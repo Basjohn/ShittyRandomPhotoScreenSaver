@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from core.logging.logger import get_logger
-from core.settings.storage_paths import get_steam_cache_dir
+from core.settings.storage_paths import ProfileRef, get_steam_cache_dir
 from core.steam.credentials import derive_profile_cache_key
 from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
 
@@ -69,7 +69,7 @@ def cache_path_for(
     profile_identifier: str,
     cache_key: str,
     *,
-    profile: str | None = None,
+    profile: ProfileRef = None,
     root: Path | None = None,
 ) -> Path:
     """Return a safe account-private cache path without raw Steam identifiers."""
@@ -87,7 +87,7 @@ def cache_path_for_profile_key(
     profile_key: str,
     cache_key: str,
     *,
-    profile: str | None = None,
+    profile: ProfileRef = None,
     root: Path | None = None,
 ) -> Path:
     """Return a cache path from an already-opaque profile key.

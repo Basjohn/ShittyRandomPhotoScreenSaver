@@ -991,6 +991,19 @@ class SettingsManager(QObject):
         """Return the directory containing the active settings profile."""
         return self._storage_path.parent
 
+    def get_storage_root(self) -> Optional["StorageRoot"]:
+        """Return the explicit data root of an isolated manager, else ``None``.
+
+        A manager built with ``storage_base_dir`` owns every credential, cache
+        and state path beside its settings file. ``None`` means production
+        resolution by the canonical storage resolver.
+        """
+        if self._storage_base_dir is None:
+            return None
+        from core.settings.storage_paths import StorageRoot
+
+        return StorageRoot(self.get_settings_dir())
+
     def get_organization_name(self) -> str:
         """Return the organization identity owned by this manager."""
         return self._organization

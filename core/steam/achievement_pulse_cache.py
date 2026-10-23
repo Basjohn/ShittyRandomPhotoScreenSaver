@@ -20,6 +20,7 @@ from core.steam.achievement_pulse import (
     recent_game_titles,
     resolve_achievement_pulse,
 )
+from core.settings.storage_paths import ProfileRef
 from core.steam.cache import cache_path_for_profile_key, read_cache_record
 from core.steam.credentials import SteamCredentialPayload, derive_profile_cache_key
 from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
@@ -135,7 +136,7 @@ def _read_candidate_achievement_results(
 def load_recent_game_titles_from_cache(
     *,
     profile_key: str,
-    profile: str | None = None,
+    profile: ProfileRef = None,
     root: Path | None = None,
     read_record: Callable[[Path], SteamResult] = read_cache_record,
 ) -> tuple[str, ...]:
@@ -170,7 +171,7 @@ def load_achievement_pulse_cache_snapshot(
     *,
     profile_key: str,
     selection: AchievementPulseSelection = AchievementPulseSelection(),
-    profile: str | None = None,
+    profile: ProfileRef = None,
     root: Path | None = None,
     now: float | None = None,
     read_record: Callable[[Path], SteamResult] = read_cache_record,
@@ -246,7 +247,7 @@ def refresh_achievement_pulse_cache(
     *,
     credential: SteamCredentialPayload,
     selection: AchievementPulseSelection = AchievementPulseSelection(),
-    profile: str | None = None,
+    profile: ProfileRef = None,
     root: Path | None = None,
     opener=None,
     now: float | None = None,

@@ -11,6 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from core.logging.logger import get_logger
+from core.settings.storage_paths import ProfileRef
 from core.steam.backend import build_endpoint, fetch_json
 from core.steam.cache import cache_path_for_profile_key, get_steam_source_refresh_lock, read_cache_record, write_success_result
 from core.steam.credentials import SteamCredentialPayload, derive_profile_cache_key
@@ -37,7 +38,7 @@ _request_backoff = SteamBackoffPolicy()
 def load_friend_pulse_cache_snapshot(
     *,
     profile_key: str,
-    profile: str | None = None,
+    profile: ProfileRef = None,
     root: Path | None = None,
     now: float | None = None,
     previous: FriendPulseSnapshot | None = None,
@@ -53,7 +54,7 @@ def load_friend_pulse_cache_snapshot(
 def refresh_friend_pulse_cache(
     *,
     credential: SteamCredentialPayload,
-    profile: str | None = None,
+    profile: ProfileRef = None,
     root: Path | None = None,
     opener: Callable | None = None,
     now: float | None = None,

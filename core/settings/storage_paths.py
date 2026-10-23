@@ -22,8 +22,24 @@ Directory layout under the application data root::
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
+
+
+@dataclass(frozen=True)
+class StorageRoot:
+    """An explicit application data directory owned by one SettingsManager.
+
+    Passed wherever a ``profile`` is accepted, it overrides profile-name
+    resolution entirely, so an isolated ``SettingsManager(storage_base_dir=...)``
+    keeps credentials, caches and state inside its own directory.
+    """
+
+    app_data_dir: Path
+
+
+ProfileRef = Union[str, StorageRoot, None]
 
 
 # ---------------------------------------------------------------------------
@@ -79,10 +95,12 @@ def _appdata_root() -> Path:
     return (Path.home() / "AppData" / "Roaming").resolve()
 
 
-def resolve_app_data_dir(profile: Optional[str] = None) -> Path:
+def resolve_app_data_dir(profile: ProfileRef = None) -> Path:
     """Resolve the canonical application data path without touching disk."""
 
     global _resolved_base, _resolved_profile
+    if isinstance(profile, StorageRoot):
+        return Path(profile.app_data_dir).resolve()
     profile = profile or _DEFAULT_PROFILE
     if _resolved_base is not None and _resolved_profile == profile:
         return _resolved_base
@@ -93,10 +111,14 @@ def resolve_app_data_dir(profile: Optional[str] = None) -> Path:
     return (_appdata_root() / folder).resolve()
 
 
-def get_app_data_dir(profile: Optional[str] = None) -> Path:
+def get_app_data_dir(profile: ProfileRef = None) -> Path:
     """Return and create the canonical application data directory."""
 
     global _resolved_base, _resolved_profile
+    if isinstance(profile, StorageRoot):
+        result = resolve_app_data_dir(profile)
+        result.mkdir(parents=True, exist_ok=True)
+        return result
     profile = profile or _DEFAULT_PROFILE
     result = resolve_app_data_dir(profile)
     result.mkdir(parents=True, exist_ok=True)
@@ -105,67 +127,67 @@ def get_app_data_dir(profile: Optional[str] = None) -> Path:
     return result
 
 
-def get_cache_dir(profile: Optional[str] = None) -> Path:
+def get_cache_dir(profile: ProfileRef = None) -> Path:
     """Return ``<app_data>/cache/`` — parent for all cache subdirectories."""
     d = get_app_data_dir(profile) / "cache"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def get_rss_cache_dir(profile: Optional[str] = None) -> Path:
+def get_rss_cache_dir(profile: ProfileRef = None) -> Path:
     """Return ``<app_data>/cache/rss/`` for RSS image caching."""
     d = get_cache_dir(profile) / "rss"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def get_feed_cache_dir(profile: Optional[str] = None) -> Path:
+def get_feed_cache_dir(profile: ProfileRef = None) -> Path:
     """Return ``<app_data>/cache/feeds/`` for durable widget-feed snapshots."""
     d = get_cache_dir(profile) / "feeds"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def get_weather_cache_file(profile: Optional[str] = None) -> Path:
+def get_weather_cache_file(profile: ProfileRef = None) -> Path:
     """Return ``<app_data>/cache/weather.json``."""
     return get_cache_dir(profile) / "weather.json"
 
 
-def get_weather_widget_cache_file(profile: Optional[str] = None) -> Path:
+def get_weather_widget_cache_file(profile: ProfileRef = None) -> Path:
     """Return ``<app_data>/cache/weather_widget_last.json``."""
     return get_cache_dir(profile) / "weather_widget_last.json"
 
 
-def get_state_dir(profile: Optional[str] = None) -> Path:
+def get_state_dir(profile: ProfileRef = None) -> Path:
     """Return ``<app_data>/state/`` for persistent runtime state files."""
     d = get_app_data_dir(profile) / "state"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def get_feed_health_file(profile: Optional[str] = None) -> Path:
+def get_feed_health_file(profile: ProfileRef = None) -> Path:
     """Return ``<app_data>/state/feed_health.json``."""
     return get_state_dir(profile) / "feed_health.json"
 
 
-def get_steam_dir(profile: Optional[str] = None) -> Path:
+def get_steam_dir(profile: ProfileRef = None) -> Path:
     """Return ``<app_data>/steam/`` for Steam credential/cache state."""
     d = get_app_data_dir(profile) / "steam"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def get_steam_credentials_file(profile: Optional[str] = None) -> Path:
+def get_steam_credentials_file(profile: ProfileRef = None) -> Path:
     """Return the encrypted Steam credential payload path."""
     return get_steam_dir(profile) / "credentials.bin"
 
 
-def get_steam_credential_meta_file(profile: Optional[str] = None) -> Path:
+def get_steam_credential_meta_file(profile: ProfileRef = None) -> Path:
     """Return the non-secret Steam credential metadata path."""
     return get_steam_dir(profile) / "credential_meta.json"
 
 
-def get_steam_cache_dir(profile: Optional[str] = None, profile_key: str | None = None) -> Path:
+def get_steam_cache_dir(profile: ProfileRef = None, profile_key: str | None = None) -> Path:
     """Return the Steam cache root or a hashed account-specific cache folder."""
     d = get_steam_dir(profile) / "cache"
     if profile_key:

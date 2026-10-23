@@ -438,7 +438,7 @@ def test_steam_connection_controls_stay_inert_until_explicit_user_action(
     try:
         monkeypatch.setattr(
             "ui.tabs.widgets_tab_steam.get_storage_status",
-            lambda: checks.append(True) or type(
+            lambda **_kwargs: checks.append(True) or type(
                 "Status",
                 (),
                 {"storage_available": True, "has_credentials": False, "message": "Steam is not connected."},
@@ -472,7 +472,7 @@ def test_saved_connection_status_hydrates_green_on_every_settings_open(
     try:
         monkeypatch.setattr(
             "ui.tabs.widgets_tab_steam.get_storage_status",
-            lambda: checks.append(True) or type(
+            lambda **_kwargs: checks.append(True) or type(
                 "Status",
                 (),
                 {"storage_available": True, "has_credentials": True, "message": "Connected."},
@@ -499,7 +499,7 @@ def test_saved_connection_check_preserves_pending_openid_identity(qt_app, settin
     try:
         monkeypatch.setattr(
             "ui.tabs.widgets_tab_steam.get_storage_status",
-            lambda: type(
+            lambda **_kwargs: type(
                 "Status",
                 (),
                 {"storage_available": True, "has_credentials": False, "message": "Steam is not connected."},

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from core.logging.logger import get_logger
-from core.settings.storage_paths import get_steam_cache_dir
+from core.settings.storage_paths import ProfileRef, get_steam_cache_dir
 from core.steam.abandonment_issues import (
     AbandonmentAchievementProgress,
     AbandonmentCandidate,
@@ -89,7 +89,7 @@ class AbandonmentRefreshOutcome:
 def load_owned_game_choices_from_cache(
     *,
     profile_key: str,
-    profile: str | None = None,
+    profile: ProfileRef = None,
     root: Path | None = None,
     limit: int = 1_000,
     read_record: Callable[[Path], SteamResult] = read_cache_record,
@@ -121,7 +121,7 @@ def load_abandonment_cache_snapshot(
     *,
     profile_key: str,
     selection: AbandonmentSelection = AbandonmentSelection(),
-    profile: str | None = None,
+    profile: ProfileRef = None,
     root: Path | None = None,
     now: float | None = None,
     advance_rotation: bool = False,
@@ -274,7 +274,7 @@ def refresh_abandonment_cache(
     *,
     credential: SteamCredentialPayload,
     selection: AbandonmentSelection = AbandonmentSelection(),
-    profile: str | None = None,
+    profile: ProfileRef = None,
     root: Path | None = None,
     opener=None,
     now: float | None = None,
@@ -359,7 +359,7 @@ def hydrate_selected_achievement_evidence(
     snapshot: AbandonmentCacheSnapshot,
     credential: SteamCredentialPayload,
     profile_key: str,
-    profile: str | None = None,
+    profile: ProfileRef = None,
     root: Path | None = None,
     opener=None,
     now: float | None = None,

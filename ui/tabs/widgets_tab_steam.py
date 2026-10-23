@@ -36,6 +36,7 @@ from core.steam.abandonment_issues import (
 )
 from core.steam.achievement_pulse_cache import load_recent_game_titles_from_cache
 from core.account_setup.controllers import SteamConnectionController, SteamConnectionStatus
+from core.settings.storage_paths import ProfileRef
 from core.steam.credentials import (
     get_storage_status,
     normalize_api_key,
@@ -245,10 +246,23 @@ def _apply_steam_connection_status(tab: "WidgetsTab", status: SteamConnectionSta
         _set_saved_connection_feedback(tab, status.feedback, success=status.feedback_success)
 
 
+def _steam_storage_profile(tab: "WidgetsTab") -> ProfileRef:
+    """Return the one storage reference every Steam operation in this tab uses.
+
+    An isolated SettingsManager supplies its own data root; production uses
+    the same canonical resolution as the Steam runtimes that write the cache.
+    """
+    settings = getattr(tab, "_settings", None)
+    get_root = getattr(settings, "get_storage_root", None)
+    return get_root() if callable(get_root) else None
+
+
 def _steam_connection_controller(tab: "WidgetsTab") -> SteamConnectionController:
+    profile = _steam_storage_profile(tab)
     return SteamConnectionController(
         lambda status: _apply_steam_connection_status(tab, status),
-        storage_status_reader=get_storage_status,
+        storage_status_reader=lambda: get_storage_status(profile=profile),
+        profile=profile,
     )
 
 
@@ -476,9 +490,12 @@ def _submit_steam_credentials(tab: "WidgetsTab", api_key: str) -> bool:
     generation = int(getattr(tab, "_steam_connection_generation", 0)) + 1
     tab._steam_connection_generation = generation
     _set_connection_status(tab, "Testing Steam API key before encrypted storage.")
+    profile = _steam_storage_profile(tab)
 
     def _test_and_save() -> SteamConnectionStatus:
-        return SteamConnectionController().test_and_save_credentials(api_key, profile_identifier)
+        return SteamConnectionController(profile=profile).test_and_save_credentials(
+            api_key, profile_identifier
+        )
 
     def _finished(task_result) -> None:
         def _apply_result() -> None:
@@ -533,9 +550,10 @@ def _on_steam_disconnect(tab: "WidgetsTab") -> None:
                 _set_connection_status(tab, "Steam disconnect did not complete. Please try again.", state="error")
         ThreadManager.run_on_ui_thread(_apply_result)
 
+    profile = _steam_storage_profile(tab)
     try:
         _get_steam_thread_manager(tab).submit_io_task(
-            lambda: SteamConnectionController().disconnect(),
+            lambda: SteamConnectionController(profile=profile).disconnect(),
             task_id=f"steam_disconnect_{generation}",
             callback=_finished,
         )
@@ -605,8 +623,7 @@ def _hydrate_achievement_selection_titles(tab: "WidgetsTab") -> None:
 
     generation = int(getattr(tab, "_steam_recent_titles_generation", 0)) + 1
     tab._steam_recent_titles_generation = generation
-    settings = getattr(tab, "_settings", None)
-    profile = settings.get_application_name() if settings is not None else None
+    profile = _steam_storage_profile(tab)
 
     def _read_titles() -> tuple[str, ...]:
         metadata = read_credential_metadata(profile=profile)
@@ -674,8 +691,7 @@ def _hydrate_abandonment_library_choices(tab: "WidgetsTab") -> None:
 
     generation = int(getattr(tab, "_steam_library_choices_generation", 0)) + 1
     tab._steam_library_choices_generation = generation
-    settings = getattr(tab, "_settings", None)
-    profile = settings.get_application_name() if settings is not None else None
+    profile = _steam_storage_profile(tab)
 
     def _read_choices() -> tuple[tuple[int, str], ...]:
         metadata = read_credential_metadata(profile=profile)
@@ -761,13 +777,14 @@ def _on_abandonment_manual_refresh(tab: "WidgetsTab") -> None:
     tab._steam_abandonment_refresh_generation = generation
     selection = _current_abandonment_selection(tab)
     refresh_minutes = int(tab.steam_refresh_minutes.value())
+    profile = _steam_storage_profile(tab)
 
     def _refresh():
         from core.steam.abandonment_cache import refresh_abandonment_cache
         from core.steam.credentials import SteamCredentialError, load_credentials
 
         try:
-            credential = load_credentials()
+            credential = load_credentials(profile=profile)
         except SteamCredentialError:
             return None
         if credential is None:
@@ -777,6 +794,7 @@ def _on_abandonment_manual_refresh(tab: "WidgetsTab") -> None:
             selection=selection,
             force=True,
             refresh_interval_minutes=refresh_minutes,
+            profile=profile,
         )
 
     def _finished(task_result) -> None:
