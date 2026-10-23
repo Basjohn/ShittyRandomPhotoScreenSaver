@@ -93,8 +93,10 @@ def saved_account_states(settings) -> dict[str, bool]:
     """Read only persisted, non-secret account hints; never test/decrypt/connect."""
     from core.settings.storage_paths import get_app_data_dir
     from core.steam.credentials import get_storage_status
-    steam = get_storage_status()
-    app_data = get_app_data_dir()
+    get_root = getattr(settings, "get_storage_root", None)
+    root = get_root() if callable(get_root) else None
+    steam = get_storage_status(profile=root)
+    app_data = get_app_data_dir(root)
     return {
         "steam": bool(steam.storage_available and steam.has_credentials),
         "gmail": bool((app_data / "gmail_imap_creds.enc").exists() or (app_data / "gmail_token.enc").exists()),

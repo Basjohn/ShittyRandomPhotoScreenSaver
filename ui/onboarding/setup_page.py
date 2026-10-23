@@ -216,6 +216,8 @@ class SetupPage(Page):
             return
         host = QWidget()
         self._steam_host = host
+        # Steam helpers resolve their storage root from the owning settings.
+        host._settings = self.settings
         body = QVBoxLayout(host); body.setContentsMargins(0, 0, 0, 0); body.setSpacing(10)
 
         def connection_row(title, button_text, handler, check_name):

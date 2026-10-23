@@ -18,6 +18,7 @@ from typing import Any, Callable
 
 from core.logging.logger import get_logger
 from core.settings.storage_paths import (
+    ProfileRef,
     get_steam_cache_dir,
     get_steam_dir,
     get_steam_credential_meta_file,
@@ -233,7 +234,7 @@ def _is_secret_field(lowered_key: str, *, inside_steam: bool) -> bool:
 def save_credentials(
     credential: SteamCredentialPayload,
     *,
-    profile: str | None = None,
+    profile: ProfileRef = None,
     encrypt_func: Callable[[bytes], bytes] = encrypt_user_data,
     credentials_path: Path | None = None,
     meta_path: Path | None = None,
@@ -274,7 +275,7 @@ def save_credentials(
 
 def load_credentials(
     *,
-    profile: str | None = None,
+    profile: ProfileRef = None,
     decrypt_func: Callable[[bytes], bytes] = decrypt_user_data,
     credentials_path: Path | None = None,
 ) -> SteamCredentialPayload | None:
@@ -290,7 +291,7 @@ def load_credentials(
     return SteamCredentialPayload.from_json_bytes(decrypted)
 
 
-def clear_credentials(*, profile: str | None = None) -> None:
+def clear_credentials(*, profile: ProfileRef = None) -> None:
     """Delete Steam credential files without touching broader cache state."""
     for path in (
         get_steam_credentials_file(profile),
@@ -302,7 +303,7 @@ def clear_credentials(*, profile: str | None = None) -> None:
             logger.warning("[STEAM] Failed to delete Steam credential file: %s", path)
 
 
-def clear_account_private_state(*, profile: str | None = None) -> None:
+def clear_account_private_state(*, profile: ProfileRef = None) -> None:
     """Delete account-private Steam cache/profile state under the Steam root."""
     cache_dir = get_steam_dir(profile) / "cache"
     try:
@@ -315,13 +316,13 @@ def clear_account_private_state(*, profile: str | None = None) -> None:
         raise SteamCredentialError("Failed to clear Steam account-private state") from exc
 
 
-def disconnect_account(*, profile: str | None = None) -> None:
+def disconnect_account(*, profile: ProfileRef = None) -> None:
     """Delete Steam credentials plus account-private cache/profile state."""
     clear_credentials(profile=profile)
     clear_account_private_state(profile=profile)
 
 
-def get_storage_status(*, profile: str | None = None) -> SteamCredentialStorageStatus:
+def get_storage_status(*, profile: ProfileRef = None) -> SteamCredentialStorageStatus:
     """Return a non-secret status for settings UI without decrypting secrets."""
     available = steam_storage_available()
     has_credentials = get_steam_credentials_file(profile).exists()
@@ -344,7 +345,7 @@ def get_storage_status(*, profile: str | None = None) -> SteamCredentialStorageS
     )
 
 
-def read_credential_metadata(*, profile: str | None = None) -> SteamCredentialMetadata | None:
+def read_credential_metadata(*, profile: ProfileRef = None) -> SteamCredentialMetadata | None:
     """Read safe cache-routing metadata without decrypting Steam credentials."""
     path = get_steam_credential_meta_file(profile)
     if not path.exists():
@@ -404,7 +405,7 @@ def validate_credential_input(api_key: str | None, profile_identifier: str | Non
 def write_credential_metadata(
     credential: SteamCredentialPayload,
     *,
-    profile: str | None = None,
+    profile: ProfileRef = None,
     meta_path: Path | None = None,
 ) -> Path:
     """Write non-secret credential metadata for UI/status surfaces."""
@@ -427,7 +428,7 @@ def write_credential_metadata(
 def get_profile_cache_dir_for_credentials(
     credential: SteamCredentialPayload,
     *,
-    profile: str | None = None,
+    profile: ProfileRef = None,
 ) -> Path:
     """Return the hashed Steam account cache dir for a credential payload."""
     return get_steam_cache_dir(

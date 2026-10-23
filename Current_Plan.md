@@ -88,9 +88,15 @@ The [operator-source reconciliation](Docs/Reference/2026-10-23_Operator_EB_Neon_
   termination. Native Steam, Clock, Feeds three-level/scroll and EB Surface/Deep/light-theme captures at150% plus
   root-reviewed29 focused checks pass. No polling, new timers, observers, separate hierarchy or geometry writes.
   Native examples/receipt: `tmp/settings_tree_native/`; contract: `Docs/Architecture/Settings_Theme_Architecture.md`.
-- [ ] **Adjacent isolation debt found during native capture:** Steam cache hydration bypasses
-  `SettingsManager(storage_base_dir)` for credential metadata and reads the profile AppData path. Investigate the
-  canonical storage resolver separately; do not add a silent fallback or weaken the isolated capture boundary.
+- [ ] **Production storage profile roots disagree across families (found 2026-10-23 while fixing isolation).**
+  Isolation itself is fixed: `SettingsManager.get_storage_root()` + `storage_paths.StorageRoot` route every
+  Settings/Guided Setup Steam read/write into an isolated manager's directory (`tests/test_storage_root_isolation.py`).
+  In production, `storage_paths` getters called without a profile resolve to `SRPSS` even under MC, while Feeds use
+  `detect_current_profile()` (per profile) and Cache Maintenance targets `get_settings_dir()` (`SRPSS_MC` under MC).
+  Result under MC: Steam/Weather/Gmail/Settings-dialog caches live in `SRPSS` but Cache Maintenance lists `SRPSS_MC`;
+  this machine has Steam credentials in **both** folders. Decide one rule (per-profile, or one shared data root
+  with per-profile settings only), then route every family through it. Per-profile moves MC Gmail sign-in
+  (`gmail_imap_creds.enc`, only in `SRPSS`), so it needs an explicit migration, not a silent fallback.
 
 ## UI R41. Small glyph presentation remainder (operator accepts capture / glyph interaction / child Edit)
 

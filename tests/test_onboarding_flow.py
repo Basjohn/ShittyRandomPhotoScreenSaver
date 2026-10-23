@@ -473,7 +473,7 @@ def test_widget_setup_shows_saved_steam_connection_through_the_settings_flow(qap
     monkeypatch.setattr(state, "selected_setup_dependencies", lambda _settings: ("steam",))
     monkeypatch.setattr(state, "saved_account_states", lambda _settings: {"steam": True, "gmail": False})
     monkeypatch.setattr(module, "is_interactive_user_desktop", lambda: True)
-    monkeypatch.setattr(steam, "get_storage_status", lambda: SteamCredentialStorageStatus(True, True, "Saved."))
+    monkeypatch.setattr(steam, "get_storage_status", lambda **_kwargs: SteamCredentialStorageStatus(True, True, "Saved."))
     page = module.SetupPage(settings)
     try:
         toggle = page.findChildren(QToolButton)[0]

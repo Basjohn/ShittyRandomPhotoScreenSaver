@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from core.settings.storage_paths import ProfileRef
 from core.steam.backend import validate_connection
 from core.steam.credentials import (
     SteamCredentialPayload,
@@ -44,10 +45,14 @@ class SteamConnectionController:
         self,
         on_status: Callable[[SteamConnectionStatus], None] | None = None,
         *,
-        storage_status_reader: Callable[[], object] = get_storage_status,
+        storage_status_reader: Callable[[], object] | None = None,
+        profile: ProfileRef = None,
     ) -> None:
         self._on_status = on_status or (lambda _status: None)
-        self._storage_status_reader = storage_status_reader
+        self._profile = profile
+        self._storage_status_reader = storage_status_reader or (
+            lambda: get_storage_status(profile=profile)
+        )
 
     def inspect_saved_connection(
         self, pending_profile_identifier: str | None, *, explicit: bool = False
@@ -99,7 +104,10 @@ class SteamConnectionController:
             return status
         if not is_current():
             return SteamConnectionStatus("Connection setup was closed.", "cancelled", False, False)
-        save_credentials(SteamCredentialPayload(api_key=normalized, profile_identifier=profile_identifier))
+        save_credentials(
+            SteamCredentialPayload(api_key=normalized, profile_identifier=profile_identifier),
+            profile=self._profile,
+        )
         status = SteamConnectionStatus(
             "Steam identity and API key were verified and stored securely.", "connected", True, True,
         )
@@ -108,7 +116,7 @@ class SteamConnectionController:
 
     def disconnect(self) -> SteamConnectionStatus:
         """Delegate encrypted credential and account-private cache removal to its owner."""
-        disconnect_account()
+        disconnect_account(profile=self._profile)
         status = SteamConnectionStatus("Steam is disconnected.", "warning", False, False)
         self._on_status(status)
         return status

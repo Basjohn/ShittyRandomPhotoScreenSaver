@@ -28,7 +28,7 @@ def test_steam_controller_validates_before_dpapi_save(monkeypatch) -> None:
         "validate_connection",
         lambda **_kwargs: SimpleNamespace(status=controllers.SteamResultStatus.SUCCESS),
     )
-    monkeypatch.setattr(controllers, "save_credentials", saved.append)
+    monkeypatch.setattr(controllers, "save_credentials", lambda credential, **_kwargs: saved.append(credential))
 
     status = controllers.SteamConnectionController(emitted.append).test_and_save_credentials(
         "abcdef0123456789abcdef0123456789", "76561197960265728"
@@ -49,7 +49,7 @@ def test_steam_controller_drops_verified_save_after_lifetime_closes(monkeypatch)
         "validate_connection",
         lambda **_kwargs: SimpleNamespace(status=controllers.SteamResultStatus.SUCCESS),
     )
-    monkeypatch.setattr(controllers, "save_credentials", saved.append)
+    monkeypatch.setattr(controllers, "save_credentials", lambda credential, **_kwargs: saved.append(credential))
     lifetime = iter((True, False))
 
     status = controllers.SteamConnectionController(emitted.append).test_and_save_credentials(
