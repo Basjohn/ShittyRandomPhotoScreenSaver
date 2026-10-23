@@ -199,18 +199,16 @@ rejected); inherited-cohort explanation [ ] (test hypothesis); surface exit [ ]
 (open independent regression); all legacy EB visual failures remain unchanged.
 
 
-## 2026-10-23 SCENE editing parity clarification (OPEN)
+## SCENE controller geometry and remaining physical-light work
 
-The operator's actual Settings screenshot shows Motion → Emission Geometry **SCENE**
-with face/region/edge visualization, while Lighting Coverage **SCENE** does not
-provide an equivalent authoring/editor model. The presence of a SCENE toggle or
-physical Light Source/End is **not** sufficient controller parity. Inspect the
-Motion SCENE mapper, marker hit-testing, 3D box faces/regions, projection,
-world-boundary snapping and camera/aim indicators; reuse the shared physical
-coordinate authority for the SCENE lighting *coverage footprint*, with controls
-that genuinely edit which spatial surfaces/regions receive/scatter light.
-Surface remains physically directional, Deep has a located emitter. Light Coverage
-and Motion emission remain independent; do not graft the Motion particle
-birth policy into lighting. Preserve the restored BEAM mode and all authored
-preset values. Agent executes native GUI drag/keyboard/persistence and fixed
-world all-angle scattering captures; visual acceptance remains open.
+`SceneVolumeMapper` owns the common oblique projection, path handles, boundary guides and camera/aim cues.
+The Settings builder supplies each editor's own path and coverage: Motion uses Emission Geometry; Light/Rays
+use Lighting Coverage. Selector changes and lazy hydration refresh built controls without opening other buckets.
+SCENE guides mark the authored Source/End boundary regions; BEAM omits those guides. The same coordinate
+editing and save boundary is retained in both Light Types. No new setting, renderer path or preset rewrite.
+
+These shared guides establish controller parity, not a new light-volume crop: Surface remains directional and
+Deep has a located emitter. Motion's particle birth policy must not become light admission. SCENE light extent,
+source-consistent all-angle scattering and actual visual coverage remain physical-light work in the live plan.
+Native Qt verification covers reverse lazy construction, Surface/Deep, painted guides, handle drag and save/hydration;
+moving rendered coverage and subjective lighting acceptance remain open.
