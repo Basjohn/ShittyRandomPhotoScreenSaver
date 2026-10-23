@@ -1,24 +1,30 @@
-"""Canonical storage path resolver for SRPSS.
+"""Canonical data-root resolver for SRPSS.
 
-Single source of truth for all application data directories.
-All modules that need persistent storage should import from here
-instead of computing paths with ``tempfile.gettempdir()`` or
-hard-coded ``%APPDATA%`` lookups.
+Single source of truth for credential, cache and state directories. All
+modules that need persistent non-settings storage import from here instead
+of computing paths with ``tempfile.gettempdir()`` or ``%APPDATA%``.
 
-Directory layout under the application data root::
+Storage rule (2026-10-24): settings are per profile; everything else is
+shared. ``core.settings.json_store.determine_storage_path`` owns the
+per-profile settings directory (``SRPSS`` or ``SRPSS_MC``: ``settings_v2.json``,
+``backups/``, ``banned_images/``). Both canonical profiles resolve their data
+root here to the one shared ``SRPSS`` folder::
 
-    %APPDATA%/SRPSS/            (or SRPSS_MC for Media Center profile)
-    ├── settings_v2.json
+    %APPDATA%/SRPSS/            (data root for Screensaver and Screensaver_MC)
     ├── cache/
+    │   ├── feeds/
+    │   ├── reddit/
     │   ├── rss/
     │   └── weather.json
     ├── state/
     │   └── feed_health.json
-    └── logs/
     └── steam/
         ├── credentials.bin
         ├── credential_meta.json
         └── cache/
+
+A ``StorageRoot`` (an isolated SettingsManager) and any non-canonical profile
+name (tests/probes, ``SRPSS_profiles/<name>``) keep their own data root.
 """
 from __future__ import annotations
 
@@ -43,9 +49,11 @@ ProfileRef = Union[str, StorageRoot, None]
 
 
 # ---------------------------------------------------------------------------
-# Profile → folder mapping (shared with json_store.determine_storage_path)
+# Profile → data-root folder. Both canonical profiles share one data root;
+# their *settings* folders differ (json_store.determine_storage_path).
 # ---------------------------------------------------------------------------
-_CANONICAL_FOLDERS = {"Screensaver": "SRPSS", "Screensaver_MC": "SRPSS_MC"}
+_SHARED_DATA_FOLDER = "SRPSS"
+_CANONICAL_PROFILES = frozenset({"Screensaver", "Screensaver_MC"})
 _DEFAULT_PROFILE = "Screensaver"
 
 # Module-level cache so repeated calls don't re-resolve
@@ -96,7 +104,7 @@ def _appdata_root() -> Path:
 
 
 def resolve_app_data_dir(profile: ProfileRef = None) -> Path:
-    """Resolve the canonical application data path without touching disk."""
+    """Resolve the data root (credentials, caches, state) without touching disk."""
 
     global _resolved_base, _resolved_profile
     if isinstance(profile, StorageRoot):
@@ -105,14 +113,15 @@ def resolve_app_data_dir(profile: ProfileRef = None) -> Path:
     if _resolved_base is not None and _resolved_profile == profile:
         return _resolved_base
 
-    folder = _CANONICAL_FOLDERS.get(profile)
-    if folder is None:
+    if profile in _CANONICAL_PROFILES:
+        folder = _SHARED_DATA_FOLDER
+    else:
         folder = f"SRPSS_profiles/{profile}"
     return (_appdata_root() / folder).resolve()
 
 
 def get_app_data_dir(profile: ProfileRef = None) -> Path:
-    """Return and create the canonical application data directory."""
+    """Return and create the data root (credentials, caches, state)."""
 
     global _resolved_base, _resolved_profile
     if isinstance(profile, StorageRoot):
