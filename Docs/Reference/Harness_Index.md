@@ -566,6 +566,13 @@ Preserve focused Settings/runtime cases for:
 
 Provider/model/resource retirement assertions stay at the actual neutral owner; do not move them back into presentation tests.
 
+**Settings transient-window probe:** `& ".\.venv\Scripts\python.exe" tools/settings_window_probe.py --out <report.json> --self-test [--opens N] [--tabs] [--tab KEY --open-bucket]`
+opens the real `SettingsDialog` against an isolated copy of the saved profile and records every top-level
+window this process creates/shows through an out-of-context WinEvent hook (catches single-frame flashes that
+polling misses; `--self-test` proves detection first). `--launch [--launch-script run.py --profile-folder SRPSS_MC]`
+hooks a real `main.py /c` or MC run-script process tree from outside, backing up and restoring the profile file.
+The dialog is visible on screen. 2026-10-24 receipts: `logs/run_matrix/2026-10-24_settings_transient_windows/`.
+
 ### 8.4 Current broad routing
 
 The related implementation/physical acceptance is closed. Use the current focused gates in this index and `Docs/TestSuite.md`, not old command bundles.

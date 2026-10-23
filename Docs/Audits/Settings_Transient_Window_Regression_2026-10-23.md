@@ -21,4 +21,15 @@ In `ui/tabs/shared_styles.py::build_bucket_toggle`, create the new `BucketTreeBo
 3. Verify that an initially expanded bucket becomes visible after construction, that a deliberately deferred bucket stays hidden until `finalize_bucket_body()`, and that no pre-parent exposure occurs. Use `tests/test_settings_bucket_tree.py::test_initially_open_bucket_is_parented_before_any_show` and source guard `tests/test_settings_bucket_single_open_contract.py::test_shared_bucket_builder_does_not_expose_unparented_widgets`.
 4. Check collapse/reopen/nested rails and one-active editing path; ensure no settings values, authored presets, focus or performance were changed. Agent should collect native evidence and mark this fixed only when the flash is absent. Operator confirmation is helpful but **not a substitute** for achievable automated/native validation.
 
-**Environment limitation:** PySide6 and Windows native HWND observation are unavailable in this Linux/container audit. Source/static tests can be run here; native behavior remains open.
+## 2026-10-24 native result (Windows, PySide6)
+
+`tools/settings_window_probe.py` (out-of-context WinEvent hook; its self-test records a deliberately flashed
+unparented QWidget) found **zero** top-level windows besides the dialog in: two direct opens visiting all ten tabs;
+three reopens with Widgets → Backend expanded and remembered; the same reopen with the pre-candidate ordering
+restored; a real `main.py /c` launch (one show: the dialog); and two canonical in-saver MC Settings cycles
+(display window + dialog only). Temporary instrumentation recorded 28 bucket builds, all with a parented host
+layout and none built expanded: remembered buckets restore after construction. The audited mechanism is
+therefore not reachable from saved state; the candidate remains correct hardening, and the observed flash is
+unreproduced and unattributed. Receipt: `logs/run_matrix/2026-10-24_settings_transient_windows/receipt.json`.
+
+**Environment limitation (original Linux audit):** PySide6 and Windows native HWND observation are unavailable in this Linux/container audit. Source/static tests can be run here; native behavior remains open.
