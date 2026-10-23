@@ -96,7 +96,10 @@ def test_input_and_settings_crash_contracts_are_explicit_and_mode_scoped():
     assert 'Qt.Key.Key_Escape:' in inp and 'if key == Qt.Key.Key_Q:\n            return False' in inp
     assert 'self._framed_shift' in inp and 'view_framed_flight_rates_changed.emit' in inp
     assert 'self._input.view_framed_flight_rates_changed.connect' in rt
-    assert "str(owner.controller.mode_id) == 'extruded_bubble'" in manager
+    # Mode isolation is proved by the state/motion test above; require the
+    # real display-manager input gate, not the old equality spelling in one
+    # particular branch (which now rightly rejects non-EB modes with !=).
+    assert 'set_framed_flight_enabled(bool(admitted and mode == "extruded_bubble"))' in manager
     assert "config['extruded_bubble_camera_position']" in manager
     # Formatters must exist before branching, and each volume mapper must receive
     # its admitted value. Exact source-line formatting is not the acceptance gate.

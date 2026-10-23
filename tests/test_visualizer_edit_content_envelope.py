@@ -26,9 +26,19 @@ def _presentation(mode: str, *, extent=(420.0, 280.0)):
 
 def _parameters() -> dict[str, object]:
     values = dict(get_raw_default_settings()["widgets"]["spotify_visualizer"])
-    # Terrain is an authored scene input already supplied by canonical settings.
-    # The presentation applier no longer invents a private terrain attribute.
-    assert isinstance(values["shockwave_grid_terrain"], dict)
+    # The public Settings value is an authored version-1 heightfield; the
+    # renderer receives a distinct, immutable *compiled* RG32F payload from
+    # the presentation applier. This direct renderer test must use that same
+    # input contract, without expecting a private presentation attribute or
+    # pinning the operator's terrain heights.
+    from rendering.gl_programs.heightfield import normalize_heightfield, heightfield_surface_bytes
+
+    source = normalize_heightfield(values["shockwave_grid_terrain"])
+    values["shockwave_grid_terrain"] = {
+        "size": source["size"],
+        "data": heightfield_surface_bytes(source),
+        "maximum": max(source["heights"]),
+    }
     return values
 
 

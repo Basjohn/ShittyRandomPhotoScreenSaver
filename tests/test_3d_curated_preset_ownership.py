@@ -66,12 +66,15 @@ def test_extruded_curated_presets_preserve_their_own_response_without_live_organ
         if preset.is_custom:
             continue
         raw = _raw("extruded_spectrum", index)
-        # Presence/ownership are required; numeric/color/style choices are not.
+        # The preset is operator-authored: every key is optional. Verify that
+        # any keys actually authored here survive activation instead of being
+        # borrowed from the old Spectrum lender. Missing keys are resolved by
+        # the canonical schema and must not be forced into the preset file.
         expected = {}
         for suffix in suffixes:
             key = f"extruded_spectrum_{suffix}"
-            assert key in raw, key
-            expected[key] = deepcopy(raw[key])
+            if key in raw:
+                expected[key] = deepcopy(raw[key])
 
         poisoned = deepcopy(_BASE)
         poisoned.update(
@@ -355,8 +358,16 @@ def test_every_curated_3d_file_normalizes_without_requiring_any_authored_value(m
     # Do not assert exhaustive contents or artistic values.  Only verify that
     # the loader returns the same normalized, owned configuration.
     assert raw.get("mode") == mode  # identity/schema, not an artistic value
-    assert set(raw) <= _owned(mode) | {"mode"}
-    assert normalize_visualizer_mode_payload(mode, raw) == get_presets(mode)[index].settings
+    # A freely edited legacy preset may still carry a *retired* leaf until
+    # the importer migrates it.  Test post-migration ownership, never require
+    # the operator to clean up historical JSON by hand.
+    from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
+
+    migrated = strip_retired_visualizer_settings(raw)
+    assert set(migrated) <= _owned(mode) | {"mode"}
+    normalized = normalize_visualizer_mode_payload(mode, raw)
+    assert normalized == get_presets(mode)[index].settings
+    assert not (set(raw) - set(migrated)) & set(normalized)
 
 
 @pytest.mark.parametrize(("mode", "index"), _CASES)

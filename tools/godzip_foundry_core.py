@@ -73,6 +73,7 @@ def is_generated_qrc_python(path: str) -> bool:
 NEVER_TRANSFER_PREFIXES = (
     "ui/assets/",
     "themes/",     # operator-authored and locally curated; never transfer or overwrite
+    "references/", # operator-owned visual references; never transfer or overwrite
     "assets/webp/",   # release showcase WebPs (tools/release_media.py)
 )
 
@@ -451,7 +452,7 @@ def workflow_default_selected(path: str, status: str = "") -> bool:
     The transfer profile intentionally keeps all documentation and direct
     ``tests/*`` files because those are valuable handoff context, while
     excluding test fixture/subfolder payloads, images and goldens. The authored
-    ``themes/`` tree is a hard non-transfer path handled separately.
+    ``themes/`` and ``references/`` trees are hard non-transfer paths handled separately.
     Gitignored files never reach this decision point.
     """
     lower = path.replace("\\", "/").lower().lstrip("./")
@@ -701,7 +702,7 @@ This archive is a **full working-tree handoff**. These rules apply when an agent
 - Preserve unrelated dirty state and existing authored behavior. A later/superseding full GODZIP replaces an earlier handoff as working-tree authority; smaller context/handoff archives do not override the newer full tree unless explicitly stated.
 - Archive omission never means delete. Only explicit debris instructions in `.godzip/manifest.json` authorize moving a path to `/deleteme`.
 - `.godzip/manifest.json` and `.godzip/workflow.md` are archive metadata, not repository replacement targets.
-- Normal GODZIPs intentionally omit heavyweight/generated payloads. In particular, `ui/assets/` and the operator-owned `themes/` directory are never part of a normal GODZIP handoff, even by manual selection. Do not re-add excluded assets or locally curated themes.
+- Normal GODZIPs intentionally omit heavyweight/generated payloads. In particular, `ui/assets/`, the operator-owned `themes/` directory, and the operator-owned `references/` directory are never part of a normal GODZIP handoff, even by manual selection. Do not re-add excluded assets, locally curated themes, or local visual references.
 - Before returning a GODZIP, run the relevant focused tests/audits and keep any operator-required physical acceptance steps explicit.
 
 Archive baseline: `{short}`  \nDirty worktree at creation: `{dirty}`

@@ -674,6 +674,12 @@ class TestEngineState:
 
         monkeypatch.setattr(engine, "_initialize_core_systems", lambda: True)
         monkeypatch.setattr(engine, "_load_settings", lambda: True)
+        # This focused test bypasses SettingsManager construction. Admit one
+        # test-owned display selection at the newly separated resolution seam;
+        # otherwise the mock leaves a None settings manager and can never test
+        # the intended startup prefetch ordering.
+        monkeypatch.setattr("core.settings.display_selection.resolve_monitor_numbers",
+                            lambda manager: frozenset({1}))
         monkeypatch.setattr(engine, "_initialize_sources", lambda: True)
         monkeypatch.setattr(engine, "_build_image_queue", lambda: True)
         monkeypatch.setattr(engine, "_initialize_cache_prefetcher", lambda: calls.append("cache") or None)
