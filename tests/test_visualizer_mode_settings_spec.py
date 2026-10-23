@@ -17,6 +17,7 @@ from core.settings.visualizer_mode_settings import (
     Custom,
     Direction,
     ScenePath,
+    SceneCameraPosition,
     Range,
     Slider,
     Toggle,
@@ -66,6 +67,11 @@ def _different(control, value):
         return [int(round(v)) for v in changed] if control.integer else changed
     if isinstance(control, Triangle):
         return [round(value[1], 4), round(value[2], 4), round(value[0], 4)] if value[0] != value[1] else [0.2, 0.3, 0.5]
+    if isinstance(control, ScenePath):
+        path = [-.55, .2, .35, .65, -.45, -.3]
+        return path if list(value) != path else [.4, -.3, -.2, -.6, .5, .7]
+    if isinstance(control, SceneCameraPosition):
+        return [.1, 0., 0.] if list(value) != [.1, 0., 0.] else [0., 0., 0.]
     if isinstance(control, Direction):
         return [((value[0] + 90.0 + 180.0) % 360.0) - 180.0,
                 (control.height_low + control.height_high) / 2 if value[1] != (control.height_low + control.height_high) / 2
@@ -79,6 +85,20 @@ def _different(control, value):
             return (value + 1) % len(control.choices)
         return next(choice for choice in control.choices if choice != value)
     return [255 - value[0], 255 - value[1], 255 - value[2], 200 if control.alpha else 255]
+
+
+def _open_control_bucket(tab, spec, control):
+    """Hydrate through the user's disclosure, preserving sectional lazy ownership."""
+    if not control.bucket:
+        return
+    from PySide6.QtWidgets import QWidget
+    from ui.widgets.continuous_border import BucketToggle
+    container = getattr(tab, f"_{spec.prefix}_settings_container")
+    bucket = container.findChild(QWidget, f"{spec.mode_id}_bucket_{control.bucket}")
+    assert bucket is not None, control.key
+    toggle = bucket.findChild(BucketToggle)
+    assert toggle is not None, control.key
+    toggle.setChecked(True)
 
 
 @pytest.mark.parametrize("spec", SPECS, ids=lambda spec: spec.mode_id)
@@ -258,6 +278,7 @@ def test_the_settings_body_builds_saves_and_reloads_every_control(qt_app, settin
         for control in spec.controls:
             if not control.bucket:
                 continue
+            _open_control_bucket(tab, spec, control)
             if isinstance(control, Colour):
                 colour = getattr(tab, f"_{control.key}")
                 wanted[control.key] = _different(control, [colour.red(), colour.green(), colour.blue()])
@@ -292,6 +313,9 @@ def test_the_settings_body_builds_saves_and_reloads_every_control(qt_app, settin
                     widget.setCurrentIndex(widget.findData(wanted[control.key]))
                 else:
                     widget.setCurrentText(wanted[control.key])
+        if mode == "extruded_bubble":
+            from core.settings.extruded_bubble_camera import admit_camera_parameters
+            wanted['extruded_bubble_camera_position'] = list(admit_camera_parameters({**DEFAULTS, **wanted}))
         tab._save_settings_now()   # the edits' own saves are debounced
         section = settings_manager.get("widgets", {})["spotify_visualizer"]
         for key, value in wanted.items():
@@ -306,6 +330,7 @@ def test_the_settings_body_builds_saves_and_reloads_every_control(qt_app, settin
         for control in spec.controls:
             if not control.bucket:
                 continue
+            _open_control_bucket(reloaded, spec, control)
             if isinstance(control, Colour):
                 colour = getattr(reloaded, f"_{control.key}")
                 shown = [colour.red(), colour.green(), colour.blue(), colour.alpha()]
@@ -362,6 +387,7 @@ def test_conditional_controls_follow_their_condition_live_and_on_load(qt_app, se
         tab._select_mode_page(mode)
         rows = getattr(tab, f"_{spec.prefix}_rows")
         def set_condition(condition, value):
+            _open_control_bucket(tab, spec, condition)
             switch = getattr(tab, condition.key)
             if isinstance(condition, Toggle):
                 switch.setChecked(value)
@@ -373,6 +399,7 @@ def test_conditional_controls_follow_their_condition_live_and_on_load(qt_app, se
                 switch.setCurrentText(value)
 
         for control in (control for control in spec.controls if control.when):
+            _open_control_bucket(tab, spec, control)
             terms = (control.when,) if isinstance(control.when[0], str) else control.when
             accepted = {key: value[0] if isinstance(value, tuple) else value for key, value in terms}
             for key, value in accepted.items():
@@ -394,6 +421,7 @@ def test_conditional_controls_follow_their_condition_live_and_on_load(qt_app, se
                 assert not rows[control.key].isHidden(), control.key
         for control in spec.controls:
             if isinstance(control, Toggle) and control.bucket and not control.label and not control.row_group:
+                _open_control_bucket(tab, spec, control)
                 assert rows[control.key] is getattr(tab, control.key), "a label-less toggle stands alone"
     finally:
         tab.deleteLater()

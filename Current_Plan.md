@@ -179,7 +179,6 @@ actors and ray shimmer, explicitly **not** water/ocean-surface animation. No res
 - [ ] **G00 strict Settings/lifecycle** (EB-L/S): find the actual retained Python owner edge on failure. **Must see** owners retired and the real Settings transition completes repeatedly at the existing barrier; never extend/bypass the barrier.
   - [~] **Awaiting Validation:** latest MC source runs retain normal updates/all useful CLI diagnostics and pass three Settings request/close/full-restart cycles each. After camera/idle/SCENE changes, idle barriers remain within 8 seconds (`logs/run_matrix/2026-10-22_mc_after_idle_scene_fades/receipt.json`). Explicit play-state stimuli then start real loopback capture four times, with all six Settings barriers completing in 0.70–4.97 seconds and normal CLI exit 0 (`2026-10-22_mc_controlled_active/receipt.json`). Canonical paused Media overrides those brief stimuli; this proves controlled capture/DSP activation plus retirement, not continuous music/preset acceptance or reproduction of the retained-owner failure. Exercise sustained active processing and preset changes locally; inspect exact owner edges on recurrence.
 - [ ] **G01 lazy Settings/persistence** (EB-S): exercise every bucket and physical editor with real native Qt. **Must see** single build/hydration, no callback exceptions, values/Custom/presets intact after reopening.
-  - [ ] **Generic spec-test drift:** `test_visualizer_mode_settings_spec.py -k extruded_bubble` exposes stale eager-page assumptions in save/conditional tests and two-angle canonical Light/Stream defaults admitted into six-coordinate paths. Repair that generic harness against real lazy expansion and migrate equivalent defaults without changing effective geometry; do not skip its controls or treat focused lazy tests as a blanket pass.
   - [~] Native lazy-bucket/control tests pass on this Windows tree, including unopened-value hydration, cross-bucket conditions, every bucket, Aim, Deep ray source and emission choice. **Awaiting Validation:** repeated actual Settings reopen/Custom/save/reset, partial-build exception cleanup and visual/editor interaction; this is not G00 retirement evidence. Use a fresh workspace `--basetemp` with the no-env fixture if sandbox temp admission fails.
   - [ ] **Startup animation warning recurred:** attribute `QUnifiedTimer::stopAnimationDriver` at retained reveal in the valid23 October MC session (`logs/run_matrix/2026-10-23_idle_hint_shaft/bound_receipt.json`, pid32476/session2ee558ff0105). One EB/display owner retires and self-exits normally; this is not zero-Qt evidence. Earlier22 October three-reopen/controlled sessions had zero messages in their own receipts. The separate earlier Settings `QFont::setPointSize(-1)` remains unproved in unopened/editor paths; shared combo QSS already uses positive point sizes.
 - [ ] **G02 256-vs-512 source-to-pixel temporal evidence** (EB-F/D): same recording and visual conditions for 2D/EB, with per-ID radius and logical/presentation timestamps. **Must see** where judder first enters; no smoothing/cadence guess counted as proof.
@@ -1068,17 +1067,10 @@ Source detail and exact local diagnostic coverage: `Docs/Reference/R43_EB_Breach
 
 ## 2A. Focused pre-existing regression triage | independent of EB acceptance
 
-- [ ] Reproduce each relevant red at the exact tree before changing it; distinguish stale oracle from actual product
-  defect, and repair at its owner. Keep this bounded, not an implicit full-suite campaign. Remaining recorded areas:
-  `test_3d_curated_preset_ownership`, `test_defaults_schema_authority`, `test_default_settings_editor`
-  (`ast.literal_eval` versus `basin_profile()`), `test_defaults_projection`, `test_engine_lifecycle`,
-  `test_image_prefetch_transport`, `test_qt611_shader_admission`, `test_theme_defaults_authority`,
-  `test_transition_distribution`, `test_visualizer_custom_route_contract`, `test_visualizer_edit_footprint`,
-  `test_visualizer_presentation_orientation`, `test_visualizer_runtime_controller`,
-  `test_visualizer_settings_body_transaction_contract`, startup/harness and hover-chrome boundaries.
-  Focused native geometry/material results and the corrected intended Sun/Moon occlusion contract are recorded
-  in [Archived Failure Triage](Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md); do not reopen those
-  renderer semantics to satisfy retired foreground/transmission oracles.
+The supplied failed-selector set is closed by focused reruns; current evidence, contract-correct replacements
+and scope limits live in [Archived Failure Triage](Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md).
+The open EB/Neon/Settings physical and visual gates above remain authoritative. New failures require exact-tree
+reproduction and owner-level repair, not tolerance changes, preset edits or an automatic full-suite campaign.
 
 - [ ] **Nonblocking tooling housekeeping:** investigate the repeated `.venv` launcher warning
   `Failed to find real location of ...pythoncore-3.14-64\\python.exe`. The forensic commands still completed with

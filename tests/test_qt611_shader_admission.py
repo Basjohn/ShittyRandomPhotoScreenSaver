@@ -46,15 +46,30 @@ try:
             assert renderer.has_resources, descriptor.transition_id
             transitions.append(descriptor.transition_id)
         finally:
+            gl.glUseProgram(0)
             renderer.release_resources()
         assert not renderer.has_resources, descriptor.transition_id
     for descriptor in iter_quick_visualizer_implementations():
         renderer = getattr(import_module(descriptor.module_name), descriptor.factory_name)()
         try:
-            renderer._initialize()
+            if callable(getattr(renderer, "_initialize", None)):
+                renderer._initialize()
+            else:
+                # Renderers without an eager initialization API admit shaders
+                # through their actual first production draw.
+                from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
+                from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
+                from tests._visualizer_frozen_settings import frozen_visualizer_settings
+                snapshot = _build_spectrum_preview_snapshot(width=64, height=64, mode=descriptor.mode_id,
+                    settings=frozen_visualizer_settings(descriptor.mode_id))
+                matrix = (2/64,0,0,0, 0,-2/64,0,0, 0,0,1,0, -1,1,0,1)
+                gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
+                gl.glViewport(0,0,64,64)
+                renderer.render(QuickVisualizerRenderFrame(snapshot,(0,0,64,64),(64.,64.),matrix,capture.vao))
             assert renderer.has_resources, descriptor.mode_id
             visualizers.append(descriptor.mode_id)
         finally:
+            gl.glUseProgram(0)
             renderer.release_resources()
         assert not renderer.has_resources, descriptor.mode_id
     assert gl.glGetError() == gl.GL_NO_ERROR

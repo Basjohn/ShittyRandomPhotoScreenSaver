@@ -1251,6 +1251,16 @@ intensity limitations and remaining moving/music/physical optics gates are in In
 
 ### Held-left framed orbit
 
+The23 October archived failed-selector reconciliation passes46 checks for the42 logged failures after
+contract-correct selector/parameter updates. Receipt and independent focused gates are recorded in
+`Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md`; this is not a full-suite or visual acceptance claim.
+Generic Settings tests hydrate actual buckets. SST tests isolate physical screen identities and retain
+nonempty binding authority. Native glyph tests complete the existing hover reveal through `QEventLoop.exec()`
+before pressing controls; detached geometry-only tests explicitly admit visible chrome. Oscilloscope smokes
+consume current packed traces, EB lifecycle supplies explicit bands, and shader probes use real first-draw
+admission with a current capture context through retirement. Temporary subprocess captures stay under pytest's
+test-owned workspace path rather than a process-global environment override.
+
 `test_visualizer_plain_orbit.py`, the existing framed-input/auxiliary gates and the narrow runtime-retirement
 AST gate protect retained MouseArea/TapHandler/glyph refusal, lower/upper stacking, pose-only changes and one
 save, cursor fade reuse, threshold/cancellation, exact physical clipping, failed cleanup ownership/retry and

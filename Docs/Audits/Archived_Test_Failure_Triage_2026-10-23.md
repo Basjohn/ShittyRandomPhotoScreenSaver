@@ -20,8 +20,31 @@ the original archive's102. Neither count is a current full-suite result. Focused
   body-only control and surface coverage mask, check hidden bodies at zero/half/full material alpha, and verify
   body alpha blending in unobstructed sky. Pixel tolerances are unchanged. No Neon renderer change is retained.
 
-Input hover/drag, shader harness admission, Settings/SST and presentation-host boundaries remain separate
-verification slices. Refer to `Current_Plan.md` §2A for actionable remainder; these results do not close art gates.
+The final combined rerun of the42 currently logged failed selectors passes46 checks. Updated SST parameter
+sets expand one old selector into four; the retired frameless Neon selector becomes two framed clip cases.
+Receipt: `tmp/archived_42_final_results.xml`. These are focused technical results, not full-suite or art acceptance.
+
+| Repaired boundary | Actual verification |
+| --- | --- |
+| Geometry, Sphere live Edit orbit and intended celestial occlusion |105 native/shared checks pass; two independent QSG clip subprocesses not part of this gate |
+| Shader admission and bootstrap |39 checks pass; renderers that compile on first draw use actual snapshot/render admission, programs unbind before deletion, subprocess captures use test-owned temporary paths |
+| Runtime/smoke ABI |24 checks pass, including Oscilloscope idle/delayed-ghost native pixels and all-mode pause/play/retirement; explicit EB body bands and current packed traces |
+| Edit glyphs, CUSTOM routing and R41 vectors |28 checks pass; real hover reveal before pointer delivery, frozen drag rectangle, incomplete route fake repaired |
+| Settings/SST/host/publication |92 checks passed before the independently corrected CUSTOM fake; all affected selectors pass in the final combined rerun |
+| Earlier defaults/editor/theme/prefetch/transition/presentation transactions |104 focused checks pass without further source edits |
+
+Generic Settings tests open actual lazy buckets and exercise six-coordinate paths plus admitted camera offsets.
+SST tests compare deterministic screen identities and nonempty numbered bindings; only the proven absent/empty
+binding-map representation seam is normalized. Publication tests retain required writes and repeated no-op
+suppression rather than a stale total count. Hover tests use the actual Qt event loop for the existing reveal;
+`QTest.qWait` holds the GIL across threaded-Quick synchronization on this runtime and is not a safe substitute.
+The detached child-lock geometry test explicitly reveals chrome without claiming pointer/hover acceptance.
+
+Renamed historical selectors map to current contracts: `shockwave_project`→`basin_project`; the former
+surface-only camera-ceiling test now checks legal eye bounds in both Light Types; rear/translucent body cases
+become hidden celestial bodies/unobstructed-sky alpha tests; frameless Neon overflow becomes framed clipping.
+No preset/default artwork edits, renderer transparency changes, relaxed pixel tolerances, XFAILs or deleted
+behavioral tests are used to make this set green. `Current_Plan.md` retains all independent visual/physical gates.
 
 The host import assertion identified a real ownership violation rather than stale test text: ordinary host
 admission looked up glyph eligibility through `rendering.widget_descriptors`, transitively importing Settings

@@ -134,7 +134,17 @@ def test_ordinary_glow_projection_keeps_semantic_handler_but_skips_noop_writes(q
     widget = SimpleNamespace(_item=item, _input_state_handler=lambda snapshot: delivered.append(snapshot) or True)
     state = QuickInputState(screen_index=0, runtime_generation=3)
     assert RetainedOverlayWidget._apply_input_state(widget, state)
-    assert len(item.writes) == 7
+    assert dict(item.writes) == {
+        "widgetGlowOnHover": state.widget_glow_on_hover,
+        "alwaysShowGlyphs": state.always_show_glyphs,
+        "widgetGlowOnClick": state.widget_glow_on_click,
+        "widgetGlowIntensity": state.widget_glow_intensity,
+        "widgetGlowDistance": state.widget_glow_distance,
+        "widgetGlowColor": QColor(*state.widget_glow_color),
+        "widgetGlowJediMode": state.widget_glow_jedi_mode,
+        "widgetGlowAdmitted": False,
+    }
+    assert len({name for name, _ in item.writes}) == len(item.writes)
     assert item.property("widgetGlowColor") == QColor(*state.widget_glow_color)
     item.writes.clear()
     for _ in range(20):

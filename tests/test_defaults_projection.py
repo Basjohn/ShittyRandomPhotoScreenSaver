@@ -34,7 +34,7 @@ _SPARSE_RUNTIME_BUCKET_KEYS = (
 )
 
 
-def _normalize_sparse_runtime_bucket_state(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+def _normalize_runtime_representations(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     normalized = json.loads(json.dumps(snapshot))
     ui = normalized.get("ui")
     if isinstance(ui, dict):
@@ -42,6 +42,9 @@ def _normalize_sparse_runtime_bucket_state(snapshot: Mapping[str, Any]) -> dict[
             bucket = ui.get(key)
             if isinstance(bucket, dict) and not any(bool(value) for value in bucket.values()):
                 ui.pop(key, None)
+    # Nonstructured empty mappings have no flat default-store leaves. SST
+    # import explicitly materializes this map; preserve every nonempty binding.
+    normalized.get("display", {}).setdefault("monitor_bindings", {})
     return normalized
 
 
@@ -104,12 +107,19 @@ def test_sst_projection_never_opens_or_rewrites_installed_settings(
 
 
 @pytest.mark.parametrize("application", [NORMAL_PROFILE, MC_PROFILE])
+@pytest.mark.parametrize("selection", [None, [2]], ids=["canonical", "numbered"])
 def test_sst_projection_import_matches_fresh_profile_reset(
     application: str,
+    selection,
     tmp_path,
     monkeypatch,
 ) -> None:
     from core.settings.settings_manager import SettingsManager
+    from core.settings.display_selection import SELECTION_KEY, BINDINGS_KEY, selection_bindings, resolve_monitor_numbers
+    from core.settings import monitor_routes
+
+    screens = ("serial:TEST_A", "serial:TEST_B")
+    monkeypatch.setattr(monitor_routes, "current_screen_identities", lambda: screens)
 
     monkeypatch.setattr(
         SettingsManager,
@@ -117,6 +127,8 @@ def test_sst_projection_import_matches_fresh_profile_reset(
         lambda *_args, **_kwargs: None,
     )
     generated = _load_outputs()[application]
+    if selection is not None:
+        generated["snapshot"]["display"]["show_on_monitors"] = selection
     generated_path = tmp_path / f"{application}.sst"
     generated_path.write_text(
         json.dumps(generated, indent=2, sort_keys=True) + "\n",
@@ -129,6 +141,8 @@ def test_sst_projection_import_matches_fresh_profile_reset(
         storage_base_dir=tmp_path / "reference",
     )
     reference.reset_to_defaults()
+    if selection is not None:
+        reference.set(SELECTION_KEY, selection)
     reference_export = tmp_path / f"{application}-reference.sst"
     assert reference.export_to_sst(str(reference_export)) is True
 
@@ -145,18 +159,23 @@ def test_sst_projection_import_matches_fresh_profile_reset(
 
     reference_snapshot = json.loads(reference_export.read_text(encoding="utf-8"))["snapshot"]
     imported_snapshot = json.loads(imported_export.read_text(encoding="utf-8"))["snapshot"]
+    expected_bindings = selection_bindings(generated["snapshot"]["display"]["show_on_monitors"], {}, screens)
+    assert imported.get(BINDINGS_KEY, {}) == reference.get(BINDINGS_KEY, {}) == expected_bindings
+    assert resolve_monitor_numbers(imported, screens) == resolve_monitor_numbers(reference, screens)
+    if selection is not None:
+        assert expected_bindings == {"2": screens[1]}
 
     # Generated SST/default artifacts intentionally keep a schema-complete set
     # of all-false bucket identities, while fresh/reset live persistence uses
     # the canonical sparse representation for "everything closed".  Compare
-    # after normalizing only that documented representation seam; every other
-    # setting must still round-trip exactly.
+    # after normalizing sparse buckets and the proven empty-binding-map seam;
+    # every other setting, including nonempty physical bindings, stays exact.
     generated_ui = generated["snapshot"]["ui"]
     for key in _SPARSE_RUNTIME_BUCKET_KEYS:
         assert key in generated_ui
         assert not any(bool(value) for value in generated_ui[key].values())
-    assert _normalize_sparse_runtime_bucket_state(imported_snapshot) == (
-        _normalize_sparse_runtime_bucket_state(reference_snapshot)
+    assert _normalize_runtime_representations(imported_snapshot) == (
+        _normalize_runtime_representations(reference_snapshot)
     )
 
 

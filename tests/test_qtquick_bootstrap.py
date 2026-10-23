@@ -57,7 +57,7 @@ def test_main_bootstraps_environment_before_qt_and_graphics_before_application()
 
 
 @pytest.mark.parametrize("entrypoint", ["production", "flicker", "resize", "stack"])
-def test_graphics_bootstrap_selects_proven_opengl_profile_in_clean_process(entrypoint):
+def test_graphics_bootstrap_selects_proven_opengl_profile_in_clean_process(entrypoint, tmp_path):
     script = r'''
 import json
 import os
@@ -71,7 +71,7 @@ if sys.argv[1] == "flicker":
     from tools.flicker_test import _apply_main_py_setup
     _apply_main_py_setup()
 elif sys.argv[1] in ("resize", "stack"):
-    with tempfile.TemporaryDirectory(prefix="srpss-gl46-capture-") as directory:
+    with tempfile.TemporaryDirectory(prefix="srpss-gl46-capture-", dir=sys.argv[2]) as directory:
         output = Path(directory) / "capture"
         if sys.argv[1] == "resize":
             from tools.ordinary_widget_resize_capture import capture
@@ -100,7 +100,7 @@ print(json.dumps({
     env = os.environ.copy()
     env["QSG_RENDER_LOOP"] = "basic"
     completed = subprocess.run(
-        [sys.executable, "-c", script, entrypoint],
+        [sys.executable, "-c", script, entrypoint, str(tmp_path)],
         cwd=ROOT,
         env=env,
         text=True,

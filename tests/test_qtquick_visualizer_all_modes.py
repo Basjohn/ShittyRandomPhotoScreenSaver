@@ -279,6 +279,7 @@ def _drive_runtime(
     if mode_id == "extruded_bubble":
         resolved = runtime.advance(
             onsets=(), now_ts=now_ts, playing=playing, intensity=0.5,
+            body_bands=(0.25, 0.5, 0.2),
             identity=(identity["runtime_generation"], identity["engine_generation"], identity["activation_id"]),
             source_identity=(identity["source_generation"], identity["source_activation_id"]),
             controls=controls_from_parameters(_resolved_mode_config("extruded_bubble")),
@@ -288,6 +289,38 @@ def _drive_runtime(
         # Its snapshot holds no identity; readiness is the runtime's own source fence.
         return SimpleNamespace(frame=resolved, reactive_source_ready=bool(fresh_source and playing))
     raise AssertionError(f"unhandled test mode: {mode_id}")
+
+
+@pytest.mark.parametrize("case", ["idle", "canonical", "ghost"])
+def test_oscilloscope_smoke_factory_constructs_current_packed_traces_without_a_window(monkeypatch, case):
+    import numpy as np
+    from rendering.quick import bootstrap
+    # Import only the snapshot factory: CLI startup owns the driver bootstrap.
+    # No QGuiApplication, environment mutation, GL context or subprocess here.
+    monkeypatch.setattr(bootstrap, "configure_quick_environment", lambda: None)
+    from tools.qtquick_visualizer_clip_smoke import _oscilloscope_snapshot
+    presentation = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("oscilloscope"), display_size=(640., 480.),
+        outer_origin=(20., 30.), viewport_extent=(320., 180.))
+    snapshot = _oscilloscope_snapshot(case, presentation)
+    frame = snapshot.logical.mode_state
+    assert isinstance(frame, OscilloscopeFrame)
+    assert frame.trace_alphas == ((.36, 1.) if case == "ghost" else (1.,))
+    points = np.frombuffer(frame.points, dtype=np.float32).reshape(len(frame.trace_alphas), -1, 2)
+    assert np.isfinite(points).all()
+    assert np.all(np.diff(points[..., 0], axis=1) > 0.)
+    assert np.allclose(points[:, 0, 0], -1.) and np.allclose(points[:, -1, 0], 1.)
+    if case == "idle":
+        # The test-owned quiet waveform still supplies a visible carrier while
+        # paused, through the production trace packer and gain conditioning.
+        active = _oscilloscope_snapshot("canonical", presentation).logical.mode_state
+        active_points = np.frombuffer(active.points, dtype=np.float32).reshape(-1, 2)
+        assert 0. < np.ptp(points[..., 1]) < np.ptp(active_points[:, 1])
+        assert snapshot.logical.playing is False
+    else:
+        assert np.ptp(points[-1, :, 1]) > .5
+        if case == "ghost":
+            assert not np.array_equal(points[0], points[-1])
 
 
 def _has_current_source(resolved: Any) -> bool:

@@ -14,6 +14,19 @@ from tests.test_visualizer_edit_native_input import edit_scene, _mouse
 from tests.test_qtquick_edit_pointer_delivery import _one
 
 
+def _reveal_parent_chrome(edit, glyph):
+    from PySide6.QtCore import QEventLoop, QTimer
+    point = glyph.mapToItem(edit.window.contentItem(), glyph.width()/2., glyph.height()/2.)
+    _mouse(edit, QEvent.MouseMove, point, Qt.NoButton, Qt.NoButton, Qt.NoModifier)
+    # qWait holds the binding bridge across threaded-Quick synchronization on
+    # this runtime. Let Qt's real loop finish the existing 700ms reveal instead.
+    loop = QEventLoop()
+    QTimer.singleShot(750, loop.quit)
+    loop.exec()
+    assert glyph.isEnabled() and glyph.opacity() > .05
+    return point
+
+
 @pytest.mark.qt
 @pytest.mark.parametrize("turn,tilt,reflection,ghost,shadow", [
     (0.0, 0.0, 0.0, False, False), (0.08, 0.16, 0.45, False, False),
@@ -60,7 +73,7 @@ def test_orbit_glyph_delivers_native_drag_from_fixed_restore_adjacent_slot(edit_
     assert glyph.isVisible()
     assert glyph.x() == pytest.approx(reset.x() + reset.width() + 6.0)
     assert glyph.y() == pytest.approx(reset.y())
-    point = glyph.mapToItem(edit.window.contentItem(), glyph.width() / 2.0, glyph.height() / 2.0)
+    point = _reveal_parent_chrome(edit, glyph)
     before = view_orbit_values(edit.visualizer.controller.presentation_state, "extruded_spectrum")
     stage = edit.item.current_global_rect
     _mouse(edit, QEvent.MouseButtonPress, point, Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
@@ -192,7 +205,7 @@ def test_empty_scene_has_semantically_admitted_orbit_without_fabricated_frame(ed
     before = view_orbit_values(edit.visualizer.controller.presentation_state, "extruded_spectrum")
     stage = edit.item.current_global_rect
     # The compact Orbit glyph is 22px wide: click its actual hit area.
-    point = glyph.mapToItem(edit.window.contentItem(), glyph.width() / 2.0, glyph.height() / 2.0)
+    point = _reveal_parent_chrome(edit, glyph)
     _mouse(edit, QEvent.MouseButtonPress, point, Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
     _mouse(edit, QEvent.MouseMove, point + QPointF(24, 12), Qt.NoButton, Qt.LeftButton, Qt.NoModifier)
     _mouse(edit, QEvent.MouseButtonRelease, point + QPointF(24, 12), Qt.LeftButton, Qt.NoButton, Qt.NoModifier)

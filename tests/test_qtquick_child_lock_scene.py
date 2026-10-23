@@ -76,6 +76,14 @@ def test_child_lock_is_reset_adjacent_default_locked_and_does_not_retire_geometr
             return items[0]
 
         frame = one("customLayoutEditFrame-clock")
+        # This detached scene has no pointer/window. Scope the geometry test to
+        # revealed chrome; actual hover and pointer delivery have native gates.
+        assert frame.property('parentGlyphControlsOpacity') == 0.
+        frame.setProperty('parentGlyphControlsOpacity', 1.)
+        from PySide6.QtCore import QEventLoop, QTimer
+        loop = QEventLoop()
+        QTimer.singleShot(1300, loop.quit)
+        loop.exec()
         reset = one("customLayoutRestoreSize-clock")
         lock = one("customLayoutChildEditLock-clock")
         close = one("customLayoutClose-clock")
