@@ -21,6 +21,9 @@
 **Settings construction contract:** SettingsManager repairs the OpenGL-only backend and acceleration before the dialog exists. The dialog constructs its selected/restored page immediately, warms only Display/Transitions after visibility with bounded, cancellable callbacks, and constructs other tabs only when visited. Pre-UI Settings/Widget Theme activation, first-visit reload, built-only reset/import and close durability are independent of hidden pages. No silent hidden-tab normalization or speculative About/Scene3D artwork construction.
 
 `QQuickWidget`, selectable old-presenter fallback and a second accelerated runtime surface are prohibited.
+Ordinary-widget glyph capabilities are resolved by the scene factory and supplied as immutable presentation
+flags before host attachment. The presentation-only host must not import the widget registry or its transitive
+Settings/provider dependencies; it releases the injected resolver with the display generation.
 The Qt Quick cutover is complete: deleted `DisplayWidget`/old-presenter paths are history, not compatibility architecture.
 Do not preserve or recreate a presenter facade merely because a stale test/comment once referenced it.
 

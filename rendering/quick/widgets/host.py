@@ -463,6 +463,7 @@ class OrdinaryWidgetPresentationHost:
         | None = None,
         jedi_event_handler: Callable[[str, str], None] | None = None,
         hover_edit_glyph_handler: Callable[[str, str], None] | None = None,
+        glyph_capabilities: Callable[[str], tuple[bool, bool, bool] | None] | None = None,
     ) -> None:
         self._host_item: QQuickItem | None = host_item
         self._shadow_host_item: QQuickItem | None = shadow_host_item
@@ -476,6 +477,7 @@ class OrdinaryWidgetPresentationHost:
         self._create_family_item = create_family_item
         self._jedi_event_handler = jedi_event_handler
         self._hover_edit_glyph_handler = hover_edit_glyph_handler
+        self._glyph_capabilities = glyph_capabilities
         if (shadow_host_item is None) != (create_shadow_item is None):
             raise RuntimeError(
                 "ordinary-widget shadow underlay requires both host and factory"
@@ -653,15 +655,11 @@ class OrdinaryWidgetPresentationHost:
             if not item.setProperty("fadeOpacity", initial_fade):
                 item.deleteLater()
                 raise RuntimeError("OverlayWidget.qml rejected fadeOpacity projection")
-        from rendering.widget_descriptors import get_widget_runtime_descriptor
-        descriptor = get_widget_runtime_descriptor(str(model_identity or ""))
-        if descriptor is not None:
-            for name, flag in (
-                ("hoverEditEligible", descriptor.supports_layout_edit_mode),
-                ("hoverRestoreEligible", descriptor.requires_size_reset_affordance),
-                ("hoverRotateEligible", False),
-            ):
+        capabilities = self._glyph_capabilities(str(model_identity or "")) if self._glyph_capabilities else None
+        if capabilities is not None:
+            for name, flag in zip(("hoverEditEligible", "hoverRestoreEligible", "hoverRotateEligible"), capabilities):
                 if item.property(name) is not None and not item.setProperty(name, bool(flag)):
+                    item.deleteLater()
                     raise RuntimeError(f"ordinary glyph capability projection failed: {name}")
         if not item.setProperty(
             "customLayoutInputBlocked", bool(self._custom_layout_input_blocked)
@@ -1165,4 +1163,5 @@ class OrdinaryWidgetPresentationHost:
         self._create_overlay_item = None
         self._create_shadow_item = None
         self._create_family_item = None
+        self._glyph_capabilities = None
         self._jedi_event_handler = None

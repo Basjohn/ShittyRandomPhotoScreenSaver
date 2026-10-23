@@ -342,6 +342,16 @@ class QuickSceneFactory(QObject):
         )
         return item
 
+    @staticmethod
+    def ordinary_widget_glyph_capabilities(identity: str) -> tuple[bool, bool, bool] | None:
+        """Resolve registry capabilities before handing presentation facts to the host."""
+        from rendering.widget_descriptors import get_widget_runtime_descriptor
+        descriptor = get_widget_runtime_descriptor(identity)
+        if descriptor is None:
+            return None
+        return (bool(descriptor.supports_layout_edit_mode),
+                bool(descriptor.requires_size_reset_affordance), False)
+
     def create_ordinary_widget_family(
         self,
         family_id: str,
@@ -542,6 +552,7 @@ class QuickSceneController(QObject):
             create_family_item=factory.create_ordinary_widget_family,
             jedi_event_handler=self._publish_jedi_mode_event,
             hover_edit_glyph_handler=self._publish_hover_edit_glyph,
+            glyph_capabilities=factory.ordinary_widget_glyph_capabilities,
         )
         window.bind_semantic_double_click_hit_test(
             self._semantic_double_click_hit_test
