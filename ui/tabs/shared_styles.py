@@ -816,7 +816,9 @@ def _circle_indicator_urls(theme: SettingsThemeSpec | None = None) -> dict[str, 
                 source.close()
                 # Ring/dot take the text colour; the thin under-stroke inverts.
                 svg = svg.replace("#000000", "@@under@@").replace("#ffffff", colour).replace("@@under@@", "#ffffff")
-                target.write_text(svg, encoding="utf-8")
+                from core.utils.atomic_files import atomic_write_text
+
+                atomic_write_text(target, svg)
             urls[name] = target.as_posix()
         return urls
     except OSError:
