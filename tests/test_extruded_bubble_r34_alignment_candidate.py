@@ -4,7 +4,8 @@ from __future__ import annotations
 from pathlib import Path
 import math
 
-from core.constants.extruded_bubble_world import WORLD_HALF, WATER_SURFACE_Y
+from core.constants.extruded_bubble_world import WORLD_CENTER, WORLD_HALF, WATER_SURFACE_Y
+from core.settings.extruded_bubble_camera import CAMERA_CLEARANCE
 from core.settings.default_contract import require_canonical_default
 from core.settings.visualizer_mode_settings import require_mode_settings
 from tools.visualizer_replay.eb_simulation_support import simulation_module
@@ -45,11 +46,16 @@ def test_bubble_and_particle_spread_have_independent_authored_controls():
     assert -WORLD_HALF[1] - 1 <= b.y <= -WORLD_HALF[1] + 1
 
 
-def test_surface_only_ceiling_prevents_geometry_breach_without_moving_projection():
+def test_both_light_modes_bound_the_actual_eye_without_moving_projection():
+    # Deep Light no longer grants permission to exit the populated physical
+    # world. Both modes share the world-box clearance; Surface additionally
+    # constrains its *baseline orbit* to remain below the water ceiling.
     surface = physical_camera(0., 0., 16/9, position_offset=(0., 2., 0.), surface_bound=True)
     deep = physical_camera(0., 0., 16/9, position_offset=(0., 2., 0.), surface_bound=False)
+    for view in (surface, deep):
+        for value, centre, half in zip(view[2], WORLD_CENTER, WORLD_HALF):
+            assert centre - half + CAMERA_CLEARANCE <= value <= centre + half - CAMERA_CLEARANCE
     assert surface[2][1] <= WATER_SURFACE_Y - .5
-    assert deep[2][1] > WATER_SURFACE_Y
     assert surface[0] == deep[0] and surface[1] == deep[1]
     assert surface[3] == deep[3] and surface[4] == deep[4]
 
