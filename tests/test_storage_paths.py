@@ -38,11 +38,21 @@ class TestPathResolution:
         assert d.exists()
         assert d.name == "SRPSS"
 
-    def test_get_app_data_dir_mc_profile(self, tmp_base: Path, monkeypatch):
+    def test_mc_profile_shares_the_data_root_but_keeps_its_settings_folder(self, tmp_base: Path, monkeypatch):
+        from core.settings.json_store import determine_storage_path
+
         monkeypatch.setattr(storage_paths, "_appdata_root", lambda: tmp_base)
-        d = storage_paths.get_app_data_dir("Screensaver_MC")
-        assert d.exists()
-        assert d.name == "SRPSS_MC"
+        normal = storage_paths.get_app_data_dir("Screensaver")
+        storage_paths.reset_module_cache()
+        mc = storage_paths.get_app_data_dir("Screensaver_MC")
+        assert mc == normal and mc.name == "SRPSS"
+        for getter in (storage_paths.get_cache_dir, storage_paths.get_state_dir,
+                       storage_paths.get_feed_cache_dir, storage_paths.get_steam_dir):
+            assert getter("Screensaver_MC") == getter("Screensaver")
+        assert storage_paths.get_steam_cache_dir("Screensaver_MC", "profile_x").is_relative_to(normal)
+        assert not (tmp_base / "SRPSS_MC").exists()
+        settings = determine_storage_path("Screensaver_MC", base_dir=tmp_base)
+        assert settings.parent.name == "SRPSS_MC"
 
     def test_get_app_data_dir_unknown_profile(self, tmp_base: Path, monkeypatch):
         monkeypatch.setattr(storage_paths, "_appdata_root", lambda: tmp_base)
