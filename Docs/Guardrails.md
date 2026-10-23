@@ -221,6 +221,10 @@ owner. Do not repair cadence with `glFinish()`, `DwmFlush()`, GUI sleeps or nest
 
 **Never make Python on the GUI thread wait for a Quick render thread.** The PySide 6.9.1 reproducer proved that ordinary Qt calls can hold the GIL across synchronous render-loop waits; the 6.11.2 runtime upgrade does not waive this guardrail unless the threaded-Quick probe proves the behaviour changed. Some calls wait synchronously for the threaded render loop: `QCoreApplication.quit()` closes every window inside the call, and `QScreen.grabWindow` does the same for a rendering window. Such a call deadlocks against a render thread that is running Python (`updatePaintNode`, a Python scene-graph node, a `DirectConnection` render slot), and every thread wedges (R-96, reproduced 3/3). Quit only through `request_application_quit(reason)`. Hide or close windows through the existing queued window paths. Capture the desktop only before first show. Treat any new call that stops or synchronizes the render loop as unsafe until a threaded-GL probe proves it safe.
 
+Do not wrap `QQuickWindow.event()` in Python and call its C++ superclass for general delivery: startup/render
+events can synchronize the threaded scene graph while the bridge holds the GIL. Use a narrow, nonblocking
+event filter for pointer admission. Hidden-window input tests cannot establish visible startup safety.
+
 **Memory owners release at the consumer boundary.**
 - A cache entry whose pixels a presentation now owns must leave the cache.
 - A retained or parked render object keeps only what its next use needs: warm GL programs, not the finished run's frames.

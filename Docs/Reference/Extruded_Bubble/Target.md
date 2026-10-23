@@ -436,7 +436,7 @@ it; Auto Rotate then starts from that view. Auto Rotate After/Speed are presenta
 **Lab knob mapping** (what each control sets in the lab; `ENGINE` values and mode defaults are not controls):
 Light Type → `mode`; Light Direction → `sun`, `light_view`, `spec_view`; Light Colour → `light`, `shaft`, `sky`
 tint, default `speck_warm`; Light Strength → `glint_power`, `light_power`, `surface_gain`, `glow`; Light Rays →
-`rays`; Ray Softness → world-pattern threshold/radial feather (`shaft_soft`); Ray Reach → physical cone angle (`fan_reach`); Beams' focus →
+`rays`; Ray Softness → pattern threshold/beam softness (`shaft_soft`); Ray Fan Spread → Surface angular fan (`fan_reach`), not a physical cone aperture; Beams' focus →
 `ray_focus`; Water/Depth Colour → `water`, `deep` (`absorb` derived); Haze → `mist`; Light Veils → `veils`; Clarity →
 `face_reflect`; Rim Glow → `probe_fill`, `proxy_power`; Iridescence → `film`, `film_range`; Softness → `rough`,
 `inner_blur`; Sparkle → `sparkle`, `speck_glow`, `glint_sharp`; Large/Small Bubbles, Bead Chains → `mid_count`,

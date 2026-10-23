@@ -112,6 +112,17 @@ For unframed 3D modes, Alt+right starts a native press-scoped origin in the curr
 Basin routes the same Alt inputs to internal scene pan/scale instead, with no CUSTOM geometry transaction; see
 [Neon Lake Basin](Neon_Lake_Basin.md).
 
+Framed 3D modes also admit ordinary held-left orbit after Qt's drag threshold in interaction/Ctrl mode.
+The actual retained card/stacking determines admission. Glyphs, visualizer descendants and higher controls
+retain first refusal; lower passive handlers cannot veto the visible card. Windows confinement uses the real
+client pixel rectangle, preserves foreign owners and retains failed cleanup at the existing runtime deletion
+gate. Release/reset/menu/Edit/mode/focus/topology/close cancel through one unwind. Cursor hiding/reveal reuses
+the existing fade timer/cache; held motion adds no polling, timer or cursor allocation. Stock native-arrow
+states explicitly decline because no alpha raster is available; existing menus already exclude orbit.
+An existing exclusive/mouse grab must retain its complete press/release sequence even below the card. The
+lower-passive-handler exception does not authorize stealing that sequence; the candidate's remaining gap
+and its required falsifier are tracked in `Current_Plan.md` → Shared camera gestures.
+
 Framed 3D modes reuse `VisualizerPresentation.qml` for a noninteractive keyboard/mouse hint at the top right.
 A pointer entry gently reveals the supplied artwork with the hover chrome; fade-out begins after five seconds even
 if the pointer stays inside. Internal movement, menu dismissal and Ctrl changes do not restart the visit;

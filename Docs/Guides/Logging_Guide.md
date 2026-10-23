@@ -102,6 +102,13 @@ active Settings dialog. It does not request Settings or drive an interaction seq
 record any separate manual or disposable-driver stimulus with the capture. The source
 MC entry point enables interaction mode; it is not proof of the installed MC binary.
 
+For MC visual/input reproduction, preserve the saved Display, Media and Visualizer routes. Do not force them
+to `ALL`: that changes window count, retained overlap, focus and capture ownership. A disposable profile may
+isolate explicit test settings while preserving those routes. Record actual MC/profile identity, selected
+physical display, effective test controls and synthetic stimuli separately. A synthetic Qt mouse sequence
+that cancels native capture is not evidence that physical orbit works or fails. Use the real MC entry point
+and the existing diagnostic capture path for visual acceptance; an isolated render host is scoped shader proof.
+
 Keep automatic updates enabled for ordinary reproductions: `--noupdates` suppresses
 automatic Gmail/Reddit/Weather retrievals and changes the workload. Omit `--fresh` when
 preserving prior evidence. `--devsteam` and `--abc-drive` alter the UI/workload and belong

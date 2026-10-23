@@ -2725,3 +2725,90 @@ normal updates and20s self-exit now starts/reveals both physical displays and re
 the original profile hash unchanged (`logs/run_matrix/2026-10-23_lighting_orbit_retry/bound_receipt.json`).
 This validates source integration, not ray art acceptance. The earlier orbit startup bridge failure and native
 gesture acceptance remain separate input work; the successful run's orbit probe did not promote a gesture.
+
+## 63. Restore accepted BEAM; isolate SCENE lighting (23 October)
+
+The operator rejects the09:41:49 capture's displaced columns/sheets and explicitly requests checkpoint
+restoration for BEAM, with further experiments confined to SCENE. `Preset1Acceptance.png` was captured22 Oct
+23:47:35. The160d6a78 lateral cone (23 Oct01:20) therefore postdates that image; restoring only the angular fan
+removed in b256036f would still leave a narrowed footprint. The pre-acceptance a51aab8a shader owns the restored
+BEAM fan, axial Source→End fades, two-depth fan support, fixed18 selective attenuation and matching
+shaft_fan/fan_rays/fan_contrast/fan_march uniform mapping. New width1x is an identity. Its other values scale the
+fan/angular concentration, including Deep compositing; they no longer assert a physical cone aperture.
+Degenerate effective paths remain safely dark. No curated preset file or operator Custom is rewritten.
+
+The frozen custom shader body in `tests/fixtures/extruded_bubble/accepted_beam_a51aab8a.glsl` is a test oracle,
+not a product fallback. Native conformance compares the production BEAM fragment against it for Surface/Deep,
+multiple poses and softness values, with a positive-energy guard. Source/End native tests protect the restored
+broad axial envelope. The rejected cone and transverse-basis helpers/knobs are retired rather than kept as dead
+production code or misrepresented by passing geometry tests. Historical lab recipes are explicitly BEAM/1x;
+MC owns current full-runtime visual validation.
+
+This is an uncheckpointed working-tree candidate. Its last focused lighting gate passed83 checks; that result
+does not close the subsequent audit findings. The oracle uses current shared uniforms/common GLSL on both
+sides, so it does not independently freeze historical knob mapping or the complete backdrop. Those boundaries
+still require verification before claiming accepted BEAM parity.
+
+SCENE keeps the same shader/half-resolution target/blur owner and executes one separate selected march.
+Surface density backprojects to the actual water plane; its broad structured phase shares the real refracted
+sun direction over fixed-world support. Deep density uses normalized sample−Light Source directions, replacing
+unrelated parallel texture planes with a radial field. SCENE ignores the beam path/width, retains contribution
+centroid shadowing, and rejects behind-emitter blockers. No pass, simulation, resource owner, polling or frame
+scheduler is added. Native tests falsify radial invariance, source movement, side/away compositing, width
+independence and shadow direction. Full multiple scattering, finite-emitter size and all-angle moving fidelity
+remain unaccepted; this is not full physical-light compliance.
+
+Actual MC captures now preserve the saved Display2 route instead of forcing ALL. The unwrapped main_mc.py
+run starts/reveals screen1 and exits0 with normal updates/full useful diagnostic CLI. The exact-route disposable
+capture driver records mc_identity=True/profile=Screensaver_MC, one visible LG window and an unchanged source
+profile hash. Its ordinary BEAM run uses unmodified current authoring (`2026-10-23_mc_saved_route_beam`). The
+P1 BEAM/SCENE placement drivers use current curated authoring in an isolated Custom, fixing only rendered ray
+intensity0.8 so rays can be inspected while real media is paused; those are NOT music or idle acceptance.
+Receipts/captures: `logs/run_matrix/2026-10-23_mc_ray_beam/` and `2026-10-23_mc_ray_scene/`. They show a broad
+sun-centred fan in both choices, replacing the rejected separate columns. Earlier ALL-display/synthetic-input
+runs do not represent the operator's MC experience, and offscreen-host stills do not meet the latest MC request.
+
+Next: moving/music/all-angle Surface and Deep SCENE, actual bubble diffusion and cost, then remaining preset
+fidelity (especially P7). Preserve BEAM's restored baseline. Do not silently promote a plausible still to parity.
+
+The final read-only audit found two lighting defects still present in the candidate: SCENE fan coverage is
+binary whenever any march sample intersects the tank, and a nonzero Surface fan with zero procedural density
+shadows at the eye because its density centroid is zero. Continuous medium support and a real fan contribution
+centroid are required; keep the existing selected march and bounded blocker query, without touching BEAM.
+The Deep Ray Fan Spread row is also ineffective and should be hidden for that Light Type. The MC placement
+captures above precede final source cleanup and these pending corrections; rerun on the final tree, preserving
+saved routes. These are implementation tasks, not requests for operator logs.
+
+## 64. Held-left orbit, black startup and release ownership (23 October)
+
+The broad Python QuickDisplayWindow.event override deadlocks visible threaded-Quick startup inside its C++
+superclass. The9s receipt and20s self-exit never execute;35s stacks are in
+`logs/run_matrix/2026-10-23_lighting_orbit_final/`. Hidden input tests missed it. That override is removed:
+a narrow event filter leaves normal startup/render delivery in C++, and a source regression forbids restoring
+it. Actual MC startup/self-exit subsequently pass on the saved single-display route. The operator independently
+reports startup fixed and physical left orbit working; those reports override failed synthetic driver claims.
+
+The gesture reuses existing camera admission, deltas and persistence. Real retained passive/exclusive grab
+notifications preserve visualizer descendants/glyphs and controls above the card. Lower ordinary handlers do
+not veto a visually higher visualizer; press admission and grab refusal use the same retained stacking
+comparison. Capture begins only after Qt's drag threshold, clips to the actual physical card/client rectangle,
+and reuses the existing cursor fade/cache. Held motion does not revive the cursor. Discrete release, reset,
+mode/menu/Edit/focus/topology/hide/close edges unwind the gesture without a new timer or polling owner.
+
+An audit subsequently identified a remaining ownership hole: the lower-handler stacking exception also admits
+an existing exclusive MouseArea grab, but promotion only clears passive grabs and can consume that control's
+release. Decline promotion for any existing exclusive/mouse grab and verify the lower MouseArea returns to
+unpressed normally. This correction is not yet implemented or tested; preserve the operator-confirmed working
+orbit path while fixing that narrow edge. Do not describe all overlap/ownership safety as accepted.
+
+The operator's native release error exposed an incorrect success test: Qt's boolean return alone cannot
+establish that native capture remains owned. Release now verifies actual GetCapture after the Qt call. A
+false result with no remaining ownership completes; a true result with retained capture still fails loudly
+and retains the cleanup token. Failed clip/query/ungrab work stays with the existing window/runtime deletion
+barrier for later discrete cleanup; foreign replacement owners are untouched. No timeout or barrier bypass.
+
+Native synthetic Qt events did not reliably promote capture: lower Media TapHandler refusal and synchronous
+WM_CAPTURECHANGED during acquisition invalidated those probes. They are not physical orbit acceptance.
+In particular, copying the MC entry/profile while forcing ALL displays changed route/overlap/focus and was an
+incorrect reproduction setup. The agent is stopped from launching apps. Physical focus-loss/capture theft,
+close/reset and mixed-DPI acceptance remain open; no new real-input polling is justified by the probe failures.
