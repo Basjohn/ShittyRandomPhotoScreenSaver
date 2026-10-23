@@ -1,22 +1,22 @@
 # Extruded Bubble | Physical lighting authority and BEAM/SCENE coverage repair
 
-**22 October 2026 | SOURCE-AUDITED DESIGN / PARTIAL CANDIDATES, ALL UNACCEPTED.** This is the detailed
+**Current repair contract | partial candidates, lighting acceptance remains open.** This is the detailed
 architecture/evidence companion for the **single live** `Current_Plan.md` §4B
 G05/G06/G27/G30/G32/G33 sequence, not a second checklist. Surface analytic
-direction now shares refracted sunlight; the larger physical-field repair remains open. A finite lateral cone now bounds Source→End; native geometry proof and
-four-view P1/P7 scope are in `Investigation.md` §58. One world-space march now replaces the view fan/two-depth mask (§60); shared positional intensity/falloff and moving art/cost acceptance stay open. Preserve the full
+direction now shares refracted sunlight; the larger physical-field repair remains open. The operator explicitly requires BEAM restoration to the pre-regression artistic fan/axial footprint; the working-tree candidate is not yet checkpointed or visually accepted. The rejected cone/world replacement remains historical evidence (Investigation §58/§60). Physical-field experiments belong to SCENE (Investigation §63); shared positional intensity/falloff and moving art/cost acceptance stay open. Preserve the full
 pre-existing EB-L/F/S/B/C/D/A/P failure inventories and the earlier R-series
 investigation. An implementation, compilation, plausible still, or GPU benchmark
 cannot become `[x]` without operator or capable local visual-agent acceptance.
 
-## Why this precedes another lighting setting
+## Current scope and protected BEAM behavior
 
-Do **physical-light authority → world-space shaft/optics correction → lighting
-BEAM/SCENE coverage → native all-angle and GPU acceptance**. Do not add coverage
-choices to a scene whose light, visible glow, reflections and scattering volume
-currently disagree. Keep the existing artistic range controls; repair their
-physical consumers rather than suppressing the effects that make the art valuable.
-This is an **EB prerequisite**, not deferred generic ray tracing or G2 shadow work.
+Lighting Coverage is already an independent BEAM/SCENE choice. Restore BEAM's accepted broad artistic
+fan and axial envelope from the pre-acceptance checkpoint; width1x must preserve that baseline, including
+its selective fixed-depth shading approximation. Do not impose the later lateral cone, world-field march
+or experimental attenuation on BEAM. Keep P1 in BEAM and preserve operator-authored presets/Custom.
+SCENE owns further fixed-world Surface/Deep scattering and physical-optics experiments. Verify both choices
+in real MC on the saved routes before claiming visual parity. Physical lighting remains active EB scope,
+not deferred generic ray tracing or G2 shadow work.
 
 ## Source audit, corrected owners and remaining contradictions
 
@@ -25,10 +25,10 @@ This is an **EB prerequisite**, not deferred generic ray tracing or G2 shadow wo
 | **Sunlit Surface** uses a directional distant sunlight | `rendering/gl_programs/extruded_bubble_scene.py:scene_knobs` sets `sun`/`sun_below` from `light_direction`, `light_power=0`; analytic `spec_dir` now shares refracted `sun_below`, replacing the contradictory world-up lobe. `Light Source` coordinates are still authored | Does moving position falsely imply moving a positional sun? Provide honest control semantics; actual sun direction consistently illuminates surface, water, glints and shafts. Native directional diagnostics establish the narrow glass repair, not complete lighting acceptance. |
 | **Deep Light** carries world-space Light Source, but its visible glow is primarily angular | In `extruded_bubble_scene.py:scene_knobs`, `light_source` is physical and Deep overrides `ray_source=light_source`; `rendering/gl_programs/extruded_bubble_program.py` evaluates visible glow from `dot(viewRay,normalize(uLightSource-uEye))` and high-power lobes, without true spatial falloff of an illuminated water field. Analytic glass now computes Source direction at each actual traced interface/matching lens exit; the former scene-wide authored path direction is removed from that positional consumer | Move emitter or a fixed camera: does brightness at known world samples decay with physical distance while visible light core and real glints agree? Source-point direction tests do not establish shared finite-emitter attenuation. |
 | Rays have distinct Ray Source → Ray End authoring | `SHAFT_FRAGMENT` has `uRaySource`, `uRayEnd`; Surface allows a separate authored segment; Deep currently forcibly aligns the ray *start* with the Light Source while the ray end remains its authored destination | Ray controls may shape light/scattering extent, but cannot silently become a second emitter. Preserve existing authored choices and explicitly distinguish Surface/Deep semantics. |
-| Shaft density is now world-space | `shaftPatternCoords` projects parallel refracted sunlight for Surface and the canonical effective Source→End basis/cone for Deep. The old angular fan and two fixed fan depths are deleted. Phase remains view-dependent gain; Surface has an explicit2.2 art calibration. Native fixed-world coordinates/noise and four-view images are scoped proof (§60), not complete visual acceptance | Holding the light/volume fixed while orbiting and looking downward must **not** move or reverse the beam volume; anisotropic scattering may vary brightness by view angle, but not physical placement. |
-| A finite length is mistaken for a finite 3D beam | `SHAFT_FRAGMENT:beamExtent(p)` now gates longitudinal `along` distance and perpendicular separation from a finite cone. Fixed source radius is0.1*WORLD_UNIT (0.9 physical units); existing angular reach widens it and softness feathers inward. The old infinite slab and view-fan/two-depth mask are removed; moving boundaries and complete physical-light coherence remain open | Use a bounded radial (or directionally widening conical) cross-section with soft edges, not the infinite slab between two planes. |
+| BEAM and SCENE are explicit independent lighting choices | BEAM restores a51aab8a fan/axial masks and matching uniforms. SCENE Surface backprojects to the water plane and adds sun-centred structure; Deep normalizes sample−Light Source to produce radial density. Both use the same half-resolution shader/blur owner; each executes one march | Preserve BEAM parity; verify SCENE fixed-source placement under camera movement, real music, all angles and bubble interaction. |
+| Rejected lateral cone narrowed accepted BEAM coverage | The160d6a78 cone and b256036f world-field substitution changed accepted art. They are removed from BEAM by explicit operator request; unused cone/basis helpers are retired | Do not reapply physical-light experiments to BEAM. SCENE owns further finite-field work. |
 | Direct illumination bypassed Light Strength in several consumers | Analytic glass/proxy/core gain already consumed strength; water glow/caustics, shaft compositing, particle scattering and small-shell/bead/snow sparkle now do so exactly once too. The shared particle vertex bypasses another gain for CPU-lit proxies. Deep particles use Source at the actual particle; ambient water/faint specks remain. Native linear-delta and exact prior-source comparisons are in §61 | Review moving authored art and bloom together; intensity coherence alone cannot establish finite-emitter appearance, small-shell visibility or shared positional falloff. |
-| Attenuation is an approximation of four physical bubbles | `uBlock0..uBlock3` and `sceneTransmittance()` use at most four proxy blockers plus aggregate particles, evaluated once at the contribution-weighted centroid of actual marched samples. One scalar distance moment suffices along a ray. This is selective shadowing; a centroid between separate lit lobes need not itself be lit | Verify coherent attenuation along **the actual field**. Bounded selective occlusion can remain; no demand for expensive shadow maps or full multiple scattering, but no false claim of complete volumetric shadowing. |
+| Attenuation is an approximation of four physical bubbles | BEAM retains the accepted fixed18 sample. SCENE uses the contributing density centroid and excludes Deep blockers behind Source. Both retain the bounded four-proxy/dust approximation | No claim of multiple scattering or complete volumetric shadowing; review moving soft bubble interaction. |
 
 These are **source findings**, not proofs that every bright/clumped pixel comes from
 lighting. Keep physical emission clumping, premature bubble disappearance, actual
@@ -51,7 +51,7 @@ occupancy, bloom/glow bias and camera projection as independently testable probl
    artistic intent and distinguish actual beam length from angular fan spread.
    For Deep Light, the physical emitter and ray origin must agree; Surface may
    shape the region that sunlight enters without claiming a local physical sun.
-3. **World-space illumination remains fixed as the observer moves.** Evaluate
+3. **SCENE world-space illumination remains fixed as the observer moves.** Evaluate
    bounded shaft density/scattering at world samples with genuine lateral
    extent, smooth radial boundary, appropriate longitudinal reach and
    scene-consistent source attenuation (positional distance falloff for Deep,
@@ -66,13 +66,14 @@ occupancy, bloom/glow bias and camera projection as independently testable probl
    authority. Measure actual GL4.6 cost before extending passes or blockers.
 5. **Settings compatibility.** `Light Type` remains `Sunlit Surface / Deep Light`.
    The independent `Lighting Coverage` setting (default **BEAM**)
-   introduces **BEAM** (physically localized shafts / underwater spotlight)
+   provides **BEAM** (the accepted artistic fan and axial Source→End envelope)
    versus **SCENE** (broad environmental illumination with coherent scattering)
    *under each existing Light Type*. It is independent of **Motion → Emission
    Geometry: BEAM/SCENE**: one governs light coverage, the other governs where
    physical bubble/particle cohorts are admitted. Do not couple or auto-switch.
-   Beam Width is a0.25–3x multiplier, default1x; it and the Ray path/Fan Spread
-   controls are shown only for enabled BEAM rays. SCENE ignores those beam
+   Beam Width is a0.25–3x footprint multiplier, default1x; it and the Ray path
+   controls are shown only for enabled BEAM rays. Ray Fan Spread is a Surface-only control; hiding its currently
+   ineffective Deep row remains open in the live plan. SCENE ignores the beam path/width
    controls and uses fixed-world scattering with the selected physical emitter.
    Reuse one emitter/shader authority. Preserve existing effective behavior,
    mutable preset values, current Custom, defaults and reset semantics; no
@@ -80,18 +81,20 @@ occupancy, bloom/glow bias and camera projection as independently testable probl
    any new persisted default explicitly before implementation, rather than
    silently assuming the emission default dictates light coverage.
 
-## Delivery sequence and gates (not another task queue)
+## Delivery boundaries and acceptance
 
-**23 October operator sequencing/default correction.** Implement independent Lighting Coverage BEAM/SCENE
-now, with BEAM as the default for all existing presets, specifically P1. Add Beam Width as a multiplier default1x;
-do not substitute the unlanded broader-aperture experiment for an authored preset or silently move P1 to SCENE.
-The target BEAM effect has broad coverage, internal variation and soft bubble interaction, not uniformly thin
-lines. Restore broad internal structure within actual bounded world support; the attempted directional-phase
-restoration failed visual comparison and was not landed. Existing BEAM1x equations remain the current baseline.
-Use actual volume contribution for attenuation, not the former two fixed-depth masks/fixed18-unit proxy point. SCENE illuminates the fixed tank
-independently of the stream emission enum and authored beam End/width. Its Surface/Deep source interpretation
-remains mode-specific. A selector is not full finite-emitter/falloff/art compliance; those gates remain open.
-This explicit user request supersedes the earlier recommendation to defer the selector until all optics accept.
+**Latest operator override:** restore BEAM from the pre-acceptance checkpoint, isolate subsequent experiments
+to SCENE, and preserve saved MC display routes. This supersedes the earlier shared-cone/world-field delivery
+approach below; the earlier attempts and failures remain evidence, not current BEAM behavior. See §63–64.
+
+
+BEAM defaults and width1x preserve existing presets, specifically P1. Broad coverage, internal variation and
+soft bubble interaction are the visual reference. BEAM intentionally retains its accepted two-depth fan masks
+and fixed18-unit selective attenuation; physical replacements must not silently alter that baseline. SCENE
+illuminates the fixed tank independently of stream emission and authored beam End/width. Its Surface/Deep
+source interpretation remains mode-specific. SCENE attenuation must use actual contributing medium, including
+fan-only light when procedural density is zero; the current binary-support/eye-sample defect remains open.
+A selector, plausible still or shader match is not full finite-emitter/falloff/art compliance.
 
 **Bounded Step B intensity candidate (§61), before distance.** Existing Light Strength now reaches analytic glass,
 glint proxies, visible Deep core/probe sun, water glow/caustics, shaft compositing, particle direct scattering
@@ -112,22 +115,19 @@ results and source ownership before patching. Check Surface directional versus
 Deep positional semantics at extreme poses and P1/P7. Verify a source shift
 changes all *intended* consumers and none of the unintended ones.
 
-**Step B — G05/G06/G27: physical authority and optical correction.** Move the
-consumers to the shared physical light; replace view-anchored placement with
-world-space field samples; implement lateral beam envelope and mode-appropriate
-attenuation. Keep ray style/softness/reactivity controls working. Compare a fixed
+**SCENE physical authority and optical correction.** Align its consumers with the physical light and
+world-space field samples, bounded tank support and mode-appropriate attenuation. Preserve BEAM's restored
+equations. Keep ray style/softness/reactivity controls working. Compare a fixed
 physical source and the *same world-space illuminated region* from under-surface
 looking up, looking **down**, side, along source axis, and oblique/rotated
 views, same frame/audio/settings. Accept view-dependent scattering intensity
 only when the geometry stays anchored. Check blocker and glint continuity.
 
-**Step C — G05/G27/G30: lighting coverage after repair.** Introduce Light Type
-× Lighting Coverage (Surface BEAM / Surface SCENE / Deep BEAM / Deep SCENE)
-only when Steps A and B demonstrate coherence. BEAM must be spatially bounded;
-SCENE must illuminate a broad authored water volume, with coherent volumetric
-response and stable world limits. Reuse existing passes and authoritative
-settings, avoid mixed emitters and retain user-authored presets. Test every
-combination with emission BEAM and emission SCENE independently.
+**Independent coverage validation.** Exercise Surface BEAM / Surface SCENE / Deep BEAM / Deep SCENE
+with emission BEAM and emission SCENE independently. SCENE must illuminate a broad authored water volume,
+with coherent volumetric response and stable world limits. Reuse existing passes and authoritative settings,
+avoid mixed emitters and retain user-authored presets. Do not make coverage validation a reason to replace
+the accepted BEAM footprint.
 
 **Step D — G06/G27/G32/G33: native acceptance and cost.** Compare old/new with
 fixed camera/light/audio/preset; then view all angles without touching sources.
@@ -192,6 +192,8 @@ following, no unexplained bubble loss, stable per-ID fades and native GPU
 p95/p99 within measured budget. A corrected RNG histogram alone is not enough.
 
 **Status:** lighting authority/optics [ ] (partial Surface/Deep analytic-direction and emitter/proxy-radiance candidates only);
-finite envelope/world shaft density [~] (native helper/full-main/frozen four-view proof; moving art/cost and shared falloff still open); lighting coverage [~] (implemented independent selector/width, native frozen comparisons; moving art and complete optics unaccepted); SCENE clustering [~] (operator visually
+BEAM restoration [~] (working-tree shader comparison; historical mapping/full-backdrop and moving parity still open);
+SCENE world shaft density [~] (source/radial helper proof; continuous support, fan-only attenuation and moving art/cost still open);
+lighting coverage [~] (implemented independent selector/width; moving art and complete optics unaccepted); SCENE clustering [~] (operator visually
 rejected); inherited-cohort explanation [ ] (test hypothesis); surface exit [ ]
 (open independent regression); all legacy EB visual failures remain unchanged.

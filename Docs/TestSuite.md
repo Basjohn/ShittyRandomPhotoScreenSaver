@@ -1172,34 +1172,44 @@ shader/fade checks:47 pass; final fade counterfactual:3 pass. Source/wall/exit c
 physical fade widths after authored energy is separated. Native P1/P7 evidence and scoped P1 visual acceptance
 live in `Docs/Reference/Extruded_Bubble/Investigation.md` §57; other-preset and long physical lifecycle gates remain.
 
-### EB finite lateral shaft envelope
+### EB restored BEAM and independent SCENE lighting
 
-`test_extruded_bubble_shaft_extent_gpu.py` executes production envelope/transmittance functions on native GL,
-with independent scalar geometry, transform/camera, control, degenerate path and actual Surface/Deep owners.
-The infinite-slab negative control fails. Root connected renderer/source/end/geometry gate:48 pass. The source
-birth test now falsifies the existing0.4/s/class resting inlet at its first2.5s credit rather than expecting an
-obsolete activation burst. Full four-view images/linear shaft fields and timing limits: Investigation §58.
-Geometry proof alone does not close world-density or positional-light field defects; the following gate covers
-the later camera-fan replacement, with moving art and full physical-light coherence still open.
+`test_extruded_bubble_accepted_beam_gpu.py` compiles the frozen a51aab8a custom shader body and production
+fragment against the same current shared GLSL. Surface/Deep, poses and softness values must match at default
+width1x, and a positive-energy guard rejects black-only comparisons. The fixture records the explicitly
+requested pre-regression equations; it does not authorize preset or full-image golden changes.
+Both sides currently use current shared uniforms, so the test alone cannot establish historical knob-mapping
+or complete-backdrop parity. Independent coverage of those boundaries remains open in G06a.
 
-### EB world shaft density and actual shadow sample
+`test_extruded_bubble_shaft_extent_gpu.py` checks the restored Source/End axial fades, broad footprint,
+rigid/camera independence, degenerate effective paths and actual source ownership. The rejected finite-cone
+assertions/helpers are retired. Width is a rendered footprint control, protected by production fan/backdrop
+checks; it does not claim a physical source aperture.
 
-`test_extruded_bubble_world_shaft_gpu.py` checks actual native pattern coordinates/noise, camera independence,
-Surface parallel projection, Deep normalized cone projection, live softness/flicker/shimmer, canonical mode/basis
-uploads independent of strength and safe empty/degenerate fields. A controlled-density oracle checks the production
-40-step integral and scalar centroid at two jitters. A full production-main test retains real attenuation wiring:
-restoring the18-unit sample incorrectly introduces16% shadow and fails. Root connected gate:62 pass. Diagnostic
-main tests alone cannot establish final wiring, art, moving camera behavior or production cost; §60 records native scope.
+`test_extruded_bubble_world_shaft_gpu.py` now checks SCENE only: actual water-plane backprojection, radial
+Deep Source density, camera independence, live softness/flicker/shimmer, canonical light geometry independent
+of strength, beam-control invariance and finite tank support. Independent box/medium quadrature checks the
+40-step integral/centroid. Production-main shadowing retains the fixed18 negative control for SCENE only;
+BEAM intentionally retains its accepted selective approximation. A behind-emitter blocker cannot shadow Deep.
+Pending falsifiers must cover continuous SCENE fan support and a Surface fan with zero procedural density:
+its attenuation must sample actual contributing medium rather than the eye. Existing passing tests do not
+close those newly identified gaps.
 
-### EB independent lighting coverage and beam width
+Lazy Settings tests protect BEAM/1x defaults for seven existing presets, reversed bucket construction,
+conditions, save/hydration and independence from Emission Geometry. Backdrop tests protect side/away SCENE
+scattering and meaningful Deep BEAM width without changing SCENE. Actual MC capture provenance, fixed ray
+intensity limitations and remaining moving/music/physical optics gates are in Investigation §63.
 
-`test_extruded_bubble_lazy_bucket_ui.py` exercises controlling Light and dependent Rays buckets in reverse
-construction order, canonical BEAM/1x defaults for all seven existing presets, save/hydration, and independence
-from Emission Geometry. Native shaft geometry checks0.25/1/3 cross-sections against the original1x oracle.
-World-shaft GPU checks distinguish bounded BEAM from tank-wide SCENE in both Light Types, including unused
-beam Source/End/width invariance, finite world boundaries and degenerate BEAM. Native production-host P1/P7
-comparisons and limitations are recorded in Investigation §62. These are control/geometry gates; broad-beam
-appearance, physical diffusion, moving all-angle quality and positional falloff remain open.
+### Held-left framed orbit
+
+`test_visualizer_plain_orbit.py`, the existing framed-input/auxiliary gates and the narrow runtime-retirement
+AST gate protect retained MouseArea/TapHandler/glyph refusal, lower/upper stacking, pose-only changes and one
+save, cursor fade reuse, threshold/cancellation, exact physical clipping, failed cleanup ownership/retry and
+foreign captures. Qt false/true release results are checked against real native ownership in both directions.
+The broad Python window.event override is forbidden. Hidden tests do not prove native startup or physical
+focus/capture/DPI behavior; Investigation §64 records the actual black-start regression and MC correction.
+The lower-exclusive-MouseArea press/release case remains an open regression gap; the lower-passive stacking
+exception must not strand an existing exclusive owner in its pressed state.
 
 ### EB shared direct-light gain
 

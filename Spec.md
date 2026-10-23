@@ -322,11 +322,15 @@ rest calibrations. Particle Amount controls squared density at constant per-poin
 activity separately releases displayed particle radius and glow. Subpixel energy retains the authored radius
 when display contraction reaches the existing raster floor; SCENE physical fades still use the contracted radius.
 Zero authored amount still draws no particles.
-Ray Source→End has a finite lateral cone with a fixed world-unit source aperture; existing angular spread
-widens it and softness feathers inward. Preserve axial fades and suppress coincident effective paths.
-One source-anchored world pattern is integrated in the existing half-resolution march, with Surface parallel
-sun projection and Deep effective-segment projection. View phase changes gain only. Selective four-proxy shadowing
-uses the contribution centroid, not an arbitrary depth. Shared positional-light consumers remain acceptance work.
+BEAM lighting preserves the pre-regression artistic fan, Source→End axial fades and selective four-bubble
+attenuation. Beam Width1x retains the accepted footprint; changes scale its angular spread/concentration.
+SCENE uses a fixed-world march: Surface density backprojects to the actual water plane and shares the sun's
+broad structure; Deep density radiates from the physical Light Source. Its selective shadow sample uses the
+contribution centroid and ignores blockers behind the emitter. These are two explicit lighting choices, not a
+fallback. Further physical-field experiments are confined to SCENE; do not retune BEAM to force that model.
+Shared positional-light optics, moving all-angle quality and complete diffusion remain acceptance work.
+The restored BEAM equations are an explicit artistic baseline: its fixed-depth masks/attenuation are retained
+approximations. SCENE physical-light experiments must not replace them or migrate P1 to another coverage mode.
 Minimum size is a separate requirement from excursion, particularly for the big population. The scene exists
 independently of camera pose; projection and material lifetime opacity must not relocate populations or replace
 transparency with geometric shrinking. Detailed requirements: `Docs/Reference/Extruded_Bubble/Target.md`;
@@ -342,7 +346,7 @@ boundary. Legal canonical home remains unchanged. Domain containment does not es
 Preset starting-view metadata owns pose; independently admitted Camera Field of View remains an authorable mode
 control in the normal preset snapshot. A reset's canonical lens policy does not prohibit that authored value.
 
-EB lighting is subject to the physical-authority repair contract in `Docs/Reference/Extruded_Bubble/Lighting_Authority_Repair.md` (partially implemented, visually unaccepted): one directional Surface or positional Deep emitter governs medium light, core glow, bubble glints, world-space ray scattering and attenuation. Ray Source/End can author the illuminated region but not a contradictory second emitter. Real beam extent has lateral boundaries; camera direction affects scattering brightness, never where the volume exists. `Light Type` remains Surface/Deep. Independent `Lighting Coverage` BEAM/SCENE defaults to BEAM for existing presets; Beam Width defaults to1x and scales the bounded beam cross-section. SCENE scattering uses the fixed tank, directional sunlight or actual Deep Light Source, ignoring the unused beam path/width. Motion `Emission Geometry` remains independent. No preset/Custom overwrite or automatic coverage migration is permitted. Physical lighting, broad-beam fidelity, native all-angle quality, SCENE grouping and surface retirement remain active visual acceptance work, not blanket spec compliance.
+EB lighting is subject to the physical-authority repair contract in `Docs/Reference/Extruded_Bubble/Lighting_Authority_Repair.md` (partially implemented, visually unaccepted): one directional Surface or positional Deep emitter governs medium light, core glow, bubble glints, world-space ray scattering and attenuation. Ray Source/End can author the illuminated region but not a contradictory second emitter. BEAM retains its accepted stylized footprint; SCENE scattering is bounded by the fixed physical tank. `Light Type` remains Surface/Deep. Independent `Lighting Coverage` BEAM/SCENE defaults to BEAM for existing presets; Beam Width defaults to1x and scales the BEAM light footprint. SCENE scattering uses the fixed tank, directional sunlight or actual Deep Light Source, ignoring the unused beam path/width. Motion `Emission Geometry` remains independent. No preset/Custom overwrite or automatic coverage migration is permitted. Physical lighting, broad-beam fidelity, native all-angle quality, SCENE grouping and surface retirement remain active visual acceptance work, not blanket spec compliance.
 
 EB positions/radii, sources and stream bases use physical world units before contact and immutable capture.
 SCENE refill derives its passage length from the same selected physical inlet faces and actual box tracks;

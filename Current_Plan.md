@@ -38,11 +38,16 @@ Checkpoint confirmed documentation or authorized changes narrowly, inspect the a
 
 ## Shared camera gestures and control hints
 
-- [ ] **Held-left-drag orbit for bordered 3D visualizers:** after the camera/idle checkpoint, trace the existing
-  press/drag/double-click/focus owners and add plain-left orbit inside the visible box only if existing click,
-  double-click, child Edit and glyph behavior can be preserved. Reuse camera admission and cursor fade-out/in;
-  confine control to the card while held, restore cursor on release/cancel/focus loss. Event-driven only: no
-  polling, timers or extra motion owner. Verify cancellation, edges, DPI and interaction conflicts natively.
+- [~] **Held-left-drag orbit — Awaiting Validation:** operator reports orbit working in their own MC launch.
+  Existing camera admission/persistence and cursor fade own the gesture; retained glyph/above-card controls keep
+  first refusal, while lower passive handlers cannot veto a higher visualizer. Native confinement cleanup now
+  verifies actual GetCapture after Qt release and retains unresolved ownership. Review physical focus/capture
+  loss, release/close/reset, overlap and mixed DPI. The broad Python window.event override caused black startup;
+  it is removed and forbidden by a regression bar. MC now starts/exits on the saved Display2 route. Synthetic
+  Qt press drivers are not physical orbit acceptance. History and launch correction: `Investigation.md` §64.
+  - [ ] **Exclusive-grab safety:** decline promotion when an existing MouseArea/exclusive grab owns the press,
+    including below the card. The lower-passive-handler exception must not consume another control's release
+    or leave it pressed. Add a real retained MouseArea press/release falsifier before checkpointing the candidate.
 - [~] **3D framed control hint — Awaiting Validation:** review the supplied thicker artwork at 90% opacity,
   crisp viewport scaling and top-right placement in actual runtime/mixed DPI. Fade-out starts after five seconds;
   movement/menu/Ctrl changes do not restart a physical visit. Widgets → General → Appearance now owns Show Glyphs
@@ -172,12 +177,34 @@ actors and ray shimmer, explicitly **not** water/ocean-surface animation. No res
     idle remains accepted, P7 still needs major work. Positional falloff and finite-emitter size remain open.
     Native linear-delta/proxy checks and exact prior-source P1/P7 comparisons: `Investigation.md` §61.
   - [~] **Deep analytic source-point candidate — Awaiting Validation:** glass now computes Source direction at each traced interface or matching homogeneous lens exit, including fused tangent surfaces and near/sub-ray paths. Native pixels prove fixed-Source End invariance, Source response and rigid translation/rotation covariance; CPU/GPU optics mirror actual path points, including inside/TIR. Frozen P1 Surface control is byte-identical; P7 highlights change. Review moving close-source/union/near art and shader storage/register cost, then resolve shared finite-emitter attenuation and the shaft field. No claim of full secondary-ray transport. Local producer: `Evidence/2026-10-22_deep_shading_points/`.
-- [ ] **G06 all-angle physical rays** (EB-C; Investigation §38): hold lighting constant, look up/down/side near surface. **Must see** genuinely descending shafts through the same physical region; angular fan and look-toward-light gain may NOT hide/reverse a real down-view volume.
+- [ ] **G06 all-angle rays** (EB-C; Investigation §38/§63): preserve restored BEAM fidelity against its accepted reference. For SCENE, hold lighting constant and look up/down/side near surface: shafts must descend through the same physical region; view-angle gain must not hide/reverse that volume. Physical-field experiments remain SCENE-only.
+  - [~] **Immediate operator rejection:** `captures/2026-10-23_09-41-49_032954_display1_visualizer_e31401f0.png`
+    shows misplaced columns/sheets, not the broad structured sunlight in `captures/Preset1Acceptance.png`.
+    Restore BEAM parity and correct SCENE placement before further preset tuning. Verify in actual MC with normal
+    updates and useful diagnostic flags; isolated render-host stills do not meet this operator request. Preserve
+    physical world support and source authority; a failed/dim phase pilot is not an improvement.
 
 **G05/G06 lighting-authority sub-order, 22 October audit (NEW OPEN work, not a second queue):**
 
-- [ ] **G05a audit/repair one physical light authority before adding coverage:** trace Light Type, world Light Source/End, Ray Source/End, Sunlit directional versus Deep positional semantics into water illumination, visible glow, glints, ray origin, attenuation and final HDR/bloom. Existing Deep glow is mainly view-angular despite a real world source; Surface's positional light marker has misleading semantics. Make physical emission and scattering agree without deleting existing art controls. **Must see** shared world geometry and honest UI at fixed light/camera during individual node moves. Evidence/design: [`Lighting_Authority_Repair.md`](Docs/Reference/Extruded_Bubble/Lighting_Authority_Repair.md).
-- [~] **G06a world-space beam extent / all-angle repair — Awaiting Validation:** a finite lateral cone and one source-anchored world density replace the old axial slab/camera fan (§58/§60). The half-resolution40-sample pipeline retains selective four-bubble/particle attenuation at the actual contribution centroid. Verify moving all-angle boundaries, shared positional illumination/falloff, shadow continuity and representative GL4.6 cost. **Must see** a stable illuminated world region when looking up/down/side/along the light; frozen helper/still proof does not close this gate.
+- [ ] **G05a light authority and honest controls:** trace Light Type, world Light Source/End, Ray Source/End, Sunlit directional versus Deep positional semantics into water illumination, visible glow, glints, ray origin, attenuation and final HDR/bloom. Existing Deep glow is mainly view-angular despite a real world source; Surface's positional light marker has misleading semantics. Make SCENE physical emission and scattering agree while preserving BEAM's accepted art and independent coverage choice. **Must see** shared world geometry and honest UI at fixed light/camera during individual node moves. Evidence/design: [`Lighting_Authority_Repair.md`](Docs/Reference/Extruded_Bubble/Lighting_Authority_Repair.md).
+- [~] **G06a BEAM restoration / SCENE placement — Awaiting Validation:** BEAM's pre-acceptance fan, broad
+  footprint and uniforms are restored from a51aab8a; the later lateral cone and world-march replacement no
+  longer alter BEAM. A frozen native shader oracle compares both Light Types. SCENE Surface now shares the sun's
+  structured direction over fixed-world support; Deep density radiates from the actual Light Source. Verify
+  musical, moving all-angle/bubble-shadow fidelity and cost in real MC. Do not treat fixed-ray-intensity
+  placement captures as music/idle acceptance. Future lighting experiments belong in SCENE. `Investigation.md` §63.
+  - [ ] **Freeze the missing parity boundary:** the shader oracle currently shares current uniform uploads;
+    independently verify the historical knob mapping and full-backdrop width1x behavior. The working-tree
+    restoration is not yet checkpointed or accepted against moving `Preset1Acceptance` conditions.
+  - [ ] **SCENE support/attenuation:** replace binary any-sample fan coverage with continuous medium support;
+    when noise density is zero but the Surface fan contributes, shadow at its real medium contribution rather
+    than the eye. Keep one selected march and the existing bounded blocker query; BEAM stays untouched.
+  - [ ] **Honest control visibility:** Ray Fan Spread currently appears for Deep although neither Deep path
+    consumes it. Restrict the row to enabled Surface rays and verify lazy conditional construction.
+  - [ ] **Final MC verification:** after those corrections, capture Surface BEAM/SCENE and Deep SCENE with
+    saved display/media/visualizer routes, normal updates and the useful CLI diagnostics. Record actual entry,
+    profile, window count and effective lighting choice. Do not reuse forced-ALL or synthetic-input runs as
+    operator reproduction, or fixed-intensity placement stills as moving/music acceptance.
 - [~] **G05/G27/G30 Lighting Coverage — Awaiting Validation:** independent Light → **Lighting Coverage
   BEAM / SCENE** and Rays → Beam Width now use canonical settings, default BEAM/1x for every existing preset.
   Motion → Emission Geometry is independent; no preset rewrite or P1 migration. Verify broad structured BEAM
@@ -250,24 +277,12 @@ actors and ray shimmer, explicitly **not** water/ocean-surface animation. No res
 #### P4 | Optical/material fidelity after underlying world and motion truth
 
 - [ ] **G26 full water-surface coverage** (EB-B/A): views far from and directly under sun. **Must see** continuous, dimmer surface outside the brilliant local light without a floating bright island.
-- [ ] **G27 ray softness, source reach, glints and attenuation** (EB-C/A): move bubble/particles through fixed shafts, compare bloom and final pixels. **Must see** coherent physical direction/soft occlusion with controls effective and bounded cost. **NEW dependency:** demonstrate true finite lateral beam width (not merely a Source→End axial slab), consistent physical light/glow/glints/medium sampling, appropriate Deep attenuation and the existing four-bubble proxy limits before any separate Lighting Coverage BEAM/SCENE can claim visual success; compare pre/post bloom, view angles, P1/P7, and current music/range controls. Reference: `Lighting_Authority_Repair.md`.
-  - [~] **Finite lateral envelope — Awaiting Validation:** inspect moving/all-angle Source→End cones,
-    near/far boundaries and actual cost. Production geometry now has a fixed world-unit source aperture,
-    reach-driven widening and inward softness; axial fades remain, coincident effective paths emit nothing.
-    Frozen P1/P7 views retain readable art; moving/peripheral cone boundaries and full light-field consistency
-    remain open. Geometry evidence: `Investigation.md` §58; current world march: §60.
-  - [~] **World shaft density — Awaiting Validation:** inspect continuous native camera/light motion and
-    measured costs against P1/P7 targets. One source-anchored density now replaces the camera fan/two-depth gate
-    in the existing40-step half-resolution march. Surface has explicit2.2 gain calibration; Deep projects through
-    canonical segment axes and source distance. Shadow proxies use a scalar contribution centroid, an approximation
-    that may lie between lit lobes. Preserve P1 quiet readability; P7 art remains far from its target. Then finish
-    shared Deep falloff/finite-emitter optics across medium, visible core, glints, shafts and particles before coverage/preset tuning.
-    Scope, retired private fan knobs, native/negative-control proof: `Investigation.md` §60.
-  - [~] **23 October operator ray regression — repair first:** the latest active P1 screenshot rejects broad,
-    washed-out columns after the world-field change. Restore broad coverage with readable internal structure in the physical
-    source field without restoring the camera-anchored fan, changing presets or masking it with exposure/particles.
-    Compare isolated linear shafts and full active/idle P1/P7 at the same recorded input and legal camera views;
-    protect P1's accepted shown idle. Evidence and candidate rationale: `Investigation.md` §62.
+- [ ] **G27 ray softness, source reach, glints and attenuation** (EB-C/A): move bubble/particles through fixed shafts, compare bloom and final pixels. **Must see** coherent physical direction/soft occlusion with controls effective and bounded cost. **Current scope:** preserve the operator-restored BEAM appearance while improving SCENE physical light/glow/glints/medium coherence, appropriate Deep attenuation and the existing four-bubble proxy limits; compare pre/post bloom, view angles, P1/P7, and current music/range controls. Reference: `Lighting_Authority_Repair.md`.
+  - [ ] **SCENE moving optics/cost:** validate continuous camera/light movement, fixed-world support,
+    source-coherent structure and soft blocker transitions before claiming physical compliance. Compare isolated
+    linear shafts and full active/idle P1/P7 at matched recorded input and legal views; protect P1's accepted
+    shown idle. The rejected shared-cone/world-field approaches are historical (§58/§60/§62); current restoration,
+    candidate scope and immediate falsifiers are owned by G06a and `Investigation.md` §63.
   - [ ] **Lab physical-uniform debt:** before using frozen-art lab output as a current physical-light reference,
     migrate its manual common upload to admitted physical Light/Ray Source/End. It currently omits those uniforms;
     shared shader bytes alone do not establish current lab/product parity. Use the production-host producers meanwhile.
