@@ -38,6 +38,7 @@ from core.reddit_preparation import (
     get_reddit_cached_timestamp,
     load_reddit_startup_snapshot,
     prepare_reddit_feed,
+    reddit_reservoir_path,
     touch_reddit_marker,
 )
 from core.runtime_flags import automatic_service_updates_enabled
@@ -334,11 +335,17 @@ class RedditRuntimeService:
         accepted_revision = self._accepted_revision
         cache_path = self._cache_file_path()
         gate_path = self._service_gate_file_path()
+        subreddit = self._config.subreddit
         runtime_generation = self._runtime_generation
         self_ref = weakref.ref(self)
 
         def _load() -> RedditStartupSnapshot:
-            return load_reddit_startup_snapshot(cache_path, gate_path)
+            return load_reddit_startup_snapshot(
+                cache_path,
+                gate_path,
+                subreddit=subreddit,
+                candidate_limit=LIST_WIDGET_MAX_CAPACITY,
+            )
 
         _load._srpss_runtime_generation = runtime_generation
 
@@ -464,7 +471,9 @@ class RedditRuntimeService:
     # Cadence
     # ------------------------------------------------------------------
     def _cache_file_path(self) -> Path:
-        return _REDDIT_CACHE_DIR / f"{self._config.cache_key}_posts.json"
+        return reddit_reservoir_path(
+            _REDDIT_CACHE_DIR, self._config.cache_key, self._config.subreddit
+        )
 
     def _service_gate_file_path(self) -> Path:
         return _REDDIT_CACHE_DIR / "_startup_gate.touch"
@@ -778,6 +787,7 @@ class RedditRuntimeService:
                 current_candidates=current_candidates,
                 cache_path=cache_path,
                 cache_key=config.cache_key,
+                subreddit=config.subreddit,
                 candidate_limit=LIST_WIDGET_MAX_CAPACITY,
             )
 

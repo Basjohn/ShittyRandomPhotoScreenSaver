@@ -7,7 +7,12 @@ import time
 import pytest
 
 from core.reddit_post_provider import RedditProviderResult
-from core.reddit_preparation import RedditPost, write_reddit_post_cache
+from core.reddit_preparation import (
+    RedditPost,
+    read_reddit_post_cache,
+    reddit_reservoir_path,
+    write_reddit_post_cache,
+)
 from core.settings.widget_capacity_policy import LIST_WIDGET_MAX_CAPACITY
 from widgets.reddit_runtime import (
     _REDDIT_PROVIDER_SORT,
@@ -125,7 +130,9 @@ def test_reddit_runtime_loads_startup_cache_without_provider_work(
     monkeypatch.setattr(runtime_module, "_REDDIT_CACHE_DIR", tmp_path)
     monkeypatch.setattr(runtime_module, "automatic_service_updates_enabled", lambda: False)
     cached = RedditPost("Cached", "https://example.com/cached", 1, 100.0)
-    assert write_reddit_post_cache(tmp_path / "reddit_posts.json", (cached,))
+    assert write_reddit_post_cache(
+        reddit_reservoir_path(tmp_path, "reddit", "python"), (cached,), "python"
+    )
     provider = _Provider([])
     service = _service(provider)
     consumer = _Consumer()
@@ -223,8 +230,10 @@ def test_reddit_runtime_rejects_stale_startup_snapshot_after_live_acceptance(
 
     monkeypatch.setattr(runtime_module, "_REDDIT_CACHE_DIR", tmp_path)
     monkeypatch.setattr(runtime_module, "automatic_service_updates_enabled", lambda: False)
-    cached = RedditPost("Old cache", "https://example.com/old", 1, 100.0)
-    assert write_reddit_post_cache(tmp_path / "reddit_posts.json", (cached,))
+    cached = RedditPost("Old cache", "https://example.com/old", 1, 50.0)
+    assert write_reddit_post_cache(
+        reddit_reservoir_path(tmp_path, "reddit", "python"), (cached,), "python"
+    )
     held = []
 
     class _HeldThreadManager:
@@ -389,8 +398,10 @@ def test_reddit_accepted_memory_outranks_older_startup_snapshot_on_reactivation(
 
     monkeypatch.setattr(runtime_module, "_REDDIT_CACHE_DIR", tmp_path)
     monkeypatch.setattr(runtime_module, "automatic_service_updates_enabled", lambda: False)
-    old = RedditPost("Old cache", "https://example.com/old", 1, 100.0)
-    assert write_reddit_post_cache(tmp_path / "reddit_posts.json", (old,))
+    old = RedditPost("Old cache", "https://example.com/old", 1, 50.0)
+    assert write_reddit_post_cache(
+        reddit_reservoir_path(tmp_path, "reddit", "python"), (old,), "python"
+    )
     provider = _Provider(
         [RedditProviderResult.with_posts(_rows("Fresh memory"), source_id="test")]
     )
@@ -544,3 +555,110 @@ def test_reddit_dormant_owner_drops_deferred_fetch(monkeypatch):
     finally:
         gate.close()
         install_gate(None)
+
+
+def _batch(label: str, count: int, *, newest: float):
+    return [
+        {
+            "title": f"{label} {index}",
+            "url": f"https://example.com/{label.casefold()}/{index}",
+            "score": 1,
+            "created_utc": newest - index,
+        }
+        for index in range(count)
+    ]
+
+
+def _started_service(provider, tmp_path, monkeypatch, *, subreddit="python"):
+    import widgets.reddit_runtime as runtime_module
+
+    monkeypatch.setattr(runtime_module, "_REDDIT_CACHE_DIR", tmp_path)
+    monkeypatch.setattr(runtime_module, "automatic_service_updates_enabled", lambda: False)
+    service = _service(provider, subreddit=subreddit)
+    service._schedule_timer = lambda: None
+    consumer = _Consumer()
+    service.attach_consumer(consumer)
+    service.set_thread_manager(_ImmediateThreadManager())
+    assert service.start()
+    return service, consumer
+
+
+def test_reddit_subreddit_change_never_shows_the_previous_subreddit_reservoir(
+    monkeypatch, tmp_path
+) -> None:
+    provider = _Provider(
+        [RedditProviderResult.with_posts(_batch("Python", 3, newest=100.0), source_id="rss")]
+    )
+    service, consumer = _started_service(provider, tmp_path, monkeypatch)
+    assert service.fetch()
+    python_window = service.candidates
+    assert len(python_window) == 3
+
+    assert service.set_subreddit("pics") is True
+    assert service.candidates == ()
+    assert all(
+        not any(post in python_window for post in posts) for posts, _ in consumer.posts[1:]
+    )
+
+    assert service.set_subreddit("Python") is True
+    assert service.candidates == python_window
+    assert consumer.posts[-1][1]["from_cache"] is True
+
+
+def test_reddit_small_batches_accumulate_across_restart(monkeypatch, tmp_path) -> None:
+    first = _Provider(
+        [RedditProviderResult.with_posts(_batch("First", 3, newest=100.0), source_id="rss")]
+    )
+    service, _consumer = _started_service(first, tmp_path, monkeypatch)
+    assert service.fetch()
+    service.retire()
+
+    second = _Provider(
+        [RedditProviderResult.with_posts(_batch("Second", 3, newest=200.0), source_id="html_old")]
+    )
+    restarted, consumer = _started_service(second, tmp_path, monkeypatch)
+    assert consumer.posts[0][1]["from_cache"] is True
+    assert len(restarted.candidates) == 3
+    assert restarted.fetch()
+
+    titles = [post.title for post in restarted.candidates]
+    assert titles == [f"Second {i}" for i in range(3)] + [f"First {i}" for i in range(3)]
+
+
+def test_reddit_blocked_and_empty_fetches_retain_the_full_reservoir(
+    monkeypatch, tmp_path
+) -> None:
+    from core.reddit_post_provider import RedditProviderUnavailableError
+
+    full = _batch("Full", LIST_WIDGET_MAX_CAPACITY, newest=1_000.0)
+
+    class _Sequence(_Provider):
+        def fetch_posts(self, request):
+            outcome = self.results.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+    provider = _Sequence(
+        [
+            RedditProviderResult.with_posts(full, source_id="rss"),
+            RedditProviderUnavailableError(
+                "Reddit public sources returned HTTP 429/403",
+                attempted_sources=("rss", "html_old", "html_www"),
+                blocked=True,
+            ),
+            RedditProviderResult.with_posts([], source_id="rss"),
+        ]
+    )
+    service, consumer = _started_service(provider, tmp_path, monkeypatch)
+    assert service.fetch()
+    accepted = service.candidates
+    assert len(accepted) == LIST_WIDGET_MAX_CAPACITY
+
+    assert service.fetch()
+    assert service.fetch()
+
+    assert service.candidates == accepted
+    assert len(consumer.errors) == 2
+    path = reddit_reservoir_path(tmp_path, "reddit", "python")
+    assert read_reddit_post_cache(path, "python") == accepted
