@@ -279,14 +279,16 @@ def _edit_shared_widget_theme_color(
         tab.widget_header_fill_btn.set_color(_rgba_to_qcolor(snapshot.color(token)))
 
 
-def _settings_app_data_dir(tab: WidgetsTab) -> Path | None:
-    storage_path = getattr(getattr(tab, "_settings", None), "_storage_path", None)
-    if storage_path is None:
-        return None
-    try:
-        return Path(storage_path).resolve().parent
-    except (OSError, RuntimeError, TypeError, ValueError):
-        return None
+def _cache_data_root(tab: WidgetsTab) -> Path:
+    """Cache families live in the data root, not the per-profile settings folder.
+
+    Under MC the settings folder is ``SRPSS_MC`` while every cache is in the
+    shared ``SRPSS`` root; an isolated manager supplies its own root.
+    """
+    from core.settings.storage_paths import resolve_app_data_dir
+
+    get_root = getattr(getattr(tab, "_settings", None), "get_storage_root", None)
+    return resolve_app_data_dir(get_root() if callable(get_root) else None)
 
 
 def _get_cache_thread_manager(tab: WidgetsTab) -> ThreadManager:
@@ -946,8 +948,7 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     shared_styles.apply_shared_label_style(cache_intro, "INFO_LABEL_STYLE")
     cache_layout.addWidget(cache_intro)
 
-    app_data_dir = _settings_app_data_dir(tab)
-    descriptors = get_cache_family_descriptors(app_data_dir=app_data_dir)
+    descriptors = get_cache_family_descriptors(app_data_dir=_cache_data_root(tab))
     tab._cache_family_descriptors = {descriptor.family_id: descriptor for descriptor in descriptors}
     tab.cache_family_checks = {}
     cache_grid = QGridLayout()
