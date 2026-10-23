@@ -1191,6 +1191,16 @@ uploads independent of strength and safe empty/degenerate fields. A controlled-d
 restoring the18-unit sample incorrectly introduces16% shadow and fails. Root connected gate:62 pass. Diagnostic
 main tests alone cannot establish final wiring, art, moving camera behavior or production cost; §60 records native scope.
 
+### EB independent lighting coverage and beam width
+
+`test_extruded_bubble_lazy_bucket_ui.py` exercises controlling Light and dependent Rays buckets in reverse
+construction order, canonical BEAM/1x defaults for all seven existing presets, save/hydration, and independence
+from Emission Geometry. Native shaft geometry checks0.25/1/3 cross-sections against the original1x oracle.
+World-shaft GPU checks distinguish bounded BEAM from tank-wide SCENE in both Light Types, including unused
+beam Source/End/width invariance, finite world boundaries and degenerate BEAM. Native production-host P1/P7
+comparisons and limitations are recorded in Investigation §62. These are control/geometry gates; broad-beam
+appearance, physical diffusion, moving all-angle quality and positional falloff remain open.
+
 ### EB shared direct-light gain
 
 `test_extruded_bubble_light_gain_gpu.py` executes the production particle vertex and real scene/uniform mapping:

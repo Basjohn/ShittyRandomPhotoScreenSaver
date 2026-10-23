@@ -65,12 +65,15 @@ occupancy, bloom/glow bias and camera projection as independently testable probl
    shadow maps, ray tracing, new render scheduling, worker/timer or simulation
    authority. Measure actual GL4.6 cost before extending passes or blockers.
 5. **Settings compatibility.** `Light Type` remains `Sunlit Surface / Deep Light`.
-   A separate, **proposed and not implemented** `Lighting Coverage` setting
+   The independent `Lighting Coverage` setting (default **BEAM**)
    introduces **BEAM** (physically localized shafts / underwater spotlight)
    versus **SCENE** (broad environmental illumination with coherent scattering)
    *under each existing Light Type*. It is independent of **Motion → Emission
    Geometry: BEAM/SCENE**: one governs light coverage, the other governs where
    physical bubble/particle cohorts are admitted. Do not couple or auto-switch.
+   Beam Width is a0.25–3x multiplier, default1x; it and the Ray path/Fan Spread
+   controls are shown only for enabled BEAM rays. SCENE ignores those beam
+   controls and uses fixed-world scattering with the selected physical emitter.
    Reuse one emitter/shader authority. Preserve existing effective behavior,
    mutable preset values, current Custom, defaults and reset semantics; no
    automated preset rewrite or protected/frozen artistic golden. Decide/verify
@@ -78,6 +81,17 @@ occupancy, bloom/glow bias and camera projection as independently testable probl
    silently assuming the emission default dictates light coverage.
 
 ## Delivery sequence and gates (not another task queue)
+
+**23 October operator sequencing/default correction.** Implement independent Lighting Coverage BEAM/SCENE
+now, with BEAM as the default for all existing presets, specifically P1. Add Beam Width as a multiplier default1x;
+do not substitute the unlanded broader-aperture experiment for an authored preset or silently move P1 to SCENE.
+The target BEAM effect has broad coverage, internal variation and soft bubble interaction, not uniformly thin
+lines. Restore broad internal structure within actual bounded world support; the attempted directional-phase
+restoration failed visual comparison and was not landed. Existing BEAM1x equations remain the current baseline.
+Use actual volume contribution for attenuation, not the former two fixed-depth masks/fixed18-unit proxy point. SCENE illuminates the fixed tank
+independently of the stream emission enum and authored beam End/width. Its Surface/Deep source interpretation
+remains mode-specific. A selector is not full finite-emitter/falloff/art compliance; those gates remain open.
+This explicit user request supersedes the earlier recommendation to defer the selector until all optics accept.
 
 **Bounded Step B intensity candidate (§61), before distance.** Existing Light Strength now reaches analytic glass,
 glint proxies, visible Deep core/probe sun, water glow/caustics, shaft compositing, particle direct scattering
@@ -178,6 +192,6 @@ following, no unexplained bubble loss, stable per-ID fades and native GPU
 p95/p99 within measured budget. A corrected RNG histogram alone is not enough.
 
 **Status:** lighting authority/optics [ ] (partial Surface/Deep analytic-direction and emitter/proxy-radiance candidates only);
-finite envelope/world shaft density [~] (native helper/full-main/frozen four-view proof; moving art/cost and shared falloff still open); lighting coverage [ ] (proposed only); SCENE clustering [~] (operator visually
+finite envelope/world shaft density [~] (native helper/full-main/frozen four-view proof; moving art/cost and shared falloff still open); lighting coverage [~] (implemented independent selector/width, native frozen comparisons; moving art and complete optics unaccepted); SCENE clustering [~] (operator visually
 rejected); inherited-cohort explanation [ ] (test hypothesis); surface exit [ ]
 (open independent regression); all legacy EB visual failures remain unchanged.

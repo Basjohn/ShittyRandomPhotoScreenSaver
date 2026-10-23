@@ -42,6 +42,8 @@ def shaft_geometry(qt_app):
 uniform vec3 uRaySource, uRayEnd, uEye;
 uniform mat3 uViewToWorld;
 uniform float uRayRadius, uFanReach, uShaftSoft, uParticleAtten;
+uniform float uBeamWidth, uLightingScene, uPositionalLight;
+uniform vec3 uSunBelow,uLightSource;
 uniform vec4 uBlock0, uBlock1, uBlock2, uBlock3;
 layout(std430,binding=5) readonly buffer Points { vec4 points[]; };
 layout(std430,binding=6) writeonly buffer Results { vec4 results[]; };
@@ -66,7 +68,7 @@ void main() {
         gl.glEnable(gl.GL_RASTERIZER_DISCARD)
 
         def evaluate(points, *, source=(0., 0., 0.), end=(0., 0., -10.), radius=.9,
-                     reach=.3, softness=.5, eye=(0., 0., 0.), view=None):
+                     reach=.3, softness=.5, width=1., eye=(0., 0., 0.), view=None):
             rows = np.ones((len(points), 4), dtype='f4')
             rows[:, :3] = points
             for binding, buffer, data in ((5, buffers[0], rows), (6, buffers[1], np.zeros_like(rows))):
@@ -76,6 +78,7 @@ void main() {
             for name, xyz in (('uRaySource', source), ('uRayEnd', end), ('uEye', eye)):
                 gl.glUniform3f(loc(name), *xyz)
             for name, value in (('uRayRadius', radius), ('uFanReach', reach),
+                                ('uBeamWidth', width), ('uLightingScene', 0.),
                                 ('uShaftSoft', softness), ('uParticleAtten', .05)):
                 gl.glUniform1f(loc(name), value)
             gl.glUniformMatrix3fv(loc('uViewToWorld'), 1, False,
@@ -141,6 +144,20 @@ def test_production_reach_widens_and_softness_feathers_without_moving_outer_edge
     narrow = shaft_geometry(point, reach=.1)[0, 0]
     wide = shaft_geometry(point, reach=.7)[0, 0]
     assert narrow == 0. and wide == 1.
+
+
+@pytest.mark.qt
+def test_authored_beam_width_scales_the_whole_cross_section_with_one_as_baseline(shaft_geometry):
+    point = [(2., 0., -5.)]
+    assert shaft_geometry(point, width=.25)[0, 0] == 0.
+    baseline = shaft_geometry(point, width=1.)[0, 0]
+    assert baseline == pytest.approx(_extent(point[0], (0.,0.,0.), (0.,0.,-10.)), abs=2e-6)
+    assert shaft_geometry(point, width=3.)[0, 0] == 1.
+
+
+@pytest.mark.qt
+def test_softness_feathers_the_existing_outer_edge(shaft_geometry):
+    point = [(2., 0., -5.)]
     outer = .9 + 5. * math.tan(.3)
     points = [(outer * .7, 0., -5.), (outer, 0., -5.), (outer * 1.1, 0., -5.)]
     hard = shaft_geometry(points, softness=0.)[:, 0]

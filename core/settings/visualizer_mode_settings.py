@@ -1472,6 +1472,7 @@ _BUBBLE = ModeSettings(
 # conditionals so only what the current choices use is shown.
 
 _EB_RAYS = ("extruded_bubble_rays_enabled", True)
+_EB_BEAM_RAYS = (_EB_RAYS, ("extruded_bubble_lighting_coverage", "BEAM"))
 _EB_SURFACE = ("extruded_bubble_light_type", "Sunlit Surface")
 _EB_BANDS = ("extruded_bubble_particle_bands", True)
 _EB_AUTO_ROTATE = ("extruded_bubble_auto_rotate", True)
@@ -1494,6 +1495,8 @@ _EXTRUDED_BUBBLE = ModeSettings(
     entries=(
         Choice("extruded_bubble_light_type", "Light Type:", ("Sunlit Surface", "Deep Light"), bucket="light",
                tooltip='Choose an overhead Sunlit Surface light or a submerged Deep Light source. Surface mode draws the water surface; Deep Light does not.'),
+        Choice("extruded_bubble_lighting_coverage", "Lighting Coverage:", ("BEAM", "SCENE"), bucket="light",
+               tooltip='BEAM keeps light shafts within the authored ray volume. SCENE lights the tank more broadly. This does not change where bubbles or particles are emitted.'),
         SceneVolumePath("extruded_bubble_light_direction", "Light Source → End:", bucket="light", legacy_kind="light",
                   tooltip='Position the authored light Source and End in the 3D scene, including depth. The visible Deep Light emitter should follow Source. [NEEDS AUDIT] Verify emitter, rays and bubble glints coincide in the actual rendered scene.'),
         Colour("extruded_bubble_light_colour", "Light Colour:", "Light Colour", bucket="light", alpha=False,
@@ -1506,9 +1509,11 @@ _EXTRUDED_BUBBLE = ModeSettings(
               tooltip='Set the intended quiet-to-loud intensity range of the light rays; left handle is quiet, right is loud. [NEEDS AUDIT] Downstream activity shaping and the capped ray driver can prevent literal endpoints and flatten within-song variation.'),
         Slider("extruded_bubble_ray_softness", "Ray Softness:", 0.0, 1.0, bucket="rays", when=_EB_RAYS,
                tooltip='Control how softly the edges of the light shafts blend into the surrounding water.'),
+        Slider("extruded_bubble_beam_width", "Beam Width:", 0.25, 3.0, bucket="rays", when=_EB_BEAM_RAYS,
+               decimals=2, suffix="x", tooltip='Widen or narrow the physical beam volume. The default 1x retains its original width; Ray Fan Spread controls how it widens along its length.'),
         SceneVolumePath("extruded_bubble_ray_path", "Ray Source → End:", bucket="rays", legacy_kind="light",
-                  when=_EB_RAYS, tooltip='Position the physical ray Source and End in all three axes; End controls how far the shafts extend, not the lens FOV. [NEEDS AUDIT] Check source parity with Deep Light and actual visible beam length, attenuation and brightness.'),
-        Slider("extruded_bubble_ray_reach", "Ray Fan Spread:", 0.0, 1.0, bucket="rays", when=_EB_RAYS,
+                  when=_EB_BEAM_RAYS, tooltip='Position the physical beam Source and End in all three axes; End controls how far it extends. Deep Light shares the physical Light Source.'),
+        Slider("extruded_bubble_ray_reach", "Ray Fan Spread:", 0.0, 1.0, bucket="rays", when=_EB_BEAM_RAYS,
                tooltip='Change the angular widening of the physical shaft volume and ray fan. The ray Source and End nodes determine the beam path and length.'),
         Slider("extruded_bubble_ray_flicker", "Ray Flicker:", 0.0, 1.0, bucket="rays", when=_EB_RAYS,
                tooltip='Set the amount of music-linked shaft shimmer; this should not replace gentle transient-linked ray brightness changes. [NEEDS AUDIT] Verify changes remain smooth rather than flashing or staying visually pinned.'),

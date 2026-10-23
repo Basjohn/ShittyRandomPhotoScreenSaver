@@ -2669,3 +2669,59 @@ currently available displays; one physical display/EB owner retires normally, ex
 unchanged,72675 trace records/no drops or write errors. Qt sessionfb232812e3ed still reports the same single
 startup animation-driver warning; it is not a zero-warning pass. Native host captures above prove the visual
 comparison; idle MC integration does not establish live music, dual-display or operator art acceptance.
+
+## 62. Operator rejects broadened ray structure (2026-10-23)
+
+The latest operator screenshot (`Evidence/2026-10-23_ray_structure/operator_rejected.png`) rejects the active
+P1 ray appearance after the source-anchored world-field change: broad pale columns replace much of the fine/
+medium shaft structure. This overrides the earlier frozen-view main-agent judgment that overall art was retained;
+P1's separately accepted shown idle remains protected. The screenshot does not prove a changed preset or exact
+audio state, and the stored `captures/Preset1Acceptance.png` is a useful earlier appearance reference, not a
+matched counterfactual. Preserve all settings/actors in the new production-host A/B.
+
+Source attribution: the removed angular fan carried three neighbouring fine/medium/coarse noise bands. The
+replacement world field kept the old coarse2D march pattern and applied Surface gain2.2, which can retain
+world placement while losing striation and raising broad wash. Restoring the old camera-ray fan would regress
+physical geometry. First test a multiscale, anisotropic physical source-plane density with the same four noise
+evaluations/40 samples and existing softness/flicker controls; compare against the present shader and earlier
+appearance before choosing calibration. No simulation, preset, exposure or particle workaround is authorized
+by this ray-specific repair. Native motion/aliasing and cost remain gates, not automatic passes from fine stills.
+
+**Operator correction:** the earlier appearance was not a thin-ray target. Preserve broad coverage, internal
+structure and soft diffusion after bubble interaction. The root's thin/narrow interpretation was wrong. None of
+the pattern/sparse/analytic prototypes has been applied to product source. Noise-only candidates wash out or
+lose intensity; the finite analytic packet currently loses the desired broad character. Inspect the Surface
+entry aperture too: the shared0.1*WORLD_UNIT patch was introduced as a geometry calibration, not an accepted
+Sunlit coverage reference. A wide directional surface entry and a small Deep source need not share that width.
+
+**Independent selector/width candidate:** Light → Lighting Coverage BEAM/SCENE and Rays → Beam Width now
+use the canonical descriptor/default/model/runtime path. All seven existing presets inherit BEAM/1x without
+file rewrites, and Motion → Emission Geometry stays independent. Width0.25–3x scales the complete finite
+cross-section, with1x matching the existing geometry oracle. SCENE integrates inside the fixed world box,
+ignoring unused beam Source/End/width; Surface uses the world origin and refracted sunlight, Deep the actual
+Light Source. It does not create actors or track the eye. Lazy construction, conditions and persistence are
+covered through actual Settings widgets.
+
+The attempted directional-phase restoration was rejected by root native visual comparison against160d6a78:
+it still lost the broad structured appearance, so it remains ignored evidence under `rejected_phase/` and
+`2026-10-23_lighting_coverage_prior/`. It is not product code. The final BEAM1x path retains0bb0f228 equations;
+full broad-ray restoration remains open. The existing soft four-bubble attenuation is a selective approximation,
+not proof of realistic diffusion after glass interception. SCENE Deep now rejects blockers behind the physical
+emitter, and final backdrop compositing no longer applies BEAM's look-toward-source gate to SCENE. Native
+production-main pixels falsify side/back-facing SCENE extinction; BEAM retains its previous compositing.
+
+Native production-host comparisons (`Evidence/2026-10-23_lighting_coverage/`) use the same recorded5s snapshot
+and47s music→60s pause state, authored settings/actors, against exact0bb0f228 shader/common/glass/scene-knob
+owners. P1/P7 default BEAM active and settled-idle captures are byte-identical. Resting bubbles/specks remain
+visible. P7 still needs major fidelity work. Width0.25/3 and SCENE captures show independent coverage changes,
+not automatic preset migration. RTX4090 interleaved12-sample medians after4 warmups are recorded per case in
+`capture.json`; they are a small frozen diagnostic, not p95/p99, moving/dual-display cost neutrality or operator
+art acceptance. SCENE admits more samples to the same four-noise field, so unchanged passes/40-step budget do
+not establish equal cost. No resource, timer, simulation or frame scheduler is added. Broad coverage, all-angle
+striation, actual bubble diffusion and shared finite-source/falloff coherence remain open.
+
+The final79 focused renderer/geometry/world-shaft/backdrop/lazy-Settings checks pass. Full diagnostic MC with
+normal updates and20s self-exit now starts/reveals both physical displays and retires normally, exit0, with
+the original profile hash unchanged (`logs/run_matrix/2026-10-23_lighting_orbit_retry/bound_receipt.json`).
+This validates source integration, not ray art acceptance. The earlier orbit startup bridge failure and native
+gesture acceptance remain separate input work; the successful run's orbit probe did not promote a gesture.
