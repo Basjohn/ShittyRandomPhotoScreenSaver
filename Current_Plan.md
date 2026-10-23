@@ -66,6 +66,48 @@ The [operator-source reconciliation](Docs/Reference/2026-10-23_Operator_EB_Neon_
 
 - [~] **Mandatory authored-data test hygiene:** Guardrails/TestSuite prohibit tests that freeze mutable authored presets, Settings values, theme contents or pack cardinalities. The blocking durability scanner has adversarial self-tests and reports offending file:line. Previously fixed artistic-value assertions use test-owned functional inputs instead. Advisory scanner candidates require individual review, not deletion by count: preserve round-trip, migration and explicit test-authored behavioral coverage. [Test Durability](Docs/Guides/Test_Durability.md). **An agent should run the focused tests and audit remaining candidates; do not weaken other suites to get green.** This is a cross-project test-integrity rule, not a theme-development task.
 
+## Storage data root rule | NEXT, before EB work (decided 2026-10-24)
+
+**Rule:** settings are per profile; everything else lives in one shared data root.
+- **Per profile** (`SRPSS` / `SRPSS_MC`, beside `settings_v2.json`): `settings_v2.json`, `backups/`, `banned_images/`.
+  These are profile-authored choices: MC already has different feeds/bans from the normal saver.
+- **Shared data root** (`%APPDATA%/SRPSS` for both canonical profiles): credentials (Steam, Gmail), every cache
+  (Feeds, RSS images, imgur, Weather, Gmail, Steam incl. Friend Pulse pins, Settings dialog cache/indicators,
+  Reddit) and `state/`. Isolated managers (`StorageRoot`) and non-canonical test profiles keep their own root.
+
+**Why this rule, not full per-profile:** it is already true for every family except Feeds and Cache Maintenance, so
+no credential moves (Gmail sign-in and Steam credentials exist only in `SRPSS`; `SRPSS_MC/steam` is an empty folder
+left by path resolution, not a second credential set). One Steam/Gmail sign-in serves both builds; Reddit/Feeds/
+Steam provider fetches are not doubled (Reddit rate limiting is severe). Full per-profile would need DPAPI
+credential copying plus a second sign-in for every future change, for no user-visible benefit.
+
+Migration, in order (each slice tested, committed and pushed):
+- [ ] **D1 — Codify the split in `core/settings/storage_paths.py`.** Add an explicit data-root resolver: canonical
+  `Screensaver` and `Screensaver_MC` → shared `SRPSS`; `StorageRoot` → its directory; other profile names → their
+  own `SRPSS_profiles/<name>` (test isolation). Every data getter (cache/state/steam/feeds/rss/weather) resolves
+  through it; settings paths stay with `json_store.determine_storage_path`. Rewrite the module's layout docstring.
+  Tests: MC data → `SRPSS`, MC settings → `SRPSS_MC`, `StorageRoot` still wins, no getter creates `SRPSS_MC/steam`.
+- [ ] **D2 — Feeds onto the shared root.** `core/feeds/cache.py` and `widgets/feed_runtime.py` stop passing
+  `detect_current_profile()`; snapshots and artwork use the data root.
+- [ ] **D3 — One forward-only bridge for existing MC Feeds snapshots.** At MC start (I/O lane, once), merge-move
+  `SRPSS_MC/cache/feeds` into the shared `cache/feeds`: move files the target lacks; on a name collision keep the
+  newer mtime; then remove the emptied MC folders and an empty `SRPSS_MC/steam`. Never touch per-profile files.
+  Record it in `Persisted_Input_Compatibility.md` with its removal horizon. Tests on temp roots: disjoint, colliding
+  (newer wins both ways), partial-failure retry, idempotent rerun.
+- [ ] **D4 — Cache Maintenance targets the data root.** Settings currently passes `_storage_path.parent`
+  (`SRPSS_MC` under MC, listing nothing real); use the data root for cache families. Update the descriptor test.
+- [ ] **D5 — Move Reddit's repo-local cache.** `widgets/reddit_runtime._REDDIT_CACHE_DIR` sits beside the code
+  (the install folder in packaged builds, possibly unwritable); move reservoirs and the startup-gate marker to
+  `<data root>/cache/reddit`. No bridge: the 2026-10-23 reservoir rename already ignores old files, so the cost is
+  one paced refetch per member. Update Cache Maintenance and the Contracts Reddit text.
+- [ ] **D6 — Two builds at once.** Both builds can now write the same caches concurrently. Per-path locks are
+  in-process only, so every shared writer must use atomic replace. Non-atomic today: `ui/settings_dialog_cache.py:76`
+  and the generated `settings_indicators` SVGs in `ui/tabs/shared_styles.py:819`. Fix them; add a source
+  guard for raw `write_text`/`write_bytes` under the data root.
+- [ ] **D7 — Docs.** `storage_paths` layout, Contracts (Reddit/Cache Maintenance/isolated roots), Spec storage text.
+  Verify natively: an MC run plus a normal `/c` open, then confirm no new files appear under `SRPSS_MC` except
+  per-profile ones (`tools/settings_window_probe.py --launch` covers both launches).
+
 ## Shared camera gestures and control hints
 
 - [~] **Held-left-drag orbit — Awaiting Validation:** operator reports orbit working in their own MC launch.
@@ -93,15 +135,7 @@ The [operator-source reconciliation](Docs/Reference/2026-10-23_Operator_EB_Neon_
   termination. Native Steam, Clock, Feeds three-level/scroll and EB Surface/Deep/light-theme captures at150% plus
   root-reviewed29 focused checks pass. No polling, new timers, observers, separate hierarchy or geometry writes.
   Native examples/receipt: `tmp/settings_tree_native/`; contract: `Docs/Architecture/Settings_Theme_Architecture.md`.
-- [ ] **Production storage profile roots disagree across families (found 2026-10-23 while fixing isolation).**
-  Isolation itself is fixed: `SettingsManager.get_storage_root()` + `storage_paths.StorageRoot` route every
-  Settings/Guided Setup Steam read/write into an isolated manager's directory (`tests/test_storage_root_isolation.py`).
-  In production, `storage_paths` getters called without a profile resolve to `SRPSS` even under MC, while Feeds use
-  `detect_current_profile()` (per profile) and Cache Maintenance targets `get_settings_dir()` (`SRPSS_MC` under MC).
-  Result under MC: Steam/Weather/Gmail/Settings-dialog caches live in `SRPSS` but Cache Maintenance lists `SRPSS_MC`;
-  this machine has Steam credentials in **both** folders. Decide one rule (per-profile, or one shared data root
-  with per-profile settings only), then route every family through it. Per-profile moves MC Gmail sign-in
-  (`gmail_imap_creds.enc`, only in `SRPSS`), so it needs an explicit migration, not a silent fallback.
+- Production storage-root disagreement: decided and planned in **Storage data root rule** above.
 
 ## UI R41. Small glyph presentation remainder (operator accepts capture / glyph interaction / child Edit)
 
