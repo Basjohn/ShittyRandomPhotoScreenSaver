@@ -540,8 +540,8 @@ class _FeedFamilyOwner:
             return result
         from core.feeds.artwork import ArtworkCancelled, FeedArtworkCache
         from core.feeds.artwork_transport import ArtworkFetchError, fetch_article_head, fetch_artwork_bytes
-        from core.settings.storage_paths import detect_current_profile, get_feed_cache_dir
-        cache = FeedArtworkCache(get_feed_cache_dir(detect_current_profile()) / "artwork")
+        from core.settings.storage_paths import get_feed_cache_dir
+        cache = FeedArtworkCache(get_feed_cache_dir() / "artwork")
         deadline = time.monotonic() + 8.0
         def needed() -> bool:
             return not cancel.is_set()

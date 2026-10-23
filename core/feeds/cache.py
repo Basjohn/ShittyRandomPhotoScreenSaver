@@ -8,7 +8,7 @@ from pathlib import Path
 import tempfile
 from typing import Any, Mapping
 
-from core.settings.storage_paths import detect_current_profile, get_feed_cache_dir
+from core.settings.storage_paths import ProfileRef, get_feed_cache_dir
 
 from .models import (
     FeedCacheRecord,
@@ -196,11 +196,9 @@ def _record(payload: Mapping[str, Any]) -> FeedCacheRecord:
 
 
 class FeedCacheStore:
-    def __init__(self, root: Path | None = None, *, profile: str | None = None) -> None:
-        self.root = (
-            Path(root) if root is not None
-            else get_feed_cache_dir(profile or detect_current_profile())
-        )
+    def __init__(self, root: Path | None = None, *, profile: ProfileRef = None) -> None:
+        # Snapshots are shared data: both canonical profiles resolve one root.
+        self.root = Path(root) if root is not None else get_feed_cache_dir(profile)
         self.root.mkdir(parents=True, exist_ok=True)
 
     def path_for(self, cache_key: str) -> Path:

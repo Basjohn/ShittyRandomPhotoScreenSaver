@@ -122,3 +122,17 @@ def test_current_storage_owners_have_no_retired_temp_migration_surface() -> None
     assert "run_all_migrations" not in source
     assert "migrate_file" not in source
     assert "migrate_directory" not in source
+
+
+def test_feed_snapshots_and_artwork_use_the_shared_data_root_under_mc(tmp_path, monkeypatch):
+    import sys
+    from core.feeds.cache import FeedCacheStore
+
+    monkeypatch.setattr(storage_paths, "_appdata_root", lambda: tmp_path)
+    monkeypatch.setattr(sys, "argv", ["main_mc.py"])
+    assert storage_paths.detect_current_profile() == "Screensaver_MC"
+
+    assert FeedCacheStore().root == tmp_path.resolve() / "SRPSS" / "cache" / "feeds"
+    assert not (tmp_path / "SRPSS_MC").exists()
+    for module in ("core/feeds/cache.py", "widgets/feed_runtime.py"):
+        assert "detect_current_profile" not in Path(module).read_text(encoding="utf-8")
