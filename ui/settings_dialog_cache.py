@@ -71,9 +71,9 @@ def _load_persisted_cache() -> SettingsDialogCacheData | None:
 def _persist_cache(cache: SettingsDialogCacheData) -> None:
     try:
         payload = asdict(cache)
-        path = _cache_file()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload), encoding="utf-8")
+        from core.utils.atomic_files import atomic_write_text
+
+        atomic_write_text(_cache_file(), json.dumps(payload))
     except Exception:
         pass
 
