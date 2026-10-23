@@ -359,6 +359,35 @@ def test_host_module_is_presentation_only() -> None:
             ), module
 
 
+@pytest.mark.parametrize("identity", ["clock", "media", "system_audio_osd"])
+def test_scene_factory_projects_registry_glyph_facts_before_host_attachment(qt_app, monkeypatch, identity):
+    from rendering.widget_descriptors import get_widget_runtime_descriptor
+    descriptor = get_widget_runtime_descriptor(identity)
+    assert descriptor is not None
+    expected = (descriptor.supports_layout_edit_mode, descriptor.requires_size_reset_affordance, False)
+    names = ("hoverEditEligible", "hoverRestoreEligible", "hoverRotateEligible")
+    window = QuickDisplayWindow(screen_index=0, runtime_generation=414, screen=qt_app.primaryScreen(),
+                                policy=QuickWindowPolicy(always_on_top=False))
+    factory = QuickSceneFactory()
+    original = factory.create_overlay_widget
+    attachments = []
+    def create(initial, context):
+        item = original(initial, context)
+        item.parentChanged.connect(lambda *_: attachments.append(tuple(item.property(name) for name in names)))
+        return item
+    monkeypatch.setattr(factory, "create_overlay_widget", create)
+    scene = QuickSceneController(window=window, factory=factory)
+    try:
+        widget = scene.ordinary_widget_host.create_widget(model_identity=identity)
+        assert tuple(widget.item.property(name) for name in names) == expected
+        assert attachments == [expected]  # No admitted frame can see default capabilities.
+    finally:
+        scene.quiesce_for_retirement()
+        window.deleteLater()
+        factory.deleteLater()
+        qt_app.processEvents()
+
+
 def test_scene_controller_owns_and_retires_ordinary_widget_host(qt_app) -> None:
     screen = qt_app.primaryScreen()
     assert screen is not None

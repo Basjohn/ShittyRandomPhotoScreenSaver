@@ -23,6 +23,12 @@ the original archive's102. Neither count is a current full-suite result. Focused
 Input hover/drag, shader harness admission, Settings/SST and presentation-host boundaries remain separate
 verification slices. Refer to `Current_Plan.md` §2A for actionable remainder; these results do not close art gates.
 
+The host import assertion identified a real ownership violation rather than stale test text: ordinary host
+admission looked up glyph eligibility through `rendering.widget_descriptors`, transitively importing Settings
+and provider dependencies. The scene factory now resolves the same capabilities; the host projects the flags
+before attachment and releases its resolver at retirement. Native source/creation/retirement tests pass,
+including Clock, Media and system-audio OSD capability projection before the first parent edge.
+
 1. **Repair/validate the new Settings native transient-window regression first**, then native single-active bucket path behavior. The shared builder now hides the unparented bucket body and only shows it after attachment; [native HWND validation](Settings_Transient_Window_Regression_2026-10-23.md) is still open.
 2. **Run real behavior falsifiers before weakening any oracle:** EB recorded breathing, pause release and fused camera/projection, Neon Lake Moon/Sun and terrain occlusion, 3D defocus image energy, engine/image speculative admission, Sphere projection, and full shader/GL admission. Failures with actual native pixels or recorded curves cannot be dismissed by observing a renamed class elsewhere.
 3. **Upgrade unambiguous test harness/API drift** in small ownership clusters: OscilloscopeFrame smoke factory, 3D/Neon `shockwave_project` and `_initialize` assumptions, required EB `body_bands`, fake Settings hosts missing required methods, and executable defaults readers. Preserve each test's behavioral intent and assertions.
