@@ -1121,6 +1121,8 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'extruded_bubble_light_direction': [0.0, 55.0],
                                     'extruded_bubble_light_strength': 1.0,
                                     'extruded_bubble_light_type': 'Sunlit Surface',
+                                    'extruded_bubble_lighting_coverage': 'BEAM',
+                                    'extruded_bubble_beam_width': 1.0,
                                     'extruded_bubble_manual_floor': 0.12,
                                     'extruded_bubble_mid_bubbles': [20, 48],
                                     'extruded_bubble_particle_bands': False,

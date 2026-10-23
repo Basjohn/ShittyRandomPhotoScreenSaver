@@ -90,6 +90,49 @@ def test_cross_bucket_conditional_survives_out_of_order_expansion(eb_tab):
     assert collect_extruded_bubble_mode_settings(tab)["extruded_bubble_light_type"] == "Sunlit Surface"
 
 
+def test_lighting_coverage_is_independent_and_survives_lazy_hydration(eb_tab):
+    """The new light choice must not rewrite physical emission or old presets."""
+    from core.settings.models import SpotifyVisualizerSettings
+    from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+
+    tab, config = eb_tab
+    for preset in range(7):
+        payload = resolve_visualizer_activation_payload(
+            {"mode": "extruded_bubble", "preset_extruded_bubble": preset},
+            mode="extruded_bubble").resolved_config
+        model = SpotifyVisualizerSettings.from_mapping(payload, apply_preset_overlay=False)
+        assert model.extruded_bubble_lighting_coverage == "BEAM"
+        assert model.extruded_bubble_beam_width == 1.0
+    payload = {**config, "extruded_bubble_lighting_coverage": "SCENE",
+               "extruded_bubble_beam_width": 1.75,
+               "extruded_bubble_emission_geometry": "BEAM"}
+    load_extruded_bubble_mode_settings(tab, payload)
+    toggle_bucket(tab, "rays")  # dependent first, controlling bucket still closed
+    width_row = tab._extruded_bubble_rows["extruded_bubble_beam_width"]
+    path_row = tab._extruded_bubble_rows["extruded_bubble_ray_path"]
+    assert width_row.isHidden() and path_row.isHidden()
+    toggle_bucket(tab, "light")
+    tab.extruded_bubble_lighting_coverage.setCurrentText("BEAM")
+    assert not width_row.isHidden() and not path_row.isHidden()
+    assert tab.extruded_bubble_beam_width.value() == 175
+    tab.extruded_bubble_beam_width.setValue(225)
+    tab.extruded_bubble_lighting_coverage.setCurrentText("SCENE")
+    saved = collect_extruded_bubble_mode_settings(tab)
+    assert saved["extruded_bubble_beam_width"] == 2.25
+    assert saved["extruded_bubble_lighting_coverage"] == "SCENE"
+    assert saved["extruded_bubble_emission_geometry"] == "BEAM"
+    tab._save_settings_now()
+    persisted = tab._settings.get("widgets")["spotify_visualizer"]
+    for key in ("extruded_bubble_lighting_coverage", "extruded_bubble_beam_width",
+                "extruded_bubble_emission_geometry"):
+        assert persisted[key] == saved[key]
+    load_extruded_bubble_mode_settings(tab, config)
+    assert not width_row.isHidden()
+    load_extruded_bubble_mode_settings(tab, saved)
+    assert width_row.isHidden()
+    assert collect_extruded_bubble_mode_settings(tab)["extruded_bubble_beam_width"] == 2.25
+
+
 def test_every_eb_bucket_constructs_and_hydrates_in_real_settings_page(eb_tab):
     """Native end-to-end catch for a failure in *any* lazily constructed control.
 

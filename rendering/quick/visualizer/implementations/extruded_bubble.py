@@ -263,6 +263,8 @@ def _common(knobs, *, view_to_world, tan, time, surface_travel, rays, streak, ey
         "uShaftScale": float(knobs.get("shaft_scale", 1.0)), "uShaftSoft": float(knobs.get("shaft_soft", 0.0)),
         "uRayRadius": float(knobs["ray_radius"]),
         "uSurfaceShaft": float(knobs["surface_shaft"]),
+        "uLightingScene": float(knobs["lighting_scene"]), "uBeamWidth": float(knobs["beam_width"]),
+        "uWorldCenter": WORLD_CENTER, "uWorldHalf": WORLD_HALF,
         "uRayAcross": _floats(knobs["ray_across"]), "uRayUp": _floats(knobs["ray_up"]),
         "uFanReach": float(knobs.get("fan_reach", 0.6)),
         "uSpecks": 0.0, "uLightPower": float(knobs.get("light_power", 0.0)),

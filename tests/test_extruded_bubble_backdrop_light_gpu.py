@@ -82,3 +82,27 @@ def test_backdrop_direct_light_scales_once_over_unchanged_ambient(backdrop_light
     assert delta.sum() > .001, contribution
     np.testing.assert_allclose(samples[1] - ambient, delta * .5, rtol=2e-4, atol=2e-6)
     np.testing.assert_allclose(samples[3] - ambient, delta * 2., rtol=2e-4, atol=2e-6)
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize('light_direction', ((0.,0.,-1.), (1.,0.,0.), (0.,0.,1.)))
+def test_deep_scene_scattering_survives_side_and_away_views(backdrop_light, light_direction):
+    from core.settings.default_contract import require_canonical_default
+    from rendering.gl_programs.extruded_bubble_scene import scene_knobs
+    from rendering.quick.visualizer.implementations.extruded_bubble import _common
+
+    parameters = {**require_canonical_default('widgets.spotify_visualizer'),
+                  'extruded_bubble_light_type': 'Deep Light'}
+    deltas = {}
+    for coverage in ('BEAM', 'SCENE'):
+        knobs = scene_knobs({**parameters, 'extruded_bubble_lighting_coverage': coverage})
+        values = _common(knobs, view_to_world=(1.,0.,0.,0.,1.,0.,0.,0.,1.),
+                         tan=(.4,.4), time=.7, surface_travel=.7, rays=1., streak=(.6,.8))
+        values.update(uSunBelow=light_direction, uMist=0., uDust=0., uGlow=0.,
+                      uVeils=0., uProbeMode=0., uLightPower=0., uGlintPower=0., uProbeFill=0.)
+        # A constant positive shaft texture isolates the real final compositing
+        # gate. Keep the production Deep ray_focus, which formerly erased SCENE.
+        deltas[coverage] = backdrop_light(values) - backdrop_light({**values, 'uRays': 0.})
+    assert deltas['SCENE'].sum() > .001
+    if light_direction != (0.,0.,-1.):
+        np.testing.assert_array_equal(deltas['BEAM'], np.zeros(3))

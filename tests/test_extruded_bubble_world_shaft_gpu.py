@@ -34,6 +34,8 @@ void main() {
     if (uDiagnostic == 0) {
         vec2 q = shaftPatternCoords(uTestPoint);
         FragColor = vec4(q, shaftPattern(q, uTime), 1.);
+    } else if (uDiagnostic == 2) {
+        FragColor = vec4(sceneTransmittance(uTestPoint));
     } else {
         float distance;
         float integral = worldShafts(uTestRay, uTestJitter, distance);
@@ -67,13 +69,17 @@ void main(){
         gl.glDisable(gl.GL_DEPTH_TEST)
         gl.glDisable(gl.GL_CULL_FACE)
 
-        def draw(point=(0., 0., -5.), *, controlled=False, integrate=False, uniforms=None):
+        def draw(point=(0., 0., -5.), *, controlled=False, integrate=False, shadow=False, uniforms=None):
             program = programs[int(controlled)]
             gl.glUseProgram(program)
             values = dict(uSurfaceShaft=0., uRaySource=(0., 0., 0.), uRayEnd=(0., 0., -20.),
+                          uBeamWidth=1., uLightingScene=0., uWorldCenter=(0.,0.,0.), uWorldHalf=(18.,8.,18.),
                           uRayAcross=(1., 0., 0.), uRayUp=(0., 1., 0.), uRayRadius=.9,
                           uFanReach=.3, uShaftSoft=.5, uShaftScale=.55, uShaftY=8.,
                           uSunBelow=(.6, .8, 0.), uEye=(0., 0., 2.), uTime=.7,
+                          uLightSource=(0.,0.,0.), uPositionalLight=0., uParticleAtten=0.,
+                          uBlock0=(0.,0.,0.,0.), uBlock1=(0.,0.,0.,0.),
+                          uBlock2=(0.,0.,0.,0.), uBlock3=(0.,0.,0.,0.),
                           uFlicker=.5, uShimmer=1.3, uTestRay=(0., 0., -1.), uTestJitter=.5,
                           uViewToWorld=np.eye(3, dtype='f4'), uTestPoint=point)
             values.update(uniforms or {})
@@ -82,10 +88,10 @@ void main(){
                 if name == 'uViewToWorld':
                     gl.glUniformMatrix3fv(location, 1, False, np.asarray(value, dtype='f4'))
                 elif isinstance(value, (tuple, list, np.ndarray)):
-                    gl.glUniform3f(location, *value)
+                    (gl.glUniform4f if len(value) == 4 else gl.glUniform3f)(location, *value)
                 else:
                     gl.glUniform1f(location, value)
-            gl.glUniform1i(gl.glGetUniformLocation(program, 'uDiagnostic'), int(integrate))
+            gl.glUniform1i(gl.glGetUniformLocation(program, 'uDiagnostic'), 2 if shadow else int(integrate))
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
             gl.glReadBuffer(gl.GL_COLOR_ATTACHMENT0)
             result = np.frombuffer(gl.glReadPixels(0, 0, 1, 1, gl.GL_RGBA, gl.GL_FLOAT), dtype='f4').copy()
@@ -161,9 +167,76 @@ def test_production_pattern_softness_and_flicker_are_live_continuous_consumers(w
     assert not np.array_equal(samples(uShimmer=0.), samples(uShimmer=2.))
 
 
+@pytest.mark.qt
+@pytest.mark.parametrize('surface', [0., 1.])
+def test_scene_lighting_ignores_beam_end_and_width_but_is_fixed_world_bounded(world_shaft, surface):
+    uniforms = dict(uLightingScene=1., uSurfaceShaft=surface, uEye=(5., 0., 2.),
+                    uTestRay=(0., 0., -1.), uShaftY=8.)
+    expected = world_shaft(controlled=True, integrate=True, uniforms=uniforms)
+    assert expected[0] > 0.
+    for end, width in (((0., 0., 0.), .25), ((0., 0., 2.), 3.)):
+        actual = world_shaft(controlled=True, integrate=True,
+                             uniforms={**uniforms, 'uRayEnd': end, 'uBeamWidth': width})
+        np.testing.assert_array_equal(actual, expected)
+    # The real density field, not only a constant-density diagnostic, must
+    # ignore the unused beam origin too. Deep remains anchored to Light Source.
+    point = (2., -1., -3.)
+    pattern = world_shaft(point, uniforms=uniforms)
+    for source in ((-8., 3., 6.), (12., -7., -13.)):
+        actual = world_shaft(point, uniforms={**uniforms, 'uRaySource': source})
+        np.testing.assert_array_equal(actual, pattern)
+    outside = world_shaft(controlled=True, integrate=True,
+                          uniforms={**uniforms, 'uEye': (100., 0., 2.)})
+    assert outside[0] == 0.
+    beam = world_shaft(controlled=True, integrate=True,
+                       uniforms={**uniforms, 'uLightingScene': 0., 'uRayEnd': (0., 0., 0.)})
+    assert beam[0] == 0.  # same degenerate End still disables an authored BEAM
+
+
 def _smooth(a, b, x):
     t = max(0., min(1., (x - a) / (b - a)))
     return t * t * (3. - 2. * t)
+
+
+@pytest.mark.qt
+def test_deep_scene_blocker_behind_emitter_cannot_shadow_forward_sample(world_shaft):
+    uniforms = dict(uLightingScene=1., uPositionalLight=1., uLightSource=(0.,0.,0.))
+    clear = world_shaft((0.,0.,-8.), shadow=True, uniforms=uniforms)
+    behind = world_shaft((0.,0.,-8.), shadow=True,
+                        uniforms={**uniforms, 'uBlock0': (0.,0.,2.,.5)})
+    between = world_shaft((0.,0.,-8.), shadow=True,
+                         uniforms={**uniforms, 'uBlock0': (0.,0.,-4.,.5)})
+    np.testing.assert_array_equal(clear, behind)
+    assert between[0] == pytest.approx(clear[0]*.84, abs=2e-6)
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize('light_type', ['Sunlit Surface', 'Deep Light'])
+def test_scene_integral_uses_canonical_light_and_ignores_authored_beam_nodes(world_shaft, light_type):
+    from core.settings.default_contract import require_canonical_default
+    from rendering.gl_programs.extruded_bubble_scene import scene_knobs
+    from rendering.quick.visualizer.implementations.extruded_bubble import _common
+
+    parameters = {**require_canonical_default('widgets.spotify_visualizer'),
+                  'extruded_bubble_light_type': light_type,
+                  'extruded_bubble_lighting_coverage': 'SCENE'}
+    def sample(**overrides):
+        knobs = scene_knobs({**parameters, **overrides})
+        mapped = _common(knobs, view_to_world=np.eye(3).ravel(), tan=(1.,1.),
+                         time=.7, surface_travel=0., rays=1., streak=(1.,0.))
+        keys = ('uSurfaceShaft','uLightingScene','uBeamWidth','uWorldCenter','uWorldHalf',
+                'uLightSource','uSunBelow','uShaftY','uRayAcross','uRayUp','uRayRadius',
+                'uFanReach','uShaftSoft','uShaftScale')
+        uniforms = {key: mapped[key] for key in keys}
+        uniforms.update(uRaySource=knobs['ray_source'], uRayEnd=knobs['ray_end'], uEye=(0.,-2.,2.))
+        return world_shaft(integrate=True, uniforms=uniforms)
+    expected = sample()
+    assert expected[0] > 0.
+    changed_beam = sample(extruded_bubble_ray_path=(-.7,.4,.3,.8,-.6,-.9),
+                          extruded_bubble_beam_width=3.)
+    np.testing.assert_array_equal(changed_beam, expected)
+    changed_light = sample(extruded_bubble_light_direction=(-.8,.2,.25,.8,-.7,.9))
+    assert not np.array_equal(changed_light, expected)
 
 
 def _controlled_integral(surface, eye, source, end, ray, shaft_y, jitter):
@@ -304,6 +377,7 @@ def test_production_main_shadows_actual_contribution_centroid_not_fixed_depth(qt
             gl.glUniformMatrix3fv(loc('uViewToWorld'), 1, False, np.eye(3, dtype='f4'))
             gl.glUniform2f(loc('uTan'), 1., 1.); gl.glUniform2f(loc('uLensShift'), 0., 0.)
             for name, value in (('uSurfaceShaft', 0.), ('uRayRadius', .9), ('uFanReach', .3),
+                                ('uBeamWidth', 1.), ('uLightingScene', 0.),
                                 ('uShaftSoft', .5), ('uParticleAtten', 0.)):
                 gl.glUniform1f(loc(name), value)
             for name, value in (('uEye', (0., 0., 2.)), ('uRaySource', (0., 0., 0.)),

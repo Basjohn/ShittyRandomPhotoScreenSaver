@@ -87,7 +87,9 @@ def water_sun_below_safe(direction):
 def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
     """The programs' knobs for these Settings (all but the rays' strength, ``ray_strength``)."""
     mode = _LIGHT_TYPES[str(_p(parameters, "light_type"))]
-    knobs: dict[str, object] = {**ENGINE, **MODES[mode], "mode": mode}
+    knobs: dict[str, object] = {**ENGINE, **MODES[mode], "mode": mode,
+                               "lighting_scene": float(_p(parameters, "lighting_coverage") == "SCENE"),
+                               "beam_width": float(_p(parameters, "beam_width"))}
     light = _rgb(_p(parameters, "light_colour"))
     water, deep = _rgb(_p(parameters, "water_colour")), _rgb(_p(parameters, "depth_colour"))
     water_hue = _hue(water)

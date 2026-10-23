@@ -26,6 +26,10 @@ uniform vec3 uSunBelow;
 uniform vec3 uLightSource;  // real physical deep-light position
 uniform float uLightStrength; // direct illumination; ambient water/particle floor remain
 uniform float uPositionalLight; // Light Type only; never inferred from strength
+uniform float uLightingScene;  // independent of physical stream emission geometry
+uniform float uBeamWidth;      // 1 retains the authored BEAM width
+uniform vec3 uWorldCenter;
+uniform vec3 uWorldHalf;
 uniform vec3 uLightEnd;     // authored far end; directional shape derived by the CPU
 uniform vec3 uDeep;
 uniform vec3 uWater;
@@ -180,7 +184,7 @@ void main() {
         shafts = uRays * (uRayCut > 0.0 ? s * smoothstep(uRayCut * 0.6, uRayCut * 1.6, s) * 1.2 + s * 0.3 : s * 1.4);
     }
     // Beams gathered around the light (the sixth mock's corner) rather than filling the water.
-    shafts *= mix(1.0, pow(max(dot(ray, uSunBelow), 0.0), 6.0) * 3.0, uRayFocus);
+    shafts *= mix(1.0, pow(max(dot(ray, uSunBelow), 0.0), 6.0) * 3.0, uRayFocus * (1.0-uLightingScene));
     vec3 colour = basinWater(ray, 1.0, shafts);
     if (uMist > 0.0) {
         float haze = pow(1.0 - abs(ray.y), 3.0);
@@ -275,7 +279,7 @@ uniform vec4 uBlock3;
 uniform float uParticleAtten;   // bounded aggregate dust opacity; not per-particle shadowing
 
 float beamRadius(float along) {
-    return uRayRadius + max(along, 0.0) * tan(clamp(uFanReach, 0.01, 1.2));
+    return (uRayRadius + max(along, 0.0) * tan(clamp(uFanReach, 0.01, 1.2))) * uBeamWidth;
 }
 float beamExtent(vec3 p) {
     vec3 line = uRayEnd - uRaySource;
@@ -296,6 +300,8 @@ float beamExtent(vec3 p) {
 }
 float blockAttenuation(vec3 samplePoint, vec4 bubble, vec3 lightTravel) {
     if (bubble.w <= 0.0) return 1.0;
+    if (uLightingScene > 0.5 && uPositionalLight > 0.5
+            && dot(bubble.xyz-uLightSource, lightTravel) < 0.0) return 1.0;
     vec3 fromObject = samplePoint - bubble.xyz;
     float afterObject = dot(fromObject, lightTravel);
     float lateral = length(fromObject - afterObject * lightTravel);
@@ -307,8 +313,14 @@ float blockAttenuation(vec3 samplePoint, vec4 bubble, vec3 lightTravel) {
 float sceneTransmittance(vec3 p) {
     vec3 line = uRayEnd - uRaySource;
     float lengthLine = length(line);
-    if (lengthLine < 0.001) return 1.0;
-    vec3 lightTravel = line / lengthLine;
+    if (uLightingScene < 0.5 && lengthLine < 0.001) return 1.0;
+    vec3 lightTravel;
+    if (uLightingScene > 0.5) {
+        vec3 travel = uPositionalLight > 0.5 ? p-uLightSource : -uSunBelow;
+        lightTravel = travel / max(length(travel), 1e-6);
+    } else {
+        lightTravel = line / lengthLine;
+    }
     float t = blockAttenuation(p, uBlock0, lightTravel)
             * blockAttenuation(p, uBlock1, lightTravel)
             * blockAttenuation(p, uBlock2, lightTravel)
@@ -328,9 +340,13 @@ float shaftPattern(vec2 q, float t) {
 }
 // One four-noise world pattern; view-dependent phase changes gain, never placement.
 vec2 shaftPatternCoords(vec3 p) {
-    vec3 delta = p - uRaySource;
+    vec3 origin = uLightingScene > 0.5 ? (uSurfaceShaft > 0.5 ? uWorldCenter : uLightSource) : uRaySource;
+    vec3 delta = p - origin;
     if (uSurfaceShaft > 0.5) {
         return delta.xz + uSunBelow.xz / max(uSunBelow.y, 0.2) * -delta.y;
+    }
+    if (uLightingScene > 0.5) {
+        return delta.xz + delta.y * vec2(.3,.17);
     }
     vec3 line = uRayEnd - uRaySource;
     float lengthLine = length(line);
@@ -344,12 +360,13 @@ float worldShafts(vec3 ray, float jitter, out float contributingDistance) {
     const float stepLength = 45.0 / 40.0;
     float sum = 0.0, moment = 0.0;
     contributingDistance = 0.0;
-    if (length(uRayEnd-uRaySource)<0.001) return 0.0;
+    if (uLightingScene<.5 && length(uRayEnd-uRaySource)<0.001) return 0.0;
     for (int i=0; i<40; ++i) {
         float s = (float(i)+jitter)*stepLength;
         vec3 p = uEye + ray*s;
         if (uSurfaceShaft>0.5 && p.y>=uShaftY) break;
-        float extent = beamExtent(p);
+        vec3 edge = abs((p-uWorldCenter)/max(uWorldHalf,vec3(1e-4)));
+        float extent = uLightingScene>.5 ? 1.-step(1.,max(edge.x,max(edge.y,edge.z))) : beamExtent(p);
         if (extent<=0.0) continue;
         float lightDistance = uSurfaceShaft>0.5 ? uShaftY-p.y : length(p-uRaySource);
         float weight = extent * shaftPattern(shaftPatternCoords(p),uTime)
@@ -366,7 +383,7 @@ void main() {
     float atDistance;
     float integral = worldShafts(ray,jitter,atDistance);
     float phase = 0.25 + pow(max(dot(ray,uSunBelow),0.0),2.0);
-    // Explicit Surface art calibration replaces its former dominant additive fan.
+    // Explicit Surface art calibration; coverage never retunes an existing preset.
     float gain = mix(1.0,2.2,uSurfaceShaft);
     float optical = integral>0.0 ? sceneTransmittance(uEye+ray*atDistance) : 1.0;
     FragColor = vec4(max(0.0,integral * 0.13 * phase * gain * optical));
