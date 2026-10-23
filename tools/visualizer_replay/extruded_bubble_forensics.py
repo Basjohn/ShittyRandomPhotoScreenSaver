@@ -21,6 +21,7 @@ from core.settings.models import SpotifyVisualizerSettings
 from rendering.gl_programs import extruded_bubble_scene as scene
 from tools.visualizer_replay.driver import replay_clip
 from tools.visualizer_replay.engine import ReplayBeatEngine
+from tools.visualizer_replay.pcm_reanalysis import PcmReanalysis
 from widgets.spotify_visualizer.extruded_bubble_frame_runtime import ExtrudedBubbleFrameRuntime
 from widgets.spotify_visualizer.feature_frame import FeatureClip, FeatureFrame
 from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
@@ -124,25 +125,12 @@ def run(args):
     original_advance = ExtrudedBubbleFrameRuntime.advance
     origin = clip.frames[0].timestamp_us / 1e6
 
+    reanalysis = PcmReanalysis()
+
     def accept(engine, feature):
         result = original_accept(engine, feature)
         if args.reanalyze_pcm:
-            from widgets.spotify_visualizer.bar_computation import compute_bars_from_samples
-            history = feature.capture_history
-            if history is None:
-                raise ValueError('--reanalyze-pcm requires native capture history on every frame')
-            if observed.get('capture_serial') != history.capture_serial:
-                if 'compute_state' not in observed:
-                    observed['compute_state'] = engine._audio_worker.make_compute_snapshot()
-                    observed['compute_state']._np = np
-                state = observed['compute_state']
-                block = int(engine._audio_worker._preferred_block_size or 0) or history.sample_rate // 100
-                samples = np.frombuffer(history.pcm_f32le, dtype='<f4')[-block:]
-                bars = compute_bars_from_samples(state, samples)
-                if bars is None:
-                    raise RuntimeError('production PCM analysis failed')
-                engine._audio_worker.commit_compute_snapshot(state)
-                observed['capture_serial'] = history.capture_serial
+            reanalysis.accept(engine, feature)
         observed['feature'] = feature
         observed['intensity'] = engine.get_musical_intensity()
         if args.reanalyze_pcm:
@@ -216,8 +204,13 @@ def run(args):
     # loudness and cadence remain unchanged; this is a controlled hybrid, not a live run.
     band_getter = (_SpotifyBeatEngine.get_bubble_energy_bands if args.reanalyze_pcm
                    else ReplayBeatEngine.get_bubble_energy_bands)
+    # Older revisions (compared from a worktree) lack EB's own feed; they read the shared one.
+    eb_body_name = 'get_extruded_bubble_body_bands'
+    eb_body_getter = getattr(_SpotifyBeatEngine if args.reanalyze_pcm else ReplayBeatEngine, eb_body_name,
+                             band_getter)
     with patch.object(ReplayBeatEngine, 'accept_feature_frame', accept), \
             patch.object(ReplayBeatEngine, 'get_bubble_energy_bands', band_getter), \
+            patch.object(ReplayBeatEngine, eb_body_name, eb_body_getter, create=True), \
             patch.object(ExtrudedBubbleFrameRuntime, 'advance', advance):
         if args.capture:
             from tools import extruded_bubble_capture as capture_tool
