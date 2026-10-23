@@ -69,9 +69,8 @@ The [operator-source reconciliation](Docs/Reference/2026-10-23_Operator_EB_Neon_
   loss, release/close/reset, overlap and mixed DPI. The broad Python window.event override caused black startup;
   it is removed and forbidden by a regression bar. MC now starts/exits on the saved Display2 route. Synthetic
   Qt press drivers are not physical orbit acceptance. History and launch correction: `Investigation.md` §64.
-  - [ ] **Exclusive-grab safety:** decline promotion when an existing MouseArea/exclusive grab owns the press,
-    including below the card. The lower-passive-handler exception must not consume another control's release
-    or leave it pressed. Add a real retained MouseArea press/release falsifier before checkpointing the candidate.
+  Any existing exclusive grab (including a lower MouseArea) now declines promotion; only passive grabs use
+  the stacking exception (`test_lower_retained_mouse_area_exclusive_grab_keeps_its_press_and_release`).
 - [~] **3D framed control hint — Awaiting Validation:** review the supplied thicker artwork at 90% opacity,
   crisp viewport scaling and top-right placement in actual runtime/mixed DPI. Fade-out starts after five seconds;
   movement/menu/Ctrl changes do not restart a physical visit. Widgets → General → Appearance now owns Show Glyphs

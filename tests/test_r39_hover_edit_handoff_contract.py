@@ -55,7 +55,11 @@ def test_shared_glyph_has_no_polling_and_edit_hide_wedge_stays_edit_only():
 def test_builds_include_shared_glyph_and_ordinary_capabilities_come_from_descriptor():
     assert 'WidgetHoverEditGlyphs.qml' in source('tools/build_layout.ps1')
     assert 'WidgetHoverEditGlyphs.qml' in source('tools/build_runner.py')
+    # The scene controller owns descriptor lookup; the presentation-only host
+    # projects the injected capability tuple and never resolves descriptors.
+    scene = source('rendering/quick/scene_controller.py')
+    assert 'descriptor.supports_layout_edit_mode' in scene
+    assert 'descriptor.requires_size_reset_affordance' in scene
     host = source('rendering/quick/widgets/host.py')
-    assert 'get_widget_runtime_descriptor' in host
-    assert 'descriptor.supports_layout_edit_mode' in host
-    assert 'descriptor.requires_size_reset_affordance' in host
+    assert 'get_widget_runtime_descriptor' not in host
+    assert 'self._glyph_capabilities(' in host
