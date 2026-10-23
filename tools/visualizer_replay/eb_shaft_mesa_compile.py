@@ -1,8 +1,8 @@
 """Optional Linux Mesa/EGL shaft shader link gate, without Qt/OpenGL Python modules.
 
 Run from the checkout/Godzip root: python tools/visualizer_replay/eb_shaft_mesa_compile.py
-GLSL 4.6 is changed to 4.5 only for this diagnostic; native 4.6 and operator
-visual acceptance are separate mandatory gates. Never called by application.
+Requires the same GL/GLSL 4.6 floor as production; native Windows rendering and
+operator visual acceptance remain separate gates. Never called by application.
 """
 import ctypes as C,sys,types,importlib
 # Isolate GLSL constants from Qt/OpenGL imports that belong to runtime, not shader source.
@@ -26,7 +26,7 @@ egl.eglBindAPI.argtypes=[C.c_uint];assert egl.eglBindAPI(0x30A2)
 egl.eglChooseConfig.argtypes=[EGLDisplay,C.POINTER(EGLint),C.POINTER(C.c_void_p),EGLint,C.POINTER(EGLint)];egl.eglChooseConfig.restype=C.c_uint
 attrs=(EGLint*7)(0x3040,0x0008,0x3033,0x0001,0x3024,8,0x3038)
 config=C.c_void_p();count=EGLint();assert egl.eglChooseConfig(display,attrs,C.byref(config),1,C.byref(count)) and count.value
-ctxattr=(EGLint*7)(0x3098,4,0x30FB,5,0x30FD,1,0x3038) # core 4.5
+ctxattr=(EGLint*7)(0x3098,4,0x30FB,6,0x30FD,1,0x3038) # core 4.6; no version downgrade
 egl.eglCreateContext.argtypes=[EGLDisplay,C.c_void_p,C.c_void_p,C.POINTER(EGLint)];egl.eglCreateContext.restype=C.c_void_p
 ctx=egl.eglCreateContext(display,config,None,ctxattr);assert ctx, 'context creation failed'
 egl.eglMakeCurrent.argtypes=[EGLDisplay,C.c_void_p,C.c_void_p,C.c_void_p];egl.eglMakeCurrent.restype=C.c_uint
@@ -40,7 +40,6 @@ glGetProgramInfoLog=fn('glGetProgramInfoLog',None,[C.c_uint,C.c_int,C.POINTER(C.
 glDeleteProgram=fn('glDeleteProgram',None,[C.c_uint])
 program=glCreateProgram()
 for shader_type,source in [(0x8B31,mod.FULL_VERTEX),(0x8B30,mod.SHAFT_FRAGMENT)]:
- source=source.replace('#version 460 core','#version 450 core')
  shader=glCreateShader(shader_type);b=source.encode();p=C.c_char_p(b);glShaderSource(shader,1,C.byref(p),None);glCompileShader(shader)
  status=C.c_int();glGetShaderiv(shader,0x8B81,C.byref(status));length=C.c_int();glGetShaderiv(shader,0x8B84,C.byref(length));buf=C.create_string_buffer(max(length.value,1));glGetShaderInfoLog(shader,len(buf),None,buf)
  print('VERT' if shader_type==0x8B31 else 'FRAG','status',status.value,'info:',buf.value[:2400].decode(errors='replace'))
@@ -54,13 +53,12 @@ buf=C.create_string_buffer(max(length.value,1));glGetProgramInfoLog(program,len(
 print('LINK status',status.value,'info:',buf.value.decode(errors='replace')[:2000])
 glDeleteProgram(program)
 assert status.value == 1
-print('OFFSCREEN_GL45_LINK_PASS; not native GL46 or visual acceptance')
+print('OFFSCREEN_GL46_LINK_PASS; not native Windows rendering or visual acceptance')
 
 # The procedural speck emitter now reads real Stream Source/End coordinates;
 # syntax/link-check its changed vertex stage without importing PySide6/OpenGL.
 particle_program=glCreateProgram()
 for shader_type,source in [(0x8B31,mod.SPECK_VERTEX),(0x8B30,mod.PARTICLE_FRAGMENT)]:
-    source=source.replace('#version 460 core','#version 450 core')
     shader=glCreateShader(shader_type)
     b=source.encode();p=C.c_char_p(b)
     glShaderSource(shader,1,C.byref(p),None);glCompileShader(shader)
@@ -77,15 +75,14 @@ buf=C.create_string_buffer(max(length.value,1));glGetProgramInfoLog(particle_pro
 print('SPECK LINK',status.value,buf.value[:1200].decode(errors='replace'))
 glDeleteProgram(particle_program)
 assert status.value==1
-print('OFFSCREEN_SPECK_GL45_LINK_PASS; not native rendering or GPU timing')
+print('OFFSCREEN_SPECK_GL46_LINK_PASS; not native rendering or GPU timing')
 
 # Path-enabled free chains, marine snow and parent-attached fizz share the
 # production bead generator. Link against a minimal diagnostic fragment instead
 # of the Qt scene's transparent-OIT owner; this checks actual vertex GLSL.
 bead_program=glCreateProgram()
 for shader_type,source in [(0x8B31,mod.BEAD_VERTEX),
-                           (0x8B30,'#version 450 core\nout vec4 colour;\nvoid main(){colour=vec4(0.0);}')]:
-    source=source.replace('#version 460 core','#version 450 core')
+                           (0x8B30,'#version 460 core\nout vec4 colour;\nvoid main(){colour=vec4(0.0);}')]:
     if shader_type == 0x8B31:
         # The shared sphere GLSL embeds sceneSphereCoverage(), fragment-only
         # fwidth code unused by the vertex stage. Mesa eagerly rejects the
@@ -107,4 +104,4 @@ buf=C.create_string_buffer(max(length.value,1));glGetProgramInfoLog(bead_program
 print('BEAD LINK',status.value,buf.value[:1800].decode(errors='replace'))
 glDeleteProgram(bead_program)
 assert status.value == 1
-print('OFFSCREEN_BEAD_GL45_LINK_PASS; not native rendering or visual acceptance')
+print('OFFSCREEN_BEAD_GL46_LINK_PASS; not native rendering or visual acceptance')

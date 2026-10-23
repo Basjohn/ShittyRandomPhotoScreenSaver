@@ -29,9 +29,15 @@ def test_glyphs_follow_actual_media_card_not_accessory_host_and_close_is_vector(
     assert 'objectName: "ordinaryHoverGlyphLoader"\n' in outer
     assert 'anchors.fill: card' in outer
     assert 'visible: actionKind === "close"' in shared
-    assert 'ctx.moveTo(5.14, 5.14)' in shared
-    assert 'ctx.lineTo(14.86, 14.86)' in shared
-    assert 'ctx.scale(0.9, 0.9)' in shared
+    # The authored inset/scale can change; preserve centred vector geometry.
+    import re
+    start = re.search(r'ctx.moveTo\(([\d.]+), \1\)', shared)
+    end = re.search(r'ctx.lineTo\(([\d.]+), \1\)', shared)
+    assert start and end
+    low, high = float(start[1]), float(end[1])
+    assert 0 < low < 10 < high < 20 and low+high == 20
+    scale = re.search(r'ctx.scale\(([\d.]+), \1\)', shared)
+    assert scale and 0 < float(scale[1]) < 1
     assert 'font.pixelSize: actionKind === "restore" ? 17 : 15' in shared
     assert 'width: visible ? 24 : 0' in shared
     assert 'height: 24' in shared

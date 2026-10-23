@@ -68,6 +68,8 @@ def _live_unit(
         set_visualizer_double_click_admission=lambda _admission: None,
         set_visualizer_middle_click_admission=lambda _admission: None,
         set_visualizer_volume_wheel_handler=lambda _handler: None,
+        set_visualizer_camera_reset_available=lambda _enabled: None,
+        set_visualizer_control_hints_available=lambda _enabled: None,
     )
     return QuickDisplayUnit(
         runtime=SimpleNamespace(
@@ -75,7 +77,10 @@ def _live_unit(
             runtime_generation=805,  # same active generation as the manager fixture
             binding_loss=binding_loss,
             scene_controller=scene_controller,
-            input_controller=SimpleNamespace(set_view_orbit_enabled=lambda _enabled: None),
+            input_controller=SimpleNamespace(
+                set_view_orbit_enabled=lambda _enabled: None,
+                set_framed_flight_enabled=lambda _enabled: None,
+                set_scene_transform_enabled=lambda _enabled, **_kwargs: None),
             window=SimpleNamespace(screen=lambda: object()),
             # display_bounds() reads display_identity.geometry; give each screen
             # a distinct non-overlapping rect like a real dual-display topology.
@@ -159,6 +164,7 @@ def test_custom_owner_binds_media_model_from_the_other_live_display(
             del runtime, bar_count
             self.controller = SimpleNamespace(
                 mode_id=initial_mode,
+                presentation_state=SimpleNamespace(),
                 engine=_Engine(),
                 settings_model=None,
                 technical_config_cache=None,
@@ -170,6 +176,12 @@ def test_custom_owner_binds_media_model_from_the_other_live_display(
 
         def configure(self, **_kwargs) -> None:
             return None
+
+        def resolved_outer_size(self):
+            return (320., 140.)
+
+        def set_authored_outer_origin(self, x, y):
+            self.authored_outer_origin = (x, y)
 
         def bind(self, **_kwargs) -> None:
             return None

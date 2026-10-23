@@ -935,7 +935,8 @@ def _oscilloscope_snapshot(case: str, presentation):
             for index in range(sample_count)
         )
         resolved = runtime.resolve(
-            idle_waveform,
+            history=None,
+            waveform=idle_waveform,
             waveform_count=sample_count,
             now_ts=1.0,
             runtime_generation=1,
@@ -945,20 +946,15 @@ def _oscilloscope_snapshot(case: str, presentation):
             source_activation_id=3,
             source_timestamp=None,
             playing=False,
-            line_speed=0.33,
-            ghosting_enabled=True,
-            ghost_decay=0.4,
-            energy=VisualizerEnergyState(),
-            kick_event=0.0,
-            snare_event=0.0,
-            transient_width_mix=0.35,
-            base_sensitivity=3.0,
-            animation_enabled=False,
+            display="Trace",
+            span_ms=30.0,
+            gain=3.0,
+            delay_ms=5.0,
+            afterglow=0.4,
         )
-        waveform = resolved.waveform
-        previous_waveform = resolved.previous_waveform
-        energy = resolved.energy
-        sensitivity = resolved.resolved_sensitivity
+        waveform = idle_waveform
+        energy = VisualizerEnergyState()
+        sensitivity = 3.0
         playing = False
     else:
         waveform = tuple(
@@ -978,6 +974,8 @@ def _oscilloscope_snapshot(case: str, presentation):
         )
         sensitivity = 3.2
         playing = True
+    points = resolved.points if not playing else _oscilloscope_smoke_packed_points(waveform, previous_waveform)
+    trace_alphas = resolved.trace_alphas if not playing else ((0.36, 1.0) if previous_waveform else (1.0,))
     logical = VisualizerLogicalFrame(
         runtime_generation=1,
         engine_generation=2,
@@ -1005,8 +1003,8 @@ def _oscilloscope_snapshot(case: str, presentation):
             ),
         ),
         mode_state=OscilloscopeFrame(
-            points=_oscilloscope_smoke_packed_points(waveform, previous_waveform),
-            trace_alphas=((0.36, 1.0) if previous_waveform else (1.0,)),
+            points=points,
+            trace_alphas=trace_alphas,
             flare=0.0 if not playing else 0.45,
             drive=0.0 if not playing else 0.65,
             tone=0.5,
