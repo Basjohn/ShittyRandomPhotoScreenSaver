@@ -1,5 +1,4 @@
 {
-  "description": "A dark teal abyss lit from the upper right inside the water: luminous veils and columns of bubbles.",
   "mode": "extruded_bubble",
   "name": "Preset 5 (Abyss)",
   "preset_index": 4,
@@ -9,9 +8,14 @@
     "widgets": {
       "spotify_visualizer": {
         "extruded_bubble_light_type": "Deep Light",
+        "extruded_bubble_lighting_coverage": "SCENE",
         "extruded_bubble_light_direction": [
-          39.3,
-          35.7
+          0.3918,
+          1.0,
+          -0.4786,
+          -0.3918,
+          -1.0,
+          0.4786
         ],
         "extruded_bubble_light_colour": [
           140,
@@ -26,6 +30,15 @@
           0.18
         ],
         "extruded_bubble_ray_softness": 0.35,
+        "extruded_bubble_beam_width": 1.0,
+        "extruded_bubble_ray_path": [
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          -1.0,
+          0.0
+        ],
         "extruded_bubble_ray_reach": 0.6,
         "extruded_bubble_ray_flicker": 0.3,
         "extruded_bubble_large_bubbles": [
@@ -40,19 +53,28 @@
           2,
           3
         ],
+        "extruded_bubble_large_size": 1.0,
+        "extruded_bubble_small_size": 1.0,
+        "extruded_bubble_bead_size": 1.0,
         "extruded_bubble_size_variety": 0.6,
         "extruded_bubble_columns": 0.75,
+        "extruded_bubble_bubble_spread": 1.0,
+        "extruded_bubble_emission_geometry": "SCENE",
         "extruded_bubble_stream_direction": [
-          21.8,
-          0.0
+          -0.1778,
+          -1.0,
+          0.0,
+          0.1778,
+          1.0,
+          -0.0
         ],
         "extruded_bubble_stream_speed": [
-          0.25,
+          0.2,
           0.8
         ],
         "extruded_bubble_drift": [
           0.1,
-          0.25
+          0.4
         ],
         "extruded_bubble_sway": 0.15,
         "extruded_bubble_breathing": [
@@ -67,11 +89,17 @@
         "extruded_bubble_smoothing": 0.5,
         "extruded_bubble_idle": 0.5,
         "extruded_bubble_collision": [
-          0.4,
-          0.3,
-          0.3
+          0.5278,
+          0.4722,
+          0.0
         ],
         "extruded_bubble_collision_scope": "All",
+        "extruded_bubble_camera_position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "extruded_bubble_camera_fov": 45,
         "extruded_bubble_auto_rotate": false,
         "extruded_bubble_auto_rotate_after": 20,
         "extruded_bubble_auto_rotate_speed": 6,
@@ -99,6 +127,7 @@
           0.3,
           0.4
         ],
+        "extruded_bubble_particle_spread": 1.0,
         "extruded_bubble_particle_size": 1.0,
         "extruded_bubble_particle_colour": [
           255,
@@ -108,6 +137,7 @@
         ],
         "extruded_bubble_particle_warmth": 0.85,
         "extruded_bubble_particle_glow": 0.0,
+        "extruded_bubble_particle_glow_reactivity": 0.0,
         "extruded_bubble_particle_bands": false,
         "extruded_bubble_band_contrast": 0.5,
         "extruded_bubble_focus": 0.23,
@@ -125,10 +155,11 @@
     }
   },
   "starting_view": {
-    "extruded_bubble_turn": 0.0,
-    "extruded_bubble_tilt": -0.111,
+    "extruded_bubble_turn": 0.016666666666667496,
+    "extruded_bubble_tilt": -0.08485185185185143,
     "extruded_bubble_scene_scale": 1.0,
     "extruded_bubble_scene_pan_x": 0.0,
     "extruded_bubble_scene_pan_y": 0.0
-  }
+  },
+  "description": "Saved from current Settings state."
 }

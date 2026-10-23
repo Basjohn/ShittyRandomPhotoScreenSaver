@@ -549,6 +549,8 @@ class QuickSceneController(QObject):
         window.bind_semantic_middle_click_hit_test(
             self._semantic_middle_click_hit_test
         )
+        window.bind_plain_orbit_target(self._plain_orbit_target_at,
+                                       grabber_blocks=self._plain_orbit_grabber_blocks)
         custom_layout_overlay_item = root.findChild(
             QQuickItem,
             "customLayoutOverlay",
@@ -1847,6 +1849,50 @@ class QuickSceneController(QObject):
         except (TypeError, RuntimeError):
             return False
 
+    def _plain_orbit_target_at(self, scene_position):
+        """Discrete press ownership from live retained items, never saved rectangles."""
+        root = self._visualizer_root
+        if (self._custom_layout_session is not None or root is None or not root.isEnabled()
+                or not root.property('cardShellEnabled')
+                or not self.visualizer_contains_scene_position(scene_position)):
+            return None
+        host = self._ordinary_widget_host
+        found = host.diagnostic_widget_at(scene_position) if host is not None else None
+        if found is not None and QuickSceneController._plain_orbit_item_blocks(found.item, root):
+            return None
+        return root
+
+    @staticmethod
+    def _plain_orbit_item_blocks(item, root):
+        if item is not None:
+            # Compare actual sibling branches at their common retained parent,
+            # including later-child precedence on equal Z. Do not invent a
+            # second overlay-rectangle map or assume all widgets sit above it.
+            branches = []
+            for item in (item, root):
+                path = []
+                while item is not None:
+                    path.append(item)
+                    item = item.parentItem()
+                branches.append(path[::-1])
+            if root in branches[0]:
+                return True  # Glyph/control within the visualizer itself.
+            for ordinary, visualizer in zip(*branches):
+                if ordinary is not visualizer:
+                    if ordinary.parentItem() is visualizer.parentItem():
+                        siblings = ordinary.parentItem().childItems()
+                        if (ordinary.z(), siblings.index(ordinary)) > (visualizer.z(), siblings.index(visualizer)):
+                            return True
+                    break
+        return False
+
+    def _plain_orbit_grabber_blocks(self, grabber, root):
+        # PointerHandlers are QObjects parented to their retained target item;
+        # MouseAreas are already items. Use actual retained paint ancestry.
+        while grabber is not None and not isinstance(grabber, QQuickItem):
+            grabber = grabber.parent()
+        return grabber is None or QuickSceneController._plain_orbit_item_blocks(grabber, root)
+
     def discard_unowned_visualizer_admission(self) -> VisualizerRenderIdentity | None:
         """Clear one manager-proven orphaned retained Visualizer admission.
 
@@ -2123,6 +2169,7 @@ class QuickSceneController(QObject):
             return
         self._window.bind_semantic_double_click_hit_test(None)
         self._window.bind_semantic_middle_click_hit_test(None)
+        self._window.bind_plain_orbit_target(None)
         self._visualizer_double_click_admission = None
         self._visualizer_middle_click_admission = None
         self._publish_readiness(admission_open=False)
@@ -2263,6 +2310,7 @@ class QuickSceneController(QObject):
             self._custom_layout_session is not None
         )
         self._visualizer_root = root
+        self._window.watch_plain_orbit_card(root)
         root.setProperty(
             "startupRevealOpacity",
             self._visualizer_startup_reveal_opacity,

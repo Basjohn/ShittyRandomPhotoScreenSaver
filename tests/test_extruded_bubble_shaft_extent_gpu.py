@@ -10,20 +10,13 @@ def _smooth(a, b, x):
     return t * t * (3. - 2. * t)
 
 
-def _extent(point, source, end, radius=.9, reach=.3, softness=.5):
-    """Independent scalar oracle for the declared fixed-aperture cone policy."""
-    line = np.asarray(end, dtype=float) - source
-    length = float(np.linalg.norm(line))
-    if length < .001:
-        return 0.
-    axis = line / length
-    delta = np.asarray(point, dtype=float) - source
-    along = float(delta @ axis)
-    lateral = float(np.linalg.norm(delta - axis * along))
-    outer = radius + max(along, 0.) * math.tan(max(.01, min(1.2, reach)))
-    feather = outer * (.2 + .4 * max(0., min(1., softness)))
-    axial = _smooth(-1.8, 1.2, along) * (1. - _smooth(length - 2., length + 1.5, along))
-    return axial * (1. - _smooth(outer - feather, outer, lateral))
+def _extent(point, source, end):
+    """Independent oracle for the operator-restored Source/End axial envelope."""
+    line=np.asarray(end,dtype=float)-source
+    length=float(np.linalg.norm(line))
+    if length<.001:return 0.
+    along=float((np.asarray(point)-source)@(line/length))
+    return _smooth(-1.8,1.2,along)*(1.-_smooth(length-2.,length+1.5,along))
 
 
 @pytest.fixture
@@ -35,8 +28,8 @@ def shaft_geometry(qt_app):
 
     # Execute the real functions unchanged, independently of camera marching,
     # angular pattern, representative-depth masks, blur and final composition.
-    start = SHAFT_FRAGMENT.index('float beamRadius(')
-    stop = SHAFT_FRAGMENT.index('float shaftPattern(', start)
+    start = SHAFT_FRAGMENT.index('float blockAttenuation(')
+    stop = SHAFT_FRAGMENT.index('float beamShaftFan(', start)
     functions = SHAFT_FRAGMENT[start:stop]
     vertex = '''#version 460 core
 uniform vec3 uRaySource, uRayEnd, uEye;
@@ -50,7 +43,7 @@ layout(std430,binding=6) writeonly buffer Results { vec4 results[]; };
 ''' + functions + '''
 void main() {
     vec3 p = points[gl_VertexID].xyz;
-    results[gl_VertexID] = vec4(beamExtent(p), sceneTransmittance(p), 0., 1.);
+    results[gl_VertexID] = vec4(acceptedBeamExtent(p), sceneTransmittance(p), 0., 1.);
     gl_Position = vec4(0.,0.,0.,1.);
 }
 '''
@@ -63,12 +56,11 @@ void main() {
         buffers = list(map(int, gl.glGenBuffers(2)))
         gl.glUseProgram(program)
         loc = lambda name: gl.glGetUniformLocation(program, name)
-        assert loc('uRayRadius') >= 0, 'finite envelope must consume the shared physical aperture'
+        assert loc('uRaySource') >= 0 and loc('uRayEnd') >= 0
         gl.glBindVertexArray(target.vao)
         gl.glEnable(gl.GL_RASTERIZER_DISCARD)
 
-        def evaluate(points, *, source=(0., 0., 0.), end=(0., 0., -10.), radius=.9,
-                     reach=.3, softness=.5, width=1., eye=(0., 0., 0.), view=None):
+        def evaluate(points, *, source=(0., 0., 0.), end=(0., 0., -10.), eye=(0., 0., 0.), view=None):
             rows = np.ones((len(points), 4), dtype='f4')
             rows[:, :3] = points
             for binding, buffer, data in ((5, buffers[0], rows), (6, buffers[1], np.zeros_like(rows))):
@@ -77,9 +69,7 @@ void main() {
                 gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, binding, buffer)
             for name, xyz in (('uRaySource', source), ('uRayEnd', end), ('uEye', eye)):
                 gl.glUniform3f(loc(name), *xyz)
-            for name, value in (('uRayRadius', radius), ('uFanReach', reach),
-                                ('uBeamWidth', width), ('uLightingScene', 0.),
-                                ('uShaftSoft', softness), ('uParticleAtten', .05)):
+            for name, value in (('uLightingScene',0.),('uParticleAtten',.05)):
                 gl.glUniform1f(loc(name), value)
             gl.glUniformMatrix3fv(loc('uViewToWorld'), 1, False,
                                   np.eye(3, dtype='f4') if view is None else np.asarray(view, dtype='f4'))
@@ -108,69 +98,22 @@ void main() {
 
 
 @pytest.mark.qt
-def test_production_cone_axis_feather_and_exterior_match_physical_oracle(shaft_geometry):
-    source, end = (0., 0., 0.), (0., 0., -10.)
-    along = 5.
-    outer = .9 + along * math.tan(.3)
-    inner = outer * .6
-    points = [(x, 0., -along) for x in (0., inner * .9, inner, (inner + outer) / 2., outer, outer * 2., 1000.)]
-    actual = shaft_geometry(points)[:, 0]
-    expected = [_extent(p, source, end) for p in points]
-    assert actual == pytest.approx(expected, abs=2e-6, rel=2e-5)
-    assert actual[:3] == pytest.approx([1., 1., 1.], abs=2e-6)
-    assert actual[3] == pytest.approx(.5, abs=2e-6)
-    assert actual[-2:] == pytest.approx([0., 0.], abs=0.)
+def test_accepted_beam_does_not_reintroduce_the_rejected_lateral_cone(shaft_geometry):
+    points=[(x,0.,-5.) for x in (-100.,-5.,0.,5.,100.)]
+    assert shaft_geometry(points)[:,0]==pytest.approx([1.]*len(points),abs=2e-6)
 
 
 @pytest.mark.qt
-def test_production_cone_is_rigid_world_geometry_not_camera_geometry(shaft_geometry):
-    source, end = np.array([0., 0., 0.]), np.array([0., 0., -10.])
-    points = np.array([[0., 0., -5.], [2., 0., -5.], [4., 0., -5.], [0., 0., -10.]])
-    baseline = shaft_geometry(points)[:, 0]
-    # A proper rigid rotation sends the cone to +X; translation is unrelated
-    # to camera position. Include an intermediate feather value, not just 0/1.
-    rotation = np.array([[0., 0., -1.], [0., 1., 0.], [1., 0., 0.]])
-    offset = np.array([7., -3., 11.])
-    moved = shaft_geometry(points @ rotation.T + offset, source=rotation @ source + offset,
-                           end=rotation @ end + offset)[:, 0]
-    assert moved == pytest.approx(baseline, abs=2e-6, rel=2e-5)
-    for eye, view in (((12., -6., 3.), rotation), ((-9., 4., 15.), np.eye(3))):
-        assert shaft_geometry(points, eye=eye, view=view)[:, 0] == pytest.approx(baseline, abs=0.)
-
-
-@pytest.mark.qt
-def test_production_reach_widens_and_softness_feathers_without_moving_outer_edge(shaft_geometry):
-    point = [(2., 0., -5.)]
-    narrow = shaft_geometry(point, reach=.1)[0, 0]
-    wide = shaft_geometry(point, reach=.7)[0, 0]
-    assert narrow == 0. and wide == 1.
-
-
-@pytest.mark.qt
-def test_authored_beam_width_scales_the_whole_cross_section_with_one_as_baseline(shaft_geometry):
-    point = [(2., 0., -5.)]
-    assert shaft_geometry(point, width=.25)[0, 0] == 0.
-    baseline = shaft_geometry(point, width=1.)[0, 0]
-    assert baseline == pytest.approx(_extent(point[0], (0.,0.,0.), (0.,0.,-10.)), abs=2e-6)
-    assert shaft_geometry(point, width=3.)[0, 0] == 1.
-
-
-@pytest.mark.qt
-def test_softness_feathers_the_existing_outer_edge(shaft_geometry):
-    point = [(2., 0., -5.)]
-    outer = .9 + 5. * math.tan(.3)
-    points = [(outer * .7, 0., -5.), (outer, 0., -5.), (outer * 1.1, 0., -5.)]
-    hard = shaft_geometry(points, softness=0.)[:, 0]
-    soft = shaft_geometry(points, softness=1.)[:, 0]
-    assert 0. < soft[0] < hard[0] == 1.
-    assert hard[1:] == pytest.approx([0., 0.], abs=0.)
-    assert soft[1:] == pytest.approx([0., 0.], abs=0.)
-    # Shader clamps are finite geometry policy, including out-of-domain input.
-    for reach in (-1., .01, 1.2, 2.):
-        for softness in (-1., 2.):
-            actual = shaft_geometry(point, reach=reach, softness=softness)[0, 0]
-            assert actual == pytest.approx(_extent(point[0], (0., 0., 0.), (0., 0., -10.),
-                                                   reach=reach, softness=softness), abs=2e-6)
+def test_accepted_source_end_envelope_is_rigid_and_camera_independent(shaft_geometry):
+    source,end=np.array([0.,0.,0.]),np.array([0.,0.,-10.])
+    points=np.array([[0.,0.,-5.],[2.,0.,-5.],[4.,0.,-5.],[0.,0.,-10.]])
+    baseline=shaft_geometry(points)[:,0]
+    rotation=np.array([[0.,0.,-1.],[0.,1.,0.],[1.,0.,0.]])
+    offset=np.array([7.,-3.,11.])
+    moved=shaft_geometry(points@rotation.T+offset,source=rotation@source+offset,
+                         end=rotation@end+offset)[:,0]
+    assert moved==pytest.approx(baseline,abs=2e-6,rel=2e-5)
+    assert shaft_geometry(points,eye=(12.,-6.,3.),view=rotation)[:,0]==pytest.approx(baseline,abs=0.)
 
 
 @pytest.mark.qt
@@ -194,12 +137,11 @@ def test_production_degenerate_segment_emits_nothing_and_has_neutral_transmittan
 
 @pytest.mark.qt
 @pytest.mark.parametrize('light_type', ['Sunlit Surface', 'Deep Light'])
-def test_actual_scene_knobs_feed_mode_owned_source_and_fixed_world_aperture(shaft_geometry, light_type):
-    from core.constants.extruded_bubble_world import WORLD_UNIT
+def test_actual_scene_knobs_feed_mode_owned_source_and_end(shaft_geometry, light_type):
     from core.settings.default_contract import require_canonical_default
     from core.settings.visualizer_mode_settings import require_mode_settings
     from core.settings.visualizer_paths import admit_path, world_point
-    from rendering.gl_programs.extruded_bubble_scene import ENGINE, scene_knobs
+    from rendering.gl_programs.extruded_bubble_scene import scene_knobs
 
     params = {entry.key: require_canonical_default('widgets.spotify_visualizer.' + entry.key)
               for entry in require_mode_settings('extruded_bubble').entries
@@ -217,12 +159,8 @@ def test_actual_scene_knobs_feed_mode_owned_source_and_fixed_world_aperture(shaf
         assert knobs['ray_end'] != knobs['light_end']
     else:
         assert knobs['ray_source'] != knobs['light_source']
-    assert knobs['ray_radius'] == ENGINE['ray_radius'] == pytest.approx(.1 * WORLD_UNIT)
     source, end = np.asarray(knobs['ray_source']), np.asarray(knobs['ray_end'])
     points = [source, (source + end) * .5, end, source + np.array([100., 100., 100.])]
-    actual = shaft_geometry(points, source=source, end=end, radius=knobs['ray_radius'],
-                            reach=knobs['fan_reach'], softness=knobs['shaft_soft'])[:, 0]
-    expected = [_extent(p, source, end, knobs['ray_radius'], knobs['fan_reach'], knobs['shaft_soft']) for p in points]
+    actual = shaft_geometry(points,source=source,end=end)[:,0]
+    expected = [_extent(p,source,end) for p in points]
     assert actual == pytest.approx(expected, abs=2e-6, rel=2e-5)
-    params['extruded_bubble_ray_path'] = (.4, -.5, -.2, -.5, -.8, .7)
-    assert scene_knobs(params)['ray_radius'] == knobs['ray_radius']  # End cannot resize the source aperture.

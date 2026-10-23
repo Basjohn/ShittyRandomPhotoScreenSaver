@@ -11,6 +11,7 @@ polling rate.
 from __future__ import annotations
 
 import math
+import logging
 import time
 from typing import Final
 
@@ -64,6 +65,7 @@ class QuickCursorController(QObject):
         self._motion_visible = False
         self._last_motion_ns = 0
         self._fade_step = 0
+        self._orbit_fade = ''
         self._last_cursor_signature: tuple[object, ...] | None = None
         self._cursor_cache: dict[tuple[str, float, int], QCursor] = {}
         self._timer = QTimer(self)
@@ -75,7 +77,39 @@ class QuickCursorController(QObject):
     def tracks_pointer_motion(self) -> bool:
         """Whether movement can affect the native Halo inactivity state."""
 
-        return bool(self._admission_open and self._halo_enabled)
+        return bool(self._admission_open and self._halo_enabled and not self._orbit_fade)
+
+    def begin_orbit_fade(self) -> bool:
+        """Fade the existing native Halo; no second timer or motion subscription."""
+        if not self._admission_open:
+            return False
+        if self._native_cursor_visible:
+            # A stock QCursor has no alpha raster. Decline rather than replace
+            # the actual system cursor with project artwork or hide it abruptly.
+            logging.getLogger(__name__).warning(
+                '[ORBIT_CURSOR] Native arrow alpha raster unavailable; drag declined')
+            return False
+        self._timer.stop()
+        if self._halo_enabled and self._motion_visible:
+            self._orbit_fade = 'out'
+            self._timer.start(_CURSOR_FADE_STEP_MS)
+        else:
+            self._orbit_fade = 'held'
+            self._fade_step = _CURSOR_FADE_STEPS
+        return True
+
+    def end_orbit_fade(self) -> None:
+        if not self._orbit_fade:
+            return
+        self._timer.stop()
+        if self._admission_open and self._halo_enabled:
+            self._orbit_fade = 'in'
+            self._motion_visible = True
+            self._timer.start(_CURSOR_FADE_STEP_MS)
+        else:
+            self._orbit_fade = ''
+            self._fade_step = 0
+            self._apply_cursor(force=True)
 
     def apply_auxiliary_state(self, state: QuickAuxiliaryState) -> bool:
         """Apply matching low-rate semantic cursor facts from auxiliary state."""
@@ -109,6 +143,17 @@ class QuickCursorController(QObject):
         )
         if current == previous:
             return False
+
+        if self._orbit_fade:
+            # The window cancels the gesture on menu/admission edges. Keep a
+            # synchronous auxiliary publication from reviving its held cursor.
+            if not self._halo_enabled:
+                self._orbit_fade = ''
+                self._fade_step = 0
+                self._motion_visible = False
+                self._timer.stop()
+            self._apply_cursor(force=True)
+            return True
 
         # The native cursor is only shown while it owns the pointer (e.g. an open
         # context menu). When it yields back to the Halo, re-assert Halo
@@ -174,6 +219,7 @@ class QuickCursorController(QObject):
         self._motion_visible = False
         self._last_motion_ns = 0
         self._fade_step = 0
+        self._orbit_fade = ''
         self._timer.stop()
         self._cursor_cache.clear()
         self._apply_cursor(force=True)
@@ -189,12 +235,31 @@ class QuickCursorController(QObject):
             "halo_shape": self._halo_shape,
             "motion_visible": self._motion_visible,
             "fade_step": self._fade_step,
+            "orbit_fade": self._orbit_fade,
             "inactivity_timer_active": self._timer.isActive(),
             "pointer_owner": "native_qcursor",
             "scene_position_binding": False,
         }
 
     def _on_timer(self) -> None:
+        if self._orbit_fade:
+            if self._orbit_fade == 'out':
+                self._fade_step = min(_CURSOR_FADE_STEPS, self._fade_step + 1)
+                if self._fade_step == _CURSOR_FADE_STEPS:
+                    self._orbit_fade = 'held'
+            elif self._orbit_fade == 'in':
+                self._fade_step = max(0, self._fade_step - 1)
+                if self._fade_step == 0:
+                    self._orbit_fade = ''
+                    self._last_motion_ns = time.monotonic_ns()
+            self._apply_cursor(force=True)
+            if self._orbit_fade in ('out', 'in'):
+                self._timer.start(_CURSOR_FADE_STEP_MS)
+            elif self._orbit_fade == 'held':
+                self._timer.stop()
+            elif not self._orbit_fade and self.tracks_pointer_motion:
+                self._timer.start(_CURSOR_INACTIVITY_MS)
+            return
         if not self.tracks_pointer_motion or not self._motion_visible:
             return
 
@@ -221,7 +286,10 @@ class QuickCursorController(QObject):
         self._apply_cursor(force=True)
 
     def _apply_cursor(self, *, force: bool = False) -> None:
-        if self._halo_enabled and self._motion_visible:
+        if self._orbit_fade == 'held':
+            signature = ('blank',)
+            cursor = QCursor(Qt.CursorShape.BlankCursor)
+        elif self._halo_enabled and self._motion_visible:
             alpha_step = min(_CURSOR_FADE_STEPS, max(0, self._fade_step))
             signature: tuple[object, ...] = (
                 "halo",
