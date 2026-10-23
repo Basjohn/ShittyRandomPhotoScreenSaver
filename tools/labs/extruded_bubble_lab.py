@@ -589,6 +589,7 @@ def render_variant(capture, resources, target, programs, env, env_fbo, settings,
         gl.glUniform1f(u("uShaftSoft"), settings.get("shaft_soft", 0.0))
         gl.glUniform1f(u("uRayRadius"), settings["ray_radius"])
         gl.glUniform1f(u("uSurfaceShaft"), float(settings["mode"] == "surface"))
+        gl.glUniform1f(u("uLightStrength"), 1.0)  # historical recipes contain already-calibrated light gains
         gl.glUniform1f(u("uFanReach"), settings.get("fan_reach", 0.6))
         gl.glUniform1f(u("uSpecks"), settings.get("specks", 0.0))
         gl.glUniform1f(u("uLightPower"), settings.get("light_power", 0.0))

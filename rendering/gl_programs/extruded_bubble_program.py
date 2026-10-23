@@ -24,6 +24,8 @@ uniform float uSurfaceTravel;
 uniform vec3 uSun;
 uniform vec3 uSunBelow;
 uniform vec3 uLightSource;  // real physical deep-light position
+uniform float uLightStrength; // direct illumination; ambient water/particle floor remain
+uniform float uPositionalLight; // Light Type only; never inferred from strength
 uniform vec3 uLightEnd;     // authored far end; directional shape derived by the CPU
 uniform vec3 uDeep;
 uniform vec3 uWater;
@@ -92,7 +94,7 @@ vec3 basinWater(vec3 ray, float detail, float shafts) {
     vec3 medium = mix(uDeep * smoothstep(-1.0, -0.2, ray.y) * 0.8 + uDeep * 0.2, uWater,
                       pow(smoothstep(-0.5, 0.9, ray.y), 1.5))
                 + uShaftColour * (pow(glow, 4.0) * 0.08 * (uGlow - 1.0) + pow(glow, 10.0) * 0.22 * uGlow
-                                  + pow(glow, 60.0) * 0.6);
+                                  + pow(glow, 60.0) * 0.6) * uLightStrength;
     if (shafts > 0.0)
         medium += mix(uShaftColour, vec3(0.9), 0.35) * shafts * (0.4 + 1.9 * pow(glow, 2.5));
     // Below: the abyss, darkening with depth (operator: no ocean floor).
@@ -194,7 +196,7 @@ void main() {
         float dust = smoothstep(0.42, 0.85, cloud);
         float toward = 0.5 + 1.2 * pow(max(dot(ray, uSunBelow), 0.0), 2.0);
         vec3 ember = uShaftColour * vec3(1.0, 0.62, 0.4);
-        colour += ember * uDust * dust * dust * 0.45 * toward;
+        colour += ember * uDust * dust * dust * 0.45 * toward * uLightStrength;
     }
     if (uWisps > 0.0) {
         float strands = 0.0;
@@ -204,7 +206,7 @@ void main() {
             strands += waterWisps(vec2(at.x + at.z * 0.3, at.y) * (0.9 - 0.15 * float(i)) + vec2(float(i) * 7.3), uTime)
                      * exp(-d * 0.06);
         }
-        colour += mix(uShaftColour, vec3(0.5, 0.8, 1.0), 0.3) * strands * 0.22 * uWisps;
+        colour += mix(uShaftColour, vec3(0.5, 0.8, 1.0), 0.3) * strands * 0.22 * uWisps * uLightStrength;
     }
     if (uVeils > 0.0) {
         // Light focused by the surface far above hangs in the water as a glowing net (mocks: the deep scenes' web of
@@ -224,7 +226,7 @@ void main() {
             web += (pow(c, 6.0) + pow(c, 2.0) * 0.12) * patches * exp(-d * 0.07);
         }
         vec3 veil = mix(uShaftColour, vec3(0.6, 0.85, 1.0), 0.25) * web * 2.2 * uVeils;
-        colour += veil;
+        colour += veil * uLightStrength;
     }
     if (uLightPower > 0.0) {
         // Deep lights are physical emitters. Translating both endpoints now
@@ -528,7 +530,6 @@ uniform float uInnerBlur;
 uniform float uShellMin;         // radius px below which a bubble is one interface
 uniform int uDiag;               // 0 composed; diagnostic views otherwise
 uniform vec3 uLightDir;          // world direction toward the scene's light (as seen under water)
-uniform float uPositionalLight; // Deep: evaluate Source from each actual interface/exit point
 uniform vec3 uSpecColour;        // the light's colour x strength
 uniform vec3 uSpecShape;
 uniform float uSpecThrough;      // share of the light seen through the lens         // core radius (rad), shoulder radius (rad), shoulder share
@@ -726,7 +727,7 @@ void main() {
     float pixels = vSphere.w / (uPixelSize * max(-front.z, 0.1));
     if (vExtra.y > 0.5 && vExtra.y < 1.5) {
         float a = coverage * 0.45 * vExtra.z * (1.0 - soft * 0.7) * vOpacity;
-        float glitter = 1.0 + uSparkle * 7.0 * step(0.86, fract(vExtra.x * 31.7));
+        float glitter = 1.0 + uSparkle * 7.0 * step(0.86, fract(vExtra.x * 31.7)) * uLightStrength;
 #ifndef NEAR_LAYER
         sceneTransparent(mix(uShaftColour, vec3(0.9, 0.95, 1.0), 0.4) * 1.2 * glitter * a, a, -front.z);
         Emission = vec4(0.0);
@@ -921,6 +922,10 @@ uniform bool uRowMajor;
 uniform mat4 uProjection;
 uniform float uPixel;                // view units per pixel at unit distance
 uniform vec3 uSunBelow;
+uniform vec3 uLightSource;
+uniform float uPositionalLight;
+uniform float uLightStrength;
+uniform float uParticleLighting; // 1: scattering particle, 0: CPU-lit glint proxy
 uniform vec3 uLightColour;
 uniform vec3 uSpeckWarm;
 uniform vec3 uWater;
@@ -935,7 +940,13 @@ void main() {
     float depth = -c.z;
     float drawn = max(aPoint.w * uParticleRadiusShare, uPixel * depth * 0.75);
     float energy = min((aPoint.w * aPoint.w) / (drawn * drawn), 1.0);
-    float phase = 0.3 + 2.2 * pow(max(dot(normalize(aPoint.xyz - uEye), uSunBelow), 0.0), 4.0);
+    vec3 lightDirection = uSunBelow;
+    if (uPositionalLight > 0.5) {
+        vec3 delta = uLightSource - aPoint.xyz;
+        lightDirection = delta / max(length(delta), 1e-6);
+    }
+    float phase = 0.3 + 2.2 * pow(max(dot(normalize(aPoint.xyz - uEye), lightDirection), 0.0), 4.0)
+                            * mix(1.0, uLightStrength, uParticleLighting);
     vec3 tint = aLook.y > 0.5 ? uSpeckWarm : mix(uWater * 6.0, vec3(0.75, 0.82, 0.86), 0.5);
     vColour = tint * aLook.x * phase * energy * uSpecks;
     vCorner = corner;

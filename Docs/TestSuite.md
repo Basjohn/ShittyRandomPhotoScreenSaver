@@ -1179,7 +1179,8 @@ with independent scalar geometry, transform/camera, control, degenerate path and
 The infinite-slab negative control fails. Root connected renderer/source/end/geometry gate:48 pass. The source
 birth test now falsifies the existing0.4/s/class resting inlet at its first2.5s credit rather than expecting an
 obsolete activation burst. Full four-view images/linear shaft fields and timing limits: Investigation §58.
-These do not close the camera-derived fan or positional-light field defects.
+Geometry proof alone does not close world-density or positional-light field defects; the following gate covers
+the later camera-fan replacement, with moving art and full physical-light coherence still open.
 
 ### EB world shaft density and actual shadow sample
 
@@ -1189,3 +1190,13 @@ uploads independent of strength and safe empty/degenerate fields. A controlled-d
 40-step integral and scalar centroid at two jitters. A full production-main test retains real attenuation wiring:
 restoring the18-unit sample incorrectly introduces16% shadow and fails. Root connected gate:62 pass. Diagnostic
 main tests alone cannot establish final wiring, art, moving camera behavior or production cost; §60 records native scope.
+
+### EB shared direct-light gain
+
+`test_extruded_bubble_light_gain_gpu.py` executes the production particle vertex and real scene/uniform mapping:
+zero-strength ambient, linear direct delta, Surface strength1 parity, physical Deep particle direction and
+CPU-lit proxy bypass. `test_extruded_bubble_backdrop_light_gpu.py` executes the full production backdrop main
+for water glow, shaft compositing and caustics in Surface/Deep, preserving ambient with0/.5/1/2 linear deltas.
+World-GPU tests additionally cover ordinary subpixel, stable bead and marine-snow glints, retaining ambient and
+opacity. Renderer-upload checks protect specks1/proxies0 admission. Investigation §61 records exact prior-source
+P1/P7 native scope. These do not prove positional distance falloff, physical emitter size or final preset fidelity.

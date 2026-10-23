@@ -299,6 +299,8 @@ def test_idle_population_uniforms_preserve_counts_and_wakes_but_fade_free_chains
         samples.append((chains,specks))
         assert proxies['uParticleActivity']==1.
         assert proxies['uParticleRadiusShare']==1.
+        assert proxies['uParticleLighting']==0.  # CPU-lit radiance bypasses a second light-strength factor
+        assert specks['uParticleLighting']==1.
     assert samples[0][0]['uChainFill']==samples[-1][0]['uChainFill']>0
     assert [c['uChainActivity'] for c,s in samples] == pytest.approx((0.,.5,1.,1.))
     assert [s['uParticleActivity'] for c,s in samples] == pytest.approx((0.,.5,1.,1.))
