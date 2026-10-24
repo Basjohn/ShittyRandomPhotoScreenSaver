@@ -12,6 +12,7 @@ from core.settings.framed_camera import (
     FramedCameraSpec, admit_camera_parameters, camera_baseline, ceiling_for, spec_for_mode,
 )
 from core.settings.visualizer_mode_settings import require_mode_settings
+from ui.widgets.edit_history import EditHistory
 from ui.widgets.visual_controls import SceneVolumeMapper
 
 POSE_SUFFIXES = ('turn', 'tilt', 'scene_scale', 'scene_pan_x', 'scene_pan_y', 'camera_fov')
@@ -27,6 +28,10 @@ def pose_attr(mode_id: str) -> str:
 
 def aim_dirty_attr(mode_id: str) -> str:
     return f'_{_settings_prefix(mode_id)}_aim_dirty'
+
+
+def _history_attr(mode_id: str) -> str:
+    return f'_{_settings_prefix(mode_id)}_camera_history'
 
 
 def _saved(tab, key):
@@ -58,6 +63,45 @@ def hydrate_pose(tab, mode_id: str, config) -> None:
     setattr(tab, aim_dirty_attr(mode_id), False)
     setattr(tab, pose_attr(mode_id), {spec.key(s): config.get(spec.key(s), _saved(tab, spec.key(s)))
                                       for s in POSE_SUFFIXES})
+    setattr(tab, _history_attr(mode_id), EditHistory(camera_state(tab, mode_id)))
+
+
+def camera_state(tab, mode_id: str) -> tuple:
+    """What one camera action changes: the Camera Position offset and the aimed turn/tilt."""
+    spec = spec_for_mode(mode_id)
+    offset = tuple(float(v) for v in live_value(tab, mode_id, spec.key('camera_position')))
+    return (offset, *camera_angles(tab, mode_id))
+
+
+def note_committed(tab, mode_id: str) -> None:
+    """A camera gesture ended: remember its result for Ctrl+Z."""
+    history = getattr(tab, _history_attr(mode_id), None)
+    if history is not None:
+        history.record(camera_state(tab, mode_id))
+
+
+def undo(tab, mode_id: str) -> bool:
+    history = getattr(tab, _history_attr(mode_id), None)
+    return _restore(tab, mode_id, history.undo() if history is not None else None)
+
+
+def redo(tab, mode_id: str) -> bool:
+    history = getattr(tab, _history_attr(mode_id), None)
+    return _restore(tab, mode_id, history.redo() if history is not None else None)
+
+
+def _restore(tab, mode_id: str, state) -> bool:
+    pose = getattr(tab, pose_attr(mode_id), None)
+    if state is None or pose is None:
+        return False
+    spec = spec_for_mode(mode_id)
+    offset, turn, tilt = state
+    pose[spec.key('turn')], pose[spec.key('tilt')] = turn, tilt
+    setattr(tab, aim_dirty_attr(mode_id), True)
+    _store_offset(tab, mode_id, list(admit_offset(tab, mode_id, offset)))
+    refresh_editors(tab, mode_id)
+    tab._save_settings()
+    return True
 
 
 def _pose(tab, mode_id: str) -> dict:
@@ -122,6 +166,7 @@ def set_offset(tab, mode_id: str, offset, *, commit: bool) -> None:
     if commit:
         # Camera movement is a live pose adjustment, not curated preset artwork.
         tab._save_settings()
+        note_committed(tab, mode_id)
 
 
 def set_aim(tab, mode_id: str, angles, *, commit: bool) -> None:
@@ -145,6 +190,7 @@ def set_aim(tab, mode_id: str, angles, *, commit: bool) -> None:
     refresh_editors(tab, mode_id)
     if commit:
         tab._save_settings()
+        note_committed(tab, mode_id)
 
 
 def collected(tab, mode_id: str, values: dict) -> dict:
