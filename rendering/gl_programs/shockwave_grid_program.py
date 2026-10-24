@@ -40,6 +40,9 @@ SHOCKWAVE_QUIET_GAP = 0.6
 SHOCKWAVE_QUIET_SHARE = 0.3
 SHOCKWAVE_MIN_STRENGTH = 0.12     # weaker onsets make no wave
 SHOCKWAVE_MAX_STRENGTH = 2.0
+# An onset's magnitude where its hit counts fully: about the p90 onset on the recorded songs (0.85-1.04,
+# 2026-10-24). The earlier 3.0 left nearly every hit near its 0.4 floor, so waves stayed a third of full height.
+SHOCKWAVE_HIT_MAGNITUDE = 1.0
 SHOCKWAVE_ECHO_SPEED = 0.62       # a big hit's echo ring, as a share of the wave speed
 SHOCKWAVE_IDLE_PERIOD = 11.0      # seconds for the idle swell to sweep across and back
 SHOCKWAVE_IDLE_HEIGHT = 0.35      # the idle swell's height at Idle Swell 1, as a share of a wave's
@@ -72,7 +75,7 @@ def shockwave_amplitude(height: float) -> float:
 def shockwave_strength(magnitude: float, loudness: float, presence: float) -> float:
     """A wave's strength (0 .. ``SHOCKWAVE_MAX_STRENGTH``) for an onset (``MusicalOnset``'s
     magnitude, loudness and presence), its emphasis read on the fixed loudness scale."""
-    hit = 0.4 + 0.6 * max(0.0, min(1.0, float(magnitude) / 3.0))
+    hit = 0.4 + 0.6 * max(0.0, min(1.0, float(magnitude) / SHOCKWAVE_HIT_MAGNITUDE))
     strength = musical_weight(loudness, presence) * musical_emphasis(loudness) * hit
     return max(0.0, min(SHOCKWAVE_MAX_STRENGTH, strength))
 

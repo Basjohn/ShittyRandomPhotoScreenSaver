@@ -253,8 +253,9 @@ def test_quiet_onsets_make_no_wave_and_big_hits_stand_well_apart_from_medium_one
 
     from widgets.spotify_visualizer.transient_bus import MUSICAL_USUAL_LOUDNESS as usual
 
-    medium = shockwave_strength(1.5, usual, 1.0)
-    big = shockwave_strength(3.0, 1.6 * usual, 1.6)       # a hit well above the usual loudness
+    from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_HIT_MAGNITUDE as full
+    medium = shockwave_strength(0.5 * full, usual, 1.0)   # magnitudes on the recorded scale (full ~ a p90 hit)
+    big = shockwave_strength(full, 1.6 * usual, 1.6)      # a hit well above the usual loudness
     assert SHOCKWAVE_MIN_STRENGTH < medium <= 1.0 and big >= 2.5 * medium and big <= SHOCKWAVE_MAX_STRENGTH
     assert shockwave_strength(3.0, MUSICAL_QUIET[0], 1.0) == 0.0                 # near-silent level
     assert shockwave_strength(3.0, usual, 0.1) < SHOCKWAVE_MIN_STRENGTH          # quiet passage of a loud track
@@ -283,11 +284,12 @@ def test_a_big_hit_stands_out_on_the_fixed_scale_and_a_loud_chorus_keeps_its_emp
         after = runtime.record_onsets(onsets=(event,), now_ts=now, playing=True, passage_intensity=1.0)
         strengths.append(after[-1][3] if len(after) > len(before) or (after and after[-1][0] == 0.0) else None)
 
+    from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_HIT_MAGNITUDE as full
     for _ in range(12):
-        onset(2.0, 1.3 * usual, 1.0)                       # a sustained loud chorus
+        onset(0.5 * full, 1.3 * usual, 1.0)                # a sustained loud chorus
     assert strengths[0] is not None and strengths[-1] == pytest.approx(strengths[0])
     chorus = strengths[-1]
-    onset(3.0, 1.9 * usual, 1.6)                           # a hit well above it
+    onset(full, 1.9 * usual, 1.6)                          # a hit well above it
     assert strengths[-1] is not None and strengths[-1] >= 1.6 * chorus
     onset(2.0, 0.05, 0.05)                                  # near-silence between songs
     assert strengths[-1] is None
