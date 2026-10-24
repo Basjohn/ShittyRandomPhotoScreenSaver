@@ -216,6 +216,8 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         worker._last_raw_bass = raw_bass
         worker._last_raw_mid = raw_mid
         worker._last_raw_treble = raw_treble
+        # Raw lanes grow with FFT length; consumers on a fixed scale need it (EB body feed).
+        worker._last_raw_fft_bins = n
         worker._prev_raw_bass = raw_bass
         if low_resolution and prev_raw_bass > 1e-3:
             bass_drop_ratio = max(0.0, (prev_raw_bass - raw_bass) / prev_raw_bass)

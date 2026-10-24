@@ -133,6 +133,7 @@ _COMPUTE_SNAPSHOT_ATTRS = (
     "_last_raw_bass",
     "_last_raw_mid",
     "_last_raw_treble",
+    "_last_raw_fft_bins",
     "_prev_raw_bass",
 )
 
@@ -304,6 +305,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._last_raw_bass: float = 0.0
         self._last_raw_mid: float = 0.0
         self._last_raw_treble: float = 0.0
+        self._last_raw_fft_bins: int = 0
         self._prev_raw_bass: float = 0.0
         self._bar_gate_prev1 = None
         self._bar_gate_prev2 = None
@@ -527,6 +529,7 @@ class SpotifyVisualizerAudioWorker(QObject):
             self._last_raw_bass = 0.0
             self._last_raw_mid = 0.0
             self._last_raw_treble = 0.0
+            self._last_raw_fft_bins = 0
             self._prev_raw_bass = 0.0
             self._last_bass_drop_ratio = 0.0
             self._bass_drop_accum = 0.0
@@ -1081,6 +1084,7 @@ class SpotifyVisualizerAudioWorker(QObject):
             "_last_raw_bass",
             "_last_raw_mid",
             "_last_raw_treble",
+            "_last_raw_fft_bins",
             "_prev_raw_bass",
             "_floor_log_last_ts",
             "_floor_log_last_mode",

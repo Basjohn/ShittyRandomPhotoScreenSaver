@@ -1571,6 +1571,11 @@ class _SpotifyBeatEngine(QObject):
     # full songs at EB's authored gain: about p90 of playing frames maps near 0.75,
     # leaving soft headroom for loud crests. These are anchors, never learned levels.
     EXTRUDED_BUBBLE_BODY_RAW_REFERENCE = (5.0, 3.0, 1.2)
+    # The references above were measured with 256-sample blocks. Per-lane growth of the
+    # FFT magnitude with block length (bass ~tonal, treble ~noise-like), fitted on the
+    # same four songs at 128/441/512/1024 samples (2026-10-24).
+    EXTRUDED_BUBBLE_BODY_REFERENCE_FFT = 256
+    EXTRUDED_BUBBLE_BODY_BLOCK_EXPONENT = (1.0, 0.9, 0.6)
 
     def get_extruded_bubble_body_bands(self) -> EnergyBands:
         """Return Extruded Bubble's floor-independent body feed on a fixed real scale.
@@ -1581,14 +1586,27 @@ class _SpotifyBeatEngine(QObject):
         those lanes at their ceilings and leaves no contrast to breathe with. With
         the floor ON it is a level learned from the track, which drifts as a song
         continues. EB instead reads the same raw lanes against fixed references:
-        no learned level, no dependence on the floor mode, Sensitivity still scales
-        the raw input. Accepted 2D Bubble keeps its own feed unchanged.
+        no learned level and no dependence on the floor mode or Sensitivity (both
+        act after these lanes). The lanes do depend on the FFT length, so they are
+        first brought to the reference block size. Accepted 2D Bubble keeps its own
+        feed unchanged.
         """
         w = self._audio_worker
         ramp = self._get_play_ramp_factor()
+        bins = int(getattr(w, "_last_raw_fft_bins", 0) or 0)
+        block_scale = self.EXTRUDED_BUBBLE_BODY_REFERENCE_FFT / (2.0 * bins) if bins > 0 else 1.0
 
         def _raw(name: str, fallback_name: str) -> float:
             return max(0.0, float(getattr(w, name, getattr(w, fallback_name, 0.0)) or 0.0))
+
+        def _at_reference_block(raw_value: float, exponent: float) -> float:
+            # A raw lane is about log1p(|X|)^1.2 and |X| grows with block length, so a
+            # longer block adds an offset rather than a factor: at 512 the same music
+            # sat ~30% higher with less contrast and pinned the lanes again. Undo the
+            # compression, rescale the magnitude to the reference block, re-compress.
+            if block_scale == 1.0 or raw_value <= 0.0:
+                return raw_value
+            return math.log1p(math.expm1(raw_value ** (1.0 / 1.2)) * block_scale ** exponent) ** 1.2
 
         def _lane(raw_value: float, reference: float) -> float:
             # Linear below 0.8, then an exponential approach to 1 that never
@@ -1599,9 +1617,10 @@ class _SpotifyBeatEngine(QObject):
             return max(0.0, min(1.0, value * ramp))
 
         bass_ref, mid_ref, high_ref = self.EXTRUDED_BUBBLE_BODY_RAW_REFERENCE
-        bass = _lane(_raw("_last_raw_bass", "_pre_agc_live_bass"), bass_ref)
-        mid = _lane(_raw("_last_raw_mid", "_pre_agc_live_mid"), mid_ref)
-        high = _lane(_raw("_last_raw_treble", "_pre_agc_live_treble"), high_ref)
+        bass_exp, mid_exp, high_exp = self.EXTRUDED_BUBBLE_BODY_BLOCK_EXPONENT
+        bass = _lane(_at_reference_block(_raw("_last_raw_bass", "_pre_agc_live_bass"), bass_exp), bass_ref)
+        mid = _lane(_at_reference_block(_raw("_last_raw_mid", "_pre_agc_live_mid"), mid_exp), mid_ref)
+        high = _lane(_at_reference_block(_raw("_last_raw_treble", "_pre_agc_live_treble"), high_exp), high_ref)
         overall = max(0.0, min(1.0, bass * 0.46 + mid * 0.34 + high * 0.20))
         return EnergyBands(bass=bass, mid=mid, high=high, overall=overall)
 
