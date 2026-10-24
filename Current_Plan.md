@@ -1098,6 +1098,7 @@ and scope limits live in [Archived Failure Triage](Docs/Audits/Archived_Test_Fai
 The open EB/Neon/Settings physical and visual gates above remain authoritative. New failures require exact-tree
 reproduction and owner-level repair, not tolerance changes, preset edits or an automatic full-suite campaign.
 
+- [ ] **Settings-open lifecycle barrier timeout after framed 3D use (after the Neon/EB work):** intermittent, more common in long sessions, reappeared once Neon Lake (the first framed 3D Visualizer) landed. 24 Oct 16:35:19 run: `[LIFECYCLE_BARRIER] timeout reason=settings` with every QObject destroyed but Python owners `QuickDisplayUnit` and `QuickDisplayVisualizerOwner` still alive (a lingering Python reference, likely around the framed visualizer/camera path). Full all-logging + frame-trace run preserved locally at `logs/preserved/2026-10-24_settings_barrier_timeout/` (git-ignored, 55 MB). Find the referrer; never weaken the barrier.
 - [ ] **Nonblocking tooling housekeeping:** investigate the repeated `.venv` launcher warning
   `Failed to find real location of ...pythoncore-3.14-64\\python.exe`. The forensic commands still completed with
   exit 0 and native captures; do not conflate this warning with EB behavior or introduce an environment-variable workaround.
