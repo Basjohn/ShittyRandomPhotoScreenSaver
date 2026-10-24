@@ -475,6 +475,60 @@ State (2026-10-24, after block normalisation and the knee/gate change): at block
 
 ---
 
+## 13B. General lessons for any new visualizer (Extruded Bubble loop, 2026-10-24)
+
+These held across EB's input, breathing, flow, collision and drift work. Each cost real time when missed.
+
+**Input**
+- **Check every derived driver for saturation, not only the input bands.** EB's input was fixed and its large
+  bubbles breathed, yet stream speed still sat at its loud handle: `soft_top(0.6 level + 0.6 small + …)` adds two
+  terms that are each ~0.5–0.7 in ordinary music. For every driver that feeds an authored Range, print p05/p50/p95
+  over several songs *as a fraction of that Range*; anything living in the top 15% is pinned.
+- **Fixed anchors need a fixed analysis geometry.** Raw FFT lanes change with block size (offset in the log
+  domain), so references measured at one block re-pin at another. Record what the analysis actually used (EB:
+  `_last_raw_fft_bins`, which also covers Auto) and normalise to the reference geometry. Measure presets at the
+  block size they ship with, not the one you calibrated on.
+- **Know which controls act before your lanes.** Input gain scales PCM before the FFT; Sensitivity and the floor act
+  after the raw lanes. A docstring claiming otherwise survived one round — read the code path.
+- **Check the recording before judging section response.** The bundled recordings are 60 s each; per-window PCM RMS
+  shows how much contrast a clip actually holds (ragdoll's capture varies ~±2.5 dB, so its loud end is not in it).
+  Long-form section changes need a full-song capture or native observation.
+
+**Response shape**
+- **One passage signal, many consumers.** EB's large breathing and its flow now both read one held passage level
+  (fixed-scale knee). Deriving each consumer's "loudness" separately is how one stays pinned while another moves.
+- **A knee belongs at a real musical level, chosen across songs.** Too low holds the effect open through all music;
+  too high collapses quieter masters. Pick it from pooled percentiles (EB: ~p25) and check the quietest capture.
+- **Gate transient pumps by the passage level.** An ungated change/onset term refills a sustained envelope on every
+  kick in a soft passage, so soft passages never contract.
+- **The authored loud handle is the maximum.** Onset lifts, sustain lifts and per-identity amplitudes go *inside* a
+  soft top toward the handle, never added after it. Users clamp behaviour with that handle; respect it.
+- **The quiet handle sets how far things can contract.** Report preset results at their own handles; a raised rest
+  caps contraction no matter how good the envelope is.
+
+**Physics on kinematic motion**
+- **Kinematic motion has no momentum, so collisions need their own separation velocity.** A positional nudge slower
+  than flow/breathing growth leaves pairs grinding ("rubbing"). Give the pair a decaying separating velocity along the
+  normal plus a fast overlap correction, and apply it to fused groups as bodies.
+- **Anything still visible still occupies space.** EB removed popping bubbles from collisions while they faded for
+  2.4 s, so survivors slid through them. Fading/retiring objects stay obstacles (separation only, no new events).
+- **Measure interpenetration by cause.** A per-frame census (pairs overlapping > 25% of the smaller radius, labelled
+  bounce/pop-fade/not-admitted/leaving, plus episodes > 0.3 s) found both causes at once; screenshots did not.
+- **Measure a reported cohort effect before fixing it.** "Old bubbles stay slow" measured equal for young and old
+  identities on current source; the cause had been the pinned input upstream.
+
+**Controls in 3D**
+- **Translate 2D controls into the 3D frame, not literally.** EB's Drift Direction works in the stream's own frame
+  (across/depth), so 2D's horizontal/vertical swish became Across/Depth, and spirals orbit the stream axis and widen,
+  so births at the source spiral out. Keep the existing behaviour as the default choice so presets do not change.
+
+**Tests**
+- **An absolute threshold can encode the bug.** EB's startup test demanded a > 1.8 peak ratio (the higher held level
+  made the same swell 1.66); the bounce test demanded < 0.01 units per step (the slow nudge that rubbed). State the
+  intent relatively — step vs play ramp, < 10% of the overlap per step — and run the old code as a negative control.
+- **Test behaviour with test-owned inputs**, never preset values: synthetic signals through the production FFT
+  (`fft_to_bars`) for block invariance; test-owned ranges for "inside the authored range".
+
 ## 14. Evidence / negative-control map
 
 Read these for the cases behind this guide rather than copying their old implementation literally:
