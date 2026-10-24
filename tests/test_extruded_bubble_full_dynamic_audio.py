@@ -112,7 +112,9 @@ class FullDynamicAudioOwnership(unittest.TestCase):
             worker = SimpleNamespace(_last_raw_bass=raw[0], _last_raw_mid=raw[1], _last_raw_treble=raw[2], **state)
             engine = SimpleNamespace(
                 _audio_worker=worker, _get_play_ramp_factor=lambda: 1.0,
-                EXTRUDED_BUBBLE_BODY_RAW_REFERENCE=_SpotifyBeatEngine.EXTRUDED_BUBBLE_BODY_RAW_REFERENCE)
+                **{name: getattr(_SpotifyBeatEngine, name) for name in (
+                    'EXTRUDED_BUBBLE_BODY_RAW_REFERENCE', 'EXTRUDED_BUBBLE_BODY_REFERENCE_FFT',
+                    'EXTRUDED_BUBBLE_BODY_BLOCK_EXPONENT')})
             result = _SpotifyBeatEngine.get_extruded_bubble_body_bands(engine)
             return (result.bass, result.mid, result.high)
 
