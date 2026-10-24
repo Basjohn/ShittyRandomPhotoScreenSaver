@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import math
 
+import pytest
+
 from widgets.spotify_visualizer.extruded_bubble_simulation import (
     ExtrudedBubbleControls, ExtrudedBubbleSimulation, MusicInput,
 )
@@ -59,12 +61,14 @@ def test_quiet_small_inlet_uses_same_readable_radius_as_contacts_and_defers_over
         stream_speed=(0.,0.),drift=(0.,0.),sway=0.,collision_scope='off')
     assert sim._spawn(False,c,(0.,1.,0.),anywhere=False)
     first = sim._bubbles[0]
-    assert first.current_radius == .5*.7825
+    from widgets.spotify_visualizer.extruded_bubble_simulation import _reaction_scale, _SMALL_REACTION
+    rest = .5 * _reaction_scale(c.small_pulse, 0., *_SMALL_REACTION)    # born at the authored rest
+    assert first.current_radius == pytest.approx(rest)
     for _ in range(10):
         assert not sim._spawn(False,c,(0.,1.,0.),anywhere=False)
     assert len(sim._bubbles) == 1
     sim.advance(MusicInput(0.,False),c)
-    assert first.current_radius == .5*.7825
+    assert first.current_radius == pytest.approx(rest)
     first.y += 5.
     assert sim._spawn(False,c,(0.,1.,0.),anywhere=False)
     assert len(sim._bubbles) == 2
