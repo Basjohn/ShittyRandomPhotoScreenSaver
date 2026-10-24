@@ -50,6 +50,10 @@ _POP_SECONDS = 2.4         # extremely gentle opacity retirement, never geometri
 _SEPARATION_SPEED = (0.15, 0.6)   # x WORLD_UNIT per second, scaled by overlap
 _SEPARATION_DECAY = 0.45          # seconds
 _OVERLAP_CORRECTION = 0.10        # seconds
+# A fused pair draws together from where it touched (separation ratio ~1: two shells pressed surface to surface,
+# which read as rubbing) to a visible merge, over about this long.
+_FUSE_RATIO = 0.72                 # centre distance / (sum of the members' displayed radii) once merged
+_FUSE_SECONDS = 0.35
 # Drift Direction, in the stream's own frame (across = sideways, depth = toward/away from the stream's side).
 # "wander" is the original per-bubble meander; the others steer the field and keep some meander so it is
 # never robotic. Swirls orbit the stream axis and widen slowly, so BEAM births spiral out from the source.
@@ -211,6 +215,11 @@ def _smooth_above(value: float, knee: float, softness: float) -> float:
 def _follow(current: float, target: float, dt: float, attack: float, release: float) -> float:
     tau = attack if target > current else release
     return target + (current - target) * math.exp(-dt / max(tau, 1e-4))
+
+
+def _shown_radius(bubble) -> float:
+    """The radius the bubble is drawn with (its smoothed display radius), for laying out fused shapes."""
+    return bubble.visual_radius if bubble.visual_radius > 0.0 else bubble.current_radius
 
 
 def _decayed(vector: tuple[float, float, float], dt: float) -> tuple[float, float, float]:
@@ -744,6 +753,9 @@ class ExtrudedBubbleSimulation:
             c.y += dt * (direction[1] * forward + across[1] * wander + c.push[1] + steer[1])
             c.z += dt * (direction[2] * forward + across[2] * wander + c.push[2] + steer[2])
             c.push = _decayed(c.push, dt)
+            merge = 1.0 - math.exp(-dt / _FUSE_SECONDS)
+            c.edges = [(left, right, axis, ratio + (min(ratio, _FUSE_RATIO) - ratio) * merge)
+                       for left, right, axis, ratio in c.edges]
             self._place_cluster(c, members)
 
         self._collide(controls, dt)
@@ -897,7 +909,7 @@ class ExtrudedBubbleSimulation:
         dx, dy, dz = b.x - a.x, b.y - a.y, b.z - a.z
         distance = math.sqrt(dx * dx + dy * dy + dz * dz)
         axis = (dx / distance, dy / distance, dz / distance) if distance > 1e-9 else (1.0, 0.0, 0.0)
-        edges.append((a.ident, b.ident, axis, distance / (a.current_radius + b.current_radius)))
+        edges.append((a.ident, b.ident, axis, distance / (_shown_radius(a) + _shown_radius(b))))
         # The joined body keeps its members' mass-weighted separation velocity.
         pushes = [self._clusters[m.cluster].push if m.cluster >= 0 else m.push for m in bubbles]
         push = tuple(sum(v[i] * m.radius ** 3 for v, m in zip(pushes, bubbles)) / weight for i in range(3))
@@ -913,14 +925,17 @@ class ExtrudedBubbleSimulation:
         return True
 
     def _place_cluster(self, cluster: _Cluster, members: list[_Bubble]) -> None:
-        """Connected offsets follow the existing smoothed radii; preserve nominal mass center."""
+        """Connected offsets follow the members' displayed (smoothed) radii; preserve nominal mass center.
+
+        The layout is the shape you see: the instantaneous physical radius jumps with every beat, and laying members
+        out from it shoved two smoothly drawn shells back and forth along their contact ~15 times a second."""
         by_id = {m.ident: m for m in members}
         positions = {members[0].ident: (0.0, 0.0, 0.0)}
         for _ in range(CLUSTER_MAX - 1):
             for left, right, axis, ratio in cluster.edges:
                 if left not in by_id or right not in by_id:
                     continue
-                length = ratio * (by_id[left].current_radius + by_id[right].current_radius)
+                length = ratio * (_shown_radius(by_id[left]) + _shown_radius(by_id[right]))
                 if left in positions and right not in positions:
                     positions[right] = tuple(p + a * length for p, a in zip(positions[left], axis))
                 elif right in positions and left not in positions:
@@ -979,7 +994,7 @@ class ExtrudedBubbleSimulation:
                 if distance < a.current_radius + b.current_radius:
                     axis = tuple((v - u) / distance for u, v in zip((a.x, a.y, a.z), (b.x, b.y, b.z))) \
                         if distance > 1e-9 else (1., 0., 0.)
-                    cluster.edges.append((a.ident, b.ident, axis, distance / (a.current_radius + b.current_radius)))
+                    cluster.edges.append((a.ident, b.ident, axis, distance / (_shown_radius(a) + _shown_radius(b))))
                 else:
                     for m in cluster.members:
                         live[m].cluster = -1
