@@ -526,6 +526,7 @@ BUBBLE_VERTEX = """#version 460 core
 layout(location=0) in vec4 aSphere;   // world centre, radius
 layout(location=1) in vec2 aExtra;    // seed, kind (0 bubble, 1 snow)
 layout(location=2) in float aOpacity; // logical lifetime, independent of physical radius
+layout(location=3) in float aLensRadius; // steady (nominal) radius for the lens: breathing never refocuses
 uniform mat3 uWorldToView;
 uniform vec3 uEye;
 uniform mat4 uProjection;
@@ -557,7 +558,7 @@ void main() {
     blur = max(blur, uPixel * depth * mix(0.7, 0.2, uCrisp));
     // Ordinary large bubbles are routed exclusively through ONE layer. Their actual front surface, not
     // their identity or a camera-attached fake, decides whether near-focus bokeh is warranted.
-    vec2 lens = ebLens(vec4(centre, aSphere.w), uProjection, uFrameSize,
+    vec2 lens = ebLens(vec4(centre, aLensRadius), uProjection, uFrameSize,
                       uFocus, uAperture, uNearCoc, uNearMax);
     float coc = lens.x;
     vLensCircle = coc;
@@ -1140,6 +1141,7 @@ uniform int uFizzPer;
 uniform int uWakeCount;
 layout(std430, binding = 7) readonly buffer EbWakes { float ebWake[]; };    // world xyz, reacted radius, stable id, retire, alpha, nominal radius
 vec4 aSphere;
+float aLensRadius;
 vec2 aExtra;
 uint beadHash(uint x) {
     x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16;
@@ -1281,12 +1283,14 @@ void beadInstance() {
         vOpacity *= 1.0 - smoothstep(0.9, 1.0, max(edge.x, max(edge.y, edge.z)));
     }
     aSphere = vec4(p, 0.005);
+    aLensRadius = aSphere.w;
     aExtra = vec2(beadRandom(i, 17u), 1.0);
 }
 """
 _ATTRIBUTES = """layout(location=0) in vec4 aSphere;   // world centre, radius
 layout(location=1) in vec2 aExtra;    // seed, kind (0 bubble, 1 snow)
 layout(location=2) in float aOpacity; // logical lifetime, independent of physical radius
+layout(location=3) in float aLensRadius; // steady (nominal) radius for the lens: breathing never refocuses
 """
 assert BUBBLE_VERTEX.count(_ATTRIBUTES) == 1 and BUBBLE_VERTEX.count("void main() {\n") == 1
 _SPECK_GLSL = """// Particulate in the same fixed water domain, with seeded stream-aligned clouds.

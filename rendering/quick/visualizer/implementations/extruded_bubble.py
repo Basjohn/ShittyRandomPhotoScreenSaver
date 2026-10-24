@@ -306,7 +306,7 @@ class QuickExtrudedBubbleRenderer:
         self._near = DefocusLayer("Extruded Bubble near layer")
         self._shafts = _ShaftTargets("Extruded Bubble shafts")
         self._probe: SceneProbe | None = None
-        self._shells = _Instances(_SHELL_CAPACITY, (4, 2, 1))
+        self._shells = _Instances(_SHELL_CAPACITY, (4, 2, 1, 1))
         self._wakes = _Instances(MAX_BUBBLES * 2, (4, 4))
         self._clusters = _Instances(_CLUSTER_CAPACITY, (4, 4, 4, 4, 3))
         self._proxies = _Instances(_SHELL_CAPACITY, (4, 4))

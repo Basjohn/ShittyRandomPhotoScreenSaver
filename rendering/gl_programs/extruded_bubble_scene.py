@@ -37,7 +37,7 @@ from core.settings.extruded_bubble_camera import camera_axes, resolve_camera_pos
 FOV_Y_DEGREES = 45.0  # narrower photographic comparison; operator visual acceptance still open
 NEAR, FAR = 0.05, 200.0
 SURFACE_Y = WATER_SURFACE_Y
-SHELL_FLOATS, CLUSTER_FLOATS, PROXY_FLOATS = 7, 19, 8
+SHELL_FLOATS, CLUSTER_FLOATS, PROXY_FLOATS = 8, 19, 8
 # What a Light Type implies (the lab's "surface" and "deep" modes) and what every scene shares.
 ENGINE = dict(shell=0.03, iors=(1.15, 2.0, 1.0), lens=1.0)
 MODES = {
@@ -264,7 +264,10 @@ def physical_camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
 
 
 def bubble_instances(records) -> np.ndarray:
-    """Pack physical xyz/radius, stable seed, kind and material opacity."""
+    """Pack physical xyz/radius, stable seed, kind, material opacity and the steady lens radius.
+
+    The lens (near-camera defocus) reads the bubble's nominal radius, not its breathing one: a close bubble's front
+    surface swinging with every beat made the blur and the near-layer routing jump in time with the music."""
     rows = np.asarray(records, dtype=np.float64).reshape(-1, 8)
     rows = rows[(rows[:, 7] < 0.0) & (rows[:, 4] > 0.0)]
     out = np.empty((len(rows), SHELL_FLOATS), dtype=np.float32)
@@ -272,6 +275,7 @@ def bubble_instances(records) -> np.ndarray:
     out[:, 4] = np.mod(rows[:, 6] * 0.6180339887, 1.0)
     out[:, 5] = 0.0
     out[:, 6] = rows[:, 4]
+    out[:, 7] = rows[:, 3] / np.maximum(1.0 + rows[:, 5], 0.05)      # displayed / (1 + swell) = nominal radius
     return out
 
 
