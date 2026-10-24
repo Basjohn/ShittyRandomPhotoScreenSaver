@@ -11,6 +11,7 @@ import math
 from dataclasses import dataclass
 from functools import lru_cache
 
+from core.constants.neon_lake_world import WATER_PEAK
 from rendering.gl_programs.heightfield_glsl import HEIGHTFIELD_GLSL, HEIGHTFIELD_WIRE_GLSL
 from rendering.gl_programs.heightfield_volume_glsl import HEIGHTFIELD_VOLUME_GLSL
 from rendering.gl_programs.heightfield_glsl import HEIGHTFIELD_GLSL as _SKY_HEIGHTFIELD_GLSL
@@ -115,6 +116,7 @@ float basinOutside(vec2 uv) {
 
 _PROJECTION = _GRID_GLSL + f"""
 const float SHOCKWAVE_DEPTH = {SHOCKWAVE_DEPTH:.6f};
+const float WATER_PEAK = {WATER_PEAK:.6f};
 uniform mat4 uMatrix;
 uniform vec4 uField;
 // The shared framed physical camera (core.settings.framed_camera): eye and right/up/back world axes,
@@ -291,7 +293,7 @@ vec3 basinSurface(vec2 uv, out float crest, out float energy, out float curved) 
     curved=water && sceneHeightfieldBankDistance(uTerrain,uTerrainSize,basinGrid(uv))>=1.0/float(uTerrainSize-1)
            ? 0.0 : basinCurve(uv);
     float wet=outer<1e-6 ? 1.0-smoothstep(0.0,BASIN_SHORE_HEIGHT,curved) : 0.0;
-    float ripple=0.18*tanh(wave.x/0.18)+0.0025*uWaterDetail*sin(15.0*p.x+18.0*p.y+uTime);
+    float ripple=WATER_PEAK*tanh(wave.x/WATER_PEAK)+0.0025*uWaterDetail*sin(15.0*p.x+18.0*p.y+uTime);
     if (water) {
         float bank=smoothstep(0.0,uWaterBankBand,basinBankDistance(uv));
         height = max(bank,wet)*ripple;
@@ -489,8 +491,8 @@ void main() {
         float ripple=(vWorld.z+uScroll)*26.0+0.35*sin(vWorld.x*5.0)+vWorld.y*9.0;
         float distance=abs(fract(ripple-0.5)-0.5)/max(fwidth(ripple),1e-5);
         float sheen=1.0-smoothstep(0.0,0.65*uEdgePx,distance);
-        // A shining surface shows its water, not a ruled grid: the resting curves fade, crests stay.
-        float curveCoverage=waveWire*(0.11*(1.0-0.8*uWaterShine)+0.55*min(crest,1.5)*(1.0-0.55*uWaterShine));
+        // A shining surface shows its water, not a ruled grid: the resting curves fade, crests stay whole.
+        float curveCoverage=waveWire*(0.11*(1.0-0.8*uWaterShine)+0.55*min(crest,1.5));
         float sheenCoverage=sheen*(0.12+0.16*crest)*uWaterDetail;
         line=(1.0-(1.0-curveCoverage)*(1.0-sheenCoverage))*waterCoverage;
     }
@@ -562,6 +564,8 @@ void main() {
         float fresnel=0.04+0.96*pow(1.0-clamp(dot(wn,view),0.0,1.0),5.0);
         vec3 depthTint=uWaterColor.rgb*(0.45+0.35*light);
         vec3 surface=mix(depthTint,sky*1.25,clamp(fresnel*(0.35+0.65*uWaterShine),0.0,1.0));
+        // A passing wave lifts the body itself, not only its crest lines, so music moves the water.
+        surface+=palette*smoothstep(0.15,1.6,crest)*0.45;
         fill=mix(fill,surface,uWaterShine);
         fillAlpha=max(fillAlpha,uWaterShine*(0.6+0.4*fresnel));
         shineEmission=sky*fresnel*uWaterShine*0.35;
@@ -660,7 +664,7 @@ void main() {
 # read the same bounded onset ring the waves use; each droplet follows a ballistic arc from its onset's age, so no
 # CPU simulation, timer or extra buffer exists, and an idle or quiet lake draws nothing.
 SPLASH_DROPLETS = 64
-SPLASH_THRESHOLD = 1.0      # onset strength (0..2) where splashing begins
+SPLASH_THRESHOLD = 1.3      # onset strength (0..2) where splashing begins: ~3-20 a minute on recorded songs
 NEON_SPLASH_VERTEX_SOURCE = (
     "#version 460 core\nlayout(location=0) in vec2 aSlot;\n"
     + SHOCKWAVE_EVENTS.glsl(3) + HEIGHTFIELD_GLSL + _PROJECTION + SHOCKWAVE_WAVE_GLSL + _POSE + _TERRAIN
@@ -679,7 +683,7 @@ void main() {{
     float drop = aSlot.y;
     if (uSplash <= 0.0 || index >= uEventCount) return;
     ShockwaveEvent e = events[index];
-    float heavy = clamp((e.strength - SPLASH_THRESHOLD) / 0.8, 0.0, 1.0);
+    float heavy = clamp((e.strength - SPLASH_THRESHOLD) / (2.0 - SPLASH_THRESHOLD), 0.0, 1.0);
     if (heavy <= 0.0) return;
     vec2 uv = vec2(e.x / (2.0 * uHalfWidth) + 0.5, -e.z / SHOCKWAVE_DEPTH);
     if (!sceneHeightfieldWater(basinBase(uv))) return;
@@ -696,7 +700,7 @@ void main() {{
     float flight = 2.0 * up / gravity;
     if (t <= 0.0 || t >= flight) return;
     vec2 ground = vec2(e.x + cos(angle) * outward * t, e.z + sin(angle) * outward * t);
-    float surface = 0.18 * tanh(shockwaveHeight(ground).x / 0.18);   // the live water under the droplet
+    float surface = WATER_PEAK * tanh(shockwaveHeight(ground).x / WATER_PEAK);   // the live water under the droplet
     vec3 p = vec3(ground.x, surface + up * t - 0.5 * gravity * t * t, ground.y);
     gl_Position = basinClip(p);
     float depth = max(-basinViewPoint(p).z, 0.05);

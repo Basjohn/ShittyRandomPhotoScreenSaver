@@ -145,7 +145,8 @@ def test_gpu_water_membership_is_authored_and_both_materials_stay_bounded(surfac
     for result in (quiet, onset, sustained):
         assert np.array_equal(result[..., 1], water.astype(np.float32))
         assert np.isfinite(result).all()
-        assert np.max(np.abs(result[..., 0][water])) <= 0.1825 + 2e-6
+        from core.constants.neon_lake_world import WATER_PEAK
+        assert np.max(np.abs(result[..., 0][water])) <= WATER_PEAK + 0.0025 + 2e-6   # soft crest cap + detail ripple
         # Terrain Reaction reshapes dry land both ways, bounded: never below its floor share of the
         # authored height, never above the largest lift (three parts at full drive and strength).
         # The shallow water-coloured fringe below the visible shore carries water waves.

@@ -10,9 +10,15 @@ from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_DEPTH
 STARSCAPE_BEAT_MIN_STRENGTH = 0.35 * 0.64
 # Half the fade speed again (operator 2026-10-17): a beat star now fades over about 5.8 s.
 STARSCAPE_BEAT_RELEASE = 1.75 / 0.3
-# At most this many beats keep stars; once three newer beats have theirs, an older beat's stars fade over
-# STARSCAPE_BEAT_DISPLACE seconds instead of vanishing.
-STARSCAPE_BEAT_EVENTS = 4
+# At most this many beats keep stars; once STARSCAPE_BEAT_HELD newer beats have theirs, an older beat's stars fade
+# over STARSCAPE_BEAT_DISPLACE seconds instead of vanishing. Recorded songs admit 1-4 beats a second, so three held
+# beats displaced each star within about a second and the long release never showed (2026-10-24).
+STARSCAPE_BEAT_EVENTS = 8
+STARSCAPE_BEAT_HELD = 6
+STARSCAPE_BEAT_STARS = 3 * STARSCAPE_BEAT_EVENTS   # the sky's uBeatStarCells capacity
+# A beat star's brightness: a visible floor at the admission strength, full for a big hit (strength 1.2).
+STARSCAPE_BEAT_FLOOR = 0.35
+STARSCAPE_BEAT_FULL = 1.2
 STARSCAPE_BEAT_DISPLACE = 0.6
 # Beat stars swell in over this long rather than switching on, so one event's stars rise while the last fade.
 STARSCAPE_BEAT_ATTACK = 0.2
@@ -116,7 +122,8 @@ def starscape_beat_cells(events, view, *, terrain=None, body=None) -> tuple[tupl
             continue
         rank = len(newer)
         newer.append(age)
-        displaced = 1.0 if rank < 3 else max(0.0, 1.0 - newer[rank - 3] / STARSCAPE_BEAT_DISPLACE)
+        displaced = (1.0 if rank < STARSCAPE_BEAT_HELD
+                     else max(0.0, 1.0 - newer[rank - STARSCAPE_BEAT_HELD] / STARSCAPE_BEAT_DISPLACE))
         if displaced <= 0.0 or rank >= STARSCAPE_BEAT_EVENTS:
             break
         seed = int(abs(x * 8219.0 + z * 3191.0) * 1871.0)
@@ -139,7 +146,10 @@ def starscape_beat_cells(events, view, *, terrain=None, body=None) -> tuple[tupl
                         and (terrain is None or _terrain_clear(cell,eye,terrain))):
                     break
             rise = min(1.0, age / STARSCAPE_BEAT_ATTACK)
-            intensity = (min(1.0, strength * 0.95) * rise * rise * (3.0 - 2.0 * rise)
+            hit = min(1.0, max(0.0, (strength - STARSCAPE_BEAT_MIN_STRENGTH)
+                               / (STARSCAPE_BEAT_FULL - STARSCAPE_BEAT_MIN_STRENGTH)))
+            brightness = STARSCAPE_BEAT_FLOOR + (1.0 - STARSCAPE_BEAT_FLOOR) * hit * hit * (3.0 - 2.0 * hit)
+            intensity = (brightness * rise * rise * (3.0 - 2.0 * rise)
                          * max(0.0, 1.0 - (age / STARSCAPE_BEAT_RELEASE)**2)**2 * displaced)
             bursts.append((float(cx), float(cy), float(intensity), 0.0))
     return tuple(bursts)

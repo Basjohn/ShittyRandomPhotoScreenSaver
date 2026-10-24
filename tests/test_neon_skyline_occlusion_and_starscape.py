@@ -50,15 +50,27 @@ def test_three_spaced_stars_per_strong_beat_with_slower_release():
 def test_each_admitted_beat_has_three_stars_and_older_beats_give_way_gradually():
     events=((0.5,0.2,-0.7,1.2),(0.1,0.7,-0.4,1.3))
     assert len(_framed_stars(events,.30,.08))==6
-    # Four beats keep stars; the oldest fades once three newer beats have theirs, then it is gone.
+    # The newest STARSCAPE_BEAT_HELD beats keep their stars; older ones fade once that many newer beats have
+    # theirs, then they are gone. Never more than the sky's capacity.
+    from rendering.gl_programs.neon_starscape import STARSCAPE_BEAT_HELD, STARSCAPE_BEAT_STARS
+    count = STARSCAPE_BEAT_HELD + 2
     def beats(newest):
-        return tuple((newest+0.4*k,0.1*k,-0.3-0.1*k,1.2) for k in range(5,-1,-1))
+        return tuple((newest+0.4*k,0.1*k,-0.3-0.1*k,1.2) for k in range(count-1,-1,-1))
     young = _framed_stars(beats(0.1),.30,.08)
-    assert len(young)==12
-    oldest = [cell[2] for cell in young[9:]]
-    later = [cell[2] for cell in _framed_stars(beats(0.3),.30,.08)[9:]]
-    assert all(b<a for a,b in zip(oldest,later))
-    assert len(_framed_stars(beats(0.7),.30,.08))==9
+    assert len(young)==3*count<=STARSCAPE_BEAT_STARS
+    held = 3*STARSCAPE_BEAT_HELD
+    oldest = [cell[2] for cell in young[held:]]
+    later = [cell[2] for cell in _framed_stars(beats(0.3),.30,.08)[held:]]
+    assert later and all(b<a for a,b in zip(oldest,later))
+    assert len(_framed_stars(beats(0.7),.30,.08))==held
+    many = tuple((0.05*k,0.1,-0.5,1.2) for k in range(40,-1,-1))
+    assert len(_framed_stars(many,.30,.08))<=STARSCAPE_BEAT_STARS
+
+
+def test_a_big_hit_lights_brighter_stars_than_a_small_one():
+    small = _framed_stars(((0.5,0.2,-0.7,STARSCAPE_BEAT_MIN_STRENGTH+0.05),),.30,.08)
+    big = _framed_stars(((0.5,0.2,-0.7,1.4),),.30,.08)
+    assert small and min(cell[2] for cell in big) > 1.8*max(cell[2] for cell in small) > 0.0
 
 def test_thick_glass_sky_and_body_use_existing_depth_surface():
     renderer=(ROOT/"rendering/quick/visualizer/implementations/shockwave_grid.py").read_text()

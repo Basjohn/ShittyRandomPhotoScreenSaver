@@ -451,17 +451,30 @@ Water is a layer of its own, whatever the land's surface style. **Water Shine** 
 body under a rippled mirror of the real visible sky into the water fill (Fresnel: dark looking down, bright at grazing
 angles, so the Sun/Moon at infinity glint in it) and adds that mirror to emission. Its ripple normal scales with Water
 Detail (0 = a still mirror; nothing else moves with the clock). Vertex marks belong to land: on water they fade out by
-Shine 0.6, the resting water curves fade (event crests stay), and mirrored land marks thin. Waves keep travelling along
+Shine 0.6, the resting water curves fade (event crests stay whole), mirrored land marks thin, and a passing crest
+lifts the body itself in its palette. Waves keep travelling along
 water that leaves the grid as a stream (`basinSurface`), easing out toward the horizon, so a channel painted to the
 edge reads as flowing water rather than a flat dotted plain.
 
-**Splashes** (Waves bucket, 0 = off and nothing is built) throw droplets where onsets above strength 1.0
-(`SPLASH_THRESHOLD`) land on water. Static slots (16 onsets x `SPLASH_DROPLETS`) read the same bounded onset ring as
+**Splashes** (Waves bucket, 0 = off and nothing is built) throw droplets where onsets above strength 1.3
+(`SPLASH_THRESHOLD`, ~3-20 a minute on the recorded songs) land on water. Static slots (16 onsets x `SPLASH_DROPLETS`) read the same bounded onset ring as
 the waves; each droplet is a ballistic arc from its onset's age launched from the live water height (a narrow column
 plus a wide crown), so there is no CPU simulation, timer or extra stream. The program and slot buffer warm with the
 others while Splashes is on. Droplets use the Water Line Glow RGB (its alpha is a palette mix, not opacity).
 Contracts: `tests/test_neon_water_layers.py`. Stage onsets for stills with `tools/neon_lake_capture.py --event`.
-Item 1 below is partly delivered (splash); the capped physical peak height remains.
+Item 1 below is partly delivered: splash, and the soft crest cap raised from 0.18 to `WATER_PEAK` 0.36
+(`core/constants/neon_lake_world.py`; the camera floor's ripple allowance follows it), so full-height authored waves
+no longer flatten to one crest.
+
+### Reactivity calibration (2026-10-24)
+
+Measured on five recorded songs through the real runtime (preset 4): 140-250 waves a minute, but median strength
+only 0.25-0.64 because a hit counted fully only at onset magnitude 3 while the recorded p90 is 0.85-1.04.
+`SHOCKWAVE_HIT_MAGNITUDE` is now 1.0 (medians 0.32-0.79, p90 0.72-1.48); Oscilloscope keeps its own accepted scale.
+Beat stars keep the newest `STARSCAPE_BEAT_HELD` (6) beats lit, up to 8 fading (24 sky slots): with 1-4 admitted
+beats a second, three held beats displaced every star within about a second. Their brightness runs from a visible
+floor at the admission strength to full at strength 1.2, so a big hit stands out. The admission threshold (operator-
+tuned easier twice) is unchanged. Strength stays volume-dependent by design (the fixed loudness scale).
 
 ## Operator-authorized future water improvements (2026-10-18; deferred, baseline accepted)
 
