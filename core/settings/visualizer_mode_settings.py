@@ -581,6 +581,8 @@ _CLOUDS = (_SKY, ("shockwave_grid_volumetric_clouds", True))
 _NEBULA = (_SKY, ("shockwave_grid_nebula_enabled", True))
 
 
+_NEON_AUTO_ROTATE = ("shockwave_grid_auto_rotate", True)
+
 _SHOCKWAVE_GRID = ModeSettings(
     "shockwave_grid",
     buckets=(
@@ -826,6 +828,16 @@ _SHOCKWAVE_GRID = ModeSettings(
                scale=1, integer=True, suffix="\u00b0", decimals=0, bucket="camera",
                tooltip="Change the vertical viewing angle without moving the camera. Narrow angles frame distant "
                        "land like a long lens; W/A/S/D fly, Q/E turn, Shift+W/S look up or down, R returns home."),
+        Toggle("shockwave_grid_auto_rotate", "", "Auto Rotate", bucket="camera",
+               tooltip="Let the camera pan slowly back and forth across the landscape by itself after a while "
+                       "without camera input."),
+        Slider("shockwave_grid_auto_rotate_after", "Auto Rotate After:", 1.0, 120.0, scale=1, integer=True,
+               suffix=" s", decimals=0, bucket="camera", when=_NEON_AUTO_ROTATE,
+               tooltip="Wait this many seconds after the last camera interaction before Auto Rotate begins."),
+        Slider("shockwave_grid_auto_rotate_speed", "Auto Rotate Speed:", 1.0, 30.0, scale=1, integer=True,
+               suffix="\u00b0/s", decimals=0, bucket="camera", when=_NEON_AUTO_ROTATE,
+               tooltip="Set how fast the camera pans across the middle of its sweep, in degrees per second; it "
+                       "slows to a stop at each end before turning back."),
         # The shared framed camera (core.settings.framed_camera), moved live: W/A/S/D flight, Q/E yaw,
         # Shift+W/S pitch, held-left orbit, Alt+right pan, Alt+wheel dolly and R home. Tilt 0 is a level
         # horizon; the eye itself never enters the land or water.

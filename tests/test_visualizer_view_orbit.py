@@ -620,14 +620,32 @@ def test_auto_rotate_waits_its_time_after_camera_input_and_input_takes_the_swive
     assert _turn_difference(view_orbit_values(host, "extruded_spectrum", 207.0)[turn], swivelled) == pytest.approx(0.2)
 
 
-def test_auto_rotate_off_or_on_a_clamped_landscape_publishes_nothing(monkeypatch):
+def test_auto_rotate_off_publishes_nothing(monkeypatch):
     from widgets.spotify_visualizer.view_orbit import arm_view_auto_rotate
 
     for after, speed in ((0.0, 18.0), (5.0, 0.0)):
         host = _auto_rotating(monkeypatch, after=after, speed=speed)
         assert arm_view_auto_rotate(host, "extruded_spectrum", 1.0, immediate=True) is None
-    # A mode whose turn does not wrap cannot swivel round a full circle.
-    host = _auto_rotating(monkeypatch, mode="shockwave_grid")
-    assert arm_view_auto_rotate(host, "shockwave_grid", 1.0, immediate=True) is None
     # A mode without the declaration: nothing.
     assert arm_view_auto_rotate(_host(), "sphere", 1.0, immediate=True) is None
+
+
+def test_auto_rotate_sweeps_a_landscape_back_and_forth_inside_its_turn_range(monkeypatch):
+    from widgets.spotify_visualizer.config_applier import presentation_setting_range
+    from widgets.spotify_visualizer.view_orbit import arm_view_auto_rotate
+
+    host = _auto_rotating(monkeypatch, mode="shockwave_grid", speed=18.0)   # 0.1 turn units per second
+    turn, _tilt = view_orbit_settings("shockwave_grid")
+    low, high = presentation_setting_range(turn)
+    record = arm_view_auto_rotate(host, "shockwave_grid", 100.0, immediate=True)
+    assert record is not None and record.sweep == (low, high)
+    times = [100.0 + i * 0.05 for i in range(1200)]          # one minute
+    turns = [view_orbit_values(host, "shockwave_grid", t)[turn] for t in times]
+    assert all(low - 1e-9 <= value <= high + 1e-9 for value in turns)
+    assert min(turns) == pytest.approx(low, abs=1e-3) and max(turns) == pytest.approx(high, abs=1e-3)
+    steps = [abs(b - a) / 0.05 for a, b in zip(turns, turns[1:])]
+    # The rate is the speed through the middle; the sweep eases to a stop at each end, never jumping.
+    assert max(steps) == pytest.approx(0.1, rel=0.02)
+    for value, step in zip(turns, steps):
+        if min(value - low, high - value) < 0.005:
+            assert step < 0.03
