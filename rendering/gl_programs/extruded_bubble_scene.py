@@ -84,6 +84,14 @@ def water_sun_below_safe(direction):
     return water_sun_below((x, max(y, 0.05), z))
 
 
+def focal_depth(focus: float) -> float:
+    """Focus 0..1 -> the depth (world units) nearer than which bubbles defocus. The lower half keeps the original
+    close range (2.5..4); the upper half reaches the scene's bubbles (the camera orbits ~15 out), so the top of the
+    slider can soften the near bubbles of the actual view instead of never touching anything."""
+    focus = max(0.0, min(1.0, float(focus)))
+    return 2.5 + 3.0 * focus if focus <= 0.5 else 4.0 + 28.0 * (focus - 0.5)
+
+
 def scene_light_support(mode: str, light_path, ray_path, sun_below) -> dict[str, object]:
     """SCENE lighting's authored extent (the Ray path), one owner for the renderer and the Settings editors.
 
@@ -113,14 +121,16 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
     water, deep = _rgb(_p(parameters, "water_colour")), _rgb(_p(parameters, "depth_colour"))
     water_hue = _hue(water)
     strength = float(_p(parameters, "light_strength"))
-    knobs["proxy_power"] = float(knobs["proxy_power"]) * strength
+    # Sparkle scales the bubbles' own glints (specular highlight and glint proxies): 1 is the original look, 0 none.
+    sparkle = float(_p(parameters, "sparkle"))
+    knobs["proxy_power"] = float(knobs["proxy_power"]) * strength * sparkle
     light_path = admit_path(_p(parameters, "light_direction"), [0.0, 55.0], 'light')
     direction = _unit(tuple(-v for v in direction_of(light_path)))
     # World-space light source/end and its separate authored beam path.
     ray_path = admit_path(parameters.get('extruded_bubble_ray_path', [0., 1., 0., 0., -1., 0.]),
                           [0., 1., 0., 0., -1., 0.], 'light')
     knobs.update(water=water, deep=deep, light=light, light_strength=strength,
-                 specular_light=tuple(c * 300.0 * strength for c in light),
+                 specular_light=tuple(c * 300.0 * strength * sparkle for c in light),
                  sky=_mix(water_hue, light, 0.6),
                  shaft=tuple(0.85 * c for c in _mix(water_hue, light, 0.45)), absorb=(0.08, 0.05, 0.035),
                  exposure=float(_p(parameters, "exposure")),
@@ -167,7 +177,7 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
     banded = bool(knobs["banded"])
     knobs.update(cloud_contrast=1.5 + 2.5 * float(_p(parameters, "band_contrast")) if banded else 1.5,
                  cloud_floor=0.03 if banded else 0.12, cloud_glow=1.8 if banded else 1.3, band_freq=9.0)
-    knobs.update(focus=2.5 + 3.0 * float(_p(parameters, "focus")), aperture=0.3 + 2.7 * float(_p(parameters, "aperture")))
+    knobs.update(focus=focal_depth(float(_p(parameters, "focus"))), aperture=0.3 + 2.7 * float(_p(parameters, "aperture")))
     return knobs
 
 
