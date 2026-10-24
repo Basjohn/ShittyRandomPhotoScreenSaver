@@ -2945,3 +2945,27 @@ little section contrast at fixed scale, so long-song section changes still need 
 ### 2026-10-23 replay tooling cleanup annotation
 
 Historical entries referring to `extruded_bubble_startup_probe.py` document what investigators used at the time, not a live required diagnostic. The one-off command was retired and the test-owned Qt-free simulation support moved into `tools/visualizer_replay/eb_simulation_support.py`; behavioral overshoot coverage now lives in normal tests. The authored preset references in the old probe were replaced by synthetic fixture profiles. This does not establish visual acceptance of breathing or real-music parity. See [Test Oracle Repair](../../Audits/Test_Oracle_Repair_2026-10-23.md).
+
+## 65. Control audit on recorded music (24 October)
+
+`tools/visualizer_replay/eb_control_audit.py` replays recorded songs through the production simulation and the
+renderer's own drivers, and reports each reactive control's realized value in the quietest and loudest fifths of a
+song (by passage intensity) at its minimum, the preset's values, a flat range and the loud handle at minimum. Visual
+controls were rendered at min/preset/max on one real-music frame (Preset 1, Deep Blue).
+
+- **Working at both ends (tag removed):** Ray Flicker (0 -> no flicker, linear), Sustained (scales the loud swell
+  0.39 -> 0.71), Particle Glow Reactivity (0 constant, 1 -> +29%), Clarity, Rim Glow.
+- **Fixed:** Sparkle reached only one speck class; it now scales the bubbles' specular glints and glint proxies too
+  (1 = the previous look, 0 = none). Focus mapped to 2.5-5.5 world units of near-only defocus while the camera orbits
+  ~15 out, so Focus and Aperture changed nothing; the lower half is unchanged (all presets sit there) and the upper
+  half now reaches 18 units (`focal_depth`).
+- **Not working as authored (tag kept with the finding):** every quiet-to-loud Range is compressed toward its middle
+  and quiet passages land close to loud ones. Cause: the simulation's `level` follows the fixed-scale body bands
+  (p10-p90 0.44-0.60 even where passage intensity spans 0-0.72), not passage loudness, and Ray Strength also
+  multiplies by the drive. Examples (human_heavy1 quiet/loud): Stream Speed [0, 0.77] -> 0.33/0.40; Drift [0, 0.6]
+  -> 0.20/0.26; Particles [0, 0.35] -> 0.16/0.18; Large Bubbles [6, 14] -> 7.2/7.1. Breathing's quiet handle saturates
+  its contraction at 0.15 and above that raises bubbles (it also feeds the expansion term); Small Pulse's quiet handle
+  barely matters. Fixing these is the EB reactivity redesign (passage-driven endpoints) with preset re-authoring.
+- **Still native/visual only:** Light Source -> End, Emission Geometry, Stream Source -> End, Camera Position,
+  Smoothing.
+
