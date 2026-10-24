@@ -1,8 +1,8 @@
 {
   "description": "Saved from current Settings state.",
   "mode": "extruded_bubble",
-  "name": "Preset 1 (Sunlit Surface)",
-  "preset_index": 0,
+  "name": "Preset 2 (Sunlit Surface)",
+  "preset_index": 1,
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
