@@ -2890,6 +2890,8 @@ median 2.28 vs ~3.2), so on fixed anchors it sits more contracted. Native frames
 **Presets 1/2** (operator-authored, uncommitted edits kept): Breathing quiet 0.05 → 0.12 (rest 0.71 → 0.30) and
 block 256 → 512 for preset 1. Preset 1 at 0.12: block 256 range 0.75–1.05, block 512 0.64–1.58 with the closer
 absolute distribution to 2D (distance 3.0 vs 3.3) and stronger small response; 512 chosen.
+Small-bubble temporal check (G14) on the same runs: reversals per step 0.011–0.021 at 512 vs 0.014–0.037 at 256,
+no jumps at either, 2D 0.13–0.27; 512 adds no small judder in the simulation (native presentation still open).
 
 Rejected: knee 0.70 (quieter song median 0.57), a 0.60 knee with the original held weight (crest too low).
 
