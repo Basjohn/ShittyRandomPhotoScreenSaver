@@ -198,3 +198,48 @@ def test_lower_never_makes_water_and_water_stays_exact(qtbot):
     _drag(editor.canvas, [(0.5, 0.5)])
     assert 0.0 in editor.get_heightfield()["heights"]
     assert apply_brush(0.0, "Lower", 1.0, 1.0, 1.0, 0.0) == 0.0, "lowering water leaves it water"
+
+
+@pytest.mark.parametrize("size", [(900, 420), (320, 700), (300, 300)])
+def test_the_authoring_field_is_square_and_centred_in_any_panel(qtbot, size):
+    editor = _editor(qtbot)
+    keep_off_screen(editor).resize(*size)
+    qtbot.wait(1)
+    rect = editor.canvas.field_rect()
+    assert rect.width() == pytest.approx(rect.height())
+    assert rect.center().x() == pytest.approx(editor.canvas.rect().center().x() + 0.5, abs=1.0)
+    # The canvas asks for a height that fits a square as wide as it may be.
+    assert editor.canvas.hasHeightForWidth() and editor.canvas.heightForWidth(600) > editor.canvas.heightForWidth(300)
+
+
+def test_a_round_brush_is_round_in_the_terrains_cells_on_a_wide_panel(qtbot):
+    size = 41
+    editor = _editor(qtbot, size=size)
+    keep_off_screen(editor).resize(1200, 420)
+    qtbot.wait(1)
+    editor.mode.setCurrentText("Raise")
+    _stroke(editor.canvas, (0.5, 0.5))
+    heights = editor.get_heightfield()["heights"]
+    centre = size // 2
+    row = [heights[centre * size + x] for x in range(size)]
+    column = [heights[y * size + centre] for y in range(size)]
+    assert max(row) > 0.0
+    # The same footprint across the terrain (u) as into it (v): no stretch from the panel's shape.
+    assert sum(1 for h in row if h > 0.0) == sum(1 for h in column if h > 0.0)
+    assert row == pytest.approx(column, abs=1e-12)
+
+
+def test_loading_and_painting_never_resample_the_stored_heightmap(qtbot):
+    size = 17
+    authored = [round((x * 7 + y * 3) % 11 / 10.0, 3) for y in range(size) for x in range(size)]
+    editor = _editor(qtbot, list(authored), size=size)
+    for panel in ((900, 420), (320, 700)):
+        keep_off_screen(editor).resize(*panel)
+        qtbot.wait(1)
+        assert editor.get_heightfield() == {"version": 1, "size": size, "heights": authored}
+    _stroke(editor.canvas, (0.1, 0.1))
+    after = editor.get_heightfield()
+    assert after["size"] == size and len(after["heights"]) == size * size
+    # Cells away from the stroke keep their exact authored values.
+    far = (size - 1) * size + (size - 1)
+    assert after["heights"][far] == authored[far]
