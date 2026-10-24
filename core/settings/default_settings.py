@@ -1246,7 +1246,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'shockwave_grid_sun_color': [255, 25, 180, 255],
                                     'shockwave_grid_sun_mode': 'Sun',
                                     'shockwave_grid_sun_x': 1.05,
-                                    'shockwave_grid_sun_y': 0.8,
+                                    'shockwave_grid_sun_y': 1.2,
                                     'shockwave_grid_sun_z': -3.2,
                                     'shockwave_grid_sun_size': 0.45,
                                     'shockwave_grid_sun_orbit_enabled': False,

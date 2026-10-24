@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from OpenGL import GL as gl
 
 from rendering.gl_programs.scene3d import scene3d_detail, scene3d_grid_vertices
-from rendering.gl_programs.neon_lake_basin_mesh import basin_mesh_vertices, basin_mesh_points
+from rendering.gl_programs.neon_lake_basin_mesh import NO_EXTENT, basin_mesh_vertices, basin_mesh_points
 from rendering.gl_programs.neon_starscape import starscape_beat_cells
 from rendering.quick import gl_query
 from rendering.gl_programs.neon_lake_basin_program import (
@@ -19,7 +19,7 @@ from rendering.gl_programs.neon_lake_basin_program import (
     NEON_SKYLINE_VERTEX_SOURCE, NEON_SKYLINE_FRAGMENT_SOURCE,
     basin_pixel_scale, basin_view,
 )
-from rendering.gl_programs.neon_celestial import basin_body_position
+from rendering.gl_programs.neon_celestial import basin_body_position, celestial_placement
 from rendering.gl_programs.neon_terrain_reaction import REACTION_SAMPLES
 from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
 from rendering.gl_programs.shockwave_grid_program import (
@@ -46,7 +46,7 @@ _CELESTIAL_UNIFORMS=("uBodyPosition","uBodySize","uBodyKind","uSunEnabled","uSun
                      "uMoonPhase","uSkyEnabled","uSkyColor","uSkyStrength","uStarColor","uStarGlowColor",
                      "uCloudColor","uHorizonColor","uClouds","uCloudDrift","uNebula","uNebulaTurn","uNebulaColorA","uNebulaColorB")
 _UNIFORMS = _VIEW_UNIFORMS + (
-    "uHalfWidth", "uEventCount", "uWave", "uHorizon", "uIdle", "uBarCount", "uBars", "uHeightScale",
+    "uTerrainGrid", "uHalfWidth", "uEventCount", "uWave", "uHorizon", "uIdle", "uBarCount", "uBars", "uHeightScale",
     "uScroll", "uLineColor", "uCrestColor", "uWaterColor", "uFloor", "uGlow", "uEdgePx",
     "uTerrain", "uTerrainSize", "uLand", "uTime", "uWaterDetail", "uWaterBankBand", "uReflection", "uPass", "uCurveCells",
     "uWireDisplay", "uMarks", "uPointPx","uTerrainFillColor","uVertexColor","uVertexAccentColor",
@@ -56,7 +56,7 @@ _UNIFORMS = _VIEW_UNIFORMS + (
 _SKY_UNIFORMS = _VIEW_UNIFORMS + _CELESTIAL_UNIFORMS + (
     "uSkyPass","uShaftSpread","uMidband", "uBeatPulse", "uCelestialGlow", "uCelestialRimVertices", "uBeatStarCount", "uBeatStarCells", "uStarGlow")
 _SKYLINE_UNIFORMS = _VIEW_UNIFORMS + (
-    "uHalfWidth", "uTerrain", "uTerrainSize", "uLand", "uEventCount",
+    "uTerrainGrid", "uHalfWidth", "uTerrain", "uTerrainSize", "uLand", "uEventCount",
     "uCrestColor", "uGlow", "uMidband", "uOutlineLiftNdc", "uHorizonThickness") + _REACTION_UNIFORMS
 
 
@@ -93,19 +93,23 @@ class QuickShockwaveGridRenderer:
         self._mesh_data = None
         self._points_cells = None
         self._points_data = None
+        self._lattice_extent = NO_EXTENT
+        self._terrain_grid = (0.0, 0.0, 1.0)
 
     def _mesh(self,cells):
+        cells = (tuple(cells), self._lattice_extent)
         if cells != self._mesh_cells:
             if self._mesh_cells is not None:
                 self._resources.drop_mesh(_mesh_key(self._mesh_cells))
-            self._mesh_data = self._resources.mesh(_mesh_key(cells),basin_mesh_vertices(cells),(2,))
+            self._mesh_data = self._resources.mesh(_mesh_key(cells),basin_mesh_vertices(*cells),(2,))
             self._mesh_cells = cells
         return self._mesh_data
 
     def _points(self, cells):
+        cells = (tuple(cells), self._lattice_extent)
         if cells != self._points_cells:
             self._drop_points()
-            self._points_data=self._resources.mesh(_point_key(cells),basin_mesh_points(cells),(2,))
+            self._points_data=self._resources.mesh(_point_key(cells),basin_mesh_points(*cells),(2,))
             self._points_cells=cells
         return self._points_data
 
@@ -118,6 +122,11 @@ class QuickShockwaveGridRenderer:
     @property
     def has_resources(self) -> bool:
         return any(owner.has_resources for owner in (self._resources, self._target, self._stream, self._heightfield))
+
+    def _adopt_terrain(self, terrain) -> None:
+        """The authored grid's reach past the basin (mesh extent) and its basin-to-grid transform."""
+        self._lattice_extent = tuple(float(v) for v in terrain.get("extent", NO_EXTENT))
+        self._terrain_grid = tuple(float(v) for v in terrain.get("grid", (0.0, 0.0, 1.0)))
 
     def _view(self, frame, parameters):
         field = tuple(float(value) for value in frame.logical_content_rect)
@@ -145,7 +154,8 @@ class QuickShockwaveGridRenderer:
         r = self._resources
         if not warm_programs(self._programs(parameters, samples, glow > 0.0)):
             return False
-        if not r.has_mesh(_mesh_key(cells)):
+        self._adopt_terrain(parameter(parameters, "shockwave_grid_terrain"))
+        if not r.has_mesh(_mesh_key((tuple(cells), self._lattice_extent))):
             self._mesh(cells)
             return False
         style=_wire_display(parameters)
@@ -170,8 +180,9 @@ class QuickShockwaveGridRenderer:
         return self._target.warm(item_pixel_rect(frame)[2:], samples, overlay=True, bloom=glow > 0.0,
                                  shafts=_rays_admitted(parameters))
 
-    @staticmethod
-    def _bind_view(uniforms, frame, view):
+    def _bind_view(self, uniforms, frame, view):
+        if "uTerrainGrid" in uniforms:          # programs that read the terrain
+            gl.glUniform3f(uniforms["uTerrainGrid"], *self._terrain_grid)
         gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
         gl.glUniform4f(uniforms["uField"], *view.field)
         gl.glUniform3f(uniforms["uEye"], *view.eye)
@@ -193,12 +204,14 @@ class QuickShockwaveGridRenderer:
             gl.glUniform1fv(uniforms[name], REACTION_SAMPLES, tables[key])
 
     @staticmethod
-    def _bind_celestial(uniforms,parameters,half_width,animation_time):
-        position=basin_body_position(*(float(parameter(parameters,"shockwave_grid_sun_"+axis)) for axis in "xyz"),
+    def _bind_celestial(uniforms,parameters,half_width,animation_time,view):
+        authored=basin_body_position(*(float(parameter(parameters,"shockwave_grid_sun_"+axis)) for axis in "xyz"),
                                      half_width,float(animation_time),bool(parameter(parameters,"shockwave_grid_sun_orbit_enabled")),
                                      float(parameter(parameters,"shockwave_grid_sun_orbit_speed")))
+        # At infinity: a fixed direction and apparent size, whatever the camera does.
+        position,size=celestial_placement(authored,float(parameter(parameters,"shockwave_grid_sun_size")),view.eye)
         gl.glUniform3f(uniforms["uBodyPosition"],*position)
-        gl.glUniform1f(uniforms["uBodySize"],float(parameter(parameters,"shockwave_grid_sun_size")))
+        gl.glUniform1f(uniforms["uBodySize"],size)
         gl.glUniform1i(uniforms["uBodyKind"],BASIN_BODY_MODES[str(parameter(parameters,"shockwave_grid_sun_mode"))])
         gl.glUniform1i(uniforms["uSunEnabled"],int(bool(parameter(parameters,"shockwave_grid_sun_enabled"))))
         gl.glUniform1f(uniforms["uMoonPhase"],float(parameter(parameters,"shockwave_grid_moon_phase")))
@@ -221,7 +234,7 @@ class QuickShockwaveGridRenderer:
                          for part in ("scale","filaments","dust")))
         gl.glUniform1f(uniforms["uNebulaTurn"],2.0*math.pi*float(parameter(parameters,"shockwave_grid_nebula_position"))
                        +0.004*float(parameter(parameters,"shockwave_grid_nebula_drift"))*float(animation_time))
-        return position
+        return position,size
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
         snapshot = frame.snapshot
@@ -256,6 +269,7 @@ class QuickShockwaveGridRenderer:
         uniforms = r.uniforms("basin", _UNIFORMS)
         skyline_program = r.program("skyline", NEON_SKYLINE_VERTEX_SOURCE, NEON_SKYLINE_FRAGMENT_SOURCE)
         skyline_uniforms = r.uniforms("skyline", _SKYLINE_UNIFORMS)
+        self._adopt_terrain(parameter(parameters, "shockwave_grid_terrain"))
         vao, vertices = self._mesh(cells)
         terrain = parameter(parameters, "shockwave_grid_terrain")
         self._heightfield.ensure(terrain["size"], terrain["data"])
@@ -269,7 +283,8 @@ class QuickShockwaveGridRenderer:
                 sky_vao, sky_count = r.mesh("sky", scene3d_grid_vertices(1, 1), (2,))
                 gl.glUseProgram(sky)
                 self._bind_view(sky_uniforms, frame, view)
-                body_position = self._bind_celestial(sky_uniforms,parameters,half_width,mode_state.animation_time)
+                body_position, body_size = self._bind_celestial(sky_uniforms,parameters,half_width,
+                                                                mode_state.animation_time,view)
                 gl.glUniform1f(sky_uniforms["uMidband"],midband)
                 gl.glUniform1i(sky_uniforms["uCelestialRimVertices"],
                                int(bool(parameter(parameters,"shockwave_grid_celestial_rim_vertices"))))
@@ -285,8 +300,9 @@ class QuickShockwaveGridRenderer:
                 star_bursts = starscape_beat_cells(
                     mode_state.events, view,
                     terrain=(terrain["size"],terrain["data"],half_width,
-                             float(parameter(parameters,"shockwave_grid_terrain_height"))),
-                    body=(*body_position,float(parameter(parameters,"shockwave_grid_sun_size")))
+                             float(parameter(parameters,"shockwave_grid_terrain_height")),
+                             tuple(terrain.get("grid", (0.0, 0.0, 1.0)))),
+                    body=(*body_position,body_size)
                          if bool(parameter(parameters,"shockwave_grid_sun_enabled"))
                          and rgba(parameter(parameters,"shockwave_grid_"+
                              ("moon_color" if str(parameter(parameters,"shockwave_grid_sun_mode"))=="Moon" else "sun_color")))[3]>0.0
@@ -300,7 +316,7 @@ class QuickShockwaveGridRenderer:
                 # transparent/glass terrain lets distant stars bleed through land.
             gl.glUseProgram(program)
             self._bind_view(uniforms, frame, view)
-            self._bind_celestial(uniforms,parameters,half_width,mode_state.animation_time)
+            self._bind_celestial(uniforms,parameters,half_width,mode_state.animation_time,view)
             gl.glUniform1f(uniforms["uHalfWidth"], half_width)
             gl.glUniform1i(uniforms["uEventCount"], len(events))
             gl.glUniform2f(uniforms["uWave"], shockwave_amplitude(float(parameter(parameters, "shockwave_grid_wave_height"))),
@@ -495,12 +511,14 @@ class QuickShockwaveGridRenderer:
             raise RuntimeError(" | ".join(errors))
 
 
-def _mesh_key(cells: tuple[int, int]) -> str:
-    return f"basin {cells[0]}x{cells[1]}"
+def _mesh_key(lattice) -> str:
+    (columns, rows), extent = lattice
+    return f"basin {columns}x{rows} reach {','.join(f'{v:.4f}' for v in extent)}"
 
 
-def _point_key(cells: tuple[int, int]) -> str:
-    return f"basin vertices {cells[0]}x{cells[1]}"
+def _point_key(lattice) -> str:
+    (columns, rows), extent = lattice
+    return f"basin vertices {columns}x{rows} reach {','.join(f'{v:.4f}' for v in extent)}"
 
 
 def _wire_display(parameters):

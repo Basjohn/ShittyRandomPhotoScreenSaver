@@ -7,7 +7,8 @@ from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QImage, QPainter, QPen
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
-from rendering.gl_programs.heightfield import normalize_heightfield, sample_heightfield
+from rendering.gl_programs.heightfield import heightfield_basin, normalize_heightfield, sample_heightfield
+from rendering.gl_programs.neon_terrain_extent import extend_heightfield, horizon_extension_cells
 from ui.tabs.shared_styles import NoWheelSlider
 from ui.widgets import StyledComboBox
 
@@ -95,6 +96,7 @@ class TerrainCanvas(QWidget):
         self._default = normalize_heightfield(default_terrain)
         self._size = self._default["size"]
         self._heights = list(self._default["heights"])
+        self._basin = heightfield_basin(self._default)
         self._undo, self._redo = [], []
         self._before = None
         self._last_uv = None
@@ -134,11 +136,15 @@ class TerrainCanvas(QWidget):
         return QRectF(area.center().x() - side / 2.0, area.center().y() - side / 2.0, side, side)
 
     def get_heightfield(self):
-        return {"version": 1, "size": self._size, "heights": list(self._heights)}
+        record = {"version": 1, "size": self._size, "heights": list(self._heights)}
+        if self._basin != (0, 0, self._size - 1):
+            record["basin"] = list(self._basin)
+        return record
 
     def set_heightfield(self, value):
         data = normalize_heightfield(value)
         self._size, self._heights = data["size"], data["heights"]
+        self._basin = heightfield_basin(data)
         self._undo.clear()
         self._redo.clear()
         self._before = self._last_uv = None
@@ -147,10 +153,10 @@ class TerrainCanvas(QWidget):
         self.update()
 
     def _snapshot(self):
-        return self._size, tuple(self._heights)
+        return self._size, tuple(self._heights), self._basin
 
     def _restore(self, state):
-        self._size, values = state
+        self._size, values, self._basin = state
         self._heights = list(values)
         self._image = None
         self.update()
@@ -183,7 +189,22 @@ class TerrainCanvas(QWidget):
     def reset_default(self):
         self._cancel_stroke()
         before = self._snapshot()
-        self._restore((self._default["size"], tuple(self._default["heights"])))
+        self._restore((self._default["size"], tuple(self._default["heights"]), heightfield_basin(self._default)))
+        self._commit(before)
+
+    def can_extend(self) -> bool:
+        return horizon_extension_cells(self.get_heightfield()) is not None
+
+    def extend_toward_horizon(self):
+        """Grow the grid back and to the sides; existing cells are kept exactly and the new ones take the
+        continuation's heights, keeping the landforms' shape. One undoable step."""
+        self._cancel_stroke()
+        cells = horizon_extension_cells(self.get_heightfield())
+        if cells is None:
+            return
+        before = self._snapshot()
+        extended = extend_heightfield(self.get_heightfield(), *cells)
+        self._restore((extended["size"], tuple(extended["heights"]), heightfield_basin(extended)))
         self._commit(before)
 
     def _cancel_stroke(self):
@@ -323,6 +344,14 @@ class TerrainCanvas(QWidget):
                              QPointF(rect.right(), rect.top() + fraction * rect.height()))
         painter.setPen(QPen(_BORDER_COLOR, 1.0))
         painter.drawRect(rect)
+        if self._basin != (0, 0, self._size - 1):
+            # The scene's basin inside a grid that reaches toward the horizon.
+            x0, y0, cells = self._basin
+            n1 = self._size - 1
+            basin = QRectF(rect.left() + rect.width() * x0 / n1, rect.bottom() - rect.height() * (y0 + cells) / n1,
+                           rect.width() * cells / n1, rect.height() * cells / n1)
+            painter.setPen(QPen(_LABEL_COLOR, 1.2, Qt.PenStyle.DashLine))
+            painter.drawRect(basin)
         painter.setPen(_LABEL_COLOR)
         painter.drawText(QRectF(12.0, 2.0, self.width() - 24.0, 20.0), Qt.AlignmentFlag.AlignCenter, "FAR / BACK")
         painter.drawText(QRectF(12.0, self.height() - 23.0, self.width() - 24.0, 20.0), Qt.AlignmentFlag.AlignCenter,
@@ -384,7 +413,13 @@ class TerrainEditor(QWidget):
         actions = QHBoxLayout()
         self.undo_button, self.redo_button = QPushButton("Undo"), QPushButton("Redo")
         self.reset_button = QPushButton("Reset Terrain to Default")
-        for button, callback in ((self.undo_button, self.canvas.undo), (self.redo_button, self.canvas.redo), (self.reset_button, self.canvas.reset_default)):
+        self.extend_button = QPushButton("Extend Toward Horizon")
+        self.extend_button.setToolTip("Grow the editable terrain further back and to the sides (dashed: the "
+                                      "original basin). New ground keeps the shape already there; water painted "
+                                      "to the edge keeps flowing to the horizon.")
+        for button, callback in ((self.undo_button, self.canvas.undo), (self.redo_button, self.canvas.redo),
+                                 (self.extend_button, self.canvas.extend_toward_horizon),
+                                 (self.reset_button, self.canvas.reset_default)):
             actions.addWidget(button)
             button.clicked.connect(callback)
         layout.addLayout(actions)
@@ -396,6 +431,7 @@ class TerrainEditor(QWidget):
     def _refresh_history(self):
         self.undo_button.setEnabled(bool(self.canvas._undo))
         self.redo_button.setEnabled(bool(self.canvas._redo))
+        self.extend_button.setEnabled(self.canvas.can_extend())
 
     def set_heightfield(self, value):
         self.canvas.set_heightfield(value)

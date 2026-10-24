@@ -68,7 +68,10 @@ def _body(**parameters):
         # Vertices have their own colours, and the skyline its own thickness.
         shockwave_grid_vertex_color=[0, 0, 0, 0], shockwave_grid_vertex_accent_color=[0, 0, 0, 0],
         shockwave_grid_vertex_outline_color=[0, 0, 0, 0], shockwave_grid_horizon_thickness=0.,
-        **parameters)
+        # The body sits at infinity in the direction its position names from the reference viewpoint:
+        # look slightly up at one a little above the horizon.
+        **{'shockwave_grid_tilt': -.05, 'shockwave_grid_sun_x': .4, 'shockwave_grid_sun_y': 1.3,
+           'shockwave_grid_sun_z': -3.2, **parameters})
 
 
 @pytest.mark.parametrize('mode,key,first,second', [

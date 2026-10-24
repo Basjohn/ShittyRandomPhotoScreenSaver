@@ -67,7 +67,9 @@ def test_terrain_is_packed_on_configuration_and_reused_by_identity_in_every_capt
     apply_presentation_vis_mode_kwargs(owner, {"shockwave_grid_terrain": FIELD})
     frozen = owner._shockwave_grid_terrain
     assert isinstance(frozen, FrozenFields)
-    assert dict(frozen) == {"size": 3, "data": original(FIELD), "maximum": 1.0}
+    assert dict(frozen) == {"size": 3, "data": original(FIELD), "maximum": 1.0,
+                            # an unextended grid: the basin is the whole grid, identity transform, no reach
+                            "basin": (0, 0, 2), "grid": (0.0, 0.0, 1.0), "extent": (0.0, 0.0, 0.0, 0.0)}
     for _ in range(4):
         apply_presentation_vis_mode_kwargs(owner, {**defaults, "shockwave_grid_terrain": deepcopy(FIELD)})
         assert owner._shockwave_grid_terrain is frozen

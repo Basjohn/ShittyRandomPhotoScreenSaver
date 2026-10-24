@@ -3,7 +3,7 @@ import math
 
 import pytest
 
-from rendering.gl_programs.neon_lake_basin_program import basin_pixel_scale, _SHORELINE_GLSL, _SURFACE_NORMAL_GLSL
+from rendering.gl_programs.neon_lake_basin_program import basin_pixel_scale, _GRID_GLSL, _SHORELINE_GLSL, _SURFACE_NORMAL_GLSL
 
 
 def test_horizon_width_is_one_canonical_editable_render_control():
@@ -46,7 +46,7 @@ def test_actual_shoreline_glsl_rejects_off_editor_land_but_preserves_authored_sh
     )]
     try:
         values = probe.run("vec4 a=arg(0); FragColor=vec4(basinShoreLight(a.xy,a.z,a.w));",
-                           samples, declarations=HEIGHTFIELD_GLSL + _SHORELINE_GLSL)[:, 0]
+                           samples, declarations=HEIGHTFIELD_GLSL + _GRID_GLSL + _SHORELINE_GLSL)[:, 0]
         assert min(values[:3]) > 1.0
         assert max(values[3:]) == 0.0
     finally:

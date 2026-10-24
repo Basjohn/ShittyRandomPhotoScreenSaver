@@ -127,7 +127,7 @@ def test_actual_sun_toggle_preserves_sky_and_sky_strength_does_not_fade_sun(targ
     capture, host = target
     base = _snapshot(shockwave_grid_glow=0., shockwave_grid_sky_enabled=True,
                      shockwave_grid_sun_color=[245, 20, 175, 255],
-                     shockwave_grid_turn=0., shockwave_grid_tilt=.04)
+                     shockwave_grid_turn=0., shockwave_grid_tilt=-.05)
     def render(sun, strength):
         state = base.logical.mode_state
         frame = replace(base, logical=replace(base.logical, mode_state=replace(
@@ -162,7 +162,7 @@ def test_real_land_depth_masks_low_celestial_disc_and_halo(target, body):
                      shockwave_grid_sun_orbit_enabled=False, shockwave_grid_sun_rays_enabled=False,
                      shockwave_grid_water_reflection=0., shockwave_grid_glow=.55,
                      shockwave_grid_celestial_glow_enabled=True, shockwave_grid_celestial_glow_strength=2.,
-                     shockwave_grid_tilt=.04, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
+                     shockwave_grid_tilt=-.05, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
     state = base.logical.mode_state
     terrain = dict(state.parameters['shockwave_grid_terrain'])
     terrain.update(data=heightfield_surface_bytes({'size': terrain['size'],
@@ -185,7 +185,7 @@ def test_horizon_thickness_and_inherited_crest_colour_reach_real_gpu_pixels(targ
     """The authored far contour width and existing crest RGBA reach its visible silhouette."""
     capture, host = target
     base = _snapshot(shockwave_grid_sun_enabled=False, shockwave_grid_glow=0.,
-                     shockwave_grid_water_reflection=0., shockwave_grid_tilt=.04,
+                     shockwave_grid_water_reflection=0., shockwave_grid_tilt=-.05,
                      shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
     def image(width, colour):
         return capture.render(host, _wire_frame(base, 'Vertices', shockwave_grid_horizon_thickness=width,
@@ -223,7 +223,7 @@ def test_production_moon_whole_surface_emission_follows_phase_glow_and_pulse(tar
                      shockwave_grid_moon_color=[190,210,255,255],
                      shockwave_grid_celestial_glow_enabled=True, shockwave_grid_celestial_glow_strength=1.,
                      shockwave_grid_celestial_glow_reactivity=0., shockwave_grid_celestial_rim_vertices=False,
-                     shockwave_grid_tilt=.04, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
+                     shockwave_grid_tilt=-.05, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
     def draw(phase, enabled=True, halo=True, pulse=False):
         frame = _wire_frame(base, 'Vertices', shockwave_grid_moon_phase=phase,
                             shockwave_grid_sun_enabled=enabled,
@@ -274,7 +274,7 @@ def test_maximum_moon_response_preserves_bright_face_ldr_headroom(target):
                      shockwave_grid_star_color=[0,0,0,0], shockwave_grid_cloud_color=[0,0,0,0],
                      shockwave_grid_celestial_glow_enabled=True, shockwave_grid_celestial_glow_strength=2.,
                      shockwave_grid_celestial_glow_reactivity=2., shockwave_grid_celestial_rim_vertices=False,
-                     shockwave_grid_tilt=.04, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
+                     shockwave_grid_tilt=-.05, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
     base = replace(base, logical=replace(base.logical, mode_state=replace(
         base.logical.mode_state, events=((0.,0.,0.,1.),))))
     absent = capture.render(host,_wire_frame(base,'Vertices',shockwave_grid_sun_enabled=False))
@@ -788,7 +788,7 @@ def test_actual_small_points_keep_body_and_emission_at_fractional_pixels(qt_app,
         renderer = host._implementations['shockwave_grid']
         frame = QuickVisualizerRenderFrame(snapshot,(0,0,pixel_w,pixel_h),(width,height),matrix,host._quad_vao)
         field,half_width,view,maximum = renderer._view(frame,base.logical.mode_state.parameters)
-        xs,ys = basin_lattice(renderer._points_cells)
+        xs,ys = basin_lattice(*renderer._points_cells)
         selected = [(min(range(len(xs)),key=lambda i:abs(xs[i]-u)),
                      min(range(len(ys)),key=lambda i:abs(ys[i]-v))) for u,v in ((.25,.2),(.5,.5),(.75,.8))]
         index = [None]
@@ -830,7 +830,7 @@ def test_vertex_density_and_tiers_keep_one_unique_active_mesh_and_glass_retires_
         capture.render(host, _wire_frame(snapshot, 'Vertices', scene3d_detail=tier,
                                         shockwave_grid_density=density))
         renderer = host._implementations['shockwave_grid']
-        columns, rows = renderer._points_cells
+        (columns, rows), _extent = renderer._points_cells
         keys = [key for key in renderer._resources._meshes if key.startswith('basin vertices ')]
         assert len(keys) == 1
         assert columns >= (12+40*density)*1.5 and rows >= 12+40*density
@@ -907,7 +907,7 @@ def test_production_point_fragment_rasterizes_round_marks(target, monkeypatch):
     monkeypatch.setattr(gl, 'glUniform1f', magnify)
     actual_draw = gl.glDrawArrays
     from rendering.gl_programs.neon_lake_basin_mesh import basin_lattice
-    xs, ys = basin_lattice(renderer._points_cells)
+    xs, ys = basin_lattice(*renderer._points_cells)
     # Overscan adds nonuniform rows/columns around the authored sub-lattice.
     # Observe authored points with enough projected separation for magnified discs.
     selected_columns = [i for i, u in enumerate(xs) if .1 < u < .9][::14]

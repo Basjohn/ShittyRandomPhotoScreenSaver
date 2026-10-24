@@ -146,7 +146,13 @@ cell width away from the authored 0..1 sub-lattice. `neon_lake_basin_mesh.py` ge
 point markers from exactly the same axis coordinates, keeping the edited interior topology untouched. A
 shader-side, deterministic land continuation joins the authored boundary, lets steep near-edge ridges settle into a shallow convex distant world rather than extruding indefinitely, and fades detail/emission/vertices while retaining
 opaque land/depth up to its real terrain/sky tangency. The finite outer mesh edge stays behind nearer land, not a painted horizon. Off-editor continuation is not another
-terrain editor or an infinitely repeating tile; it never creates an additional authored lake. Distant
+terrain editor or an infinitely repeating tile; it never invents a lake, but water the user painted to the grid's
+edge keeps flowing outward as a stream or coast to the horizon (2026-10-24, operator: a stream out of the scene).
+**Terrain reach:** the authored grid may extend past the basin (`basin: [column, row, cells]` in the heightfield
+record; default the whole grid). The editor's **Extend Toward Horizon** grows it back and to the sides by whole cells
+(basin cells kept exactly, new cells seeded from the continuation, max 257 a side); the shaders keep every distance in
+basin uv and convert only heightfield reads (`basinGrid`, `uTerrainGrid`), and the mesh's fine lattice spans the whole
+grid. CPU mirrors: `neon_terrain_extent.basin_continuation`, the camera floor and beat-star terrain checks. Distant
 coverage and performance, including unusual zoom/card aspects, remain operator/GPU acceptance items.
 An authored tier change replaces the one active mesh; ordinary frames allocate/rebuild nothing. Authored patch
 bounds are derived once per terrain change; static conservative fitting changes only with authored terrain/view/aspect.
@@ -237,7 +243,13 @@ The sky background is drawn continuously first, then the terrain's **real depth-
 sky colour/emission in proportion to the same surface coverage/fade. Subsequent surface/sky-body
 passes use that terrain depth, so distant stars or Moon/Sun are occluded by foreground land
 without creating a separate card-wide alpha band. The translucent/glass surface retains its
-material appearance while **opaque terrain coverage** blocks the sky behind it. Sun/Moon draw **after** surface colour as celestial background with LEQUAL at far depth, so the same terrain depth clips both body and halo at the horizon. Their analytic sphere retains authored apparent pose, phase, orbit, reflection and illumination; direct presentation no longer places an astronomical body in front of distant land merely because its artistic XYZ is nearby. No additional depth target, mask or timer is created. Reflected body hits retain the authored land-volume approximation. Near-camera visible-body attenuation still prevents an enormous disc without changing world lighting or orbit.
+material appearance while **opaque terrain coverage** blocks the sky behind it. Sun/Moon draw **after** surface colour as celestial background with LEQUAL at far depth, so the same terrain depth clips both body and halo at the horizon. Their analytic sphere retains authored apparent pose, phase, orbit, reflection and illumination; direct presentation no longer places an astronomical body in front of distant land merely because its artistic XYZ is nearby. No additional depth target, mask or timer is created. **At infinity (2026-10-24, operator: bodies must not change with the
+camera):** Position X/Y/Z is where the body appears from the fixed reference viewpoint `CELESTIAL_REFERENCE`
+(0, 1, 2) in front of the basin; that gives its direction and, with Size, its apparent size. Each frame
+`celestial_placement` puts it `CELESTIAL_DISTANCE` (40) from the real eye along that direction with a radius keeping
+its angular size, so flying, dollying or panning never moves, grows or re-phases it and its light on the land is
+effectively directional (the basis for scene lighting). Presets 1-4 were converted to keep the direction and size
+seen from their start views. Reflected body hits retain the authored land-volume approximation. Near-camera visible-body attenuation still prevents an enormous disc without changing world lighting or orbit.
 
 Optional rays use `heightfield_volume_glsl.py` single scattering over the same world-space basin and authored body.
 The existing sky program/quad and SceneTarget are reused after geometry; no volume texture, timer or simulation is

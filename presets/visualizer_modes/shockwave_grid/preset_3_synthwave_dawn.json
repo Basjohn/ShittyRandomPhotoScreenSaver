@@ -178,9 +178,9 @@
         "shockwave_grid_sun_rays_enabled": true,
         "shockwave_grid_sun_rays_strength": 0.45,
         "shockwave_grid_sun_size": 0.23,
-        "shockwave_grid_sun_x": -0.16,
-        "shockwave_grid_sun_y": 0.8,
-        "shockwave_grid_sun_z": 0.08,
+        "shockwave_grid_sun_x": -0.8966,
+        "shockwave_grid_sun_y": 0.9007,
+        "shockwave_grid_sun_z": 0.5698,
         "shockwave_grid_terrain": {
           "heights": [
             0.19462470216003733,
