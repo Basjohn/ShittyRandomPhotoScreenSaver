@@ -766,6 +766,7 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
 // through the hollow sphere, every path looked up in the scene itself. Toward the rim, where the paths change from
 // one pixel to the next (light guided round inside the wall), four rays spread over the pixel are averaged.
 const float kRimRaysFull = 10.0;  // radius px from which a rim pixel averages eight rays (four below)
+const float kSmallShellRays = 6.0;  // radius px below which every pixel of a shell averages rays, its face too
 vec4 shadeBubble(vec3 rayView, vec4 sphere, float pixels, float soft, vec3 frontView) {
     // Each pixel sees a cone of directions as wide as the curvature it covers: read the probe at that level.
     float texelAngle = 1.5707963 / float(textureSize(uProbe, 0).x);
@@ -780,7 +781,9 @@ vec4 shadeBubble(vec3 rayView, vec4 sphere, float pixels, float soft, vec3 front
     // One pixel's step in view directions, analytic (derivatives after the caller's discard are undefined: they
     // came back zero and every sub-ray was the same ray).
     vec3 dx = vec3(uPixelSize, 0.0, 0.0) * -rayView.z, dy = vec3(0.0, uPixelSize, 0.0) * -rayView.z;
-    if (facing > 0.8 || pixels < 3.0) {
+    // A shell under kSmallShellRays px is all rim: one ray per pixel made it shimmer as it drifted sub-pixel
+    // (20% at 3 px), most of all the deepest-contracted bubbles at rest. Its few pixels take the four rays too.
+    if (facing > 0.8 && pixels >= kSmallShellRays) {
         sum = shadeBubbleRay(rayView, sphere, pixels, soft, blur);
     } else {
         sum = vec4(0.0);
@@ -812,7 +815,7 @@ flat in float vLensCircle;
 void main() {
     vec2 ndc = gl_FragCoord.xy / uFrameSize * 2.0 - 1.0 - uLensShift;
     vec3 ray = normalize(vec3(ndc * uTan, -1.0));
-    float coverage = sceneSphereCoverage(ray, vSphere.xyz, vSphere.w, vBlur);
+    float coverage = sceneSphereCoverage(ray, vSphere.xyz, vSphere.w, vBlur, uPixelSize);
     if (coverage <= 0.0) discard;
     float tNear, tFar;
     bool hit = sceneSphereRay(ray, vSphere.xyz, vSphere.w, tNear, tFar);

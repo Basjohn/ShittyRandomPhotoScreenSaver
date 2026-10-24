@@ -120,6 +120,15 @@ float sceneSphereCoverage(vec3 ray, vec3 centre, float radius, float blur) {
     float width = max(derivative, max(blur, 0.0) * 2.0);
     return clamp((radius + max(blur, 0.0) - miss) / max(width, 1e-6) + 0.5 * step(blur, 0.0), 0.0, 1.0);
 }
+// The same coverage with the pixel's width known (``pixelAngle``: view units per pixel at unit distance) instead of
+// read from fwidth. On a sphere a few pixels across the 2x2 neighbours straddle its centre and edge and fwidth comes
+// back far too small: the edge turned hard and the sphere's total light jumped 20% as it moved by sub-pixels.
+float sceneSphereCoverage(vec3 ray, vec3 centre, float radius, float blur, float pixelAngle) {
+    float along = dot(centre, ray);
+    float miss = length(centre - ray * along);
+    float width = max(pixelAngle * along * ray.z * ray.z, max(blur, 0.0) * 2.0);
+    return clamp((radius + max(blur, 0.0) - miss) / max(width, 1e-6) + 0.5 * step(blur, 0.0), 0.0, 1.0);
+}
 float sceneDefocusRadius(float depth, float focus, float aperture, float nearWeight, float farWeight) {
     return aperture * (max(focus - depth, 0.0) * nearWeight + max(depth - focus, 0.0) * farWeight);
 }
