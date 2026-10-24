@@ -843,7 +843,10 @@ _SHOCKWAVE_GRID = ModeSettings(
         # horizon; the eye itself never enters the land or water.
         Slider("shockwave_grid_tilt", "", -0.10, 0.58, bucket=""),
         Slider("shockwave_grid_turn", "", -0.50, 0.50, bucket=""),
-        SceneCameraPosition("shockwave_grid_camera_position", ""),
+        SceneCameraPosition("shockwave_grid_camera_position", "Camera Position:", bucket="camera",
+               tooltip="Move the real camera eye over the landscape without changing the lens. It stays above the "
+                       "land and water. Drag the diamond to move, Shift+drag for depth, drag the Aim point to turn; "
+                       "W/A/S/D fly the same eye in the card and R returns to the preset's view."),
         Slider("shockwave_grid_scene_scale", "", 0.25, 4.0),
         Slider("shockwave_grid_scene_pan_x", "", -2.0, 2.0),
         Slider("shockwave_grid_scene_pan_y", "", -2.0, 2.0),

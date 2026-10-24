@@ -28,6 +28,7 @@ SPEC = fc.FramedCameraSpec(
     eye_center=(0.0, 2.0, PIVOT[2]), eye_half=(7.0, 2.0, 7.0), clearance=0.05, offset_scale=(7.0, 2.0, 7.0),
     travel_speed=1.2, fov_range=(20.0, 62.0),
     floor_hook='core.settings.neon_lake_camera:floor',
+    editor_references_hook='core.settings.neon_lake_camera:editor_references',
     context_suffixes=('terrain', 'terrain_height', 'terrain_reaction_enabled', 'terrain_reaction_strength',
                       'terrain_peaks', 'terrain_pulses', 'terrain_swell'))
 
@@ -86,3 +87,13 @@ def floor_reaction(values: Mapping[str, object]) -> float:
 def floor(values: Mapping[str, object]) -> fc.Floor:
     return terrain_floor(values['shockwave_grid_terrain'], float(values['shockwave_grid_terrain_height']),
                          reaction=floor_reaction(values))
+
+
+def editor_references(get) -> dict:
+    """The basin's water-level outline inside the Settings editor's normalized eye box."""
+    def normalized(point):
+        return tuple((p - c) / h for p, c, h in zip(point, SPEC.eye_center, SPEC.eye_half))
+    hw = NOMINAL_HALF_WIDTH
+    corners = [(-hw, 0.0, 0.0), (hw, 0.0, 0.0), (hw, 0.0, -DEPTH), (-hw, 0.0, -DEPTH)]
+    return {f'basin_{i}': (*normalized(a), *normalized(b))
+            for i, (a, b) in enumerate(zip(corners, corners[1:] + corners[:1]))}

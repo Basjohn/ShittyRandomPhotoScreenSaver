@@ -47,6 +47,8 @@ class FramedCameraSpec:
     surface_bound_hook: str = ''
     floor_hook: str = ''
     context_suffixes: tuple[str, ...] = ()
+    # Optional "module:function"(get) -> {role: six normalized coords}: faint scene guides for the Settings editor.
+    editor_references_hook: str = ''
 
     def key(self, suffix: str) -> str:
         return self.prefix + suffix
