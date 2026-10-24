@@ -21,7 +21,7 @@ def test_production_moon_exterior_halo_surrounds_every_phase(qt_app):
     base = _snapshot(shockwave_grid_sun_mode='Moon', shockwave_grid_sun_x=0.,
                      shockwave_grid_sun_y=3., shockwave_grid_sun_z=-6., shockwave_grid_sun_size=.45,
                      shockwave_grid_sun_orbit_enabled=False, shockwave_grid_sun_rays_enabled=False,
-                     shockwave_grid_water_reflection=0., shockwave_grid_glow=.55,
+                     shockwave_grid_water_reflection=0., shockwave_grid_water_shine=0., shockwave_grid_glow=.55,
                      shockwave_grid_sky_enabled=True, shockwave_grid_starscape_beat=False,
                      shockwave_grid_star_color=[0,0,0,0], shockwave_grid_cloud_color=[0,0,0,0],
                      shockwave_grid_moon_color=[190,220,255,255],

@@ -21,7 +21,7 @@ def _change(snapshot, **parameters):
 def _base(**parameters):
     snapshot = _snapshot(scene3d_detail='Performance', shockwave_grid_glow=0.,
         shockwave_grid_sun_orbit_enabled=False, shockwave_grid_sun_rays_enabled=False,
-        shockwave_grid_scroll=0., shockwave_grid_idle=0., shockwave_grid_water_reflection=0.,
+        shockwave_grid_scroll=0., shockwave_grid_idle=0., shockwave_grid_water_reflection=0., shockwave_grid_water_shine=0.,
         shockwave_grid_terrain_reactivity=0., shockwave_grid_terrain_detail=0.,
         shockwave_grid_glass_strength=.85, shockwave_grid_glass_roughness=.12,
         shockwave_grid_vertex_color=[20, 255, 80, 255],

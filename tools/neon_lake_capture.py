@@ -52,7 +52,8 @@ def _draw(host, target, snapshot, width, height, window):
             matrix)
 
 
-def capture(output: Path, *, width=1300, height=750, dpr=1.0, overrides=None, window=None, preset=1) -> dict:
+def capture(output: Path, *, width=1300, height=750, dpr=1.0, overrides=None, window=None, preset=1,
+            events=()) -> dict:
     from PySide6.QtGui import QImage
 
     from core.settings.visualizer_presets import resolve_visualizer_activation_payload
@@ -65,6 +66,12 @@ def capture(output: Path, *, width=1300, height=750, dpr=1.0, overrides=None, wi
         {"mode": "shockwave_grid", "preset_shockwave_grid": preset - 1}, mode="shockwave_grid")
     settings = {**activation.resolved_config, **(overrides or {})}
     snapshot = _build_spectrum_preview_snapshot(width=width, height=height, mode="shockwave_grid", settings=settings)
+    if events:
+        # Staged onsets (age, x share, z, strength), e.g. one heavy hit on the water for splashes.
+        from dataclasses import replace
+        logical = snapshot.logical
+        snapshot = replace(snapshot, logical=replace(logical, mode_state=replace(
+            logical.mode_state, events=tuple(tuple(float(v) for v in event) for event in events))))
     window_width, window_height = window or (width, height)
     pixel_width, pixel_height = round(window_width * dpr), round(window_height * dpr)
     target = TransitionCapture(pixel_width, pixel_height)
@@ -247,6 +254,8 @@ def main():
     parser.add_argument("--window", help="logical render-window size; centres the card inside it")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=JSON", help="in-memory settings override")
     parser.add_argument("--preset", type=int, default=1, help="1-based Neon Lake preset (its starting view applies)")
+    parser.add_argument("--event", action="append", default=[], metavar="AGE,X,Z,STRENGTH",
+                        help="stage an onset (still captures): age s, x share of half width, world z, strength 0..2")
     parser.add_argument("--suite", action="store_true", help="baseline size, DPR, angle, zoom and aspect views")
     parser.add_argument("--clip", type=Path, help="native recorded-feature JSONL; enables retained-host motion capture")
     parser.add_argument("--start", type=float, default=0.)
@@ -303,7 +312,8 @@ def main():
     ) if args.suite else ((None, width, height, args.dpr, {}),)
     for name, w, h, ratio, pose, *embedded in cases:
         capture(args.output / name if name else args.output, width=w, height=h, dpr=ratio,
-                overrides={**overrides, **pose}, window=embedded[0] if embedded else window, preset=args.preset)
+                overrides={**overrides, **pose}, window=embedded[0] if embedded else window, preset=args.preset,
+                events=[tuple(float(v) for v in event.split(",")) for event in args.event])
 
 
 if __name__ == "__main__":
