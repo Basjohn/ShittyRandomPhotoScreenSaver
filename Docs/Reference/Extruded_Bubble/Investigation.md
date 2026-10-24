@@ -2969,3 +2969,16 @@ controls were rendered at min/preset/max on one real-music frame (Preset 1, Deep
 - **Still native/visual only:** Light Source -> End, Emission Geometry, Stream Source -> End, Camera Position,
   Smoothing.
 
+## 66. Fusing rubbed instead of merging (24 October)
+
+Operator: fused bubbles never cojoin and "rub" with real friction (bounce sometimes too). Measured with
+`tools/visualizer_replay/eb_collision_probe.py` on three recorded songs. Two faults, both in fused layout:
+- A pair fuses at first touch, so its stored separation ratio was ~0.98-0.995 (surface to surface) and never changed:
+  two shells pressed together, not a merge. It now eases to `_FUSE_RATIO` 0.72 over `_FUSE_SECONDS` 0.35 s.
+- Members were laid out from the instantaneous physical radius, which jumps with every beat (e.g. 0.46 -> 2.08 in
+  half a second), while they are drawn with the smoothed display radius: the drawn shells shuttled along their
+  contact ~15 times a second (contact point sliding 5-11 radii/s). The layout now follows the displayed radius
+  (`_shown_radius`); contacts themselves stay on the physical radius (the simulation's guardrail).
+After: fused ratio p50/p90 0.720/0.73 on all songs, contact drift ~1 radius/s (breathing only). Bounce: contacts part
+in <= 0.15 s (p90) and drawn shells never overlap while physically apart; no separate bounce fault was found.
+

@@ -68,14 +68,18 @@ def test_expanded_contact_uses_snapshot_radius_across_old_grid_cells_and_does_no
     assert state.clusters[0] == 2.
     assert [(b.x, b.y, b.z) for b in sim._bubbles] == before
     assert all(b.current_radius == state.bubbles[i * 8 + 3] for i, b in enumerate(sim._bubbles))
-    admitted_ratio = 6. / (2 * state.bubbles[3])
+    from widgets.spotify_visualizer.extruded_bubble_simulation import _FUSE_RATIO
+    ratios = []
     for _ in range(600):
         previous = [(b.x, b.y, b.z) for b in sim._bubbles]
         state = sim.advance(MusicInput(1/120, False), controls)
         a, b = sim._bubbles
-        ratio = math.dist((a.x, a.y, a.z), (b.x, b.y, b.z)) / (a.current_radius + b.current_radius)
-        assert ratio == pytest.approx(admitted_ratio)  # connected throughout deep contraction
-        assert max(math.dist(old, (b.x, b.y, b.z)) for old, b in zip(previous, sim._bubbles)) < .025
+        # Laid out on the displayed radii: the drawn shells hold their overlap however the physical radius jumps.
+        ratios.append(math.dist((a.x, a.y, a.z), (b.x, b.y, b.z)) / (a.visual_radius + b.visual_radius))
+        assert max(math.dist(old, (b.x, b.y, b.z)) for old, b in zip(previous, sim._bubbles)) < .025   # no snap
+    # From where they touched, the pair draws steadily into a merge and stays merged through deep contraction.
+    assert all(later <= earlier + 1e-9 for earlier, later in zip(ratios, ratios[1:]))
+    assert ratios[-1] == pytest.approx(_FUSE_RATIO, abs=1e-3)
 
 
 def test_tiny_reacted_surfaces_do_not_collide_just_because_nominal_radii_overlap():
@@ -110,8 +114,11 @@ def test_third_member_keeps_existing_union_edges_and_admitted_positions():
     assert len(cluster.members) == 3 and edge in cluster.edges
     assert [(b.x, b.y, b.z) for b in sim._bubbles] == before
     for _ in range(30):
+        previous = [(b.x, b.y, b.z) for b in sim._bubbles]
         sim.advance(MusicInput(1/120, False), controls)
-    assert all(math.dist(old, (b.x,b.y,b.z)) < 1e-10 for old,b in zip(before,sim._bubbles))
+        assert max(math.dist(old, (b.x, b.y, b.z)) for old, b in zip(previous, sim._bubbles)) < .025   # merging, never snapping
+    cluster = next(iter(sim._clusters.values()))
+    assert len(cluster.members) == 3 and {e[:3] for e in cluster.edges} >= {edge[:3]}   # the same union, drawing together
 
 
 def test_bounce_is_gradual_and_continues_after_event_choice():
@@ -156,12 +163,14 @@ def test_pruning_each_member_preserves_survivor_positions_and_only_connected_uni
     sim,controls=controlled((-1.8,0.,-8.),(0.,0.,-8.),(1.8,0.,-8.))
     sim.advance(MusicInput(0.,False),controls)
     assert len(next(iter(sim._clusters.values())).members)==3
+    for _ in range(600):                      # let the union finish merging, so only pruning can move anyone
+        sim.advance(MusicInput(1/120,False),controls)
     before={b.ident:(b.x,b.y,b.z) for b in sim._bubbles}
     sim._bubbles[victim].popping=2.4
     sim.advance(MusicInput(0.,False),controls)
     sim.advance(MusicInput(.01,False),controls)
     for b in sim._bubbles:
-        if b.ident in before:assert (b.x,b.y,b.z)==pytest.approx(before[b.ident])
+        if b.ident in before:assert (b.x,b.y,b.z)==pytest.approx(before[b.ident],abs=1e-4)
     assert bool(sim._clusters)==(victim!=1)
 
 
