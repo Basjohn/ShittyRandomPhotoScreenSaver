@@ -2924,6 +2924,22 @@ source. Steered directions keep 40% of the meander. Directions live in the strea
 `test_extruded_bubble_world.py` (opposite sides for Left/Right; signed turn and widening for both swirls). Native
 frames: `logs/eb_breathing/2026-10-24/pixels/swirl_cw/contact.png`.
 
+## 69. Live cohorts and passage-following flow (24 October; candidate)
+
+**Cohorts (G19/G20 observation of 23 Oct):** young (< 2 s) and old (> 5 s) identities were measured over 60 s of
+ragdoll_quiet_intro_loud_end1 (preset 3, PCM reanalysis): forward speed medians 1.16–1.34 vs 1.19–1.45 and lateral
+drift 0.16–0.37 vs 0.19–0.35 per 4 s window — the same. Every free identity reads the shared speed/drift each
+step; the reported mixed-speed population is not reproduced on current source (most likely the pinned input of §65,
+which held flow at its loud end).
+
+**Flow drive saturated:** `change_drive = soft_top(0.6 level + 0.6 small + 0.15 flash)` sat at 0.75–0.94 in ordinary
+music on the fixed scale, so stream speed spent p05..p95 at 0.13..0.21 of a 0.06..0.20 range on four songs, and
+onset/sustain extras could pass the loud handle. The passage part is now the large lane's held body (same knee),
+eased (0.35 s up, 1.0 s down) so flow follows passages, not beats: `soft_top(0.70 flow_body + 0.30 small + 0.15
+flash)`; onset/sustain lifts are inside a soft top, so Stream Speed and Drift loud handles are maxima. Controlled
+quiet→loud passage now spans 0.89 of the authored range (before 0.67). The available recordings are 60 s with
+little section contrast at fixed scale, so long-song section changes still need native observation.
+
 ### 2026-10-23 replay tooling cleanup annotation
 
 Historical entries referring to `extruded_bubble_startup_probe.py` document what investigators used at the time, not a live required diagnostic. The one-off command was retired and the test-owned Qt-free simulation support moved into `tools/visualizer_replay/eb_simulation_support.py`; behavioral overshoot coverage now lives in normal tests. The authored preset references in the old probe were replaced by synthetic fixture profiles. This does not establish visual acceptance of breathing or real-music parity. See [Test Oracle Repair](../../Audits/Test_Oracle_Repair_2026-10-23.md).

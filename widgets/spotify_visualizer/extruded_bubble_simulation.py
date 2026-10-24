@@ -308,6 +308,7 @@ class ExtrudedBubbleSimulation:
         self._motion_rate: float | None = None
         self._body_big_envelope = 0.0
         self._body_small_envelope = 0.0
+        self._flow_body = 0.0
         self._population_drive = 0.0  # separate audio-owned occupancy eligibility; no display Smoothing
         self._big_body_reference = 0.0
         self._last_big_body: float | None = None
@@ -517,7 +518,12 @@ class ExtrudedBubbleSimulation:
         # Counts describe passage occupancy. Flow/light/emission must still express
         # changing vocals while that occupancy is held high by bass. Reuse the
         # existing clean small-body envelope; no second band read or response clock.
-        change_drive = _soft_top(0.60 * level + 0.60 * self._body_small_envelope + 0.15 * self._flash)
+        # The passage part is the large lane's held body (same fixed-scale knee), eased
+        # so flow follows passages, not beats. Level instead sat ~0.7 in ordinary music
+        # on the fixed scale and held speed/drift at their loud ends (p05..p95 0.13..0.21
+        # of a 0.06..0.20 range on four songs).
+        self._flow_body = _follow(self._flow_body, held_body, dt, 0.35 * soft, 1.0 * soft)
+        change_drive = _soft_top(0.70 * self._flow_body + 0.30 * self._body_small_envelope + 0.15 * self._flash)
         # Resting phases barely advance. Sway and shader animation share this integrated musical time.
         idle_rate = 0.03 + 0.06 * max(0.0, min(1.0, controls.idle))
         # Operator-requested +10% RESTING activity for moving actors, NOT for
@@ -562,8 +568,9 @@ class ExtrudedBubbleSimulation:
         # Drift, stream speed and emission: quick attack, slow decay (the stream slowest), onsets only through them.
         low_speed, high_speed = controls.stream_speed
         activity = min(1.0, idle_rate * rest_motion_boost + 1.6 * level)
-        speed_target = (_lerp(controls.stream_speed, change_drive) + (high_speed - low_speed) * (0.35 * self._flash + 0.15 * sustain)) * activity
-        drift_target = _soft_top(_lerp(controls.drift, change_drive) + 0.2 * sustain * (controls.drift[1] - controls.drift[0])) * activity
+        # Onset and sustained lifts stay inside the authored range: the loud handle is the maximum.
+        speed_target = _lerp(controls.stream_speed, _soft_top(change_drive + 0.35 * self._flash + 0.15 * sustain)) * activity
+        drift_target = _lerp(controls.drift, _soft_top(change_drive + 0.2 * sustain)) * activity
         emission_target = _soft_top(_lerp(controls.emission, change_drive)
                                     + 0.2 * (controls.emission[1] - controls.emission[0]) * self._flash)
         if self._speed is None:
