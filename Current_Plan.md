@@ -85,7 +85,6 @@ The [operator-source reconciliation](Docs/Reference/2026-10-23_Operator_EB_Neon_
   (`ui/tabs/media/framed_camera_editor.py`; Neon draws its basin outline in the eye box). Open: native
   all-angle/near-horizon/aspect/DPR checks.
 - [ ] **Neon Lake terrain authoring and water layers:** see [Neon Lake contract](Docs/Reference/Neon_Lake_Basin.md) and [reconciliation](Docs/Reference/2026-10-23_Operator_EB_Neon_Settings_Reconciliation.md). Square the editor without altering stored heightmap or strokes, optionally provide accurate angled pseudo-3D authoring; investigate composited water plus water glows and relevant 3D controls/optics. Focus artistic examples on existing presets 1–4 without deleting/freezing other editable presets. Existing accepted Neon Lake behavior is the baseline, not automatically failed by feature extensions.
-- [~] **Test debt (separate from visual acceptance):** classify the 102 archived full-suite failures by actual final-source reproducibility; only revise stale oracles after source-backed proof. Preserve genuine EB music/projection/lifecycle/Settings and other mode regressions. Never weaken measured thresholds to make counts green. [Archived 102-test source-oriented triage](Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md): 32 files, with obsolete ABI/schema failures separated from real pixel/audio/lifecycle evidence. Agent should update stale harnesses and run native falsifiers, not convert native test work wholesale into operator tasks.
 
 ## 2026-10-23 test-authority guardrails | core regression prevention
 

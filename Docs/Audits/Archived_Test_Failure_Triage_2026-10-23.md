@@ -4,6 +4,10 @@
 
 The source handoff is the 23 October `e692801bb9` godzip. Archived log source: operator-provided `logs993de3141c.zip` (four `pytest_chunk_N.log` runs). A later source candidate changed Settings bucket policy, a Ray Fan Spread visibility gate and a couple of literal-default readers. **Do not treat archived failure counts as current rerun results.** Every original test remains present; no test was deleted or XFAIL-marked here.
 
+**24 October closure:** the complete isolated suite (`tests/run_chunked.py --isolated`, every file in its own
+process) passed **737 of 737 files** on the current source, with `collect_ignore` empty. The archived failures are
+resolved for this source; the plan item is closed. Visual/physical gates stay in `Current_Plan.md`.
+
 ## Immediate priorities and diagnosis
 
 ### Native rerun on the later checkout
