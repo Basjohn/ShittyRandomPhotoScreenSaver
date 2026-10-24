@@ -29,4 +29,11 @@
 5. Denied leave (display-route, Quick Start Arrange, no-sources on close) must **not** clear the active path. A failed lazy tab builder must not clear it either. No GUI hitches, tick loops or frame-time regressions.
 6. Windows native test selections: updated `test_settings_bucket_single_open_contract.py`, `test_widgets_tab_current.py`, `test_visualizer_settings_lazy_bodies_current.py`, `test_gmail_settings_roundtrip.py`, and a real SettingsDialog close/reopen/reload integration. Keep every test failure visible until diagnosed; do not bulk mark stale.
 
+**24 October native evidence (PySide6, Windows, real SettingsDialog, not shown):** the full isolated suite passes
+(737 files), including every selection in item 6, and `tests/test_settings_bucket_reopen_real_dialog.py` covers close/
+reopen for Visualizer modes, Sources, Steam nested leaves, Widgets pill replacement and a legacy multi-mode map. Removing
+the startup projection or leave-retirement alone does not break these scenarios: the tabs' own retirement on pill/tab
+change and per-mode hydration enforce the same contract (layered, not single-owner). Items 3-5 and visual inspection
+remain open.
+
 **Known verification limitation:** No PySide6 in this container. Native signal ordering, QWidget ancestry under all builders, Qt paint/scroll/rail behavior and Settings reopen are **not visually confirmed**. The source implementation is offered for a local native agent to test and correct, not operator-approved finished UX.
