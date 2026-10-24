@@ -55,7 +55,7 @@ class ExtrudedBubbleShaderContractTests(unittest.TestCase):
     def test_near_dof_uses_one_depth_and_footprint_policy_not_an_identity_cohort(self):
         stages = _vertex_stages()
         vertex = stages['BUBBLE_VERTEX']
-        self.assertIn('ebLens(vec4(centre, aSphere.w), uProjection, uFrameSize,', vertex)
+        self.assertIn('ebLens(vec4(centre, aLensRadius), uProjection, uFrameSize,', vertex)
         self.assertIn('aExtra.y < 0.5 && coc > 1.5', vertex)
         self.assertNotIn('aExtra.y > 2.5 ||', vertex)
         source = _PROGRAM.read_text(encoding='utf-8')

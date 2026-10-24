@@ -424,7 +424,7 @@ def test_drift_and_emission_follow_music_then_settle_without_an_idle_size_oscill
     for _ in range(1440):
         idle = simulation.advance(_music(STEP, False), controls)
     assert idle.flash < 1e-5
-    assert idle.stream_speed < loud.stream_speed * 0.1
+    assert 0.0 < idle.stream_speed < loud.stream_speed * 0.5    # bubbles keep drifting slowly at rest
     assert idle.emission == pytest.approx(controls.emission[0], abs=1e-5)
     assert all(r[5] < 0 for r in _records(idle))
 
@@ -503,7 +503,8 @@ def test_nothing_pins_flat_at_the_top_of_its_range():
 
 def test_large_contracts_deeply_while_small_keeps_a_readable_nonpulsing_rest():
     controls = ExtrudedBubbleControls(large_count=(8, 8), mid_count=(16, 16), collision_scope="off",
-                                     breathing=(.15, .6), small_pulse=(.15, .8))
+                                     breathing=(.15, .6), small_pulse=(.15, .8),
+                                     stream_speed=(0, 0), drift=(0, 0))   # resting contraction only, no travel
     sim = ExtrudedBubbleSimulation(88)
     snap = _run(sim, controls, 20, intensity=0)
     bases = {b.ident: (b.radius,b.large) for b in sim._bubbles}

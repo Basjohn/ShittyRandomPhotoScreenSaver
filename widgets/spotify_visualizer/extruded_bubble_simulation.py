@@ -576,7 +576,12 @@ class ExtrudedBubbleSimulation:
                      else stream_vector(*controls.stream_direction))
         # Drift, stream speed and emission: quick attack, slow decay (the stream slowest), onsets only through them.
         low_speed, high_speed = controls.stream_speed
-        activity = min(1.0, idle_rate * rest_motion_boost + 1.6 * level)
+        # A resting floor (scaled by Idle) keeps the stream, drift and the particles it carries slowly moving in
+        # silence, as 2D Bubble rests at its authored baseline speed; the resting factor alone (idle_rate, ~0.06)
+        # froze them. A floor, never an addition: quiet music is never slower than silence, and ordinary music
+        # (already above it) keeps its full quiet-to-loud contrast.
+        rest_activity = (0.15 + 0.45 * max(0.0, min(1.0, controls.idle))) * rest_motion_boost
+        activity = min(1.0, max(idle_rate * rest_motion_boost + 1.6 * level, rest_activity))
         # Onset and sustained lifts stay inside the authored range: the loud handle is the maximum.
         speed_target = _lerp(controls.stream_speed, _soft_top(change_drive + 0.35 * self._flash + 0.15 * sustain)) * activity
         drift_target = _lerp(controls.drift, _soft_top(change_drive + 0.2 * sustain)) * activity

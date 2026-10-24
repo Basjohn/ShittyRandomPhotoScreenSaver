@@ -139,7 +139,7 @@ def test_pause_releases_radius_and_every_motion_phase_into_slow_rest(clip):
     combined = FeatureClip('real_music_then_pause', clip.frames + paused)
     result,kinds = states_and_kinds(combined)
     active, start, end = result[len(clip.frames)-1], result[len(clip.frames)], result[-1]
-    assert active.stream_speed > end.stream_speed * 10
+    assert active.stream_speed > end.stream_speed * 2 and end.stream_speed > 0.0   # slow rest, never frozen
     assert active.emission > end.emission + .1
     assert end.emission == pytest.approx(settings()['extruded_bubble_particles'][0],abs=.002)
     assert end.emission > .02  # sparse visible rest survives downstream squared particle density
@@ -167,4 +167,7 @@ def test_pause_releases_radius_and_every_motion_phase_into_slow_rest(clip):
     assert .04 < end.motion_phase - before.motion_phase < .08
     assert .04 < end.shimmer - before.shimmer < .08
     from widgets.spotify_visualizer.extruded_bubble_geometry import WORLD_UNIT
-    assert 0 < end.travel - before.travel < .01 * WORLD_UNIT
+    # Resting flow drifts slowly: under one second of the authored quiet speed (Idle scales it down), never frozen.
+    from widgets.spotify_visualizer.extruded_bubble_frame_runtime import STREAM_SPEED_FULL
+    quiet_speed = settings()['extruded_bubble_stream_speed'][0] * STREAM_SPEED_FULL * WORLD_UNIT
+    assert 0 < end.travel - before.travel < quiet_speed * 1.01
