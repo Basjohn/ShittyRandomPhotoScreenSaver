@@ -79,16 +79,32 @@ def inertia_pose(inertia: OrbitInertia, now: float) -> Dict[str, float]:
 @dataclass(frozen=True, slots=True)
 class AutoRotate:
     """The view of ``mode_id`` swivels from ``turn`` at ``rate`` (turn units per second) from ``start``
-    (logical-clock seconds) on; before ``start`` it holds still."""
+    (logical-clock seconds) on; before ``start`` it holds still. A landscape whose turn does not wrap carries its
+    ``sweep`` range: the view then eases back and forth across it, at ``rate`` through the middle and slowing to
+    a stop at each end, instead of circling."""
 
     mode_id: str
     turn: float
     rate: float
     start: float
+    sweep: tuple[float, float] | None = None
 
 
 def auto_rotate_turn(record: AutoRotate, turn_key: str, now: float) -> float:
-    return _wrap(record.turn + record.rate * max(0.0, float(now) - record.start))
+    elapsed = max(0.0, float(now) - record.start)
+    if record.sweep is None:
+        return _wrap(record.turn + record.rate * elapsed)
+    low, high = record.sweep
+    span = high - low
+    if span <= 0.0 or record.rate == 0.0:
+        return max(low, min(high, record.turn))
+    # turn = low + span * (1 - cos(phase)) / 2; the phase starts at the current turn, heading the rate's way.
+    start = max(0.0, min(1.0, (record.turn - low) / span))
+    phase = math.acos(1.0 - 2.0 * start)
+    if record.rate < 0.0:
+        phase = -phase
+    phase += 2.0 * abs(record.rate) / span * elapsed
+    return low + span * 0.5 * (1.0 - math.cos(phase))
 
 
 
@@ -484,14 +500,14 @@ def _take_auto_rotation(host: Any, mode_id: str, now: float | None) -> None:
 def arm_view_auto_rotate(host: Any, mode_id: str, now: float, *, immediate: bool) -> AutoRotate | None:
     """Publish (GUI thread) the swivel ``mode_id`` starts when its Auto Rotate is on: at once for a completed
     startup or mode/preset swap (``immediate``), else after its Auto Rotate After seconds without camera input.
-    Off, or a mode without Auto Rotate or whose turn does not wrap: the record is dropped."""
+    Off, or a mode without Auto Rotate: the record is dropped. A non-wrapping turn sweeps its range."""
     try:
         descriptor = get_visualizer_mode_descriptor(mode_id)
     except (KeyError, ValueError):
         setattr(host, _AUTO, None)
         return None
     keys = descriptor.view_auto_rotate_settings
-    if not keys or not descriptor.view_orbit_turn_wraps or not descriptor.view_orbit_settings:
+    if not keys or not descriptor.view_orbit_settings:
         setattr(host, _AUTO, None)
         return None
     if len(keys) == 3:
@@ -506,8 +522,12 @@ def arm_view_auto_rotate(host: Any, mode_id: str, now: float, *, immediate: bool
         setattr(host, _AUTO, None)
         return None
     turn_key = descriptor.view_orbit_settings[0]
+    sweep = None
+    if not descriptor.view_orbit_turn_wraps:
+        from widgets.spotify_visualizer.config_applier import presentation_setting_range
+        sweep = tuple(float(v) for v in presentation_setting_range(turn_key))
     record = AutoRotate(mode_id, float(getattr(host, f"_{turn_key}")), speed / 180.0,
-                        float(now) if immediate else float(now) + after)
+                        float(now) if immediate else float(now) + after, sweep)
     setattr(host, _AUTO, record)
     return record
 

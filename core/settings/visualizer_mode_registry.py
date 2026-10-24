@@ -362,6 +362,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         view_orbit_turn_wraps=False,
         scene_pan_envelope=(0.50, 0.50, 0.50, -0.50, 1.50),
         framed_camera="core.settings.neon_lake_camera:SPEC",
+        # Auto Rotate sweeps a landscape back and forth across its turn range (it never circles).
+        view_auto_rotate_settings=("shockwave_grid_auto_rotate", "shockwave_grid_auto_rotate_after",
+                                   "shockwave_grid_auto_rotate_speed"),
         scene_transform_settings=("shockwave_grid_scene_scale", "shockwave_grid_scene_pan_x", "shockwave_grid_scene_pan_y"),
         prepared_reveal=True,
         geometry_kind="freeform_3d",
