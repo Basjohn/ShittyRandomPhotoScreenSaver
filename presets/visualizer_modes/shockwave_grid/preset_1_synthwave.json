@@ -10,7 +10,16 @@
         "shockwave_grid_adaptive_sensitivity": false,
         "shockwave_grid_agc_strength": 0.15,
         "shockwave_grid_audio_block_size": 256,
+        "shockwave_grid_auto_rotate": false,
+        "shockwave_grid_auto_rotate_after": 20,
+        "shockwave_grid_auto_rotate_speed": 4,
         "shockwave_grid_bar_count": 35,
+        "shockwave_grid_camera_fov": 30,
+        "shockwave_grid_camera_position": [
+          0.0,
+          0.0,
+          0.0
+        ],
         "shockwave_grid_celestial_glow_enabled": true,
         "shockwave_grid_celestial_glow_reactivity": 2.0,
         "shockwave_grid_celestial_glow_strength": 1.0,
@@ -174,6 +183,7 @@
         "shockwave_grid_sky_enabled": true,
         "shockwave_grid_sky_strength": 0.8,
         "shockwave_grid_solid_bar_hysteresis_enabled": false,
+        "shockwave_grid_splashes": 0.6,
         "shockwave_grid_star_color": [
           217,
           229,
@@ -207,6 +217,8 @@
           255
         ],
         "shockwave_grid_sun_rays_enabled": true,
+        "shockwave_grid_sun_rays_length": 0.65,
+        "shockwave_grid_sun_rays_spread": 0.4,
         "shockwave_grid_sun_rays_strength": 0.45,
         "shockwave_grid_sun_size": 0.16,
         "shockwave_grid_sun_x": -0.234,
@@ -4550,6 +4562,7 @@
           0
         ],
         "shockwave_grid_water_reflection": 0.82,
+        "shockwave_grid_water_shine": 0.0,
         "shockwave_grid_wave_amplitude": 0.75,
         "shockwave_grid_wave_height": 0.96,
         "shockwave_grid_wave_speed": 0.45,

@@ -94,6 +94,7 @@
           ]
         ],
         "extruded_spectrum_profile_floor": 0.2,
+        "extruded_spectrum_rainbow_ghost": true,
         "extruded_spectrum_reflection": 0.85,
         "extruded_spectrum_sensitivity": 0.97,
         "extruded_spectrum_shadow_enabled": false,

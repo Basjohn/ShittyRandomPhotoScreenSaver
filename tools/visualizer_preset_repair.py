@@ -364,6 +364,11 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
         mode_key = f"{prefix}{suffix}"
         if mode_key in canonical_defaults:
             sanitized.setdefault(mode_key, deepcopy(canonical_defaults[mode_key]))
+    # A preset authors every control: a new control is filled at its canonical default (what the preset already
+    # resolved to), never left to a silent fallback, and then authored per preset.
+    for key in vp.preset_artwork_keys(mode):
+        if key not in sanitized and key in canonical_defaults:
+            sanitized[key] = deepcopy(canonical_defaults[key])
     orig_keys = set(original_filtered.keys())
     new_keys = set(sanitized.keys())
 
@@ -803,13 +808,17 @@ def _regenerate_shipped_preset_artifacts_if_needed(mutated_paths: Iterable[Path]
 
 def repair_all_presets(
     *,
+    modes: Iterable[str] | None = None,
     on_result: Callable[[str, Path, Path, Dict[str, Any]], None] | None = None,
     on_error: Callable[[str, Path, Exception], None] | None = None,
 ) -> List[Tuple[str, Path, Path, Dict[str, Any]]]:
     """Repair every curated preset JSON under presets/visualizer_modes."""
 
     processed: List[Tuple[str, Path, Path, Dict[str, Any]]] = []
+    wanted = set(modes) if modes is not None else None
     for mode, path in _discover_preset_files():
+        if wanted is not None and mode not in wanted:
+            continue
         try:
             backup, stats = repair_file(path, mode, sync_shipped_artifacts=False)
         except Exception as exc:  # pragma: no cover - batch path logging
@@ -1077,6 +1086,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="Repair every preset JSON under presets/visualizer_modes and exit.",
     )
     parser.add_argument(
+        "--mode",
+        action="append",
+        help="With --repair-all: only this mode's presets (repeatable).",
+    )
+    parser.add_argument(
         "--audit-curated",
         action="store_true",
         help="Audit curated preset JSON files for duplicate prefixes, backup blocks, and stale authored payloads.",
@@ -1103,7 +1117,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             rel = path.relative_to(ROOT)
             print(f"Failed to repair {rel} ({mode}): {exc}", file=sys.stderr, flush=True)
 
-        results = repair_all_presets(on_result=_cli_result, on_error=_cli_error)
+        results = repair_all_presets(modes=args.mode, on_result=_cli_result, on_error=_cli_error)
         print(f"Completed batch repair for {len(results)} preset(s).", flush=True)
         return
 

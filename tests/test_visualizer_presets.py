@@ -905,35 +905,22 @@ def test_repair_tool_keeps_missing_optional_bubble_keys_missing_in_source_author
     assert "bubble_bubble_transient_mix_vocal" not in cleaned
 
 
-def test_repair_tool_keeps_missing_optional_spectrum_and_osc_keys_missing_in_source_authoritative_mode():
-    spectrum_payload = {
-        "snapshot": {
-            "widgets": {
-                "spotify_visualizer": {
-                    "mode": "spectrum",
-                    "spectrum_growth": 2.7,
-                }
-            }
-        }
-    }
-    spectrum_cleaned, _ = repair._sanitize_settings("spectrum", spectrum_payload)
-    assert spectrum_cleaned["spectrum_growth"] == pytest.approx(2.7)
-    assert "spectrum_glow_enabled" not in spectrum_cleaned
-    assert "spectrum_glow_intensity" not in spectrum_cleaned
-    assert "spectrum_glow_color" not in spectrum_cleaned
+def test_repair_tool_keeps_authored_values_and_fills_every_missing_control_at_its_default():
+    """Presets author every control (operator 2026-10-24): a missing one is filled at the canonical default it
+    already resolved to, so nothing changes on screen, and authored values are never touched."""
+    from core.settings.visualizer_presets import preset_artwork_keys
 
-    osc_payload = {
-        "snapshot": {
-            "widgets": {
-                "spotify_visualizer": {
-                    "mode": "oscilloscope",
-                }
-            }
-        }
-    }
-    osc_cleaned, _ = repair._sanitize_settings("oscilloscope", osc_payload)
-    assert "osc_display" not in osc_cleaned
-    assert "osc_line_count" not in osc_cleaned
+    for mode, authored in (("spectrum", {"spectrum_growth": 2.7}), ("oscilloscope", {})):
+        payload = {"snapshot": {"widgets": {"spotify_visualizer": {"mode": mode, **authored}}}}
+        cleaned, stats = repair._sanitize_settings(mode, payload)
+        defaults = repair._canonical_mode_defaults(mode)
+        for key, value in authored.items():
+            assert cleaned[key] == pytest.approx(value)
+        assert not stats["changed"] and not stats["removed"]
+        for key in preset_artwork_keys(mode):
+            assert key in cleaned
+            if key not in authored:
+                assert cleaned[key] == defaults[key]
 
 
 def test_restore_visualizer_snapshot_clears_mode_technical_keys_absent_from_payload():
