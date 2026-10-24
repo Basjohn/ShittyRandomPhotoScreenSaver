@@ -228,3 +228,101 @@ def test_transition_advanced_returns_on_its_pill_and_a_left_pill_presents_closed
     QCoreApplication.processEvents()
     assert not _advanced_of(tab, first).isChecked()
     _close(dialog)
+
+
+def _technical_root(dialog, mode):
+    container = getattr(dialog.visualizers_tab, f"_{mode}_settings_container")
+    return next(t for t in container.findChildren(BucketToggle) if t.text() == "Technical")
+
+
+def test_visualizer_advanced_leaf_returns_with_its_root_and_technical_stays_closed(manager):
+    dialog = _dialog(manager)
+    _page(dialog, "visualizers")
+    dialog.visualizers_tab._select_mode_page("extruded_bubble")
+    dialog.visualizers_tab._extruded_bubble_adv_toggle.setChecked(True)
+    _visualizer_bucket(dialog, "extruded_bubble", "camera").setChecked(True)
+    _close(dialog)
+    dialog = _dialog(manager)
+    tab = dialog.visualizers_tab
+    assert tab._extruded_bubble_adv_toggle.isChecked()
+    assert _visualizer_bucket(dialog, "extruded_bubble", "camera").isChecked()
+    assert not _technical_root(dialog, "extruded_bubble").isChecked()
+    _close(dialog)
+
+
+def test_visualizer_technical_leaf_returns_with_its_root_and_owns_the_path(manager):
+    dialog = _dialog(manager)
+    _page(dialog, "visualizers")
+    tab = dialog.visualizers_tab
+    tab._select_mode_page("extruded_bubble")
+    tab._extruded_bubble_adv_toggle.setChecked(True)
+    _visualizer_bucket(dialog, "extruded_bubble", "camera").setChecked(True)
+    technical = _technical_root(dialog, "extruded_bubble")
+    technical.setChecked(True)
+    QCoreApplication.processEvents()
+    leaf = next(t for t in technical._srpss_bucket_body.findChildren(BucketToggle))
+    leaf_title = leaf.text()
+    leaf.setChecked(True)
+    QCoreApplication.processEvents()
+    _close(dialog)
+
+    dialog = _dialog(manager)
+    tab = dialog.visualizers_tab
+    technical = _technical_root(dialog, "extruded_bubble")
+    assert technical.isChecked()
+    leaf = next(t for t in technical._srpss_bucket_body.findChildren(BucketToggle) if t.text() == leaf_title)
+    assert leaf.isChecked()
+    # One editing path: the Advanced root and its bucket did not come back with it.
+    assert not tab._extruded_bubble_adv_toggle.isChecked()
+    assert not _visualizer_bucket(dialog, "extruded_bubble", "camera").isChecked()
+    _close(dialog)
+
+
+def _eb_camera_saved(manager):
+    return bool((manager.get("ui.visualizer_bucket_states") or {}).get("extruded_bubble:camera"))
+
+
+def test_a_refused_leave_or_failed_target_build_keeps_the_editing_path(manager, monkeypatch):
+    dialog = _dialog(manager)
+    _page(dialog, "visualizers")
+    dialog.visualizers_tab._select_mode_page("extruded_bubble")
+    _visualizer_bucket(dialog, "extruded_bubble", "camera").setChecked(True)
+    assert _eb_camera_saved(manager)
+    visualizers, display = dialog._tab_index_for_key("visualizers"), dialog._tab_index_for_key("display")
+    # The user refuses to leave (e.g. a display-route prompt): nothing is retired.
+    monkeypatch.setattr(dialog, "isVisible", lambda: True)
+    monkeypatch.setattr(dialog, "_resolve_leaving_widget_page", lambda: False)
+    dialog._switch_tab(display, animate=False)
+    assert dialog.content_stack.currentIndex() == visualizers
+    assert _eb_camera_saved(manager) and _visualizer_bucket(dialog, "extruded_bubble", "camera").isChecked()
+    # The target tab fails to build: the current editing path survives the failure.
+    monkeypatch.setattr(dialog, "_resolve_leaving_widget_page", lambda: True)
+
+    def failing(index):
+        raise RuntimeError("lazy builder failed")
+    monkeypatch.setattr(dialog, "_ensure_tab_built", failing)
+    with pytest.raises(RuntimeError):
+        dialog._switch_tab(display, animate=False)
+    assert _eb_camera_saved(manager) and _visualizer_bucket(dialog, "extruded_bubble", "camera").isChecked()
+    monkeypatch.undo()
+    _close(dialog)
+
+
+def test_a_settings_reload_lands_on_setup_and_no_stale_bucket_returns_later(manager):
+    """Reset/import/global presets may replace the stored maps: the Visualizers tab reloads onto its Setup page
+    with every disclosure closed, and a later reopen does not revive the bucket open before the reload."""
+    dialog = _dialog(manager)
+    _page(dialog, "visualizers")
+    tab = dialog.visualizers_tab
+    tab._select_mode_page("extruded_bubble")
+    _visualizer_bucket(dialog, "extruded_bubble", "camera").setChecked(True)
+    dialog._reload_all_tab_settings()       # after a preset change, reset or import
+    QCoreApplication.processEvents()
+    assert tab.get_view_state().get("page") != "mode"
+    assert not _visualizer_bucket(dialog, "extruded_bubble", "camera").isChecked()
+    _close(dialog)
+    dialog = _dialog(manager)
+    _page(dialog, "visualizers")
+    dialog.visualizers_tab._select_mode_page("extruded_bubble")
+    assert not _visualizer_bucket(dialog, "extruded_bubble", "camera").isChecked()
+    _close(dialog)

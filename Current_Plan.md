@@ -48,8 +48,10 @@ The [operator-source reconciliation](Docs/Reference/2026-10-23_Operator_EB_Neon_
     it; a legacy multi-mode map reopens on the current mode only. Note: a profile with no image sources closes before
     view capture (by design), so probes must configure a source. **Fixed:** Transitions Advanced never survived a
     reopen (the projection compared the pill's display name, "3D Block Spins", with its section id "blockspin");
-    the dialog now passes the section. Still open: Visualizer Technical/Custom nested, reset/import, denied leave,
-    visual/mixed-DPI inspection and operator acceptance.
+    the dialog now passes the section. Also covered: Visualizer Advanced and Technical leaves return with their
+    own root (one path owns one root), a refused leave or failed target build keeps the path, and a reload
+    (reset/import/global preset) lands on Setup with nothing stale returning later. Still open: visual/mixed-DPI
+    inspection and operator acceptance.
   - **2026-10-23 candidate source repair, NOT ACCEPTED:** single-active stored projection + QWidget ancestry-based live closure + nested descendant retirement; Sources/Transitions gain simple-path state. [Source repair audit and native falsifiers](Docs/Audits/Settings_Bucket_Persistence_Repair_Candidate_2026-10-23.md). **21 targeted headless tests pass, one missing-fixture test unrun; no PySide6 native run or operator approval.** The original multi-scope defect and full end-to-end acceptance checklist stay open until verified.
   - [~] **Native verification 2026-10-24 — awaiting final operator sign-off only:** `tools/settings_window_probe.py`
     (WinEvent hook, self-tested) records zero extra top-level windows on current source across direct dialog opens

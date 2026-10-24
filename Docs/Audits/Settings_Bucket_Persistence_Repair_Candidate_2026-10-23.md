@@ -33,7 +33,10 @@
 (737 files), including every selection in item 6, and `tests/test_settings_bucket_reopen_real_dialog.py` covers close/
 reopen for Visualizer modes, Sources, Steam nested leaves, Widgets pill replacement and a legacy multi-mode map. Removing
 the startup projection or leave-retirement alone does not break these scenarios: the tabs' own retirement on pill/tab
-change and per-mode hydration enforce the same contract (layered, not single-owner). Items 3-5 and visual inspection
-remain open.
+change and per-mode hydration enforce the same contract (layered, not single-owner). Later the same day: item 3 found
+a defect (an open Transition Advanced never survived reopen: the projection compared the pill's display name with its
+section id) and fixed it; items 4-5 (reload, refused leave, failed target build) and the Visualizer Advanced/Technical
+roots are covered by the same real-dialog file (9 tests). A full reload deliberately returns the Visualizers tab to
+Setup with every disclosure closed. Visual/mixed-DPI inspection and operator acceptance remain open.
 
 **Known verification limitation:** No PySide6 in this container. Native signal ordering, QWidget ancestry under all builders, Qt paint/scroll/rail behavior and Settings reopen are **not visually confirmed**. The source implementation is offered for a local native agent to test and correct, not operator-approved finished UX.
