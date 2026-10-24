@@ -562,24 +562,61 @@ def _refresh_eb_volume(tab):
     from core.settings.visualizer_paths import direction_of
     emission_geometry = _eb_live_value(tab, 'extruded_bubble_emission_geometry')
     lighting_coverage = _eb_live_value(tab, 'extruded_bubble_lighting_coverage')
+    light_guides = _eb_scene_light_guides(tab, deep, light, effective['rays'])
     for role, key in keys.items():
         widget = getattr(tab, key, None)
         if not isinstance(widget, SceneVolumeMapper):
             continue
         ghosts = {other: effective[other] for other in keys if other != role}
-        try:
-            scene_direction = direction_of(effective[role])
-        except ValueError:
-            # A Deep linked Ray Source can coincide with its independent End.
-            # The effective empty path has no boundary guides, as in rendering.
-            scene_direction = (0., 0., 0.)
+        if role == 'stream':
+            try:
+                scene_direction, scene_source = direction_of(effective[role]), effective[role][:3]
+            except ValueError:
+                scene_direction, scene_source = (0., 0., 0.), effective[role][:3]
+        else:
+            # SCENE light's actual entry faces, as the renderer admits them (none for positional Deep light).
+            scene_direction, scene_source = light_guides
         widget.setSceneReferences(paths=ghosts, base_eye=base, camera_offset=camera,
                                   camera_angles=angles,
                                   linked_source=light[:3] if deep and role == 'rays' else None,
                                   coverage_geometry=emission_geometry if role == 'stream' else lighting_coverage,
                                   scene_direction=scene_direction,
-                                  scene_source=effective[role][:3])
+                                  scene_source=scene_source,
+                                  scene_range=None if role == 'stream' else _eb_scene_light_range(deep, light,
+                                                                                                  effective['rays']))
     fce.refresh(tab, 'extruded_bubble', references=effective)
+
+
+def _eb_scene_light_guides(tab, deep, light, rays):
+    """(direction, source) for the Light/Rays editors' SCENE face guides: Surface sunlight's travel (the refracted
+    sun, ``scene_light_support``) entering through the water surface; Deep light has no entry face."""
+    if deep:
+        return (0., 0., 0.), tuple(rays[:3])
+    import math
+    from core.settings.visualizer_paths import admit_path, direction_of
+    from rendering.gl_programs.extruded_bubble_scene import water_sun_below_safe
+    try:
+        sun = tuple(-v for v in direction_of(admit_path(light, [0.0, 55.0], 'light')))
+    except ValueError:
+        return (0., 0., 0.), tuple(rays[:3])
+    norm = math.sqrt(sum(v * v for v in sun)) or 1.0
+    travel = tuple(-v for v in water_sun_below_safe(tuple(v / norm for v in sun)))
+    return travel, (0., 1., 0.)
+
+
+def _eb_scene_light_range(deep, light, rays):
+    """Deep SCENE light's lit region for the editors: (normalized emitter, per-axis normalized range), the same
+    Light Source -> Ray End range the renderer uses (``scene_light_support``); None for directional sunlight or a
+    zero range (unshaped)."""
+    if not deep:
+        return None
+    import math
+    from core.settings.visualizer_paths import WORLD_HALF, world_point
+    source, end = world_point(light[:3]), world_point(rays[3:])
+    reach = math.dist(source, end)
+    if reach <= 1e-6:
+        return None
+    return tuple(light[:3]), tuple(reach / h for h in WORLD_HALF)
 
 
 def _admit_eb_camera_offset(tab, offset):

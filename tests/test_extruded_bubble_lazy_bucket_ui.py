@@ -104,7 +104,8 @@ def test_lighting_coverage_is_independent_and_survives_lazy_hydration(eb_tab):
     toggle_bucket(tab, "rays")  # dependent first, controlling bucket still closed
     width_row = tab._extruded_bubble_rows["extruded_bubble_beam_width"]
     path_row = tab._extruded_bubble_rows["extruded_bubble_ray_path"]
-    assert width_row.isHidden() and path_row.isHidden()
+    # SCENE: no beam width, but the Ray path authors SCENE light's extent too.
+    assert width_row.isHidden() and not path_row.isHidden()
     toggle_bucket(tab, "light")
     tab.extruded_bubble_lighting_coverage.setCurrentText("BEAM")
     assert not width_row.isHidden() and not path_row.isHidden()
@@ -300,6 +301,19 @@ def test_scene_emission_choice_and_volume_face_repaint_use_one_settings_owner(eb
     assert editor._coverage_geometry == 'SCENE'
 
 
+def _scene_light_guide(light_type, light_path):
+    """What the renderer admits (``scene_light_support``): Surface sunlight enters through the water surface along
+    the refracted sun; positional Deep light has no entry face, only its range round the emitter."""
+    import math
+    from core.settings.visualizer_paths import direction_of
+    from rendering.gl_programs.extruded_bubble_scene import water_sun_below_safe
+    if light_type == 'Deep Light':
+        return (0., 0., 0.), None
+    sun = tuple(-v for v in direction_of(light_path))
+    norm = math.sqrt(sum(v * v for v in sun))
+    return tuple(-v for v in water_sun_below_safe(tuple(v / norm for v in sun))), (0., 1., 0.)
+
+
 @pytest.mark.parametrize('light_type', ['Sunlit Surface', 'Deep Light'])
 @pytest.mark.parametrize('first_bucket', ['motion', 'light'])
 def test_scene_lighting_guides_use_own_coverage_and_path_with_lazy_hydration(
@@ -323,8 +337,12 @@ def test_scene_lighting_guides_use_own_coverage_and_path_with_lazy_hydration(
     motion = tab.extruded_bubble_stream_direction
     assert editor._coverage_geometry == 'SCENE'
     assert motion._coverage_geometry == 'BEAM'
-    assert editor._scene_source == tuple(light_path[:3])
-    assert editor._scene_direction == pytest.approx(direction_of(light_path))
+    direction, source = _scene_light_guide(light_type, light_path)
+    assert editor._scene_direction == pytest.approx(direction, abs=1e-4)   # paths persist at 6 decimals
+    if source is not None:
+        assert editor._scene_source == source and editor._scene_range is None
+    else:
+        assert editor._scene_range[0] == tuple(light_path[:3])     # Deep: the range round the emitter
     scene_image = editor.grab().toImage()
     assert scene_image.save(str(tmp_path / 'scene_light.png'))
     selector = tab.extruded_bubble_lighting_coverage
@@ -349,14 +367,17 @@ def test_scene_lighting_guides_use_own_coverage_and_path_with_lazy_hydration(
     changed = collect_extruded_bubble_mode_settings(tab)
     assert changed['extruded_bubble_light_direction'] != light_path
     assert changed['extruded_bubble_stream_direction'] == stream_path
-    assert editor._scene_source == tuple(editor.value()[:3])
-    assert editor._scene_direction == pytest.approx(direction_of(editor.value()))
+    direction, source = _scene_light_guide(light_type, list(editor.value()))
+    assert editor._scene_direction == pytest.approx(direction, abs=1e-4)   # paths persist at 6 decimals
+    if source is None:
+        assert editor._scene_range[0] == tuple(editor.value()[:3])
     # Rehydration and reverse coverage switches preserve each authored path.
     tab._save_settings_now()
     saved = tab._settings.get('widgets')['spotify_visualizer']
     load_extruded_bubble_mode_settings(tab, saved)
     assert editor._coverage_geometry == 'SCENE'
-    assert editor._scene_source == tuple(saved['extruded_bubble_light_direction'][:3])
+    assert editor._scene_direction == pytest.approx(
+        _scene_light_guide(light_type, saved['extruded_bubble_light_direction'])[0], abs=1e-4)
     selector.setCurrentText('BEAM')
     assert editor._coverage_geometry == 'BEAM'
     assert motion._coverage_geometry == 'SCENE'

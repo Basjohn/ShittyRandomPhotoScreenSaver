@@ -802,6 +802,7 @@ class SceneVolumeMapper(_VisualControl):
         self._camera_angles = (0., 0.)
         self._linked_source = None
         self._coverage_geometry = 'BEAM'
+        self._scene_range = None     # SCENE positional light: (normalized centre, per-axis normalized radius)
         self._scene_direction = (0., 1., 0.)
         self._scene_source = (0., -1., 0.)
         self._references = {}
@@ -836,8 +837,9 @@ class SceneVolumeMapper(_VisualControl):
     def setSceneReferences(self, *, paths=None, base_eye=(0., 0., 0.), camera_offset=(0., 0., 0.),
                            camera_angles=(0., 0.), linked_source=None,
                            coverage_geometry='BEAM', scene_direction=(0., 1., 0.),
-                           scene_source=(0., -1., 0.)):
+                           scene_source=(0., -1., 0.), scene_range=None):
         self._references = dict(paths or {})
+        self._scene_range = (tuple(float(v) for v in scene_range[0]), tuple(float(v) for v in scene_range[1]))             if scene_range is not None else None
         self._coverage_geometry = coverage_geometry
         self._scene_direction = tuple(float(v) for v in scene_direction)
         self._scene_source = tuple(float(v) for v in scene_source)
@@ -945,6 +947,21 @@ class SceneVolumeMapper(_VisualControl):
                     p.setPen(QPen(outline, 1.4))
                     p.drawPolygon(QPolygonF(vertices))
             p.setBrush(Qt.BrushStyle.NoBrush)
+            if self._scene_range is not None:
+                # A positional light's lit region: its range round the emitter, as three great circles.
+                import math
+                centre, radius = self._scene_range
+                p.setPen(QPen(QColor(255, 195, 99, 120), 1.4, Qt.PenStyle.DashLine))
+                for a, b in ((0, 1), (0, 2), (1, 2)):
+                    path = QPainterPath()
+                    for i in range(65):
+                        t = 2.0 * math.pi * i / 64.0
+                        point = list(centre)
+                        point[a] += radius[a] * math.cos(t)
+                        point[b] += radius[b] * math.sin(t)
+                        projected = self._point(point)
+                        path.moveTo(projected) if i == 0 else path.lineTo(projected)
+                    p.drawPath(path)
         # Faint neighbouring path references; no second coordinate authority.
         colors = {'stream': QColor(87, 197, 212, 90), 'light': QColor(250, 183, 92, 90),
                   'rays': QColor(210, 157, 236, 90)}

@@ -201,6 +201,23 @@ rejected); inherited-cohort explanation [ ] (test hypothesis); surface exit [ ]
 
 ## SCENE controller geometry and remaining physical-light work
 
+**SCENE light extent (2026-10-24).** SCENE no longer ignores the Ray path: `scene_light_support`
+(`rendering/gl_programs/extruded_bubble_scene.py`) is the one owner of its extent for the shaft shader and both
+Settings editors, and the Ray Source → End editor is shown for SCENE as well as BEAM.
+- *Sunlit Surface* (directional, open water): sunlight enters only through the water surface along the refracted sun,
+  which the path cannot re-aim; Ray End's depth below the surface is how deep it reaches (fade from 0.9x to 1.3x).
+  Walls admit nothing in open water, so no wall face is offered. The editors draw the surface as the inlet face.
+- *Deep Light* (positional): the emitter stays at Light Source; Light Source → Ray End is its range (fade from 0.5x to
+  1.1x) and aim (brightest toward End, 35% behind). It has no entry face; the editors draw its range round the
+  emitter instead.
+- The tank boundary is soft (last 6%), fixing the binary-coverage defect; where the pattern is momentarily empty the
+  shadow centroid falls back to the lit medium (the zero-density centroid defect). A zero range leaves the light
+  unshaped, and the uniforms default to that, so BEAM and any program that never sets them are unchanged.
+- Measured on presets 1 (Surface) and 5 (Deep) with their default paths against the previous tree: preset 1 matches
+  (mean 0.69/765 per pixel, none above 24), preset 5 changes gently (its range now ends near the floor, aimed down).
+  Natively verified by `tests/test_extruded_bubble_scene_light_extent_gpu.py`; moving all-angle visual acceptance is
+  still open.
+
 `SceneVolumeMapper` owns the common oblique projection, path handles, boundary guides and camera/aim cues.
 The Settings builder supplies each editor's own path and coverage: Motion uses Emission Geometry; Light/Rays
 use Lighting Coverage. Selector changes and lazy hydration refresh built controls without opening other buckets.
