@@ -22,7 +22,9 @@ idle size converges to a contracted constant rather than continuing periodic bre
 
 **Collisions.** Overlapping bubbles admitted by ``collision_scope`` resolve once per contact, chosen by the
 Fuse / Pop / Bounce shares from the pair's identities: Fuse joins them into a cluster (at most ``CLUSTER_MAX``
-members) that then moves as one; Pop fades the smaller one out softly; Bounce pushes them gently apart.
+members) that then moves as one; Pop fades the smaller one out softly; Bounce sends them apart along the
+contact normal with a decaying separation velocity. A popping bubble keeps its space until its fade ends, so
+neither the survivor nor a third bubble slides through it; no pair is left grinding against another.
 """
 from __future__ import annotations
 
@@ -43,6 +45,11 @@ CLUSTER_STRIDE = 4         # members, then up to three member slots (indices int
 _FADE_IN = 0.6             # seconds
 _FADE_OUT = 0.9
 _POP_SECONDS = 2.4         # extremely gentle opacity retirement, never geometric implosion
+# Contact separation: a bounced (or popped) pair moves apart along its contact normal with a decaying
+# separation velocity, and any remaining overlap is corrected within about a tenth of a second.
+_SEPARATION_SPEED = (0.15, 0.6)   # x WORLD_UNIT per second, scaled by overlap
+_SEPARATION_DECAY = 0.45          # seconds
+_OVERLAP_CORRECTION = 0.10        # seconds
 _LARGE_RADIUS = (0.075 * WORLD_UNIT, 0.16 * WORLD_UNIT)
 _MID_RADIUS = (0.025 * WORLD_UNIT, 0.07 * WORLD_UNIT)
 # (musical expansion, quiet contraction). Large keeps the existing .13 nominal
@@ -145,6 +152,7 @@ class _Bubble:
     pop_alpha: float = 1.0
     cluster: int = -1
     offset: tuple[float, float, float] = (0.0, 0.0, 0.0)   # from its cluster's centre
+    push: tuple[float, float, float] = (0.0, 0.0, 0.0)     # decaying contact separation velocity
 
 
 @dataclass(slots=True)
@@ -156,6 +164,7 @@ class _Cluster:
     members: list[int] = field(default_factory=list)
     # Connected tree: stable member IDs, admitted world direction and distance / summed radii.
     edges: list[tuple[int, int, tuple[float, float, float], float]] = field(default_factory=list)
+    push: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
 
 def stream_vector(around: float, height: float) -> tuple[float, float, float]:
@@ -189,6 +198,14 @@ def _smooth_above(value: float, knee: float, softness: float) -> float:
 def _follow(current: float, target: float, dt: float, attack: float, release: float) -> float:
     tau = attack if target > current else release
     return target + (current - target) * math.exp(-dt / max(tau, 1e-4))
+
+
+def _decayed(vector: tuple[float, float, float], dt: float) -> tuple[float, float, float]:
+    if vector == (0.0, 0.0, 0.0):
+        return vector
+    k = math.exp(-dt / _SEPARATION_DECAY)
+    out = tuple(v * k for v in vector)
+    return (0.0, 0.0, 0.0) if sum(v * v for v in out) < (1e-4 * WORLD_UNIT) ** 2 else out
 
 
 def _reaction_scale(pair: tuple[float, float], drive: float, expansion: float, contraction: float) -> float:
@@ -646,9 +663,10 @@ class ExtrudedBubbleSimulation:
             swing = (controls.sway * WORLD_UNIT * 0.06 * min(1.0, self._motion_rate) * rest_motion_boost
                      * math.sin(t * (1.1 + 0.5 * math.sin(b.phase)) + 3.0 * b.phase))
             deep = self._drift * WORLD_UNIT * 0.015 * math.sin(t * 0.29 + 1.7 * b.phase)
-            b.x += dt * (direction[0] * forward + across[0] * (wander + swing) + depth_axis[0] * deep)
-            b.y += dt * (direction[1] * forward + across[1] * (wander + swing) + depth_axis[1] * deep)
-            b.z += dt * (direction[2] * forward + across[2] * (wander + swing) + depth_axis[2] * deep)
+            b.x += dt * (direction[0] * forward + across[0] * (wander + swing) + depth_axis[0] * deep + b.push[0])
+            b.y += dt * (direction[1] * forward + across[1] * (wander + swing) + depth_axis[1] * deep + b.push[1])
+            b.z += dt * (direction[2] * forward + across[2] * (wander + swing) + depth_axis[2] * deep + b.push[2])
+            b.push = _decayed(b.push, dt)
         for c in self._clusters.values():
             members = [self._find(i) for i in c.members]
             members = [m for m in members if m is not None]
@@ -656,9 +674,10 @@ class ExtrudedBubbleSimulation:
                 continue
             forward = speed * 0.9
             wander = self._drift * WORLD_UNIT * 0.04 * math.sin(t * 0.31 + c.ident)
-            c.x += dt * (direction[0] * forward + across[0] * wander)
-            c.y += dt * (direction[1] * forward + across[1] * wander)
-            c.z += dt * (direction[2] * forward + across[2] * wander)
+            c.x += dt * (direction[0] * forward + across[0] * wander + c.push[0])
+            c.y += dt * (direction[1] * forward + across[1] * wander + c.push[1])
+            c.z += dt * (direction[2] * forward + across[2] * wander + c.push[2])
+            c.push = _decayed(c.push, dt)
             self._place_cluster(c, members)
 
         self._collide(controls, dt)
@@ -723,6 +742,12 @@ class ExtrudedBubbleSimulation:
             return False
         return scope == "all" or (scope == "big") == b.large
 
+    def _obstacle(self, b: _Bubble, scope: str) -> bool:
+        """A popping bubble fades for seconds: it still occupies space (no new event, separation only)."""
+        if scope == "off" or b.popping < 0.0 or b.leaving or b.alpha <= 0.05:
+            return False
+        return scope == "all" or (scope == "big") == b.large
+
     def _collide(self, controls: ExtrudedBubbleControls, dt: float) -> None:
         scope = controls.collision_scope
         fuse, pop, bounce = controls.collision
@@ -735,7 +760,7 @@ class ExtrudedBubbleSimulation:
         cell = max(.1, 2.0 * max((b.current_radius for b in self._bubbles), default=0.0))
         grid: dict[tuple[int, int, int], list[_Bubble]] = {}
         for b in self._bubbles:
-            if self._admitted(b, scope):
+            if self._admitted(b, scope) or self._obstacle(b, scope):
                 grid.setdefault((int(math.floor(b.x / cell)), int(math.floor(b.y / cell)),
                                  int(math.floor(b.z / cell))), []).append(b)
         # Freeze discovery before any response moves a member or changes cluster ownership.
@@ -750,6 +775,14 @@ class ExtrudedBubbleSimulation:
                     candidates.append((a, b))
         touching: set[tuple[int, int]] = set()
         for a, b in candidates:
+            if a.popping >= 0.0 or b.popping >= 0.0:
+                # A fading pop keeps its space until it is gone; the survivor and any third bubble
+                # are separated from it instead of sliding through it.
+                if self._obstacle(a, scope) or self._obstacle(b, scope):
+                    if all(self._admitted(m, scope) or self._obstacle(m, scope) for m in (a, b)) \
+                            and not (a.cluster >= 0 and a.cluster == b.cluster) and self._bounce(a, b, dt):
+                        touching.add((a.ident, b.ident))
+                continue
             if not self._admitted(a, scope) or not self._admitted(b, scope):
                 continue
             if a.cluster >= 0 and a.cluster == b.cluster:
@@ -774,7 +807,7 @@ class ExtrudedBubbleSimulation:
                 else:
                     response = "bounce"
                 self._contacts[pair] = response
-            if self._contacts[pair] == "bounce":
+            if self._contacts[pair] in ("bounce", "pop"):
                 self._bounce(a, b, dt)
         # Contacts end when the pair separates (so a later meeting resolves anew).
         self._contacts = {pair: response for pair, response in self._contacts.items()
@@ -799,14 +832,18 @@ class ExtrudedBubbleSimulation:
         distance = math.sqrt(dx * dx + dy * dy + dz * dz)
         axis = (dx / distance, dy / distance, dz / distance) if distance > 1e-9 else (1.0, 0.0, 0.0)
         edges.append((a.ident, b.ident, axis, distance / (a.current_radius + b.current_radius)))
+        # The joined body keeps its members' mass-weighted separation velocity.
+        pushes = [self._clusters[m.cluster].push if m.cluster >= 0 else m.push for m in bubbles]
+        push = tuple(sum(v[i] * m.radius ** 3 for v, m in zip(pushes, bubbles)) / weight for i in range(3))
         for old in {a.cluster, b.cluster} - {-1}:
             self._clusters.pop(old, None)
         ident = min(m.ident for m in bubbles)
-        cluster = _Cluster(ident, cx, cy, cz, [m.ident for m in bubbles], edges)
+        cluster = _Cluster(ident, cx, cy, cz, [m.ident for m in bubbles], edges, push)
         self._clusters[ident] = cluster
         for m in bubbles:
             m.cluster = ident
             m.offset = (m.x - cx, m.y - cy, m.z - cz)
+            m.push = (0.0, 0.0, 0.0)
         return True
 
     def _place_cluster(self, cluster: _Cluster, members: list[_Bubble]) -> None:
@@ -828,26 +865,39 @@ class ExtrudedBubbleSimulation:
             m.offset = tuple(positions[m.ident][i] - center[i] for i in range(3))
             m.x, m.y, m.z = (c + d for c, d in zip((cluster.x, cluster.y, cluster.z), m.offset))
 
-    def _bounce(self, a: _Bubble, b: _Bubble, dt: float) -> None:
+    def _bounce(self, a: _Bubble, b: _Bubble, dt: float) -> bool:
+        """Drive an overlapping pair apart; False once they no longer overlap.
+
+        Motion is kinematic (stream, drift, sway), so a bounce needs its own separation velocity:
+        the old positional nudge (0.35 s, capped at 0.2 units/s) was slower than the flow and
+        breathing that close a gap, and pairs ground against each other instead of bouncing away.
+        """
         dx, dy, dz = b.x - a.x, b.y - a.y, b.z - a.z
         distance = math.sqrt(dx * dx + dy * dy + dz * dz)
         overlap = (a.current_radius + b.current_radius) - distance
         if overlap <= 0.0:
-            return
-        # Continue a gentle dt-bounded response after the once-per-contact event choice.
-        groups = [([self._find(i) for i in self._clusters[bubble.cluster].members]
+            return False
+        groups = [([m for m in (self._find(i) for i in self._clusters[bubble.cluster].members) if m is not None]
                    if bubble.cluster >= 0 else [bubble]) for bubble in (a, b)]
         weights = [sum(m.radius ** 3 for m in group) for group in groups]
-        move = min(overlap * (1.0 - math.exp(-dt / .35)), WORLD_UNIT * .2 * dt)
+        move = min(overlap * (1.0 - math.exp(-dt / _OVERLAP_CORRECTION)), WORLD_UNIT * 1.5 * dt)
         axis = (dx / distance, dy / distance, dz / distance) if distance > 1e-8 else (1.0, 0.0, 0.0)
+        low, high = _SEPARATION_SPEED
+        speed = WORLD_UNIT * max(low, min(high, overlap / (0.3 * WORLD_UNIT)))
         for bubble, group, sign, share in ((a, groups[0], -1.0, weights[1] / sum(weights)),
                                           (b, groups[1], 1.0, weights[0] / sum(weights))):
             delta = tuple(sign * move * share * v for v in axis)
             for m in group:
                 m.x += delta[0]; m.y += delta[1]; m.z += delta[2]
+            owner = self._clusters[bubble.cluster] if bubble.cluster >= 0 else bubble
             if bubble.cluster >= 0:
-                cluster = self._clusters[bubble.cluster]
-                cluster.x += delta[0]; cluster.y += delta[1]; cluster.z += delta[2]
+                owner.x += delta[0]; owner.y += delta[1]; owner.z += delta[2]
+            # Raise (never lower) the outward component of the separation velocity while touching.
+            outward = sum(p * sign * v for p, v in zip(owner.push, axis))
+            needed = speed * share
+            if outward < needed:
+                owner.push = tuple(p + sign * (needed - outward) * v for p, v in zip(owner.push, axis))
+        return True
 
     def _prune_clusters(self) -> None:
         live = {b.ident: b for b in self._bubbles}

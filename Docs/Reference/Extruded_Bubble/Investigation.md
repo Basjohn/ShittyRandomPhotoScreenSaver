@@ -2893,6 +2893,25 @@ absolute distribution to 2D (distance 3.0 vs 3.3) and stronger small response; 5
 
 Rejected: knee 0.70 (quieter song median 0.57), a 0.60 knee with the original held weight (crest too low).
 
+## 67. Collision rubbing (24 October; candidate)
+
+Operator: bubbles sometimes rub against each other, even with Bounce at 0%; the triangle only allows fuse, pop
+or bounce. Census on four recorded songs (preset 3 collision, visible pairs outside one fused cluster
+interpenetrating by > 25% of the smaller radius; `scratchpad eb_rub_probe`):
+
+| cause | before (pairs/frame, episodes > 0.3 s) | after |
+| --- | --- | --- |
+| pop fade: survivor/third bubble slid through a fading pop (popping bubbles left collisions at once while fading 2.4 s) | 0.29, 84 | 0.04, 0 |
+| bounce contacts that never separated (positional nudge 0.35 s, capped 0.2 units/s, slower than flow/breathing) | 0.28, 65 | 0.03, 0 |
+| Bounce 0% (fuse/pop 50/50): pop fade + full-cluster fuse falling back to bounce | 0.41 + 0.06, 130 | 0.06 + 0.01, 0 |
+
+Fix: bounce gives the pair (or the clusters as bodies) a separation velocity along the normal (0.15–0.6
+WORLD_UNIT/s by overlap, decaying 0.45 s, raised never lowered while touching) and corrects remaining overlap
+within ~0.1 s (capped 1.5 WORLD_UNIT/s); a popping bubble is an obstacle until its fade ends (separation only, no
+new event). Large range on preset 3 is unchanged or higher (anything_mixed2 0.62 → 0.78). Native consecutive frames:
+`logs/eb_breathing/2026-10-24/pixels/am2_p3_bounce/strip.png`. The world test's `< .01` first-step bound encoded the
+slow nudge; it now asserts no snap (< 10% of the overlap in one 1/120 s step).
+
 ### 2026-10-23 replay tooling cleanup annotation
 
 Historical entries referring to `extruded_bubble_startup_probe.py` document what investigators used at the time, not a live required diagnostic. The one-off command was retired and the test-owned Qt-free simulation support moved into `tools/visualizer_replay/eb_simulation_support.py`; behavioral overshoot coverage now lives in normal tests. The authored preset references in the old probe were replaced by synthetic fixture profiles. This does not establish visual acceptance of breathing or real-music parity. See [Test Oracle Repair](../../Audits/Test_Oracle_Repair_2026-10-23.md).

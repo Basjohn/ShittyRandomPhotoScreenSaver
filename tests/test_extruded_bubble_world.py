@@ -119,7 +119,10 @@ def test_bounce_is_gradual_and_continues_after_event_choice():
     before = [b.x for b in sim._bubbles]
     sim.advance(MusicInput(1/120, False), controls)
     after = [b.x for b in sim._bubbles]
-    assert 0 < max(abs(a-b) for a, b in zip(after, before)) < .01
+    # No snap: one 1/120 s step resolves only a small share of the overlap (the pair then
+    # keeps separating; the old 0.01 bound encoded a nudge slower than the flow, which rubbed).
+    overlap = 2. - (before[1] - before[0])
+    assert 0 < max(abs(a-b) for a, b in zip(after, before)) < .1 * overlap
     for _ in range(120):
         sim.advance(MusicInput(1/120, False), controls)
     assert sim._bubbles[1].x - sim._bubbles[0].x > after[1] - after[0] + .5
