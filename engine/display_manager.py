@@ -798,8 +798,10 @@ class DisplayManager(QObject):
 
         admitted = self._quick_view_orbit_admitted()
         owner = self._quick_visualizer_owner
-        if owner is not None and str(owner.controller.mode_id) != 'extruded_bubble':
-            # An EB flight abandoned by a mode switch must never resume in a new mode.
+        flight = getattr(owner.controller.presentation_state, '_view_framed_flight_motion', None) \
+            if owner is not None else None
+        if flight is not None and flight.mode_id != str(owner.controller.mode_id):
+            # A flight abandoned by a mode switch must never resume in a new mode.
             setattr(owner.controller.presentation_state, '_view_framed_flight_motion', None)
         if admitted and owner is not None:
             # A completed startup or mode/preset swap starts Auto Rotate at once (when the mode has it on).
@@ -827,8 +829,10 @@ class DisplayManager(QObject):
         framed = bool(admitted and mode and get_visualizer_mode_descriptor(mode).scene_transform_settings)
         runtime = unit.runtime
         runtime.input_controller.set_view_orbit_enabled(admitted)
-        runtime.input_controller.set_framed_flight_enabled(bool(admitted and mode == "extruded_bubble"))
-        runtime.scene_controller.set_visualizer_camera_reset_available(bool(admitted and mode == "extruded_bubble"))
+        from core.settings.framed_camera import spec_for_mode
+        physical = bool(admitted and mode and spec_for_mode(mode) is not None)
+        runtime.input_controller.set_framed_flight_enabled(physical)
+        runtime.scene_controller.set_visualizer_camera_reset_available(physical)
         runtime.scene_controller.set_visualizer_control_hints_available(framed)
         runtime.input_controller.set_scene_transform_enabled(framed, mode_id=mode)
 
@@ -851,15 +855,19 @@ class DisplayManager(QObject):
 
     def _set_quick_framed_flight_rates(self, yaw: float, pitch: float,
                                        strafe: float, travel: float) -> None:
-        """EB only: physical camera flight and yaw/pitch on the existing capture clock."""
+        """Framed physical camera flight and yaw/pitch on the existing capture clock."""
         owner = self._quick_visualizer_owner
-        if owner is None or owner.is_retired or str(owner.controller.mode_id) != 'extruded_bubble':
+        if owner is None or owner.is_retired:
+            return
+        from core.settings.framed_camera import spec_for_mode
+        mode_id = str(owner.controller.mode_id)
+        if spec_for_mode(mode_id) is None:
             return
         from widgets.spotify_visualizer.view_orbit import set_framed_flight_rates
         values = set_framed_flight_rates(owner.controller.presentation_state,
-                                        'extruded_bubble', yaw, pitch, strafe, travel, time.time())
+                                        mode_id, yaw, pitch, strafe, travel, time.time())
         if values:
-            self._quick_view_orbit_pending = ('extruded_bubble', values)
+            self._quick_view_orbit_pending = (mode_id, values)
             self._quick_view_pose_owner = owner
             self._refresh_quick_visualizer_edit_content_envelope()
 
@@ -1080,13 +1088,15 @@ class DisplayManager(QObject):
         # Reset of the lens is explicit, not a preset artwork rewrite. The
         # old 62-degree projection must not survive the Home command unnoticed.
         lens = {}
-        if mode == "extruded_bubble":
-            lens["extruded_bubble_camera_fov"] = float(require_canonical_default(
-                "widgets.spotify_visualizer.extruded_bubble_camera_fov"))
+        from core.settings.framed_camera import spec_for_mode
+        spec = spec_for_mode(mode)
+        if spec is not None:
+            lens[spec.key("camera_fov")] = float(require_canonical_default(
+                "widgets.spotify_visualizer." + spec.key("camera_fov")))
             # The editable 3D position is a physical camera translation, not
             # preset artwork. R/home must restore it with the same authority.
-            lens["extruded_bubble_camera_position"] = list(require_canonical_default(
-                "widgets.spotify_visualizer.extruded_bubble_camera_position"))
+            lens[spec.key("camera_position")] = list(require_canonical_default(
+                "widgets.spotify_visualizer." + spec.key("camera_position")))
         apply_presentation_vis_mode_kwargs(pres, {**home, **lens})
         from core.settings.visualizer_view_orbit import resolve_visualizer_view_orbit
         custom = settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
@@ -1145,10 +1155,12 @@ class DisplayManager(QObject):
         config, cache = resolve_visualizer_view_orbit(
             section, custom_presets, mode=mode_id, values=values
         )
-        if mode_id == 'extruded_bubble':
+        from core.settings.framed_camera import spec_for_mode
+        spec = spec_for_mode(mode_id)
+        if spec is not None:
             # Persistent camera translation belongs to live view, never a curated preset.
-            config['extruded_bubble_camera_position'] = list(
-                owner.controller.presentation_state._extruded_bubble_camera_position)
+            position_key = spec.key('camera_position')
+            config[position_key] = list(getattr(owner.controller.presentation_state, '_' + position_key))
         settings.replace_visualizer_runtime_preset_state(config, cache)
         self._widgets_config_snapshot["spotify_visualizer"] = deepcopy(config)
         self._refresh_all_quick_context_menus()

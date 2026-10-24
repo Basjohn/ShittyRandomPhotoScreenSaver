@@ -1,4 +1,4 @@
-"""Live 3D view control: freeform WASD orbit, EB Q/E yaw and camera-facing WASD flight,
+"""Live 3D view control: freeform WASD orbit, framed-camera Q/E yaw and camera-facing WASD flight,
 plus shared Alt + left drag. No second camera, clock, or FOV manipulation.
 
 A mode opts in through its descriptor's ``view_orbit_settings`` (its turn and tilt
@@ -107,7 +107,7 @@ class ViewOrbitMotion:
 
 @dataclass(frozen=True, slots=True)
 class FramedFlightMotion:
-    """One immutable keyboard gesture for the EB physical camera, evaluated on capture time."""
+    """One immutable keyboard gesture for a framed physical camera, evaluated on capture time."""
     mode_id: str
     since: float
     offset: tuple[float, float, float]
@@ -122,6 +122,7 @@ class FramedFlightMotion:
     pan_y: float = 0.
     fov: float = 45.
     surface_bound: bool = True
+    floor: Any = field(default=None, compare=False)   # the mode's eye floor at publication (immutable)
     pitch_limit_offset: tuple[float, float, float] | None = field(default=None, init=False, repr=False, compare=False)
 
     def __post_init__(self):
@@ -132,61 +133,85 @@ class FramedFlightMotion:
             object.__setattr__(self, 'pitch_limit_offset', _changing_pitch_flight(self, limit))
 
 
-def _flight_geometry(host):
-    values = _eb_camera_values(host)
-    return (values['extruded_bubble_scene_scale'], values['extruded_bubble_scene_pan_x'],
-            values['extruded_bubble_scene_pan_y'], values['extruded_bubble_camera_fov'],
-            values['extruded_bubble_light_type'] == 'Sunlit Surface')
+def _spec(mode_id):
+    from core.settings.framed_camera import spec_for_mode
+    return spec_for_mode(mode_id)
 
 
-def _eb_camera_values(host, values=None):
+def _position_key(mode_id) -> str:
+    return _spec(mode_id).key('camera_position')
+
+
+def _flight_geometry(host, mode_id):
+    spec = _spec(mode_id)
+    values = _camera_values(host, spec)
+    return (values[spec.key('scene_scale')], values[spec.key('scene_pan_x')], values[spec.key('scene_pan_y')],
+            values[spec.key('camera_fov')], spec.surface_bound(values), spec.floor(values))
+
+
+def _camera_values(host, spec, values=None):
     from core.settings.default_contract import require_canonical_default
-    from core.settings.extruded_bubble_camera import CAMERA_INPUT_KEYS
     result = {}
-    for key in CAMERA_INPUT_KEYS:
+    for key in spec.input_keys:
         value = getattr(host, '_' + key, None)
         result[key] = require_canonical_default('widgets.spotify_visualizer.' + key) if value is None else value
     result.update(values or {})
     return result
 
 
-def _bounded_eb_values(host, values):
-    from core.settings.extruded_bubble_camera import admit_camera_parameters
-    return {**values, 'extruded_bubble_camera_position': admit_camera_parameters(_eb_camera_values(host, values))}
+def _bounded_camera_values(host, mode_id, values):
+    from core.settings.framed_camera import admit_camera_parameters
+    spec = _spec(mode_id)
+    if spec is None:
+        return dict(values)
+    return {**values, spec.key('camera_position'): admit_camera_parameters(spec, _camera_values(host, spec, values))}
+
+
+def _ceiling(motion, spec):
+    return spec.surface_ceiling if motion.surface_bound else None
+
+
+def _tilt_at(motion, spec, t):
+    low, high = spec.tilt_range
+    return max(low, min(high, motion.tilt + motion.tilt_rate * t))
 
 
 def _constant_pitch_flight(motion, offset, start, end, strafe, travel):
     """Exact box saturation along circular horizontal motion, bounded for long holds.
 
     Split at coordinate extrema. A full zero-net cycle's translated-clamp map is
-    idempotent, so repeated cycles need only one evaluation. Y saturates linearly.
+    idempotent, so repeated cycles need only one evaluation. Y saturates linearly
+    (and, with a floor, rises over the ground it reaches).
     """
-    from core.constants.extruded_bubble_world import WORLD_HALF
-    from core.settings.extruded_bubble_camera import camera_baseline, bound_camera_eye
-    pitch = math.radians(16. + 90.*max(-.5, min(.5, motion.tilt+motion.tilt_rate*start)))
+    from core.settings.framed_camera import bound_eye, camera_baseline, pitch_radians
+    spec = _spec(motion.mode_id)
+    scale_xyz = spec.offset_scale
+    pitch = pitch_radians(spec, _tilt_at(motion, spec, start))
     cp, sp = math.cos(pitch), math.sin(pitch)
     def baseline(t):
-        return camera_baseline(motion.turn+motion.turn_rate*t,
-            max(-.5, min(.5, motion.tilt+motion.tilt_rate*t)), motion.scale,
-            motion.pan_x, motion.pan_y, motion.fov, motion.surface_bound)
+        return camera_baseline(spec, motion.turn + motion.turn_rate * t, _tilt_at(motion, spec, t), motion.scale,
+                               motion.pan_x, motion.pan_y, motion.fov, _ceiling(motion, spec))
+    def bound(eye):
+        return bound_eye(spec, eye, motion.floor)
     base = baseline(start)
-    eye = list(bound_camera_eye(tuple(base[i]+offset[i]*WORLD_HALF[i] for i in range(3))))
-    duration, speed = end-start, FRAMED_CAMERA_TRAVEL_UNITS_PER_SECOND
-    omega = math.pi*motion.turn_rate
-    theta = math.remainder(math.pi*(motion.turn+motion.turn_rate*start), math.tau)
+    eye = list(bound(tuple(base[i] + offset[i] * scale_xyz[i] for i in range(3))))
+    duration, speed = end - start, spec.travel_speed
+    omega = spec.yaw_span * motion.turn_rate
+    theta = math.remainder(spec.yaw_span * (motion.turn + motion.turn_rate * start), math.tau)
     if abs(omega) < 1e-14:
         moved = (strafe*math.cos(theta)-travel*cp*math.sin(theta), travel*sp,
                  -strafe*math.sin(theta)-travel*cp*math.cos(theta))
-        eye = list(bound_camera_eye(tuple(eye[i]+speed*duration*moved[i] for i in range(3))))
+        eye = list(bound(tuple(eye[i]+speed*duration*moved[i] for i in range(3))))
     else:
         period = math.tau/abs(omega)
         remainder = duration % period
         if min(remainder, period-remainder) < period*1e-12:
             remainder = 0.
         span = duration if duration < period else period+remainder
-        # Baseline X=B*sin(theta)+P*cos(theta), Z=B*cos(theta)-P*sin(theta).
-        b = base[0]*math.sin(theta)+base[2]*math.cos(theta)
-        p = base[0]*math.cos(theta)-base[2]*math.sin(theta)
+        # Baseline relative to the pivot: X=B*sin(theta)+P*cos(theta), Z=B*cos(theta)-P*sin(theta).
+        rx, rz = base[0] - spec.pivot[0], base[2] - spec.pivot[2]
+        b = rx*math.sin(theta)+rz*math.cos(theta)
+        p = rx*math.cos(theta)-rz*math.sin(theta)
         a, d = b*omega+speed*strafe, p*omega+speed*travel*cp
         phases = (math.atan2(a, d), math.atan2(-d, a))
         for axis, phase in zip((0, 2), phases):
@@ -207,44 +232,48 @@ def _constant_pitch_flight(motion, offset, start, end, strafe, travel):
                          2.*sh*(-b*sm-p*cm)+distance*(-strafe*sm-travel*cp*cm))
                 proposed = list(eye)
                 proposed[axis] += delta
-                eye[axis] = bound_camera_eye(proposed)[axis]
-        eye[1] = bound_camera_eye((eye[0], eye[1]+speed*duration*travel*sp, eye[2]))[1]
+                eye[axis] = bound(proposed)[axis]
+        eye[1] = bound((eye[0], eye[1]+speed*duration*travel*sp, eye[2]))[1]
     final_base = baseline(end)
-    return tuple((eye[i]-final_base[i])/WORLD_HALF[i] for i in range(3))
+    return tuple((eye[i]-final_base[i])/scale_xyz[i] for i in range(3))
 
 
 def _pitch_limit_time(motion):
-    return max(0., ((.5 if motion.tilt_rate>0 else -.5)-motion.tilt)/motion.tilt_rate) if motion.tilt_rate else 0.
+    if not motion.tilt_rate:
+        return 0.
+    low, high = _spec(motion.mode_id).tilt_range
+    return max(0., ((high if motion.tilt_rate > 0 else low) - motion.tilt) / motion.tilt_rate)
 
 
 def _flight_offset(motion, offset, t):
-    from core.settings.extruded_bubble_camera import resolve_camera_position
-    return resolve_camera_position(motion.turn + motion.turn_rate*t,
-        max(-.5, min(.5, motion.tilt + motion.tilt_rate*t)), motion.scale, motion.pan_x,
-        motion.pan_y, motion.fov, offset, motion.surface_bound)[1]
+    from core.settings.framed_camera import resolve_camera_position
+    spec = _spec(motion.mode_id)
+    return resolve_camera_position(spec, motion.turn + motion.turn_rate*t, _tilt_at(motion, spec, t), motion.scale,
+                                   motion.pan_x, motion.pan_y, motion.fov, offset, _ceiling(motion, spec),
+                                   motion.floor)[1]
 
 
 def _changing_pitch_flight(motion, duration):
-    from core.constants.extruded_bubble_world import WORLD_HALF
+    from core.settings.framed_camera import pitch_radians
+    spec = _spec(motion.mode_id)
+    scale_xyz = spec.offset_scale
     offset = _flight_offset(motion, motion.offset, 0.)
     magnitude = math.hypot(motion.strafe, motion.travel)
     strafe, travel = motion.strafe / max(1.0, magnitude), motion.travel / max(1.0, magnitude)
     # Production Shift+W/S reaches a pitch limit within 1.5s. The .015rad
     # subdivision is independent of frame rate; 512 bounds synthetic slow rates.
-    spans = min(512, max(1, math.ceil(duration*math.pi*(abs(motion.turn_rate)+.5*abs(motion.tilt_rate))/.015)))
+    spans = min(512, max(1, math.ceil(duration*(abs(spec.yaw_span*motion.turn_rate)
+                                                 + abs(math.radians(spec.pitch_span_degrees)*motion.tilt_rate))/.015)))
     portion = duration / spans
     for i in range(spans):
         t = (i + 0.5) * portion
-        yaw = math.pi * (motion.turn + motion.turn_rate * t)
-        # EB's canonical tilt is [-0.5, 0.5]; no Qt/config imports on the capture path.
-        tilt = max(-0.5, min(0.5, motion.tilt + motion.tilt_rate * t))
-        pitch = math.radians(16.0 + 90.0 * tilt)
+        yaw = spec.yaw_span * (motion.turn + motion.turn_rate * t)
+        pitch = pitch_radians(spec, _tilt_at(motion, spec, t))
         sy, cy = math.sin(yaw), math.cos(yaw)
         cp, sp = math.cos(pitch), math.sin(pitch)
-        # Same world axes as extruded_bubble_scene.camera: right and -back.
+        # Same world axes as framed_camera.camera_axes: right and -back.
         moved = (strafe * cy - travel * sy * cp, travel * sp, -strafe * sy - travel * cy * cp)
-        requested = tuple(offset[j] + portion*moved[j]*FRAMED_CAMERA_TRAVEL_UNITS_PER_SECOND/WORLD_HALF[j]
-                          for j in range(3))
+        requested = tuple(offset[j] + portion*moved[j]*spec.travel_speed/scale_xyz[j] for j in range(3))
         # Discard outward travel at every segment, including the orbit baseline's
         # movement; never accumulate hidden overshoot during a long wall hold.
         offset = _flight_offset(motion, requested, (i+1)*portion)
@@ -268,24 +297,26 @@ def framed_flight_position(motion: FramedFlightMotion, now: float) -> tuple[floa
 def set_framed_flight_rates(host: Any, mode_id: str, yaw: float, pitch: float,
                             strafe: float, travel: float, now: float) -> Dict[str, float]:
     """One GUI-thread publication per key edge; all held motion is capture-clock owned."""
-    if mode_id != 'extruded_bubble':
+    if _spec(mode_id) is None:
         return {}
     from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
+    position_key = _position_key(mode_id)
+    turn_key, tilt_key = view_orbit_settings(mode_id)
     old = getattr(host, _FLIGHT, None)
     if isinstance(old, FramedFlightMotion) and old.mode_id == mode_id:
         offset = framed_flight_position(old, now)
     else:
-        offset = tuple(float(x) for x in getattr(host, '_extruded_bubble_camera_position'))
+        offset = tuple(float(x) for x in getattr(host, '_' + position_key))
     # Resolve the old orbit before changing its rate, even if travel and yaw are held together.
     turns = view_orbit_values(host, mode_id, now)
-    apply_presentation_vis_mode_kwargs(host, {**turns, 'extruded_bubble_camera_position': list(offset)})
+    apply_presentation_vis_mode_kwargs(host, {**turns, position_key: list(offset)})
     values = set_view_orbit_rates(host, mode_id, yaw, pitch, now)
     turn_step, tilt_step = get_visualizer_mode_descriptor(mode_id).view_orbit_steps
     setattr(host, _FLIGHT, FramedFlightMotion(
-        mode_id, float(now), offset, turns['extruded_bubble_turn'], turns['extruded_bubble_tilt'],
+        mode_id, float(now), offset, turns[turn_key], turns[tilt_key],
         float(yaw) * turn_step * VIEW_ORBIT_STEPS_PER_SECOND,
         float(pitch) * tilt_step * VIEW_ORBIT_STEPS_PER_SECOND,
-        float(strafe), float(travel), *_flight_geometry(host)))
+        float(strafe), float(travel), *_flight_geometry(host, mode_id)))
     return values
 
 
@@ -294,15 +325,17 @@ def settle_framed_flight(host: Any, now: float) -> tuple[float, float, float] | 
     if not isinstance(motion, FramedFlightMotion):
         return None
     from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
+    position_key = _position_key(motion.mode_id)
+    turn_key, tilt_key = view_orbit_settings(motion.mode_id)
     offset = framed_flight_position(motion, now)
     turns = view_orbit_values(host, motion.mode_id, now)
     # Freeze first so an intervening capture can never see a half-written value.
     setattr(host, _FLIGHT, FramedFlightMotion(motion.mode_id, now, offset,
-            turns['extruded_bubble_turn'], turns['extruded_bubble_tilt'], 0., 0., 0., 0.,
-            motion.scale, motion.pan_x, motion.pan_y, motion.fov, motion.surface_bound))
-    apply_presentation_vis_mode_kwargs(host, {**turns, 'extruded_bubble_camera_position': list(offset)})
+            turns[turn_key], turns[tilt_key], 0., 0., 0., 0.,
+            motion.scale, motion.pan_x, motion.pan_y, motion.fov, motion.surface_bound, motion.floor))
+    apply_presentation_vis_mode_kwargs(host, {**turns, position_key: list(offset)})
     setattr(host, _FLIGHT, None)
-    return tuple(host._extruded_bubble_camera_position)
+    return tuple(getattr(host, '_' + position_key))
 
 
 def rebase_framed_flight_on_drag(host: Any, now: float) -> None:
@@ -310,14 +343,17 @@ def rebase_framed_flight_on_drag(host: Any, now: float) -> None:
     motion = getattr(host, _FLIGHT, None)
     if not isinstance(motion, FramedFlightMotion):
         return
+    position_key = _position_key(motion.mode_id)
+    turn_key, tilt_key = view_orbit_settings(motion.mode_id)
     offset = framed_flight_position(motion, now)
     turns = view_orbit_values(host, motion.mode_id, now)
     from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
-    apply_presentation_vis_mode_kwargs(host, {**turns, 'extruded_bubble_camera_position': offset})
-    offset = tuple(host._extruded_bubble_camera_position)
+    apply_presentation_vis_mode_kwargs(host, {**turns, position_key: offset})
+    offset = tuple(getattr(host, '_' + position_key))
     setattr(host, _FLIGHT, FramedFlightMotion(motion.mode_id, now, offset,
-            turns['extruded_bubble_turn'], turns['extruded_bubble_tilt'],
-            motion.turn_rate, motion.tilt_rate, motion.strafe, motion.travel, *_flight_geometry(host)))
+            turns[turn_key], turns[tilt_key],
+            motion.turn_rate, motion.tilt_rate, motion.strafe, motion.travel,
+            *_flight_geometry(host, motion.mode_id)))
 
 
 def view_orbit_settings(mode_id: str) -> tuple[str, str] | tuple[()]:
@@ -407,11 +443,11 @@ def transform_visualizer_scene(host: Any, mode_id: str, values: Mapping[str, flo
     from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
     import time as _time
     now = _time.time()
-    if mode_id == 'extruded_bubble':
+    if _spec(mode_id) is not None:
         rebase_framed_flight_on_drag(host, now)
     _take_auto_rotation(host, mode_id, now)
     apply_presentation_vis_mode_kwargs(host, {key: _clamped(key, float(value)) for key, value in values.items()})
-    if mode_id == 'extruded_bubble':
+    if _spec(mode_id) is not None:
         rebase_framed_flight_on_drag(host, now)
     return view_pose_values(host, mode_id)
 
@@ -421,14 +457,14 @@ def apply_view_orbit_motion(host: Any, mode_id: str, values: Mapping[str, object
     motion = _motion(host, mode_id)
     flight = getattr(host, _FLIGHT, None)
     if isinstance(flight, FramedFlightMotion) and flight.mode_id == mode_id:
-        values = {**values, 'extruded_bubble_camera_position': framed_flight_position(flight, now)}
+        values = {**values, _position_key(mode_id): framed_flight_position(flight, now)}
     if motion is not None:
         values = {**values, **orbit_motion_values(motion, now)}
     auto = getattr(host, _AUTO, None)
     if motion is None and isinstance(auto, AutoRotate) and auto.mode_id == mode_id:
         turn_key = view_orbit_settings(mode_id)[0]
         values = {**values, turn_key: auto_rotate_turn(auto, turn_key, now)}
-    return _bounded_eb_values(host, values) if mode_id == 'extruded_bubble' else dict(values)
+    return _bounded_camera_values(host, mode_id, values)
 
 
 def _take_auto_rotation(host: Any, mode_id: str, now: float | None) -> None:
@@ -530,9 +566,10 @@ def rebase_view_orbit_motion(host: Any, now: float) -> None:
     if isinstance(flight, FramedFlightMotion):
         turn_key, tilt_key = view_orbit_settings(flight.mode_id)
         setattr(host, _FLIGHT, FramedFlightMotion(flight.mode_id, now,
-                tuple(float(x) for x in getattr(host, '_extruded_bubble_camera_position')),
+                tuple(float(x) for x in getattr(host, '_' + _position_key(flight.mode_id))),
                 float(getattr(host, f'_{turn_key}')), float(getattr(host, f'_{tilt_key}')),
-                flight.turn_rate, flight.tilt_rate, flight.strafe, flight.travel, *_flight_geometry(host)))
+                flight.turn_rate, flight.tilt_rate, flight.strafe, flight.travel,
+                *_flight_geometry(host, flight.mode_id)))
     if motion is None:
         return
     turn_key, tilt_key = view_orbit_settings(motion.mode_id)
@@ -550,7 +587,7 @@ def orbit_visualizer_view(host: Any, mode_id: str, turn_steps: float, tilt_steps
         return {}
     turn_key, tilt_key = keys
     turn_step, tilt_step = get_visualizer_mode_descriptor(mode_id).view_orbit_steps
-    if mode_id == 'extruded_bubble' and now is not None:
+    if _spec(mode_id) is not None and now is not None:
         rebase_framed_flight_on_drag(host, now)
     motion = _motion(host, mode_id)
     if motion is not None and now is not None:
@@ -559,7 +596,7 @@ def orbit_visualizer_view(host: Any, mode_id: str, turn_steps: float, tilt_steps
             mode_id, _turn_for_mode(mode_id, turn_key, values[turn_key] + turn_step * float(turn_steps)),
             _clamped(tilt_key, values[tilt_key] + tilt_step * float(tilt_steps)),
             motion.turn_rate, motion.tilt_rate, float(now)))
-        if mode_id == 'extruded_bubble':
+        if _spec(mode_id) is not None:
             rebase_framed_flight_on_drag(host, now)
         return view_orbit_values(host, mode_id, now)
     from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
@@ -585,7 +622,7 @@ def orbit_visualizer_view(host: Any, mode_id: str, turn_steps: float, tilt_steps
         turn_key: _turn_for_mode(mode_id, turn_key, values[turn_key] + turn_delta),
         tilt_key: values[tilt_key] + tilt_delta,
     })
-    if mode_id == 'extruded_bubble' and now is not None:
+    if _spec(mode_id) is not None and now is not None:
         rebase_framed_flight_on_drag(host, now)
     return view_orbit_values(host, mode_id, now)
 

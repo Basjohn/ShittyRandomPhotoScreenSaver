@@ -66,8 +66,8 @@ def test_pan_is_physical_and_card_aspect_independent():
 
 def test_preset_camera_starts_are_unchanged_and_home_resets_new_position():
     manager = (ROOT/'engine/display_manager.py').read_text(encoding='utf-8')
-    assert '"extruded_bubble_camera_position"' in manager
-    assert 'lens["extruded_bubble_camera_position"] = list(require_canonical_default(' in manager
+    assert 'lens[spec.key("camera_position")] = list(require_canonical_default(' in manager
+    assert 'lens[spec.key("camera_fov")] = float(require_canonical_default(' in manager
     # Home Reset must source the current canonical authority, not a fixed old
     # artistic value (which the operator can freely edit).
 

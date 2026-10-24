@@ -145,6 +145,10 @@ class VisualizerModeDescriptor:
     view_orbit_inertia: bool = False
     scene_pan_envelope: tuple[float, ...] = ()
     view_auto_rotate_settings: tuple[str, ...] = ()
+    # The standard framed physical camera (``core.settings.framed_camera``), as "module:SPEC": its declared pivot,
+    # distances, pitch/yaw mapping and eye bounds. A mode with one gets keyboard flight, Camera Position, Camera
+    # Field of View and reset from the shared camera; none of that code branches on a mode id.
+    framed_camera: str = ""
     # Optional framed scene pose (scale, screen-normalized pan x/y). These
     # capabilities target the scene inside the card, never CUSTOM geometry.
     # Canonical presentation specs own the numeric ranges and defaults.
@@ -392,6 +396,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),
         view_auto_rotate_settings=("extruded_bubble_auto_rotate", "extruded_bubble_auto_rotate_after",
                                    "extruded_bubble_auto_rotate_speed"),
+        framed_camera="core.settings.extruded_bubble_camera:SPEC",
         # A volume, not a landscape: pan keeps its centre in view at every zoom.
         scene_pan_envelope=(0.50, 0.50, 0.50, 0.15, 0.85),
         scene_transform_settings=("extruded_bubble_scene_scale", "extruded_bubble_scene_pan_x",

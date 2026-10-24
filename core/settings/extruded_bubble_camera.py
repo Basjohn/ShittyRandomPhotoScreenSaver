@@ -1,4 +1,4 @@
-"""Pure EB camera geometry shared by admission, motion, editors and projection.
+"""Extruded Bubble's framed camera: the first ``FramedCameraSpec`` of the shared standard (``framed_camera``).
 
 The world stays fixed. A three-unit water clearance bounds the actual eye, not
 the offset slider: it preserves the canonical home and guarantees at least that
@@ -7,70 +7,52 @@ of perceptual density or readable subpixel materials.
 """
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping
 
 from core.constants.extruded_bubble_world import WORLD_CENTER, WORLD_HALF, WATER_SURFACE_Y
+from core.settings import framed_camera as fc
 
 ORBIT_DISTANCE = 15.0
 ORBIT_PIVOT = WORLD_CENTER
 CAMERA_CLEARANCE = 3.0
-CAMERA_INPUT_KEYS = tuple('extruded_bubble_' + name for name in (
-    'turn', 'tilt', 'scene_scale', 'scene_pan_x', 'scene_pan_y',
-    'camera_fov', 'camera_position', 'light_type'))
+
+SPEC = fc.FramedCameraSpec(
+    prefix='extruded_bubble_', pivot=ORBIT_PIVOT, orbit_distance=ORBIT_DISTANCE,
+    # Looking up toward the surface by an authored 16 degrees; tilt +-0.5 pitches +-45 degrees beyond it.
+    pitch_base_degrees=16.0, pitch_span_degrees=90.0, yaw_span=fc.math.pi, tilt_range=(-0.5, 0.5),
+    eye_center=WORLD_CENTER, eye_half=WORLD_HALF, clearance=CAMERA_CLEARANCE, offset_scale=WORLD_HALF,
+    travel_speed=5.5, surface_ceiling=WATER_SURFACE_Y - .5,
+    surface_bound_hook='core.settings.extruded_bubble_camera:surface_bound', context_suffixes=('light_type',))
+CAMERA_INPUT_KEYS = SPEC.input_keys
+
+
+def surface_bound(values: Mapping[str, object]) -> bool:
+    return values['extruded_bubble_light_type'] == 'Sunlit Surface'
 
 
 def camera_axes(turn: float, tilt: float) -> tuple[float, ...]:
-    pitch = math.radians(16.0 + 90.0 * float(tilt))
-    yaw = math.pi * float(turn)
-    cp, sp, cy, sy = math.cos(pitch), math.sin(pitch), math.cos(yaw), math.sin(yaw)
-    right = (cy, 0.0, -sy)
-    back = (sy * cp, -sp, cy * cp)
-    up = (back[1] * right[2] - back[2] * right[1], back[2] * right[0] - back[0] * right[2],
-          back[0] * right[1] - back[1] * right[0])
-    return (*right, *up, *back)
+    return fc.camera_axes(SPEC, turn, tilt)
 
 
 def camera_baseline(turn: float, tilt: float, scale: float = 1., pan_x: float = 0., pan_y: float = 0.,
                     fov_y_degrees: float = 45., surface_bound: bool = True, *, axes=None):
     """Orbit/pan reference before the independent XYZ offset; never a second eye."""
-    axes = camera_axes(turn, tilt) if axes is None else axes
-    right, up, back = axes[:3], axes[3:6], axes[6:9]
-    distance = ORBIT_DISTANCE / max(float(scale), 1e-3)
-    ceiling = WATER_SURFACE_Y - .5
-    # Retain the authored orbit/pan calibration. The joint world bound below
-    # applies after offset composition, equally to Surface and Deep cameras.
-    if surface_bound and back[1] > 1e-9:
-        distance = min(distance, max(1., (ceiling - ORBIT_PIVOT[1]) / back[1]))
-    tan_y = math.tan(math.radians(max(35., min(62., float(fov_y_degrees)))) / 2.)
-    dx, dy = -2. * distance * tan_y * float(pan_x), 2. * distance * tan_y * float(pan_y)
-    y = ORBIT_PIVOT[1] + distance * back[1] + dx * right[1] + dy * up[1]
-    if surface_bound and y > ceiling and up[1] > 1e-9:
-        dy -= (y - ceiling) / up[1]
-    return tuple(ORBIT_PIVOT[i] + distance * back[i] + dx * right[i] + dy * up[i] for i in range(3))
+    return fc.camera_baseline(SPEC, turn, tilt, scale, pan_x, pan_y, fov_y_degrees,
+                              SPEC.surface_ceiling if surface_bound else None, axes=axes)
 
 
 def bound_camera_eye(eye):
-    return tuple(max(c - h + CAMERA_CLEARANCE, min(c + h - CAMERA_CLEARANCE, float(p)))
-                 for p, c, h in zip(eye, WORLD_CENTER, WORLD_HALF))
+    return fc.bound_eye(SPEC, eye)
 
 
 def resolve_camera_position(turn: float, tilt: float, scale: float = 1., pan_x: float = 0., pan_y: float = 0.,
                             fov_y_degrees: float = 45., position_offset=(0., 0., 0.),
                             surface_bound: bool = True, *, axes=None):
     """Return bounded world eye AND its effective existing normalized offset."""
-    base = camera_baseline(turn, tilt, scale, pan_x, pan_y, fov_y_degrees, surface_bound, axes=axes)
-    requested = tuple(base[i] + float(position_offset[i]) * WORLD_HALF[i] for i in range(3))
-    eye = bound_camera_eye(requested)
-    # Preserve exact legal input values, avoiding repeated normalize/round-trip churn.
-    offset = tuple(position_offset) if eye == requested else tuple((eye[i] - base[i]) / WORLD_HALF[i] for i in range(3))
-    return eye, offset
+    return fc.resolve_camera_position(SPEC, turn, tilt, scale, pan_x, pan_y, fov_y_degrees, position_offset,
+                                      SPEC.surface_ceiling if surface_bound else None, axes=axes)
 
 
 def admit_camera_parameters(parameters: Mapping[str, object]) -> tuple[float, float, float]:
     """Joint admission; caller supplies the complete existing camera settings."""
-    def get(name):
-        return parameters['extruded_bubble_' + name]
-    return resolve_camera_position(get('turn'), get('tilt'), get('scene_scale'),
-        get('scene_pan_x'), get('scene_pan_y'), get('camera_fov'), get('camera_position'),
-        get('light_type') == 'Sunlit Surface')[1]
+    return fc.admit_camera_parameters(SPEC, parameters)
