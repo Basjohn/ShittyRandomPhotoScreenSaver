@@ -777,7 +777,7 @@ def _barycentric_clamped(p: QPointF, a: QPointF, b: QPointF, c: QPointF) -> tupl
 __all__ = ["DirectionMapper", "LIVE_THEMED_PAINTERS", "RangeSlider", "TriangleMapper"]
 
 class SceneVolumeMapper(_VisualControl):
-    """Oblique 3D world-volume editor, sharing EB's normalized XYZ geometry.
+    """Oblique 3D world-volume editor over a framed camera's normalized eye box (EB's world by default).
 
     No FOV-dependent projection or alternate renderer. Drag a point to adjust its
     X/Y plane; Shift+drag or right-drag adjusts physical depth Z. Source/end
@@ -803,6 +803,9 @@ class SceneVolumeMapper(_VisualControl):
         self._scene_direction = (0., 1., 0.)
         self._scene_source = (0., -1., 0.)
         self._references = {}
+        self._reference_colour = None
+        from core.settings.extruded_bubble_camera import SPEC as eb_spec
+        self._camera_spec = eb_spec
         self._active = 0
         self._drag_axis = ''
         self._drag_role = ''
@@ -843,6 +846,12 @@ class SceneVolumeMapper(_VisualControl):
             self._camera_offset = tuple(float(x) for x in camera_offset)
         self.update()
 
+    def setCameraModel(self, spec, *, reference_colour=None):
+        """The framed camera this editor shows: its yaw/pitch mapping and the eye box it normalizes by."""
+        self._camera_spec = spec
+        self._reference_colour = reference_colour
+        self.update()
+
     def describe(self):
         if self._camera_only:
             return 'Camera world translation ' + ', '.join(f'{x:+.2f}' for x in self._coords)
@@ -853,15 +862,18 @@ class SceneVolumeMapper(_VisualControl):
 
     def _forward(self):
         # Exactly the production camera's yaw/pitch basis, independent of FOV.
-        turn, tilt = self._camera_angles
-        pitch = math.radians(16.0 + 90.0 * tilt)
-        yaw = math.pi * turn
-        return (-math.sin(yaw)*math.cos(pitch), math.sin(pitch), -math.cos(yaw)*math.cos(pitch))
+        from core.settings.framed_camera import camera_axes
+        back = camera_axes(self._camera_spec, *self._camera_angles)[6:9]
+        return tuple(-v for v in back)
+
+    def _aim_distance(self):
+        # The aim marker sits a little inside the orbit distance (EB: 13 of 15 world units).
+        return 13.0 / 15.0 * self._camera_spec.orbit_distance
 
     def _aim(self):
-        from core.constants.extruded_bubble_world import WORLD_HALF
+        half = self._camera_spec.eye_half
         eye, forward = self._eye(), self._forward()
-        return tuple(eye[i] + 13.0*forward[i]/WORLD_HALF[i] for i in range(3))
+        return tuple(eye[i] + self._aim_distance()*forward[i]/half[i] for i in range(3))
 
     def _path_point(self, idx):
         if idx == 0 and self._linked_source is not None:
@@ -937,7 +949,7 @@ class SceneVolumeMapper(_VisualControl):
         for role, coords in self._references.items():
             if not isinstance(coords,(list,tuple)) or len(coords)!=6:
                 continue
-            p.setPen(QPen(colors.get(role, faint),1.5,Qt.PenStyle.DashLine))
+            p.setPen(QPen(colors.get(role, self._reference_colour or faint),1.5,Qt.PenStyle.DashLine))
             p.drawLine(self._point(coords[:3]),self._point(coords[3:]))
         if not self._camera_only:
             src,end = self._marker(self._path_point(0)),self._marker(self._path_point(1))
@@ -953,10 +965,12 @@ class SceneVolumeMapper(_VisualControl):
         # Two sight guides and the true forward point, all derived from the
         # renderer's current yaw/pitch. The editor never adjusts the FOV.
         direction = self._forward()
-        from core.constants.extruded_bubble_world import WORLD_HALF
-        side = (math.cos(math.pi*self._camera_angles[0]),0.,-math.sin(math.pi*self._camera_angles[0]))
+        from core.settings.framed_camera import camera_axes
+        half = self._camera_spec.eye_half
+        side = camera_axes(self._camera_spec, *self._camera_angles)[:3]
+        reach = self._aim_distance()
         for sign in (-1.,1.):
-            guide = tuple(eye[i] + (13.0*direction[i] + 2.0*sign*side[i])/WORLD_HALF[i] for i in range(3))
+            guide = tuple(eye[i] + (reach*direction[i] + reach*2.0/13.0*sign*side[i])/half[i] for i in range(3))
             p.setPen(QPen(QColor(205,165,229,100),1.2))
             p.drawLine(cp,self._marker(guide))
         p.setPen(QPen(QColor(205,165,229,145),1.,Qt.PenStyle.DashLine))
@@ -974,29 +988,33 @@ class SceneVolumeMapper(_VisualControl):
             p.drawText(QRectF(5,12,self.width()-10,20),Qt.AlignmentFlag.AlignCenter,'Camera outside the source volume')
         # Fully coloured symbols and text; no verbose coordinates or keyboard
         # instructions cluttering the visual controller (screen readers retain describe()).
-        for x, name, colour in ((9, '● Start', QColor(94,223,231)),
-                                (79, '● End', QColor(255,195,99)),
-                                (143, '◆ Camera', QColor(236,156,237)),
-                                (221, '● Aim', QColor(244,211,253))):
+        legend = (((143, '◆ Camera', QColor(236,156,237)), (221, '● Aim', QColor(244,211,253)))
+                  if self._camera_only else
+                  ((9, '● Start', QColor(94,223,231)), (79, '● End', QColor(255,195,99)),
+                   (143, '◆ Camera', QColor(236,156,237)), (221, '● Aim', QColor(244,211,253))))
+        for x, name, colour in legend:
             p.setPen(colour)
             p.drawText(QRectF(x,240,85,19),Qt.AlignmentFlag.AlignLeft,name)
 
     def _move_to(self, position):
         if self._drag_role == 'aim':
-            from core.constants.extruded_bubble_world import WORLD_HALF
+            spec = self._camera_spec
+            half = spec.eye_half
             eye = self._eye()
             aim = list(self._aim())
             z = aim[2]
             x = (position.x()-self.width()*.5+38.*z)/67.
             y = (139.+21.*z+13.*x-position.y())/62.
-            target = (x*WORLD_HALF[0], y*WORLD_HALF[1], z*WORLD_HALF[2])
-            difference = tuple(target[i]-eye[i]*WORLD_HALF[i] for i in range(3))
+            difference = tuple((target-eye[i])*half[i] for i, target in enumerate((x, y, z)))
             planar = math.hypot(difference[0], difference[2])
             if planar < 1e-5:
                 return
-            yaw = math.atan2(-difference[0],-difference[2])/math.pi
+            # Invert the spec's own mapping: yaw = yaw_span * turn, pitch = base + span * tilt.
+            yaw = math.atan2(-difference[0],-difference[2])/spec.yaw_span
             pitch = math.degrees(math.atan2(difference[1], planar))
-            angles = (max(-1.,min(1.,yaw)),max(-0.5,min(0.5,(pitch-16.)/90.)))
+            low, high = spec.tilt_range
+            angles = (max(-1.,min(1.,yaw)),
+                      max(low,min(high,(pitch-spec.pitch_base_degrees)/spec.pitch_span_degrees)))
             self._camera_angles = angles
             self.cameraAimChanged.emit(angles)
             self.update()

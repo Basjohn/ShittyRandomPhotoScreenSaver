@@ -575,7 +575,9 @@ held-key flight on the capture clock. A mode opts in with `framed_camera="module
 W/A/S/D flight, Q/E yaw, Shift+W/S pitch, held-left orbit, Alt+right pan, Alt+wheel dolly, R home and the control
 hint. Its renderer resolves the eye through the same functions (bounded by its floor hook over the exact card) and
 projects with that eye; Neon Lake's `BasinView` is the raster example, EB's ray-traced scene the volume example.
-Specs: `core/settings/extruded_bubble_camera.py`, `core/settings/neon_lake_camera.py`.
+Specs: `core/settings/extruded_bubble_camera.py`, `core/settings/neon_lake_camera.py`. Settings: one Camera
+Position editor (`ui/tabs/media/framed_camera_editor.py` over `SceneVolumeMapper.setCameraModel(spec)`) for every
+framed mode; a spec may add scene guides through `editor_references_hook`.
 
 - **GLSL:** include `SCENE3D_GLSL` from `rendering/gl_programs/scene3d.py` (camera with a real near plane, lighting,
   planar shadows, streaks, integer hash, impulse and departure helpers). Every function has a CPU mirror in the same

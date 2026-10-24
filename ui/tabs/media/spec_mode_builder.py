@@ -46,6 +46,8 @@ from ui.tabs.shared_styles import NoWheelSlider, RecommendedMarkSlider, add_alig
 from ui.widgets import StyledComboBox
 from ui.widgets.continuous_border import BucketToggle
 from ui.widgets.visual_controls import DirectionMapper, RangeSlider, TriangleMapper, ScenePathMapper, SceneVolumeMapper
+from core.settings.framed_camera import spec_for_mode
+from ui.tabs.media import framed_camera_editor as fce
 
 _LABEL_WIDTH = 150
 
@@ -82,6 +84,10 @@ def build_spec_mode_ui(tab, parent_layout, mode_id: str) -> None:
             tab, scaffold.advanced_layout if bucket.advanced else scaffold.normal_layout,
             mode_key=mode_id, bucket_key=bucket.key, title=bucket.title, helper_text=bucket.helper,
         )
+    if spec_for_mode(mode_id) is not None:
+        # Shared camera edits repaint every editor of this mode; EB's also shows its paths.
+        setattr(tab, f"_{prefix}_camera_refresh",
+                _refresh_eb_volume if mode_id == "extruded_bubble" else None)
     if mode_id == "extruded_bubble":
         # EB's many controls are *sectionally* lazy, on top of the existing lazy mode host.
         # Closed buckets allocate neither controls nor signal hookups. Authoritative values
@@ -308,8 +314,9 @@ def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
         value.setText(control.text(widget.value()))
         setattr(tab, f"{control.key}_label", value)
         widget.valueChanged.connect(lambda position, c=control, label=value: label.setText(c.text(position)))
-        if control.key == 'extruded_bubble_camera_fov':
-            widget.valueChanged.connect(lambda *_: _refresh_eb_volume(tab))
+        framed = fce.framed_mode_of(control.key)
+        if framed is not None and control.key == spec_for_mode(framed).key('camera_fov'):
+            widget.valueChanged.connect(lambda *_, m=framed: fce.refresh_editors(tab, m))
         bind_setting_signal(tab, widget.valueChanged, auto_switch=auto_switch)
         content.addWidget(widget)
         content.addWidget(value)
@@ -390,14 +397,15 @@ def _build_visual_control(tab, layout, control, default, *, auto_switch=True):
     bind_setting_signal(tab, widget.valueCommitted,
                         auto_switch=auto_switch and not isinstance(control, SceneCameraPosition))
     if isinstance(control, (SceneVolumePath, SceneCameraPosition)):
-        widget.cameraAimChanged.connect(lambda angles: _set_eb_camera_aim(tab, angles, commit=False))
-        widget.cameraAimCommitted.connect(lambda angles: _set_eb_camera_aim(tab, angles, commit=True))
+        framed = fce.framed_mode_of(control.key)
+        widget.cameraAimChanged.connect(lambda angles, m=framed: fce.set_aim(tab, m, angles, commit=False))
+        widget.cameraAimCommitted.connect(lambda angles, m=framed: fce.set_aim(tab, m, angles, commit=True))
         if control.key == 'extruded_bubble_ray_path':
             widget.linkedSourceChanged.connect(lambda source: _set_eb_light_source(tab, source, commit=False))
             widget.linkedSourceCommitted.connect(lambda source: _set_eb_light_source(tab, source, commit=True))
         # Cross-path overlays are driven by the SAME saved settings and live widgets;
         # never allocate a second Settings camera or world-coordinate owner.
-        widget.valueChanged.connect(lambda *_: _refresh_eb_volume(tab))
+        widget.valueChanged.connect(lambda *_, m=framed: fce.refresh_editors(tab, m))
         if isinstance(control, SceneVolumePath):
             widget.cameraOffsetChanged.connect(lambda offset: _set_eb_camera_offset(tab, offset, commit=False))
             widget.cameraOffsetCommitted.connect(lambda offset: _set_eb_camera_offset(tab, offset, commit=True))
@@ -486,16 +494,10 @@ def load_spec_mode_settings(tab, mode_id: str, config, *, only_buckets: frozense
             getattr(tab, f"{entry.key}_label").setText(entry.text(widget.value()))
         _apply_availability(widget, entry)
     # Conditions follow their controls' signals, which were blocked.
-    if mode_id == 'extruded_bubble':
+    if spec_for_mode(mode_id) is not None:
         if only_buckets is None:
-            tab._extruded_bubble_aim_dirty = False
-            setattr(tab, '_extruded_bubble_loaded_camera_pose', {
-                key: config.get(key, tab._settings.get('widgets.spotify_visualizer.' + key,
-                      tab._widget_default('spotify_visualizer', key)))
-                for key in ('extruded_bubble_turn', 'extruded_bubble_tilt',
-                            'extruded_bubble_scene_scale', 'extruded_bubble_scene_pan_x',
-                            'extruded_bubble_scene_pan_y', 'extruded_bubble_camera_fov')})
-        _refresh_eb_volume(tab)
+            fce.hydrate_pose(tab, mode_id, config)
+        fce.refresh_editors(tab, mode_id)
     apply = getattr(tab, f"_{spec.prefix}_apply_conditions", None)
     if apply is not None:
         apply()
@@ -523,73 +525,30 @@ def collect_spec_mode_settings(tab, mode_id: str) -> dict[str, Any]:
                                                tab._widget_default("spotify_visualizer", entry.key))
             continue
         values[entry.key] = _current_value(tab, entry)
-    if mode_id == 'extruded_bubble' and getattr(tab, '_extruded_bubble_aim_dirty', False):
-        pose = getattr(tab, '_extruded_bubble_loaded_camera_pose', {})
-        for key in ('extruded_bubble_turn','extruded_bubble_tilt'):
-            values[key] = pose[key]
-    if mode_id == 'extruded_bubble':
-        values['extruded_bubble_camera_position'] = list(_admit_eb_camera_offset(
-            tab, values['extruded_bubble_camera_position']))
+    if spec_for_mode(mode_id) is not None:
+        values = fce.collected(tab, mode_id, values)
     return values
 
 
 def _eb_live_value(tab, key):
-    cache = getattr(tab, '_extruded_bubble_lazy_values', {})
-    widget = getattr(tab, key, None)
-    if isinstance(widget, SceneVolumeMapper):
-        return tuple(widget.value())
-    if key in ('extruded_bubble_light_type', 'extruded_bubble_emission_geometry',
-               'extruded_bubble_lighting_coverage') and widget is not None and hasattr(widget, 'currentText'):
-        return widget.currentText()
-    return cache.get(key, tab._widget_default('spotify_visualizer', key))
+    return fce.live_value(tab, 'extruded_bubble', key)
 
 
 def _eb_base_eye(tab):
-    """Read the shared orbit/pan baseline, before the editor's existing XYZ offset.
-
-    Only the position offset is excluded, because the editor is authoring it.
-    The existing live pose comes from the most recent Settings hydration.
-    """
-    from core.settings.extruded_bubble_camera import camera_baseline
-    pose = getattr(tab, '_extruded_bubble_loaded_camera_pose', {})
-    def get(key):
-        return float(pose.get(key, tab._settings.get('widgets.spotify_visualizer.' + key,
-              tab._widget_default('spotify_visualizer', key))))
-    fov = get('extruded_bubble_camera_fov')
-    fov_widget = getattr(tab, 'extruded_bubble_camera_fov', None)
-    if fov_widget is not None and hasattr(fov_widget, 'value'):
-        fov = float(fov_widget.value())  # FOV edits also affect world pan width
-    return camera_baseline(get('extruded_bubble_turn'),get('extruded_bubble_tilt'),
-                           scale=get('extruded_bubble_scene_scale'),
-                           pan_x=get('extruded_bubble_scene_pan_x'),
-                           pan_y=get('extruded_bubble_scene_pan_y'),
-                           fov_y_degrees=fov,
-                           surface_bound=_eb_live_value(tab, 'extruded_bubble_light_type') == 'Sunlit Surface')
+    """The shared orbit/pan baseline, before the editor's existing XYZ offset."""
+    return fce.base_eye(tab, 'extruded_bubble')
 
 
 def _refresh_eb_volume(tab):
     """Repaint constructed 3D controls only; never open a closed bucket."""
     if not hasattr(tab, '_extruded_bubble_lazy_values'):
         return
-    from core.constants.extruded_bubble_world import WORLD_HALF
-    camera = _admit_eb_camera_offset(tab, _eb_live_value(tab, 'extruded_bubble_camera_position'))
-    getattr(tab, '_extruded_bubble_lazy_values')['extruded_bubble_camera_position'] = list(camera)
-    position_widget = getattr(tab, 'extruded_bubble_camera_position', None)
-    if isinstance(position_widget, SceneVolumeMapper) and tuple(position_widget.value()) != tuple(camera):
-        blocked = position_widget.blockSignals(True)
-        try:
-            position_widget.setValue(camera)
-        finally:
-            position_widget.blockSignals(blocked)
-        getattr(tab, 'extruded_bubble_camera_position_label').setText(
-            require_mode_settings('extruded_bubble').control('extruded_bubble_camera_position').text(camera))
-    base = tuple(p / h for p, h in zip(_eb_base_eye(tab), WORLD_HALF))
+    camera = fce.admit_offset(tab, 'extruded_bubble', _eb_live_value(tab, 'extruded_bubble_camera_position'))
+    base = fce.normalized_base(tab, 'extruded_bubble')
     keys = {'stream':'extruded_bubble_stream_direction',
             'light':'extruded_bubble_light_direction',
             'rays':'extruded_bubble_ray_path'}
-    pose = getattr(tab, '_extruded_bubble_loaded_camera_pose', {})
-    angles = (float(pose.get('extruded_bubble_turn', 0.0)),
-              float(pose.get('extruded_bubble_tilt', 0.0)))
+    angles = fce.camera_angles(tab, 'extruded_bubble')
     deep = _eb_live_value(tab, 'extruded_bubble_light_type') == 'Deep Light'
     light = _eb_live_value(tab, 'extruded_bubble_light_direction')
     effective = {role: _eb_live_value(tab, key) for role, key in keys.items()}
@@ -615,67 +574,21 @@ def _refresh_eb_volume(tab):
                                   coverage_geometry=emission_geometry if role == 'stream' else lighting_coverage,
                                   scene_direction=scene_direction,
                                   scene_source=effective[role][:3])
-    widget = getattr(tab, 'extruded_bubble_camera_position', None)
-    if isinstance(widget, SceneVolumeMapper):
-        widget.setSceneReferences(paths=effective,
-                                  base_eye=base, camera_offset=camera, camera_angles=angles)
+    fce.refresh(tab, 'extruded_bubble', references=effective)
 
 
 def _admit_eb_camera_offset(tab, offset):
-    from core.settings.extruded_bubble_camera import CAMERA_INPUT_KEYS, admit_camera_parameters
-    pose = getattr(tab, '_extruded_bubble_loaded_camera_pose', {})
-    values = {key: pose[key] if key in pose else _eb_live_value(tab, key) for key in CAMERA_INPUT_KEYS}
-    fov_widget = getattr(tab, 'extruded_bubble_camera_fov', None)
-    if fov_widget is not None and hasattr(fov_widget, 'value'):
-        values['extruded_bubble_camera_fov'] = float(fov_widget.value())
-    values['extruded_bubble_camera_position'] = offset
-    return admit_camera_parameters(values)
+    return fce.admit_offset(tab, 'extruded_bubble', offset)
 
 
 def _set_eb_camera_offset(tab, offset, *, commit):
     """Camera diamond gestures use the existing Settings persistence owner."""
-    from core.settings.visualizer_mode_settings import require_mode_settings
-    descriptor = require_mode_settings('extruded_bubble').control('extruded_bubble_camera_position')
-    value = list(_admit_eb_camera_offset(tab, descriptor.admit(offset, (0.,0.,0.))))
-    getattr(tab, '_extruded_bubble_lazy_values')['extruded_bubble_camera_position'] = value
-    widget = getattr(tab, 'extruded_bubble_camera_position', None)
-    if isinstance(widget, SceneVolumeMapper):
-        was_blocked = widget.blockSignals(True)
-        try:
-            widget.setValue(value)
-        finally:
-            widget.blockSignals(was_blocked)
-        getattr(tab, 'extruded_bubble_camera_position_label').setText(descriptor.text(value))
-    _refresh_eb_volume(tab)
-    if commit:
-        # Camera movement is a live pose adjustment, not curated preset artwork.
-        tab._save_settings()
+    fce.set_offset(tab, 'extruded_bubble', offset, commit=commit)
 
 
 def _set_eb_camera_aim(tab, angles, *, commit):
     """Aiming edits the existing live turn/tilt, NOT a separate FOV or camera."""
-    from core.settings.visualizer_mode_settings import require_mode_settings
-    pose = getattr(tab, '_extruded_bubble_loaded_camera_pose', None)
-    if pose is None:
-        return
-    from core.constants.extruded_bubble_world import WORLD_HALF
-    # physical_camera's turn/tilt ordinarily ORBITS a pivot. Aiming must
-    # ROTATE IN PLACE: rebase the existing world-offset against the newly
-    # oriented orbit baseline so the actual eye is invariant.
-    offset_before = tuple(float(v) for v in _eb_live_value(tab, 'extruded_bubble_camera_position'))
-    base_before = _eb_base_eye(tab)
-    physical_eye = tuple(base_before[i] + offset_before[i]*WORLD_HALF[i] for i in range(3))
-    spec = require_mode_settings('extruded_bubble')
-    for key, angle in zip(('extruded_bubble_turn','extruded_bubble_tilt'), angles):
-        pose[key] = spec.control(key).admit(angle, tab._widget_default('spotify_visualizer', key))
-    base_after = _eb_base_eye(tab)
-    rebase = tuple((physical_eye[i] - base_after[i])/WORLD_HALF[i] for i in range(3))
-    _set_eb_camera_offset(tab, rebase, commit=False)
-    if commit:
-        tab._extruded_bubble_aim_dirty = True
-    _refresh_eb_volume(tab)
-    if commit:
-        tab._save_settings()
+    fce.set_aim(tab, 'extruded_bubble', angles, commit=commit)
 
 
 def _set_eb_light_source(tab, source, *, commit):

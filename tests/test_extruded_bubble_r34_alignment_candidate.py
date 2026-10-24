@@ -81,11 +81,13 @@ def test_camera_editor_retains_shared_mapper_and_uses_existing_yaw_pitch_not_fov
     assert 'cameraAimCommitted = Signal(tuple)' in code
     assert 'linkedSourceCommitted = Signal(tuple)' in code
     assert 'self._camera_angles = angles' in code
-    assert "pose[key] = spec.control(key).admit(angle" in builder
-    assert "for key in ('extruded_bubble_turn','extruded_bubble_tilt')" in builder
-    assert "'_extruded_bubble_aim_dirty'" in builder
-    assert 'fov_y_degrees=fov' in builder  # only used by physical_camera; not aim updates
-    assert 'cameraAimCommitted.connect' in builder
+    # The aim/offset logic is the shared framed-camera editor (every framed 3D mode, EB included).
+    editor = (ROOT/'ui/tabs/media/framed_camera_editor.py').read_text(encoding='utf-8')
+    assert "pose[key] = settings.control(key).admit(angle" in editor
+    assert "for suffix in ('turn', 'tilt'):" in editor
+    assert "_aim_dirty'" in editor
+    assert "def _fov(" in editor and 'camera_fov' in editor  # FOV only widens pan; aim never changes it
+    assert 'cameraAimCommitted.connect' in builder and 'fce.set_aim(' in builder
 
 
 def test_r34_aim_roundtrip_preserves_world_eye_with_camera_translation_precision():

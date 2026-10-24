@@ -372,7 +372,8 @@ orbits the basin centre `(0, 0, -1.2)` at 3.6 (Scene Scale dollies it), pans by 
 (Q/E yaw, Shift+W/S pitch), moves by Camera Position and resets with R. Turn spans **-0.50..0.50** (±90°, saturating,
 never wrapping); tilt **-0.10..0.58**: 0 is a level horizon, negative looks slightly up. Camera Field of View
 (20°..62°, default 30°, Camera bucket) is the lens; Auto Rotate (same bucket, off by default) sweeps the view back
-and forth across the turn range, easing to a stop at each end. The eye, not the pose, is bounded: inside a box around the basin
+and forth across the turn range, easing to a stop at each end; Camera Position (same bucket) is the shared
+editor, with the basin's water-level outline drawn in its eye box. The eye, not the pose, is bounded: inside a box around the basin
 and at least 0.05 above the land or water under it — the heightfield cell maximum times Terrain Height with detail,
 the music's actual Terrain Reaction lift, the lake's ripple crest, and the continuation from the basin edge down to
 the rolling ground. Settings and flight bound with the nominal 16:9 width; the renderer re-bounds over the card's
