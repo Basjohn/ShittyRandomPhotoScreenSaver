@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from functools import lru_cache
 
 from rendering.gl_programs.heightfield_glsl import HEIGHTFIELD_GLSL, HEIGHTFIELD_WIRE_GLSL
 from rendering.gl_programs.heightfield_volume_glsl import HEIGHTFIELD_VOLUME_GLSL
@@ -276,7 +277,9 @@ vec3 basinSurface(vec2 uv, out float crest, out float energy, out float curved) 
     vec2 p = vec2((uv.x*2.0 - 1.0)*uHalfWidth, -uv.y*SHOCKWAVE_DEPTH);
     float base = basinBase(uv);
     float outer=basinOutside(uv);
-    vec2 wave = outer<1e-6 ? shockwaveHeight(p) : vec2(0.0);
+    // Waves travel on along a stream that leaves the grid as water, easing out toward the horizon.
+    vec2 wave = outer<1e-6 || sceneHeightfieldWater(base)
+              ? shockwaveHeight(p)*(1.0-smoothstep(0.6,2.4,outer)) : vec2(0.0);
     crest = min(wave.y, 2.5);
     energy = basinEnergy(uv)*(1.0-smoothstep(0.0,0.55,outer));
     float height;
@@ -410,6 +413,7 @@ uniform vec2 uGlass; // strength, roughness
 uniform float uLightStrength;
 uniform vec4 uWaterLineGlowColor; // the water lines' glow colour; alpha mixes it in over their ripple palette
 uniform float uWaterLineGlow;     // their glow, relative to the shared surface glow
+uniform float uWaterShine;        // the water's own surface: tinted body with a rippled mirror of the sky
 vec4 sceneEmission(vec3 rgb) { return vec4(rgb, dot(rgb, vec3(0.2126,0.7152,0.0722))); }
 void main() {
     float detailFade=basinDetailFade(vUv);
@@ -456,7 +460,9 @@ void main() {
         if ((uWireDisplay&4)!=0) pointColour=uVertexOutlineColor;
         vec3 palette=pointColour.rgb;
         float gain=water ? 0.65+0.4*vCrest : 0.65+vEnergy*clamp(base+0.15,0.0,1.0);
-        if (uPass==0) coverage*=uReflection*0.55*exp(-abs(vWorld.y)*1.5)
+        // Marks belong to the land: a shining water surface replaces them (crests keep their curves).
+        if (water) coverage*=1.0-smoothstep(0.0,0.6,uWaterShine);
+        if (uPass==0) coverage*=uReflection*0.55*exp(-abs(vWorld.y)*1.5)*(1.0-0.6*uWaterShine)
                            *smoothstep(-0.5,0.6,sin(reflectionPlane.z*95.0+uTime*0.4));
         float alpha=coverage*pointColour.a*distanceFade*detailFade;
         FragColor=vec4(min(palette*gain,vec3(1.0)),alpha);
@@ -483,7 +489,8 @@ void main() {
         float ripple=(vWorld.z+uScroll)*26.0+0.35*sin(vWorld.x*5.0)+vWorld.y*9.0;
         float distance=abs(fract(ripple-0.5)-0.5)/max(fwidth(ripple),1e-5);
         float sheen=1.0-smoothstep(0.0,0.65*uEdgePx,distance);
-        float curveCoverage=waveWire*(0.11+0.55*min(crest,1.5));
+        // A shining surface shows its water, not a ruled grid: the resting curves fade, crests stay.
+        float curveCoverage=waveWire*(0.11*(1.0-0.8*uWaterShine)+0.55*min(crest,1.5)*(1.0-0.55*uWaterShine));
         float sheenCoverage=sheen*(0.12+0.16*crest)*uWaterDetail;
         line=(1.0-(1.0-curveCoverage)*(1.0-sheenCoverage))*waterCoverage;
     }
@@ -523,6 +530,7 @@ void main() {
         fill+=bodyColour.rgb*bodyColour.a*uLightStrength*max(dot(n,toBody),0.0)*0.32;
     }
     float fillAlpha=uFloor*(water ? uWaterColor.a*0.55 : uTerrainFillColor.a);
+    vec3 shineEmission=vec3(0.0);
     if (glassWeight>0.0) {
         float roughness=clamp(uGlass.y,0.045,0.5);
         SceneMaterial material=SceneMaterial(uGlassTint.rgb,roughness,0.0,0.5,vec3(0.0));
@@ -540,6 +548,23 @@ void main() {
         if (bodyLight) glass+=sceneBrdfLight(material,n,view,toBody,bodyColour.rgb*bodyColour.a*0.7);
         fill=mix(fill,glass,glassWeight);
         fillAlpha=max(fillAlpha,glassWeight*0.85);
+    }
+    // Water reads as water whatever the land's surface style: a tinted body under a rippled mirror of
+    // the real sky (Fresnel: dark looking down, bright at grazing angles). The Sun/Moon at infinity
+    // appear in it as a natural glint. Land keeps its own material.
+    if (water && uWaterShine>0.0) {
+        vec2 rp=vWorld.xz*vec2(9.0,13.0)+vec2(uTime*0.35,-uTime*0.27);
+        vec3 ripple=vec3(sin(rp.x)+0.5*sin(rp.y*1.7),0.0,cos(rp.y)+0.5*cos(rp.x*1.3));
+        vec3 wn=normalize(n+0.1*uWaterDetail*ripple);      // Water Detail 0: a still mirror
+        vec3 mirror=reflect(-view,wn);
+        mirror.y=abs(mirror.y);                       // the mirror shows the sky above the water
+        vec3 sky=basinVisibleSkyRadiance(vWorld,mirror);
+        float fresnel=0.04+0.96*pow(1.0-clamp(dot(wn,view),0.0,1.0),5.0);
+        vec3 depthTint=uWaterColor.rgb*(0.45+0.35*light);
+        vec3 surface=mix(depthTint,sky*1.25,clamp(fresnel*(0.35+0.65*uWaterShine),0.0,1.0));
+        fill=mix(fill,surface,uWaterShine);
+        fillAlpha=max(fillAlpha,uWaterShine*(0.6+0.4*fresnel));
+        shineEmission=sky*fresnel*uWaterShine*0.35;
     }
     // The same continuous surface settles into opaque atmospheric land at
     // its far horizon. Keep depth/coverage while fading detail and glow.
@@ -564,7 +589,7 @@ void main() {
     // Only water carries lines here; their glow takes its own colour and strength.
     vec3 lineGlow=mix(wire,uWaterLineGlowColor.rgb*(0.65+0.55*crest),uWaterLineGlowColor.a)*uWaterLineGlow;
     Emission=sceneEmission((lineGlow*lineAlpha + palette*ringAlpha*0.45+shoreColour*shoreAlpha
-                           +fill*fillAlpha*glassWeight*0.12)*uGlow*distanceFade*detailFade);
+                           +fill*fillAlpha*glassWeight*0.12+shineEmission*fillAlpha)*uGlow*distanceFade*detailFade);
 }
 """
 )
@@ -630,6 +655,83 @@ void main() {
 }
 """
 )
+
+# Splashes: the heaviest onsets that land on water throw droplets up and out. Static droplet slots (onset, droplet)
+# read the same bounded onset ring the waves use; each droplet follows a ballistic arc from its onset's age, so no
+# CPU simulation, timer or extra buffer exists, and an idle or quiet lake draws nothing.
+SPLASH_DROPLETS = 64
+SPLASH_THRESHOLD = 1.0      # onset strength (0..2) where splashing begins
+NEON_SPLASH_VERTEX_SOURCE = (
+    "#version 460 core\nlayout(location=0) in vec2 aSlot;\n"
+    + SHOCKWAVE_EVENTS.glsl(3) + HEIGHTFIELD_GLSL + _PROJECTION + SHOCKWAVE_WAVE_GLSL + _POSE + _TERRAIN
+    + f"""
+const float SPLASH_THRESHOLD = {SPLASH_THRESHOLD:.6f};
+uniform float uSplash;       // amount 0..1 (0 draws nothing)
+out float vAlpha;
+out float vHeat;
+float splashHash(float a, float b) {{ return fract(sin(a * 127.1 + b * 311.7) * 43758.5453); }}
+void main() {{
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = 0.0;
+    vAlpha = 0.0;
+    vHeat = 0.0;
+    int index = int(aSlot.x);
+    float drop = aSlot.y;
+    if (uSplash <= 0.0 || index >= uEventCount) return;
+    ShockwaveEvent e = events[index];
+    float heavy = clamp((e.strength - SPLASH_THRESHOLD) / 0.8, 0.0, 1.0);
+    if (heavy <= 0.0) return;
+    vec2 uv = vec2(e.x / (2.0 * uHalfWidth) + 0.5, -e.z / SHOCKWAVE_DEPTH);
+    if (!sceneHeightfieldWater(basinBase(uv))) return;
+    float seed = e.x * 13.7 + e.z * 5.1 + float(index) * 0.37;
+    float angle = 6.2831853 * splashHash(seed, drop);
+    // A third rise as a narrow central column, the rest as a wide crown.
+    bool column = splashHash(seed + 9.4, drop) < 0.33;
+    float up = (column ? 1.15 + 0.6 * splashHash(seed + 3.1, drop) : 0.6 + 0.6 * splashHash(seed + 3.1, drop))
+             * (0.7 + 0.5 * heavy) * (0.55 + 0.6 * uSplash);
+    float outward = (column ? 0.03 + 0.07 * splashHash(seed + 1.7, drop) : 0.25 + 0.45 * splashHash(seed + 1.7, drop))
+                  * (0.6 + 0.6 * heavy);
+    float gravity = 3.2;
+    float t = e.age - 0.08 * splashHash(seed + 7.9, drop);   // a short stagger: a burst, not a shell
+    float flight = 2.0 * up / gravity;
+    if (t <= 0.0 || t >= flight) return;
+    vec2 ground = vec2(e.x + cos(angle) * outward * t, e.z + sin(angle) * outward * t);
+    float surface = 0.18 * tanh(shockwaveHeight(ground).x / 0.18);   // the live water under the droplet
+    vec3 p = vec3(ground.x, surface + up * t - 0.5 * gravity * t * t, ground.y);
+    gl_Position = basinClip(p);
+    float depth = max(-basinViewPoint(p).z, 0.05);
+    gl_PointSize = clamp(uPointPx * (0.6 + 0.8 * splashHash(seed + 5.3, drop)) * 9.0 / depth, 1.5, uPointPx * 7.0);
+    vAlpha = heavy * (0.4 + 0.6 * uSplash) * (1.0 - smoothstep(0.55, 1.0, t / flight));
+    vHeat = heavy;
+}}
+"""
+)
+NEON_SPLASH_FRAGMENT_SOURCE = """#version 460 core
+layout(location=0) out vec4 FragColor;
+layout(location=1) out vec4 Emission;
+in float vAlpha;
+in float vHeat;
+uniform vec4 uSplashColor;   // the water lines' glow colour (its alpha is their palette mix, not opacity)
+uniform float uGlow;
+void main() {
+    float radius = length(gl_PointCoord - 0.5);
+    float alpha = (1.0 - smoothstep(0.18, 0.5, radius)) * vAlpha;
+    if (alpha < 0.004) discard;
+    vec3 colour = min(uSplashColor.rgb * (0.85 + 0.5 * vHeat), vec3(1.0));
+    FragColor = vec4(colour, alpha);
+    vec3 glow = colour * alpha * (0.5 + uGlow);
+    Emission = vec4(glow, dot(glow, vec3(0.2126, 0.7152, 0.0722)));
+}
+"""
+
+
+@lru_cache(maxsize=1)
+def splash_slots() -> tuple[float, ...]:
+    """(onset index, droplet index) for every droplet the bounded onset buffer can carry."""
+    from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_CAPACITY
+    return tuple(float(v) for index in range(SHOCKWAVE_CAPACITY) for drop in range(SPLASH_DROPLETS)
+                 for v in (index, drop))
+
 
 NEON_SKY_VERTEX_SOURCE = """#version 460 core
 layout(location=0) in vec2 aUv;
@@ -755,5 +857,5 @@ void main() {
 """
 )
 
-__all__ = ["BasinView", "basin_view", "orbit_view", "NEON_VERTEX_SOURCE", "NEON_FRAGMENT_SOURCE",
+__all__ = ["BasinView", "basin_view", "orbit_view", "NEON_SPLASH_VERTEX_SOURCE", "NEON_SPLASH_FRAGMENT_SOURCE", "splash_slots", "SPLASH_DROPLETS", "NEON_VERTEX_SOURCE", "NEON_FRAGMENT_SOURCE",
            "NEON_SKY_VERTEX_SOURCE", "NEON_SKY_FRAGMENT_SOURCE", "NEON_SKYLINE_VERTEX_SOURCE", "NEON_SKYLINE_FRAGMENT_SOURCE"]

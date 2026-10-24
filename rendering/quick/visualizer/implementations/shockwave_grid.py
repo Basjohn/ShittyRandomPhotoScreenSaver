@@ -16,10 +16,11 @@ from rendering.gl_programs.neon_starscape import starscape_beat_cells
 from rendering.quick import gl_query
 from rendering.gl_programs.neon_lake_basin_program import (
     NEON_VERTEX_SOURCE, NEON_FRAGMENT_SOURCE, NEON_SKY_VERTEX_SOURCE, NEON_SKY_FRAGMENT_SOURCE,
-    NEON_SKYLINE_VERTEX_SOURCE, NEON_SKYLINE_FRAGMENT_SOURCE,
-    basin_pixel_scale, basin_view,
+    NEON_SKYLINE_VERTEX_SOURCE, NEON_SKYLINE_FRAGMENT_SOURCE, NEON_SPLASH_VERTEX_SOURCE, NEON_SPLASH_FRAGMENT_SOURCE,
+    basin_pixel_scale, basin_view, splash_slots,
 )
 from rendering.gl_programs.neon_celestial import basin_body_position, celestial_placement
+from rendering.gl_programs.neon_lake_basin_program import SPLASH_THRESHOLD
 from rendering.gl_programs.neon_terrain_reaction import REACTION_SAMPLES
 from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
 from rendering.gl_programs.shockwave_grid_program import (
@@ -51,10 +52,13 @@ _UNIFORMS = _VIEW_UNIFORMS + (
     "uTerrain", "uTerrainSize", "uLand", "uTime", "uWaterDetail", "uWaterBankBand", "uReflection", "uPass", "uCurveCells",
     "uWireDisplay", "uMarks", "uPointPx","uTerrainFillColor","uVertexColor","uVertexAccentColor",
     "uVertexOutlineColor","uGlassTint","uGlass","uLightStrength","uSmoothGlass","uDepthOnly",
-    "uWaterLineGlowColor","uWaterLineGlow",
+    "uWaterLineGlowColor","uWaterLineGlow","uWaterShine",
 ) + _CELESTIAL_UNIFORMS + _REACTION_UNIFORMS
 _SKY_UNIFORMS = _VIEW_UNIFORMS + _CELESTIAL_UNIFORMS + (
     "uSkyPass","uShaftSpread","uMidband", "uBeatPulse", "uCelestialGlow", "uCelestialRimVertices", "uBeatStarCount", "uBeatStarCells", "uStarGlow")
+_SPLASH_UNIFORMS = _VIEW_UNIFORMS + (
+    "uTerrainGrid", "uHalfWidth", "uTerrain", "uTerrainSize", "uEventCount", "uWave", "uIdle", "uSplash", "uPointPx",
+    "uSplashColor", "uGlow")
 _SKYLINE_UNIFORMS = _VIEW_UNIFORMS + (
     "uTerrainGrid", "uHalfWidth", "uTerrain", "uTerrainSize", "uLand", "uEventCount",
     "uCrestColor", "uGlow", "uMidband", "uOutlineLiftNdc", "uHorizonThickness") + _REACTION_UNIFORMS
@@ -144,6 +148,8 @@ class QuickShockwaveGridRenderer:
                     (r, "skyline", NEON_SKYLINE_VERTEX_SOURCE, NEON_SKYLINE_FRAGMENT_SOURCE)]
         if _sky_admitted(parameters):
             programs.append((r, "sky", NEON_SKY_VERTEX_SOURCE, NEON_SKY_FRAGMENT_SOURCE))
+        if _splashes_admitted(parameters):
+            programs.append((r, "splash", NEON_SPLASH_VERTEX_SOURCE, NEON_SPLASH_FRAGMENT_SOURCE))
         programs.extend((r, *program) for program in scene_target_programs(samples, bloom, False, overlay=True,
                                                                            shafts=_rays_admitted(parameters)))
         return programs
@@ -157,6 +163,9 @@ class QuickShockwaveGridRenderer:
         self._adopt_terrain(parameter(parameters, "shockwave_grid_terrain"))
         if not r.has_mesh(_mesh_key((tuple(cells), self._lattice_extent))):
             self._mesh(cells)
+            return False
+        if _splashes_admitted(parameters) and not r.has_mesh(_SPLASH_SLOTS):
+            r.mesh(_SPLASH_SLOTS,splash_slots(),(2,))
             return False
         style=_wire_display(parameters)
         if style&2:
@@ -190,6 +199,15 @@ class QuickShockwaveGridRenderer:
         gl.glUniform3f(uniforms["uUp"], *view.up)
         gl.glUniform3f(uniforms["uBack"], *view.back)
         gl.glUniform2f(uniforms["uTan"], *view.tan)
+
+    @staticmethod
+    def _bind_wave(uniforms, parameters, mode_state, half_width) -> None:
+        """The lake's travelling waves and idle swell (``shockwaveHeight``)."""
+        gl.glUniform2f(uniforms["uWave"], shockwave_amplitude(float(parameter(parameters, "shockwave_grid_wave_height"))),
+                       shockwave_wave_speed(float(parameter(parameters, "shockwave_grid_wave_speed"))))
+        gl.glUniform2f(uniforms["uIdle"], *shockwave_idle(
+            float(parameter(parameters, "shockwave_grid_wave_height")), float(parameter(parameters, "shockwave_grid_idle")),
+            float(mode_state.animation_time), half_width))
 
     @staticmethod
     def _bind_reaction(uniforms, parameters, mode_state, terrain) -> None:
@@ -319,12 +337,8 @@ class QuickShockwaveGridRenderer:
             self._bind_celestial(uniforms,parameters,half_width,mode_state.animation_time,view)
             gl.glUniform1f(uniforms["uHalfWidth"], half_width)
             gl.glUniform1i(uniforms["uEventCount"], len(events))
-            gl.glUniform2f(uniforms["uWave"], shockwave_amplitude(float(parameter(parameters, "shockwave_grid_wave_height"))),
-                           shockwave_wave_speed(float(parameter(parameters, "shockwave_grid_wave_speed"))))
+            self._bind_wave(uniforms, parameters, mode_state, half_width)
             gl.glUniform1f(uniforms["uHorizon"], SHOCKWAVE_MAX_RIDGE * float(parameter(parameters, "shockwave_grid_horizon")))
-            gl.glUniform2f(uniforms["uIdle"], *shockwave_idle(
-                float(parameter(parameters, "shockwave_grid_wave_height")), float(parameter(parameters, "shockwave_grid_idle")),
-                float(mode_state.animation_time), half_width))
             gl.glUniform1i(uniforms["uBarCount"], count)
             if count:
                 gl.glUniform1fv(uniforms["uBars"], count, levels[:count])
@@ -336,6 +350,7 @@ class QuickShockwaveGridRenderer:
             gl.glUniform1f(uniforms["uGlow"], glow)
             gl.glUniform4f(uniforms["uWaterLineGlowColor"], *rgba(parameter(parameters, "shockwave_grid_water_line_glow_color")))
             gl.glUniform1f(uniforms["uWaterLineGlow"], float(parameter(parameters, "shockwave_grid_water_line_glow")))
+            gl.glUniform1f(uniforms["uWaterShine"], float(parameter(parameters, "shockwave_grid_water_shine")))
             # fwidth already measures physical fragments, including DPR/MSAA.
             gl.glUniform1f(uniforms["uEdgePx"], 0.75)
             gl.glUniform1f(uniforms["uCurveCells"], 12.0+40.0*float(parameter(parameters,"shockwave_grid_density")))
@@ -418,6 +433,7 @@ class QuickShockwaveGridRenderer:
                     gl.glDepthMask(gl.GL_FALSE)
                     gl.glBindVertexArray(vao)
                     gl.glDrawArrays(gl.GL_TRIANGLES,0,vertices)
+                    self._draw_splashes(frame,view,parameters,mode_state,terrain,events,half_width,glow)
                     if body_enabled:
                         # Translucent bodies and their antialiased limbs blend
                         # over the completed surface while retaining 3D depth.
@@ -445,6 +461,38 @@ class QuickShockwaveGridRenderer:
                             with self._target.shaft_writes():
                                 gl.glDrawArrays(gl.GL_TRIANGLES,0,sky_count)
                             self._target.set_shaft_light(light)
+
+    def _draw_splashes(self,frame,view,parameters,mode_state,terrain,events,half_width,glow):
+        """Droplets from the heaviest onsets on water; nothing at all while Splashes is 0 or no onset is heavy."""
+        if not _splashes_admitted(parameters) or not any(event["strength"]>SPLASH_THRESHOLD for event in events):
+            return
+        amount=float(parameter(parameters,"shockwave_grid_splashes"))
+        r=self._resources
+        program=r.program("splash",NEON_SPLASH_VERTEX_SOURCE,NEON_SPLASH_FRAGMENT_SOURCE)
+        uniforms=r.uniforms("splash",_SPLASH_UNIFORMS)
+        slots_vao,slots=r.mesh(_SPLASH_SLOTS,splash_slots(),(2,))
+        gl.glUseProgram(program)
+        self._bind_view(uniforms,frame,view)
+        gl.glUniform1f(uniforms["uHalfWidth"],half_width)
+        gl.glUniform1i(uniforms["uTerrain"],_HEIGHT_UNIT)
+        gl.glUniform1i(uniforms["uTerrainSize"],terrain["size"])
+        gl.glUniform1i(uniforms["uEventCount"],len(events))
+        self._bind_wave(uniforms,parameters,mode_state,half_width)
+        gl.glUniform1f(uniforms["uSplash"],amount)
+        gl.glUniform1f(uniforms["uPointPx"],2.0*basin_pixel_scale(frame.matrix_values,frame.viewport))
+        gl.glUniform4f(uniforms["uSplashColor"],*rgba(parameter(parameters,"shockwave_grid_water_line_glow_color")))
+        gl.glUniform1f(uniforms["uGlow"],glow)
+        enabled=bool(gl.glIsEnabled(gl.GL_PROGRAM_POINT_SIZE))
+        gl.glEnable(gl.GL_PROGRAM_POINT_SIZE)
+        gl.glEnable(gl.GL_DEPTH_TEST)
+        gl.glDepthFunc(gl.GL_LEQUAL)
+        gl.glDepthMask(gl.GL_FALSE)
+        try:
+            gl.glBindVertexArray(slots_vao)
+            gl.glDrawArrays(gl.GL_POINTS,0,slots)
+        finally:
+            if not enabled:
+                gl.glDisable(gl.GL_PROGRAM_POINT_SIZE)
 
     def _draw_scene(self,frame,uniforms,vao,vertices,cells,style,reflections,*,depth_prepared=False):
         points=self._points(cells) if style&2 else None
@@ -509,6 +557,13 @@ class QuickShockwaveGridRenderer:
         self._points_data = None
         if errors:
             raise RuntimeError(" | ".join(errors))
+
+
+_SPLASH_SLOTS = "splash slots"
+
+
+def _splashes_admitted(parameters) -> bool:
+    return float(parameter(parameters, "shockwave_grid_splashes")) > 0.0
 
 
 def _mesh_key(lattice) -> str:

@@ -445,6 +445,24 @@ Rejected attempts and old checkpoint evidence belong in
 not in this live behavior reference.
 
 
+## Layered water (2026-10-24)
+
+Water is a layer of its own, whatever the land's surface style. **Water Shine** (Waves bucket, 0..1) mixes a tinted
+body under a rippled mirror of the real visible sky into the water fill (Fresnel: dark looking down, bright at grazing
+angles, so the Sun/Moon at infinity glint in it) and adds that mirror to emission. Its ripple normal scales with Water
+Detail (0 = a still mirror; nothing else moves with the clock). Vertex marks belong to land: on water they fade out by
+Shine 0.6, the resting water curves fade (event crests stay), and mirrored land marks thin. Waves keep travelling along
+water that leaves the grid as a stream (`basinSurface`), easing out toward the horizon, so a channel painted to the
+edge reads as flowing water rather than a flat dotted plain.
+
+**Splashes** (Waves bucket, 0 = off and nothing is built) throw droplets where onsets above strength 1.0
+(`SPLASH_THRESHOLD`) land on water. Static slots (16 onsets x `SPLASH_DROPLETS`) read the same bounded onset ring as
+the waves; each droplet is a ballistic arc from its onset's age launched from the live water height (a narrow column
+plus a wide crown), so there is no CPU simulation, timer or extra stream. The program and slot buffer warm with the
+others while Splashes is on. Droplets use the Water Line Glow RGB (its alpha is a palette mix, not opacity).
+Contracts: `tests/test_neon_water_layers.py`. Stage onsets for stills with `tools/neon_lake_capture.py --event`.
+Item 1 below is partly delivered (splash); the capped physical peak height remains.
+
 ## Operator-authorized future water improvements (2026-10-18; deferred, baseline accepted)
 
 These are three **new capabilities**, not permission to reopen the accepted Neon Lake graphics, change authored

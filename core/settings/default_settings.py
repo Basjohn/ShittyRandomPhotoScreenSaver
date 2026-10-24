@@ -1241,6 +1241,8 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'shockwave_grid_water_color': [40, 105, 180, 255],
                                     'shockwave_grid_water_reflection': 0.55,
                                     'shockwave_grid_water_detail': 0.45,
+                                    'shockwave_grid_water_shine': 0.6,
+                                    'shockwave_grid_splashes': 0.6,
                                     'shockwave_grid_sky_enabled': True,
                                     'shockwave_grid_sun_enabled': True,
                                     'shockwave_grid_sun_color': [255, 25, 180, 255],

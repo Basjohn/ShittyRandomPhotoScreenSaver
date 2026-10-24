@@ -631,6 +631,11 @@ _SHOCKWAVE_GRID = ModeSettings(
                "Subtle water swell between musical waves.", bucket="waves"),
         Slider("shockwave_grid_water_reflection", "Water Reflection:", 0.0, 1.0,
                "Reflection strength on the water surface.", bucket="waves"),
+        Slider("shockwave_grid_water_shine", "Water Shine:", 0.0, 1.0,
+               "The water's own surface, whatever the land's style: a tinted body under a rippled mirror of the sky, "
+               "dark looking down and bright at grazing angles, with the Sun or Moon glinting in it.", bucket="waves"),
+        Slider("shockwave_grid_splashes", "Splashes:", 0.0, 1.0,
+               "Droplets thrown up where the heaviest hits land on the water. 0 turns them off.", bucket="waves"),
         Toggle("shockwave_grid_terrain_reaction_enabled", "React to Music:", "Reshape the land with the music",
                "Off keeps the land exactly as authored, with no reaction work at all.", bucket="reaction"),
         Slider("shockwave_grid_terrain_reaction_strength", "Strength:", 0.0, 1.0,
