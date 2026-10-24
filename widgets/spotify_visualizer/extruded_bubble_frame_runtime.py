@@ -25,6 +25,9 @@ MAX_STEP_SECONDS = 0.1
 # Full-dynamic musical body bands are read from the existing 2D Bubble engine, not a new floor/DSP.
 STREAM_SPEED_FULL = 0.25
 _SCOPES = {"All": "all", "Big": "big", "Small": "small", "Off": "off"}
+_DRIFT_DIRECTIONS = {"Wander": "wander", "Left": "left", "Right": "right", "Diagonal": "diagonal",
+                     "Swish (Across)": "swish_across", "Swish (Depth)": "swish_depth", "Random": "random",
+                     "Clockwise": "swirl_cw", "Counter-Clockwise": "swirl_ccw"}
 
 
 def controls_from_parameters(parameters) -> ExtrudedBubbleControls:
@@ -51,6 +54,7 @@ def controls_from_parameters(parameters) -> ExtrudedBubbleControls:
         stream_path=stream_path,
         stream_speed=pair("extruded_bubble_stream_speed", STREAM_SPEED_FULL),
         drift=pair("extruded_bubble_drift"),
+        drift_direction=_DRIFT_DIRECTIONS[str(parameters["extruded_bubble_drift_direction"])],
         sway=float(parameters["extruded_bubble_sway"]),
         emission=pair("extruded_bubble_particles"),
         idle=float(parameters["extruded_bubble_idle"]),

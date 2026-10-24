@@ -2912,6 +2912,18 @@ new event). Large range on preset 3 is unchanged or higher (anything_mixed2 0.62
 `logs/eb_breathing/2026-10-24/pixels/am2_p3_bounce/strip.png`. The world test's `< .01` first-step bound encoded the
 slow nudge; it now asserts no snap (< 10% of the overlap in one 1/120 s step).
 
+## 68. Drift Direction (24 October; candidate)
+
+Operator: EB lacked 2D Bubble's drift direction controls, including spiral drift. New Motion choice
+`extruded_bubble_drift_direction` (default Wander = the previous meander, so existing presets are unchanged):
+Left/Right/Diagonal steer the field across the stream, Swish (Across/Depth) sways it together on one carrier with a
+small per-bubble lag, Random gives each bubble a fixed heading from its phase, Clockwise/Counter-Clockwise orbit the
+stream axis (BEAM: through the Source; SCENE: tank centre) and widen slowly, so BEAM births spiral out from the
+source. Steered directions keep 40% of the meander. Directions live in the stream's own frame (EB is 3D), so
+2D's horizontal/vertical swish became Across/Depth. Speeds scale with the musical Drift range. Tests:
+`test_extruded_bubble_world.py` (opposite sides for Left/Right; signed turn and widening for both swirls). Native
+frames: `logs/eb_breathing/2026-10-24/pixels/swirl_cw/contact.png`.
+
 ### 2026-10-23 replay tooling cleanup annotation
 
 Historical entries referring to `extruded_bubble_startup_probe.py` document what investigators used at the time, not a live required diagnostic. The one-off command was retired and the test-owned Qt-free simulation support moved into `tools/visualizer_replay/eb_simulation_support.py`; behavioral overshoot coverage now lives in normal tests. The authored preset references in the old probe were replaced by synthetic fixture profiles. This does not establish visual acceptance of breathing or real-music parity. See [Test Oracle Repair](../../Audits/Test_Oracle_Repair_2026-10-23.md).
