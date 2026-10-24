@@ -1,4 +1,5 @@
-"""New negative-control gate: scalar saturation cannot manufacture musical breathing.
+"""New negative-control gate: scalar saturation cannot manufacture musical breathing (the scalar, the passage,
+places the flow and light Ranges; the bands alone drive breathing).
 
 These CPU tests are NOT operator or offscreen-pixel visual acceptance. No Qt dependency.
 """
@@ -45,10 +46,14 @@ class FullDynamicAudioOwnership(unittest.TestCase):
 
     def test_saturated_scalar_does_not_create_permanent_sine_breathing(self):
         values = [self.lanes(self.step(0, 0, 0)) for _ in range(420)]
-        for lane, rest_swell in ((0, -.29), (1, -.0435)):
+        mod = self.mod
+        for lane, pair, policy in ((0, self.controls.breathing, mod._LARGE_REACTION),
+                                   (1, self.controls.small_pulse, mod._SMALL_REACTION)):
             tail = [v[lane] for v in values[-120:]]
-            # These authored quiet strengths are .05/.03, not the .15 reference.
-            # The high handle cannot determine their contracted resting size.
+            # The quiet handle alone sets the contracted rest; the loud handle cannot.
+            rest_swell = mod._reaction_scale(pair, 0., *policy) - 1.
+            self.assertEqual(rest_swell, mod._reaction_scale((pair[0], 0.), 0., *policy) - 1.)
+            self.assertLess(rest_swell, 0.)
             self.assertAlmostEqual(max(tail), rest_swell, places=8)
             self.assertLess(max(tail) - min(tail), 1e-8)
 
@@ -63,14 +68,25 @@ class FullDynamicAudioOwnership(unittest.TestCase):
         self.assertGreater(vocal_peak[-1][1], 0.045)
         self.assertGreater(vocal_peak[-1][1], vocal_peak[-1][0] * 0.35)
 
-    def test_emission_rays_and_stream_follow_bands_not_saturated_scalar(self):
+    def test_the_passage_places_emission_rays_and_stream_and_bands_swing_them(self):
+        # The scalar is the passage (the engine's eased PassageIntensity): it places each lane in its Range.
         for _ in range(210):
-            quiet = self.step(0, 0, 0)
+            quiet = self.step(.5, .5, .4, scalar=.15)
         for _ in range(210):
-            loud = self.step(0.92, 0.88, 0.83)
+            loud = self.step(.5, .5, .4, scalar=1.)
+        self.assertGreater(loud.emission, quiet.emission + 0.5)
+        self.assertGreater(loud.rays, quiet.rays + 0.4)
+        self.assertGreater(loud.stream_speed, quiet.stream_speed * 2.)
+        self.assertGreater(loud.drift, quiet.drift * 1.8)
+        # Inside one usual passage the bands still move every lane.
+        self.sim = self.mod.ExtrudedBubbleSimulation(21)
+        for _ in range(210):
+            quiet = self.step(0, 0, 0, scalar=.65)
+        for _ in range(210):
+            loud = self.step(0.92, 0.88, 0.83, scalar=.65)
         self.assertGreater(loud.level, quiet.level + 0.65)
-        self.assertGreater(loud.emission, quiet.emission + 0.3)
-        self.assertGreater(loud.rays, quiet.rays + 0.25)
+        self.assertGreater(loud.emission, quiet.emission + 0.15)
+        self.assertGreater(loud.rays, quiet.rays + 0.06)
         self.assertGreater(loud.stream_speed, quiet.stream_speed * 1.9)
 
     def test_breathing_and_mid_pulse_remain_owned_by_their_own_ranges(self):

@@ -449,7 +449,7 @@ def _capture_extruded_bubble(
         flash=snapshot.flash, sustain=snapshot.sustain, drift=snapshot.drift,
         emission=snapshot.emission, stream=snapshot.stream, stream_speed=snapshot.stream_speed,
         travel=snapshot.travel, rays=snapshot.rays, shimmer=snapshot.shimmer,
-        motion_phase=snapshot.motion_phase, wakes=snapshot.wakes,
+        motion_phase=snapshot.motion_phase, wakes=snapshot.wakes, passage=snapshot.passage,
         parameters=_render_parameters({name: value for name, value in extra.items() if not name.startswith("_quick_")}),
     )
     return frame, extra

@@ -79,11 +79,11 @@
         "extruded_bubble_drift_direction": "Wander",
         "extruded_bubble_sway": 0.3,
         "extruded_bubble_breathing": [
-          0.08,
+          0.3,
           0.7
         ],
         "extruded_bubble_small_pulse": [
-          0.15,
+          0.2,
           0.8
         ],
         "extruded_bubble_sustained": 0.6,

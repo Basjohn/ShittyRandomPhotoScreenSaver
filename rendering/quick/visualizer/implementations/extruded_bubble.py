@@ -91,6 +91,11 @@ def _idle_activity(level: float) -> float:
     return amount * amount * (3.0 - 2.0 * amount)
 
 
+def chain_drive(state) -> float:
+    """Where the Bead Chains Range sits: how loud the passage is, swung a little by the beat-level follower."""
+    return min(1.0, float(getattr(state, "passage", 0.0)) * (0.8 + 0.4 * float(state.level)))
+
+
 def _procedural_fill(parameters, level: float, emission: float) -> tuple[float, float, float]:
     """Continuous (chains, snow, fizz per owner), each authored Range resolved once.
 
@@ -442,7 +447,7 @@ class QuickExtrudedBubbleRenderer:
             self._uniforms.set(programs[key], {**view, **_glass(knobs, near),
                                              "uNearCoc": 22.0 * height / 941.0,
                                              "uNearMax": _near_spread(height)})
-        chain_fill, snow_fill, fizz_fill = _procedural_fill(parameters, state.level, state.emission)
+        chain_fill, snow_fill, fizz_fill = _procedural_fill(parameters, chain_drive(state), state.emission)
         idle_activity = _idle_activity(state.level)
         beads, snow = math.ceil(chain_fill) * _BEADS_PER_CHAIN, math.ceil(snow_fill)
         fizz_per = math.ceil(fizz_fill)

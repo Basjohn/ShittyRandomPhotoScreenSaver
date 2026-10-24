@@ -161,8 +161,11 @@ def test_pause_releases_radius_and_every_motion_phase_into_slow_rest(clip):
                  if i in settling and i in resting and v - resting[i] > .05]
     assert remaining and min(remaining) > .25  # gradual, not instant collapse
     assert all(v < -.1 for v in end.bubbles[5::8])
+    from widgets.spotify_visualizer.extruded_bubble_simulation import _reaction_scale, _LARGE_REACTION, _SMALL_REACTION
+    rests = {large: _reaction_scale(settings()['extruded_bubble_breathing' if large else 'extruded_bubble_small_pulse'],
+                                    0., *(_LARGE_REACTION if large else _SMALL_REACTION)) for large in (True, False)}
     for i in range(0,len(end.bubbles),8):
-        assert 1+end.bubbles[i+5] == pytest.approx(.13 if kinds[int(end.bubbles[i+6])] else .7825,abs=.002)
+        assert 1+end.bubbles[i+5] == pytest.approx(rests[kinds[int(end.bubbles[i+6])]],abs=.002)
     before = result[-92]
     assert .04 < end.motion_phase - before.motion_phase < .08
     assert .04 < end.shimmer - before.shimmer < .08

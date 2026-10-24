@@ -2982,3 +2982,33 @@ Operator: fused bubbles never cojoin and "rub" with real friction (bounce someti
 After: fused ratio p50/p90 0.720/0.73 on all songs, contact drift ~1 radius/s (breathing only). Bounce: contacts part
 in <= 0.15 s (p90) and drawn shells never overlap while physically apart; no separate bounce fault was found.
 
+
+## 67. Passage-driven Ranges, breathing depth and tiny-shell shimmer (25 October)
+
+Follows §65. **Ranges:** the simulation now carries `passage`: the engine's PassageIntensity (fixed real-music scale,
+eased 0.4 s up / 1.2 s down) through a smoothstep and eased again (0.6 s / 1.5 s; seeded on the first fill so
+activation inside music starts at the passage heard). The passage *places* every quiet-to-loud Range and the beats
+*swing* it multiplicatively, never as additive floors (those held every passage mid-range): rays
+`soft_top(passage x (0.6 + 0.7 beats))`, flow `passage x (0.7 + 0.6 change)` for speed, drift and particles, occupancy
+`passage x (0.8 + 0.4 bands)`, bead chains `passage x (0.8 + 0.4 level)`. The small lane's swell is scaled x0.7..x1.3
+by the passage (vocal change thins out in loud held passages); a held passage term was tried and rejected because a
+hot vocal plateau then inflated the whole small field. Ray Strength no longer crushes quiet music toward its resting
+3% (only near silence).
+The audit now ranks fifths by a centred 4 s mean of intensity: the instantaneous value snaps to 0 in every near-silent
+gap, so the old "quietest fifth" was beat gaps inside loud music. Quiet/loud with the quiet handle at 0 (1985_loud1):
+Stream Speed 0.16 / 0.50 (was compressed to ~0.38 / 0.49 on every song), Drift 0.12 / 0.38, Bead Chains 25 / 70,
+Rays 0.21 / 0.51. Live counts follow sections over seconds: bubbles drain physically, never pop.
+`eb_control_audit --realized --preset 1 2 ...` reports every preset's own quiet / middle / loud values in one replay
+per song.
+
+**Breathing / Small Bubble Pulse depth:** the quiet handle is a monotonic contraction depth reaching the class's
+deepest rest (large 0.13, small 0.35) half way (`_QUIET_DEPTH_FULL`). At the far end it forced the loud handle (the
+crest) to its maximum, since the slider's handles cannot cross: presets stored [1.0, 0.6] and resolved as [0.6, 1.0].
+Presets keep their rests on the new scale, and idle deflates further (operator): small rest 0.78 -> 0.59, Preset 1
+large 0.54 -> 0.33, Preset 2 0.30 -> 0.22, Presets 3-7 at the deepest.
+
+**Tiny-shell shimmer (operator: the deepest-contracted bubbles shimmer at rest):** a shell a few pixels across read
+its antialiasing width from `fwidth`, which on so small a disc comes back far too small: total light jumped ~20% as
+it drifted by sub-pixels (3 px). Coverage now takes the pixel width analytically (`sceneSphereCoverage(..., pixelAngle)`)
+and shells under 6 px average four rays per pixel: 3 px 1.1%, 4.5 px 1.9%
+(`tests/test_extruded_bubble_small_shell_steady.py`).
