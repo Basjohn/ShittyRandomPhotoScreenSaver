@@ -98,7 +98,21 @@ def basin_view(parameters, field) -> BasinView:
 
 
 
-_PROJECTION = f"""
+# The authored grid may reach past the basin toward the horizon: grid uv = (basin uv + xy) * z.
+# Every distance and constant in these shaders is in basin uv; only heightfield reads convert.
+# A program that never sets the uniform sees the identity (an unextended grid).
+_GRID_GLSL = """
+uniform vec3 uTerrainGrid = vec3(0.0, 0.0, 1.0);
+vec2 basinGrid(vec2 uv) { return (uv + uTerrainGrid.xy) * uTerrainGrid.z; }
+#define SCENE_HEIGHTFIELD_GRID(uv) basinGrid(uv)
+// Distance outside the authored grid, in basin uv (0 on it).
+float basinOutside(vec2 uv) {
+    vec2 grid = basinGrid(uv);
+    return length(grid - clamp(grid, vec2(0.0), vec2(1.0))) / uTerrainGrid.z;
+}
+"""
+
+_PROJECTION = _GRID_GLSL + f"""
 const float SHOCKWAVE_DEPTH = {SHOCKWAVE_DEPTH:.6f};
 uniform mat4 uMatrix;
 uniform vec4 uField;
@@ -164,21 +178,22 @@ uniform int uDepthOnly; // shared surface depth prepass for celestial transmissi
 uniform float uPointPx;
 // The artist owns only 0..1. Continue that exact boundary into deterministic
 // land rather than indefinitely clamping a last row of hills (or water).
-float basinOutside(vec2 uv) {
-    return length(uv-clamp(uv,vec2(0.0),vec2(1.0)));
-}
 float basinContinuation(vec2 uv) {
-    vec2 edge=clamp(uv,vec2(0.0),vec2(1.0));
-    vec2 delta=uv-edge;
-    float distance=length(delta);
+    vec2 grid=basinGrid(uv);
+    vec2 edge=clamp(grid,vec2(0.0),vec2(1.0));
+    vec2 delta=grid-edge;
+    float distance=length(delta)/uTerrainGrid.z;
     float boundary=sceneHeightfield(uTerrain,uTerrainSize,edge);
     if (distance<1e-6) return boundary;
+    // Water reaching the grid's edge keeps flowing outward to the horizon (a painted stream or coast),
+    // never stopping at a wall of rolling land; dry edges roll away as before.
+    if (sceneHeightfieldWater(boundary)) return 0.0;
     vec2 inward=clamp(edge-sign(delta)/float(uTerrainSize-1),vec2(0.0),vec2(1.0));
     float interior=sceneHeightfield(uTerrain,uTerrainSize,inward);
     // Continue the local edge derivative only in a thin transition strip.
     // Retaining the last border height indefinitely made tall ridges look like
     // mountain-shaped extrusion running to the end of the world.
-    float slope=clamp((boundary-interior)*float(uTerrainSize-1),-0.8,0.8);
+    float slope=clamp((boundary-interior)*float(uTerrainSize-1)*uTerrainGrid.z,-0.8,0.8);
     float nearSlope=0.20*slope*min(distance,0.16);
     float descent=smoothstep(0.04,0.68,distance);
     // A broad, low rolling *landform*, not the infinitely extruded editor
@@ -193,12 +208,13 @@ float basinContinuation(vec2 uv) {
     return mix(rolling,0.065,smoothstep(1.1,2.2,distance));
 }
 float basinBase(vec2 uv) {
-    return basinOutside(uv)<1e-6 ? sceneHeightfield(uTerrain,uTerrainSize,uv)
+    return basinOutside(uv)<1e-6 ? sceneHeightfield(uTerrain,uTerrainSize,basinGrid(uv))
                                  : basinContinuation(uv);
 }
 float basinCurve(vec2 uv) {
-    if (basinOutside(uv)<1e-6) return sceneHeightfieldCurve(uTerrain,uTerrainSize,uv);
-    vec2 edge=clamp(uv,vec2(0.0),vec2(1.0));
+    if (basinOutside(uv)<1e-6) return sceneHeightfieldCurve(uTerrain,uTerrainSize,basinGrid(uv));
+    vec2 edge=clamp(basinGrid(uv),vec2(0.0),vec2(1.0));
+    if (sceneHeightfieldWater(sceneHeightfield(uTerrain,uTerrainSize,edge))) return 0.0;
     // Exactly continuous with the cubic surface at the editor boundary.
     float boundary=sceneHeightfieldCurve(uTerrain,uTerrainSize,edge);
     float continued=max(0.0,boundary+basinContinuation(uv)-sceneHeightfield(uTerrain,uTerrainSize,edge));
@@ -238,12 +254,13 @@ float basinLandHeight(vec2 uv,float base,float curved) {
     return height-0.38*distance*distance;
 }
 float basinBankDistance(vec2 uv) {
-    float cached=sceneHeightfieldBankDistance(uTerrain,uTerrainSize,uv);
+    // Stored distances are in grid uv; the band and the result are in basin uv.
+    float cached=sceneHeightfieldBankDistance(uTerrain,uTerrainSize,basinGrid(uv))/uTerrainGrid.z;
     if (cached>=uWaterBankBand) return cached;
     // Interpolated conservative distances can be zero across an entire water
     // cell at a concave bank junction. Resolve only this narrow band against
     // the actual bilinear-positive support, not its expanded control samples.
-    vec2 p=uv*float(uTerrainSize-1);
+    vec2 p=basinGrid(uv)*float(uTerrainSize-1);
     ivec2 cell=ivec2(floor(p));
     float distance=1.0;
     for (int y=-1;y<=2;++y) for (int x=-1;x<=2;++x) {
@@ -253,7 +270,7 @@ float basinBankDistance(vec2 uv) {
             distance=min(distance,length(delta)/float(uTerrainSize-1));
         }
     }
-    return distance;
+    return distance/uTerrainGrid.z;
 }
 vec3 basinSurface(vec2 uv, out float crest, out float energy, out float curved) {
     vec2 p = vec2((uv.x*2.0 - 1.0)*uHalfWidth, -uv.y*SHOCKWAVE_DEPTH);
@@ -268,7 +285,7 @@ vec3 basinSurface(vec2 uv, out float crest, out float energy, out float curved) 
     // shallow fringe instead of stopping at a jagged control-cell boundary.
     // Deep water is farther than the cubic support, so needs no cubic sampling.
     bool water=sceneHeightfieldWater(base);
-    curved=water && sceneHeightfieldBankDistance(uTerrain,uTerrainSize,uv)>=1.0/float(uTerrainSize-1)
+    curved=water && sceneHeightfieldBankDistance(uTerrain,uTerrainSize,basinGrid(uv))>=1.0/float(uTerrainSize-1)
            ? 0.0 : basinCurve(uv);
     float wet=outer<1e-6 ? 1.0-smoothstep(0.0,BASIN_SHORE_HEIGHT,curved) : 0.0;
     float ripple=0.18*tanh(wave.x/0.18)+0.0025*uWaterDetail*sin(15.0*p.x+18.0*p.y+uTime);
@@ -287,9 +304,9 @@ vec4 basinVisibleBody(vec3 eye,vec3 ray,out vec3 hitPoint) {{
     vec4 body=basinCelestial(eye,ray,hitPoint);
     if (body.a>0.0) {{
         vec2 uv=vec2(hitPoint.x/(2.0*uHalfWidth)+0.5,-hitPoint.z/SHOCKWAVE_DEPTH);
-        if (uv.x>=0.0 && uv.x<=1.0 && uv.y>=0.0 && uv.y<=1.0) {{
+        if (basinOutside(uv)<1e-6) {{
             float base=basinBase(uv);
-            if (!sceneHeightfieldWater(base) && hitPoint.y<=basinLandHeight(uv,base,sceneHeightfieldCurve(uTerrain,uTerrainSize,uv)))
+            if (!sceneHeightfieldWater(base) && hitPoint.y<=basinLandHeight(uv,base,basinCurve(uv)))
                 body=vec4(0.0);
         }}
     }}
@@ -321,7 +338,7 @@ void main() {
         // Central derivatives of the very same displaced surface, evaluated
         // only for glass. Interpolation removes per-triangle highlight steps;
         // water, shore taper, cubic land and growth retain one height owner.
-        float step=0.25/float(uTerrainSize-1);
+        float step=0.25/(float(uTerrainSize-1)*uTerrainGrid.z);   // a quarter grid cell, in basin uv
         float crest,energy,curved;
         vec3 dx=basinSurface(aUv+vec2(step,0.0),crest,energy,curved)
                -basinSurface(aUv-vec2(step,0.0),crest,energy,curved);
@@ -346,10 +363,9 @@ void main() {
 
 _SHORELINE_GLSL = _SHORE_HEIGHT_GLSL + """
 float basinShoreLight(vec2 uv, float base, float curved) {
-    // Only the authored domain can contain a lake. The positive rolling land
+    // Only the authored grid draws a shore line. The positive rolling land
     // outside it can cross the visual shore band without containing water.
-    if (sceneHeightfieldWater(base) || any(lessThan(uv,vec2(0.0)))
-        || any(greaterThan(uv,vec2(1.0)))) return 0.0;
+    if (sceneHeightfieldWater(base) || basinOutside(uv)>1e-6) return 0.0;
     float distance=abs(curved-BASIN_SHORE_HEIGHT)/max(fwidth(curved),0.0001);
     return (1.0-smoothstep(0.45,1.15,distance))
            +0.12*exp(-pow(distance/2.8,2.0));
@@ -367,7 +383,7 @@ vec3 basinSurfaceNormal(vec3 areaNormal) {
 
 NEON_FRAGMENT_SOURCE = (
     "#version 460 core\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\n"
-    + SHOCKWAVE_EVENTS.glsl(3) + SCENE3D_GLSL + SCENE3D_ORBIT_GLSL + HEIGHTFIELD_VOLUME_GLSL + HEIGHTFIELD_WIRE_GLSL + _PROJECTION + SHOCKWAVE_WAVE_GLSL + _POSE + _TERRAIN + NEON_CELESTIAL_GLSL + _BODY_VISIBILITY + _SHORELINE_GLSL + _SURFACE_NORMAL_GLSL
+    + SHOCKWAVE_EVENTS.glsl(3) + SCENE3D_GLSL + SCENE3D_ORBIT_GLSL + HEIGHTFIELD_WIRE_GLSL + _PROJECTION + HEIGHTFIELD_VOLUME_GLSL + SHOCKWAVE_WAVE_GLSL + _POSE + _TERRAIN + NEON_CELESTIAL_GLSL + _BODY_VISIBILITY + _SHORELINE_GLSL + _SURFACE_NORMAL_GLSL
     + """
 in vec3 vWorld;
 in vec2 vUv;
@@ -422,7 +438,8 @@ void main() {
         vec3 plane = mix(eye,vWorld,t);
         reflectionPlane=plane;
         vec2 uv = vec2(plane.x/(2.0*uHalfWidth)+0.5, -plane.z/SHOCKWAVE_DEPTH);
-        if (any(lessThan(uv,vec2(0.0))) || any(greaterThan(uv,vec2(1.0))) || !sceneHeightfieldWater(basinBase(uv))) discard;
+        // Reflections follow the water wherever it is, including a stream continuing past the grid.
+        if (!sceneHeightfieldWater(basinBase(uv))) discard;
     }
     if (uMarks == 1) {
         float radius=length(gl_PointCoord-0.5);

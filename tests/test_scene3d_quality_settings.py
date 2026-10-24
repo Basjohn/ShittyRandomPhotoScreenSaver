@@ -252,5 +252,7 @@ def test_a_3d_visualizer_draws_with_its_tiers_levers(render_rig, tier):
     assert bool(shockwave._target._names["emission"]) == detail.post_effects        # glow only with post effects
     # Neon tessellation includes its style/density lever on the one basin mesh.
     _, _, (columns, rows) = shockwave_quality(snapshot.logical.mode_state.parameters)
-    assert shockwave._resources.has_mesh(f"basin {columns}x{rows}")
-    assert shockwave._mesh_cells == (columns, rows)
+    # The mesh is keyed by tessellation and the authored grid's reach past the basin.
+    from rendering.quick.visualizer.implementations.shockwave_grid import _mesh_key
+    assert shockwave._mesh_cells[0] == (columns, rows)
+    assert shockwave._resources.has_mesh(_mesh_key(shockwave._mesh_cells))

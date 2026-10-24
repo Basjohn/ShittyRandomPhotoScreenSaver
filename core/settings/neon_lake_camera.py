@@ -52,7 +52,11 @@ def terrain_floor(terrain: Mapping, terrain_height: float, half_width: float = N
 
     ``reaction`` is the music's largest lift in lane units (strength x (peaks + pulses + swell)).
     """
+    from rendering.gl_programs.heightfield import heightfield_grid_transform
     size, heights = _heights(terrain)
+    # The render record carries its precomputed transform; a settings record derives it from its basin.
+    grid_left, grid_front, grid_scale = (tuple(terrain["grid"]) if "grid" in terrain
+                                         else heightfield_grid_transform(terrain))
     scale = max(0.0, float(terrain_height))
     lift = _REACTION_HEIGHT * max(0.0, float(reaction))
 
@@ -63,11 +67,13 @@ def terrain_floor(terrain: Mapping, terrain_height: float, half_width: float = N
         return max(heights[r * size + c] for r in (r0, min(size - 1, r0 + 1)) for c in (c0, min(size - 1, c0 + 1)))
 
     def floor(x: float, z: float) -> float:
-        u, v = (x / half_width + 1.0) * 0.5, -z / DEPTH
+        # Basin uv, then the authored grid's uv (it may reach past the basin toward the horizon).
+        u, v = ((x / half_width + 1.0) * 0.5 + grid_left) * grid_scale, (-z / DEPTH + grid_front) * grid_scale
         local = cell_max(u, v)
-        outside = math.hypot(u - max(0.0, min(1.0, u)), v - max(0.0, min(1.0, v)))
-        if outside > 0.0:
-            # The shader's continuation: from the nearest edge down to low rolling ground.
+        outside = math.hypot(u - max(0.0, min(1.0, u)), v - max(0.0, min(1.0, v))) / grid_scale
+        if outside > 0.0 and local > 0.0:
+            # The shader's continuation: from the nearest edge down to low rolling ground (water at the
+            # grid's edge instead flows on to the horizon and stays at the ripple floor).
             descent = _smoothstep(*_DESCENT, outside)
             local = max(_CONTINUATION, local * (1.0 - descent) + _CONTINUATION * descent)
         land = scale * (local * _DETAIL + (lift if local > 0.0 else 0.0))

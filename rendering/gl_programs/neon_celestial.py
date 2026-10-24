@@ -55,6 +55,24 @@ def basin_body_position(
     return world_x, y, world_z
 
 
+# Sun and Moon sit at infinity (operator 2026-10-24: they must not change with the camera). The authored position
+# is where the body appears from a fixed reference viewpoint in front of the basin; that names its direction and,
+# with Size, its apparent size. Each frame the body is placed this far from the actual eye along that direction
+# (beyond all terrain, inside the far plane) and scaled to keep its angular size, so flying the camera never moves,
+# grows or re-phases it, and its light on the land is effectively directional.
+CELESTIAL_DISTANCE = 40.0
+CELESTIAL_REFERENCE = (0.0, 1.0, 2.0)
+
+
+def celestial_placement(position, size: float, eye) -> tuple[tuple[float, float, float], float]:
+    """(world centre, world radius) of a body at infinity seen from ``eye``."""
+    offset = tuple(p - c for p, c in zip(position, CELESTIAL_REFERENCE))
+    distance = max(0.5, math.sqrt(sum(v * v for v in offset)))
+    direction = tuple(v / distance for v in offset)
+    centre = tuple(e + CELESTIAL_DISTANCE * d for e, d in zip(eye, direction))
+    return centre, float(size) * CELESTIAL_DISTANCE / distance
+
+
 def basin_body_camera_coverage(camera_distance: float, body_radius: float) -> float:
     """Visible-disc attenuation only, leaving the orbit and scene radiance intact.
 

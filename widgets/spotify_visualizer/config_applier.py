@@ -171,14 +171,21 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
     # --- Card + bar styling (global across modes) --------------------
     if ("shockwave_grid_terrain" in kwargs
             and getattr(getattr(host, "runtime_controller", None), "mode_id", None) == "shockwave_grid"):
-        from rendering.gl_programs.heightfield import heightfield_surface_bytes, normalize_heightfield
+        from rendering.gl_programs.heightfield import (
+            heightfield_basin, heightfield_extent, heightfield_grid_transform, heightfield_surface_bytes,
+            normalize_heightfield,
+        )
 
         terrain = normalize_heightfield(kwargs["shockwave_grid_terrain"])
-        signature = (terrain["size"], tuple(terrain["heights"]))
+        signature = (terrain["size"], tuple(terrain["heights"]), heightfield_basin(terrain))
         if signature != getattr(host, "_shockwave_grid_terrain_signature", None):
             host._shockwave_grid_terrain = freeze_render_fields({
                 "size": terrain["size"], "data": heightfield_surface_bytes(terrain),
                 "maximum": max(terrain["heights"]),
+                # Where the basin sits in a grid reaching toward the horizon (identity when unextended).
+                "basin": list(heightfield_basin(terrain)),
+                "grid": list(heightfield_grid_transform(terrain)),
+                "extent": list(heightfield_extent(terrain)),
             })
             host._shockwave_grid_terrain_signature = signature
     if "shockwave_grid_terrain_shaper" in kwargs:

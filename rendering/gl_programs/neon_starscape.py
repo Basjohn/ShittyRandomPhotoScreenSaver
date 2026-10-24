@@ -35,10 +35,14 @@ def _terrain_clear(cell, eye, terrain):
     This is only a cheap admission preference. Actual surface depth/coverage
     remains the renderer's authority, including land beyond the authored basin.
     """
-    size, data, half_width, height = terrain
+    size, data, half_width, height, *grid = terrain
+    left, front, scale = grid[0] if grid else (0., 0., 1.)
     ray = _star_ray(cell)
     near, far = 0., math.inf
-    for axis, low, high in ((0,-half_width,half_width),(2,-SHOCKWAVE_DEPTH,0.)):
+    # The authored grid may reach past the basin: its world box, from basin uv -left .. 1/scale-left.
+    x_low, x_high = (2.*(-left)-1.)*half_width, (2.*(1./scale-left)-1.)*half_width
+    z_low, z_high = -(1./scale-front)*SHOCKWAVE_DEPTH, front*SHOCKWAVE_DEPTH
+    for axis, low, high in ((0,x_low,x_high),(2,z_low,z_high)):
         if abs(ray[axis]) < 1e-8:
             if not low <= eye[axis] <= high:
                 return True
@@ -51,8 +55,8 @@ def _terrain_clear(cell, eye, terrain):
     for step in range(13):
         t = near+(far-near)*step/12.
         x,y,z = (eye[i]+t*ray[i] for i in range(3))
-        u = max(0.,min(size-1.,(x/(2*half_width)+.5)*(size-1)))
-        v = max(0.,min(size-1.,-z/SHOCKWAVE_DEPTH*(size-1)))
+        u = max(0.,min(size-1.,((x/(2*half_width)+.5)+left)*scale*(size-1)))
+        v = max(0.,min(size-1.,(-z/SHOCKWAVE_DEPTH+front)*scale*(size-1)))
         ix,iy = min(size-2,int(u)), min(size-2,int(v))
         fx,fy = u-ix,v-iy
         base = ((heights[iy*size+ix]*(1-fx)+heights[iy*size+ix+1]*fx)*(1-fy)

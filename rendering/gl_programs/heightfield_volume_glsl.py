@@ -61,6 +61,10 @@ float sceneHeightfieldVolumeTerrainHeight(
     float halfWidth, float depth, float heightScale)
 {
     vec2 uv = sceneHeightfieldVolumeUv(world, halfWidth, depth);
+    // A program whose grid reaches past its basin maps basin uv to grid uv (identity by default).
+#ifdef SCENE_HEIGHTFIELD_GRID
+    uv = SCENE_HEIGHTFIELD_GRID(uv);
+#endif
     float authoredHeight = sceneHeightfield(heightfield, heightfieldSize, uv);
     // Exact authored-zero water stays at base level and never occludes light.
     return sceneHeightfieldWater(authoredHeight)

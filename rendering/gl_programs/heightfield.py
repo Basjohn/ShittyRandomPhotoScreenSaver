@@ -15,13 +15,13 @@ _FLOAT32_MIN_NORMAL = 2.0 ** -126
 
 def _size(value: object) -> int:
     if isinstance(value, bool):
-        raise ValueError("heightfield size must be a whole number within 2..65")
+        raise ValueError("heightfield size must be a whole number within 2..257")
     try:
         number = float(value)
     except (TypeError, ValueError, OverflowError) as exc:
-        raise ValueError("heightfield size must be a whole number within 2..65") from exc
-    if not math.isfinite(number) or number != int(number) or not 2 <= number <= 65:
-        raise ValueError("heightfield size must be a whole number within 2..65")
+        raise ValueError("heightfield size must be a whole number within 2..257") from exc
+    if not math.isfinite(number) or number != int(number) or not 2 <= number <= 257:
+        raise ValueError("heightfield size must be a whole number within 2..257")
     return int(number)
 
 
@@ -45,7 +45,45 @@ def normalize_heightfield(value: object) -> dict:
         if 0.0 < number < _FLOAT32_MIN_NORMAL:
             raise ValueError("positive heightfield heights must be representable as normal float32 values")
         heights.append(0.0 if number == 0.0 else number)
-    return {"version": 1, "size": size, "heights": heights}
+    record = {"version": 1, "size": size, "heights": heights}
+    basin = heightfield_basin({"size": size, **({"basin": value["basin"]} if "basin" in value else {})})
+    if basin != (0, 0, size - 1):
+        record["basin"] = list(basin)
+    return record
+
+
+def heightfield_basin(data: Mapping) -> tuple[int, int, int]:
+    """Where the scene's basin sits in the grid: first column, first row and its span in cells.
+
+    A grid extended toward the horizon keeps the basin's own cells exactly (no resampling); the default
+    is the whole grid. ``x0 + cells`` and ``y0 + cells`` stay inside the grid.
+    """
+    size = int(data["size"])
+    raw = data.get("basin")
+    if raw is None:
+        return 0, 0, size - 1
+    try:
+        x0, y0, cells = (int(v) for v in raw)
+        if any(float(v) != int(v) or isinstance(v, bool) for v in raw):
+            raise ValueError
+    except (TypeError, ValueError) as exc:
+        raise ValueError("heightfield basin must be three whole numbers: column, row, cells") from exc
+    if cells < 1 or x0 < 0 or y0 < 0 or x0 + cells > size - 1 or y0 + cells > size - 1:
+        raise ValueError("heightfield basin must lie inside the grid")
+    return x0, y0, cells
+
+
+def heightfield_grid_transform(data: Mapping) -> tuple[float, float, float]:
+    """(left, front, scale): grid uv = (basin uv + (left, front)) * scale; identity for an unextended grid."""
+    x0, y0, cells = heightfield_basin(data)
+    return x0 / cells, y0 / cells, cells / (int(data["size"]) - 1)
+
+
+def heightfield_extent(data: Mapping) -> tuple[float, float, float, float]:
+    """How far the grid reaches past the basin on each side (left, right, front, back), in basin uv units."""
+    x0, y0, cells = heightfield_basin(data)
+    span = (int(data["size"]) - 1) / cells
+    return x0 / cells, span - 1.0 - x0 / cells, y0 / cells, span - 1.0 - y0 / cells
 
 
 def sample_heightfield(data: Mapping, u: float, v: float) -> float:

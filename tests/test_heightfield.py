@@ -19,7 +19,7 @@ from rendering.gl_programs.heightfield import (
     {"version": True, "size": 2, "heights": [0.0] * 4},
     {"version": 1, "size": True, "heights": [0.0] * 4},
     {"version": 1, "size": 1, "heights": [0.0]},
-    {"version": 1, "size": 66, "heights": [0.0] * (66 * 66)},
+    {"version": 1, "size": 258, "heights": [0.0] * (258 * 258)},
     {"version": 1, "size": 2.1, "heights": [0.0] * 4},
     {"version": 1, "size": 2, "heights": [0.0] * 3},
     *({"version": 1, "size": 2, "heights": [0.0, 0.0, 0.0, bad]}
