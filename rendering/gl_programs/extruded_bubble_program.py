@@ -278,6 +278,13 @@ uniform vec4 uBlock1;
 uniform vec4 uBlock2;
 uniform vec4 uBlock3;
 uniform float uParticleAtten;   // bounded aggregate dust opacity; not per-particle shadowing
+// SCENE light extent (extruded_bubble_scene.scene_light_support): entry-face weights and travel (Surface), aim
+// (Deep); reach per entry face's axis (Surface) or range in x (Deep); 0 leaves that part unshaped.
+// A program that never sets them sees the unshaped light: the surface admits, nothing fades.
+uniform vec3 uLightFaces = vec3(0.0, 1.0, 0.0);
+uniform vec3 uLightTravel = vec3(0.0, -1.0, 0.0);
+uniform vec3 uLightAxis = vec3(0.0, -1.0, 0.0);
+uniform vec3 uLightReach = vec3(0.0);
 
 float blockAttenuation(vec3 samplePoint, vec4 bubble, vec3 lightTravel) {
     if (bubble.w <= 0.0) return 1.0;
@@ -360,26 +367,58 @@ vec2 shaftPatternCoords(vec3 p) {
     vec3 direction = delta/max(length(delta),1e-6);
     return (direction.xz + direction.y*vec2(.3,.17))*6.0;
 }
+// How much SCENE light reaches world point p (0..1): inside the tank (a soft edge, never a binary sheet), then
+// shaped by the authored extent. Surface: open water, so sunlight enters through the surface plane and fades with
+// depth past its reach (Ray End's depth). Deep: falls off with distance from the emitter over its range, brightest
+// toward its aim. (The per-face form keeps one rule should a scene ever admit light through another face.)
+float sceneLightSupport(vec3 p) {
+    vec3 edge = abs((p-uWorldCenter)/max(uWorldHalf,vec3(1e-4)));
+    float inside = 1.0 - smoothstep(0.94, 1.0, max(edge.x,max(edge.y,edge.z)));
+    if (inside <= 0.0) return 0.0;
+    if (uPositionalLight > 0.5) {
+        if (uLightReach.x <= 1e-3) return inside;
+        vec3 d = p - uLightSource;
+        float r = length(d);
+        float aim = dot(d / max(r, 1e-4), uLightAxis);
+        return inside * (1.0 - smoothstep(0.5*uLightReach.x, 1.1*uLightReach.x, r))
+             * mix(0.35, 1.0, smoothstep(-0.3, 0.9, aim));
+    }
+    float lit = 0.0;
+    for (int a = 0; a < 3; ++a) {
+        float c = uLightTravel[a];
+        if (uLightFaces[a] <= 0.0 || abs(c) < 1e-6) continue;
+        float face = uWorldCenter[a] - sign(c) * uWorldHalf[a];
+        if (a == 1 && c < 0.0) face = min(face, uShaftY);     // sunlight enters at the water surface
+        float depth = max((p[a] - face) * sign(c), 0.0);     // how far past this entry plane
+        float reach = uLightReach[a];
+        float fade = reach > 1e-3 ? 1.0 - smoothstep(0.9*reach, 1.3*reach, depth) : 1.0;
+        lit = max(lit, uLightFaces[a] * fade);
+    }
+    return inside * lit;
+}
 float worldShafts(vec3 ray, float jitter, out float contributingDistance, out float coverage) {
     const float stepLength = 45.0 / 40.0;
-    float sum = 0.0, moment = 0.0;
+    float sum = 0.0, moment = 0.0, support = 0.0, supportMoment = 0.0;
     contributingDistance = 0.0;
     coverage = 0.0;
     for (int i=0; i<40; ++i) {
         float s = (float(i)+jitter)*stepLength;
         vec3 p = uEye + ray*s;
         if (uSurfaceShaft>0.5 && p.y>=uShaftY) break;
-        vec3 edge = abs((p-uWorldCenter)/max(uWorldHalf,vec3(1e-4)));
-        float extent = 1.-step(1.,max(edge.x,max(edge.y,edge.z)));
+        float extent = sceneLightSupport(p);
         if (extent<=0.0) continue;
         coverage = max(coverage,extent);
+        support += extent;
+        supportMoment += extent*s;
         float lightDistance = uSurfaceShaft>0.5 ? uShaftY-p.y : length(p-uLightSource);
         float weight = extent * shaftPattern(shaftPatternCoords(p),uTime)
                      * exp(-lightDistance*0.07) * exp(-s*0.035);
         sum += weight;
         moment += weight*s;
     }
+    // Shadow where the light is scattered; where the pattern is momentarily empty, where the lit medium is.
     if (sum>0.0) contributingDistance = moment/sum;
+    else if (support>0.0) contributingDistance = supportMoment/support;
     return sum*stepLength;
 }
 float beamShafts(vec3 ray, float maxDistance, vec3 sunBelow, float surfaceY, float t, int samples, float jitter) {

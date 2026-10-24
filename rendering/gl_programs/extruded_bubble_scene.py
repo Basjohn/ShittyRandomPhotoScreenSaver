@@ -84,6 +84,25 @@ def water_sun_below_safe(direction):
     return water_sun_below((x, max(y, 0.05), z))
 
 
+def scene_light_support(mode: str, light_path, ray_path, sun_below) -> dict[str, object]:
+    """SCENE lighting's authored extent (the Ray path), one owner for the renderer and the Settings editors.
+
+    Sunlit Surface is directional and the water is open: sunlight enters only through the surface, along the
+    refracted sun (the path cannot re-aim it), and Ray End's depth below the surface is how deep it reaches before
+    fading. Deep Light is positional: the emitter stays at Light Source and Ray End sets its range (distance) and aim
+    (direction). A zero range leaves the light unshaped (the whole tank, as before)."""
+    ray_end = world_point(ray_path[3:])
+    if mode == "surface":
+        travel = _unit(tuple(-v for v in sun_below))
+        depth = max(0.5, SURFACE_Y - ray_end[1])
+        return {"faces": (0.0, 1.0, 0.0), "travel": travel, "reach": (0.0, depth, 0.0), "axis": travel}
+    source = world_point(light_path[:3])
+    delta = tuple(e - s for e, s in zip(ray_end, source))
+    reach = math.sqrt(sum(v * v for v in delta))
+    axis = tuple(v / reach for v in delta) if reach > 1e-6 else (0.0, -1.0, 0.0)
+    return {"faces": (0.0, 0.0, 0.0), "travel": axis, "reach": (reach, 0.0, 0.0), "axis": axis}
+
+
 def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
     """The programs' knobs for these Settings (all but the rays' strength, ``ray_strength``)."""
     mode = _LIGHT_TYPES[str(_p(parameters, "light_type"))]
@@ -130,6 +149,7 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
                      glow=0.6, ray_focus=1.0, sky=_mix(water_hue, light, 0.85),
                      shaft=tuple(0.95 * c for c in _mix(water_hue, light, 0.85)))
     knobs["surface_shaft"] = 1.0 if mode == "surface" else 0.0
+    knobs["scene_light"] = scene_light_support(mode, light_path, ray_path, knobs["sun_below"])
     softness = float(_p(parameters, "ray_softness"))
     knobs.update(shaft_soft=softness, fan_contrast=0.8+(0.2-0.8)*softness,
                  fan_march=0.15+(0.6-0.15)*softness, fan_rays=80.0+(30.0-80.0)*softness, fan_reach=0.3 + 0.7 * float(_p(parameters, "ray_reach")))

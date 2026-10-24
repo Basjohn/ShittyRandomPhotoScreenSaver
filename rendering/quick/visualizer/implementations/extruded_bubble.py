@@ -426,6 +426,10 @@ class QuickExtrudedBubbleRenderer:
                         "uShimmer": float(state.shimmer),
                         "uRaySource": _floats(knobs["ray_source"]),
                         "uRayEnd": _floats(knobs["ray_end"]),
+                        "uLightFaces": _floats(knobs["scene_light"]["faces"]),
+                        "uLightTravel": _floats(knobs["scene_light"]["travel"]),
+                        "uLightAxis": _floats(knobs["scene_light"]["axis"]),
+                        "uLightReach": _floats(knobs["scene_light"]["reach"]),
                         "uParticleAtten": max(0.0, min(0.08, 0.08 * float(state.emission)))}
         for i, bubble in enumerate(leaders):
             ray_uniforms[f"uBlock{i}"] = bubble

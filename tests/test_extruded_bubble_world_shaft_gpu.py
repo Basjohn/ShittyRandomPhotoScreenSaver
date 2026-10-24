@@ -228,6 +228,12 @@ def test_scene_integral_uses_canonical_light_and_ignores_authored_beam_nodes(wor
     assert not np.array_equal(changed_light, expected)
 
 
+def _soft_tank(edge):
+    """The tank's soft boundary (sceneLightSupport): full inside, easing to nothing over its last 6%."""
+    t = min(1., max(0., (edge-.94)/.06))
+    return 1.-t*t*(3.-2.*t)
+
+
 def _controlled_integral(surface,eye,source,ray,shaft_y,jitter):
     """Independent box/medium quadrature, without the retired cone model."""
     eye,source,ray=(np.asarray(v,dtype=float) for v in (eye,source,ray))
@@ -238,9 +244,10 @@ def _controlled_integral(surface,eye,source,ray,shaft_y,jitter):
         p=eye+ray*distance
         below=shaft_y-p[1]
         if surface and below<=0.:break
-        if np.any(np.abs(p)>=np.array((18.,8.,18.))):continue
+        extent=_soft_tank(float(np.max(np.abs(p)/np.array((18.,8.,18.)))))
+        if extent<=0.:continue
         light_distance=below if surface else float(np.linalg.norm(p-source))
-        weight=math.exp(-light_distance*.07)*math.exp(-distance*.035)
+        weight=extent*math.exp(-light_distance*.07)*math.exp(-distance*.035)
         total+=weight;moment+=distance*weight
     return total*step,moment/total if total>0. else 0.
 
@@ -344,7 +351,7 @@ def test_scene_main_shadows_actual_contribution_centroid_not_fixed_depth(qt_app)
             assert np.isfinite(values).all(); results.append(values.copy())
         distances = (np.arange(40)+.25)*(45./40.)
         weights = np.exp(-np.abs(2.-distances)*.07)*np.exp(-distances*.035)
-        weights *= np.abs(2.-distances)<18.
+        weights *= np.array([_soft_tank(abs(2.-d)/18.) for d in distances])
         integral = weights.sum()*(45./40.)
         distance = (weights*distances).sum()/weights.sum()
         assert 2. - distance > -12.
