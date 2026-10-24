@@ -86,6 +86,19 @@ MODE_KEY_PREFIXES: Dict[str, List[str]] = {
 MODES: List[str] = list(VISUALIZER_MODE_IDS)
 
 
+def preset_artwork_keys(mode: str) -> tuple[str, ...]:
+    """Every Settings control a curated preset must author for ``mode``: its whole typed spec except the view
+    pose (optional ``starting_view`` metadata; pose leaves inside artwork are inert)."""
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    from core.settings.visualizer_view_orbit import get_visualizer_view_pose_keys
+    try:
+        spec = require_mode_settings(mode)
+    except KeyError:
+        return ()
+    pose = set(get_visualizer_view_pose_keys(mode))
+    return tuple(control.key for control in spec.controls if control.key not in pose)
+
+
 def _is_key_for_mode(key: str, prefixes: list[str]) -> bool:
     if not prefixes:
         return False

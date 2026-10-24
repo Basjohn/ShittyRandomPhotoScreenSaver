@@ -74,6 +74,7 @@
         "sphere_shadow_softness": 0.18,
         "sphere_size_response": 2.54,
         "sphere_specular": 1.3,
+        "sphere_spin_direction": "Default",
         "sphere_taste_the_rainbow_edges": false,
         "sphere_taste_the_rainbow_enabled": false,
         "sphere_taste_the_rainbow_extent": 0.22,

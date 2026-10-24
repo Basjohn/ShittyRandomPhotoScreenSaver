@@ -10,7 +10,16 @@
         "shockwave_grid_adaptive_sensitivity": false,
         "shockwave_grid_agc_strength": 0.15,
         "shockwave_grid_audio_block_size": 256,
+        "shockwave_grid_auto_rotate": false,
+        "shockwave_grid_auto_rotate_after": 20,
+        "shockwave_grid_auto_rotate_speed": 4,
         "shockwave_grid_bar_count": 35,
+        "shockwave_grid_camera_fov": 30,
+        "shockwave_grid_camera_position": [
+          0.0,
+          0.0,
+          0.0
+        ],
         "shockwave_grid_celestial_glow_enabled": true,
         "shockwave_grid_celestial_glow_reactivity": 2.0,
         "shockwave_grid_celestial_glow_strength": 1.0,
@@ -21,6 +30,11 @@
           255,
           150
         ],
+        "shockwave_grid_cloud_coverage": 0.45,
+        "shockwave_grid_cloud_drift": 0.25,
+        "shockwave_grid_cloud_opacity": 0.85,
+        "shockwave_grid_cloud_scale": 0.5,
+        "shockwave_grid_cloud_softness": 0.5,
         "shockwave_grid_crest_color": [
           255,
           224,
@@ -80,6 +94,25 @@
           255
         ],
         "shockwave_grid_moon_phase": 0.4,
+        "shockwave_grid_nebula_color_a": [
+          255,
+          80,
+          180,
+          255
+        ],
+        "shockwave_grid_nebula_color_b": [
+          80,
+          140,
+          255,
+          255
+        ],
+        "shockwave_grid_nebula_drift": 0.0,
+        "shockwave_grid_nebula_dust": 0.4,
+        "shockwave_grid_nebula_enabled": false,
+        "shockwave_grid_nebula_filaments": 0.5,
+        "shockwave_grid_nebula_intensity": 0.5,
+        "shockwave_grid_nebula_position": 0.0,
+        "shockwave_grid_nebula_scale": 0.5,
         "shockwave_grid_notch_positions_linear": [
           [
             0.0,
@@ -150,14 +183,22 @@
         "shockwave_grid_sky_enabled": true,
         "shockwave_grid_sky_strength": 0.65,
         "shockwave_grid_solid_bar_hysteresis_enabled": false,
+        "shockwave_grid_splashes": 0.6,
         "shockwave_grid_star_color": [
           255,
           252,
           212,
           255
         ],
+        "shockwave_grid_star_glow_color": [
+          255,
+          214,
+          140,
+          0
+        ],
         "shockwave_grid_star_glow_reactivity": 1.77,
         "shockwave_grid_star_glow_strength": 0.7,
+        "shockwave_grid_star_size": 0.5,
         "shockwave_grid_starscape_beat": true,
         "shockwave_grid_sun_color": [
           255,
@@ -176,6 +217,8 @@
           255
         ],
         "shockwave_grid_sun_rays_enabled": true,
+        "shockwave_grid_sun_rays_length": 0.65,
+        "shockwave_grid_sun_rays_spread": 0.4,
         "shockwave_grid_sun_rays_strength": 0.45,
         "shockwave_grid_sun_size": 0.23,
         "shockwave_grid_sun_x": -0.8966,
@@ -4422,7 +4465,12 @@
         "shockwave_grid_terrain_growth_attack": 0.08,
         "shockwave_grid_terrain_growth_release": 0.3,
         "shockwave_grid_terrain_height": 0.9,
-        "shockwave_grid_terrain_reactivity": 0.0,
+        "shockwave_grid_terrain_motion_speed": 0.5,
+        "shockwave_grid_terrain_peaks": 0.7,
+        "shockwave_grid_terrain_pulses": 0.8,
+        "shockwave_grid_terrain_reaction_enabled": false,
+        "shockwave_grid_terrain_reaction_strength": 0.6,
+        "shockwave_grid_terrain_swell": 0.15,
         "shockwave_grid_transient_clamp": 1.5,
         "shockwave_grid_transient_pulse_gain": 1.0,
         "shockwave_grid_vertex_accent_color": [
@@ -4445,6 +4493,7 @@
         ],
         "shockwave_grid_visual_smoothing": 0.5,
         "shockwave_grid_visual_smoothing_enabled": false,
+        "shockwave_grid_volumetric_clouds": false,
         "shockwave_grid_water_color": [
           255,
           176,
@@ -4452,7 +4501,15 @@
           255
         ],
         "shockwave_grid_water_detail": 0.28,
+        "shockwave_grid_water_line_glow": 1.0,
+        "shockwave_grid_water_line_glow_color": [
+          120,
+          230,
+          255,
+          0
+        ],
         "shockwave_grid_water_reflection": 0.77,
+        "shockwave_grid_water_shine": 0.6,
         "shockwave_grid_wave_amplitude": 0.75,
         "shockwave_grid_wave_height": 1.0,
         "shockwave_grid_wave_speed": 0.51,

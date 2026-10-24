@@ -30,6 +30,12 @@
         "bubble_big_size_max": 0.02,
         "bubble_big_specular_max_size": 4.03,
         "bubble_big_visual_smoothing": 1.0,
+        "bubble_bounce_big_pct": 0,
+        "bubble_bounce_big_speed": 0.0,
+        "bubble_bounce_same_only": true,
+        "bubble_bounce_small_pct": 60,
+        "bubble_bounce_small_speed": 0.1,
+        "bubble_collision_pop_mode": "one",
         "bubble_drift_amount": 0.2,
         "bubble_drift_direction": "swirl_cw",
         "bubble_drift_frequency": 0.1,
@@ -95,8 +101,7 @@
         "bubble_transient_mix_bass": 0.05,
         "bubble_transient_mix_vocal": 0.05,
         "bubble_transient_pulse_gain": 0.0,
-        "mode": "bubble",
-        "monitor": "ALL"
+        "mode": "bubble"
       }
     }
   },
