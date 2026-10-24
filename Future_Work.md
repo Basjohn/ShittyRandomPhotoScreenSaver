@@ -128,6 +128,7 @@ none is a blocker on the accepted Neon Lake baseline or current Extruded Bubble 
 
 Keep these deferred unless new evidence or an explicit request promotes them:
 
+- **Ctrl+Z in every Settings visual editor** (operator 2026-10-24): each visual editor (camera, shape, curve, colour/gradient and similar canvases) undoes at least its last 2-3 actions with Ctrl+Z (Ctrl+Shift+Z / Ctrl+Y redo). In-memory only: nothing persists, not even past the bucket closing. Build it once as a shared small bounded snapshot history the editors adopt, not per-editor copies; the Neon terrain editor already does this (its own stack) and should move onto the shared one;
 - ImageWorker lean-spawn entry and residual memory-footprint follow-up;
 - `--usage` observer-cost refinement and residual handle-slope attribution;
 - migrate `main.py`'s `SRPSS_PROFILE_CPU` environment gate to an explicit profiling CLI/sidecar boundary; current CONFIG
