@@ -108,3 +108,74 @@ def test_extend_in_the_editor_is_one_undoable_step(qtbot):
     assert emitted and emitted[-1] == grown
     editor.undo_button.click()
     assert editor.get_heightfield() == terrain
+
+
+def _angled_editor(qtbot, terrain):
+    from tests._invisible_windows import keep_off_screen
+    from ui.tabs.media.terrain_editor import TerrainEditor
+    editor = TerrainEditor(terrain)
+    qtbot.addWidget(editor)
+    keep_off_screen(editor).resize(600, 560)
+    editor.show()
+    qtbot.waitExposed(editor)
+    editor.view.setCurrentText("Angled")
+    return editor, editor.canvas
+
+
+def _screen_of(canvas, u, v):
+    from PySide6.QtCore import QPointF
+    from rendering.gl_programs.heightfield import sample_heightfield
+    from ui.tabs.media import terrain_angled_view as angled
+    projection = canvas._angled_view()[1]
+    record = canvas.get_heightfield()
+    world = angled.world_points(record["size"], heightfield_basin(record), np.array(u), np.array(v),
+                                np.array(sample_heightfield(record, u, v)))
+    x, y = projection.project(world)[0]
+    return QPointF(float(x), float(y))
+
+
+def test_the_angled_view_picks_the_surface_it_draws_and_paints_there(qtbot):
+    from PySide6.QtCore import QPoint, Qt
+    from rendering.gl_programs.heightfield import sample_heightfield
+    terrain = extend_heightfield(_stream_terrain(), *horizon_extension_cells(_stream_terrain()))
+    editor, canvas = _angled_editor(qtbot, terrain)
+    # Near vertices that top their neighbourhood (nothing beside them can hide them) pick back to their own
+    # uv; one at a cliff's foot would rightly pick the wall in front of it.
+    from PySide6.QtCore import QPointF
+    projection = canvas._angled_view()[1]
+    heights = projection.world[..., 1]
+    flat = [(row, col) for row in (1, 2) for col in range(1, heights.shape[1] - 1)
+            if heights[row - 1:row + 2, col - 1:col + 2].max() <= heights[row, col]]
+    assert len(flat) >= 3
+    for row, col in flat:
+        picked = canvas._uv(QPointF(*projection.screen[row, col]))
+        assert picked == pytest.approx(tuple(projection.uv[row, col]), abs=1e-3)
+    assert canvas._uv(QPoint(canvas.width() // 2, 30)) is None       # the sky above the terrain
+    # Painting through the angled view raises the picked ground, as one undoable stroke.
+    emitted = []
+    canvas.terrain_changed.connect(emitted.append)
+    target = _screen_of(canvas, 0.2, 0.15)
+    before = sample_heightfield(canvas.get_heightfield(), 0.2, 0.15)
+    qtbot.mouseClick(canvas, Qt.MouseButton.LeftButton, pos=target.toPoint())
+    assert sample_heightfield(canvas.get_heightfield(), 0.2, 0.15) > before
+    assert len(emitted) == 1
+    # A click on the sky paints nothing.
+    qtbot.mouseClick(canvas, Qt.MouseButton.LeftButton, pos=QPoint(canvas.width() // 2, 30))
+    assert len(emitted) == 1
+
+
+def test_turning_the_angled_view_never_changes_the_terrain(qtbot):
+    from PySide6.QtCore import QPoint, Qt
+    terrain = _stream_terrain()
+    editor, canvas = _angled_editor(qtbot, terrain)
+    emitted = []
+    canvas.terrain_changed.connect(emitted.append)
+    yaw = canvas._yaw
+    start = QPoint(canvas.width() // 2, canvas.height() // 2)
+    qtbot.mousePress(canvas, Qt.MouseButton.RightButton, pos=start)
+    qtbot.mouseMove(canvas, start + QPoint(60, -20))
+    qtbot.mouseRelease(canvas, Qt.MouseButton.RightButton, pos=start + QPoint(60, -20))
+    assert canvas._yaw != yaw
+    assert not emitted and canvas.get_heightfield() == terrain
+    editor.view.setCurrentText("Top")                  # the top map is unchanged by the angled view
+    assert canvas.get_heightfield() == terrain

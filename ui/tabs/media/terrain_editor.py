@@ -4,11 +4,13 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QImage, QPainter, QPen
+import numpy as np
+from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from rendering.gl_programs.heightfield import heightfield_basin, normalize_heightfield, sample_heightfield
 from rendering.gl_programs.neon_terrain_extent import extend_heightfield, horizon_extension_cells
+from ui.tabs.media import terrain_angled_view as angled
 from ui.tabs.shared_styles import NoWheelSlider
 from ui.widgets import StyledComboBox
 
@@ -102,6 +104,10 @@ class TerrainCanvas(QWidget):
         self._last_uv = None
         self._hover = None
         self._image = None
+        self._angled = None          # (QImage, projection) of the angled view, rebuilt on change
+        self.view = "Top"            # "Top" (the authoring map) or "Angled" (the scene's proportions)
+        self._yaw, self._pitch = angled.DEFAULT_YAW, angled.DEFAULT_PITCH
+        self._orbit = None
         self.mode = "Raise"
         self.radius = 0.12
         self.strength = 0.35
@@ -122,6 +128,8 @@ class TerrainCanvas(QWidget):
     def heightForWidth(self, width: int) -> int:  # type: ignore[override]
         # A square authoring field as wide as the panel allows, up to a comfortable size.
         side = max(_MIN_SIDE, min(_MAX_SIDE, width - 2 * _SIDE_MARGIN))
+        if self.view == "Angled":
+            side *= 0.72      # the basin is wider than deep: the angled picture is a landscape
         return int(side + 2 * _LABEL_MARGIN)
 
     def sizeHint(self):  # type: ignore[override]
@@ -134,6 +142,18 @@ class TerrainCanvas(QWidget):
         area = QRectF(self.rect()).adjusted(_SIDE_MARGIN, _LABEL_MARGIN, -_SIDE_MARGIN, -_LABEL_MARGIN)
         side = max(1.0, min(area.width(), area.height()))
         return QRectF(area.center().x() - side / 2.0, area.center().y() - side / 2.0, side, side)
+
+    def _invalidate(self):
+        self._image = None
+        self._angled = None
+
+    def set_view(self, view: str):
+        """Top or Angled; both paint the same heights with the same brush."""
+        self._cancel_stroke()
+        self.view = view
+        self._hover = None
+        self.updateGeometry()
+        self.update()
 
     def get_heightfield(self):
         record = {"version": 1, "size": self._size, "heights": list(self._heights)}
@@ -148,7 +168,7 @@ class TerrainCanvas(QWidget):
         self._undo.clear()
         self._redo.clear()
         self._before = self._last_uv = None
-        self._image = None
+        self._invalidate()
         self.history_changed.emit()
         self.update()
 
@@ -158,7 +178,7 @@ class TerrainCanvas(QWidget):
     def _restore(self, state):
         self._size, values, self._basin = state
         self._heights = list(values)
-        self._image = None
+        self._invalidate()
         self.update()
 
     def _commit(self, before):
@@ -214,9 +234,81 @@ class TerrainCanvas(QWidget):
         self._carry = 0.0
 
     def _uv(self, point):
+        """The grid uv under ``point``; None over the angled view's sky."""
+        if self.view == "Angled":
+            return angled.pick_uv(self._angled_view()[1], (point.x(), point.y()))
         rect = self.field_rect()
         return (max(0.0, min(1.0, (point.x() - rect.left()) / rect.width())),
                 max(0.0, min(1.0, (rect.bottom() - point.y()) / rect.height())))
+
+    def _on_field(self, point) -> bool:
+        if self.view == "Angled":
+            return self._uv(point) is not None
+        return self.field_rect().contains(point)
+
+    def _angled_rect(self):
+        return QRectF(self.rect()).adjusted(_SIDE_MARGIN, _LABEL_MARGIN, -_SIDE_MARGIN, -_LABEL_MARGIN)
+
+    def _angled_view(self):
+        """The angled view's cached picture and projection (rebuilt after any change)."""
+        size = (self.width(), self.height())
+        if self._angled is None or self._angled[2] != size:
+            area = self._angled_rect()
+            projection = angled.project_terrain(self._size, self._heights, self._basin,
+                                                (area.left(), area.top(), area.width(), area.height()),
+                                                yaw=self._yaw, pitch=self._pitch)
+            self._angled = (self._paint_angled_terrain(projection), projection, size)
+        return self._angled[0], self._angled[1]
+
+    def _paint_angled_terrain(self, projection):
+        image = QImage(max(1, self.width()), max(1, self.height()), QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(image)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        grid = np.asarray(self._heights, dtype=np.float64).reshape(self._size, self._size)
+        stride_index = np.unique(np.r_[np.arange(0, self._size, projection.stride), self._size - 1])
+        corner = grid[np.ix_(stride_index, stride_index)]
+        mean = (corner[:-1, :-1] + corner[1:, :-1] + corner[:-1, 1:] + corner[1:, 1:]) / 4.0
+        light = angled.quad_light(projection)
+        screen = projection.screen
+        for row, col in angled.quad_order(projection):
+            height, shade = float(mean[row, col]), 0.5 + 0.5 * float(light[row, col])
+            if height <= 0.0:
+                base, shade = _WATER_COLOR, 0.85 + 0.15 * shade
+            else:
+                t = max(0.0, min(1.0, height ** 0.84))
+                base = QColor(round(_LAND_LOW.red() + (_LAND_HIGH.red() - _LAND_LOW.red()) * t),
+                              round(_LAND_LOW.green() + (_LAND_HIGH.green() - _LAND_LOW.green()) * t),
+                              round(_LAND_LOW.blue() + (_LAND_HIGH.blue() - _LAND_LOW.blue()) * t))
+            colour = QColor(round(base.red() * shade), round(base.green() * shade), round(base.blue() * shade))
+            painter.setPen(QPen(colour, 1.0))    # the outline closes antialiasing seams between quads
+            painter.setBrush(colour)
+            painter.drawPolygon(QPolygonF([QPointF(*screen[r, c]) for r, c in
+                                           ((row, col), (row, col + 1), (row + 1, col + 1), (row + 1, col))]))
+        if self._basin != (0, 0, self._size - 1):
+            # The scene's basin, draped over the ground of a grid reaching toward the horizon.
+            x0, y0, cells = self._basin
+            n1 = self._size - 1
+            corners = [(x0 / n1, y0 / n1), ((x0 + cells) / n1, y0 / n1), ((x0 + cells) / n1, (y0 + cells) / n1),
+                       (x0 / n1, (y0 + cells) / n1)]
+            outline = []
+            for (ua, va), (ub, vb) in zip(corners, corners[1:] + corners[:1]):
+                outline.extend((ua + (ub - ua) * k / 24.0, va + (vb - va) * k / 24.0) for k in range(24))
+            outline.append(corners[0])
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(_LABEL_COLOR, 1.2, Qt.PenStyle.DashLine))
+            painter.drawPolyline(self._draped(projection, outline))
+        painter.end()
+        return image
+
+    def _draped(self, projection, uvs) -> QPolygonF:
+        """Screen points of grid ``uvs`` resting on the terrain."""
+        record = {"size": self._size, "heights": self._heights}
+        u = np.array([p[0] for p in uvs])
+        v = np.array([p[1] for p in uvs])
+        h = np.array([sample_heightfield(record, a, b) for a, b in uvs])
+        screen, _depth = projection.project(angled.world_points(self._size, self._basin, u, v, h))
+        return QPolygonF([QPointF(float(x), float(y)) for x, y in screen])
 
     def _radius(self) -> float:
         return max(0.03, min(0.35, float(self.radius)))
@@ -244,7 +336,7 @@ class TerrainCanvas(QWidget):
                     index = y * n + x
                     self._heights[index] = apply_brush(self._heights[index], self.mode, weight, amount, strength,
                                                        self.flatten_height)
-        self._image = None
+        self._invalidate()
         self.update()
 
     def _stroke_to(self, uv):
@@ -262,7 +354,11 @@ class TerrainCanvas(QWidget):
         self._last_uv = uv
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton and self.field_rect().contains(event.position()):
+        if event.button() == Qt.MouseButton.RightButton and self.view == "Angled":
+            self._orbit = (QPointF(event.position()), self._yaw, self._pitch)
+            event.accept()
+            return
+        if event.button() == Qt.MouseButton.LeftButton and self._on_field(event.position()):
             self.setFocus()
             self._before = self._snapshot()
             self._last_uv = self._uv(event.position())
@@ -274,13 +370,29 @@ class TerrainCanvas(QWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        self._hover = QPointF(event.position()) if self.field_rect().contains(event.position()) else None
+        if self._orbit is not None:
+            # Right-drag turns the angled view (in memory only; nothing is saved).
+            start, yaw, pitch = self._orbit
+            delta = event.position() - start
+            self._yaw = max(angled.YAW_RANGE[0], min(angled.YAW_RANGE[1], yaw - delta.x() * 0.008))
+            self._pitch = max(angled.PITCH_RANGE[0], min(angled.PITCH_RANGE[1], pitch + delta.y() * 0.008))
+            self._angled = None
+            self.update()
+            event.accept()
+            return
+        self._hover = QPointF(event.position()) if self._on_field(event.position()) else None
         if self._before is not None:
-            self._stroke_to(self._uv(event.position()))
+            uv = self._uv(event.position())
+            if uv is not None:
+                self._stroke_to(uv)
         self.update()
         event.accept()
 
     def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton and self._orbit is not None:
+            self._orbit = None
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.LeftButton and self._before is not None:
             before = self._before
             self._before = self._last_uv = None
@@ -313,6 +425,9 @@ class TerrainCanvas(QWidget):
             super().keyPressEvent(event)
 
     def paintEvent(self, event):
+        if self.view == "Angled":
+            self._paint_angled()
+            return
         # Cached pixels change only on a stroke/load, not on every pointer move.
         if self._image is None:
             n = self._size
@@ -371,6 +486,35 @@ class TerrainCanvas(QWidget):
             painter.drawText(rect.adjusted(8.0, 6.0, -8.0, -6.0), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
                              f"{self.mode}  •  {'WATER' if height == 0.0 else f'Height {height:.0%}'}")
 
+    def _paint_angled(self):
+        image, projection = self._angled_view()
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), _BG_COLOR)
+        painter.drawImage(0, 0, image)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(_LABEL_COLOR)
+        painter.drawText(QRectF(12.0, 2.0, self.width() - 24.0, 20.0), Qt.AlignmentFlag.AlignCenter, "FAR / BACK")
+        painter.drawText(QRectF(12.0, self.height() - 23.0, self.width() - 24.0, 20.0), Qt.AlignmentFlag.AlignCenter,
+                         "NEAR / FRONT  •  Right-drag to turn the view")
+        uv = self._uv(self._hover) if self._hover is not None else None
+        if uv is None:
+            return
+        # The brush's rim (dashed) and flat core (solid), draped over the ground.
+        radius = self._radius()
+        for extent, style, width in ((brush_reach(self.falloff), Qt.PenStyle.DashLine, 1.5),
+                                     (1.0 - max(0.0, min(1.0, self.falloff)), Qt.PenStyle.SolidLine, 1.0)):
+            if extent * radius <= 1e-3:
+                continue
+            ring = [(max(0.0, min(1.0, uv[0] + extent * radius * math.cos(a))),
+                     max(0.0, min(1.0, uv[1] + extent * radius * math.sin(a))))
+                    for a in np.linspace(0.0, 2.0 * math.pi, 49)]
+            painter.setPen(QPen(_CURSOR_COLOR, width, style))
+            painter.drawPolyline(self._draped(projection, ring))
+        height = sample_heightfield({"size": self._size, "heights": self._heights}, *uv)
+        painter.drawText(self._angled_rect().adjusted(8.0, 6.0, -8.0, -6.0),
+                         Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
+                         f"{self.mode}  •  {'WATER' if height == 0.0 else f'Height {height:.0%}'}")
+
 
 class TerrainEditor(QWidget):
     terrain_changed = Signal(dict)
@@ -385,7 +529,14 @@ class TerrainEditor(QWidget):
         self.mode.addItems(["Raise", "Lower", "Flatten", "Water"])
         tools.addWidget(QLabel("Brush:"), 0, 0)
         tools.addWidget(self.mode, 0, 1)
+        self.view = StyledComboBox(size_variant="compact")
+        self.view.addItems(["Top", "Angled"])
+        self.view.setToolTip("Top: the authoring map. Angled: the terrain in the scene's own proportions; paint on "
+                             "it directly, right-drag to turn it.")
+        tools.addWidget(QLabel("View:"), 0, 2)
+        tools.addWidget(self.view, 0, 3)
         self.canvas = TerrainCanvas(default_terrain, self)
+        self.view.currentTextChanged.connect(self.canvas.set_view)
         tips = {
             "Radius": "The brush size.",
             "Strength": "How much a stroke changes the land per brush-width it travels. Low values build up "
