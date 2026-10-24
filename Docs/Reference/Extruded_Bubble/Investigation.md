@@ -2864,6 +2864,35 @@ contraction would need a deliberate authored-curve change); swing rate still abo
 installed motion, 256/512 block sizes and operator acceptance. Method for future modes:
 `Docs/Guides/Visualizer_Reactivity_Authoring.md` §13A.
 
+## 66. Block-size-normalised feed and wider large span (24 October; candidate, visual acceptance open)
+
+**Block size re-pinned the feed.** §65's references were measured at 256-sample blocks; presets 2–7 use 512.
+Raw lanes grow with FFT length (offset in the log domain), so at 512 EB's input pinned again: preset 3 large
+range 0.24/0.43/0.58/1.16 vs 0.74/0.73/0.84/1.11 at 256. `get_extruded_bubble_body_bands` now rescales the
+lanes to the 256 reference via the FFT bin count (`_last_raw_fft_bins`) with per-lane exponents (1.0, 0.9, 0.6);
+synthetic-signal test: 512 within 0.08 of 256, 0.13–0.20 off without it (commit 5ca50b7a).
+
+**Large span.** Knee 0.45 → 0.55 (span 0.52), held weight 0.45 + 0.55 × sustain, change term gated by held level,
+per-identity excursion capped at the Breathing loud handle (commit aa3f2e5d). 60 s per song, preset 3, block 512,
+2D Dynamic Floor ON reference:
+
+| song | large range 2D / EB | large p05/median/p95 2D | EB |
+| --- | --- | --- | --- |
+| anything_mixed2 | 0.88 / 0.62 | 0.73 / 1.54 / 2.26 | 0.92 / 1.71 / 2.27 |
+| nightsolong_acousticsoft1 | 0.73 / 0.81 | 0.23 / 1.63 / 2.21 | 0.69 / 1.71 / 2.36 |
+| ragdoll_quiet_intro_loud_end1 | 1.01 / 1.13 | 0.63 / 1.47 / 2.28 | 0.66 / 1.36 / 2.17 |
+| cindarellaman_heavy2 | 0.89 / 1.93 | 0.83 / 1.58 / 2.16 | 0.39 / 0.85 / 1.79 |
+
+Top reversals 0 on all; small range 1.28–1.36 (2D 0.67–0.87). cindarellaman is captured ~30% quieter (raw bass
+median 2.28 vs ~3.2), so on fixed anchors it sits more contracted. Native frames:
+`logs/eb_breathing/2026-10-24/pixels/am2_p3_reshape/contact.png` (contraction 7–8 s and 14–15 s, full swell 9–13 s).
+
+**Presets 1/2** (operator-authored, uncommitted edits kept): Breathing quiet 0.05 → 0.12 (rest 0.71 → 0.30) and
+block 256 → 512 for preset 1. Preset 1 at 0.12: block 256 range 0.75–1.05, block 512 0.64–1.58 with the closer
+absolute distribution to 2D (distance 3.0 vs 3.3) and stronger small response; 512 chosen.
+
+Rejected: knee 0.70 (quieter song median 0.57), a 0.60 knee with the original held weight (crest too low).
+
 ### 2026-10-23 replay tooling cleanup annotation
 
 Historical entries referring to `extruded_bubble_startup_probe.py` document what investigators used at the time, not a live required diagnostic. The one-off command was retired and the test-owned Qt-free simulation support moved into `tools/visualizer_replay/eb_simulation_support.py`; behavioral overshoot coverage now lives in normal tests. The authored preset references in the old probe were replaced by synthetic fixture profiles. This does not establish visual acceptance of breathing or real-music parity. See [Test Oracle Repair](../../Audits/Test_Oracle_Repair_2026-10-23.md).
