@@ -163,3 +163,49 @@ def test_pruning_each_member_preserves_survivor_positions_and_only_connected_uni
     for b in sim._bubbles:
         if b.ident in before:assert (b.x,b.y,b.z)==pytest.approx(before[b.ident])
     assert bool(sim._clusters)==(victim!=1)
+
+
+def _steered(drift_direction, steps=90):
+    """Bubbles on a ring around the stream axis, music playing, no stream travel/sway/collisions."""
+    from widgets.spotify_visualizer.extruded_bubble_geometry import WORLD_CENTER
+    direction = stream_vector(0., 0.)
+    across, depth = stream_basis(direction)
+    ring = 1.5 * WORLD_UNIT * .2
+    starts = [tuple(c + ring * (math.cos(a) * u + math.sin(a) * v) for c, u, v in zip(WORLD_CENTER, across, depth))
+              for a in (i * math.tau / 8 for i in range(8))]
+    sim, controls = controlled(*starts, collision=(0., 0., 0.))
+    controls = replace(controls, drift=(1., 1.), drift_direction=drift_direction, collision_scope="off")
+    before = {b.ident: (b.x, b.y, b.z) for b in sim._bubbles}
+    for _ in range(steps):
+        sim.advance(MusicInput(1 / 60, True, .7, (), (.6, .5, .3)), controls)
+    moved = {b.ident: ((b.x, b.y, b.z), before[b.ident]) for b in sim._bubbles}
+    return moved, direction, across, WORLD_CENTER
+
+
+def _mean_across(moved, across):
+    return sum(sum((p - q) * u for p, q, u in zip(after, start, across)) for after, start in moved.values()) / len(moved)
+
+
+def test_left_and_right_drift_steer_the_field_to_opposite_sides_of_the_stream():
+    left, _, across, _ = _steered("left")
+    right, _, _, _ = _steered("right")
+    wander, _, _, _ = _steered("wander")
+    assert _mean_across(left, across) < -.05 * WORLD_UNIT < .05 * WORLD_UNIT < _mean_across(right, across)
+    assert abs(_mean_across(wander, across)) < .5 * min(-_mean_across(left, across), _mean_across(right, across))
+
+
+@pytest.mark.parametrize("kind, sign", [("swirl_ccw", 1.), ("swirl_cw", -1.)])
+def test_swirl_orbits_the_stream_axis_and_widens(kind, sign):
+    moved, direction, _, centre = _steered(kind)
+    for after, start in moved.values():
+        r0 = [p - c for p, c in zip(start, centre)]
+        r1 = [p - c for p, c in zip(after, centre)]
+        # Signed turn about the stream axis (right-hand rule), and a wider orbit than at the start.
+        turn = sum(d * x for d, x in zip(direction, (r0[1] * r1[2] - r0[2] * r1[1],
+                                                       r0[2] * r1[0] - r0[0] * r1[2],
+                                                       r0[0] * r1[1] - r0[1] * r1[0])))
+        assert sign * turn > 0
+        def radial(r):
+            along = sum(a * d for a, d in zip(r, direction))
+            return math.sqrt(sum((a - along * d) ** 2 for a, d in zip(r, direction)))
+        assert radial(r1) > radial(r0)

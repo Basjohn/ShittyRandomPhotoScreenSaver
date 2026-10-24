@@ -50,6 +50,18 @@ _POP_SECONDS = 2.4         # extremely gentle opacity retirement, never geometri
 _SEPARATION_SPEED = (0.15, 0.6)   # x WORLD_UNIT per second, scaled by overlap
 _SEPARATION_DECAY = 0.45          # seconds
 _OVERLAP_CORRECTION = 0.10        # seconds
+# Drift Direction, in the stream's own frame (across = sideways, depth = toward/away from the stream's side).
+# "wander" is the original per-bubble meander; the others steer the field and keep some meander so it is
+# never robotic. Swirls orbit the stream axis and widen slowly, so BEAM births spiral out from the source.
+DRIFT_DIRECTIONS = ("wander", "left", "right", "diagonal", "swish_across", "swish_depth", "random",
+                    "swirl_cw", "swirl_ccw")
+_STEER_SPEED = 0.10        # x WORLD_UNIT per second at full drift (left/right/diagonal)
+_RANDOM_SPEED = 0.08
+_SWISH_SPEED = 0.14
+_SWISH_RATE = 0.55         # radians of motion phase per second of the shared swish carrier
+_SWIRL_SPEED = 0.30        # tangential
+_SWIRL_WIDEN = 0.06        # outward, so the orbit becomes a widening spiral
+_STEERED_WANDER = 0.4      # share of the original meander kept under a steered direction
 _LARGE_RADIUS = (0.075 * WORLD_UNIT, 0.16 * WORLD_UNIT)
 _MID_RADIUS = (0.025 * WORLD_UNIT, 0.07 * WORLD_UNIT)
 # (musical expansion, quiet contraction). Large keeps the existing .13 nominal
@@ -91,6 +103,7 @@ class ExtrudedBubbleControls:
     stream_path: tuple[float, ...] | None = None       # normalized source/end xyz, authoritative when supplied
     stream_speed: tuple[float, float] = (0.05, 0.16)     # authored normalized length/s, converted once to physical world units
     drift: tuple[float, float] = (0.3, 0.8)  # lateral wander 0..1 at quiet, loud
+    drift_direction: str = "wander"          # one of DRIFT_DIRECTIONS
     sway: float = 0.4                       # 0..1 side-to-side swing
     emission: tuple[float, float] = (0.3, 1.0)   # particle emission (specks, dust, trails) 0..1 at quiet, loud
     idle: float = 0.5                       # 0..1 gentle resting motion; never a size oscillator
@@ -206,6 +219,42 @@ def _decayed(vector: tuple[float, float, float], dt: float) -> tuple[float, floa
     k = math.exp(-dt / _SEPARATION_DECAY)
     out = tuple(v * k for v in vector)
     return (0.0, 0.0, 0.0) if sum(v * v for v in out) < (1e-4 * WORLD_UNIT) ** 2 else out
+
+
+def _drift_steer(kind: str, position, phase: float, t: float, direction, across, depth_axis, axis_origin,
+                 amount: float) -> tuple[float, float, float]:
+    """Extra drift velocity for a Drift Direction; ``amount`` is the musical drift in world units/s."""
+    def combine(a: float, b: float) -> tuple[float, float, float]:
+        return tuple(amount * (a * u + b * v) for u, v in zip(across, depth_axis))
+
+    if kind == "left":
+        return combine(-_STEER_SPEED, 0.0)
+    if kind == "right":
+        return combine(_STEER_SPEED, 0.0)
+    if kind == "diagonal":
+        return combine(_STEER_SPEED * math.sqrt(.5), _STEER_SPEED * math.sqrt(.5))
+    if kind == "random":  # a fixed heading per bubble, from its stable phase
+        return combine(_RANDOM_SPEED * math.cos(phase), _RANDOM_SPEED * math.sin(phase))
+    if kind in ("swish_across", "swish_depth"):
+        # One shared carrier moves the field together; a small per-bubble lag keeps it organic.
+        sway = _SWISH_SPEED * math.sin(t * _SWISH_RATE - 0.35 * math.sin(phase))
+        return combine(sway, 0.0) if kind == "swish_across" else combine(0.0, sway)
+    if kind in ("swirl_cw", "swirl_ccw"):
+        r = tuple(p - o for p, o in zip(position, axis_origin))
+        along = sum(a * d for a, d in zip(r, direction))
+        radial = tuple(a - along * d for a, d in zip(r, direction))
+        distance = math.sqrt(sum(a * a for a in radial))
+        if distance < 1e-3 * WORLD_UNIT:  # on the axis: leave along the bubble's own heading
+            radial = tuple(math.cos(phase) * u + math.sin(phase) * v for u, v in zip(across, depth_axis))
+        else:
+            radial = tuple(a / distance for a in radial)
+        # Counter-clockwise seen from the stream's end looking back at its source (right-hand rule).
+        tangent = (direction[1] * radial[2] - direction[2] * radial[1],
+                   direction[2] * radial[0] - direction[0] * radial[2],
+                   direction[0] * radial[1] - direction[1] * radial[0])
+        sign = 1.0 if kind == "swirl_ccw" else -1.0
+        return tuple(amount * (sign * _SWIRL_SPEED * g + _SWIRL_WIDEN * q) for g, q in zip(tangent, radial))
+    return (0.0, 0.0, 0.0)
 
 
 def _reaction_scale(pair: tuple[float, float], drive: float, expansion: float, contraction: float) -> float:
@@ -653,19 +702,27 @@ class ExtrudedBubbleSimulation:
             else:
                 b.visual_radius = _follow(b.visual_radius, b.current_radius, dt, attack * pace, release * pace)
         t = self._motion_phase
+        steering = controls.drift_direction if controls.drift_direction in DRIFT_DIRECTIONS else "wander"
+        meander = 1.0 if steering == "wander" else _STEERED_WANDER
+        axis_origin = (world_point(controls.stream_path[:3], WORLD_HALF)
+                       if controls.stream_path is not None and controls.emission_geometry != "SCENE"
+                       else WORLD_CENTER)
         for b in self._bubbles:
             if b.cluster >= 0:
                 continue
             size = (b.radius - _MID_RADIUS[0]) / (_LARGE_RADIUS[1] - _MID_RADIUS[0])
             forward = speed * (0.65 + 0.6 * max(0.0, min(1.0, size)))
-            wander = self._drift * WORLD_UNIT * 0.05 * (math.sin(t * 0.37 + b.phase) + 0.6 * math.sin(t * 0.83 + 2.1 * b.phase))
+            wander = meander * self._drift * WORLD_UNIT * 0.05 * (
+                math.sin(t * 0.37 + b.phase) + 0.6 * math.sin(t * 0.83 + 2.1 * b.phase))
             # A slowly changing sine can still be a fast velocity; its amplitude must settle too.
             swing = (controls.sway * WORLD_UNIT * 0.06 * min(1.0, self._motion_rate) * rest_motion_boost
                      * math.sin(t * (1.1 + 0.5 * math.sin(b.phase)) + 3.0 * b.phase))
-            deep = self._drift * WORLD_UNIT * 0.015 * math.sin(t * 0.29 + 1.7 * b.phase)
-            b.x += dt * (direction[0] * forward + across[0] * (wander + swing) + depth_axis[0] * deep + b.push[0])
-            b.y += dt * (direction[1] * forward + across[1] * (wander + swing) + depth_axis[1] * deep + b.push[1])
-            b.z += dt * (direction[2] * forward + across[2] * (wander + swing) + depth_axis[2] * deep + b.push[2])
+            deep = meander * self._drift * WORLD_UNIT * 0.015 * math.sin(t * 0.29 + 1.7 * b.phase)
+            steer = _drift_steer(steering, (b.x, b.y, b.z), b.phase, t, direction, across, depth_axis, axis_origin,
+                                 self._drift * WORLD_UNIT)
+            b.x += dt * (direction[0] * forward + across[0] * (wander + swing) + depth_axis[0] * deep + b.push[0] + steer[0])
+            b.y += dt * (direction[1] * forward + across[1] * (wander + swing) + depth_axis[1] * deep + b.push[1] + steer[1])
+            b.z += dt * (direction[2] * forward + across[2] * (wander + swing) + depth_axis[2] * deep + b.push[2] + steer[2])
             b.push = _decayed(b.push, dt)
         for c in self._clusters.values():
             members = [self._find(i) for i in c.members]
@@ -673,10 +730,12 @@ class ExtrudedBubbleSimulation:
             if not members:
                 continue
             forward = speed * 0.9
-            wander = self._drift * WORLD_UNIT * 0.04 * math.sin(t * 0.31 + c.ident)
-            c.x += dt * (direction[0] * forward + across[0] * wander + c.push[0])
-            c.y += dt * (direction[1] * forward + across[1] * wander + c.push[1])
-            c.z += dt * (direction[2] * forward + across[2] * wander + c.push[2])
+            wander = meander * self._drift * WORLD_UNIT * 0.04 * math.sin(t * 0.31 + c.ident)
+            steer = _drift_steer(steering, (c.x, c.y, c.z), 1.3 * c.ident, t, direction, across, depth_axis,
+                                 axis_origin, self._drift * WORLD_UNIT)
+            c.x += dt * (direction[0] * forward + across[0] * wander + c.push[0] + steer[0])
+            c.y += dt * (direction[1] * forward + across[1] * wander + c.push[1] + steer[1])
+            c.z += dt * (direction[2] * forward + across[2] * wander + c.push[2] + steer[2])
             c.push = _decayed(c.push, dt)
             self._place_cluster(c, members)
 
