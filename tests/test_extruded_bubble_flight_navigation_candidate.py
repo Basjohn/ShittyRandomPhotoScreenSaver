@@ -99,8 +99,12 @@ def test_input_and_settings_crash_contracts_are_explicit_and_mode_scoped():
     # Mode isolation is proved by the state/motion test above; require the
     # real display-manager input gate, not the old equality spelling in one
     # particular branch (which now rightly rejects non-EB modes with !=).
-    assert 'set_framed_flight_enabled(bool(admitted and mode == "extruded_bubble"))' in manager
-    assert "config['extruded_bubble_camera_position']" in manager
+    # Flight and the saved Camera Position follow the mode's declared framed camera (shared standard).
+    assert 'physical = bool(admitted and mode and spec_for_mode(mode) is not None)' in manager
+    assert 'set_framed_flight_enabled(physical)' in manager
+    assert "config[position_key] = list(getattr(owner.controller.presentation_state, '_' + position_key))" in manager
+    from core.settings.framed_camera import spec_for_mode
+    assert spec_for_mode('extruded_bubble').key('camera_position') == 'extruded_bubble_camera_position'
     # Formatters must exist before branching, and each volume mapper must receive
     # its admitted value. Exact source-line formatting is not the acceptance gate.
     import ast
