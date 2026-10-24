@@ -366,18 +366,19 @@ The exact changes and audio/visual acceptance gates remain in `Current_Plan.md` 
 
 ## Landscape camera, clipping and terrain skyline
 
-The framed landscape admits canonical turn **-0.20..0.20** (roughly ±36°) and tilt
-**0.17..0.58** (roughly 15°..52°). WASD and Alt+left-drag saturate rather than wrap;
-Alt+right pan is bounded against scale. Horizontal movement retains the central basin reference;
-the downward-looking limit retains the basin's `y=.68` reference at the top margin `.08`.
-The upward-looking limit instead retains upper sky's `y=.12` reference at the bottom
-margin `.92`, allowing the lake below the card when framing the Sun/sky. These are
-composition bounds inside the unchanged `-2..2` pan admission; turn/tilt limits and
-homogeneous/card clipping remain independent protections. Alt+wheel scales
-only the inner scene, preserving the outer bordered card and Edit/CUSTOM authority.
-These **landscape-specific values are not reusable defaults**. §4A FC must share the
-underlying bounded-camera capability for future framed 3D modes, with per-mode declared
-limits and composition targets. The live camera remains separately owned; preset starting metadata is only a seed.
+**Since 2026-10-24 Neon Lake uses the shared framed physical camera** (`core/settings/framed_camera.py`, spec
+`core/settings/neon_lake_camera.py`; operator: EB's camera controls are the standard for framed 3D). A real eye
+orbits the basin centre `(0, 0, -1.2)` at 3.6 (Scene Scale dollies it), pans by translating, flies with W/A/S/D
+(Q/E yaw, Shift+W/S pitch), moves by Camera Position and resets with R. Turn spans **-0.50..0.50** (±90°, saturating,
+never wrapping); tilt **-0.10..0.58**: 0 is a level horizon, negative looks slightly up. Camera Field of View
+(20°..62°, default 30°, Camera bucket) is the lens. The eye, not the pose, is bounded: inside a box around the basin
+and at least 0.05 above the land or water under it — the heightfield cell maximum times Terrain Height with detail,
+the music's actual Terrain Reaction lift, the lake's ripple crest, and the continuation from the basin edge down to
+the rolling ground. Settings and flight bound with the nominal 16:9 width; the renderer re-bounds over the card's
+exact width. Pan keeps only a loose composition envelope. Presets 1-4 and the canonical default were converted from
+the old screen-space fit by least squares over visible terrain points and the Sun/Moon (14-26 px RMS at 1672 px; the
+default also weights far-horizon points); saved live poses are reinterpreted, not migrated (R returns to the preset's
+start). The live camera remains separately owned; preset starting metadata is only a seed.
 
 The overscanned surface can cross the camera near plane under admitted views. Its shader
 emits a homogeneous clip position and relies on hardware clipping rather than dividing

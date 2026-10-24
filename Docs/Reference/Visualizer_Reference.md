@@ -568,6 +568,15 @@ resource/ring substrate while its reaction semantics remain mode-owned and its a
 `Docs/Reference/Sphere_Visualizer.md` (already operator-accepted). The binding lessons in
 `Docs/Reference/Transitions.md` ("3D foundation lessons") apply to modes as well.
 
+**Framed physical camera (the standard for framed 3D modes).** Extruded Bubble's camera is the standard
+(operator 2026-10-24): `core/settings/framed_camera.py` owns orbit, dolly (Scene Scale), eye-translating pan,
+Camera Position, Camera Field of View and bounded eye admission; `widgets/spotify_visualizer/view_orbit.py` owns
+held-key flight on the capture clock. A mode opts in with `framed_camera="module:SPEC"` on its descriptor and gets
+W/A/S/D flight, Q/E yaw, Shift+W/S pitch, held-left orbit, Alt+right pan, Alt+wheel dolly, R home and the control
+hint. Its renderer resolves the eye through the same functions (bounded by its floor hook over the exact card) and
+projects with that eye; Neon Lake's `BasinView` is the raster example, EB's ray-traced scene the volume example.
+Specs: `core/settings/extruded_bubble_camera.py`, `core/settings/neon_lake_camera.py`.
+
 - **GLSL:** include `SCENE3D_GLSL` from `rendering/gl_programs/scene3d.py` (camera with a real near plane, lighting,
   planar shadows, streaks, integer hash, impulse and departure helpers). Every function has a CPU mirror in the same
   module, checked on the GPU by `tests/test_scene3d_glsl_mirrors.py`.

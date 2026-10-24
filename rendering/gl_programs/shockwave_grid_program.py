@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import math
 
+from core.constants.neon_lake_world import DEPTH as NEON_LAKE_DEPTH, half_width as neon_lake_half_width
 from rendering.gl_programs.scene3d import Scene3DStorageLayout
 from widgets.spotify_visualizer.transient_bus import musical_emphasis, musical_weight, passage_ramp
 
 SHOCKWAVE_MAX_TILT = math.radians(90.0)
 SHOCKWAVE_MAX_TURN = math.radians(180.0)
 SHOCKWAVE_MAX_RIDGE = 0.6          # the horizon ridge's height at Horizon 1 and a full bar
-SHOCKWAVE_DEPTH = 2.4             # the grid's length into the distance, in field heights
+SHOCKWAVE_DEPTH = NEON_LAKE_DEPTH   # the grid's length into the distance, in field heights
 SHOCKWAVE_WIDTH = 0.16            # a crest's half width
 SHOCKWAVE_DECAY = 1.1             # seconds for a wave to fall to 1/e
 SHOCKWAVE_LIFETIME = 3.2          # seconds after which an event is dropped (all but invisible)
@@ -55,10 +56,7 @@ def shockwave_grid_cells(tier_cells: int) -> tuple[int, int]:
     return columns, max(2, round(columns * SHOCKWAVE_GRID_CELLS[1] / SHOCKWAVE_GRID_CELLS[0]))
 
 
-def shockwave_half_width(aspect: float) -> float:
-    """The grid's half width for a field ``aspect`` times wider than tall (wide enough that
-    its sides leave the view when it is turned)."""
-    return 0.8 * max(1.0, float(aspect)) + 0.9
+shockwave_half_width = neon_lake_half_width
 
 
 def shockwave_wave_speed(speed: float) -> float:

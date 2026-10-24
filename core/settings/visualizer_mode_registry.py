@@ -357,10 +357,11 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         profile_migration_source_mode="spectrum",
         view_orbit_settings=("shockwave_grid_turn", "shockwave_grid_tilt"),
         view_orbit_steps=(2.0 / 180.0, 2.0 / 90.0),
-        # A landscape: no wrapping through its back/underside. Pan keeps the lake anchor in view and, looking up,
-        # an upper-sky reference (so the Sun can be framed without the lake staying central).
+        # A landscape: no wrapping through its back/underside. The shared physical camera's eye bounds keep it
+        # out of the land and water, so pan only needs a loose composition envelope.
         view_orbit_turn_wraps=False,
-        scene_pan_envelope=(0.50, 0.68, 0.12, 0.08, 0.92),
+        scene_pan_envelope=(0.50, 0.50, 0.50, -0.50, 1.50),
+        framed_camera="core.settings.neon_lake_camera:SPEC",
         scene_transform_settings=("shockwave_grid_scene_scale", "shockwave_grid_scene_pan_x", "shockwave_grid_scene_pan_y"),
         prepared_reveal=True,
         geometry_kind="freeform_3d",

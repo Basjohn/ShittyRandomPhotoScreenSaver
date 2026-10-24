@@ -40,6 +40,7 @@ class FramedCameraSpec:
     clearance: float
     offset_scale: Vec3              # Camera Position units per world unit, per axis
     travel_speed: float             # keyboard flight, world units per second
+    fov_range: tuple[float, float] = FOV_RANGE
     surface_ceiling: float | None = None   # orbit/pan baseline ceiling while the mode's surface bound applies
     # Optional mode hooks, as "module:function" (lazy, so the spec stays importable from Qt-free code):
     # surface_bound(values) -> bool, floor(values) -> Floor | None, context_suffixes extra settings they read.
@@ -101,8 +102,8 @@ def camera_axes(spec: FramedCameraSpec, turn: float, tilt: float) -> tuple[float
     return (*right, *up, *back)
 
 
-def tan_half_fov(fov_y_degrees: float) -> float:
-    return math.tan(math.radians(max(FOV_RANGE[0], min(FOV_RANGE[1], float(fov_y_degrees)))) / 2.0)
+def tan_half_fov(fov_y_degrees: float, fov_range: tuple[float, float] = FOV_RANGE) -> float:
+    return math.tan(math.radians(max(fov_range[0], min(fov_range[1], float(fov_y_degrees)))) / 2.0)
 
 
 def camera_baseline(spec: FramedCameraSpec, turn: float, tilt: float, scale: float = 1., pan_x: float = 0.,
@@ -114,7 +115,7 @@ def camera_baseline(spec: FramedCameraSpec, turn: float, tilt: float, scale: flo
     distance = spec.orbit_distance / max(float(scale), 1e-3)
     if ceiling is not None and back[1] > 1e-9:
         distance = min(distance, max(1., (ceiling - pivot[1]) / back[1]))
-    tan_y = tan_half_fov(fov_y_degrees)
+    tan_y = tan_half_fov(fov_y_degrees, spec.fov_range)
     dx, dy = -2. * distance * tan_y * float(pan_x), 2. * distance * tan_y * float(pan_y)
     y = pivot[1] + distance * back[1] + dx * right[1] + dy * up[1]
     if ceiling is not None and y > ceiling and up[1] > 1e-9:
@@ -170,7 +171,7 @@ def view_matrices(spec: FramedCameraSpec, turn: float, tilt: float, aspect: floa
     view_to_world = camera_axes(spec, turn, tilt)
     right, up, back = view_to_world[:3], view_to_world[3:6], view_to_world[6:9]
     world_to_view = (right[0], up[0], back[0], right[1], up[1], back[1], right[2], up[2], back[2])
-    tan_y = tan_half_fov(fov_y_degrees)
+    tan_y = tan_half_fov(fov_y_degrees, spec.fov_range)
     f = 1.0 / tan_y
     projection = (f / aspect, 0.0, 0.0, 0.0, 0.0, f, 0.0, 0.0, 0.0, 0.0,
                   (far + near) / (near - far), -1.0, 0.0, 0.0, 2.0 * far * near / (near - far), 0.0)
@@ -186,7 +187,7 @@ def project_point(spec: FramedCameraSpec, point, eye, turn: float, tilt: float, 
     depth = -sum(a * b for a, b in zip(rel, back))
     if depth <= 1e-6:
         return None
-    tan_y = tan_half_fov(fov_y_degrees)
+    tan_y = tan_half_fov(fov_y_degrees, spec.fov_range)
     x = sum(a * b for a, b in zip(rel, right)) / (depth * tan_y * aspect)
     y = sum(a * b for a, b in zip(rel, up)) / (depth * tan_y)
     return x, y, depth

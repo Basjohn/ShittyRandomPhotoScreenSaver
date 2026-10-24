@@ -4558,11 +4558,11 @@
     }
   },
   "starting_view": {
-    "shockwave_grid_scene_pan_x": -0.03643724696356275,
-    "shockwave_grid_scene_pan_y": 0.12741035856573707,
-    "shockwave_grid_scene_scale": 1.903330000000001,
-    "shockwave_grid_tilt": 0.17,
-    "shockwave_grid_turn": -0.2
+    "shockwave_grid_scene_pan_x": -0.051355,
+    "shockwave_grid_scene_pan_y": 0.103997,
+    "shockwave_grid_scene_scale": 0.935951,
+    "shockwave_grid_tilt": 0.133037,
+    "shockwave_grid_turn": -0.189112
   },
   "visualizer_preset_mode": "shockwave_grid",
   "visualizer_preset_override": true

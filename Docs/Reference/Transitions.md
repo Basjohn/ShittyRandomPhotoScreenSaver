@@ -526,6 +526,25 @@ Each foundation slice adds what it learned here.
 - A product port of a lab scene: keep one source for programs and knobs (the lab imports both), render the product
   through its production host from a real recording, and compare with the lab at the same size before tuning anything.
 
+**Framed physical camera (shared standard, 2026-10-24)**
+- Framed 3D modes share one physical camera (`core/settings/framed_camera.py`): a mode declares a
+  `FramedCameraSpec` (pivot, orbit distance, pitch/yaw mapping, FOV range, eye box, optional floor/ceiling hooks)
+  on its descriptor's `framed_camera`; flight, Camera Position admission, reset and input gating follow the
+  declaration and never test a mode id. Extruded Bubble was its first spec (numerically unchanged), Neon Lake the second.
+- Bound the eye, never the sliders: a near-flat horizon is a pose, entering the land is an eye position. Derive the
+  floor from the shader's own height function (Neon: heightfield cell maximum x Terrain Height x detail, the music's
+  actual Terrain Reaction lift, the lake's ripple crest, the edge-to-rolling continuation). A constant "tallest peak"
+  floor in front of the basin lifted every preset's eye; the music's maximum lift with Reaction off did the same.
+- An old screen-space fit (scale/offset after projection) is a lens shift; an on-axis physical camera cannot match
+  both near land and the far horizon with it. Convert poses by least squares over many visible world points (plus the
+  body and far-horizon points where the sky matters) from the old renderer in a worktree, not by matching one ray:
+  Neon presets 1-4 reached 14-26 px RMS on a 1672 px card (one-ray conversion left preset 2's Moon off-card).
+- A wider screen-space envelope is not a camera bound: keep `scene_pan_envelope` loose for a physical camera and let
+  the eye bounds protect the scene.
+- Raster passes with a physical camera: homogeneous clip from view depth (numerator linear in view position), the
+  sky ray from the same right/up/back and tan, and one per-frame CPU view object (`BasinView`) that every CPU
+  projection (shafts, beat stars, edit envelope) uses — never a second CPU camera.
+
 ## Operator-triggered appearance review (reference checklist)
 
 Automated image differences are not aesthetic acceptance. Previously implemented work is operator-accepted; use the following reference checks **only if** a newly observed regression or new transition tranche requires targeted appearance review:

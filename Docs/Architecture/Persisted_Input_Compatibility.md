@@ -163,6 +163,11 @@ without the safe path below.
   change apparent widget size. There is no second schema or duplicate placement flag. Runtime Edit preserves
   these tokens for move-only Save and removes content sizing for measured resize/extent/child edits.
 
+- **Neon Lake live view (2026-10-24).** `shockwave_grid_turn/tilt/scene_scale/scene_pan_x/scene_pan_y` now drive
+  the shared framed physical camera instead of a screen-space fit, and `shockwave_grid_camera_fov` /
+  `shockwave_grid_camera_position` join them. Presets 1-4 and the canonical default were converted; a saved live
+  pose from an older build is read with the new meaning (still bounded, never inside the land) and R returns to the
+  preset's start. There is deliberately no bridge: a live camera pose is not artwork.
 - **Custom layout version handling.** `CUSTOM_LAYOUT_VERSION = 2` is enforced by
   hard rejection (`load_custom_layout_map` drops any `version != 2`); there is
   **no** v1 migration path to remove, and adding one would *widen* compatibility.

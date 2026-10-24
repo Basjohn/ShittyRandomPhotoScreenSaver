@@ -15,7 +15,9 @@ def _scene(time=12.0, **parameters):
         # Nothing else moves with the animation clock, so a drift is the only change over time.
         shockwave_grid_scroll=0.0, shockwave_grid_idle=0.0, shockwave_grid_water_detail=0.0,
         shockwave_grid_water_reflection=0.0,
-        shockwave_grid_sun_orbit_enabled=False, shockwave_grid_starscape_beat=False), **parameters})
+        shockwave_grid_sun_orbit_enabled=False, shockwave_grid_starscape_beat=False,
+        # Look almost level so the upper card is sky (the subject of these contracts).
+        shockwave_grid_tilt=.02), **parameters})
     state = snapshot.logical.mode_state
     return replace(snapshot, logical=replace(snapshot.logical, mode_state=replace(state, events=(),
                                                                                  animation_time=time)))

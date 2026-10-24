@@ -91,7 +91,9 @@ def test_body_colour_position_size_and_moon_phase_are_visible_without_sky(target
 
 def test_disabled_moon_has_no_sun_or_body_when_sky_is_disabled(target):
     capture, host = target
-    snapshot = _body(shockwave_grid_sun_mode='Moon')
+    # Look nearly level: steeper views also frame the faded distant land at the horizon (the same in
+    # the pre-framed-camera renderer), which is terrain, not a celestial body.
+    snapshot = _body(shockwave_grid_sun_mode='Moon', shockwave_grid_tilt=.1)
     moon = capture.render(host, snapshot)
     disabled = capture.render(host, _change(snapshot, shockwave_grid_sun_enabled=False))
     _different(moon, disabled)

@@ -2,28 +2,24 @@
 
 Authored base height alone classifies water. Its travelling waves join the visible
 shore through the shallow fringe; dry land retains its independent bounded lift.
-The fit is static for authored terrain/view and the final scene pose acts only in
-the card interior. Audio cannot change framing or target sizing.
+The view is the shared framed physical camera (``core.settings.framed_camera``): orbit, dolly, pan and
+flight move a real eye over the land; audio cannot change framing or target sizing.
 """
 from __future__ import annotations
 
 import math
-import struct
+from dataclasses import dataclass
 
 from rendering.gl_programs.heightfield_glsl import HEIGHTFIELD_GLSL, HEIGHTFIELD_WIRE_GLSL
 from rendering.gl_programs.heightfield_volume_glsl import HEIGHTFIELD_VOLUME_GLSL
 from rendering.gl_programs.heightfield_glsl import HEIGHTFIELD_GLSL as _SKY_HEIGHTFIELD_GLSL
 from rendering.gl_programs.neon_celestial import NEON_CELESTIAL_GLSL
 from rendering.gl_programs.neon_terrain_reaction import REACTION_GLSL
-from rendering.gl_programs.scene3d import SCENE3D_GLSL, SCENE3D_ORBIT_GLSL, scene3d_orbit_project
+from rendering.gl_programs.scene3d import SCENE3D_GLSL, SCENE3D_ORBIT_GLSL
 from rendering.gl_programs.shockwave_grid_program import (
-    SHOCKWAVE_DEPTH, SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_WAVE_GLSL,
+    SHOCKWAVE_DEPTH, SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_WAVE_GLSL, shockwave_half_width,
 )
 
-
-
-def basin_camera(half_width: float, maximum: float) -> float:
-    return max(3.0, 1.25 * math.sqrt(half_width ** 2 + (SHOCKWAVE_DEPTH / 2) ** 2 + maximum ** 2))
 
 
 def basin_pixel_scale(matrix, viewport) -> float:
@@ -37,100 +33,114 @@ def basin_pixel_scale(matrix, viewport) -> float:
     return math.sqrt(abs(determinant) * viewport[2] * viewport[3]) / (2.0 * abs(matrix[15]))
 
 
-def basin_project(point, tilt, turn, camera):
-    return scene3d_orbit_project(point,tilt,turn,camera=camera,pivot=(0.0,0.0,-0.5*SHOCKWAVE_DEPTH))
+@dataclass(frozen=True, slots=True)
+class BasinView:
+    """One frame's physical camera (the shared framed-camera standard) on the card's interior ``field``."""
+    eye: tuple[float, float, float]
+    right: tuple[float, float, float]
+    up: tuple[float, float, float]
+    back: tuple[float, float, float]
+    tan: tuple[float, float]
+    field: tuple[float, float, float, float]
+
+    def view(self, point) -> tuple[float, float, float]:
+        rel = tuple(p - e for p, e in zip(point, self.eye))
+        return tuple(sum(a * b for a, b in zip(rel, axis)) for axis in (self.right, self.up, self.back))
+
+    def depth(self, point) -> float:
+        return -self.view(point)[2]
+
+    def item_point(self, point) -> tuple[float, float]:
+        """CPU mirror of basinItem (callers check ``depth`` first for points behind the eye)."""
+        x, y, z = self.view(point)
+        depth = max(-z, 1e-6)
+        fx, fy, width, height = self.field
+        return (fx + 0.5 * width + 0.5 * width * x / (depth * self.tan[0]),
+                fy + 0.5 * height - 0.5 * height * y / (depth * self.tan[1]))
+
+    def ray(self, u: float, v: float) -> tuple[float, float, float]:
+        """World direction through card interior UV (v down), as the sky shader casts it."""
+        nx, ny = (2.0 * u - 1.0) * self.tan[0], (1.0 - 2.0 * v) * self.tan[1]
+        d = tuple(nx * r + ny * up - b for r, up, b in zip(self.right, self.up, self.back))
+        norm = math.sqrt(sum(c * c for c in d))
+        return tuple(c / norm for c in d)
 
 
-def basin_bounds(size: int, data: bytes) -> tuple:
-    """Sixteen conservative authored patches, derived once per terrain change."""
-    heights = struct.unpack(f"<{size * size * 2}f", data)[::2]
-    edges = tuple(round(i * (size - 1) / 4) for i in range(5))
-    points = []
-    for y0, y1 in zip(edges, edges[1:]):
-        for x0, x1 in zip(edges, edges[1:]):
-            highest = max(heights[y * size + x]
-                          for y in range(max(0,y0-2),min(size,y1+3))
-                          for x in range(max(0,x0-2),min(size,x1+3)))
-            points.extend((x / (size - 1), y, z / (size - 1))
-                          for x in (x0, x1) for z in (y0, y1) for y in (-0.20, highest))
-    return tuple(points)
+def orbit_view(turn: float, tilt: float, field=(0.0, 0.0, 1800.0, 1000.0), *, scale: float = 1.0,
+               pan=(0.0, 0.0), fov: float = 30.0, position=(0.0, 0.0, 0.0)) -> BasinView:
+    """A view from settings-unit pose values with no terrain floor (tools and contracts)."""
+    from core.settings import framed_camera as fc
+    from core.settings.neon_lake_camera import SPEC
+    axes = fc.camera_axes(SPEC, turn, tilt)
+    eye, _offset = fc.resolve_camera_position(SPEC, turn, tilt, scale, pan[0], pan[1], fov, position, axes=axes)
+    tan_y = fc.tan_half_fov(fov, SPEC.fov_range)
+    return BasinView(eye, axes[:3], axes[3:6], axes[6:9], (tan_y * field[2] / field[3], tan_y), tuple(field))
 
 
-def basin_fit(tilt: float, turn: float, half_width: float, maximum: float, aspect: float,
-              bounds=None, height_scale: float = 1.0) -> tuple[float, float]:
-    """Static conservative fit, reserving sky above the authored basin."""
-    camera = basin_camera(half_width, maximum)
-    world = (((u*2.0 - 1.0)*half_width, y*height_scale if y > 0 else y, -v*SHOCKWAVE_DEPTH)
-             for u,y,v in bounds) if bounds is not None else (
-                 (x,y,z) for x in (-half_width, 0.0, half_width)
-                 for y in (-0.10,maximum) for z in (0.0,-SHOCKWAVE_DEPTH))
-    points = [basin_project(point, tilt, turn, camera) for point in world]
-    low, high = min(p[1] for p in points), max(p[1] for p in points)
-    span = max(p[0] for p in points) - min(p[0] for p in points)
-    scale = min(0.85 / max(high - low, 1e-3), 1.15 * aspect / max(span, 1e-3))
-    return scale, 0.99 + low * scale
+def basin_view(parameters, field) -> BasinView:
+    """The frame's eye from the shared camera, bounded over the card's exact terrain width."""
+    from core.settings import framed_camera as fc
+    from core.settings.neon_lake_camera import SPEC, floor_reaction, terrain_floor
+
+    def get(name):
+        return parameters["shockwave_grid_" + name]
+    aspect = field[2] / field[3]
+    turn, tilt, fov = float(get("turn")), float(get("tilt")), float(get("camera_fov"))
+    axes = fc.camera_axes(SPEC, turn, tilt)
+    eye, _offset = fc.resolve_camera_position(
+        SPEC, turn, tilt, float(get("scene_scale")), float(get("scene_pan_x")), float(get("scene_pan_y")), fov,
+        get("camera_position"), None,
+        terrain_floor(get("terrain"), float(get("terrain_height")), shockwave_half_width(aspect),
+                      floor_reaction(parameters)), axes=axes)
+    tan_y = fc.tan_half_fov(fov, SPEC.fov_range)
+    return BasinView(eye, axes[:3], axes[3:6], axes[6:9], (tan_y * aspect, tan_y), tuple(field))
 
 
-def basin_item_point(point, field, fit, tilt, turn, half_width, maximum, scene_scale=1.0, pan=(0.0, 0.0)):
-    """CPU mirror of basinItem: scale about interior centre, then normalized pan."""
-    sx, sy, _depth = basin_project(point, tilt, turn, basin_camera(half_width, maximum))
-    x, y, width, height = field
-    cx, cy = x + width / 2, y + height / 2
-    px = cx + sx * fit[0] * height
-    py = y + height * (fit[1] - sy * fit[0])
-    return (cx + (px - cx) * scene_scale + pan[0] * width,
-            cy + (py - cy) * scene_scale + pan[1] * height)
 
 
 _PROJECTION = f"""
 const float SHOCKWAVE_DEPTH = {SHOCKWAVE_DEPTH:.6f};
 uniform mat4 uMatrix;
 uniform vec4 uField;
-uniform vec2 uView;
-uniform float uCamera;
-uniform vec2 uFit;
+// The shared framed physical camera (core.settings.framed_camera): eye and right/up/back world axes,
+// and tan of the half field of view on x and y.
+uniform vec3 uEye;
+uniform vec3 uRight;
+uniform vec3 uUp;
+uniform vec3 uBack;
+uniform vec2 uTan;
 uniform float uHalfWidth;
 uniform float uHorizon;
 uniform int uBarCount;
 uniform float uBars[{SHOCKWAVE_MAX_BARS}];
 uniform float uHeightScale;
-vec3 shockwaveProject(vec3 p) {{
-    return sceneOrbitProject(p,uView,vec3(0.0,0.0,-0.5*SHOCKWAVE_DEPTH),vec3(0.0),uCamera);
-}}
 """
 _POSE = """
-uniform vec3 uScenePose; // scale, pan-x, pan-y (fractions of interior)
+vec3 basinViewPoint(vec3 world) {
+    vec3 rel = world - uEye;
+    return vec3(dot(rel, uRight), dot(rel, uUp), dot(rel, uBack));
+}
 vec2 basinItem(vec3 world) {
-    vec3 screen = shockwaveProject(world);
-    vec2 centre = uField.xy + 0.5 * uField.zw;
-    vec2 item = vec2(centre.x + screen.x * uFit.x * uField.w,
-                    uField.y + uField.w * (uFit.y - screen.y * uFit.x));
-    return centre + (item - centre) * uScenePose.x + uScenePose.yz * uField.zw;
+    vec3 v = basinViewPoint(world);
+    float depth = max(-v.z, 1e-6);
+    return uField.xy + 0.5 * uField.zw + 0.5 * uField.zw * vec2(v.x / (depth * uTan.x), -v.y / (depth * uTan.y));
 }
-vec3 basinUnview(vec3 p) {
-    float c = cos(uView.x), s = sin(uView.x);
-    p = vec3(p.x, p.y*c + p.z*s, -p.y*s + p.z*c);
-    c = cos(uView.y); s = sin(uView.y);
-    return vec3(p.x*c - p.z*s, p.y, p.x*s + p.z*c);
+vec3 basinUnview(vec3 v) {
+    return v.x * uRight + v.y * uUp + v.z * uBack;
 }
-// True homogeneous camera projection for the overscanned landscape. Flattening
-// sceneOrbitProject to pixel XY *before* clipping makes triangles crossing the
-// camera divide by negative/near-zero distances, producing giant sheet artifacts.
-// Keep the numerator linear in view position and let GL clip at the near plane.
-const float BASIN_NEAR = 0.12;
-float basinFar() { return max(48.0, 20.0*uCamera); }
+// True homogeneous camera projection for the overscanned landscape: keep the numerator
+// linear in view position and let GL clip at the near plane (flattening to pixel XY
+// before clipping divides by negative/near-zero depths and produces giant sheets).
+const float BASIN_NEAR = 0.04;
+float basinFar() { return 60.0; }
 vec4 basinClip(vec3 world) {
-    vec3 view=sceneOrbitPoint(world,uView,vec3(0.0,0.0,-0.5*SHOCKWAVE_DEPTH),vec3(0.0));
-    float distance=uCamera-view.z;
-    float w=distance/uCamera;
-    vec2 centre=uField.xy+0.5*uField.zw;
-    vec2 basePosition=centre+vec2(0.0,uField.w*(uFit.y-0.5)*uScenePose.x)
-               +uScenePose.yz*uField.zw;
-    vec2 numerator=vec2(view.x,-view.y)*uFit.x*uField.w*uScenePose.x;
-    vec4 clip=uMatrix*vec4(basePosition*w+numerator,0.0,w);
-    float farPlane=basinFar();
-    clip.z=((farPlane+BASIN_NEAR)*distance-2.0*farPlane*BASIN_NEAR)
-           /((farPlane-BASIN_NEAR)*uCamera);
+    vec3 v = basinViewPoint(world);
+    float depth = -v.z;
+    vec2 centre = uField.xy + 0.5 * uField.zw;
+    vec2 numerator = 0.5 * uField.zw * vec2(v.x / uTan.x, -v.y / uTan.y);
+    vec4 clip = uMatrix * vec4(centre * depth + numerator, 0.0, depth);
+    float farPlane = basinFar();
+    clip.z = ((farPlane + BASIN_NEAR) * depth - 2.0 * farPlane * BASIN_NEAR) / (farPlane - BASIN_NEAR);
     return clip;
 }
 """
@@ -404,7 +414,7 @@ void main() {
     vec3 reflectionPlane=vec3(0.0);
     if (uPass == 0) {
         if (water || uReflection <= 0.0) discard;
-        vec3 eye = basinUnview(vec3(0.0,0.0,uCamera)) + vec3(0.0,0.0,-0.5*SHOCKWAVE_DEPTH);
+        vec3 eye = uEye;
         float denominator = vWorld.y - eye.y;
         if (abs(denominator) < 1e-4) discard;
         float t = -eye.y / denominator;
@@ -484,7 +494,7 @@ void main() {
     // The original event crest illuminates curved water detail. Keep troughs
     // dark instead of covering each crest with an opaque luminous sheet.
     float ring = water ? clamp(crest*0.08,0.0,0.20) : 0.0;
-    vec3 eye=basinUnview(vec3(0.0,0.0,uCamera))+vec3(0.0,0.0,-0.5*SHOCKWAVE_DEPTH);
+    vec3 eye=uEye;
     vec3 view=normalize(eye-vWorld);
     n=faceforward(n,-view,n);
     vec4 bodyColour=uBodyKind==0 ? uSunColor : uMoonColor;
@@ -627,13 +637,9 @@ uniform float uBeatPulse;
 uniform vec2 uCelestialGlow; // brightness, musical response
 uniform int uCelestialRimVertices;
 void main() {
-    vec2 item=uField.xy+vUv*uField.zw;
-    vec2 centre=uField.xy+0.5*uField.zw;
-    item=centre+(item-centre-uScenePose.yz*uField.zw)/uScenePose.x;
-    vec2 screen=vec2((item.x-centre.x)/(uFit.x*uField.w),
-                    (uFit.y-(item.y-uField.y)/uField.w)/uFit.x);
-    vec3 ray=normalize(basinUnview(vec3(screen,-uCamera)));
-    vec3 eye=basinUnview(vec3(0.0,0.0,uCamera))+vec3(0.0,0.0,-0.5*SHOCKWAVE_DEPTH);
+    vec2 ndc=vec2(2.0*vUv.x-1.0,1.0-2.0*vUv.y);
+    vec3 ray=normalize(basinUnview(vec3(ndc*uTan,-1.0)));
+    vec3 eye=uEye;
     if (uSkyPass==3) {
         // Only the shaft source is written here (SceneTarget.shaft_writes); at the far plane, so the
         // terrain and water already drawn leave it out where they stand in front of the light.
@@ -732,5 +738,5 @@ void main() {
 """
 )
 
-__all__ = ["basin_camera", "basin_fit", "basin_bounds", "basin_project", "basin_item_point", "NEON_VERTEX_SOURCE", "NEON_FRAGMENT_SOURCE",
+__all__ = ["BasinView", "basin_view", "orbit_view", "NEON_VERTEX_SOURCE", "NEON_FRAGMENT_SOURCE",
            "NEON_SKY_VERTEX_SOURCE", "NEON_SKY_FRAGMENT_SOURCE", "NEON_SKYLINE_VERTEX_SOURCE", "NEON_SKYLINE_FRAGMENT_SOURCE"]

@@ -84,42 +84,27 @@ def _nearby_bright_star(lon: int, lat: int) -> tuple[int, int]:
     return lon, lat
 
 
-def _visible_star_cell(x: float, y: float, tilt: float, turn: float,
-                       camera: float, fit: tuple[float, float],
-                       pose: tuple[float, float, float], aspect: float) -> tuple[int, int]:
+def _visible_star_cell(x: float, y: float, view) -> tuple[int, int]:
     """CPU mirror of NEON_SKY_FRAGMENT_SOURCE's camera ray, at card UV x/y.
 
     A static latitude derived from orbit tilt can select stars hidden by the
     mountains or completely outside the viewport after framing/zoom/pan.
     These are genuine panorama cells, not fake screen-anchored sprites.
     """
-    scale, pan_x, pan_y = pose
-    sx = (x - 0.5 - pan_x) * aspect / (max(scale, 1e-5) * fit[0])
-    sy = (fit[1] - 0.5 - (y - 0.5 - pan_y) / max(scale, 1e-5)) / fit[0]
-    ct, st, cy, syaw = math.cos(tilt), math.sin(tilt), math.cos(turn), math.sin(turn)
-    vy = sy*ct-camera*st
-    vz = -sy*st-camera*ct
-    wx = sx*cy-vz*syaw
-    wz = sx*syaw+vz*cy
-    norm = math.sqrt(wx*wx+vy*vy+wz*wz)
-    longitude = math.atan2(wx,-wz)
-    latitude = math.asin(max(-1.0,min(1.0,vy/norm)))
-    return round(longitude*420),round(latitude*420)
+    wx, vy, wz = view.ray(x, y)
+    longitude = math.atan2(wx, -wz)
+    latitude = math.asin(max(-1.0, min(1.0, vy)))
+    return round(longitude*420), round(latitude*420)
 
 
-def starscape_beat_cells(events, tilt: float, turn: float, *,
-                         camera: float,
-                         fit: tuple[float, float],
-                         pose: tuple[float, float, float] = (1.0,0.0,0.0),
-                         aspect: float = 1.7, terrain=None, body=None) -> tuple[tuple[float, ...], ...]:
+def starscape_beat_cells(events, view, *, terrain=None, body=None) -> tuple[tuple[float, ...], ...]:
     """Three spaced existing celestial star-cells per recent powerful onset.
 
     Derived from the existing bounded onset ring/clock. Nothing is persisted or
     recomputed by a background owner, and disabled mode does no work at all.
     """
     bursts = []
-    eye = (-camera*math.cos(tilt)*math.sin(turn), camera*math.sin(tilt),
-           camera*math.cos(tilt)*math.cos(turn)-.5*SHOCKWAVE_DEPTH)
+    eye = view.eye
     # The latest strong hits keep independent gentle release tails; older ones give way gradually.
     newer: list[float] = []
     for age, x, z, strength in reversed(events):
@@ -143,7 +128,7 @@ def starscape_beat_cells(events, tilt: float, turn: float, *,
             for attempt in range(3):
                 px = x + (0.,-.06,.06)[attempt]
                 py = max(.025,y-attempt*.07)
-                lon, lat = _visible_star_cell(px,py,tilt,turn,camera,fit,pose,aspect)
+                lon, lat = _visible_star_cell(px, py, view)
                 cx, cy = _nearby_bright_star(lon,lat)
                 cell = (cx,cy)
                 if ((body is None or _body_clear(cell,eye,body))

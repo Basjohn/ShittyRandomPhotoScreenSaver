@@ -52,7 +52,7 @@ def _draw(host, target, snapshot, width, height, window):
             matrix)
 
 
-def capture(output: Path, *, width=1300, height=750, dpr=1.0, overrides=None, window=None) -> dict:
+def capture(output: Path, *, width=1300, height=750, dpr=1.0, overrides=None, window=None, preset=1) -> dict:
     from PySide6.QtGui import QImage
 
     from core.settings.visualizer_presets import resolve_visualizer_activation_payload
@@ -62,7 +62,7 @@ def capture(output: Path, *, width=1300, height=750, dpr=1.0, overrides=None, wi
     from tools.transition_contact_sheet import TransitionCapture
 
     activation = resolve_visualizer_activation_payload(
-        {"mode": "shockwave_grid", "preset_shockwave_grid": 0}, mode="shockwave_grid")
+        {"mode": "shockwave_grid", "preset_shockwave_grid": preset - 1}, mode="shockwave_grid")
     settings = {**activation.resolved_config, **(overrides or {})}
     snapshot = _build_spectrum_preview_snapshot(width=width, height=height, mode="shockwave_grid", settings=settings)
     window_width, window_height = window or (width, height)
@@ -111,7 +111,7 @@ def capture(output: Path, *, width=1300, height=750, dpr=1.0, overrides=None, wi
 
 def capture_motion(output: Path, clip_path: Path, *, width, height, dpr, window, overrides,
                    start=0., duration=8., fps=12., resize=(), gif=False, resize_smooth=False,
-                   rgb_roi=None, all_frames=False):
+                   rgb_roi=None, all_frames=False, preset=1):
     """Replay native recorded features, retaining one real GL context and mode host."""
     from bisect import bisect_left
     from dataclasses import replace
@@ -144,7 +144,7 @@ def capture_motion(output: Path, clip_path: Path, *, width, height, dpr, window,
     sizes = tuple(resize) or ((width, height),)
     window = window or (max(w for w, _h in sizes), max(h for _w, h in sizes))
     activation = resolve_visualizer_activation_payload(
-        {"mode": "shockwave_grid", "preset_shockwave_grid": 0}, mode="shockwave_grid")
+        {"mode": "shockwave_grid", "preset_shockwave_grid": preset - 1}, mode="shockwave_grid")
     settings = {**activation.resolved_config, **overrides}
     target = TransitionCapture(round(window[0]*dpr), round(window[1]*dpr))
     host = QuickVisualizerRenderHost()
@@ -246,6 +246,7 @@ def main():
     parser.add_argument("--dpr", type=float, default=1.0)
     parser.add_argument("--window", help="logical render-window size; centres the card inside it")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=JSON", help="in-memory settings override")
+    parser.add_argument("--preset", type=int, default=1, help="1-based Neon Lake preset (its starting view applies)")
     parser.add_argument("--suite", action="store_true", help="baseline size, DPR, angle, zoom and aspect views")
     parser.add_argument("--clip", type=Path, help="native recorded-feature JSONL; enables retained-host motion capture")
     parser.add_argument("--start", type=float, default=0.)
@@ -285,7 +286,7 @@ def main():
         capture_motion(args.output, args.clip, width=width, height=height, dpr=args.dpr, window=window,
                        overrides=overrides, start=args.start, duration=args.duration, fps=args.fps,
                        resize=resize, gif=args.gif, resize_smooth=args.resize_smooth,
-                       rgb_roi=rgb_roi, all_frames=args.all_frames)
+                       rgb_roi=rgb_roi, all_frames=args.all_frames, preset=args.preset)
         return
     cases = (
         ("large", 2100, 1200, 1., {}), ("medium", 1300, 750, 1., {}),
@@ -302,7 +303,7 @@ def main():
     ) if args.suite else ((None, width, height, args.dpr, {}),)
     for name, w, h, ratio, pose, *embedded in cases:
         capture(args.output / name if name else args.output, width=w, height=h, dpr=ratio,
-                overrides={**overrides, **pose}, window=embedded[0] if embedded else window)
+                overrides={**overrides, **pose}, window=embedded[0] if embedded else window, preset=args.preset)
 
 
 if __name__ == "__main__":

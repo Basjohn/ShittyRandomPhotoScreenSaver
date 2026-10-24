@@ -17,13 +17,13 @@ from rendering.quick import gl_query
 from rendering.gl_programs.neon_lake_basin_program import (
     NEON_VERTEX_SOURCE, NEON_FRAGMENT_SOURCE, NEON_SKY_VERTEX_SOURCE, NEON_SKY_FRAGMENT_SOURCE,
     NEON_SKYLINE_VERTEX_SOURCE, NEON_SKYLINE_FRAGMENT_SOURCE,
-    basin_camera, basin_fit, basin_bounds, basin_item_point, basin_pixel_scale, basin_project,
+    basin_pixel_scale, basin_view,
 )
 from rendering.gl_programs.neon_celestial import basin_body_position
 from rendering.gl_programs.neon_terrain_reaction import REACTION_SAMPLES
 from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
 from rendering.gl_programs.shockwave_grid_program import (
-    SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_MAX_RIDGE, SHOCKWAVE_MAX_TILT, SHOCKWAVE_MAX_TURN,
+    SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_MAX_RIDGE,
     shockwave_amplitude, shockwave_event_records, shockwave_grid_cells, shockwave_half_width,
     shockwave_idle, shockwave_wave_speed,
 )
@@ -39,7 +39,7 @@ from ..render_contract import QuickVisualizerRenderFrame
 from .spectrum import prepare_spectrum_shader_levels
 
 _EVENT_BINDING, _HEIGHT_UNIT = 3, 4
-_VIEW_UNIFORMS = ("uMatrix", "uField", "uView", "uCamera", "uFit", "uScenePose")
+_VIEW_UNIFORMS = ("uMatrix", "uField", "uEye", "uRight", "uUp", "uBack", "uTan")
 _REACTION_UNIFORMS = ("uReaction", "uReactionBands", "uReactionPhase", "uReactionMaximum", "uReactionLane",
                       "uReactionWeight", "uReactionBias")
 _CELESTIAL_UNIFORMS=("uBodyPosition","uBodySize","uBodyKind","uSunEnabled","uSunColor","uMoonColor",
@@ -88,10 +88,7 @@ class QuickShockwaveGridRenderer:
         self._target = SceneTarget("Neon Lake Basin")
         self._stream = StreamRing("Neon Lake Basin")
         self._heightfield = HeightfieldTexture("Neon Lake Basin", components=2)
-        self._fit_key = None
-        self._fit = (1.0, 0.5)
         self._terrain_data = None
-        self._terrain_bounds = ()
         self._mesh_cells = None
         self._mesh_data = None
         self._points_cells = None
@@ -125,21 +122,12 @@ class QuickShockwaveGridRenderer:
     def _view(self, frame, parameters):
         field = tuple(float(value) for value in frame.logical_content_rect)
         half_width = shockwave_half_width(field[2] / field[3])
-        tilt = SHOCKWAVE_MAX_TILT * float(parameter(parameters, "shockwave_grid_tilt"))
-        turn = SHOCKWAVE_MAX_TURN * float(parameter(parameters, "shockwave_grid_turn"))
         terrain = parameter(parameters, "shockwave_grid_terrain")
         if terrain["data"] is not self._terrain_data:
-            self._terrain_bounds = basin_bounds(terrain["size"], terrain["data"])
             self._terrain_data = terrain["data"]
         maximum = max(0.19, float(terrain["maximum"])
                       * float(parameter(parameters, "shockwave_grid_terrain_height")) * 1.50)
-        key = (tilt, turn, half_width, maximum, field[2] / field[3], id(self._terrain_data),
-               float(parameter(parameters, "shockwave_grid_terrain_height")))
-        if key != self._fit_key:
-            self._fit = basin_fit(tilt, turn, half_width, maximum, field[2] / field[3], self._terrain_bounds,
-                                  float(parameter(parameters, "shockwave_grid_terrain_height"))*1.50)
-            self._fit_key = key
-        return field, half_width, tilt, turn, maximum
+        return field, half_width, basin_view(parameters, field), maximum
 
     def _programs(self, parameters, samples, bloom):
         r = self._resources
@@ -182,16 +170,15 @@ class QuickShockwaveGridRenderer:
         return self._target.warm(item_pixel_rect(frame)[2:], samples, overlay=True, bloom=glow > 0.0,
                                  shafts=_rays_admitted(parameters))
 
-    def _bind_view(self, uniforms, frame, parameters, field, half_width, tilt, turn, maximum):
+    @staticmethod
+    def _bind_view(uniforms, frame, view):
         gl.glUniformMatrix4fv(uniforms["uMatrix"], 1, gl.GL_FALSE, frame.matrix_values)
-        gl.glUniform4f(uniforms["uField"], *field)
-        gl.glUniform2f(uniforms["uView"], tilt, turn)
-        gl.glUniform1f(uniforms["uCamera"], basin_camera(half_width, maximum))
-        gl.glUniform2f(uniforms["uFit"], *self._fit)
-        gl.glUniform3f(uniforms["uScenePose"],
-                       float(parameter(parameters, "shockwave_grid_scene_scale")),
-                       float(parameter(parameters, "shockwave_grid_scene_pan_x")),
-                       float(parameter(parameters, "shockwave_grid_scene_pan_y")))
+        gl.glUniform4f(uniforms["uField"], *view.field)
+        gl.glUniform3f(uniforms["uEye"], *view.eye)
+        gl.glUniform3f(uniforms["uRight"], *view.right)
+        gl.glUniform3f(uniforms["uUp"], *view.up)
+        gl.glUniform3f(uniforms["uBack"], *view.back)
+        gl.glUniform2f(uniforms["uTan"], *view.tan)
 
     @staticmethod
     def _bind_reaction(uniforms, parameters, mode_state, terrain) -> None:
@@ -250,7 +237,7 @@ class QuickShockwaveGridRenderer:
         if frame.logical_content_rect[2] <= 0.0 or frame.logical_content_rect[3] <= 0.0:
             return
         parameters = mode_state.parameters
-        field, half_width, tilt, turn, maximum = self._view(frame, parameters)
+        field, half_width, view, maximum = self._view(frame, parameters)
         count = min(SHOCKWAVE_MAX_BARS, int(logical.common.bar_count))
         levels, _peaks = prepare_spectrum_shader_levels(logical.common.bars, mode_state.peaks, bar_count=count)
         events = shockwave_event_records(tuple(mode_state.events), half_width)
@@ -281,7 +268,7 @@ class QuickShockwaveGridRenderer:
                 sky_uniforms = r.uniforms("sky", _SKY_UNIFORMS)
                 sky_vao, sky_count = r.mesh("sky", scene3d_grid_vertices(1, 1), (2,))
                 gl.glUseProgram(sky)
-                self._bind_view(sky_uniforms, frame, parameters, field, half_width, tilt, turn, maximum)
+                self._bind_view(sky_uniforms, frame, view)
                 body_position = self._bind_celestial(sky_uniforms,parameters,half_width,mode_state.animation_time)
                 gl.glUniform1f(sky_uniforms["uMidband"],midband)
                 gl.glUniform1i(sky_uniforms["uCelestialRimVertices"],
@@ -296,13 +283,7 @@ class QuickShockwaveGridRenderer:
                                float(parameter(parameters,"shockwave_grid_star_glow_reactivity")),
                                float(parameter(parameters,"shockwave_grid_star_size")))
                 star_bursts = starscape_beat_cells(
-                    mode_state.events, tilt, turn,
-                    camera=basin_camera(half_width, maximum),
-                    fit=self._fit,
-                    pose=(float(parameter(parameters,"shockwave_grid_scene_scale")),
-                          float(parameter(parameters,"shockwave_grid_scene_pan_x")),
-                          float(parameter(parameters,"shockwave_grid_scene_pan_y"))),
-                    aspect=field[2]/field[3],
+                    mode_state.events, view,
                     terrain=(terrain["size"],terrain["data"],half_width,
                              float(parameter(parameters,"shockwave_grid_terrain_height"))),
                     body=(*body_position,float(parameter(parameters,"shockwave_grid_sun_size")))
@@ -318,7 +299,7 @@ class QuickShockwaveGridRenderer:
                 # Sky is composited AFTER a depth-only terrain admission. Otherwise
                 # transparent/glass terrain lets distant stars bleed through land.
             gl.glUseProgram(program)
-            self._bind_view(uniforms, frame, parameters, field, half_width, tilt, turn, maximum)
+            self._bind_view(uniforms, frame, view)
             self._bind_celestial(uniforms,parameters,half_width,mode_state.animation_time)
             gl.glUniform1f(uniforms["uHalfWidth"], half_width)
             gl.glUniform1i(uniforms["uEventCount"], len(events))
@@ -395,12 +376,12 @@ class QuickShockwaveGridRenderer:
                     gl.glUseProgram(program)
                     gl.glUniform1i(uniforms["uDepthOnly"],0)
                     self._draw_scene(frame,uniforms,vao,vertices,cells,style,
-                                     reflection>0.0 and tilt>0.001,depth_prepared=depth_prepared)
+                                     reflection>0.0 and view.eye[1]>0.001,depth_prepared=depth_prepared)
                     # Screen-space displacement of the exact terrain triangles.
                     # The unshifted surface depth rejects internal colour, leaving
                     # a narrow ridge line against sky (never projected-column boxes).
                     gl.glUseProgram(skyline_program)
-                    self._bind_view(skyline_uniforms,frame,parameters,field,half_width,tilt,turn,maximum)
+                    self._bind_view(skyline_uniforms,frame,view)
                     gl.glUniform1f(skyline_uniforms["uHalfWidth"],half_width)
                     gl.glUniform1i(skyline_uniforms["uTerrain"],_HEIGHT_UNIT)
                     gl.glUniform1i(skyline_uniforms["uTerrainSize"],terrain["size"])
@@ -432,7 +413,7 @@ class QuickShockwaveGridRenderer:
                         gl.glBindVertexArray(sky_vao)
                         gl.glDrawArrays(gl.GL_TRIANGLES,0,sky_count)
                     if _rays_admitted(parameters):
-                        light = _shaft_light(parameters, field, self._fit, tilt, turn, half_width, maximum,
+                        light = _shaft_light(parameters, view,
                                              body_position)
                         if light is not None:
                             # The light's source, behind everything already drawn; the shared shafts
@@ -505,9 +486,7 @@ class QuickShockwaveGridRenderer:
                 release()
             except Exception as exc:
                 errors.append(str(exc))
-        self._fit_key = None
         self._terrain_data = None
-        self._terrain_bounds = ()
         self._mesh_cells = None
         self._mesh_data = None
         self._points_cells = None
@@ -544,16 +523,12 @@ def _sky_admitted(parameters):
 RAY_GAIN = 1.6
 
 
-def _shaft_light(parameters, field, fit, tilt, turn, half_width, maximum, body_position):
+def _shaft_light(parameters, view, body_position):
     """This frame's ``ShaftLight``: where the Sun/Moon sits on the card (it may lie outside), how far the rays
     reach (Ray Length) and their colour times Ray Strength; ``None`` while the body is behind the camera."""
-    camera = basin_camera(half_width, maximum)
-    if camera - basin_project(body_position, tilt, turn, camera)[2] < 0.05:
+    if view.depth(body_position) < 0.05:
         return None
-    point = basin_item_point(body_position, field, fit, tilt, turn, half_width, maximum,
-                             float(parameter(parameters, "shockwave_grid_scene_scale")),
-                             (float(parameter(parameters, "shockwave_grid_scene_pan_x")),
-                              float(parameter(parameters, "shockwave_grid_scene_pan_y"))))
+    point = view.item_point(body_position)
     colour = rgba(parameter(parameters, "shockwave_grid_sun_rays_color"))
     gain = RAY_GAIN * float(parameter(parameters, "shockwave_grid_sun_rays_strength")) * colour[3]
     return ShaftLight(item_point=point, reach=0.15 + 0.85 * float(parameter(parameters, "shockwave_grid_sun_rays_length")),

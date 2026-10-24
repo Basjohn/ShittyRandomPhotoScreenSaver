@@ -263,30 +263,21 @@ def _shockwave_envelope(
     presentation: ResolvedVisualizerPresentation,
     parameters: Mapping[str, object],
 ) -> dict[str, object] | None:
-    from rendering.gl_programs.shockwave_grid_program import (
-        SHOCKWAVE_DEPTH,
-        SHOCKWAVE_MAX_TILT,
-        SHOCKWAVE_MAX_TURN,
-        shockwave_half_width,
-    )
-    from rendering.gl_programs.neon_lake_basin_program import basin_bounds, basin_fit, basin_item_point
+    from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_DEPTH, shockwave_half_width
+    from rendering.gl_programs.neon_lake_basin_program import basin_view
 
     field = _local_content_rect(presentation)
     if field[3] <= 0.0:
         return None
     half_width = shockwave_half_width(field[2] / field[3])
-    tilt = SHOCKWAVE_MAX_TILT * float(parameters["shockwave_grid_tilt"])
-    turn = SHOCKWAVE_MAX_TURN * float(parameters["shockwave_grid_turn"])
     terrain = parameters["shockwave_grid_terrain"]
     height_scale = float(parameters["shockwave_grid_terrain_height"])*1.50
     maximum = max(0.19, float(terrain["maximum"])*height_scale)
-    fit = basin_fit(tilt, turn, half_width, maximum, field[2]/field[3],
-                    basin_bounds(terrain["size"], terrain["data"]), height_scale)
-    scene_scale = float(parameters["shockwave_grid_scene_scale"])
-    pan = (float(parameters["shockwave_grid_scene_pan_x"]), float(parameters["shockwave_grid_scene_pan_y"]))
+    view = basin_view(parameters, field)
 
     def project(point):
-        x,y = basin_item_point(point, field, fit, tilt, turn, half_width, maximum, scene_scale, pan)
+        # Points behind the eye are pushed to its near plane: the guide stays on the card.
+        x, y = view.item_point(point)
         # The derived guide follows the same scene pose but lives inside the
         # card, including extreme zoom/pan and Edit. It cannot author geometry.
         return (min(max(x,field[0]),field[0]+field[2]), min(max(y,field[1]),field[1]+field[3]))

@@ -1417,11 +1417,11 @@
     }
   },
   "starting_view": {
-    "shockwave_grid_turn": -0.2,
-    "shockwave_grid_tilt": 0.17,
-    "shockwave_grid_scene_scale": 2.093663000000001,
-    "shockwave_grid_scene_pan_x": 0.17085020242914978,
-    "shockwave_grid_scene_pan_y": 0.5317928286852589
+    "shockwave_grid_turn": -0.247585,
+    "shockwave_grid_tilt": -0.02574,
+    "shockwave_grid_scene_scale": 0.992904,
+    "shockwave_grid_scene_pan_x": 0.277038,
+    "shockwave_grid_scene_pan_y": 0.549931
   },
   "description": "Saved from current Settings state."
 }
