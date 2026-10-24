@@ -82,7 +82,7 @@ def sphere_pixels(qt_app, request):
             gl.glUniformMatrix4fv(loc('uProjection'),1,False,projection)
             gl.glVertexAttrib4f(0,*centre,radius)
             if kind in ('ordinary','near'):
-                gl.glVertexAttrib2f(1,*extra);gl.glVertexAttrib1f(2,alpha)
+                gl.glVertexAttrib2f(1,*extra);gl.glVertexAttrib1f(2,alpha);gl.glVertexAttrib1f(3,radius)  # steady lens radius = the drawn one
             else:
                 gl.glVertexAttrib4f(1,*(second or (*centre,1e-6)))
                 gl.glVertexAttrib4f(2,0,0,0,0)

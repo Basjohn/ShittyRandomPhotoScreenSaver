@@ -489,6 +489,7 @@ def test_an_instance_of_no_size_draws_no_quad(qt_app, stage):
             gl.glVertexAttrib4f(0, 0.0, 0.0, -5.0, radius)      # straight ahead
             gl.glVertexAttrib4f(1, 1.0, 0.0, 0.5, 0.0)
             gl.glVertexAttrib1f(2, 1.0)                    # explicit lifetime attribute for ordinary shells
+            gl.glVertexAttrib1f(3, radius)                 # steady lens radius = the drawn one
             gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, 1)
             gl.glFinish()
             pixels = gl.glReadPixels(0, 0, width, height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)
