@@ -279,8 +279,9 @@ def project_settings_bucket_context(settings, tab: str, pill: str | None = None)
     raw_simple = settings.get("ui.basic_bucket_path")
     if tab == "sources" and raw_simple in ("sources:folders", "sources:feeds"):
         basic = raw_simple
-    elif (tab == "transitions" and raw_simple == "transitions:"
-          + pill.strip().lower().replace(" ", "_")):
+    elif tab == "transitions" and pill and raw_simple == "transitions:" + pill:
+        # For Transitions the caller passes the pill's bucket section (``transition_bucket_section``):
+        # a pill's display name ("3D Block Spins") is not its section ("blockspin").
         basic = raw_simple
     else:
         basic = ""

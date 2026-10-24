@@ -74,6 +74,14 @@ def _transition_defaults_root() -> dict:
     return value
 
 
+def transition_bucket_section(pill: str) -> str:
+    """The Advanced bucket section of a Transitions pill (the transition's registry name), else ''."""
+    for spec in iter_transition_settings():
+        if spec.name == pill:
+            return spec.section
+    return ""
+
+
 class TransitionsTab(QWidget):
     """Transitions configuration tab."""
     

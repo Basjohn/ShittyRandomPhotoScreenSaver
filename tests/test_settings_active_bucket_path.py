@@ -96,6 +96,13 @@ class SettingsActiveBucketPathTests(unittest.TestCase):
         project_settings_bucket_context(settings, "transitions", "Particle")
         self.assertEqual(settings.get("ui.basic_bucket_path"), "")
 
+    def test_transition_advanced_survives_on_its_own_pill_section(self):
+        settings = MemorySettings(**{"ui.basic_bucket_path": "transitions:blockspin"})
+        project_settings_bucket_context(settings, "transitions", "blockspin")
+        self.assertEqual(settings.get("ui.basic_bucket_path"), "transitions:blockspin")
+        project_settings_bucket_context(settings, "transitions", "glass_shatter")
+        self.assertEqual(settings.get("ui.basic_bucket_path"), "")
+
     def test_projection_idempotent_on_clean_state(self):
         settings = MemorySettings(**{
             "ui.widget_bucket_states": {"media:controls": True},

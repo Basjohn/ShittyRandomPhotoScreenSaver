@@ -719,7 +719,8 @@ class SettingsDialog(QDialog):
             initial_pill = (str(initial_state.get("mode_id") or "")
                             if initial_state.get("page") == "mode" else "")
         elif initial_key == "transitions":
-            initial_pill = str(initial_state.get("pill") or "")
+            from ui.tabs.transitions_tab import transition_bucket_section
+            initial_pill = transition_bucket_section(str(initial_state.get("pill") or ""))
         else:
             initial_pill = ""
         # Explicit launch targets and capability redirects must not resurrect a
@@ -1786,7 +1787,8 @@ class SettingsDialog(QDialog):
         elif tab_key == "visualizers":
             pill = str(view.get("mode_id") or "") if view.get("page") == "mode" else ""
         elif tab_key == "transitions":
-            pill = str(view.get("pill") or "")
+            from ui.tabs.transitions_tab import transition_bucket_section
+            pill = transition_bucket_section(str(view.get("pill") or ""))
         else:
             pill = ""
         from core.settings.ui_bucket_state import project_settings_bucket_context

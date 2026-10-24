@@ -182,3 +182,49 @@ def test_a_legacy_profile_with_many_dormant_opens_reopens_on_the_current_pill_on
     dialog.visualizers_tab._select_mode_page("extruded_bubble")
     assert not _visualizer_bucket(dialog, "extruded_bubble", "camera").isChecked()
     _close(dialog)
+
+
+def _transition_with_advanced(tab, skip=()):
+    """(nav key, Advanced toggle) of a transition pill whose page has an Advanced bucket."""
+    from rendering.transition_settings import iter_transition_settings
+    for key in tab._nav_buttons:
+        if key in skip:
+            continue
+        tab._nav_buttons[key].click()          # as the user selects a pill
+        QCoreApplication.processEvents()
+        for spec in iter_transition_settings():
+            toggle = getattr(tab, f"{spec.section}_advanced_toggle", None)
+            group = getattr(tab, f"{spec.section}_group", None)
+            if toggle is not None and group is not None and group.isVisibleTo(tab):
+                return key, toggle
+    raise AssertionError("no transition pill with an Advanced bucket")
+
+
+def _advanced_of(tab, key):
+    from ui.tabs.transitions_tab import transition_bucket_section
+    return getattr(tab, f"{transition_bucket_section(key)}_advanced_toggle")
+
+
+def test_transition_advanced_returns_on_its_pill_and_a_left_pill_presents_closed(manager):
+    dialog = _dialog(manager)
+    _page(dialog, "transitions")
+    tab = dialog.transitions_tab
+    first, toggle = _transition_with_advanced(tab)
+    toggle.setChecked(True)
+    _close(dialog)
+
+    dialog = _dialog(manager)
+    tab = dialog.transitions_tab
+    assert tab._current_nav_key() == first
+    assert _advanced_of(tab, first).isChecked()
+
+    # Another pill becomes current; returning to the first finds its Advanced closed.
+    second, _toggle2 = _transition_with_advanced(tab, skip=(first,))
+    _close(dialog)
+    dialog = _dialog(manager)
+    tab = dialog.transitions_tab
+    assert tab._current_nav_key() == second
+    tab._nav_buttons[first].click()
+    QCoreApplication.processEvents()
+    assert not _advanced_of(tab, first).isChecked()
+    _close(dialog)
