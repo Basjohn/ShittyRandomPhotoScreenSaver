@@ -93,5 +93,9 @@ def test_idle_motion_ten_percent_more_without_changing_surface_phase():
     # Snapshot speed is in world units. Use its actual world scalar, not a
     # camera-dependent screen displacement for the resting-boost gate.
     from widgets.spotify_visualizer.extruded_bubble_geometry import WORLD_UNIT
-    assert snap.stream_speed == pytest.approx(ctl.stream_speed[0] * idle_rate * 1.10 * WORLD_UNIT)
+    # At rest the stream keeps moving at its quiet handle scaled by Idle (as 2D Bubble rests at its baseline), with
+    # the +10% resting boost; it never freezes (the old ~6% resting factor stopped bubbles and particles).
+    rest = (0.15 + 0.45 * ctl.idle) * 1.10      # the resting floor (Idle-scaled) with the +10% resting boost
+    assert snap.stream_speed == pytest.approx(ctl.stream_speed[0] * rest * WORLD_UNIT)
+    assert snap.stream_speed >= 0.25 * ctl.stream_speed[0] * WORLD_UNIT     # slow, never frozen
     assert snap.shimmer == pytest.approx(4.0 * idle_rate * 1.10)
