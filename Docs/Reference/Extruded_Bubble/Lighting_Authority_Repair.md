@@ -217,6 +217,12 @@ Settings editors, and the Ray Source → End editor is shown for SCENE as well a
   (mean 0.69/765 per pixel, none above 24), preset 5 changes gently (its range now ends near the floor, aimed down).
   Natively verified by `tests/test_extruded_bubble_scene_light_extent_gpu.py`; moving all-angle visual acceptance is
   still open.
+- *All-angle check (24 Oct):* Presets 2 (Surface) and 5 (Deep) in SCENE rendered over turn -1..0.5 x tilt -0.5..0.5 on
+  one real-music frame. Deep was coherent from every side (the emitter's glow and the glints stay world-fixed).
+  Surface lost its shafts whenever the view turned from the sun: only the sun-angular fan carried visible energy
+  and the world march was weighted to ~1% of its integral. A side-scattering share of the world march
+  (`SCENE_SIDE_SCATTER`, none toward the sun) now keeps the world-fixed columns visible from the side; the
+  toward-sun view is unchanged (mean 1.1/255). Moving/music all-angle acceptance remains the operator's look.
 
 `SceneVolumeMapper` owns the common oblique projection, path handles, boundary guides and camera/aim cues.
 The Settings builder supplies each editor's own path and coverage: Motion uses Emission Geometry; Light/Rays

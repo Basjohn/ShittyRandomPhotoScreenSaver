@@ -396,6 +396,7 @@ float sceneLightSupport(vec3 p) {
     }
     return inside * lit;
 }
+const float SCENE_SIDE_SCATTER = 2.0;   // side views of sunlit SCENE shafts (share of the world march)
 float worldShafts(vec3 ray, float jitter, out float contributingDistance, out float coverage) {
     const float stepLength = 45.0 / 40.0;
     float sum = 0.0, moment = 0.0, support = 0.0, supportMoment = 0.0;
@@ -455,8 +456,13 @@ void main() {
     // Environmental sunlight retains broad structure about the actual sun;
     // the fixed world supplies support and the all-angle scattering floor.
     float march = integral * 0.13 * phase;
+    // Sunlit shafts are world-space columns of lit water, visible from any side: looking away from the sun the
+    // sun-angular fan is gone, so the world march itself carries a side-scattering share (none toward the sun,
+    // where the fan already shows them).
+    float side = 1.0 - smoothstep(0.0, 0.7, dot(ray, uSunBelow));
     float energy = uSurfaceShaft > 0.5
                  ? march*uFanMix.y + beamShaftFan(ray,uSunBelow,uTime)*0.9*coverage
+                   + integral * 0.13 * SCENE_SIDE_SCATTER * side
                  : march;
     float optical = coverage>0.0 ? sceneTransmittance(uEye+ray*atDistance) : 1.0;
     FragColor = vec4(max(0.0,energy*optical));
