@@ -209,3 +209,27 @@ def test_swirl_orbits_the_stream_axis_and_widens(kind, sign):
             along = sum(a * d for a, d in zip(r, direction))
             return math.sqrt(sum((a - along * d) ** 2 for a, d in zip(r, direction)))
         assert radial(r1) > radial(r0)
+
+
+def test_flow_follows_passages_inside_the_authored_speed_and_drift_ranges():
+    speed_range, drift_range = (0.05, 0.2), (0.2, 0.8)
+    controls = ExtrudedBubbleControls(large_count=(3, 3), mid_count=(4, 4), stream_speed=speed_range,
+                                      drift=drift_range, collision_scope="off")
+
+    def settle(bands, onsets=False):
+        sim = ExtrudedBubbleSimulation(7)
+        peak_speed = peak_drift = 0.0
+        for i in range(600):
+            hits = (("kick", 1.0),) if onsets and i % 12 == 0 else ()
+            sim.advance(MusicInput(1 / 60, True, .5, hits, bands), controls)
+            peak_speed, peak_drift = max(peak_speed, sim._speed), max(peak_drift, sim._drift)
+        return sim._speed, sim._drift, peak_speed, peak_drift
+
+    quiet = settle((.30, .25, .10))
+    loud = settle((.80, .70, .45))
+    hammered = settle((.95, .90, .60), onsets=True)
+    # A quiet passage and a full one sit far apart within the authored range (test-owned ranges).
+    assert loud[0] - quiet[0] > .8 * (speed_range[1] - speed_range[0])
+    assert loud[1] - quiet[1] > .8 * (drift_range[1] - drift_range[0])
+    # Onset and sustained lifts never pass the loud handle.
+    assert hammered[2] <= speed_range[1] and hammered[3] <= drift_range[1]
