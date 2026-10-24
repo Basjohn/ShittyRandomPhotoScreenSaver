@@ -51,9 +51,11 @@ _MID_RADIUS = (0.025 * WORLD_UNIT, 0.07 * WORLD_UNIT)
 _LARGE_REACTION = (4.0, 5.8)
 _SMALL_REACTION = (4.0, 1.45)
 # Large held-body knee/span on the fixed-scale EB body feed (beat_engine.get_extruded_bubble_body_bands):
-# about p10 and p95 of bass + .28 mid + .10 high pooled over four full songs (2026-10-24).
-_LARGE_HELD_KNEE = 0.45
-_LARGE_HELD_SPAN = 0.62
+# about p25 and p95 of bass + .28 mid + .10 high pooled over four full songs (2026-10-24). A p10 knee held
+# large bubbles open through nearly all music (p95/p05 ~1.8x vs accepted 2D's 2.6-9x); a p40 knee
+# collapsed a quieter-captured song. The knee is a fixed real level, never learned from the track.
+_LARGE_HELD_KNEE = 0.55
+_LARGE_HELD_SPAN = 0.52
 _LARGE_HELD_SOFTNESS = 0.08
 # Per-identity excursion (amplitude at the class's smallest size, spread to its largest):
 # large 1.12 -> 0.88, small 1.18 -> 0.82, around the authored class response.
@@ -426,8 +428,13 @@ class ExtrudedBubbleSimulation:
         # without lifting louder levels. It reads the unsquashed body sum;
         # big_body's soft top compresses its upper half.
         held_body = _soft_top(_smooth_above(body_sum, _LARGE_HELD_KNEE, _LARGE_HELD_SOFTNESS) / _LARGE_HELD_SPAN)
+        # Phrase changes swell in proportion to how full the passage is: in a soft
+        # passage a kick no longer refills the envelope (that pump kept p05 near
+        # mid-size), while full passages crest further.
+        change_authority = 0.15 + 0.85 * held_body
         self._body_big_envelope = _follow(self._body_big_envelope,
-            _soft_top((0.22 + 0.70 * sustain) * held_body + 2.2 * big_change), dt, 0.12 * soft, large_release)
+            _soft_top((0.45 + 0.55 * sustain) * held_body + 3.0 * big_change * change_authority),
+            dt, 0.12 * soft, large_release)
         # Small bubbles open on changing vocal/body energy, with restrained held support.
         # A hot mid/high plateau must not inflate the whole small field to hero size.
         # The small lane had the same zero-reference hot-start problem as large,
@@ -600,6 +607,10 @@ class ExtrudedBubbleSimulation:
         # Authored rest (drive 0): per-identity variation never moves it.
         big_rest = _reaction_scale(controls.breathing, 0.0, *_LARGE_REACTION)
         small_rest = _reaction_scale(controls.small_pulse, 0.0, *_SMALL_REACTION)
+        # Authored loud handle = the class's maximum expansion; per-identity excursion
+        # eases toward it and never passes it.
+        big_top = _reaction_scale(controls.breathing, 1.0, *_LARGE_REACTION)
+        small_top = _reaction_scale(controls.small_pulse, 1.0, *_SMALL_REACTION)
         # Per-identity visual radius is display-only: no oscillators, no threshold hold/deadband,
         # no smoothing of music or of the instantaneous physical collision radius.
         visual_smoothing = max(0.0, min(1.0, float(controls.smoothing)))
@@ -614,8 +625,11 @@ class ExtrudedBubbleSimulation:
             low, high = _LARGE_RADIUS if b.large else _MID_RADIUS
             size_t = max(0.0, min(1.0, (b.radius / self._applied_sizes[b.large] - low) / (high - low)))
             amplitude, spread = _PER_ID_LARGE if b.large else _PER_ID_SMALL
-            class_scale, rest = (big_scale, big_rest) if b.large else (small_scale, small_rest)
-            b.current_radius = b.radius * (rest + (class_scale - rest) * (amplitude - spread * size_t))
+            class_scale, rest, top = (big_scale, big_rest, big_top) if b.large else (small_scale, small_rest, small_top)
+            scale = rest + (class_scale - rest) * (amplitude - spread * size_t)
+            if scale > rest and top > rest:
+                scale = rest + _soft_top(scale - rest, top - rest, 0.85)
+            b.current_radius = b.radius * scale
             pace = 0.75 + 0.5 * size_t
             if b.visual_radius <= 0.0:
                 b.visual_radius = b.current_radius

@@ -17,8 +17,12 @@ def test_large_startup_avoids_false_song_start_on_both_join_and_engine_play_ramp
 def test_startup_recovery_does_not_erase_a_real_post_idle_musical_step():
     mod = probe.simulation_module()
     controls = probe.synthetic_controls(mod, "strong")
-    result = probe.summary(probe.trace(mod, controls, "quiet_then_hot"))["big"]
-    assert result["peak_to_final"] > 1.8  # distinct from the 1-second artificial ramp
+    step = probe.summary(probe.trace(mod, controls, "quiet_then_hot"))["big"]
+    ramp = probe.summary(probe.trace(mod, controls, "play_ramp"))["big"]
+    # Distinct from the 1-second artificial ramp reaching the same held level: the
+    # real step swells well past where it settles; the ramp does not overshoot.
+    assert step["peak_to_final"] > 1.5, step
+    assert step["peak"] > 1.5 * ramp["peak"], (step, ramp)
 
 
 def test_live_independent_population_size_edit_preserves_existing_shell_ids():
