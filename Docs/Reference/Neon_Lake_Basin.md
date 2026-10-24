@@ -445,6 +445,17 @@ Rejected attempts and old checkpoint evidence belong in
 not in this live behavior reference.
 
 
+## Terrain editor views (2026-10-24)
+
+The editor's **View** is Top (the square authoring map) or **Angled**: the same heights in the scene's own
+proportions (basin width of the nominal 16:9 card, `DEPTH` deep, heights at about the default Terrain Height), from
+a raised front camera that right-drag turns (in memory only). Angled is a full authoring view, not a picture: the
+cursor is picked on the drawn surface (`ui/tabs/media/terrain_angled_view.py`: barycentric hits on the projected
+preview triangles, nearest to the eye wins, so a cliff correctly hides what is behind it), the brush rim/core drape
+over the ground, and strokes run through the same brush, history and Undo as Top. Large grids preview at up to 64
+quads a side (painting still edits every cell); the picture is cached and rebuilt only after a change (15-35 ms).
+An extended grid shows the basin's dashed outline draped over the ground.
+
 ## Layered water (2026-10-24)
 
 Water is a layer of its own, whatever the land's surface style. **Water Shine** (Waves bucket, 0..1) mixes a tinted
