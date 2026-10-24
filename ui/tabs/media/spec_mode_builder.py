@@ -406,6 +406,11 @@ def _build_visual_control(tab, layout, control, default, *, auto_switch=True):
         # Cross-path overlays are driven by the SAME saved settings and live widgets;
         # never allocate a second Settings camera or world-coordinate owner.
         widget.valueChanged.connect(lambda *_, m=framed: fce.refresh_editors(tab, m))
+        if isinstance(control, SceneCameraPosition):
+            # Ctrl+Z / Ctrl+Y step through the camera's last few committed gestures (in memory only).
+            widget.valueCommitted.connect(lambda *_, m=framed: fce.note_committed(tab, m))
+            widget.undoRequested.connect(lambda m=framed: fce.undo(tab, m))
+            widget.redoRequested.connect(lambda m=framed: fce.redo(tab, m))
         if isinstance(control, SceneVolumePath):
             widget.cameraOffsetChanged.connect(lambda offset: _set_eb_camera_offset(tab, offset, commit=False))
             widget.cameraOffsetCommitted.connect(lambda offset: _set_eb_camera_offset(tab, offset, commit=True))

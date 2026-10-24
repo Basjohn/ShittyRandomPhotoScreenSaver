@@ -88,3 +88,30 @@ def test_aiming_turns_the_neon_camera_in_place(neon_tab):
     # Reloading the saved body keeps the aimed pose and the editor's eye.
     load_spec_mode_settings(tab, MODE, {**config, **collected})
     assert fce.camera_angles(tab, MODE) == pytest.approx((0.12, 0.05))
+
+
+def test_ctrl_z_steps_back_through_the_last_few_camera_gestures(neon_tab, qtbot):
+    from PySide6.QtCore import Qt
+    from ui.tabs.media import framed_camera_editor as fce
+    from ui.widgets.edit_history import EDIT_HISTORY_DEPTH
+    tab, _config = neon_tab
+    editor = _open_camera(tab)
+    tab._save_settings = lambda *args: None
+    states = [fce.camera_state(tab, MODE)]
+    for step in range(EDIT_HISTORY_DEPTH + 1):     # one more gesture than the history keeps
+        fce.set_offset(tab, MODE, (0.05 * (step + 1), 0.1, -0.05 * step), commit=True)
+        fce.set_aim(tab, MODE, (0.03 * (step + 1), 0.04), commit=True)
+        states.append(fce.camera_state(tab, MODE))
+    undone = []
+    for _ in range(2 * EDIT_HISTORY_DEPTH + 2):    # past the bound: further presses do nothing
+        qtbot.keyClick(editor, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+        undone.append(fce.camera_state(tab, MODE))
+    # Each gesture's aim is one action; the bounded history reaches back EDIT_HISTORY_DEPTH actions.
+    assert undone[-1] == undone[EDIT_HISTORY_DEPTH - 1] != states[-1]
+    assert tuple(editor.value()) == pytest.approx(undone[-1][0], abs=1e-6)
+    qtbot.keyClick(editor, Qt.Key.Key_Y, Qt.KeyboardModifier.ControlModifier)
+    assert fce.camera_state(tab, MODE) == undone[EDIT_HISTORY_DEPTH - 2]
+    # A new gesture after undo starts a fresh branch: nothing left to redo.
+    fce.set_aim(tab, MODE, (0.2, 0.1), commit=True)
+    branched = fce.camera_state(tab, MODE)
+    assert not fce.redo(tab, MODE) and fce.camera_state(tab, MODE) == branched

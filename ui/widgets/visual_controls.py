@@ -21,7 +21,7 @@ import math
 import weakref
 
 from PySide6.QtCore import QEvent, QPointF, QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPolygonF
+from PySide6.QtGui import QColor, QFont, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPolygonF
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
 # Live widgets repainted when the Settings theme changes.
@@ -790,6 +790,8 @@ class SceneVolumeMapper(_VisualControl):
     cameraAimCommitted = Signal(tuple)
     linkedSourceChanged = Signal(tuple)
     linkedSourceCommitted = Signal(tuple)
+    undoRequested = Signal()     # Ctrl+Z / Ctrl+Y: the owner keeps the edit history
+    redoRequested = Signal()
 
     def __init__(self, *, camera_only=False, parent=None):
         super().__init__(parent)
@@ -1090,6 +1092,12 @@ class SceneVolumeMapper(_VisualControl):
 
     def keyPressEvent(self,event):
         key=event.key()
+        for sequence,signal in ((QKeySequence.StandardKey.Undo,self.undoRequested),
+                                (QKeySequence.StandardKey.Redo,self.redoRequested)):
+            if event.matches(sequence):
+                signal.emit()
+                event.accept()
+                return
         if key==Qt.Key.Key_Tab and not self._camera_only:
             self._active=1-self._active
             self.update()
