@@ -20,15 +20,13 @@ from rendering.gl_programs.shockwave_grid_program import (
     SHOCKWAVE_EVENT_MEMORY,
     SHOCKWAVE_EVENT_RING,
     SHOCKWAVE_LIFETIME,
-    SHOCKWAVE_MAX_TILT,
-    SHOCKWAVE_MAX_TURN,
     SHOCKWAVE_MIN_GAP,
     shockwave_event_records,
     shockwave_height,
     shockwave_origin,
     shockwave_strength,
 )
-from rendering.gl_programs.neon_lake_basin_program import basin_camera, basin_fit, basin_project
+from rendering.gl_programs.shockwave_grid_program import shockwave_half_width
 from widgets.spotify_visualizer.shockwave_frame_runtime import ShockwaveGridFrameRuntime
 from tests._visualizer_frozen_settings import frozen_visualizer_settings
 
@@ -150,21 +148,33 @@ def test_a_wave_is_a_travelling_crest_that_fades():
     assert shockwave_height(0.3, -0.4, [], amplitude, speed) == (0.0, 0.0)
 
 
-def test_the_fit_frames_the_visible_grid_for_any_view():
+def test_the_physical_eye_stays_above_land_and_water_for_any_admitted_view():
+    """Orbit, dolly, pan and Camera Position may go anywhere admitted; the eye never enters the scene."""
+    from rendering.gl_programs.heightfield import heightfield_surface_bytes
+    from rendering.gl_programs.neon_lake_basin_program import basin_view
+    from core.settings.neon_lake_camera import SPEC, floor_reaction, terrain_floor
     rng = random.Random(3)
+    base = dict(frozen_visualizer_settings("shockwave_grid"))
     for _ in range(300):
-        tilt, turn = rng.uniform(0.05, SHOCKWAVE_MAX_TILT), rng.uniform(-SHOCKWAVE_MAX_TURN, SHOCKWAVE_MAX_TURN)
-        half_width, ridge = rng.uniform(1.0, 5.0), rng.uniform(0.0, 0.6)
-        aspect = max(1.0,(half_width-0.9)/0.8)
-        scale, base = basin_fit(tilt, turn, half_width, ridge, aspect)
-        camera = basin_camera(half_width,ridge)
-        for x in (-half_width, half_width):
-            for z in (0.0, -SHOCKWAVE_DEPTH):
-                assert math.hypot(x, z + 0.5 * SHOCKWAVE_DEPTH) < camera            # nothing reaches the camera
-                y = base - basin_project((x, 0.0, z), tilt, turn, camera)[1] * scale
-                # Framed composition reserves sky and intentionally carries the
-                # near foot beyond the card bottom; the real QSG clip owns it.
-                assert 0.14 - 1e-9 <= y <= 1.04 + 1e-9
+        size = 5
+        heights = [rng.uniform(0.0, 1.0) for _ in range(size * size)]
+        terrain = {"size": size, "data": heightfield_surface_bytes({"size": size, "heights": heights}),
+                   "maximum": max(heights)}
+        aspect = rng.uniform(1.0, 3.0)
+        field = (0.0, 0.0, 400.0 * aspect, 400.0)
+        values = {**base, "shockwave_grid_terrain": terrain,
+                  "shockwave_grid_terrain_height": rng.uniform(0.0, 1.5),
+                  "shockwave_grid_turn": rng.uniform(-0.5, 0.5), "shockwave_grid_tilt": rng.uniform(*SPEC.tilt_range),
+                  "shockwave_grid_scene_scale": rng.uniform(0.25, 4.0),
+                  "shockwave_grid_scene_pan_x": rng.uniform(-2.0, 2.0), "shockwave_grid_scene_pan_y": rng.uniform(-2.0, 2.0),
+                  "shockwave_grid_camera_fov": rng.uniform(*SPEC.fov_range),
+                  "shockwave_grid_camera_position": [rng.uniform(-8.0, 8.0) for _ in range(3)]}
+        eye = basin_view(values, field).eye
+        floor = terrain_floor(terrain, values["shockwave_grid_terrain_height"], shockwave_half_width(aspect),
+                              floor_reaction(values))
+        assert eye[1] >= min(floor(eye[0], eye[2]) + SPEC.clearance,
+                             SPEC.eye_center[1] + SPEC.eye_half[1] - SPEC.clearance) - 1e-9
+        assert all(abs(p - c) <= h - SPEC.clearance + 1e-9 for p, c, h in zip(eye, SPEC.eye_center, SPEC.eye_half))
 
 
 def test_the_capture_turns_transient_onsets_into_aged_events():

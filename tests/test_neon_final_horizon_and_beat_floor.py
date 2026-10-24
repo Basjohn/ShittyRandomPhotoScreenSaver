@@ -14,7 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _framed_stars(events, tilt, turn):
-    return starscape_beat_cells(events,tilt,turn,camera=3.5,fit=(.7,1.1))
+    # Old orbit radians -> the shared framed camera's settings units (tilt quarter turns, turn half turns).
+    from math import pi
+    from rendering.gl_programs.neon_lake_basin_program import orbit_view
+    return starscape_beat_cells(events, orbit_view(turn / pi, tilt / (pi / 2)))
 
 
 def test_starscape_entry_floor_is_exactly_thirtysix_percent_lower_than_035():

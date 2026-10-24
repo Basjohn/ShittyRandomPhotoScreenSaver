@@ -333,14 +333,15 @@ def test_every_3d_transition_blurs_its_motion_and_stays_exact_when_nothing_moves
 
 
 def test_the_shared_orbit_reproduces_each_3d_visualizers_former_projection():
-    """``scene3d_orbit_project`` (H6) is the one orbit/perspective both 3D Visualizers use; each
-    mode's former inline projection, kept here as the reference, must come out unchanged."""
+    """``scene3d_orbit_project`` (H6) is the one orbit/perspective helper; each former inline
+    projection, kept here as the reference, must come out unchanged. (Neon Lake moved to the shared
+    framed physical camera in 2026-10; its former pivoted form still checks the helper's pivot.)"""
     import math
     import random
 
     from rendering.gl_programs.extruded_spectrum_program import EXTRUDED_CAMERA, EXTRUDED_PIVOT, extruded_project
     from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_DEPTH
-    from rendering.gl_programs.neon_lake_basin_program import basin_project
+    from rendering.gl_programs.scene3d import scene3d_orbit_project
 
     def former_extruded(point, tilt, turn):
         x, y, z = point
@@ -366,5 +367,4 @@ def test_the_shared_orbit_reproduces_each_3d_visualizers_former_projection():
         point = (rng.uniform(-3, 3), rng.uniform(-1, 1), rng.uniform(-2.4, 0))
         tilt, turn, camera = rng.uniform(0, math.pi / 2), rng.uniform(-math.pi, math.pi), rng.uniform(2.6, 6)
         assert extruded_project(point, tilt, turn) == pytest.approx(former_extruded(point, tilt, turn), abs=1e-12)
-        assert basin_project(point, tilt, turn, camera) == pytest.approx(
-            former_shockwave(point, tilt, turn, camera), abs=1e-12)
+        assert scene3d_orbit_project(point, tilt, turn, camera=camera, pivot=(0.0, 0.0, -0.5 * SHOCKWAVE_DEPTH))             == pytest.approx(former_shockwave(point, tilt, turn, camera), abs=1e-12)

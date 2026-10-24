@@ -104,47 +104,30 @@ def test_authored_terrain_replacement_uploads_once_without_target_churn(target, 
 
 
 
-def test_low_terrain_height_invalidates_fit_even_below_maximum_floor(target, monkeypatch):
-    from rendering.quick.visualizer.implementations import shockwave_grid as implementation
-    capture, host = target
-    original = _snapshot(shockwave_grid_terrain_height=0., shockwave_grid_glow=0.)
-    terrain = dict(original.logical.mode_state.parameters['shockwave_grid_terrain'])
-    # Low, level terrain keeps the camera maximum at .19 for both settings,
-    # while its actual positive bounds still move under the authored height.
-    terrain['data'] = heightfield_surface_bytes({'size': terrain['size'],
-                                               'heights': [.08] * terrain['size'] ** 2})
-    terrain['maximum'] = .08
-    state = original.logical.mode_state
-    initial = replace(original, logical=replace(original.logical, mode_state=replace(
-        state, parameters={**dict(state.parameters), 'shockwave_grid_terrain': terrain})))
-    raised = replace(initial, logical=replace(initial.logical, mode_state=replace(
-        initial.logical.mode_state, parameters={**dict(initial.logical.mode_state.parameters),
-                                              'shockwave_grid_terrain_height': .12})))
-    fits = []
-    actual_fit = implementation.basin_fit
-    def fit(*args, **kwargs):
-        result = actual_fit(*args, **kwargs)
-        fits.append((args, result))
-        return result
-    monkeypatch.setattr(implementation, 'basin_fit', fit)
-    capture.render(host, initial)
-    renderer = host._implementations['shockwave_grid']
-    first_fit = renderer._fit
-    capture.render(host, raised)
-    assert len(fits) == 2  # Changing height must invalidate the production cache.
-    assert fits[0][0][3] == fits[1][0][3] == .19
-    assert fits[0][0][-1] == 0. and fits[1][0][-1] == pytest.approx(.18)
-    assert renderer._fit == fits[1][1] and renderer._fit != first_fit
-    for frame in (raised, raised):
-        capture.render(host, frame)
-    assert len(fits) == 2  # Ordinary frames continue reusing the same fit.
+def test_raised_terrain_lifts_a_low_eye_above_the_new_land():
+    """Terrain Height reaches the shared camera's floor: the eye never sinks into raised land."""
+    from rendering.gl_programs.neon_lake_basin_program import basin_view
+    from core.settings.neon_lake_camera import SPEC
+    parameters = dict(_snapshot(shockwave_grid_terrain_reaction_enabled=False).logical.mode_state.parameters)
+    terrain = dict(parameters['shockwave_grid_terrain'])
+    terrain.update(data=heightfield_surface_bytes({'size': terrain['size'], 'heights': [.5] * terrain['size'] ** 2}),
+                   maximum=.5)
+    # Look level from straight above the land's centre, pushed far below it.
+    low = {**parameters, 'shockwave_grid_terrain': terrain, 'shockwave_grid_tilt': 0., 'shockwave_grid_turn': 0.,
+           'shockwave_grid_scene_scale': 8., 'shockwave_grid_scene_pan_x': 0., 'shockwave_grid_scene_pan_y': 0.,
+           'shockwave_grid_camera_position': [0., -1., 0.]}
+    field = (0., 0., 1600., 900.)
+    eyes = [basin_view({**low, 'shockwave_grid_terrain_height': height}, field).eye for height in (.4, 1.)]
+    for eye, height in zip(eyes, (.4, 1.)):
+        assert eye[1] >= .5 * height + SPEC.clearance - 1e-9
+    assert eyes[1][1] > eyes[0][1]
 
 
 def test_actual_sun_toggle_preserves_sky_and_sky_strength_does_not_fade_sun(target):
     capture, host = target
     base = _snapshot(shockwave_grid_glow=0., shockwave_grid_sky_enabled=True,
                      shockwave_grid_sun_color=[245, 20, 175, 255],
-                     shockwave_grid_turn=0., shockwave_grid_tilt=.5)
+                     shockwave_grid_turn=0., shockwave_grid_tilt=.04)
     def render(sun, strength):
         state = base.logical.mode_state
         frame = replace(base, logical=replace(base.logical, mode_state=replace(
@@ -179,7 +162,7 @@ def test_real_land_depth_masks_low_celestial_disc_and_halo(target, body):
                      shockwave_grid_sun_orbit_enabled=False, shockwave_grid_sun_rays_enabled=False,
                      shockwave_grid_water_reflection=0., shockwave_grid_glow=.55,
                      shockwave_grid_celestial_glow_enabled=True, shockwave_grid_celestial_glow_strength=2.,
-                     shockwave_grid_tilt=.17, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
+                     shockwave_grid_tilt=.04, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
     state = base.logical.mode_state
     terrain = dict(state.parameters['shockwave_grid_terrain'])
     terrain.update(data=heightfield_surface_bytes({'size': terrain['size'],
@@ -202,7 +185,7 @@ def test_horizon_thickness_and_inherited_crest_colour_reach_real_gpu_pixels(targ
     """The authored far contour width and existing crest RGBA reach its visible silhouette."""
     capture, host = target
     base = _snapshot(shockwave_grid_sun_enabled=False, shockwave_grid_glow=0.,
-                     shockwave_grid_water_reflection=0., shockwave_grid_tilt=.17,
+                     shockwave_grid_water_reflection=0., shockwave_grid_tilt=.04,
                      shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
     def image(width, colour):
         return capture.render(host, _wire_frame(base, 'Vertices', shockwave_grid_horizon_thickness=width,
@@ -240,7 +223,7 @@ def test_production_moon_whole_surface_emission_follows_phase_glow_and_pulse(tar
                      shockwave_grid_moon_color=[190,210,255,255],
                      shockwave_grid_celestial_glow_enabled=True, shockwave_grid_celestial_glow_strength=1.,
                      shockwave_grid_celestial_glow_reactivity=0., shockwave_grid_celestial_rim_vertices=False,
-                     shockwave_grid_tilt=.17, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
+                     shockwave_grid_tilt=.04, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
     def draw(phase, enabled=True, halo=True, pulse=False):
         frame = _wire_frame(base, 'Vertices', shockwave_grid_moon_phase=phase,
                             shockwave_grid_sun_enabled=enabled,
@@ -291,7 +274,7 @@ def test_maximum_moon_response_preserves_bright_face_ldr_headroom(target):
                      shockwave_grid_star_color=[0,0,0,0], shockwave_grid_cloud_color=[0,0,0,0],
                      shockwave_grid_celestial_glow_enabled=True, shockwave_grid_celestial_glow_strength=2.,
                      shockwave_grid_celestial_glow_reactivity=2., shockwave_grid_celestial_rim_vertices=False,
-                     shockwave_grid_tilt=.17, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
+                     shockwave_grid_tilt=.04, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
     base = replace(base, logical=replace(base.logical, mode_state=replace(
         base.logical.mode_state, events=((0.,0.,0.,1.),))))
     absent = capture.render(host,_wire_frame(base,'Vertices',shockwave_grid_sun_enabled=False))
@@ -326,18 +309,15 @@ def test_production_solid_moon_masks_stars_on_lit_and_shaded_hemispheres(target,
                      shockwave_grid_sky_enabled=True, shockwave_grid_starscape_beat=False,
                      shockwave_grid_star_color=[255,255,255,0], shockwave_grid_star_glow_strength=2.,
                      shockwave_grid_star_glow_reactivity=2., shockwave_grid_celestial_glow_enabled=False,
-                     shockwave_grid_tilt=.17, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
+                     shockwave_grid_tilt=-.05, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
     capture.render(host, base)
     renderer = host._implementations['shockwave_grid']
     program = renderer._resources.program('sky', NEON_SKY_VERTEX_SOURCE, NEON_SKY_FRAGMENT_SOURCE)
     uniforms = renderer._resources.uniforms('sky', _SKY_UNIFORMS)
-    camera, view, position = np.zeros(1,np.float32), np.zeros(2,np.float32), np.zeros(3,np.float32)
-    gl.glGetUniformfv(program,uniforms['uCamera'],camera)
-    gl.glGetUniformfv(program,uniforms['uView'],view)
+    eye, position = np.zeros(3,np.float32), np.zeros(3,np.float32)
+    # The production eye and body the sky program actually drew with, not a hand-positioned screen dot.
+    gl.glGetUniformfv(program,uniforms['uEye'],eye)
     gl.glGetUniformfv(program,uniforms['uBodyPosition'],position)
-    # Use the same production basin pivot/depth, not a hand-positioned screen dot.
-    from rendering.gl_programs.neon_lake_basin_program import SHOCKWAVE_DEPTH
-    eye = np.array([0.,camera[0]*math.sin(view[0]),camera[0]*math.cos(view[0])-.5*SHOCKWAVE_DEPTH])
     ray = position-eye
     ray /= np.linalg.norm(ray)
     def cell_at(offset):
@@ -387,11 +367,8 @@ def test_terrain_erases_beat_star_colour_and_emission_even_with_transparent_mate
         shockwave_grid_tilt=.3,shockwave_grid_turn=0.),'Glass')
     capture.render(host,base)
     renderer=host._implementations['shockwave_grid']
-    half_width=module.shockwave_half_width(W/H)
-    maximum=.6*float(dict(base.logical.mode_state.parameters)['shockwave_grid_terrain_height'])*1.5
-    camera=module.basin_camera(half_width,maximum)
-    tilt=.3*module.SHOCKWAVE_MAX_TILT
-    eye=np.array([0.,camera*math.sin(tilt),camera*math.cos(tilt)-.5*SHOCKWAVE_DEPTH])
+    from rendering.gl_programs.neon_lake_basin_program import basin_view
+    eye=np.array(basin_view(dict(base.logical.mode_state.parameters),(0.,0.,float(W),float(H))).eye)
     # Aim a real sky star at a point below the authored solid surface.
     ray=np.array([0.,0.,-.5*SHOCKWAVE_DEPTH])-eye
     ray/=np.linalg.norm(ray)
@@ -761,7 +738,7 @@ def test_actual_small_points_keep_body_and_emission_at_fractional_pixels(qt_app,
     from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
     from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
     from rendering.gl_programs.neon_lake_basin_mesh import basin_lattice
-    from rendering.gl_programs.neon_lake_basin_program import basin_item_point, SHOCKWAVE_DEPTH
+    from rendering.gl_programs.neon_lake_basin_program import SHOCKWAVE_DEPTH
     from rendering.gl_programs.heightfield import sample_heightfield_curve
 
     width,height = 640,400
@@ -810,7 +787,7 @@ def test_actual_small_points_keep_body_and_emission_at_fractional_pixels(qt_app,
         render(matrix)
         renderer = host._implementations['shockwave_grid']
         frame = QuickVisualizerRenderFrame(snapshot,(0,0,pixel_w,pixel_h),(width,height),matrix,host._quad_vao)
-        field,half_width,tilt,turn,maximum = renderer._view(frame,base.logical.mode_state.parameters)
+        field,half_width,view,maximum = renderer._view(frame,base.logical.mode_state.parameters)
         xs,ys = basin_lattice(renderer._points_cells)
         selected = [(min(range(len(xs)),key=lambda i:abs(xs[i]-u)),
                      min(range(len(ys)),key=lambda i:abs(ys[i]-v))) for u,v in ((.25,.2),(.5,.5),(.75,.8))]
@@ -833,7 +810,7 @@ def test_actual_small_points_keep_body_and_emission_at_fractional_pixels(qt_app,
                 colour,emission = render(shifted)
                 u,v = xs[column],ys[row]
                 world = ((2*u-1)*half_width,sample_heightfield_curve(grid,u,v)*state.parameters['shockwave_grid_terrain_height'],-v*SHOCKWAVE_DEPTH)
-                x,y = basin_item_point(world,field,renderer._fit,tilt,turn,half_width,maximum,.65,(0.,0.))
+                x,y = view.item_point(world)
                 px,py = round(x*dpr+phase),round(y*dpr+phase)
                 roi = np.s_[py-5:py+6,px-5:px+6,:3]
                 assert np.max(np.abs(colour-empty_colour)[roi])>8,(style,dpr,phase,u,v,(px,py),

@@ -276,6 +276,16 @@ def test_scene_gesture_settlement_does_not_stop_held_wasd(card, monkeypatch):
     assert pose(card)['shockwave_grid_scene_scale'] == scale
 
 
+def _envelope_limit(scale, pan_x, pan_y):
+    from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+    from widgets.spotify_visualizer.config_applier import presentation_setting_range
+    from widgets.spotify_visualizer.view_orbit import bounded_scene_pan
+    x, y = bounded_scene_pan(get_visualizer_mode_descriptor(MODE).scene_pan_envelope, scale, pan_x, pan_y)
+    lx, hx = presentation_setting_range('shockwave_grid_scene_pan_x')
+    ly, hy = presentation_setting_range('shockwave_grid_scene_pan_y')
+    return max(lx, min(hx, x)), max(ly, min(hy, y))
+
+
 def test_internal_transform_uses_spec_limits_without_changing_frame(card):
     from widgets.spotify_visualizer.config_applier import presentation_setting_range
     presentation = card.scene.visualizer_item.presentation
@@ -284,8 +294,10 @@ def test_internal_transform_uses_spec_limits_without_changing_frame(card):
     mouse(card, QEvent.Type.MouseMove, p + QPointF(10000., -10000.), Qt.MouseButton.RightButton)
     mouse(card, QEvent.Type.MouseButtonRelease, p, Qt.MouseButton.RightButton)
     scale=pose(card)['shockwave_grid_scene_scale']
-    assert pose(card)['shockwave_grid_scene_pan_x'] == pytest.approx(.42)
-    assert pose(card)['shockwave_grid_scene_pan_y'] == pytest.approx(.08-(.5+.18*scale))
+    # The far drag saturates at the mode's declared envelope (and the pan setting range).
+    expected = _envelope_limit(scale, 1e9, -1e9)
+    assert pose(card)['shockwave_grid_scene_pan_x'] == pytest.approx(expected[0])
+    assert pose(card)['shockwave_grid_scene_pan_y'] == pytest.approx(expected[1])
     wheel(card, p, 12000)
     release_alt(card)
     assert pose(card)['shockwave_grid_scene_scale'] == presentation_setting_range('shockwave_grid_scene_scale')[1]
@@ -303,7 +315,9 @@ def test_native_pan_can_frame_sky_at_the_reported_zoom_and_persist_within_limits
     mouse(card,QEvent.Type.MouseMove,p+QPointF(0.,10000.),Qt.MouseButton.RightButton)
     mouse(card,QEvent.Type.MouseButtonRelease,p,Qt.MouseButton.RightButton)
     live=pose(card)
-    assert live['shockwave_grid_scene_pan_y']==pytest.approx(1.1432654)
-    assert card.settings.get('widgets.spotify_visualizer')['shockwave_grid_scene_pan_y']==pytest.approx(1.1432654)
+    upper = _envelope_limit(1.90333, 0., 1e9)[1]
+    assert upper > .0774006  # looking up toward the sky is admitted at this zoom
+    assert live['shockwave_grid_scene_pan_y']==pytest.approx(upper)
+    assert card.settings.get('widgets.spotify_visualizer')['shockwave_grid_scene_pan_y']==pytest.approx(upper)
     assert card.scene.visualizer_item.presentation==outer
     assert len(card.writes)==1

@@ -80,23 +80,38 @@ def test_turn_goes_round_a_full_circle_and_tilt_stops_at_its_ends(mode):
     assert low < high and orbit_visualizer_view(host, mode, 0, -1)[tilt] == low
 
 
+def _neon_range(key):
+    from widgets.spotify_visualizer.config_applier import presentation_setting_range
+    return presentation_setting_range(key)
+
+
+def _neon_pan_limit(scale, pan_x, pan_y):
+    """The declared envelope at this zoom, inside the pan settings' own ranges."""
+    from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+    from widgets.spotify_visualizer.view_orbit import bounded_scene_pan
+    x, y = bounded_scene_pan(get_visualizer_mode_descriptor("shockwave_grid").scene_pan_envelope, scale, pan_x, pan_y)
+    (lx, hx), (ly, hy) = _neon_range("shockwave_grid_scene_pan_x"), _neon_range("shockwave_grid_scene_pan_y")
+    return max(lx, min(hx, x)), max(ly, min(hy, y))
+
+
 def test_neon_lake_landscape_turn_tilt_are_bounded_for_drag_and_held_keys():
     from widgets.spotify_visualizer.view_orbit import (ViewOrbitMotion, orbit_motion_values)
+    (turn_low, turn_high), (tilt_low, tilt_high) = _neon_range("shockwave_grid_turn"), _neon_range("shockwave_grid_tilt")
     host = _host()
-    for _ in range(180):
+    for _ in range(400):
         view = orbit_visualizer_view(host, "shockwave_grid", 1, 1)
-    assert view["shockwave_grid_turn"] == pytest.approx(.2)
-    assert view["shockwave_grid_tilt"] == pytest.approx(.58)
-    for _ in range(180):
+    assert view["shockwave_grid_turn"] == pytest.approx(turn_high)   # a landscape saturates, never wraps
+    assert view["shockwave_grid_tilt"] == pytest.approx(tilt_high)
+    for _ in range(400):
         view = orbit_visualizer_view(host, "shockwave_grid", -1, -1)
-    assert view["shockwave_grid_turn"] == pytest.approx(-.2)
-    assert view["shockwave_grid_tilt"] == pytest.approx(.17)
+    assert view["shockwave_grid_turn"] == pytest.approx(turn_low)
+    assert view["shockwave_grid_tilt"] == pytest.approx(tilt_low)
     motion = ViewOrbitMotion("shockwave_grid", 0.0, 0.4, 1.0, -1.0, 10.0)
     assert orbit_motion_values(motion, 50.0) == {
-        "shockwave_grid_turn": .2, "shockwave_grid_tilt": .17}
+        "shockwave_grid_turn": turn_high, "shockwave_grid_tilt": tilt_low}
     motion = ViewOrbitMotion("shockwave_grid", 0.0, 0.4, -1.0, 1.0, 10.0)
     assert orbit_motion_values(motion, 50.0) == {
-        "shockwave_grid_turn": -.2, "shockwave_grid_tilt": .58}
+        "shockwave_grid_turn": turn_low, "shockwave_grid_tilt": tilt_high}
 
 
 def test_neon_lake_pan_bound_reapplies_on_zoom_and_configuration_reload():
@@ -107,13 +122,13 @@ def test_neon_lake_pan_bound_reapplies_on_zoom_and_configuration_reload():
     pose = transform_visualizer_scene(host, mode, {
         "shockwave_grid_scene_scale": 1.,
         "shockwave_grid_scene_pan_x": 2.0, "shockwave_grid_scene_pan_y": 2.0})
-    assert pose["shockwave_grid_scene_pan_x"] == pytest.approx(.42)
-    assert pose["shockwave_grid_scene_pan_y"] == pytest.approx(.80)
+    expected = _neon_pan_limit(1., 2., 2.)
+    assert (pose["shockwave_grid_scene_pan_x"], pose["shockwave_grid_scene_pan_y"]) == pytest.approx(expected)
     pose = transform_visualizer_scene(host, mode, {"shockwave_grid_scene_scale": 4.0})
-    assert pose["shockwave_grid_scene_pan_y"] == pytest.approx(.80)
+    assert pose["shockwave_grid_scene_pan_y"] == pytest.approx(_neon_pan_limit(4., 0., expected[1])[1])
     apply_presentation_vis_mode_kwargs(host, {"shockwave_grid_scene_scale": 4.0,
                                              "shockwave_grid_scene_pan_y": -2.0})
-    assert host._shockwave_grid_scene_pan_y == pytest.approx(-1.14)
+    assert host._shockwave_grid_scene_pan_y == pytest.approx(_neon_pan_limit(4., 0., -2.)[1])
 
 
 @pytest.mark.parametrize('scale',[.25,.65,1.,1.90333,4.])
@@ -123,13 +138,12 @@ def test_neon_sky_framing_is_reachable_but_pan_and_orbit_remain_bounded(scale):
     sky=transform_visualizer_scene(host,'shockwave_grid',{
         'shockwave_grid_scene_scale':scale,'shockwave_grid_scene_pan_x':100.,
         'shockwave_grid_scene_pan_y':100.})
-    assert sky['shockwave_grid_scene_pan_x']==pytest.approx(.42)
-    assert sky['shockwave_grid_scene_pan_y']==pytest.approx(.92-(.5-.38*scale))
+    assert (sky['shockwave_grid_scene_pan_x'],sky['shockwave_grid_scene_pan_y'])==pytest.approx(
+        _neon_pan_limit(scale,100.,100.))
     ground=transform_visualizer_scene(host,'shockwave_grid',{'shockwave_grid_scene_pan_y':-100.})
-    assert ground['shockwave_grid_scene_pan_y']==pytest.approx(.08-(.5+.18*scale))
-    # Looking up keeps upper sky in the card; looking down retains the basin.
-    assert .5+(.12-.5)*scale+sky['shockwave_grid_scene_pan_y']==pytest.approx(.92)
-    assert .5+(.68-.5)*scale+ground['shockwave_grid_scene_pan_y']==pytest.approx(.08)
+    assert ground['shockwave_grid_scene_pan_y']==pytest.approx(_neon_pan_limit(scale,0.,-100.)[1])
+    # Raising the eye (sky) and lowering it (ground) both remain reachable and bounded.
+    assert ground['shockwave_grid_scene_pan_y'] < 0. < sky['shockwave_grid_scene_pan_y']
 
 
 def test_neon_run_tail_camera_can_pan_higher_without_changing_rotation_or_zoom():

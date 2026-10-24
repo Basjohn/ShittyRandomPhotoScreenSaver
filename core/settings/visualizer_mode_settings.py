@@ -594,6 +594,8 @@ _SHOCKWAVE_GRID = ModeSettings(
         Bucket("sky", "Sky", "Atmosphere, clouds and stars, and stars that flare on strong beats.", advanced=True),
         Bucket("celestial", "Sun & Moon", "The Sun or Moon, its halo, placement, orbit and light rays.", advanced=True),
         Bucket("glow", "Glow", "How brightly the land, ridges and water lines glow.", advanced=True),
+        Bucket("camera", "Camera", "The camera's lens; fly the view itself with the keyboard and mouse.",
+               advanced=True),
         Bucket("response", "Frequency Response",
                "This independent audio profile routes frequency lanes into water and ridge energy; it does not author terrain.",
                advanced=True),
@@ -820,9 +822,16 @@ _SHOCKWAVE_GRID = ModeSettings(
                "ui.tabs.media.shockwave_grid_settings_binding:load_smoothing_section",
                "ui.tabs.media.shockwave_grid_settings_binding:collect_smoothing_section",
                keys=("shockwave_grid_visual_smoothing_enabled", "shockwave_grid_visual_smoothing", "shockwave_grid_solid_bar_hysteresis_enabled")),
-        # Orbited live (W/A/S/D, Alt + drag) rather than from a body control.
-        Slider("shockwave_grid_tilt", "", 0.17, 0.58, bucket=""),
-        Slider("shockwave_grid_turn", "", -0.20, 0.20, bucket=""),
+        Slider("shockwave_grid_camera_fov", "Camera Field of View:", 20.0, 62.0,
+               scale=1, integer=True, suffix="\u00b0", decimals=0, bucket="camera",
+               tooltip="Change the vertical viewing angle without moving the camera. Narrow angles frame distant "
+                       "land like a long lens; W/A/S/D fly, Q/E turn, Shift+W/S look up or down, R returns home."),
+        # The shared framed camera (core.settings.framed_camera), moved live: W/A/S/D flight, Q/E yaw,
+        # Shift+W/S pitch, held-left orbit, Alt+right pan, Alt+wheel dolly and R home. Tilt 0 is a level
+        # horizon; the eye itself never enters the land or water.
+        Slider("shockwave_grid_tilt", "", -0.10, 0.58, bucket=""),
+        Slider("shockwave_grid_turn", "", -0.50, 0.50, bucket=""),
+        SceneCameraPosition("shockwave_grid_camera_position", ""),
         Slider("shockwave_grid_scene_scale", "", 0.25, 4.0),
         Slider("shockwave_grid_scene_pan_x", "", -2.0, 2.0),
         Slider("shockwave_grid_scene_pan_y", "", -2.0, 2.0),

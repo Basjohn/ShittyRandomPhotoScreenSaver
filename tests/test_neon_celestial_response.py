@@ -27,7 +27,7 @@ def test_production_moon_exterior_halo_surrounds_every_phase(qt_app):
                      shockwave_grid_moon_color=[190,220,255,255],
                      shockwave_grid_celestial_glow_strength=1.,
                      shockwave_grid_celestial_glow_reactivity=0., shockwave_grid_celestial_rim_vertices=False,
-                     shockwave_grid_tilt=.17, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
+                     shockwave_grid_tilt=-.05, shockwave_grid_turn=0., shockwave_grid_scene_scale=.75)
     try:
         def draw(phase, halo, enabled=True):
             colour = capture.render(host, _wire_frame(base, 'Vertices',
