@@ -76,16 +76,18 @@ def test_expanded_contact_uses_snapshot_radius_across_old_grid_cells_and_does_no
         a, b = sim._bubbles
         # Laid out on the displayed radii: the drawn shells hold their overlap however the physical radius jumps.
         ratios.append(math.dist((a.x, a.y, a.z), (b.x, b.y, b.z)) / (a.visual_radius + b.visual_radius))
-        assert max(math.dist(old, (b.x, b.y, b.z)) for old, b in zip(previous, sim._bubbles)) < .025   # no snap
+        # No snap (one would move a shell by about its radius); the crest's quadratic release contracts quickly.
+        assert max(math.dist(old, (b.x, b.y, b.z)) for old, b in zip(previous, sim._bubbles)) < .03
     # From where they touched, the pair draws steadily into a merge and stays merged through deep contraction.
     assert all(later <= earlier + 1e-9 for earlier, later in zip(ratios, ratios[1:]))
     assert ratios[-1] == pytest.approx(_FUSE_RATIO, abs=1e-3)
 
 
 def test_tiny_reacted_surfaces_do_not_collide_just_because_nominal_radii_overlap():
-    sim, controls = controlled((-.5, 0., -8.), (.5, 0., -8.), strength=(.15, .6))
+    sim, controls = controlled((-.5, 0., -8.), (.5, 0., -8.), strength=(1., .6))     # the deepest rest
     state = sim.advance(MusicInput(0., False), controls)
-    assert state.bubbles[3] == pytest.approx(.13)
+    from widgets.spotify_visualizer.extruded_bubble_simulation import _LARGE_REACTION
+    assert state.bubbles[3] == pytest.approx(_LARGE_REACTION[1])
     assert not state.clusters
 
 
@@ -93,11 +95,14 @@ def test_quiet_small_contacts_use_the_larger_resting_shell():
     sim,c = controlled((-.5,0.,-8.),(.5,0.,-8.),collision=(0.,0.,1.))
     for bubble in sim._bubbles:
         bubble.large = False
-    c = replace(c,large_count=(0,0),mid_count=(2,2),small_pulse=(.15,.8))
+    c = replace(c,large_count=(0,0),mid_count=(2,2),small_pulse=(.112,.8))
     sim.advance(MusicInput(1/90,False),c)
     a,b = sim._bubbles
-    assert a.current_radius == pytest.approx(.7825)
-    assert b.current_radius == pytest.approx(.7825)
+    from widgets.spotify_visualizer.extruded_bubble_simulation import _reaction_scale, _SMALL_REACTION
+    rest = _reaction_scale(c.small_pulse, 0., *_SMALL_REACTION)
+    assert .5 < rest < 1.
+    assert a.current_radius == pytest.approx(rest)
+    assert b.current_radius == pytest.approx(rest)
     assert a.x < -.5 and b.x > .5
 
 
@@ -225,18 +230,18 @@ def test_flow_follows_passages_inside_the_authored_speed_and_drift_ranges():
     controls = ExtrudedBubbleControls(large_count=(3, 3), mid_count=(4, 4), stream_speed=speed_range,
                                       drift=drift_range, collision_scope="off")
 
-    def settle(bands, onsets=False):
+    def settle(bands, passage, onsets=False):
         sim = ExtrudedBubbleSimulation(7)
         peak_speed = peak_drift = 0.0
         for i in range(600):
             hits = (("kick", 1.0),) if onsets and i % 12 == 0 else ()
-            sim.advance(MusicInput(1 / 60, True, .5, hits, bands), controls)
+            sim.advance(MusicInput(1 / 60, True, passage, hits, bands), controls)
             peak_speed, peak_drift = max(peak_speed, sim._speed), max(peak_drift, sim._drift)
         return sim._speed, sim._drift, peak_speed, peak_drift
 
-    quiet = settle((.30, .25, .10))
-    loud = settle((.80, .70, .45))
-    hammered = settle((.95, .90, .60), onsets=True)
+    quiet = settle((.30, .25, .10), .15)
+    loud = settle((.80, .70, .45), 1.)
+    hammered = settle((.95, .90, .60), 1., onsets=True)
     # A quiet passage and a full one sit far apart within the authored range (test-owned ranges).
     assert loud[0] - quiet[0] > .8 * (speed_range[1] - speed_range[0])
     assert loud[1] - quiet[1] > .8 * (drift_range[1] - drift_range[0])

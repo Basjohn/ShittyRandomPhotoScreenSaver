@@ -667,6 +667,7 @@ class ExtrudedBubbleFrame:
     parameters: FrozenFields = FrozenFields()
     motion_phase: float = 0.0  # music-owned integrated visual phase; never elapsed wall time
     wakes: tuple[float, ...] = ()  # stable wake emitters, live/retiring, 8 floats each
+    passage: float = 0.0  # how loud the passage is, 0..1: where the renderer's quiet-to-loud Ranges sit
 
     def __post_init__(self) -> None:
         wakes = _float_tuple(self.wakes, name="extruded bubble wake record")
@@ -684,7 +685,7 @@ class ExtrudedBubbleFrame:
             raise ValueError("Extruded Bubble stream must be a 3D direction")
         object.__setattr__(self, "stream", stream)
         for name in ("time", "level", "flash", "sustain", "drift", "emission", "stream_speed", "travel",
-                     "rays", "shimmer", "motion_phase"):
+                     "rays", "shimmer", "motion_phase", "passage"):
             object.__setattr__(self, name, _finite(getattr(self, name), name=f"extruded bubble {name}"))
         object.__setattr__(self, "parameters",
                            _coerce_frozen_fields(self.parameters, name="extruded bubble parameters"))

@@ -147,7 +147,8 @@ def test_ray_strength_reads_its_range_at_the_ray_driver_and_is_off_when_disabled
     low, high = SETTINGS["extruded_bubble_rays"]
     on = {**SETTINGS, "extruded_bubble_rays_enabled": True}
     assert 0 < scene.ray_strength(on, 0.0) < low * .05  # very dim rest, not the full quiet-music endpoint
-    assert scene.ray_strength(on, .15) < scene.ray_strength(on, .75) * .3
+    # Inside music a quiet passage shows the authored quiet handle, no longer crushed toward the resting 3%.
+    assert low <= scene.ray_strength(on, .15) < scene.ray_strength(on, .75)
     assert scene.ray_strength(on, 1.0) == pytest.approx(high)
     assert scene.ray_strength(on, 2.0) == pytest.approx(high)
     assert scene.ray_strength({**SETTINGS, "extruded_bubble_rays_enabled": False}, 0.7) == 0.0

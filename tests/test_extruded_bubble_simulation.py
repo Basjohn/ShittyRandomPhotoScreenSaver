@@ -39,12 +39,15 @@ def _records(snapshot):
     return [values[i:i + BUBBLE_STRIDE] for i in range(0, len(values), BUBBLE_STRIDE)]
 
 
-@pytest.mark.parametrize('policy', [(4.,5.8), (4.,1.45)])
-def test_reaction_handles_have_independent_quiet_and_crest_authority(policy):
-    from widgets.spotify_visualizer.extruded_bubble_simulation import _reaction_scale
+@pytest.mark.parametrize('large', [True, False])
+def test_reaction_handles_have_independent_quiet_and_crest_authority(large):
+    from widgets.spotify_visualizer.extruded_bubble_simulation import _reaction_scale, _LARGE_REACTION, _SMALL_REACTION
+    policy = _LARGE_REACTION if large else _SMALL_REACTION
     scale = lambda pair, drive: _reaction_scale(pair,drive,*policy)
     assert scale((.15,.3),0.) == scale((.15,.9),0.)
-    assert scale((.05,.8),0.) > scale((.15,.8),0.)
+    # The quiet handle is a contraction depth, monotonic over its whole travel (it once turned back above .15).
+    rests = [scale((i/20,.8),0.) for i in range(21)]
+    assert rests == sorted(rests, reverse=True) and rests[0] == 1. and rests[-1] < rests[1]
     assert scale((.05,.8),1.) == scale((.15,.8),1.)
     assert scale((.15,.9),1.) > scale((.15,.3),1.)
     for drive in (0.,.1,.5,.9,1.):
@@ -56,10 +59,13 @@ def test_reaction_handles_have_independent_quiet_and_crest_authority(policy):
 
 def test_class_calibration_retains_large_contraction_and_strong_small_excursion():
     from widgets.spotify_visualizer.extruded_bubble_simulation import _reaction_scale, _LARGE_REACTION, _SMALL_REACTION
-    assert _reaction_scale((.15,.6),0.,*_LARGE_REACTION) == pytest.approx(.13)
-    assert _reaction_scale((.15,.6),1.,*_LARGE_REACTION) == pytest.approx(3.4)
-    assert _reaction_scale((.15,.8),0.,*_SMALL_REACTION) == pytest.approx(.7825)
-    assert _reaction_scale((.15,.8),1.,*_SMALL_REACTION) == pytest.approx(4.2)
+    # Full quiet handle: large contracts far deeper than small, which keeps a readable rest.
+    large_rest, small_rest = (_reaction_scale((1.,.6),0.,*p) for p in (_LARGE_REACTION, _SMALL_REACTION))
+    assert 0 < large_rest < .2 and large_rest < small_rest < .5
+    # The loud handle is the crest above nominal, independent of the rest.
+    for policy in (_LARGE_REACTION, _SMALL_REACTION):
+        crest = _reaction_scale((.2,.6),1.,*policy)
+        assert crest == pytest.approx(_reaction_scale((.9,.6),1.,*policy)) and crest > 2.
 
 
 def test_light_and_particle_release_extension_is_bounded_without_changing_attacks(monkeypatch):
@@ -186,7 +192,7 @@ def test_very_quiet_phrase_release_has_no_threshold_jump_and_stays_gentle():
 
 
 def test_soft_large_breathes_downward_instead_of_carrying_a_generic_hold():
-    controls=ExtrudedBubbleControls(large_count=(2,2),mid_count=(0,0),breathing=(.15,.6),
+    controls=ExtrudedBubbleControls(large_count=(2,2),mid_count=(0,0),breathing=(1.,.6),
         sustained=1.,stream_speed=(0,0),drift=(0,0),sway=0,collision_scope="off")
     sim=ExtrudedBubbleSimulation(26)
     for _ in range(360):sim.advance(MusicInput(STEP,True,1.,(),(.1,.1,.05)),controls)
@@ -195,7 +201,7 @@ def test_soft_large_breathes_downward_instead_of_carrying_a_generic_hold():
     # stays contracted. The onset step uses the pooled real-music median passage.
     peak=max(1.+sim.advance(MusicInput(STEP,True,1.,(),(.6,.55,.35)),controls).bubbles[5] for _ in range(24))
     held=_run(sim,controls,6.,intensity=.2)
-    assert peak>1.5 and 1.+held.bubbles[5]<.5
+    assert peak>1.3 and 1.+held.bubbles[5]<.5
     assert held.sustain<.01  # soft music never acquires loud-passage hold
 
 
@@ -203,9 +209,10 @@ def test_changing_vocals_inside_held_bass_drive_smalls_and_every_flow_light_lane
     controls=ExtrudedBubbleControls(large_count=(2,2),mid_count=(4,4),breathing=(.15,.6),small_pulse=(.15,.8),
         stream_speed=(.05,.5),drift=(.1,.9),emission=(.1,.9),sway=0,collision_scope="off")
     sim=ExtrudedBubbleSimulation(27)
+    usual=.65  # PassageIntensity.USUAL
     for _ in range(720):
-        before=sim.advance(MusicInput(STEP,True,1.,(),(.9,.1,.05)),controls)
-    states=[sim.advance(MusicInput(STEP,True,1.,(),(.9,.8,.5)),controls) for _ in range(36)]
+        before=sim.advance(MusicInput(STEP,True,usual,(),(.9,.1,.05)),controls)
+    states=[sim.advance(MusicInput(STEP,True,usual,(),(.9,.8,.5)),controls) for _ in range(36)]
     # Max-level would be exactly .9 throughout: a shared max cannot explain
     # these changes, and no discrete onset is injected.
     assert all(abs(s.level-before.level)<1e-9 for s in states)
@@ -213,7 +220,7 @@ def test_changing_vocals_inside_held_bass_drive_smalls_and_every_flow_light_lane
     for name,minimum in (('stream_speed',.1),('drift',.08),('emission',.10),('rays',.1)):
         assert max(getattr(s,name) for s in states)>getattr(before,name)+minimum,name
     for _ in range(720):
-        held=sim.advance(MusicInput(STEP,True,1.,(),(.9,.8,.5)),controls)
+        held=sim.advance(MusicInput(STEP,True,usual,(),(.9,.8,.5)),controls)
     kinds={b.ident:b.large for b in sim._bubbles}
     small=[1.+r[5] for r in _records(held) if not kinds[int(r[6])]]
     big=[1.+r[5] for r in _records(held) if kinds[int(r[6])]]
@@ -502,6 +509,7 @@ def test_nothing_pins_flat_at_the_top_of_its_range():
 
 
 def test_large_contracts_deeply_while_small_keeps_a_readable_nonpulsing_rest():
+    from widgets.spotify_visualizer.extruded_bubble_simulation import _reaction_scale, _LARGE_REACTION, _SMALL_REACTION
     controls = ExtrudedBubbleControls(large_count=(8, 8), mid_count=(16, 16), collision_scope="off",
                                      breathing=(.15, .6), small_pulse=(.15, .8),
                                      stream_speed=(0, 0), drift=(0, 0))   # resting contraction only, no travel
@@ -511,7 +519,9 @@ def test_large_contracts_deeply_while_small_keeps_a_readable_nonpulsing_rest():
     assert snap.count == 24
     for r in _records(snap):
         nominal, large = bases[int(r[6])]
-        assert r[3]/nominal == pytest.approx(.13 if large else .7825)
+        rest = _reaction_scale(controls.breathing if large else controls.small_pulse, 0.,
+                               *(_LARGE_REACTION if large else _SMALL_REACTION))
+        assert r[3]/nominal == pytest.approx(rest) and rest < 1.
 
 
 def test_resting_sway_velocity_is_slow_as_well_as_its_phase():

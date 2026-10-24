@@ -201,14 +201,16 @@ def ray_strength(parameters: Mapping[str, object], rays: float) -> float:
     """Resolve the authored Range once, with collapsed resting activity in silence.
 
     A strong quiet-music endpoint must not keep the full fan bright with no musical
-    input. The continuous simulation driver opens the light from 3% resting activity
-    to the authored loud endpoint; disabled rays still emit no shafts.
+    input: the light collapses to 3% only near silence (driver below ~0.15). Inside
+    music the authored quiet handle is what quiet passages show (the old factor
+    0.03 + 0.97 x driver crushed it all through quiet music); disabled rays emit no shafts.
     """
     if not bool(_p(parameters, "rays_enabled")):
         return 0.0
     low, high = (float(v) for v in _p(parameters, "rays"))
     drive = max(0.0, min(1.0, float(rays)))
-    return (low + (high - low) * drive) * (0.03 + 0.97 * drive)
+    rest = min(1.0, drive / 0.15)
+    return (low + (high - low) * drive) * (0.03 + 0.97 * rest * rest * (3.0 - 2.0 * rest))
 
 
 def ray_motion(parameters: Mapping[str, object], rays: float, sustain: float) -> tuple[float, float]:

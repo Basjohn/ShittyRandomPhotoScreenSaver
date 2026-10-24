@@ -21,7 +21,7 @@
         "extruded_bubble_bead_size": 1.0,
         "extruded_bubble_beam_width": 1.0,
         "extruded_bubble_breathing": [
-          0.15,
+          0.5,
           0.6
         ],
         "extruded_bubble_bubble_spread": 1.0,
@@ -117,7 +117,7 @@
         "extruded_bubble_sensitivity": 0.4,
         "extruded_bubble_size_variety": 0.6,
         "extruded_bubble_small_pulse": [
-          0.15,
+          0.2,
           0.8
         ],
         "extruded_bubble_small_size": 1.0,

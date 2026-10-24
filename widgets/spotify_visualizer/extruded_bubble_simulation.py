@@ -68,11 +68,12 @@ _SWIRL_WIDEN = 0.06        # outward, so the orbit becomes a widening spiral
 _STEERED_WANDER = 0.4      # share of the original meander kept under a steered direction
 _LARGE_RADIUS = (0.075 * WORLD_UNIT, 0.16 * WORLD_UNIT)
 _MID_RADIUS = (0.025 * WORLD_UNIT, 0.07 * WORLD_UNIT)
-# (musical expansion, quiet contraction). Large keeps the existing .13 nominal
-# minimum at the normal .15 quiet strength; smalls need their own readable rest.
-# These are response calibrations, not optical/physical constants or 2D mechanics.
-_LARGE_REACTION = (4.0, 5.8)
-_SMALL_REACTION = (4.0, 1.45)
+# (musical expansion, deepest rest). The quiet handle is a contraction depth: 0 keeps the nominal size at rest,
+# 1 rests at the class's deepest size (large at the old .13 minimum; smalls keep a readable shell). Until
+# 2026-10-24 it was a slope that saturated at .15 and also fed expansion, so raising it ABOVE .15 made quiet
+# bubbles bigger. These are response calibrations, not optical/physical constants or 2D mechanics.
+_LARGE_REACTION = (4.0, 0.13)
+_SMALL_REACTION = (4.0, 0.35)
 # Large held-body knee/span on the fixed-scale EB body feed (beat_engine.get_extruded_bubble_body_bands):
 # about p25 and p95 of bass + .28 mid + .10 high pooled over four full songs (2026-10-24). A p10 knee held
 # large bubbles open through nearly all music (p95/p05 ~1.8x vs accepted 2D's 2.6-9x); a p40 knee
@@ -85,6 +86,7 @@ _LARGE_HELD_SOFTNESS = 0.08
 _PER_ID_LARGE = (1.12, 0.24)
 _PER_ID_SMALL = (1.18, 0.36)
 _MINIMUM_REACTION_RADIUS = .13
+_QUIET_DEPTH_FULL = 0.5   # Breathing / Small Bubble Pulse quiet handle at which the class reaches its deepest rest
 _LANE = 0.26 * WORLD_UNIT  # fixed world spacing transverse to the stream
 _WAKE_RETIRE_SECONDS = 1.1  # front-to-tail dissolve of a wake whose emitter pops, merges or exits
 _WAKE_STRIDE = 8           # x, y, z, reacted radius, stable ident, retirement progress (-1 active), alpha, nominal radius
@@ -111,8 +113,8 @@ class ExtrudedBubbleControls:
     sway: float = 0.4                       # 0..1 side-to-side swing
     emission: tuple[float, float] = (0.3, 1.0)   # particle emission (specks, dust, trails) 0..1 at quiet, loud
     idle: float = 0.5                       # 0..1 gentle resting motion; never a size oscillator
-    breathing: tuple[float, float] = (0.04, 0.18)        # large reaction strength, quiet..loud
-    small_pulse: tuple[float, float] = (0.02, 0.10)      # mid reaction strength, quiet..loud
+    breathing: tuple[float, float] = (0.0355, 0.18)      # large: quiet contraction depth, loud expansion
+    small_pulse: tuple[float, float] = (0.001, 0.10)     # mid: quiet contraction depth, loud expansion
     sustained: float = 0.6                  # 0..1 loud-passage large support and change response; no held-small inflation
     smoothing: float = 0.5                  # 0 snappy .. 1 soft; DISPLAYED radius only, not audio/physics
     collision: tuple[float, float, float] = (0.4, 0.3, 0.3)   # Fuse, Pop, Bounce shares
@@ -146,6 +148,7 @@ class ExtrudedBubbleSnapshot:
     shimmer: float = 0.0                    # the rays' shimmer phase (ever rising, faster on the hits)
     motion_phase: float = 0.0              # Integrated music-owned phase for surface, veils, rays and ambient effects
     wakes: tuple[float, ...] = ()          # stable live/retiring emitter records; immutable, wake-only, 8 floats each
+    passage: float = 0.0                   # how loud the passage is (0 quiet .. 1 loud): where every Range sits
 
     @property
     def count(self) -> int:
@@ -217,6 +220,13 @@ def _follow(current: float, target: float, dt: float, attack: float, release: fl
     return target + (current - target) * math.exp(-dt / max(tau, 1e-4))
 
 
+def _passage_curve(intensity: float) -> float:
+    """The engine's passage intensity (0 near-silence, ~0.65 a usual passage, 1 loud) as where a Range sits: a usual
+    passage a little past the middle, the quietest music near the quiet handle, the loudest at the loud one."""
+    value = max(0.0, min(1.0, float(intensity)))
+    return value * value * (3.0 - 2.0 * value)
+
+
 def _shown_radius(bubble) -> float:
     """The radius the bubble is drawn with (its smoothed display radius), for laying out fused shapes."""
     return bubble.visual_radius if bubble.visual_radius > 0.0 else bubble.current_radius
@@ -266,24 +276,25 @@ def _drift_steer(kind: str, position, phase: float, t: float, direction, across,
     return (0.0, 0.0, 0.0)
 
 
-def _reaction_scale(pair: tuple[float, float], drive: float, expansion: float, contraction: float) -> float:
+def _reaction_scale(pair: tuple[float, float], drive: float, expansion: float, deepest: float) -> float:
     """Authored strength spans contracted rest and musical expansion; zero disables both.
 
     Base radius is nominal size, not an uncontractable lower bound. A silent/held
     input converges to one size; no clock or independent oscillator creates pulses.
     """
-    # Silence belongs to the quiet handle. A high-handle edit must not secretly
-    # contract the resting population. The shared minimum bounds contraction;
-    # strengths above it still affect intermediate musical expansion.
-    strength = max(0.0, min(1.0, pair[0]))
-    rest = max(_MINIMUM_REACTION_RADIUS, 1.0 - contraction * strength)
+    # Silence belongs to the quiet handle alone: a contraction depth, monotonic from the nominal size (0) to the
+    # class's deepest rest (_QUIET_DEPTH_FULL, half way), eased (square root) so its low part still reads. It never
+    # feeds expansion. The deepest rest sits half way, not at the end: the slider's handles cannot cross, so a rest
+    # authored at the far end forced the loud handle (the crest) to its maximum with it.
+    strength = max(0.0, min(1.0, pair[0] / _QUIET_DEPTH_FULL))
+    rest = 1.0 - (1.0 - deepest) * math.sqrt(strength)
     # Keep the response shape separate from the resting radius: simply lifting
     # rest makes a larger share of the remaining motion quadratic, accelerating
     # the perceived release despite unchanged followers. Normalize the existing
     # .13-reference curve, then span the independently authored rest and crest.
     reference_rest_span = 1.0 - _MINIMUM_REACTION_RADIUS
     reference_span = reference_rest_span + expansion * pair[1]
-    response = (reference_rest_span * drive + expansion * _lerp(pair, drive) * drive) / reference_span
+    response = (reference_rest_span * drive + expansion * pair[1] * drive * drive) / reference_span
     return rest + (1.0 - rest + expansion * pair[1]) * response
 
 
@@ -319,6 +330,7 @@ class ExtrudedBubbleSimulation:
         self._body_small_envelope = 0.0
         self._flow_body = 0.0
         self._population_drive = 0.0  # separate audio-owned occupancy eligibility; no display Smoothing
+        self._passage = 0.0           # the passage drive every quiet-to-loud Range ramps on (see advance)
         self._big_body_reference = 0.0
         self._last_big_body: float | None = None
         self._was_play_ramping = False
@@ -455,6 +467,15 @@ class ExtrudedBubbleSimulation:
         small_body = _soft_top(vocal_body)
         intensity = min(1.0, max(bass, vocal_body))  # population/motion retain their existing normalized driver
         self._level = _follow(self._level, intensity, dt, 0.08 * soft, 0.45 * soft)
+        # Where every quiet-to-loud Range sits: how loud the PASSAGE is (the shared PassageIntensity on the fixed
+        # real-music scale, already eased by the engine), eased once more so a phrase, not a beat, moves the
+        # endpoints. The band-driven drives above follow beats on a fixed scale that sits mid-range in nearly all
+        # music, so ranges never reached their quiet or loud ends (audit 2026-10-24); beats still add motion on top.
+        passage_target = _passage_curve(music.intensity) if music.playing else 0.0
+        # Activation can join music already playing: the first fill starts at the passage heard, not at silence.
+        self._passage = (passage_target if not self._filled else
+                         _follow(self._passage, passage_target, dt, 0.6 * soft, 1.5 * soft))
+        passage = self._passage
         onsets = music.onsets if music.playing else ()
         if onsets:
             self._flash = max(self._flash, max(w for _kind, w in onsets))
@@ -522,8 +543,12 @@ class ExtrudedBubbleSimulation:
         self._last_small_body = small_body if music.playing else None
         self._small_body_reference = _follow(self._small_body_reference, small_body, dt, 0.55 * soft, 0.25 * soft)
         small_change = 0.0 if (music.play_ramping or finishing_source_ramp) else max(0.0, small_body - self._small_body_reference)
+        # The passage scales the small swell (x0.7 quiet .. x1.3 loud): vocal CHANGE thins out in a loud, held
+        # passage, so without it soft songs breathed less as they got louder (audit 2026-10-25). Never a held
+        # passage term: a hot vocal plateau must not inflate the whole small field.
         self._body_small_envelope = _follow(self._body_small_envelope,
-            _soft_top(0.18 * small_body + (6.0 + 2.0 * sustain) * small_change), dt, 0.06 * soft, body_release)
+            _soft_top((0.18 * small_body + (6.0 + 2.0 * sustain) * small_change) * (0.7 + 0.6 * passage)),
+            dt, 0.06 * soft, body_release)
         # Counts describe passage occupancy. Flow/light/emission must still express
         # changing vocals while that occupancy is held high by bass. Reuse the
         # existing clean small-body envelope; no second band read or response clock.
@@ -564,10 +589,14 @@ class ExtrudedBubbleSimulation:
         if onsets and not music.play_ramping:
             self._ray_lift = max(self._ray_lift, min(1.0, max(w for _kind, w in onsets)))
         self._ray_lift = _follow(self._ray_lift, 0.0, dt, 0.08, 0.42)
-        ray_target = (0.24 * level + 0.26 * self._body_small_envelope
-                      + 0.06 * sustain + 0.23 * self._ray_phrase + 0.32 * self._ray_lift)
+        # The passage sets where the fan sits in its Range; beats swing it around that (x0.6 .. x1.3), never
+        # lift a quiet passage off its quiet handle (additive beat terms held every passage mid-range). The swing
+        # stays wide enough to move a saturated passage under its soft top.
+        ray_beats = min(1.0, 0.35 * self._body_small_envelope + 0.6 * self._ray_phrase + 0.6 * self._ray_lift
+                        + 0.1 * sustain)
+        ray_target = _soft_top(passage * (0.6 + 0.7 * ray_beats))
         ray_release = 0.58 + 0.25 * quiet * quiet
-        self._rays = _follow(self._rays, min(0.90, ray_target), dt, 0.12,
+        self._rays = _follow(self._rays, ray_target, dt, 0.12,
                              ray_release + min(0.15, 0.20 * ray_release))
         # Integrated phase keeps the shimmer pattern continuous. The transient
         # brightening above is separate from this cosmetic shimmer; no flashing.
@@ -583,10 +612,13 @@ class ExtrudedBubbleSimulation:
         rest_activity = (0.15 + 0.45 * max(0.0, min(1.0, controls.idle))) * rest_motion_boost
         activity = min(1.0, max(idle_rate * rest_motion_boost + 1.6 * level, rest_activity))
         # Onset and sustained lifts stay inside the authored range: the loud handle is the maximum.
-        speed_target = _lerp(controls.stream_speed, _soft_top(change_drive + 0.35 * self._flash + 0.15 * sustain)) * activity
-        drift_target = _lerp(controls.drift, _soft_top(change_drive + 0.2 * sustain)) * activity
-        emission_target = _soft_top(_lerp(controls.emission, change_drive)
-                                    + 0.2 * (controls.emission[1] - controls.emission[0]) * self._flash)
+        # The passage sets where flow sits in each Range; phrase changes and onsets swing it around that.
+        flow_drive = passage * (0.7 + 0.6 * change_drive)
+        speed_target = _lerp(controls.stream_speed,
+                             _soft_top(flow_drive * (1.0 + 0.20 * self._flash + 0.10 * sustain))) * activity
+        drift_target = _lerp(controls.drift, _soft_top(flow_drive * (1.0 + 0.15 * sustain))) * activity
+        emission_target = _soft_top(_lerp(controls.emission, flow_drive)
+                                    + 0.2 * (controls.emission[1] - controls.emission[0]) * self._flash * passage)
         if self._speed is None:
             self._speed, self._drift, self._emission = speed_target, drift_target, emission_target
         # Flow accelerates continuously, rather than stepping at a vocal accent;
@@ -620,8 +652,8 @@ class ExtrudedBubbleSimulation:
         # gate, the monotonic curve remains responsive throughout the range. The
         # follower shares this logical tick and is deliberately independent of the
         # display-radius Smoothing setting.
-        breadth = 0.52 * intensity + 0.48 * (0.42 * bass + 0.39 * mid + 0.19 * high)
-        population_target = max(0.0, min(1.0, breadth)) ** 1.8
+        breadth = passage * (0.8 + 0.4 * (0.42 * bass + 0.39 * mid + 0.19 * high))
+        population_target = max(0.0, min(1.0, breadth))
         self._population_drive = (population_target if not self._filled else
                                   _follow(self._population_drive, population_target, dt, 0.28, 1.05))
         # Preserve authored quiet/loud endpoints, operator's identity/fade semantics,
@@ -1060,7 +1092,7 @@ class ExtrudedBubbleSimulation:
         return ExtrudedBubbleSnapshot(self._time, tuple(bubbles), tuple(clusters), level,
                                       self._flash, direction, speed, self._drift, self._emission, self._sustain,
                                       self._travel, self._rays, self._shimmer, self._motion_phase,
-                                      self._wakes(dt))
+                                      self._wakes(dt), self._passage)
 
 
 __all__ = ["BUBBLE_STRIDE", "CLUSTER_MAX", "CLUSTER_STRIDE", "ExtrudedBubbleControls", "ExtrudedBubbleSimulation",

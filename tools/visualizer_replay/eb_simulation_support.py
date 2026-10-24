@@ -38,10 +38,10 @@ def synthetic_controls(mod, profile: str):
     """
     profiles = {
         "gentle": dict(large_count=(3., 3.), mid_count=(4., 4.),
-                       breathing=(.04, .18), small_pulse=(.02, .10),
+                       breathing=(.0355, .18), small_pulse=(.001, .10),
                        sustained=.6, smoothing=.5),
         "strong": dict(large_count=(5., 5.), mid_count=(8., 8.),
-                       breathing=(.12, .45), small_pulse=(.10, .42),
+                       breathing=(.32, .45), small_pulse=(.025, .42),
                        sustained=.7, smoothing=.35),
     }
     return mod.ExtrudedBubbleControls(**profiles[profile],

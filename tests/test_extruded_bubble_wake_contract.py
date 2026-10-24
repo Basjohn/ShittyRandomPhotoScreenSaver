@@ -83,12 +83,12 @@ class WakeOwnershipTests(unittest.TestCase):
 
     def test_nominal_radius_is_preserved_separately_from_parent_reaction_and_retirement(self):
         from dataclasses import replace
-        controls = replace(self.controls, breathing=(.15,.6))
+        controls = replace(self.controls, breathing=(1.,.6))      # the deepest rest
         first = source_records(self.sim.advance(self.mod.MusicInput(1/60,False),controls))
         bases = {b.ident:b.radius for b in self.sim._bubbles}
         for ident,row in first.items():
             self.assertAlmostEqual(row[7],bases[ident])
-            self.assertAlmostEqual(row[3]/row[7],.13)
+            self.assertAlmostEqual(row[3]/row[7],self.mod._LARGE_REACTION[1])
         for _ in range(90):
             snap=self.sim.advance(self.mod.MusicInput(1/60,True,1.,(),(.8,.7,.6)),controls)
         live=source_records(snap)

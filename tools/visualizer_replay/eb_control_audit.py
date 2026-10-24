@@ -9,6 +9,9 @@ its minimum. A working minimum shows a clearly lower quiet value than the preset
 the left handle and loud near the right one.
 
     python -m tools.visualizer_replay.eb_control_audit [--preset 1] [clip ...]
+
+``--realized`` instead reports each preset's own values once (quietest fifth / middle fifth / loudest fifth) for every
+metric from one replay per song, for re-authoring presets: ``--realized --preset 1 2 3``.
 """
 from __future__ import annotations
 
@@ -22,7 +25,7 @@ DEFAULT_CLIPS = ("human_heavy1", "1985_loud1", "nightsolong_acousticsoft1")
 
 def _metrics():
     from rendering.gl_programs.extruded_bubble_scene import ray_motion, ray_strength
-    from rendering.quick.visualizer.implementations.extruded_bubble import _procedural_fill
+    from rendering.quick.visualizer.implementations.extruded_bubble import _procedural_fill, chain_drive
     from widgets.spotify_visualizer.extruded_bubble_frame_runtime import STREAM_SPEED_FULL
     from widgets.spotify_visualizer.extruded_bubble_simulation import BUBBLE_STRIDE, WORLD_UNIT
 
@@ -47,7 +50,7 @@ def _metrics():
         "extruded_bubble_ray_flicker": ("flicker depth", lambda p, s, r: ray_motion(p, s.rays, s.sustain)[0]),
         "extruded_bubble_large_bubbles": ("live large", population(True)),
         "extruded_bubble_mid_bubbles": ("live small", population(False)),
-        "extruded_bubble_bead_chains": ("chains", lambda p, s, r: _procedural_fill(p, s.level, s.emission)[0]),
+        "extruded_bubble_bead_chains": ("chains", lambda p, s, r: _procedural_fill(p, chain_drive(s), s.emission)[0]),
         "extruded_bubble_stream_speed": ("speed (x full)", lambda p, s, r: s.stream_speed / (WORLD_UNIT * STREAM_SPEED_FULL)),
         "extruded_bubble_drift": ("drift", lambda p, s, r: s.drift),
         "extruded_bubble_breathing": ("large breath", breath(True)),
@@ -61,6 +64,12 @@ def _metrics():
 
 
 def _replay(clip, params, metric):
+    quiet, _middle, loud = _replay_all(clip, params, {"metric": metric})["metric"]
+    return quiet, loud
+
+
+def _replay_all(clip, params, metrics):
+    """Each metric's mean in the quietest, middle and loudest fifths of the song, from one replay."""
     from tools.visualizer_replay.engine import ReplayBeatEngine
     from widgets.spotify_visualizer.extruded_bubble_frame_runtime import (
         ExtrudedBubbleFrameRuntime, controls_from_parameters,
@@ -78,11 +87,50 @@ def _replay(clip, params, metric):
                                body_bands=tuple(getattr(engine.get_extruded_bubble_body_bands(), n)
                                                 for n in ("bass", "mid", "high")),
                                controls=controls)
-        rows.append((engine.get_musical_intensity(), metric(params, snap, runtime)))
-    rows = [r for r in rows[len(rows) // 10:] if r[1] == r[1]]          # skip warm-up and empty frames
+        rows.append((engine.get_musical_intensity(), tuple(m(params, snap, runtime) for m in metrics.values())))
+    # Rank by the PASSAGE (a centred 4 s mean of the engine's intensity), not the instantaneous value: that snaps
+    # to 0 in every near-silent gap between beats, so its quietest fifth was beat gaps inside loud music.
+    times = [f.timestamp_us / 1e6 for f in clip.frames]
+    sums = [0.0]
+    for intensity, _v in rows:
+        sums.append(sums[-1] + intensity)
+    passage, lo, hi = [], 0, 0
+    for i, t in enumerate(times):
+        while times[lo] < t - 2.0:
+            lo += 1
+        while hi < len(times) and times[hi] <= t + 2.0:
+            hi += 1
+        passage.append((sums[hi] - sums[lo]) / (hi - lo))
+    rows = [(p, v) for p, (_i, v) in zip(passage, rows)][len(rows) // 10:]      # skip warm-up
     rows.sort(key=lambda r: r[0])
-    fifth = max(1, len(rows) // 5)
-    return statistics.fmean(v for _i, v in rows[:fifth]), statistics.fmean(v for _i, v in rows[-fifth:])
+    result = {}
+    for index, name in enumerate(metrics):
+        # skip warm-up and empty frames (NaN: no bubble of that class on screen)
+        values = [(p, v[index]) for p, v in rows if v[index] == v[index]]
+        fifth = max(1, len(values) // 5)
+        middle = len(values) // 2 - fifth // 2
+        result[name] = tuple(statistics.fmean(v for _p, v in part) if part else float("nan")
+                             for part in (values[:fifth], values[middle:middle + fifth], values[-fifth:]))
+    return result
+
+
+def realized(presets, clip_names, keys=()):
+    """Each preset's own values, every metric from one replay per song: quiet / middle / loud fifths."""
+    from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+    from widgets.spotify_visualizer.feature_frame import FeatureClip
+    clips = [FeatureClip.from_jsonl_bytes(n, (ROOT / f"{n}.jsonl").read_bytes()) for n in clip_names]
+    metrics = {k: m for k, (_label, m) in _metrics().items() if not keys or k in keys}
+    for preset in presets:
+        params = dict(resolve_visualizer_activation_payload(
+            {"mode": "extruded_bubble", "preset_extruded_bubble": preset - 1}, mode="extruded_bubble").resolved_config)
+        params.setdefault("scene3d_detail", "High")
+        params["extruded_bubble_rays_enabled"] = params.get("extruded_bubble_rays_enabled", True)
+        results = [_replay_all(clip, params, metrics) for clip in clips]
+        print(f"\nPreset {preset}")
+        for key in metrics:
+            cells = "   ".join(f"{clip.name[:12]:>12s} " + " / ".join(f"{v:6.3f}" for v in result[key])
+                               for clip, result in zip(clips, results))
+            print(f"  {key[len('extruded_bubble_'):]:26s} {str(params[key]):14s} {cells}", flush=True)
 
 
 def _cases(control, value):
@@ -95,18 +143,22 @@ def _cases(control, value):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--preset", type=int, default=1)
+    parser.add_argument("--preset", type=int, nargs="+", default=[1])
+    parser.add_argument("--realized", action="store_true", help="each preset's own values only, every metric")
     parser.add_argument("--keys", nargs="*", help="only these controls (extruded_bubble_ prefix optional)")
     parser.add_argument("clips", nargs="*", default=list(DEFAULT_CLIPS))
     args = parser.parse_args(argv)
+    wanted = {k if k.startswith("extruded_bubble_") else "extruded_bubble_" + k for k in (args.keys or ())}
+    if args.realized:
+        realized(args.preset, args.clips, wanted)
+        return
     from core.settings.visualizer_mode_settings import require_mode_settings
     from core.settings.visualizer_presets import resolve_visualizer_activation_payload
     from widgets.spotify_visualizer.feature_frame import FeatureClip
     base = dict(resolve_visualizer_activation_payload(
-        {"mode": "extruded_bubble", "preset_extruded_bubble": args.preset - 1}, mode="extruded_bubble").resolved_config)
+        {"mode": "extruded_bubble", "preset_extruded_bubble": args.preset[0] - 1}, mode="extruded_bubble").resolved_config)
     # The renderer's drivers also read the 3D Detail tier (resolved per display, not a setting): audit at High.
     base.setdefault("scene3d_detail", "High")
-    wanted = {k if k.startswith("extruded_bubble_") else "extruded_bubble_" + k for k in (args.keys or ())}
     spec = require_mode_settings("extruded_bubble")
     clips = [FeatureClip.from_jsonl_bytes(n, (ROOT / f"{n}.jsonl").read_bytes()) for n in args.clips]
     for key, (label, metric) in _metrics().items():
