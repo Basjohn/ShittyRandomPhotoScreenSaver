@@ -127,6 +127,44 @@ class FullDynamicAudioOwnership(unittest.TestCase):
         louder = bands(tuple(value * 1.4 for value in typical))
         self.assertTrue(all(b > a for a, b in zip(reference, louder)), (reference, louder))
 
+    def test_eb_body_feed_reads_the_same_music_alike_at_256_and_512_sample_blocks(self):
+        import numpy as np
+        from types import SimpleNamespace
+        from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker
+        from widgets.spotify_visualizer.bar_computation import fft_to_bars
+        from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
+
+        # Test-owned signal: a pulsing bass tone, two mid/high tones and some noise.
+        rate = 48000
+        t = np.arange(rate * 2) / rate
+        signal = (0.5 * np.sin(2 * np.pi * 55 * t) * (0.6 + 0.4 * np.sin(2 * np.pi * 2 * t))
+                  + 0.2 * np.sin(2 * np.pi * 440 * t) + 0.15 * np.sin(2 * np.pi * 1320 * t)
+                  + 0.05 * np.random.default_rng(7).standard_normal(t.size)).astype('float32')
+
+        def median_bands(block, *, normalise=True):
+            worker = SpotifyVisualizerAudioWorker(32)
+            worker._np = np
+            worker.set_notch_positions([[0.0, 'Bass'], [0.3, 'Mid'], [0.65, 'Treble'], [1.0, 'End']])
+            engine = SimpleNamespace(_audio_worker=worker, _get_play_ramp_factor=lambda: 1.0, **{
+                name: getattr(_SpotifyBeatEngine, name) for name in (
+                    'EXTRUDED_BUBBLE_BODY_RAW_REFERENCE', 'EXTRUDED_BUBBLE_BODY_REFERENCE_FFT',
+                    'EXTRUDED_BUBBLE_BODY_BLOCK_EXPONENT')})
+            rows = []
+            for start in range(0, signal.size - block, 2048):
+                fft_to_bars(worker, np.abs(np.fft.rfft(signal[start:start + block])))
+                if not normalise:
+                    worker._last_raw_fft_bins = 0  # negative control: lanes read as if at the reference block
+                result = _SpotifyBeatEngine.get_extruded_bubble_body_bands(engine)
+                rows.append((result.bass, result.mid, result.high))
+            return np.median(np.array(rows), axis=0)
+
+        reference = median_bands(256)
+        normalised = median_bands(512)
+        raw = median_bands(512, normalise=False)
+        self.assertTrue(np.all(np.abs(normalised - reference) < 0.08), (reference, normalised))
+        # Without the block normalisation the longer block lifts mid/high toward their ceilings.
+        self.assertTrue(np.all(raw[1:] - reference[1:] > 0.12), (reference, raw))
+
     def test_particle_range_is_consumed_only_by_simulation_not_by_renderer(self):
         source = SCENE.read_text()
         start = source.index('def speck_amount(')

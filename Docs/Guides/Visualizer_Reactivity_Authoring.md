@@ -387,7 +387,17 @@ contrast. Do not copy that mechanism; it is the unreliable part.
   (bass, mid, treble) = (5.0, 3.0, 1.2), linear below 0.8 and an exponential approach to 1 above it, times the
   play ramp. Pick references from pooled raw percentiles over several full songs so about **p90 maps near
   0.75** and loud crests keep soft headroom (§4). No learned level, no dependence on the floor mode or the
-  manual floor; Sensitivity/input gain still scale the raw lanes, so the controls stay meaningful.
+  manual floor. Sensitivity acts *after* the raw lanes (gate floor/expansion), so it does not move them; input
+  gain scales the PCM before the FFT and does.
+- **Fixed references need a fixed FFT length.** Raw lanes are ~`log1p(|FFT|)^1.2` of an unnormalised `rfft`,
+  and `|FFT|` grows with block length, so a longer block adds an *offset*, not a factor: at 512 samples the same
+  music sat ~30% higher with less contrast and pinned EB again (large range 0.24–0.58 on three songs; 256 gave
+  0.73–0.84). A per-block multiplier cannot restore contrast. EB records the FFT bin count
+  (`_last_raw_fft_bins`), undoes the compression, rescales the magnitude to the 256-sample reference with
+  per-lane exponents (bass 1.0 ~tonal, mid 0.9, treble 0.6 ~noise-like; fitted at 128/441/512/1024 on four
+  songs), and re-compresses. Auto blocks are covered because the bin count is the actual FFT. Residual: band
+  splits move with block length (128/1024 ~15–20%, 441/512 ~5–10%). Measure every mode at each block size a
+  preset uses.
 - Do **not** change a shared feed that an accepted mode depends on (accepted 2D presets run floor OFF on
   `get_bubble_energy_bands`); add the mode-owned getter beside it. Replay engines must serve the new getter too
   (`ReplayBeatEngine` returns the recorded shared feed in ordinary replay; PCM reanalysis runs production).
@@ -399,8 +409,13 @@ contrast. Do not copy that mechanism; it is the unreliable part.
 ### Shape the sustained (large/body) lane after unpinning
 
 - A linear held term (`k × body`) compresses phrase contrast. Accepted 2D uses a **knee** (sustained support is
-  zero below it). EB's held body is `soft_top(smooth_above(body_sum, knee=0.45, softness=0.08) / span=0.62)`:
-  knee ≈ pooled **p10** and knee + span ≈ pooled **p95** of `bass + .28 mid + .10 high`.
+  zero below it). EB's held body is `soft_top(smooth_above(body_sum, knee=0.55, softness=0.08) / span=0.52)`:
+  knee ≈ pooled **p25** and knee + span ≈ pooled **p95** of `bass + .28 mid + .10 high`. A p10 knee held large
+  bubbles open through nearly all music (p95/p05 ~1.8×); a p40 knee collapsed a quieter-captured song (median
+  0.57 vs 2D 1.58). With fixed anchors, quieter captures honestly breathe smaller — choose the knee so they
+  still breathe.
+- **Gate the change term by the held level** (`change × (0.15 + 0.85 × held)`): otherwise every kick in a soft
+  passage refills the envelope and p05 stays near mid-size. Full passages then crest further.
 - Apply the knee to the **unsquashed** sum. EB's old `soft_top(sum)` already compressed the upper half of all
   samples into 0.8–1.0, so a knee on top of it bought almost nothing (measured).
 - Use a **smooth** knee (softplus) anchored to **exactly 0 at silence**, so steady quiet music sits a little
@@ -409,7 +424,10 @@ contrast. Do not copy that mechanism; it is the unreliable part.
 - Timing follows the passage role (operator: large = phrase body; small/flow/rays = changes inside loud
   passages). EB large: release ~**0.30 s** in music (2D's large decay 2.85–3.85/s; 0.10 s produced beat-rate
   wobble near the top), attack **0.12 s** (inside 2D's 0.09–0.125 s; 0.06 s followed per-frame band noise),
-  change-term weight 2.2 (3.0 pumped). Small keeps its faster release.
+  change-term weight 3.0 *with* the held-level gate (2.2 ungated; 3.0 ungated pumped). Small keeps its faster
+  release.
+- **Cap at the authored maximum.** Per-identity amplitudes above 1 must not pass the loud handle: EB eases the
+  excursion with `soft_top` toward the class maximum (Breathing's loud handle), never a hard clip.
 - Measured and rejected: an even ease of the held body (τ 0.4 s) lowered range and did **not** reduce swings —
   the swings came from the change term and the attack, not the held term. Measure before keeping a smoother.
 
@@ -448,9 +466,12 @@ from 1.0 and changed resting shells.
   the old code. An absolute threshold tuned on a non-production feed (EB's old `> 1.8`) exceeded what accepted
   2D itself reaches (1.22) and only passed against the pinned feed.
 
-Remaining EB gap (2026-10-24): large dynamic span 2.1–2.6× (p95/p05) vs 2D's 2.6–9×. 2D adds crest boosts at
-peaks and contracts very deeply in quiet passages; reaching that needs a deliberate change to EB's authored
-response curve, not more input gain. Evidence: `Docs/Reference/Extruded_Bubble/Investigation.md` §65.
+- **The quiet handle sets the floor of contraction.** Breathing's quiet handle 0.05 puts large rest at 0.71 of
+  nominal, so no envelope change can contract further; measure presets at their own handles and report it.
+
+State (2026-10-24, after block normalisation and the knee/gate change): at block 512 large p95/p05 is
+2.5–4.6× (2D 2.6–9×), range 0.62–1.93 vs 2D 0.73–1.01, top reversals 0. anything_mixed2 stays below 2D range
+(0.62 vs 0.88) because its median sits high. Evidence: `Docs/Reference/Extruded_Bubble/Investigation.md` §65–66.
 
 ---
 
