@@ -84,7 +84,7 @@ The [operator-source reconciliation](Docs/Reference/2026-10-23_Operator_EB_Neon_
   at each end (Camera bucket; off by default). The Settings Camera Position editor is shared as well
   (`ui/tabs/media/framed_camera_editor.py`; Neon draws its basin outline in the eye box). Open: native
   all-angle/near-horizon/aspect/DPR checks.
-- [ ] **Neon Lake terrain authoring and water layers:** see [Neon Lake contract](Docs/Reference/Neon_Lake_Basin.md) and [reconciliation](Docs/Reference/2026-10-23_Operator_EB_Neon_Settings_Reconciliation.md). Square the editor without altering stored heightmap or strokes, optionally provide accurate angled pseudo-3D authoring; investigate composited water plus water glows and relevant 3D controls/optics. Focus artistic examples on existing presets 1–4 without deleting/freezing other editable presets. Existing accepted Neon Lake behavior is the baseline, not automatically failed by feature extensions.
+- [ ] **Neon Lake terrain authoring and water layers:** see [Neon Lake contract](Docs/Reference/Neon_Lake_Basin.md) and [reconciliation](Docs/Reference/2026-10-23_Operator_EB_Neon_Settings_Reconciliation.md). The editor now authors on a square field (24 Oct; brush round in cells, heights never resampled; awaiting your look); optionally provide accurate angled pseudo-3D authoring; investigate composited water plus water glows and relevant 3D controls/optics. Focus artistic examples on existing presets 1–4 without deleting/freezing other editable presets. Existing accepted Neon Lake behavior is the baseline, not automatically failed by feature extensions.
 
 ## 2026-10-23 test-authority guardrails | core regression prevention
 

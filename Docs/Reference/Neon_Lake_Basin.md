@@ -100,7 +100,10 @@ basin seed. Positive values below the normal float32 minimum are rejected so pac
 into water. `rendering/gl_programs/heightfield.py` owns admission, float32 packing and the bilinear CPU sampler. Water is
 exactly an authored sampled height of zero, independent of waves, view pose and land height scale.
 
-The terrain editor supports Raise, Lower, Flatten and exact Water, a physically circular brush on non-square canvases, bounded brush radius/strength/falloff, per-stroke Undo/Redo,
+The terrain editor authors on a **square** field (2026-10-24: one heightmap cell is square on screen, centred, up to 440 px,
+the canvas growing its height with its width), so the brush is round in the terrain's own cells whatever the panel's
+shape; stored heights are never resampled. Before, the field stretched to the panel and a dab's footprint in cells
+depended on the panel's width. It supports Raise, Lower, Flatten and exact Water, a circular brush, bounded brush radius/strength/falloff, per-stroke Undo/Redo,
 reset and an explicit blue water preview. Brush effect depends on the stroke's path, never on pointer speed: dabs fall every 0.15 radii of physical distance (the remainder carries between pointer events) and each stands for that much stroke; a press that never moves applies a quarter radius once. Strength is quadratic (Raise/Lower add up to 0.5 height per radius of stroke at 100%, barely anything at 1%). The profile is flat in a core of (1 - Falloff) radius and eases with a cosine skirt out to 1 + Falloff/2 radii; the cursor shows both circles. Flatten approaches its height exponentially with that weight and snaps the core only at 100%. Lower stops at a small positive land height and leaves water alone, so only Water authors exact zero (inside the brush's half-weight contour). Loading is silent; one completed stroke saves once through the existing Custom
 spec hook. Escape/hide cancels an unfinished stroke. Brush/history state is ephemeral; closed Settings has no terrain
 timer, scene renderer or simulation.

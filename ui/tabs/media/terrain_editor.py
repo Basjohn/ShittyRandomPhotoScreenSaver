@@ -79,6 +79,12 @@ def apply_brush(old: float, mode: str, weight: float, amount: float, strength: f
     return min(1.0, old + delta)
 
 
+_SIDE_MARGIN = 12.0
+_LABEL_MARGIN = 26.0
+_MIN_SIDE = 220
+_MAX_SIDE = 440
+
+
 class TerrainCanvas(QWidget):
     terrain_changed = Signal(dict)
     history_changed = Signal()
@@ -100,13 +106,32 @@ class TerrainCanvas(QWidget):
         self.falloff = 0.5
         self.flatten_height = 0.20
         self._carry = 0.0
-        self.setMinimumSize(280, 220)
+        self.setMinimumSize(280, _LABEL_MARGIN * 2 + _MIN_SIDE)
+        policy = self.sizePolicy()
+        policy.setHeightForWidth(True)
+        self.setSizePolicy(policy)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setToolTip("Paint land or restore exact base-level water. Far/back is at the top; near/front is at the bottom.")
 
+    def hasHeightForWidth(self) -> bool:  # type: ignore[override]
+        return True
+
+    def heightForWidth(self, width: int) -> int:  # type: ignore[override]
+        # A square authoring field as wide as the panel allows, up to a comfortable size.
+        side = max(_MIN_SIDE, min(_MAX_SIDE, width - 2 * _SIDE_MARGIN))
+        return int(side + 2 * _LABEL_MARGIN)
+
+    def sizeHint(self):  # type: ignore[override]
+        from PySide6.QtCore import QSize
+        return QSize(_MAX_SIDE + 2 * _SIDE_MARGIN, self.heightForWidth(_MAX_SIDE + 2 * _SIDE_MARGIN))
+
     def field_rect(self):
-        return QRectF(self.rect()).adjusted(12.0, 26.0, -12.0, -26.0)
+        """The square heightmap field, centred: one heightmap cell is square on screen, so a round brush is
+        round in the terrain's own cells whatever the panel's shape (the stored heights are never resampled)."""
+        area = QRectF(self.rect()).adjusted(_SIDE_MARGIN, _LABEL_MARGIN, -_SIDE_MARGIN, -_LABEL_MARGIN)
+        side = max(1.0, min(area.width(), area.height()))
+        return QRectF(area.center().x() - side / 2.0, area.center().y() - side / 2.0, side, side)
 
     def get_heightfield(self):
         return {"version": 1, "size": self._size, "heights": list(self._heights)}
