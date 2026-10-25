@@ -158,7 +158,7 @@ def test_owner_referrer_snapshot_does_not_retain_owner() -> None:
     assert snapshot["owner_type"].endswith("._Owner")
 
 
-def test_barrier_owner_trace_is_diagnostic_only(qt_app, monkeypatch) -> None:
+def test_barrier_owner_trace_runs_in_source_and_diagnostic_runs_not_standard_frozen(qt_app, monkeypatch) -> None:
     engine = type(
         "_Engine",
         (),
@@ -195,10 +195,20 @@ def test_barrier_owner_trace_is_diagnostic_only(qt_app, monkeypatch) -> None:
         "capture_weak_owner_referrer_snapshots",
         _capture_batch,
     )
+    # The standard frozen product never traces.
+    monkeypatch.setattr(build_profile, "is_compiled_runtime", lambda: True)
     monkeypatch.setattr(build_profile, "_DIAGNOSTIC_BUILD", False)
     assert barrier._capture_diagnostic_python_owner_referrers() == ((), {})
     assert calls == []
 
+    # A source run (main_mc, main.py) traces, whatever its CLI flags.
+    monkeypatch.setattr(build_profile, "is_compiled_runtime", lambda: False)
+    snapshots, _metadata = barrier._capture_diagnostic_python_owner_referrers()
+    assert calls == [owner] and len(snapshots) == 1
+    calls.clear()
+
+    # The diagnostic product traces, frozen or not.
+    monkeypatch.setattr(build_profile, "is_compiled_runtime", lambda: True)
     monkeypatch.setattr(build_profile, "_DIAGNOSTIC_BUILD", True)
     snapshots, metadata = barrier._capture_diagnostic_python_owner_referrers()
     assert calls == [owner]

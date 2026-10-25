@@ -672,17 +672,20 @@ class RuntimeDestructionBarrier:
         self,
         pending_owner_refs: tuple[tuple[int, str, object], ...] | None = None,
     ) -> tuple[tuple[tuple[int, str, str], ...], dict[str, object]]:
-        """Attribute survivors only in the explicit diagnostic product.
+        """Attribute survivors in source runs and the diagnostic product (not the standard frozen build).
 
         The snapshot is taken after the barrier has already failed.  It is
         observational only: no garbage collection, owner release, retry, or
-        continuation decision is performed here.
+        continuation decision is performed here, and its cost is bounded by the
+        tracer's own item / query / time caps. It used to be diagnostic-only, so
+        a fully logged source run (``main_mc`` with every CLI log flag) still
+        could not name what held a surviving owner.
         """
 
         try:
-            from core.build_profile import is_diagnostic_build
+            from core.build_profile import is_compiled_runtime, is_diagnostic_build
 
-            if not is_diagnostic_build():
+            if is_compiled_runtime() and not is_diagnostic_build():
                 return (), {}
             from core.logging.ownership_trace import (
                 capture_weak_owner_referrer_snapshots,
