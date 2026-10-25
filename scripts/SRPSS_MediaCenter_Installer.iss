@@ -22,7 +22,7 @@
 [Setup]
 AppId={{31A3E38F-0A6C-46CF-8934-9EB8A42F0463}
 AppName=SRPSS - Media Center
-AppVersion=5.0.8
+AppVersion=5.1.0
 AppPublisher=Jayde Ver Elst
 AppPublisherURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
 AppSupportURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
@@ -42,7 +42,7 @@ CloseApplicationsFilter=*.exe,*.dll,*.scr
 RestartApplications=no
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
-VersionInfoVersion=5.0.8
+VersionInfoVersion=5.1.0
 WizardStyle=modern dark includetitlebar hidebevels
 WizardBackColor=#0d181e
 WizardImageFile=
