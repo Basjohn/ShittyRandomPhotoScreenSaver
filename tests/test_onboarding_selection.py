@@ -139,6 +139,26 @@ def test_visualizer_selection_offers_standard_sphere_and_can_enable_it(qapp, set
         page.deleteLater()
 
 
+def test_every_offered_mode_is_listed_and_can_be_enabled(qapp, settings) -> None:
+    from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
+    offered_ids = [d.mode_id for d in iter_visualizer_mode_descriptors() if d.guided_setup_offered]
+    widgets = settings.values["widgets"]
+    widgets["family_activation"]["media"] = True
+    widgets["family_activation"]["visualizers"] = True
+    widgets["spotify_visualizer"]["enabled"] = True
+    page = VisualizerPage(settings)
+    try:
+        page.refresh()
+        rows = {page.rows.item(index).data(Qt.ItemDataRole.UserRole): page.rows.item(index)
+                for index in range(page.rows.count())}
+        assert set(offered_ids) <= set(rows)
+        for mode_id in offered_ids:
+            rows[mode_id].setCheckState(Qt.CheckState.Checked)
+            assert settings.get("widgets.spotify_visualizer.mode_activation")[mode_id] is True, mode_id
+    finally:
+        page.deleteLater()
+
+
 def test_transition_toggle_updates_activation_pool_and_random_semantics(qapp, settings) -> None:
     transitions = settings.values["transitions"]
     transitions["type"] = "Random"
