@@ -492,3 +492,36 @@ def test_real_terrain_view_places_the_sun_and_follows_its_settings(qt_app, setti
     finally:
         tab.deleteLater()
         qt_app.processEvents()
+
+
+def test_terrain_view_shows_the_loaded_sun_not_stale_widgets(qt_app, settings_manager):
+    """Loading Settings (reopening, or a preset) hands the 3/4 view the Sun / Moon and scene it is loading. The terrain
+    section loads before the Sun / Moon controls receive their values (with signals blocked), so reading the controls
+    there showed the previous values: after a trip into the app the body sat somewhere other than where it was seen."""
+    from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
+    from core.settings.visualizer_presets import get_custom_preset_index
+    from ui.tabs.media.spec_mode_builder import load_spec_mode_settings
+    from ui.tabs.visualizers_tab import VisualizersTab
+
+    settings_manager.set("widgets", {"spotify_visualizer": {
+        "enabled": True, "visualizers_enabled": True, "mode": "shockwave_grid",
+        "mode_activation": build_visualizer_mode_activation(["shockwave_grid"]),
+        "preset_shockwave_grid": get_custom_preset_index("shockwave_grid"), "shockwave_grid_terrain": FIELD,
+    }})
+    tab = VisualizersTab(settings_manager)
+    try:
+        tab._select_mode_page("shockwave_grid")
+        canvas = tab.shockwave_grid_terrain_editor.canvas
+        base = {**require_canonical_default("widgets.spotify_visualizer"), "shockwave_grid_terrain": FIELD,
+                "shockwave_grid_sun_enabled": True}
+        for sun in ((0.4, 1.2, -1.0, "Sun", 0.6), (-1.1, 2.3, -3.2, "Moon", 1.3)):
+            x, y, z, mode, height = sun
+            load_spec_mode_settings(tab, "shockwave_grid", {
+                **base, "shockwave_grid_sun_x": x, "shockwave_grid_sun_y": y, "shockwave_grid_sun_z": z,
+                "shockwave_grid_sun_mode": mode, "shockwave_grid_terrain_height": height})
+            body = canvas._body
+            assert (float(body["sun_x"]), float(body["sun_y"]), float(body["sun_z"])) == pytest.approx((x, y, z))
+            assert body["sun_mode"] == mode
+            assert canvas._terrain_height == pytest.approx(height)
+    finally:
+        tab.deleteLater()

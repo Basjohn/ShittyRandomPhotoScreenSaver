@@ -514,8 +514,10 @@ class TerrainCanvas(QWidget):
 
     def mouseMoveEvent(self, event):
         if self._body_drag is not None:
+            # It settles on gentle steps (and the horizon / straight ahead); hold Shift to place it freely.
+            free = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
             x, y, z = angled.place_body(self._angled_view()[1], (event.position().x(), event.position().y()),
-                                        self._body_drag)
+                                        self._body_drag, snap=not free)
             self._body.update(sun_x=x, sun_y=y, sun_z=z)
             self._angled = None       # the fit follows the body: the view never loses it
             self.update()
@@ -655,7 +657,7 @@ class TerrainCanvas(QWidget):
         painter.setPen(_LABEL_COLOR)
         painter.drawText(QRectF(12.0, 2.0, self.width() - 24.0, 20.0), Qt.AlignmentFlag.AlignCenter, "FAR / BACK")
         painter.drawText(QRectF(12.0, self.height() - 23.0, self.width() - 24.0, 20.0), Qt.AlignmentFlag.AlignCenter,
-                         "NEAR / FRONT  •  Drag the Sun / Moon to place it  •  Right-drag to turn the view")
+                         "NEAR / FRONT  •  Drag the Sun / Moon to place it (Shift: free)  •  Right-drag to turn the view")
         body = self._body_on_screen()
         if body is not None and (self._body_hover or self._body_drag is not None):
             centre, radius = body
