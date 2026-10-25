@@ -253,9 +253,29 @@ def body_preview(projection: AngledProjection, x: float, y: float, z: float, siz
     return screen[0], float(np.linalg.norm(edge[0] - screen[0])), distance
 
 
-def place_body(projection: AngledProjection, point, distance: float):
+SNAP_STEP = math.radians(2.5)      # a dragged Sun / Moon settles on these steps of bearing and height ..
+SNAP_MAGNET = math.radians(4.0)    # .. and is held a little harder by the horizon and straight ahead
+
+
+def snap_direction(direction) -> np.ndarray:
+    """``direction`` (unit, from the scene's reference viewpoint) on the drag's snap: its bearing and height above
+    the horizon in ``SNAP_STEP`` steps, the horizon and straight ahead held within ``SNAP_MAGNET``. Snapping the
+    direction (never X / Y / Z) keeps the body's distance, so its apparent size."""
+    x, y, z = (float(v) for v in direction)
+    elevation = math.asin(max(-1.0, min(1.0, y)))
+    bearing = math.atan2(x, -z)                     # 0 straight ahead (into the scene, -Z)
+    snapped = []
+    for angle in (elevation, bearing):
+        angle = 0.0 if abs(angle) < SNAP_MAGNET else round(angle / SNAP_STEP) * SNAP_STEP
+        snapped.append(angle)
+    elevation, bearing = snapped
+    return np.array([math.sin(bearing) * math.cos(elevation), math.sin(elevation),
+                     -math.cos(bearing) * math.cos(elevation)])
+
+
+def place_body(projection: AngledProjection, point, distance: float, snap: bool = True):
     """Authored (x, y, z) of the body under screen ``point``: where its view ray meets the sky dome (or passes
-    nearest it), at the same authored distance."""
+    nearest it), at the same authored distance; on the drag's snap unless ``snap`` is False."""
     centre, radius = projection.dome
     ray = projection.direction_at(point)
     eye = projection.eye
@@ -264,6 +284,8 @@ def place_body(projection: AngledProjection, point, distance: float):
     miss = float(np.linalg.norm(nearest - centre))
     hit = nearest + ray * math.sqrt(radius * radius - miss * miss) if miss < radius else nearest
     direction = (hit - centre) / max(float(np.linalg.norm(hit - centre)), 1e-9)
+    if snap:
+        direction = snap_direction(direction)
     authored = np.asarray(CELESTIAL_REFERENCE) + direction * distance
     values = (authored[0] / NOMINAL_HALF_WIDTH, authored[1], authored[2])
     return tuple(float(max(low, min(high, v))) for v, (low, high) in zip(values, _BODY_LIMITS))

@@ -17,9 +17,19 @@ def collect_shockwave_grid_mode_settings(tab) -> dict:
 def load_terrain_section(tab, config) -> None:
     key = "shockwave_grid_terrain"
     tab.shockwave_grid_terrain_editor.set_heightfield(config.get(key, tab._widget_default("spotify_visualizer", key)))
-    from ui.tabs.media.shockwave_grid_builder import connect_scene_preview, refresh_scene_preview
+    from ui.tabs.media.shockwave_grid_builder import SCENE_PREVIEW_KEYS, connect_scene_preview
     connect_scene_preview(tab)
-    refresh_scene_preview(tab)
+    # The 3/4 view shows the values being loaded. Never read the controls here: this section loads before the Sun /
+    # Moon and colour controls receive their values (with signals blocked), so the view kept the previous ones and the
+    # body sat somewhere other than where it was just seen in the app. Later edits reach it through the controls.
+    from core.settings.visualizer_mode_settings import read_control_value, require_mode_settings
+    spec = require_mode_settings("shockwave_grid")
+    scene = {}
+    for key in SCENE_PREVIEW_KEYS:
+        control = spec.control(key)
+        default = tab._widget_default("spotify_visualizer", key)
+        scene[key] = control.admit(read_control_value(control, config.get, default), default)
+    tab.shockwave_grid_terrain_editor.set_scene(scene)
 
 
 def collect_terrain_section(tab) -> dict:

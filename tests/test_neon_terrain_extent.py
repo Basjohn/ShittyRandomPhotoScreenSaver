@@ -202,3 +202,32 @@ def test_the_angled_view_draws_the_scenes_own_surface_and_its_continuation():
     tall = angled.surface_points(record["size"], record["heights"], basin, np.array([0.1]), np.array([0.1]), 2.0)
     low = angled.surface_points(record["size"], record["heights"], basin, np.array([0.1]), np.array([0.1]), 1.0)
     assert tall[0, 1] == pytest.approx(2.0 * low[0, 1])
+
+
+def test_the_dragged_sun_settles_on_gentle_steps_and_keeps_its_size():
+    """Dragging the Sun / Moon snaps its direction (bearing and height in steps, held by the horizon and straight
+    ahead) and never its distance, so its apparent size stays; without snap it follows the cursor exactly."""
+    import math
+    from rendering.gl_programs.neon_celestial import CELESTIAL_REFERENCE
+    from core.constants.neon_lake_world import NOMINAL_HALF_WIDTH
+    from ui.tabs.media import terrain_angled_view as angled
+    for raw in ((0.31, 0.27, -0.91), (-0.52, 0.04, -0.85), (0.02, 0.6, -0.8)):
+        d = np.asarray(raw) / np.linalg.norm(raw)
+        snapped = angled.snap_direction(d)
+        assert np.linalg.norm(snapped) == pytest.approx(1.0)
+        elevation, bearing = math.asin(snapped[1]), math.atan2(snapped[0], -snapped[2])
+        for angle in (elevation, bearing):
+            steps = angle / angled.SNAP_STEP
+            assert steps == pytest.approx(round(steps), abs=1e-6)
+        assert math.degrees(math.acos(min(1.0, float(d @ snapped)))) < 2.0 + math.degrees(angled.SNAP_MAGNET)
+    near_horizon = angled.snap_direction(np.array([0.3, 0.03, -0.95]) / np.linalg.norm([0.3, 0.03, -0.95]))
+    assert near_horizon[1] == pytest.approx(0.0, abs=1e-9)                     # held on the horizon
+    record = _stream_terrain()
+    projection = angled.project_terrain(record["size"], record["heights"], heightfield_basin(record),
+                                        (0.0, 0.0, 600.0, 400.0), body=(0.0, 1.4, -2.0, 0.3))
+    point = projection.screen[0, 0] + np.array([120.0, -160.0])
+    for snap in (True, False):
+        x, y, z = angled.place_body(projection, point, 3.0, snap=snap)
+        distance = math.dist((x * NOMINAL_HALF_WIDTH, y, z), CELESTIAL_REFERENCE)
+        assert distance == pytest.approx(3.0, abs=1e-6)
+    assert angled.place_body(projection, point, 3.0, snap=True) != angled.place_body(projection, point, 3.0, snap=False)

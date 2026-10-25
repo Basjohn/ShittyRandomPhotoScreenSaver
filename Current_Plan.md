@@ -9,7 +9,7 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 
 **Work strictly in this order:**
 
-1. **§1 Neon Lake terrain editor fixes**: three small, reproduced bugs.
+1. **§1 Neon Lake**: the remaining open item and validations.
 2. **§2 Everything else before the next mode**: fixes, then Settings/UX, then feature work, then release media (§3).
    §5 is a watchlist observed during normal use, not a task queue.
 3. **§6 Shared 3D architecture**: one step that builds the reusable 3D primitives, each proven on its own harness.
@@ -31,16 +31,13 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 when Extruded Bubble closed; documents citing them refer to that history: `git show 3c6cf7d8:Current_Plan.md` and
 `Docs/Reference/Extruded_Bubble/Investigation.md`. Stable IDs kept below: §2A, §3 (RM/SC/SC4), §4C, §5, R38/R41.
 
-## 1. Neon Lake terrain editor fixes (now)
+## 1. Neon Lake (now)
 
-- [ ] **Sun / Moon drag snap:** placing the body by drag in the 3/4 view is too fiddly. Add gentle snapping (to round
-  Position X / Y / Z steps and to the horizon line) without changing the authored-distance semantics or the one save
-  per placement.
-- [ ] **Sun / Moon position resets after an app round-trip:** after running the saver and returning, the editor shows a
-  body position different from the one just seen in the app (many times in the latest log). Reproduce from the log,
-  find which side is stale (editor state vs saved Settings vs the scene's own resolution) and fix the owner.
-- [ ] **Preset 4's stray long ridge:** remove the uneditable long ridge from Preset 4's terrain (preset data fix; no
-  editor rework).
+- [ ] **Continued edge water stays flat while the far land curves away:** a stream reaching the grid's edge continues
+  as water at height 0 while the distant land drops with the world's curvature, so far out it stands as a raised
+  flat-topped causeway to the horizon (outside the grid, so not paintable). Preset 4's channel showed it; its data now
+  closes the channel at the back edge (25 Oct). Fix in the shader (`basinSurface` / the skyline: continued water follows
+  the same distant drop), then re-check every preset with edge water.
 - [~] **Neon Lake camera parity — awaiting native validation:** framed physical camera (flight, yaw/pitch, dolly, pan,
   Camera Position, FOV, R home, hints, level horizon, eye floor over land/water) and Auto Rotate. Open: native
   all-angle, near-horizon, aspect and DPR checks. This also covers the old "framed-camera keyboard audit".
