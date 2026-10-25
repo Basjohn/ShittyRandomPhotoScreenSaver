@@ -42,6 +42,7 @@ Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavio
 - `Docs/Guardrails/Bubble_Temporal_Fidelity.md`
 - `Docs/Reference/Visualizer_Reference.md`
 - `Docs/Guides/Visualizer_Reactivity_Authoring.md`
+- `Docs/Guides/Visualizer_Visual_Tuning.md` before judging or tuning any look
 - `Current_Plan.md`
 - `Docs/Guardrails/Performance_Optimization_Contract.md` for any hitch/cadence/tail optimization
 

@@ -529,6 +529,23 @@ These held across EB's input, breathing, flow, collision and drift work. Each co
 - **Test behaviour with test-owned inputs**, never preset values: synthetic signals through the production FFT
   (`fft_to_bars`) for block invariance; test-owned ranges for "inside the authored range".
 
+## 13C. Passage-driven Ranges and beat motion (Extruded Bubble, 2026-10-25)
+
+- **Ranges ramp on the passage, beats swing them.** Band-driven drivers sit mid-range in nearly all music, and
+  additive beat terms floor every passage there: EB's quiet and loud passages landed close together on every
+  Range. The engine's eased passage intensity places each Range (`passage x (base + beats)`); beats modulate it
+  multiplicatively, never as an added floor. Seed the passage follower on the first fill (activation can join music
+  already playing).
+- **A passage follower smooths beats away; beat motion needs its own path.** Speed and drift spanned ~2x across
+  passages but moved 2-4% with the beats. A separate surge (onsets that stand out from the recent ones, eased in
+  over ~0.1 s, released over ~0.3 s) pushes toward the loud handle; leave headroom under the handle for it.
+- **Music sends ~10 onsets a second.** A response to every onset with a half-second release is a constant offset,
+  not pulses: respond to accents (weight above the recent mean).
+- **Rank quiet/loud by the passage, not the instantaneous value** (it snaps to 0 between beats, so its "quietest
+  fifth" is beat gaps inside loud music).
+- **Handles that cannot cross must hold one ordered quantity.** A rest depth and a crest on one Range forced the
+  crest to its maximum whenever the rest was deepest.
+
 ## 14. Evidence / negative-control map
 
 Read these for the cases behind this guide rather than copying their old implementation literally:
