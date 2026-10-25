@@ -5,7 +5,7 @@ import math
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 import numpy as np
-from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPolygonF
+from PySide6.QtGui import QColor, QImage, QLinearGradient, QPainter, QPen, QPolygonF, QRadialGradient
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from rendering.gl_programs.heightfield import heightfield_basin, normalize_heightfield, sample_heightfield
@@ -26,6 +26,30 @@ _CURSOR_COLOR = QColor(180, 200, 255, 220)
 _WATER_COLOR = QColor(35, 78, 106)
 _LAND_LOW = QColor(38, 44, 67)
 _LAND_HIGH = QColor(178, 194, 239)
+# The 3/4 view draws the scene in its own colours (``set_scene``); these stand in until a scene is given.
+_SCENE_KEYS = ("sky_color", "terrain_fill_color", "water_color", "line_color", "crest_color", "sun_color", "moon_color")
+_BODY_KEYS = ("sun_enabled", "sun_mode", "sun_x", "sun_y", "sun_z", "sun_size", "moon_phase")
+
+
+def _scene_default(key):
+    from core.settings.default_contract import require_canonical_default
+    return require_canonical_default("widgets.spotify_visualizer.shockwave_grid_" + key)
+
+
+def _qcolor(value) -> QColor:
+    values = list(value) + [255] * (4 - len(list(value)))
+    return QColor(*(max(0, min(255, int(v))) for v in values[:4]))
+
+
+def _mix(a: QColor, b: QColor, t: float, alpha: int | None = None) -> QColor:
+    t = max(0.0, min(1.0, float(t)))
+    return QColor(round(a.red() + (b.red() - a.red()) * t), round(a.green() + (b.green() - a.green()) * t),
+                  round(a.blue() + (b.blue() - a.blue()) * t), a.alpha() if alpha is None else alpha)
+
+
+def _scaled(colour: QColor, k: float, alpha: int | None = None) -> QColor:
+    return QColor(min(255, round(colour.red() * k)), min(255, round(colour.green() * k)),
+                  min(255, round(colour.blue() * k)), colour.alpha() if alpha is None else alpha)
 
 # Brush model. Distances are in brush radii, measured physically (against the field's shorter side),
 # so a stroke's effect depends on its path, never on mouse speed or event granularity.
@@ -91,6 +115,8 @@ _MAX_SIDE = 440
 class TerrainCanvas(QWidget):
     terrain_changed = Signal(dict)
     history_changed = Signal()
+    celestial_changed = Signal(dict)     # the Sun / Moon dragged in the 3/4 view: {"x", "y", "z"} on release
+    orbit_changed = Signal(float, float)  # the 3/4 view's turn and tilt (radians), after a right-drag
     HISTORY_LIMIT = 32
 
     def __init__(self, default_terrain, parent=None):
@@ -108,6 +134,10 @@ class TerrainCanvas(QWidget):
         self.view = "Top"            # "Top" (the authoring map) or "Angled" (the scene's proportions)
         self._yaw, self._pitch = angled.DEFAULT_YAW, angled.DEFAULT_PITCH
         self._orbit = None
+        self._scene = {key: _qcolor(_scene_default(key)) for key in _SCENE_KEYS}
+        self._body = {key: _scene_default(key) for key in _BODY_KEYS}
+        self._body_drag = None       # the authored distance while the Sun / Moon is being dragged
+        self._body_hover = False
         self.mode = "Raise"
         self.radius = 0.12
         self.strength = 0.35
@@ -154,6 +184,45 @@ class TerrainCanvas(QWidget):
         self._hover = None
         self.updateGeometry()
         self.update()
+
+    def set_scene(self, config):
+        """The scene's colours and Sun / Moon (Settings keys) for the 3/4 view; missing keys keep their value."""
+        for key in _SCENE_KEYS:
+            if "shockwave_grid_" + key in config:
+                self._scene[key] = _qcolor(config["shockwave_grid_" + key])
+        for key in _BODY_KEYS:
+            if "shockwave_grid_" + key in config:
+                self._body[key] = config["shockwave_grid_" + key]
+        if self._body_drag is None:
+            self._angled = None
+            self.update()
+
+    def set_orbit(self, yaw: float, pitch: float):
+        self._yaw = max(angled.YAW_RANGE[0], min(angled.YAW_RANGE[1], float(yaw)))
+        self._pitch = max(angled.PITCH_RANGE[0], min(angled.PITCH_RANGE[1], float(pitch)))
+        self._angled = None
+        self.update()
+
+    def _body_shown(self) -> bool:
+        return bool(self._body["sun_enabled"])
+
+    def _body_args(self):
+        b = self._body
+        return float(b["sun_x"]), float(b["sun_y"]), float(b["sun_z"]), float(b["sun_size"])
+
+    def _body_on_screen(self):
+        """(screen centre, radius) of the Sun / Moon in the 3/4 view, or None."""
+        if self.view != "Angled" or not self._body_shown():
+            return None
+        centre, radius, _distance = angled.body_preview(self._angled_view()[1], *self._body_args())
+        return None if centre is None else (QPointF(float(centre[0]), float(centre[1])), max(4.0, radius))
+
+    def _over_body(self, point) -> bool:
+        body = self._body_on_screen()
+        if body is None:
+            return False
+        centre, radius = body
+        return math.hypot(point.x() - centre.x(), point.y() - centre.y()) <= radius + 8.0
 
     def get_heightfield(self):
         record = {"version": 1, "size": self._size, "heights": list(self._heights)}
@@ -256,33 +325,52 @@ class TerrainCanvas(QWidget):
             area = self._angled_rect()
             projection = angled.project_terrain(self._size, self._heights, self._basin,
                                                 (area.left(), area.top(), area.width(), area.height()),
-                                                yaw=self._yaw, pitch=self._pitch)
+                                                yaw=self._yaw, pitch=self._pitch,
+                                                body=self._body_args() if self._body_shown() else None)
             self._angled = (self._paint_angled_terrain(projection), projection, size)
         return self._angled[0], self._angled[1]
 
     def _paint_angled_terrain(self, projection):
+        """The scene as it will look, in its own colours: a sky, the Sun / Moon behind the land, the terrain as dark
+        ground under glowing grid lines (brighter on the ridges, fading with distance), and the lake."""
         image = QImage(max(1, self.width()), max(1, self.height()), QImage.Format.Format_ARGB32_Premultiplied)
-        image.fill(Qt.GlobalColor.transparent)
+        image.fill(_BG_COLOR)
         painter = QPainter(image)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        scene = self._scene
+        area = self._angled_rect()
+        screen = projection.screen
+        horizon = float(screen[..., 1].min())
+        sky = QLinearGradient(QPointF(0.0, area.top()), QPointF(0.0, max(area.top() + 1.0, horizon + 12.0)))
+        sky.setColorAt(0.0, _scaled(scene["sky_color"], 0.35, 255))
+        sky.setColorAt(1.0, _mix(_scaled(scene["sky_color"], 1.1, 255), scene["line_color"], 0.25, 255))
+        painter.fillRect(area, sky)
+        if self._body_shown():
+            body = angled.body_preview(projection, *self._body_args())
+            if body[0] is not None:
+                self._paint_body(painter, QPointF(float(body[0][0]), float(body[0][1])), max(4.0, body[1]))
         grid = np.asarray(self._heights, dtype=np.float64).reshape(self._size, self._size)
         stride_index = np.unique(np.r_[np.arange(0, self._size, projection.stride), self._size - 1])
         corner = grid[np.ix_(stride_index, stride_index)]
         mean = (corner[:-1, :-1] + corner[1:, :-1] + corner[:-1, 1:] + corner[1:, 1:]) / 4.0
+        wet = ((corner[:-1, :-1] <= 0.0).astype(float) + (corner[1:, :-1] <= 0.0) + (corner[:-1, 1:] <= 0.0)
+               + (corner[1:, 1:] <= 0.0)) / 4.0
         light = angled.quad_light(projection)
-        screen = projection.screen
+        depth = projection.depth
+        near, far = float(depth.min()), float(depth.max())
+        fill, water, line, crest = scene["terrain_fill_color"], scene["water_color"], scene["line_color"], scene["crest_color"]
+        peak = max(1e-6, float(mean.max()))
         for row, col in angled.quad_order(projection):
-            height, shade = float(mean[row, col]), 0.5 + 0.5 * float(light[row, col])
-            if height <= 0.0:
-                base, shade = _WATER_COLOR, 0.85 + 0.15 * shade
-            else:
-                t = max(0.0, min(1.0, height ** 0.84))
-                base = QColor(round(_LAND_LOW.red() + (_LAND_HIGH.red() - _LAND_LOW.red()) * t),
-                              round(_LAND_LOW.green() + (_LAND_HIGH.green() - _LAND_LOW.green()) * t),
-                              round(_LAND_LOW.blue() + (_LAND_HIGH.blue() - _LAND_LOW.blue()) * t))
-            colour = QColor(round(base.red() * shade), round(base.green() * shade), round(base.blue() * shade))
-            painter.setPen(QPen(colour, 1.0))    # the outline closes antialiasing seams between quads
-            painter.setBrush(colour)
+            height, shade, wetness = float(mean[row, col]), float(light[row, col]), float(wet[row, col])
+            distance = (float(depth[row, col]) - near) / max(far - near, 1e-6)
+            land = _scaled(fill, 0.35 + 0.75 * shade, 255)
+            lake = _scaled(water, 0.55 + 0.3 * shade, 255)
+            ground = _mix(land, lake, wetness, 255)
+            glow = 1.0 - 0.7 * distance
+            ridge = max(0.0, min(1.0, height / peak))
+            edge = _mix(line, crest, ridge ** 1.5, round(255 * glow * (1.0 - 0.75 * wetness)))
+            painter.setPen(QPen(edge, 1.25 - 0.5 * distance))
+            painter.setBrush(ground)
             painter.drawPolygon(QPolygonF([QPointF(*screen[r, c]) for r, c in
                                            ((row, col), (row, col + 1), (row + 1, col + 1), (row + 1, col))]))
         if self._basin != (0, 0, self._size - 1):
@@ -300,6 +388,36 @@ class TerrainCanvas(QWidget):
             painter.drawPolyline(self._draped(projection, outline))
         painter.end()
         return image
+
+    def _paint_body(self, painter, centre: QPointF, radius: float):
+        """The Sun (a glowing disc) or the Moon (lit by its phase) with its halo."""
+        moon = str(self._body["sun_mode"]) == "Moon"
+        colour = self._scene["moon_color" if moon else "sun_color"]
+        halo = QRadialGradient(centre, radius * 3.2)
+        halo.setColorAt(0.0, _scaled(colour, 1.0, 150))
+        halo.setColorAt(0.35, _scaled(colour, 1.0, 60))
+        halo.setColorAt(1.0, _scaled(colour, 1.0, 0))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(halo)
+        painter.drawEllipse(centre, radius * 3.2, radius * 3.2)
+        disc = QLinearGradient(QPointF(centre.x(), centre.y() - radius), QPointF(centre.x(), centre.y() + radius))
+        disc.setColorAt(0.0, _mix(colour, QColor(255, 255, 255), 0.45, 255))
+        disc.setColorAt(1.0, _scaled(colour, 0.95, 255))
+        painter.setBrush(disc)
+        painter.drawEllipse(centre, radius, radius)
+        if moon:
+            # The unlit part: a shadow disc slid across by the phase (0 new .. 0.5 full .. 1 new).
+            phase = float(self._body.get("moon_phase", 0.5)) % 1.0
+            shift = (phase - 0.5) * 4.0 * radius
+            if abs(shift) > 0.05 * radius:
+                painter.save()
+                from PySide6.QtGui import QPainterPath
+                clip = QPainterPath()
+                clip.addEllipse(centre, radius, radius)
+                painter.setClipPath(clip)
+                painter.setBrush(_scaled(self._scene["sky_color"], 0.45, 235))
+                painter.drawEllipse(QPointF(centre.x() + shift, centre.y()), radius * 1.02, radius * 1.02)
+                painter.restore()
 
     def _draped(self, projection, uvs) -> QPolygonF:
         """Screen points of grid ``uvs`` resting on the terrain."""
@@ -354,6 +472,11 @@ class TerrainCanvas(QWidget):
         self._last_uv = uv
 
     def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self._over_body(event.position()):
+            # Drag the Sun / Moon across its sky; it keeps its distance (its apparent size).
+            self._body_drag = angled.body_preview(self._angled_view()[1], *self._body_args())[2]
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.RightButton and self.view == "Angled":
             self._orbit = (QPointF(event.position()), self._yaw, self._pitch)
             event.accept()
@@ -370,6 +493,15 @@ class TerrainCanvas(QWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        if self._body_drag is not None:
+            x, y, z = angled.place_body(self._angled_view()[1], (event.position().x(), event.position().y()),
+                                        self._body_drag)
+            self._body.update(sun_x=x, sun_y=y, sun_z=z)
+            self._angled = None       # the fit follows the body: the view never loses it
+            self.update()
+            event.accept()
+            return
+        self._body_hover = self._over_body(event.position())
         if self._orbit is not None:
             # Right-drag turns the angled view (in memory only; nothing is saved).
             start, yaw, pitch = self._orbit
@@ -389,8 +521,16 @@ class TerrainCanvas(QWidget):
         event.accept()
 
     def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self._body_drag is not None:
+            self._body_drag = None
+            self.celestial_changed.emit({"x": round(float(self._body["sun_x"]), 3),
+                                         "y": round(float(self._body["sun_y"]), 3),
+                                         "z": round(float(self._body["sun_z"]), 3)})
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.RightButton and self._orbit is not None:
             self._orbit = None
+            self.orbit_changed.emit(self._yaw, self._pitch)
             event.accept()
             return
         if event.button() == Qt.MouseButton.LeftButton and self._before is not None:
@@ -495,7 +635,18 @@ class TerrainCanvas(QWidget):
         painter.setPen(_LABEL_COLOR)
         painter.drawText(QRectF(12.0, 2.0, self.width() - 24.0, 20.0), Qt.AlignmentFlag.AlignCenter, "FAR / BACK")
         painter.drawText(QRectF(12.0, self.height() - 23.0, self.width() - 24.0, 20.0), Qt.AlignmentFlag.AlignCenter,
-                         "NEAR / FRONT  •  Right-drag to turn the view")
+                         "NEAR / FRONT  •  Drag the Sun / Moon to place it  •  Right-drag to turn the view")
+        body = self._body_on_screen()
+        if body is not None and (self._body_hover or self._body_drag is not None):
+            centre, radius = body
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(_CURSOR_COLOR, 1.5, Qt.PenStyle.DashLine))
+            painter.drawEllipse(centre, radius + 6.0, radius + 6.0)
+            b = self._body
+            painter.drawText(QRectF(centre.x() - 90.0, centre.y() + radius + 8.0, 180.0, 18.0),
+                             Qt.AlignmentFlag.AlignCenter,
+                             f"X {float(b['sun_x']):.2f}  Y {float(b['sun_y']):.2f}  Z {float(b['sun_z']):.2f}")
+            return
         uv = self._uv(self._hover) if self._hover is not None else None
         if uv is None:
             return
@@ -518,6 +669,7 @@ class TerrainCanvas(QWidget):
 
 class TerrainEditor(QWidget):
     terrain_changed = Signal(dict)
+    celestial_changed = Signal(dict)     # {"x", "y", "z"}: the Sun / Moon placed in the 3/4 view
 
     def __init__(self, default_terrain, parent=None):
         super().__init__(parent)
@@ -531,8 +683,9 @@ class TerrainEditor(QWidget):
         tools.addWidget(self.mode, 0, 1)
         self.view = StyledComboBox(size_variant="compact")
         self.view.addItems(["Top", "Angled"])
-        self.view.setToolTip("Top: the authoring map. Angled: the terrain in the scene's own proportions; paint on "
-                             "it directly, right-drag to turn it.")
+        self.view.setToolTip("Angled: a three-quarter view of the scene you are building, in its own colours; paint "
+                             "on it directly, drag the Sun / Moon to place it, turn it with Turn / Tilt or a "
+                             "right-drag. Top: the flat authoring map.")
         tools.addWidget(QLabel("View:"), 0, 2)
         tools.addWidget(self.view, 0, 3)
         self.canvas = TerrainCanvas(default_terrain, self)
@@ -574,10 +727,45 @@ class TerrainEditor(QWidget):
             actions.addWidget(button)
             button.clicked.connect(callback)
         layout.addLayout(actions)
-        layout.addWidget(self.canvas)
+        # Turn and tilt the 3/4 view (view only: nothing is saved).
+        orbit = QHBoxLayout()
+        self.turn = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.turn.setRange(round(math.degrees(angled.YAW_RANGE[0])), round(math.degrees(angled.YAW_RANGE[1])))
+        self.turn.setValue(round(math.degrees(angled.DEFAULT_YAW)))
+        self.turn.setToolTip("Turn the 3/4 view around the basin.")
+        self.tilt = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.tilt.setRange(round(math.degrees(angled.PITCH_RANGE[0])), round(math.degrees(angled.PITCH_RANGE[1])))
+        self.tilt.setValue(round(math.degrees(angled.DEFAULT_PITCH)))
+        self.tilt.setToolTip("Look down on the basin more steeply, or more level with it.")
+        for label, slider in (("Turn:", self.turn), ("Tilt:", self.tilt)):
+            orbit.addWidget(QLabel(label))
+            orbit.addWidget(slider, 1)
+            slider.valueChanged.connect(self._orbit_from_sliders)
+        self._orbit_row = QWidget()
+        self._orbit_row.setLayout(orbit)
+        orbit.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._orbit_row)
+        self.canvas.orbit_changed.connect(self._orbit_to_sliders)
+        self.canvas.celestial_changed.connect(self.celestial_changed)
+        self.view.currentTextChanged.connect(lambda view: self._orbit_row.setVisible(view == "Angled"))
+        layout.addWidget(self.canvas, 1)
+        self.view.setCurrentText("Angled")      # see what you are building first
         self.canvas.terrain_changed.connect(self.terrain_changed)
         self.canvas.history_changed.connect(self._refresh_history)
         self._refresh_history()
+
+    def _orbit_from_sliders(self, _value=None):
+        self.canvas.set_orbit(math.radians(self.turn.value()), math.radians(self.tilt.value()))
+
+    def _orbit_to_sliders(self, yaw: float, pitch: float):
+        for slider, value in ((self.turn, yaw), (self.tilt, pitch)):
+            blocked = slider.blockSignals(True)
+            slider.setValue(round(math.degrees(value)))
+            slider.blockSignals(blocked)
+
+    def set_scene(self, config):
+        """The scene's colours and Sun / Moon from Settings (``shockwave_grid_*`` keys) for the 3/4 view."""
+        self.canvas.set_scene(config)
 
     def _refresh_history(self):
         self.undo_button.setEnabled(bool(self.canvas._undo))

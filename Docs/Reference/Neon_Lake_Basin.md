@@ -456,6 +456,14 @@ over the ground, and strokes run through the same brush, history and Undo as Top
 quads a side (painting still edits every cell); the picture is cached and rebuilt only after a change (15-35 ms).
 An extended grid shows the basin's dashed outline draped over the ground.
 
+**3/4 view (2026-10-25).** The Angled view now opens first and shows the scene as it will look, in its own Settings
+colours (sky, terrain fill under neon grid lines brightening toward the ridges and fading with distance, the lake
+with its shoreline blended per quad), from a three-quarter camera turned by **Turn / Tilt** sliders (or right-drag).
+The Sun / Moon (Moon with its phase) appears on a sky dome round the basin at the scene's eye height, in the
+direction its authored position names from the scene's reference viewpoint and at its apparent size; dragging it
+sets Position X / Y / Z at the same authored distance (so its size never changes), as one Custom edit and one
+save. The view follows every Setting it draws (`shockwave_grid_builder.SCENE_PREVIEW_KEYS`).
+
 ## Layered water (2026-10-24)
 
 Water is a layer of its own, whatever the land's surface style. **Water Shine** (Waves bucket, 0..1) mixes a tinted

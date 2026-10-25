@@ -32,6 +32,7 @@ def _stroke(canvas, start, end=None):
 def test_actual_raise_lower_flatten_water_strokes_undo_redo_and_reset(qtbot):
     blank = {"version": 1, "size": 25, "heights": [0.0] * 625}
     editor = TerrainEditor(blank)
+    editor.view.setCurrentText("Top")      # the brush tests work in the flat authoring map
     qtbot.addWidget(editor)
     keep_off_screen(editor).resize(600, 420)
     editor.show()
@@ -90,6 +91,7 @@ def test_actual_raise_lower_flatten_water_strokes_undo_redo_and_reset(qtbot):
 def test_history_is_bounded_per_completed_stroke_and_escape_cancels(qtbot):
     blank = {"version": 1, "size": 25, "heights": [0.0] * 625}
     editor = TerrainEditor(blank)
+    editor.view.setCurrentText("Top")      # the brush tests work in the flat authoring map
     qtbot.addWidget(editor)
     keep_off_screen(editor).resize(600, 420)
     editor.show()
@@ -118,6 +120,7 @@ def test_history_is_bounded_per_completed_stroke_and_escape_cancels(qtbot):
 
 def _editor(qtbot, heights=None, size=25):
     editor = TerrainEditor({"version": 1, "size": size, "heights": heights or [0.0] * (size * size)})
+    editor.view.setCurrentText("Top")      # the brush tests work in the flat authoring map
     qtbot.addWidget(editor)
     keep_off_screen(editor).resize(600, 420)
     editor.show()

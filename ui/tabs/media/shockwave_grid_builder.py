@@ -111,4 +111,58 @@ def build_terrain_section(tab, layout) -> None:
         tab._save_settings()
 
     tab.shockwave_grid_terrain_editor.terrain_changed.connect(changed)
+    tab.shockwave_grid_terrain_editor.celestial_changed.connect(lambda position: place_celestial_body(tab, position))
     layout.addWidget(tab.shockwave_grid_terrain_editor)
+
+
+# What the terrain editor's 3/4 view draws from Settings: the scene's colours and its Sun / Moon.
+SCENE_PREVIEW_KEYS = tuple("shockwave_grid_" + key for key in (
+    "sky_color", "terrain_fill_color", "water_color", "line_color", "crest_color", "sun_color", "moon_color",
+    "sun_enabled", "sun_mode", "sun_x", "sun_y", "sun_z", "sun_size", "moon_phase"))
+
+
+def refresh_scene_preview(tab) -> None:
+    """Hand the terrain editor's 3/4 view the scene's current colours and Sun / Moon."""
+    editor = getattr(tab, "shockwave_grid_terrain_editor", None)
+    if editor is None:
+        return
+    from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings
+    values = collect_spec_mode_settings(tab, "shockwave_grid")
+    editor.set_scene({key: values[key] for key in SCENE_PREVIEW_KEYS if key in values})
+
+
+def connect_scene_preview(tab) -> None:
+    """Follow every Setting the 3/4 view draws (once; the controls exist once the mode body is built)."""
+    if getattr(tab, "_shockwave_grid_scene_preview_connected", False):
+        return
+    for key in SCENE_PREVIEW_KEYS:
+        widget = getattr(tab, key + "_btn", None) or getattr(tab, key, None)
+        for name in ("color_changed", "valueChanged", "toggled", "currentTextChanged"):
+            signal = getattr(widget, name, None)
+            if signal is not None:
+                signal.connect(lambda *_: refresh_scene_preview(tab))
+                break
+    tab._shockwave_grid_scene_preview_connected = True
+
+
+def place_celestial_body(tab, position: dict) -> None:
+    """The Sun / Moon dragged in the terrain editor's 3/4 view: set its Position X / Y / Z like any edit."""
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    spec = require_mode_settings("shockwave_grid")
+    for axis in ("x", "y", "z"):
+        key = "shockwave_grid_sun_" + axis
+        control = spec.control(key)
+        widget = getattr(tab, key, None)
+        if widget is None:
+            continue
+        # One placement is one edit: the three controls change silently, then one Custom + save below.
+        blocked = widget.blockSignals(True)
+        try:
+            widget.setValue(round(float(control.admit(position[axis], control.low)) * control.scale))
+        finally:
+            widget.blockSignals(blocked)
+        label = getattr(tab, key + "_label", None)
+        if label is not None:
+            label.setText(control.text(widget.value()))
+    tab._force_visualizer_preset_to_custom("shockwave_grid")
+    tab._save_settings()

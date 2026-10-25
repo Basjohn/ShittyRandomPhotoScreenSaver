@@ -17,6 +17,9 @@ def collect_shockwave_grid_mode_settings(tab) -> dict:
 def load_terrain_section(tab, config) -> None:
     key = "shockwave_grid_terrain"
     tab.shockwave_grid_terrain_editor.set_heightfield(config.get(key, tab._widget_default("spotify_visualizer", key)))
+    from ui.tabs.media.shockwave_grid_builder import connect_scene_preview, refresh_scene_preview
+    connect_scene_preview(tab)
+    refresh_scene_preview(tab)
 
 
 def collect_terrain_section(tab) -> dict:
