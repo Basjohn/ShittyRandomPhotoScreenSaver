@@ -261,6 +261,20 @@ class TerrainCanvas(QWidget):
         self._redo.clear()
         self.history_changed.emit()
         self.terrain_changed.emit(self.get_heightfield())
+        from ui.settings_undo import record_edit
+        record_edit(self, before, self._snapshot(), self._restore_edit)
+
+    def _restore_edit(self, state):
+        """Settings' Ctrl+Z / Ctrl+Y: put a stroke's before/after back as an edit (the editor's own Undo can take it
+        back again)."""
+        if self._snapshot() == state:
+            return
+        self._undo.append(self._snapshot())
+        del self._undo[:-self.HISTORY_LIMIT]
+        self._redo.clear()
+        self._restore(state)
+        self.history_changed.emit()
+        self.terrain_changed.emit(self.get_heightfield())
 
     def undo(self):
         if self._before is not None or not self._undo:

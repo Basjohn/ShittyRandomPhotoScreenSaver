@@ -559,6 +559,24 @@ class SpectrumShapeEditor(QWidget):
         self.update()
         self.nodes_changed.emit(self.get_nodes())
 
+    # ── Settings' Ctrl+Z: one gesture (a node, notch or lane drag) is one edit ──
+
+    def event(self, event):  # type: ignore[override]
+        from ui.settings_undo import gesture_event
+        return gesture_event(self, event, super().event, self._undo_state, self._restore_undo_state)
+
+    def _undo_state(self):
+        return (self.get_nodes(), sorted(self.get_lane_strengths().items()), self.get_notch_positions())
+
+    def _restore_undo_state(self, state) -> None:
+        nodes, lanes, notches = state
+        self.set_nodes(nodes)
+        self.set_lane_strengths(dict(lanes))
+        self.set_notch_positions(notches)
+        self.nodes_changed.emit(self.get_nodes())
+        self.lane_strengths_changed.emit(self.get_lane_strengths())
+        self.notch_positions_changed.emit(self.get_notch_positions())
+
     # ── Painting ─────────────────────────────────────────────────────
 
     def paintEvent(self, event: QPaintEvent) -> None:

@@ -805,8 +805,15 @@ class TransitionsTab(QWidget):
         button = getattr(self, widget_attr(spec.section, control))
         color = StyledColorPicker.get_color(button.color(), self, control.label.rstrip(":"), show_alpha=False)
         if color is not None:
+            before = button.color().getRgb()
             button.set_color(color)
             self._save_settings()
+            from ui.settings_undo import record_edit
+
+            def restore(rgba, b=button):
+                b.set_color(QColor(*rgba))
+                self._save_settings()
+            record_edit(button, before, color.getRgb(), restore)
 
     # ---- Pages with their own controls (spec ``custom``) ------------------
 
@@ -1704,9 +1711,17 @@ class TransitionsTab(QWidget):
             show_alpha=True,
         )
         if color is not None:
+            before = QColor(self._burn_glow_color).getRgb()
             self._burn_glow_color = color
             self._apply_burn_glow_color_btn()
             self._save_settings()
+            from ui.settings_undo import record_edit
+
+            def restore(rgba):
+                self._burn_glow_color = QColor(*rgba)
+                self._apply_burn_glow_color_btn()
+                self._save_settings()
+            record_edit(self, before, QColor(color).getRgb(), restore)
 
     def _apply_burn_ember_color_btn(self) -> None:
         """Reflect the independently authored burn ember/char colour."""
@@ -1725,9 +1740,17 @@ class TransitionsTab(QWidget):
             show_alpha=True,
         )
         if color is not None:
+            before = QColor(self._burn_ember_color).getRgb()
             self._burn_ember_color = color
             self._apply_burn_ember_color_btn()
             self._save_settings()
+            from ui.settings_undo import record_edit
+
+            def restore(rgba):
+                self._burn_ember_color = QColor(*rgba)
+                self._apply_burn_ember_color_btn()
+                self._save_settings()
+            record_edit(self, before, QColor(color).getRgb(), restore)
 
     def _refresh_hw_dependent_options(self) -> None:
         """No-op — renderer is always GL, all transitions available."""

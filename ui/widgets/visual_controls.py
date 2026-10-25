@@ -97,11 +97,22 @@ class _VisualControl(QWidget):
             return "active"
         return "hover" if self._hover and primary else ""
 
+    # Its value is one undoable edit per gesture (Settings' Ctrl+Z); an editor that records its own (the camera) opts out.
+    undo_records_value = True
+
     def event(self, event):  # type: ignore[override]
         # Another control taking the page's last-moved highlight clears ours: repaint.
         if event.type() == QEvent.Type.DynamicPropertyChange and bytes(event.propertyName()) == b"lastMoved":
             self.update()
-        return super().event(event)
+        if not self.undo_records_value:
+            return super().event(event)
+        from ui.settings_undo import gesture_event
+        return gesture_event(self, event, super().event, self.value, self._restore_value)
+
+    def _restore_value(self, value) -> None:
+        """Put ``value`` back as a user edit would (labels, previews and saving follow)."""
+        self.setValue(value)
+        self._changed(commit=True)
 
     # A scrolling page never changes a setting.
     def wheelEvent(self, event):  # type: ignore[override]
@@ -790,12 +801,13 @@ class SceneVolumeMapper(_VisualControl):
     cameraAimCommitted = Signal(tuple)
     linkedSourceChanged = Signal(tuple)
     linkedSourceCommitted = Signal(tuple)
-    undoRequested = Signal()     # Ctrl+Z / Ctrl+Y: the owner keeps the edit history
+    undoRequested = Signal()     # Ctrl+Z / Ctrl+Y outside Settings' own undo (which takes them first)
     redoRequested = Signal()
 
     def __init__(self, *, camera_only=False, parent=None):
         super().__init__(parent)
         self._camera_only = bool(camera_only)
+        self.undo_records_value = not self._camera_only    # camera gestures are recorded whole (offset and aim)
         self._coords = [0., -1., 0., 0., 1., 0.] if not camera_only else [0., 0., 0.]
         self._camera_offset = (0., 0., 0.)
         self._base_eye = (0., 0., 0.)

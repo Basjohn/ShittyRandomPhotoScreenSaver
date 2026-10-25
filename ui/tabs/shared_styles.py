@@ -585,6 +585,11 @@ class NoWheelSlider(QSlider):
     def wheelEvent(self, event):  # type: ignore[override]
         event.ignore()
 
+    def event(self, event):  # type: ignore[override]
+        # A drag, click or key step is one undoable edit (Settings' Ctrl+Z); setValue from loading is not.
+        from ui.settings_undo import gesture_event
+        return gesture_event(self, event, super().event, self.value, lambda value: self.setValue(int(value)))
+
 
 def mark_last_moved_control(widget) -> None:
     """Give ``widget`` the page's single last-moved highlight (``lastMoved`` property), taking it from the

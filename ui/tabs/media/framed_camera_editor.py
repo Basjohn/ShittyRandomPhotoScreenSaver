@@ -77,7 +77,14 @@ def note_committed(tab, mode_id: str) -> None:
     """A camera gesture ended: remember its result for Ctrl+Z."""
     history = getattr(tab, _history_attr(mode_id), None)
     if history is not None:
+        before = history.current
         history.record(camera_state(tab, mode_id))
+        from ui.settings_undo import record_edit
+
+        def restore(state):
+            _restore(tab, mode_id, state)
+            history.record(state)
+        record_edit(tab, before, history.current, restore)
 
 
 def undo(tab, mode_id: str) -> bool:
