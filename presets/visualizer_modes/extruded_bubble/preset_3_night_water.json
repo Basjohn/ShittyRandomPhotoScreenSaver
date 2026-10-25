@@ -16,11 +16,11 @@
         "extruded_bubble_band_gather": 0.0,
         "extruded_bubble_bar_count": 32,
         "extruded_bubble_bead_chains": [
-          8,
+          10,
           10
         ],
-        "extruded_bubble_bead_scatter": 0.15,
-        "extruded_bubble_bead_size": 1.0,
+        "extruded_bubble_bead_scatter": 0.06,
+        "extruded_bubble_bead_size": 1.5,
         "extruded_bubble_beam_width": 1.0,
         "extruded_bubble_breathing": [
           0.3,
@@ -42,9 +42,9 @@
         "extruded_bubble_collision_scope": "All",
         "extruded_bubble_columns": 0.0,
         "extruded_bubble_depth_colour": [
-          7,
-          18,
-          36,
+          12,
+          20,
+          34,
           255
         ],
         "extruded_bubble_doublets": 0.35,
@@ -144,9 +144,9 @@
         "extruded_bubble_veils": 0.0,
         "extruded_bubble_wake_trails": 0.2,
         "extruded_bubble_water_colour": [
-          12,
-          28,
-          50,
+          18,
+          30,
+          48,
           255
         ],
         "mode": "extruded_bubble"

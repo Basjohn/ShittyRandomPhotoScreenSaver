@@ -7,7 +7,7 @@
     "widgets": {
       "spotify_visualizer": {
         "extruded_bubble_adaptive_sensitivity": true,
-        "extruded_bubble_aperture": 0.4,
+        "extruded_bubble_aperture": 0.52,
         "extruded_bubble_audio_block_size": 512,
         "extruded_bubble_auto_rotate": false,
         "extruded_bubble_auto_rotate_after": 20,
