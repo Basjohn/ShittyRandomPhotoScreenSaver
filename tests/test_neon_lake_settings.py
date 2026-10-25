@@ -133,6 +133,7 @@ def test_real_terrain_body_silent_roundtrip_reset_and_stroke_save_batch(qt_app, 
         for key in pose:
             assert not hasattr(tab, key)
         editor = tab.shockwave_grid_terrain_editor
+        editor.view.setCurrentText("Top")           # this stroke works in the flat authoring map
         canvas = editor.canvas
         canvas.resize(500, 300)
         rect = canvas.field_rect()
@@ -431,6 +432,63 @@ def test_neon_glow_bucket_live_conditions_and_latent_roundtrip(qt_app, settings_
         collected = collect_spec_mode_settings(tab, 'shockwave_grid')
         assert all(collected[key] == value for key, value in saved.items())
         assert all(rows['shockwave_grid_' + key].isHidden() for key in hidden)
+    finally:
+        tab.deleteLater()
+        qt_app.processEvents()
+
+
+def test_real_terrain_view_places_the_sun_and_follows_its_settings(qt_app, settings_manager, monkeypatch):
+    """The terrain editor's 3/4 view shows the scene's Sun / Moon; dragging it there sets Position X / Y / Z like
+    any edit (Custom, one save), at the same authored distance (its apparent size), and the view follows edits."""
+    import math
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+    from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
+    from core.settings.visualizer_presets import get_custom_preset_index
+    from rendering.gl_programs.neon_celestial import CELESTIAL_REFERENCE
+    from core.constants.neon_lake_world import NOMINAL_HALF_WIDTH
+    from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
+    from ui.tabs.visualizers_tab import VisualizersTab
+
+    settings_manager.set("widgets", {"spotify_visualizer": {
+        "enabled": True, "visualizers_enabled": True, "mode": "shockwave_grid",
+        "mode_activation": build_visualizer_mode_activation(["shockwave_grid"]),
+        "preset_shockwave_grid": get_custom_preset_index("shockwave_grid"), "shockwave_grid_terrain": FIELD,
+    }})
+    tab = VisualizersTab(settings_manager)
+    try:
+        tab._select_mode_page("shockwave_grid")
+        load_spec_mode_settings(tab, "shockwave_grid", {
+            **require_canonical_default("widgets.spotify_visualizer"), "shockwave_grid_terrain": FIELD,
+            "shockwave_grid_sun_enabled": True})
+        calls = []
+        monkeypatch.setattr(tab, "_save_settings", lambda: calls.append("save"))
+        monkeypatch.setattr(tab, "_force_visualizer_preset_to_custom", lambda mode=None: calls.append(mode))
+        canvas = tab.shockwave_grid_terrain_editor.canvas
+        canvas.resize(520, 420)
+        assert canvas.view == "Angled"
+        before = collect_spec_mode_settings(tab, "shockwave_grid")
+
+        def distance(values):
+            authored = (values["shockwave_grid_sun_x"] * NOMINAL_HALF_WIDTH, values["shockwave_grid_sun_y"],
+                        values["shockwave_grid_sun_z"])
+            return math.dist(authored, CELESTIAL_REFERENCE)
+
+        centre, _radius = canvas._body_on_screen()
+        start = QPoint(round(centre.x()), round(centre.y()))
+        QTest.mousePress(canvas, Qt.MouseButton.LeftButton, pos=start)
+        QTest.mouseMove(canvas, start + QPoint(-40, -15))
+        assert calls == []                                   # nothing is saved mid-drag
+        QTest.mouseRelease(canvas, Qt.MouseButton.LeftButton, pos=start + QPoint(-40, -15))
+        assert calls == ["shockwave_grid", "save"]
+        after = collect_spec_mode_settings(tab, "shockwave_grid")
+        assert after["shockwave_grid_sun_x"] < before["shockwave_grid_sun_x"]
+        assert after["shockwave_grid_terrain"] == FIELD                # the drag painted nothing
+        assert distance(after) == pytest.approx(distance(before), rel=0.05)
+        # The view follows Settings edits (here, the Position Y control).
+        tab.shockwave_grid_sun_y.setValue(tab.shockwave_grid_sun_y.minimum())
+        assert float(canvas._body["sun_y"]) == pytest.approx(
+            collect_spec_mode_settings(tab, "shockwave_grid")["shockwave_grid_sun_y"])
     finally:
         tab.deleteLater()
         qt_app.processEvents()

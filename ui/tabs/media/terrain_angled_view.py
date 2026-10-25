@@ -5,6 +5,12 @@ perspective camera fitted into a rectangle, order its quads back to front, and p
 the cursor (exact barycentric hits on the projected triangles, nearest to the eye wins), so the editor paints the
 same uv in either view. World proportions follow the basin: its width is the nominal 16:9 card's, its depth
 ``DEPTH``; an extended grid reaches past it as in the scene. Heights use the default Terrain Height's scale.
+
+The scene's Sun / Moon sits at infinity in the direction of its authored position seen from the scene's reference
+viewpoint (``neon_celestial``). A diorama's raised camera would see the scene's horizon above its frame, so the view
+shows the body on a sky dome round the basin at the scene's eye height, in that direction and at its apparent size
+(a body on the scene's horizon sits behind the far edge at eye level), and turns a drag of it into authored
+X / Y / Z at the same distance (so its apparent size never changes).
 """
 from __future__ import annotations
 
@@ -14,10 +20,13 @@ from dataclasses import dataclass
 import numpy as np
 
 from core.constants.neon_lake_world import DEPTH, NOMINAL_HALF_WIDTH
+from rendering.gl_programs.neon_celestial import CELESTIAL_REFERENCE
 
 MAX_PREVIEW_QUADS = 64        # per side: a large grid is shown at a stride, never resampled when painted
 HEIGHT_SCALE = 0.45           # world height of an authored 1.0 (about the scene at its default Terrain Height)
-DEFAULT_YAW, DEFAULT_PITCH = 0.0, math.radians(50.0)
+DEFAULT_YAW, DEFAULT_PITCH = math.radians(28.0), math.radians(30.0)   # a three-quarter view
+SKY_SHARE = 0.30              # the upper part of the view kept for the sky and its Sun / Moon
+SKY_DOME = 0.5                # the Sun / Moon sky dome's radius, in grid diagonals
 PITCH_RANGE = (math.radians(12.0), math.radians(80.0))
 YAW_RANGE = (math.radians(-75.0), math.radians(75.0))
 _FOCAL = 1.0 / math.tan(math.radians(17.0))   # a 34-degree field of view
@@ -32,6 +41,9 @@ class AngledProjection:
     screen: np.ndarray    # (rows, cols, 2) pixels
     depth: np.ndarray     # (rows, cols) distance along the view axis
     project: object       # world (..., 3) -> (screen (..., 2), depth (...))
+    eye: np.ndarray = None        # the view's camera
+    direction_at: object = None   # screen point (x, y) -> the world direction of the view ray there
+    dome: tuple = ()              # (centre, radius) of the Sun / Moon's sky dome
 
 
 def preview_stride(size: int) -> int:
@@ -56,8 +68,23 @@ def _camera(yaw: float, pitch: float, centre: np.ndarray, distance: float):
     return eye, right, up, back
 
 
-def project_terrain(size: int, heights, basin, rect, *, yaw=DEFAULT_YAW, pitch=DEFAULT_PITCH) -> AngledProjection:
-    """The preview mesh projected and fitted into ``rect`` (left, top, width, height), whole grid in view."""
+def dome_of(extent: float) -> tuple[np.ndarray, float]:
+    return np.array([0.0, float(CELESTIAL_REFERENCE[1]), -DEPTH / 2.0]), SKY_DOME * float(extent)
+
+
+def body_world(dome, x: float, y: float, z: float, size: float):
+    """(dome point, world radius there, authored distance) of the body at authored X / Y / Z."""
+    authored = np.array([x * NOMINAL_HALF_WIDTH, y, z])
+    offset = authored - np.asarray(CELESTIAL_REFERENCE)
+    distance = max(0.5, float(np.linalg.norm(offset)))
+    centre, radius = dome
+    return centre + offset / distance * radius, radius * float(size) / distance, distance
+
+
+def project_terrain(size: int, heights, basin, rect, *, yaw=DEFAULT_YAW, pitch=DEFAULT_PITCH,
+                    body=None) -> AngledProjection:
+    """The preview mesh projected and fitted into ``rect`` (left, top, width, height), whole grid in view, with the
+    Sun / Moon (``body``: authored x, y, z, size) when it is in front of the view."""
     stride = preview_stride(size)
     indices = np.unique(np.r_[np.arange(0, size, stride), size - 1])
     grid = np.asarray(heights, dtype=np.float64).reshape(size, size)
@@ -75,23 +102,69 @@ def project_terrain(size: int, heights, basin, rect, *, yaw=DEFAULT_YAW, pitch=D
         forward = np.maximum(forward, 1e-3)
         return np.stack([_FOCAL * (relative @ right) / forward, -_FOCAL * (relative @ up) / forward], axis=-1), forward
 
-    # Fit the whole grid's box (up to its highest land, never flatter than a fifth of full) into the rectangle.
+    # Fit the whole grid's box (up to its highest land, never flatter than a fifth of full) into the rectangle,
+    # below a band of sky for the Sun / Moon.
     top = max(float(highs[1]), 0.2 * HEIGHT_SCALE)
     corners = np.array([[x, y, z] for x in (lows[0], highs[0]) for y in (0.0, top)
                         for z in (lows[2], highs[2])])
+    dome = dome_of(extent)
+    if body is not None:
+        point, radius, _distance = body_world(dome, *body)
+        if float(-(point - eye) @ back) > 1e-3:
+            corners = np.vstack([corners, point + up * radius, point - up * radius,
+                                 point + right * radius, point - right * radius])
     flat, _ = raw(corners)
     left, top, width, height = rect
     span = np.maximum(flat.max(axis=0) - flat.min(axis=0), 1e-6)
-    scale = 0.96 * min(width / span[0], height / span[1])
+    land = 1.0 - SKY_SHARE
+    scale = 0.96 * min(width / span[0], land * height / span[1])
     middle = (flat.max(axis=0) + flat.min(axis=0)) / 2.0
-    offset = np.array([left + width / 2.0, top + height / 2.0])
+    offset = np.array([left + width / 2.0, top + height * (1.0 - land / 2.0)])
 
     def project(points):
         screen, forward = raw(points)
         return (screen - middle) * scale + offset, forward
 
     screen, depth = project(world)
-    return AngledProjection(stride, uv, world, screen, depth, project)
+
+    def direction_at(point):
+        tangent = ((np.asarray(point, dtype=np.float64) - offset) / scale + middle) / _FOCAL
+        direction = right * tangent[0] - up * tangent[1] - back
+        return direction / np.linalg.norm(direction)
+
+    return AngledProjection(stride, uv, world, screen, depth, project, eye, direction_at, dome)
+
+
+_BODY_LIMITS = ((-2.0, 2.0), (0.1, 3.0), (-6.0, 2.0))   # the Position X / Y / Z controls' ranges
+
+
+def body_preview(projection: AngledProjection, x: float, y: float, z: float, size: float):
+    """(screen centre or None behind the view, screen radius, authored distance) of the body."""
+    point, radius, distance = body_world(projection.dome, x, y, z, size)
+    screen, forward = projection.project(point[None, :])
+    if float(forward[0]) <= 1e-3:
+        return None, 0.0, distance
+    edge, _ = projection.project((point + projection.direction_at(screen[0]) * 0.0
+                                  + np.cross(projection.direction_at(screen[0]), [0.0, 1.0, 0.0]) * radius
+                                  / max(1e-9, float(np.linalg.norm(np.cross(projection.direction_at(screen[0]),
+                                                                            [0.0, 1.0, 0.0])))))[None, :])
+    return screen[0], float(np.linalg.norm(edge[0] - screen[0])), distance
+
+
+def place_body(projection: AngledProjection, point, distance: float):
+    """Authored (x, y, z) of the body under screen ``point``: where its view ray meets the sky dome (or passes
+    nearest it), at the same authored distance."""
+    centre, radius = projection.dome
+    ray = projection.direction_at(point)
+    eye = projection.eye
+    along = float((centre - eye) @ ray)
+    nearest = eye + ray * along
+    miss = float(np.linalg.norm(nearest - centre))
+    hit = nearest + ray * math.sqrt(radius * radius - miss * miss) if miss < radius else nearest
+    direction = (hit - centre) / max(float(np.linalg.norm(hit - centre)), 1e-9)
+    authored = np.asarray(CELESTIAL_REFERENCE) + direction * distance
+    values = (authored[0] / NOMINAL_HALF_WIDTH, authored[1], authored[2])
+    return tuple(float(max(low, min(high, v))) for v, (low, high) in zip(values, _BODY_LIMITS))
 
 
 def quad_order(projection: AngledProjection) -> np.ndarray:
