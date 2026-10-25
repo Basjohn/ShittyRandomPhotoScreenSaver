@@ -90,6 +90,11 @@ question is pixel-level (edges, aliasing, a bead's shading).
   direction is not enough either (its tail still moves on its own). Model the physics: a wake is the water the
   bubble passed through (EB `extruded_bubble_wake.WakePath`: sampled path history, dragged after the bubble a moment,
   then drifting with the water and smoothing out with age). Root it at the owner's own size (the bubble's lower sides).
+- **Per-tick numpy in the logical thread starves the app.** Each small numpy call holds the GIL the GUI and render
+  threads need: a per-wake, per-tick resample (`np.interp`) took a 90 fps scene to 4 fps although the simulation
+  tick itself measured only ~5 ms. `gui_stall_stacks.log` names the culprit (count the logical thread's innermost
+  frames across stalls). Batch the work across all owners at a fixed low cadence and keep per-tick work to plain
+  arithmetic (EB `WakeField`: points laid by distance, the water moved 10 times a second in one batched step).
 - **Look at the goal at full resolution before choosing a technique.** EB's wakes were first drawn as soft blurred
   veils; the goal's are clear sheets with crisp glassy rims and fine lengthwise strands (caustic light drawn out
   along the flow). A blur cannot become that; edges and inner structure must be modelled. Shared optics apply to

@@ -33,8 +33,10 @@ import random
 from dataclasses import dataclass, field
 
 from core.settings.visualizer_paths import direction_of, world_point
+from itertools import chain
+
 from core.constants.extruded_bubble_world import WAKE_POINTS
-from widgets.spotify_visualizer.extruded_bubble_wake import WakePath, trails as wake_trails
+from widgets.spotify_visualizer.extruded_bubble_wake import WakeField, trails as wake_trails
 from widgets.spotify_visualizer.extruded_bubble_geometry import (
     WORLD_CENTER, WORLD_HALF, WORLD_MARGIN, WORLD_UNIT, WATER_SURFACE_Y, stream_basis,
     upstream_source, box_entry, scene_track_length, scene_source_face_weights, scene_mean_passage,
@@ -91,6 +93,7 @@ _MINIMUM_REACTION_RADIUS = .13
 _QUIET_DEPTH_FULL = 0.5   # Breathing / Small Bubble Pulse quiet handle at which the class reaches its deepest rest
 _LANE = 0.26 * WORLD_UNIT  # fixed world spacing transverse to the stream
 _WAKE_RETIRE_SECONDS = 1.1  # front-to-tail dissolve of a wake whose emitter pops, merges or exits
+_NO_WAKE_PATH = (0.0,) * (3 + 3 * WAKE_POINTS)   # trails, length, span, path: a bubble without a trail
 
 
 @dataclass(frozen=True, slots=True)
@@ -357,7 +360,9 @@ class ExtrudedBubbleSimulation:
         self._spawn_credit = {True: 0.0, False: 0.0}
         self._wake_live: dict[int, tuple[float, ...]] = {}
         self._wake_retiring: dict[int, tuple[float, ...]] = {}
-        self._wake_paths: dict[int, WakePath] = {}   # trailing bubbles' wakes (live and retiring), by identity
+        self._wake_field = WakeField(2 * MAX_BUBBLES)   # trailing bubbles' wakes (live and retiring), by identity
+        self._wake_share = 0.0
+        self._wake_chosen: dict[int, bool] = {}
 
     @property
     def time(self) -> float:
@@ -1118,39 +1123,40 @@ class ExtrudedBubbleSimulation:
 
         Retiring wakes retain their last *own* physical world source, never rebind to the shell currently occupying
         the old GPU instance slot. The shader wipes each wake from the travel-facing head backwards over its life.
-        A trailing bubble's path is the water it has passed through (``WakePath``), drifting on after it is gone.
+        A trailing bubble's path is the water it has passed through (``WakeField``), drifting on after it is gone.
         """
+        field = self._wake_field
+        field.flow(dt, self._motion_phase)
+        if share != self._wake_share:                    # the trailing set is chosen once per Wake Trails value
+            self._wake_share, self._wake_chosen = share, {}
         current: dict[int, tuple[float, ...]] = {}
-        paths: dict[int, WakePath] = {}
         for b in self._bubbles:
             if b.cluster < 0 and b.popping < 0 and not b.leaving and b.alpha > 0.02:
                 head = (b.x, b.y, b.z)
-                path = self._wake_paths.get(b.ident)
-                if path is None and wake_trails(b.ident, share):
-                    path = WakePath(b.ident, b.radius)
-                if path is None:
+                chosen = self._wake_chosen.get(b.ident)
+                if chosen is None:
+                    chosen = self._wake_chosen[b.ident] = wake_trails(b.ident, share)
+                if chosen and b.ident in field and b.ident in self._wake_retiring:
+                    field.remove(b.ident)                # back from a fusion: its old wake stays behind, a new one starts
+                if chosen and b.ident not in field:
+                    field.add(b.ident, b.radius, head)
+                elif not chosen and b.ident in field:
+                    field.remove(b.ident)
+                if b.ident in field:
+                    field.follow(b.ident, head, dt, max(4.0 * b.radius, 0.1 * WORLD_UNIT))
                     current[b.ident] = (b.x, b.y, b.z, b.visual_radius, b.ident, -1.0, b.alpha, b.radius,
-                                        0.0, 0.0, *head * WAKE_POINTS)
-                    continue
-                path.advance(head, dt, self._motion_phase, max(4.0 * b.radius, 0.1 * WORLD_UNIT))
-                length, points = path.resampled(head, 0.0)     # from the bubble's widest point, its centre plane
-                paths[b.ident] = path
-                current[b.ident] = (b.x, b.y, b.z, b.visual_radius, b.ident, -1.0, b.alpha, b.radius,
-                                    1.0, length, *points)
+                                        1.0, *field.record(b.ident, head))
+                else:
+                    current[b.ident] = (b.x, b.y, b.z, b.visual_radius, b.ident, -1.0, b.alpha, b.radius,
+                                        *_NO_WAKE_PATH)
         # Advance existing tombstones on the sole logical tick, never in the renderer; a retiring wake's water keeps
         # drifting as it dissolves.
         retained = {}
         for ident, old in self._wake_retiring.items():
             age = old[5] + dt / _WAKE_RETIRE_SECONDS
             if age < 1.0:
-                path = self._wake_paths.get(ident)
-                if path is not None:
-                    path.advance(None, dt, self._motion_phase, 0.0)
-                    length, points = path.resampled(None, 0.0)
-                    paths[ident] = path
-                    retained[ident] = (*old[:5], age, *old[6:9], length, *points)
-                else:
-                    retained[ident] = (*old[:5], age, *old[6:])
+                retained[ident] = ((*old[:5], age, *old[6:9], *field.record(ident, old[:3])) if ident in field
+                                   else (*old[:5], age, *old[6:]))
         # Begin retirement immediately when pop/fuse/exit takes its source out of the free population.
         for ident, old in self._wake_live.items():
             if ident not in current and ident not in retained:
@@ -1159,10 +1165,14 @@ class ExtrudedBubbleSimulation:
         if len(retained) > MAX_BUBBLES:
             retained = dict(sorted(retained.items(), key=lambda item: item[1][5])[:MAX_BUBBLES])
         self._wake_live, self._wake_retiring = current, retained
-        self._wake_paths = {ident: path for ident, path in paths.items() if ident in current or ident in retained}
+        for ident in field.idents():
+            if ident not in current and ident not in retained:
+                field.remove(ident)
+        if len(self._wake_chosen) > 4 * MAX_BUBBLES:
+            self._wake_chosen = {ident: self._wake_chosen[ident] for ident in current if ident in self._wake_chosen}
         records = list(current.values())[:MAX_BUBBLES]
         records.extend(retained.values())
-        return tuple(value for row in records for value in row)
+        return tuple(chain.from_iterable(records))
 
     def _snapshot(self, direction, speed, controls: ExtrudedBubbleControls, dt: float) -> ExtrudedBubbleSnapshot:
         level = self._level

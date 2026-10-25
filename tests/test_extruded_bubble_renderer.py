@@ -2,6 +2,8 @@
 an offscreen context (no window). No pixel goldens: looks are judged against the operator's mocks in the lab."""
 from __future__ import annotations
 
+from core.constants.extruded_bubble_world import WAKE_STRIDE
+
 import dataclasses
 import math
 
@@ -397,7 +399,7 @@ def test_camera_changes_only_projection_and_keeps_uploaded_world_populations_and
     snapshot=_snapshot()
     state=dataclasses.replace(snapshot.logical.mode_state,
         bubbles=_record(z=-8.)+_record(x=.5,z=-8.,ident=2,cluster=3)+_record(x=2.,z=-8.,ident=3,cluster=3),
-        clusters=(2.,1.,2.,-1.),wakes=(0.,0.,-8.,1.,1.,.3,.7,1.)+(0.,)*50,stream=(.6,.8,0.))
+        clusters=(2.,1.,2.,-1.),wakes=(0.,0.,-8.,1.,1.,.3,.7,1.)+(0.,)*(WAKE_STRIDE-8),stream=(.6,.8,0.))
     for turn,tilt,scale,pan in ((0.,0.,1.,0.),(.7,-.4,.6,.2),(-1.,.5,2.,-.1)):
         parameters={**dict(state.parameters),'extruded_bubble_turn':turn,'extruded_bubble_tilt':tilt,
                     'extruded_bubble_scene_scale':scale,'extruded_bubble_scene_pan_x':pan}
@@ -427,7 +429,7 @@ def test_particle_emission_thins_each_wake_at_balanced_instead_of_dropping_owner
         return draw(*args)
     monkeypatch.setattr(gl,'glDrawArraysInstanced',observed)
     snapshot=_snapshot(scene3d_detail='Balanced',extruded_bubble_bead_chains=[0,0])
-    sources=(0.,0.,.3,.1,7.,-1.,1.,.1)+(0.,)*50+(.2,0.,.3,.1,9.,.4,1.,.1)+(0.,)*50
+    sources=(0.,0.,.3,.1,7.,-1.,1.,.1)+(0.,)*(WAKE_STRIDE-8)+(.2,0.,.3,.1,9.,.4,1.,.1)+(0.,)*(WAKE_STRIDE-8)
     def at(emission):
         state=dataclasses.replace(snapshot.logical.mode_state,wakes=sources,emission=emission)
         return dataclasses.replace(snapshot,logical=dataclasses.replace(snapshot.logical,mode_state=state))
