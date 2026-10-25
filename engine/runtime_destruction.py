@@ -156,7 +156,6 @@ class RuntimeDestructionBarrier:
         self._completion_scheduled = False
         self._had_qobjects = False
         self._thaw_collection_deferred = False
-        self._cycle_sweep_done = False
         self._continuation: Callable[[], None] | None = None
         self._qobject_labels: dict[int, str] = {}
         self._qobject_refs: dict[int, weakref.ReferenceType[QObject]] = {}
@@ -459,18 +458,20 @@ class RuntimeDestructionBarrier:
                 self._completion_scheduled = True
                 self._complete()
                 return
-        # A retired generation's Python callback cycles outlive its QObjects: they are long-lived (the oldest GC
-        # generation, which the RUN policy scans rarely; the startup freeze even pins the first generation). Once
-        # all *native* roots have disappeared, the GC policy sweeps once for this retirement. Neither the barrier
-        # timeout nor the strict owner test is relaxed: owners remaining after that sweep are genuine failures.
-        if (not self._qobject_labels and self._python_labels and not self._cycle_sweep_done
+        # The RUN freeze can pin a generation's Python callback cycles even
+        # after Qt has released every QObject. Once all *native* roots have
+        # disappeared, allow the GC policy exactly one stop-boundary sweep.
+        # Neither the barrier timeout nor the strict owner test is relaxed:
+        # remaining owners after that sweep are genuine failures.
+        if (not self._qobject_labels and self._python_labels
                 and not self._remaining_generation_resources()
                 and not self._remaining_thread_work()
                 and not self._remaining_global_subscriptions()):
             engine = self._engine_ref()
             policy = getattr(engine, "_gc_policy", None) if engine is not None else None
-            finish = getattr(policy, "collect_retirement_cycles", None)
-            if callable(finish):
+            finish = getattr(policy, "collect_thawed_retirement_cycles_once", None)
+            if (callable(finish)
+                    and bool(getattr(policy, "retirement_collection_pending", False))):
                 if not self._thaw_collection_deferred:
                     # The final QObject weakref may fire *inside* a native
                     # QObject.destroyed emission. Never run a gen2 cycle sweep
@@ -482,14 +483,7 @@ class RuntimeDestructionBarrier:
                         raise RuntimeError("Runtime destruction recheck timer was disposed")
                     timer.start(0)
                     return
-                self._cycle_sweep_done = True
-                waiting = dict(Counter(self._python_labels.values()))
-                if finish() and waiting:
-                    released = waiting.keys() - set(self._python_labels.values())
-                    # Attribution for any future failure: owners this sweep freed were cyclic garbage, not leaks.
-                    logger.info("[LIFECYCLE_BARRIER] retirement sweep reason=%s retiring_generation=%s "
-                                "released_cyclic=%s still_held=%s", self.reason, self.retiring_generation,
-                                sorted(released), dict(Counter(self._python_labels.values())))
+                finish()
                 if self._completed or self._completion_scheduled:
                     return
         if self._qobject_labels or self._python_labels:
