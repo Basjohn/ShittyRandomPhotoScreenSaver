@@ -3070,3 +3070,26 @@ Toward the lab, then past it to the mocks (operator: the lab is not the goal):
   emitter with a radial starburst. P7 now uses a sunlit surface from the upper right with Light Tint 1. Shafts paled
   35% toward white whatever the tint; the whitening now eases off above the former sunlit tint (0.45 unchanged).
 Steady GPU for P7 at 1672x941: 4.2-4.5 ms median. Presets 1/2 render pixel-identically.
+
+## 71. Trails, floor, beat motion, lens proximity; P7 accepted (25 October)
+
+- **Preset 7 accepted** by the operator (camera and stream direction their own). Presets 1/2 take Preset 6's
+  breathing reactivity (Breathing [0.3, 0.5], Small Bubble Pulse [0.2, 0.5], Smoothing 0.5).
+- **Wake Trails (option)**, reworked after the operator called the first version low fidelity: the goals' tendrils
+  are a dense bead stream inside a faint, soft, out-of-focus veil that curls away from the bubble. One shared wake
+  path (`_WAKE_PATH_GLSL`) now carries both the veil (Gaussian profile, billowing density flowing down the trail, a
+  soft broken core thread) and the fizz beads (larger glass beads, a stream of their own from Wake Trails rather
+  than Particles). Clamped strip ends (`pow` of a negative drew black dashes). 7.1-7.3 ms at full trails.
+- **Floor (option):** dark murky bed, warped caustic net only under broad drifting light patches, soft glow pools,
+  veiled with distance (operator: good in production).
+- **Beat motion:** speed and drift moved 2-4% with the beats (passage followers smooth beats away). A surge on
+  accents (onsets above the recent mean; ~10 onsets a second made every-onset surges a constant offset), eased in
+  over 0.1 s and released over 0.3 s, pushes both toward their loud handles (never past); the resting share of the
+  flow Ranges dropped to leave headroom (particles keep theirs). Accents now lift them 9-11% (p90) to 12-15% (p98).
+- **Lens proximity:** a shell reaching the lens off axis kept its small clipped screen share and was never faded;
+  it now eases out within a third of its (steady lens) radius of the eye and back in as it leaves. Near defocus and
+  the share fade unchanged (conservative, per operator).
+- **Presets 3-6 by measured water colour** (3x3 grid of 35th-percentile colours, mock vs render from the files):
+  P3 ~5x too dark, P4/P6 3-8x too dark below, P6's top twice too bright; re-authored to the measurements. P6 also
+  gets a fuller floor and larger bubbles; P5's deep light moves just outside the frame.
+Methods are in [Visualizer_Visual_Tuning.md](../../Guides/Visualizer_Visual_Tuning.md).
