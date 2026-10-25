@@ -86,9 +86,14 @@ question is pixel-level (edges, aliasing, a bead's shading).
 - **Shared paths for related layers:** a wake's veil and its bead stream follow one path function, so the beads
   stream inside their veil. Two independent approximations of one thing never line up.
 - **Attached elements follow their owner, not the music.** A wake steered by a global uniform (the live stream
-  direction) swings with every musical turn while its bubble only drifts, and reads as detached. Give each emitter
-  its own state eased from the owner's real motion (EB: a lead and a lagging settle direction per wake record), and
-  root it at the owner's own size (a wake leaves the bubble's lower sides at the bubble's width and tapers).
+  direction) swings with every musical turn while its bubble only drifts, and reads as detached; easing a per-trail
+  direction is not enough either (its tail still moves on its own). Model the physics: a wake is the water the
+  bubble passed through (EB `extruded_bubble_wake.WakePath`: sampled path history, dragged after the bubble a moment,
+  then drifting with the water and smoothing out with age). Root it at the owner's own size (the bubble's lower sides).
+- **Look at the goal at full resolution before choosing a technique.** EB's wakes were first drawn as soft blurred
+  veils; the goal's are clear sheets with crisp glassy rims and fine lengthwise strands (caustic light drawn out
+  along the flow). A blur cannot become that; edges and inner structure must be modelled. Shared optics apply to
+  attachments too: a defocused bubble's wake takes the bubble's own near-defocus circle.
 - **Every new control is authored into every preset** (`tools/visualizer_preset_repair.py --repair-all --mode
   <mode>` fills the default; then author the presets that use it). Tests never pin preset values.
 - Record what was tried and rejected in the mode's Investigation log, with the measurement that decided it.

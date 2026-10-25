@@ -98,31 +98,59 @@ class WakeOwnershipTests(unittest.TestCase):
         self.assertEqual(retired[7],live[ident][7])
         self.assertEqual(retired[3],live[ident][3])
 
-    def test_trail_follows_its_bubble_with_inertia(self):
-        import math
-        for _ in range(30):
-            self.tick()
-        bubble = self.sim._bubbles[0]
+    def test_a_trail_is_the_water_its_bubble_passed_through(self):
+        import numpy as np
+        from widgets.spotify_visualizer.extruded_bubble_wake import WakePath
+        path = WakePath(5, 0.5)
+        here = np.array([0.0, 0.0, 0.0])
+        for _ in range(120):                      # rising to the right ..
+            here = here + (0.012, 0.0, 0.0)
+            path.advance(tuple(here), 1 / 60, 0.0, 1.0)
+        turn = here.copy()
+        for _ in range(60):                       # .. then turned upward by the music
+            here = here + (0.0, 0.012, 0.0)
+            path.advance(tuple(here), 1 / 60, 0.0, 1.0)
+        length, flat = path.resampled(tuple(here), 0.3)
+        points = np.asarray(flat).reshape(-1, 3)
+        self.assertGreater(length, 1.0)
+        self.assertAlmostEqual(float(np.linalg.norm(points[0] - here)), 0.3, delta=0.05)    # just behind the bubble
+        # Near the bubble the trail runs back down its new course; farther back it lies along the old one.
+        self.assertLess(abs(points[1][0] - turn[0]), 0.1)
+        self.assertLess(points[1][1], here[1])
+        self.assertLess(points[-1][0], turn[0] - 0.3)
+        self.assertLess(abs(points[-1][1] - turn[1]), 0.15)
 
-        def turned(row, axis):     # angle (degrees) between a trail direction and "behind a bubble moving +x"
-            return math.degrees(math.acos(max(-1.0, min(1.0, -row[axis]))))
+    def test_a_trail_drifts_with_the_water_after_its_bubble_is_gone(self):
+        import numpy as np
+        from widgets.spotify_visualizer.extruded_bubble_wake import FLOW, WakePath
+        path = WakePath(9, 0.5)
+        for k in range(120):
+            path.advance((0.0, 0.012 * k, 0.0), 1 / 60, 0.0, 1.0)
+        for _ in range(90):                       # the drag of the bubble's passing dies away
+            path.advance(None, 1 / 60, 0.0, 0.0)
+        before = np.asarray(path.resampled(None, 0.0)[1]).reshape(-1, 3)
+        path.advance(None, 1 / 60, 0.0, 0.0)
+        after = np.asarray(path.resampled(None, 0.0)[1]).reshape(-1, 3)
+        # Only the water's slow swirl (and what is left of the drag) moves it: no tail of its own.
+        self.assertLess(float(np.abs(after - before).max()), 3.0 * FLOW / 60 + 1e-3)
 
-        before = source_records(self.tick())[bubble.ident]
-        start_lead = turned(before, 8)
-        # The bubble swings hard sideways: its trail turns after it, never with it in one step.
-        rows = []
-        for _ in range(90):
-            bubble.x += 0.06
-            rows.append(source_records(self.tick())[bubble.ident])
-        self.assertLess(start_lead - turned(rows[0], 8), 15.0)
-        leads = [turned(row, 8) for row in rows]
-        self.assertLess(leads[-1], 25.0, 'the lead settles behind the motion')
-        self.assertTrue(all(b <= a + 1e-6 for a, b in zip(leads, leads[1:])), 'the lead turns steadily')
-        # The tail lags the lead: the turn curls back where the bubble came from.
-        self.assertGreater(turned(rows[20], 11), turned(rows[20], 8) + 5.0)
-        for row in rows:
-            for axis in (8, 11):
-                self.assertAlmostEqual(math.sqrt(sum(v * v for v in row[axis:axis + 3])), 1.0, places=5)
+    def test_wake_trails_choose_trailing_bubbles_and_zero_keeps_no_history(self):
+        from dataclasses import replace
+        from core.constants.extruded_bubble_world import WAKE_PATH
+        rows = source_records(self.tick())
+        self.assertTrue(all(row[8] == 0.0 for row in rows.values()))
+        self.assertEqual(self.sim._wake_paths, {})
+        controls = replace(self.controls, wake_trails=1.0)
+        for _ in range(180):                      # music moves the bubbles: their trails grow behind them
+            snap = self.sim.advance(self.mod.MusicInput(1 / 60, True, 1., (), (.8, .7, .6)), controls)
+        rows = {ident: row for ident, row in source_records(snap).items() if row[5] < 0.0}
+        self.assertTrue(rows and all(row[8] == 1.0 and row[9] > 0.0 for row in rows.values()))
+        for ident, row in rows.items():
+            bubble = self.sim._find(ident)
+            first = row[WAKE_PATH:WAKE_PATH + 3]
+            # The trail leaves the bubble's widest point: its path starts at the centre plane.
+            self.assertAlmostEqual(sum((a - b) ** 2 for a, b in zip(first, (bubble.x, bubble.y, bubble.z))) ** 0.5,
+                                   0.0, delta=1e-6)
 
     def test_no_wake_when_no_parent_population(self):
         self.controls = self.mod.ExtrudedBubbleControls(large_count=(0, 0), mid_count=(0, 0),

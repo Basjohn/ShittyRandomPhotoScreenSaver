@@ -53,7 +53,7 @@ void main() {
         gl.glEnable(gl.GL_RASTERIZER_DISCARD)
 
         def generated(scale,amount=1.,alpha=1.,free=False):
-            data=np.array((0,0,-8,.2*scale,7,-1,alpha,.2,0,-1,0,0,-1,0),dtype='f4')
+            data=np.array((0,0,-8,.2*scale,7,-1,alpha,.2)+(0.,)*50,dtype='f4')
             gl.glNamedBufferData(wakes,data.nbytes,data,gl.GL_DYNAMIC_DRAW)
             gl.glUniform1f(gl.glGetUniformLocation(program,'uBeadSize'),amount)
             gl.glUniform1i(gl.glGetUniformLocation(program,'uBeadCount'),64 if free else 0)
@@ -96,7 +96,7 @@ void main() {
             ratio=generated(1.,amount=amount,free=True)[valid,0]/free[valid,0]
             assert np.all((ratio>=.89999)&(ratio<=1.10001))
         # A thinner quality budget represents both stable owners, including a retiring source.
-        sources=np.array(((-5,0,-8,.2,7,-1,1,.2,0,-1,0,0,-1,0),(5,0,-8,.2,9,.4,1,.2,0,-1,0,0,-1,0)),dtype='f4')
+        sources=np.array(((-5,0,-8,.2,7,-1,1,.2)+(0.,)*50,(5,0,-8,.2,9,.4,1,.2)+(0.,)*50),dtype='f4')
         gl.glNamedBufferData(wakes,sources.nbytes,sources,gl.GL_DYNAMIC_DRAW)
         for name,value in (('uBeadCount',0),('uSnowCount',0),('uWakeCount',2),('uFizzPer',32)):
             gl.glUniform1i(gl.glGetUniformLocation(program,name),value)
@@ -239,7 +239,7 @@ void main(){vOpacity=1.0;beadInstance();results[gl_InstanceID]=aSphere;gl_Positi
         names=np.empty(2,dtype='u4');gl.glCreateBuffers(2,names);buffers=list(map(int,names))
         result,wakes=buffers
         gl.glNamedBufferData(result,224*16,None,gl.GL_DYNAMIC_READ)
-        source=np.array((0,0,-8,.5,7,-1,1,.5,0,-1,0,0,-1,0),dtype='f4')
+        source=np.array((0,0,-8,.5,7,-1,1,.5)+(0.,)*50,dtype='f4')
         gl.glNamedBufferData(wakes,source.nbytes,source,gl.GL_STATIC_DRAW)
         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,6,result);gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,7,wakes)
         gl.glUseProgram(program);loc=lambda name:gl.glGetUniformLocation(program,name)
