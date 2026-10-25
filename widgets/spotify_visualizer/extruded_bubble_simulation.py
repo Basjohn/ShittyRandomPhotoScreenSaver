@@ -323,6 +323,10 @@ class ExtrudedBubbleSimulation:
         self._time = 0.0
         self._level = 0.0
         self._flash = 0.0
+        self._surge = 0.0             # the flow's beat surge: a quick push on each onset, released over half a second
+        self._onset_mean = 0.0        # the recent onsets' usual weight, so only accents push the flow
+        self._surge_target = 0.0
+        self._drift_shown = 0.0       # drift with its surge, as the bubbles move by it
         self._sustain = 0.0
         self._travel = 0.0
         self._motion_phase = 0.0
@@ -649,11 +653,12 @@ class ExtrudedBubbleSimulation:
         activity = min(1.0, max(idle_rate * rest_motion_boost + 1.6 * level, rest_activity))
         # Onset and sustained lifts stay inside the authored range: the loud handle is the maximum.
         # The passage sets where flow sits in each Range; phrase changes and onsets swing it around that.
-        flow_drive = passage * (0.7 + 0.6 * change_drive)
+        flow_drive = passage * (0.55 + 0.5 * change_drive)    # headroom under the loud handle for the beat surge
         speed_target = _lerp(controls.stream_speed,
                              _soft_top(flow_drive * (1.0 + 0.20 * self._flash + 0.10 * sustain))) * activity
         drift_target = _lerp(controls.drift, _soft_top(flow_drive * (1.0 + 0.15 * sustain))) * activity
-        emission_target = _soft_top(_lerp(controls.emission, flow_drive)
+        # Particles have no beat surge: they keep the full passage share.
+        emission_target = _soft_top(_lerp(controls.emission, passage * (0.7 + 0.6 * change_drive))
                                     + 0.2 * (controls.emission[1] - controls.emission[0]) * self._flash * passage)
         if self._speed is None:
             self._speed, self._drift, self._emission = speed_target, drift_target, emission_target
@@ -664,7 +669,24 @@ class ExtrudedBubbleSimulation:
         emission_release = (0.25 + 1.25 * quiet * quiet) * soft
         self._emission = _follow(self._emission, emission_target, dt, 0.08 * soft,
                                  emission_release + min(0.15, 0.20 * emission_release))
-        speed = self._speed * WORLD_UNIT
+        # The beat surge: each onset pushes the flow toward its loud handle (never past it) and lets go over about
+        # half a second, so the stream visibly answers the beat. The followers above carry the passage only; they
+        # smooth beats away (speed and drift moved 2-4% with the beats on recorded music, audit 2026-10-25).
+        # Only onsets that stand out from the recent ones push (music sends ~10 a second: every one pushing held the
+        # surge as a constant offset, not pulses).
+        if onsets and not music.play_ramping:
+            weight = min(1.0, max(w for _kind, w in onsets))
+            accent = 1.6 * max(0.0, weight - 1.15 * self._onset_mean) / max(0.25, 1.0 - self._onset_mean)
+            self._onset_mean = _follow(self._onset_mean, weight, dt, 1.5, 1.5)
+            self._surge_target = max(self._surge_target, min(1.0, accent))
+        self._surge_target = _follow(self._surge_target, 0.0, dt, 0.02, 0.32)
+        # Eased in over about a tenth of a second: a push, never a step in velocity.
+        self._surge = _follow(self._surge, self._surge_target, dt, 0.1, 0.05)
+        push = self._surge * (0.25 + 0.75 * passage)
+        speed_live = self._speed + max(0.0, high_speed * activity - self._speed) * push
+        drift_live = self._drift + max(0.0, controls.drift[1] * activity - self._drift) * push
+        self._drift_shown = drift_live
+        speed = speed_live * WORLD_UNIT
         # The procedural layers (bead chains, snow) move by this distance, never by time x a changing speed, so a
         # change of speed never makes them jump.
         self._travel += speed * dt
@@ -804,14 +826,14 @@ class ExtrudedBubbleSimulation:
                 continue
             size = (b.radius - _MID_RADIUS[0]) / (_LARGE_RADIUS[1] - _MID_RADIUS[0])
             forward = speed * (0.65 + 0.6 * max(0.0, min(1.0, size)))
-            wander = meander * self._drift * WORLD_UNIT * 0.05 * (
+            wander = meander * drift_live * WORLD_UNIT * 0.05 * (
                 math.sin(t * 0.37 + b.phase) + 0.6 * math.sin(t * 0.83 + 2.1 * b.phase))
             # A slowly changing sine can still be a fast velocity; its amplitude must settle too.
             swing = (controls.sway * WORLD_UNIT * 0.06 * min(1.0, self._motion_rate) * rest_motion_boost
                      * math.sin(t * (1.1 + 0.5 * math.sin(b.phase)) + 3.0 * b.phase))
-            deep = meander * self._drift * WORLD_UNIT * 0.015 * math.sin(t * 0.29 + 1.7 * b.phase)
+            deep = meander * drift_live * WORLD_UNIT * 0.015 * math.sin(t * 0.29 + 1.7 * b.phase)
             steer = _drift_steer(steering, (b.x, b.y, b.z), b.phase, t, direction, across, depth_axis, axis_origin,
-                                 self._drift * WORLD_UNIT)
+                                 drift_live * WORLD_UNIT)
             b.x += dt * (direction[0] * forward + across[0] * (wander + swing) + depth_axis[0] * deep + b.push[0] + steer[0])
             b.y += dt * (direction[1] * forward + across[1] * (wander + swing) + depth_axis[1] * deep + b.push[1] + steer[1])
             b.z += dt * (direction[2] * forward + across[2] * (wander + swing) + depth_axis[2] * deep + b.push[2] + steer[2])
@@ -822,9 +844,9 @@ class ExtrudedBubbleSimulation:
             if not members:
                 continue
             forward = speed * 0.9
-            wander = meander * self._drift * WORLD_UNIT * 0.04 * math.sin(t * 0.31 + c.ident)
+            wander = meander * drift_live * WORLD_UNIT * 0.04 * math.sin(t * 0.31 + c.ident)
             steer = _drift_steer(steering, (c.x, c.y, c.z), 1.3 * c.ident, t, direction, across, depth_axis,
-                                 axis_origin, self._drift * WORLD_UNIT)
+                                 axis_origin, drift_live * WORLD_UNIT)
             c.x += dt * (direction[0] * forward + across[0] * wander + c.push[0] + steer[0])
             c.y += dt * (direction[1] * forward + across[1] * wander + c.push[1] + steer[1])
             c.z += dt * (direction[2] * forward + across[2] * wander + c.push[2] + steer[2])
@@ -1129,7 +1151,7 @@ class ExtrudedBubbleSimulation:
             slots = [float(index[m]) for m in cluster.members if m in index][:CLUSTER_MAX]
             clusters.extend((float(len(slots)), *slots, *([-1.0] * (CLUSTER_MAX - len(slots)))))
         return ExtrudedBubbleSnapshot(self._time, tuple(bubbles), tuple(clusters), level,
-                                      self._flash, direction, speed, self._drift, self._emission, self._sustain,
+                                      self._flash, direction, speed, self._drift_shown, self._emission, self._sustain,
                                       self._travel, self._rays, self._shimmer, self._motion_phase,
                                       self._wakes(dt), self._passage)
 
