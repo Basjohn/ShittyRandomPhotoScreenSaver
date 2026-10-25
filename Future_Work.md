@@ -33,63 +33,31 @@ Do not begin a backend program while modern OpenGL satisfies measured product ne
 If that gate opens, investigate one QRhi-based renderer substrate first. Native D3D/Vulkan escape hatches require a capability
 QRhi cannot expose and must remain isolated rather than becoming parallel permanent engines.
 
-## 3. Deferred visual concepts
+## 3. Visual concepts
 
-Only genuinely deferred concepts live here. Accepted transition membership belongs to the canonical registry and
-`Docs/Reference/Transitions.md`; do not resurrect completed expansion batches as active plan work.
+Accepted transition membership belongs to the canonical registry and `Docs/Reference/Transitions.md`.
 
-- **Volumetric music chamber** — bounded fog volume, light shafts and spectrum-driven emitters.
-- **Audio aurora / ribbon volume** — translucent ribbons with OIT, glow and slow logical-history advection. - Generate mock for promotion possibility
-- **Photo fracture portal** — depth-bearing source shell around a destination-space portal.
-- **Voxel morph field** — deterministic compute/SSBO rearrangement between shapes/topologies, distinct from Voxel Sphere.
-- **Reactive Liquid / Audio Melt Pool** — bounded 2D/2.5D height+velocity field or deformable sheet; do not restart the rejected
-  SDF route or jump directly to full 3D SPH without measured justification.
-- **Holographic depth slices** — layered photo/spectrum planes only if the result reads as actual depth rather than cards.
-- **Procedural storm scene** — lightning, rain, smoke/fog and reflected light after each primitive is independently cheap.
-- **Concrete Rain Visualizer** — rain-on-city-pavement nocturne: a low-camera urban curb/pavement scene where audio drives rainfall density, droplet impact energy, splash crown population, ripple interference and reflected-light distortion without changing the authored street, curb, building silhouettes or light placements. Visual target and deferred contract: `Docs/Future_Work/Concrete_Rain.md` using operator-supplied reference `references/Low and High Reactivity Rain Comparison.png` (left = low react, right = high react). Requires a shared bounded wet-surface/reflection substrate rather than a private effect-only renderer: shallow water-sheet + puddle mask semantics, ripple/crown impact population, splash sheet/particle choreography, reflected-light distortion sampling, raindrop emission lanes with coverage control, and a low-angle framed-camera consumer that preserves geometry while modulating rainfall response. Promote only after each primitive is independently bounded and musically legible.
-- **Usu Moonscape Visualizer** — long-horizon character/world vertical: Usu walks, runs, Naruto-runs, skids/falls/gets up
-  and lies down across a round moon under a starscape, with orbit framing and optional fuzz-tip bloom. Plan, behaviour,
-  reactivity contract, required architecture and gates: `Docs/Future_Work/Usu_Moonscape.md` (supersedes the 2026-10-02
-  snapshot); its remaining Blender authoring work is in `Docs/Future_Work/Usu_Blender_Work.md`. Its missing shared foundations (asset pipeline, skinning, animation graph, secondary motion, felt/fuzz material,
-  shadow maps, sphere world/starscape, world-view projection) are listed below as S19–S27 and are to be side-built by
-  transitions/Visualizer consumers first; a bordered Visualizer consumes the shared §4A framed-camera capability,
-  rather than inventing its own camera input authority. The Usu mode itself stays deferred until the relevant
-  shared foundations are accepted.
+The remaining Visualizer modes are **queued in `Current_Plan.md` §7** (Waveform Ribbon → Reactive Liquid / Melt Pool →
+Concrete Rain → Usu Moonscape), built on the shared 3D primitives of `Current_Plan.md` §6. Their contracts:
+`Docs/Future_Work/Waveform_Ribbon.md`, `Docs/Future_Work/Melt_Pool.md`, `Docs/Future_Work/Concrete_Rain.md`,
+`Docs/Future_Work/Usu_Moonscape.md` (with `Usu_Blender_Work.md`). Other mode concepts were dropped on 2026-10-25; the
+architecture they called for is the shared step in `Current_Plan.md` §6.
 
-### Deferred 3D consumers and missing substrate
+### Usu Moonscape: character/world foundations (deferred until §7.4)
 
-This section defers **generic later consumers and their unused extensions**. Any emitter/particle/wisp/volume or
-camera primitive needed to reproduce Extruded Bubble's examples is active EB work under `Current_Plan.md` §4B;
-it does not wait until after EB. Healthy reactivity is the first recovery slice, not a reduction of its visual scope.
-Promote the unrelated modes after Extruded Bubble only when separately admitted. Retain the order **Reactive Particle Field →
-Terrain/Skyline/Tunnel → Waveform Ribbon → Deformable Blob Sphere**. Usu remains governed by its focused plan.
-Each promoted mode needs recorded musical controls, its own accepted visual target and bounded measured cost.
+Usu walks, runs, Naruto-runs, skids/falls/gets up and lies down across a round moon under a starscape, with orbit
+framing and optional fuzz-tip bloom. Its missing foundations, proven one at a time in offscreen harnesses before
+combining (no physics engine, no extra animation clock):
 
-- **G2 / S25, shared shadows:** one fitted directional depth map, bounded soft PCF/bias, caster/receiver admission,
-  resize/teardown/dormancy and tier cost on a real test scene. Build when a consumer needs an approved receiver;
-  EB currently has none. This is also Usu S25, not a second shadow foundation or revival of rejected Extruded shadows.
-- **G4 / S18, particle/ribbon extensions:** inventory CompactedPopulation/sprite/streak helpers first; add bounded
-  lifetimes, ribbons, collision or indirect draws only for a real consumer. Keep deterministic admission/retirement
-  and shared G3A transparency. A proven EB need promotes only the small needed primitive, not the whole engine.
-- **G5 / S18, lightning then volumes:** bounded procedural geometry/light before reduced-resolution smoke/fog/fire,
-  advection and reprojection. Require consumer-specific quality/cost proof; no permanent targets/separate cadence.
-  This generic progression does not constrain EB's required ember/gas composition: build its needed primitive in
-  EB recovery when the example/lab comparison demands it, using the shared substrate where reusable.
-- **Reactive Particle Field:** establish capacity, lifetime and response target before collision; consume G4 on demand.
-  **Terrain/Skyline/Tunnel:** one bounded geometry/camera slice at a time, fixed loudness semantics. **Waveform Ribbon:**
-  real waveform history plus G4 ribbon proof. **Deformable Blob Sphere:** deformation/normal/geometry bounds and
-  independent measured cost before materials/effects.
-- **S19 → S20:** deterministic validated Blender/glTF bake with provenance-stamped packed assets, followed by shared
+- **S19 → S20:** deterministic validated Blender/glTF bake with provenance-stamped packed assets, then shared
   material/instancing static-mesh rendering. Runtime consumes packed data, not Blender authoring graphs.
 - **S21 → S22 → S23:** bounded GPU joint palettes/skinning; logical-time clip sampling/crossfades/masks/additive
-  layers/root motion/eye tracks; deterministic secondary-motion springs. Prove each in an offscreen harness before
-  combining. No physics engine or extra animation clock. Usu static silhouette approval remains a separate hard gate.
+  layers/root motion/eye tracks; deterministic secondary-motion springs. Usu static silhouette approval remains a
+  separate hard gate.
 - **S24:** opt-in felt/sheen/bounded fuzz shells and emitted tips; preserve existing shaders and measure tier costs.
-  **S25:** reuse G2. **S27 → S26:** prove world-view projection distinct from the photo-plane camera, then seeded
-  sphere/crater/stars and logical travel. Bordered consumers use shared FC input/persistence; unframed world travel
-  may have different projection semantics, never duplicate framed-camera authority.
-- **Combinations:** electrical terrain, smoke-lit fracture, ember/dust destruction, refractive glass lit by bolts,
-  volumetric shockwaves and photo-colour IBL only after component proofs; one promoted effect at a time.
+- **S25:** the shared shadows of `Current_Plan.md` §6 (S3D-6). **S27 → S26:** prove world-view projection distinct from
+  the photo-plane camera, then seeded sphere/crater/stars and logical travel. Bordered consumers use the shared framed
+  camera input/persistence; unframed world travel may differ in projection, never duplicate framed-camera authority.
 
 ### Settings live preview (aspiration, not scheduled)
 
@@ -103,10 +71,6 @@ render-thread resource retirement and zero idle polling/work. No implementation 
 R128 hard-disables cast shadows after three successive physically rejected treatments (R125–R127). The existing Settings controls are greyed out, saved values are retained for compatibility, and the renderer never draws the rejected pass or expands Edit bounds for it. Reopen only when there is a new, operator-approved visual target and a renderer design consistent with the canvas and global shadow direction. Do **not** silently re-enable the old GLSL projection. The failed approaches and visual evidence are in `Docs/Historical_Bugs/R-125_to_R-128_Extruded_Cast_Shadow_Failure.md`.
 
 
-
-## Neon Lake framed-camera keyboard audit (deferred; operator 2026-10-21)
-
-Audit whether accepted Neon Lake inherited the new EB-only physical navigation or still uses the old WASD orbit. It should eventually support the framed-camera distinction (Q/E yaw, Shift+W/S pitch, camera-facing WASD physical travel) through the *same camera/navigation authority*, never EB-specific underwater offsets pasted into the landscape. The required terrain safety gate is **no vertical orbit below geometry or viewing the underside of the world**; preserve accepted terrain camera, FOV, horizon, authored presets and clip bounds. No Neon Lake camera behavior changes in the current EB keyboard slice. Live tracking: `Current_Plan.md` EB-R31.
 
 ## Neon Lake water extension (operator-requested, deferred 2026-10-18)
 
@@ -128,7 +92,6 @@ none is a blocker on the accepted Neon Lake baseline or current Extruded Bubble 
 
 Keep these deferred unless new evidence or an explicit request promotes them:
 
-- **Ctrl+Z in every Settings visual editor** (operator 2026-10-24): each visual editor (camera, shape, curve, colour/gradient and similar canvases) undoes at least its last 2-3 actions with Ctrl+Z (Ctrl+Shift+Z / Ctrl+Y redo). In-memory only: nothing persists, not even past the bucket closing. Shared owner: `ui/widgets/edit_history.py` (`EditHistory`, depth 3), adopted first by the framed Camera Position editor (24 Oct; mapper emits `undoRequested`/`redoRequested`). Remaining: the other visual editors, and moving the Neon terrain editor's own unbounded stack onto it;
 - ImageWorker lean-spawn entry and residual memory-footprint follow-up;
 - `--usage` observer-cost refinement and residual handle-slope attribution;
 - migrate `main.py`'s `SRPSS_PROFILE_CPU` environment gate to an explicit profiling CLI/sidecar boundary; current CONFIG
@@ -159,4 +122,4 @@ kept here as a museum list.
 
 ### Shared widget glyph reveal / developer captures: R38 follow-up (not closed)
 
-Current implementation checkpoint and prioritized open action-handoff requirements live in `Current_Plan.md` R38. The global Edit-only glyph handoff (existing session first, then existing command) remains required across all families; no new edit model or repaint/polling service. Diagnostic `\` capture is source/diagnostic only and requires native evidence of custom GL pixels before treating it as an accepted substitute for Snipping Tool. The UI presentation transition is not acceptance.
+The open action-handoff requirement lives in `Current_Plan.md` §2B (R38). The global Edit-only glyph handoff (existing session first, then existing command) remains required across all families; no new edit model or repaint/polling service. Diagnostic `\` capture is source/diagnostic only and requires native evidence of custom GL pixels before treating it as an accepted substitute for Snipping Tool. The UI presentation transition is not acceptance.
