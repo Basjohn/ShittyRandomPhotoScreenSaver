@@ -136,9 +136,9 @@ def scene_surface(grid, basin, gu, gv):
     curve = np.where(inside, curve, curve * (1.0 - _smoothstep(1.1, 2.2, outside)) + 0.065 * _smoothstep(1.1, 2.2, outside))
     water = base == 0.0
     land = curve * _smoothstep(0.0, 0.015, base)
-    # The scene's shallow convex distant world: the land falls away toward a real horizon.
-    land = land - 0.38 * np.maximum(0.0, outside - 0.20) ** 2
-    return np.where(water, 0.0, land), water
+    # The scene's shallow convex distant world: land and water alike fall away toward a real horizon.
+    drop = 0.38 * np.maximum(0.0, outside - 0.20) ** 2
+    return np.where(water, -drop, land - drop), water
 
 
 def surface_points(size: int, heights, basin, u, v, terrain_height: float = 1.0) -> np.ndarray:
