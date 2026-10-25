@@ -47,6 +47,7 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 New failures need exact-tree reproduction and owner-level repair, never tolerance changes or preset edits.
 Triage history: `Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md`.
 
+- [ ] **Flaky hint-fade test:** `test_visualizer_control_hints.py::test_native_hover_expires_...` (line 165) waits wall-clock time then needs opacity exactly 0; failed once in a full-file run, passed 5/5 alone (2026-10-26). Wait on the fade's completion (or poll to a bound) instead of fixed `qWait`s.
 - [ ] **`.venv` launcher warning** `Failed to find real location of ...pythoncore-3.14-64\\python.exe`: harmless so
   far (commands exit 0); find its cause without an environment-variable workaround.
 - [~] **Authored-data test hygiene:** tests never freeze mutable presets, Settings values, theme contents or pack
