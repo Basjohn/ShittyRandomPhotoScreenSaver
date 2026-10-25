@@ -9,7 +9,7 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 
 **Work strictly in this order:**
 
-1. **§1 Neon Lake**: the remaining open item and validations.
+1. **§1 Neon Lake**: validations awaiting your look.
 2. **§2 Everything else before the next mode**: fixes, then Settings/UX, then feature work, then release media (§3).
    §5 is a watchlist observed during normal use, not a task queue.
 3. **§6 Shared 3D architecture**: one step that builds the reusable 3D primitives, each proven on its own harness.
@@ -33,11 +33,6 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 
 ## 1. Neon Lake (now)
 
-- [ ] **Continued edge water stays flat while the far land curves away:** a stream reaching the grid's edge continues
-  as water at height 0 while the distant land drops with the world's curvature, so far out it stands as a raised
-  flat-topped causeway to the horizon (outside the grid, so not paintable). Preset 4's channel showed it; its data now
-  closes the channel at the back edge (25 Oct). Fix in the shader (`basinSurface` / the skyline: continued water follows
-  the same distant drop), then re-check every preset with edge water.
 - [~] **Neon Lake camera parity — awaiting native validation:** framed physical camera (flight, yaw/pitch, dolly, pan,
   Camera Position, FOV, R home, hints, level horizon, eye floor over land/water) and Auto Rotate. Open: native
   all-angle, near-horizon, aspect and DPR checks. This also covers the old "framed-camera keyboard audit".
@@ -82,10 +77,12 @@ Triage history: `Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md`.
   - [ ] Make Advanced more prominent with the existing larger bucket; move Technical controls (and EB Camera) under it.
   - [ ] Expose overall/per-mode 3D quality in Visualizer bodies as views of the existing 3D tab keys (per-mode AA/Bloom
     via `resolve_scene_quality`), never duplicated persisted settings.
-- [ ] **Ctrl+Z in every Settings visual editor:** each visual editor (camera, shape, curve, colour/gradient and similar
-  canvases) undoes its last 2-3 actions (Ctrl+Shift+Z / Ctrl+Y redo), in memory only. Shared owner
-  `ui/widgets/edit_history.py` (`EditHistory`, depth 3), already used by the framed Camera Position editor; adopt it in
-  the others and move the Neon terrain editor's own unbounded stack onto it.
+- [ ] **Ctrl+Z / redo for every slider and visual editor in Settings:** every slider (and Range/Triangle/Direction
+  control) and every visual editor (camera, terrain, shape, curve, colour/gradient and similar canvases) undoes its
+  recent changes with Ctrl+Z (Ctrl+Shift+Z / Ctrl+Y redo). Short memory is enough (a few steps per control or editor),
+  for the current Settings session only, never persisted. Shared owner `ui/widgets/edit_history.py` (`EditHistory`),
+  already used by the framed Camera Position editor; adopt it once at the shared slider/control builders rather than
+  per page, and move the Neon terrain editor's own unbounded stack onto it. A slider drag counts as one step.
 - [~] **Hierarchy connector rails — awaiting validation:** connectors derive from visible widget geometry; review the
   operator theme and physical mixed-DPI movement (native captures `tmp/settings_tree_native/`).
 - [ ] **Display Settings capacity:** replace the four fixed monitor checkboxes with current-screen rows; preserve

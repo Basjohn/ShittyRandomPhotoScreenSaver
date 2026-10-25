@@ -243,6 +243,13 @@ float basinEnergy(vec2 uv) {
     float level=mix(uBars[i0],uBars[i1],fract(f));
     return clamp(pow(clamp(level,0.0,1.0),1.15)*clamp(uHeightScale,1.0,1.85),0.0,1.0)*uHorizon/0.6;
 }
+// The shallow convex distant world: everything past the authored basin's immediate continuation falls away
+// toward a real horizon, water included (a stream carried on from the grid's edge stayed flat while the land
+// beside it fell, and stood above it as a long raised causeway to the horizon).
+float basinDistantDrop(vec2 uv) {
+    float distance=max(0.0,basinOutside(uv)-0.20);
+    return 0.38*distance*distance;
+}
 float basinLandHeight(vec2 uv,float base,float curved) {
     vec2 p=vec2((uv.x*2.0-1.0)*uHalfWidth,-uv.y*SHOCKWAVE_DEPTH);
     float height=curved*smoothstep(0.0,0.015,base)*uLand.x*(1.0+0.16*uLand.y*basinDetail(p));
@@ -253,8 +260,7 @@ float basinLandHeight(vec2 uv,float base,float curved) {
     // A shallow convex distant world produces a real terrain/sky tangency,
     // rather than an exposed remote mesh edge or an infinitely flat plane.
     // The authored basin and its immediate continuation are untouched.
-    float distance=max(0.0,basinOutside(uv)-0.20);
-    return height-0.38*distance*distance;
+    return height-basinDistantDrop(uv);
 }
 float basinBankDistance(vec2 uv) {
     // Stored distances are in grid uv; the band and the result are in basin uv.
@@ -296,7 +302,7 @@ vec3 basinSurface(vec2 uv, out float crest, out float energy, out float curved) 
     float ripple=WATER_PEAK*tanh(wave.x/WATER_PEAK)+0.0025*uWaterDetail*sin(15.0*p.x+18.0*p.y+uTime);
     if (water) {
         float bank=smoothstep(0.0,uWaterBankBand,basinBankDistance(uv));
-        height = max(bank,wet)*ripple;
+        height = max(bank,wet)*ripple-basinDistantDrop(uv);
     } else {
         height = basinLandHeight(uv,base,curved)+wet*ripple;
     }
@@ -311,7 +317,7 @@ vec4 basinVisibleBody(vec3 eye,vec3 ray,out vec3 hitPoint) {{
         vec2 uv=vec2(hitPoint.x/(2.0*uHalfWidth)+0.5,-hitPoint.z/SHOCKWAVE_DEPTH);
         if (basinOutside(uv)<1e-6) {{
             float base=basinBase(uv);
-            if (!sceneHeightfieldWater(base) && hitPoint.y<=basinLandHeight(uv,base,basinCurve(uv)))
+            if (hitPoint.y<=(sceneHeightfieldWater(base) ? -basinDistantDrop(uv) : basinLandHeight(uv,base,basinCurve(uv))))
                 body=vec4(0.0);
         }}
     }}
@@ -617,7 +623,7 @@ void main() {
     float base=basinBase(aUv);
     float smoothed=basinCurve(aUv);
     vec3 world=vec3((aUv.x*2.0-1.0)*uHalfWidth,
-                    sceneHeightfieldWater(base) ? 0.0 : basinLandHeight(aUv,base,smoothed),
+                    sceneHeightfieldWater(base) ? -basinDistantDrop(aUv) : basinLandHeight(aUv,base,smoothed),
                     -aUv.y*SHOCKWAVE_DEPTH);
     vec4 clip=basinClip(world);
     float width=mix(1.8,uHorizonThickness,smoothstep(0.0,0.25,basinOutside(aUv)));
