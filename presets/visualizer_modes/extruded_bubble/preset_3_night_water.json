@@ -7,7 +7,7 @@
     "widgets": {
       "spotify_visualizer": {
         "extruded_bubble_adaptive_sensitivity": true,
-        "extruded_bubble_aperture": 0.4,
+        "extruded_bubble_aperture": 0.5,
         "extruded_bubble_audio_block_size": 512,
         "extruded_bubble_auto_rotate": false,
         "extruded_bubble_auto_rotate_after": 20,
@@ -15,21 +15,22 @@
         "extruded_bubble_band_contrast": 0.5,
         "extruded_bubble_bar_count": 32,
         "extruded_bubble_bead_chains": [
-          5,
-          8
+          6,
+          9
         ],
-        "extruded_bubble_bead_size": 1.0,
+        "extruded_bubble_bead_scatter": 0.25,
+        "extruded_bubble_bead_size": 1.1,
         "extruded_bubble_beam_width": 1.0,
         "extruded_bubble_breathing": [
           0.5,
           0.6
         ],
-        "extruded_bubble_bubble_spread": 1.0,
+        "extruded_bubble_bubble_spread": 2.6,
         "extruded_bubble_camera_fov": 45,
         "extruded_bubble_camera_position": [
-          0.0,
-          0.0,
-          0.0
+          -0.388364,
+          -0.015365,
+          -0.787878
         ],
         "extruded_bubble_clarity": 0.0,
         "extruded_bubble_collision": [
@@ -40,9 +41,9 @@
         "extruded_bubble_collision_scope": "All",
         "extruded_bubble_columns": 0.0,
         "extruded_bubble_depth_colour": [
-          4,
-          8,
-          12,
+          2,
+          6,
+          11,
           255
         ],
         "extruded_bubble_drift": [
@@ -51,35 +52,40 @@
         ],
         "extruded_bubble_drift_direction": "Wander",
         "extruded_bubble_dynamic_floor": false,
-        "extruded_bubble_emission_geometry": "BEAM",
-        "extruded_bubble_exposure": 0.82,
-        "extruded_bubble_focus": 0.5,
-        "extruded_bubble_haze": 0.2,
+        "extruded_bubble_emission_geometry": "SCENE",
+        "extruded_bubble_exposure": 0.85,
+        "extruded_bubble_focus": 0.4,
+        "extruded_bubble_haze": 0.3,
         "extruded_bubble_idle": 0.5,
         "extruded_bubble_input_gain": 1.0,
         "extruded_bubble_iridescence": 0.3,
         "extruded_bubble_large_bubbles": [
-          6,
-          14
+          4,
+          12
         ],
-        "extruded_bubble_large_size": 1.0,
+        "extruded_bubble_large_size": 0.8,
         "extruded_bubble_light_colour": [
-          163,
-          177,
-          191,
+          150,
+          172,
+          205,
           255
         ],
         "extruded_bubble_light_direction": [
-          0.0,
-          38.7
+          -0.3265,
+          0.6929,
+          -0.5933,
+          -0.0301,
+          -1.0,
+          0.5933
         ],
         "extruded_bubble_light_strength": 1.0,
+        "extruded_bubble_light_tint": 0.45,
         "extruded_bubble_light_type": "Sunlit Surface",
-        "extruded_bubble_lighting_coverage": "BEAM",
+        "extruded_bubble_lighting_coverage": "SCENE",
         "extruded_bubble_manual_floor": 0.12,
         "extruded_bubble_mid_bubbles": [
-          20,
-          48
+          40,
+          90
         ],
         "extruded_bubble_particle_bands": false,
         "extruded_bubble_particle_colour": [
@@ -92,10 +98,10 @@
         "extruded_bubble_particle_glow_reactivity": 0.0,
         "extruded_bubble_particle_size": 1.0,
         "extruded_bubble_particle_spread": 1.0,
-        "extruded_bubble_particle_warmth": 0.3,
+        "extruded_bubble_particle_warmth": 0.1,
         "extruded_bubble_particles": [
-          0.1,
-          0.35
+          0.02,
+          0.05
         ],
         "extruded_bubble_ray_flicker": 0.3,
         "extruded_bubble_ray_path": [
@@ -107,39 +113,43 @@
           0.0
         ],
         "extruded_bubble_ray_reach": 0.6,
-        "extruded_bubble_ray_softness": 0.35,
+        "extruded_bubble_ray_softness": 0.75,
         "extruded_bubble_rays": [
-          0.3,
-          0.5
+          0.15,
+          0.35
         ],
         "extruded_bubble_rays_enabled": true,
         "extruded_bubble_rim_glow": 1.0,
         "extruded_bubble_sensitivity": 0.4,
-        "extruded_bubble_size_variety": 0.6,
+        "extruded_bubble_size_variety": 0.8,
         "extruded_bubble_small_pulse": [
           0.2,
           0.8
         ],
-        "extruded_bubble_small_size": 1.0,
+        "extruded_bubble_small_size": 0.7,
         "extruded_bubble_smoothing": 0.5,
         "extruded_bubble_softness": 0.1,
         "extruded_bubble_sparkle": 1.0,
         "extruded_bubble_stream_direction": [
+          -0.0896,
+          -1.0,
           0.0,
-          0.0
+          -0.0697,
+          0.9961,
+          -0.0
         ],
         "extruded_bubble_stream_speed": [
           0.25,
           0.8
         ],
-        "extruded_bubble_surface_brightness": 1.0,
+        "extruded_bubble_surface_brightness": 0.5,
         "extruded_bubble_sustained": 0.6,
         "extruded_bubble_sway": 0.4,
         "extruded_bubble_veils": 0.0,
         "extruded_bubble_water_colour": [
           6,
-          12,
           18,
+          30,
           255
         ],
         "mode": "extruded_bubble"

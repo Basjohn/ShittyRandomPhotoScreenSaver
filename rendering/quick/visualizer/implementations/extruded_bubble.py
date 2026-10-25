@@ -468,6 +468,7 @@ class QuickExtrudedBubbleRenderer:
             "uBeadsPerChain": _BEADS_PER_CHAIN,
             "uBeadCount": beads, "uBeadSize": float(parameter(parameters, "extruded_bubble_bead_size"))
             * (0.9 + 0.2 * max(0.0, min(1.0, float(state.level)))),
+            "uBeadScatter": float(parameter(parameters, "extruded_bubble_bead_scatter")),
             "uChainFill": chain_fill, "uChainActivity": idle_activity,
             "uSnowFill": snow_fill, "uFizzFill": fizz_fill,
             "uBeadTravel": _BEAD_CLIMB * float(state.travel),
