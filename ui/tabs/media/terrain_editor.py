@@ -136,6 +136,7 @@ class TerrainCanvas(QWidget):
         self._orbit = None
         self._scene = {key: _qcolor(_scene_default(key)) for key in _SCENE_KEYS}
         self._body = {key: _scene_default(key) for key in _BODY_KEYS}
+        self._terrain_height = float(_scene_default("terrain_height"))   # the scene's land scale
         self._body_drag = None       # the authored distance while the Sun / Moon is being dragged
         self._body_hover = False
         self.mode = "Raise"
@@ -193,6 +194,8 @@ class TerrainCanvas(QWidget):
         for key in _BODY_KEYS:
             if "shockwave_grid_" + key in config:
                 self._body[key] = config["shockwave_grid_" + key]
+        if "shockwave_grid_terrain_height" in config:
+            self._terrain_height = float(config["shockwave_grid_terrain_height"])
         if self._body_drag is None:
             self._angled = None
             self.update()
@@ -326,7 +329,8 @@ class TerrainCanvas(QWidget):
             projection = angled.project_terrain(self._size, self._heights, self._basin,
                                                 (area.left(), area.top(), area.width(), area.height()),
                                                 yaw=self._yaw, pitch=self._pitch,
-                                                body=self._body_args() if self._body_shown() else None)
+                                                body=self._body_args() if self._body_shown() else None,
+                                                terrain_height=self._terrain_height)
             self._angled = (self._paint_angled_terrain(projection), projection, size)
         return self._angled[0], self._angled[1]
 
@@ -349,30 +353,47 @@ class TerrainCanvas(QWidget):
             body = angled.body_preview(projection, *self._body_args())
             if body[0] is not None:
                 self._paint_body(painter, QPointF(float(body[0][0]), float(body[0][1])), max(4.0, body[1]))
-        grid = np.asarray(self._heights, dtype=np.float64).reshape(self._size, self._size)
-        stride_index = np.unique(np.r_[np.arange(0, self._size, projection.stride), self._size - 1])
-        corner = grid[np.ix_(stride_index, stride_index)]
-        mean = (corner[:-1, :-1] + corner[1:, :-1] + corner[:-1, 1:] + corner[1:, 1:]) / 4.0
-        wet = ((corner[:-1, :-1] <= 0.0).astype(float) + (corner[1:, :-1] <= 0.0) + (corner[:-1, 1:] <= 0.0)
-               + (corner[1:, 1:] <= 0.0)) / 4.0
-        light = angled.quad_light(projection)
+        painter.setClipRect(area)
+        fill, water, line, crest = scene["terrain_fill_color"], scene["water_color"], scene["line_color"], scene["crest_color"]
+        haze = _mix(_scaled(scene["sky_color"], 1.1, 255), scene["line_color"], 0.25, 255)
         depth = projection.depth
         near, far = float(depth.min()), float(depth.max())
-        fill, water, line, crest = scene["terrain_fill_color"], scene["water_color"], scene["line_color"], scene["crest_color"]
-        peak = max(1e-6, float(mean.max()))
-        for row, col in angled.quad_order(projection):
-            height, shade, wetness = float(mean[row, col]), float(light[row, col]), float(wet[row, col])
-            distance = (float(depth[row, col]) - near) / max(far - near, 1e-6)
+        peak = max(1e-6, float(projection.height.max()))
+        quads = []      # (depth, corners, mean height, shade, wetness, distance 0 near .. 1 far, continued)
+        for mesh in (None, projection.beyond):
+            heights_ = projection.height if mesh is None else mesh["height"]
+            wet_ = (projection.water if mesh is None else mesh["water"]).astype(float)
+            points = screen if mesh is None else mesh["screen"]
+            depths = depth if mesh is None else mesh["depth"]
+            world = projection.world if mesh is None else mesh["world"]
+            mean = (heights_[:-1, :-1] + heights_[1:, :-1] + heights_[:-1, 1:] + heights_[1:, 1:]) / 4.0
+            wet = (wet_[:-1, :-1] + wet_[1:, :-1] + wet_[:-1, 1:] + wet_[1:, 1:]) / 4.0
+            centre = (depths[:-1, :-1] + depths[1:, :-1] + depths[:-1, 1:] + depths[1:, 1:]) / 4.0
+            light = angled.quad_light(world)
+            for row in range(mean.shape[0]):
+                for col in range(mean.shape[1]):
+                    if mesh is not None and mesh["inside"][row, col]:
+                        continue
+                    if float(centre[row, col]) <= 1e-3:
+                        continue
+                    quads.append((float(centre[row, col]),
+                                  [points[r, c] for r, c in ((row, col), (row, col + 1), (row + 1, col + 1), (row + 1, col))],
+                                  float(mean[row, col]), float(light[row, col]), float(wet[row, col]),
+                                  (float(centre[row, col]) - near) / max(far - near, 1e-6), mesh is not None))
+        quads.sort(key=lambda quad: -quad[0])
+        for _depth, corners, height, shade, wetness, distance, continued in quads:
             land = _scaled(fill, 0.35 + 0.75 * shade, 255)
             lake = _scaled(water, 0.55 + 0.3 * shade, 255)
             ground = _mix(land, lake, wetness, 255)
-            glow = 1.0 - 0.7 * distance
+            # The continuation (the scene's, not paintable) dims into the haze toward the horizon.
+            fog = max(0.0, min(1.0, 0.35 + 0.45 * (distance - 1.0))) if continued else 0.0
+            ground = _mix(ground, haze, fog, 255)
+            glow = max(0.0, 1.0 - 0.7 * min(distance, 1.0)) * (0.55 if continued else 1.0) * (1.0 - fog)
             ridge = max(0.0, min(1.0, height / peak))
             edge = _mix(line, crest, ridge ** 1.5, round(255 * glow * (1.0 - 0.75 * wetness)))
-            painter.setPen(QPen(edge, 1.25 - 0.5 * distance))
+            painter.setPen(QPen(edge, max(0.5, 1.25 - 0.5 * min(distance, 1.5))))
             painter.setBrush(ground)
-            painter.drawPolygon(QPolygonF([QPointF(*screen[r, c]) for r, c in
-                                           ((row, col), (row, col + 1), (row + 1, col + 1), (row + 1, col))]))
+            painter.drawPolygon(QPolygonF([QPointF(float(x), float(y)) for x, y in corners]))
         if self._basin != (0, 0, self._size - 1):
             # The scene's basin, draped over the ground of a grid reaching toward the horizon.
             x0, y0, cells = self._basin
@@ -421,11 +442,10 @@ class TerrainCanvas(QWidget):
 
     def _draped(self, projection, uvs) -> QPolygonF:
         """Screen points of grid ``uvs`` resting on the terrain."""
-        record = {"size": self._size, "heights": self._heights}
         u = np.array([p[0] for p in uvs])
         v = np.array([p[1] for p in uvs])
-        h = np.array([sample_heightfield(record, a, b) for a, b in uvs])
-        screen, _depth = projection.project(angled.world_points(self._size, self._basin, u, v, h))
+        screen, _depth = projection.project(angled.surface_points(self._size, self._heights, self._basin, u, v,
+                                                                  self._terrain_height))
         return QPolygonF([QPointF(float(x), float(y)) for x, y in screen])
 
     def _radius(self) -> float:

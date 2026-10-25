@@ -463,6 +463,10 @@ The Sun / Moon (Moon with its phase) appears on a sky dome round the basin at th
 direction its authored position names from the scene's reference viewpoint and at its apparent size; dragging it
 sets Position X / Y / Z at the same authored distance (so its size never changes), as one Custom edit and one
 save. The view follows every Setting it draws (`shockwave_grid_builder.SCENE_PREVIEW_KEYS`).
+The surface it draws is the scene's own (`terrain_angled_view.scene_surface`, the CPU mirror of `basinCurve` /
+`basinLandHeight`): the smooth cubic land with its soft banks at the scene's Terrain Height, never the raw cells (a
+first cut drew raw cells at a fixed half height: stepped banks, flattened hills), and past the grid the scene's
+continuation (dimming into the haze, not paintable), so a stream at the edge visibly flows on to the horizon.
 
 ## Layered water (2026-10-24)
 

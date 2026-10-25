@@ -128,8 +128,8 @@ def _screen_of(canvas, u, v):
     from ui.tabs.media import terrain_angled_view as angled
     projection = canvas._angled_view()[1]
     record = canvas.get_heightfield()
-    world = angled.world_points(record["size"], heightfield_basin(record), np.array(u), np.array(v),
-                                np.array(sample_heightfield(record, u, v)))
+    world = angled.surface_points(record["size"], record["heights"], heightfield_basin(record), np.array(u),
+                                  np.array(v), canvas._terrain_height)
     x, y = projection.project(world)[0]
     return QPointF(float(x), float(y))
 
@@ -139,13 +139,13 @@ def test_the_angled_view_picks_the_surface_it_draws_and_paints_there(qtbot):
     from rendering.gl_programs.heightfield import sample_heightfield
     terrain = extend_heightfield(_stream_terrain(), *horizon_extension_cells(_stream_terrain()))
     editor, canvas = _angled_editor(qtbot, terrain)
-    # Near vertices that top their neighbourhood (nothing beside them can hide them) pick back to their own
-    # uv; one at a cliff's foot would rightly pick the wall in front of it.
+    # Near vertices that top their own row and the row in front (nothing nearer can hide them; the rows behind are
+    # farther) pick back to their own uv; one at a cliff's foot would rightly pick the wall in front of it.
     from PySide6.QtCore import QPointF
     projection = canvas._angled_view()[1]
     heights = projection.world[..., 1]
-    flat = [(row, col) for row in (1, 2) for col in range(1, heights.shape[1] - 1)
-            if heights[row - 1:row + 2, col - 1:col + 2].max() <= heights[row, col]]
+    flat = [(row, col) for row in (0, 1, 2) for col in range(1, heights.shape[1] - 1)
+            if heights[max(0, row - 1):row + 1, col - 1:col + 2].max() <= heights[row, col] + 1e-9]
     assert len(flat) >= 3
     for row, col in flat:
         picked = canvas._uv(QPointF(*projection.screen[row, col]))
@@ -179,3 +179,26 @@ def test_turning_the_angled_view_never_changes_the_terrain(qtbot):
     assert not emitted and canvas.get_heightfield() == terrain
     editor.view.setCurrentText("Top")                  # the top map is unchanged by the angled view
     assert canvas.get_heightfield() == terrain
+
+
+def test_the_angled_view_draws_the_scenes_own_surface_and_its_continuation():
+    """The 3/4 view's surface is the scene's: the smooth cubic land (not raw cells), water where the scene has it, and
+    past the grid the scene's continuation (a stream at the edge flows on as water)."""
+    from rendering.gl_programs.heightfield import sample_heightfield, sample_heightfield_curve
+    from rendering.gl_programs.neon_terrain_extent import basin_continuation
+    from ui.tabs.media import terrain_angled_view as angled
+    record = _stream_terrain()
+    grid = np.asarray(record["heights"]).reshape(record["size"], record["size"])
+    basin = heightfield_basin(record)
+    for u, v in ((0.05, 0.05), (0.2, 0.9), (0.95, 0.4)):
+        land, water = angled.scene_surface(grid, basin, np.array(u), np.array(v))
+        assert sample_heightfield(record, u, v) >= 0.015          # full land: no shore ramp
+        assert not bool(water) and float(land) == pytest.approx(sample_heightfield_curve(record, u, v), abs=1e-9)
+    for u, v in ((0.5, 1.6), (-0.4, 0.3), (1.3, 1.2)):
+        _land, water = angled.scene_surface(grid, basin, np.array(u), np.array(v))
+        assert bool(water) == (basin_continuation(record, u, v) == 0.0)
+    assert bool(angled.scene_surface(grid, basin, np.array(0.5), np.array(1.6))[1])     # the channel runs on
+    # Terrain Height scales the drawn land exactly.
+    tall = angled.surface_points(record["size"], record["heights"], basin, np.array([0.1]), np.array([0.1]), 2.0)
+    low = angled.surface_points(record["size"], record["heights"], basin, np.array([0.1]), np.array([0.1]), 1.0)
+    assert tall[0, 1] == pytest.approx(2.0 * low[0, 1])
