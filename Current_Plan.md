@@ -47,11 +47,13 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 New failures need exact-tree reproduction and owner-level repair, never tolerance changes or preset edits.
 Triage history: `Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md`.
 
-- [ ] **Settings-open lifecycle barrier timeout after framed 3D use:** intermittent, more common in long sessions,
-  since Neon Lake (the first framed 3D Visualizer). 24 Oct 16:35:19: `[LIFECYCLE_BARRIER] timeout reason=settings`
-  with every QObject destroyed but Python owners `QuickDisplayUnit` and `QuickDisplayVisualizerOwner` still alive (a
-  lingering Python reference, likely on the framed visualizer/camera path). Preserved run:
-  `logs/preserved/2026-10-24_settings_barrier_timeout/` (git-ignored). Find the referrer; never weaken the barrier.
+- [~] **Settings-open lifecycle barrier timeout — fix landed, awaiting natural recurrence check (25 Oct):** the
+  surviving `QuickDisplayUnit` / `QuickDisplayVisualizerOwner` were cyclic garbage, not held: the first retirement
+  completed only through the startup-freeze thaw sweep (collected 13207), later retirements had no sweep, and the RUN
+  policy ran one gen2 collection all session, so the barrier waited on a deep scan that never came. The barrier now
+  asks the GC policy for one sweep per retirement once all native roots are gone (`collect_retirement_cycles`), and
+  logs `[LIFECYCLE_BARRIER] retirement sweep ... released_cyclic=[...]`. In long sessions with several Settings
+  round trips, confirm no timeout; a timeout now means a genuine held reference (owners listed under `still_held`).
 - [ ] **`.venv` launcher warning** `Failed to find real location of ...pythoncore-3.14-64\\python.exe`: harmless so
   far (commands exit 0); find its cause without an environment-variable workaround.
 - [~] **Authored-data test hygiene:** tests never freeze mutable presets, Settings values, theme contents or pack
