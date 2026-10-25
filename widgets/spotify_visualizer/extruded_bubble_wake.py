@@ -29,7 +29,7 @@ HISTORY_SECONDS = 8.0         # the oldest water a trail can still show
 ENTRAIN = 0.45                # share of the bubble's velocity its wake water is first dragged with ..
 ENTRAIN_SECONDS = 0.7         # .. decaying over this
 FLOW = 0.012 * WORLD_UNIT     # the water's own slow swirl (world units a second): every trail drifts in it alike
-LENGTH = (7.0, 15.0)          # a trail's longest reach, in its bubble's radii (stable per bubble)
+LENGTH = (7.7, 16.5)          # a trail's longest reach, in its bubble's radii (stable per bubble)
 DIFFUSION = 1.2               # how fast the disturbed water smooths out (viscosity): older wiggles relax into sweeps
 RADIUS_SECONDS = 0.4          # the wake's body follows its bubble's size this slowly (the beat swell is the root's)
 

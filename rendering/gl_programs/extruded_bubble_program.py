@@ -1205,6 +1205,7 @@ float scenePathFade(vec3 p, vec3 centre, vec3 halfExt, float travelled, float sp
 # fizz beads (_BEAD_GLSL) both follow it, so the beads flow inside their veil. Each path is the water the bubble has
 # passed through (the simulation's WakePath: sampled history, dragged after the bubble a moment, then drifting with the
 # water), so the trail shows where the bubble went and the music steers only the bubble.
+TRAIL_FADE = 0.31   # where a trail (its sheet and its beads) begins to thin, as a share of its length
 _WAKE_PATH_GLSL = """
 layout(std430, binding = 7) readonly buffer EbWakes { float ebWake[]; };    // see core.constants WAKE_STRIDE
 const int WAKE_STRIDE = """ + str(WAKE_STRIDE) + """;
@@ -1217,6 +1218,7 @@ const int WAKE_LEAD = """ + str(WAKE_LEAD) + """;
 const int WAKE_RADIUS = """ + str(WAKE_RADIUS) + """;
 uniform float uTrails;        // Wake Trails: 0 none .. 1 most bubbles trail a veil
 uniform float uTrailTime;     // the simulation's motion phase: the veil's inner light drifts with the water
+const float TRAIL_FADE = """ + str(TRAIL_FADE) + """;
 float trailHash(float x) { return fract(sin(x * 12.9898) * 43758.5453); }
 // The trail's chain: the bubble itself (k = 0), then the water it passed through, newest first.
 vec3 wakePoint(int owner, int k) {
@@ -1406,7 +1408,8 @@ void beadInstance() {
             float body = wakeField(owner, WAKE_RADIUS);
             p = trailWater(owner, c) + (side * g.x + deep * g.y * 0.7) * mix(body * 0.45, nominalRadius * 0.12, sqrt(st));
             // Born at the bubble, gone where the trail ends (or before the trail has reached it).
-            trailEnds = smoothstep(0.0, 0.4, c) * (1.0 - smoothstep(reachNow - 1.0, reachNow, c));
+            // Born at the bubble; thinning with the sheet down the trail (gone before the trail has reached it).
+            trailEnds = smoothstep(0.0, 0.4, c) * (1.0 - smoothstep(TRAIL_FADE * reachNow, reachNow, c));
         }
         float size = nominalRadius * mix(0.04, 0.08, beadRandom(seed, 22u))
                    * uBeadSize * (1.0 - 0.5 * along_ / reach);
@@ -1637,6 +1640,7 @@ TRAIL_FRAGMENT = ("#version 460 core\n" + SCENE_OIT_GLSL + "layout(location=2) o
 uniform sampler2D uBackground;
 uniform vec2 uTargetSize;
 uniform float uTrailTime;
+const float TRAIL_FADE = """ + str(TRAIL_FADE) + """;
 in vec2 vAcross;
 in float vDepth;
 in float vWidthPx;
@@ -1653,7 +1657,8 @@ void main() {
     float blur = clamp(vBlur / max(vWidthPx, 1e-3), 0.0, 1.0);         // its bubble's defocus, across the sheet
     float sharp = 1.0 / (1.0 + 0.5 * vBlur);                          // fine detail a defocused wake keeps
     // Whole from the bubble, thinning away toward the tail.
-    float fade = smoothstep(0.0, 0.02, s) * (1.0 - smoothstep(0.45, 1.0, s));
+    // Thinning gently from under a third of the way down, over the whole rest of its length.
+    float fade = smoothstep(0.0, 0.02, s) * (1.0 - smoothstep(TRAIL_FADE, 1.0, s));
     // A sheet of clear disturbed water with real edges: it ends crisply (antialiased to a pixel), never a blur.
     float body = 1.0 - smoothstep(1.0 - 1.5 * pixel - blur, 1.0, abs(x));
     // Its two walls, seen edge-on, catch the light as fine bright rims (the goals' glassy outlines).
@@ -1671,6 +1676,8 @@ void main() {
         float line = 1.0 - smoothstep(0.0, 1.3, abs(fract(u) - 0.5) / max(fwidth(u), 1e-4));
         float presence = smoothstep(0.4, 0.8, skyNoise2(vec2(vAlong * 0.12,
                                                              floor(u) * 3.7 + vShapeSeed * 11.0 + float(k) * 19.0), 197u));
+        // Every strand runs unbroken out of the bubble's underside, coming and going only farther down.
+        presence = mix(1.0, presence, smoothstep(1.2, 3.0, vUnder));
         fine += line * presence * (0.6 - 0.2 * float(k));
     }
     fine *= body * smoothstep(0.85, 0.55, abs(x)) * sharp;
@@ -1684,7 +1691,11 @@ void main() {
     acrossScreen = acrossScreen / max(length(acrossScreen), 1e-6);
     // Under the bubble's own lower half only the walls show (its sides running on into the sheet): the sheet's water,
     // its bend and its inside appear below the bubble, never as a milky fill or a seam across it.
-    float below = smoothstep(0.3, 1.1, vUnder);
+    // The wake comes out of the bubble, not after it: its water and strands rise into the bubble's lower half (seen
+    // through its glass), so no dark band of empty water separates the bubble's outline from its wake.
+    float below = smoothstep(0.3, 0.9, vUnder);
+    // Where it leaves the bubble the disturbed water glows most: one luminous junction binds bubble and wake.
+    float junction = exp(-pow((vUnder - 0.9) / 0.45, 2.0)) * body * (1.0 - 0.5 * abs(x));
     vec2 shift = acrossScreen * x * sqrt(max(1.0 - x * x, 0.0)) * min(vWidthPx * 0.18, 7.0) * strength * body * below;
     if (!(abs(shift.x) + abs(shift.y) < 1e4)) shift = vec2(0.0);
     vec3 bent = texture(uBackground, (gl_FragCoord.xy + shift) / uTargetSize).rgb;
@@ -1697,7 +1708,7 @@ void main() {
     fill *= below;
     strands *= below;
     fine *= below;
-    vec3 glow = light * tint * (rim * 1.1 + (strands * 1.2 + fine * 0.6 + fill) * resolved) * strength;
+    vec3 glow = light * tint * (rim * 1.1 + (strands * 1.2 + fine * 0.6 + fill + junction * 0.22) * resolved) * strength;
     sceneTransparent(bent * a + glow, a, vDepth);
     Emission = vec4(0.0);
 }
