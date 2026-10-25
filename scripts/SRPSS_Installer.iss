@@ -20,7 +20,7 @@
 [Setup]
 AppId={{D8A5B7C8-9F9B-4F0D-9C5A-0F2F6A1E7C11}
 AppName=ShittyRandomPhotoScreenSaver
-AppVersion=5.0.8
+AppVersion=5.1.0
 AppPublisher=Jayde Ver Elst
 DefaultDirName={commonpf}\SRPSS
 DefaultGroupName=ShittyRandomPhotoScreenSaver
@@ -37,7 +37,7 @@ CloseApplicationsFilter=*.exe,*.dll,*.scr
 RestartApplications=no
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
-VersionInfoVersion=5.0.8
+VersionInfoVersion=5.1.0
 WizardStyle=modern dark includetitlebar hidebevels
 WizardBackColor=#0d181e
 WizardImageFile=
