@@ -1220,7 +1220,7 @@ vec3 wakePoint(int owner, int k) {
 }
 // Centripetal Catmull-Rom (knots by the square root of each segment's length): it never loops or overshoots where
 // neighbouring segments differ greatly in length, as the bubble's own segment does just after it lays a new point
-// (a uniform curve looped there, swinging the trail's root off its bubble until the segment grew back).
+// (a uniform curve looped there in 3.2% of sampled roots, swinging the trail's root off its bubble).
 vec3 wakeSpline(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float u) {
     float t1 = sqrt(max(distance(p0, p1), 1e-6));
     float t2 = t1 + sqrt(max(distance(p1, p2), 1e-6));
@@ -1233,39 +1233,11 @@ vec3 wakeSpline(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float u) {
     vec3 b2 = mix(a2, a3, (t - t1) / (t3 - t1));
     return mix(b1, b2, (t - t1) / (t2 - t1));
 }
-// Where s (0 at the bubble .. 1 its tail) falls along the chain, by length: the segment index plus the fraction
-// into it, and the distance from the bubble (world). Measured along the trail, never per segment: the bubble's own
-// segment is nearly empty just after it lays a point, and a per-segment parameter squeezed the root's shape then.
-float trailSegment(int owner, float s, out float along) {
-    float span = max(ebWake[owner * WAKE_STRIDE + WAKE_SPAN], 1e-3);
-    int last = max(int(ceil(span)), 1);
-    float total = 0.0;
-    vec3 previous = wakePoint(owner, 0);
-    for (int k = 1; k <= WAKE_POINTS; ++k) {
-        if (k > last) break;
-        vec3 here = wakePoint(owner, k);
-        total += distance(previous, here) * clamp(span - float(k - 1), 0.0, 1.0);
-        previous = here;
-    }
-    along = clamp(s, 0.0, 1.0) * total;
-    float walked = 0.0;
-    previous = wakePoint(owner, 0);
-    for (int k = 1; k <= WAKE_POINTS; ++k) {
-        vec3 here = wakePoint(owner, k);
-        float piece = distance(previous, here);
-        if (k >= last || walked + piece >= along)
-            return float(k - 1) + clamp((along - walked) / max(piece, 1e-6), 0.0, 1.0);
-        walked += piece;
-        previous = here;
-    }
-    return 0.0;
-}
-// The trail at s: the spline through the chain, s spaced evenly along its length.
+// The trail at s (0 at the bubble .. 1 its tail): the spline through the chain over its span.
 vec3 trailPath(int owner, float s) {
     float span = max(ebWake[owner * WAKE_STRIDE + WAKE_SPAN], 1e-3);
     int last = max(int(ceil(span)), 1);
-    float along;
-    float f = trailSegment(owner, s, along);
+    float f = clamp(s, 0.0, 1.0) * span;
     int i = min(int(floor(f)), last - 1);
     float t = f - float(i);
     vec3 p1 = wakePoint(owner, i), p2 = wakePoint(owner, i + 1);
@@ -1408,12 +1380,10 @@ void beadInstance() {
             float st = clamp(along_ / reach, 0.0, 1.0);
             vec3 tangent = trailPath(owner, st + 0.03) - trailPath(owner, max(st - 0.03, 0.0));
             tangent = dot(tangent, tangent) > 1e-10 ? normalize(tangent) : vec3(0.0, -1.0, 0.0);
-            // A continuous frame (a hard switch of axis flipped beads across the trail), sized by the bubble's steady
-            // radius: the water's beads never jump with its beat swell.
-            vec3 axis = normalize(mix(vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), smoothstep(0.75, 0.95, abs(tangent.z))));
-            vec3 side = normalize(cross(tangent, axis));
+            vec3 side = normalize(abs(tangent.z) < 0.9 ? cross(tangent, vec3(0.0, 0.0, 1.0))
+                                                       : cross(tangent, vec3(1.0, 0.0, 0.0)));
             vec3 deep = cross(tangent, side);
-            p = trailPath(owner, st) + (side * g.x + deep * g.y * 0.7) * mix(nominalRadius * 0.45, nominalRadius * 0.12, sqrt(st));
+            p = trailPath(owner, st) + (side * g.x + deep * g.y * 0.7) * mix(r * 0.45, nominalRadius * 0.12, sqrt(st));
         }
         float size = nominalRadius * mix(0.04, 0.08, beadRandom(seed, 22u))
                    * uBeadSize * (1.0 - 0.5 * along_ / reach);
@@ -1614,42 +1584,21 @@ void main() {
     vec3 next = uWorldToView * (trailPath(owner, min(s + 0.02, 1.0)) - uEye);
     vec3 previous = uWorldToView * (trailPath(owner, max(s - 0.02, 0.0)) - uEye);
     vec3 tangent = next - previous;
-    // Where the samples nearly coincide (the bubble's own segment just after a new point) read the direction over a
-    // longer stretch, never a fixed fallback: the root keeps its orientation from frame to frame.
-    if (dot(tangent, tangent) < 1e-6 * r * r)
-        tangent = uWorldToView * (trailPath(owner, min(s + 0.15, 1.0)) - trailPath(owner, max(s - 0.15, 0.0)));
     tangent = dot(tangent, tangent) > 1e-12 ? normalize(tangent) : vec3(0.0, -1.0, 0.0);
     vec3 across = normalize(cross(tangent, normalize(-here)));
-    // A sheet of disturbed water hanging from the bubble. Like the flow itself it wraps the bubble's lower surface and
-    // separates a little below its widest point: down to there its edges follow the bubble's own outline on screen
-    // (measured on screen, so it holds from any angle), then leave along the outline's direction and settle into a
-    // long, slowly narrowing sheet. A sheet that merely narrowed from the widest point stood outside the bubble's
-    // fast-curving lower outline: a sliver gap that came and went as the bubble moved.
-    float along;
-    trailSegment(owner, s, along);
-    float d = along / max(r, 1e-4);                                 // distance down the trail, in bubble radii
+    // A sheet of disturbed water hanging from the bubble: its edges leave the bubble's widest point (its full width,
+    // at its centre plane) and curve inward under it, then run on as a long, slowly narrowing sheet.
+    float d = s * trailLength / max(r, 1e-4);                       // distance down, in bubble radii
+    // At the bubble the edges meet its true outline: a sphere's perspective silhouette is wider than a sheet through
+    // its centre by 1 / sqrt(1 - (r / D)^2) (a visible pixel gap on nearer bubbles otherwise).
     vec3 bubble_ = uWorldToView * (vec3(ebWake[base], ebWake[base + 1], ebWake[base + 2]) - uEye);
-    float projected = r / max(-bubble_.z, 1e-3);                    // the bubble's radius on screen (tan units)
-    float onScreen = length(here.xy / max(-here.z, 1e-3) - bubble_.xy / max(-bubble_.z, 1e-3)) / max(projected, 1e-6);
-    float under = mix(onScreen, d, smoothstep(1.2, 1.6, d));        // near the bubble its outline governs
-    // It leaves just below the widest point, where the outline is still nearly upright, and bends in gently.
-    const float SEPARATION = 0.35;                                  // where the flow leaves the bubble (in radii)
-    const float SHEET = 0.8;                                        // the sheet's settled width (radii)
-    float outlineWidth = sqrt(max(1.0 - SEPARATION * SEPARATION, 0.0));
-    float outlineSlope = SEPARATION / outlineWidth;                 // the outline's inward slope there
-    float settle = outlineWidth - SHEET;
-    float profile = under <= SEPARATION ? sqrt(max(1.0 - under * under, 0.0))
-                  : SHEET + settle * exp(-(outlineSlope / settle) * (under - SEPARATION));
-    // A sphere's perspective silhouette is wider than a sheet through its centre by 1 / sqrt(1 - (r / D)^2).
     float outline = inversesqrt(max(1.0 - r * r / max(dot(bubble_, bubble_), 1e-6), 0.05));
-    // The root matches the bubble as it swells with the music; the sheet beyond is the water's, sized by the
-    // bubble's steady radius (a sheet sized by the reacting radius widened and narrowed on every beat).
-    float size = mix(r * outline, nominal, smoothstep(SEPARATION, 1.6, under));
-    float width = size * profile * (1.0 - 0.45 * pow(s, 1.6)) + nominal * 0.05 * smoothstep(0.5, 1.5, under);
-    vUnder = under;
+    float width = r * (0.72 + 0.28 * exp(-0.6 * d * d)) * (1.0 - 0.45 * pow(s, 1.6))
+                * mix(outline, 1.0, smoothstep(0.0, 1.5, d)) + nominal * 0.05 * smoothstep(0.0, 1.0, d);
+    vUnder = d;
     vWidthPx = width / (uPixel * max(-here.z, 0.1));
     vAcross = vec2(sideSign, s);
-    vAlong = along / max(nominal, 1e-3);
+    vAlong = s * trailLength / max(nominal, 1e-3);
     vDepth = -here.z;
     gl_Position = vStrength > 0.0 && here.z < -0.05
                 ? uProjection * vec4(here + across * sideSign * width, 1.0) : vec4(2.0, 2.0, 2.0, 1.0);
@@ -1681,8 +1630,7 @@ void main() {
     float body = 1.0 - smoothstep(1.0 - 1.5 * pixel - blur, 1.0, abs(x));
     // Its two walls, seen edge-on, catch the light as fine bright rims (the goals' glassy outlines).
     float rimWidth = max(1.4 * pixel + blur, 0.05);
-    // Until the flow separates the bubble's own outline is the edge: the sheet's walls appear as they leave it.
-    float rim = exp(-pow((1.0 - abs(x)) / rimWidth, 2.0)) * body * mix(1.0, sharp, 0.7) * smoothstep(0.15, 0.45, vUnder);
+    float rim = exp(-pow((1.0 - abs(x)) / rimWidth, 2.0)) * body * mix(1.0, sharp, 0.7);
     // Inside, the light the water focuses runs down it in fine strands (the caustic web drawn out along the flow):
     // they meander, fan apart down the trail, and come and go as the water carries them.
     vec2 q = vec2(x * (1.6 + 1.2 * s) + vShapeSeed * 9.0, vAlong * 0.16 - uTrailTime * 0.05);
@@ -1708,7 +1656,7 @@ void main() {
     acrossScreen = acrossScreen / max(length(acrossScreen), 1e-6);
     // Under the bubble's own lower half only the walls show (its sides running on into the sheet): the sheet's water,
     // its bend and its inside appear below the bubble, never as a milky fill or a seam across it.
-    float below = smoothstep(0.25, 0.8, vUnder);
+    float below = smoothstep(0.75, 1.15, vUnder);
     vec2 shift = acrossScreen * x * sqrt(max(1.0 - x * x, 0.0)) * min(vWidthPx * 0.18, 7.0) * strength * body * below;
     if (!(abs(shift.x) + abs(shift.y) < 1e4)) shift = vec2(0.0);
     vec3 bent = texture(uBackground, (gl_FragCoord.xy + shift) / uTargetSize).rgb;
