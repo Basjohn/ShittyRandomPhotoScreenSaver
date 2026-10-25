@@ -57,6 +57,8 @@ Triage history: `Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md`.
   (`[LIFECYCLE_BARRIER][PYTHON_OWNER_REFS]`) now also runs in source runs (`main_mc`, `main.py`), not only Diagnostic:
   the next timeout names what holds them. Find that cycle and break it at teardown (as
   `_release_terminal_generation_references` and the owner's `retire` do); never weaken the barrier or touch GC timing.
+  Sweep pros/cons, history and options (strict / always sweep / snapshot-then-recover):
+  `Docs/Audits/Retirement_GC_Sweep_Assessment_2026-10-25.md` (decide after the cycle is found).
 - [ ] **`.venv` launcher warning** `Failed to find real location of ...pythoncore-3.14-64\\python.exe`: harmless so
   far (commands exit 0); find its cause without an environment-variable workaround.
 - [~] **Authored-data test hygiene:** tests never freeze mutable presets, Settings values, theme contents or pack
