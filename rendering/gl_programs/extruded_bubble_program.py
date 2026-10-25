@@ -572,6 +572,11 @@ vec2 ebLens(vec4 sphere, mat4 projection, vec2 frameSize, float focus,
     float circle = max(sceneNearCircle(depth - sphere.w, focus, aperture, circleScale),
                        maxCircle * wide);
     float opacity = 1.0 - smoothstep(0.78, 1.0, share);
+    // Right at the lens a shell no longer reads as a bubble, even off axis where its clipped share stays small: it
+    // eases out as its surface nears the eye (within a third of its radius), and back in as it leaves. Measured on the
+    // steady lens radius, so breathing never toggles it; the near defocus above is unchanged.
+    float surface = length(sphere.xyz) - sphere.w;
+    opacity *= smoothstep(0.06, 0.33, surface / sphere.w);
     return vec2(min(circle, maxCircle), opacity);
 }
 """
