@@ -107,53 +107,89 @@ class WakeOwnershipTests(unittest.TestCase):
         field.add(5, 0.5, tuple(here))
         for _ in range(240):                      # rising to the right ..
             here = here + (0.012, 0.0, 0.0)
-            field.follow(5, tuple(here), 1 / 60, 1.0)
+            field.follow(5, tuple(here), 0.5, 1 / 60, 1.0)
             field.flow(1 / 60, 0.0)
         turn = here.copy()
         for _ in range(60):                       # .. then turned upward by the music
             here = here + (0.0, 0.012, 0.0)
-            field.follow(5, tuple(here), 1 / 60, 1.0)
+            field.follow(5, tuple(here), 0.5, 1 / 60, 1.0)
             field.flow(1 / 60, 0.0)
-        length, span, *flat = field.record(5, tuple(here))
+        spacing, count, water, lead, radius, *flat = field.record(5, tuple(here))
         points = np.asarray(flat).reshape(WAKE_POINTS, 3)
-        self.assertGreater(length, 1.0)
-        self.assertGreater(span, 3.0)
+        self.assertGreater(spacing, 0.0)
+        self.assertGreater(count, 3.0)
+        self.assertTrue(0.0 <= lead <= 1.0)
         # Near the bubble the trail runs back down its new course; farther back it lies along the old one.
         self.assertLess(abs(points[0][0] - turn[0]), 0.1)
         self.assertLess(points[0][1], here[1])
-        last = points[int(np.ceil(span)) - 1]
+        last = points[int(count) - 1]
         self.assertLess(last[0], turn[0] - 0.3)
         self.assertLess(abs(last[1] - turn[1]), 0.15)
 
+    def test_a_place_in_the_water_stays_put_as_the_bubble_lays_points(self):
+        """Beads and the sheet are placed by water index: the water at a fixed index must not move when the bubble
+        lays a new point (placing by a share of the chain's segments slid it with the bubble and jumped it back)."""
+        import math
+        import numpy as np
+        from core.constants.extruded_bubble_world import WAKE_POINTS
+        from widgets.spotify_visualizer.extruded_bubble_wake import FLOW, WakeField
+
+        def place(record, head, index):        # the GPU's trailWater, with straight segments
+            spacing, count, water, lead, _radius, *flat = record
+            chain = [np.asarray(head)] + [np.asarray(flat[3 * k:3 * k + 3]) for k in range(int(count))]
+            c = water - index
+            f = c / max(lead, 1e-4) if c <= lead else 1.0 + (c - lead)
+            f = min(max(f, 0.0), float(int(count)))
+            i = min(int(f), int(count) - 1)
+            return chain[i] + (chain[i + 1] - chain[i]) * (f - i)
+
+        field = WakeField(2)
+        here = np.array([0.0, 0.0, 0.0])
+        field.add(3, 0.4, tuple(here))
+        records = []
+        for k in range(400):
+            here = here + (0.004 * math.sin(k * 0.05), 0.011, 0.0)
+            field.follow(3, tuple(here), 0.4, 1 / 60, 1.0)
+            field.flow(1 / 60, 0.0)
+            records.append((field.record(3, tuple(here)), tuple(here)))
+        index = records[200][0][2] - 2.5       # water the bubble passed 2.5 spacings before tick 200
+        laid = 0
+        for (a, head_a), (b, head_b) in zip(records[200:300], records[201:301]):
+            laid += int(b[1] != a[1] or b[2] < a[2] + 1e-9 or b[3] < a[3])
+            moved = float(np.linalg.norm(place(b, head_b, index) - place(a, head_a, index)))
+            # Only the water moves it: its drag and swirl over one tick, never a jump.
+            self.assertLess(moved, 0.012 * 0.45 + FLOW / 60 * 3 + 1e-4)
+        self.assertGreater(laid, 0)            # the window spans new points being laid
+
     def test_a_trail_drifts_with_the_water_after_its_bubble_is_gone(self):
         import numpy as np
-        from widgets.spotify_visualizer.extruded_bubble_wake import FLOW, STEP_SECONDS, WakeField
+        from widgets.spotify_visualizer.extruded_bubble_wake import FLOW, WakeField
         field = WakeField(2)
         field.add(9, 0.5, (0.0, 0.0, 0.0))
         for k in range(1, 121):
-            field.follow(9, (0.0, 0.012 * k, 0.0), 1 / 60, 1.0)
+            field.follow(9, (0.0, 0.012 * k, 0.0), 0.5, 1 / 60, 1.0)
             field.flow(1 / 60, 0.0)
         for _ in range(90):                       # the drag of the bubble's passing dies away
             field.flow(1 / 60, 0.0)
-        before = np.asarray(field.record(9, (0.0, 1.44, 0.0))[2:])
+        before = np.asarray(field.record(9, (0.0, 1.44, 0.0))[5:])
         for _ in range(6):
             field.flow(1 / 60, 0.0)
-        after = np.asarray(field.record(9, (0.0, 1.44, 0.0))[2:])
+        after = np.asarray(field.record(9, (0.0, 1.44, 0.0))[5:])
         # Only the water's slow swirl (what is left of the drag, a little smoothing) moves it: no tail of its own.
-        self.assertLess(float(np.abs(after - before).max()), 3.0 * FLOW * STEP_SECONDS + 2e-3)
+        self.assertLess(float(np.abs(after - before).max()), 3.0 * FLOW * 0.1 + 2e-3)
 
     def test_a_long_lived_wake_stays_even_along_its_length(self):
         """The water smooths only between a wake's own points: its tail never drifts off toward unused slots."""
         import math
         from dataclasses import replace
-        from core.constants.extruded_bubble_world import WAKE_PATH, WAKE_SPAN, WAKE_STRIDE
+        from core.constants.extruded_bubble_world import WAKE_COUNT, WAKE_PATH, WAKE_STRIDE
         controls = replace(self.controls, wake_trails=1.0)
         for _ in range(900):
             snap = self.sim.advance(self.mod.MusicInput(1 / 60, True, 1., (), (.8, .7, .6)), controls)
         checked = 0
         for i in range(0, len(snap.wakes), WAKE_STRIDE):
             row = snap.wakes[i:i + WAKE_STRIDE]
-            n = math.ceil(row[WAKE_SPAN])
+            n = int(row[WAKE_COUNT])
             if row[8] < 0.5 or n < 4:
                 continue
             chain = [row[WAKE_PATH + 3 * k:WAKE_PATH + 3 * k + 3] for k in range(n)]
@@ -172,7 +208,7 @@ class WakeOwnershipTests(unittest.TestCase):
         for _ in range(180):                      # music moves the bubbles: their trails grow behind them
             snap = self.sim.advance(self.mod.MusicInput(1 / 60, True, 1., (), (.8, .7, .6)), controls)
         rows = {ident: row for ident, row in source_records(snap).items() if row[5] < 0.0}
-        self.assertTrue(rows and all(row[8] == 1.0 and row[9] > 0.0 for row in rows.values()))
+        self.assertTrue(rows and all(row[8] == 1.0 and row[9] > 0.0 and row[10] >= 1.0 for row in rows.values()))
         for ident, row in rows.items():
             bubble = self.sim._find(ident)
             # The trail's head is the bubble itself (drawn from its centre plane); its newest water lies just behind.
