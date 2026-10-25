@@ -15,6 +15,7 @@ Item {
     signal appVolumeStepRequested(int direction)
     property bool cameraResetAvailable: false
     signal cameraResetRequested()
+    signal presetStepRequested(int direction)
     property real authoredSceneOpacity: 1.0
     property real startupRevealOpacity: 1.0
     property bool cardShellEnabled: true
@@ -207,8 +208,7 @@ Item {
 
     HoverHandler {
         id: cameraResetHover
-        enabled: visualizerPresentationRoot.cameraResetAvailable
-            && visualizerPresentationRoot.alwaysShowGlyphs
+        enabled: visualizerPresentationRoot.alwaysShowGlyphs
             && visualizerPresentationRoot.widgetGlowAdmitted
         blocking: false
     }
@@ -216,6 +216,14 @@ Item {
     // One-shot hover animation for the camera reset glyph. No Timer/polling;
     // the first 1008ms are entirely invisible, independent of card hover glow.
     property real cameraResetTipProgress: 0.0
+    property string cameraActionTip: "RESET CAMERA"
+    property real cameraActionTipX: 0
+    onWidgetGlowAdmittedChanged: {
+        if (!widgetGlowAdmitted) {
+            cameraResetTipReveal.stop()
+            cameraResetTipProgress = 0.0
+        }
+    }
     NumberAnimation {
         id: cameraResetTipReveal
         target: visualizerPresentationRoot
@@ -263,8 +271,13 @@ Item {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             propagateComposedEvents: false
-            onEntered: cameraResetTipReveal.restart()
+            onEntered: {
+                visualizerPresentationRoot.cameraActionTip = "RESET CAMERA"
+                visualizerPresentationRoot.cameraActionTipX = cameraResetGlyph.x + cameraResetGlyph.width
+                cameraResetTipReveal.restart()
+            }
             onExited: {
+                if (visualizerPresentationRoot.cameraActionTip !== "RESET CAMERA") return
                 cameraResetTipReveal.stop()
                 visualizerPresentationRoot.cameraResetTipProgress = 0.0
             }
@@ -276,16 +289,91 @@ Item {
         }
     }
 
+    Row {
+        id: presetControls
+        objectName: "visualizerPresetControls"
+        x: Math.max(6, (cameraResetGlyph.visible ? cameraResetGlyph.x : parent.width - 12) - width - 5)
+        y: cameraResetGlyph.y
+        spacing: 5
+        z: 12
+        visible: visualizerPresentationRoot.widgetGlowAdmitted && visualizerPresentationRoot.visible
+            && visualizerPresentationRoot.volumeWheelEnabled
+        opacity: (visualizerPresentationRoot.alwaysShowGlyphs && cameraResetHover.hovered) ? 0.92 : 0.0
+        enabled: visible && visualizerPresentationRoot.alwaysShowGlyphs
+            && cameraResetHover.hovered && opacity > 0.05
+        Behavior on opacity {
+            NumberAnimation { duration: cameraResetHover.hovered ? 700 : 1200; easing.type: Easing.InOutSine }
+        }
+        Repeater {
+            model: [-1, 1]
+            delegate: Rectangle {
+                required property int modelData
+                objectName: modelData < 0 ? "visualizerPreviousPresetGlyph" : "visualizerNextPresetGlyph"
+                width: cameraResetGlyph.width
+                height: cameraResetGlyph.height
+                radius: width / 2
+                color: cameraResetGlyph.color
+                border.width: cameraResetGlyph.border.width
+                border.color: cameraResetGlyph.border.color
+                Canvas {
+                    anchors.centerIn: parent
+                    width: 20
+                    height: 20
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        ctx.save()
+                        if (modelData < 0) { ctx.translate(20, 0); ctx.scale(-1, 1) }
+                        ctx.strokeStyle = "white"
+                        ctx.lineWidth = 1.8
+                        ctx.lineCap = "round"
+                        ctx.lineJoin = "round"
+                        ctx.beginPath()
+                        ctx.moveTo(4, 10)
+                        ctx.lineTo(16, 10)
+                        ctx.moveTo(11, 5)
+                        ctx.lineTo(16, 10)
+                        ctx.lineTo(11, 15)
+                        ctx.stroke()
+                        ctx.restore()
+                    }
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    propagateComposedEvents: false
+                    onEntered: {
+                        visualizerPresentationRoot.cameraActionTip = modelData < 0 ? "PREVIOUS PRESET" : "NEXT PRESET"
+                        visualizerPresentationRoot.cameraActionTipX = presetControls.x + parent.x + parent.width
+                        cameraResetTipReveal.restart()
+                    }
+                    onExited: {
+                        if (visualizerPresentationRoot.cameraActionTip !== (modelData < 0 ? "PREVIOUS PRESET" : "NEXT PRESET")) return
+                        cameraResetTipReveal.stop()
+                        visualizerPresentationRoot.cameraResetTipProgress = 0.0
+                    }
+                    onPressed: function(mouse) { mouse.accepted = true }
+                    onClicked: function(mouse) {
+                        mouse.accepted = true
+                        visualizerPresentationRoot.presetStepRequested(modelData)
+                    }
+                }
+            }
+        }
+    }
+
     Rectangle {
         id: cameraResetTooltip
+        objectName: "visualizerPresetTooltip"
         z: 14
         enabled: false
-        visible: cameraResetGlyph.enabled && opacity > 0.0
+        visible: presetControls.enabled && opacity > 0.0
         opacity: Math.max(0.0, Math.min(1.0,
             (visualizerPresentationRoot.cameraResetTipProgress - 0.56) / 0.44))
         width: resetTooltipText.implicitWidth + 18
         height: resetTooltipText.implicitHeight + 12
-        x: Math.max(6, cameraResetGlyph.x + cameraResetGlyph.width - width)
+        x: Math.max(6, visualizerPresentationRoot.cameraActionTipX - width)
         y: Math.max(3, cameraResetGlyph.y - height - 7)
         radius: 7
         color: "#e51d2634"
@@ -294,7 +382,7 @@ Item {
         Text {
             id: resetTooltipText
             anchors.centerIn: parent
-            text: "RESET CAMERA"
+            text: visualizerPresentationRoot.cameraActionTip
             color: "#f6f6f8"
             font.pixelSize: 11
             font.weight: Font.Medium

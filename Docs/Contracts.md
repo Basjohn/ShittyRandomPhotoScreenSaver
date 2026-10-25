@@ -498,7 +498,7 @@ join blocks visualizer/display generation retirement. Retained visualizer double
 admitted before the display-level next-image fallback. Retained visualizer middle-click is semantic same-mode preset-cycle
 input: it advances one preset with wraparound, preserves mode identity, snapshots/restores the user-owned Custom slot, and
 persists only `widgets.spotify_visualizer`. It must not become a whole-widget refresh, second visualizer owner, or disguised
-cross-mode request.
+cross-mode request. Previous/Next glyphs in normal and Edit chrome use this same transaction with a signed single step.
 
 Visualizer geometry has two independent persisted dimensions of intent:
 

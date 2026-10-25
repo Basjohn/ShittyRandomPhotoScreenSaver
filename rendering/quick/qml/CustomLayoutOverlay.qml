@@ -716,6 +716,144 @@ Item {
                 }
             }
 
+            Row {
+                id: presetControls
+                objectName: "customLayoutPresetControls-" + editFrame.widgetId
+                visible: editFrame.widgetId === "spotify_visualizer" && Boolean(editFrame.contentEnvelopeItem)
+                x: Math.max(1, editFrame.width - width - 10 - (rotateContentControl.visible || (editFrame.contentEnvelopeItem && editFrame.contentEnvelopeItem.cameraResetAvailable) ? 32 : 0))
+                y: Math.max(1, editFrame.height - height - 10)
+                spacing: 6
+                z: 120
+                opacity: editFrame.parentGlyphControlsOpacity
+                enabled: !editFrame.parentGlyphControlsHidden && opacity > 0.05
+                Repeater {
+                    model: [-1, 1]
+                    delegate: Rectangle {
+                        required property int modelData
+                        objectName: (modelData < 0 ? "customLayoutPreviousPreset-" : "customLayoutNextPreset-") + editFrame.widgetId
+                        width: 22
+                        height: 22
+                        radius: width / 2
+                        antialiasing: true
+                        color: customLayoutOverlay.closeButtonColor
+                        border.width: 1
+                        border.color: customLayoutOverlay.closeButtonBorderColor
+                        Canvas {
+                            anchors.centerIn: parent
+                            width: 20
+                            height: 20
+                            onPaint: {
+                                const ctx = getContext("2d")
+                                ctx.clearRect(0, 0, width, height)
+                                ctx.save()
+                                if (modelData < 0) { ctx.translate(20, 0); ctx.scale(-1, 1) }
+                                ctx.strokeStyle = String(customLayoutOverlay.closeButtonGlyphColor)
+                                ctx.lineWidth = 1.8
+                                ctx.lineCap = "round"
+                                ctx.lineJoin = "round"
+                                ctx.beginPath()
+                                ctx.moveTo(4, 10)
+                                ctx.lineTo(16, 10)
+                                ctx.moveTo(11, 5)
+                                ctx.lineTo(16, 10)
+                                ctx.lineTo(11, 15)
+                                ctx.stroke()
+                                ctx.restore()
+                            }
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            propagateComposedEvents: false
+                            onEntered: editFrame.showGlyphTip(parent, modelData < 0 ? "PREVIOUS PRESET" : "NEXT PRESET")
+                            onExited: editFrame.hideGlyphTip(parent)
+                            onPressed: function(mouse) { mouse.accepted = true }
+                            onClicked: function(mouse) {
+                                mouse.accepted = true
+                                if (editFrame.contentEnvelopeItem)
+                                    editFrame.contentEnvelopeItem.presetStepRequested(modelData)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Passive tooltip observers leave every existing glyph's gesture owner intact.
+            property var glyphTipTarget: null
+            property string glyphTipText: ""
+            property real glyphTipProgress: 0
+            function showGlyphTip(target, text) {
+                glyphTipTarget = target
+                glyphTipText = text
+                glyphTipReveal.restart()
+            }
+            function hideGlyphTip(target) {
+                if (glyphTipTarget !== target) return
+                glyphTipReveal.stop()
+                glyphTipProgress = 0
+                glyphTipTarget = null
+            }
+            NumberAnimation {
+                id: glyphTipReveal
+                target: editFrame
+                property: "glyphTipProgress"
+                from: 0
+                to: 1
+                duration: 1800
+            }
+            Repeater {
+                model: [
+                    {control: closeControl, text: "CLOSE & DISABLE WIDGET"},
+                    {control: restoreSizeControl, text: "RESTORE WIDGET SIZE"},
+                    {control: rotateContentControl, text: "ROTATE WIDGET CONTENT"},
+                    {control: contentOrbitControl, text: "ORBIT VISUALIZER"},
+                    {control: childEditLockControl, text: "TOGGLE CHILD LOCK"},
+                    {control: parentGlyphControlWedge, text: "SHOW / HIDE CONTROLS"},
+                    {control: transferLeftControl, text: "MOVE TO PREVIOUS DISPLAY"},
+                    {control: transferRightControl, text: "MOVE TO NEXT DISPLAY"}
+                ]
+                delegate: Item {
+                    required property var modelData
+                    parent: modelData.control
+                    anchors.fill: parent
+                    HoverHandler {
+                        enabled: parent.parent.visible && parent.parent.enabled
+                        blocking: false
+                        onHoveredChanged: {
+                            if (hovered) editFrame.showGlyphTip(parent.parent, modelData.text)
+                            else editFrame.hideGlyphTip(parent.parent)
+                        }
+                    }
+                }
+            }
+            Rectangle {
+                objectName: "customLayoutGlyphTooltip-" + editFrame.widgetId
+                z: 200
+                enabled: false
+                visible: editFrame.glyphTipTarget !== null && editFrame.glyphTipTarget.visible
+                    && editFrame.glyphTipTarget.enabled && opacity > 0
+                opacity: Math.max(0, Math.min(1, (editFrame.glyphTipProgress - 0.56) / 0.44))
+                readonly property point tipPoint: editFrame.glyphTipTarget
+                    ? editFrame.glyphTipTarget.mapToItem(editFrame, 0, 0) : Qt.point(0, 0)
+                x: Math.max(4, Math.min(editFrame.width - width - 4, tipPoint.x))
+                y: Math.max(3, tipPoint.y - height - 7)
+                width: editGlyphCaption.implicitWidth + 18
+                height: editGlyphCaption.implicitHeight + 12
+                radius: 7
+                color: "#e51d2634"
+                border.width: 1
+                border.color: "#bdc38e88"
+                Text {
+                    id: editGlyphCaption
+                    anchors.centerIn: parent
+                    text: editFrame.glyphTipText
+                    color: "#f6f6f8"
+                    font.pixelSize: 11
+                    font.weight: Font.Medium
+                }
+            }
+
             Rectangle {
                 id: rotateContentControl
                 objectName: "customLayoutRotateContent-" + editFrame.widgetId
@@ -3603,6 +3741,7 @@ Item {
                                 closeControl,
                                 restoreSizeControl,
                                 rotateContentControl,
+                                presetControls,
                                 childEditLockControl,
                                 transferLeftControl,
                                 transferRightControl

@@ -106,6 +106,15 @@ default-off/not-yet-product-accepted and permits private reaction semantics and 
 private scheduling/presentation authority or a disposable GPU engine. Promotion to stable should normally change
 admission/status/defaults and close acceptance gates, not require reimplementing the mode on a second substrate.
 
+### Preset navigation glyphs
+
+The default Visualizer is Extruded Bubble, Preset 1 (stored index 0); existing saved selections remain authoritative.
+On hover, Previous Preset (left arrow) and Next Preset (right arrow) appear at the bottom right, immediately left of
+Reset Camera or Rotate where available. Normal and Edit chrome use their existing glyph sizes, styling and fades.
+Both arrows reuse middle-click's same-mode preset-change owner, including wraparound and Custom snapshot preservation;
+middle-click still steps forward. Glyph tooltips use the existing themed, noninteractive reveal after at least one second
+of dwell, resetting on leave or a different glyph. Edit parent actions also expose matching tooltips.
+
 ### Direct 3D interaction geometry
 
 For unframed 3D modes, Alt+right starts a native press-scoped origin in the current display's direct CUSTOM transaction. An Alt+wheel resize may keep that transaction open; a later Alt+right press must rebase the move origin to the **current** rectangle before applying the new pointer delta, otherwise stale unscaled positions teleport the stage. Freeform 3D whole-stage wheel scaling preserves the stage **centre** (subject to display-edge clamp), while planar/ordinary widgets retain their own established anchor rule. These whole-stage paths may not create a timer or borrow geometry from a sibling layout profile. Framed Neon Lake

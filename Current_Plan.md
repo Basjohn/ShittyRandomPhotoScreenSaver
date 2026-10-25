@@ -57,6 +57,11 @@ Triage history: `Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md`.
 
 ### 2B. Settings and UI (in this order)
 
+- [~] **Visualizer preset glyphs — awaiting operator validation:** check Previous/Next placement left of Reset/Rotate,
+  vector-arrow alignment, hover fades and delayed tooltips in normal/Edit, including mixed DPI and Hide Controls.
+  Confirm backward/forward wrap and Custom return in normal use; new/reset profiles select Extruded Bubble Preset 1.
+
+
 - [~] **Settings bucket persistence — awaiting final sign-off:** only the selected pill (or tab without pills) reopens,
   one editing path, everything else closed ([contract](Docs/Architecture/Settings_Bucket_Persistence_Contract.md)).
   Real-dialog tests cover mode/tab/leaf/reload behaviour; the Transitions Advanced reopen bug is fixed. Open:

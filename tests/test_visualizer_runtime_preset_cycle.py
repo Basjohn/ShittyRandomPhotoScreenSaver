@@ -124,7 +124,8 @@ def test_every_active_mode_wraps_from_custom_without_changing_mode(mode: str) ->
     assert cache == before_cache
 
 
-def test_custom_roundtrip_is_lossless_and_curated_target_replaces_values() -> None:
+@pytest.mark.parametrize("direction", [-1, 1])
+def test_custom_roundtrip_is_lossless_and_curated_target_replaces_values(direction) -> None:
     mode = "spectrum"
     config = _default_visualizer_config()
     custom_index = get_custom_preset_index(mode)
@@ -138,8 +139,8 @@ def test_custom_roundtrip_is_lossless_and_curated_target_replaces_values() -> No
     original_custom = build_normalized_custom_snapshot(mode, config)
     cache: dict = {}
 
-    target = resolve_next_visualizer_runtime_preset(config, cache, mode=mode)
-    curated = get_preset_settings(mode, 0)
+    target = resolve_next_visualizer_runtime_preset(config, cache, mode=mode, direction=direction)
+    curated = get_preset_settings(mode, target.target_index)
     assert target.visualizer_config["spectrum_glow_intensity"] == pytest.approx(
         curated["spectrum_glow_intensity"]
     )
@@ -150,6 +151,7 @@ def test_custom_roundtrip_is_lossless_and_curated_target_replaces_values() -> No
             target.visualizer_config,
             target.custom_presets,
             mode=mode,
+            direction=direction,
         )
 
     assert target.target_index == custom_index
@@ -235,3 +237,13 @@ def test_malformed_custom_cache_is_rejected_before_activation() -> None:
             {"not-a-mode": {"bubble_growth": 3.0}},
             mode="bubble",
         )
+
+
+@pytest.mark.parametrize("mode", [mode for mode in VISUALIZER_MODE_IDS if is_mode_active(mode)])
+def test_previous_wraps_from_first_to_custom(mode):
+    config = _default_visualizer_config()
+    config.update(mode=mode)
+    config[get_preset_key(mode)] = 0
+    target = resolve_next_visualizer_runtime_preset(config, {}, mode=mode, direction=-1)
+    assert target.target_index == get_custom_preset_index(mode)
+    assert target.visualizer_config["mode"] == mode
