@@ -292,9 +292,10 @@ def bubble_instances(records) -> np.ndarray:
 def wake_instances(records) -> np.ndarray:
     """Pack stable physical emitters unchanged, including frozen retiring anchors.
 
-    xyz, reacted radius, stable ID, retirement, opacity, nominal radius.
+    xyz, reacted radius, stable ID, retirement, opacity, nominal radius, trail lead and settle directions.
     """
-    return np.asarray(records, dtype=np.float32).reshape(-1, 8)
+    from core.constants.extruded_bubble_world import WAKE_STRIDE
+    return np.asarray(records, dtype=np.float32).reshape(-1, WAKE_STRIDE)
 
 
 def cluster_instances(records, clusters) -> np.ndarray:

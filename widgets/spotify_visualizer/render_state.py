@@ -666,13 +666,14 @@ class ExtrudedBubbleFrame:
     shimmer: float = 0.0
     parameters: FrozenFields = FrozenFields()
     motion_phase: float = 0.0  # music-owned integrated visual phase; never elapsed wall time
-    wakes: tuple[float, ...] = ()  # stable wake emitters, live/retiring, 8 floats each
+    wakes: tuple[float, ...] = ()  # stable wake emitters, live/retiring, WAKE_STRIDE floats each
     passage: float = 0.0  # how loud the passage is, 0..1: where the renderer's quiet-to-loud Ranges sit
 
     def __post_init__(self) -> None:
         wakes = _float_tuple(self.wakes, name="extruded bubble wake record")
-        if len(wakes) % 8:
-            raise ValueError("Extruded Bubble wake records must be whole (8 floats per source)")
+        from core.constants.extruded_bubble_world import WAKE_STRIDE
+        if len(wakes) % WAKE_STRIDE:
+            raise ValueError(f"Extruded Bubble wake records must be whole ({WAKE_STRIDE} floats per source)")
         object.__setattr__(self, "wakes", wakes)
         bubbles = _float_tuple(self.bubbles, name="extruded bubble record")
         clusters = _float_tuple(self.clusters, name="extruded bubble cluster")

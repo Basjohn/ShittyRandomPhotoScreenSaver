@@ -89,7 +89,10 @@ _MINIMUM_REACTION_RADIUS = .13
 _QUIET_DEPTH_FULL = 0.5   # Breathing / Small Bubble Pulse quiet handle at which the class reaches its deepest rest
 _LANE = 0.26 * WORLD_UNIT  # fixed world spacing transverse to the stream
 _WAKE_RETIRE_SECONDS = 1.1  # front-to-tail dissolve of a wake whose emitter pops, merges or exits
-_WAKE_STRIDE = 8           # x, y, z, reacted radius, stable ident, retirement progress (-1 active), alpha, nominal radius
+# A trail follows its bubble with inertia: its lead eases toward the way the bubble has been moving, its tail
+# eases after the lead, so a turn curls the tail back where the bubble came from. Music steers the bubbles only.
+_WAKE_LEAD_SECONDS = 0.45
+_WAKE_SETTLE_SECONDS = 1.4
 
 
 @dataclass(frozen=True, slots=True)
@@ -353,8 +356,9 @@ class ExtrudedBubbleSimulation:
         self._filled = False
         self._applied_sizes = {True: 1.0, False: 1.0}   # live edits scale SAME-ID radii at the logical owner
         self._spawn_credit = {True: 0.0, False: 0.0}
-        self._wake_live: dict[int, tuple[float, float, float, float, int, float, float, float]] = {}
-        self._wake_retiring: dict[int, tuple[float, float, float, float, int, float, float, float]] = {}
+        self._wake_live: dict[int, tuple[float, ...]] = {}
+        self._wake_retiring: dict[int, tuple[float, ...]] = {}
+        self._wake_motion: dict[int, tuple[tuple[float, ...], ...]] = {}   # last position, lead, settle
 
     @property
     def time(self) -> float:
@@ -1110,27 +1114,44 @@ class ExtrudedBubbleSimulation:
 
     # -- snapshot ----------------------------------------------------------------------------------------------------
 
-    def _wakes(self, dt: float) -> tuple[float, ...]:
+    def _wakes(self, dt: float, direction) -> tuple[float, ...]:
         """Logical emitter identity survives compaction, fusion, pop and surface exit.
 
         Retiring wakes retain their last *own* physical world source, never rebind to the shell currently occupying
         the old GPU instance slot. The shader wipes each wake from the travel-facing head backwards over its life.
         """
-        current: dict[int, tuple[float, float, float, float, int, float, float, float]] = {}
+        current: dict[int, tuple[float, ...]] = {}
+        motion: dict[int, tuple[tuple[float, ...], ...]] = {}
+        behind_stream = _unit(tuple(-float(c) for c in direction)) or (0.0, -1.0, 0.0)
+        lead_ease = 1.0 - math.exp(-max(dt, 0.0) / _WAKE_LEAD_SECONDS)
+        settle_ease = 1.0 - math.exp(-max(dt, 0.0) / _WAKE_SETTLE_SECONDS)
         for b in self._bubbles:
             if b.cluster < 0 and b.popping < 0 and not b.leaving and b.alpha > 0.02:
+                here = (b.x, b.y, b.z)
+                prior = self._wake_motion.get(b.ident)
+                if prior is None:
+                    lead = settle = behind_stream
+                else:
+                    last, lead, settle = prior
+                    step = tuple(h - p for h, p in zip(here, last))
+                    moved = math.sqrt(sum(v * v for v in step))
+                    if 1e-9 < moved < max(4.0 * b.radius, 0.1 * WORLD_UNIT):   # a jump (re-entry) is not motion
+                        lead = _toward(lead, tuple(-v / moved for v in step), lead_ease)
+                    settle = _toward(settle, lead, settle_ease)
+                motion[b.ident] = (here, lead, settle)
                 current[b.ident] = (b.x, b.y, b.z, b.visual_radius,
-                                    b.ident, -1.0, b.alpha, b.radius)
+                                    b.ident, -1.0, b.alpha, b.radius, *lead, *settle)
+        self._wake_motion = motion
         # Advance existing tombstones on the sole logical tick, never in the renderer.
         retained = {}
         for ident, old in self._wake_retiring.items():
             age = old[5] + dt / _WAKE_RETIRE_SECONDS
             if age < 1.0:
-                retained[ident] = (*old[:5], age, old[6], old[7])
+                retained[ident] = (*old[:5], age, *old[6:])
         # Begin retirement immediately when pop/fuse/exit takes its source out of the free population.
         for ident, old in self._wake_live.items():
             if ident not in current and ident not in retained:
-                retained[ident] = (*old[:5], 0.0, old[6], old[7])
+                retained[ident] = (*old[:5], 0.0, *old[6:])
         # The total lifetime history is bounded as well as its GPU upload: intense collisions cannot grow it.
         if len(retained) > MAX_BUBBLES:
             retained = dict(sorted(retained.items(), key=lambda item: item[1][5])[:MAX_BUBBLES])
@@ -1153,7 +1174,17 @@ class ExtrudedBubbleSimulation:
         return ExtrudedBubbleSnapshot(self._time, tuple(bubbles), tuple(clusters), level,
                                       self._flash, direction, speed, self._drift_shown, self._emission, self._sustain,
                                       self._travel, self._rays, self._shimmer, self._motion_phase,
-                                      self._wakes(dt), self._passage)
+                                      self._wakes(dt, direction), self._passage)
+
+
+def _unit(v) -> tuple[float, ...] | None:
+    length = math.sqrt(sum(c * c for c in v))
+    return tuple(c / length for c in v) if length > 1e-9 else None
+
+
+def _toward(a, b, t: float) -> tuple[float, ...]:
+    """Ease unit direction ``a`` toward ``b`` by ``t`` (renormalised; opposite directions keep ``a``)."""
+    return _unit(tuple(x + (y - x) * t for x, y in zip(a, b))) or tuple(a)
 
 
 __all__ = ["BUBBLE_STRIDE", "CLUSTER_MAX", "CLUSTER_STRIDE", "ExtrudedBubbleControls", "ExtrudedBubbleSimulation",

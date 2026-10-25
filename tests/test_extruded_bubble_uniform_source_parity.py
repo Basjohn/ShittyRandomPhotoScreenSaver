@@ -73,7 +73,7 @@ class EBSourceAndUploadTests(unittest.TestCase):
         self.assertIn('1.0 - smoothstep(0.82, 1.0, progress)', glsl)
         self.assertIn('"uStreamSource": stream_source, "uStreamEnd": stream_end', render)
         self.assertIn('"uSpeckSource": stream_source, "uSpeckEnd": stream_end', render)
-        self.assertIn('vec3 centre = vec3(ebWake[owner * 8]', glsl,
+        self.assertIn('vec3 centre = vec3(ebWake[owner * WAKE_STRIDE]', glsl,
                       'attached fizz must retain parent source and retirement owner')
         self.assertNotIn('speck_path = admit_path', render, 'shared stream paths should have one admitted owner')
 

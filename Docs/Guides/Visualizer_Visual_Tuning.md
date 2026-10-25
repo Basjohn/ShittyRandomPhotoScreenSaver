@@ -85,6 +85,10 @@ question is pixel-level (edges, aliasing, a bead's shading).
   matches a mock.
 - **Shared paths for related layers:** a wake's veil and its bead stream follow one path function, so the beads
   stream inside their veil. Two independent approximations of one thing never line up.
+- **Attached elements follow their owner, not the music.** A wake steered by a global uniform (the live stream
+  direction) swings with every musical turn while its bubble only drifts, and reads as detached. Give each emitter
+  its own state eased from the owner's real motion (EB: a lead and a lagging settle direction per wake record), and
+  root it at the owner's own size (a wake leaves the bubble's lower sides at the bubble's width and tapers).
 - **Every new control is authored into every preset** (`tools/visualizer_preset_repair.py --repair-all --mode
   <mode>` fills the default; then author the presets that use it). Tests never pin preset values.
 - Record what was tried and rejected in the mode's Investigation log, with the measurement that decided it.

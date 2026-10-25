@@ -25,9 +25,10 @@ def simulation_module():
 
 
 def source_records(snapshot):
-    assert len(snapshot.wakes) % 8 == 0
-    return {int(snapshot.wakes[i + 4]): snapshot.wakes[i:i + 8]
-            for i in range(0, len(snapshot.wakes), 8)}
+    from core.constants.extruded_bubble_world import WAKE_STRIDE
+    assert len(snapshot.wakes) % WAKE_STRIDE == 0
+    return {int(snapshot.wakes[i + 4]): snapshot.wakes[i:i + WAKE_STRIDE]
+            for i in range(0, len(snapshot.wakes), WAKE_STRIDE)}
 
 
 class WakeOwnershipTests(unittest.TestCase):
@@ -96,6 +97,32 @@ class WakeOwnershipTests(unittest.TestCase):
         retired=source_records(self.sim.advance(self.mod.MusicInput(1/60,False),controls))[ident]
         self.assertEqual(retired[7],live[ident][7])
         self.assertEqual(retired[3],live[ident][3])
+
+    def test_trail_follows_its_bubble_with_inertia(self):
+        import math
+        for _ in range(30):
+            self.tick()
+        bubble = self.sim._bubbles[0]
+
+        def turned(row, axis):     # angle (degrees) between a trail direction and "behind a bubble moving +x"
+            return math.degrees(math.acos(max(-1.0, min(1.0, -row[axis]))))
+
+        before = source_records(self.tick())[bubble.ident]
+        start_lead = turned(before, 8)
+        # The bubble swings hard sideways: its trail turns after it, never with it in one step.
+        rows = []
+        for _ in range(90):
+            bubble.x += 0.06
+            rows.append(source_records(self.tick())[bubble.ident])
+        self.assertLess(start_lead - turned(rows[0], 8), 15.0)
+        leads = [turned(row, 8) for row in rows]
+        self.assertLess(leads[-1], 25.0, 'the lead settles behind the motion')
+        self.assertTrue(all(b <= a + 1e-6 for a, b in zip(leads, leads[1:])), 'the lead turns steadily')
+        # The tail lags the lead: the turn curls back where the bubble came from.
+        self.assertGreater(turned(rows[20], 11), turned(rows[20], 8) + 5.0)
+        for row in rows:
+            for axis in (8, 11):
+                self.assertAlmostEqual(math.sqrt(sum(v * v for v in row[axis:axis + 3])), 1.0, places=5)
 
     def test_no_wake_when_no_parent_population(self):
         self.controls = self.mod.ExtrudedBubbleControls(large_count=(0, 0), mid_count=(0, 0),

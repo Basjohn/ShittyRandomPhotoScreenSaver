@@ -485,7 +485,7 @@ class QuickExtrudedBubbleRenderer:
         fizz = wake_count * fizz_per
         trails = float(parameter(parameters, "extruded_bubble_wake_trails"))
         # One wake path for the veils and the fizz that streams inside them (0 Wake Trails: fizz as before).
-        wake_path = {"uTrail": tuple(-c for c in stream), "uTrailSide": across, "uTrails": trails,
+        wake_path = {"uTrailSide": across, "uTrails": trails,
                      "uTrailTime": float(state.motion_phase),
                      "uTrailSway": float(parameter(parameters, "extruded_bubble_sway"))}
         for key in ("trails", "beads"):
