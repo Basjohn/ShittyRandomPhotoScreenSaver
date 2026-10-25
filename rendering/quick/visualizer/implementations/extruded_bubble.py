@@ -31,6 +31,7 @@ from rendering.gl_programs.extruded_bubble_program import (
     NEAR_FRAGMENT, NEAR_CLUSTER_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT, SPECK_VERTEX,
     TRAIL_FRAGMENT, TRAIL_SEGMENTS, TRAIL_VERTEX,
 )
+from core.constants.extruded_bubble_world import WAKE_STRIDE
 from rendering.gl_programs.extruded_bubble_scene import (
     CLUSTER_FLOATS, PROXY_FLOATS, SHELL_FLOATS, SURFACE_Y, bubble_instances, camera,
     SPECKS_FULL, cluster_instances, wake_instances, physical_camera, speck_amount,
@@ -161,11 +162,12 @@ class _ShaftTargets:
 
 
 class _Instances:
-    """One fixed-capacity instance buffer and its vertex array (attributes of ``sizes`` floats, divisor 1)."""
+    """One fixed-capacity instance buffer and its vertex array (attributes of ``sizes`` floats, divisor 1); a
+    buffer read only as storage gives its row's ``floats`` instead."""
 
-    def __init__(self, capacity: int, sizes: tuple[int, ...]) -> None:
+    def __init__(self, capacity: int, sizes: tuple[int, ...], floats: int | None = None) -> None:
         self.capacity, self.sizes = capacity, sizes
-        self.stride = 4 * sum(sizes)
+        self.stride = 4 * (sum(sizes) if floats is None else floats)
         self.vao = self.buffer = 0
         self.count = 0
 
@@ -314,7 +316,7 @@ class QuickExtrudedBubbleRenderer:
         self._shafts = _ShaftTargets("Extruded Bubble shafts")
         self._probe: SceneProbe | None = None
         self._shells = _Instances(_SHELL_CAPACITY, (4, 2, 1, 1))
-        self._wakes = _Instances(MAX_BUBBLES * 2, (4, 4))
+        self._wakes = _Instances(MAX_BUBBLES * 2, (), floats=WAKE_STRIDE)   # read as storage (EbWakes)
         self._clusters = _Instances(_CLUSTER_CAPACITY, (4, 4, 4, 4, 3))
         self._proxies = _Instances(_SHELL_CAPACITY, (4, 4))
         self._empty_vao = 0                       # the procedural layers read no attributes
@@ -452,7 +454,9 @@ class QuickExtrudedBubbleRenderer:
             self._uniforms.set(programs[key], {**view, **_glass(knobs, near),
                                              "uNearCoc": 22.0 * height / 941.0,
                                              "uNearMax": _near_spread(height)})
-        self._uniforms.set(programs["trails"], view)
+        self._uniforms.set(programs["trails"], {**view, "uFocus": float(knobs.get("focus", 4.2)),
+                                                "uAperture": float(knobs.get("aperture", 3.0)),
+                                                "uNearCoc": 22.0 * height / 941.0, "uNearMax": _near_spread(height)})
         chain_fill, snow_fill, fizz_fill = _procedural_fill(parameters, chain_drive(state), state.emission)
         idle_activity = _idle_activity(state.level)
         beads, snow = math.ceil(chain_fill) * _BEADS_PER_CHAIN, math.ceil(snow_fill)
@@ -485,9 +489,8 @@ class QuickExtrudedBubbleRenderer:
         fizz = wake_count * fizz_per
         trails = float(parameter(parameters, "extruded_bubble_wake_trails"))
         # One wake path for the veils and the fizz that streams inside them (0 Wake Trails: fizz as before).
-        wake_path = {"uTrailSide": across, "uTrails": trails,
-                     "uTrailTime": float(state.motion_phase),
-                     "uTrailSway": float(parameter(parameters, "extruded_bubble_sway"))}
+        wake_path = {"uTrails": trails,
+                     "uTrailTime": float(state.motion_phase)}
         for key in ("trails", "beads"):
             self._uniforms.set(programs[key], wake_path)
         self._uniforms.set(programs["blur"], {"uSource": 0})
