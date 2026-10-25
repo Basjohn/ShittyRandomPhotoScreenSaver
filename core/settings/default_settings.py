@@ -1099,6 +1099,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'extruded_bubble_auto_rotate_after': 20,
                                     'extruded_bubble_auto_rotate_speed': 6,
                                     'extruded_bubble_band_contrast': 0.5,
+                                    'extruded_bubble_band_gather': 0.0,
                                     'extruded_bubble_bar_count': 32,
                                     'extruded_bubble_bead_chains': [2, 4],
                                     'extruded_bubble_breathing': [0.5, 0.6],

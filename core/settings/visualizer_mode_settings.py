@@ -1650,6 +1650,8 @@ _EXTRUDED_BUBBLE = ModeSettings(
                tooltip='Enable or disable spatial banding/clustering of floating specks; does not control audio frequency bands.'),
         Slider("extruded_bubble_band_contrast", "Band Contrast:", 0.0, 1.0, bucket="particles", when=_EB_BANDS,
                tooltip='Control how distinctly the particle bands stand out from the surrounding speck field. Shown when Particle Bands is enabled.'),
+        Slider("extruded_bubble_band_gather", "Band Gathering:", 0.0, 1.0, bucket="particles", when=_EB_BANDS,
+               tooltip='With SCENE emission, gather the specks themselves into the bands, leaving dark water between them. 0 keeps the whole field and lets the bands vary its glow.'),
         Slider("extruded_bubble_focus", "Focus:", 0.0, 1.0, bucket="lens",
                tooltip='Choose the focus distance: bubbles nearer than it soften. The lower half softens only very close bubbles; the upper half reaches the bubbles in view.'),
         Slider("extruded_bubble_aperture", "Aperture:", 0.0, 1.0, bucket="lens",

@@ -497,7 +497,7 @@ class QuickExtrudedBubbleRenderer:
             "uSpeckSource": stream_source, "uSpeckEnd": stream_end,
             "uWarmShare": float(knobs["warm_share"]),
             "uClouds": (float(knobs["cloud_contrast"]), float(knobs["cloud_floor"]), float(knobs["cloud_glow"])),
-            "uBandFreq": float(knobs["band_freq"]),
+            "uBandFreq": float(knobs["band_freq"]), "uBandGather": float(knobs["band_gather"]),
             "uSpeckSize": float(knobs["speck_size"])})
         self._uniforms.set(programs["proxies"], {"uSpecks": 1.0, "uSpeckBloom": 0.0, "uParticleActivity": 1.0,
                                                  "uParticleLighting": 0.0,

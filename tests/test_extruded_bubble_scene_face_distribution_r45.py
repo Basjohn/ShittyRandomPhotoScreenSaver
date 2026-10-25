@@ -39,7 +39,8 @@ def test_scene_gpu_inlet_uses_independent_face_uv_not_correlated_fraction():
 
 def test_scene_speck_band_mask_can_no_longer_drop_entire_face_patches():
     shader = SHADER.read_text(encoding='utf-8')
-    assert 'uSceneEmission == 1 ? sceneKeep : uClouds.y + 0.88 * clouds' in shader
+    # SCENE keeps whole-face admission unless Band Gathering asks for the banded patches (dark water between bands).
+    assert 'uSceneEmission == 1 ? mix(sceneKeep, uClouds.y + 0.88 * clouds, uBandGather)' in shader
     assert 'uSceneEmission == 1 ?\n        (0.35 + uClouds.z' in shader
     assert 'bool kept = speckRandom(i, 6u)' in shader
     # BEAM keeps the original cloud-shaped admission; only SCENE reinterprets

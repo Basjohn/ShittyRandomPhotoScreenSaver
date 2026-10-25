@@ -3033,3 +3033,25 @@ Presets 3-7 re-authored on the current architecture (physical paths, SCENE emiss
 Remaining gaps: P6's goal looks down onto a caustic light network (camera and caustic backdrop; the backdrop touches
 the no-seabed ruling, so it needs a decision); P7's shafts stay paler than copper; a near-to-far depth hierarchy
 (large blurred near bubbles) only appears when bubbles pass close to the camera.
+
+## 69. Lab parity for presets 3-7 (25 October)
+
+Operator: the §68 presets were "vastly inferior"; the goal is parity with the composition lab
+(`tools/labs/extruded_bubble_lab.py`, whose scenes came closest to the mocks), presets 1 and 2 excluded, then past it
+toward the mocks. The original presets 3-7 were already transcriptions of the lab recipes, yet rendered far worse
+than the lab: the gap was production's world against the lab's composition, not the values. Differences found (lab
+against production, same recipe) and how each was closed:
+- **Lens:** the lab renders at 62 degrees vertical; the presets used 45. Camera Field of View 62.
+- **Composition:** the lab composes by on-screen radius (~10 large 40-85 px, 26 mid 18-40, 60 small 8-18, 150 tiny
+  2-7, ~40% of large/mid fused, near giants at the edges); production showed nothing under 18 px (its small bubbles
+  swell up to ~4x in loud music) and 7-60 visible bubbles in BEAM piles. New `eb_screen_stats` measures the same
+  bands through the production camera; SCENE emission, 150 small + 16 large, smaller sizes and moderated loud swells
+  bring P5 to 43/50/10/1 in the 7-85 px bands; loose microbubble plumes (Bead Scatter) supply the tiny band.
+- **Lighting coverage:** the lab draws deep-light rays with coverage off (BEAM); SCENE coverage hid the fan.
+- **Light placement:** the lab's deep lights sit just outside the frame (glow and fan only); production's emitters
+  were discs inside it. Sources moved toward the camera so they rise out of frame.
+- **Specks:** dense bright starfields with orange specks; the lab's are sparse and fine. P7's banded clouds need the
+  specks gathered into bands, which SCENE emission had turned into glow variation only: new **Band Gathering**
+  option (0 = the previous behaviour; presets 1/2 render pixel-identically).
+Remaining against the lab: fused doublets (~40% in the lab, 0% here: needs bubbles born as fused pairs), near
+defocused giants at the edges, P7's corner starburst a little stronger than the lab's.
