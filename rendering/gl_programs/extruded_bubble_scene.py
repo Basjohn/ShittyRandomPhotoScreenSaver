@@ -125,6 +125,8 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
     # Under a surface the sky's light is mostly the water's own (0.45 was the fixed share); a deep light's glow, beams
     # and veils take its colour (0.85 was its fixed share).
     tint = max(0.0, min(1.0, float(_p(parameters, "light_tint"))))
+    # Shafts pale 35% toward white up to the former sunlit share; a coloured light keeps its colour in them.
+    knobs["shaft_white"] = 0.35 * max(0.0, min(1.0, (1.0 - tint) / 0.55))
     # Sparkle scales the bubbles' own glints (specular highlight and glint proxies): 1 is the original look, 0 none.
     sparkle = float(_p(parameters, "sparkle"))
     knobs["proxy_power"] = float(knobs["proxy_power"]) * strength * sparkle
@@ -167,7 +169,7 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
     softness = float(_p(parameters, "ray_softness"))
     knobs.update(shaft_soft=softness, fan_contrast=0.8+(0.2-0.8)*softness,
                  fan_march=0.15+(0.6-0.15)*softness, fan_rays=80.0+(30.0-80.0)*softness, fan_reach=0.3 + 0.7 * float(_p(parameters, "ray_reach")))
-    knobs.update(mist=float(_p(parameters, "haze")), veils=float(_p(parameters, "veils")))
+    knobs.update(mist=float(_p(parameters, "haze")), veils=float(_p(parameters, "veils")), dust=float(_p(parameters, "dust")))
     clarity, softness = float(_p(parameters, "clarity")), float(_p(parameters, "softness"))
     knobs.update(face_reflect=1.0 + (0.2 - 1.0) * clarity,
                  probe_fill=float(MODES["surface"]["probe_fill"] if mode == "surface" else 3.0) * float(_p(parameters, "rim_glow")),

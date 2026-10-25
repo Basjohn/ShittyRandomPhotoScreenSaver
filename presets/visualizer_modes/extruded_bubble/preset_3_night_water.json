@@ -47,11 +47,13 @@
           12,
           255
         ],
+        "extruded_bubble_doublets": 0.35,
         "extruded_bubble_drift": [
           0.3,
           0.8
         ],
         "extruded_bubble_drift_direction": "Wander",
+        "extruded_bubble_dust": 0.0,
         "extruded_bubble_dynamic_floor": false,
         "extruded_bubble_emission_geometry": "SCENE",
         "extruded_bubble_exposure": 0.82,

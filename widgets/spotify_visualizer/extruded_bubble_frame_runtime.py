@@ -46,6 +46,7 @@ def controls_from_parameters(parameters) -> ExtrudedBubbleControls:
         large_size=float(parameters.get("extruded_bubble_large_size", 1.0)),
         small_size=float(parameters.get("extruded_bubble_small_size", 1.0)),
         size_variety=float(parameters["extruded_bubble_size_variety"]),
+        doublets=float(parameters["extruded_bubble_doublets"]),
         columns=float(parameters["extruded_bubble_columns"]),
         bubble_spread=float(parameters["extruded_bubble_bubble_spread"]),
         emission_geometry=str(parameters.get("extruded_bubble_emission_geometry", "BEAM")),

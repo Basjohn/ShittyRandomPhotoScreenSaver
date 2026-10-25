@@ -101,6 +101,7 @@ class ExtrudedBubbleControls:
     large_size: float = 1.0                # physical-radius multiplier; existing controls preserve 1.0
     small_size: float = 1.0                # independent mid population radius multiplier
     size_variety: float = 0.6               # 0 all alike .. 1 strongly varied (biased small)
+    doublets: float = 0.0                   # chance a birth rises already fused with a smaller companion (or two)
     columns: float = 0.0                    # 0..1 share of bubbles that rise in lines along the stream
     bubble_spread: float = 1.0               # source-patch width; independent from Columns and particle width
     emission_geometry: str = "BEAM"           # BEAM authored patch / SCENE all physical upstream faces
@@ -441,7 +442,42 @@ class ExtrudedBubbleSimulation:
                          alpha=1.0 if anywhere else 0.0)
         self._next_ident += 1
         self._bubbles.append(bubble)
+        # Never draw from the stream when Doublets is 0: the population stays exactly what it was.
+        if controls.doublets > 0.0 and rng.random() < controls.doublets:
+            self._companions(bubble, prospective)
         return True
+
+    def _companions(self, parent: _Bubble, prospective: float) -> None:
+        """A birth that rises already fused: one smaller companion touching it (now and then a second), merged as a
+        contact fuse merges them (the goals' doublets and triplets). Physical births at the parent, never placed by
+        the camera; a crowded spot simply leaves the parent single."""
+        rng = self._rng
+        for _ in range(1 if rng.random() < 0.8 else 2):
+            if len(self._bubbles) >= MAX_BUBBLES:
+                return
+            share = rng.uniform(0.3, 0.85)
+            current = prospective * share
+            gap = (prospective + current) * rng.uniform(0.8, 0.95)
+            theta, z = rng.uniform(0.0, math.tau), rng.uniform(-1.0, 1.0)
+            ring = math.sqrt(max(0.0, 1.0 - z * z))
+            axis = (ring * math.cos(theta), ring * math.sin(theta), z)
+            point = tuple(p + a * gap for p, a in zip((parent.x, parent.y, parent.z), axis))
+            # Inlet births sit on a face: the companion may lie as far outside as the pair's own span, entering with it.
+            if any(abs(p - c) > h + gap + current for p, c, h in zip(point, WORLD_CENTER, WORLD_HALF)):
+                continue
+            family = set(self._clusters[parent.cluster].members) if parent.cluster >= 0 else {parent.ident}
+            if any(sum((p - q) ** 2 for p, q in zip(point, (b.x, b.y, b.z))) <
+                   (current + max(b.current_radius, b.radius * 0.35) + WORLD_UNIT * .08) ** 2
+                   for b in self._bubbles if b.ident not in family and b.popping < 0 and not b.leaving):
+                continue
+            companion = _Bubble(self._next_ident, parent.large, *point, parent.radius * share,
+                                rng.uniform(0.0, math.tau), current_radius=current, visual_radius=current,
+                                alpha=parent.alpha)
+            self._next_ident += 1
+            self._bubbles.append(companion)
+            if not self._fuse(parent, companion):
+                self._bubbles.pop()
+                return
 
     def _outside(self, b: _Bubble, *, surface_scene: bool) -> bool:
         return (any(abs(p - c) > h + WORLD_MARGIN + b.current_radius
@@ -677,6 +713,9 @@ class ExtrudedBubbleSimulation:
                     for _ in range(targets[large]):
                         # Finite attempts; never weaken spacing just to reach
                         # authored occupancy or allocate beyond MAX_BUBBLES.
+                        # Fused companions count toward the occupancy they join.
+                        if sum(1 for b in self._bubbles if b.large == large) >= targets[large]:
+                            break
                         self._spawn(large, controls, direction, anywhere=True)
                 continue
             shortage = targets[large] - len(live[large])
