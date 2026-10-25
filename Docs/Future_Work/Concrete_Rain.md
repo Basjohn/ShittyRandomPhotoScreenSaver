@@ -1,8 +1,8 @@
 # Concrete Rain — deferred Visualizer concept
 
-**Status:** deferred concept. Not admitted for runtime implementation; `Future_Work.md` routes it and `Current_Plan.md` owns any promoted slice. This document records the visual target, likely shared architecture and the guardrails for future admission.
+**Status:** queued third in `Current_Plan.md` §7 (after Waveform Ribbon and Melt Pool), built lab-first (§7.0) on the shared 3D primitives of §6. This document records the visual target, likely shared architecture and the guardrails for future admission.
 
-**Reference image:** `references/Low and High Reactivity Rain Comparison.png` (operator-owned local reference; intentionally omitted from GODZIP payloads). The left panel is the low-reactivity target and the right panel is the high-reactivity target.
+**Reference image:** `references/Low and High Reactivity Concrete Rain Comparison.png` (operator-owned local reference; intentionally omitted from GODZIP payloads). The left panel is the low-reactivity target and the right panel is the high-reactivity target.
 
 ---
 
