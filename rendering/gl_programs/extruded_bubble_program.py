@@ -1205,7 +1205,7 @@ float scenePathFade(vec3 p, vec3 centre, vec3 halfExt, float travelled, float sp
 # fizz beads (_BEAD_GLSL) both follow it, so the beads flow inside their veil. Each path is the water the bubble has
 # passed through (the simulation's WakePath: sampled history, dragged after the bubble a moment, then drifting with the
 # water), so the trail shows where the bubble went and the music steers only the bubble.
-TRAIL_FADE = 0.31   # where a trail (its sheet and its beads) begins to thin, as a share of its length
+TRAIL_FADE = 0.26   # where a trail (its sheet and its beads) begins to thin, as a share of its length
 _WAKE_PATH_GLSL = """
 layout(std430, binding = 7) readonly buffer EbWakes { float ebWake[]; };    // see core.constants WAKE_STRIDE
 const int WAKE_STRIDE = """ + str(WAKE_STRIDE) + """;
@@ -1589,6 +1589,7 @@ out float vWidthPx;           // the veil's half-width on screen here
 out float vAlong;             // place in the water along the trail, in its bubble's radii (the strands stay put)
 flat out float vBlur;         // its bubble's near-defocus circle (pixels)
 out float vUnder;             // distance below the bubble's centre, in its radii (inside the bubble below 1)
+out float vHalf;              // the sheet's half-width here, in its bubble's radii
 flat out float vStrength;
 flat out float vShapeSeed;
 void main() {
@@ -1627,6 +1628,7 @@ void main() {
     float width = body * (0.72 + 0.28 * exp(-0.6 * d * d)) * (1.0 - 0.45 * pow(s, 1.6))
                 * mix(outline, 1.0, smoothstep(0.0, 1.5, d)) + nominal * 0.05 * smoothstep(0.0, 1.0, d);
     vUnder = d;
+    vHalf = width / max(r, 1e-4);
     vWidthPx = width / (uPixel * max(-here.z, 0.1));
     vAcross = vec2(sideSign, s);
     vAlong = (wakeField(owner, WAKE_WATER) - c) * spacing / max(nominal, 1e-3);   // fixed in the water
@@ -1647,6 +1649,7 @@ in float vWidthPx;
 in float vAlong;
 flat in float vBlur;
 in float vUnder;
+in float vHalf;
 flat in float vStrength;
 flat in float vShapeSeed;
 void main() {
@@ -1693,7 +1696,11 @@ void main() {
     // its bend and its inside appear below the bubble, never as a milky fill or a seam across it.
     // The wake comes out of the bubble, not after it: its water and strands rise into the bubble's lower half (seen
     // through its glass), so no dark band of empty water separates the bubble's outline from its wake.
-    float below = smoothstep(0.3, 0.9, vUnder);
+    // Hidden only where it lies inside the bubble's outline (no milky glass); in the crescent between the bubble's
+    // curving lower outline and the sheet's straight edges the water shows, filling right up to the bubble's side (it
+    // was hidden there too: a dark crescent, then a lone edge, read as a detached wake on larger bubbles).
+    float fromCentre = length(vec2(x * vHalf, vUnder));              // radii from the bubble's centre
+    float below = max(smoothstep(0.3, 0.9, vUnder), smoothstep(0.95, 1.08, fromCentre));
     // Where it leaves the bubble the disturbed water glows most: one luminous junction binds bubble and wake.
     float junction = exp(-pow((vUnder - 0.9) / 0.45, 2.0)) * body * (1.0 - 0.5 * abs(x));
     vec2 shift = acrossScreen * x * sqrt(max(1.0 - x * x, 0.0)) * min(vWidthPx * 0.18, 7.0) * strength * body * below;
