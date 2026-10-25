@@ -180,7 +180,8 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
     # Clouds stretched along the stream; Particle Bands sharpens them into the sixth mock's diagonal bands.
     banded = bool(knobs["banded"])
     knobs.update(cloud_contrast=1.5 + 2.5 * float(_p(parameters, "band_contrast")) if banded else 1.5,
-                 cloud_floor=0.03 if banded else 0.12, cloud_glow=1.8 if banded else 1.3, band_freq=9.0)
+                 cloud_floor=0.03 if banded else 0.12, cloud_glow=1.8 if banded else 1.3, band_freq=9.0,
+                 band_gather=float(_p(parameters, "band_gather")) if banded else 0.0)
     knobs.update(focus=focal_depth(float(_p(parameters, "focus"))), aperture=0.3 + 2.7 * float(_p(parameters, "aperture")))
     return knobs
 

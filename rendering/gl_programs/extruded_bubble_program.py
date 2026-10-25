@@ -1345,6 +1345,7 @@ uniform vec3 uSpeckEnd;          // world end and fade-out region
 uniform float uWarmShare;      // share lit in the particle colour
 uniform vec3 uClouds;          // cloud contrast, floor, glow
 uniform float uBandFreq;
+uniform float uBandGather;      // SCENE: 0 the bands vary the field's glow .. 1 they gather the specks themselves
 uniform float uSpeckSize;
 vec4 aPoint;
 vec4 aLook;
@@ -1375,7 +1376,10 @@ void speckInstance() {
     // authored band variation modulates light, not spatial admission; a stable
     // deterministic threshold bounds speck work without camera-dependent births.
     float sceneKeep = clamp(uClouds.y + 0.45 * uClouds.z, 0.35, 0.9);
-    bool kept = speckRandom(i, 6u) < (uSceneEmission == 1 ? sceneKeep : uClouds.y + 0.88 * clouds);
+    // Band Gathering asks for exactly those patches: the diagonal bands with dark water between them (lab, sixth
+    // mock), gathering the specks into the clouds as BEAM does.
+    bool kept = speckRandom(i, 6u) < (uSceneEmission == 1 ? mix(sceneKeep, uClouds.y + 0.88 * clouds, uBandGather)
+                                                         : uClouds.y + 0.88 * clouds);
     // Along the exact Stream Source -> End path. Cohorts recycle *after* fading
     // at End and *before* fading in at Source, avoiding static midpoint debris.
     vec3 path = uSpeckEnd - uSpeckSource;
