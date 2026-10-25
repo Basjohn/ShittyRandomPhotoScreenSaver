@@ -48,10 +48,15 @@ New failures need exact-tree reproduction and owner-level repair, never toleranc
 Triage history: `Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md`.
 
 - [ ] **Settings-open lifecycle barrier timeout after framed 3D use:** intermittent, more common in long sessions,
-  since Neon Lake (the first framed 3D Visualizer). 24 Oct 16:35:19: `[LIFECYCLE_BARRIER] timeout reason=settings`
-  with every QObject destroyed but Python owners `QuickDisplayUnit` and `QuickDisplayVisualizerOwner` still alive (a
-  lingering Python reference, likely on the framed visualizer/camera path). Preserved run:
-  `logs/preserved/2026-10-24_settings_barrier_timeout/` (git-ignored). Find the referrer; never weaken the barrier.
+  since Neon Lake (the first framed 3D Visualizer). Every QObject destroyed but `QuickDisplayUnit` and
+  `QuickDisplayVisualizerOwner` still alive (preserved run: `logs/preserved/2026-10-24_settings_barrier_timeout/`).
+  Evidence so far (25 Oct): they behave as cyclic garbage: the first retirement completed only through the
+  startup-freeze thaw sweep (collected 13207); later retirements have no sweep and the RUN policy ran one gen2
+  collection all session. A per-retirement GC sweep was tried and **reverted** (it changes collector timing on every
+  retirement path the GC policy was tuned for). The referrer snapshot on timeout
+  (`[LIFECYCLE_BARRIER][PYTHON_OWNER_REFS]`) now also runs in source runs (`main_mc`, `main.py`), not only Diagnostic:
+  the next timeout names what holds them. Find that cycle and break it at teardown (as
+  `_release_terminal_generation_references` and the owner's `retire` do); never weaken the barrier or touch GC timing.
 - [ ] **`.venv` launcher warning** `Failed to find real location of ...pythoncore-3.14-64\\python.exe`: harmless so
   far (commands exit 0); find its cause without an environment-variable workaround.
 - [~] **Authored-data test hygiene:** tests never freeze mutable presets, Settings values, theme contents or pack
