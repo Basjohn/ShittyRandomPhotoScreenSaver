@@ -1505,6 +1505,7 @@ _EB_BEAM_RAYS = (_EB_RAYS, ("extruded_bubble_lighting_coverage", "BEAM"))
 _EB_SURFACE = ("extruded_bubble_light_type", "Sunlit Surface")
 _EB_SURFACE_RAYS = (_EB_RAYS, _EB_SURFACE)
 _EB_BANDS = ("extruded_bubble_particle_bands", True)
+_EB_BEAM_EMISSION = ("extruded_bubble_emission_geometry", "BEAM")   # greyed under SCENE (whole inlet faces)
 _EB_AUTO_ROTATE = ("extruded_bubble_auto_rotate", True)
 
 _EXTRUDED_BUBBLE = ModeSettings(
@@ -1553,7 +1554,7 @@ _EXTRUDED_BUBBLE = ModeSettings(
                tooltip='Set the quiet-to-loud number of large bubbles: quiet passages head for the left handle, loud ones for the right. Bubbles leave by travelling out, never popping, so the count follows a section over seconds.'),
         Range("extruded_bubble_mid_bubbles", "Small Bubbles:", 0.0, 150.0, scale=1, integer=True, bucket="bubbles",
                tooltip='Set the quiet-to-loud number of small bubbles: quiet passages head for the left handle, loud ones for the right. Bubbles leave by travelling out, never popping, so the count follows a section over seconds.'),
-        Range("extruded_bubble_bead_chains", "Bead Chains:", 0.0, 10.0, scale=1, integer=True, bucket="bubbles",
+        Range("extruded_bubble_bead_chains", "Bead Chains:", 0.0, 20.0, scale=1, integer=True, bucket="bubbles",
                tooltip='Set the quiet-to-loud amount of free bead chains in the current stream: quiet passages sit near the left handle, loud ones near the right.'),
         Slider("extruded_bubble_large_size", "Large Size:", 0.5, 2.0, bucket="bubbles",
                tooltip='Set the nominal physical radius of large bubbles; 1.0 is the original size, before musical breathing and per-bubble variation.'),
@@ -1569,9 +1570,10 @@ _EXTRUDED_BUBBLE = ModeSettings(
                tooltip='Set the chance that a bubble rises already fused with a smaller companion, now and then two, as merged doublets and triplets.'),
         Slider("extruded_bubble_size_variety", "Size Variety:", 0.0, 1.0, bucket="bubbles",
                tooltip='Vary individual bubble birth sizes within a population; low values are more uniform, high values produce a wider range.'),
-        Slider("extruded_bubble_columns", "Columns:", 0.0, 1.0, bucket="bubbles",
+        Slider("extruded_bubble_columns", "Columns:", 0.0, 1.0, bucket="bubbles", enabled_when=_EB_BEAM_EMISSION,
                tooltip='In BEAM, gather a share of bubble births into stream-aligned columns. SCENE uses full-area inlet faces and does not quantize them into columns.'),
         Slider("extruded_bubble_bubble_spread", "Bubble Spread:", 0.0, 4.0, bucket="bubbles",
+               enabled_when=_EB_BEAM_EMISSION,
                tooltip='In BEAM, widen or narrow bubble births around the local Stream Source. SCENE instead uses complete inlet faces; this does not change the population limits.'),
         Choice("extruded_bubble_emission_geometry", "Emission Geometry:", ("BEAM", "SCENE"), bucket="motion",
                tooltip="BEAM emits from the authored local source. SCENE fills the physical tank from upstream boundary faces and exits at downstream faces. Same bubbles, physics and count limits. [NEEDS AUDIT] Visual density and rendering cost remain unaccepted."),
@@ -1642,6 +1644,7 @@ _EXTRUDED_BUBBLE = ModeSettings(
         Range("extruded_bubble_particles", "Particles:", 0.0, 1.0, percent=True, bucket="particles",
                tooltip='Set quiet-to-loud particle density: quiet passages sit near the left handle, loud ones near the right. Individual speck radiance stays constant while size and glow release separately.'),
         Slider("extruded_bubble_particle_spread", "Particle Spread:", 0.0, 4.0, bucket="particles",
+               enabled_when=_EB_BEAM_EMISSION,
                tooltip='In BEAM, widen or narrow decorative specks, free beads and snow around the stream. SCENE distributes them across actual inlet faces instead. Attached wakes always keep their parent bubble source.'),
         Slider("extruded_bubble_particle_size", "Particle Size:", 0.5, 2.0, bucket="particles",
                tooltip='Set the apparent size of floating decorative specks. It does not resize ordinary bubbles.'),
@@ -1659,7 +1662,7 @@ _EXTRUDED_BUBBLE = ModeSettings(
         Slider("extruded_bubble_band_contrast", "Band Contrast:", 0.0, 1.0, bucket="particles", when=_EB_BANDS,
                tooltip='Control how distinctly the particle bands stand out from the surrounding speck field. Shown when Particle Bands is enabled.'),
         Slider("extruded_bubble_band_gather", "Band Gathering:", 0.0, 1.0, bucket="particles", when=_EB_BANDS,
-               tooltip='With SCENE emission, gather the specks themselves into the bands, leaving dark water between them. 0 keeps the whole field and lets the bands vary its glow.'),
+               tooltip='Gather the background dust into the bands, and with SCENE emission the specks themselves too, leaving dark water between them. 0 keeps the whole field and lets the bands vary its glow.'),
         Slider("extruded_bubble_focus", "Focus:", 0.0, 1.0, bucket="lens",
                tooltip='Choose the focus distance: bubbles nearer than it soften. The lower half softens only very close bubbles; the upper half reaches the bubbles in view.'),
         Slider("extruded_bubble_aperture", "Aperture:", 0.0, 1.0, bucket="lens",

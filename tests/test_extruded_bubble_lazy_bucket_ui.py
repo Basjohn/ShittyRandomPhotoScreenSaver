@@ -90,6 +90,25 @@ def test_cross_bucket_conditional_survives_out_of_order_expansion(eb_tab):
     assert collect_extruded_bubble_mode_settings(tab)["extruded_bubble_light_type"] == "Sunlit Surface"
 
 
+def test_beam_only_emission_controls_grey_under_scene_across_buckets(eb_tab):
+    """Controls that only shape BEAM emission are greyed (value kept) under SCENE, live and across lazy buckets."""
+    tab, config = eb_tab
+    beam_only = ("extruded_bubble_columns", "extruded_bubble_bubble_spread", "extruded_bubble_particle_spread")
+    load_extruded_bubble_mode_settings(tab, {**config, "extruded_bubble_emission_geometry": "SCENE"})
+    toggle_bucket(tab, "bubbles")    # dependents built BEFORE the controlling Motion bucket
+    toggle_bucket(tab, "particles")
+    assert not any(getattr(tab, key).isEnabled() for key in beam_only)
+    toggle_bucket(tab, "motion")
+    tab.extruded_bubble_emission_geometry.setCurrentText("BEAM")
+    assert all(getattr(tab, key).isEnabled() for key in beam_only)
+    tab.extruded_bubble_bubble_spread.setValue(tab.extruded_bubble_bubble_spread.minimum())
+    tab.extruded_bubble_emission_geometry.setCurrentText("SCENE")
+    assert not any(getattr(tab, key).isEnabled() for key in beam_only)
+    saved = collect_extruded_bubble_mode_settings(tab)
+    assert saved["extruded_bubble_emission_geometry"] == "SCENE"
+    assert saved["extruded_bubble_bubble_spread"] == pytest.approx(0.0)   # greyed, not reset
+
+
 def test_lighting_coverage_is_independent_and_survives_lazy_hydration(eb_tab):
     """Test-owned BEAM/SCENE edits must round-trip independently of emission.
 
