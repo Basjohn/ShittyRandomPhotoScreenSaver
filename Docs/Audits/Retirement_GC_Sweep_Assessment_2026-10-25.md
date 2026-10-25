@@ -1,6 +1,7 @@
 # Retirement GC sweep: assessment (2026-10-25)
 
-**Status:** assessment only. The per-retirement sweep (commit `c8a00d08`) was reverted in `635587c3`; nothing here is
+**Status:** assessment only. **Cause found (R-169):** the opt-in GUI stall sampler's frame-map cycle, fixed
+without any sweep (option A); this stays as the record of why a sweep was not adopted. The per-retirement sweep (commit `c8a00d08`) was reverted in `635587c3`; nothing here is
 implemented. Live task: `Current_Plan.md` §2A "Settings-open lifecycle barrier timeout". First find the actual cycle
 (referrer snapshot now on in source runs, `ec2f0920`), then decide whether any sweep mechanism is wanted.
 
