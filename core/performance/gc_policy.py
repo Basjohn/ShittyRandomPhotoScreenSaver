@@ -12,11 +12,15 @@ This owner deliberately does much less:
 * observe every collection without adding a timer or polling cadence;
 * restore the interpreter's original policy when RUN lifetime ends.
 
-No manual ``gc.collect()`` occurs during active rendering. A single explicit
-stop-boundary collection is permitted only if this RUN has frozen a live Quick
-generation and that generation's Qt/GL/thread roots have all retired. This
-resolves the freeze-versus-Settings-destruction conflict without shifting an
-expensive gen2 scan into a visualizer frame.
+No manual ``gc.collect()`` occurs during active rendering. One explicit
+collection is permitted per runtime **retirement**, requested by the strict
+destruction barrier only after the retiring generation's Qt/GL/thread roots have
+all drained (``collect_retirement_cycles``). A retiring generation is long-lived,
+so its Python callback cycles sit in the oldest generation, which this policy
+deliberately scans rarely (one gen2 collection in a whole session was observed):
+without the boundary sweep the barrier waited on a deep scan that did not come and
+timed out (2026-10-25; first retirement completed only through its sweep, later
+ones failed). Never during a visualizer frame; never a polling cadence.
 """
 from __future__ import annotations
 
@@ -233,20 +237,21 @@ class RuntimeGCPolicy:
         with self._lock:
             return self._retirement_collection_pending
 
-    def collect_thawed_retirement_cycles_once(self) -> bool:
-        """One stop-boundary gen2 sweep, only after all Qt/native roots drained.
+    def collect_retirement_cycles(self) -> bool:
+        """One gen2 sweep at a runtime retirement boundary, after all Qt/native roots drained.
 
-        Called by the existing destruction barrier when it sees exclusively
-        outstanding Python owners and zero live Qt/resources/thread work.
-        The barrier still requires every weak owner to disappear, and still
-        fails loudly if an actual reference leak remains. No frame-time GC.
+        Called by the destruction barrier (at most once per retirement) when it sees exclusively outstanding Python
+        owners and zero live Qt/resources/thread work: the retired generation's callback cycles are garbage that
+        only a deep scan reclaims. The barrier still requires every weak owner to disappear and still fails loudly
+        if an actual reference leak remains. No frame-time GC.
         """
         with self._lock:
-            if not self._retirement_collection_pending:
+            if not self._active:
                 return False
+            thawed = self._retirement_collection_pending
             self._retirement_collection_pending = False
         collected = gc.collect(2)
-        logger.info("[GC_POLICY] Stop-boundary thaw sweep collected=%d", collected)
+        logger.info("[GC_POLICY] Retirement-boundary sweep collected=%d thawed_generation=%s", collected, thawed)
         return True
 
     def stop(self) -> bool:
