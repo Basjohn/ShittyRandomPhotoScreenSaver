@@ -3055,3 +3055,18 @@ against production, same recipe) and how each was closed:
   option (0 = the previous behaviour; presets 1/2 render pixel-identically).
 Remaining against the lab: fused doublets (~40% in the lab, 0% here: needs bubbles born as fused pairs), near
 defocused giants at the edges, P7's corner starburst a little stronger than the lab's.
+
+## 70. Doublets, ember smoke and P7's copper shafts (25 October)
+
+Toward the lab, then past it to the mocks (operator: the lab is not the goal):
+- **Doublets (option):** a birth rises already fused with a smaller companion (0.3-0.85x, now and then two), merged
+  by the existing fuse layout; a physical birth at the parent, never a camera placement. Inlet births sit on a face,
+  so a companion may lie outside by the pair's own span. 0 draws nothing from the stream (presets 1/2 identical);
+  0.35 gives the lab's ~40% fused share of large/mid bubbles on screen (`eb_screen_stats`).
+- **Dust (option):** production had the lab's dust hard-wired off. Exposed, made strong enough to read as glowing
+  smoke, tinted toward the light's colour, drawn out in fine streaks, and with Band Gathering it follows the same
+  world bands as the ember specks, so smoke and embers coincide (beyond the lab, toward the sixth goal).
+- **P7's top right:** the goal shows broad copper beams slanting in from off-frame; the deep light drew a point
+  emitter with a radial starburst. P7 now uses a sunlit surface from the upper right with Light Tint 1. Shafts paled
+  35% toward white whatever the tint; the whitening now eases off above the former sunlit tint (0.45 unchanged).
+Steady GPU for P7 at 1672x941: 4.2-4.5 ms median. Presets 1/2 render pixel-identically.

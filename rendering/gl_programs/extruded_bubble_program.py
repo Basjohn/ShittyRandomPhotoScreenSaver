@@ -35,6 +35,7 @@ uniform vec3 uDeep;
 uniform vec3 uWater;
 uniform vec3 uSkyTint;
 uniform vec3 uShaftColour;
+uniform float uShaftWhite;     // how far the shafts pale toward white (sunlight); less as Light Tint colours them
 uniform float uWisps;
 uniform float uVeils;           // luminous caustic web through the water (deep scenes)
 uniform float uSurfaceY;
@@ -46,6 +47,9 @@ uniform float uMist;
 uniform float uSurfaceGain;
 uniform float uSurfaceSky;      // the window's light away from the sun   // the light through the surface (HDR: what bubbles mirror)
 uniform float uDust;
+uniform vec3 uDustAlong;        // the stream (world), along which the particle bands run
+uniform vec3 uDustAcross;
+uniform vec3 uDustBands;        // band frequency, world unit, how far the dust gathers into the particle bands (0..1)
 uniform float uRayFocus;
 uniform float uRayCut;          // beam density below which water stays clear
 uniform float uSpecks;          // particulate density in the water
@@ -100,7 +104,7 @@ vec3 basinWater(vec3 ray, float detail, float shafts) {
                 + uShaftColour * (pow(glow, 4.0) * 0.08 * (uGlow - 1.0) + pow(glow, 10.0) * 0.22 * uGlow
                                   + pow(glow, 60.0) * 0.6) * uLightStrength;
     if (shafts > 0.0)
-        medium += mix(uShaftColour, vec3(0.9), 0.35) * shafts * (0.4 + 1.9 * pow(glow, 2.5));
+        medium += mix(uShaftColour, vec3(0.9), uShaftWhite) * shafts * (0.4 + 1.9 * pow(glow, 2.5));
     // Below: the abyss, darkening with depth (operator: no ocean floor).
     if (ray.y <= 0.015) return medium;
     float distance_ = (SURFACE_Y - uEye.y) / ray.y;
@@ -198,10 +202,27 @@ void main() {
         vec2 along = normalize(uStreak + vec2(1e-4));
         vec2 rotated = vec2(dot(angular, along), dot(angular, vec2(-along.y, along.x)));
         float cloud = skyFbm2(rotated * vec2(1.6, 6.5) + vec2(uTime * 0.02, 0.0), 5, 67u);
-        float dust = smoothstep(0.42, 0.85, cloud);
+        float dust = smoothstep(0.38, 0.85, cloud);
+        if (uDustBands.z > 0.0) {
+            // Gathered with the specks: the same world-space bands, sampled at three depths along the ray, so the
+            // smoke glows where the embers stream (sixth goal) instead of wherever the sky noise falls.
+            float banded = 0.0;
+            for (int i = 0; i < 3; ++i) {
+                vec3 p = uEye + ray * (6.0 + 8.0 * float(i)) - uWorldCenter;
+                float a = dot(p, uDustAcross) / uDustBands.y, b = dot(p, uDustAlong) / uDustBands.y;
+                float phase = a * uDustBands.x + 1.4 * sin(b * 2.3 + a * 3.0) + 0.8 * sin(b * 5.1 - a * 7.0);
+                banded += pow(clamp(0.5 + 0.5 * sin(phase), 0.0, 1.0), 3.0) / 3.0;
+            }
+            dust = mix(dust, smoothstep(0.25, 0.8, cloud) * 2.4 * banded, uDustBands.z);
+        }
+        // Fine smouldering streaks drawn out along the stream inside the clouds (smoke, not a smooth glow).
+        float streaks = skyFbm2(rotated * vec2(3.5, 24.0) + vec2(uTime * 0.03, 0.0), 4, 71u);
+        dust *= 0.35 + 1.3 * smoothstep(0.35, 0.75, streaks);
         float toward = 0.5 + 1.2 * pow(max(dot(ray, uSunBelow), 0.0), 2.0);
-        vec3 ember = uShaftColour * vec3(1.0, 0.62, 0.4);
-        colour += ember * uDust * dust * dust * 0.45 * toward * uLightStrength;
+        // Smouldering: the light's own colour deepened toward red, as embers glow (the shafts' colour washed it pale).
+        vec3 ember = mix(uShaftColour, uLightColour, 0.6) * vec3(1.0, 0.55, 0.3);
+        // Glowing smoke, not a faint tint (sixth goal: molten clouds along the bands); a dim light still shows it.
+        colour += ember * uDust * dust * dust * 1.2 * toward * (0.5 + 0.5 * uLightStrength);
     }
     if (uWisps > 0.0) {
         float strands = 0.0;
