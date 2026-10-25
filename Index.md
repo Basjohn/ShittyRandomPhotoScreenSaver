@@ -82,6 +82,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer visual tuning: offscreen preview, side-by-side sheets, measurement, pixel-identity proof | `Docs/Guides/Visualizer_Visual_Tuning.md` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
+| Visualizer Previous/Next preset glyphs and default selection | `Docs/Reference/Visualizer_Reference.md` → Preset navigation glyphs |
 | Visualizer Settings declarations, consumer/authoring boundaries, validation, availability and bespoke editors | `core/settings/visualizer_mode_settings.py`; `Docs/Reference/Visualizer_Reference.md` → Settings declarations; `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Future Visualizer concepts, feasibility notes and low/high-react mocks | `Docs/Future_Work/Additional_Future_Transitions_Package.zip` (concept catalogue; only promoted work enters `Current_Plan.md`) |
 | Neon Lake Basin framing, terrain authoring, editable experiments, Custom selection migration and renderer | `Docs/Reference/Neon_Lake_Basin.md`; `Current_Plan.md` §2A / §3 / §5 |

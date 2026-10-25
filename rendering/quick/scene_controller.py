@@ -399,6 +399,7 @@ class QuickSceneController(QObject):
     jedi_mode_requested = Signal(str, str)
     hover_edit_glyph_requested = Signal(str, str)
     visualizer_camera_reset_requested = Signal()
+    visualizer_preset_step_requested = Signal(int)
     custom_layout_save_requested = Signal()
     # Semantic Edit-only routes.  The native input block remains intact while
     # the retained overlay forwards these to DisplayManager's existing orbit
@@ -2338,6 +2339,7 @@ class QuickSceneController(QObject):
                     str(action), "spotify_visualizer"
                 )
             )
+        root.presetStepRequested.connect(self.visualizer_preset_step_requested.emit)
         camera_reset = getattr(root, "cameraResetRequested", None)
         if camera_reset is not None and hasattr(camera_reset, "connect"):
             camera_reset.connect(self.visualizer_camera_reset_requested.emit)

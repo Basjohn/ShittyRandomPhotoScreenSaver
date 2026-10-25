@@ -1777,7 +1777,7 @@ class DisplayManager(QObject):
             next_visualizer_mode_id(owner.controller.mode_id, mode_activation)
         )
 
-    def _request_quick_visualizer_preset_change(self) -> bool:
+    def _request_quick_visualizer_preset_change(self, direction: int = 1) -> bool:
         """Resolve one detached same-mode preset target on the admitted owner."""
 
         owner = self._quick_visualizer_owner
@@ -1807,6 +1807,7 @@ class DisplayManager(QObject):
                 section,
                 custom_presets,
                 mode=owner.controller.mode_id,
+                direction=direction,
             )
             activation = resolve_visualizer_activation_payload(
                 target.visualizer_config,
@@ -1845,8 +1846,8 @@ class DisplayManager(QObject):
             )
         )
 
-    def _cycle_quick_visualizer_preset(self) -> None:
-        self._request_quick_visualizer_preset_change()
+    def _cycle_quick_visualizer_preset(self, direction: int = 1) -> None:
+        self._request_quick_visualizer_preset_change(direction)
 
     def _visualizer_presentation_kwargs(self, model: Any, mode_id: str) -> dict[str, Any]:
         """The activation's presentation values: the model's, plus the 3D Detail tier the 3D
@@ -2028,6 +2029,12 @@ class DisplayManager(QObject):
         runtime.view_orbit_requested.connect(
             lambda *args, callback=self._orbit_quick_visualizer_view: live_unit_route(
                 lambda display, *values: self._route_quick_visualizer_input(display, callback, *values), *args
+            )
+        )
+        runtime.scene_controller.visualizer_preset_step_requested.connect(
+            lambda direction: live_unit_route(
+                lambda display, step: self._route_quick_visualizer_input(
+                    display, self._cycle_quick_visualizer_preset, step), direction
             )
         )
         runtime.view_camera_reset_requested.connect(

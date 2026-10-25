@@ -43,8 +43,9 @@ def resolve_next_visualizer_runtime_preset(
     custom_presets: Mapping[str, Any],
     *,
     mode: str | None = None,
+    direction: int = 1,
 ) -> VisualizerRuntimePresetCycleTarget:
-    """Resolve exactly one forward preset step without mutating either input.
+    """Resolve exactly one directional preset step without mutating either input.
 
     A missing per-mode Custom snapshot is seeded from the persisted raw section
     before any curated replacement.  This makes first use deterministic while
@@ -55,6 +56,9 @@ def resolve_next_visualizer_runtime_preset(
         raise TypeError("visualizer_config must be a mapping")
     if not isinstance(custom_presets, Mapping):
         raise TypeError("custom_presets must be a mapping")
+
+    if direction not in (-1, 1):
+        raise ValueError("preset direction must be -1 or 1")
 
     requested = str(mode or visualizer_config.get("mode") or "").strip().lower()
     mode_key = coerce_visualizer_mode_id(requested)
@@ -68,7 +72,7 @@ def resolve_next_visualizer_runtime_preset(
     source = deepcopy(dict(visualizer_config))
     source["mode"] = mode_key
     source_index = resolve_preset_index_from_mapping(mode_key, source)
-    target_index = (source_index + 1) % preset_count
+    target_index = (source_index + direction) % preset_count
     custom_index = get_custom_preset_index(mode_key)
 
     # Only this mode's snapshot is read or replaced; the others pass through as stored.

@@ -47,7 +47,8 @@ def test_camera_reset_tooltip_has_the_same_delayed_qml_clock():
     s = read(QML/'VisualizerPresentation.qml')
     assert 'cameraResetTipReveal.restart()' in s
     assert '(visualizerPresentationRoot.cameraResetTipProgress - 0.56) / 0.44' in s
-    assert 'text: "RESET CAMERA"' in s
+    assert 'cameraActionTip = "RESET CAMERA"' in s
+    assert 'text: visualizerPresentationRoot.cameraActionTip' in s
     assert 'Timer {' not in s
 
 

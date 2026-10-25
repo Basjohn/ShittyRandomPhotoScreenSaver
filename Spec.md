@@ -13,6 +13,9 @@ Operator music capture and replay format are documented in `Docs/Reference/Harne
 with no added runtime owner or idle recorder timer. GODZIP Foundry's FOUNDRIES tab also provides a separate
 TOOLS quick-launch section; its maintained entries and launch contract live in that same Harness Index.
 
+Visualizer defaults and hover/Edit preset-navigation controls are documented in
+[Visualizer Reference](Docs/Reference/Visualizer_Reference.md#preset-navigation-glyphs).
+
 ## Product priorities
 
 1. visualizer fidelity/reactivity;

@@ -79,7 +79,14 @@ def _active_visualizer_default(key: str) -> Any:
     mode = get_technical_profile_mode(str(_visualizer_default("mode")).lower())
     if mode not in PER_MODE_TECHNICAL_MODES:
         raise ValueError(f"invalid canonical visualizer technical profile: {mode!r}")
-    return _visualizer_default(f"{mode}_{key}")
+    # Match activation's existing inert worker-mirror policy for outputs this
+    # mode does not consume. Never invent persisted settings for those outputs.
+    if key in _ACTIVE_MODE_SHARED_VISUAL_KEYS:
+        from core.settings.visualizer_mode_registry import get_resolved_mode_setting_profile
+        profile = get_resolved_mode_setting_profile(mode, "shared_bar")
+        return _visualizer_default(f"{profile or 'spectrum'}_{key}")
+    owned = get_owned_mode_setting_keys(mode, "technical")
+    return _visualizer_default(owned.get(key, f"spectrum_{key}"))
 
 
 
