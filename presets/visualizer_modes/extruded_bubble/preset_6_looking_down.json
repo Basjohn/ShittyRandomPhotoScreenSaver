@@ -57,6 +57,7 @@
         "extruded_bubble_dynamic_floor": false,
         "extruded_bubble_emission_geometry": "SCENE",
         "extruded_bubble_exposure": 1.0,
+        "extruded_bubble_floor": 0.8,
         "extruded_bubble_focus": 0.5,
         "extruded_bubble_haze": 0.4,
         "extruded_bubble_idle": 0.5,
@@ -141,6 +142,7 @@
         "extruded_bubble_sustained": 0.6,
         "extruded_bubble_sway": 0.4,
         "extruded_bubble_veils": 0.0,
+        "extruded_bubble_wake_trails": 0.5,
         "extruded_bubble_water_colour": [
           8,
           28,

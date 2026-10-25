@@ -29,6 +29,7 @@ from OpenGL import GL as gl
 from rendering.gl_programs.extruded_bubble_program import (
     BACKDROP_FRAGMENT, BEAD_VERTEX, BLUR_FRAGMENT, BUBBLE_FRAGMENT, BUBBLE_VERTEX, CLUSTER_FRAGMENT, CLUSTER_VERTEX, FULL_VERTEX,
     NEAR_FRAGMENT, NEAR_CLUSTER_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT, SPECK_VERTEX,
+    TRAIL_FRAGMENT, TRAIL_SEGMENTS, TRAIL_VERTEX,
 )
 from rendering.gl_programs.extruded_bubble_scene import (
     CLUSTER_FLOATS, PROXY_FLOATS, SHELL_FLOATS, SURFACE_Y, bubble_instances, camera,
@@ -61,6 +62,7 @@ _PROGRAMS = (
     ("near_clusters", CLUSTER_VERTEX, NEAR_CLUSTER_FRAGMENT),
     ("proxies", PARTICLE_VERTEX, PARTICLE_FRAGMENT),
     ("specks", SPECK_VERTEX, PARTICLE_FRAGMENT),
+    ("trails", TRAIL_VERTEX, TRAIL_FRAGMENT),
 )
 # The probe's cube face size per 3D Detail tier (what bubbles mirror; smaller is softer and cheaper).
 _PROBE_SIZE = {"High": 256, "Balanced": 256, "Performance": 128, "KAK": 64}
@@ -264,7 +266,7 @@ def _common(knobs, *, view_to_world, tan, time, surface_travel, rays, streak, ey
         "uGlow": float(knobs.get("glow", 1.0)), "uRays": float(rays) * float(knobs["light_strength"]),
         "uMist": float(knobs.get("mist", 0.0)),
         "uSurfaceGain": float(knobs.get("surface_gain", 1.0)), "uSurfaceSky": float(knobs.get("surface_sky", 1.0)),
-        "uDust": float(knobs.get("dust", 0.0)), "uShaftWhite": float(knobs.get("shaft_white", 0.35)), "uRayFocus": float(knobs.get("ray_focus", 0.0)), "uRayCut": float(knobs.get("ray_cut", 0.25)),
+        "uDust": float(knobs.get("dust", 0.0)), "uFloor": (float(knobs.get("floor", 0.0)), float(WORLD_CENTER[1] - WORLD_HALF[1] - 4.0)), "uShaftWhite": float(knobs.get("shaft_white", 0.35)), "uRayFocus": float(knobs.get("ray_focus", 0.0)), "uRayCut": float(knobs.get("ray_cut", 0.25)),
         "uShaftScale": float(knobs.get("shaft_scale", 1.0)), "uShaftSoft": float(knobs.get("shaft_soft", 0.0)),
         "uSurfaceShaft": float(knobs["surface_shaft"]),
         "uShaftFan": float(knobs.get("shaft_fan",0.0)), "uFanRays": float(knobs["fan_rays"]),
@@ -450,6 +452,7 @@ class QuickExtrudedBubbleRenderer:
             self._uniforms.set(programs[key], {**view, **_glass(knobs, near),
                                              "uNearCoc": 22.0 * height / 941.0,
                                              "uNearMax": _near_spread(height)})
+        self._uniforms.set(programs["trails"], view)
         chain_fill, snow_fill, fizz_fill = _procedural_fill(parameters, chain_drive(state), state.emission)
         idle_activity = _idle_activity(state.level)
         beads, snow = math.ceil(chain_fill) * _BEADS_PER_CHAIN, math.ceil(snow_fill)
@@ -478,6 +481,13 @@ class QuickExtrudedBubbleRenderer:
             "uSnowDrift": _SNOW_CARRY * float(state.travel), "uSnowCount": snow, "uFizzPer": fizz_per,
             "uWakeCount": wake_count})
         fizz = wake_count * fizz_per
+        trails = float(parameter(parameters, "extruded_bubble_wake_trails"))
+        if trails > 0.0 and wake_count:
+            trail_dir = tuple(-c for c in stream)
+            self._uniforms.set(programs["trails"], {
+                "uTrail": trail_dir, "uTrailSide": across, "uTrails": trails,
+                "uTrailTime": float(state.motion_phase),
+                "uSway": float(parameter(parameters, "extruded_bubble_sway"))})
         self._uniforms.set(programs["blur"], {"uSource": 0})
         share, brightness = speck_amount(state.emission)
         # Optional glow lift never adds another source follower: the same musical
@@ -560,6 +570,15 @@ class QuickExtrudedBubbleRenderer:
                         gl.glUseProgram(programs["beads"])
                         gl.glBindVertexArray(self._empty_vao)
                         gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, beads + snow + fizz)
+                        gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _WAKE_BINDING, prior)
+                    if trails > 0.0 and wake_count:
+                        # Wake trails: one sheet per stable emitter, read from the same records as the fizz.
+                        prior = gl_query.get_indexed_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING, _WAKE_BINDING)
+                        gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _WAKE_BINDING, self._wakes.buffer)
+                        self._uniforms.set(programs["trails"], {"uTargetSize": target_size})
+                        gl.glUseProgram(programs["trails"])
+                        gl.glBindVertexArray(self._empty_vao)
+                        gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 2 * (TRAIL_SEGMENTS + 1), wake_count)
                         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _WAKE_BINDING, prior)
             # Only ordinary large bubbles whose front surface actually reaches the focus region enter this layer.
             # BUBBLE_VERTEX makes the same depth decision in both passes so a bubble is never drawn twice.
