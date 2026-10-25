@@ -42,9 +42,9 @@
         "extruded_bubble_collision_scope": "All",
         "extruded_bubble_columns": 0.0,
         "extruded_bubble_depth_colour": [
-          4,
-          8,
-          12,
+          7,
+          18,
+          36,
           255
         ],
         "extruded_bubble_doublets": 0.35,
@@ -56,10 +56,10 @@
         "extruded_bubble_dust": 0.0,
         "extruded_bubble_dynamic_floor": false,
         "extruded_bubble_emission_geometry": "SCENE",
-        "extruded_bubble_exposure": 0.82,
+        "extruded_bubble_exposure": 0.9,
         "extruded_bubble_floor": 0.0,
         "extruded_bubble_focus": 0.5,
-        "extruded_bubble_haze": 0.2,
+        "extruded_bubble_haze": 0.3,
         "extruded_bubble_idle": 0.5,
         "extruded_bubble_input_gain": 1.0,
         "extruded_bubble_iridescence": 0.3,
@@ -144,9 +144,9 @@
         "extruded_bubble_veils": 0.0,
         "extruded_bubble_wake_trails": 0.2,
         "extruded_bubble_water_colour": [
-          6,
           12,
-          18,
+          28,
+          50,
           255
         ],
         "mode": "extruded_bubble"

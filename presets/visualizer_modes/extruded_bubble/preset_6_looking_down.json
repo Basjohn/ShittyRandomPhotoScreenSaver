@@ -42,9 +42,9 @@
         "extruded_bubble_collision_scope": "All",
         "extruded_bubble_columns": 0.0,
         "extruded_bubble_depth_colour": [
-          13,
-          31,
-          51,
+          24,
+          50,
+          84,
           255
         ],
         "extruded_bubble_doublets": 0.35,
@@ -56,18 +56,18 @@
         "extruded_bubble_dust": 0.0,
         "extruded_bubble_dynamic_floor": false,
         "extruded_bubble_emission_geometry": "SCENE",
-        "extruded_bubble_exposure": 1.0,
-        "extruded_bubble_floor": 0.8,
+        "extruded_bubble_exposure": 0.8,
+        "extruded_bubble_floor": 1.0,
         "extruded_bubble_focus": 0.5,
         "extruded_bubble_haze": 0.4,
         "extruded_bubble_idle": 0.5,
         "extruded_bubble_input_gain": 1.0,
         "extruded_bubble_iridescence": 1.0,
         "extruded_bubble_large_bubbles": [
-          16,
-          16
+          10,
+          18
         ],
-        "extruded_bubble_large_size": 0.95,
+        "extruded_bubble_large_size": 1.3,
         "extruded_bubble_light_colour": [
           140,
           173,
@@ -78,7 +78,7 @@
           16.7,
           37.5
         ],
-        "extruded_bubble_light_strength": 0.7,
+        "extruded_bubble_light_strength": 0.5,
         "extruded_bubble_light_tint": 0.85,
         "extruded_bubble_light_type": "Deep Light",
         "extruded_bubble_lighting_coverage": "BEAM",
