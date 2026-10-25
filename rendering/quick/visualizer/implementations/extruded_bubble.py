@@ -456,7 +456,9 @@ class QuickExtrudedBubbleRenderer:
         chain_fill, snow_fill, fizz_fill = _procedural_fill(parameters, chain_drive(state), state.emission)
         idle_activity = _idle_activity(state.level)
         beads, snow = math.ceil(chain_fill) * _BEADS_PER_CHAIN, math.ceil(snow_fill)
-        fizz_per = math.ceil(fizz_fill)
+        trail_fizz = (_FIZZ_PER_BUBBLE * scene3d_detail(parameter(parameters, "scene3d_detail")).particles
+                      * float(parameter(parameters, "extruded_bubble_wake_trails")))
+        fizz_per = math.ceil(max(fizz_fill, trail_fizz))
         stream = _floats(state.stream)
         across, depth_axis = stream_basis(stream)
         stream_path = admit_path(parameter(parameters, "extruded_bubble_stream_direction"), [0., 0.], "stream")
@@ -476,18 +478,18 @@ class QuickExtrudedBubbleRenderer:
             * (0.9 + 0.2 * max(0.0, min(1.0, float(state.level)))),
             "uBeadScatter": float(parameter(parameters, "extruded_bubble_bead_scatter")),
             "uChainFill": chain_fill, "uChainActivity": idle_activity,
-            "uSnowFill": snow_fill, "uFizzFill": fizz_fill,
+            "uSnowFill": snow_fill, "uFizzFill": fizz_fill, "uTrailFizz": trail_fizz,
             "uBeadTravel": _BEAD_CLIMB * float(state.travel),
             "uSnowDrift": _SNOW_CARRY * float(state.travel), "uSnowCount": snow, "uFizzPer": fizz_per,
             "uWakeCount": wake_count})
         fizz = wake_count * fizz_per
         trails = float(parameter(parameters, "extruded_bubble_wake_trails"))
-        if trails > 0.0 and wake_count:
-            trail_dir = tuple(-c for c in stream)
-            self._uniforms.set(programs["trails"], {
-                "uTrail": trail_dir, "uTrailSide": across, "uTrails": trails,
-                "uTrailTime": float(state.motion_phase),
-                "uSway": float(parameter(parameters, "extruded_bubble_sway"))})
+        # One wake path for the veils and the fizz that streams inside them (0 Wake Trails: fizz as before).
+        wake_path = {"uTrail": tuple(-c for c in stream), "uTrailSide": across, "uTrails": trails,
+                     "uTrailTime": float(state.motion_phase),
+                     "uTrailSway": float(parameter(parameters, "extruded_bubble_sway"))}
+        for key in ("trails", "beads"):
+            self._uniforms.set(programs[key], wake_path)
         self._uniforms.set(programs["blur"], {"uSource": 0})
         share, brightness = speck_amount(state.emission)
         # Optional glow lift never adds another source follower: the same musical
