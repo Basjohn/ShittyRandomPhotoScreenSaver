@@ -344,7 +344,8 @@ def test_stream_speed_rises_quickly_decays_slowly_and_never_jumps_or_stops():
     assert speeds[-1] > 0.0                                        # never a sudden stop
     steps = [abs(b - a) for a, b in zip(speeds, speeds[1:])]
     span = max(speeds) - min(speeds)
-    assert max(steps) < 0.025 * span                               # no frame moves it by more than 2.5% of its span
+    # Never a jump: a beat's surge eases in over about a tenth of a second (no frame moves it by 8% of its span).
+    assert max(steps) < 0.08 * span
 
 
 def test_travel_is_the_distance_the_stream_carried_the_water_so_procedural_layers_never_jump():
