@@ -93,7 +93,7 @@ _MINIMUM_REACTION_RADIUS = .13
 _QUIET_DEPTH_FULL = 0.5   # Breathing / Small Bubble Pulse quiet handle at which the class reaches its deepest rest
 _LANE = 0.26 * WORLD_UNIT  # fixed world spacing transverse to the stream
 _WAKE_RETIRE_SECONDS = 1.1  # front-to-tail dissolve of a wake whose emitter pops, merges or exits
-_NO_WAKE_PATH = (0.0,) * (3 + 3 * WAKE_POINTS)   # trails, length, span, path: a bubble without a trail
+_NO_WAKE_PATH = (0.0,) * (6 + 3 * WAKE_POINTS)   # trails and the trail's fields: a bubble without a trail
 
 
 @dataclass(frozen=True, slots=True)
@@ -1143,7 +1143,7 @@ class ExtrudedBubbleSimulation:
                 elif not chosen and b.ident in field:
                     field.remove(b.ident)
                 if b.ident in field:
-                    field.follow(b.ident, head, dt, max(4.0 * b.radius, 0.1 * WORLD_UNIT))
+                    field.follow(b.ident, head, b.visual_radius, dt, max(4.0 * b.radius, 0.1 * WORLD_UNIT))
                     current[b.ident] = (b.x, b.y, b.z, b.visual_radius, b.ident, -1.0, b.alpha, b.radius,
                                         1.0, *field.record(b.ident, head))
                 else:

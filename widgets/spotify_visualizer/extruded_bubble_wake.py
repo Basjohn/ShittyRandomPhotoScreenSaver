@@ -6,10 +6,15 @@ curve drawn from a direction: when the music turns the bubble, the trail shows t
 end keeps drifting with the water whatever the bubble does next.
 
 ``WakeField`` keeps every trailing bubble's history in one pooled array. A bubble lays down a point each time it has
-moved a fixed share of its trail's reach (``WAKE_POINTS`` points always span the whole trail, whatever its speed); the
-water moves (drag, swirl, viscous smoothing) in one batched step ``STEP_SECONDS`` apart for all wakes together. Per tick
-only plain arithmetic runs: numpy calls are few and batched, since each holds the GIL the GUI and render threads need
-(a per-wake, per-tick resample starved them to 4 fps). The GPU draws the head segment from the bubble itself.
+moved a fixed ``spacing`` (``WAKE_POINTS`` points always span the whole trail, whatever its speed); the water moves
+(drag, swirl, viscous smoothing) every tick in one batched step for all wakes together. Numpy calls are few and
+batched, since each holds the GIL the GUI and render threads need (a per-wake, per-tick resample starved them to 4 fps).
+
+Everything drawn in a wake belongs to the water, so it is placed by its **water index**: how far, in spacings, the
+bubble had travelled when it passed that water. The bubble itself is at ``water`` (the points laid plus how far it is
+into the next spacing); the water ``c`` spacings behind it stays fixed in the water whatever the bubble does next. The
+GPU places the sheet's shape and its beads by that index, so laying a point moves nothing (placing them by a fraction
+of the chain's segments made beads slide with the bubble and jump back at every new point, and the sheet's root snap).
 """
 from __future__ import annotations
 
@@ -20,13 +25,13 @@ import numpy as np
 
 from core.constants.extruded_bubble_world import WAKE_POINTS, WORLD_UNIT
 
-STEP_SECONDS = 0.1            # the water moves in one batched step this often
 HISTORY_SECONDS = 8.0         # the oldest water a trail can still show
 ENTRAIN = 0.45                # share of the bubble's velocity its wake water is first dragged with ..
 ENTRAIN_SECONDS = 0.7         # .. decaying over this
 FLOW = 0.012 * WORLD_UNIT     # the water's own slow swirl (world units a second): every trail drifts in it alike
 LENGTH = (7.0, 15.0)          # a trail's longest reach, in its bubble's radii (stable per bubble)
 DIFFUSION = 1.2               # how fast the disturbed water smooths out (viscosity): older wiggles relax into sweeps
+RADIUS_SECONDS = 0.4          # the wake's body follows its bubble's size this slowly (the beat swell is the root's)
 
 
 def trails(ident: int, share: float) -> bool:
@@ -53,10 +58,11 @@ class WakeField:
         self._free = list(range(capacity - 1, -1, -1))
         self._slots: dict[int, int] = {}
         self._spacing: dict[int, float] = {}
-        self._last: dict[int, tuple[float, float, float]] = {}
+        self._laid: dict[int, int] = {}                 # points laid since the wake began (its water index base)
+        self._since: dict[int, float] = {}              # seconds since the newest point was laid
+        self._radius: dict[int, float] = {}             # the bubble's size, followed slowly
         self._newest: dict[int, tuple[float, float, float]] = {}
-        self._flat: dict[int, tuple[tuple[float, ...], float]] = {}      # path floats, its length (head excluded)
-        self._since = 0.0
+        self._flat: dict[int, tuple[float, ...]] = {}
 
     def __contains__(self, ident: int) -> bool:
         return ident in self._slots
@@ -73,6 +79,8 @@ class WakeField:
         slot = self._free.pop()
         self._slots[ident] = slot
         self._spacing[ident] = radius * random.Random(ident * 104729 + 7).uniform(*LENGTH) / (WAKE_POINTS - 1)
+        self._laid[ident] = 0
+        self._radius[ident] = radius
         self._lay(ident, slot, head, (0.0, 0.0, 0.0), fresh=True)
         return True
 
@@ -82,7 +90,7 @@ class WakeField:
             return
         self.count[slot] = 0
         self._free.append(slot)
-        for table in (self._spacing, self._last, self._newest, self._flat):
+        for table in (self._spacing, self._laid, self._since, self._radius, self._newest, self._flat):
             table.pop(ident, None)
 
     def _lay(self, ident: int, slot: int, head, velocity, fresh: bool = False) -> None:
@@ -97,66 +105,61 @@ class WakeField:
         self.carry[slot, 0] = tuple(ENTRAIN * v for v in velocity)
         self.age[slot, 0] = 0.0
         self.count[slot] = min(int(self.count[slot]) + 1, WAKE_POINTS)
-        self._last[ident] = tuple(head)
+        self._laid[ident] += 1
+        self._since[ident] = 0.0
         self._newest[ident] = tuple(head)
-        self._cache(ident, slot)
-
-    def _cache(self, ident: int, slot: int) -> None:
+        flat = self.points[slot].reshape(-1).tolist()
         n = int(self.count[slot])
-        path = self.points[slot, :n]
-        length = float(np.linalg.norm(np.diff(path, axis=0), axis=1).sum()) if n > 1 else 0.0
-        flat = path.reshape(-1).tolist()
-        flat.extend(flat[-3:] * (WAKE_POINTS - n))
-        self._flat[ident] = (tuple(flat), length)
+        self._flat[ident] = tuple(flat[:3 * n] + flat[3 * n - 3:3 * n] * (WAKE_POINTS - n))
 
-    def follow(self, ident: int, head, dt: float, jump: float) -> None:
+    def follow(self, ident: int, head, radius: float, dt: float, jump: float) -> None:
         """The bubble (at ``head``) moved this tick: lay a point once it is a spacing past the newest."""
         slot = self._slots[ident]
-        last = self._last[ident]
-        moved = math.dist(head, last)
-        if moved > jump:                       # a re-entry is not motion: start a fresh wake
+        self._radius[ident] += (radius - self._radius[ident]) * (1.0 - math.exp(-max(dt, 0.0) / RADIUS_SECONDS))
+        self._since[ident] += dt
+        newest = self._newest[ident]
+        lead = math.dist(head, newest)
+        if lead > jump:                        # a re-entry is not motion: start a fresh wake
+            self._laid[ident] = 0
             self._lay(ident, slot, head, (0.0, 0.0, 0.0), fresh=True)
             return
-        self._last[ident] = tuple(head)
-        if math.dist(head, self._newest[ident]) >= self._spacing[ident]:
-            velocity = tuple((h - l) / dt for h, l in zip(head, last)) if dt > 0.0 else (0.0, 0.0, 0.0)
-            self._lay(ident, slot, head, velocity)
+        if lead >= self._spacing[ident]:
+            # Its drag: the bubble's mean velocity over the spacing it just crossed (one tick's step is noise).
+            since = max(self._since[ident], 1e-3)
+            self._lay(ident, slot, head, tuple((h - n) / since for h, n in zip(head, newest)))
 
     def flow(self, dt: float, phase: float) -> None:
-        """The water moves: one batched step every ``STEP_SECONDS`` for all wakes together."""
-        self._since += dt
-        if self._since < STEP_SECONDS or not self._slots:
-            self._since = min(self._since, STEP_SECONDS)
+        """The water moves, every tick, in one batched step for all wakes together."""
+        if not self._slots or dt <= 0.0:
             return
-        step, self._since = self._since, 0.0
+        idents = list(self._slots)
         live = np.fromiter(self._slots.values(), dtype=int)
         points, carry, age = self.points[live], self.carry[live], self.age[live]
-        carry *= math.exp(-step / ENTRAIN_SECONDS)
-        points += (carry + water_flow(points, phase)) * step
-        age += step
-        # Viscous smoothing, stronger with age: the fresh wake keeps the bubble's exact course.
-        # Only between a wake's own points: its last one has no neighbour beyond (unused slots hold stale points).
-        inner = np.arange(1, WAKE_POINTS - 1)[None, :] < (self.count[live] - 1)[:, None]
-        rate = np.clip(DIFFUSION * step * np.minimum(age[:, 1:-1], 1.0), 0.0, 0.25) * inner
+        carry *= math.exp(-dt / ENTRAIN_SECONDS)
+        points += (carry + water_flow(points, phase)) * dt
+        age += dt
+        # Viscous smoothing, stronger with age: the fresh wake keeps the bubble's exact course. Only between a wake's
+        # own points: its last one has no neighbour beyond (unused slots hold stale points).
+        counts = self.count[live]
+        inner = np.arange(1, WAKE_POINTS - 1)[None, :] < (counts - 1)[:, None]
+        rate = np.clip(DIFFUSION * dt * np.minimum(age[:, 1:-1], 1.0), 0.0, 0.25) * inner
         points[:, 1:-1] += rate[..., None] * (points[:, :-2] + points[:, 2:] - 2.0 * points[:, 1:-1])
         self.points[live], self.carry[live], self.age[live] = points, carry, age
-        counts = np.minimum(self.count[live], (age < HISTORY_SECONDS).sum(axis=1))
-        self.count[live] = np.maximum(counts, 1)
-        for ident, slot in self._slots.items():
-            self._newest[ident] = tuple(self.points[slot, 0].tolist())
-            self._cache(ident, slot)
+        counts = np.maximum(np.minimum(counts, (age < HISTORY_SECONDS).sum(axis=1)), 1)
+        self.count[live] = counts
+        rows = points.reshape(len(live), -1).tolist()
+        for ident, row, n in zip(idents, rows, counts.tolist()):
+            self._newest[ident] = tuple(row[:3])
+            self._flat[ident] = tuple(row[:3 * n] + row[3 * n - 3:3 * n] * (WAKE_POINTS - n))
 
     def record(self, ident: int, head) -> tuple[float, ...]:
-        """(length, span, path floats): the trail from ``head`` (the bubble, or where it last was) back along its
-        history; ``span`` is how many segments the GPU draws, easing its tail in as the next point nears."""
-        slot = self._slots[ident]
-        flat, length = self._flat[ident]
-        n = int(self.count[slot])
-        lead = math.dist(head, self._newest[ident])
-        span = float(n)
-        if n == WAKE_POINTS:
-            span -= min(lead / self._spacing[ident], 1.0)
-        return (length + lead, max(span, 0.0), *flat)
+        """(spacing, count, water, lead, radius, path floats) of the trail behind ``head`` (the bubble, or where it
+        last was): ``water`` is the bubble's continuous water index, ``lead`` how far (in spacings) it is past its
+        newest point, ``radius`` its size followed slowly."""
+        spacing = self._spacing[ident]
+        lead = min(math.dist(head, self._newest[ident]) / spacing, 1.0)
+        n = int(self.count[self._slots[ident]])
+        return (spacing, float(n), float(self._laid[ident]) + lead, lead, self._radius[ident], *self._flat[ident])
 
 
-__all__ = ["DIFFUSION", "ENTRAIN", "FLOW", "HISTORY_SECONDS", "STEP_SECONDS", "WakeField", "trails", "water_flow"]
+__all__ = ["DIFFUSION", "ENTRAIN", "FLOW", "HISTORY_SECONDS", "WakeField", "trails", "water_flow"]
