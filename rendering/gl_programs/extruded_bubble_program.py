@@ -767,6 +767,8 @@ vec4 shadeBubbleRay(vec3 rayView, vec4 sphere, float pixels, float soft, float b
 // one pixel to the next (light guided round inside the wall), four rays spread over the pixel are averaged.
 const float kRimRaysFull = 10.0;  // radius px from which a rim pixel averages eight rays (four below)
 const float kSmallShellRays = 6.0;  // radius px below which every pixel of a shell averages rays, its face too
+const float kBeadShellFrom = 2.0;   // radius px from which a bead blends from glass speck to a shaded shell
+const float kBeadShellFull = 3.5;   // ... and at which it is a shaded shell
 vec4 shadeBubble(vec3 rayView, vec4 sphere, float pixels, float soft, vec3 frontView) {
     // Each pixel sees a cone of directions as wide as the curvature it covers: read the probe at that level.
     float texelAngle = 1.5707963 / float(textureSize(uProbe, 0).x);
@@ -846,6 +848,23 @@ void main() {
         vec3 light = mix(waterBehind, probe, 0.22 + 0.45 * fresnel);
         light += uShaftColour * uSpeckGlow * (0.12 + 0.30 * fresnel) * glint;
         float alpha = coverage * (0.22 + 0.38 * fresnel) * vExtra.z * vOpacity;
+        // A bead large enough to resolve reads as micro-glass: a bright Fresnel rim and the light's own glint,
+        // filtered by the bead's footprint. The speck alone kept every bead of a microbubble column a dim grey ring
+        // however large it was drawn; the full shell trace doubled the frame for thousands of beads. Blended in by
+        // size only (beads never breathe), so nothing flips; beads of a pixel or two are unchanged.
+        float shell = smoothstep(kBeadShellFrom, kBeadShellFull, pixels);
+        if (shell > 0.0) {
+            // The glint is a pixel or two on the side facing the light, whatever the bead's size (the shell's own
+            // lobe, filtered over so small a footprint, all but vanishes).
+            vec3 toLight = normalize(uLightDir * uViewToWorld);   // world -> view (the transpose of a rotation)
+            float spot = pow(max(dot(normalV, normalize(toLight - ray)), 0.0), 2.0 + 0.6 * pixels * pixels);
+            vec3 glint = uSpecColour * 0.05 * uSparkle * spot;
+            vec3 glass = mix(waterBehind, probe, 0.25 + 0.65 * fresnel) + uShaftColour * uSpeckGlow * 0.4 * fresnel
+                       + glint;
+            light = mix(light, glass, shell);
+            alpha = mix(alpha, coverage * min(1.0, 0.28 + 0.62 * fresnel + 0.5 * spot * uSparkle) * vExtra.z
+                               * vOpacity, shell);
+        }
         gl_FragDepth = sceneSphereDepth(front, uProjection);
 #ifndef NEAR_LAYER
         sceneTransparent(light * alpha, alpha, -front.z);
@@ -1137,6 +1156,7 @@ uniform float uBeadTravel;     // integrated physical world travel
 uniform int uBeadsPerChain;
 uniform int uBeadCount;        // chains x beads; instances past it are marine snow
 uniform float uBeadSize;       // bead size scale
+uniform float uBeadScatter;    // 0 single-file chains .. 1 loose plumes widening as they rise
 uniform float uParticleSpread; // free chains and snow only: 1.0 original physical width
 uniform int uSceneEmission; // SCENE uses whole upstream faces; BEAM remains identical
 uniform vec3 uSceneFaces;    // physically valid face areas selected by Source
@@ -1195,6 +1215,14 @@ void beadInstance() {
                + depthAxis * ((pathEnabled && uSceneEmission == 0) ? (beadRandom(chain, 3u) * 2.0 - 1.0) * pathWidth : 0.0)
                + across * 1.15 * scale * (arc + (beadRandom(chain * 977 + k, 7u) - 0.5) * 0.035)
                + depthAxis * (beadRandom(chain * 977 + k, 8u) - 0.5) * 0.1 * scale;
+        if (uBeadScatter > 0.0) {
+            // A plume: each bead's own (Gaussian) place across and in depth, widening as the chain rises. Stable per
+            // bead, so the plume flows rather than flickers.
+            vec2 g = sqrt(-2.0 * log(max(beadRandom(chain * 977 + k, 25u), 1e-6)))
+                   * vec2(cos(6.2832 * beadRandom(chain * 977 + k, 26u)), sin(6.2832 * beadRandom(chain * 977 + k, 26u)));
+            float plume = uBeadScatter * 0.55 * scale * (0.2 + 0.8 * progress);
+            p += across * g.x * plume + depthAxis * g.y * plume;
+        }
         // A whole-chain lifetime, independent for each stable seed; both population changes and
         // cycling cohorts fade in and out, not jump through integer chain draw-count changes.
         float life = fract(uBeadTravel * 0.035 + beadRandom(chain, 24u));

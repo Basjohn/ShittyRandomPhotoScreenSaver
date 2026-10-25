@@ -121,6 +121,10 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
     water, deep = _rgb(_p(parameters, "water_colour")), _rgb(_p(parameters, "depth_colour"))
     water_hue = _hue(water)
     strength = float(_p(parameters, "light_strength"))
+    # How much of the light's colour the water carries in its shafts and glow (0 the water's own hue, 1 the light's).
+    # Under a surface the sky's light is mostly the water's own (0.45 was the fixed share); a deep light's glow, beams
+    # and veils take its colour (0.85 was its fixed share).
+    tint = max(0.0, min(1.0, float(_p(parameters, "light_tint"))))
     # Sparkle scales the bubbles' own glints (specular highlight and glint proxies): 1 is the original look, 0 none.
     sparkle = float(_p(parameters, "sparkle"))
     knobs["proxy_power"] = float(knobs["proxy_power"]) * strength * sparkle
@@ -131,8 +135,8 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
                           [0., 1., 0., 0., -1., 0.], 'light')
     knobs.update(water=water, deep=deep, light=light, light_strength=strength,
                  specular_light=tuple(c * 300.0 * strength * sparkle for c in light),
-                 sky=_mix(water_hue, light, 0.6),
-                 shaft=tuple(0.85 * c for c in _mix(water_hue, light, 0.45)), absorb=(0.08, 0.05, 0.035),
+                 sky=_mix(water_hue, light, min(1.0, tint + 0.15)),
+                 shaft=tuple(0.85 * c for c in _mix(water_hue, light, tint)), absorb=(0.08, 0.05, 0.035),
                  exposure=float(_p(parameters, "exposure")),
                  light_source=world_point(light_path[:3]),
                  light_end=world_point(light_path[3:]),
@@ -156,8 +160,8 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
         # the sky's light is mostly the water's own).
         knobs.update(sun=direction, sun_below=direction, spec_dir=direction, surface_gain=0.6,
                      glint_power=600.0 * strength, light_power=1.2 * strength, surface=60.0, shaft_y=16.0,
-                     glow=0.6, ray_focus=1.0, sky=_mix(water_hue, light, 0.85),
-                     shaft=tuple(0.95 * c for c in _mix(water_hue, light, 0.85)))
+                     glow=0.6, ray_focus=1.0, sky=_mix(water_hue, light, tint),
+                     shaft=tuple(0.95 * c for c in _mix(water_hue, light, tint)))
     knobs["surface_shaft"] = 1.0 if mode == "surface" else 0.0
     knobs["scene_light"] = scene_light_support(mode, light_path, ray_path, knobs["sun_below"])
     softness = float(_p(parameters, "ray_softness"))

@@ -3012,3 +3012,24 @@ its antialiasing width from `fwidth`, which on so small a disc comes back far to
 it drifted by sub-pixels (3 px). Coverage now takes the pixel width analytically (`sceneSphereCoverage(..., pixelAngle)`)
 and shells under 6 px average four rays per pixel: 3 px 1.1%, 4.5 px 1.9%
 (`tests/test_extruded_bubble_small_shell_steady.py`).
+
+## 68. Fidelity pass toward the preset goals (25 October)
+
+Every preset was rendered at the same loud frame (ragdoll, 30 s) beside its goal mock. Presets 1 and 2 are kept; the
+gaps in 3-7 were mostly authoring on legacy values (two-number light directions, a `[0, 0]` stream, BEAM emission at
+spread 1 piling every bubble in the centre, Particles drawn as a uniform starfield). Shared architecture found
+missing and added, each a pure upgrade or a preset-authored option:
+- **Micro-glass beads (pure upgrade):** beads always took the glass-speck branch, a dim grey ring however large
+  they were drawn, so microbubble columns never read. Beads now blend by size (2 to 3.5 px, beads never breathe)
+  into micro-glass: Fresnel rim plus a footprint-sized glint toward the light. The full shell trace was tried and
+  rejected (it doubled the frame for thousands of beads: 8 -> 16 ms at 1672x941); micro-glass costs nothing
+  measurable. Presets 1/2: about 1% of pixels change, their columns now read as glass.
+- **Bead Scatter (option, 0 = the previous single-file chains):** loosens each chain into a plume of microbubbles
+  widening as it rises, as the goals' columns are.
+- **Light Tint (option; 0.45 = the former fixed sunlit share, 0.85 the deep one):** how much of the Light Colour the
+  water's shafts and glow carry. Sunlit shafts were fixed at 45% light, so a copper surface light could not give
+  copper shafts.
+Presets 3-7 re-authored on the current architecture (physical paths, SCENE emission, counts, beads, palette, focus).
+Remaining gaps: P6's goal looks down onto a caustic light network (camera and caustic backdrop; the backdrop touches
+the no-seabed ruling, so it needs a decision); P7's shafts stay paler than copper; a near-to-far depth hierarchy
+(large blurred near bubbles) only appears when bubbles pass close to the camera.

@@ -505,16 +505,17 @@ def test_an_instance_of_no_size_draws_no_quad(qt_app, stage):
         capture.close()
 
 
-def test_a_deep_light_tints_the_water_it_lights_more_than_a_sunlit_surface_does():
-    """Inside the water the light's own colour carries its glow, beams and veils; under a surface the sky's light is
-    mostly the water's."""
+@pytest.mark.parametrize("light_type", ["Sunlit Surface", "Deep Light"])
+def test_light_tint_carries_the_lights_colour_into_the_water(light_type):
+    """Light Tint sets how much of the light's own colour the water's shafts and glow carry, for either light (a deep
+    light's glow, beams and veils usually take it; under a surface the sky's light is mostly the water's)."""
     orange = {**SETTINGS, "extruded_bubble_light_colour": [255, 130, 50, 255],
-              "extruded_bubble_water_colour": [8, 30, 40, 255]}
+              "extruded_bubble_water_colour": [8, 30, 40, 255], "extruded_bubble_light_type": light_type}
     light = np.asarray(scene._rgb(orange["extruded_bubble_light_colour"]))
 
-    def distance(light_type, key):
-        knobs = scene.scene_knobs({**orange, "extruded_bubble_light_type": light_type})
-        tint = np.asarray(knobs[key]) / max(knobs[key])
-        return float(np.abs(tint - light / light.max()).sum())
+    def distance(tint, key):
+        knobs = scene.scene_knobs({**orange, "extruded_bubble_light_tint": tint})
+        colour = np.asarray(knobs[key]) / max(knobs[key])
+        return float(np.abs(colour - light / light.max()).sum())
     for key in ("sky", "shaft"):
-        assert distance("Deep Light", key) < 0.5 * distance("Sunlit Surface", key)
+        assert distance(0.85, key) < 0.5 * distance(0.3, key)
