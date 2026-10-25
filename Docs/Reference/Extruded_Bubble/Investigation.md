@@ -3029,7 +3029,7 @@ missing and added, each a pure upgrade or a preset-authored option:
 - **Light Tint (option; 0.45 = the former fixed sunlit share, 0.85 the deep one):** how much of the Light Colour the
   water's shafts and glow carry. Sunlit shafts were fixed at 45% light, so a copper surface light could not give
   copper shafts.
-Presets 3-7 re-authored on the current architecture (physical paths, SCENE emission, counts, beads, palette, focus).
+Presets 3-7 were re-authored on the current architecture and **rejected by the operator** ("vastly inferior, not even close"); their previous authoring is restored, with the new options at their neutral values.
 Remaining gaps: P6's goal looks down onto a caustic light network (camera and caustic backdrop; the backdrop touches
 the no-seabed ruling, so it needs a decision); P7's shafts stay paler than copper; a near-to-far depth hierarchy
 (large blurred near bubbles) only appears when bubbles pass close to the camera.
