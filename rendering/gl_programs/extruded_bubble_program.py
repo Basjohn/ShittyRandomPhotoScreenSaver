@@ -7,7 +7,7 @@ lab comparison is a comparison of the product's shaders. Uniforms are documented
 """
 from __future__ import annotations
 
-from core.constants.extruded_bubble_world import WAKE_PATH, WAKE_POINTS, WAKE_STRIDE
+from core.constants.extruded_bubble_world import WAKE_PATH, WAKE_POINTS, WAKE_SPAN, WAKE_STRIDE
 from rendering.gl_programs.scene3d_optics import SCENE3D_OPTICS_GLSL
 from rendering.gl_programs.scene3d_spheres import SCENE3D_SPHERES_GLSL
 from rendering.gl_programs.scene3d_water import SCENE3D_WATER_GLSL
@@ -1209,21 +1209,25 @@ layout(std430, binding = 7) readonly buffer EbWakes { float ebWake[]; };    // s
 const int WAKE_STRIDE = """ + str(WAKE_STRIDE) + """;
 const int WAKE_PATH = """ + str(WAKE_PATH) + """;
 const int WAKE_POINTS = """ + str(WAKE_POINTS) + """;
+const int WAKE_SPAN = """ + str(WAKE_SPAN) + """;
 uniform float uTrails;        // Wake Trails: 0 none .. 1 most bubbles trail a veil
 uniform float uTrailTime;     // the simulation's motion phase: the veil's inner light drifts with the water
 float trailHash(float x) { return fract(sin(x * 12.9898) * 43758.5453); }
-vec3 wakePoint(int owner, int i) {
-    int at = owner * WAKE_STRIDE + WAKE_PATH + 3 * clamp(i, 0, WAKE_POINTS - 1);
+// The trail's chain: the bubble itself (k = 0), then the water it passed through, newest first.
+vec3 wakePoint(int owner, int k) {
+    int at = k <= 0 ? owner * WAKE_STRIDE : owner * WAKE_STRIDE + WAKE_PATH + 3 * (min(k, WAKE_POINTS) - 1);
     return vec3(ebWake[at], ebWake[at + 1], ebWake[at + 2]);
 }
-// The trail at s (0 just behind the bubble .. 1 its tail): a Catmull-Rom curve through the path's points.
+// The trail at s (0 at the bubble .. 1 its tail): a Catmull-Rom curve through the chain over its span.
 vec3 trailPath(int owner, float s) {
-    float f = clamp(s, 0.0, 1.0) * float(WAKE_POINTS - 1);
-    int i = min(int(floor(f)), WAKE_POINTS - 2);
+    float span = max(ebWake[owner * WAKE_STRIDE + WAKE_SPAN], 1e-3);
+    int last = max(int(ceil(span)), 1);
+    float f = clamp(s, 0.0, 1.0) * span;
+    int i = min(int(floor(f)), last - 1);
     float t = f - float(i);
     vec3 p1 = wakePoint(owner, i), p2 = wakePoint(owner, i + 1);
     vec3 p0 = i > 0 ? wakePoint(owner, i - 1) : 2.0 * p1 - p2;
-    vec3 p3 = i + 2 < WAKE_POINTS ? wakePoint(owner, i + 2) : 2.0 * p2 - p1;
+    vec3 p3 = i + 2 <= last ? wakePoint(owner, i + 2) : 2.0 * p2 - p1;
     return 0.5 * (2.0 * p1 + (p2 - p0) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t * t
                   + (3.0 * p1 - p0 - 3.0 * p2 + p3) * t * t * t);
 }
@@ -1571,7 +1575,12 @@ void main() {
     // A sheet of disturbed water hanging from the bubble: its edges leave the bubble's widest point (its full width,
     // at its centre plane) and curve inward under it, then run on as a long, slowly narrowing sheet.
     float d = s * trailLength / max(r, 1e-4);                       // distance down, in bubble radii
-    float width = r * (0.72 + 0.28 * exp(-0.6 * d * d)) * (1.0 - 0.45 * pow(s, 1.6)) + nominal * 0.05;
+    // At the bubble the edges meet its true outline: a sphere's perspective silhouette is wider than a sheet through
+    // its centre by 1 / sqrt(1 - (r / D)^2) (a visible pixel gap on nearer bubbles otherwise).
+    vec3 bubble_ = uWorldToView * (vec3(ebWake[base], ebWake[base + 1], ebWake[base + 2]) - uEye);
+    float outline = inversesqrt(max(1.0 - r * r / max(dot(bubble_, bubble_), 1e-6), 0.05));
+    float width = r * (0.72 + 0.28 * exp(-0.6 * d * d)) * (1.0 - 0.45 * pow(s, 1.6))
+                * mix(outline, 1.0, smoothstep(0.0, 1.5, d)) + nominal * 0.05 * smoothstep(0.0, 1.0, d);
     vUnder = d;
     vWidthPx = width / (uPixel * max(-here.z, 0.1));
     vAcross = vec2(sideSign, s);
@@ -1631,18 +1640,18 @@ void main() {
     // The water bends what lies behind it like a clear tube (strongest toward its sides).
     vec2 acrossScreen = vec2(dFdx(x), dFdy(x));
     acrossScreen = acrossScreen / max(length(acrossScreen), 1e-6);
-    vec2 shift = acrossScreen * x * sqrt(max(1.0 - x * x, 0.0)) * min(vWidthPx * 0.18, 7.0) * strength * body;
+    // Under the bubble's own lower half only the walls show (its sides running on into the sheet): the sheet's water,
+    // its bend and its inside appear below the bubble, never as a milky fill or a seam across it.
+    float below = smoothstep(0.75, 1.15, vUnder);
+    vec2 shift = acrossScreen * x * sqrt(max(1.0 - x * x, 0.0)) * min(vWidthPx * 0.18, 7.0) * strength * body * below;
     if (!(abs(shift.x) + abs(shift.y) < 1e4)) shift = vec2(0.0);
     vec3 bent = texture(uBackground, (gl_FragCoord.xy + shift) / uTargetSize).rgb;
     vec3 light = (mix(uSkyTint, uShaftColour, 0.5) * 1.4 + uLightColour * 0.2) * max(uLightStrength, 0.3);
     // Thin water's colour: cyan in the body, a violet cast toward its walls (the goals' iridescent edges).
     vec3 tint = mix(vec3(0.4, 0.82, 1.0), vec3(0.72, 0.55, 1.0), smoothstep(0.55, 1.0, abs(x)));
-    float a = clamp(body * 0.12 * strength, 0.0, 0.4);
+    float a = clamp(body * 0.12 * strength * below, 0.0, 0.4);
     // A soft luminous fill where it leaves the bubble (lit disturbed water), clearing down the trail.
     float fill = body * (0.03 + 0.14 * (1.0 - smoothstep(0.0, 0.5, s))) * mix(1.0, 0.6, abs(x));
-    // Under the bubble's own lower half only the walls show (its sides running on into the sheet); the inside of the
-    // sheet appears below the bubble, never as a milky fill in it.
-    float below = smoothstep(0.75, 1.15, vUnder);
     fill *= below;
     strands *= below;
     fine *= below;

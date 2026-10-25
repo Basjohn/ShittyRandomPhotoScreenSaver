@@ -100,46 +100,74 @@ class WakeOwnershipTests(unittest.TestCase):
 
     def test_a_trail_is_the_water_its_bubble_passed_through(self):
         import numpy as np
-        from widgets.spotify_visualizer.extruded_bubble_wake import WakePath
-        path = WakePath(5, 0.5)
+        from core.constants.extruded_bubble_world import WAKE_POINTS
+        from widgets.spotify_visualizer.extruded_bubble_wake import WakeField
+        field = WakeField(4)
         here = np.array([0.0, 0.0, 0.0])
-        for _ in range(120):                      # rising to the right ..
+        field.add(5, 0.5, tuple(here))
+        for _ in range(240):                      # rising to the right ..
             here = here + (0.012, 0.0, 0.0)
-            path.advance(tuple(here), 1 / 60, 0.0, 1.0)
+            field.follow(5, tuple(here), 1 / 60, 1.0)
+            field.flow(1 / 60, 0.0)
         turn = here.copy()
         for _ in range(60):                       # .. then turned upward by the music
             here = here + (0.0, 0.012, 0.0)
-            path.advance(tuple(here), 1 / 60, 0.0, 1.0)
-        length, flat = path.resampled(tuple(here), 0.3)
-        points = np.asarray(flat).reshape(-1, 3)
+            field.follow(5, tuple(here), 1 / 60, 1.0)
+            field.flow(1 / 60, 0.0)
+        length, span, *flat = field.record(5, tuple(here))
+        points = np.asarray(flat).reshape(WAKE_POINTS, 3)
         self.assertGreater(length, 1.0)
-        self.assertAlmostEqual(float(np.linalg.norm(points[0] - here)), 0.3, delta=0.05)    # just behind the bubble
+        self.assertGreater(span, 3.0)
         # Near the bubble the trail runs back down its new course; farther back it lies along the old one.
-        self.assertLess(abs(points[1][0] - turn[0]), 0.1)
-        self.assertLess(points[1][1], here[1])
-        self.assertLess(points[-1][0], turn[0] - 0.3)
-        self.assertLess(abs(points[-1][1] - turn[1]), 0.15)
+        self.assertLess(abs(points[0][0] - turn[0]), 0.1)
+        self.assertLess(points[0][1], here[1])
+        last = points[int(np.ceil(span)) - 1]
+        self.assertLess(last[0], turn[0] - 0.3)
+        self.assertLess(abs(last[1] - turn[1]), 0.15)
 
     def test_a_trail_drifts_with_the_water_after_its_bubble_is_gone(self):
         import numpy as np
-        from widgets.spotify_visualizer.extruded_bubble_wake import FLOW, WakePath
-        path = WakePath(9, 0.5)
-        for k in range(120):
-            path.advance((0.0, 0.012 * k, 0.0), 1 / 60, 0.0, 1.0)
+        from widgets.spotify_visualizer.extruded_bubble_wake import FLOW, STEP_SECONDS, WakeField
+        field = WakeField(2)
+        field.add(9, 0.5, (0.0, 0.0, 0.0))
+        for k in range(1, 121):
+            field.follow(9, (0.0, 0.012 * k, 0.0), 1 / 60, 1.0)
+            field.flow(1 / 60, 0.0)
         for _ in range(90):                       # the drag of the bubble's passing dies away
-            path.advance(None, 1 / 60, 0.0, 0.0)
-        before = np.asarray(path.resampled(None, 0.0)[1]).reshape(-1, 3)
-        path.advance(None, 1 / 60, 0.0, 0.0)
-        after = np.asarray(path.resampled(None, 0.0)[1]).reshape(-1, 3)
-        # Only the water's slow swirl (and what is left of the drag) moves it: no tail of its own.
-        self.assertLess(float(np.abs(after - before).max()), 3.0 * FLOW / 60 + 1e-3)
+            field.flow(1 / 60, 0.0)
+        before = np.asarray(field.record(9, (0.0, 1.44, 0.0))[2:])
+        for _ in range(6):
+            field.flow(1 / 60, 0.0)
+        after = np.asarray(field.record(9, (0.0, 1.44, 0.0))[2:])
+        # Only the water's slow swirl (what is left of the drag, a little smoothing) moves it: no tail of its own.
+        self.assertLess(float(np.abs(after - before).max()), 3.0 * FLOW * STEP_SECONDS + 2e-3)
+
+    def test_a_long_lived_wake_stays_even_along_its_length(self):
+        """The water smooths only between a wake's own points: its tail never drifts off toward unused slots."""
+        import math
+        from dataclasses import replace
+        from core.constants.extruded_bubble_world import WAKE_PATH, WAKE_SPAN, WAKE_STRIDE
+        controls = replace(self.controls, wake_trails=1.0)
+        for _ in range(900):
+            snap = self.sim.advance(self.mod.MusicInput(1 / 60, True, 1., (), (.8, .7, .6)), controls)
+        checked = 0
+        for i in range(0, len(snap.wakes), WAKE_STRIDE):
+            row = snap.wakes[i:i + WAKE_STRIDE]
+            n = math.ceil(row[WAKE_SPAN])
+            if row[8] < 0.5 or n < 4:
+                continue
+            chain = [row[WAKE_PATH + 3 * k:WAKE_PATH + 3 * k + 3] for k in range(n)]
+            segments = [math.dist(a, b) for a, b in zip(chain, chain[1:])]
+            self.assertLess(max(segments), 2.0 * sum(segments) / len(segments))
+            checked += 1
+        self.assertGreater(checked, 0)
 
     def test_wake_trails_choose_trailing_bubbles_and_zero_keeps_no_history(self):
         from dataclasses import replace
         from core.constants.extruded_bubble_world import WAKE_PATH
         rows = source_records(self.tick())
         self.assertTrue(all(row[8] == 0.0 for row in rows.values()))
-        self.assertEqual(self.sim._wake_paths, {})
+        self.assertEqual(len(self.sim._wake_field), 0)
         controls = replace(self.controls, wake_trails=1.0)
         for _ in range(180):                      # music moves the bubbles: their trails grow behind them
             snap = self.sim.advance(self.mod.MusicInput(1 / 60, True, 1., (), (.8, .7, .6)), controls)
@@ -147,10 +175,10 @@ class WakeOwnershipTests(unittest.TestCase):
         self.assertTrue(rows and all(row[8] == 1.0 and row[9] > 0.0 for row in rows.values()))
         for ident, row in rows.items():
             bubble = self.sim._find(ident)
+            # The trail's head is the bubble itself (drawn from its centre plane); its newest water lies just behind.
+            self.assertEqual(tuple(row[:3]), (bubble.x, bubble.y, bubble.z))
             first = row[WAKE_PATH:WAKE_PATH + 3]
-            # The trail leaves the bubble's widest point: its path starts at the centre plane.
-            self.assertAlmostEqual(sum((a - b) ** 2 for a, b in zip(first, (bubble.x, bubble.y, bubble.z))) ** 0.5,
-                                   0.0, delta=1e-6)
+            self.assertLess(sum((a - b) ** 2 for a, b in zip(first, row[:3])) ** 0.5, 15.0 / 11.0 * bubble.radius + 1e-6)
 
     def test_no_wake_when_no_parent_population(self):
         self.controls = self.mod.ExtrudedBubbleControls(large_count=(0, 0), mid_count=(0, 0),
