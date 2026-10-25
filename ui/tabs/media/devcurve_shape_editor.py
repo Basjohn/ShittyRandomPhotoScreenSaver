@@ -581,6 +581,23 @@ class DevCurveShapeEditor(QWidget):
             self._emit_change()
         event.accept()
 
+    # ── Settings' Ctrl+Z: one gesture (a node or lane drag) is one edit ──
+
+    def event(self, event):  # type: ignore[override]
+        from ui.settings_undo import gesture_event
+        return gesture_event(self, event, super().event, self._undo_state, self._restore_undo_state)
+
+    def _undo_state(self):
+        return (self.get_layer_nodes_map(), sorted(self.get_lane_strengths().items()))
+
+    def _restore_undo_state(self, state) -> None:
+        layer_nodes, lanes = state
+        self.set_layer_nodes_map(layer_nodes)
+        self.set_lane_strengths(dict(lanes))
+        self.nodes_changed.emit(self.get_nodes())
+        self.layer_nodes_changed.emit(self.get_layer_nodes_map())
+        self.lane_strengths_changed.emit(self.get_lane_strengths())
+
     def _emit_change(self) -> None:
         self._clamp_all()
         self._layer_nodes[self._active_layer] = self._nodes

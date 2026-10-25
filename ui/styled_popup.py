@@ -699,9 +699,19 @@ class ColorSwatchButton(QPushButton):
             self._color, self.parentWidget(), self._title, self._show_alpha
         )
         if new_color is not None:
+            before = QColor(self._color).getRgb()
             self._color = new_color
             self.update()
             self.color_changed.emit(new_color)
+            from ui.settings_undo import record_edit
+            record_edit(self, before, QColor(new_color).getRgb(), self._restore_color)
+
+    def _restore_color(self, rgba) -> None:
+        """Put a colour back as a pick would (Settings' Ctrl+Z)."""
+        color = QColor(*rgba)
+        self._color = color
+        self.update()
+        self.color_changed.emit(color)
 
 
 class StyledColorPicker:

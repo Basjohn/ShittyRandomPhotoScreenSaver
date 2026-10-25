@@ -77,12 +77,9 @@ Triage history: `Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md`.
   - [ ] Make Advanced more prominent with the existing larger bucket; move Technical controls (and EB Camera) under it.
   - [ ] Expose overall/per-mode 3D quality in Visualizer bodies as views of the existing 3D tab keys (per-mode AA/Bloom
     via `resolve_scene_quality`), never duplicated persisted settings.
-- [ ] **Ctrl+Z / redo for every slider and visual editor in Settings:** every slider (and Range/Triangle/Direction
-  control) and every visual editor (camera, terrain, shape, curve, colour/gradient and similar canvases) undoes its
-  recent changes with Ctrl+Z (Ctrl+Shift+Z / Ctrl+Y redo). Short memory is enough (a few steps per control or editor),
-  for the current Settings session only, never persisted. Shared owner `ui/widgets/edit_history.py` (`EditHistory`),
-  already used by the framed Camera Position editor; adopt it once at the shared slider/control builders rather than
-  per page, and move the Neon terrain editor's own unbounded stack onto it. A slider drag counts as one step.
+- [~] **Settings undo — awaiting your use:** Ctrl+Z / Ctrl+Y over the session's slider and visual-editor edits
+  (contract: `Docs/Contracts.md` "Settings undo"). Check it in normal use across pages; extend to any control found
+  missing.
 - [~] **Hierarchy connector rails — awaiting validation:** connectors derive from visible widget geometry; review the
   operator theme and physical mixed-DPI movement (native captures `tmp/settings_tree_native/`).
 - [ ] **Display Settings capacity:** replace the four fixed monitor checkboxes with current-screen rows; preserve

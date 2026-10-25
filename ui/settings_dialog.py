@@ -638,6 +638,9 @@ class SettingsDialog(QDialog):
             )
 
         super().__init__(parent)
+        # Ctrl+Z / Ctrl+Y over this session's slider and visual-editor edits (memory only).
+        from ui.settings_undo import SettingsUndo
+        self._settings_undo = SettingsUndo(self)
 
         self._runtime_generation = runtime_generation
         self._launch_target = resolve_settings_launch_target(initial_target)

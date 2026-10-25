@@ -1034,7 +1034,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     text_limit_row.addStretch()
 
     balance_row = _aligned_row(appearance_inner, "Text Balance:")
-    tab.gmail_sender_subject_ratio = QSlider(Qt.Orientation.Horizontal)
+    tab.gmail_sender_subject_ratio = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.gmail_sender_subject_ratio.setRange(10, 80)
     tab.gmail_sender_subject_ratio.setInvertedAppearance(True)
     tab.gmail_sender_subject_ratio.setInvertedControls(True)

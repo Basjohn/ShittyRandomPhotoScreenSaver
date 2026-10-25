@@ -217,7 +217,7 @@ def test_gmail_text_limits_and_balance_use_distinct_controls() -> None:
     assert "text_limit_grid = QGridLayout()" in source
     assert "text_limit_grid.addWidget(tab.gmail_max_sender_words, 0, 1)" in source
     assert "text_limit_grid.addWidget(tab.gmail_max_subject_words, 0, 3)" in source
-    assert "tab.gmail_sender_subject_ratio = QSlider" in source
+    assert "tab.gmail_sender_subject_ratio = NoWheelSlider" in source     # one ratio slider (Settings-undoable)
     assert "gmail_sender_column_width = QSpinBox" not in source
     assert "gmail_max_subject_chars = QSpinBox" not in source
 
