@@ -118,7 +118,7 @@ def build_terrain_section(tab, layout) -> None:
 # What the terrain editor's 3/4 view draws from Settings: the scene's colours and its Sun / Moon.
 SCENE_PREVIEW_KEYS = tuple("shockwave_grid_" + key for key in (
     "sky_color", "terrain_fill_color", "water_color", "line_color", "crest_color", "sun_color", "moon_color",
-    "sun_enabled", "sun_mode", "sun_x", "sun_y", "sun_z", "sun_size", "moon_phase"))
+    "sun_enabled", "sun_mode", "sun_x", "sun_y", "sun_z", "sun_size", "moon_phase", "terrain_height"))
 
 
 def refresh_scene_preview(tab) -> None:

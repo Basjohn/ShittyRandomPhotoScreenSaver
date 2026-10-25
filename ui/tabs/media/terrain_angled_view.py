@@ -4,7 +4,11 @@ Pure geometry (numpy, no Qt painting): build a preview mesh of the authored grid
 perspective camera fitted into a rectangle, order its quads back to front, and pick the visible surface point under
 the cursor (exact barycentric hits on the projected triangles, nearest to the eye wins), so the editor paints the
 same uv in either view. World proportions follow the basin: its width is the nominal 16:9 card's, its depth
-``DEPTH``; an extended grid reaches past it as in the scene. Heights use the default Terrain Height's scale.
+``DEPTH``; an extended grid reaches past it as in the scene.
+
+The surface is the scene's own (``scene_surface``, the CPU mirror of ``basinCurve`` / ``basinLandHeight``): the
+smooth cubic land with its soft banks, scaled by Terrain Height, never the raw cells. Past the authored grid the
+scene's continuation carries the land and water on toward the horizon; the view shows it too (not paintable).
 
 The scene's Sun / Moon sits at infinity in the direction of its authored position seen from the scene's reference
 viewpoint (``neon_celestial``). A diorama's raised camera would see the scene's horizon above its frame, so the view
@@ -22,8 +26,9 @@ import numpy as np
 from core.constants.neon_lake_world import DEPTH, NOMINAL_HALF_WIDTH
 from rendering.gl_programs.neon_celestial import CELESTIAL_REFERENCE
 
-MAX_PREVIEW_QUADS = 64        # per side: a large grid is shown at a stride, never resampled when painted
-HEIGHT_SCALE = 0.45           # world height of an authored 1.0 (about the scene at its default Terrain Height)
+MAX_PREVIEW_QUADS = 64        # per side over the authored grid (the scene's smooth surface, sampled)
+CONTINUATION_STEP = 1.0 / 16.0   # the continuation's quads, in grid uv (aligned with the grid's edges)
+CONTINUATION_REACH = (0.625, 0.625, 0.0625, 1.75)   # grid uv shown past the grid: left, right, front, back
 DEFAULT_YAW, DEFAULT_PITCH = math.radians(28.0), math.radians(30.0)   # a three-quarter view
 SKY_SHARE = 0.30              # the upper part of the view kept for the sky and its Sun / Moon
 SKY_DOME = 0.5                # the Sun / Moon sky dome's radius, in grid diagonals
@@ -34,7 +39,10 @@ _FOCAL = 1.0 / math.tan(math.radians(17.0))   # a 34-degree field of view
 
 @dataclass(frozen=True)
 class AngledProjection:
-    """Projected preview vertices (``screen`` rows x columns x 2, ``depth`` from the eye) and their uv."""
+    """Projected preview vertices (``screen`` rows x columns x 2, ``depth`` from the eye) and their uv.
+
+    ``uv`` .. ``depth`` are the authored grid's mesh; ``beyond`` is the continuation's coarser mesh around it
+    (``uv``, ``world``, ``screen``, ``depth``, ``height``, ``water``, ``inside``: which quads the grid covers)."""
     stride: int
     uv: np.ndarray        # (rows, cols, 2) grid uv of each preview vertex
     world: np.ndarray     # (rows, cols, 3)
@@ -44,6 +52,9 @@ class AngledProjection:
     eye: np.ndarray = None        # the view's camera
     direction_at: object = None   # screen point (x, y) -> the world direction of the view ray there
     dome: tuple = ()              # (centre, radius) of the Sun / Moon's sky dome
+    height: np.ndarray = None     # (rows, cols) the scene's land height (Terrain Height 1) at each vertex
+    water: np.ndarray = None      # (rows, cols) True where the scene has water
+    beyond: dict = None           # the continuation's mesh (see the class doc)
 
 
 def preview_stride(size: int) -> int:
@@ -51,12 +62,91 @@ def preview_stride(size: int) -> int:
 
 
 def world_points(size: int, basin, u: np.ndarray, v: np.ndarray, height: np.ndarray) -> np.ndarray:
-    """World positions of grid uv points (u right, v toward the back) at authored ``height``."""
+    """World positions of grid uv points (u right, v toward the back) at world ``height``."""
     x0, y0, cells = basin
     n1 = size - 1
     x = ((u * n1 - x0) / cells - 0.5) * 2.0 * NOMINAL_HALF_WIDTH
     z = -((v * n1 - y0) / cells) * DEPTH
-    return np.stack([x, height * HEIGHT_SCALE, z], axis=-1)
+    return np.stack([x, np.broadcast_to(height, np.shape(x)), z], axis=-1)
+
+
+def _smoothstep(low, high, x):
+    t = np.clip((x - low) / (high - low), 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+def _bilinear(grid: np.ndarray, gu, gv):
+    n1 = grid.shape[0] - 1
+    x, y = np.clip(gu, 0.0, 1.0) * n1, np.clip(gv, 0.0, 1.0) * n1
+    x0, y0 = np.floor(x).astype(int), np.floor(y).astype(int)
+    x1, y1 = np.minimum(x0 + 1, n1), np.minimum(y0 + 1, n1)
+    fx, fy = x - x0, y - y0
+    near = grid[y0, x0] * (1.0 - fx) + grid[y0, x1] * fx
+    far = grid[y1, x0] * (1.0 - fx) + grid[y1, x1] * fx
+    return near * (1.0 - fy) + far * fy
+
+
+def _cubic(grid: np.ndarray, gu, gv):
+    """The scene's positive cubic B-spline surface (``sceneHeightfieldCurve``)."""
+    n1 = grid.shape[0] - 1
+    x, y = np.clip(gu, 0.0, 1.0) * n1, np.clip(gv, 0.0, 1.0) * n1
+    ix, iy = np.floor(x).astype(int), np.floor(y).astype(int)
+
+    def weights(t):
+        t2, t3 = t * t, t * t * t
+        return ((1.0 - t) ** 3 / 6.0, (3.0 * t3 - 6.0 * t2 + 4.0) / 6.0, (-3.0 * t3 + 3.0 * t2 + 3.0 * t + 1.0) / 6.0,
+                t3 / 6.0)
+
+    wx, wy = weights(x - ix), weights(y - iy)
+    total = np.zeros(np.shape(x))
+    for b in range(4):
+        rows = np.clip(iy + b - 1, 0, n1)
+        for a in range(4):
+            total = total + wx[a] * wy[b] * grid[rows, np.clip(ix + a - 1, 0, n1)]
+    return total
+
+
+def scene_surface(grid, basin, gu, gv):
+    """(land height at Terrain Height 1, water) of the scene at grid uv, inside the grid or past it: the CPU mirror
+    of ``basinBase`` / ``basinCurve`` / ``basinLandHeight`` (without the music's reaction or fine detail)."""
+    grid = np.asarray(grid, dtype=np.float64)
+    n1 = grid.shape[0] - 1
+    x0, y0, cells = basin
+    scale = cells / n1
+    gu, gv = np.asarray(gu, dtype=np.float64), np.asarray(gv, dtype=np.float64)
+    eu, ev = np.clip(gu, 0.0, 1.0), np.clip(gv, 0.0, 1.0)
+    du, dv = gu - eu, gv - ev
+    outside = np.hypot(du, dv) / scale
+    boundary = _bilinear(grid, eu, ev)
+    # basinContinuation: the edge carried outward, easing into low rolling land (water stays water).
+    interior = _bilinear(grid, np.clip(eu - np.sign(du) / n1, 0.0, 1.0), np.clip(ev - np.sign(dv) / n1, 0.0, 1.0))
+    slope = np.clip((boundary - interior) * n1 * scale, -0.8, 0.8)
+    near_slope = 0.20 * slope * np.minimum(outside, 0.16)
+    descent = _smoothstep(0.04, 0.68, outside)
+    bu, bv = gu / scale - x0 / cells, gv / scale - y0 / cells          # basin uv
+    background = (0.12 + 0.065 * np.sin(2.7 * bu + 1.7 * bv) * np.cos(2.4 * bv - 0.8 * bu)
+                  + 0.040 * np.sin(1.1 * bv - 2.3 * bu))
+    rolling = np.maximum(0.025, (boundary + near_slope) * (1.0 - descent) + background * descent)
+    continued = rolling * (1.0 - _smoothstep(1.1, 2.2, outside)) + 0.065 * _smoothstep(1.1, 2.2, outside)
+    continued = np.where(boundary == 0.0, 0.0, continued)
+    inside = outside < 1e-9
+    base = np.where(inside, boundary, continued)
+    edge_curve = _cubic(grid, eu, ev)
+    curve = np.where(inside, edge_curve, np.maximum(0.0, edge_curve + continued - boundary))
+    curve = np.where(inside, curve, curve * (1.0 - _smoothstep(1.1, 2.2, outside)) + 0.065 * _smoothstep(1.1, 2.2, outside))
+    water = base == 0.0
+    land = curve * _smoothstep(0.0, 0.015, base)
+    # The scene's shallow convex distant world: the land falls away toward a real horizon.
+    land = land - 0.38 * np.maximum(0.0, outside - 0.20) ** 2
+    return np.where(water, 0.0, land), water
+
+
+def surface_points(size: int, heights, basin, u, v, terrain_height: float = 1.0) -> np.ndarray:
+    """World positions of grid uv points resting on the scene's surface."""
+    grid = np.asarray(heights, dtype=np.float64).reshape(size, size)
+    land, _water = scene_surface(grid, basin, u, v)
+    return world_points(size, basin, np.asarray(u, dtype=np.float64), np.asarray(v, dtype=np.float64),
+                        land * float(terrain_height))
 
 
 def _camera(yaw: float, pitch: float, centre: np.ndarray, distance: float):
@@ -82,15 +172,26 @@ def body_world(dome, x: float, y: float, z: float, size: float):
 
 
 def project_terrain(size: int, heights, basin, rect, *, yaw=DEFAULT_YAW, pitch=DEFAULT_PITCH,
-                    body=None) -> AngledProjection:
-    """The preview mesh projected and fitted into ``rect`` (left, top, width, height), whole grid in view, with the
-    Sun / Moon (``body``: authored x, y, z, size) when it is in front of the view."""
+                    body=None, terrain_height: float = 1.0) -> AngledProjection:
+    """The scene's surface projected and fitted into ``rect`` (left, top, width, height), whole grid in view, its
+    continuation reaching on past it, with the Sun / Moon (``body``: authored x, y, z, size) when it is in front."""
     stride = preview_stride(size)
-    indices = np.unique(np.r_[np.arange(0, size, stride), size - 1])
     grid = np.asarray(heights, dtype=np.float64).reshape(size, size)
-    v_index, u_index = np.meshgrid(indices, indices, indexing="ij")
-    uv = np.stack([u_index / (size - 1), v_index / (size - 1)], axis=-1)
-    world = world_points(size, basin, uv[..., 0], uv[..., 1], grid[v_index, u_index])
+    # Two samples a cell (a bank turns within one), at most MAX_PREVIEW_QUADS.
+    samples = np.linspace(0.0, 1.0, min(2 * (size - 1), MAX_PREVIEW_QUADS) + 1)
+    gv, gu = np.meshgrid(samples, samples, indexing="ij")
+    uv = np.stack([gu, gv], axis=-1)
+    surface, water = scene_surface(grid, basin, gu, gv)
+    world = world_points(size, basin, gu, gv, surface * float(terrain_height))
+    left_reach, right_reach, front_reach, back_reach = CONTINUATION_REACH
+    bu = np.arange(-left_reach, 1.0 + right_reach + 1e-9, CONTINUATION_STEP)
+    bv = np.arange(-front_reach, 1.0 + back_reach + 1e-9, CONTINUATION_STEP)
+    beyond_v, beyond_u = np.meshgrid(bv, bu, indexing="ij")
+    beyond_land, beyond_water = scene_surface(grid, basin, beyond_u, beyond_v)
+    centres_u, centres_v = (beyond_u[:-1, :-1] + beyond_u[1:, 1:]) / 2.0, (beyond_v[:-1, :-1] + beyond_v[1:, 1:]) / 2.0
+    beyond = {"uv": np.stack([beyond_u, beyond_v], axis=-1), "height": beyond_land, "water": beyond_water,
+              "world": world_points(size, basin, beyond_u, beyond_v, beyond_land * float(terrain_height)),
+              "inside": (centres_u > 0.0) & (centres_u < 1.0) & (centres_v > 0.0) & (centres_v < 1.0)}
     lows, highs = world.reshape(-1, 3).min(axis=0), world.reshape(-1, 3).max(axis=0)
     centre = np.array([(lows[0] + highs[0]) / 2.0, 0.0, (lows[2] + highs[2]) / 2.0])
     extent = float(np.linalg.norm(highs - lows))
@@ -102,9 +203,9 @@ def project_terrain(size: int, heights, basin, rect, *, yaw=DEFAULT_YAW, pitch=D
         forward = np.maximum(forward, 1e-3)
         return np.stack([_FOCAL * (relative @ right) / forward, -_FOCAL * (relative @ up) / forward], axis=-1), forward
 
-    # Fit the whole grid's box (up to its highest land, never flatter than a fifth of full) into the rectangle,
+    # Fit the whole grid's box (up to its highest land, never flatter than a tenth of full) into the rectangle,
     # below a band of sky for the Sun / Moon.
-    top = max(float(highs[1]), 0.2 * HEIGHT_SCALE)
+    top = max(float(highs[1]), 0.1)
     corners = np.array([[x, y, z] for x in (lows[0], highs[0]) for y in (0.0, top)
                         for z in (lows[2], highs[2])])
     dome = dome_of(extent)
@@ -126,13 +227,14 @@ def project_terrain(size: int, heights, basin, rect, *, yaw=DEFAULT_YAW, pitch=D
         return (screen - middle) * scale + offset, forward
 
     screen, depth = project(world)
+    beyond["screen"], beyond["depth"] = project(beyond["world"])
 
     def direction_at(point):
         tangent = ((np.asarray(point, dtype=np.float64) - offset) / scale + middle) / _FOCAL
         direction = right * tangent[0] - up * tangent[1] - back
         return direction / np.linalg.norm(direction)
 
-    return AngledProjection(stride, uv, world, screen, depth, project, eye, direction_at, dome)
+    return AngledProjection(stride, uv, world, screen, depth, project, eye, direction_at, dome, surface, water, beyond)
 
 
 _BODY_LIMITS = ((-2.0, 2.0), (0.1, 3.0), (-6.0, 2.0))   # the Position X / Y / Z controls' ranges
@@ -175,9 +277,9 @@ def quad_order(projection: AngledProjection) -> np.ndarray:
     return np.stack([rows, cols], axis=-1)
 
 
-def quad_light(projection: AngledProjection) -> np.ndarray:
-    """0..1 Lambert light of each quad from the upper left front."""
-    w = projection.world
+def quad_light(projection) -> np.ndarray:
+    """0..1 Lambert light of each quad from the upper left front (a projection, or a world mesh)."""
+    w = projection.world if isinstance(projection, AngledProjection) else np.asarray(projection)
     across = w[:-1, 1:] - w[:-1, :-1]
     along = w[1:, :-1] - w[:-1, :-1]
     normal = np.cross(along, across)
