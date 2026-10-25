@@ -47,9 +47,12 @@ A non-terminal timeout calls `QCoreApplication.exit(1)`: **the saver closes inst
 
 1. **It hides the detector.** The barrier is the project's cycle detector for runtime owners (R-53/R-154). Sweeping
    turns every new cycle into silent memory churn; regressions stop being visible unless something else reports them.
-2. **It runs unrelated finalizers at a lifecycle boundary.** All unreachable cycles in the process are collected:
-   R-90-class native finalizers, parentless PySide QObjects/timers with another thread's affinity, worker-side objects.
-   The same risk exists at any natural gen2, but a sweep concentrates it into teardown, beside the teardown code itself.
+2. **It can wake crashes that are dormant today.** A sweep collects *every* unreachable cycle in the process, so it runs
+   their finalizers: R-90-class native releases, parentless PySide QObjects/timers owned by another thread, worker-side
+   objects. Because the RUN policy makes deep collections so rare (one per session observed), a latent finalizer bug
+   in such a cycle very likely never runs today. A sweep at every Settings / custom-edit / monitor teardown would run it
+   regularly, during teardown itself. A sweep does not create the defect, but it can turn a dormant one into a crash
+   users see. This is the strongest argument against B and C.
 3. **A pause at every full teardown.** After the first thaw nothing is frozen, so each sweep scans the whole heap:
    expect the historical 50–150 ms (the thaw sweep measured 86.9 ms). It is inside the lifecycle window (not counted as a
    stall) but adds to Settings-open, custom-edit and monitor-wake latency.
@@ -64,8 +67,6 @@ A non-terminal timeout calls `QCoreApplication.exit(1)`: **the saver closes inst
 2. **Consistency.** The first and later retirements, before or after the 45 s freeze, would behave the same.
 3. **Memory.** Each retirement's cyclic Python graph (13k objects on the first; controller/simulation state included)
    is reclaimed instead of accumulating for the session.
-4. **Deterministic finalizer timing.** R-90 was hard to find because of "an arbitrary later GC". A boundary sweep makes
-   such faults reproducible at a known point. (This cuts both ways: see harm 2.)
 
 ## Options
 
@@ -78,6 +79,7 @@ A non-terminal timeout calls `QCoreApplication.exit(1)`: **the saver closes inst
 
 **Assessment:** A is right for development, but leaves users exposed whenever a new cycle appears. C keeps detection
 (the referrer snapshot is taken *before* the sweep and logged as a warning on every occurrence, and refcount-only tests
-remain the real gate), stops the user-facing exit, and makes behaviour consistent. It still carries harms 2–5 and must
+remain the real gate), stops the user-facing exit, and makes behaviour consistent. It still carries harms 2–5 (harm 2 above all: it can
+surface dormant finalizer crashes) and must
 supersede R-53/R-56/R-59 explicitly. Decide after the actual cycle is found: if it is a single new edge on the framed
 path, fixing it (A) may be enough and C becomes a separate product-robustness question.
