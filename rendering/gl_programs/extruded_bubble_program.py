@@ -47,6 +47,7 @@ uniform float uMist;
 uniform float uSurfaceGain;
 uniform float uSurfaceSky;      // the window's light away from the sun   // the light through the surface (HDR: what bubbles mirror)
 uniform float uDust;
+uniform vec2 uFloor;            // Floor amount, world height of the floor below the tank
 uniform vec3 uDustAlong;        // the stream (world), along which the particle bands run
 uniform vec3 uDustAcross;
 uniform vec3 uDustBands;        // band frequency, world unit, how far the dust gathers into the particle bands (0..1)
@@ -253,6 +254,32 @@ void main() {
         }
         vec3 veil = mix(uShaftColour, vec3(0.6, 0.85, 1.0), 0.25) * web * 2.2 * uVeils;
         colour += veil * uLightStrength;
+    }
+    if (uFloor.x > 0.0 && ray.y < -0.02) {
+        // A floor far below (goals 5 and 6): the light the surface focuses lies on it as a moving caustic net over
+        // darker, rocky patches, sinking into the water's haze with distance. Light in the water, not a scene object.
+        float t = (uFloor.y - uEye.y) / ray.y;
+        if (t > 0.0) {
+            vec2 q = (uEye + ray * t).xz;
+            float rocks = skyFbm2(q * 0.09, 4, 301u);
+            float stones = smoothstep(0.42, 0.7, skyFbm2(q * 0.3 + vec2(7.1, 2.3), 4, 307u));
+            // Warped, as light focused through a moving surface falls: organic threads, never a cell grid.
+            vec2 warp = vec2(skyFbm2(q * 0.12 + vec2(uTime * 0.01, 0.0), 3, 311u),
+                             skyFbm2(q * 0.12 + vec2(5.2, uTime * 0.008), 3, 313u));
+            float c = waterCaustics(q * 0.32 + (warp - 0.5) * 2.4, uSurfaceTravel * 0.3);
+            // Murky, not a lit tiling: the net shows only where broad patches of light fall (slowly drifting), soft
+            // pools glow where it gathers, and the dark bed between threads stays dark.
+            float patches = smoothstep(0.3, 0.75, skyFbm2(q * 0.05 + vec2(uTime * 0.006, -uTime * 0.004), 3, 317u));
+            float pools = pow(smoothstep(0.5, 0.9, skyFbm2(q * 0.1 + vec2(-uTime * 0.01, 1.9), 3, 331u)), 1.6);
+            float web = (pow(c, 6.0) + pow(c, 3.0) * 0.12) * (0.12 + 1.3 * patches) * (1.0 - 0.8 * stones);
+            float glow = pools * (0.35 + 0.65 * patches) * (1.0 - 0.5 * stones);
+            vec3 bed = uDeep * (0.22 + 0.45 * rocks) * (1.0 - 0.75 * stones);
+            vec3 light = mix(uShaftColour, vec3(0.6, 0.85, 1.0), 0.3) * uLightStrength;
+            vec3 caustic = light * (web * 4.5 + glow * 3.0);
+            // The water veils the floor with distance; a little of its glow still bleeds through the haze.
+            float veil = exp(-t * 0.04) * smoothstep(0.02, 0.25, -ray.y);
+            colour = mix(colour, bed + caustic, uFloor.x * veil) + caustic * uFloor.x * (1.0 - veil) * 0.18;
+        }
     }
     if (uLightPower > 0.0) {
         // Deep lights are physical emitters. Translating both endpoints now
@@ -1447,6 +1474,117 @@ BEAD_VERTEX = (BUBBLE_VERTEX.replace(_ATTRIBUTES, "")
                .replace("void main() {\n    vOpacity = aOpacity;\n",
                _SCENE_INLET_GLSL + _BEAD_GLSL + "void main() {\n    vOpacity = 1.0;\n    beadInstance();\n"))
 
+# Wake trails: a sheet of disturbed water streaming off behind each free bubble (the goals' translucent tendrils, the
+# composition lab's ribbon). One strip per stable wake emitter (the fizz's records: retiring emitters dissolve their
+# trail as the fizz does), bent by the water's sway. Disturbed water bends the scene behind it and here and there a thin
+# fold catches the light as a faint broken strand.
+TRAIL_SEGMENTS = 40
+TRAIL_VERTEX = """#version 460 core
+layout(std430, binding = 7) readonly buffer EbWakes { float ebWake[]; };
+uniform mat3 uWorldToView;
+uniform vec3 uEye;
+uniform mat4 uProjection;
+uniform vec3 uTrail;          // world direction the trails stream in (against the bubbles' travel)
+uniform vec3 uTrailSide;      // world direction across it
+uniform float uTrails;        // Wake Trails: 0 none .. 1 most bubbles trail a sheet
+uniform float uTrailTime;     // the simulation's motion phase: the sheets sway with the water, never on a clock
+uniform float uSway;
+uniform float uPixel;         // view units per pixel at unit distance
+const int SEGMENTS = """ + str(TRAIL_SEGMENTS) + """;
+out vec2 vAcross;             // across the sheet (-1..1), along it (0 at the bubble .. 1)
+out float vFold;
+out float vDepth;
+flat out float vStrength;
+flat out float vShapeSeed;
+float trailHash(float x) { return fract(sin(x * 12.9898) * 43758.5453); }
+vec3 trailPath(vec3 start, float r, float length_, float lean, float seed, float s) {
+    vec3 p = start + uTrail * length_ * s;
+    float wave = sin(s * 2.6 + seed * 6.28 + uTrailTime * 0.9) * r * 6.0 * s * s * (0.5 + uSway);
+    p += uTrailSide * (lean * length_ * s * s + wave);
+    vec3 depthAxis = normalize(cross(uTrail, uTrailSide));
+    p += depthAxis * cos(s * 1.9 + seed * 4.1 + uTrailTime * 0.7) * r * 1.5 * s * (0.4 + uSway);
+    return p;
+}
+void main() {
+    int base = gl_InstanceID * 8;
+    vec3 centre = vec3(ebWake[base], ebWake[base + 1], ebWake[base + 2]);
+    float r = ebWake[base + 3], seed = trailHash(ebWake[base + 4] * 0.618034 + 0.17);
+    float retirement = ebWake[base + 5], alpha = ebWake[base + 6], nominal = ebWake[base + 7];
+    // Which bubbles trail a sheet is stable per identity; the share grows with Wake Trails.
+    float owns = step(seed, uTrails);
+    float fade = retirement < 0.0 ? 1.0 : 1.0 - retirement;
+    vStrength = owns * alpha * fade * (0.5 + 0.5 * trailHash(seed * 7.1)) * min(1.0, uTrails * 1.5);
+    vShapeSeed = seed;
+    int i = gl_VertexID >> 1;
+    float sideSign = (gl_VertexID & 1) == 0 ? -1.0 : 1.0;
+    float s = float(i) / float(SEGMENTS);
+    float length_ = nominal * mix(6.0, 14.0, trailHash(seed * 3.3));
+    float lean = (trailHash(seed * 5.7) - 0.5) * 1.2;
+    vec3 start = centre + uTrail * r * 0.95;
+    // Only bubbles that resolve trail a sheet: a strip under a few pixels wide only aliases into dark dashes.
+    float pixels = nominal / (uPixel * max(-(uWorldToView * (centre - uEye)).z, 0.1));
+    vStrength *= smoothstep(2.5, 5.0, pixels);
+    vec3 here = uWorldToView * (trailPath(start, nominal, length_, lean, seed, s) - uEye);
+    vec3 next = uWorldToView * (trailPath(start, nominal, length_, lean, seed, min(s + 0.02, 1.0)) - uEye);
+    vec3 previous = uWorldToView * (trailPath(start, nominal, length_, lean, seed, max(s - 0.02, 0.0)) - uEye);
+    vec3 tangent = normalize(next - previous);
+    vec3 across = normalize(cross(tangent, normalize(-here)));
+    float turn = 0.6 + 0.4 * cos(s * 3.5 + seed * 6.28);
+    float width = nominal * mix(0.8, 1.6, s) * mix(1.0, 0.6, s * s);
+    vAcross = vec2(sideSign, s);
+    vFold = turn;
+    vDepth = -here.z;
+    gl_Position = vStrength > 0.0 && here.z < -0.05
+                ? uProjection * vec4(here + across * sideSign * width * turn, 1.0) : vec4(2.0, 2.0, 2.0, 1.0);
+}
+"""
+TRAIL_FRAGMENT = ("#version 460 core\n" + SCENE_OIT_GLSL + "layout(location=2) out vec4 Emission;\n"
+                  + SCENE3D_SPHERES_GLSL + SCENE3D_OPTICS_GLSL + SCENE3D_WATER_GLSL + COMMON + """
+uniform sampler2D uBackground;
+uniform vec2 uTargetSize;
+in vec2 vAcross;
+in float vFold;
+in float vDepth;
+flat in float vStrength;
+flat in float vShapeSeed;
+void main() {
+    // Interpolation overshoots the strip's ends by a hair: pow(1 - s) of a negative is NaN (black pixels).
+    float s = clamp(vAcross.y, 0.0, 1.0);
+    float u = clamp(vAcross.x * 0.5 + 0.5, 0.0, 1.0);
+    float fade = smoothstep(0.0, 0.08, s) * pow(1.0 - s, 1.8);
+    float sheet = smoothstep(0.0, 0.25, u) * smoothstep(1.0, 0.75, u);
+    // Refraction: the scene behind displaced across the sheet by a slow wave along it.
+    float wave = sin(u * 9.0 + s * 14.0 + vShapeSeed * 20.0) * 0.6 + sin(u * 23.0 - s * 9.0 + vShapeSeed * 7.0) * 0.4;
+    vec2 shift = vec2(dFdx(u), dFdy(u));
+    shift = shift / max(length(shift), 1e-6) * wave * 3.0 * sheet * fade;
+    if (!(abs(shift.x) + abs(shift.y) < 1e4)) shift = vec2(0.0);
+    vec3 bent = texture(uBackground, (gl_FragCoord.xy + shift) / uTargetSize).rgb;
+    // Strands: a bundle of fine filaments leaving the bubble together and fanning apart as they trail, each lightly
+    // broken along its length, brightest where the sheet turns edge-on.
+    float strands = 0.0;
+    float pixelU = max(fwidth(u), 1e-4);
+    for (int k = 0; k < 10; ++k) {
+        float h = fract(float(k) * 0.618034 + vShapeSeed * 3.1);
+        float centre = 0.5 + (h - 0.5) * (0.25 + 0.85 * s) + 0.04 * sin(s * (5.0 + float(k)) + float(k) * 1.7);
+        float d = abs(u - centre) / (pixelU * mix(0.8, 1.6, fract(h * 7.3)));
+        float broken = mix(0.35, 1.0, smoothstep(0.3, 0.7, skyNoise2(vec2(s * (10.0 + 3.0 * float(k)), float(k) * 3.7 + vShapeSeed * 11.0), 171u)));
+        strands += exp(-d * d) * broken * mix(0.5, 1.0, fract(h * 13.1));
+    }
+    float edgeOn = 0.5 / (abs(vFold) + 0.5);
+    // A sheet seen edge-on is a sliver a pixel wide: it only aliases (dark one-pixel dashes), so it fades out.
+    float widthPx = 1.0 / pixelU;
+    float resolved = smoothstep(2.0, 5.0, widthPx);
+    float glow = min(strands, 1.5) * edgeOn * fade * vStrength * resolved;
+    vec3 strandLight = (mix(uSkyTint, uShaftColour, 0.5) * 1.6 + uLightColour * 0.25) * max(uLightStrength, 0.3);
+    float sheetA = sheet * fade * vStrength * 0.45 * resolved;
+    float a = clamp(sheetA + glow * 1.2, 0.0, 0.9);
+    // A faint luminous body as well as the strands: lit water, not only lines.
+    vec3 body = strandLight * 0.35 * sheet * fade * vStrength * resolved;
+    sceneTransparent(bent * sheetA + body + strandLight * glow * 1.3, a, vDepth);
+    Emission = vec4(0.0);
+}
+""")
+
 __all__ = [
     "BACKDROP_FRAGMENT",
     "BEAD_VERTEX",
@@ -1466,4 +1604,7 @@ __all__ = [
     "SHAFT_FRAGMENT",
     "SPECK_VERTEX",
     "SPECKS_GLSL",
+    "TRAIL_FRAGMENT",
+    "TRAIL_SEGMENTS",
+    "TRAIL_VERTEX",
 ]
