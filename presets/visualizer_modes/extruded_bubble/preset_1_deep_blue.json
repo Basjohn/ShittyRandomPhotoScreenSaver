@@ -24,7 +24,7 @@
         "extruded_bubble_beam_width": 1.0,
         "extruded_bubble_breathing": [
           0.3,
-          0.7
+          0.5
         ],
         "extruded_bubble_bubble_spread": 1.09,
         "extruded_bubble_camera_fov": 45,
@@ -128,10 +128,10 @@
         "extruded_bubble_size_variety": 0.65,
         "extruded_bubble_small_pulse": [
           0.2,
-          0.8
+          0.5
         ],
         "extruded_bubble_small_size": 0.75,
-        "extruded_bubble_smoothing": 0.62,
+        "extruded_bubble_smoothing": 0.5,
         "extruded_bubble_softness": 0.2,
         "extruded_bubble_sparkle": 1.1,
         "extruded_bubble_stream_direction": [
