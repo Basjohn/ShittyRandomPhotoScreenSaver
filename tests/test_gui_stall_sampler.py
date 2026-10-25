@@ -1,7 +1,9 @@
 """Opt-in GUI stall stacks: separately admitted and silent in lifecycle windows."""
 from __future__ import annotations
 
+import gc
 import time
+import weakref
 
 from core.performance import frame_trace
 from core.performance.gui_stall_sampler import GuiStallSampler
@@ -34,6 +36,37 @@ def test_a_stall_records_the_gui_threads_stack_once_and_its_length(tmp_path):
     assert text.count("=== gui_stall") == 1
     assert "--- thread GUI" in text and "_stalling_gui_work" in text
     assert "stall_end total_ms=" in text
+
+
+
+class _Owner:
+    pass
+
+
+def _stall_holding(owner: _Owner, seconds: float) -> None:
+    _stalling_gui_work(seconds)
+
+
+def test_a_sampled_stall_never_pins_the_gui_threads_locals(tmp_path):
+    """The stack map holds the sampler's own frame, whose locals hold the map: if kept, that cycle pinned every
+    sampled frame, so a retiring display unit in a sampled orbit save outlived its runtime (barrier timeout,
+    2026-10-25). The GUI thread's locals must be freed by reference counting alone."""
+    sampler = GuiStallSampler(tmp_path / "stalls.log", threshold_s=0.05, suppress_predicate=lambda: False)
+    gc.collect()
+    gc.disable()
+    try:
+        owner = _Owner()
+        released = weakref.ref(owner)
+        sampler.note_wake()
+        _stall_holding(owner, 0.25)
+        sampler.note_wake()
+        time.sleep(0.05)
+        assert sampler.stalls == 1
+        del owner
+        assert released() is None
+    finally:
+        gc.enable()
+        sampler.close()
 
 
 def test_nothing_happens_before_the_first_wake_or_after_wakes_stop(tmp_path):

@@ -157,10 +157,11 @@ class GuiStallSampler:
         lines = [f"=== gui_stall wall={time.strftime('%Y-%m-%d %H:%M:%S')} perf={time.perf_counter():.6f} "
                  f"since_wake_ms={silence * 1000.0:.1f} sampler_late_ms={late_ms:.1f}\n"]
         frames = sys._current_frames()
+        # The map holds this thread's running frame, whose locals hold the map: a cycle that would keep every
+        # sampled frame (and the GUI thread's locals, e.g. a retiring display unit) alive until a gen2 scan.
+        frames.pop(threading.get_ident(), None)
         ordered = sorted(frames.items(), key=lambda item: item[0] != self._gui_ident)
         for ident, frame in ordered:
-            if ident == threading.get_ident():
-                continue
             label = "GUI" if ident == self._gui_ident else names.get(ident, str(ident))
             lines.append(f"--- thread {label}\n")
             lines.extend(traceback.format_stack(frame, limit=24))
