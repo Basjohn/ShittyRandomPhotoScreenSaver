@@ -430,3 +430,21 @@ def test_proximity_blur_scales_with_framebuffer_and_survives_tall_cards(sphere_p
         coc=np.divide(circle[:,:,0],circle[:,:,1],out=np.zeros((height,width)),where=circle[:,:,1]>1e-6)
         assert pixels[:,:,3].max()>.99
         assert .8*sphere_pixels.near_budget <= coc.max() <= sphere_pixels.near_budget+1e-4
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize('kind,near_kind',[('ordinary','near'),('cluster','near_cluster')])
+def test_offaxis_shell_reaching_the_lens_eases_out_instead_of_filling_the_view(sphere_pixels,kind,near_kind):
+    # Off axis its clipped screen share stays small, so only its surface's distance to the eye can fade it.
+    energies=[]
+    for gap in (1.0,.33,.2,.12,.03):
+        direction=np.array((.8,0.,-.6))
+        centre=tuple(direction*(1.+gap))         # radius 1: the surface lies `gap` radii from the eye
+        total=0.
+        for layer in (kind,near_kind):
+            pixels,_=sphere_pixels(layer,centre,radius=1.)
+            total+=float(pixels[:,:,3].sum())
+        energies.append(total)
+    assert energies[0]>100. and energies[1]>.9*energies[0]
+    assert all(a>b for a,b in zip(energies[1:],energies[2:]))
+    assert energies[-1]<.05*energies[0]
