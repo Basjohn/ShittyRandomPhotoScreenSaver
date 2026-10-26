@@ -229,6 +229,7 @@ class Choice:
     uppercase: bool = False
     labels: tuple[str, ...] = ()
     size_variant: str = ""
+    direction_mapper: bool = False
 
     def _normalize(self, value: object) -> object:
         if self.normalizer:
@@ -1292,7 +1293,7 @@ _SPHERE = ModeSettings(
         Slider('sphere_taste_the_rainbow_extent', 'Rainbow Extent:', 0.0, 1.0,
                'How much of the colour wheel spans the voxel field; zero gives one uniform hue.', bucket='appearance', logical=True, runtime_strict=True, enabled_when=('sphere_taste_the_rainbow_enabled', True)),
         Choice("sphere_light_direction", "Light Direction:", ("N", "NE", "E", "SE", "S", "SW", "W", "NW"),
-               bucket="appearance", logical=True, compact=False, uppercase=True, runtime_strict=True, ingress_strict=True),
+               bucket="appearance", logical=True, compact=False, uppercase=True, runtime_strict=True, ingress_strict=True, direction_mapper=True),
         Slider('sphere_perspective_strength', 'Perspective Strength:', 0.0, 1.0,
                'Controls only the existing voxel camera perspective. 1.0 is the accepted current projection; lower values flatten toward orthographic. The range cannot exceed the current golden perspective.', bucket='appearance', logical=True, runtime_strict=True, suffix='x', recommended=1.0),
         Slider('sphere_gloss', 'Gloss:', 0.0, 1.0,
@@ -1390,13 +1391,13 @@ _BUBBLE = ModeSettings(
                ("top", "bottom", "left", "right", "top_left", "top_right", "bottom_left", "bottom_right"),
                bucket="appearance", size_variant="mini",
                labels=("Top", "Bottom", "Left", "Right", "Top Left", "Top Right", "Bottom Left", "Bottom Right"),
-               normalizer="core.settings.bubble_gradient_semantics:normalize_bubble_specular_direction"),
+               normalizer="core.settings.bubble_gradient_semantics:normalize_bubble_specular_direction", direction_mapper=True),
         Choice("bubble_gradient_direction", "Gradient Direction:",
                ("top", "bottom", "left", "right", "top_left", "top_right", "bottom_left", "bottom_right",
                 "center_out", "center_out_reverse"), bucket="appearance", size_variant="mini",
                labels=("Top", "Bottom", "Left", "Right", "Top Left", "Top Right", "Bottom Left", "Bottom Right",
                        "Center Out", "Center Out Reverse"),
-               normalizer="core.settings.bubble_gradient_semantics:normalize_bubble_gradient_direction"),
+               normalizer="core.settings.bubble_gradient_semantics:normalize_bubble_gradient_direction", direction_mapper=True),
         Colour("bubble_outline_color", "Outline Colour:", "Choose Bubble Outline Color", bucket="appearance"),
         Colour("bubble_specular_color", "Specular Colour:", "Choose Bubble Specular Color", bucket="appearance"),
         Colour("bubble_gradient_light", "Gradient Light:", "Choose Bubble Gradient Light", bucket="appearance"),

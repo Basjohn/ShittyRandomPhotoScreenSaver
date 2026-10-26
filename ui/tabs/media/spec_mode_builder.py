@@ -45,7 +45,7 @@ from ui.tabs.media.builder_scaffold import (
 from ui.tabs.shared_styles import NoWheelSlider, RecommendedMarkSlider, add_aligned_row_widget
 from ui.widgets import StyledComboBox
 from ui.widgets.continuous_border import BucketToggle
-from ui.widgets.visual_controls import DirectionMapper, RangeSlider, TriangleMapper, ScenePathMapper, SceneVolumeMapper
+from ui.widgets.visual_controls import DirectionChoiceMapper, DirectionMapper, RangeSlider, TriangleMapper, ScenePathMapper, SceneVolumeMapper
 from core.settings.framed_camera import spec_for_mode
 from ui.tabs.media import framed_camera_editor as fce
 
@@ -350,6 +350,11 @@ def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
                                'extruded_bubble_lighting_coverage'):
                 widget.currentTextChanged.connect(lambda *_: _refresh_eb_volume(tab))
             bind_setting_signal(tab, widget.currentTextChanged, auto_switch=auto_switch)
+        if control.direction_mapper:
+            dial = DirectionChoiceMapper(widget)
+            dial.setToolTip(_control_tooltip(control))
+            widget.direction_mapper = dial
+            content.addWidget(dial)
         content.addWidget(widget)
         content.addStretch()
     widget.setToolTip(_control_tooltip(control))
@@ -498,6 +503,9 @@ def load_spec_mode_settings(tab, mode_id: str, config, *, only_buckets: frozense
             # Its value label follows valueChanged, which was blocked.
             getattr(tab, f"{entry.key}_label").setText(entry.text(widget.value()))
         _apply_availability(widget, entry)
+        dial = getattr(widget, "direction_mapper", None)
+        if dial is not None:
+            dial.refresh()
     # Conditions follow their controls' signals, which were blocked.
     if spec_for_mode(mode_id) is not None:
         if only_buckets is None:

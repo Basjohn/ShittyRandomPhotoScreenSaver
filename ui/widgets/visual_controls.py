@@ -742,6 +742,88 @@ class DirectionMapper(_VisualControl):
         event.accept()
 
 
+class DirectionChoiceMapper(DirectionMapper):
+    """A dial view of an existing compass-choice combo, never a settings owner.
+
+    The combo retains every stored enum and nonspatial choice. Drag release or
+    one arrow key selects one compass value through that same combo signal.
+    Builders call refresh after a signal-blocked hydration.
+    """
+    _ANGLES = {
+        "top": 0., "up": 0., "n": 0., "north": 0.,
+        "topright": 45., "ne": 45., "northeast": 45.,
+        "right": 90., "e": 90., "east": 90.,
+        "bottomright": 135., "se": 135., "southeast": 135.,
+        "bottom": 180., "down": 180., "s": 180., "south": 180.,
+        "bottomleft": 225., "sw": 225., "southwest": 225.,
+        "left": 270., "w": 270., "west": 270.,
+        "topleft": 315., "nw": 315., "northwest": 315.,
+    }
+
+    def __init__(self, combo, parent=None):
+        super().__init__((0., 0.), parent=parent)
+        self._combo = combo
+        self._angles = {}
+        for index in range(combo.count()):
+            value = combo.itemData(index)
+            token = str(combo.itemText(index) if value is None else value).lower().replace("_", "").replace(" ", "")
+            if token in self._ANGLES:
+                self._angles[index] = self._ANGLES[token]
+        if len(self._angles) < 2:
+            raise ValueError("A direction-choice mapper requires at least two compass choices")
+        combo.currentIndexChanged.connect(self.refresh)
+        combo.installEventFilter(self)
+        self.valueCommitted.connect(self._select_angle)
+        self.refresh()
+
+    def refresh(self, *_args):
+        index = self._combo.currentIndex()
+        angle = self._angles.get(index)
+        self.setEnabled(self._combo.isEnabled() and angle is not None)
+        if not self.isEnabled():
+            self._dragging = self._moved_in_drag = False
+        if angle is not None:
+            self.setValue((angle, 0.))
+        self.setAccessibleDescription(self._combo.currentText())
+
+    def eventFilter(self, watched, event):
+        if watched is self._combo and event.type() == QEvent.Type.EnabledChange:
+            self.refresh()
+        return super().eventFilter(watched, event)
+
+    def _restore_value(self, value):
+        # Undo restores the combo's persisted enum even if a later special
+        # selection or conditional disabled this dial's interactive input.
+        self._apply_angle(value)
+        self._changed(commit=False)
+
+    def _apply_angle(self, value):
+        index = min(self._angles, key=lambda candidate: abs(_wrap_degrees(self._angles[candidate] - value[0])))
+        self._combo.setCurrentIndex(index)
+        self.refresh()
+
+    def _select_angle(self, value):
+        if not self.isEnabled() or not self._combo.isEnabled():
+            self.refresh()
+            return
+        self._apply_angle(value)
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key not in (Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_Up, Qt.Key.Key_Down):
+            return super().keyPressEvent(event)
+        if not self.isEnabled() or self._combo.currentIndex() not in self._angles:
+            event.ignore()
+            return
+        indices = sorted(self._angles, key=self._angles.get)
+        current = indices.index(self._combo.currentIndex())
+        delta = 1 if key in (Qt.Key.Key_Right, Qt.Key.Key_Down) else -1
+        target = indices[(current + delta) % len(indices)]
+        self.setValue((self._angles[target], 0.))
+        self._changed(commit=True)
+        event.accept()
+
+
 def _wrap_degrees(value: float) -> float:
     return (float(value) + 180.0) % 360.0 - 180.0
 
@@ -785,7 +867,7 @@ def _barycentric_clamped(p: QPointF, a: QPointF, b: QPointF, c: QPointF) -> tupl
     return best  # type: ignore[return-value]
 
 
-__all__ = ["DirectionMapper", "LIVE_THEMED_PAINTERS", "RangeSlider", "TriangleMapper"]
+__all__ = ["DirectionChoiceMapper", "DirectionMapper", "LIVE_THEMED_PAINTERS", "RangeSlider", "TriangleMapper"]
 
 class SceneVolumeMapper(_VisualControl):
     """Oblique 3D world-volume editor over a framed camera's normalized eye box (EB's world by default).
