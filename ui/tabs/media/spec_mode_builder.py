@@ -352,7 +352,8 @@ def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
             bind_setting_signal(tab, widget.currentTextChanged, auto_switch=auto_switch)
         if control.direction_mapper:
             dial = DirectionChoiceMapper(widget)
-            dial.setToolTip(_control_tooltip(control))
+            dial.setToolTip(_control_tooltip(control) or
+                           "Drag to choose a direction; arrow keys step through compass choices. Other choices stay in the list.")
             widget.direction_mapper = dial
             content.addWidget(dial)
         content.addWidget(widget)

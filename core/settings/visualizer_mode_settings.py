@@ -1407,7 +1407,7 @@ _BUBBLE = ModeSettings(
                ("none", "up", "down", "left", "right", "top_left", "top_right", "bottom_left", "bottom_right", "random"),
                bucket="motion", logical=True,
                labels=("None", "Up", "Down", "Left", "Right", "Top Left", "Top Right", "Bottom Left", "Bottom Right", "Random"),
-               normalizer="core.settings.visualizer_mode_settings:_bubble_stream_direction"),
+               normalizer="core.settings.visualizer_mode_settings:_bubble_stream_direction", direction_mapper=True),
         Slider("bubble_stream_constant_speed", "Stream Constant Speed:", 0.0, 2.0, bucket="motion",
                logical=True, percent=True, tick=25, truncate=True),
         Slider("bubble_stream_speed_cap", "Stream Speed Cap:", 0.5, 4.0, bucket="motion",

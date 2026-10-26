@@ -107,6 +107,52 @@ def test_opening_visualizers_lands_on_setup_and_builds_zero_modes(
         tab.deleteLater()
 
 
+def test_bubble_stream_compass_uses_the_real_enum_and_persistence(qt_app, qtbot, settings_manager, tmp_path):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QImage
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QVBoxLayout, QWidget
+    from ui.tabs.media.spec_mode_builder import load_spec_mode_settings
+    from ui.widgets.continuous_border import BucketToggle
+
+    tab = _make_tab(settings_manager, "bubble", enabled_modes=("bubble",))
+    frame = QWidget()
+    QVBoxLayout(frame).addWidget(tab)
+    try:
+        tab._select_mode_page("bubble")
+        tab._bubble_preset_slider.set_preset_index(get_custom_preset_index("bubble"))
+        motion = tab.findChild(QWidget, "bubble_bucket_motion")
+        toggle = motion.findChild(BucketToggle)
+        toggle.setChecked(True)
+        combo = tab.bubble_stream_direction
+        dial = combo.direction_mapper
+        for value in ("none", "random", "up"):
+            load_spec_mode_settings(tab, "bubble", {"bubble_stream_direction": value})
+            assert combo.currentData() == value
+            assert dial.isEnabled() == (value == "up")
+        QTest.keyClick(dial, Qt.Key.Key_Right)
+        assert combo.currentData() == "top_right"
+        qtbot.waitUntil(lambda: settings_manager.get("widgets.spotify_visualizer.bubble_stream_direction") == "top_right",
+                        timeout=1000)
+        row = tab._bubble_rows["bubble_stream_direction"]
+        frame.resize(1100, 950)
+        frame.ensurePolished()
+        for widget in reversed([frame, *frame.findChildren(QWidget)]):
+            if widget.layout() is not None:
+                widget.layout().activate()
+        qt_app.processEvents()
+        frame_image = QImage(frame.size(), QImage.Format.Format_ARGB32_Premultiplied)
+        frame_image.fill(0)
+        frame.render(frame_image)
+        assert row.height() >= dial.minimumHeight()
+        image = QImage(row.size(), QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(0)
+        row.render(image)
+        assert image.save(str(tmp_path / "bubble_stream_direction.png"))
+    finally:
+        frame.deleteLater()
+
+
 
 def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
     qt_app, settings_manager
