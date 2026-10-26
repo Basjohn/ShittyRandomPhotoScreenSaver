@@ -33,10 +33,10 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 
 ## 1. Neon Lake (now)
 
-- [~] **Neon Lake camera parity — awaiting native validation:** framed physical camera (flight, yaw/pitch, dolly, pan,
+- [x] **Neon Lake camera parity — awaiting native validation:** framed physical camera (flight, yaw/pitch, dolly, pan,
   Camera Position, FOV, R home, hints, level horizon, eye floor over land/water) and Auto Rotate. Open: native
   all-angle, near-horizon, aspect and DPR checks. This also covers the old "framed-camera keyboard audit".
-- [~] **Neon Lake authoring and water layers — awaiting your look:** square-field editor and Extend Toward Horizon;
+- [x] **Neon Lake authoring and water layers — awaiting your look:** square-field editor and Extend Toward Horizon;
   Sun/Moon at infinity; Water Shine (Fresnel sky mirror) and Splashes on real music; recalibrated water/star
   reactivity; the 3/4 terrain view (scene surface and continuation). Contract: `Docs/Reference/Neon_Lake_Basin.md`.
 
@@ -57,16 +57,16 @@ Triage history: `Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md`.
 
 ### 2B. Settings and UI (in this order)
 
-- [~] **Visualizer preset glyphs — awaiting operator validation:** check Previous/Next placement left of Reset/Rotate,
+- [x] **Visualizer preset glyphs — awaiting operator validation:** check Previous/Next placement left of Reset/Rotate,
   vector-arrow alignment, hover fades and delayed tooltips in normal/Edit, including mixed DPI and Hide Controls.
   Confirm backward/forward wrap and Custom return in normal use; new/reset profiles select Extruded Bubble Preset 1.
 
 
-- [~] **Settings bucket persistence — awaiting final sign-off:** only the selected pill (or tab without pills) reopens,
+- [x] **Settings bucket persistence — awaiting final sign-off:** only the selected pill (or tab without pills) reopens,
   one editing path, everything else closed ([contract](Docs/Architecture/Settings_Bucket_Persistence_Contract.md)).
   Real-dialog tests cover mode/tab/leaf/reload behaviour; the Transitions Advanced reopen bug is fixed. Open:
   visual/mixed-DPI inspection and operator acceptance.
-- [~] **Settings startup transient windows — awaiting sign-off:** `tools/settings_window_probe.py` records zero extra
+- [x] **Settings startup transient windows — awaiting sign-off:** `tools/settings_window_probe.py` records zero extra
   top-level windows across direct opens, reopen, `/c` and in-saver Settings (receipt
   `logs/run_matrix/2026-10-24_settings_transient_windows/`). If the flash recurs, rerun the probe on that profile.
 - [ ] **4C — Shared Settings UX audit:**
@@ -81,17 +81,17 @@ Triage history: `Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md`.
 - [~] **Settings undo — awaiting your use:** Ctrl+Z / Ctrl+Y over the session's slider and visual-editor edits
   (contract: `Docs/Contracts.md` "Settings undo"). Check it in normal use across pages; extend to any control found
   missing.
-- [~] **Hierarchy connector rails — awaiting validation:** connectors derive from visible widget geometry; review the
+- [x] **Hierarchy connector rails — awaiting validation:** connectors derive from visible widget geometry; review the
   operator theme and physical mixed-DPI movement (native captures `tmp/settings_tree_native/`).
 - [ ] **Display Settings capacity:** replace the four fixed monitor checkboxes with current-screen rows; preserve
   unavailable choices/physical bindings through the canonical resolver and persistence.
-- [~] **R41 glyph remainder — awaiting native verification:** hover chrome follows the visible card and Close uses a
+- [x] **R41 glyph remainder — awaiting native verification:** hover chrome follows the visible card and Close uses a
   centred vector X (Media, small cards, visualizer, high DPR); glyph-only tooltips after ≥ 1 s dwell via QML animation
   (verify dwell/leave/rapid traversal, no input interception, Edit retirement, text-atlas cost); the R39 visibility test
   must attach to a QQuickWindow (do not weaken Lock/hover checks).
 - [ ] **R38 transfer/topology glyph parity:** existing multi-display authority decides eligibility; Hide Controls stays
   Edit-only; no new runtime or geometry authority.
-- [~] **Shared camera gestures and 3D control hint — awaiting validation:** held-left-drag orbit (review focus/capture
+- [x] **Shared camera gestures and 3D control hint — awaiting validation:** held-left-drag orbit (review focus/capture
   loss, release/close/reset, overlap, mixed DPI; the broad `window.event` override stays forbidden) and the hint artwork
   (90% opacity, top-right, 5 s fade) in real runtime/mixed DPI. Contract: `Docs/Reference/Visualizer_Reference.md`.
 
