@@ -37,6 +37,9 @@ Item {
     // Signed offsets: negative values move the shadow up/left and must not clip.
     property real shadowOffsetX: 0.0
     property real shadowOffsetY: 2.0
+    // The light-theme soft shadow sits at half the authored offset (Contracts: Shadow authority); its blur
+    // still sizes from the authored offset. Dark/hard shadows keep the full offset.
+    readonly property real shadowOffsetScale: shadowSoft ? 0.5 : 1.0
 
     clip: false
     implicitWidth: mainText.implicitWidth
@@ -56,8 +59,8 @@ Item {
         objectName: "shadowedTextShadow"
         width: shadowedText.width
         height: shadowedText.height
-        x: shadowedText.shadowOffsetX
-        y: shadowedText.shadowOffsetY
+        x: shadowedText.shadowOffsetX * shadowedText.shadowOffsetScale
+        y: shadowedText.shadowOffsetY * shadowedText.shadowOffsetScale
         visible: shadowedText.shadowEnabled
         layer.enabled: shadowedText.shadowEnabled && shadowedText.shadowSoft
         layer.effect: shadowedText.shadowSoft ? softShadowEffect : null

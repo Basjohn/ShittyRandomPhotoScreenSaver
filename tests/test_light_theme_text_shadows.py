@@ -120,7 +120,7 @@ def test_soft_shadow_capture_preserves_logical_geometry_and_follows_source_edges
         assert not undefined and not query.hasError(), query.error()
         return result
     try:
-        assert (main.x(), main.y(), shadow.x(), shadow.y()) == (0, 0, -7, 9)
+        assert (main.x(), main.y(), shadow.x(), shadow.y()) == (0, 0, -3.5, 4.5)   # soft: half the offset
         assert value("layer.enabled")
         dpr = qt_app.primaryScreen().devicePixelRatio()
         assert value("layer.textureSize.width") == math.ceil(300 * dpr * .5)
@@ -132,7 +132,28 @@ def test_soft_shadow_capture_preserves_logical_geometry_and_follows_source_edges
         item.setProperty("shadowSoft", False)
         assert not value("layer.enabled")
         assert value("layer.textureSize.width") == 0
-        assert (shadow.x(), shadow.y()) == (-7, 9)
+        assert (shadow.x(), shadow.y()) == (-7, 9)                                    # hard: the full offset
+    finally:
+        item.deleteLater()
+
+
+def test_soft_separator_shadow_sits_at_half_the_offset(qt_app):
+    from pathlib import Path
+    from PySide6.QtCore import QUrl
+    from PySide6.QtQml import QQmlComponent, QQmlEngine
+    from PySide6.QtQuick import QQuickItem
+    engine = QQmlEngine()
+    component = QQmlComponent(engine)
+    root = Path(__file__).resolve().parents[1] / "rendering/quick/qml"
+    component.setData(b'import QtQuick; import "."; Separator { width: 100; shadowEnabled: true; shadowSoft: true; shadowOffsetX: -6; shadowOffsetY: 8 }',
+                      QUrl.fromLocalFile(str(root / "test_fixture.qml")))
+    item = component.create()
+    assert item is not None, component.errors()
+    try:
+        shadow = item.findChild(QQuickItem, "overlaySeparatorShadow")
+        assert (shadow.x(), shadow.y()) == (-3, 4)
+        item.setProperty("shadowSoft", False)
+        assert (shadow.x(), shadow.y()) == (-6, 8)
     finally:
         item.deleteLater()
 

@@ -449,8 +449,10 @@ ordinary card so a later sibling shadow cannot overpaint earlier widget content.
 the same global Card shadow direction/opacity/blur/Extra Offset contract at generation admission, but its shadow lives in
 the menu overlay plane so it may cast over runtime content while remaining below the menu surface itself. Text shadows
 remain retained duplicate glyphs with signed displacement. The explicit light-theme modifier filters only that shadow
-glyph through the shared `SoftShadowEffect`; foreground glyphs stay crisp, offsets/colour/alpha stay authored, and
-card surfaces are unchanged. Header logos reuse their existing effect layer with the same soft profile. Dark palettes
+glyph through the shared `SoftShadowEffect`; foreground glyphs stay crisp, colour/alpha stay authored, the soft
+shadow sits at **half** the authored offset (its blur still sized from the authored offset), and card surfaces are
+unchanged. Text, separators and header logos apply the same half offset; the hard path keeps the full offset. Header
+logos reuse their existing effect layer with the same soft profile. Dark palettes
 and an unchecked modifier retain the hard path without new text layers/effects. Light admission derives from the
 shared semantic foreground/surface classifier, never a theme name or separate palette. Shadow-only captures use half
 native resolution; the source layer updates on paint/geometry changes. This has a measured resource cost accepted by
