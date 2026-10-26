@@ -5,6 +5,16 @@ from core.dev_gates import force_gate, is_steam_enabled
 from ui.tabs.widgets_tab import WidgetsTab
 
 
+@pytest.fixture
+def settings_manager(qt_app, tmp_path):
+    from core.settings.settings_manager import SettingsManager
+
+    manager = SettingsManager(organization="SRPSSFocusedTests", application="HiddenWidgetStyle",
+                              storage_base_dir=tmp_path / "profile")
+    yield manager
+    assert manager.flush(timeout=5.)
+
+
 @pytest.mark.parametrize("page,section,field,value", [
     ("feeds", "feeds_custom_1", "feeds_custom1_item_limit", 9),
     ("steam", "steam_progress", "steam_progress_font_size", 19),
