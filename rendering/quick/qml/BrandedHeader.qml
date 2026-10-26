@@ -42,6 +42,9 @@ Item {
 
     property bool textShadowEnabled: true
     property bool textShadowSoft: false
+    // The light-theme soft shadow sits at half the authored offset (Contracts: Shadow authority); its blur
+    // still sizes from the authored offset. Dark/hard shadows keep the full offset.
+    readonly property real textShadowOffsetScale: textShadowSoft ? 0.5 : 1.0
     property color textShadowColor: "#54000000"
     property real textShadowOffsetX: 2.0
     property real textShadowOffsetY: 2.0
@@ -148,8 +151,8 @@ Item {
                     blurMax: header.textShadowSoft ? softBlurMax : 32
                     blurMultiplier: header.textShadowSoft ? softBlurMultiplier : 0.0
                     shadowBlur: header.textShadowSoft ? softBlur : 0.0
-                    shadowHorizontalOffset: header.textShadowOffsetX
-                    shadowVerticalOffset: header.textShadowOffsetY
+                    shadowHorizontalOffset: header.textShadowOffsetX * header.textShadowOffsetScale
+                    shadowVerticalOffset: header.textShadowOffsetY * header.textShadowOffsetScale
                     autoPaddingEnabled: true
                 }
             }

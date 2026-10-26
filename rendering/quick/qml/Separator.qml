@@ -16,6 +16,9 @@ Item {
     property color shadowColor: "#96000000"
     property real shadowOffsetX: 0.0
     property real shadowOffsetY: 2.0
+    // The light-theme soft shadow sits at half the authored offset (Contracts: Shadow authority); its blur
+    // still sizes from the authored offset. Dark/hard shadows keep the full offset.
+    readonly property real shadowOffsetScale: shadowSoft ? 0.5 : 1.0
 
     implicitWidth: horizontal ? 0.0 : thickness
     implicitHeight: horizontal ? thickness : 0.0
@@ -32,8 +35,8 @@ Item {
     Rectangle {
         id: separatorShadow
         objectName: "overlaySeparatorShadow"
-        x: separator.shadowOffsetX
-        y: separator.shadowOffsetY
+        x: separator.shadowOffsetX * separator.shadowOffsetScale
+        y: separator.shadowOffsetY * separator.shadowOffsetScale
         width: separator.horizontal ? separator.width : separator.thickness
         height: separator.horizontal ? separator.thickness : separator.height
         visible: separator.shadowEnabled
