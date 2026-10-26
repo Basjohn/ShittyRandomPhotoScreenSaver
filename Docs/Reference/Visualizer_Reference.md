@@ -40,6 +40,9 @@ The combo remains the sole value; the dial snaps to its admitted compass choices
 such as Random or Center Out. Signal-blocked loads refresh the dial without writes. Undo restores the enum even
 when a later selection or conditional has disabled interactive input. Bubble's gradient/specular directions and
 Sphere's light direction use this adapter without changing their persisted meaning.
+The shared Transitions Direction row uses the same adapter, refreshing from each spec's own label-to-code mapping.
+Shared controls whose target changes with navigation retain that target in undo state; restoring an edit on another
+transition updates that transition's existing leaf without changing the currently viewed page.
 
 Advanced uses the existing large bucket header. Technical is nested within Advanced, alongside the mode's advanced
 artistic buckets; Extruded Bubble's Camera bucket is advanced. The same disclosure maps retain only the chosen leaf
