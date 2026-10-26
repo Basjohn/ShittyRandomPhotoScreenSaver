@@ -51,6 +51,7 @@ from ui.tabs.shared_styles import (
 from ui.styled_popup import ColorSwatchButton, StyledColorPicker
 from ui.widgets import StyledComboBox
 from ui.flow_layout import FlowContainer
+from ui.widgets.visual_controls import DirectionChoiceMapper
 
 _MODULE_ROW_MIN_WIDTH = 220
 
@@ -74,6 +75,27 @@ class _TransitionDurationSlider(NoWheelSlider):
         if owner._current_transition == name:
             self.setValue(int(value))
         else:
+            owner._save_settings()
+
+
+class _TransitionDirectionMapper(DirectionChoiceMapper):
+    """A compass view of the shared combo with transition-scoped undo."""
+
+    def __init__(self, owner):
+        super().__init__(owner.direction_combo, allow_empty=True)
+        self._direction_owner = owner
+
+    def _undo_state(self):
+        return self._direction_owner._current_transition, self._combo.currentText()
+
+    def _restore_undo_state(self, state):
+        name, value = state
+        owner = self._direction_owner
+        section = transition_settings(name).section
+        if owner._current_transition == name:
+            self._combo.setCurrentText(value)
+        else:
+            owner._direction_by_type[section] = value
             owner._save_settings()
 
 _TRANSITION_SETTING_NAMES = get_transition_setting_names()
@@ -418,6 +440,9 @@ class TransitionsTab(QWidget):
         # Items are populated dynamically per transition in _update_specific_settings()
         self.direction_combo.currentTextChanged.connect(self._save_settings)
         direction_row.addWidget(self.direction_combo)
+        self.direction_mapper = _TransitionDirectionMapper(self)
+        self.direction_mapper.setToolTip("Choose a compass direction. Random and centre choices stay in the list.")
+        direction_row.addWidget(self.direction_mapper)
         direction_row.addStretch()
         
         layout.addWidget(self.direction_group)
@@ -1679,7 +1704,8 @@ class TransitionsTab(QWidget):
             self.direction_combo.blockSignals(True)
             try:
                 self.direction_combo.clear()
-                self.direction_combo.addItems(list(directions.choices))
+                for label in directions.choices:
+                    self.direction_combo.addItem(label, directions.code(label))
                 # A retired or unknown stored direction shows as Random.
                 idx = self.direction_combo.findText(self._direction_by_type[spec.section])
                 if idx < 0:
@@ -1687,6 +1713,7 @@ class TransitionsTab(QWidget):
                 self.direction_combo.setCurrentIndex(max(0, idx))
             finally:
                 self.direction_combo.blockSignals(False)
+            self.direction_mapper.refresh_choices()
 
         # Show only the built specific group matching the current transition.
         # Unbuilt groups (lazy) simply have nothing to show.

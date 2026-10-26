@@ -45,6 +45,50 @@ def qapp():
     yield app
 
 
+def test_shared_direction_dial_roundtrips_codes_and_undo_after_navigation(qapp, settings_manager, qtbot, tmp_path):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QImage
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QVBoxLayout, QWidget
+    from ui.settings_undo import SettingsUndo
+
+    window = QWidget()
+    qtbot.addWidget(window)
+    window.settings_undo = SettingsUndo(window)
+    tab = TransitionsTab(settings_manager, window)
+    QVBoxLayout(window).addWidget(tab)
+    window.resize(1100, 800)
+    for name in ("Slide", "Wipe", "Glass Shatter", "Directional Pixel Accretion", "Melt Drip"):
+        tab._on_nav_selected(name)
+        spec = transition_settings(name)
+        for label in spec.directions.choices:
+            tab.direction_combo.setCurrentText(label)
+            assert settings_manager.get(f"transitions.{spec.section}.direction") == label
+            assert tab.direction_mapper.isEnabled() == (label not in {"Random", "Center Out", "Center In"})
+        # Loading and programmatic choice hydration are not new undo gestures.
+        assert not window.settings_undo.can_undo
+    tab._on_nav_selected("Wipe")
+    tab.direction_combo.setCurrentText("Top to Bottom")
+    assert tab.direction_mapper.value()[0] == -180.
+    QTest.keyClick(tab.direction_mapper, Qt.Key.Key_Right)
+    assert tab.direction_combo.currentText() == "Diagonal TR-BL"
+    tab._on_nav_selected("Slide")
+    current = tab.direction_combo.currentText()
+    assert window.settings_undo.undo()
+    assert settings_manager.get("transitions.wipe.direction") == "Top to Bottom"
+    assert tab.direction_combo.currentText() == current and tab._current_transition == "Slide"
+    assert window.settings_undo.redo()
+    assert settings_manager.get("transitions.wipe.direction") == "Diagonal TR-BL"
+    # Activate the real parent layout before capturing the actual form row.
+    frame = QImage(window.size(), QImage.Format.Format_ARGB32_Premultiplied)
+    frame.fill(0)
+    window.render(frame)
+    image = QImage(tab.direction_group.size(), QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(0)
+    tab.direction_group.render(image)
+    assert image.save(str(tmp_path / "transition_direction.png"))
+
+
 @pytest.fixture
 def settings_manager(tmp_path):
     # Use a dedicated org/app so we don't pollute real settings

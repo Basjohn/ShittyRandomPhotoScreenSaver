@@ -107,7 +107,13 @@ class _VisualControl(QWidget):
         if not self.undo_records_value:
             return super().event(event)
         from ui.settings_undo import gesture_event
-        return gesture_event(self, event, super().event, self.value, self._restore_value)
+        return gesture_event(self, event, super().event, self._undo_state, self._restore_undo_state)
+
+    def _undo_state(self):
+        return self.value()
+
+    def _restore_undo_state(self, value):
+        self._restore_value(value)
 
     def _restore_value(self, value) -> None:
         """Put ``value`` back as a user edit would (labels, previews and saving follow)."""
@@ -758,28 +764,36 @@ class DirectionChoiceMapper(DirectionMapper):
         "bottomleft": 225., "sw": 225., "southwest": 225.,
         "left": 270., "w": 270., "west": 270.,
         "topleft": 315., "nw": 315., "northwest": 315.,
+        "lefttoright": 90., "righttoleft": 270.,
+        "toptobottom": 180., "bottomtotop": 0., "topcenter": 0.,
+        "diagtlbr": 135., "diagtrbl": 225., "diagbltr": 45., "diagbrtl": 315.,
     }
 
-    def __init__(self, combo, parent=None):
+    def __init__(self, combo, parent=None, *, allow_empty=False):
         super().__init__((0., 0.), parent=parent)
         self._combo = combo
+        self.refresh_choices()
+        if len(self._angles) < 2 and not (allow_empty and combo.count() == 0):
+            raise ValueError("A direction-choice mapper requires at least two compass choices")
+        combo.currentIndexChanged.connect(self.refresh)
+        combo.installEventFilter(self)
+        self.valueCommitted.connect(self._select_angle)
+
+    def refresh_choices(self):
+        """Refresh a signal-blocked, repopulated combo from its own item codes."""
+        combo = self._combo
         self._angles = {}
         for index in range(combo.count()):
             value = combo.itemData(index)
             token = str(combo.itemText(index) if value is None else value).lower().replace("_", "").replace(" ", "")
             if token in self._ANGLES:
                 self._angles[index] = self._ANGLES[token]
-        if len(self._angles) < 2:
-            raise ValueError("A direction-choice mapper requires at least two compass choices")
-        combo.currentIndexChanged.connect(self.refresh)
-        combo.installEventFilter(self)
-        self.valueCommitted.connect(self._select_angle)
         self.refresh()
 
     def refresh(self, *_args):
         index = self._combo.currentIndex()
         angle = self._angles.get(index)
-        self.setEnabled(self._combo.isEnabled() and angle is not None)
+        self.setEnabled(self._combo.isEnabled() and len(self._angles) >= 2 and angle is not None)
         if not self.isEnabled():
             self._dragging = self._moved_in_drag = False
         if angle is not None:
