@@ -133,3 +133,36 @@ def test_long_rows_render_separate_stars_and_four_colour_squares(qt_app, tmp_pat
     signals = QSignalSpy(view.favouriteToggled)
     QTest.keyClick(view, Qt.Key.Key_D, Qt.KeyboardModifier.ControlModifier)
     assert signals.count() == 1 and signals.at(0) == ["fixture"]
+
+
+def test_swatch_border_follows_current_theme_without_white_corner_leaks(qt_app):
+    from PySide6.QtCore import QRect
+    from PySide6.QtGui import QColor, QPainter
+    from PySide6.QtWidgets import QStyleOptionViewItem
+    from ui.settings_theme_runtime import get_active_settings_theme, set_active_settings_theme
+
+    previous = get_active_settings_theme()
+    view = ThemeListWidget()
+    item = QListWidgetItem("Fixture")
+    view.add_theme_item(item, DEFAULT_DARK_SETTINGS_THEME)
+    item.setData(PALETTE_ROLE, ((255, 255, 255),) * 4)
+    option = QStyleOptionViewItem()
+    option.rect = QRect(0, 0, 320, 40)
+    option.widget = view
+    _, square = _ThemeRowDelegate.decoration_rects(option.rect)
+    try:
+        for rgb in ((30, 140, 190), (130, 30, 160)):
+            colours = dict(previous.colors)
+            colours["swatch.border"] = Rgba(*rgb)
+            set_active_settings_theme(replace(previous, colors=colours))
+            image = QImage(320, 40, QImage.Format.Format_ARGB32_Premultiplied)
+            image.fill(QColor(10, 20, 30))
+            painter = QPainter(image)
+            view.itemDelegate().paint(painter, option, view.model().index(0, 0))
+            painter.end()
+            assert image.pixelColor(square.left() + 1, square.center().y()).getRgb()[:3] == rgb
+            assert image.pixelColor(square.center()) == QColor("white")
+            assert image.pixelColor(square.topLeft()) != QColor("white")
+    finally:
+        set_active_settings_theme(previous)
+        view.deleteLater()
