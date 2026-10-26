@@ -276,9 +276,7 @@ def build_mode_scaffold(
     quality_rows = scene3d_quality_rows()
     quality_key = scene3d_entry_key(mode_key)
     if quality_key in quality_rows:
-        quality = Scene3DQualityControls(tab._settings, tuple(
-            quality_rows[key] for key in ("detail", "visualizers_detail", quality_key)
-        ))
+        quality = Scene3DQualityControls(tab._settings, (quality_rows[quality_key],))
         quality.setObjectName(f"{mode_key}_quality_controls")
         layout.addWidget(quality)
         setattr(tab, f"_{mode_key}_quality_controls", quality)

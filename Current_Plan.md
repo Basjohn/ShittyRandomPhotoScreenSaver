@@ -43,14 +43,15 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
   - [ ] Audit every Visualizer/Transition/widget page for the shared Angle/Direction, Range and Triangle controls,
     stronger `when` conditionals and nested bucketing; keep stored meaning and keys, prove each changed body's
     round-trip and render it offscreen. No per-page owner clones. Bubble/Sphere compass enum adapters are landed;
-    continue with transitions and coupled ranges; inspect the actual native forms alongside the theme pass.
+    transitions now share that adapter with navigation-safe undo; continue with coupled ranges and inspect native forms.
   - [ ] Prototype the gradient direction mapper on original Bubble (around = direction, distance from centre =
     strength/gradualness).
   - [~] **Advanced hierarchy — awaiting operator look:** large Advanced header contains Technical and EB Camera;
     native real-dialog reopen/retirement and legacy-path checks pass. Inspect the nested path at operator DPI/theme;
     capture: `tmp/pytest_advanced_render/test_visualizer_technical_path0/advanced_technical.png`.
-  - [~] General/family/mode 3D Detail views share the 3D tab's keys, editor and resolver; focused bidirectional,
-    retirement and artistic-preset isolation checks pass. Inspect native layout. Per-mode AA/Bloom remains to be
+  - [~] Each tier-aware mode exposes only its own Detail, sharing the 3D tab's key, editor and resolver; General/family
+    controls stay on the 3D tab. Focused bidirectional, retirement and artistic-preset isolation checks pass.
+    Inspect native layout. Per-mode AA/Bloom remains to be
     admitted through `resolve_scene_quality`, never duplicated persisted settings or a cosmetic unwired control.
 - [~] **Settings undo — awaiting your use:** Ctrl+Z / Ctrl+Y over the session's slider and visual-editor edits
   (contract: `Docs/Contracts.md` "Settings undo"). Check it in normal use across pages; extend to any control found

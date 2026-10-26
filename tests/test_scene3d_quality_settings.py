@@ -259,7 +259,8 @@ def test_a_3d_visualizer_draws_with_its_tiers_levers(render_rig, tier):
 
 
 @pytest.mark.qt
-def test_visualizer_quality_views_share_3d_tab_keys_without_changing_art(qt_app, tmp_path):
+@pytest.mark.parametrize("mode", ["extruded_bubble", "extruded_spectrum", "shockwave_grid"])
+def test_visualizer_quality_views_share_3d_tab_keys_without_changing_art(qt_app, tmp_path, mode):
     from copy import deepcopy
     from PySide6.QtCore import QCoreApplication, QEvent
     from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
@@ -268,28 +269,32 @@ def test_visualizer_quality_views_share_3d_tab_keys_without_changing_art(qt_app,
 
     manager = _manager(tmp_path, "shared_views")
     config = deepcopy(manager.get("widgets.spotify_visualizer"))
-    config.update(mode="extruded_bubble", enabled=True, visualizers_enabled=True,
-                  mode_activation=build_visualizer_mode_activation(["extruded_bubble"]))
+    config.update(mode=mode, enabled=True, visualizers_enabled=True,
+                  mode_activation=build_visualizer_mode_activation([mode]))
     manager.set("widgets.spotify_visualizer", config)
     page = Scene3DTab(manager)
     visualizers = VisualizersTab(manager)
-    visualizers._select_mode_page("extruded_bubble")
-    controls = visualizers._extruded_bubble_quality_controls
+    visualizers._select_mode_page(mode)
+    controls = getattr(visualizers, f"_{mode}_quality_controls")
+    own_key = f"{mode}_detail"
     # Measure the quality edits after the existing preset activation/hydration.
     before_art = deepcopy(manager.get("widgets.spotify_visualizer"))
     before_custom = deepcopy(manager.get("visualizer_custom_presets"))
     try:
-        assert set(controls._combos) == {"detail", "visualizers_detail", "extruded_bubble_detail"}
+        assert set(controls._combos) == {own_key}
         general = page._combos["detail"]
         general.setCurrentIndex(general.findData("KAK"))
-        assert controls._combos["detail"].currentData() == "KAK"
-        own = controls._combos["extruded_bubble_detail"]
+        own = controls._combos[own_key]
+        own.setCurrentIndex(own.findData("Auto"))
+        assert controls._now_labels[own_key].text() == "Now: KAK"
         own.setCurrentIndex(own.findData("Balanced"))
-        assert page._combos["extruded_bubble_detail"].currentData() == "Balanced"
-        assert controls._now_labels["extruded_bubble_detail"].text() == "Now: Balanced"
-        assert manager.get("scene3d.extruded_bubble_detail") == "Balanced"
+        assert page._combos[own_key].currentData() == "Balanced"
+        assert controls._now_labels[own_key].text() == "Now: Balanced"
+        assert manager.get(f"scene3d.{own_key}") == "Balanced"
         manager.set("scene3d.detail", "High")
-        assert controls._combos["detail"].currentData() == page._combos["detail"].currentData() == "High"
+        assert controls._now_labels[own_key].text() == "Now: Balanced"
+        own.setCurrentIndex(own.findData("Auto"))
+        assert controls._now_labels[own_key].text() == "Now: High"
         assert manager.get("widgets.spotify_visualizer") == before_art
         assert manager.get("visualizer_custom_presets") == before_custom
     finally:
