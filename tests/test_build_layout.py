@@ -519,3 +519,20 @@ def test_publication_uses_bounded_retry_for_late_windows_locks() -> None:
     assert "Start-Sleep -Milliseconds" in contract
     publish = contract[contract.index("function Publish-SRPSSDirectory") :]
     assert "Remove-SRPSSPathWithRetry -Path $targetFull" in publish
+
+
+def test_qml_sources_import_only_the_frozen_packaging_allowlist() -> None:
+    """The build refuses QML Qt imports outside build_layout.ps1's allowlist; catch them here, not at release time.
+    (Qt 6's QtQuick already provides Window/Screen attached properties: QtQuick.Window is not needed for them.)"""
+    import re
+    script = LAYOUT_SCRIPT.read_text(encoding="utf-8")
+    block = re.search(r"\$allowedImports = @\((.*?)\)", script, re.S)
+    assert block, "allowlist not found in build_layout.ps1"
+    allowed = set(re.findall(r"'([^']+)'", block.group(1)))
+    unexpected = []
+    for qml in sorted((REPO_ROOT / "rendering" / "quick" / "qml").rglob("*.qml")):
+        for number, line in enumerate(qml.read_text(encoding="utf-8").splitlines(), 1):
+            match = re.match(r"\s*import\s+([A-Za-z0-9_.]+)(?:\s|$)", line)
+            if match and match.group(1).startswith("Qt") and match.group(1) not in allowed:
+                unexpected.append(f"{qml.relative_to(REPO_ROOT)}:{number}: {match.group(1)}")
+    assert not unexpected, unexpected
