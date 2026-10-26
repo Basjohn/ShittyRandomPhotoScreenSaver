@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import importlib.util
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -77,7 +78,11 @@ def test_lazy_theme_pages_refresh_without_polling_or_cross_tab_theme_owner() -> 
     assert "QTimer" not in themes
 
 
-def test_frozen_theme_root_uses_same_programdata_srpss_asset_root_as_presets(monkeypatch, tmp_path) -> None:
+@pytest.mark.parametrize("diagnostic", [False, True])
+def test_frozen_theme_root_uses_same_programdata_srpss_asset_root_as_presets(monkeypatch, tmp_path, diagnostic) -> None:
+    from core import build_profile
+
+    monkeypatch.setattr(build_profile, "is_diagnostic_build", lambda: diagnostic)
     path = ROOT / "ui" / "settings_theme_paths.py"
     spec = importlib.util.spec_from_file_location("_srpss_settings_theme_paths_test", path)
     assert spec is not None and spec.loader is not None
