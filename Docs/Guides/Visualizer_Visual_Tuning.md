@@ -24,7 +24,9 @@ real recorded music, with no window and no settings writes:
 - **GPU time:** the first frame of a run includes shader compiles and warm-up (hundreds of ms). Measure steady
   cost with `--duration 3 --fps 4`, twice, and read the median; compare against a control on the same machine
   state (absolute ms swing with clocks).
-- Real windows are never opened by probes or tests (they freeze a blank screen).
+- Mode capture probes stay offscreen. Native Settings/interaction verification is a separate bounded window exercise;
+  follow [Qt/QML observability](Qt_QML_Observability.md). Future mode labs share the context/target and lifecycle contract
+  in [Visualizer Labs](Visualizer_Labs.md), rather than creating diagnostic fullscreen windows.
 
 ## 2. Compare side by side, always against the target
 
