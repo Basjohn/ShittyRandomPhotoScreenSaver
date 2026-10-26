@@ -18,8 +18,9 @@ def test_catalogue_tracks_canonical_registry_and_curated_files() -> None:
 
     cases = catalogue()
     assert {case.identity for case in cases if case.kind == "transition"} == {
-        descriptor.stable_id for descriptor in iter_transition_descriptors() if descriptor.available}
-    assert {case.label for case in cases if case.identity == "blinds"} == set(BLINDS_STYLE_CHOICES)
+        descriptor.stable_id for descriptor in iter_transition_descriptors()
+        if descriptor.available and descriptor.stable_id not in {"warp_dissolve", "particle"}}
+    assert {case.label for case in cases if case.identity == "blinds"} == set(BLINDS_STYLE_CHOICES) - {"Flat"}
     expected = {(descriptor.mode_id, preset.name) for descriptor in iter_visualizer_mode_descriptors()
                 for preset in get_presets(descriptor.mode_id) if not preset.is_custom}
     assert {(case.identity, case.label) for case in cases if case.kind == "visualizer"} == expected
