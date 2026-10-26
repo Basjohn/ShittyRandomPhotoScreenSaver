@@ -480,7 +480,8 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
 def _build_settings_root_stylesheet(theme: SettingsThemeSpec) -> str:
     """Return the complete Settings-root stylesheet from permanent owners."""
 
-    return _build_base_structural_styles() + _build_custom_styles(theme)
+    from ui.theme_typography import settings_typography_qss
+    return settings_typography_qss(_build_base_structural_styles() + _build_custom_styles(theme), theme)
 
 
 def _is_live_qobject(widget) -> bool:
@@ -509,6 +510,9 @@ def _apply_theme_to_widget(widget, theme: SettingsThemeSpec) -> bool:
         return False
 
     widget.setStyleSheet(_build_settings_root_stylesheet(theme))
+    from ui.theme_typography import apply_settings_typography, apply_settings_tooltip_typography
+    apply_settings_typography(widget, theme)
+    apply_settings_tooltip_typography(theme)
     logger.debug("Theme loaded successfully: %s", theme.name)
     return True
 

@@ -631,7 +631,7 @@ OverlayWidget {
                         layer.enabled: true
                     }
                 }
-                Text { anchors.fill: parent; visible: avatarSource.length === 0; text: primaryText.length > 0 ? primaryText.charAt(0).toUpperCase() : ""; color: friendRoot.friendPulseModel.accentColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.1 * friendRoot.customAvatarScale; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                ThemedText { anchors.fill: parent; visible: avatarSource.length === 0; text: primaryText.length > 0 ? primaryText.charAt(0).toUpperCase() : ""; color: friendRoot.friendPulseModel.accentColor; sourceFont.family: friendRoot.friendPulseModel.fontFamily; sourceFont.pointSize: friendRoot.friendPulseModel.fontSize * 1.1 * friendRoot.customAvatarScale; sourceFont.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                 Rectangle {
                     objectName: "friendPulseRowAvatarOutline_" + index
                     anchors.fill: parent
@@ -724,7 +724,7 @@ OverlayWidget {
                 width: 24.0; height: 30.0; radius: 7.0
                 anchors.right: parent.right; anchors.rightMargin: 7.0; anchors.verticalCenter: parent.verticalCenter
                 color: rowMenuHover.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.14) : "transparent"
-                Text { anchors.fill: parent; text: "⋮"; color: rowMenuHover.hovered ? "white" : friendRoot.friendPulseModel.mutedTextColor; font.pixelSize: 20.0; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                ThemedText { anchors.fill: parent; text: "⋮"; color: rowMenuHover.hovered ? "white" : friendRoot.friendPulseModel.mutedTextColor; sourceFont.pixelSize: 20.0; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                 HoverHandler { id: rowMenuHover; cursorShape: Qt.PointingHandCursor; enabled: friendRoot.friendPulseModel.interactionEnabled }
                 TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.openActionMenu(index, friendActionAvailable, gameActionAvailable, rowMenuButton) }
             }
@@ -950,7 +950,7 @@ OverlayWidget {
                             layer.enabled: true
                         }
                     }
-                    Text { anchors.fill: parent; visible: avatarSource.length === 0; text: primaryText.length > 0 ? primaryText.charAt(0).toUpperCase() : ""; color: friendRoot.friendPulseModel.accentColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.28 * friendRoot.customAvatarScale; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    ThemedText { anchors.fill: parent; visible: avatarSource.length === 0; text: primaryText.length > 0 ? primaryText.charAt(0).toUpperCase() : ""; color: friendRoot.friendPulseModel.accentColor; sourceFont.family: friendRoot.friendPulseModel.fontFamily; sourceFont.pointSize: friendRoot.friendPulseModel.fontSize * 1.28 * friendRoot.customAvatarScale; sourceFont.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                     Rectangle {
                         objectName: "friendPulseGridAvatarOutline_" + index
                         anchors.fill: parent
@@ -1046,7 +1046,7 @@ OverlayWidget {
                     anchors.right: parent.right; anchors.rightMargin: 6.0; anchors.top: parent.top; anchors.topMargin: 4.0
                     width: 24.0; height: 28.0; radius: 7.0
                     color: gridMenuHover.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.14) : "transparent"
-                    Text { anchors.fill: parent; text: "⋮"; color: gridMenuHover.hovered ? "white" : friendRoot.friendPulseModel.mutedTextColor; font.pixelSize: 20.0; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    ThemedText { anchors.fill: parent; text: "⋮"; color: gridMenuHover.hovered ? "white" : friendRoot.friendPulseModel.mutedTextColor; sourceFont.pixelSize: 20.0; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                     HoverHandler { id: gridMenuHover; cursorShape: Qt.PointingHandCursor; enabled: friendRoot.friendPulseModel.interactionEnabled }
                     TapHandler { enabled: friendRoot.friendPulseModel.interactionEnabled; acceptedButtons: Qt.LeftButton; onTapped: friendRoot.openActionMenu(index, friendActionAvailable, gameActionAvailable, gridMenuButton) }
                 }
@@ -1198,7 +1198,7 @@ OverlayWidget {
         objectName: "friendPulseQuietState"
         visible: !activityRowsView.visible && !activityGridView.visible
         x: 36.0; y: 104.0; width: friendRoot.friendPulseModel.authoredWidth - 72.0; height: friendRoot.friendPulseModel.authoredHeight - y - 32.0
-        Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: 8.0; width: 54.0; height: 54.0; radius: 27.0; color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, 0.16); border.color: friendRoot.friendPulseModel.rowBorderColor; border.width: friendRoot.friendStrokeWidth(1.0); Text { anchors.fill: parent; text: friendRoot.friendPulseModel.viewState === "private" ? "◌" : "●"; color: friendRoot.friendPulseModel.accentColor; font.pixelSize: 25.0; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
+        Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: 8.0; width: 54.0; height: 54.0; radius: 27.0; color: Qt.rgba(friendRoot.friendPulseModel.accentColor.r, friendRoot.friendPulseModel.accentColor.g, friendRoot.friendPulseModel.accentColor.b, 0.16); border.color: friendRoot.friendPulseModel.rowBorderColor; border.width: friendRoot.friendStrokeWidth(1.0); ThemedText { anchors.fill: parent; text: friendRoot.friendPulseModel.viewState === "private" ? "◌" : "●"; color: friendRoot.friendPulseModel.accentColor; sourceFont.pixelSize: 25.0; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
         ShadowedText { anchors.left: parent.left; anchors.right: parent.right; y: 73.0; height: 34.0; text: friendRoot.friendPulseModel.primaryMetric; color: friendRoot.friendPulseModel.textColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 1.18; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY }
         ShadowedText { anchors.left: parent.left; anchors.right: parent.right; y: 108.0; height: 42.0; text: friendRoot.friendPulseModel.viewState === "connect_required" ? "Connect Steam in Settings to see the friend roster." : (friendRoot.friendPulseModel.viewState === "private" ? "Steam is not exposing this friend roster." : (friendRoot.friendPulseModel.viewState === "stale" ? "This friend roster uses the last accepted Steam observation." : (friendRoot.friendPulseModel.viewState === "loading" ? "Loading the account-private friend roster first…" : "The next accepted friend-roster observation will appear here."))); color: friendRoot.friendPulseModel.mutedTextColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 0.76; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; wrap: true; maximumLineCount: 2; elide: Text.ElideRight; shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled; shadowColor: friendRoot.friendPulseModel.textShadowColor; shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX; shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY }
     }
@@ -1234,7 +1234,7 @@ OverlayWidget {
                         visible: enabledAction; width: parent.width; height: visible ? 29.0 : 0.0; radius: 6.0
                         color: actionHover.hovered ? Qt.rgba(1.0, 1.0, 1.0, 0.12) : "transparent"
                         objectName: "friendPulseAction_" + modelData
-                        Text { anchors.fill: parent; leftPadding: 8.0; text: modelData === "profile" ? "View Profile" : (modelData === "chat" ? "Start Chat" : (modelData === "store" ? "View Game in Store" : "Copy Steam ID")); color: actionHover.hovered ? "white" : friendRoot.friendPulseModel.textColor; font.family: friendRoot.friendPulseModel.fontFamily; font.pointSize: friendRoot.friendPulseModel.fontSize * 0.78; verticalAlignment: Text.AlignVCenter }
+                        ThemedText { anchors.fill: parent; leftPadding: 8.0; text: modelData === "profile" ? "View Profile" : (modelData === "chat" ? "Start Chat" : (modelData === "store" ? "View Game in Store" : "Copy Steam ID")); color: actionHover.hovered ? "white" : friendRoot.friendPulseModel.textColor; sourceFont.family: friendRoot.friendPulseModel.fontFamily; sourceFont.pointSize: friendRoot.friendPulseModel.fontSize * 0.78; verticalAlignment: Text.AlignVCenter }
                         HoverHandler { id: actionHover; cursorShape: Qt.PointingHandCursor; enabled: parent.enabledAction && friendRoot.friendPulseModel.interactionEnabled }
                         TapHandler {
                             enabled: parent.enabledAction && friendRoot.friendPulseModel.interactionEnabled

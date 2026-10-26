@@ -185,6 +185,11 @@ class QuickSceneFactory(QObject):
             str(self._qml_root / "DisplayScene.qml")
         )
         self._engine = QQmlEngine(self)
+        from ui.theme_semantics import widget_theme_is_light
+        from ui.theme_typography import WidgetThemeTypography
+        from ui.widget_theme_active import get_active_widget_theme
+        self._theme_typography = WidgetThemeTypography(widget_theme_is_light(get_active_widget_theme()), self)
+        self._engine.rootContext().setContextProperty("widgetThemeTypography", self._theme_typography)
         self._engine.addImportPath(str(self._qml_root))
         self._media_artwork_provider = MediaArtworkImageProvider()
         self._engine.addImageProvider(

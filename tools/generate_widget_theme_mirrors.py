@@ -29,6 +29,7 @@ if "ui" not in sys.modules:
 
 from ui.settings_theme_io import load_settings_theme_file
 from ui.settings_theme_spec import DEFAULT_DARK_SETTINGS_THEME, Rgba, SettingsThemeSpec
+from ui.theme_semantics import settings_theme_is_light
 from ui.widget_theme_io import widget_theme_to_json
 from ui.widget_theme_spec import DEFAULT_DARK_WIDGET_THEME, WidgetThemeSpec
 
@@ -69,18 +70,6 @@ def _scaled_alpha(color: Rgba, scale: float) -> Rgba:
     )
 
 
-def _relative_luminance(color: Rgba) -> float:
-    channels: list[float] = []
-    for value in (color.r, color.g, color.b):
-        channel = value / 255.0
-        channels.append(
-            channel / 12.92
-            if channel <= 0.04045
-            else ((channel + 0.055) / 1.055) ** 2.4
-        )
-    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
-
-
 def _uses_dark_text_on_light_surface(theme: SettingsThemeSpec) -> bool:
     """Detect the light-value hierarchy that needs an opaque runtime floor.
 
@@ -91,10 +80,7 @@ def _uses_dark_text_on_light_surface(theme: SettingsThemeSpec) -> bool:
     theme names so future light themes inherit the same safety rule.
     """
 
-    return (
-        _relative_luminance(_rgba(theme, "text.primary")) <= 0.18
-        and _relative_luminance(_rgba(theme, "panel.group.surface")) >= 0.55
-    )
+    return settings_theme_is_light(theme)
 
 
 def _runtime_card_surface(theme: SettingsThemeSpec) -> Rgba:

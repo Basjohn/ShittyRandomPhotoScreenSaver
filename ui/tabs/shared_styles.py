@@ -1671,8 +1671,9 @@ def _install_theme_styles(theme: SettingsThemeSpec) -> None:
     global _SETTINGS_THEME
     _SETTINGS_THEME = theme
     namespace = globals()
+    from ui.theme_typography import settings_typography_qss
     for name, builder in _THEME_STYLE_BUILDERS.items():
-        namespace[name] = builder()
+        namespace[name] = settings_typography_qss(builder(), theme)
 
 
 def _refresh_live_shared_widgets(theme: SettingsThemeSpec) -> None:
@@ -1716,6 +1717,7 @@ def _refresh_live_shared_widgets(theme: SettingsThemeSpec) -> None:
 # shared apply helpers rather than importing rendered style strings by value.
 # Existing by-value consumers are deliberately migrated in focused checkpoints
 # instead of being patched through module-global or application-wide scans.
+_install_theme_styles(_SETTINGS_THEME)
 _THEME_UNSUBSCRIBE = subscribe_settings_theme(_refresh_live_shared_widgets)
 
 

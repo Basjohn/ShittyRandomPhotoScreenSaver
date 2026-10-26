@@ -12,6 +12,9 @@
     <file alias="fonts/Jost-Bold.ttf" compression-algorithm="none">../assets/fonts/Jost-Bold.ttf</file>
     <file alias="fonts/Jost-Regular.ttf" compression-algorithm="none">../assets/fonts/Jost-Regular.ttf</file>
     <file alias="fonts/Jost-SemiBold.ttf" compression-algorithm="none">../assets/fonts/Jost-SemiBold.ttf</file>
+    <file alias="fonts/Jost-Readability-Variable.ttf" compression-algorithm="none">../assets/fonts/Jost-Readability-Variable.ttf</file>
+    <file alias="fonts/Jost-Readability-Italic-Variable.ttf" compression-algorithm="none">../assets/fonts/Jost-Readability-Italic-Variable.ttf</file>
+    <file alias="fonts/Jost-OFL.txt">../assets/fonts/Jost-OFL.txt</file>
     <file alias="branding/about/Logo_LiquidMask.png" compression-algorithm="none">../assets/branding/about/Logo_LiquidMask.png</file>
     <file alias="branding/about/Logo.png" compression-algorithm="none">../assets/branding/about/Logo.png</file>
     <file alias="branding/about/Shoogle300W_LiquidMask.png" compression-algorithm="none">../assets/branding/about/Shoogle300W_LiquidMask.png</file>

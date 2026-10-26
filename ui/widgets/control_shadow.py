@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollBar,
+    QStyle,
     QToolButton,
     QWidget,
 )
@@ -286,11 +287,22 @@ class _TextShadowOverlay(QWidget):
         margin = max(0, int(owner.margin()))
         if margin:
             text_rect.adjust(margin, margin, -margin, -margin)
-        if owner.objectName() == "titleBarLabel":
-            # settings_theme.py gives the title 10px left / 3px top padding.
-            # QLabel's contentsRect does not reliably expose stylesheet padding.
-            text_rect.adjust(10.0, 3.0, 0.0, 0.0)
-
+        # QLabel's contents rect already includes stylesheet padding, including
+        # the title bar's inset. Applying it again displaces the shadow glyphs.
+        # Its independent indent still applies inside that rect. Negative
+        # indent is QLabel's documented half-x-width when it has a frame.
+        indent = owner.indent()
+        if indent < 0:
+            indent = owner.fontMetrics().horizontalAdvance("x") // 2 if owner.frameWidth() > 0 else 0
+        alignment = QStyle.visualAlignment(owner.layoutDirection(), owner.alignment())
+        if alignment & Qt.AlignmentFlag.AlignLeft:
+            text_rect.adjust(indent, 0, 0, 0)
+        elif alignment & Qt.AlignmentFlag.AlignRight:
+            text_rect.adjust(0, 0, -indent, 0)
+        if alignment & Qt.AlignmentFlag.AlignTop:
+            text_rect.adjust(0, indent, 0, 0)
+        elif alignment & Qt.AlignmentFlag.AlignBottom:
+            text_rect.adjust(0, 0, 0, -indent)
         offset = helper.config.offset
         shadow_rect = QRectF(text_rect)
         shadow_rect.translate(offset)
@@ -1072,6 +1084,10 @@ def _style_scope(
     scope: QWidget,
     target_types: tuple[Type[QWidget], ...],
 ) -> None:
+    # Font policy has its own adapter; share this existing one-shot/lazy style
+    # pass so it does not need a second QObject watcher or recurring work.
+    from ui.theme_typography import apply_settings_typography
+    apply_settings_typography(scope, get_active_settings_theme())
     _style_one_widget(scope, target_types)
     for widget in scope.findChildren(QWidget):
         _style_one_widget(widget, target_types)

@@ -392,13 +392,13 @@ OverlayWidget {
             )
             z: 5
 
-            Text {
+            ThemedText {
                 anchors.fill: parent
                 text: "i"
                 color: abandonmentRoot.abandonmentModel.steamInfoTextColor
-                font.family: abandonmentRoot.abandonmentModel.fontFamily
-                font.pixelSize: 12.0
-                font.bold: true
+                sourceFont.family: abandonmentRoot.abandonmentModel.fontFamily
+                sourceFont.pixelSize: 12.0
+                sourceFont.bold: true
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
@@ -434,14 +434,14 @@ OverlayWidget {
             )
             z: 10
 
-            Text {
+            ThemedText {
                 id: infoTipText
                 anchors.fill: parent
                 anchors.margins: 7.0
                 text: abandonmentRoot.abandonmentModel.connectionInfoTooltip
                 color: abandonmentRoot.abandonmentModel.steamTooltipTextColor
-                font.family: abandonmentRoot.abandonmentModel.fontFamily
-                font.pixelSize: 12.0
+                sourceFont.family: abandonmentRoot.abandonmentModel.fontFamily
+                sourceFont.pixelSize: 12.0
                 wrapMode: Text.WordWrap
                 verticalAlignment: Text.AlignVCenter
             }

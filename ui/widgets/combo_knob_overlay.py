@@ -6,6 +6,7 @@ from typing import Literal
 from PySide6.QtCore import QObject, QEvent, QPoint, QRect, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QWidget
+from ui.settings_theme_runtime import get_active_settings_theme
 
 KnobState = Literal["normal", "hover", "pressed", "disabled"]
 
@@ -79,21 +80,15 @@ class ComboKnobOverlay(QWidget):
 
     def _resolve_color(self) -> QColor:
         host = getattr(self, "_host", None)
-        if host is None or not host.isEnabled():
-            return QColor("#6a6a6a")
         # Opt-in tool-local colour override: Foundries preview selected themes
-        # without changing SRPSS's active application theme. Other combos
-        # retain the existing knob rendering unchanged.
+        # without changing SRPSS's active application theme.
         key = {"normal": "Normal", "hover": "Hover", "pressed": "Pressed", "disabled": "Disabled"}
-        state = self._state if host.isEnabled() else "disabled"
-        authored = host.property(f"previewKnob{key[state]}")
+        state = self._state if host is not None and host.isEnabled() else "disabled"
+        authored = host.property(f"previewKnob{key[state]}") if host is not None else None
         if isinstance(authored, str) and QColor(authored).isValid():
             return QColor(authored)
-        if self._state == "pressed":
-            return QColor("#2d2d2d")
-        if self._state == "hover":
-            return QColor("#4d4d4d")
-        return QColor("#ffffff")
+        role = "surface" if state == "normal" else state + "_surface"
+        return QColor(*get_active_settings_theme().color("control.stepper." + role).as_tuple())
 
 
 class ComboKnobController(QObject):

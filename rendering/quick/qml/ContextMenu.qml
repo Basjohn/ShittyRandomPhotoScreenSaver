@@ -198,7 +198,7 @@ Item {
                             }
                         }
 
-                        Text {
+                        ThemedText {
                             anchors.left: indicator.visible ? indicator.right : parent.left
                             anchors.leftMargin: indicator.visible ? 10.0 : 10.0
                             anchors.right: submenuArrow.left
@@ -207,19 +207,19 @@ Item {
                             text: menuRow.modelData.label
                             color: menuRoot.textColor
                             elide: Text.ElideRight
-                            font.family: "Jost"
-                            font.pixelSize: 14
-                            font.weight: Font.DemiBold
+                            sourceFont.family: "Jost"
+                            sourceFont.pixelSize: 14
+                            sourceFont.weight: Font.DemiBold
                         }
 
-                        Text {
+                        ThemedText {
                             id: submenuArrow
                             anchors.right: parent.right
                             anchors.rightMargin: 10.0
                             anchors.verticalCenter: parent.verticalCenter
                             text: "▸"
                             color: menuRoot.arrowColor
-                            font.pixelSize: 16
+                            sourceFont.pixelSize: 16
                             visible: menuRow.modelData.kind === "submenu"
                         }
 
@@ -367,7 +367,7 @@ Item {
                                         }
                                     }
 
-                                    Text {
+                                    ThemedText {
                                         anchors.left: submenuIndicator.right
                                         anchors.leftMargin: 9.0
                                         anchors.right: parent.right
@@ -378,9 +378,9 @@ Item {
                                             ? menuRoot.submenuCheckedTextColor
                                             : menuRoot.submenuTextColor
                                         elide: Text.ElideRight
-                                        font.family: "Jost"
-                                        font.pixelSize: 13
-                                        font.weight: submenuRow.modelData.checked
+                                        sourceFont.family: "Jost"
+                                        sourceFont.pixelSize: 13
+                                        sourceFont.weight: submenuRow.modelData.checked
                                             ? Font.Bold
                                             : Font.DemiBold
                                     }

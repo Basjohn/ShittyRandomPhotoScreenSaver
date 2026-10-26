@@ -48,6 +48,7 @@ from ui.tabs.shared_styles import (
 )
 from ui.settings_theme_catalog import read_persisted_theme_id
 from ui.settings_theme_spec import Rgba
+from ui.settings_theme_runtime import get_active_settings_theme
 from ui.widget_theme_active import subscribe_widget_theme
 from ui.widget_theme_runtime import WidgetThemeState, begin_theme_owned_edit
 from ui.widget_theme_selection import (
@@ -479,7 +480,7 @@ class _ShadowDirectionButton(QPushButton):
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        pen = QPen(QColor(255, 255, 255, 245))
+        pen = QPen(QColor(*get_active_settings_theme().color("control.button.text").as_tuple()))
         pen.setWidthF(1.8)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)

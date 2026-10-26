@@ -1,6 +1,7 @@
 # Settings Theme Architecture
 
-**Expansion persistence clarification (2026-10-23):** connector rail styling/geometry is distinct from [single-current-context Settings bucket persistence](Settings_Bucket_Persistence_Contract.md). Existing per-scope sparse maps do not enforce the operator's one-active-pill/tab editing-path requirement; native navigation/reopen validation remains open.
+Expansion persistence follows the [single-current-context Settings bucket contract](Settings_Bucket_Persistence_Contract.md).
+Connector rails show that hierarchy; they do not own its stored editing path.
 
 Durable contract for the QWidget Settings theme system, native backdrop ownership and theme authoring. This document owns the current Settings-theme architecture. Historical investigation belongs under `Docs/Historical_Bugs/`; temporary theme migration notes do not override this contract.
 
@@ -28,6 +29,26 @@ core/windows/dwm_blur.py
 ```
 
 No renderer may invent a second palette because a particular native material is inconvenient.
+
+## Shared text and control painting
+
+QLabel text shadows use the label's already padded `contentsRect`, then its margin and actual indent, followed by the
+selected signed shadow offset. Do not add title-bar padding a second time. The shared overlay draws one shadow and
+leaves foreground text to QLabel; no per-theme shadow-strength override is permitted.
+
+Shadow-direction arrows consume `control.button.text`. Combo indicators consume the existing `control.stepper.*`
+state roles, including disabled state, with the existing explicit Foundry-preview properties retained. Light and dark
+surfaces use the same semantic resolution and paint path. Native Glass/Acrylic composition must be inspected; declared
+palette contrast alone is insufficient evidence of legibility.
+
+`ui/theme_semantics.py` derives light-palette admission from existing semantic foreground/surface roles; it stores no
+theme state. `ui/theme_typography.py` copies authored fonts and adds a real weight increment for light palettes.
+Jost uses a private variable family with explicit `wght`, retaining the original static family for dark matching;
+other variable families retain their axes, and static families use their nearest stronger installed face.
+Settings applies the reversible policy through existing root/shared/lazy style edges, including tooltips. Quick
+uses the generation-owned typography input and shared text primitives; opening Settings retires the old factory before
+theme changes, so the new runtime receives the new classification. No extra theme watcher or frame-time font scan exists.
+Repeated projection must not accumulate weight, replace the stored font choice or change dark glyph pixels.
 
 ## Schema-v6 contract
 
@@ -74,14 +95,14 @@ Source/development resolution mirrors that hierarchy:
 ```
 
 `ui/settings_theme_paths.py` owns this resolved-root policy. Frozen/installed builds resolve directly to the stable
-ProgramData theme root above; source/dev builds resolve the repository `themes` tree. Installer scripts seed the same
+ProgramData theme root above, including Diagnostic; source/dev builds resolve the repository `themes` tree. Installer scripts seed the same
 ProgramData tree from the bundled curated pack, matching the existing preset-seeding model. Do not reintroduce a frozen
 build placeholder or teach `settings_theme_catalog.py` to merge multiple roots.
 
 Resolution rules:
 
 1. explicit path injection remains valid for tests/tools;
-2. installed/frozen builds prefer the stable `%ProgramData%\SRPSS\themes` root;
+2. every installed/frozen flavour uses the stable `%ProgramData%\SRPSS\themes` root, never its extraction tree;
 3. source/dev builds use repository-root `themes`;
 4. Widget Theme discovery is always the `widgets` child of the resolved theme root;
 5. a bundled/repository theme tree may be used as a bootstrap/copy source when constructing ProgramData, but production

@@ -15,6 +15,10 @@ Item {
     property string text: ""
     property int textFormat: Text.AutoText
     property font font
+    // A standalone primitive keeps its supplied font; production factories
+    // supply one generation-scoped semantic typography adapter.
+    readonly property font effectiveFont: typeof widgetThemeTypography !== "undefined" && widgetThemeTypography.light
+        ? widgetThemeTypography.adjustedFont(shadowedText.font) : shadowedText.font
     property color color: "#ffffffff"
     property int horizontalAlignment: Text.AlignLeft
     property int verticalAlignment: Text.AlignTop
@@ -47,7 +51,7 @@ Item {
         visible: shadowedText.shadowEnabled
         text: shadowedText.text
         textFormat: shadowedText.textFormat
-        font: shadowedText.font
+        font: shadowedText.effectiveFont
         color: shadowedText.shadowColor
         horizontalAlignment: shadowedText.horizontalAlignment
         verticalAlignment: shadowedText.verticalAlignment
@@ -67,7 +71,7 @@ Item {
         height: shadowedText.height
         text: shadowedText.text
         textFormat: shadowedText.textFormat
-        font: shadowedText.font
+        font: shadowedText.effectiveFont
         color: shadowedText.color
         horizontalAlignment: shadowedText.horizontalAlignment
         verticalAlignment: shadowedText.verticalAlignment

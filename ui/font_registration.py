@@ -16,6 +16,21 @@ _INTER_FONT_PATHS = (
     ":/srpss/fonts/Inter-Italic-VariableFont_opsz,wght.ttf",
 )
 _FONTS_REGISTERED = False
+READABILITY_JOST_FAMILY = "SRPSS Jost Variable"
+_READABILITY_FONTS_REGISTERED = False
+
+
+def ensure_readability_fonts() -> None:
+    """Register private light-only variants without changing Jost matching."""
+    global _READABILITY_FONTS_REGISTERED
+    if _READABILITY_FONTS_REGISTERED or QGuiApplication.instance() is None:
+        return
+    ensure_core_resources()
+    for path in (":/srpss/fonts/Jost-Readability-Variable.ttf",
+                 ":/srpss/fonts/Jost-Readability-Italic-Variable.ttf"):
+        if QFontDatabase.addApplicationFont(path) < 0:
+            raise RuntimeError(f"Could not register readability font: {path}")
+    _READABILITY_FONTS_REGISTERED = True
 
 
 def ensure_custom_fonts() -> None:
@@ -32,4 +47,4 @@ def ensure_custom_fonts() -> None:
     _FONTS_REGISTERED = True
 
 
-__all__ = ["ensure_custom_fonts"]
+__all__ = ["ensure_custom_fonts", "ensure_readability_fonts", "READABILITY_JOST_FAMILY"]
