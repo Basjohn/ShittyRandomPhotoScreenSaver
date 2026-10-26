@@ -106,9 +106,9 @@ class _ThemeRowDelegate(QStyledItemDelegate):
             cell = QRect(square.left() + (number % 2) * self.SIDE // 2,
                          square.top() + (number // 2) * self.SIDE // 2, self.SIDE // 2, self.SIDE // 2)
             painter.fillRect(cell, QColor(*rgb))
-        painter.setPen(QPen(QColor(*theme.color("control.list.border").as_tuple()), 1.0))
+        painter.setPen(QPen(QColor(*theme.color("control.list.border").as_tuple()), 2.0))
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRect(QRectF(square).adjusted(.5, .5, -.5, -.5))
+        painter.drawRect(QRectF(square).adjusted(1., 1., -1., -1.))
         painter.setRenderHint(painter.RenderHint.Antialiasing)
         accent = QColor(*theme.color("control.list.selected_accent").as_tuple())
         painter.setPen(QPen(accent, 1.25))

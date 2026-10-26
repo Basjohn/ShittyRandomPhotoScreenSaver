@@ -289,7 +289,7 @@ Both product theme lists use `ThemeListWidget`: one delegate paints each row's r
 without per-row child widgets. Palette RGBs are derived once from validated semantic colours, ranked by role prevalence
 and alpha, grouping nearby shades and excluding invisible/shadow effects. Fully transparent palettes preview their
 authored RGBs. These previews never become a new palette authority.
-The square's 1 px border uses the current `control.list.border`; the star uses `control.list.selected_accent`.
+The square's 2 px border uses the current `control.list.border`; the star uses `control.list.selected_accent`.
 
 `ui.theme_favourites` stores separate Settings and Widget stable-ID lists in normal Settings persistence. Theme files
 and schemas are unchanged. Favourites sort first, retaining catalogue order within both groups and preserving missing
