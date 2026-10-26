@@ -61,8 +61,9 @@ question is pixel-level (edges, aliasing, a bead's shading).
 
 ## 4. Prove what must not change
 
-- **Accepted looks are pixel-identical, not "similar".** Render accepted presets at HEAD (`git stash`, render,
-  `git stash pop`) and with the change, and require a zero max difference. New options default to the value that
+- **Accepted looks are pixel-identical, not "similar".** Capture the unchanged revision from a separate read-only
+  snapshot or authorized isolated checkout, then the candidate with identical inputs, and require a zero max difference.
+  Never stash/reset/clean unrelated dirty work to obtain a baseline. New options default to the value that
   reproduces the previous look exactly (Bead Scatter 0, Light Tint at the former fixed share, Band Gathering 0,
   Doublets 0, Wake Trails 0, Floor 0); an option that is 0 must not even draw from a random stream.
 - Simulation changes move every later frame, so pixel identity only holds for render-only changes; for simulation
@@ -95,8 +96,9 @@ question is pixel-level (edges, aliasing, a bead's shading).
 - **Per-tick numpy in the logical thread starves the app.** Each small numpy call holds the GIL the GUI and render
   threads need: a per-wake, per-tick resample (`np.interp`) took a 90 fps scene to 4 fps although the simulation
   tick itself measured only ~5 ms. `gui_stall_stacks.log` names the culprit (count the logical thread's innermost
-  frames across stalls). Batch the work across all owners at a fixed low cadence and keep per-tick work to plain
-  arithmetic (EB `WakeField`: points laid by distance, the water moved 10 times a second in one batched step).
+  frames across stalls). Batch bounded work across owners on the existing logical tick and measure GUI freshness too.
+  Current EB `WakeField` lays points by distance and moves the water every tick in one shared batch; it has no private
+  low-frequency scheduler. Do not copy a historical cadence into a new timing authority.
 - **Look at the goal at full resolution before choosing a technique.** EB's wakes were first drawn as soft blurred
   veils; the goal's are clear sheets with crisp glassy rims and fine lengthwise strands (caustic light drawn out
   along the flow). A blur cannot become that; edges and inner structure must be modelled. Shared optics apply to

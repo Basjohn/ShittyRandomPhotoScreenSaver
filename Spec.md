@@ -733,6 +733,8 @@ The currently curated Sphere presentation examples include **Glass Current** (Pr
 Future modes use the lab-first method and shared offscreen target described in `Docs/Guides/Visualizer_Labs.md`.
 Labs compose production primitives or the retained production render host, with explicit time and legal context-owned
 retirement. They introduce no runtime scheduler, palette or persistence authority.
+Waveform Ribbon must use `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` for reference custody, architecture dependencies,
+staged work packages and A–H visual evidence; the concept brief remains the intent authority and Current_Plan owns order.
 
 Every registered original mode declares its body controls once in `core/settings/visualizer_mode_settings.py`; canonical defaults and editable
 presets remain value authorities. Lazy Settings bodies, model serialization and consumer-specific appliers use that spec.
