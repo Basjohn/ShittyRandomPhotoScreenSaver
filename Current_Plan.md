@@ -64,22 +64,16 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 
 ### 2C. Feature work
 
-- [ ] **SC4 — Just Make It Work Pools** (design and gates: `Docs/Reference/Wallpaper_Pool_Selection.md`). Today the
-  action replaces the feed list with four fixed entries; pool UI, provider rotation and NASA selection do not exist yet.
-  - [ ] **SC4.1 Source eligibility:** bounded live probes per candidate (Wallhaven's JSON API is already the feed). One
-    `Space` choice groups NASA Sun/Mars/Solar System/Universe (Solar System is several Photojournal feeds); Minitokyo stays
-    experimental until anonymous original access is demonstrated; compare Konachan.net, Safebooru/Zerochan, Yande.re and
-    E-Shuushuu with SFW/API caveats. A board becomes a default only after successful authorized original retrieval.
-  - [ ] **SC4.2 One provider-selection authority:** a canonical typed selection of named pools (Wallhaven thematic
-    searches, not its coarse General/Anime/People flags), one popup-level discovery order (Random, Latest, Popular,
-    Today/Week/Month/Year) translated only where providers support it, validated query templates and a bounded number
-    of feed documents per acquisition pass. Existing coordinator, backoff, pacing, cache and the engine's own shuffle stay
-    the owners; no scheduler, timer or second shuffle. Prove pool=full, offline, 429, restart and zero displays.
-  - [ ] **SC4.3 Shared popup and Guided Setup:** both Just Make It Work buttons open the same `Just Make It Work Pools`
-    popup (Wallhaven themed checkboxes, one NASA Space checkbox, approved boards, one discovery-order selector) in the
-    StyledPopup dark-glass theme; Guided Setup keeps its draft/Finish/Skip lifecycle and never overwrites custom feeds.
-  - [ ] **SC4.4 Migration and acceptance:** migrate the curated NASA/Wallhaven URLs into pool identities once, never
-    misclassifying custom URLs; preserve other feeds, folders, ratio and cache; test-owned configs and fake feeds.
+- [ ] **SC4 — Finish Just Make It Work Pools** (`Docs/Reference/Wallpaper_Pool_Selection.md` owns detailed contracts):
+  - [ ] Repair cold-start admission: a bounded first opportunity (for example, one undersized NASA original) must not
+    terminate initialization before remaining selected providers get a finite fair chance. Remove the competing
+    async/sync startup admissions through the existing IO/callback owner; no new scheduler or unbounded source burst.
+  - [ ] Prove initial-empty-cache, busy-pass, failed-first/usable-later, cancellation and finite-budget failure at the
+    actual engine/coordinator seam, then review and checkpoint the source/UI/migration slice.
+  - [~] **Awaiting normal runtime image use:** after the source checkpoint, inspect subject/query relevance and usable
+    yield at actual display sizes, initial empty/cache-warm runs, and normal background top-ups. Native dark/light
+    selector navigation/circle controls/tooltips and no-env focused provider/draft/migration gates pass; image relevance
+    is not established by streamed header dimensions. Excluded providers require new sanctioned access evidence.
 - [~] **Reddit's data-root cache:** the first normal saver run with Reddit on should create `SRPSS/cache/reddit` and
   refetch once per member (paced); check its log then.
 
