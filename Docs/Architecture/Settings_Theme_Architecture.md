@@ -283,6 +283,20 @@ inspect exact current source
 
 Do not fix a native-material problem by perturbing stylesheet order, and do not fix a QSS-role problem by changing the native compositor.
 
+## Catalogue palette previews and favourites
+
+Both product theme lists use `ThemeListWidget`: one delegate paints each row's right-aligned 2×2 palette and star,
+without per-row child widgets. Palette RGBs are derived once from validated semantic colours, ranked by role prevalence
+and alpha, grouping nearby shades and excluding invisible/shadow effects. Fully transparent palettes preview their
+authored RGBs. These previews never become a new palette authority.
+The square's 1 px border uses the current `control.list.border`; the star uses `control.list.selected_accent`.
+
+`ui.theme_favourites` stores separate Settings and Widget stable-ID lists in normal Settings persistence. Theme files
+and schemas are unchanged. Favourites sort first, retaining catalogue order within both groups and preserving missing
+IDs for returning files. Star clicks and focused-list Ctrl+D toggle only this preference, keeping selection/activation
+and linked theme state unchanged. Widget Custom previews refresh from the existing stored Custom snapshot on page entry.
+Names elide before the decorations; the square remains at the visible viewport's right edge.
+
 ## Theme sorting (standalone tool)
 
 [Theme Sorter Foundry](../Guides/Theme_Sorter_Foundry.md) previews editable Settings themes on itself and performs explicit paired Widget/Settings theme file rename/delete using `linked_settings_theme_id`. It does not change product theme selection. [Mutable test-oracle audit](../Audits/Mutable_Test_Oracle_Theme_Sorter_2026-10-23.md) prevents freezing current curated colours, file names or pack count in tests.

@@ -261,6 +261,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                 'separators': False,
                                 'sound': False},
         'settings_theme_selection': 'file:Default Dark [Single] [Glass].srtheme',
+        'theme_favourites': {'settings': [], 'widgets': []},
         'visualizer_adv_states': {'bubble': False,
                                   'devcurve': False,
                                   'extruded_bubble': False,

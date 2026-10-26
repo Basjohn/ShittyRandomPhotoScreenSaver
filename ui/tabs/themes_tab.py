@@ -10,12 +10,14 @@ Internal navigation:
 """
 from __future__ import annotations
 from typing import Optional
+from dataclasses import replace
 from time import perf_counter_ns
 from PySide6.QtCore import QLineF, QSignalBlocker, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (QButtonGroup, QGroupBox, QLabel, QListWidget,
     QListWidgetItem, QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
-from ui.widgets.continuous_border import OutlinedListWidget
+from ui.widgets.theme_list import (ThemeListWidget, PALETTE_ROLE, FAVOURITES_KEY,
+                                  dominant_theme_colours, read_theme_favourites)
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
 from ui.flow_layout import FlowContainer
@@ -25,7 +27,7 @@ from ui.settings_theme_catalog import (SettingsThemeCatalog, activate_catalog_th
 from ui.settings_theme_runtime import get_active_settings_theme, set_active_settings_theme
 from ui.settings_theme_selection import apply_settings_theme_selection
 from ui.widget_theme_catalog import get_current_widget_theme_catalog
-from ui.widget_theme_runtime import CUSTOM_WIDGET_THEME_ID, WidgetThemeState
+from ui.widget_theme_runtime import CUSTOM_WIDGET_THEME_ID, WidgetThemeState, resolve_widget_theme
 from ui.widget_theme_selection import (
     activate_widget_theme_state,
     persist_widget_theme_state,
@@ -215,7 +217,8 @@ class ThemesTab(QWidget):
         intro.setWordWrap(True); shared_styles.apply_shared_label_style(intro,"INFO_LABEL_STYLE"); group_layout.addWidget(intro)
         self.settings_keep_synced=self._make_link_button()
         group_layout.addWidget(self.settings_keep_synced,0,Qt.AlignmentFlag.AlignLeft)
-        self.theme_list=OutlinedListWidget(); self.theme_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.theme_list=ThemeListWidget(); self.theme_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.theme_list.favouriteToggled.connect(lambda theme_id: self._toggle_theme_favourite("settings", theme_id))
         # Root Settings QSS still owns semantic list colours; only typography
         # is enlarged here for catalogue readability.
         self.theme_list.setStyleSheet("QListWidget { font-size: 12pt; }")
@@ -236,7 +239,8 @@ class ThemesTab(QWidget):
         intro.setWordWrap(True); shared_styles.apply_shared_label_style(intro,"INFO_LABEL_STYLE"); group_layout.addWidget(intro)
         self.widget_keep_synced=self._make_link_button()
         group_layout.addWidget(self.widget_keep_synced,0,Qt.AlignmentFlag.AlignLeft)
-        self.widget_theme_list=OutlinedListWidget(); self.widget_theme_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.widget_theme_list=ThemeListWidget(); self.widget_theme_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.widget_theme_list.favouriteToggled.connect(lambda theme_id: self._toggle_theme_favourite("widgets", theme_id))
         self.widget_theme_list.setStyleSheet("QListWidget { font-size: 12pt; }")
         self.widget_theme_list.setMinimumHeight(240); group_layout.addWidget(self.widget_theme_list)
         self.widget_theme_status=QLabel(""); self.widget_theme_status.setWordWrap(True)
@@ -267,6 +271,18 @@ class ThemesTab(QWidget):
             button.setToolTip(tooltip)
             del blocker
 
+    def _toggle_theme_favourite(self, kind: str, theme_id: str) -> None:
+        favourites = read_theme_favourites(self._settings, kind)
+        if theme_id in favourites:
+            favourites.remove(theme_id)
+        else:
+            favourites.add(theme_id)
+        state = {category: sorted(favourites if category == kind else read_theme_favourites(self._settings, category))
+                 for category in ("settings", "widgets")}
+        self._settings.set(FAVOURITES_KEY, state)
+        target = self.theme_list if kind == "settings" else self.widget_theme_list
+        target.set_favourites(favourites)
+
     def _populate_settings_themes(self):
         self._loading_selection=True
         try:
@@ -277,7 +293,8 @@ class ThemesTab(QWidget):
                     item.setToolTip("Built-in fallback. This appearance does not depend on any theme file.")
                 elif entry.source_path is not None:
                     item.setToolTip(entry.source_path.name)
-                self.theme_list.addItem(item)
+                self.theme_list.add_theme_item(item, entry.theme)
+            self.theme_list.set_favourites(read_theme_favourites(self._settings, "settings"))
             resolution=resolve_persisted_settings_theme(self._settings,self._catalog)
             self._select_theme_id(resolution.entry.theme_id)
             messages=[]
@@ -362,11 +379,13 @@ class ThemesTab(QWidget):
                     item.setToolTip("Built-in runtime fallback. No theme file is required.")
                 elif entry.source_path is not None:
                     item.setToolTip(entry.source_path.name)
-                self.widget_theme_list.addItem(item)
+                self.widget_theme_list.add_theme_item(item, entry.theme)
             if state.custom_payload is not None:
                 custom=QListWidgetItem("Custom"); custom.setData(Qt.ItemDataRole.UserRole,CUSTOM_WIDGET_THEME_ID)
                 custom.setToolTip("Settings-persisted user Widget Theme snapshot.")
-                self.widget_theme_list.addItem(custom)
+                self.widget_theme_list.add_theme_item(custom, resolve_widget_theme(
+                    replace(state, selected_id=CUSTOM_WIDGET_THEME_ID, keep_synced=False), catalog).theme)
+            self.widget_theme_list.set_favourites(read_theme_favourites(self._settings, "widgets"))
             self._sync_link_buttons(state.keep_synced)
             effective=activate_widget_theme_state(
                 self._settings,
@@ -418,9 +437,14 @@ class ThemesTab(QWidget):
             custom=QListWidgetItem("Custom")
             custom.setData(Qt.ItemDataRole.UserRole,CUSTOM_WIDGET_THEME_ID)
             custom.setToolTip("Settings-persisted user Widget Theme snapshot.")
-            self.widget_theme_list.addItem(custom)
+            self.widget_theme_list.add_theme_item(custom, resolve_widget_theme(
+                replace(state, selected_id=CUSTOM_WIDGET_THEME_ID, keep_synced=False), catalog).theme)
         elif state.custom_payload is None and custom_row >= 0:
             self.widget_theme_list.takeItem(custom_row)
+        elif state.custom_payload is not None and custom_row >= 0:
+            self.widget_theme_list.item(custom_row).setData(PALETTE_ROLE, dominant_theme_colours(resolve_widget_theme(
+                replace(state, selected_id=CUSTOM_WIDGET_THEME_ID, keep_synced=False), catalog).theme))
+        self.widget_theme_list.set_favourites(read_theme_favourites(self._settings, "widgets"))
 
         resolved=resolve_widget_theme_state(
             state,
