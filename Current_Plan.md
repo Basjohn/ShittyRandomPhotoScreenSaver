@@ -38,8 +38,13 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
   - [ ] Finish the page-by-page conditional/nested-bucket review across Visualizers, Transitions and widgets. Use
     shared Angle/Direction, Range and Triangle controls only where their stored meaning fits; keep categorical motion
     and ordering choices intact. Prove each changed body's round-trip and rendered layout; no per-page owner clones.
-  - [ ] Prototype the gradient direction mapper on original Bubble (around = direction, distance from centre =
-    strength/gradualness).
+  - [ ] **Shared lab foundation:** consolidate existing offscreen GL context/target/readback/retirement facilities for
+    future mode labs; retain one production renderer/scene substrate, explicit logical time, CLI-owned scratch and
+    process-tree-bounded probes. Document the shared lab contract and prove lifecycle/resize/capture before adoption.
+  - [~] **Bubble gradient prototype — revise to two nodes:** independent Dark/Light endpoints define direction and
+    blend span/gradualness. Replace the initial single-node lab (`tools/labs/bubble_gradient_mapper_lab.py`), reuse shared
+    visual controls and production shading, and inspect shifted/narrow/wide endpoint captures. Keep current enum keys,
+    presets and production appearance intact until the interaction and migration are reviewed.
   - [~] **Advanced hierarchy — awaiting operator look:** large Advanced header contains Technical and EB Camera;
     native real-dialog reopen/retirement and legacy-path checks pass. Inspect the nested path at operator DPI/theme;
     capture: `tmp/pytest_advanced_render/test_visualizer_technical_path0/advanced_technical.png`.
