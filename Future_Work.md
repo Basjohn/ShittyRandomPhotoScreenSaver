@@ -105,6 +105,10 @@ Keep these deferred unless new evidence or an explicit request promotes them:
 - Spectrum extreme-viewport smoothness where physical evidence demonstrates a defect;
 - installed GODZIP Foundry Windows-diff acceptance;
 - wallpaper-feed consolidation only where shared normalization simplifies code without merging cache/scheduling authorities;
+- shared HTTP all-phase cancellation: `requests.get` can remain inside status/header parsing while a peer trickles
+  bytes, despite per-socket timeouts. Body `read1` cancellation does not solve that phase. Prove it with a bounded local
+  server before admitting a transport-level correction; retain strict runtime destruction barriers and refuse source
+  cache-writer overlap. Do not add private socket cancellation, weaken retirement or claim a hard deadline from read timeouts;
 - Steam asset-cache/catalog reconciliation if missing-image requests recur: the 2026-10-07 loaded RUN received HTTP 404 for
   asset hashes `4b349d51e996` and `3f5b734df3c5`. Resolve the source identities and verify failure backoff before changing asset admission;
 - persistent shader/program cache only for a measured residual cold-compile hitch after gradual warm-up;

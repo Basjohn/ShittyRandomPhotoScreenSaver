@@ -65,9 +65,10 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 ### 2C. Feature work
 
 - [ ] **SC4 — Finish Just Make It Work Pools** (`Docs/Reference/Wallpaper_Pool_Selection.md` owns detailed contracts):
-  - [ ] Bound listing cancellation within the existing eight-second runtime destruction barrier before tagging RSS IO
-    jobs to that generation. Replace the thirty-second listing stall/trickle exposure at the existing transport owner;
-    prove cancellation with a bounded local-server falsifier, preserving decoding, document caps and validators.
+  - [ ] Make listing-body cancellation responsive and cap ordinary socket waits before tagging RSS IO jobs to the
+    existing eight-second runtime destruction barrier. Prove the shared transport with bounded local-server tests,
+    preserving decoding, document caps and validators. Slow status/header trickle remains a known shared HTTP limit
+    (`Future_Work.md`); the strict barrier must reject overlap, never pretend all-phase hard cancellation is solved.
   - [ ] Repair Settings-to-runtime source resumption: a stopped coordinator must retire, changed pool choices must
     reach the replacement queue, and the existing background refresh must resume. Reuse display-aware source
     admission and the strict Settings destruction barrier; no acquisition with zero selected live displays.
