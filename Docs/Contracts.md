@@ -552,6 +552,11 @@ without image admission/retry, rotation, RSS scheduling or new image workers; co
 Returning selected screens use the ordinary destruction/replacement barrier and current-image replay, without changing
 queue position. Failure to construct a requested window remains initialization failure, not selection suspension.
 
+Display Settings builds one checkbox row per current screen, with no fixed monitor-count cap. Qt topology edges
+refresh these views for the page's QObject lifetime; they do not author a selection or rebind unavailable targets.
+Unrelated control saves preserve absent targets. An explicit monitor choice continues to author today's physical
+selection through the existing Settings transaction.
+
 **Physical monitor assignments:** `widgets.monitor_bindings` stores each numbered route's owning settings section
 as `{monitor: <authoring number>, screen: <canonical CUSTOM display signature>}`. Settings owns this metadata in the
 same transaction as the widget route; it survives generation replacement and process restart. Before legacy numeric

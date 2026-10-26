@@ -55,8 +55,10 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 - [~] **Settings undo — awaiting your use:** Ctrl+Z / Ctrl+Y over the session's slider and visual-editor edits
   (contract: `Docs/Contracts.md` "Settings undo"). Check it in normal use across pages; extend to any control found
   missing.
-- [ ] **Display Settings capacity:** replace the four fixed monitor checkboxes with current-screen rows; preserve
-  unavailable choices/physical bindings through the canonical resolver and persistence.
+- [~] **Display Settings capacity — awaiting physical hotplug validation:** current-screen rows have no fixed cap;
+  focused six-screen/disconnect/reorder/zero-screen and retirement checks preserve canonical selections/bindings.
+  Check Settings remains coherent during actual disconnect/return and explicit reauthoring; hidden form evidence:
+  `tmp/pytest_display_rows_final/test_display_ui_rows_follow_to0/six_display_rows.png`.
 - [ ] **R38 transfer/topology glyph parity:** existing multi-display authority decides eligibility; Hide Controls stays
   Edit-only; no new runtime or geometry authority.
 
