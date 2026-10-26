@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Window
 
 // Presentation-only text with the surviving SRPSS text-shadow semantic: a
 // retained duplicate glyph drawn behind the main text at a signed offset, with
