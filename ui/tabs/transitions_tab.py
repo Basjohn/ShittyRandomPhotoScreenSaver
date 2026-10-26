@@ -1714,6 +1714,7 @@ class TransitionsTab(QWidget):
             finally:
                 self.direction_combo.blockSignals(False)
             self.direction_mapper.refresh_choices()
+            self.direction_mapper.setVisible(self.direction_mapper.has_compass_choices)
 
         # Show only the built specific group matching the current transition.
         # Unbuilt groups (lazy) simply have nothing to show.
