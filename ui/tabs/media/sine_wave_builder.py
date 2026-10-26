@@ -61,7 +61,7 @@ def _row(layout, label: str) -> tuple[QWidget, QHBoxLayout]:
 def build_lines_section(tab, layout) -> None:
     """Multi-line mode, the line count, and lines 2-6: colour, glow colour, travel, ghost and shift."""
     default_count = int(tab._widget_default("spotify_visualizer", "sine_line_count"))
-    tab.sine_multi_line = QCheckBox("Multi-Line Mode (Up to 3 Lines)")
+    tab.sine_multi_line = QCheckBox("Multi-Line Mode")
     tab.sine_multi_line.setProperty("circleIndicator", True)
     tab.sine_multi_line.setChecked(default_count > 1)
     tab.sine_multi_line.setToolTip("Enable additional sine waves with different frequency distributions.")

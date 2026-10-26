@@ -48,9 +48,6 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
   - [~] **Advanced hierarchy — awaiting operator look:** large Advanced header contains Technical and EB Camera;
     native real-dialog reopen/retirement and legacy-path checks pass. Inspect the nested path at operator DPI/theme;
     capture: `tmp/pytest_advanced_render/test_visualizer_technical_path0/advanced_technical.png`.
-  - [ ] Trace existing per-mode AA/Bloom controls and admit their quality overrides through `resolve_scene_quality`;
-    do not expose a cosmetic unwired control or duplicate persisted settings. Mode pages retain only their own Detail;
-    General/family authoring stays on the 3D tab.
 - [~] **Settings undo — awaiting your use:** Ctrl+Z / Ctrl+Y over the session's slider and visual-editor edits
   (contract: `Docs/Contracts.md` "Settings undo"). Check it in normal use across pages; extend to any control found
   missing.

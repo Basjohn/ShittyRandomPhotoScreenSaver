@@ -54,7 +54,15 @@ both hidden disclosures. This remains Custom-only UI and does not change authore
 Each tier-aware 3D mode page exposes only its own Detail through `Scene3DQualityControls`, the same editor used
 by the 3D Settings tab. General and family controls stay on the 3D tab. Both surfaces read/write the existing `scene3d` leaves and refresh from Settings change edges;
 their resolved labels use `resolve_scene3d_tier`. Quality edits never select Custom or overwrite artistic presets.
-These tier views do not introduce per-mode AA/Bloom overrides; those require explicit renderer/resolver admission.
+These tier views do not introduce per-mode AA/Bloom overrides. Existing transition AA/Bloom choices already pass
+through `resolve_scene_quality`; visualizer glow and Extruded Spectrum's Smooth Edges retain their mode-owned
+consumers. New visualizer overrides require explicit renderer/resolver admission and must not be inferred from the
+transition settings schema.
+
+Oscilloscope's Phase Delay row appears only in Phase display, while Graticule Colour appears for Grid/Crosshair.
+Signal-blocked loads apply the same conditions, and hidden values remain authored and round-trip unchanged.
+Sine's Displacement belongs to Motion because it affects every enabled line, including single-line mode; the
+Multi-Line editor controls the additional lines and no longer claims a three-line limit.
 
 Spline Curve's scalar controls are logical-owned, including ghost and foreground styling, because its logical frame
 snapshot consumes them. Its four-layer spline editor remains Custom with independent nodes, power, enabled/alpha/offset,
