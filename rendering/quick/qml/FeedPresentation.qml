@@ -259,6 +259,7 @@ OverlayWidget {
             textColor: feedRoot.feedModel.headerTextColor
             fontFamily: feedRoot.feedModel.fontFamily
             textShadowEnabled: feedRoot.feedModel.textShadowEnabled
+            textShadowSoft: feedRoot.feedModel.textShadowSoft
             textShadowColor: feedRoot.feedModel.textShadowColor
             textShadowOffsetX: feedRoot.feedModel.textShadowOffsetX
             textShadowOffsetY: feedRoot.feedModel.textShadowOffsetY
@@ -300,6 +301,7 @@ OverlayWidget {
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
             shadowEnabled: feedRoot.feedModel.textShadowEnabled
+            shadowSoft: feedRoot.feedModel.textShadowSoft
             shadowColor: feedRoot.feedModel.textShadowColor
             shadowOffsetX: feedRoot.feedModel.textShadowOffsetX
             shadowOffsetY: feedRoot.feedModel.textShadowOffsetY
@@ -358,6 +360,7 @@ OverlayWidget {
                 glyphColor: feedRoot.feedModel.headerTextColor
                 fontFamily: feedRoot.feedModel.fontFamily
                 shadowEnabled: feedRoot.feedModel.textShadowEnabled
+                shadowSoft: feedRoot.feedModel.textShadowSoft
                 shadowColor: feedRoot.feedModel.textShadowColor
                 shadowOffsetX: feedRoot.feedModel.textShadowOffsetX
                 shadowOffsetY: feedRoot.feedModel.textShadowOffsetY
@@ -553,6 +556,7 @@ OverlayWidget {
                         maximumLineCount: feedRoot.feedModel.viewMode === "compact" ? 1 : 2
                         wrap: true
                         shadowEnabled: feedRoot.feedModel.textShadowEnabled
+                        shadowSoft: feedRoot.feedModel.textShadowSoft
                         shadowColor: feedRoot.feedModel.textShadowColor
                         shadowOffsetX: feedRoot.feedModel.textShadowOffsetX
                         shadowOffsetY: feedRoot.feedModel.textShadowOffsetY
@@ -573,6 +577,7 @@ OverlayWidget {
                         font.pixelSize: Math.max(8.0, feedRoot.feedModel.fontSize - 3.0)
                         horizontalAlignment: feedRoot.headerFlipped ? Text.AlignLeft : Text.AlignRight
                         shadowEnabled: feedRoot.feedModel.textShadowEnabled
+                        shadowSoft: feedRoot.feedModel.textShadowSoft
                         shadowColor: feedRoot.feedModel.textShadowColor
                         shadowOffsetX: feedRoot.feedModel.textShadowOffsetX
                         shadowOffsetY: feedRoot.feedModel.textShadowOffsetY
@@ -595,6 +600,7 @@ OverlayWidget {
                         elide: Text.ElideRight
                         maximumLineCount: 1
                         shadowEnabled: feedRoot.feedModel.textShadowEnabled
+                        shadowSoft: feedRoot.feedModel.textShadowSoft
                         shadowColor: feedRoot.feedModel.textShadowColor
                         shadowOffsetX: feedRoot.feedModel.textShadowOffsetX
                         shadowOffsetY: feedRoot.feedModel.textShadowOffsetY
@@ -820,6 +826,7 @@ OverlayWidget {
                                 ? 2 : 1
                         elide: Text.ElideRight
                         shadowEnabled: feedRoot.feedModel.textShadowEnabled
+                        shadowSoft: feedRoot.feedModel.textShadowSoft
                         shadowColor: feedRoot.feedModel.textShadowColor
                         shadowOffsetX: feedRoot.feedModel.textShadowOffsetX
                         shadowOffsetY: feedRoot.feedModel.textShadowOffsetY
@@ -846,6 +853,7 @@ OverlayWidget {
                         maximumLineCount: height >= 42.0 ? 3 : 2
                         elide: Text.ElideRight
                         shadowEnabled: feedRoot.feedModel.textShadowEnabled
+                        shadowSoft: feedRoot.feedModel.textShadowSoft
                         shadowColor: feedRoot.feedModel.textShadowColor
                         shadowOffsetX: feedRoot.feedModel.textShadowOffsetX
                         shadowOffsetY: feedRoot.feedModel.textShadowOffsetY
@@ -867,6 +875,7 @@ OverlayWidget {
                         horizontalAlignment: feedRoot.headerFlipped ? Text.AlignRight : Text.AlignLeft
                         verticalAlignment: Text.AlignVCenter
                         shadowEnabled: feedRoot.feedModel.textShadowEnabled
+                        shadowSoft: feedRoot.feedModel.textShadowSoft
                         shadowColor: feedRoot.feedModel.textShadowColor
                         shadowOffsetX: feedRoot.feedModel.textShadowOffsetX
                         shadowOffsetY: feedRoot.feedModel.textShadowOffsetY
@@ -979,6 +988,7 @@ OverlayWidget {
             font.family: feedRoot.feedModel.fontFamily
             font.pixelSize: Math.max(10.0, feedRoot.feedModel.fontSize - 1.0)
             shadowEnabled: feedRoot.feedModel.textShadowEnabled
+            shadowSoft: feedRoot.feedModel.textShadowSoft
             shadowColor: feedRoot.feedModel.textShadowColor
             shadowOffsetX: feedRoot.feedModel.textShadowOffsetX
             shadowOffsetY: feedRoot.feedModel.textShadowOffsetY
@@ -1010,6 +1020,7 @@ OverlayWidget {
         font.pixelSize: Math.max(8.0, feedRoot.feedModel.fontSize - 4.0)
         horizontalAlignment: feedRoot.headerFlipped ? Text.AlignLeft : Text.AlignRight
         shadowEnabled: feedRoot.feedModel.textShadowEnabled
+        shadowSoft: feedRoot.feedModel.textShadowSoft
         shadowColor: feedRoot.feedModel.textShadowColor
         shadowOffsetX: feedRoot.feedModel.textShadowOffsetX
         shadowOffsetY: feedRoot.feedModel.textShadowOffsetY

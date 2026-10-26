@@ -379,6 +379,7 @@ OverlayWidget {
             textColor: achievementRoot.achievementModel.headerTextColor
             fontFamily: achievementRoot.achievementModel.fontFamily
             textShadowEnabled: achievementRoot.achievementModel.textShadowEnabled
+            textShadowSoft: achievementRoot.achievementModel.textShadowSoft
             textShadowColor: achievementRoot.achievementModel.textShadowColor
             textShadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
             textShadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
@@ -642,6 +643,7 @@ OverlayWidget {
                 )
                 elide: customGeometryActive ? Text.ElideNone : Text.ElideRight
                 shadowEnabled: achievementRoot.achievementModel.textShadowEnabled
+                shadowSoft: achievementRoot.achievementModel.textShadowSoft
                 shadowColor: achievementRoot.achievementModel.textShadowColor
                 shadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
                 shadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
@@ -694,6 +696,7 @@ OverlayWidget {
                     wrap: true
                     elide: Text.ElideRight
                     shadowEnabled: achievementRoot.achievementModel.textShadowEnabled
+                    shadowSoft: achievementRoot.achievementModel.textShadowSoft
                     shadowColor: achievementRoot.achievementModel.textShadowColor
                     shadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
                     shadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
@@ -764,6 +767,7 @@ OverlayWidget {
                         verticalAlignment: Text.AlignVCenter
                         elide: Text.ElideRight
                         shadowEnabled: achievementRoot.achievementModel.textShadowEnabled
+                        shadowSoft: achievementRoot.achievementModel.textShadowSoft
                         shadowColor: achievementRoot.achievementModel.textShadowColor
                         shadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
                         shadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
@@ -903,6 +907,7 @@ OverlayWidget {
                 minimumPointSize: Math.max(8.0, achievementRoot.achievementModel.fontSize * 0.70)
                 elide: Text.ElideRight
                 shadowEnabled: achievementRoot.achievementModel.textShadowEnabled
+                shadowSoft: achievementRoot.achievementModel.textShadowSoft
                 shadowColor: achievementRoot.achievementModel.textShadowColor
                 shadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
                 shadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
@@ -1107,6 +1112,7 @@ OverlayWidget {
                     minimumPointSize: 9.0
                     elide: Text.ElideRight
                     shadowEnabled: achievementRoot.achievementModel.textShadowEnabled
+                    shadowSoft: achievementRoot.achievementModel.textShadowSoft
                     shadowColor: achievementRoot.achievementModel.textShadowColor
                     shadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
                     shadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
@@ -1231,6 +1237,7 @@ OverlayWidget {
                             shelfAccentColor: achievementRoot.achievementModel.accentColor
                             textColor: achievementRoot.achievementModel.textColor
                             textShadowEnabled: achievementRoot.achievementModel.textShadowEnabled
+                            textShadowSoft: achievementRoot.achievementModel.textShadowSoft
                             textShadowColor: achievementRoot.achievementModel.textShadowColor
                             textShadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
                             textShadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
@@ -1266,6 +1273,7 @@ OverlayWidget {
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     shadowEnabled: achievementRoot.achievementModel.textShadowEnabled
+                    shadowSoft: achievementRoot.achievementModel.textShadowSoft
                     shadowColor: achievementRoot.achievementModel.textShadowColor
                     shadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
                     shadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
@@ -1290,6 +1298,7 @@ OverlayWidget {
                     font.pointSize: achievementRoot.achievementModel.fontSize
                     verticalAlignment: Text.AlignVCenter
                     shadowEnabled: achievementRoot.achievementModel.textShadowEnabled
+                    shadowSoft: achievementRoot.achievementModel.textShadowSoft
                     shadowColor: achievementRoot.achievementModel.textShadowColor
                     shadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
                     shadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY
@@ -1309,6 +1318,7 @@ OverlayWidget {
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
                 shadowEnabled: achievementRoot.achievementModel.textShadowEnabled
+                shadowSoft: achievementRoot.achievementModel.textShadowSoft
                 shadowColor: achievementRoot.achievementModel.textShadowColor
                 shadowOffsetX: achievementRoot.achievementModel.textShadowOffsetX
                 shadowOffsetY: achievementRoot.achievementModel.textShadowOffsetY

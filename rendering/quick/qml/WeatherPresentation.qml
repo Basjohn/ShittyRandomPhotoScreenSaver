@@ -275,6 +275,7 @@ OverlayWidget {
                             ? Text.AlignRight : Text.AlignLeft
                         verticalAlignment: Text.AlignVCenter
                         shadowEnabled: weatherRoot.weatherModel.textShadowEnabled
+                        shadowSoft: weatherRoot.weatherModel.textShadowSoft
                         shadowColor: weatherRoot.weatherModel.textShadowColor
                         shadowOffsetX: weatherRoot.weatherModel.textShadowOffsetX
                         shadowOffsetY: weatherRoot.weatherModel.textShadowOffsetY
@@ -306,6 +307,7 @@ OverlayWidget {
                         verticalAlignment: Text.AlignVCenter
                         wrap: true
                         shadowEnabled: weatherRoot.weatherModel.textShadowEnabled
+                        shadowSoft: weatherRoot.weatherModel.textShadowSoft
                         shadowColor: weatherRoot.weatherModel.textShadowColor
                         shadowOffsetX: weatherRoot.weatherModel.textShadowOffsetX
                         shadowOffsetY: weatherRoot.weatherModel.textShadowOffsetY
@@ -450,6 +452,7 @@ OverlayWidget {
                                         font.pointSize: weatherRoot.weatherModel.detailFontSize
                                         verticalAlignment: Text.AlignVCenter
                                         shadowEnabled: weatherRoot.weatherModel.textShadowEnabled
+                                        shadowSoft: weatherRoot.weatherModel.textShadowSoft
                                         shadowColor: weatherRoot.weatherModel.textShadowColor
                                         shadowOffsetX: weatherRoot.weatherModel.textShadowOffsetX
                                         shadowOffsetY: weatherRoot.weatherModel.textShadowOffsetY
@@ -514,6 +517,7 @@ OverlayWidget {
                         verticalAlignment: Text.AlignVCenter
                         wrap: true
                         shadowEnabled: weatherRoot.weatherModel.textShadowEnabled
+                        shadowSoft: weatherRoot.weatherModel.textShadowSoft
                         shadowColor: weatherRoot.weatherModel.textShadowColor
                         shadowOffsetX: weatherRoot.weatherModel.textShadowOffsetX
                         shadowOffsetY: weatherRoot.weatherModel.textShadowOffsetY
@@ -573,6 +577,7 @@ OverlayWidget {
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         shadowEnabled: weatherRoot.weatherModel.textShadowEnabled
+                        shadowSoft: weatherRoot.weatherModel.textShadowSoft
                         shadowColor: weatherRoot.weatherModel.textShadowColor
                         shadowOffsetX: weatherRoot.weatherModel.textShadowOffsetX
                         shadowOffsetY: weatherRoot.weatherModel.textShadowOffsetY
@@ -652,6 +657,7 @@ OverlayWidget {
                                     font.bold: true
                                     horizontalAlignment: Text.AlignHCenter
                                     shadowEnabled: weatherRoot.weatherModel.textShadowEnabled
+                                    shadowSoft: weatherRoot.weatherModel.textShadowSoft
                                     shadowColor: weatherRoot.weatherModel.textShadowColor
                                     shadowOffsetX: weatherRoot.weatherModel.textShadowOffsetX
                                     shadowOffsetY: weatherRoot.weatherModel.textShadowOffsetY
@@ -666,6 +672,7 @@ OverlayWidget {
                                     font.pointSize: weatherRoot.weatherModel.detailFontSize * 0.83
                                     horizontalAlignment: Text.AlignHCenter
                                     shadowEnabled: weatherRoot.weatherModel.textShadowEnabled
+                                    shadowSoft: weatherRoot.weatherModel.textShadowSoft
                                     shadowColor: weatherRoot.weatherModel.textShadowColor
                                     shadowOffsetX: weatherRoot.weatherModel.textShadowOffsetX
                                     shadowOffsetY: weatherRoot.weatherModel.textShadowOffsetY
@@ -711,6 +718,7 @@ OverlayWidget {
                 verticalAlignment: Text.AlignVCenter
                 wrap: true
                 shadowEnabled: weatherRoot.weatherModel.textShadowEnabled
+                shadowSoft: weatherRoot.weatherModel.textShadowSoft
                 shadowColor: weatherRoot.weatherModel.textShadowColor
                 shadowOffsetX: weatherRoot.weatherModel.textShadowOffsetX
                 shadowOffsetY: weatherRoot.weatherModel.textShadowOffsetY
@@ -741,6 +749,7 @@ OverlayWidget {
                 verticalAlignment: Text.AlignVCenter
                 wrap: true
                 shadowEnabled: weatherRoot.weatherModel.textShadowEnabled
+                shadowSoft: weatherRoot.weatherModel.textShadowSoft
                 shadowColor: weatherRoot.weatherModel.textShadowColor
                 shadowOffsetX: weatherRoot.weatherModel.textShadowOffsetX
                 shadowOffsetY: weatherRoot.weatherModel.textShadowOffsetY

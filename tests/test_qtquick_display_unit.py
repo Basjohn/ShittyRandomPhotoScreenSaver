@@ -63,6 +63,7 @@ def test_unit_assembles_chain_and_binds_families(qt_app) -> None:
                 "frame_opacity": 0.77,
                 "frame_extra_offset": 0,
                 "text_enabled": True,
+                "soft_text_on_light_themes": False,
                 "text_opacity": 0.4,
                 "text_extra_offset": 0,
                 "header_enabled": True,

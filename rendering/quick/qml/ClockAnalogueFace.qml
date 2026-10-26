@@ -317,6 +317,7 @@ Item {
                 thickness: analogueFace.clockModel.separatorThickness * analogueFace.fontResizeFactor
                 lineColor: analogueFace.clockModel.separatorColor
                 shadowEnabled: analogueFace.clockModel.textShadowEnabled
+                shadowSoft: analogueFace.clockModel.textShadowSoft
                 shadowColor: analogueFace.clockModel.textShadowColor
                 shadowOffsetX: analogueFace.clockModel.textShadowOffsetX
                 shadowOffsetY: analogueFace.clockModel.textShadowOffsetY
@@ -345,6 +346,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             shadowEnabled: analogueFace.clockModel.textShadowEnabled
+            shadowSoft: analogueFace.clockModel.textShadowSoft
             shadowColor: analogueFace.clockModel.textShadowColor
             shadowOffsetX: analogueFace.clockModel.textShadowOffsetX
             shadowOffsetY: analogueFace.clockModel.textShadowOffsetY
@@ -374,6 +376,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             shadowEnabled: analogueFace.clockModel.textShadowEnabled
+            shadowSoft: analogueFace.clockModel.textShadowSoft
             shadowColor: analogueFace.clockModel.textShadowColor
             shadowOffsetX: analogueFace.clockModel.textShadowOffsetX
             shadowOffsetY: analogueFace.clockModel.textShadowOffsetY

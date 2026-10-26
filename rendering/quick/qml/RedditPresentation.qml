@@ -223,6 +223,7 @@ OverlayWidget {
                 textColor: redditRoot.redditModel.headerTextColor
                 fontFamily: redditRoot.redditModel.fontFamily
                 textShadowEnabled: redditRoot.redditModel.textShadowEnabled
+                textShadowSoft: redditRoot.redditModel.textShadowSoft
                 textShadowColor: redditRoot.redditModel.textShadowColor
                 textShadowOffsetX: redditRoot.redditModel.textShadowOffsetX
                 textShadowOffsetY: redditRoot.redditModel.textShadowOffsetY
@@ -292,6 +293,7 @@ OverlayWidget {
                     fontFamily: redditRoot.redditModel.fontFamily
                     bold: true
                     shadowEnabled: redditRoot.redditModel.textShadowEnabled
+                    shadowSoft: redditRoot.redditModel.textShadowSoft
                     shadowColor: redditRoot.redditModel.textShadowColor
                     shadowOffsetX: redditRoot.redditModel.textShadowOffsetX
                     shadowOffsetY: redditRoot.redditModel.textShadowOffsetY
@@ -331,6 +333,7 @@ OverlayWidget {
                 verticalAlignment: Text.AlignVCenter
                 wrap: true
                 shadowEnabled: redditRoot.redditModel.textShadowEnabled
+                shadowSoft: redditRoot.redditModel.textShadowSoft
                 shadowColor: redditRoot.redditModel.textShadowColor
                 shadowOffsetX: redditRoot.redditModel.textShadowOffsetX
                 shadowOffsetY: redditRoot.redditModel.textShadowOffsetY
@@ -455,6 +458,7 @@ OverlayWidget {
                         verticalAlignment: Text.AlignVCenter
                         elide: Text.ElideRight
                         shadowEnabled: redditRoot.redditModel.textShadowEnabled
+                        shadowSoft: redditRoot.redditModel.textShadowSoft
                         shadowColor: redditRoot.redditModel.textShadowColor
                         shadowOffsetX: redditRoot.redditModel.textShadowOffsetX
                         shadowOffsetY: redditRoot.redditModel.textShadowOffsetY
@@ -478,6 +482,7 @@ OverlayWidget {
                             ? Text.AlignLeft : Text.AlignRight
                         verticalAlignment: Text.AlignVCenter
                         shadowEnabled: redditRoot.redditModel.textShadowEnabled
+                        shadowSoft: redditRoot.redditModel.textShadowSoft
                         shadowColor: redditRoot.redditModel.textShadowColor
                         shadowOffsetX: redditRoot.redditModel.textShadowOffsetX
                         shadowOffsetY: redditRoot.redditModel.textShadowOffsetY
@@ -505,6 +510,7 @@ OverlayWidget {
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
                     shadowEnabled: redditRoot.redditModel.textShadowEnabled
+                    shadowSoft: redditRoot.redditModel.textShadowSoft
                     shadowColor: redditRoot.redditModel.textShadowColor
                     shadowOffsetX: redditRoot.redditModel.textShadowOffsetX
                     shadowOffsetY: redditRoot.redditModel.textShadowOffsetY

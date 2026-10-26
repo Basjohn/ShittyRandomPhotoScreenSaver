@@ -182,6 +182,7 @@ def _fake_general_tab(existing_shadows: dict) -> SimpleNamespace:
     tab._save_settings = lambda: setattr(tab, "_save_calls", tab._save_calls + 1)
     tab.widget_shadows_enabled = QCheckBox()
     tab.widget_text_shadows_enabled = QCheckBox()
+    tab.widget_soft_text_shadows_on_light_themes = QCheckBox()
     tab.widget_header_shadows_enabled = QCheckBox()
     tab.widget_stacking_enabled = QCheckBox()
     tab.widget_child_collision_enabled = QCheckBox()
@@ -221,6 +222,7 @@ def test_general_save_merges_and_preserves_canonical_and_future_keys(qt_app) -> 
         {
             "enabled": True,
             "text_enabled": True,
+            "soft_text_on_light_themes": False,
             "header_enabled": True,
             "color": [0, 0, 0, 255],
             "direction": "NW",
@@ -232,6 +234,7 @@ def test_general_save_merges_and_preserves_canonical_and_future_keys(qt_app) -> 
     # User edits: turn drop shadows off, set darkness 50%, extra offset 5, pick SE.
     tab.widget_shadows_enabled.setChecked(False)
     tab.widget_text_shadows_enabled.setChecked(True)
+    tab.widget_soft_text_shadows_on_light_themes.setChecked(True)
     tab.widget_header_shadows_enabled.setChecked(True)
     tab.widget_shadow_darkness_spin.setValue(50)
     tab.widget_shadow_extra_offset_spin.setValue(5)
@@ -245,6 +248,7 @@ def test_general_save_merges_and_preserves_canonical_and_future_keys(qt_app) -> 
     assert shadows_config["frame_opacity"] == pytest.approx(0.5)
     assert shadows_config["frame_extra_offset"] == 5
     assert shadows_config["text_extra_offset"] == 2
+    assert shadows_config["soft_text_on_light_themes"] is True
     assert shadows_config["direction"] == "SE"
     # Unedited canonical and unknown-future keys are preserved.
     assert shadows_config["color"] == [0, 0, 0, 255]

@@ -16,7 +16,7 @@ from core.settings.shadow_direction import (
     resolve_signed_offset,
 )
 from rendering.quick.shadow_snapshot import QuickShadowSnapshot
-from .theme_projection import resolve_rgba_role
+from .theme_projection import resolve_rgba_role, resolve_soft_text_shadow
 from .host import (
     ORDINARY_CARD_SHADOW_BASE,
     ORDINARY_TEXT_SHADOW_BASE,
@@ -98,6 +98,7 @@ class SteamCardStyleProjection:
 
     card_style: OverlayCardStyle
     text_shadow_enabled: bool
+    text_shadow_soft: bool
     text_shadow_color: QColor
     text_shadow_offset_x: float
     text_shadow_offset_y: float
@@ -218,6 +219,7 @@ def project_steam_card_style(
             shadow_extend_bottom=card_extensions[3],
         ),
         text_shadow_enabled=shadow.text_enabled,
+        text_shadow_soft=resolve_soft_text_shadow(shadow),
         text_shadow_color=with_alpha(
             shadow_rgba,
             shadow.text_opacity,

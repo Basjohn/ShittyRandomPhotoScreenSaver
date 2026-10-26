@@ -54,6 +54,7 @@ class QuickShadowSnapshot:
 
     enabled: bool
     text_enabled: bool
+    soft_text_on_light_themes: bool
     header_enabled: bool
     color: tuple[int, int, int, int]
     blur_radius: float
@@ -74,6 +75,7 @@ class QuickShadowSnapshot:
         return cls(
             enabled=_required_bool(values, "enabled"),
             text_enabled=_required_bool(values, "text_enabled"),
+            soft_text_on_light_themes=_required_bool(values, "soft_text_on_light_themes"),
             header_enabled=_required_bool(values, "header_enabled"),
             color=_required_rgba(values),
             blur_radius=_required_float(values, "blur_radius", minimum=0.0, maximum=128.0),

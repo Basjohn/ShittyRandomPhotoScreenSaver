@@ -45,6 +45,7 @@ def _shadow_values():
         "blur_radius": 18,
         "frame_opacity": 0.77,
         "text_enabled": True,
+        "soft_text_on_light_themes": False,
         "text_opacity": 0.33,
         "direction": "SE",
     }

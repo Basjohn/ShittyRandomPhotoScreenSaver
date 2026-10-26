@@ -123,6 +123,7 @@ def test_widget_settings_section_descriptors_capture_loader_routing():
     assert defaults.loader_guard_attrs == (
         "widget_shadows_enabled",
         "widget_text_shadows_enabled",
+        "widget_soft_text_shadows_on_light_themes",
         "widget_header_shadows_enabled",
         "widget_stacking_enabled",
         "widget_child_collision_enabled",

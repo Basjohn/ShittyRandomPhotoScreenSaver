@@ -957,6 +957,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                          'frame_opacity': 0.77,
                          'header_enabled': True,
                          'text_enabled': True,
+                         'soft_text_on_light_themes': True,
                          'text_extra_offset': 2,
                          'text_opacity': 0.39},
              'spotify_visualizer': {'bubble_adaptive_sensitivity': False,

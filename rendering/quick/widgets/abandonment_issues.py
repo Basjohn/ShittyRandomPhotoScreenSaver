@@ -391,6 +391,7 @@ class AbandonmentIssuesPresentationConfig:
 class AbandonmentIssuesPresentationStyle:
     card_style: OverlayCardStyle
     text_shadow_enabled: bool
+    text_shadow_soft: bool
     text_shadow_color: QColor
     text_shadow_offset_x: float
     text_shadow_offset_y: float
@@ -415,6 +416,7 @@ class AbandonmentIssuesPresentationStyle:
         return cls(
             card_style=projection.card_style,
             text_shadow_enabled=projection.text_shadow_enabled,
+            text_shadow_soft=projection.text_shadow_soft,
             text_shadow_color=projection.text_shadow_color,
             text_shadow_offset_x=projection.text_shadow_offset_x,
             text_shadow_offset_y=projection.text_shadow_offset_y,
@@ -1124,6 +1126,10 @@ class AbandonmentIssuesPresentationModel(QObject):
     @Property(bool, notify=stateChanged)
     def textShadowEnabled(self) -> bool:
         return self.style.text_shadow_enabled
+
+    @Property(bool, notify=stateChanged)
+    def textShadowSoft(self) -> bool:
+        return self.style.text_shadow_soft
 
     @Property(QColor, notify=stateChanged)
     def textShadowColor(self) -> QColor:

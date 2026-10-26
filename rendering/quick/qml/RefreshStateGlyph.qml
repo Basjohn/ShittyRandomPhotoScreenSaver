@@ -15,6 +15,7 @@ Item {
     property bool bold: false
     property real restOpacity: 0.7
     property bool shadowEnabled: false
+    property bool shadowSoft: false
     property color shadowColor: "transparent"
     property real shadowOffsetX: 0.0
     property real shadowOffsetY: 0.0
@@ -81,6 +82,7 @@ Item {
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         shadowEnabled: refreshStateGlyph.shadowEnabled
+        shadowSoft: refreshStateGlyph.shadowSoft
         shadowColor: refreshStateGlyph.shadowColor
         shadowOffsetX: refreshStateGlyph.shadowOffsetX
         shadowOffsetY: refreshStateGlyph.shadowOffsetY
@@ -100,6 +102,7 @@ Item {
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         shadowEnabled: refreshStateGlyph.shadowEnabled
+        shadowSoft: refreshStateGlyph.shadowSoft
         shadowColor: refreshStateGlyph.shadowColor
         shadowOffsetX: refreshStateGlyph.shadowOffsetX
         shadowOffsetY: refreshStateGlyph.shadowOffsetY

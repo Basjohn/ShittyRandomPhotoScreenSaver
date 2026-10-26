@@ -43,6 +43,7 @@ def _shadow_values(**changes):
         **require_canonical_default("widgets.shadows"),
         "enabled": True,
         "text_enabled": True,
+        "soft_text_on_light_themes": False,
         "direction": "SE",
         "color": [0, 0, 0, 255],
         "frame_opacity": 0.77,

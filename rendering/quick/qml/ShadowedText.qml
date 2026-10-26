@@ -1,10 +1,11 @@
 import QtQuick
+import QtQuick.Window
 
 // Presentation-only text with the surviving SRPSS text-shadow semantic: a
 // retained duplicate glyph drawn behind the main text at a signed offset, with
-// its own color/alpha. Current text-shadow source authority exposes no authored
-// ordinary-text blur, so there is deliberately no MultiEffect, no layer capture
-// and no shadowBlur property here — a static label performs no per-frame work.
+// its own color/alpha. The explicit global light-palette modifier filters only
+// that retained shadow glyph. The foreground, signed displacement and alpha
+// stay authored. Dark/hard shadows create no layer/effect instance.
 // The signed offset is resolved from the global shadow direction in Python
 // before it reaches this component. This is a shared E4 primitive and exposes
 // only explicit presentation properties.
@@ -32,6 +33,7 @@ Item {
     property int maximumLineCount: 2147483647
 
     property bool shadowEnabled: true
+    property bool shadowSoft: false
     property color shadowColor: "#96000000"
     // Signed offsets: negative values move the shadow up/left and must not clip.
     property real shadowOffsetX: 0.0
@@ -41,6 +43,15 @@ Item {
     implicitWidth: mainText.implicitWidth
     implicitHeight: mainText.implicitHeight
 
+    Component {
+        id: softShadowEffect
+        SoftShadowEffect {
+            objectName: "shadowedTextSoftEffect"
+            softOffsetX: shadowedText.shadowOffsetX
+            softOffsetY: shadowedText.shadowOffsetY
+        }
+    }
+
     Text {
         id: shadowGlyph
         objectName: "shadowedTextShadow"
@@ -49,6 +60,15 @@ Item {
         x: shadowedText.shadowOffsetX
         y: shadowedText.shadowOffsetY
         visible: shadowedText.shadowEnabled
+        layer.enabled: shadowedText.shadowEnabled && shadowedText.shadowSoft
+        layer.effect: shadowedText.shadowSoft ? softShadowEffect : null
+        // Only the diffuse shadow capture is downsampled. Main glyphs retain
+        // their native full-resolution text renderer and all logical geometry.
+        layer.textureSize: shadowedText.shadowSoft
+            ? Qt.size(Math.max(1, Math.ceil(width * Screen.devicePixelRatio * 0.5)),
+                      Math.max(1, Math.ceil(height * Screen.devicePixelRatio * 0.5)))
+            : Qt.size(0, 0)
+        layer.smooth: true
         text: shadowedText.text
         textFormat: shadowedText.textFormat
         font: shadowedText.effectiveFont

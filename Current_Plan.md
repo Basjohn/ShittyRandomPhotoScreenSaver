@@ -34,15 +34,6 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 
 ### 2B. Settings and UI (in this order)
 
-- [~] **Light-theme soft shadows — finish final native validation and checkpoint:** the operator accepted the measured
-  prototype cost. The half-resolution shadow-only capture keeps crisp
-  foregrounds and all authored offsets/alpha; measured extra dedicated GPU memory is 7.88 MiB and render CPU +0.057 ms
-  with unchanged 60 Hz cadence (`tmp/light_theme_audit/soft_half_pearl_cost/`). Do not describe this as performance-neutral.
-  Reverify the accepted soft profile in native light/dark Settings/runtime before landing and closure.
-  The independent typography, semantic indicators and QWidget shadow-geometry corrections are verified. Preserve
-  backgrounds, theme schemas, global controls and exact dark-theme font/shadow behavior; blanket light-shadow removal
-  was rejected. Every native probe needs an external deadline and completed production retirement.
-
 - [ ] **4C — Shared Settings UX audit:**
   - [ ] Finish the page-by-page conditional/nested-bucket review across Visualizers, Transitions and widgets. Use
     shared Angle/Direction, Range and Triangle controls only where their stored meaning fits; keep categorical motion

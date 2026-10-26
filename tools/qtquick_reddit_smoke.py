@@ -66,6 +66,8 @@ def _shadows(direction: str) -> dict[str, object]:
         "frame_opacity": 0.77,
         "frame_extra_offset": 1,
         "text_enabled": True,
+        "soft_text_on_light_themes": False,
+        "header_enabled": True,
         "text_opacity": 0.5,
         "text_extra_offset": 1,
         "direction": direction,

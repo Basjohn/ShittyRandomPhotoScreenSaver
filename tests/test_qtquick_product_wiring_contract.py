@@ -51,6 +51,7 @@ _NEUTRAL_SHADOW = {
     "frame_opacity": 0.0,
     "frame_extra_offset": 0,
     "text_enabled": False,
+    "soft_text_on_light_themes": False,
     "text_opacity": 0.0,
     "text_extra_offset": 0,
     "header_enabled": False,

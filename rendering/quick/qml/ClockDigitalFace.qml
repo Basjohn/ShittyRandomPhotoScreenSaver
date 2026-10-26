@@ -84,6 +84,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             shadowEnabled: digitalFace.clockModel.textShadowEnabled
+            shadowSoft: digitalFace.clockModel.textShadowSoft
             shadowColor: digitalFace.clockModel.textShadowColor
             shadowOffsetX: digitalFace.clockModel.textShadowOffsetX
             shadowOffsetY: digitalFace.clockModel.textShadowOffsetY
@@ -113,6 +114,7 @@ Item {
                 thickness: digitalFace.clockModel.separatorThickness * digitalFace.fontResizeFactor
                 lineColor: digitalFace.clockModel.separatorColor
                 shadowEnabled: digitalFace.clockModel.textShadowEnabled
+                shadowSoft: digitalFace.clockModel.textShadowSoft
                 shadowColor: digitalFace.clockModel.textShadowColor
                 shadowOffsetX: digitalFace.clockModel.textShadowOffsetX
                 shadowOffsetY: digitalFace.clockModel.textShadowOffsetY
@@ -141,6 +143,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             shadowEnabled: digitalFace.clockModel.textShadowEnabled
+            shadowSoft: digitalFace.clockModel.textShadowSoft
             shadowColor: digitalFace.clockModel.textShadowColor
             shadowOffsetX: digitalFace.clockModel.textShadowOffsetX
             shadowOffsetY: digitalFace.clockModel.textShadowOffsetY
@@ -171,6 +174,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             shadowEnabled: digitalFace.clockModel.textShadowEnabled
+            shadowSoft: digitalFace.clockModel.textShadowSoft
             shadowColor: digitalFace.clockModel.textShadowColor
             shadowOffsetX: digitalFace.clockModel.textShadowOffsetX
             shadowOffsetY: digitalFace.clockModel.textShadowOffsetY

@@ -64,6 +64,7 @@ def _shadows(**overrides):
         "frame_opacity": 0.77,
         "frame_extra_offset": 1,
         "text_enabled": True,
+        "soft_text_on_light_themes": False,
         "text_opacity": 0.4,
         "text_extra_offset": 1,
         "header_enabled": True,

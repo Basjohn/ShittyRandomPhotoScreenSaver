@@ -544,6 +544,9 @@ owner.
 Canonical direction is NW/N/NE/W/E/SW/S/SE, default SE, resolved in Python. No Text Blur, Intense mode,
 `widgets.shadows.offset`, `shadowtuning.json`, or replacement hidden tuning. Ordinary card = cached retained
 `RectangularShadow`; ordinary text = duplicate glyph + signed offset; whole-widget fade = one retained root opacity.
+The visible Soft Text Shadows on Light Themes modifier diffuses only that shadow glyph and existing header-logo
+shadows through one shared profile. Foregrounds and authored direction/offset/alpha remain unchanged; dark themes
+retain hard shadows. Its bounded measured cost was explicitly accepted; see `Docs/Contracts.md` → Shadow authority.
 Clock analogue hard shadows are permanent family-authored exceptions under doc 11.
 
 Settings-window theme/shadow ownership is separate from runtime overlay-widget shadow authority; see
