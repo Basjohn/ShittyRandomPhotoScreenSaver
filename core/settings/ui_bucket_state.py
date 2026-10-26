@@ -230,6 +230,37 @@ def normalize_active_visualizer_leaf_path(
 # One active editing context is retained across the entire Settings dialog.
 # Existing maps remain the canonical per-control schemas; this function only
 # projects their saved *open* values to the selected tab/pill at navigation.
+def visualizer_bucket_is_advanced(key: str) -> bool:
+    """Read a Custom leaf's parent from its existing mode declaration."""
+    from core.settings.visualizer_mode_settings import mode_settings
+    mode, _, bucket = key.partition(":")
+    spec = mode_settings(mode)
+    return spec is not None and any(entry.key == bucket and entry.advanced for entry in spec.buckets)
+
+
+def normalize_visualizer_disclosure_path(
+    custom: Mapping[str, bool], technical: Mapping[str, bool],
+    advanced: Mapping[str, bool], tech_roots: Mapping[str, bool],
+) -> tuple[dict[str, bool], dict[str, bool]]:
+    """Preserve required ancestors: Technical is a child of Advanced."""
+    advanced = dict(advanced)
+    tech_roots = dict(tech_roots)
+    for mode in advanced:
+        custom_leaf = next((key for key, opened in custom.items()
+                            if opened and key.partition(":")[0] == mode), None)
+        technical_leaf = any(opened and key.partition(":")[0] == mode
+                             for key, opened in technical.items())
+        if technical_leaf:
+            tech_roots[mode] = True
+            advanced[mode] = True
+        elif custom_leaf is not None:
+            tech_roots[mode] = False
+            advanced[mode] = visualizer_bucket_is_advanced(custom_leaf)
+        elif tech_roots.get(mode):
+            advanced[mode] = True
+    return advanced, tech_roots
+
+
 def project_settings_bucket_context(settings, tab: str, pill: str | None = None) -> None:
     from core.settings.defaults import get_default_settings
 
@@ -267,15 +298,13 @@ def project_settings_bucket_context(settings, tab: str, pill: str | None = None)
             if tab == "visualizers" and str(key) == pill and bool(expanded)
             and key in canonical[leaf]
         }
-    # Legacy profiles could leave both outer disclosures open independently.
-    # Technical owns its root if a Technical leaf is the chosen editing path.
-    if requested["ui.visualizer_adv_states"] and requested["ui.visualizer_tech_states"]:
-        if requested["ui.visualizer_tech_bucket_states"]:
-            requested["ui.visualizer_adv_states"] = {}
-        else:
-            requested["ui.visualizer_tech_states"] = {}
-    if requested["ui.visualizer_tech_bucket_states"] and pill in canonical["visualizer_tech_states"]:
-        requested["ui.visualizer_tech_states"] = {pill: True}
+    advanced, tech_roots = normalize_visualizer_disclosure_path(
+        custom, technical,
+        {key: bool(requested["ui.visualizer_adv_states"].get(key)) for key in canonical["visualizer_adv_states"]},
+        {key: bool(requested["ui.visualizer_tech_states"].get(key)) for key in canonical["visualizer_tech_states"]},
+    )
+    requested["ui.visualizer_adv_states"] = sparse_open_bucket_states(advanced)
+    requested["ui.visualizer_tech_states"] = sparse_open_bucket_states(tech_roots)
     raw_simple = settings.get("ui.basic_bucket_path")
     if tab == "sources" and raw_simple in ("sources:folders", "sources:feeds"):
         basic = raw_simple

@@ -25,6 +25,8 @@ from core.settings.ui_bucket_state import (
     set_single_open_bucket_state,
     sparse_open_bucket_states,
     visualizer_bucket_scope,
+    visualizer_bucket_is_advanced,
+    normalize_visualizer_disclosure_path,
 )
 from core.settings.visualizer_mode_registry import (
     get_default_visualizer_mode_id,
@@ -96,6 +98,10 @@ class VisualizerSettingsContextMixin:
         self._visualizer_tech_bucket_state = self._load_tech_bucket_states()
         self._visualizer_bucket_state = self._load_bucket_states()
         self._normalize_visualizer_leaf_bucket_states()
+        self._visualizer_adv_state, self._visualizer_tech_state = normalize_visualizer_disclosure_path(
+            self._visualizer_bucket_state, self._visualizer_tech_bucket_state,
+            self._visualizer_adv_state, self._visualizer_tech_state,
+        )
 
     def _load_canonical_ui_state_mapping(
         self,
@@ -375,24 +381,12 @@ class VisualizerSettingsContextMixin:
             technical[candidate] = combined[candidate]
 
         if expanded:
-            # A normal Custom accessory can be clicked while Technical is open.
-            # Clear the opposite root visually and in storage, not merely its leaf.
-            from PySide6.QtWidgets import QToolButton
-            from ui.tabs import shared_styles
             mode = key.partition(":")[0]
-            opposite = "technical" if key in custom else "advanced"
-            states = (self._visualizer_tech_state if opposite == "technical"
-                      else self._visualizer_adv_state)
-            state_key = (self._TECH_STATE_KEY if opposite == "technical"
-                         else self._ADV_STATE_KEY)
-            if states.get(mode):
-                states[mode] = False
-                self._settings.set(state_key, dict(states), emit_change=False)
-            for toggle in self.findChildren(QToolButton):
-                if (getattr(toggle, "_srpss_outer_mode", None) == mode
-                        and getattr(toggle, "_srpss_outer_kind", None) == opposite
-                        and toggle.isChecked()):
-                    shared_styles.set_bucket_toggle_checked(toggle, False, coordinate=False)
+            is_technical = key in technical
+            self._set_visualizer_disclosure_path(
+                mode, advanced=is_technical or visualizer_bucket_is_advanced(key),
+                technical=is_technical,
+            )
 
         # These are two canonical persisted subtrees but one logical leaf scope.
         # Write both sparse projections on interaction so legacy dual-open state
@@ -418,67 +412,57 @@ class VisualizerSettingsContextMixin:
                     state[key] = False
                 self._settings.set(path, {}, emit_change=False)
 
+    def _set_visualizer_disclosure_path(self, mode: str, *, advanced: bool, technical: bool) -> None:
+        from PySide6.QtWidgets import QToolButton
+        from ui.tabs import shared_styles
+        for states, path, opened in (
+            (self._visualizer_adv_state, self._ADV_STATE_KEY, advanced or technical),
+            (self._visualizer_tech_state, self._TECH_STATE_KEY, technical),
+        ):
+            for key in states:
+                states[key] = key == mode and opened
+            self._settings.set(path, sparse_open_bucket_states(states), emit_change=False)
+        for toggle in self.findChildren(QToolButton):
+            target_mode = getattr(toggle, "_srpss_outer_mode", None)
+            kind = getattr(toggle, "_srpss_outer_kind", None)
+            if target_mode is None or kind not in {"advanced", "technical"}:
+                continue
+            states = self._visualizer_adv_state if kind == "advanced" else self._visualizer_tech_state
+            target = bool(states.get(target_mode))
+            if toggle.isChecked() != target:
+                shared_styles.set_bucket_toggle_checked(toggle, target, coordinate=False)
+
     def get_visualizer_adv_state(self, mode: str) -> bool:
         """Return remembered expanded state for a canonical visualizer mode."""
         return bool(self._visualizer_adv_state[mode])
 
     def set_visualizer_adv_state(self, mode: str, expanded: bool) -> None:
-        """Persist expanded/collapsed state for a visualizer mode."""
-        self._visualizer_adv_state[mode] = bool(expanded)
-        if expanded:
-            for key in self._visualizer_adv_state:
-                if key != mode:
-                    self._visualizer_adv_state[key] = False
-            # This click selects the Advanced root as the new editing path.
-            for key in self._visualizer_bucket_state:
+        """Select or retire the Advanced path, including its Technical child."""
+        for key in self._visualizer_bucket_state:
+            if expanded or (key.startswith(f"{mode}:") and visualizer_bucket_is_advanced(key)):
                 self._visualizer_bucket_state[key] = False
-            self._settings.set(self._BUCKET_STATE_KEY, {}, emit_change=False)
-            for key in self._visualizer_tech_state:
-                self._visualizer_tech_state[key] = False
-            self._settings.set(self._TECH_STATE_KEY, dict(self._visualizer_tech_state), emit_change=False)
-            for key in self._visualizer_tech_bucket_state:
-                self._visualizer_tech_bucket_state[key] = False
-            self._settings.set(self._TECH_BUCKET_STATE_KEY, {}, emit_change=False)
-        elif not expanded:
-            for key in self._visualizer_bucket_state:
-                if key.startswith(f"{mode}:") and key.rpartition(":")[2] not in ("bar_appearance", "rainbow"):
-                    self._visualizer_bucket_state[key] = False
-            self._settings.set(self._BUCKET_STATE_KEY, sparse_open_bucket_states(self._visualizer_bucket_state), emit_change=False)
-        try:
-            self._settings.set(self._ADV_STATE_KEY, dict(self._visualizer_adv_state))
-        except Exception:
-            pass
+        for key in self._visualizer_tech_bucket_state:
+            self._visualizer_tech_bucket_state[key] = False
+        self._settings.set(self._BUCKET_STATE_KEY, sparse_open_bucket_states(self._visualizer_bucket_state), emit_change=False)
+        self._settings.set(self._TECH_BUCKET_STATE_KEY, {}, emit_change=False)
+        self._set_visualizer_disclosure_path(mode, advanced=bool(expanded), technical=False)
 
     def get_visualizer_tech_state(self, mode: str) -> bool:
         """Return remembered outer Technical disclosure state for a visualizer mode."""
         return bool(self._visualizer_tech_state[mode])
 
     def set_visualizer_tech_state(self, mode: str, expanded: bool) -> None:
-        """Persist the outer Technical disclosure state for a visualizer mode."""
-        self._visualizer_tech_state[mode] = bool(expanded)
+        """Select Technical below Advanced; closing it retains its parent."""
+        for key in self._visualizer_tech_bucket_state:
+            self._visualizer_tech_bucket_state[key] = False
+        self._settings.set(self._TECH_BUCKET_STATE_KEY, {}, emit_change=False)
         if expanded:
-            for key in self._visualizer_tech_state:
-                if key != mode:
-                    self._visualizer_tech_state[key] = False
-            # Fresh root selection retires any old hidden Technical leaf.
-            for key in self._visualizer_tech_bucket_state:
-                self._visualizer_tech_bucket_state[key] = False
-            self._settings.set(self._TECH_BUCKET_STATE_KEY, {}, emit_change=False)
-            for key in self._visualizer_adv_state:
-                self._visualizer_adv_state[key] = False
-            self._settings.set(self._ADV_STATE_KEY, dict(self._visualizer_adv_state), emit_change=False)
             for key in self._visualizer_bucket_state:
                 self._visualizer_bucket_state[key] = False
             self._settings.set(self._BUCKET_STATE_KEY, {}, emit_change=False)
-        elif not expanded:
-            for key in self._visualizer_tech_bucket_state:
-                if key.startswith(f"{mode}:"):
-                    self._visualizer_tech_bucket_state[key] = False
-            self._settings.set(self._TECH_BUCKET_STATE_KEY, sparse_open_bucket_states(self._visualizer_tech_bucket_state), emit_change=False)
-        try:
-            self._settings.set(self._TECH_STATE_KEY, dict(self._visualizer_tech_state))
-        except Exception:
-            pass
+        self._set_visualizer_disclosure_path(
+            mode, advanced=expanded or self._visualizer_adv_state[mode], technical=bool(expanded),
+        )
 
     def get_visualizer_tech_bucket_state(self, mode: str, bucket: str) -> bool:
         """Return whether this is the remembered open Technical leaf bucket."""

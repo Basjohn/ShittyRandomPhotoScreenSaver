@@ -884,10 +884,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
         helper.setVisible(not checked)
         setter = getattr(tab, "set_visualizer_tech_state", None)
         if callable(setter) and persist:
-            try:
-                setter(mode_key, checked)
-            except Exception:
-                pass
+            setter(mode_key, checked)
 
     toggle._srpss_bucket_apply_visual_state = lambda checked: (
         toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow),
@@ -899,7 +896,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     shared_styles.bind_bucket_accordion(
         toggle, scope_owner=tab,
         apply_visual_state=toggle._srpss_bucket_apply_visual_state,
-        scope_key=("visualizer_outer", mode_key),
+        scope_key=("visualizer_advanced", mode_key),
     )
     toggle.toggled.connect(_apply_toggle_state)
     _apply_toggle_state(default_expanded, persist=False)

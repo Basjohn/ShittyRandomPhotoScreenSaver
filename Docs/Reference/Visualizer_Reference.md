@@ -35,6 +35,11 @@ repaint on theme change, ignore the wheel, offer keyboard control and an accessi
 gesture or keyboard step (`valueCommitted`; the value label follows `valueChanged`). Use `when` conditionals and
 nested buckets heavily so a body shows only what the current choices use.
 
+Advanced uses the existing large bucket header. Technical is nested within Advanced, alongside the mode's advanced
+artistic buckets; Extruded Bubble's Camera bucket is advanced. The same disclosure maps retain only the chosen leaf
+and the ancestors it requires. Legacy Technical-only opens acquire the Advanced ancestor; opening a normal leaf retires
+both hidden disclosures. This remains Custom-only UI and does not change authored values or runtime configuration.
+
 Spline Curve's scalar controls are logical-owned, including ghost and foreground styling, because its logical frame
 snapshot consumes them. Its four-layer spline editor remains Custom with independent nodes, power, enabled/alpha/offset,
 opaque outlines and ranked stacking. The shared builder preserves paired FX toggles, signed offsets, conditional rows

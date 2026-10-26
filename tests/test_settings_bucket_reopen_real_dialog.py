@@ -272,8 +272,9 @@ def test_visualizer_technical_leaf_returns_with_its_root_and_owns_the_path(manag
     assert technical.isChecked()
     leaf = next(t for t in technical._srpss_bucket_body.findChildren(BucketToggle) if t.text() == leaf_title)
     assert leaf.isChecked()
-    # One editing path: the Advanced root and its bucket did not come back with it.
-    assert not tab._extruded_bubble_adv_toggle.isChecked()
+    # One editing path: Advanced is now Technical's required ancestor; the
+    # sibling Camera leaf must not return with it.
+    assert tab._extruded_bubble_adv_toggle.isChecked()
     assert not _visualizer_bucket(dialog, "extruded_bubble", "camera").isChecked()
     _close(dialog)
 
@@ -325,4 +326,45 @@ def test_a_settings_reload_lands_on_setup_and_no_stale_bucket_returns_later(mana
     _page(dialog, "visualizers")
     dialog.visualizers_tab._select_mode_page("extruded_bubble")
     assert not _visualizer_bucket(dialog, "extruded_bubble", "camera").isChecked()
+    _close(dialog)
+
+
+def test_visualizer_technical_path_is_nested_under_advanced_and_reopens(manager, tmp_path):
+    from core.settings.visualizer_presets import get_custom_preset_index
+    manager.set("widgets.spotify_visualizer.preset_extruded_bubble", get_custom_preset_index("extruded_bubble"))
+    dialog = _dialog(manager)
+    tab = _page(dialog, "visualizers")
+    tab._select_mode_page("extruded_bubble")
+    advanced = tab._extruded_bubble_adv_toggle
+    technical = next(t for t in advanced._srpss_bucket_body.findChildren(BucketToggle)
+                     if t.text() == "Technical")
+    assert advanced.property("bucketSize") == "large"
+    advanced.setChecked(True)
+    technical.setChecked(True)
+    agc = tab._per_mode_technical_controls["modes"]["extruded_bubble"]["agc_visibility_toggle"]
+    assert technical._srpss_bucket_body.isAncestorOf(agc)
+    agc.setChecked(True)
+    assert advanced.isChecked() and technical.isChecked() and agc.isChecked()
+    assert manager.get("ui.visualizer_adv_states").get("extruded_bubble")
+    assert manager.get("ui.visualizer_tech_states").get("extruded_bubble")
+    _close(dialog)
+    dialog = _dialog(manager)
+    tab = _page(dialog, "visualizers")
+    advanced = tab._extruded_bubble_adv_toggle
+    technical = next(t for t in advanced._srpss_bucket_body.findChildren(BucketToggle)
+                     if t.text() == "Technical")
+    agc = tab._per_mode_technical_controls["modes"]["extruded_bubble"]["agc_visibility_toggle"]
+    assert technical._srpss_bucket_body.isAncestorOf(agc)
+    assert advanced.isChecked() and technical.isChecked() and agc.isChecked()
+    dialog.resize(1100, 900)
+    dialog.show()
+    QCoreApplication.processEvents()
+    rendered = tab._extruded_bubble_advanced_host.grab()
+    assert not rendered.isNull()
+    assert rendered.save(str(tmp_path / "advanced_technical.png"))
+    # The normal leaf selects a different path, retiring both hidden ancestors.
+    _visualizer_bucket(dialog, "extruded_bubble", "bubbles").setChecked(True)
+    assert not advanced.isChecked() and not technical.isChecked() and not agc.isChecked()
+    assert not any(manager.get("ui.visualizer_adv_states").values())
+    assert not any(manager.get("ui.visualizer_tech_states").values())
     _close(dialog)

@@ -450,8 +450,8 @@ def test_visualizer_parent_disclosures_remain_independent_from_leaf_accordions()
     assert "get_visualizer_tech_state(mode_key)" in technical
     assert 'setter = getattr(tab, "set_visualizer_tech_state", None)' in technical
     assert "setter(mode_key, checked)" in technical
-    assert 'scope_key=("visualizer_outer", mode_key)' in technical
-    # Outer disclosures coordinate with each other, but never share the
+    assert 'scope_key=("visualizer_advanced", mode_key)' in technical
+    # Technical coordinates inside Advanced; neither shares the
     # leaf accordion's ("visualizer", mode) scope.
 
 

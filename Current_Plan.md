@@ -34,13 +34,19 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 
 ### 2B. Settings and UI (in this order)
 
+- [ ] **Light-theme legibility (single 6.1 Sol High agent):** audit and correct native composited Settings/runtime
+  text, controls, tooltips and transparent surfaces through the shared semantic theme system. Preserve operator shadow
+  controls/direction, Glass/Acrylic and dark-theme appearance; native light/dark visual proof before acceptance.
+
 - [ ] **4C — Shared Settings UX audit:**
   - [ ] Audit every Visualizer/Transition/widget page for the shared Angle/Direction, Range and Triangle controls,
     stronger `when` conditionals and nested bucketing; keep stored meaning and keys, prove each changed body's
     round-trip and render it offscreen. No per-page owner clones.
   - [ ] Prototype the gradient direction mapper on original Bubble (around = direction, distance from centre =
     strength/gradualness).
-  - [ ] Make Advanced more prominent with the existing larger bucket; move Technical controls (and EB Camera) under it.
+  - [~] **Advanced hierarchy — awaiting operator look:** large Advanced header contains Technical and EB Camera;
+    native real-dialog reopen/retirement and legacy-path checks pass. Inspect the nested path at operator DPI/theme;
+    capture: `tmp/pytest_advanced_render/test_visualizer_technical_path0/advanced_technical.png`.
   - [ ] Expose overall/per-mode 3D quality in Visualizer bodies as views of the existing 3D tab keys (per-mode AA/Bloom
     via `resolve_scene_quality`), never duplicated persisted settings.
 - [~] **Settings undo — awaiting your use:** Ctrl+Z / Ctrl+Y over the session's slider and visual-editor edits
