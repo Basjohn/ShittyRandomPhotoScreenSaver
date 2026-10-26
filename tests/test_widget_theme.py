@@ -14,6 +14,7 @@ module owns the surviving behavioural contracts.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -27,6 +28,7 @@ from ui.widget_theme_io import (
     WIDGET_THEME_FILE_EXTENSION,
     WidgetThemeFileError,
     load_widget_theme_or_default,
+    load_widget_theme_file,
     save_widget_theme_file,
     widget_theme_from_json,
     widget_theme_to_json,
@@ -36,6 +38,8 @@ from ui.widget_theme_catalog import (
     build_widget_theme_catalog,
     resolve_widget_theme_selection,
 )
+
+
 from ui.widget_theme_runtime import (
     CUSTOM_WIDGET_THEME_ID,
     WidgetThemeState,
@@ -45,6 +49,16 @@ from ui.widget_theme_runtime import (
 
 
 # -- default validity ------------------------------------------------------- #
+
+
+def test_shipped_canonical_mirror_is_admitted_as_the_compiled_fallback():
+    mirror = Path(__file__).resolve().parents[1] / "themes" / "widgets" / "Default Dark.srwtheme"
+    if not mirror.exists():
+        pytest.skip("Optional generated mirrors are absent from this source bundle")
+    assert load_widget_theme_file(mirror) == DEFAULT_DARK_WIDGET_THEME
+    catalog = build_widget_theme_catalog(mirror.parent)
+    assert catalog.canonical_default_path == mirror
+    assert all(issue.source_path != mirror for issue in catalog.issues)
 
 
 def test_default_dark_is_colour_only_v3_and_valid():

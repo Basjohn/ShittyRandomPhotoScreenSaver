@@ -34,10 +34,6 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 
 ### 2B. Settings and UI (in this order)
 
-- [ ] **Theme catalogue side-defect:** the shipped `Default Dark.srwtheme` canonical mirror differs from the compiled
-  fallback and is excluded with a visible warning. Regenerate only that canonical mirror through the existing writer;
-  prove catalogue admission without changing authored named themes or the fallback palette.
-
 - [~] **Light-theme legibility:** finish shared **soft** light-theme text/header-logo shadows and slightly heavier
   typography across Settings/runtime. Preserve dark-theme pixels, authored shadow parameters, backgrounds and theme
   schemas; derive admission from semantic roles. Verify native Glass/Acrylic and translucent runtime cards before
