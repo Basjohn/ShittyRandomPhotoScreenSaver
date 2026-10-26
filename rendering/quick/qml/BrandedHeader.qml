@@ -41,6 +41,7 @@ Item {
     property real secondaryMaximumWidth: 0.0
 
     property bool textShadowEnabled: true
+    property bool textShadowSoft: false
     property color textShadowColor: "#54000000"
     property real textShadowOffsetX: 2.0
     property real textShadowOffsetY: 2.0
@@ -133,14 +134,20 @@ Item {
                 cache: true
                 layer.enabled: header.logoDesaturated || header.logoTintEnabled
                     || header.textShadowEnabled
-                layer.effect: MultiEffect {
+                layer.effect: SoftShadowEffect {
+                    softOffsetX: header.textShadowOffsetX
+                    softOffsetY: header.textShadowOffsetY
+                    blurEnabled: false
+                    blur: 0.0
                     saturation: header.logoDesaturated ? -1.0 : 0.0
                     colorization: header.logoTintEnabled ? 1.0 : 0.0
                     colorizationColor: header.logoTintColor
                     shadowEnabled: header.textShadowEnabled
                     shadowColor: header.textShadowColor
                     shadowOpacity: 1.0
-                    shadowBlur: 0.0
+                    blurMax: header.textShadowSoft ? softBlurMax : 32
+                    blurMultiplier: header.textShadowSoft ? softBlurMultiplier : 0.0
+                    shadowBlur: header.textShadowSoft ? softBlur : 0.0
                     shadowHorizontalOffset: header.textShadowOffsetX
                     shadowVerticalOffset: header.textShadowOffsetY
                     autoPaddingEnabled: true
@@ -166,6 +173,7 @@ Item {
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideNone
                 shadowEnabled: header.textShadowEnabled
+                shadowSoft: header.textShadowSoft
                 shadowColor: header.textShadowColor
                 shadowOffsetX: header.textShadowOffsetX
                 shadowOffsetY: header.textShadowOffsetY
@@ -184,6 +192,7 @@ Item {
                 verticalAlignment: Text.AlignVCenter
                 elide: header.secondaryMaximumWidth > 0.0 ? Text.ElideRight : Text.ElideNone
                 shadowEnabled: header.textShadowEnabled
+                shadowSoft: header.textShadowSoft
                 shadowColor: header.textShadowColor
                 shadowOffsetX: header.textShadowOffsetX
                 shadowOffsetY: header.textShadowOffsetY

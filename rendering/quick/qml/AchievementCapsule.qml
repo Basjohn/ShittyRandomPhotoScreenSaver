@@ -24,6 +24,7 @@ Item {
     property color shelfAccentColor: borderColor
     property color textColor: "#ffffffff"
     property bool textShadowEnabled: true
+    property bool textShadowSoft: false
     property color textShadowColor: "#54000000"
     property real textShadowOffsetX: 1.0
     property real textShadowOffsetY: 1.0
@@ -80,6 +81,7 @@ Item {
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
             shadowEnabled: capsule.textShadowEnabled
+            shadowSoft: capsule.textShadowSoft
             shadowColor: capsule.textShadowColor
             shadowOffsetX: capsule.textShadowOffsetX
             shadowOffsetY: capsule.textShadowOffsetY
@@ -125,6 +127,7 @@ Item {
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
             shadowEnabled: capsule.textShadowEnabled
+            shadowSoft: capsule.textShadowSoft
             shadowColor: capsule.textShadowColor
             shadowOffsetX: capsule.textShadowOffsetX
             shadowOffsetY: capsule.textShadowOffsetY
@@ -178,6 +181,7 @@ Item {
             minimumPointSize: 6.0
             elide: Text.ElideRight
             shadowEnabled: capsule.textShadowEnabled
+            shadowSoft: capsule.textShadowSoft
             shadowColor: capsule.textShadowColor
             shadowOffsetX: capsule.textShadowOffsetX
             shadowOffsetY: capsule.textShadowOffsetY
@@ -198,6 +202,7 @@ Item {
             minimumPointSize: 6.0
             elide: Text.ElideRight
             shadowEnabled: capsule.textShadowEnabled
+            shadowSoft: capsule.textShadowSoft
             shadowColor: capsule.textShadowColor
             shadowOffsetX: capsule.textShadowOffsetX
             shadowOffsetY: capsule.textShadowOffsetY

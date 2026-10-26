@@ -362,6 +362,7 @@ OverlayWidget {
             textColor: abandonmentRoot.abandonmentModel.headerTextColor
             fontFamily: abandonmentRoot.abandonmentModel.fontFamily
             textShadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
+            textShadowSoft: abandonmentRoot.abandonmentModel.textShadowSoft
             textShadowColor: abandonmentRoot.abandonmentModel.textShadowColor
             textShadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
             textShadowOffsetY: abandonmentRoot.abandonmentModel.textShadowOffsetY
@@ -545,6 +546,7 @@ OverlayWidget {
                     minimumPointSize: Math.max(5.0, 6.0
                         * abandonmentRoot.abandonmentModel.customBacklogHeightScale)
                     shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
+                    shadowSoft: abandonmentRoot.abandonmentModel.textShadowSoft
                     shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
                     shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
                     shadowOffsetY: abandonmentRoot.abandonmentModel.textShadowOffsetY
@@ -777,6 +779,7 @@ OverlayWidget {
                     // second line when the resized role has enough height.
                     elide: Text.ElideNone
                     shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
+                    shadowSoft: abandonmentRoot.abandonmentModel.textShadowSoft
                     shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
                     shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
                     shadowOffsetY: abandonmentRoot.abandonmentModel.textShadowOffsetY
@@ -830,6 +833,7 @@ OverlayWidget {
                     minimumPointSize: 6.0
                     elide: Text.ElideNone
                     shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
+                    shadowSoft: abandonmentRoot.abandonmentModel.textShadowSoft
                     shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
                     shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
                     shadowOffsetY: abandonmentRoot.abandonmentModel.textShadowOffsetY
@@ -904,6 +908,7 @@ OverlayWidget {
                         verticalAlignment: Text.AlignVCenter
                         elide: Text.ElideRight
                         shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
+                        shadowSoft: abandonmentRoot.abandonmentModel.textShadowSoft
                         shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
                         shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
                         shadowOffsetY: abandonmentRoot.abandonmentModel.textShadowOffsetY
@@ -928,6 +933,7 @@ OverlayWidget {
                         fontSizeMode: Text.HorizontalFit
                         minimumPointSize: 7.0
                         shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
+                        shadowSoft: abandonmentRoot.abandonmentModel.textShadowSoft
                         shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
                         shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
                         shadowOffsetY: abandonmentRoot.abandonmentModel.textShadowOffsetY
@@ -1047,6 +1053,7 @@ OverlayWidget {
                                 minimumPointSize: 6.0
                                 elide: Text.ElideRight
                                 shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
+                                shadowSoft: abandonmentRoot.abandonmentModel.textShadowSoft
                                 shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
                                 shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
                                 shadowOffsetY: abandonmentRoot.abandonmentModel.textShadowOffsetY
@@ -1072,6 +1079,7 @@ OverlayWidget {
                                 minimumPointSize: 6.0
                                 elide: Text.ElideRight
                                 shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
+                                shadowSoft: abandonmentRoot.abandonmentModel.textShadowSoft
                                 shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
                                 shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
                                 shadowOffsetY: abandonmentRoot.abandonmentModel.textShadowOffsetY
@@ -1106,6 +1114,7 @@ OverlayWidget {
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
+                        shadowSoft: abandonmentRoot.abandonmentModel.textShadowSoft
                         shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
                         shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
                         shadowOffsetY: abandonmentRoot.abandonmentModel.textShadowOffsetY
@@ -1132,6 +1141,7 @@ OverlayWidget {
                         font.bold: true
                         verticalAlignment: Text.AlignVCenter
                         shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
+                        shadowSoft: abandonmentRoot.abandonmentModel.textShadowSoft
                         shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
                         shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
                         shadowOffsetY: abandonmentRoot.abandonmentModel.textShadowOffsetY
@@ -1151,6 +1161,7 @@ OverlayWidget {
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
                     shadowEnabled: abandonmentRoot.abandonmentModel.textShadowEnabled
+                    shadowSoft: abandonmentRoot.abandonmentModel.textShadowSoft
                     shadowColor: abandonmentRoot.abandonmentModel.textShadowColor
                     shadowOffsetX: abandonmentRoot.abandonmentModel.textShadowOffsetX
                     shadowOffsetY: abandonmentRoot.abandonmentModel.textShadowOffsetY

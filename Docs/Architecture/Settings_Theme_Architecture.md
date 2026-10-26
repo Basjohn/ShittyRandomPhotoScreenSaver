@@ -50,6 +50,14 @@ uses the generation-owned typography input and shared text primitives; opening S
 theme changes, so the new runtime receives the new classification. No extra theme watcher or frame-time font scan exists.
 Repeated projection must not accumulate weight, replace the stored font choice or change dark glyph pixels.
 
+Runtime text/header-logo shadow softness is an explicit global Settings choice,
+`widgets.shadows.soft_text_on_light_themes`, projected once through the existing family styles. It keeps text shadows
+enabled under the existing master, signed offsets and opacity. `SoftShadowEffect` supplies one fixed-kernel diffuse
+profile, applied to half-resolution shadow-only captures; header logos reuse their existing effect layer. It does not
+blur foreground text or alter card backgrounds. Dark palettes and an unchecked modifier retain their original hard
+path. Settings-window theme-authored `ShadowStyle` values are unchanged. See the shadow authority in `Docs/Contracts.md`
+and the [bounded native validation record](../Audits/Light_Theme_Legibility_2026-10-26.md).
+
 ## Schema-v6 contract
 
 `ui/settings_theme_spec.py` owns the compiled `DEFAULT_DARK_SETTINGS_THEME` and schema-v6 semantic vocabulary.

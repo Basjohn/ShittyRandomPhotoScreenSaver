@@ -295,6 +295,7 @@ OverlayWidget {
                 textColor: gmailRoot.gmailModel.headerTextColor
                 fontFamily: gmailRoot.gmailModel.fontFamily
                 textShadowEnabled: gmailRoot.gmailModel.textShadowEnabled
+                textShadowSoft: gmailRoot.gmailModel.textShadowSoft
                 textShadowColor: gmailRoot.gmailModel.textShadowColor
                 textShadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
                 textShadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
@@ -360,6 +361,7 @@ OverlayWidget {
                     fontFamily: gmailRoot.gmailModel.fontFamily
                     bold: true
                     shadowEnabled: gmailRoot.gmailModel.textShadowEnabled
+                    shadowSoft: gmailRoot.gmailModel.textShadowSoft
                     shadowColor: gmailRoot.gmailModel.textShadowColor
                     shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
                     shadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
@@ -400,6 +402,7 @@ OverlayWidget {
                 verticalAlignment: Text.AlignVCenter
                 wrap: true
                 shadowEnabled: gmailRoot.gmailModel.textShadowEnabled
+                shadowSoft: gmailRoot.gmailModel.textShadowSoft
                 shadowColor: gmailRoot.gmailModel.textShadowColor
                 shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
                 shadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
@@ -562,6 +565,7 @@ OverlayWidget {
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight
                             shadowEnabled: gmailRoot.gmailModel.textShadowEnabled
+                            shadowSoft: gmailRoot.gmailModel.textShadowSoft
                             shadowColor: gmailRoot.gmailModel.textShadowColor
                             shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
                             shadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
@@ -595,6 +599,7 @@ OverlayWidget {
                                 verticalAlignment: Text.AlignVCenter
                                 elide: Text.ElideRight
                                 shadowEnabled: gmailRoot.gmailModel.textShadowEnabled
+                                shadowSoft: gmailRoot.gmailModel.textShadowSoft
                                 shadowColor: gmailRoot.gmailModel.textShadowColor
                                 shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
                                 shadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
@@ -619,6 +624,7 @@ OverlayWidget {
                                 verticalAlignment: Text.AlignVCenter
                                 elide: Text.ElideRight
                                 shadowEnabled: gmailRoot.gmailModel.textShadowEnabled
+                                shadowSoft: gmailRoot.gmailModel.textShadowSoft
                                 shadowColor: gmailRoot.gmailModel.textShadowColor
                                 shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
                                 shadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY
@@ -650,6 +656,7 @@ OverlayWidget {
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             shadowEnabled: gmailRoot.gmailModel.textShadowEnabled
+                            shadowSoft: gmailRoot.gmailModel.textShadowSoft
                             shadowColor: gmailRoot.gmailModel.textShadowColor
                             shadowOffsetX: gmailRoot.gmailModel.textShadowOffsetX
                             shadowOffsetY: gmailRoot.gmailModel.textShadowOffsetY

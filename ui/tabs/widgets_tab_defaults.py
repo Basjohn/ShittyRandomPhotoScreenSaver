@@ -744,6 +744,16 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.widget_text_shadows_enabled.setChecked(tab._default_bool("shadows", "text_enabled"))
     tab.widget_text_shadows_enabled.stateChanged.connect(tab._save_settings)
     row.addWidget(tab.widget_text_shadows_enabled)
+    tab.widget_soft_text_shadows_on_light_themes = QCheckBox("Soft Text Shadows on Light Themes")
+    tab.widget_soft_text_shadows_on_light_themes.setProperty("circleIndicator", True)
+    tab.widget_soft_text_shadows_on_light_themes.setToolTip(
+        "Use soft text and header-logo shadows on light Widget Themes.\n"
+        "Disable for the original hard shadow. Requires Text Shadows.\n"
+        "Direction, darkness and extra offset still apply."
+    )
+    tab.widget_soft_text_shadows_on_light_themes.setChecked(tab._default_bool("shadows", "soft_text_on_light_themes"))
+    tab.widget_soft_text_shadows_on_light_themes.stateChanged.connect(tab._save_settings)
+    row.addWidget(tab.widget_soft_text_shadows_on_light_themes)
     row.addStretch()
     appearance_layout.addLayout(row)
 
@@ -1008,6 +1018,7 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
     if isinstance(shadows_config, Mapping):
         tab.widget_shadows_enabled.setChecked(tab._config_bool("shadows", shadows_config, "enabled"))
         tab.widget_text_shadows_enabled.setChecked(tab._config_bool("shadows", shadows_config, "text_enabled"))
+        tab.widget_soft_text_shadows_on_light_themes.setChecked(tab._config_bool("shadows", shadows_config, "soft_text_on_light_themes"))
         tab.widget_header_shadows_enabled.setChecked(tab._config_bool("shadows", shadows_config, "header_enabled"))
     else:
         shadows_config = {}
@@ -1015,6 +1026,7 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
         tab.widget_text_shadows_enabled.setChecked(
             tab._default_bool("shadows", "text_enabled")
         )
+        tab.widget_soft_text_shadows_on_light_themes.setChecked(tab._default_bool("shadows", "soft_text_on_light_themes"))
         tab.widget_header_shadows_enabled.setChecked(
             tab._default_bool("shadows", "header_enabled")
         )
@@ -1090,6 +1102,7 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
 
     shadows_config["enabled"] = tab.widget_shadows_enabled.isChecked()
     shadows_config["text_enabled"] = tab.widget_text_shadows_enabled.isChecked()
+    shadows_config["soft_text_on_light_themes"] = tab.widget_soft_text_shadows_on_light_themes.isChecked()
     shadows_config["header_enabled"] = tab.widget_header_shadows_enabled.isChecked()
     if hasattr(tab, "widget_shadow_darkness_spin"):
         shadows_config["frame_opacity"] = round(

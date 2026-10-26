@@ -40,6 +40,7 @@ from .host import (
 )
 from .steam_common import as_bool, bounded_float, bounded_int, rgba, with_alpha
 from .theme_projection import (
+    resolve_soft_text_shadow,
     resolve_card_surface_colors,
     resolve_header_colors,
     resolve_primary_text_color,
@@ -223,6 +224,7 @@ class SystemStatsPresentationConfig:
 class SystemStatsPresentationStyle:
     card_style: OverlayCardStyle
     text_shadow_enabled: bool
+    text_shadow_soft: bool
     text_shadow_color: QColor
     text_shadow_offset_x: float
     text_shadow_offset_y: float
@@ -268,6 +270,7 @@ class SystemStatsPresentationStyle:
                 shadow_extend_bottom=card_extensions[3],
             ),
             text_shadow_enabled=shadow.text_enabled,
+            text_shadow_soft=resolve_soft_text_shadow(shadow),
             text_shadow_color=with_alpha(shadow.color, shadow.text_opacity),
             text_shadow_offset_x=text_offset[0],
             text_shadow_offset_y=text_offset[1],
@@ -662,6 +665,10 @@ class SystemStatsPresentationModel(QObject):
     @Property(bool, notify=stateChanged)
     def textShadowEnabled(self) -> bool:
         return self.style.text_shadow_enabled
+
+    @Property(bool, notify=stateChanged)
+    def textShadowSoft(self) -> bool:
+        return self.style.text_shadow_soft
 
     @Property(QColor, notify=stateChanged)
     def textShadowColor(self) -> QColor:

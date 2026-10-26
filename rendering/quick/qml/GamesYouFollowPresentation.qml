@@ -109,6 +109,7 @@ OverlayWidget {
         textColor: followedModel.headerTextColor
         fontFamily: followedModel.fontFamily
         textShadowEnabled: followedModel.textShadowEnabled
+        textShadowSoft: followedModel.textShadowSoft
         textShadowColor: followedModel.textShadowColor
         textShadowOffsetX: followedModel.textShadowOffsetX
         textShadowOffsetY: followedModel.textShadowOffsetY
@@ -170,6 +171,7 @@ OverlayWidget {
             glyphColor: followedModel.primaryColor
             fontFamily: followedModel.fontFamily
             shadowEnabled: followedModel.textShadowEnabled
+            shadowSoft: followedModel.textShadowSoft
             shadowColor: followedModel.textShadowColor
             shadowOffsetX: followedModel.textShadowOffsetX
             shadowOffsetY: followedModel.textShadowOffsetY
@@ -427,6 +429,7 @@ OverlayWidget {
                     text: storyGame
                     textFormat: Text.PlainText
                     shadowEnabled: followedModel.textShadowEnabled
+                    shadowSoft: followedModel.textShadowSoft
                     shadowColor: followedModel.textShadowColor
                     shadowOffsetX: followedModel.textShadowOffsetX
                     shadowOffsetY: followedModel.textShadowOffsetY
@@ -451,6 +454,7 @@ OverlayWidget {
                         ? storyTitle.substring(0, followedModel.headlineChars) + "…" : storyTitle
                     textFormat: Text.PlainText
                     shadowEnabled: followedModel.textShadowEnabled
+                    shadowSoft: followedModel.textShadowSoft
                     shadowColor: followedModel.textShadowColor
                     shadowOffsetX: followedModel.textShadowOffsetX
                     shadowOffsetY: followedModel.textShadowOffsetY
@@ -667,6 +671,7 @@ OverlayWidget {
                     text: storyPreview
                     textFormat: Text.PlainText
                     shadowEnabled: followedModel.textShadowEnabled
+                    shadowSoft: followedModel.textShadowSoft
                     shadowColor: followedModel.textShadowColor
                     shadowOffsetX: followedModel.textShadowOffsetX
                     shadowOffsetY: followedModel.textShadowOffsetY
@@ -692,6 +697,7 @@ OverlayWidget {
                     text: storyPublished + "  ·  " + storySource
                     textFormat: Text.PlainText
                     shadowEnabled: followedModel.textShadowEnabled
+                    shadowSoft: followedModel.textShadowSoft
                     shadowColor: followedModel.textShadowColor
                     shadowOffsetX: followedModel.textShadowOffsetX
                     shadowOffsetY: followedModel.textShadowOffsetY
@@ -751,6 +757,7 @@ OverlayWidget {
         textFormat: Text.PlainText
         elide: Text.ElideRight
         shadowEnabled: followedModel.textShadowEnabled
+        shadowSoft: followedModel.textShadowSoft
         shadowColor: followedModel.textShadowColor
         shadowOffsetX: followedModel.textShadowOffsetX
         shadowOffsetY: followedModel.textShadowOffsetY

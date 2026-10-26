@@ -249,6 +249,7 @@ class ShadowSettings:
 
     enabled: bool = bool(require_canonical_default("widgets.shadows.enabled"))
     text_enabled: bool = bool(require_canonical_default("widgets.shadows.text_enabled"))
+    soft_text_on_light_themes: bool = bool(require_canonical_default("widgets.shadows.soft_text_on_light_themes"))
     header_enabled: bool = bool(require_canonical_default("widgets.shadows.header_enabled"))
     color: List[int] = field(default_factory=lambda: require_canonical_default("widgets.shadows.color"))
     blur_radius: int = int(require_canonical_default("widgets.shadows.blur_radius"))
@@ -329,6 +330,7 @@ class ShadowSettings:
         return cls(
             enabled=as_bool("enabled"),
             text_enabled=as_bool("text_enabled"),
+            soft_text_on_light_themes=as_bool("soft_text_on_light_themes"),
             header_enabled=as_bool("header_enabled"),
             color=color,
             blur_radius=as_int("blur_radius"),
@@ -343,6 +345,7 @@ class ShadowSettings:
         return {
             "widgets.shadows.enabled": self.enabled,
             "widgets.shadows.text_enabled": self.text_enabled,
+            "widgets.shadows.soft_text_on_light_themes": self.soft_text_on_light_themes,
             "widgets.shadows.header_enabled": self.header_enabled,
             "widgets.shadows.color": list(self.color),
             "widgets.shadows.blur_radius": self.blur_radius,

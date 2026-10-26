@@ -420,6 +420,10 @@ class GamesYouFollowPresentationModel(QObject):
     def textShadowEnabled(self) -> bool:
         return self._visual_style.text_shadow_enabled
 
+    @Property(bool, constant=True)
+    def textShadowSoft(self) -> bool:
+        return self._visual_style.text_shadow_soft
+
     @Property(QColor, constant=True)
     def textShadowColor(self) -> QColor:
         return QColor(self._visual_style.text_shadow_color)

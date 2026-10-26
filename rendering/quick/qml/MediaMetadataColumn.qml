@@ -111,6 +111,7 @@ Item {
             maximumLineCount: 1
             elide: Text.ElideRight
             shadowEnabled: metadataFade.mediaModel.textShadowEnabled
+            shadowSoft: metadataFade.mediaModel.textShadowSoft
             shadowColor: metadataFade.mediaModel.textShadowColor
             shadowOffsetX: metadataFade.mediaModel.textShadowOffsetX
             shadowOffsetY: metadataFade.mediaModel.textShadowOffsetY
@@ -146,6 +147,7 @@ Item {
                 maximumLineCount: 1
                 elide: Text.ElideRight
                 shadowEnabled: metadataFade.mediaModel.textShadowEnabled
+                shadowSoft: metadataFade.mediaModel.textShadowSoft
                 shadowColor: metadataFade.mediaModel.textShadowColor
                 shadowOffsetX: metadataFade.mediaModel.textShadowOffsetX
                 shadowOffsetY: metadataFade.mediaModel.textShadowOffsetY
@@ -171,6 +173,7 @@ Item {
             maximumLineCount: 1
             elide: Text.ElideRight
             shadowEnabled: metadataFade.mediaModel.textShadowEnabled
+            shadowSoft: metadataFade.mediaModel.textShadowSoft
             shadowColor: metadataFade.mediaModel.textShadowColor
             shadowOffsetX: metadataFade.mediaModel.textShadowOffsetX
             shadowOffsetY: metadataFade.mediaModel.textShadowOffsetY
@@ -200,6 +203,7 @@ Item {
             maximumLineCount: 1
             elide: Text.ElideRight
             shadowEnabled: metadataFade.mediaModel.textShadowEnabled
+            shadowSoft: metadataFade.mediaModel.textShadowSoft
             shadowColor: metadataFade.mediaModel.textShadowColor
             shadowOffsetX: metadataFade.mediaModel.textShadowOffsetX
             shadowOffsetY: metadataFade.mediaModel.textShadowOffsetY
@@ -235,6 +239,7 @@ Item {
                 maximumLineCount: 1
                 elide: Text.ElideRight
                 shadowEnabled: metadataFade.mediaModel.textShadowEnabled
+                shadowSoft: metadataFade.mediaModel.textShadowSoft
                 shadowColor: metadataFade.mediaModel.textShadowColor
                 shadowOffsetX: metadataFade.mediaModel.textShadowOffsetX
                 shadowOffsetY: metadataFade.mediaModel.textShadowOffsetY
@@ -259,6 +264,7 @@ Item {
             maximumLineCount: 1
             elide: Text.ElideRight
             shadowEnabled: metadataFade.mediaModel.textShadowEnabled
+            shadowSoft: metadataFade.mediaModel.textShadowSoft
             shadowColor: metadataFade.mediaModel.textShadowColor
             shadowOffsetX: metadataFade.mediaModel.textShadowOffsetX
             shadowOffsetY: metadataFade.mediaModel.textShadowOffsetY

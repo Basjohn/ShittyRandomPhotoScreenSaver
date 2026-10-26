@@ -406,6 +406,7 @@ OverlayWidget {
                 textColor: mediaRoot.mediaModel.headerTextColor
                 fontFamily: mediaRoot.mediaModel.fontFamily
                 textShadowEnabled: mediaRoot.mediaModel.textShadowEnabled
+                textShadowSoft: mediaRoot.mediaModel.textShadowSoft
                 textShadowColor: mediaRoot.mediaModel.textShadowColor
                 textShadowOffsetX: mediaRoot.mediaModel.textShadowOffsetX
                 textShadowOffsetY: mediaRoot.mediaModel.textShadowOffsetY
@@ -526,6 +527,7 @@ OverlayWidget {
                         font.pointSize: mediaRoot.mediaModel.fontSize * 0.65
                         font.bold: true
                         shadowEnabled: mediaRoot.mediaModel.textShadowEnabled
+                        shadowSoft: mediaRoot.mediaModel.textShadowSoft
                         shadowColor: mediaRoot.mediaModel.textShadowColor
                         shadowOffsetX: mediaRoot.mediaModel.textShadowOffsetX
                         shadowOffsetY: mediaRoot.mediaModel.textShadowOffsetY

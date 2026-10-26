@@ -439,15 +439,22 @@ Once a display captures a derivative into its `PresentationImage`, the presentat
 
 ## Shadow authority
 
-Canonical includes direction, Card enabled/opacity/blur/extra offset, Text enabled/opacity/extra offset, and Header
+Canonical includes direction, Card enabled/opacity/blur/extra offset, Text enabled/opacity/extra offset, the explicit
+Soft Text Shadows on Light Themes modifier, and Header
 enabled. No `widgets.shadows.offset`, Intense mode, Text Blur or `shadowtuning.json` replacement. Python resolves
 direction to signed offsets before QML. Card/frame Extra Offset is directional one-sided geometry with zero Qt
 effect translation; ordinary production card shadows are composed in one display-level underlay beneath every
 ordinary card so a later sibling shadow cannot overpaint earlier widget content. The retained Context Menu consumes
 the same global Card shadow direction/opacity/blur/Extra Offset contract at generation admission, but its shadow lives in
 the menu overlay plane so it may cast over runtime content while remaining below the menu surface itself. Text shadows
-remain retained duplicate glyphs with signed displacement, not MultiEffect blur. Clock analogue geometry is the permanent
-explicit family exception.
+remain retained duplicate glyphs with signed displacement. The explicit light-theme modifier filters only that shadow
+glyph through the shared `SoftShadowEffect`; foreground glyphs stay crisp, offsets/colour/alpha stay authored, and
+card surfaces are unchanged. Header logos reuse their existing effect layer with the same soft profile. Dark palettes
+and an unchecked modifier retain the hard path without new text layers/effects. Light admission derives from the
+shared semantic foreground/surface classifier, never a theme name or separate palette. Shadow-only captures use half
+native resolution; the source layer updates on paint/geometry changes. This has a measured resource cost accepted by
+the operator, not a claim of free blur or universal performance neutrality. Clock analogue geometry remains the
+explicit family exception. Details and bounded native evidence: `Docs/Audits/Light_Theme_Legibility_2026-10-26.md`.
 
 ## Transition / visualizer
 

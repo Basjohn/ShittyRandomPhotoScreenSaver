@@ -352,6 +352,7 @@ OverlayWidget {
         textColor: friendRoot.friendPulseModel.headerTextColor
         fontFamily: friendRoot.friendPulseModel.fontFamily
         textShadowEnabled: friendRoot.friendPulseModel.textShadowEnabled
+        textShadowSoft: friendRoot.friendPulseModel.textShadowSoft
         textShadowColor: friendRoot.friendPulseModel.textShadowColor
         textShadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX
         textShadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
@@ -410,6 +411,7 @@ OverlayWidget {
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
             shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled
+            shadowSoft: friendRoot.friendPulseModel.textShadowSoft
             shadowColor: friendRoot.friendPulseModel.textShadowColor
             shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX
             shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY
@@ -682,6 +684,7 @@ OverlayWidget {
                     minimumPointSize: 7.0
                     elide: Text.ElideRight
                     shadowEnabled: friendRoot.friendPulseModel.textShadowEnabled
+                    shadowSoft: friendRoot.friendPulseModel.textShadowSoft
                     shadowColor: friendRoot.friendPulseModel.textShadowColor
                     shadowOffsetX: friendRoot.friendPulseModel.textShadowOffsetX
                     shadowOffsetY: friendRoot.friendPulseModel.textShadowOffsetY

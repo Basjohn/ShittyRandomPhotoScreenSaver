@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from widgets.system_mute_runtime import SystemMuteRuntimeSnapshot
 
 from .theme_projection import (
+    resolve_soft_text_shadow,
     configured_rgba_override,
     resolve_card_surface_colors,
     resolve_header_colors,
@@ -441,6 +442,7 @@ class MediaPresentationConfig:
 class MediaPresentationStyle:
     card_style: OverlayCardStyle
     text_shadow_enabled: bool
+    text_shadow_soft: bool
     text_shadow_color: QColor
     text_shadow_offset_x: float
     text_shadow_offset_y: float
@@ -502,6 +504,7 @@ class MediaPresentationStyle:
                 shadow_extend_bottom=card_extensions[3],
             ),
             text_shadow_enabled=shadow.text_enabled,
+            text_shadow_soft=resolve_soft_text_shadow(shadow),
             text_shadow_color=_with_alpha(
                 shadow_rgba,
                 shadow.text_opacity,
@@ -1533,6 +1536,10 @@ class MediaPresentationModel(QObject):
     @Property(bool, notify=stateChanged)
     def textShadowEnabled(self) -> bool:
         return self.style.text_shadow_enabled
+
+    @Property(bool, notify=stateChanged)
+    def textShadowSoft(self) -> bool:
+        return self.style.text_shadow_soft
 
     @Property(QColor, notify=stateChanged)
     def textShadowColor(self) -> QColor:

@@ -202,6 +202,7 @@ OverlayWidget {
         textColor: statsRoot.systemStatsModel.headerTextColor
         fontFamily: statsRoot.systemStatsModel.fontFamily
         textShadowEnabled: statsRoot.systemStatsModel.textShadowEnabled
+        textShadowSoft: statsRoot.systemStatsModel.textShadowSoft
         textShadowColor: statsRoot.systemStatsModel.textShadowColor
         textShadowOffsetX: statsRoot.systemStatsModel.textShadowOffsetX
         textShadowOffsetY: statsRoot.systemStatsModel.textShadowOffsetY
@@ -291,6 +292,7 @@ OverlayWidget {
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
             shadowEnabled: statsRoot.systemStatsModel.textShadowEnabled
+            shadowSoft: statsRoot.systemStatsModel.textShadowSoft
             shadowColor: statsRoot.systemStatsModel.textShadowColor
             shadowOffsetX: statsRoot.systemStatsModel.textShadowOffsetX
             shadowOffsetY: statsRoot.systemStatsModel.textShadowOffsetY
@@ -318,6 +320,7 @@ OverlayWidget {
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
             shadowEnabled: statsRoot.systemStatsModel.textShadowEnabled
+            shadowSoft: statsRoot.systemStatsModel.textShadowSoft
             shadowColor: statsRoot.systemStatsModel.textShadowColor
             shadowOffsetX: statsRoot.systemStatsModel.textShadowOffsetX
             shadowOffsetY: statsRoot.systemStatsModel.textShadowOffsetY
@@ -343,6 +346,7 @@ OverlayWidget {
             fontSizeMode: Text.HorizontalFit
             minimumPointSize: 9.0
             shadowEnabled: statsRoot.systemStatsModel.textShadowEnabled
+            shadowSoft: statsRoot.systemStatsModel.textShadowSoft
             shadowColor: statsRoot.systemStatsModel.textShadowColor
             shadowOffsetX: statsRoot.systemStatsModel.textShadowOffsetX
             shadowOffsetY: statsRoot.systemStatsModel.textShadowOffsetY

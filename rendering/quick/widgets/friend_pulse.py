@@ -346,6 +346,7 @@ class FriendPulsePresentationConfig:
 class FriendPulsePresentationStyle:
     card_style: OverlayCardStyle
     text_shadow_enabled: bool
+    text_shadow_soft: bool
     text_shadow_color: QColor
     text_shadow_offset_x: float
     text_shadow_offset_y: float
@@ -370,6 +371,7 @@ class FriendPulsePresentationStyle:
         return cls(
             card_style=projected.card_style,
             text_shadow_enabled=projected.text_shadow_enabled,
+            text_shadow_soft=projected.text_shadow_soft,
             text_shadow_color=projected.text_shadow_color,
             text_shadow_offset_x=projected.text_shadow_offset_x,
             text_shadow_offset_y=projected.text_shadow_offset_y,
@@ -1201,6 +1203,10 @@ class FriendPulsePresentationModel(QObject):
     @Property(bool, notify=stateChanged)
     def textShadowEnabled(self) -> bool:
         return self.style.text_shadow_enabled
+
+    @Property(bool, notify=stateChanged)
+    def textShadowSoft(self) -> bool:
+        return self.style.text_shadow_soft
 
     @Property(QColor, notify=stateChanged)
     def textShadowColor(self) -> QColor:

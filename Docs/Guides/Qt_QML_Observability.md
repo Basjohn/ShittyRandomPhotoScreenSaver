@@ -1,5 +1,18 @@
 # Qt / QML Observability Contract
 
+## Bounded native visual probes
+
+Use isolated CLI/sidecar settings and an external process-tree deadline. On Windows a `.venv` launcher can redirect
+to a different interpreter PID; killing the launcher alone is not a bound on the probe. Reuse the existing
+`tools.build_runner.BuildProcessOwner` Job Object ownership (suspended launch, assign, resume, cancel/retire/shutdown)
+for the diagnostic process; never kill broad executable names or a potentially reused root PID.
+
+Wait for production Quick retirement before application exit; direct window closure while a threaded render is active
+can deadlock. A GUI timer cannot enforce a deadline once its event loop is blocked. On an unexplained startup stall,
+retain stage breadcrumbs and bounded faulthandler evidence before one instrumented retry; a timed-out capture is not
+visual validation. Confirm the owned process tree and windows are gone. Inspect the owned native window itself, since
+a desktop capture of a covered window may contain another application.
+
 ## Frozen frame-trace admission and evidence
 
 When a diagnostic run explicitly requests `--frame-trace`, a trace file/header and activation receipt should be observable. Check the admitted arguments, writer-open result, bin rotation and output directory from evidence before speculating about user launch flags. The Python argv and Windows native process command line can differ in frozen launchers. Failed open/priority/writer paths must log a classified failure; absence of records is a diagnostic problem, not proof the operator disabled tracing.

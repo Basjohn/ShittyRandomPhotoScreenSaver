@@ -14,6 +14,14 @@ from collections.abc import Mapping
 from ui.settings_theme_spec import Rgba
 from ui.widget_theme_active import get_active_widget_theme
 from ui.widget_visual_roles import resolve_widget_visual_color
+from ui.theme_semantics import widget_theme_is_light
+from rendering.quick.shadow_snapshot import QuickShadowSnapshot
+
+
+def resolve_soft_text_shadow(shadow: QuickShadowSnapshot) -> bool:
+    """Resolve the visible light-theme style modifier once per style build."""
+    return (shadow.text_enabled and shadow.soft_text_on_light_themes
+            and widget_theme_is_light(get_active_widget_theme()))
 
 
 RgbaTuple = tuple[int, int, int, int]
@@ -283,4 +291,5 @@ __all__ = [
     "resolve_header_colors",
     "resolve_primary_text_color",
     "resolve_rgba_role",
+    "resolve_soft_text_shadow",
 ]

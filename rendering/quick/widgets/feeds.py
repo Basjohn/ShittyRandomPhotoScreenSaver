@@ -40,6 +40,7 @@ from .host import (
     RetainedOverlayWidget,
 )
 from .theme_projection import (
+    resolve_soft_text_shadow,
     resolve_card_surface_colors,
     resolve_header_colors,
     resolve_primary_text_color,
@@ -364,6 +365,7 @@ def _monogram_ordinal(widgets: Mapping[str, object], widget_id: str) -> int:
 class FeedPresentationStyle:
     card_style: OverlayCardStyle
     text_shadow_enabled: bool
+    text_shadow_soft: bool
     text_shadow_color: QColor
     text_shadow_offset_x: float
     text_shadow_offset_y: float
@@ -403,6 +405,7 @@ class FeedPresentationStyle:
                 shadow_extend_bottom=card_extensions[3],
             ),
             text_shadow_enabled=shadow.text_enabled,
+            text_shadow_soft=resolve_soft_text_shadow(shadow),
             text_shadow_color=_with_alpha(shadow.color, shadow.text_opacity),
             text_shadow_offset_x=text_offset[0],
             text_shadow_offset_y=text_offset[1],
@@ -1066,6 +1069,10 @@ class FeedPresentationModel(QObject):
     @Property(bool, constant=True)
     def textShadowEnabled(self) -> bool:
         return self.style.text_shadow_enabled
+
+    @Property(bool, constant=True)
+    def textShadowSoft(self) -> bool:
+        return self.style.text_shadow_soft
 
     @Property(QColor, constant=True)
     def textShadowColor(self) -> QColor:
