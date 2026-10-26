@@ -148,26 +148,29 @@ def hint_scene(qt_app):
         qt_app.processEvents()
 
 
-def test_native_hover_expires_without_internal_movement_restart_and_reenters(hint_scene):
+def test_native_hover_expires_without_internal_movement_restart_and_reenters(hint_scene, qtbot):
     window, root = hint_scene
     hint = root.findChild(QQuickItem, "visualizerControlHint")
     QTest.mouseMove(window, QPoint(200,150))
-    QTest.qWait(850)
+    qtbot.waitUntil(lambda: hint.opacity() > .85, timeout=2000)
     assert root.property("controlHintHovered") is True
     assert hint.opacity() > .85
     assert hint.isEnabled() is False
     assert hint.x() > root.width()*.8 and hint.y() >= 12
     assert 48 <= hint.width() <= 84
     assert hint.implicitWidth() == 332 and hint.implicitHeight() == 468
-    QTest.qWait(2200)
+    qtbot.wait(2200)  # Move within this visit, before its scheduled expiry.
     QTest.mouseMove(window, QPoint(260,180))
-    QTest.qWait(3100)
+    # Bound the remaining original visit: restarting on the move would need
+    # another full reveal/hold/fade and must still fail this test.
+    qtbot.waitUntil(lambda: hint.opacity() == 0., timeout=4500)
     assert root.property("controlHintHovered") is True
     assert hint.opacity() == pytest.approx(0., abs=.005)
     QTest.mouseMove(window, QPoint(680,460))
-    QTest.qWait(400)
+    qtbot.waitUntil(lambda: not root.property("controlHintVisitStarted")
+                    and hint.opacity() == 0., timeout=1500)
     QTest.mouseMove(window, QPoint(220,160))
-    QTest.qWait(850)
+    qtbot.waitUntil(lambda: hint.opacity() > .85, timeout=2000)
     assert hint.opacity() > .85
 
 

@@ -1,13 +1,17 @@
-# Settings bucket persistence | operator scope clarification (2026-10-23)
+# Settings bucket persistence
 
-**Status: OPEN, SOURCE-AUDITED, NOT NATIVE-ACCEPTED.** This contract is routed from [Current Plan](../../Current_Plan.md) and the [Oct 23 reconciliation](../Reference/2026-10-23_Operator_EB_Neon_Settings_Reconciliation.md). It is separate from the already-built visual **connector rails**. The rails display hierarchy; they do not fix remembered expansion semantics.
+Only the active pill's editor context (or active tab where no pills exist) retains its last-open editing path for
+reopening Settings. Inactive pills and unrelated tabs present as closed, including after lazy reconstruction. Nested
+ancestors remain open only to expose the selected leaf. Fresh profiles start closed. Preset choice, current mode and
+stored Settings values remain independent of disclosure state.
 
-**Product rule:** Only the active pill's editor context (or currently active tab, where no pills exist) may retain a last-open editing bucket/path for reopening Settings and resuming a preset edit. All inactive/other pill and unrelated tab buckets must present as closed, including when their lazy bodies are rebuilt. Nested ancestors may be visibly open as needed to expose a single remembered leaf, not as free-floating independently remembered expansion states. Do not persist a forest of mutually dormant opens. Fresh profiles start closed.
+`core/settings/ui_bucket_state.py` owns canonical normalization and `project_settings_bucket_context` /
+`retire_settings_bucket_context`. The Settings dialog and tab navigation apply that projection; shared bucket helpers
+close unrelated live branches silently. Existing per-control maps remain the persistence schemas. Navigation does not
+create a second context store, scheduler or polling owner. Connector rails derive from the visible hierarchy and do
+not own persistence.
 
-Current source stores sparse `True` bucket maps, **one open per local scope**, which is a different contract: Widgets `widget_bucket_scope()` separates each section and nested card family; Visualizers `visualizer_bucket_scope()` separates each mode, and independent outer Advanced/Technical disclosures persist in full boolean maps. Navigation handlers swap UI without clearing previous scopes. Existing tests encode this older multiple-pills contract. Distinguish **selected Settings tab**, **selected inner pill**, **active nested path**, **Custom or preset choice**, **UI expanded state**, and **render/session mode** before changing anything. Navigation may save the current visible context without preserving other dormant expansions.
-
-Tests needed: clean start, open leaf, change colour / save Custom, close/reopen while same pill active (must land in right bucket); switch inner pills before close/reopen (only new context eligible); switch top-level tabs with/without pills; Visualizer Custom/Technical nested disclosure; Steam 3-level nested buckets; lazy retire and first-open; conditional visibility; disabled/reactivated family; legacy multi-open state migration; tab view-state restoration; app restart and reset. Never introduce polling or alter authored preset values, and do not treat correct connector rail drawing as persistence acceptance. Visual inspection under PySide6/Windows and mixed DPI required.
-
-## 23 October source repair candidate (superseding *source-status only*)
-
-The historical audit above describes the pre-repair source and remains preserved as a failure record. New code now attempts the one-active-context policy through startup projection, successful-navigation retirement, silent live-widget closure, nested ancestor preservation and newly persisted Sources/Transitions buckets. Follow the [repair audit and native acceptance checklist](../Audits/Settings_Bucket_Persistence_Repair_Candidate_2026-10-23.md). These changes are **[~] source candidates** only; PySide6 native interaction, reset/import, lazy sections, mixed DPI and operator visual acceptance remain **OPEN**. Do not equate 21 headless test passes with a finished GUI fix.
+Focused regression coverage lives in `tests/test_settings_active_bucket_path.py`,
+`tests/test_settings_bucket_single_open_contract.py` and `tests/test_settings_bucket_reopen_real_dialog.py`: selected
+context, nested ancestors, tab/pill changes, lazy reopening, migration and real-dialog round trips. Operator acceptance
+of the persistence and connector-rail work is recorded in source control; any new defect enters `Current_Plan.md`.
