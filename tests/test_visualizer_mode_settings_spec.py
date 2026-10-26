@@ -369,6 +369,41 @@ def test_controls_read_and_persist_as_declared():
 CONDITIONAL = [spec for spec in SPECS if any(control.when for control in spec.controls)]
 
 
+def test_oscilloscope_hidden_mode_controls_retain_authored_values(qt_app, settings_manager):
+    from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    from core.settings.visualizer_presets import get_custom_preset_index
+    from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
+    from ui.tabs.visualizers_tab import VisualizersTab
+
+    config = {**DEFAULTS, "enabled": True, "visualizers_enabled": True, "mode": "oscilloscope",
+              "mode_activation": build_visualizer_mode_activation(["oscilloscope"]),
+              "preset_oscilloscope": get_custom_preset_index("oscilloscope"),
+              "osc_delay": 3.7, "osc_graticule_color": [80, 130, 180, 90],
+              "osc_display": "Trace", "osc_graticule": "Off"}
+    settings_manager.set("widgets.spotify_visualizer", config)
+    tab = VisualizersTab(settings_manager)
+    try:
+        tab._select_mode_page("oscilloscope")
+        spec = require_mode_settings("oscilloscope")
+        for key in ("osc_delay", "osc_graticule_color"):
+            _open_control_bucket(tab, spec, spec.control(key))
+        rows = tab._osc_rows
+        for display in ("Trace", "Phase", "Ring"):
+            tab.osc_display.setCurrentText(display)
+            assert rows["osc_delay"].isHidden() == (display != "Phase")
+            assert collect_spec_mode_settings(tab, "oscilloscope")["osc_delay"] == 3.7
+        for style in ("Off", "Crosshair", "Grid", "Off"):
+            tab.osc_graticule.setCurrentText(style)
+            assert rows["osc_graticule_color"].isHidden() == (style == "Off")
+            assert collect_spec_mode_settings(tab, "oscilloscope")["osc_graticule_color"] == config["osc_graticule_color"]
+        load_spec_mode_settings(tab, "oscilloscope", config)
+        assert rows["osc_delay"].isHidden() and rows["osc_graticule_color"].isHidden()
+    finally:
+        tab.deleteLater()
+        qt_app.processEvents()
+
+
 @pytest.mark.parametrize("spec", CONDITIONAL, ids=lambda spec: spec.mode_id)
 def test_conditional_controls_follow_their_condition_live_and_on_load(qt_app, settings_manager, spec, open_gate):
     from core.settings.visualizer_mode_registry import build_visualizer_mode_activation

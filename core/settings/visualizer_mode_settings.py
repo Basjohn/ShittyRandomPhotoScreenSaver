@@ -877,7 +877,7 @@ _SINE_WAVE = ModeSettings(
         Bucket("motion", "Motion", "Speed, travel, crawl, and wave-motion controls still apply when hidden."),
         Bucket("response", "Response", "Energy response and width behavior still apply when hidden."),
         Bucket("multi_line", "Multi-Line",
-               "Extra line colors, travel, ghosting, displacement, and line offsets still apply when hidden.",
+               "Extra line colors, travel, ghosting, and line offsets still apply when hidden.",
                advanced=True),
         Bucket("layout", "Layout", "Density, spacing, and card-height controls still apply when hidden.",
                advanced=True),
@@ -929,9 +929,9 @@ _SINE_WAVE = ModeSettings(
                "bigger swells. CPU detects bass transients and the shader briefly "
                "amplifies all sine lines.", bucket="response", logical=True, percent=True, tick=10),
         Slider("sine_displacement", "Displacement:", 0.0, 1.0,
-               "Bass-reactive XY displacement of multi-line sine waves. "
+               "Bass-reactive XY displacement of sine waves. "
                "Higher = larger transient shoves when bass hits. "
-               "Most visible with 2-3 lines enabled.", bucket="multi_line", percent=True, tick=10),
+               "Applies to every enabled line, including single-line mode.", bucket="motion", percent=True, tick=10),
         # Lines 2-6 sit side by side (colour, glow, travel) and appear with the line count.
         Custom("lines", "multi_line", build="ui.tabs.media.sine_wave_builder:build_lines_section",
                load="ui.tabs.media.sine_wave_settings_binding:load_lines_section",
@@ -990,7 +990,7 @@ def _oscilloscope() -> ModeSettings:
             Slider("osc_delay", "Phase Delay:", 0.1, 6.0,
                    "Phase display only: how far apart the two moments it compares are. Short delays draw tight "
                    "loops, long ones wide knots.",
-                   bucket="display", logical=True, scale=10, decimals=1, suffix=" ms"),
+                   bucket="display", logical=True, scale=10, decimals=1, suffix=" ms", when=("osc_display", "Phase")),
             Colour("osc_beam_color", "Beam Colour:", "Choose Beam Colour",
                    "The beam's colour; its centre burns toward white.", bucket="beam", alpha=False),
             Colour("osc_beam_glow_color", "Glow Colour:", "Choose Glow Colour",
@@ -1015,7 +1015,8 @@ def _oscilloscope() -> ModeSettings:
             Choice("osc_graticule", "Graticule:", OSC_GRATICULES,
                    "The scale behind the beam: the classic grid, only the centre axes, or none.", bucket="screen"),
             Colour("osc_graticule_color", "Graticule Colour:", "Choose Graticule Colour",
-                   "The scale's colour; its alpha sets how faint it is.", bucket="screen"),
+                   "The scale's colour; its alpha sets how faint it is.", bucket="screen",
+                   when=("osc_graticule", ("Grid", "Crosshair"))),
         ),
     )
 
