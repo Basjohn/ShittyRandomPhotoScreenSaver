@@ -56,6 +56,26 @@ _MODULE_ROW_MIN_WIDTH = 220
 
 logger = get_logger(__name__)
 
+
+class _TransitionDurationSlider(NoWheelSlider):
+    """A shared view whose undo state retains the transition it edited."""
+
+    def __init__(self, owner):
+        super().__init__(Qt.Orientation.Horizontal)
+        self._duration_owner = owner
+
+    def _undo_state(self):
+        return self._duration_owner._current_transition, self.value()
+
+    def _restore_undo_state(self, state):
+        name, value = state
+        owner = self._duration_owner
+        owner._duration_by_type[name] = int(value)
+        if owner._current_transition == name:
+            self.setValue(int(value))
+        else:
+            owner._save_settings()
+
 _TRANSITION_SETTING_NAMES = get_transition_setting_names()
 
 _SETUP_NAV_KEY = "__setup__"
@@ -371,7 +391,7 @@ class TransitionsTab(QWidget):
         duration_layout.setContentsMargins(0, 12, 0, 0)
         duration_layout.setSpacing(12)
         duration_row = _aligned_row(duration_layout, "Duration (Short → Long):")
-        self.duration_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.duration_slider = _TransitionDurationSlider(self)
         self.duration_slider.setRange(100, 15000)  # store milliseconds directly (15s max)
         self.duration_slider.setSingleStep(100)
         self.duration_slider.setPageStep(500)

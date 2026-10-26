@@ -11,6 +11,32 @@ from rendering.transition_registry import get_transition_setting_names
 from rendering.transition_settings import iter_transition_settings, transition_settings, widget_attr
 
 
+def test_duration_undo_keeps_the_original_transition_after_navigation(qapp, settings_manager, qtbot):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QWidget
+    from ui.settings_undo import SettingsUndo
+
+    window = QWidget()
+    qtbot.addWidget(window)
+    window.settings_undo = SettingsUndo(window)
+    tab = TransitionsTab(settings_manager, window)
+    tab._on_nav_selected("Slide")
+    before = tab.duration_slider.value()
+    QTest.keyClick(tab.duration_slider, Qt.Key.Key_Right)
+    after = tab.duration_slider.value()
+    assert after != before
+    tab._on_nav_selected("Wipe")
+    other = tab.duration_slider.value()
+    assert window.settings_undo.undo()
+    assert settings_manager.get("transitions.durations")["Slide"] == before
+    assert tab.duration_slider.value() == other
+    assert tab._current_transition == "Wipe"
+    assert window.settings_undo.redo()
+    assert settings_manager.get("transitions.durations")["Slide"] == after
+    assert tab.duration_slider.value() == other
+
+
 @pytest.fixture
 def qapp():
     app = QApplication.instance()
