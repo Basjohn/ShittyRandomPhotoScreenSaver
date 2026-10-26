@@ -34,10 +34,21 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 
 ### 2B. Settings and UI (in this order)
 
-- [~] **Light-theme legibility:** finish the explicit shared light-theme text-shadow switch and slightly heavier
+- [ ] **Theme-list palette previews and favourites (active):**
+  - [ ] In both Settings and Widget theme lists, add a right-aligned square made from four dominant theme colours,
+    with a 1 px current semantic border. Derive previews from validated theme data, without changing theme schemas.
+  - [ ] Immediately left of each square, add a semantic-colour clickable star; filled means favourite. Persist stable
+    theme identities through existing Settings infrastructure; keep Settings/Widget catalogue identities distinct.
+  - [ ] Sort favourites first in each list, preserving normal catalogue order within each group, selection, linked
+    behaviour, keyboard navigation and Custom lifecycle. Starring must not activate a different theme.
+  - [ ] Verify persistence/reopen, toggling and stable order, long-name layout, semantic theme refresh and actual
+    rendered rows. Finish this slice, then resume the shared Settings UX audit below.
+
+- [~] **Light-theme legibility:** finish shared **soft** light-theme text/header-logo shadows and slightly heavier
   typography across Settings/runtime. Preserve dark-theme pixels, authored shadow parameters, backgrounds and theme
   schemas; derive admission from semantic roles. Verify native Glass/Acrylic and translucent runtime cards before
-  landing; probes need external deadlines and completed production retirement.
+  landing; probes need external deadlines and completed production retirement. Blanket light-theme shadow removal
+  was rejected; use a measured soft-shadow prototype and preserve the global operator controls.
 
 - [ ] **4C — Shared Settings UX audit:**
   - [ ] Audit every Visualizer/Transition/widget page for the shared Angle/Direction, Range and Triangle controls,
