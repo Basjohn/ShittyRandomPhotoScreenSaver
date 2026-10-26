@@ -1,6 +1,6 @@
 # Shared scene3d GPU resources
 
-The retained Quick transition host remains the render owner. `rendering/quick/scene3d/` supplies context-local,
+The retained Quick transition and visualizer hosts remain their scenes' render owners. `rendering/quick/scene3d/` supplies context-local,
 lazy resources; it does not create a clock, scheduler, global texture cache or alternate renderer. All admitted
 operations require the validated OpenGL 4.6 context. PyOpenGL DSA creation calls use explicit output arrays.
 
@@ -10,13 +10,14 @@ Early E8 receiver attempts produced triangular near-footprint casts or a corner-
 
 ## Shared framed-camera and transparent-scene admission contract
 
-The **implemented Neon Lake internal view** establishes the behavior to generalize, not a new camera subsystem.
-Before Extruded Bubble, §4A FC must promote the existing `view_orbit_settings`, optional
-`scene_transform_settings`, gesture admission and projection/fit helpers into one opt-in **framed 3D camera
-capability**. The outer retained card and CUSTOM stage remain fixed, while its content orbits/pans/zooms inside
+The opt-in **framed 3D camera capability** is implemented in `core/settings/framed_camera.py` with the existing
+view-orbit/scene-transform declarations and shared physical projection/admission helpers. Neon Lake and Extruded Bubble
+are current consumers; future modes reuse this owner rather than repeating the retired §4A/FC promotion.
+The outer retained card and CUSTOM stage remain fixed, while its content orbits/pans/zooms inside
 CARD_INTERIOR. Mode declarations supply bounds, pivot, pan/zoom safety, fit and near-plane behavior; do **not**
 globalize landscape angles, wrap bounded modes, give future modes copied camera controllers or change unframed 3D
-behavior. Save camera view under the existing presentation authority, not the art presets or layout profile.
+behavior. Live gesture pose persistence stays with the existing view-pose/presentation owner; a mode's authored initial
+pose retains its declared Settings/preset keys.
 
 Before a consumer with overlapping translucent geometry, prove these **separate, lazy shared primitives**:
 

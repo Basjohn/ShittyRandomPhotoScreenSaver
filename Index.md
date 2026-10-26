@@ -82,6 +82,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer visual tuning: offscreen preview, side-by-side sheets, measurement, pixel-identity proof | `Docs/Guides/Visualizer_Visual_Tuning.md` |
 | Shared lab context/target, production-host input experiments, bounded capture and retirement | `Docs/Guides/Visualizer_Labs.md`; `tools/labs/render_target.py` |
+| Waveform Ribbon reference measurements, architecture prerequisites, work packages and visual fidelity gates | `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`; `Docs/Future_Work/Waveform_Ribbon.md` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
 | Visualizer Previous/Next preset glyphs and default selection | `Docs/Reference/Visualizer_Reference.md` → Preset navigation glyphs |
 | Visualizer hover display transfer, native glyph admission and existing CUSTOM transaction | `Docs/Reference/Visualizer_Reference.md` → Preset navigation glyphs; `Current_Plan.md` → R38 |
@@ -103,7 +104,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Reusable framed 3D internal camera, held-left orbit and per-mode view-pose contract | `Docs/Reference/Visualizer_Reference.md` → Live view pose; `Docs/Reference/Scene3D_Resources.md` → Shared framed-camera |
 | Framed 3D control hints, hover visit, global glyph/hint preferences and RCC artwork | `Docs/Reference/Visualizer_Reference.md` → framed hints; `ui/assets/widgets/visualizer/control_hint.png` |
 | Framed preset starting views, Save Preset As and camera validation | `Docs/Reference/Visualizer_Reference.md` → Framed preset starting views; `core/settings/visualizer_view_orbit.py` |
-| Shared G1 attachments, G3A transparent layering, G2 shadow-map and selective G3B optics proof | `Docs/Reference/Scene3D_Resources.md`; `Current_Plan.md` §4A |
+| Shared G1 attachments, G3A transparent layering, G2 shadow-map and selective G3B optics proof | `Docs/Reference/Scene3D_Resources.md`; `Current_Plan.md` §6 |
 | Usu character authoring source and static review renders | local checkout `assets/usu/README.md` (excluded from normal Godzip); media source guidance in `Current_Plan.md` §3 |
 | shared 3D resource ownership, DSA, immutable storage and state restoration | `Docs/Reference/Scene3D_Resources.md` |
 | runtime audit 2026-09-22 outcomes and rejected ideas (closed) | `Docs/Guardrails/Performance_Optimization_Contract.md` |

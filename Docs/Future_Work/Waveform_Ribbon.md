@@ -1,6 +1,11 @@
 > Operator-supplied concept brief, copied verbatim from `references/waveform_ribbon_concept_package.zip` (local, git-ignored) on 2026-10-25 so the plan can
 > link it. The mock image(s) (Waveform_Ribbon_Concept.png, Waveform_Ribbon_Alternate_Annotated_Mock.png) stay in that package. Sequencing lives in `Current_Plan.md` §7.
 
+Detailed decomposition, inspected reference inventory, shared-prerequisite ownership and staged visual evidence gates:
+[Waveform Ribbon Lab Plan](../Reference/Waveform_Ribbon_Lab_Plan.md). Use it when the mode is admitted; it does not
+replace Current_Plan sequencing or mark the concept visually validated. It distinguishes the approved primary from
+the archive's additional alternate; the copied brief below is unchanged.
+
 # Waveform Ribbon — SRPSS concept package
 
 ## Included image

@@ -186,6 +186,10 @@ Chosen first: the smallest contained scene, it directly reuses Extruded Bubble's
 and it proves the lab-first pipeline before the bigger scenes. Brief and gates: `Docs/Future_Work/Waveform_Ribbon.md`
 (mocks in `references/waveform_ribbon_concept_package.zip`).
 
+Execution must use `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`: WR-00 reference/crop/recording custody, then
+WR-01/02 independent S3D-1 proof before composition. The copied brief approves the primary cool hall image;
+the archive's alternate is context only. Existing EB wakes/probes do not establish a generic ribbon or floor reflection.
+
 - [ ] Lab: one ribbon (bass → width, mids → twist/deformation, energy → glow) toward the concept image.
 - [ ] Production: single ribbon, translucent emissive shading and bloom, then the reflective floor, then multi-ribbon,
   then particle accents, then a restrained Settings surface (gates A–H: same scene low/high, no second renderer, one
