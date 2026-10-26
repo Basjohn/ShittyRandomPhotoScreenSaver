@@ -18,6 +18,62 @@ from ui.widgets.visual_controls import DirectionMapper, RangeSlider, TriangleMap
 pytestmark = pytest.mark.qt
 
 
+def test_gradient_mapper_has_independent_nodes_and_one_commit_per_edit(qt_app):
+    from ui.widgets.visual_controls import GradientMapper
+
+    mapper = GradientMapper(aspect=2.)
+    mapper.resize(mapper.sizeHint())
+    mapper.setValue((.2, .8, .8, .2))
+    record = _Recorder(mapper)
+    before = mapper.value()
+    start = _point(mapper.node_point(0))
+    QTest.mousePress(mapper, Qt.MouseButton.LeftButton, pos=start)
+    QTest.mouseMove(mapper, start + QPoint(20, -8))
+    assert not record.committed
+    QTest.mouseRelease(mapper, Qt.MouseButton.LeftButton)
+    moved = mapper.value()
+    assert moved[:2] != before[:2] and moved[2:] == before[2:]
+    assert len(record.committed) == 1
+    QTest.keyClick(mapper, Qt.Key.Key_Tab)
+    QTest.keyClick(mapper, Qt.Key.Key_Right)
+    assert mapper.value()[:2] == moved[:2] and mapper.value()[2] > moved[2]
+    assert len(record.committed) == 2
+    with pytest.raises(ValueError, match="minimum span"):
+        mapper.setValue((.5, .5, .5, .5))
+
+
+def test_gradient_tab_visits_both_nodes_then_leaves_the_form_control(qt_app):
+    from PySide6.QtWidgets import QLineEdit
+    from ui.widgets.visual_controls import GradientMapper
+
+    form = QWidget()
+    layout = QVBoxLayout(form)
+    before, mapper, after = QLineEdit(), GradientMapper(), QLineEdit()
+    for widget in (before, mapper, after):
+        layout.addWidget(widget)
+    # Focus traversal works on a hidden native widget tree without showing a window.
+    before.setFocus()
+    QTest.keyClick(before, Qt.Key.Key_Tab)
+    assert form.focusWidget() == mapper and mapper._active == 0
+    QTest.keyClick(mapper, Qt.Key.Key_Tab)
+    assert form.focusWidget() == mapper and mapper._active == 1
+    QTest.keyClick(mapper, Qt.Key.Key_Tab)
+    assert form.focusWidget() == after
+    QTest.keyClick(after, Qt.Key.Key_Backtab)
+    assert form.focusWidget() == mapper
+    # Hidden widgets defer FocusIn delivery until shown; deliver its real reason
+    # here without disturbing the desktop to prove reverse entry semantics too.
+    from PySide6.QtGui import QFocusEvent
+    from PySide6.QtCore import QEvent
+    qt_app.sendEvent(mapper, QFocusEvent(QEvent.Type.FocusIn, Qt.FocusReason.BacktabFocusReason))
+    assert mapper._active == 1
+    QTest.keyClick(mapper, Qt.Key.Key_Backtab)
+    assert form.focusWidget() == mapper and mapper._active == 0
+    QTest.keyClick(mapper, Qt.Key.Key_Backtab)
+    assert form.focusWidget() == before
+    form.deleteLater()
+
+
 # --- spec admission -------------------------------------------------------------------------------------------
 
 def test_spec_types_repair_stored_values_into_their_range():

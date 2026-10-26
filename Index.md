@@ -81,6 +81,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Visualizer change preflight | `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer visual tuning: offscreen preview, side-by-side sheets, measurement, pixel-identity proof | `Docs/Guides/Visualizer_Visual_Tuning.md` |
+| Shared lab context/target, production-host input experiments, bounded capture and retirement | `Docs/Guides/Visualizer_Labs.md`; `tools/labs/render_target.py` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
 | Visualizer Previous/Next preset glyphs and default selection | `Docs/Reference/Visualizer_Reference.md` → Preset navigation glyphs |
 | Visualizer Settings declarations, consumer/authoring boundaries, validation, availability and bespoke editors | `core/settings/visualizer_mode_settings.py`; `Docs/Reference/Visualizer_Reference.md` → Settings declarations; `Docs/Guides/Visualizer_Change_Checklist.md` |

@@ -2610,7 +2610,7 @@ def test_bubble_shader_radial_modes_keep_center_out_as_primary_mode():
     )
     shader = shader_path.read_text(encoding="utf-8")
 
-    assert 'grad_t = (u_gradient_mode == 2) ? radial_t : (1.0 - radial_t);' in shader
+    assert 'grad_t = (gradient_mode == 2.0) ? radial_t : (1.0 - radial_t);' in shader
 
 
 class TestVisualizerModeEnum:

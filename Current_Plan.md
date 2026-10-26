@@ -38,13 +38,13 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
   - [ ] Finish the page-by-page conditional/nested-bucket review across Visualizers, Transitions and widgets. Use
     shared Angle/Direction, Range and Triangle controls only where their stored meaning fits; keep categorical motion
     and ordering choices intact. Prove each changed body's round-trip and rendered layout; no per-page owner clones.
-  - [ ] **Shared lab foundation:** consolidate existing offscreen GL context/target/readback/retirement facilities for
-    future mode labs; retain one production renderer/scene substrate, explicit logical time, CLI-owned scratch and
-    process-tree-bounded probes. Document the shared lab contract and prove lifecycle/resize/capture before adoption.
-  - [~] **Bubble gradient prototype — revise to two nodes:** independent Dark/Light endpoints define direction and
-    blend span/gradualness. Replace the initial single-node lab (`tools/labs/bubble_gradient_mapper_lab.py`), reuse shared
-    visual controls and production shading, and inspect shifted/narrow/wide endpoint captures. Keep current enum keys,
-    presets and production appearance intact until the interaction and migration are reviewed.
+  - [~] **Bubble two-node gradient prototype — awaiting operator look:** inspect independent Dark/Light endpoints,
+    direction, blend span and shifted placement in `tools/labs/bubble_gradient_mapper_lab.py`; control capture:
+    `tmp/bubble_gradient_mapper/prototype.png`, sibling wide/narrow/shifted fixtures. Geometry, gesture and driver pixel
+    compatibility pass. Keep current enums, presets and production appearance until interaction/migration review.
+  - [ ] Reconcile the EB lab recipe/reference registry with renamed `*Goal.png` targets before a full comparison run.
+    Six old `ExBubble*.png` originals and their README/manifest paths are absent; `--only=ExBubble2` remains valid.
+    Do not invent mappings or substitute archived lab output for operator targets. Missing references fail before GL.
   - [~] **Advanced hierarchy — awaiting operator look:** large Advanced header contains Technical and EB Camera;
     native real-dialog reopen/retirement and legacy-path checks pass. Inspect the nested path at operator DPI/theme;
     capture: `tmp/pytest_advanced_render/test_visualizer_technical_path0/advanced_technical.png`.
@@ -169,7 +169,8 @@ then closed the gap by measuring against both. Do the same for every new mode:
 1. **Target first:** the mock/concept package and its low/high pair; write the mode's contract and hard gates (from its
    brief) into its focused doc before code.
 2. **Lab:** `tools/labs/<mode>_lab.py` composes the target scene by hand, offscreen, from the shared primitives, with
-   free knobs and no Settings/preset plumbing. Iterate on rendered stills (mock | lab sheets) until it is close.
+   free knobs and no Settings/preset plumbing. Reuse the context/target and ownership contract in
+   `Docs/Guides/Visualizer_Labs.md`. Iterate on rendered stills (mock | lab sheets) until it is close.
 3. **Production through the shared substrate:** typed Settings, presets, the logical clock and lifecycle. Diff the lab's
    effective knobs against production's key by key; judge with **mock | lab | ours** sheets per preset, the per-mode
    capture tool (`tools/<mode>_capture.py` on recorded real music) and measurements (regional colour, on-screen size

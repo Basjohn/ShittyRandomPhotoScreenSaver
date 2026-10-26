@@ -11,8 +11,7 @@ from OpenGL import GL as gl
 
 from core.performance.frame_trace import FrameTraceEvent
 from core.settings.bubble_gradient_semantics import (
-    get_bubble_gradient_shader_mode,
-    get_bubble_gradient_shader_vector,
+    project_bubble_gradient,
     get_bubble_specular_shader_vector,
 )
 from rendering.quick.render.gl_resources import compile_program
@@ -214,6 +213,10 @@ class QuickBubbleRenderer:
     def has_resources(self) -> bool:
         return bool(self._program)
 
+    def _gradient_parameters(self, parameters, layout: QuickBubbleLayout):
+        """One input projection; labs may supply endpoints without forking drawing."""
+        return project_bubble_gradient(str(parameter(parameters, "bubble_gradient_direction")))
+
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
         trace = frame.trace_context
         snapshot = frame.snapshot
@@ -341,16 +344,8 @@ class QuickBubbleRenderer:
         specular_direction = get_bubble_specular_shader_vector(
             str(parameter(parameters, "bubble_specular_direction"))
         )
-        gradient_name = str(
-            parameter(parameters, "bubble_gradient_direction")
-        )
-        gradient_direction = get_bubble_gradient_shader_vector(gradient_name)
         gl.glUniform2f(uniforms["u_specular_dir"], *specular_direction)
-        gl.glUniform2f(uniforms["u_gradient_dir"], *gradient_direction)
-        gl.glUniform1i(
-            uniforms["u_gradient_mode"],
-            get_bubble_gradient_shader_mode(gradient_name),
-        )
+        gl.glUniform4f(uniforms["u_gradient"], *self._gradient_parameters(parameters, layout))
 
         color_parameters = (
             ("u_outline_color", "bubble_outline_color"),
@@ -446,8 +441,7 @@ class QuickBubbleRenderer:
                 "u_trail_radial_scale",
                 "u_viewport_stroke_extra_half_px",
                 "u_specular_dir",
-                "u_gradient_dir",
-                "u_gradient_mode",
+                "u_gradient",
                 "u_outline_color",
                 "u_specular_color",
                 "u_gradient_light",

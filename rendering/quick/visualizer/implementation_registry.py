@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from importlib import import_module
+from typing import Callable
 
 from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
@@ -43,6 +44,8 @@ def iter_quick_visualizer_implementations(
 
 def resolve_quick_visualizer_renderer(
     mode_id: object,
+    *,
+    renderer_factory: Callable[[str], QuickVisualizerRenderer | None] | None = None,
 ) -> QuickVisualizerRenderer | None:
     canonical = str(mode_id or "").strip().lower()
     if canonical not in VISUALIZER_MODE_IDS:
@@ -50,24 +53,27 @@ def resolve_quick_visualizer_renderer(
     descriptor = _BY_ID.get(canonical)
     if descriptor is None:
         return None
-    module = import_module(descriptor.module_name)
-    factory = getattr(module, descriptor.factory_name, None)
-    if not callable(factory):
-        raise RuntimeError(
-            f"Quick visualizer factory is unavailable: {descriptor.module_name}:"
-            f"{descriptor.factory_name}"
-        )
-    renderer = factory()
-    if getattr(renderer, "mode_id", None) != canonical:
-        raise RuntimeError(
-            f"Quick visualizer implementation identity mismatch: {canonical}"
-        )
-    if not callable(getattr(renderer, "render", None)) or not callable(
-        getattr(renderer, "release_resources", None)
-    ):
-        raise TypeError(
-            f"Quick visualizer implementation violates render contract: {canonical}"
-        )
+    if renderer_factory is None:
+        module = import_module(descriptor.module_name)
+        factory = getattr(module, descriptor.factory_name, None)
+        if not callable(factory):
+            raise RuntimeError(
+                f"Quick visualizer factory is unavailable: {descriptor.module_name}:"
+                f"{descriptor.factory_name}"
+            )
+        renderer = factory()
+    else:
+        renderer = renderer_factory(canonical)
+    try:
+        if getattr(renderer, "mode_id", None) != canonical:
+            raise RuntimeError(f"Quick visualizer implementation identity mismatch: {canonical}")
+        if not callable(getattr(renderer, "render", None)) or not callable(getattr(renderer, "release_resources", None)):
+            raise TypeError(f"Quick visualizer implementation violates render contract: {canonical}")
+    except Exception:
+        release = getattr(renderer, "release_resources", None)
+        if callable(release):
+            release()
+        raise
     return renderer
 
 

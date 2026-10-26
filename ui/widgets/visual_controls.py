@@ -428,6 +428,140 @@ class TriangleMapper(_VisualControl):
         super().keyPressEvent(event)
 
 
+class GradientMapper(_VisualControl):
+    """Two independent Dark/Light endpoints; line sets direction, span sets blend.
+
+    Normalized top-left coordinates match the preview. Tab visits both endpoints
+    then leaves the control; arrows move it (Shift is fine). Short spans reject.
+    """
+
+    def __init__(self, parent=None, *, aspect=2.):
+        super().__init__(parent)
+        if not math.isfinite(aspect) or aspect <= 0:
+            raise ValueError("Gradient canvas aspect must be positive and finite")
+        self._aspect = float(aspect)
+        self._coords = (.2, .8, .8, .2)
+        self._active = 0
+        self._grab_offset = QPointF()
+        self.setMinimumSize(280, 190)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.setAccessibleDescription(self.describe())
+
+    def sizeHint(self):
+        return QSize(360, 220)
+
+    def setAspectRatio(self, aspect):
+        if not math.isfinite(aspect) or aspect <= 0:
+            raise ValueError("Gradient canvas aspect must be positive and finite")
+        self._aspect = float(aspect)
+        self.update()
+
+    def value(self):
+        return self._coords
+
+    def setValue(self, values):
+        from core.gradient_geometry import admit_gradient_endpoints
+        self._coords = admit_gradient_endpoints(values)
+        self.setAccessibleDescription(self.describe())
+        self.update()
+
+    def describe(self):
+        dx, dy, lx, ly = self._coords
+        return f"Dark {dx:.2f}, {dy:.2f}; Light {lx:.2f}, {ly:.2f}"
+
+    def canvas(self):
+        width = min(self.width() - 28., (self.height() - 40.) * self._aspect)
+        height = width / self._aspect
+        return QRectF((self.width() - width) / 2., 24. + (self.height() - 40. - height) / 2., width, height)
+
+    def node_point(self, index):
+        rect = self.canvas()
+        return QPointF(rect.left() + self._coords[index * 2] * rect.width(),
+                       rect.top() + self._coords[index * 2 + 1] * rect.height())
+
+    def focusInEvent(self, event):
+        if event.reason() == Qt.FocusReason.TabFocusReason:
+            self._active = 0
+        elif event.reason() == Qt.FocusReason.BacktabFocusReason:
+            self._active = 1
+        self.update()
+        super().focusInEvent(event)
+
+    def focusNextPrevChild(self, next_):
+        if self.isEnabled() and self._active == (0 if next_ else 1):
+            self._active = 1 if next_ else 0
+            self.update()
+            return True
+        return super().focusNextPrevChild(next_)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = self.canvas()
+        painter.setPen(QPen(_colour('slider.groove.border'), 1.))
+        painter.setBrush(_vertical_gradient('slider.groove.surface', rect.top(), rect.bottom()))
+        painter.drawRoundedRect(rect, 5., 5.)
+        painter.setPen(QPen(_colour('slider.groove.bottom_border'), 1.))
+        painter.drawLine(QPointF(rect.center().x(), rect.top()), QPointF(rect.center().x(), rect.bottom()))
+        painter.drawLine(QPointF(rect.left(), rect.center().y()), QPointF(rect.right(), rect.center().y()))
+        dark, light = self.node_point(0), self.node_point(1)
+        painter.setPen(QPen(_colour('slider.handle.hover_border'), 2.5))
+        painter.drawLine(dark, light)
+        for index, point in enumerate((dark, light)):
+            _paint_handle(painter, point, self._state(primary=index == self._active), self.isEnabled(), round_=True)
+            painter.setPen(_colour('text.tertiary'))
+            painter.drawText(QRectF(point.x() - 25., point.y() - 23., 50., 16.), Qt.AlignmentFlag.AlignCenter,
+                             "Dark" if index == 0 else "Light")
+
+    def _move_to(self, point, *, commit=False):
+        from core.gradient_geometry import admit_gradient_endpoints
+        rect = self.canvas()
+        values = list(self._coords)
+        values[self._active * 2:self._active * 2 + 2] = (
+            (point.x() - rect.left()) / rect.width(), (point.y() - rect.top()) / rect.height())
+        try:
+            admitted = admit_gradient_endpoints(values)
+        except ValueError:
+            # Reject a too-short gesture, retaining the last admitted endpoints.
+            return
+        if admitted != self._coords:
+            self._coords = admitted
+            self._changed(commit=commit)
+
+    def mousePressEvent(self, event):
+        if event.button() != Qt.MouseButton.LeftButton or not self.isEnabled():
+            return super().mousePressEvent(event)
+        point = event.position()
+        distances = [((point - self.node_point(index)).manhattanLength(), index != self._active, index)
+                     for index in range(2)]
+        distance, _other, self._active = min(distances)
+        self._grab_offset = point - self.node_point(self._active) if distance < 16. else QPointF()
+        self._dragging, self._moved_in_drag = True, False
+        self._move_to(point - self._grab_offset)
+        self.update()
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self._dragging:
+            self._move_to(event.position() - self._grab_offset)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def keyPressEvent(self, event):
+        if not self.isEnabled():
+            return super().keyPressEvent(event)
+        delta = {Qt.Key.Key_Left: (-1, 0), Qt.Key.Key_Right: (1, 0),
+                 Qt.Key.Key_Up: (0, -1), Qt.Key.Key_Down: (0, 1)}.get(event.key())
+        if delta is None:
+            return super().keyPressEvent(event)
+        rect = self.canvas()
+        step = .002 if event.modifiers() & Qt.KeyboardModifier.ShiftModifier else .01
+        point = self.node_point(self._active) + QPointF(delta[0] * step * rect.width(), delta[1] * step * rect.height())
+        self._move_to(point, commit=True)
+        event.accept()
+
+
 class ScenePathMapper(_VisualControl):
     """Physical 3D scene segment: two independently draggable XY nodes and depth rails.
 
@@ -885,7 +1019,7 @@ def _barycentric_clamped(p: QPointF, a: QPointF, b: QPointF, c: QPointF) -> tupl
     return best  # type: ignore[return-value]
 
 
-__all__ = ["DirectionChoiceMapper", "DirectionMapper", "LIVE_THEMED_PAINTERS", "RangeSlider", "TriangleMapper"]
+__all__ = ["DirectionChoiceMapper", "DirectionMapper", "GradientMapper", "LIVE_THEMED_PAINTERS", "RangeSlider", "TriangleMapper"]
 
 class SceneVolumeMapper(_VisualControl):
     """Oblique 3D world-volume editor over a framed camera's normalized eye box (EB's world by default).

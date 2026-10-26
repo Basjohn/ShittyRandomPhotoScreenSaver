@@ -106,57 +106,69 @@ class TransitionCapture:
     def __init__(self, width: int, height: int, source=None, destination=None):
         import numpy as np
         from OpenGL import GL as gl
-        from PySide6.QtGui import QGuiApplication, QOffscreenSurface, QOpenGLContext, QSurfaceFormat
-        from rendering.quick.bootstrap import QUICK_OPENGL_VERSION, validate_current_opengl_context
-        from rendering.quick.scene3d.resources import MeshResources
+        from PySide6.QtGui import QOpenGLContext
         from rendering.quick.transitions.render_host import QuickTransitionRenderHost
+        from tools.labs.render_target import OffscreenRenderTarget
 
-        self.width, self.height = width, height
-        from PySide6.QtCore import QCoreApplication
-
-        existing = QCoreApplication.instance()
-        if existing is not None and not isinstance(existing, QGuiApplication):
-            # Creating a GL context under a plain QCoreApplication is an access violation, not an error.
-            raise RuntimeError("TransitionCapture needs a QGuiApplication, but a QCoreApplication already exists")
-        self.app = existing or QGuiApplication([])
-        fmt = QSurfaceFormat()
-        fmt.setRenderableType(QSurfaceFormat.OpenGL)
-        fmt.setProfile(QSurfaceFormat.CoreProfile)
-        fmt.setVersion(*QUICK_OPENGL_VERSION)
-        fmt.setDepthBufferSize(24)
-        self.context = QOpenGLContext()
-        self.context.setFormat(fmt)
-        if not self.context.create(): raise RuntimeError(f"OpenGL {QUICK_OPENGL_VERSION} context unavailable")
-        self.surface = QOffscreenSurface()
-        self.surface.setFormat(self.context.format())
-        self.surface.create()
-        if not self.context.makeCurrent(self.surface): raise RuntimeError("offscreen GL admission failed")
-        validate_current_opengl_context(reason="transition-capture", context=self.context)
-        self.driver = gl.glGetString(gl.GL_RENDERER).decode()
-        self.host = QuickTransitionRenderHost()
-        self.mesh = MeshResources("transition diagnostic quad")
-        self.vao, _ = self.mesh.mesh("quad", (0., 0., 1., 0., 0., 1., 1., 1.), (2,))
-        fixtures = fixture_images(width, height)
-        self.images = tuple(image.convert("RGBA").resize((width, height)) for image in
-                            (source or fixtures[0], destination or fixtures[1]))
+        previous = QOpenGLContext.currentContext()
+        previous_surface = previous.surface() if previous is not None else None
+        self._target = OffscreenRenderTarget(width, height, label="transition-capture")
+        self.host = None
         self.textures = []
-        for image in (*self.images, None):
-            texture = int(gl.glGenTextures(1))
-            self.textures.append(texture)
-            gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
-            for axis in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T): gl.glTexParameteri(gl.GL_TEXTURE_2D, axis, gl.GL_CLAMP_TO_EDGE)
-            for filt in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER): gl.glTexParameteri(gl.GL_TEXTURE_2D, filt, gl.GL_LINEAR)
-            gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE,
-                            None if image is None else np.asarray(image))
-        self.fbo = int(gl.glGenFramebuffers(1))
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self.fbo)
-        gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, self.textures[2], 0)
-        self.depth = int(gl.glGenRenderbuffers(1))
-        gl.glBindRenderbuffer(gl.GL_RENDERBUFFER, self.depth)
-        gl.glRenderbufferStorage(gl.GL_RENDERBUFFER, gl.GL_DEPTH_COMPONENT24, width, height)
-        gl.glFramebufferRenderbuffer(gl.GL_FRAMEBUFFER, gl.GL_DEPTH_ATTACHMENT, gl.GL_RENDERBUFFER, self.depth)
-        if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
-            raise RuntimeError("transition diagnostic framebuffer incomplete")
+        try:
+            self.host = QuickTransitionRenderHost()
+            # A transition frame always needs this quad. Warm at admission, as
+            # before extraction, rather than changing cold-frame timing scope.
+            self.vao
+            fixtures = fixture_images(width, height)
+            self.images = tuple(image.convert("RGBA").resize((width, height)) for image in
+                                (source or fixtures[0], destination or fixtures[1]))
+            for image in self.images:
+                texture = int(gl.glGenTextures(1))
+                self.textures.append(texture)
+                gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+                for axis in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
+                    gl.glTexParameteri(gl.GL_TEXTURE_2D, axis, gl.GL_CLAMP_TO_EDGE)
+                for filt in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
+                    gl.glTexParameteri(gl.GL_TEXTURE_2D, filt, gl.GL_LINEAR)
+                gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0,
+                                gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, np.asarray(image))
+            # Borrowed target view; its sole deletion owner remains _target.
+            self.textures.append(self._target.color_texture)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, self._target.color_texture)
+        except Exception:
+            self.close()
+            if previous is not None and previous_surface is not None:
+                if not previous.makeCurrent(previous_surface):
+                    raise RuntimeError("Could not restore caller's GL context after capture admission failed")
+            raise
+
+    @property
+    def width(self): return self._target.width
+
+    @property
+    def height(self): return self._target.height
+
+    @property
+    def app(self): return self._target.app
+
+    @property
+    def context(self): return self._target.context
+
+    @property
+    def surface(self): return self._target.surface
+
+    @property
+    def driver(self): return self._target.driver
+
+    @property
+    def vao(self): return self._target.vao
+
+    @property
+    def fbo(self): return self._target.fbo
+
+    @property
+    def depth(self): return self._target.depth
 
     def run(self, effect: str, *, seed: int = 713, direction=None, parameters=None, duration_ms: int = 1000,
             settings=None):
@@ -218,6 +230,10 @@ class TransitionCapture:
                                           self.vao, self.textures[0], self.textures[1])
 
     def render(self, run, progress: float):
+        with self._target.current():
+            return self._render_current(run, progress)
+
+    def _render_current(self, run, progress: float):
         from OpenGL import GL as gl
         from PIL import Image
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self.fbo)
@@ -233,42 +249,52 @@ class TransitionCapture:
         return image, submit_ms
 
     def benchmark(self, run):
+        with self._target.current():
+            return self._benchmark_current(run)
+
+    def _benchmark_current(self, run):
         """Bounded test-only GPU query; no runtime instrumentation or glFinish."""
         from OpenGL import GL as gl
         cpu, queries = [], []
-        for index in range(12):
-            query = int(gl.glGenQueries(1)[0])
-            queries.append(query)
-            gl.glBeginQuery(gl.GL_TIME_ELAPSED, query)
-            start = perf_counter()
-            self.host.render(self.frame(run, .15+.7*index/11))
-            cpu.append((perf_counter()-start)*1000)
-            gl.glEndQuery(gl.GL_TIME_ELAPSED)
-            # Flush per frame as presentation does; otherwise the driver's command-buffer
-            # boundary lands inside a query and it counts the GPU waiting on the CPU.
-            gl.glFlush()
         gpu = []
         try:
+            for index in range(12):
+                query = int(gl.glGenQueries(1)[0])
+                queries.append(query)
+                gl.glBeginQuery(gl.GL_TIME_ELAPSED, query)
+                try:
+                    start = perf_counter()
+                    self.host.render(self.frame(run, .15+.7*index/11))
+                    cpu.append((perf_counter()-start)*1000)
+                finally:
+                    gl.glEndQuery(gl.GL_TIME_ELAPSED)
+                # Flush per frame as presentation does; otherwise a command-buffer
+                # boundary counts the GPU waiting on the CPU inside the query.
+                gl.glFlush()
             for query in queries:
                 value = ctypes.c_uint64()
                 gl.glGetQueryObjectui64v(query, gl.GL_QUERY_RESULT, ctypes.byref(value))
                 gpu.append(value.value/1e6)
         finally:
-            gl.glDeleteQueries(len(queries), queries)
+            if queries:
+                gl.glDeleteQueries(len(queries), queries)
         return {"warm_cpu_submit_ms_max": max(cpu), "gpu_ms_max": max(gpu),
                 "gpu_ms_mean": sum(gpu)/len(gpu)}
 
     def close(self):
         from OpenGL import GL as gl
-        self.host.set_enabled_transition_ids(())
-        if self.host.has_resources or self.host.resolved_transition_ids:
-            raise RuntimeError("disabled transition retained resources")
-        self.mesh.release_resources()
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0)
-        gl.glDeleteRenderbuffers(1, [self.depth])
-        gl.glDeleteFramebuffers(1, [self.fbo])
-        gl.glDeleteTextures(self.textures)
-        self.context.doneCurrent()
+        if self._target.closed:
+            return
+        with self._target.current():
+            if self.host is not None:
+                self.host.set_enabled_transition_ids(())
+                if self.host.has_resources or self.host.resolved_transition_ids:
+                    raise RuntimeError("disabled transition retained resources")
+            sources = self.textures[:2]
+            if sources:
+                gl.glDeleteTextures(sources)
+            self.textures = []
+        self._target.close()
 
 
 def quick_smoke(args):
