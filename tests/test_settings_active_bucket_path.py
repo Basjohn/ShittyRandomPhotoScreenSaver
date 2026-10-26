@@ -103,6 +103,18 @@ class SettingsActiveBucketPathTests(unittest.TestCase):
         project_settings_bucket_context(settings, "transitions", "glass_shatter")
         self.assertEqual(settings.get("ui.basic_bucket_path"), "")
 
+    def test_legacy_technical_leaf_gains_required_advanced_ancestor(self):
+        settings = MemorySettings(**{
+            "ui.visualizer_tech_bucket_states": {"extruded_bubble:agc": True},
+            "ui.visualizer_tech_states": {"extruded_bubble": True},
+        })
+        project_settings_bucket_context(settings, "visualizers", "extruded_bubble")
+        self.assertEqual(settings.get("ui.visualizer_adv_states"), {"extruded_bubble": True})
+        self.assertEqual(settings.get("ui.visualizer_tech_states"), {"extruded_bubble": True})
+        settings.writes.clear()
+        project_settings_bucket_context(settings, "visualizers", "extruded_bubble")
+        self.assertEqual(settings.writes, [])
+
     def test_projection_idempotent_on_clean_state(self):
         settings = MemorySettings(**{
             "ui.widget_bucket_states": {"media:controls": True},

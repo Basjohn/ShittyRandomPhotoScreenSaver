@@ -43,7 +43,6 @@ from dataclasses import dataclass
 import math
 from functools import cached_property
 from importlib import import_module
-import math
 from types import MappingProxyType
 from typing import Union
 
@@ -1517,7 +1516,7 @@ _EXTRUDED_BUBBLE = ModeSettings(
         Bucket("motion", "Motion", "The stream's direction and speed, and how bubbles drift and sway."),
         Bucket("reaction", "Reaction", "Breathing, pulse and the response to sustained loud passages."),
         Bucket("collision", "Collision", "What happens when bubbles meet: fuse, pop or bounce."),
-        Bucket("camera", "Camera", "Turn the view slowly on its own after a while without camera input."),
+        Bucket("camera", "Camera", "Turn the view slowly on its own after a while without camera input.", advanced=True),
         Bucket("water", "Water", "The water's colours, haze and veils of light.", advanced=True),
         Bucket("glass", "Glass", "How the bubbles' glass looks: clarity, rim glow, iridescence.", advanced=True),
         Bucket("particles", "Particles", "Specks, dust and their glow, quiet to loud.", advanced=True),

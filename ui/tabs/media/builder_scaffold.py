@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QVBoxLayout, QWidget
 
 from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
@@ -290,6 +290,8 @@ def build_mode_scaffold(
     toggle_row.setSpacing(8)
     toggle = BucketToggle()
     toggle.setText("Advanced")
+    toggle.setProperty("bucketSize", "large")
+    toggle.setIconSize(QSize(11, 11))
     toggle.setCheckable(True)
     default_expanded = bool(tab.get_visualizer_adv_state(mode_key))
     toggle.setChecked(default_expanded)
@@ -328,10 +330,7 @@ def build_mode_scaffold(
         helper.setVisible(not checked)
         setter = getattr(tab, "set_visualizer_adv_state", None)
         if callable(setter) and persist:
-            try:
-                setter(mode_key, checked)
-            except Exception:
-                pass
+            setter(mode_key, checked)
 
     toggle._srpss_bucket_apply_visual_state = lambda checked: (
         toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow),
@@ -361,7 +360,7 @@ def build_mode_scaffold(
     )
 
     if get_visualizer_mode_descriptor(mode_key).technical_controls:
-        technical_host = build_per_mode_technical_group(tab, layout, mode_key)
+        technical_host = build_per_mode_technical_group(tab, advanced_layout, mode_key)
     else:
         technical_host = QWidget(container)
         technical_host.setVisible(False)
