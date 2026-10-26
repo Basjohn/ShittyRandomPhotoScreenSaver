@@ -256,3 +256,45 @@ def test_a_3d_visualizer_draws_with_its_tiers_levers(render_rig, tier):
     from rendering.quick.visualizer.implementations.shockwave_grid import _mesh_key
     assert shockwave._mesh_cells[0] == (columns, rows)
     assert shockwave._resources.has_mesh(_mesh_key(shockwave._mesh_cells))
+
+
+@pytest.mark.qt
+def test_visualizer_quality_views_share_3d_tab_keys_without_changing_art(qt_app, tmp_path):
+    from copy import deepcopy
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
+    from ui.tabs.scene3d_tab import Scene3DTab
+    from ui.tabs.visualizers_tab import VisualizersTab
+
+    manager = _manager(tmp_path, "shared_views")
+    config = deepcopy(manager.get("widgets.spotify_visualizer"))
+    config.update(mode="extruded_bubble", enabled=True, visualizers_enabled=True,
+                  mode_activation=build_visualizer_mode_activation(["extruded_bubble"]))
+    manager.set("widgets.spotify_visualizer", config)
+    page = Scene3DTab(manager)
+    visualizers = VisualizersTab(manager)
+    visualizers._select_mode_page("extruded_bubble")
+    controls = visualizers._extruded_bubble_quality_controls
+    # Measure the quality edits after the existing preset activation/hydration.
+    before_art = deepcopy(manager.get("widgets.spotify_visualizer"))
+    before_custom = deepcopy(manager.get("visualizer_custom_presets"))
+    try:
+        assert set(controls._combos) == {"detail", "visualizers_detail", "extruded_bubble_detail"}
+        general = page._combos["detail"]
+        general.setCurrentIndex(general.findData("KAK"))
+        assert controls._combos["detail"].currentData() == "KAK"
+        own = controls._combos["extruded_bubble_detail"]
+        own.setCurrentIndex(own.findData("Balanced"))
+        assert page._combos["extruded_bubble_detail"].currentData() == "Balanced"
+        assert controls._now_labels["extruded_bubble_detail"].text() == "Now: Balanced"
+        assert manager.get("scene3d.extruded_bubble_detail") == "Balanced"
+        manager.set("scene3d.detail", "High")
+        assert controls._combos["detail"].currentData() == page._combos["detail"].currentData() == "High"
+        assert manager.get("widgets.spotify_visualizer") == before_art
+        assert manager.get("visualizer_custom_presets") == before_custom
+    finally:
+        page.deleteLater()
+        visualizers.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    # Change edges after lazy-body retirement must not reach destroyed views.
+    manager.set("scene3d.detail", "Balanced")

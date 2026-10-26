@@ -62,6 +62,109 @@ def scene3d_visualizer_entries() -> tuple[tuple[str, str], ...]:
                  if scene3d_entry_key(mode) in canonical and is_mode_active(mode))
 
 
+def scene3d_quality_rows() -> dict[str, tuple]:
+    """One UI description for the existing scene3d keys on every Settings surface."""
+    rows = {
+        "detail": ("detail", "General 3D Detail:", SCENE3D_GENERAL_CHOICES,
+                   "The detail for everything 3D. Auto picks by the graphics card in use.\n\n" + _TIERS_TIP),
+        "transitions_detail": ("transitions_detail", "3D Transitions:", SCENE3D_FAMILY_CHOICES,
+                               "Use General follows the General tier. Transition Auto effects follow this tier.\n\n" + _TIERS_TIP),
+        "visualizers_detail": ("visualizers_detail", "3D Visualizers:", SCENE3D_FAMILY_CHOICES,
+                               "Use General follows the General tier; each mode can set its own.\n\n" + _TIERS_TIP),
+    }
+    for mode, name in scene3d_visualizer_entries():
+        key = scene3d_entry_key(mode)
+        rows[key] = (key, name + ":", SCENE3D_ENTRY_CHOICES,
+                     f"The detail {name} draws with. Auto follows 3D Visualizers.")
+    return rows
+
+
+class Scene3DQualityControls(QWidget):
+    """Views of the same stored keys, synchronized by Settings change edges."""
+    scene3d_changed = Signal()
+    _LABEL_WIDTH = 160
+
+    def __init__(self, settings: SettingsManager, rows, parent=None):
+        super().__init__(parent)
+        self._settings = settings
+        self._loading = True
+        self._combos = {}
+        self._now_labels = {}
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        for key, label, choices, tip in rows:
+            row, _label = shared_add_aligned_row(layout, label, label_width=self._LABEL_WIDTH)
+            combo = StyledComboBox(size_variant="compact")
+            for choice in choices:
+                combo.addItem(_FAMILY_LABELS.get(choice, choice), choice)
+            combo.setToolTip(tip)
+            combo.currentIndexChanged.connect(lambda _index, k=key: self._on_changed(k))
+            row.addWidget(combo)
+            now = QLabel("")
+            now.setToolTip("What this resolves to right now.")
+            row.addWidget(now)
+            row.addStretch()
+            self._combos[key] = combo
+            self._now_labels[key] = now
+        self._load_settings()
+        self._loading = False
+        settings.settings_changed.connect(self._on_store_changed)
+
+    def load_from_settings(self):
+        self._loading = True
+        try:
+            self._load_settings()
+        finally:
+            self._loading = False
+
+    def _on_store_changed(self, key, _value):
+        if key in {"*", SCENE3D_SECTION} or key.startswith(SCENE3D_SECTION + "."):
+            self.load_from_settings()
+
+    def _section(self) -> dict:
+        return read_scene3d_section(self._settings.get)
+
+    def _load_settings(self) -> None:
+        section = self._section()
+        for key, combo in self._combos.items():
+            index = combo.findData(section.get(key))
+            if index < 0:
+                index = combo.findData(get_default_setting(f"{SCENE3D_SECTION}.{key}", missing=None))
+            previous = combo.blockSignals(True)
+            try:
+                combo.setCurrentIndex(max(0, index))
+            finally:
+                combo.blockSignals(previous)
+        self._refresh_now()
+
+    def _on_changed(self, key: str) -> None:
+        if self._loading:
+            return
+        value = self._combos[key].currentData()
+        self._settings.set(f"{SCENE3D_SECTION}.{key}", value)
+        logger.debug("[SCENE3D_TAB] %s = %s", key, value)
+        self.scene3d_changed.emit()
+
+    def _refresh_now(self) -> None:
+        from rendering.quick.bootstrap import last_validated_gpu
+
+        gpu = last_validated_gpu()
+        section = self._section()
+        for key, label in self._now_labels.items():
+            if key == "detail":
+                tier = scene3d_auto_tier(gpu) if section.get(key) == "Auto" else section.get(key)
+                note = "" if section.get(key) != "Auto" or gpu else " (until the graphics card is known)"
+                label.setText(f"Now: {tier}{note}")
+            elif key == "transitions_detail":
+                label.setText(f"Now: {resolve_scene3d_tier(section, 'transitions', gpu=gpu)}")
+            elif key == "visualizers_detail":
+                label.setText(f"Now: {resolve_scene3d_tier(section, 'visualizers', gpu=gpu)}")
+            else:
+                entry = key[: -len("_detail")]
+                label.setText(f"Now: {resolve_scene3d_tier(section, 'visualizers', entry, gpu=gpu)}")
+
+
 class Scene3DTab(QWidget):
     """General / 3D Transitions / 3D Visualizers detail tiers."""
 
@@ -71,13 +174,11 @@ class Scene3DTab(QWidget):
     def __init__(self, settings: SettingsManager, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._settings = settings
-        self._loading = True
+        self._quality_editors: list[Scene3DQualityControls] = []
         self._combos: dict[str, StyledComboBox] = {}       # scene3d key -> combo
         self._now_labels: dict[str, QLabel] = {}            # scene3d key -> its "Now:" label
         self._pages: dict[str, QWidget] = {}
         self._setup_ui()
-        self._load_settings()
-        self._loading = False
 
     # ---- construction -------------------------------------------------------------------
 
@@ -114,24 +215,12 @@ class Scene3DTab(QWidget):
             nav.addWidget(button)
         layout.addWidget(nav)
 
-        self._pages["general"] = self._page(layout, "3D Detail", (
-            ("detail", "3D Detail:", SCENE3D_GENERAL_CHOICES,
-             "The detail for everything 3D, unless 3D Transitions, 3D Visualizers or one mode "
-             "sets its own. Auto picks by the graphics card in use.\n\n" + _TIERS_TIP),
+        rows = scene3d_quality_rows()
+        self._pages["general"] = self._page(layout, "3D Detail", (rows["detail"],))
+        self._pages["transitions"] = self._page(layout, "3D Transitions", (rows["transitions_detail"],))
+        self._pages["visualizers"] = self._page(layout, "3D Visualizers", tuple(
+            row for key, row in rows.items() if key not in {"detail", "transitions_detail"}
         ))
-        self._pages["transitions"] = self._page(layout, "3D Transitions", (
-            ("transitions_detail", "3D Detail:", SCENE3D_FAMILY_CHOICES,
-             "The detail for 3D transitions. Use General follows the General page. A transition's "
-             "own Anti-aliasing, Bloom and Motion Blur (on its page under Transitions) set to Auto "
-             "follow this.\n\n" + _TIERS_TIP),
-        ))
-        rows = [("visualizers_detail", "3D Detail:", SCENE3D_FAMILY_CHOICES,
-                 "The detail for 3D Visualizers. Use General follows the General page; each mode "
-                 "below can set its own.\n\n" + _TIERS_TIP)]
-        rows.extend((scene3d_entry_key(mode), f"{name}:", SCENE3D_ENTRY_CHOICES,
-                     f"The detail {name} draws with. Auto follows 3D Visualizers above.")
-                    for mode, name in scene3d_visualizer_entries())
-        self._pages["visualizers"] = self._page(layout, "3D Visualizers", tuple(rows))
 
         layout.addStretch()
         scroll.setWidget(content)
@@ -147,20 +236,12 @@ class Scene3DTab(QWidget):
         group_layout = QVBoxLayout(group)
         group_layout.setContentsMargins(0, 12, 0, 0)
         group_layout.setSpacing(8)
-        for key, label, choices, tip in rows:
-            row, _label = shared_add_aligned_row(group_layout, label, label_width=self._LABEL_WIDTH)
-            combo = StyledComboBox(size_variant="compact")
-            for choice in choices:
-                combo.addItem(_FAMILY_LABELS.get(choice, choice), choice)
-            combo.setToolTip(tip)
-            combo.currentIndexChanged.connect(lambda _index, k=key: self._on_changed(k))
-            row.addWidget(combo)
-            now = QLabel("")
-            now.setToolTip("What this resolves to right now.")
-            row.addWidget(now)
-            row.addStretch()
-            self._combos[key] = combo
-            self._now_labels[key] = now
+        editor = Scene3DQualityControls(self._settings, rows)
+        editor.scene3d_changed.connect(self.scene3d_changed.emit)
+        group_layout.addWidget(editor)
+        self._quality_editors.append(editor)
+        self._combos.update(editor._combos)
+        self._now_labels.update(editor._now_labels)
         layout.addWidget(group)
         return group
 
@@ -175,55 +256,9 @@ class Scene3DTab(QWidget):
         if not button.isChecked():
             button.setChecked(True)
 
-    # ---- settings -----------------------------------------------------------------------
-
     def load_from_settings(self) -> None:
-        self._loading = True
-        try:
-            self._load_settings()
-        finally:
-            self._loading = False
-
-    def _section(self) -> dict:
-        return read_scene3d_section(self._settings.get)
-
-    def _load_settings(self) -> None:
-        section = self._section()
-        for key, combo in self._combos.items():
-            index = combo.findData(section.get(key))
-            if index < 0:
-                index = combo.findData(get_default_setting(f"{SCENE3D_SECTION}.{key}", missing=None))
-            combo.blockSignals(True)
-            combo.setCurrentIndex(max(0, index))
-            combo.blockSignals(False)
-        self._refresh_now()
-
-    def _on_changed(self, key: str) -> None:
-        if self._loading:
-            return
-        value = self._combos[key].currentData()
-        self._settings.set(f"{SCENE3D_SECTION}.{key}", value)
-        logger.debug("[SCENE3D_TAB] %s = %s", key, value)
-        self._refresh_now()
-        self.scene3d_changed.emit()
-
-    def _refresh_now(self) -> None:
-        from rendering.quick.bootstrap import last_validated_gpu
-
-        gpu = last_validated_gpu()
-        section = self._section()
-        for key, label in self._now_labels.items():
-            if key == "detail":
-                tier = scene3d_auto_tier(gpu) if section.get(key) == "Auto" else section.get(key)
-                note = "" if section.get(key) != "Auto" or gpu else " (until the graphics card is known)"
-                label.setText(f"Now: {tier}{note}")
-            elif key == "transitions_detail":
-                label.setText(f"Now: {resolve_scene3d_tier(section, 'transitions', gpu=gpu)}")
-            elif key == "visualizers_detail":
-                label.setText(f"Now: {resolve_scene3d_tier(section, 'visualizers', gpu=gpu)}")
-            else:
-                entry = key[: -len("_detail")]
-                label.setText(f"Now: {resolve_scene3d_tier(section, 'visualizers', entry, gpu=gpu)}")
+        for editor in self._quality_editors:
+            editor.load_from_settings()
 
 
-__all__ = ["PAGES", "Scene3DTab", "scene3d_visualizer_entries"]
+__all__ = ["PAGES", "Scene3DTab", "Scene3DQualityControls", "scene3d_quality_rows", "scene3d_visualizer_entries"]
