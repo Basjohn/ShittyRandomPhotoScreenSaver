@@ -2,10 +2,9 @@
 
 ## Start here
 
-- **Settings active bucket-path source repair candidate:** [source audit and native validation](Docs/Audits/Settings_Bucket_Persistence_Repair_Candidate_2026-10-23.md), [durable contract](Docs/Architecture/Settings_Bucket_Persistence_Contract.md), and [authoritative live task](Current_Plan.md). Native visual acceptance remains open.
+- **Settings editing-path persistence:** [durable ownership contract](Docs/Architecture/Settings_Bucket_Persistence_Contract.md).
+  [Current Plan](Current_Plan.md) owns remaining work; accepted Settings-window, connector and Visualizer checks live in source control.
 
-- **Current 23 October operator evidence and new/open scopes:** [EB / Neon Lake / Settings reconciliation](Docs/Reference/2026-10-23_Operator_EB_Neon_Settings_Reconciliation.md); [Settings bucket persistence contract](Docs/Architecture/Settings_Bucket_Persistence_Contract.md). The one authoritative task/status queue remains [Current Plan](Current_Plan.md).
-- **Settings transient-window regression after bucket persistence candidate:** [Native-window source audit and agent falsifiers](Docs/Audits/Settings_Transient_Window_Regression_2026-10-23.md); original Windows root-cause evidence in [R-18](Docs/Historical_Bugs/R-18_Settings_Dialog_Taskbar_Ghost.md). This candidate is **not native-accepted**.
 - **23 October 102 archived pytest failures (32 file groups):** [source-oriented test triage and exact selectors](Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md); native visual/runtime regressions remain open.
 
 ```text

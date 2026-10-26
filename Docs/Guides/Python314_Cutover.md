@@ -10,6 +10,15 @@
 - `scripts/python314_runtime.ps1` resolves the single interpreter. Normal and Repo Venv Build Runner options still have independent build workspaces but use the **same repo `.venv` Python for QRC and Nuitka preparation**. Godzip Foundry RUN SCRIPT does not rewrite pasted commands.
 - Preserve `core/native_threads.py`'s **one OpenBLAS thread before NumPy import**, including child processes, and the Qt GUI image-pool thread-retention policy (R-99/R-97). Both are native-memory/thread-churn guardrails, not optional Python-migration cleanup.
 
+### Managed-sandbox path warning
+
+The Codex managed filesystem sandbox can print `Failed to find real location of ...python.exe` on venv startup.
+The same unchanged interpreter resolves correctly outside that sandbox. In the restricted process, opening the base
+and venv executables succeeds but Win32 `GetFinalPathNameByHandleW` with DOS/GUID volume names returns Access Denied;
+NT/volume-free forms succeed. The Python startup diagnostic does not indicate a broken venv or different package root.
+Retain the warning and the current environment; do not recreate the venv, change ACLs or add environment-variable
+workarounds. If the warning also occurs outside the managed sandbox, investigate that new evidence independently.
+
 ## Evidence already accepted
 
 The operator's migration tooling selection passed **47/47**; R149's source repair focus passed **124/124**; R150 Sphere/Shockwave audio isolation focus passed **96/96**; and R151's Windows Steam/Settings regression selection passed **106/106**. Sphere and Shockwave were also physically accepted. Those focused results do not imply a full R151 destination-suite pass. The latest supplied four-chunk results, from before the R151 publication-lock repair, had one Windows Steam final-publication collision in chunk 4; its repair has now passed the relevant focused tests. The now-retired R149 test diary is not current evidence authority; the substantial Sphere analysis and cache publication mechanisms remain in R150 and R151, linked from `Docs/Historical_Bugs.md`.
