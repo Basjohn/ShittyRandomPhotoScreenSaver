@@ -289,6 +289,18 @@ Do not "simplify" a shared-owner/runtime test by invoking its completion callbac
 
 Likewise, do not pin an incidental callback count when the contract is a state boundary such as "remain loading until all providers settle." Step the deterministic queue through that boundary and assert the semantic state before and after it.
 
+### Advisory review boundaries
+
+A schema repair's output follows its canonical target defaults; keep its stale historical signature as fixture data,
+compare repaired live/cache fields to the authority and exercise test-owned retuning of that target. Numbered monitor
+routes are extensible: a default route is `ALL` or a positive integer, never a fixed list of currently connected displays.
+The blocking audit rejects finite canonical monitor catalogs.
+
+The advisory scan also finds valid control-setter round trips, helper inputs, normalization and preservation checks,
+protocol/schema versions, enum/range admission and relationships derived from canonical values. Literals elsewhere in
+one assertion can collide with unrelated default keys. Review provenance before changing these; do not promote all
+advisory matches into blocking rules.
+
 ## 6. Review questions
 
 For any suspicious assertion, answer these in order:

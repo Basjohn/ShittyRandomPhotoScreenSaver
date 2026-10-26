@@ -753,8 +753,9 @@ class TestSettingsManagerDefaults:
             == SettingsManager._VISUALIZER_SCHEMA_VERSION
         )
 
+    @pytest.mark.parametrize("retune_defaults", [False, True])
     def test_visualizer_schema_v11_repairs_only_generated_extruded_profile(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, retune_defaults: bool,
     ) -> None:
         """Schema 10's generated 33/512 Extruded bundle must not masquerade as user state."""
         storage_root = tmp_path / "extruded_schema10_profile"
@@ -803,18 +804,36 @@ class TestSettingsManagerDefaults:
 
         monkeypatch.setattr(visualizer_presets, "apply_preset_to_config", retuned_organs)
 
+        import core.settings.visualizer_settings_contract as contract
+        from core.settings.default_contract import require_canonical_default
+        replacement = {
+            "extruded_spectrum_bar_count": 40,
+            "extruded_spectrum_audio_block_size": 256,
+            "extruded_spectrum_agc_strength": .61,
+            "extruded_spectrum_input_gain": 1.2,
+            "extruded_spectrum_sensitivity": .72,
+            "extruded_spectrum_lane_transient_mix": .43,
+        } if retune_defaults else {}
+        def canonical_for_repair(path):
+            key = path.removeprefix("widgets.spotify_visualizer.")
+            return replacement[key] if key in replacement else require_canonical_default(path)
+        monkeypatch.setattr(contract, "require_canonical_default", canonical_for_repair)
+
         reloaded = SettingsManager(
             organization="TestOrg", application=app_name, storage_base_dir=storage_root,
         )
         live = reloaded.get("widgets.spotify_visualizer")
         custom = reloaded.get("visualizer_custom_presets")["extruded_spectrum"]
+        # Repair targets belong to the current canonical Extruded profile; the
+        # generated schema-10 signature above is the historical fixture.
+        repaired_keys = (
+            "extruded_spectrum_bar_count", "extruded_spectrum_audio_block_size",
+            "extruded_spectrum_agc_strength", "extruded_spectrum_input_gain",
+            "extruded_spectrum_sensitivity", "extruded_spectrum_lane_transient_mix",
+        )
         for payload in (live, custom):
-            assert payload["extruded_spectrum_bar_count"] == 35
-            assert payload["extruded_spectrum_audio_block_size"] == 128
-            assert payload["extruded_spectrum_agc_strength"] == pytest.approx(0.34)
-            assert payload["extruded_spectrum_input_gain"] == pytest.approx(0.98)
-            assert payload["extruded_spectrum_sensitivity"] == pytest.approx(0.97)
-            assert payload["extruded_spectrum_lane_transient_mix"] == pytest.approx(0.9)
+            for key in repaired_keys:
+                assert payload[key] == canonical_for_repair(f"widgets.spotify_visualizer.{key}")
             assert payload["extruded_spectrum_ghost_alpha"] == pytest.approx(0.17)
         assert reloaded._settings.metadata().get("visualizer_schema_version") == SettingsManager._VISUALIZER_SCHEMA_VERSION
 

@@ -121,3 +121,72 @@ def test_theme(tmp_path):
     assert deserialize(theme.read_text()) == spec
 ''')
     assert not rules
+
+
+def test_audit_rejects_finite_canonical_monitor_catalog(tmp_path):
+    rules = _rules(tmp_path, """
+def test_default_route():
+    widgets = get_default_settings()["widgets"]
+    card = widgets["clock"]
+    assert str(card["monitor"]) in {"ALL", "1", "2", "3"}
+""")
+    assert "canonical-monitor-catalog" in rules
+
+
+def test_audit_keeps_fixture_routes_and_semantic_schema_checks(tmp_path):
+    rules = _rules(tmp_path, """
+def test_schema():
+    widgets = get_default_settings()["widgets"]
+    card = widgets["clock"]
+    route = str(card["monitor"]).strip()
+    assert route.upper() == "ALL" or (route.isdecimal() and int(route) > 0)
+    assert card["display_mode"] in {"digital", "analog"}
+    fixture = {"monitor": "2"}
+    assert str(fixture["monitor"]) in {"1", "2"}
+""")
+    assert not rules
+
+
+def test_monitor_guard_tracks_scalar_alias(tmp_path):
+    rules = _rules(tmp_path, """
+def test_bad_alias():
+    widgets = get_default_settings()["widgets"]
+    card = widgets["clock"]
+    route = str(card["monitor"]).strip()
+    assert route in {"ALL", "1", "2", "3"}
+""")
+    assert "canonical-monitor-catalog" in rules
+
+
+def test_monitor_guard_retires_fixture_reassignment(tmp_path):
+    rules = _rules(tmp_path, """
+def test_fixture():
+    widgets = get_default_settings()["widgets"]
+    card = widgets["clock"]
+    card = {"monitor": "2"}
+    route = str(card["monitor"]).strip()
+    assert route in {"1", "2"}
+""")
+    assert not rules
+
+
+def test_monitor_guard_ignores_nonoracle_membership(tmp_path):
+    rules = _rules(tmp_path, """
+def test_conditional():
+    widgets = get_default_settings()["widgets"]
+    card = widgets["clock"]
+    if str(card["monitor"]) in {"1", "2"}:
+        exercise_selected_display(card)
+""")
+    assert not rules
+
+
+def test_monitor_guard_retires_authored_mapping_field(tmp_path):
+    rules = _rules(tmp_path, """
+def test_fixture_field():
+    card = get_default_settings()["widgets"]["clock"]
+    alias = card
+    alias["monitor"] = "2"
+    assert str(card["monitor"]) in {"1", "2"}
+""")
+    assert not rules

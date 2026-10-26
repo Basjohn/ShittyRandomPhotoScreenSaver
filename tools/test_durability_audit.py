@@ -304,6 +304,83 @@ def _canonical_snapshot_names(node: ast.AST) -> set[str]:
     return names
 
 
+def _canonical_monitor_catalog_findings(function: ast.AST, path: Path) -> list[Finding]:
+    """Track only asserted route membership, retiring explicit fixture writes.
+
+    Canonical mappings share an origin through aliases; changing their monitor
+    field authors that origin. Scalar route aliases retain the value they read.
+    No inference about SettingsManager repair outputs or nonoracle branches.
+    """
+    findings: list[Finding] = []
+    authority_calls = {"build_defaults_snapshot", "get_default_settings",
+                       "get_base_default_settings", "get_raw_default_settings"}
+
+    def walk(statements, names, authored):
+        def provenance(value):
+            if isinstance(value, ast.Name):
+                if value.id in {"DEFAULT_SETTINGS", "CANONICAL_DEFAULTS"}:
+                    return ("mapping", value.id)
+                return names.get(value.id)
+            if isinstance(value, ast.Call) and isinstance(value.func, ast.Name):
+                if value.func.id in authority_calls:
+                    return ("mapping", id(value))
+                if value.func.id == "str" and len(value.args) == 1:
+                    return provenance(value.args[0])
+            if (isinstance(value, ast.Call) and isinstance(value.func, ast.Attribute)
+                    and value.func.attr == "strip" and not value.args and not value.keywords):
+                source = provenance(value.func.value)
+                return source if source and source[0] == "route" else None
+            if isinstance(value, ast.Subscript):
+                source = provenance(value.value)
+                if source and source[0] == "mapping":
+                    if isinstance(value.slice, ast.Constant) and value.slice.value == "monitor":
+                        return ("route", source[1]) if source[1] not in authored else None
+                    return source
+            return None
+
+        for statement in statements:
+            if isinstance(statement, (ast.Assign, ast.AnnAssign)) and statement.value is not None:
+                source = provenance(statement.value)
+                targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+                for target in targets:
+                    if isinstance(target, ast.Name):
+                        if source is None:
+                            names.pop(target.id, None)
+                        else:
+                            names[target.id] = source
+                    elif (isinstance(target, ast.Subscript) and isinstance(target.slice, ast.Constant)
+                          and target.slice.value == "monitor"):
+                        container = provenance(target.value)
+                        if container and container[0] == "mapping":
+                            authored.add(container[1])
+            elif isinstance(statement, ast.Assert):
+                for comparison in ast.walk(statement.test):
+                    if not (isinstance(comparison, ast.Compare) and len(comparison.ops) == 1
+                            and isinstance(comparison.ops[0], ast.In)):
+                        continue
+                    source = provenance(comparison.left)
+                    catalog = comparison.comparators[0]
+                    if not source or source[0] != "route" or not isinstance(catalog, (ast.Set, ast.List, ast.Tuple)):
+                        continue
+                    if any(isinstance(item, ast.Constant) and isinstance(item.value, str)
+                           and item.value.isdecimal() for item in catalog.elts):
+                        findings.append(Finding(
+                            "canonical-monitor-catalog", path, comparison.lineno,
+                            "numbered monitor routes are extensible; validate ALL or a positive integer instead of a finite default catalog",
+                        ))
+            # Branches are checked locally, without pretending a conditional
+            # assignment executed unconditionally in a later assertion.
+            elif isinstance(statement, (ast.If, ast.For, ast.While, ast.With, ast.Try)):
+                walk(statement.body, dict(names), set(authored))
+                walk(getattr(statement, "orelse", ()), dict(names), set(authored))
+                for handler in getattr(statement, "handlers", ()):
+                    walk(handler.body, dict(names), set(authored))
+                walk(getattr(statement, "finalbody", ()), dict(names), set(authored))
+
+    walk(function.body, {}, set())
+    return findings
+
+
 def _root_name(node: ast.AST) -> str | None:
     current = node
     while isinstance(current, ast.Subscript):
@@ -415,6 +492,7 @@ def audit_test_file(path: Path) -> list[Finding]:
             continue
         canonical_default_names = _canonical_default_names(node)
         canonical_names = _canonical_snapshot_names(node)
+        findings.extend(_canonical_monitor_catalog_findings(node, path))
         markdown_names = _markdown_text_names(node)
         for child in ast.walk(node):
             if not isinstance(child, ast.Assert):
