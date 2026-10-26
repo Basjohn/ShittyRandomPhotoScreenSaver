@@ -34,7 +34,10 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 
 ### 2B. Settings and UI (in this order)
 
-- [ ] **4C — Shared Settings UX audit:**
+- [~] **4C — Shared Settings UX audit — awaiting operator review:**
+  - [ ] Repair input placeholder foreground through shared theme styling: the native light Sources page exposes
+    near-white placeholder text on a pale field. Preserve dark appearance and authored semantic input colours;
+    validate the actual composed input in both themes.
   - [~] **Conditional/nested Settings audit — awaiting normal operator use:** source review, focused round-trips,
     mode disable/rebuild condition checks and native changed-page rendering pass. Exercise mixed-page edits and
     disclosures in normal use; report any irrelevant rows, clipped controls or lost latent values. Keep categorical
@@ -65,11 +68,9 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 ### 2C. Feature work
 
 - [ ] **SC4 — Finish Just Make It Work Pools** (`Docs/Reference/Wallpaper_Pool_Selection.md` owns detailed contracts):
-  - [ ] Repair cold-start admission: a bounded first opportunity (for example, one undersized NASA original) must not
-    terminate initialization before remaining selected providers get a finite fair chance. Remove the competing
-    async/sync startup admissions through the existing IO/callback owner; no new scheduler or unbounded source burst.
-  - [ ] Prove initial-empty-cache, busy-pass, failed-first/usable-later, cancellation and finite-budget failure at the
-    actual engine/coordinator seam, then review and checkpoint the source/UI/migration slice.
+  - [ ] Repair Settings-to-runtime source resumption: a stopped coordinator must retire, changed pool choices must
+    reach the replacement queue, and the existing background refresh must resume. Reuse display-aware source
+    admission and the strict Settings destruction barrier; no acquisition with zero selected live displays.
   - [~] **Awaiting normal runtime image use:** after the source checkpoint, inspect subject/query relevance and usable
     yield at actual display sizes, initial empty/cache-warm runs, and normal background top-ups. Native dark/light
     selector navigation/circle controls/tooltips and no-env focused provider/draft/migration gates pass; image relevance
@@ -106,8 +107,6 @@ transition loops, no arbitrary size cap; outputs stay outside runtime QRCs).
   Interaction Mode and wake/exit input (history: R-79).
 - [ ] **Refresh contention:** correlate FEEDS/Gmail/Reddit queue/claim/publish/retire with transition delays in a natural
   dual-display trace (fairness, no post-transition stampede, retained last-good content).
-- [ ] **Wallpaper RSS after runtime replacement:** `engine_lifecycle.stop(exit_app=False)` permanently sets the reused
-  RSSCoordinator stop event and replacement does not restore its timer; decide resume vs rebuild after auditing owners.
 - [ ] **Cross-display Media shortcuts** delivered once on the other display, when exercised.
 - [ ] **Music recorder** 60-second clip, signal/history, cancel and mixed-DPR UI, when recording is needed.
 - [ ] **Frozen release gate (operator scheduled):** Standard/Diagnostic from one compile, MC and Reddit Helper installed

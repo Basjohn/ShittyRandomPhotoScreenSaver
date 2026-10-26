@@ -60,6 +60,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | safety / guardrail router | `Docs/Guardrails.md` |
 | performance admission / reopen rules | `Docs/Guardrails/Performance_Optimization_Contract.md` |
 | wallpaper cache, speculative source batches and image-worker ownership | `Docs/Contracts.md` → Wallpaper image cache and prefetch |
+| Just Make It Work pool selection, provider admission and legacy feed migration | `Docs/Reference/Wallpaper_Pool_Selection.md`; `sources/rss/pools.py` |
 | accepted Standard/MC Ban Image and matching-run frozen-build evidence | `Docs/Guides/Python314_Cutover.md` |
 | persisted Ban Image identity, zero-ban cost and explicit Clear | `Spec.md` → Persistent Ban Image admission; `Docs/Contracts.md` → Actions / images |
 | image filters, Lanczos cost, quality migration and measurements | `Docs/Reference/Image_Quality.md` |

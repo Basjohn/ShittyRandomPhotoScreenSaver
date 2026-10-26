@@ -12,7 +12,6 @@ from datetime import datetime, timedelta
 from typing import List, Tuple, TYPE_CHECKING
 
 from core.events import EventType
-from core.feeds.normalization import redacted_url_for_log
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.logging.tags import TAG_RSS
 from sources.base_provider import ImageMetadata, ImageSourceType
@@ -171,24 +170,46 @@ def drop_retired_rss_images(engine: ScreensaverEngine) -> int:
 def load_rss_images_async(engine: ScreensaverEngine) -> None:
     """Load RSS images asynchronously via RSSCoordinator.
 
-    All disk I/O (warm_cache) and network I/O happen on the IO pool.
-    Cached images are pre-loaded into the queue first, then new
-    downloads are merged as they arrive.
+    Acquisition and remaining cache work run on the IO pool. Queue construction
+    retains its existing synchronous disk-cache warm preload; no network runs
+    there. The bounded result is merged once on IO before GUI image admission.
     """
-    if not engine.rss_coordinator or not engine.thread_manager:
+    if not engine.rss_coordinator:
         return
+    if not engine.thread_manager:
+        raise RuntimeError("Wallpaper startup requires the existing IO owner")
 
     logger.info(f"{TAG_RSS} Starting async RSS load via RSSCoordinator...")
+    coordinator = engine.rss_coordinator
+    queue = engine.image_queue
     _preloaded = False  # closure flag
+
+    def _publish_startup_completion() -> None:
+        generation, display_manager = engine._capture_runtime_identity()
+        def _resume_on_ui() -> None:
+            if (engine._shutting_down or coordinator.is_stopped or engine.rss_coordinator is not coordinator
+                    or engine.image_queue is not queue
+                    or not engine._is_runtime_identity_current(generation, display_manager)
+                    or not engine.is_running() or engine._display_selection_suspended()
+                    or display_manager is None or display_manager.has_presented_image()
+                    or engine._loading_in_progress):
+                return
+            if engine._replacement_watchdog_label is not None and queue.total_images() > 0:
+                engine._arm_replacement_watchdog()
+            if not engine._show_next_image(origin="rss_startup_completion"):
+                engine._schedule_startup_first_image_retry()
+        _resume_on_ui._srpss_runtime_generation = generation
+        engine.thread_manager.single_shot(0, _resume_on_ui)
 
     def _on_new_images(new_images: List[ImageMetadata]):
         """Callback from coordinator with freshly downloaded images."""
         nonlocal _preloaded
 
-        if engine._shutting_down or not engine.image_queue:
+        if (engine._shutting_down or coordinator.is_stopped or engine.rss_coordinator is not coordinator
+                or engine.image_queue is not queue):
             return
-
-        cap = get_rss_background_cap(engine)
+        was_empty = queue.total_images() == 0
+        to_merge = []
 
         # First call: inject cached images that warm_cache loaded from disk
         if not _preloaded:
@@ -199,50 +220,24 @@ def load_rss_images_async(engine: ScreensaverEngine) -> None:
                 if len(cached) > rotating:
                     random.shuffle(cached)
                     cached = cached[:rotating]
-                n = engine.image_queue.add_images(cached)
-                logger.info(f"{TAG_RSS} Pre-loaded {n} cached RSS images (cap={rotating})")
-
-        if not new_images:
-            drop_retired_rss_images(engine)
-            return
-
-        try:
-            current_rss = sum(
-                1 for m in engine.image_queue.get_all_images()
-                if getattr(m, 'source_type', None) == ImageSourceType.RSS
-            )
-        except Exception:
-            current_rss = 0
-        remaining = max(0, cap - current_rss)
-        if remaining > 0:
-            to_add = new_images[:remaining]
-            engine.image_queue.add_images(to_add)
-            logger.info(f"{TAG_RSS} Added {len(to_add)} new RSS images to queue (cap={cap})")
-        else:
-            logger.debug(f"{TAG_RSS} RSS cap reached ({cap}), skipping {len(new_images)} new images")
+                to_merge.extend(cached)
+        to_merge.extend(new_images)
+        merge_rss_images_from_refresh(engine, to_merge, shuffle=False, retire_stale=False)
         # Replacements are in: the images they replace leave the queue.
         drop_retired_rss_images(engine)
+        if was_empty:
+            _publish_startup_completion()
 
-    engine.rss_coordinator.load_async(on_images=_on_new_images)
+    coordinator.load_async(on_images=_on_new_images)
 
 
-def load_rss_images_sync(engine: ScreensaverEngine) -> None:
-    """Load RSS images synchronously (only used when no local images exist)."""
-    if not engine.rss_coordinator:
-        return
-
-    logger.info("Loading RSS images synchronously via RSSCoordinator...")
-    cap = get_rss_background_cap(engine)
-    engine.rss_coordinator.load_sync()
-
-    # Also include cached images that were already loaded
-    all_images = engine.rss_coordinator.get_all_images()
-    if all_images and engine.image_queue:
-        if len(all_images) > cap:
-            random.shuffle(all_images)
-            all_images = all_images[:cap]
-        count = engine.image_queue.add_images(all_images)
-        logger.info(f"Queue initialized with {count} RSS images (cap={cap})")
+def startup_image_pending(engine: ScreensaverEngine) -> bool:
+    """Derive waiting from existing queue/source state, never another state owner."""
+    from sources.rss.coordinator import RSSState
+    return bool(engine.image_queue is not None and engine.image_queue.total_images() == 0
+                and engine.rss_coordinator is not None
+                and not engine.rss_coordinator.is_stopped
+                and engine.rss_coordinator.state == RSSState.LOADING)
 
 
 # ------------------------------------------------------------------
@@ -252,7 +247,7 @@ def load_rss_images_sync(engine: ScreensaverEngine) -> None:
 def start_rss_background_refresh_if_needed(engine: ScreensaverEngine) -> None:
     """Schedule background RSS refresh if RSS sources are present."""
     try:
-        if not engine.thread_manager or not engine.image_queue or not engine.rss_coordinator:
+        if not engine.thread_manager or engine.image_queue is None or not engine.rss_coordinator:
             return
         if engine._rss_refresh_timer is not None:
             return
@@ -304,7 +299,7 @@ def background_refresh_rss(engine: ScreensaverEngine) -> None:
     try:
         if not engine._running:
             return
-        if not (engine.thread_manager and engine.image_queue and engine.rss_coordinator):
+        if not engine.thread_manager or engine.image_queue is None or not engine.rss_coordinator:
             return
 
         cap = get_rss_background_cap(engine)
@@ -325,20 +320,15 @@ def background_refresh_rss(engine: ScreensaverEngine) -> None:
         if current_rss >= cap:
             return
 
-        # Pick a random feed to refresh (spread load across ticks)
-        feed_urls = list(engine.rss_coordinator.feed_urls)
-        if not feed_urls:
+        if not engine.rss_coordinator.source_count:
             return
-        random.shuffle(feed_urls)
-        feed_url = feed_urls[0]
-
-        logger.debug("Background RSS refresh: %s", redacted_url_for_log(feed_url))
+        logger.debug("Background RSS refresh: next bounded source opportunity")
 
         coordinator = engine.rss_coordinator
 
         def _refresh_task():
             try:
-                return coordinator.refresh_single_feed(feed_url)
+                return coordinator.refresh_next_sources()
             except Exception as e:
                 logger.warning(f"[FALLBACK] Background RSS refresh failed: {e}")
                 return []
@@ -372,9 +362,12 @@ def background_refresh_rss(engine: ScreensaverEngine) -> None:
 def merge_rss_images_from_refresh(
     engine: ScreensaverEngine,
     images: List[ImageMetadata],
+    *,
+    shuffle: bool = True,
+    retire_stale: bool = True,
 ) -> None:
     """Merge refreshed RSS images into the queue under the global cap."""
-    if not images or not engine.image_queue:
+    if not images or engine.image_queue is None:
         return
 
     cap = get_rss_background_cap(engine)
@@ -413,6 +406,7 @@ def merge_rss_images_from_refresh(
                 key = str(m.local_path) if m.local_path else (m.url or "")
                 if not key or key in existing_keys:
                     continue
+                existing_keys.add(key)
                 new_items.append(m)
             except Exception as _e:
                 logger.debug("[ENGINE] Exception suppressed: %s", _e)
@@ -421,10 +415,11 @@ def merge_rss_images_from_refresh(
         if not new_items:
             return
 
-        try:
-            random.shuffle(new_items)
-        except Exception as e:
-            logger.debug(f"{TAG_RSS} Failed to shuffle new items: %s", e)
+        if shuffle:
+            try:
+                random.shuffle(new_items)
+            except Exception as e:
+                logger.debug(f"{TAG_RSS} Failed to shuffle new items: %s", e)
 
         to_add = new_items[: max(0, remaining)]
         if not to_add:
@@ -438,7 +433,7 @@ def merge_rss_images_from_refresh(
             return
 
         removed_stale = 0
-        if added > 0:
+        if added > 0 and retire_stale:
             stale_minutes = get_rss_stale_minutes(engine)
             if stale_minutes > 0:
                 cutoff = datetime.utcnow() - timedelta(minutes=stale_minutes)

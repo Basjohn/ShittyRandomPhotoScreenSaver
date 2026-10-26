@@ -272,6 +272,9 @@ def _project_import_state(
             section_mapping, _legacy_alias_changed = promote_legacy_section_aliases(
                 section_key, section_value
             )
+            if section_key == "sources":
+                from sources.rss.pools import project_imported_pool_section
+                section_mapping = project_imported_pool_section(section_mapping)
             if section_key == "display":
                 section_mapping, _resample_changed = (
                     promote_legacy_display_resample_filter(section_mapping)

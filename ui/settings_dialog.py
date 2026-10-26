@@ -1823,17 +1823,21 @@ class SettingsDialog(QDialog):
         logger.debug("[SETTINGS] Reloaded tab settings after preset change")
     
     def _on_add_default_sources(self) -> None:
-        """Add curated RSS feeds as default sources."""
+        """Open the same staged pool selector as Sources and Guided Setup."""
         try:
-            from sources.rss.curated import apply_curated_wallpaper_feeds
-            curated_feeds = apply_curated_wallpaper_feeds(self._settings)
+            from ui.wallpaper_pool_popup import choose_wallpaper_pools
+            if not choose_wallpaper_pools(self, self._settings):
+                return
 
             # Reload sources tab if it exists
             tab = self._get_tab_instance('sources')
             if tab and hasattr(tab, '_load_settings'):
                 tab._load_settings()
+            from core.sources.readiness import has_image_sources
+            if not has_image_sources(self._settings):
+                return
             
-            logger.info("Added %d curated RSS feeds as default sources", len(curated_feeds))
+            logger.info("[WALLPAPER_POOLS] Updated selection from no-source recovery")
             
             # Now close the dialog
             self.close()

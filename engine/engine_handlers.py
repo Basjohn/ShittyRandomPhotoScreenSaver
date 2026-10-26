@@ -687,11 +687,10 @@ def _construct_and_start_replacement_runtime(
     # a few seconds, so the all-thread stack dump stays armed from construction
     # to the generation's coordinated reveal (or its retirement); a fired dump
     # names the wedged frame the breadcrumbs cannot.
-    from core.diagnostics.hang_watchdog import arm as _arm_hang, disarm as _disarm_hang
+    from core.diagnostics.hang_watchdog import disarm as _disarm_hang
 
     label = replacement_watchdog_label(event, int(getattr(engine, "_runtime_generation", 0)))
-    _arm_hang(label, timeout_s=20.0)
-    engine._replacement_watchdog_label = label
+    engine._arm_replacement_watchdog(label)
     constructed = False
     try:
         log_lifecycle_resource_snapshot(

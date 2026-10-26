@@ -38,7 +38,13 @@ def settings():
     result = Settings()
     result.values["sources"]["folders"] = []
     result.values["sources"]["rss_feeds"] = []
+    result.values["sources"]["wallpaper_pools"] = {"enabled": False, "selected": ["wallhaven.nature"], "discovery_order": "latest"}
     return result
+
+
+@pytest.fixture
+def qapp(qt_app):
+    return qt_app
 
 
 @pytest.mark.parametrize("sources,silenced,expected", [(False,False,"wizard"),(False,True,"popup"),(True,False,None),(True,True,None)])
@@ -112,8 +118,9 @@ def test_header_skip_replaces_close_and_leaves_settings_alone(qapp, settings):
 
 @pytest.mark.parametrize("choice,finishes", [("skip",True),("continue",False)])
 def test_curated_action_shared_and_both_followups(qapp, settings, monkeypatch, choice, finishes):
-    from sources.rss.constants import DEFAULT_RSS_FEEDS
+    from sources.rss.pools import WallpaperPoolSelection, read_pool_selection, write_pool_selection
     import ui.onboarding.basic_pages as module
+    import ui.wallpaper_pool_popup as chooser
     captured = {}
     class Popup:
         def __init__(self, parent, title, message, **kwargs):
@@ -121,12 +128,18 @@ def test_curated_action_shared_and_both_followups(qapp, settings, monkeypatch, c
             self.result_value = choice
         def exec(self): pass
     monkeypatch.setattr(module, "StyledPopup", Popup)
+    def select(parent, store):
+        current = read_pool_selection(store)
+        write_pool_selection(store, WallpaperPoolSelection(True, ("nasa.space",), current.discovery_order))
+        return True
+    monkeypatch.setattr(chooser, "choose_wallpaper_pools", select)
     page = SourcesPage(settings)
     finished = []
     page.finishRequested.connect(lambda: finished.append(True))
     before = deepcopy(settings.values)
     page.make_it_work()
-    before["sources"]["rss_feeds"] = list(DEFAULT_RSS_FEEDS.values())
+    before["sources"]["wallpaper_pools"]["enabled"] = True
+    before["sources"]["wallpaper_pools"]["selected"] = ["nasa.space"]
     assert settings.values == before
     assert bool(finished) is finishes
     assert captured["message"] == "You're Lazy And So Am I! Skip The Rest?"

@@ -505,6 +505,12 @@ entries (Sources tab, Guided Setup, the collection above) goes through `core/sou
 separators, case- and separator-insensitive identity, so Qt's `C:/…` picker result and a `C:\…` path are one folder.
 Stored values are read as they are and never rewritten merely to change separators.
 
+**Just Make It Work** opens one staged pool selector shared by Sources, Guided Setup and no-source recovery.
+Stable pool IDs and discovery order are stored separately from custom feed URLs; Cancel writes nothing and Guided
+Setup retains its existing Finish boundary. Selected pools reuse the RSS coordinator's bounded acquisition, cache,
+backoff and fair source rotation. They add no playback shuffle or scheduler. Provider admission, exact retired-URL
+migration and the focused verification contract live in `Docs/Reference/Wallpaper_Pool_Selection.md`.
+
 Retained Windows GSMTC event observation has a stricter ownership rule than ordinary burst IO. The manager, selected session and their subscription/remove tokens are created, rebound, detached and released only on one lazy ThreadManager-owned **affinity lane**. The general IO pool is not an apartment authority and the Qt UI thread must never clear retained WinRT wrappers. Native manager callbacks capture only a coarse edge and queue any session rebind back to that lane; session dirty callbacks remain presentation-neutral. Teardown fences the observation generation first, then synchronously executes detach/release on the affinity owner. This lane is Condition-driven and owns no polling cadence.
 
 Media refresh queries (the Visualizer's play/pause truth) and transport commands run on a separate lane owned by the shared Media runtime owner: a ThreadManager-owned dedicated `media` worker (`create_affinity_lane(worker="media")`), created on first use, generation-tagged and stopped when the owner retires. They never run on the FIFO IO pool, where network work (unbounded DNS/connect stalls) could starve them, and never on the observation worker, whose teardown waits a bounded 2 s on that thread. The owner injects the lane into its controller (`set_work_executor`); one-in-flight/one-pending refresh, command de-duplication and event authority are unchanged, and there is no polling fallback.

@@ -40,8 +40,9 @@ The existing user-desktop helper consumes only admitted queue work, waits for th
 ## Guided Setup / Quick Start ownership
 
 - `SettingsDialog` makes one deferred no-source decision after show. `sources.guided_setup_silenced` selects the
-  existing popup; manual Quick Start reruns ignore it. Source readiness and curated wallpaper selection have one
-  shared owner each (`core.sources.readiness`, `sources.rss.curated`). The existing source-less close guard stays active.
+  existing popup; manual Quick Start reruns ignore it. Source readiness and staged wallpaper pool selection have one
+  shared owner each (`core.sources.readiness`, `ui.wallpaper_pool_popup`). Provider/persistence semantics belong to
+  `sources.rss.pools` and `Docs/Reference/Wallpaper_Pool_Selection.md`. The source-less close guard stays active.
 - `ui/onboarding` is a lazy Settings surface, not a runtime. No onboarding import or background hydration starts
   a source, audio consumer, QML scene, polling timer or preview renderer. Quick Start's Arrange bucket is lazy again.
   An open Arrange page measures widget sizes on detached family QML items (never a window or scene, no service).

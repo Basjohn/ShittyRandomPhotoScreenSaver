@@ -405,6 +405,14 @@ class ScreensaverEngine(QObject):
         with self._state_lock:
             return self._state
     
+    def _arm_replacement_watchdog(self, label: str | None = None) -> None:
+        """Arm/rearm this generation's one construction-to-reveal hang owner."""
+        if label is not None:
+            self._replacement_watchdog_label = label
+        if self._replacement_watchdog_label is not None:
+            from core.diagnostics.hang_watchdog import arm
+            arm(self._replacement_watchdog_label, timeout_s=20.0)
+
     def _end_replacement_watchdog(self, reason: str) -> None:
         """Close the replacement generation's construction-to-reveal hang window."""
 
@@ -704,16 +712,19 @@ class ScreensaverEngine(QObject):
             
             # Get RSS sources from settings
             rss_feeds = self.settings_manager.get('sources.rss_feeds')
+            from sources.rss.pools import read_pool_selection
+            pool_selection = read_pool_selection(self.settings_manager)
             rss_save_to_disk = self.settings_manager.get('sources.rss_save_to_disk')
             rss_save_directory = self.settings_manager.get('sources.rss_save_directory')
 
             # Create single RSSCoordinator with all feed URLs
-            if rss_feeds:
+            if rss_feeds or pool_selection.active_ids:
                 try:
                     from engine.engine_rss import get_rss_startup_target_total
 
                     self.rss_coordinator = RSSCoordinator(
                         feed_urls=rss_feeds,
+                        pool_selection=pool_selection,
                         target_total_images=get_rss_startup_target_total(self),
                         required_size=self._wallpaper_required_size(),
                         save_to_disk=bool(rss_save_to_disk and rss_save_directory),
@@ -723,11 +734,11 @@ class ScreensaverEngine(QObject):
                         shutdown_check=lambda: not self._shutting_down,
                     )
                     sources_initialized += 1
-                    logger.info(f"RSSCoordinator created with {len(rss_feeds)} feeds")
+                    logger.info("RSSCoordinator created with %d custom feeds and %d pools", len(rss_feeds), len(pool_selection.active_ids))
                 except Exception as e:
                     logger.warning(f"[FALLBACK] Failed to create RSSCoordinator: {e}")
             
-            rss_count = len(rss_feeds) if self.rss_coordinator else 0
+            rss_count = self.rss_coordinator.source_count if self.rss_coordinator else 0
             logger.info(f"Initialized {sources_initialized} image sources "
                        f"({len(self.folder_sources)} folder, {rss_count} RSS feeds)")
             
@@ -805,15 +816,11 @@ class ScreensaverEngine(QObject):
             if self.rss_coordinator:
                 self._load_rss_images_async()
 
-            # If we still have zero images after cache pre-load AND no local
-            # images, do a short sync load as last resort.
+            # An empty configured RSS queue waits for its one existing IO job.
+            # A second sync load raced that job's pass lock and blocked the GUI;
+            # its zero return could fail startup before other pools got a turn.
             if self.image_queue.total_images() == 0 and self.rss_coordinator:
-                logger.info("No cached or local images - waiting for RSS images to load...")
-                self._load_rss_images_sync()
-                if self.image_queue.total_images() == 0:
-                    logger.error("No images found from RSS sources")
-                    self.error_occurred.emit("No images found")
-                    return False
+                logger.info("No cached/local images; awaiting bounded RSS startup IO completion")
             
             logger.info(f"Image queue ready with {self.image_queue.total_images()} images")
             
@@ -852,10 +859,9 @@ class ScreensaverEngine(QObject):
         from engine.engine_rss import load_rss_images_async
         load_rss_images_async(self)
 
-    def _load_rss_images_sync(self) -> None:
-        """Delegates to engine.engine_rss."""
-        from engine.engine_rss import load_rss_images_sync
-        load_rss_images_sync(self)
+    def _rss_startup_image_pending(self) -> bool:
+        from engine.engine_rss import startup_image_pending
+        return startup_image_pending(self)
 
     def _get_rss_background_cap(self) -> int:
         """Delegates to engine.engine_rss."""
@@ -1465,7 +1471,13 @@ class ScreensaverEngine(QObject):
             # image once the generation's displays are ready; a parallel retry
             # here would race it into a second batch.
             if show_first_image and not suspended:
-                if not self._show_next_image(origin="startup"):
+                if self._rss_startup_image_pending():
+                    logger.info("[RSS] First wallpaper awaits startup IO completion")
+                    if self._replacement_watchdog_label is not None:
+                        from core.diagnostics.hang_watchdog import disarm
+                        disarm(self._replacement_watchdog_label)
+                        logger.info("[RSS] Reveal watchdog awaits bounded source IO; display construction completed")
+                elif not self._show_next_image(origin="startup"):
                     logger.warning("[FALLBACK] Failed to show first image")
                     self._schedule_startup_first_image_retry()
             
@@ -1517,8 +1529,10 @@ class ScreensaverEngine(QObject):
         """Load and display next image from queue with passive admission tracing."""
         if self._display_selection_suspended():
             return False
+        if self._rss_startup_image_pending():
+            return False
         perf_trace = ImageChangePerfTrace(origin=origin)
-        if not self.image_queue or not self.display_manager:
+        if self.image_queue is None or self.display_manager is None:
             perf_trace.finish("unavailable", reason="queue_or_display_missing")
             logger.warning("[FALLBACK] Queue or display not initialized")
             return False
@@ -1692,6 +1706,8 @@ class ScreensaverEngine(QObject):
         """Best-effort bounded retry owned by one runtime generation."""
         if self._display_selection_suspended():
             return
+        if self._rss_startup_image_pending():
+            return  # the existing IO completion, rather than GUI polling, resumes admission
         max_attempts = 4
         if attempt > max_attempts:
             logger.error(
@@ -2354,7 +2370,7 @@ class ScreensaverEngine(QObject):
             'current_image': str(self._current_image.local_path) if self._current_image and self._current_image.local_path else None,
             'loading': self._loading_in_progress,
             'folder_sources': len(self.folder_sources),
-            'rss_sources': len(self.rss_coordinator.feed_urls) if self.rss_coordinator else 0,
+            'rss_sources': self.rss_coordinator.source_count if self.rss_coordinator else 0,
         }
         
         if self.image_queue:

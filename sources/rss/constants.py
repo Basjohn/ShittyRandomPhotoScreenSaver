@@ -1,19 +1,18 @@
-"""Wallpaper-feed constants: curated defaults, pool bounds, rotation, politeness.
+"""Wallpaper acquisition bounds and exact retired feed identities.
 
-No per-site rules live here. Feeds are ordinary RSS/Atom/JSON Feed documents or
-JSON image listings read by shape; images are judged by their real pixels
-against the connected displays (fill mode, no upscaling).
+Provider query/response rules live in ``pools.py``; generic custom listings
+remain in ``json_listing.py``. Real image pixels decide display-size admission.
 """
 
 # ---------------------------------------------------------------------------
-# Curated defaults (added through Settings / first-run onboarding)
+# Retired curated identities (one-time migration only; never active defaults)
 # ---------------------------------------------------------------------------
-# Chosen 2026-09-24 by measured image size: each advertises images well beyond
+# Originally chosen 2026-09-24 by measured image size: each advertises images well beyond
 # 1080p (NASA 2000-9000 px, JPL 5000-11780 px, Wallhaven full-size originals).
 # Bing's archive is 1920x1080: admitted on 1080p setups, skipped from its header
 # on larger displays at a cost of a few kilobytes. Flickr's public feeds (at
 # most 1024 px in every format) and Wikimedia are deliberately absent.
-DEFAULT_RSS_FEEDS = {
+LEGACY_CURATED_RSS_FEEDS = {
     "NASA Image of the Day": "https://www.nasa.gov/feeds/iotd-feed",
     "NASA JPL Photojournal": "https://photojournal.jpl.nasa.gov/rss/new",
     "Wallhaven SFW Wallpapers": "https://wallhaven.cc/api/v1/search?categories=110&purity=100",

@@ -14,8 +14,9 @@ through `ui/onboarding/draft.py:SettingsDraft`, never the store itself: saving i
 unsaved, Skip or closing Settings asks Keep Changes / Discard Changes / Stay In Setup, and dismissing that prompt
 means Stay. A discard also restores the live theme the Theme page previewed. Explicit save buttons inside pages
 (Save to Slot, account Save & Test, Import Settings) write straight through.
-`core/sources/readiness.py` is the shared source-readiness rule; `sources/rss/curated.py` is the one Just Make It Work
-operation used by Sources, the close popup and Guided Setup.
+`core/sources/readiness.py` is the shared source-readiness rule; `ui/wallpaper_pool_popup.py:choose_wallpaper_pools`
+is the staged Just Make It Work selector used by Sources, the close popup and Guided Setup. Provider and persistence
+semantics live in [Wallpaper Pool Selection](Wallpaper_Pool_Selection.md); the selector edits this wizard's draft.
 
 Copy follows one casing rule (`ui/onboarding/common.py:title_case`): Title Case with short joining words and
 prepositions lowercase, short tags in ALL CAPS, user data (paths, URLs, addresses) never re-cased. The panel paints a
