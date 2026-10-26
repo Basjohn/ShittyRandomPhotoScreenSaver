@@ -59,6 +59,7 @@ def test_shared_direction_dial_roundtrips_codes_and_undo_after_navigation(qapp, 
     QVBoxLayout(window).addWidget(tab)
     window.resize(1100, 800)
     for name in ("Slide", "Wipe", "Glass Shatter", "Directional Pixel Accretion", "Melt Drip"):
+        tab._activation_checkboxes[name].setChecked(True)
         tab._on_nav_selected(name)
         spec = transition_settings(name)
         for label in spec.directions.choices:
@@ -67,7 +68,14 @@ def test_shared_direction_dial_roundtrips_codes_and_undo_after_navigation(qapp, 
             assert tab.direction_mapper.isEnabled() == (label not in {"Random", "Center Out", "Center In"})
         # Loading and programmatic choice hydration are not new undo gestures.
         assert not window.settings_undo.can_undo
+    tab._activation_checkboxes["Chromatic Shear"].setChecked(True)
+    tab._on_nav_selected("Chromatic Shear")
+    assert tab.direction_mapper.isHidden()
+    for label in transition_settings("Chromatic Shear").directions.choices:
+        tab.direction_combo.setCurrentText(label)
+        assert settings_manager.get("transitions.chromatic_shear.direction") == label
     tab._on_nav_selected("Wipe")
+    assert not tab.direction_mapper.isHidden()
     tab.direction_combo.setCurrentText("Top to Bottom")
     assert tab.direction_mapper.value()[0] == -180.
     QTest.keyClick(tab.direction_mapper, Qt.Key.Key_Right)

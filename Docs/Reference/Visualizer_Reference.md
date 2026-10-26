@@ -42,6 +42,7 @@ when a later selection or conditional has disabled interactive input. Bubble's g
 Sphere's light direction use this adapter without changing their persisted meaning. Bubble's Stream Direction uses
 the same adapter; None and Random retain their existing enum semantics and disable the compass.
 The shared Transitions Direction row uses the same adapter, refreshing from each spec's own label-to-code mapping.
+Lists without compass choices retain only their existing categorical selector; they do not show an inert compass.
 Shared controls whose target changes with navigation retain that target in undo state; restoring an edit on another
 transition updates that transition's existing leaf without changing the currently viewed page.
 

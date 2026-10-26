@@ -790,10 +790,14 @@ class DirectionChoiceMapper(DirectionMapper):
                 self._angles[index] = self._ANGLES[token]
         self.refresh()
 
+    @property
+    def has_compass_choices(self):
+        return len(self._angles) >= 2
+
     def refresh(self, *_args):
         index = self._combo.currentIndex()
         angle = self._angles.get(index)
-        self.setEnabled(self._combo.isEnabled() and len(self._angles) >= 2 and angle is not None)
+        self.setEnabled(self._combo.isEnabled() and self.has_compass_choices and angle is not None)
         if not self.isEnabled():
             self._dragging = self._moved_in_drag = False
         if angle is not None:
