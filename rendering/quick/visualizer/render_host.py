@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from OpenGL import GL as gl
 from PySide6.QtGui import QOpenGLContext
@@ -80,10 +80,14 @@ class QuickVisualizerRenderHost:
         self,
         *,
         lifecycle_telemetry: VisualizerRenderHostLifecycleTelemetry | None = None,
+        renderer_factory: Callable[[str], QuickVisualizerRenderer | None] | None = None,
     ) -> None:
         self._quad_vao = 0
         self._quad_vbo = 0
         self._implementations: dict[str, QuickVisualizerRenderer] = {}
+        # Scoped lab/test construction seam. The canonical resolver still owns
+        # registry admission and protocol validation; consulted only on a miss.
+        self._renderer_factory = renderer_factory
         self._last_render_mode_id: str | None = None
         # (mode id, activation id) whose renderer has everything its visible frames need. Written
         # here on the render thread, read by the GUI-side reveal (one reference, no lock needed).
@@ -179,7 +183,11 @@ class QuickVisualizerRenderHost:
             self.release_inactive_implementations(mode_id)
         implementation = self._implementations.get(mode_id)
         if implementation is None:
-            implementation = resolve_quick_visualizer_renderer(mode_id)
+            implementation = (
+                resolve_quick_visualizer_renderer(mode_id)
+                if self._renderer_factory is None
+                else resolve_quick_visualizer_renderer(mode_id, renderer_factory=self._renderer_factory)
+            )
             if implementation is None:
                 raise RuntimeError(
                     f"Quick visualizer renderer is not registered: {mode_id}"

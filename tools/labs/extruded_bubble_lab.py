@@ -3,6 +3,7 @@
 side with them. A development harness for judging primitives against the target; not the Extruded Bubble renderer.
 usage: python tools/labs/extruded_bubble_lab.py out_sheet.png [--backdrop]"""
 import ctypes
+from contextlib import ExitStack
 import math
 import random
 import sys
@@ -26,7 +27,7 @@ from rendering.gl_programs.scene3d_water import SCENE3D_WATER_GLSL, water_sun_be
 from rendering.quick.render.gl_resources import compile_program
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.target import SCENE_OIT_GLSL, SceneTarget
-from tools.transition_contact_sheet import TransitionCapture
+from tools.labs.render_target import OffscreenRenderTarget
 from rendering.gl_programs.extruded_bubble_scene import ENGINE, MODES
 from rendering.gl_programs.extruded_bubble_program import (  # the product's shaders, proven here
     COMMON,
@@ -887,78 +888,97 @@ YAW = next((float(a.split("=", 1)[1]) for a in sys.argv if a.startswith("--yaw="
 
 def main():
     global PROBE, NEAR
-    capture = TransitionCapture(W, H)
-    PROBE = SceneProbe("bubble lab probe", PROBE_SIZE)
-    NEAR = DefocusLayer("bubble lab near layer")
-    resources, target = MeshResources("bubble lab"), SceneTarget("bubble lab")
-    programs = (compile_program(FULL_VERTEX, ENV_FRAGMENT, label="lab env"),
-                compile_program(FULL_VERTEX, BACKDROP_FRAGMENT, label="lab backdrop"),
-                compile_program(BUBBLE_VERTEX, BUBBLE_FRAGMENT, label="lab bubbles"),
-                compile_program(CLUSTER_VERTEX, CLUSTER_FRAGMENT, label="lab clusters"),
-                compile_program(FULL_VERTEX, SHAFT_FRAGMENT, label="lab shafts"),
-                compile_program(FULL_VERTEX, BLUR_FRAGMENT, label="lab blur"),
-                compile_program(GLINT_VERTEX, GLINT_FRAGMENT, label="lab glints"),
-                compile_program(RIBBON_VERTEX, RIBBON_FRAGMENT, label="lab ribbons"),
-                compile_program(PARTICLE_VERTEX, PARTICLE_FRAGMENT, label="lab particulate"),
-                compile_program(BUBBLE_VERTEX, NEAR_FRAGMENT, label="lab near layer"),
-                compile_program(CLUSTER_VERTEX, NEAR_CLUSTER_FRAGMENT, label="lab near clusters"))
-    shaft_tex, shaft_fbo = [], []
-    for _ in range(2):
-        texture = int(np.asarray(gl.glGenTextures(1)).ravel()[0])
-        gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
-        gl.glTexStorage2D(gl.GL_TEXTURE_2D, 1, gl.GL_R16F, W // 2, H // 2)
-        for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
-            gl.glTexParameteri(gl.GL_TEXTURE_2D, parameter, gl.GL_LINEAR)
-        for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
-            gl.glTexParameteri(gl.GL_TEXTURE_2D, wrap, gl.GL_CLAMP_TO_EDGE)
-        fbo = int(np.asarray(gl.glGenFramebuffers(1)).ravel()[0])
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
-        gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, texture, 0)
-        shaft_tex.append(texture)
-        shaft_fbo.append(fbo)
-    programs = programs + (shaft_tex, shaft_fbo)
-    levels = int(math.log2(ENV_W)) + 1
-    env = int(np.asarray(gl.glGenTextures(1)).ravel()[0])
-    gl.glBindTexture(gl.GL_TEXTURE_2D, env)
-    gl.glTexStorage2D(gl.GL_TEXTURE_2D, levels, gl.GL_RGBA16F, ENV_W, ENV_H)
-    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR_MIPMAP_LINEAR)
-    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
-    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_S, gl.GL_REPEAT)
-    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_EDGE)
-    env_fbo = int(np.asarray(gl.glGenFramebuffers(1)).ravel()[0])
-    gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, env_fbo)
-    gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, env, 0)
-    half = (W // 2, H // 2)
     only = next((a.split("=", 1)[1].split(",") for a in sys.argv if a.startswith("--only=")), None)
     names = [CARD] if CARD else [name for name in VARIANTS if only is None or name in only]
-    sheet = Image.new("RGB", (W, half[1] * len(names)))
-    for row, name in enumerate(names):
-        image, gpu, count = render_variant(capture, resources, target, programs, env, env_fbo, VARIANTS[name], 11 + list(VARIANTS).index(name))
-        image.save(sys.argv[1].replace(".png", f"_{name}.png"))
-        if CARD:
-            mock_full = Image.open(ROOT / "Docs/Reference/Extruded_Bubble/Targets/Originals" / f"{name}.png").convert("RGB").resize((W, H), Image.LANCZOS)
-            for label, box in CARD_SETS[CARD]["crops"].items():
-                a, b = mock_full.crop(box), image.crop(box)
-                pair = Image.new("RGB", (a.width * 2 + 6, a.height))
-                pair.paste(a, (0, 0))
-                pair.paste(b, (a.width + 6, 0))
-                pair.save(sys.argv[1].replace(".png", f"_card_{label}.png"))
-        mock = Image.open(ROOT / "Docs/Reference/Extruded_Bubble/Targets/Originals" / f"{name}.png").convert("RGB").resize(half, Image.LANCZOS)
-        sheet.paste(mock, (0, row * half[1]))
-        sheet.paste(image.resize(half, Image.LANCZOS), (half[0], row * half[1]))
-        print(f"{name}: GPU median {gpu:.3f} ms (p95 {TIMINGS['total'][1]:.3f}), {count} instances ({W}x{H}, 4x MSAA)")
-        print("   " + "  ".join(f"{k} {v[0]:.2f}/{v[1]:.2f}" for k, v in TIMINGS.items() if k != "total"))
-        TIMING_LOG[name] = dict(TIMINGS)
-    sheet.save(sys.argv[1])
-    import json
-    Path(sys.argv[1].replace(".png", "_timings.json")).write_text(json.dumps(
-        {"overrides": {k: repr(v) for k, v in OVERRIDES.items()}, "yaw": YAW, "size": [W, H], "msaa": 4,
-         "passes_ms_median_p95": TIMING_LOG}, indent=1), encoding="utf-8")
-    PROBE.release()
-    NEAR.release()
-    target.release()
-    resources.release_resources()
-    capture.close()
+    if not names or (only is not None and set(only) - VARIANTS.keys()):
+        raise ValueError("--only must name existing lab recipes")
+    references = {name: ROOT / "Docs/Reference/Extruded_Bubble/Targets/Originals" / f"{name}.png" for name in names}
+    missing = [str(path) for path in references.values() if not path.is_file()]
+    if missing:
+        raise FileNotFoundError("Lab reference images unavailable; supply an existing recipe with --only: " + ", ".join(missing))
+    with ExitStack() as cleanup:
+        capture = OffscreenRenderTarget(W, H, label="extruded-bubble-lab")
+        cleanup.callback(capture.close)
+
+        def owned_program(*args, **kwargs):
+            program = compile_program(*args, **kwargs)
+            cleanup.callback(gl.glDeleteProgram, program)
+            return program
+
+        PROBE = SceneProbe("bubble lab probe", PROBE_SIZE)
+        cleanup.callback(PROBE.release)
+        NEAR = DefocusLayer("bubble lab near layer")
+        cleanup.callback(NEAR.release)
+        resources = MeshResources("bubble lab")
+        cleanup.callback(resources.release_resources)
+        target = SceneTarget("bubble lab")
+        cleanup.callback(target.release)
+        programs = (owned_program(FULL_VERTEX, ENV_FRAGMENT, label="lab env"),
+                    owned_program(FULL_VERTEX, BACKDROP_FRAGMENT, label="lab backdrop"),
+                    owned_program(BUBBLE_VERTEX, BUBBLE_FRAGMENT, label="lab bubbles"),
+                    owned_program(CLUSTER_VERTEX, CLUSTER_FRAGMENT, label="lab clusters"),
+                    owned_program(FULL_VERTEX, SHAFT_FRAGMENT, label="lab shafts"),
+                    owned_program(FULL_VERTEX, BLUR_FRAGMENT, label="lab blur"),
+                    owned_program(GLINT_VERTEX, GLINT_FRAGMENT, label="lab glints"),
+                    owned_program(RIBBON_VERTEX, RIBBON_FRAGMENT, label="lab ribbons"),
+                    owned_program(PARTICLE_VERTEX, PARTICLE_FRAGMENT, label="lab particulate"),
+                    owned_program(BUBBLE_VERTEX, NEAR_FRAGMENT, label="lab near layer"),
+                    owned_program(CLUSTER_VERTEX, NEAR_CLUSTER_FRAGMENT, label="lab near clusters"))
+        shaft_tex, shaft_fbo = [], []
+        for _ in range(2):
+            texture = int(np.asarray(gl.glGenTextures(1)).ravel()[0])
+            cleanup.callback(gl.glDeleteTextures, [texture])
+            gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+            gl.glTexStorage2D(gl.GL_TEXTURE_2D, 1, gl.GL_R16F, W // 2, H // 2)
+            for parameter in (gl.GL_TEXTURE_MIN_FILTER, gl.GL_TEXTURE_MAG_FILTER):
+                gl.glTexParameteri(gl.GL_TEXTURE_2D, parameter, gl.GL_LINEAR)
+            for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
+                gl.glTexParameteri(gl.GL_TEXTURE_2D, wrap, gl.GL_CLAMP_TO_EDGE)
+            fbo = int(np.asarray(gl.glGenFramebuffers(1)).ravel()[0])
+            cleanup.callback(gl.glDeleteFramebuffers, 1, [fbo])
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
+            gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, texture, 0)
+            shaft_tex.append(texture)
+            shaft_fbo.append(fbo)
+        programs = programs + (shaft_tex, shaft_fbo)
+        levels = int(math.log2(ENV_W)) + 1
+        env = int(np.asarray(gl.glGenTextures(1)).ravel()[0])
+        cleanup.callback(gl.glDeleteTextures, [env])
+        gl.glBindTexture(gl.GL_TEXTURE_2D, env)
+        gl.glTexStorage2D(gl.GL_TEXTURE_2D, levels, gl.GL_RGBA16F, ENV_W, ENV_H)
+        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR_MIPMAP_LINEAR)
+        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
+        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_S, gl.GL_REPEAT)
+        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_EDGE)
+        env_fbo = int(np.asarray(gl.glGenFramebuffers(1)).ravel()[0])
+        cleanup.callback(gl.glDeleteFramebuffers, 1, [env_fbo])
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, env_fbo)
+        gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, env, 0)
+        half = (W // 2, H // 2)
+        sheet = Image.new("RGB", (W, half[1] * len(names)))
+        for row, name in enumerate(names):
+            image, gpu, count = render_variant(capture, resources, target, programs, env, env_fbo, VARIANTS[name], 11 + list(VARIANTS).index(name))
+            image.save(sys.argv[1].replace(".png", f"_{name}.png"))
+            if CARD:
+                mock_full = Image.open(references[name]).convert("RGB").resize((W, H), Image.LANCZOS)
+                for label, box in CARD_SETS[CARD]["crops"].items():
+                    a, b = mock_full.crop(box), image.crop(box)
+                    pair = Image.new("RGB", (a.width * 2 + 6, a.height))
+                    pair.paste(a, (0, 0))
+                    pair.paste(b, (a.width + 6, 0))
+                    pair.save(sys.argv[1].replace(".png", f"_card_{label}.png"))
+            mock = Image.open(references[name]).convert("RGB").resize(half, Image.LANCZOS)
+            sheet.paste(mock, (0, row * half[1]))
+            sheet.paste(image.resize(half, Image.LANCZOS), (half[0], row * half[1]))
+            print(f"{name}: GPU median {gpu:.3f} ms (p95 {TIMINGS['total'][1]:.3f}), {count} instances ({W}x{H}, 4x MSAA)")
+            print("   " + "  ".join(f"{k} {v[0]:.2f}/{v[1]:.2f}" for k, v in TIMINGS.items() if k != "total"))
+            TIMING_LOG[name] = dict(TIMINGS)
+        sheet.save(sys.argv[1])
+        import json
+        Path(sys.argv[1].replace(".png", "_timings.json")).write_text(json.dumps(
+            {"overrides": {k: repr(v) for k, v in OVERRIDES.items()}, "yaw": YAW, "size": [W, H], "msaa": 4,
+             "passes_ms_median_p95": TIMING_LOG}, indent=1), encoding="utf-8")
 
 
-main()
+if __name__ == "__main__":
+    main()

@@ -1348,55 +1348,46 @@ def _render_spectrum_preview(path: Path, *, width: int, height: int, mode: str =
     so it shows only over something).
     """
 
-    from OpenGL import GL as gl
     from PIL import Image
-    from PySide6.QtGui import QGuiApplication, QOffscreenSurface, QOpenGLContext, QSurfaceFormat
-    from rendering.quick.bootstrap import QUICK_OPENGL_VERSION, validate_current_opengl_context
+    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtGui import QGuiApplication
     from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
+    from tools.labs.render_target import OffscreenRenderTarget
 
-    app = QGuiApplication.instance() or QGuiApplication(["onboarding-spectrum"])
+    app = QCoreApplication.instance()
+    if app is not None and not isinstance(app, QGuiApplication):
+        raise RuntimeError("Spectrum preview requires QGuiApplication")
+    app = app or QGuiApplication(["onboarding-spectrum"])
     platform = app.platformName().strip().lower()
     if platform != "windows":
         raise RuntimeError(
             "Spectrum preview requires the hidden Windows-QPA QOffscreenSurface worker"
         )
-    context = QOpenGLContext(); fmt = QSurfaceFormat(); fmt.setRenderableType(QSurfaceFormat.OpenGL)
-    fmt.setProfile(QSurfaceFormat.CoreProfile); fmt.setVersion(*QUICK_OPENGL_VERSION); context.setFormat(fmt)
-    if not context.create(): raise RuntimeError("offscreen Spectrum GL context unavailable")
-    surface = QOffscreenSurface(); surface.setFormat(context.format()); surface.create()
-    if not context.makeCurrent(surface): raise RuntimeError("offscreen Spectrum GL admission failed")
-    color = depth = fbo = 0; host = QuickVisualizerRenderHost()
+    target = OffscreenRenderTarget(width, height, label="onboarding-spectrum")
+    host = None
     try:
-        validate_current_opengl_context(reason="onboarding-spectrum", context=context)
-        color = int(gl.glGenTextures(1)); gl.glBindTexture(gl.GL_TEXTURE_2D, color)
-        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None)
-        depth = int(gl.glGenRenderbuffers(1)); gl.glBindRenderbuffer(gl.GL_RENDERBUFFER, depth)
-        gl.glRenderbufferStorage(gl.GL_RENDERBUFFER, gl.GL_DEPTH_COMPONENT24, width, height)
-        fbo = int(gl.glGenFramebuffers(1)); gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
-        gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, color, 0)
-        gl.glFramebufferRenderbuffer(gl.GL_FRAMEBUFFER, gl.GL_DEPTH_ATTACHMENT, gl.GL_RENDERBUFFER, depth)
-        if gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE: raise RuntimeError("Spectrum FBO incomplete")
+        host = QuickVisualizerRenderHost()
         snapshot = _build_spectrum_preview_snapshot(width=width, height=height, mode=mode)
         clear = (0.0, 0.0, 0.0, 0.0) if backdrop is None else (*(channel / 255.0 for channel in backdrop), 1.0)
-        gl.glViewport(0, 0, width, height); gl.glClearColor(*clear); gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+        target.bind(clear=clear)
         # Quick's item coordinates are top-left based; match the production
         # render-frame transform before readback flips OpenGL's framebuffer.
         matrix = (2/width, 0, 0, 0, 0, -2/height, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1)
         if host.render(snapshot=snapshot, viewport=(0, 0, width, height), logical_size=(float(width), float(height)), matrix_values=matrix) != mode: raise RuntimeError(f"{mode} renderer was not admitted")
         import numpy
-        pixels = numpy.frombuffer(bytes(gl.glReadPixels(0, 0, width, height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)),
-                                  dtype=numpy.uint8).reshape(height, width, 4)
+        pixels = target.read_rgba()
         if backdrop is None:
-            _straight_alpha(numpy.flipud(pixels)).save(path, "PNG")
+            _straight_alpha(pixels).save(path, "PNG")
         else:
-            Image.fromarray(numpy.ascontiguousarray(numpy.flipud(pixels))[:, :, :3], "RGB").save(path, "PNG")
+            Image.fromarray(numpy.ascontiguousarray(pixels)[:, :, :3], "RGB").save(path, "PNG")
         return snapshot
     finally:
-        host.release_resources()
-        if fbo: gl.glDeleteFramebuffers(1, [fbo])
-        if depth: gl.glDeleteRenderbuffers(1, [depth])
-        if color: gl.glDeleteTextures([color])
-        context.doneCurrent(); surface.destroy()
+        try:
+            if host is not None:
+                with target.current():
+                    host.release_resources()
+        finally:
+            target.close()
 
 
 # One strip per transition: three frames side by side, no gaps or labels.

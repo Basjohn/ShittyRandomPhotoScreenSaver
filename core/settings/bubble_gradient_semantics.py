@@ -135,6 +135,11 @@ def get_bubble_gradient_shader_vector(direction: str) -> tuple[float, float]:
     return _DIRECTIONAL_SHADER_VECTORS.get(normalized, _DIRECTIONAL_SHADER_VECTORS["top"])
 
 
+def project_bubble_gradient(direction: str) -> tuple[float, float, float, float]:
+    """Pack the existing enum's vector, zero centre bias and unchanged radial mode."""
+    return (*get_bubble_gradient_shader_vector(direction), 0., float(get_bubble_gradient_shader_mode(direction)))
+
+
 def get_bubble_specular_shader_vector(direction: str) -> tuple[float, float]:
     """Return the existing shader-space Bubble light direction."""
 

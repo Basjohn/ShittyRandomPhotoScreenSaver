@@ -46,8 +46,7 @@ uniform float u_viewport_stroke_extra_half_px; // cached physical half-stroke gr
 // --- Styling ---
 uniform vec2 u_specular_dir;       // normalised direction to light source
 uniform float u_specular_reference_aspect; // canonical content at this scale/inset (Quick)
-uniform vec2 u_gradient_dir;       // gradient direction helper vector
-uniform int u_gradient_mode;       // 0=directional, 1=center_out, 2=center_out_reverse
+uniform vec4 u_gradient;           // direction XY, centre-relative bias, mode (0/1/2)
 uniform vec4 u_outline_color;      // bubble outline colour (RGBA 0-1)
 uniform vec4 u_specular_color;     // specular highlight colour
 uniform vec4 u_gradient_light;     // gradient light end
@@ -158,11 +157,12 @@ void main() {
     
     // --- Background gradient ---
     // Gradient direction now follows "brightest point location" semantics.
-    // Radial special cases are handled explicitly via u_gradient_mode.
+    // Radial special cases retain their existing mode semantics.
     vec2 center = vec2(0.5, 0.5);
-    vec2 grad_dir = u_gradient_dir;
+    vec2 grad_dir = u_gradient.xy;
+    float gradient_mode = u_gradient.w;
     float grad_t;
-    if (u_gradient_mode == 1 || u_gradient_mode == 2) {
+    if (gradient_mode == 1.0 || gradient_mode == 2.0) {
         // Radial center-out modes.
         vec2 radial_delta = vec2((uv.x - center.x) * aspect, uv.y - center.y);
         float radial_dist = length(radial_delta);
@@ -173,9 +173,9 @@ void main() {
         float radial_t = pow(norm, 1.40);
         // "Center Out" keeps the brightest point at the center and darkens
         // toward the outside. Reverse flips that relationship.
-        grad_t = (u_gradient_mode == 2) ? radial_t : (1.0 - radial_t);
+        grad_t = (gradient_mode == 2.0) ? radial_t : (1.0 - radial_t);
     } else {
-        grad_t = dot(uv - center, grad_dir) + 0.5;
+        grad_t = dot(uv - center, grad_dir) + 0.5 + u_gradient.z;
         grad_t = clamp(grad_t, 0.0, 1.0);
     }
     
