@@ -204,3 +204,68 @@ def test_direction_midline_is_opt_in_painted_guide_not_a_second_direction_author
     assert ordinary == ignored                           # angle-only dials have no horizon
     assert not Direction("ordinary", "Ordinary:").midline
     assert Direction("surface", "Surface:", midline=True).midline
+
+
+def test_compass_choice_dial_preserves_enum_loading_and_commits_once(qt_app, monkeypatch):
+    from core.settings.visualizer_mode_settings import Choice
+    import ui.tabs.media.spec_mode_builder as builder
+
+    control = Choice("t_heading", "Heading:", ("top", "right", "bottom", "left", "random"),
+                     bucket="b", direction_mapper=True)
+    spec = ModeSettings("t_heading_mode", (Bucket("b", "B"),), (control,))
+    monkeypatch.setattr(builder, "require_mode_settings", lambda _: spec)
+    saves = []
+    tab = SimpleNamespace(_widget_default=lambda *_: "top", _save_settings=lambda *_: saves.append(True),
+                          _force_visualizer_preset_to_custom=lambda: None)
+    host = QWidget()
+    builder._build_control(tab, QVBoxLayout(host), control)
+    combo = tab.t_heading
+    dial = combo.direction_mapper
+    dial.resize(dial.sizeHint())
+    for value in control.choices:
+        builder.load_spec_mode_settings(tab, "t_heading_mode", {control.key: value})
+        assert builder.collect_spec_mode_settings(tab, "t_heading_mode") == {control.key: value}
+        assert dial.isEnabled() == (value != "random")
+    assert saves == []
+    builder.load_spec_mode_settings(tab, "t_heading_mode", {control.key: "right"})
+    assert dial.value()[0] == pytest.approx(90.)
+    centre, radius = dial.disc()
+    left = _point(QPointF(centre.x() - radius, centre.y()))
+    QTest.mousePress(dial, Qt.LeftButton, pos=left)
+    assert saves == []
+    QTest.mouseRelease(dial, Qt.LeftButton, pos=left)
+    assert combo.currentText() == "left" and len(saves) == 1
+    QTest.keyClick(dial, Qt.Key_Right)
+    assert combo.currentText() == "top" and len(saves) == 2
+    combo.setEnabled(False)
+    assert not dial.isEnabled()
+    dial.valueCommitted.emit((90., 0.))
+    assert combo.currentText() == "top" and len(saves) == 2
+    host.deleteLater()
+
+
+@pytest.mark.parametrize("disable_combo", [False, True])
+def test_compass_choice_dial_uses_the_existing_session_undo(qt_app, disable_combo):
+    from ui.settings_undo import SettingsUndo
+    from ui.widgets import StyledComboBox
+    from ui.widgets.visual_controls import DirectionChoiceMapper
+
+    host = QWidget()
+    undo = SettingsUndo(host)
+    layout = QVBoxLayout(host)
+    combo = StyledComboBox()
+    combo.addItems(["Top", "Right", "Bottom", "Left", "Random"])
+    dial = DirectionChoiceMapper(combo)
+    layout.addWidget(combo)
+    layout.addWidget(dial)
+    changes = []
+    combo.currentTextChanged.connect(changes.append)
+    QTest.keyClick(dial, Qt.Key_Right)
+    assert combo.currentText() == "Right" and undo.can_undo
+    combo.setCurrentText("Random")
+    combo.setEnabled(not disable_combo)
+    assert not dial.isEnabled()
+    assert undo.undo() and combo.currentText() == "Top"
+    assert undo.redo() and combo.currentText() == "Right"
+    assert changes == ["Right", "Random", "Top", "Right"]
+    host.deleteLater()

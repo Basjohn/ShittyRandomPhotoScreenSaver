@@ -35,6 +35,12 @@ repaint on theme change, ignore the wheel, offer keyboard control and an accessi
 gesture or keyboard step (`valueCommitted`; the value label follows `valueChanged`). Use `when` conditionals and
 nested buckets heavily so a body shows only what the current choices use.
 
+`Choice(direction_mapper=True)` adds a shared `DirectionChoiceMapper` beside an existing compass enum combo.
+The combo remains the sole value; the dial snaps to its admitted compass choices and disables for nonspatial values
+such as Random or Center Out. Signal-blocked loads refresh the dial without writes. Undo restores the enum even
+when a later selection or conditional has disabled interactive input. Bubble's gradient/specular directions and
+Sphere's light direction use this adapter without changing their persisted meaning.
+
 Advanced uses the existing large bucket header. Technical is nested within Advanced, alongside the mode's advanced
 artistic buckets; Extruded Bubble's Camera bucket is advanced. The same disclosure maps retain only the chosen leaf
 and the ancestors it requires. Legacy Technical-only opens acquire the Advanced ancestor; opening a normal leaf retires
