@@ -232,10 +232,7 @@ def load_system_stats_settings(tab: "WidgetsTab", widgets: Mapping[str, Any]) ->
 
 
 def save_system_stats_settings(tab: "WidgetsTab") -> dict[str, Any]:
-    defaults = tab._widget_defaults.get("system_stats")
-    if not isinstance(defaults, Mapping):
-        raise KeyError("Canonical widget defaults are missing widgets.system_stats")
-    payload = dict(defaults)
+    payload = tab._widget_save_base("system_stats")
     payload.update(
         {
             "enabled": bool(tab.system_stats_enabled.isChecked()),

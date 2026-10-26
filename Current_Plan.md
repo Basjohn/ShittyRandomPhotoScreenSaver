@@ -35,14 +35,16 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 ### 2B. Settings and UI (in this order)
 
 - [ ] **4C — Shared Settings UX audit:**
-  - [ ] Finish the page-by-page conditional/nested-bucket review across Visualizers, Transitions and widgets. Use
-    shared Angle/Direction, Range and Triangle controls only where their stored meaning fits; keep categorical motion
-    and ordering choices intact. Prove each changed body's round-trip and rendered layout; no per-page owner clones.
+  - [~] **Conditional/nested Settings audit — awaiting normal operator use:** source review, focused round-trips,
+    mode disable/rebuild condition checks and native changed-page rendering pass. Exercise mixed-page edits and
+    disclosures in normal use; report any irrelevant rows, clipped controls or lost latent values. Keep categorical
+    direction choices intact and use shared visual controls only where their stored meaning fits.
   - [~] **Bubble two-node gradient prototype — awaiting operator look:** inspect independent Dark/Light endpoints,
     direction, blend span and shifted placement in `tools/labs/bubble_gradient_mapper_lab.py`; control capture:
     `tmp/bubble_gradient_mapper/prototype.png`, sibling wide/narrow/shifted fixtures. Geometry, gesture and driver pixel
     compatibility pass. Keep current enums, presets and production appearance until interaction/migration review.
-  - [ ] Reconcile the EB lab recipe/reference registry with renamed `*Goal.png` targets before a full comparison run.
+  - [~] **EB lab reference associations — awaiting target confirmation:** reconcile the recipe/reference registry
+    with renamed `*Goal.png` targets before a full comparison run.
     Six old `ExBubble*.png` originals and their README/manifest paths are absent; `--only=ExBubble2` remains valid.
     Do not invent mappings or substitute archived lab output for operator targets. Missing references fail before GL.
   - [~] **Advanced hierarchy — awaiting operator look:** large Advanced header contains Technical and EB Camera;

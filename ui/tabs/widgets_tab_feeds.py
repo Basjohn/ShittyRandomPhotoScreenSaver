@@ -683,10 +683,8 @@ def load_feeds_settings(tab: "WidgetsTab", widgets: Mapping[str, Any]) -> None:
 
 
 def _save_card(tab: "WidgetsTab", widget_id: str) -> dict[str, Any]:
-    defaults = tab._widget_defaults.get(widget_id)
-    if not isinstance(defaults, Mapping):
-        raise KeyError(f"Canonical widget defaults are missing widgets.{widget_id}")
-    payload = dict(defaults)
+    payload = tab._widget_save_base(widget_id)
+    defaults = tab._widget_defaults[widget_id]
     view_mode = _LABEL_TO_VIEW.get(_control(tab, widget_id, "view_mode").currentText())
     if view_mode is None:
         view_mode = str(defaults["view_mode"])

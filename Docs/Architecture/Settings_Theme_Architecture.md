@@ -147,6 +147,13 @@ While independent, either catalogue may change without mutating the other. Card 
 
 `Widgets -> General -> Style Overrides` is the single ordinary-widget shared styling surface: Card Surface, Card Border and Header Fill are theme-authoring edits that fork the full resolved palette to Widget `Custom`; **Reset All Colours to Theme** explicitly normalizes ordinary family colour/card-alpha compatibility overrides back to canonical Inherit values; Card Border Width is a global style value outside Widget Theme schema. The reset is operator-invoked, never a startup migration, and excludes Visualizer-authored colours. Runtime Widget Themes are colour/semantic bundles only; Settings-window Glass/Acrylic remains a separate native-window concern.
 
+Hydrated Feeds, Steam-card and System Stats savers project their base payload from current stored values restricted to
+canonical default keys, then replace the controls the page actually owns. Supported unexposed local styling therefore
+survives an unrelated content, font or sampling edit. Retired/unknown leaves cannot return through this projection;
+explicit Reset All Colours and imports remain authoritative because the base is read at save time, not cached in the UI.
+Reset membership derives from the canonical widget-family catalogue, including disabled families and every Clock,
+Feeds, Steam and System Stats member. Visualizer-authored colours remain excluded; no second family list is maintained.
+
 The curated catalogue currently contains **58 Settings themes and 58 deterministic Widget mirrors**, including four genuinely light/white-adjacent themes (Porcelain Sky, Linen Sage, Pearl Blush, Alabaster Citrus) and four silver/metal themes (Polished Chrome, Brushed Nickel, Titanium Cobalt, Tungsten Blues). Mirrors use the same stable-ID projection authority as the original pack. Dark-text light/light-metal Widget mirrors also establish a high-opacity light runtime card floor because, unlike the Settings HWND, runtime cards sit directly over arbitrary wallpaper. Regeneration must remain deterministic; mirrors change only when their semantic source/mapping intentionally changes.
 
 ## Proven Windows backdrop mapping

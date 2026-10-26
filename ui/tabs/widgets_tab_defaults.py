@@ -25,6 +25,7 @@ from core.settings.shadow_direction import (
     ShadowDirection,
     resolve_shadow_direction,
 )
+from core.settings.widget_family_catalog import WIDGET_FAMILY_DESCRIPTORS
 
 from core.cache_maintenance import (
     CacheClearResult,
@@ -74,16 +75,12 @@ _SHADOW_SPIN_SHADOW_PAD = 10
 # colours are deliberately excluded because they are not generic Widget Theme
 # presentation.  See Docs/Architecture/Persisted_Input_Compatibility.md for the
 # eventual retirement gate.
-_THEME_COLOR_OVERRIDE_SECTIONS = (
-    "clock",
-    "weather",
-    "reddit",
-    "reddit2",
-    "gmail",
-    "media",
-    "achievement_pulse",
-    "abandonment_issues",
-)
+_THEME_COLOR_OVERRIDE_SECTIONS = tuple(dict.fromkeys(
+    widget_id
+    for family in WIDGET_FAMILY_DESCRIPTORS
+    if family.family_id != "visualizers"
+    for widget_id in family.member_widget_ids
+))
 _THEME_COLOR_OVERRIDE_EXTRA_KEYS = frozenset({"bg_opacity", "border_opacity"})
 _HEADER_FILL_LOCAL_FALLBACK = Rgba(0, 0, 0, 0)
 

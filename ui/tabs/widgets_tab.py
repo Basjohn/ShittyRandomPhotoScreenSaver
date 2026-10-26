@@ -318,6 +318,21 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
                     descriptor.section,
                     descriptor.key)
             setattr(self, descriptor.attr_name, value)
+
+    def _widget_save_base(self, section: str) -> Dict[str, Any]:
+        """Preserve supported stored fields a hydrated page does not expose.
+
+        Canonical membership excludes retired/unknown keys; the page then replaces
+        its actual controls. Read current storage so reset/import cannot be undone
+        by a stale hidden-value cache.
+        """
+        defaults = self._widget_defaults.get(section)
+        if not isinstance(defaults, Mapping):
+            raise KeyError(f"Canonical widget defaults are missing widgets.{section}")
+        current = self._settings.get(f"widgets.{section}")
+        if not isinstance(current, Mapping):
+            current = {}
+        return {key: current.get(key, value) for key, value in defaults.items()}
     
     
     
