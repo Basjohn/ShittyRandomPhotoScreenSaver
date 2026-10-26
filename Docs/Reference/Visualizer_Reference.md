@@ -61,6 +61,8 @@ transition settings schema.
 
 Oscilloscope's Phase Delay row appears only in Phase display, while Graticule Colour appears for Grid/Crosshair.
 Signal-blocked loads apply the same conditions, and hidden values remain authored and round-trip unchanged.
+Conditional signal bookkeeping and row-capturing predicates belong to the current body generation: retirement drops
+them, and reconstruction binds the new widgets afresh. Section-lazy expansion reuses only that generation's connections.
 Sine's Displacement belongs to Motion because it affects every enabled line, including single-line mode; the
 Multi-Line editor controls the additional lines and no longer claims a three-line limit.
 

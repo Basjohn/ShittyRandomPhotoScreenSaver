@@ -712,6 +712,8 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
                 break
         body.hide()
         self._mode_body_layout.removeWidget(body)
+        from ui.tabs.media.spec_mode_builder import retire_spec_mode_conditions
+        retire_spec_mode_conditions(self, mode_id)
 
         # Technical controls use one shared mode-indexed store, so retire only
         # this mode's entry rather than deleting the store for other live bodies.
