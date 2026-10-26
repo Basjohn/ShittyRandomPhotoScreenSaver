@@ -775,7 +775,7 @@ OverlayWidget {
                             cache: true
                         }
 
-                        Text {
+                        ThemedText {
                             width: parent.width - 24.0
                             height: parent.height
                             text: {
@@ -786,8 +786,8 @@ OverlayWidget {
                                 return "Delete"
                             }
                             color: actionHover.hovered ? "white" : gmailRoot.gmailModel.actionPopupTextColor
-                            font.family: gmailRoot.gmailModel.fontFamily
-                            font.pixelSize: 12.0
+                            sourceFont.family: gmailRoot.gmailModel.fontFamily
+                            sourceFont.pixelSize: 12.0
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight
                         }

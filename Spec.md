@@ -132,6 +132,10 @@ Settings and Widget theme lists include four-colour palette previews and a seman
 above the normal catalogue without selecting or activating another theme; previews and favourite preferences do not
 change theme file schemas. Details: `Docs/Architecture/Settings_Theme_Architecture.md` → Catalogue palette previews.
 
+Light semantic palettes use a shared, reversible font-weight presentation policy in Settings and runtime text.
+It preserves the stored font choice and dark-theme matching, with actual variable weight rather than a rounded static
+face request. Ownership and native-validation boundaries live in `Docs/Architecture/Settings_Theme_Architecture.md`.
+
 Settings disclosure rails use the existing widget/layout hierarchy through shared bucket builders. Connect only
 visible relevant rows and nested headers, terminate at the last child and exclude explanatory/status annotations.
 Use semantic border colours and a shared child gutter; preserve values, lazy loading, accordion persistence and

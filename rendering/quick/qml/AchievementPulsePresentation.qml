@@ -409,13 +409,13 @@ OverlayWidget {
             )
             z: 4
 
-            Text {
+            ThemedText {
                 anchors.fill: parent
                 text: "i"
                 color: achievementRoot.achievementModel.steamInfoTextColor
-                font.family: achievementRoot.achievementModel.fontFamily
-                font.pixelSize: 12.0
-                font.bold: true
+                sourceFont.family: achievementRoot.achievementModel.fontFamily
+                sourceFont.pixelSize: 12.0
+                sourceFont.bold: true
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
@@ -451,14 +451,14 @@ OverlayWidget {
             )
             z: 10
 
-            Text {
+            ThemedText {
                 id: infoTipText
                 anchors.fill: parent
                 anchors.margins: 7.0
                 text: achievementRoot.achievementModel.connectionInfoTooltip
                 color: achievementRoot.achievementModel.steamTooltipTextColor
-                font.family: achievementRoot.achievementModel.fontFamily
-                font.pixelSize: 12.0
+                sourceFont.family: achievementRoot.achievementModel.fontFamily
+                sourceFont.pixelSize: 12.0
                 wrapMode: Text.WordWrap
                 verticalAlignment: Text.AlignVCenter
             }
@@ -1060,15 +1060,15 @@ OverlayWidget {
                     )
                 }
 
-                Text {
+                ThemedText {
                     anchors.fill: parent
                     text: achievementRoot.achievementModel.progressText
                     color: achievementRoot.achievementModel.capsuleBorderColor
                     opacity: progressPulse.pulseLevel * 0.16
                     scale: progressPulse.progressTextVisualScale * 1.11
-                    font.family: achievementRoot.achievementModel.fontFamily
-                    font.pointSize: achievementRoot.achievementModel.fontSize * 1.998
-                    font.bold: true
+                    sourceFont.family: achievementRoot.achievementModel.fontFamily
+                    sourceFont.pointSize: achievementRoot.achievementModel.fontSize * 1.998
+                    sourceFont.bold: true
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     fontSizeMode: Text.HorizontalFit
@@ -1076,15 +1076,15 @@ OverlayWidget {
                     visible: opacity > 0.001
                 }
 
-                Text {
+                ThemedText {
                     anchors.fill: parent
                     text: achievementRoot.achievementModel.progressText
                     color: achievementRoot.achievementModel.capsuleBorderColor
                     opacity: progressPulse.pulseLevel * 0.44
                     scale: progressPulse.progressTextVisualScale * 1.045
-                    font.family: achievementRoot.achievementModel.fontFamily
-                    font.pointSize: achievementRoot.achievementModel.fontSize * 1.998
-                    font.bold: true
+                    sourceFont.family: achievementRoot.achievementModel.fontFamily
+                    sourceFont.pointSize: achievementRoot.achievementModel.fontSize * 1.998
+                    sourceFont.bold: true
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     fontSizeMode: Text.HorizontalFit

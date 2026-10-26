@@ -894,14 +894,14 @@ OverlayWidget {
                         scale: previousTap.pressed ? 1.10
                             : (previousHover.hovered && previousTap.enabled ? 1.055 : 1.0)
 
-                        Text {
+                        ThemedText {
                             anchors.centerIn: parent
                             text: "←"
                             color: mediaRoot.mediaModel.controlsIconColor
-                            font.family: mediaRoot.mediaModel.fontFamily
-                            font.pointSize: mediaRoot.mediaModel.fontSize
+                            sourceFont.family: mediaRoot.mediaModel.fontFamily
+                            sourceFont.pointSize: mediaRoot.mediaModel.fontSize
                                 * mediaRoot.mediaModel.customTransportHeightScale
-                            font.bold: true
+                            sourceFont.bold: true
                         }
 
                         HoverHandler {
@@ -938,14 +938,14 @@ OverlayWidget {
                         scale: playPauseTap.pressed ? 1.10
                             : (playPauseHover.hovered && playPauseTap.enabled ? 1.055 : 1.0)
 
-                        Text {
+                        ThemedText {
                             anchors.centerIn: parent
                             text: mediaRoot.mediaModel.playbackState === "playing" ? "||" : "▶"
                             color: mediaRoot.mediaModel.controlsIconColor
-                            font.family: mediaRoot.mediaModel.fontFamily
-                            font.pointSize: mediaRoot.mediaModel.fontSize * 0.9
+                            sourceFont.family: mediaRoot.mediaModel.fontFamily
+                            sourceFont.pointSize: mediaRoot.mediaModel.fontSize * 0.9
                                 * mediaRoot.mediaModel.customTransportHeightScale
-                            font.bold: true
+                            sourceFont.bold: true
                         }
 
                         HoverHandler {
@@ -982,14 +982,14 @@ OverlayWidget {
                         scale: nextTap.pressed ? 1.10
                             : (nextHover.hovered && nextTap.enabled ? 1.055 : 1.0)
 
-                        Text {
+                        ThemedText {
                             anchors.centerIn: parent
                             text: "→"
                             color: mediaRoot.mediaModel.controlsIconColor
-                            font.family: mediaRoot.mediaModel.fontFamily
-                            font.pointSize: mediaRoot.mediaModel.fontSize
+                            sourceFont.family: mediaRoot.mediaModel.fontFamily
+                            sourceFont.pointSize: mediaRoot.mediaModel.fontSize
                                 * mediaRoot.mediaModel.customTransportHeightScale
-                            font.bold: true
+                            sourceFont.bold: true
                         }
 
                         HoverHandler {

@@ -191,20 +191,20 @@ Item {
                     x: staticFace.centerX + Math.sin(angle) * analogueFace.numeralRadius - width / 2.0
                     y: staticFace.centerY - Math.cos(angle) * analogueFace.numeralRadius - height / 2.0
 
-                    Text {
+                    ThemedText {
                         id: numeralMainShadow
                         objectName: "clockAnalogueNumeralMainShadow" + numeral.index
                         x: analogueFace.clockModel.analogNumeralMainOffsetX
                         y: analogueFace.clockModel.analogNumeralMainOffsetY
                         text: numeral.modelData
                         color: analogueFace.clockModel.analogShadowColor
-                        font.family: analogueFace.clockModel.fontFamily
-                        font.pointSize: analogueFace.numeralSize
-                        font.weight: Font.Black
+                        sourceFont.family: analogueFace.clockModel.fontFamily
+                        sourceFont.pointSize: analogueFace.numeralSize
+                        sourceFont.weight: Font.Black
                         visible: analogueFace.clockModel.analogFaceShadow
                     }
 
-                    Text {
+                    ThemedText {
                         id: numeralContactShadow
                         objectName: "clockAnalogueNumeralContactShadow" + numeral.index
                         x: analogueFace.clockModel.analogNumeralContactOffsetX
@@ -216,20 +216,20 @@ Item {
                             analogueFace.clockModel.analogShadowColor.b,
                             analogueFace.clockModel.analogShadowColor.a * 0.84
                         )
-                        font.family: analogueFace.clockModel.fontFamily
-                        font.pointSize: analogueFace.numeralSize
-                        font.weight: Font.Black
+                        sourceFont.family: analogueFace.clockModel.fontFamily
+                        sourceFont.pointSize: analogueFace.numeralSize
+                        sourceFont.weight: Font.Black
                         visible: analogueFace.clockModel.analogFaceShadow
                     }
 
-                    Text {
+                    ThemedText {
                         id: visibleNumeral
                         objectName: "clockAnalogueNumeralVisible" + numeral.index
                         text: numeral.modelData
                         color: analogueFace.clockModel.textColor
-                        font.family: analogueFace.clockModel.fontFamily
-                        font.pointSize: analogueFace.numeralSize
-                        font.weight: Font.Black
+                        sourceFont.family: analogueFace.clockModel.fontFamily
+                        sourceFont.pointSize: analogueFace.numeralSize
+                        sourceFont.weight: Font.Black
                     }
                 }
             }

@@ -107,15 +107,15 @@ OverlayWidget {
             }
         }
 
-        Text {
+        ThemedText {
             id: percentage
             objectName: "systemAudioOSDPercentage"
             visible: osdBody.showNumeric
             text: osdModel.percentageText
             color: osdModel.textColor
-            font.family: osdModel.fontFamily
-            font.pixelSize: osdModel.fontSize
-            font.bold: true
+            sourceFont.family: osdModel.fontFamily
+            sourceFont.pixelSize: osdModel.fontSize
+            sourceFont.bold: true
             width: osdBody.insideNumeric ? audioTrack.width : osdBody.numericWidth
             x: osdBody.insideNumeric ? audioTrack.x
                 : (osdBody.leftNumeric ? osdBody.laneStart - width

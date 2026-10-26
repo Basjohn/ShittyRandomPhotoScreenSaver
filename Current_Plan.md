@@ -34,11 +34,14 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 
 ### 2B. Settings and UI (in this order)
 
-- [~] **Light-theme legibility:** finish shared **soft** light-theme text/header-logo shadows and slightly heavier
-  typography across Settings/runtime. Preserve dark-theme pixels, authored shadow parameters, backgrounds and theme
-  schemas; derive admission from semantic roles. Verify native Glass/Acrylic and translucent runtime cards before
-  landing; probes need external deadlines and completed production retirement. Blanket light-theme shadow removal
-  was rejected; use a measured soft-shadow prototype and preserve the global operator controls.
+- [~] **Light-theme soft shadows — performance gate remains open:** retain the shared text/header-logo prototype
+  pending cost acceptance or further bounded optimization. The half-resolution shadow-only capture keeps crisp
+  foregrounds and all authored offsets/alpha; measured extra dedicated GPU memory is 7.88 MiB and render CPU +0.057 ms
+  with unchanged 60 Hz cadence (`tmp/light_theme_audit/soft_half_pearl_cost/`). This is not proof of performance neutrality;
+  do not land the new default yet. Reverify accepted soft profile in native light/dark Settings/runtime before closure.
+  The independent typography, semantic indicators and QWidget shadow-geometry corrections are verified. Preserve
+  backgrounds, theme schemas, global controls and exact dark-theme font/shadow behavior; blanket light-shadow removal
+  was rejected. Every native probe needs an external deadline and completed production retirement.
 
 - [ ] **4C — Shared Settings UX audit:**
   - [ ] Audit every Visualizer/Transition/widget page for the shared Angle/Direction, Range and Triangle controls,
