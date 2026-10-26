@@ -451,6 +451,7 @@ class QuickSceneController(QObject):
         self._visualizer_root: QQuickItem | None = None
         self._visualizer_startup_reveal_opacity = 1.0
         self._visualizer_camera_reset_available = False
+        self._visualizer_display_transfer_available = (False, False)
         self._visualizer_control_hints_available = False
         self._visualizer_content_host: QQuickItem | None = None
         self._visualizer_item: VisualizerRenderItem | None = None
@@ -815,7 +816,7 @@ class QuickSceneController(QObject):
             or not state.always_show_glyphs
         ):
             return
-        if action not in {"close", "restore", "rotate", "lock"}:
+        if action not in {"close", "restore", "rotate", "lock", "transfer_left", "transfer_right"}:
             return
         self.hover_edit_glyph_requested.emit(action, model_identity)
 
@@ -2139,6 +2140,15 @@ class QuickSceneController(QObject):
         if self._visualizer_root is not None:
             self._visualizer_root.setProperty("cameraResetAvailable", bool(available))
 
+    def set_visualizer_display_transfer_available(self, left: bool, right: bool) -> None:
+        value = bool(left), bool(right)
+        if value == self._visualizer_display_transfer_available:
+            return
+        self._visualizer_display_transfer_available = value
+        if self._visualizer_root is not None:
+            self._visualizer_root.setProperty("displayTransferLeftAvailable", value[0])
+            self._visualizer_root.setProperty("displayTransferRightAvailable", value[1])
+
     def set_visualizer_control_hints_available(self, available: bool) -> None:
         """Project framed-camera capability at mode admission, including lazy roots."""
         self._visualizer_control_hints_available = bool(available)
@@ -2334,6 +2344,8 @@ class QuickSceneController(QObject):
         )
         root.setProperty("volumeWheelEnabled", self._custom_layout_session is None)
         root.setProperty("cameraResetAvailable", self._visualizer_camera_reset_available)
+        root.setProperty("displayTransferLeftAvailable", self._visualizer_display_transfer_available[0])
+        root.setProperty("displayTransferRightAvailable", self._visualizer_display_transfer_available[1])
         root.setProperty("controlHintsAvailable", self._visualizer_control_hints_available)
         if self._input_state is not None:
             self._apply_visualizer_input_state(self._input_state)

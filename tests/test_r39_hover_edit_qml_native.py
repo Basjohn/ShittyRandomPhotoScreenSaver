@@ -71,9 +71,13 @@ def test_existing_ordinary_and_visualizer_roots_load_shared_glyphs(qt_app):
                 item.setProperty('hoverEditEligible', True)
             else:
                 item.setProperty('presentationActive', True)
+                item.setProperty('displayTransferRightAvailable', True)
             item.setProperty('widgetGlowAdmitted', True)
             qt_app.processEvents()
             assert item.findChild(QQuickItem, expected) is not None
+            glyphs = item.findChild(QQuickItem, expected)
+            assert glyphs.property('canTransferLeft') is False
+            assert glyphs.property('canTransferRight') is (name == 'VisualizerPresentation.qml')
         finally:
             item.deleteLater()
             qt_app.processEvents()

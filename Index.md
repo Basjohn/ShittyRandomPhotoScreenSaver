@@ -84,6 +84,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Shared lab context/target, production-host input experiments, bounded capture and retirement | `Docs/Guides/Visualizer_Labs.md`; `tools/labs/render_target.py` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
 | Visualizer Previous/Next preset glyphs and default selection | `Docs/Reference/Visualizer_Reference.md` → Preset navigation glyphs |
+| Visualizer hover display transfer, native glyph admission and existing CUSTOM transaction | `Docs/Reference/Visualizer_Reference.md` → Preset navigation glyphs; `Current_Plan.md` → R38 |
 | Visualizer Settings declarations, consumer/authoring boundaries, validation, availability and bespoke editors | `core/settings/visualizer_mode_settings.py`; `Docs/Reference/Visualizer_Reference.md` → Settings declarations; `Docs/Guides/Visualizer_Change_Checklist.md` |
 | Future Visualizer concepts, feasibility notes and low/high-react mocks | `Docs/Future_Work/Additional_Future_Transitions_Package.zip` (concept catalogue; only promoted work enters `Current_Plan.md`) |
 | Neon Lake Basin framing, terrain authoring, editable experiments, Custom selection migration and renderer | `Docs/Reference/Neon_Lake_Basin.md`; `Current_Plan.md` §2A / §3 / §5 |

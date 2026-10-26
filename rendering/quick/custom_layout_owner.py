@@ -1104,11 +1104,25 @@ class QuickCustomLayoutOwner:
 
         if item.model_identity != "spotify_visualizer":
             return None
+        return self._adjacent_binding_for_identity(item.current_display_identity, direction,
+                                                   self._bindings if bindings is None else bindings)
+
+    def visualizer_display_transfer_options(self, source_unit) -> tuple[bool, bool]:
+        """Event-edge hover projection of the same live selector used by Edit."""
+        available = self._live_display_bindings()
+        source = next((entry for entry in available.values() if entry.unit is source_unit), None)
+        if source is None:
+            return False, False
+        return tuple(self._adjacent_binding_for_identity(source.identity, direction, available) is not None
+                     for direction in ("left", "right"))
+
+    @staticmethod
+    def _adjacent_binding_for_identity(display_identity, direction, available):
+        """One identity/topology selector; neither hover nor QML derives neighbours."""
         direction = str(direction or "").strip().lower()
         if direction not in {"left", "right"}:
             return None
-        available = self._bindings if bindings is None else bindings
-        source = available.get(item.current_display_identity)
+        source = available.get(display_identity)
         if source is None:
             return None
         source_center_x = source.geometry.x() + source.geometry.width() / 2.0

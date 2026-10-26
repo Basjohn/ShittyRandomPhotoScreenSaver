@@ -9,12 +9,26 @@ Item {
     property bool canRestore: false
     property bool canRotate: false
     property bool canLock: false
+    property bool canTransferLeft: false
+    property bool canTransferRight: false
+    readonly property color buttonSurface: "#d51b1e23"
+    readonly property color buttonBorder: "#c0777d86"
+    readonly property color buttonInk: "#f2f4f7"
     signal actionRequested(string action)
     // One event-triggered animation clock while a glyph is hovered; nothing
     // schedules or polls when a pointer is absent. Zero extra windows/threads.
     property string activeTip: ""
     property real tipX: 0
+    property real tipY: 0
     property real delayedTipProgress: 0.0
+    function hideTip(text) {
+        if (activeTip !== text) return
+        tipReveal.stop()
+        activeTip = ""
+        delayedTipProgress = 0
+    }
+    onCanTransferLeftChanged: if (!canTransferLeft) hideTip("MOVE TO PREVIOUS DISPLAY")
+    onCanTransferRightChanged: if (!canTransferRight) hideTip("MOVE TO NEXT DISPLAY")
     // Restart per distinct glyph, so sliding from Lock to Close never inherits
     // Lock's completed hover delay. This is event-driven animation, no Timer.
     NumberAnimation {
@@ -69,9 +83,9 @@ Item {
                 width: visible ? 24 : 0
                 height: 24
                 radius: 12
-                color: "#d51b1e23"
+                color: chrome.buttonSurface
                 border.width: 1
-                border.color: "#c0777d86"
+                border.color: chrome.buttonBorder
                 z: 10
                 Text {
                     anchors.centerIn: parent
@@ -137,14 +151,11 @@ Item {
                     onEntered: {
                         chrome.activeTip = String(tipText)
                         chrome.tipX = actions.x + parent.x + parent.width / 2
+                        chrome.tipY = actions.y
                         tipReveal.restart()
                     }
                     onExited: {
-                        if (chrome.activeTip === String(tipText)) {
-                            tipReveal.stop()
-                            chrome.activeTip = ""
-                            chrome.delayedTipProgress = 0.0
-                        }
+                        chrome.hideTip(String(tipText))
                     }
                     cursorShape: Qt.PointingHandCursor
                     propagateComposedEvents: false
@@ -153,6 +164,70 @@ Item {
                         mouse.accepted = true
                         chrome.actionRequested(String(actionKind))
                     }
+                }
+            }
+        }
+    }
+
+    Repeater {
+        // Absent on ordinary/single-display cards, retained during hover fades.
+        model: chrome.canTransferLeft || chrome.canTransferRight ? [-1, 1] : []
+        delegate: Rectangle {
+            required property int modelData
+            readonly property string actionKind: modelData < 0 ? "transfer_left" : "transfer_right"
+            readonly property string tipText: modelData < 0 ? "MOVE TO PREVIOUS DISPLAY" : "MOVE TO NEXT DISPLAY"
+            objectName: "hoverEditGlyph-" + actionKind
+            visible: modelData < 0 ? chrome.canTransferLeft : chrome.canTransferRight
+            width: 24
+            height: 24
+            radius: width / 2
+            x: modelData < 0 ? 8 : Math.max(8, chrome.width - width - 8)
+            y: Math.max(8, (chrome.height - height) / 2)
+            color: chrome.buttonSurface
+            border.width: 1
+            border.color: chrome.buttonBorder
+            Canvas {
+                anchors.centerIn: parent
+                width: 20
+                height: 20
+                onPaint: {
+                    const ctx = getContext("2d")
+                    ctx.clearRect(0, 0, width, height)
+                    ctx.save()
+                    if (modelData < 0) { ctx.translate(20, 0); ctx.scale(-1, 1) }
+                    ctx.strokeStyle = chrome.buttonInk
+                    ctx.lineWidth = 1.8
+                    ctx.lineCap = "round"
+                    ctx.lineJoin = "round"
+                    ctx.beginPath()
+                    ctx.moveTo(4, 10)
+                    ctx.lineTo(16, 10)
+                    ctx.moveTo(11, 5)
+                    ctx.lineTo(16, 10)
+                    ctx.lineTo(11, 15)
+                    ctx.stroke()
+                    ctx.restore()
+                }
+            }
+            MouseArea {
+                anchors.fill: parent
+                enabled: chrome.enabled && parent.visible
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                propagateComposedEvents: false
+                onEntered: {
+                    chrome.activeTip = tipText
+                    chrome.tipX = parent.x + parent.width / 2
+                    chrome.tipY = parent.y
+                    tipReveal.restart()
+                }
+                onExited: {
+                    chrome.hideTip(tipText)
+                }
+                onPressed: function(mouse) { mouse.accepted = true }
+                onClicked: function(mouse) {
+                    mouse.accepted = true
+                    chrome.actionRequested(actionKind)
                 }
             }
         }
@@ -168,7 +243,7 @@ Item {
         visible: opacity > 0.0 && chrome.activeTip.length > 0
         opacity: Math.max(0.0, Math.min(1.0, (chrome.delayedTipProgress - 0.56) / 0.44))
         x: Math.max(4, Math.min(chrome.width - width - 4, chrome.tipX - width / 2))
-        y: Math.max(3, actions.y - height - 7)
+        y: Math.max(3, chrome.tipY - height - 7)
         width: Math.min(190, caption.implicitWidth + 18)
         height: caption.implicitHeight + 12
         radius: 7

@@ -54,6 +54,8 @@ Item {
         }
     }
     signal hoverEditGlyphRequested(string action)
+    property bool displayTransferLeftAvailable: false
+    property bool displayTransferRightAvailable: false
     property bool widgetGlowOnHover: false
     property bool widgetGlowOnClick: false
     property bool widgetGlowClicked: false
@@ -403,6 +405,8 @@ Item {
             hovered: visualizerInteractionHover.hovered
             canRestore: true
             canRotate: false
+            canTransferLeft: visualizerPresentationRoot.displayTransferLeftAvailable
+            canTransferRight: visualizerPresentationRoot.displayTransferRightAvailable
             canLock: false
             onActionRequested: function(action) {
                 visualizerPresentationRoot.hoverEditGlyphRequested(action)

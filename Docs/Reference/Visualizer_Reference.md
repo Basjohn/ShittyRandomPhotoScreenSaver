@@ -146,6 +146,15 @@ Both arrows reuse middle-click's same-mode preset-change owner, including wrapar
 middle-click still steps forward. Glyph tooltips use the existing themed, noninteractive reveal after at least one second
 of dwell, resetting on leave or a different glyph. Edit parent actions also expose matching tooltips.
 
+Normal Visualizer hover chrome also exposes lateral Previous/Next Display arrows when CUSTOM's existing live,
+identity-based adjacent-display selector admits that direction. DisplayManager projects eligibility at display/owner
+admission, context-menu refresh, transfer and Save/Cancel edges; SceneController retains it across lazy root creation.
+There is no pointer-time topology scan or new polling. The hover click revalidates its current unit and direction before
+entering the existing global Edit transaction, then invokes the same session-model transfer as the Edit arrow. Save,
+Cancel, Undo, target fitting and scene/retirement ownership remain with CUSTOM. A failed newly opened transfer cancels
+that new Edit session; a pre-existing Edit session remains the operator's. Ineligible arrows allocate no delegates,
+lost eligibility retires their tooltip, and fading chrome cannot accept late clicks. Hide Controls stays Edit-only.
+
 ### Direct 3D interaction geometry
 
 For unframed 3D modes, Alt+right starts a native press-scoped origin in the current display's direct CUSTOM transaction. An Alt+wheel resize may keep that transaction open; a later Alt+right press must rebase the move origin to the **current** rectangle before applying the new pointer delta, otherwise stale unscaled positions teleport the stage. Freeform 3D whole-stage wheel scaling preserves the stage **centre** (subject to display-edge clamp), while planar/ordinary widgets retain their own established anchor rule. These whole-stage paths may not create a timer or borrow geometry from a sibling layout profile. Framed Neon Lake
