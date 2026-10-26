@@ -46,6 +46,11 @@ artistic buckets; Extruded Bubble's Camera bucket is advanced. The same disclosu
 and the ancestors it requires. Legacy Technical-only opens acquire the Advanced ancestor; opening a normal leaf retires
 both hidden disclosures. This remains Custom-only UI and does not change authored values or runtime configuration.
 
+3D mode pages expose General, 3D Visualizers and mode Detail through `Scene3DQualityControls`, the same editor used
+by the 3D Settings tab. Both surfaces read/write the existing `scene3d` leaves and refresh from Settings change edges;
+their resolved labels use `resolve_scene3d_tier`. Quality edits never select Custom or overwrite artistic presets.
+These tier views do not introduce per-mode AA/Bloom overrides; those require explicit renderer/resolver admission.
+
 Spline Curve's scalar controls are logical-owned, including ghost and foreground styling, because its logical frame
 snapshot consumes them. Its four-layer spline editor remains Custom with independent nodes, power, enabled/alpha/offset,
 opaque outlines and ranked stacking. The shared builder preserves paired FX toggles, signed offsets, conditional rows

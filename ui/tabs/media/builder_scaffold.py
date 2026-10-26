@@ -271,6 +271,18 @@ def build_mode_scaffold(
     setattr(tab, preset_slider_attr, preset_slider)
     layout.addWidget(preset_slider)
 
+    from core.settings.scene3d_quality import scene3d_entry_key
+    from ui.tabs.scene3d_tab import Scene3DQualityControls, scene3d_quality_rows
+    quality_rows = scene3d_quality_rows()
+    quality_key = scene3d_entry_key(mode_key)
+    if quality_key in quality_rows:
+        quality = Scene3DQualityControls(tab._settings, tuple(
+            quality_rows[key] for key in ("detail", "visualizers_detail", quality_key)
+        ))
+        quality.setObjectName(f"{mode_key}_quality_controls")
+        layout.addWidget(quality)
+        setattr(tab, f"_{mode_key}_quality_controls", quality)
+
     normal_widget = QWidget()
     normal_layout = QVBoxLayout(normal_widget)
     normal_layout.setContentsMargins(0, 0, 0, 0)

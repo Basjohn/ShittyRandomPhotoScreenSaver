@@ -34,21 +34,24 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 
 ### 2B. Settings and UI (in this order)
 
-- [ ] **Light-theme legibility (single 6.1 Sol High agent):** audit and correct native composited Settings/runtime
-  text, controls, tooltips and transparent surfaces through the shared semantic theme system. Preserve operator shadow
-  controls/direction, Glass/Acrylic and dark-theme appearance; native light/dark visual proof before acceptance.
+- [~] **Light-theme legibility:** finish the explicit shared light-theme text-shadow switch and slightly heavier
+  typography across Settings/runtime. Preserve dark-theme pixels, authored shadow parameters, backgrounds and theme
+  schemas; derive admission from semantic roles. Verify native Glass/Acrylic and translucent runtime cards before
+  landing; probes need external deadlines and completed production retirement.
 
 - [ ] **4C — Shared Settings UX audit:**
   - [ ] Audit every Visualizer/Transition/widget page for the shared Angle/Direction, Range and Triangle controls,
     stronger `when` conditionals and nested bucketing; keep stored meaning and keys, prove each changed body's
-    round-trip and render it offscreen. No per-page owner clones.
+    round-trip and render it offscreen. No per-page owner clones. Bubble/Sphere compass enum adapters are landed;
+    continue with transitions and coupled ranges; inspect the actual native forms alongside the theme pass.
   - [ ] Prototype the gradient direction mapper on original Bubble (around = direction, distance from centre =
     strength/gradualness).
   - [~] **Advanced hierarchy — awaiting operator look:** large Advanced header contains Technical and EB Camera;
     native real-dialog reopen/retirement and legacy-path checks pass. Inspect the nested path at operator DPI/theme;
     capture: `tmp/pytest_advanced_render/test_visualizer_technical_path0/advanced_technical.png`.
-  - [ ] Expose overall/per-mode 3D quality in Visualizer bodies as views of the existing 3D tab keys (per-mode AA/Bloom
-    via `resolve_scene_quality`), never duplicated persisted settings.
+  - [~] General/family/mode 3D Detail views share the 3D tab's keys, editor and resolver; focused bidirectional,
+    retirement and artistic-preset isolation checks pass. Inspect native layout. Per-mode AA/Bloom remains to be
+    admitted through `resolve_scene_quality`, never duplicated persisted settings or a cosmetic unwired control.
 - [~] **Settings undo — awaiting your use:** Ctrl+Z / Ctrl+Y over the session's slider and visual-editor edits
   (contract: `Docs/Contracts.md` "Settings undo"). Check it in normal use across pages; extend to any control found
   missing.
@@ -113,6 +116,8 @@ transition loops, no arbitrary size cap; outputs stay outside runtime QRCs).
 - [ ] **Music recorder** 60-second clip, signal/history, cancel and mixed-DPR UI, when recording is needed.
 - [ ] **Frozen release gate (operator scheduled):** Standard/Diagnostic from one compile, MC and Reddit Helper installed
   startup/exit, Settings/widgets/cache/audio and installer behaviour.
+  Check installer logs and obsolete-file removal in both curated theme/preset trees. Both sources declare whole-tree
+  replacement; verify Diagnostic now reads that installed theme tree too.
 - [ ] **Conditional evidence only:** original Bubble tiny-radius judder (R-105) and dual-display reboot recovery
   (R-134–R-145) need new reproductions. The 90 Hz versus 60 Hz investigation stays off limits.
 
