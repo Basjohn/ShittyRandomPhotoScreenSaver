@@ -49,8 +49,8 @@ artistic buckets; Extruded Bubble's Camera bucket is advanced. The same disclosu
 and the ancestors it requires. Legacy Technical-only opens acquire the Advanced ancestor; opening a normal leaf retires
 both hidden disclosures. This remains Custom-only UI and does not change authored values or runtime configuration.
 
-3D mode pages expose General, 3D Visualizers and mode Detail through `Scene3DQualityControls`, the same editor used
-by the 3D Settings tab. Both surfaces read/write the existing `scene3d` leaves and refresh from Settings change edges;
+Each tier-aware 3D mode page exposes only its own Detail through `Scene3DQualityControls`, the same editor used
+by the 3D Settings tab. General and family controls stay on the 3D tab. Both surfaces read/write the existing `scene3d` leaves and refresh from Settings change edges;
 their resolved labels use `resolve_scene3d_tier`. Quality edits never select Custom or overwrite artistic presets.
 These tier views do not introduce per-mode AA/Bloom overrides; those require explicit renderer/resolver admission.
 
