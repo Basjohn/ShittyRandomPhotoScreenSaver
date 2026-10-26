@@ -5,7 +5,7 @@ No display runtime, build, global settings or environment mutations.
 """
 from pathlib import Path
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QUrl, Qt
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickItem, QQuickWindow
 
@@ -26,6 +26,9 @@ def test_hover_edit_glyph_component_constructs_and_admits_lock(qt_app):
     # A detached zero-sized QQuickItem is not a valid scene-visibility probe.
     # Check the effective property only after attaching to a real Quick scene.
     window = QQuickWindow()
+    origin = qt_app.screens()[-1].geometry().topLeft()
+    window.setFlags(Qt.WindowType.Tool | Qt.WindowType.WindowDoesNotAcceptFocus)
+    window.setGeometry(origin.x()+100, origin.y()+100, 300, 200)
     item.setParentItem(window.contentItem())
     item.setWidth(180)
     item.setHeight(110)

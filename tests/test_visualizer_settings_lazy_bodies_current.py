@@ -25,6 +25,16 @@ _BUILDERS = {
 }
 
 
+@pytest.fixture
+def settings_manager(qt_app, tmp_path):
+    from core.settings.settings_manager import SettingsManager
+
+    manager = SettingsManager(organization="SRPSSFocusedTests", application="VisualizerLazyBodies",
+                              storage_base_dir=tmp_path / "profile")
+    yield manager
+    assert manager.flush(timeout=5.)
+
+
 def _install_counters(monkeypatch) -> dict[str, int]:
     counts = {mode: 0 for mode in _BUILDERS}
     for mode, (module, fn_name) in _BUILDERS.items():
