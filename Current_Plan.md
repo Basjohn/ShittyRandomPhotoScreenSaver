@@ -32,16 +32,6 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 
 ## 2. Before the next mode: fixes, Settings/UX, features
 
-### 2A. Regression triage and test integrity
-
-New failures need exact-tree reproduction and owner-level repair, never tolerance changes or preset edits.
-Triage history: `Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md`.
-
-- [~] **Authored-data test hygiene:** tests never freeze mutable presets, Settings values, theme contents or pack
-  cardinalities; the blocking durability scanner enforces it ([Test Durability](Docs/Guides/Test_Durability.md)).
-  Review remaining advisory candidates individually (preserve round-trip, migration and test-authored behaviour);
-  [Test Oracle Repair audit](Docs/Audits/Test_Oracle_Repair_2026-10-23.md).
-
 ### 2B. Settings and UI (in this order)
 
 - [ ] **4C — Shared Settings UX audit:**

@@ -143,7 +143,8 @@ def test_steam_defaults_include_shared_preferences_and_valid_cards() -> None:
     for widget_id in STEAM_WIDGET_IDS:
         card = widgets[widget_id]
         assert isinstance(card["enabled"], bool)
-        assert str(card["monitor"]) in {"ALL", "1", "2", "3"}
+        route = str(card["monitor"]).strip()
+        assert route.upper() == "ALL" or (route.isdecimal() and int(route) > 0)
         assert isinstance(card["show_background"], bool)
         assert int(card["preferred_width"]) >= 260
         assert int(card["preferred_height"]) >= 120
