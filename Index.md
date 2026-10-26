@@ -74,7 +74,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | R154 display-owner retirement callback; historical diagnostic preset collision, superseded by R155 unified runtime root | `Docs/Historical_Bugs/R-154_Quick_Display_Terminal_Callback_And_Sphere_Slot_Collision.md` |
 | R156 missing Diagnostic frame-trace evidence; native Windows CLI admission and writer-failure receipts | `Docs/Guides/Qt_QML_Observability.md`; `Current_Plan.md` §5 |
 | R155 cross-display Media shortcuts and compiled Diagnostic shared preset authority | `Docs/Guardrails/Visualizer_Presentation.md`; `Spec.md` → Media transport / Visualizer preset catalogue |
-| physical saver/widget selection, absent-display lifecycle, monitor power/wake and saved CUSTOM replay | `Spec.md` → Visualizer display routing; `Docs/Contracts.md` → Geometry / CUSTOM; `Docs/Architecture/Persisted_Input_Compatibility.md`; `Current_Plan.md` §5 |
+| current-screen Settings rows, physical saver/widget selection, absent-display lifecycle, monitor power/wake and saved CUSTOM replay | `Spec.md` → Visualizer display routing; `Docs/Contracts.md` → Saver display selection / Geometry / CUSTOM; `Docs/Architecture/Persisted_Input_Compatibility.md`; `Current_Plan.md` §2B / §5 |
 | current source/Qt/physical proof for CUSTOM changes | `Docs/TestSuite.md` → Shared paint/Edit parity acceptance; `Current_Plan.md` for newly opened gates |
 | Visualizer planar/freeform CUSTOM geometry split and hot-swap contract | `Docs/Contracts.md`; `Spec.md` → Visualizer geometry; `Docs/Guides/Visualizer_Change_Checklist.md` §7A |
 | Visualizer change preflight | `Docs/Guides/Visualizer_Change_Checklist.md` |

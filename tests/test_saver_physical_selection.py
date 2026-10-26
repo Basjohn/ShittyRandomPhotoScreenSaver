@@ -122,6 +122,59 @@ def test_display_ui_preserves_absence_none_and_fixed_all(tmp_path, monkeypatch):
         tab.deleteLater()
 
 
+def test_display_ui_rows_follow_topology_beyond_four_without_rebinding(tmp_path, monkeypatch, qt_app):
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtGui import QImage
+    from PySide6.QtWidgets import QWidget
+    import ui.tabs.display_tab as display_ui
+
+    screens = tuple(f"serial:capacity-{number}" for number in range(1, 7))
+    manager, live = make_manager(tmp_path, monkeypatch, screens=screens)
+    monkeypatch.setattr(display_ui, 'get_screen_count', lambda: len(live[0]))
+    manager.set('display.show_on_monitors', [6])
+    tab = DisplayTab(manager)
+    try:
+        assert len(tab.monitor_checks) == 6
+        assert tab.monitor_checks[5].isChecked()
+        tab.resize(1100, 900)
+        tab.ensurePolished()
+        for widget in reversed([tab, *tab.findChildren(QWidget)]):
+            if widget.layout() is not None:
+                widget.layout().activate()
+        qt_app.processEvents()
+        image = QImage(tab.size(), QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(0)
+        tab.render(image)
+        assert image.save(str(tmp_path / "six_display_rows.png"))
+        assert all(first.geometry().bottom() < second.geometry().top()
+                   for first, second in zip(tab.monitor_checks, tab.monitor_checks[1:]))
+        original = manager.get(BINDINGS_KEY)
+        live[0] = screens[:3]
+        qt_app.screenRemoved.emit(qt_app.primaryScreen())
+        assert len(tab.monitor_checks) == 3
+        assert not any(check.isChecked() for check in tab.monitor_checks)
+        tab.same_image_check.setChecked(not tab.same_image_check.isChecked())
+        assert manager.get('display.show_on_monitors') == [6]
+        assert manager.get(BINDINGS_KEY) == original
+        live[0] = (screens[5], *screens[:5])
+        qt_app.screenAdded.emit(qt_app.primaryScreen())
+        assert len(tab.monitor_checks) == 6
+        assert tab.monitor_checks[0].isChecked() and not tab.monitor_checks[5].isChecked()
+        assert manager.get(BINDINGS_KEY) == original
+        tab.monitor_checks[1].setChecked(True)
+        assert manager.get('display.show_on_monitors') == [1, 2]
+        assert manager.get(BINDINGS_KEY) == {'1': screens[5], '2': screens[0]}
+        live[0] = ()
+        qt_app.screenRemoved.emit(qt_app.primaryScreen())
+        assert not tab.monitor_checks
+        assert manager.get('display.show_on_monitors') == [1, 2]
+    finally:
+        tab.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    # Topology observation ends with the Settings page's QObject lifetime.
+    qt_app.screenAdded.emit(qt_app.primaryScreen())
+
+
 def test_onboarding_and_arrange_use_effective_physical_selection(tmp_path, monkeypatch):
     from PySide6.QtCore import QRect, QSize
     from ui.onboarding import basic_pages, arrange

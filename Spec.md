@@ -748,6 +748,10 @@ one Visualizer owner, controller, BeatEngine/source, logical-runtime slot, retai
 
 ## Visualizer display routing
 
+Display Settings presents one row per current monitor and observes Qt topology changes while its page exists.
+Rows have no fixed count cap. The canonical saver selection and physical bindings retain absent targets through
+unrelated saves; only explicit selection authoring changes that intent (`Docs/Contracts.md` → Saver display selection).
+
 The saver-wide display choice preserves selected physical monitors across renumbering, power-off and restart. ALL includes
 displays connected later; a fixed numbered selection stays fixed even when it includes every present display. NONE selects
 none. If every assigned display is absent, the saver observes topology without creating a window or acquiring fresh image

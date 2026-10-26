@@ -13,7 +13,7 @@ from typing import Optional, List
 
 import shiboken6
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel,
+    QApplication, QWidget, QVBoxLayout, QLabel,
     QSpinBox, QGroupBox, QCheckBox, QScrollArea, QComboBox,
     QButtonGroup, QPushButton,
 )
@@ -66,6 +66,10 @@ class DisplayTab(QWidget):
         self._setup_ui()
         self._load_settings()
         self._bind_widget_glow_theme()
+        app = QApplication.instance()
+        if app is not None:
+            app.screenAdded.connect(self._refresh_monitor_choices)
+            app.screenRemoved.connect(self._refresh_monitor_choices)
 
         logger.debug("DisplayTab created")
 
@@ -217,26 +221,22 @@ class DisplayTab(QWidget):
     def _build_monitor_section(self) -> QWidget:
         group, layout = self._new_section_group("Monitor Configuration")
 
-        show_row, _ = add_aligned_row(
+        show_row, monitor_label = add_aligned_row(
             layout,
             "Show Screensaver On:",
             label_width=self._LABEL_WIDTH,
         )
+        monitor_label.parentWidget().layout().setAlignment(monitor_label, Qt.AlignmentFlag.AlignTop)
         self.show_all_check = QCheckBox("All")
         self.show_all_check.setProperty("circleIndicator", True)
-        self.monitor_checks: List[QCheckBox] = [
-            QCheckBox("Monitor 1"),
-            QCheckBox("Monitor 2"),
-            QCheckBox("Monitor 3"),
-            QCheckBox("Monitor 4"),
-        ]
+        self.monitor_checks: List[QCheckBox] = []
         self.show_all_check.stateChanged.connect(self._on_show_on_changed)
-        show_row.addWidget(self.show_all_check)
-        for cb in self.monitor_checks:
-            cb.setProperty("circleIndicator", True)
-            cb.stateChanged.connect(self._on_show_on_changed)
-            show_row.addWidget(cb)
-        show_row.addSpacing(12)
+        choices = QWidget()
+        self._monitor_choices_layout = QVBoxLayout(choices)
+        self._monitor_choices_layout.setContentsMargins(0, 0, 0, 0)
+        self._monitor_choices_layout.setSpacing(8)
+        self._monitor_choices_layout.addWidget(self.show_all_check)
+        show_row.addWidget(choices)
         show_row.addStretch()
 
         same_image_row, _ = add_aligned_row(
@@ -657,22 +657,7 @@ class DisplayTab(QWidget):
         self.widget_glow_jedi_mode_check.blockSignals(True)
         
         try:
-            from core.settings.display_selection import normalize_selection, resolve_monitor_numbers
-            raw_show_on = self._settings.get('display.show_on_monitors')
-            show_all = normalize_selection(raw_show_on) == 'ALL'
-            selected_monitors = resolve_monitor_numbers(self._settings)
-            self.show_all_check.setChecked(show_all)
-            screen_count = get_screen_count()
-            for idx, cb in enumerate(self.monitor_checks, start=1):
-                cb.setEnabled(idx <= screen_count)
-                cb.setChecked(idx in selected_monitors)
-            self._display_selection_dirty = False
-            unavailable = normalize_selection(raw_show_on)
-            self.show_all_check.setToolTip(
-                "All displays, including displays connected later."
-                if not isinstance(unavailable, list) or len(selected_monitors) == len(unavailable)
-                else "Some selected physical displays are unavailable. They remain selected until you change this choice."
-            )
+            self._refresh_monitor_choices()
 
             # Same image toggle
             same_image = self._settings.get('display.same_image_all_monitors')
@@ -789,6 +774,40 @@ class DisplayTab(QWidget):
             self.widget_glow_jedi_mode_check.blockSignals(False)
             self._loading = False
     
+    def _refresh_monitor_choices(self, *_args) -> None:
+        """Present today's screens without authoring a new physical selection."""
+        from core.settings.display_selection import normalize_selection, resolve_monitor_numbers
+
+        previous_loading, self._loading = self._loading, True
+        try:
+            count = get_screen_count()
+            if len(self.monitor_checks) != count:
+                for check in self.monitor_checks:
+                    self._monitor_choices_layout.removeWidget(check)
+                    check.hide()
+                    check.deleteLater()
+                self.monitor_checks = []
+                for number in range(1, count + 1):
+                    check = QCheckBox(f"Monitor {number}")
+                    check.setProperty("circleIndicator", True)
+                    check.setToolTip(f"Select the physical display currently numbered {number}.")
+                    check.stateChanged.connect(self._on_show_on_changed)
+                    self._monitor_choices_layout.addWidget(check)
+                    self.monitor_checks.append(check)
+            selection = normalize_selection(self._settings.get('display.show_on_monitors'))
+            selected = resolve_monitor_numbers(self._settings)
+            self.show_all_check.setChecked(selection == 'ALL')
+            for number, check in enumerate(self.monitor_checks, 1):
+                check.setChecked(number in selected)
+            self._display_selection_dirty = False
+            self.show_all_check.setToolTip(
+                "All displays, including displays connected later."
+                if not isinstance(selection, list) or len(selected) == len(selection)
+                else "Some selected physical displays are unavailable. They remain selected until you change this choice."
+            )
+        finally:
+            self._loading = previous_loading
+
     def _save_settings(self) -> None:
         """Save current settings to settings manager."""
         if getattr(self, "_loading", False):
