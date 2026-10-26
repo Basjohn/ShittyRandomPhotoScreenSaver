@@ -49,6 +49,10 @@ TRANSITION_LOOP_HOLD_MS = 350          # each loop end rests on the first pictur
 # Every ordered pair of distinct scenes. Each generation picks a pair and the run there's seed
 # at random (operator direction); the manifest records the pick, which does not stale an entry.
 SHOWCASE_BLOCK_SPIN_EDGE_GLASS = ("Off", "Reflection")
+# Release catalogue policy, separate from runtime transition availability.
+SHOWCASE_TRANSITION_EXCLUSIONS = frozenset({
+    ("warp_dissolve", "default"), ("particle", "default"), ("blinds", "flat"),
+})
 SCENE_PAIRS = tuple((a, b) for a in range(4) for b in range(4) if a != b)
 
 
@@ -130,6 +134,8 @@ def catalogue() -> list[MediaCase]:
             variants = [(_slug(value), value, {"blockspin": {"edge_glass": value}})
                         for value in BLOCK_SPIN_EDGE_GLASS_CHOICES if value in SHOWCASE_BLOCK_SPIN_EDGE_GLASS]
         for variant, label, settings in variants:
+            if (identity, variant) in SHOWCASE_TRANSITION_EXCLUSIONS:
+                continue
             cases.append(MediaCase("transition", identity, variant, label, settings=settings,
                                    duration_ms=int(durations[descriptor.setting_name])))
     for descriptor in iter_visualizer_mode_descriptors():

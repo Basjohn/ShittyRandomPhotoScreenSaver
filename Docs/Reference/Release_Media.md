@@ -34,7 +34,8 @@ Scene pairs/seeds remain stable in the manifest for unchanged entries; random ch
 
 Transition outputs default to ignored `assets/webp/trans/` and Visualizer outputs to `assets/webp/viz/` (operator layout 2026-10-17), both excluded from normal Godzips. Every new or reworked transition or Visualizer gets one rendered showcase WebP there (operator policy 2026-10-17). The agent reviews every new or
 visually changed transition's WebP before closing that implementation. The accepted catalogue exclusions are Warp
-Dissolve, Particle and Blinds Flat until the operator changes them. Landed transitions are accepted; catalogue generation
+Dissolve, Particle and Blinds Flat until the operator changes them; `catalogue()` filters these release-only cases
+before listing or capture, without changing runtime availability. Landed transitions are accepted; catalogue generation
 and capture endpoint proof do not reopen general product visual acceptance. Remaining execution lives in Current_Plan §3.
 These transition publication rules do not change Visualizer capture/encoding rules below.
 
