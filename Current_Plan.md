@@ -34,29 +34,27 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 
 ### 2B. Settings and UI (in this order)
 
-- [~] **Light-theme soft shadows — performance gate remains open:** retain the shared text/header-logo prototype
-  pending cost acceptance or further bounded optimization. The half-resolution shadow-only capture keeps crisp
+- [~] **Light-theme soft shadows — finish final native validation and checkpoint:** the operator accepted the measured
+  prototype cost. The half-resolution shadow-only capture keeps crisp
   foregrounds and all authored offsets/alpha; measured extra dedicated GPU memory is 7.88 MiB and render CPU +0.057 ms
-  with unchanged 60 Hz cadence (`tmp/light_theme_audit/soft_half_pearl_cost/`). This is not proof of performance neutrality;
-  do not land the new default yet. Reverify accepted soft profile in native light/dark Settings/runtime before closure.
+  with unchanged 60 Hz cadence (`tmp/light_theme_audit/soft_half_pearl_cost/`). Do not describe this as performance-neutral.
+  Reverify the accepted soft profile in native light/dark Settings/runtime before landing and closure.
   The independent typography, semantic indicators and QWidget shadow-geometry corrections are verified. Preserve
   backgrounds, theme schemas, global controls and exact dark-theme font/shadow behavior; blanket light-shadow removal
   was rejected. Every native probe needs an external deadline and completed production retirement.
 
 - [ ] **4C — Shared Settings UX audit:**
-  - [ ] Audit every Visualizer/Transition/widget page for the shared Angle/Direction, Range and Triangle controls,
-    stronger `when` conditionals and nested bucketing; keep stored meaning and keys, prove each changed body's
-    round-trip and render it offscreen. No per-page owner clones. Bubble/Sphere compass enum adapters are landed;
-    transitions now share that adapter with navigation-safe undo; continue with coupled ranges and inspect native forms.
+  - [ ] Finish the page-by-page conditional/nested-bucket review across Visualizers, Transitions and widgets. Use
+    shared Angle/Direction, Range and Triangle controls only where their stored meaning fits; keep categorical motion
+    and ordering choices intact. Prove each changed body's round-trip and rendered layout; no per-page owner clones.
   - [ ] Prototype the gradient direction mapper on original Bubble (around = direction, distance from centre =
     strength/gradualness).
   - [~] **Advanced hierarchy — awaiting operator look:** large Advanced header contains Technical and EB Camera;
     native real-dialog reopen/retirement and legacy-path checks pass. Inspect the nested path at operator DPI/theme;
     capture: `tmp/pytest_advanced_render/test_visualizer_technical_path0/advanced_technical.png`.
-  - [~] Each tier-aware mode exposes only its own Detail, sharing the 3D tab's key, editor and resolver; General/family
-    controls stay on the 3D tab. Focused bidirectional, retirement and artistic-preset isolation checks pass.
-    Inspect native layout. Per-mode AA/Bloom remains to be
-    admitted through `resolve_scene_quality`, never duplicated persisted settings or a cosmetic unwired control.
+  - [ ] Trace existing per-mode AA/Bloom controls and admit their quality overrides through `resolve_scene_quality`;
+    do not expose a cosmetic unwired control or duplicate persisted settings. Mode pages retain only their own Detail;
+    General/family authoring stays on the 3D tab.
 - [~] **Settings undo — awaiting your use:** Ctrl+Z / Ctrl+Y over the session's slider and visual-editor edits
   (contract: `Docs/Contracts.md` "Settings undo"). Check it in normal use across pages; extend to any control found
   missing.

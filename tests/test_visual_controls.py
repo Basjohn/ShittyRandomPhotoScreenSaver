@@ -210,7 +210,7 @@ def test_compass_choice_dial_preserves_enum_loading_and_commits_once(qt_app, mon
     from core.settings.visualizer_mode_settings import Choice
     import ui.tabs.media.spec_mode_builder as builder
 
-    control = Choice("t_heading", "Heading:", ("top", "right", "bottom", "left", "random"),
+    control = Choice("t_heading", "Heading:", ("top", "right", "bottom", "left", "random", "none"),
                      bucket="b", direction_mapper=True)
     spec = ModeSettings("t_heading_mode", (Bucket("b", "B"),), (control,))
     monkeypatch.setattr(builder, "require_mode_settings", lambda _: spec)
@@ -225,7 +225,7 @@ def test_compass_choice_dial_preserves_enum_loading_and_commits_once(qt_app, mon
     for value in control.choices:
         builder.load_spec_mode_settings(tab, "t_heading_mode", {control.key: value})
         assert builder.collect_spec_mode_settings(tab, "t_heading_mode") == {control.key: value}
-        assert dial.isEnabled() == (value != "random")
+        assert dial.isEnabled() == (value not in {"random", "none"})
     assert saves == []
     builder.load_spec_mode_settings(tab, "t_heading_mode", {control.key: "right"})
     assert dial.value()[0] == pytest.approx(90.)
