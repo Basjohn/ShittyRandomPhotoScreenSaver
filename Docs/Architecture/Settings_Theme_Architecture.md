@@ -41,6 +41,11 @@ state roles, including disabled state, with the existing explicit Foundry-previe
 surfaces use the same semantic resolution and paint path. Native Glass/Acrylic composition must be inspected; declared
 palette contrast alone is insufficient evidence of legibility.
 
+The Settings root projects plain line/spin/combo input text from `control.input.text`; placeholders use that same
+colour at half its authored alpha, and disabled text/placeholder roles use `control.input.disabled_text`. Component
+surface overrides keep this shared foreground rule. An inherited Windows palette must not leave white input text
+on a light semantic surface. This adds no theme field, watcher, surface adjustment or shadow override.
+
 `ui/theme_semantics.py` derives light-palette admission from existing semantic foreground/surface roles; it stores no
 theme state. `ui/theme_typography.py` copies authored fonts and adds a real weight increment for light palettes.
 Jost uses a private variable family with explicit `wght`, retaining the original static family for dark matching;

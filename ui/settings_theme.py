@@ -221,6 +221,18 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
                     background-color: %(list_hover_surface)s;
                 }
 
+                /* Plain inputs need semantic text too; native placeholder
+                   palettes can stay white after a light theme is selected. */
+                QLineEdit, QAbstractSpinBox, QComboBox {
+                    color: %(input_text)s;
+                    placeholder-text-color: %(input_placeholder)s;
+                }
+
+                QLineEdit:disabled, QAbstractSpinBox:disabled, QComboBox:disabled {
+                    color: %(input_disabled_text)s;
+                    placeholder-text-color: %(input_disabled_text)s;
+                }
+
                 QPushButton {
                     background-color: %(button_surface)s;
                     color: %(button_text)s;
@@ -474,6 +486,9 @@ def _build_custom_styles(theme: SettingsThemeSpec) -> str:
         "tooltip_border": _theme_rgba(theme, "tooltip.border"),
         "label_text": _theme_qss_color(theme, "text.primary"),
         "label_disabled_text": _theme_qss_color(theme, "text.disabled"),
+        "input_text": _theme_rgba(theme, "control.input.text"),
+        "input_placeholder": _theme_scaled_alpha(theme, "control.input.text", 0.5),
+        "input_disabled_text": _theme_rgba(theme, "control.input.disabled_text"),
     }
 
 
