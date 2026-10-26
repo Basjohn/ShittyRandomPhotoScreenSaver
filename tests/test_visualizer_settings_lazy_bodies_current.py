@@ -580,6 +580,37 @@ def test_last_enabled_mode_cannot_be_disabled(qt_app, settings_manager):
         tab.deleteLater()
 
 
+@pytest.mark.parametrize("mode,key,row_key,on,off", [
+    ("bubble", "bubble_ghosting_enabled", "bubble_ghost_alpha", True, False),
+    ("oscilloscope", "osc_display", "osc_delay", "Phase", "Trace"),
+])
+def test_conditional_signals_belong_to_each_reconstructed_body(qt_app, settings_manager, mode, key, row_key, on, off):
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtWidgets import QCheckBox
+    from core.settings.visualizer_mode_settings import require_mode_settings
+
+    tab = _make_tab(settings_manager, mode, enabled_modes=["spectrum", mode])
+    spec = require_mode_settings(mode)
+    try:
+        for generation in range(3):
+            tab._select_mode_page(mode)
+            source = getattr(tab, key)
+            row = getattr(tab, f"_{spec.prefix}_rows")[row_key]
+            for value, hidden in ((off, True), (on, False), (off, True)):
+                source.setChecked(value) if isinstance(source, QCheckBox) else source.setCurrentText(value)
+                assert row.isHidden() == hidden, (mode, generation, value)
+            tab._select_setup_page()
+            tab._on_mode_admission_toggled(mode, False)
+            QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            assert not hasattr(tab, key)
+            assert not hasattr(tab, f"_{spec.prefix}_apply_conditions")
+            assert not hasattr(tab, f"_{spec.prefix}_condition_connected")
+            tab._on_mode_admission_toggled(mode, True)
+    finally:
+        tab.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
 def test_disabling_active_mode_substitutes_without_constructing_replacement(
     qt_app, settings_manager, monkeypatch
 ):

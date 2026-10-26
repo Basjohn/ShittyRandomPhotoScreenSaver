@@ -66,6 +66,10 @@ def build_spec_mode_ui(tab, parent_layout, mode_id: str) -> None:
     with its controls in the spec's order."""
     spec = require_mode_settings(mode_id)
     prefix = spec.prefix
+    # Connections and the closure capturing rows belong to this widget generation,
+    # including ordinary (non-sectional) bodies rebuilt after admission changes.
+    retire_spec_mode_conditions(tab, mode_id)
+    setattr(tab, f"_{prefix}_condition_connected", set())
     scaffold = build_mode_scaffold(
         tab,
         parent_layout,
@@ -102,9 +106,6 @@ def build_spec_mode_ui(tab, parent_layout, mode_id: str) -> None:
                   for entry in spec.entries if entry.bucket}
         setattr(tab, cache_attr, values)
         setattr(tab, built_attr, set())
-        # A mode body may be rebuilt on the same tab. Its former connection set
-        # referenced previous widgets and must not suppress new subscriptions.
-        setattr(tab, f"_{prefix}_condition_connected", set())
         rows: dict = {}
         setattr(tab, f"_{prefix}_rows", rows)
         bucket_entries = {bucket.key: [entry for entry in spec.entries if entry.bucket == bucket.key]
@@ -178,6 +179,15 @@ def build_spec_mode_ui(tab, parent_layout, mode_id: str) -> None:
         content.addStretch()
     setattr(tab, f"_{prefix}_rows", rows)
     _bind_conditions(tab, spec, rows)
+
+
+def retire_spec_mode_conditions(tab, mode_id: str) -> None:
+    """Drop generation-local signal bookkeeping and closures retaining old rows."""
+    prefix = require_mode_settings(mode_id).prefix
+    for suffix in ("condition_connected", "apply_conditions"):
+        attr = f"_{prefix}_{suffix}"
+        if hasattr(tab, attr):
+            delattr(tab, attr)
 
 
 def _bind_conditions(tab, spec: ModeSettings, rows) -> None:
