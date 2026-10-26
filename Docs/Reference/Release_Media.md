@@ -6,7 +6,7 @@ the normal GODZIP, or runtime asset trees. Use a dedicated ignored `logs/<direct
 ```powershell
 python tools/release_media.py --list
 python tools/release_media.py --kind transition --id jigsaw      # -> assets/webp/trans (the default for transitions)
-python tools/release_media.py --kind visualizer --clip logs/visualizer_recordings/balanced.jsonl --start-seconds 5 --output-dir logs/release_media
+python tools/release_media.py --kind visualizer --clip logs/visualizer_recordings/dontyouseemetrying_mixed.jsonl --start-seconds 5 --output-dir logs/release_media
 ```
 
 Filter deliberately with `--kind`, `--id` and `--variant` using values returned by `--list`. `--duration-seconds` overrides
@@ -42,6 +42,8 @@ These transition publication rules do not change Visualizer capture/encoding rul
 Visualizer identities come from the active canonical mode registry and each mode's actual curated preset catalogue;
 Custom is excluded. The filename-derived variant survives sparse authored slots. The tool accepts only non-archived,
 schema-2 operator recordings under `logs/visualizer_recordings`; synthetic fixtures and archived takes are rejected.
+Select an active passage with populated recorded features (and recorded PCM history for modes that consume it);
+a schema number alone does not establish a representative musical signal.
 It replays the passage's pre-roll through the existing `ReplayBeatEngine`, production logical ticks, immutable capture,
 mailbox and `QuickVisualizerPresentationSync`, then renders published snapshots through `QuickVisualizerRenderHost`.
 The authored preset stays intact. The capture pins Scene3D High quality, draws on a plain dark grey
