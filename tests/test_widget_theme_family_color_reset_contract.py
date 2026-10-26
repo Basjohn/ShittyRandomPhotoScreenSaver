@@ -90,37 +90,23 @@ def test_retired_header_swatches_have_no_phantom_runtime_expectations() -> None:
 
 
 def test_reset_scope_covers_every_ordinary_theme_family_but_not_visualizer() -> None:
+    from ui.tabs.widgets_tab_defaults import _THEME_COLOR_OVERRIDE_SECTIONS, _is_theme_family_color_override_key
+
     source = _text("ui/tabs/widgets_tab_defaults.py")
-    for section in (
-        "clock",
-        "weather",
-        "reddit",
-        "reddit2",
-        "gmail",
-        "media",
-        "achievement_pulse",
-        "abandonment_issues",
-    ):
-        assert f'    "{section}",' in source
-    assert '"spotify_visualizer"' not in source.split('_THEME_COLOR_OVERRIDE_SECTIONS = (', 1)[1].split(')', 1)[0]
+    required = {"clock", "clock2", "clock3", "weather", "reddit", "reddit2", "gmail", "media",
+                "achievement_pulse", "abandonment_issues", "friend_pulse", "steam_progress", "system_stats",
+                "system_audio_osd", "feeds_custom_1", "feeds_news_world"}
+    assert required <= set(_THEME_COLOR_OVERRIDE_SECTIONS)
+    assert "spotify_visualizer" not in _THEME_COLOR_OVERRIDE_SECTIONS
     assert 'normalized == "color"' in source
     assert 'normalized.endswith("_color")' in source
     assert 'frozenset({"bg_opacity", "border_opacity"})' in source
 
     defaults = build_defaults_snapshot()["widgets"]
     # All current ordinary-family colour keys are representable by the reset rule.
-    for section in (
-        "clock",
-        "weather",
-        "reddit",
-        "reddit2",
-        "gmail",
-        "media",
-        "achievement_pulse",
-        "abandonment_issues",
-    ):
-        for key in defaults[section]:
+    for section in _THEME_COLOR_OVERRIDE_SECTIONS:
+        for key in defaults.get(section, {}):
             if key == "color" or key.endswith("_color"):
-                assert key == "color" or key.endswith("_color")
+                assert _is_theme_family_color_override_key(key)
 
 

@@ -2107,10 +2107,7 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
 
 
 def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
-    defaults = tab._widget_defaults.get(key)
-    if not isinstance(defaults, Mapping):
-        raise KeyError(f"Canonical widget defaults are missing widgets.{key}")
-    payload = dict(defaults)
+    payload = tab._widget_save_base(key)
     payload.update({
         "enabled": getattr(tab, f"{key}_enabled").isChecked(),
         "position": getattr(tab, f"{key}_position").currentText(),
