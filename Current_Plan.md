@@ -57,8 +57,10 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
   focused six-screen/disconnect/reorder/zero-screen and retirement checks preserve canonical selections/bindings.
   Check Settings remains coherent during actual disconnect/return and explicit reauthoring; hidden form evidence:
   `tmp/pytest_display_rows_final/test_display_ui_rows_follow_to0/six_display_rows.png`.
-- [ ] **R38 transfer/topology glyph parity:** existing multi-display authority decides eligibility; Hide Controls stays
-  Edit-only; no new runtime or geometry authority.
+- [~] **R38 hover display-transfer glyphs — awaiting physical topology use:** source/model/lifecycle and native Quick
+  hit/tooltip/fade checks pass. Exercise Previous/Next Display on actual mixed-DPI screens, Save/Cancel/Undo and monitor
+  unplug/return. Eligibility and transfer reuse CUSTOM; Hide Controls remains Edit-only. Native control capture:
+  `tmp/pytest_hover_transfer_native_final/test_transfer_glyphs_are_absen0/transfer_glyphs.png`.
 
 ### 2C. Feature work
 

@@ -1488,9 +1488,22 @@ class DisplayManager(QObject):
         )
 
     def _refresh_all_quick_context_menus(self) -> None:
+        self._refresh_quick_visualizer_transfer_glyphs()
         for display in tuple(self.displays):
             if isinstance(display, QuickDisplayUnit) and not display.is_retired:
                 self._refresh_quick_context_menu(display)
+
+    def _refresh_quick_visualizer_transfer_glyphs(self) -> None:
+        live = tuple(display for display in self.displays
+                     if isinstance(display, QuickDisplayUnit) and not display.is_retired)
+        if not live:
+            return
+        source = self._quick_visualizer_unit
+        options = ((False, False) if source not in live else
+                   self._quick_custom_layout_owner.visualizer_display_transfer_options(source))
+        for display in live:
+            display.runtime.scene_controller.set_visualizer_display_transfer_available(
+                *(options if display is source else (False, False)))
 
     def _enforce_single_quick_context_menu(
         self, opening_unit: QuickDisplayUnit
@@ -2303,7 +2316,7 @@ class DisplayManager(QObject):
         """
         if (
             self._retired or source.is_retired or source not in self.displays
-            or action not in {"close", "restore", "rotate", "lock"}
+            or action not in {"close", "restore", "rotate", "lock", "transfer_left", "transfer_right"}
         ):
             return False
         scene = source.runtime.scene_controller
@@ -2316,6 +2329,13 @@ class DisplayManager(QObject):
         ):
             return False
         owner = self._quick_custom_layout_owner
+        transfer_direction = action.removeprefix("transfer_") if action.startswith("transfer_") else None
+        if transfer_direction is not None:
+            if widget_id != "spotify_visualizer" or source is not self._quick_visualizer_unit:
+                return False
+            options = owner.visualizer_display_transfer_options(source)
+            if not options[0 if transfer_direction == "left" else 1]:
+                return False
         was_editing = owner.is_editing
         if not self._start_quick_custom_layout_session():
             return False
@@ -2358,6 +2378,8 @@ class DisplayManager(QObject):
             -1,
         )
         if row < 0:
+            if not was_editing:
+                self.cancel_custom_layout_session()
             return False
         if action == "close":
             model.closeItem(row)
@@ -2366,6 +2388,16 @@ class DisplayManager(QObject):
             return bool(model.restoreSize(row))
         if action == "rotate":
             return bool(model.rotateContent(row))
+        if transfer_direction is not None:
+            try:
+                moved = bool(model.transferItem(row, transfer_direction))
+            except Exception:
+                if not was_editing:
+                    self.cancel_custom_layout_session()
+                raise
+            if not moved and not was_editing:
+                self.cancel_custom_layout_session()
+            return moved
         model.requestToggleChildEditLockForWidget(widget_id)
         return True
 
@@ -3695,6 +3727,7 @@ class DisplayManager(QObject):
             target.attach_visualizer_owner(owner)
             target_attached = True
             self._quick_visualizer_unit = target
+            self._refresh_quick_visualizer_transfer_glyphs()
         except Exception:
             # The scene transfer has already happened, but the manager-side
             # lifecycle move is still one bounded transaction.  Restore the old
@@ -4381,6 +4414,7 @@ class DisplayManager(QObject):
             self._configure_quick_auxiliary(display)
             self._refresh_quick_context_menu(display)
             self.displays.append(display)
+            self._refresh_quick_visualizer_transfer_glyphs()
             logger.info("Quick display unit created for screen %d" % screen_index)
             if show_immediately:
                 self._show_display_widget(display)

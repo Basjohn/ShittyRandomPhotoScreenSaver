@@ -1382,7 +1382,8 @@ def test_routed_ordinary_custom_transfer_moves_same_item_cancel_and_save(qt_app)
         qt_app.processEvents()
 
 
-def test_display_manager_visualizer_transfer_moves_unit_retirement_authority() -> None:
+@pytest.mark.parametrize("fail_projection", [False, True])
+def test_display_manager_visualizer_transfer_moves_unit_retirement_authority(fail_projection) -> None:
     """Manager/unit ownership follows the retained scene to the target display."""
 
     class _Owner:
@@ -1426,19 +1427,33 @@ def test_display_manager_visualizer_transfer_moves_unit_retirement_authority() -
     source, target = _Unit(0), _Unit(1)
     visualizer = _Owner(source.runtime)
     source.visualizer_owner = visualizer
+    refreshed = []
+    def refresh():
+        refreshed.append(manager._quick_visualizer_unit)
+        if fail_projection:
+            raise RuntimeError("projection failed")
     manager = SimpleNamespace(
         _retired=False,
         _quick_visualizer_owner=visualizer,
         _quick_visualizer_unit=source,
         displays=[source, target],
+        _refresh_quick_visualizer_transfer_glyphs=refresh,
     )
 
+    if fail_projection:
+        with pytest.raises(RuntimeError, match="projection failed"):
+            DisplayManager._transfer_quick_visualizer_unit(manager, target)
+        assert manager._quick_visualizer_unit is source
+        assert source.visualizer_owner is visualizer and target.visualizer_owner is None
+        assert visualizer.runtime is source.runtime
+        return
     assert DisplayManager._transfer_quick_visualizer_unit(manager, target) is True
     assert manager._quick_visualizer_unit is target
     assert source.visualizer_owner is None
     assert target.visualizer_owner is visualizer
     assert visualizer.runtime is target.runtime
     assert visualizer.moves == [target.runtime]
+    assert refreshed == [target]
 
 
 def test_custom_layout_visualizer_display_transaction_moves_scene_and_manager_edge() -> None:
