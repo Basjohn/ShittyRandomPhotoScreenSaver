@@ -35,9 +35,6 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 ### 2B. Settings and UI (in this order)
 
 - [~] **4C — Shared Settings UX audit — awaiting operator review:**
-  - [ ] Repair input placeholder foreground through shared theme styling: the native light Sources page exposes
-    near-white placeholder text on a pale field. Preserve dark appearance and authored semantic input colours;
-    validate the actual composed input in both themes.
   - [~] **Conditional/nested Settings audit — awaiting normal operator use:** source review, focused round-trips,
     mode disable/rebuild condition checks and native changed-page rendering pass. Exercise mixed-page edits and
     disclosures in normal use; report any irrelevant rows, clipped controls or lost latent values. Keep categorical
