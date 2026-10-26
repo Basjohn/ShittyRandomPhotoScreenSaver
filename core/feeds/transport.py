@@ -41,9 +41,10 @@ class FeedTransportError(RuntimeError):
     Feed discovery uses it to tell a missing/blocked page from being offline.
     """
 
-    def __init__(self, message: str = "", *, status_code: int | None = None) -> None:
+    def __init__(self, message: str = "", *, status_code: int | None = None, retry_after: str = "") -> None:
         super().__init__(message)
         self.status_code = status_code
+        self.retry_after = str(retry_after)[:128]
 
 
 @dataclass(frozen=True)
@@ -223,7 +224,8 @@ class FeedHttpTransport:
                 )
             status_code = int(response.status_code)
             if status_code >= 400:
-                raise FeedTransportError(f"HTTP {status_code}", status_code=status_code)
+                raise FeedTransportError(f"HTTP {status_code}", status_code=status_code,
+                                         retry_after=str(response.headers.get("Retry-After") or ""))
             declared = response.headers.get("Content-Length")
             if declared:
                 try:

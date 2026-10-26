@@ -207,6 +207,7 @@ class SourceSettings:
 
     folders: List[str] = field(default_factory=lambda: require_canonical_default("sources.folders"))
     rss_feeds: List[str] = field(default_factory=lambda: require_canonical_default("sources.rss_feeds"))
+    wallpaper_pools: Dict[str, Any] = field(default_factory=lambda: require_canonical_default("sources.wallpaper_pools"))
     rss_save_to_disk: bool = bool(require_canonical_default("sources.rss_save_to_disk"))
     rss_save_directory: str = str(require_canonical_default("sources.rss_save_directory"))
     rss_rotating_cache_size: int = int(require_canonical_default("sources.rss_rotating_cache_size"))
@@ -217,9 +218,11 @@ class SourceSettings:
 
     @classmethod
     def from_settings(cls, settings: "SettingsManager") -> "SourceSettings":
+        from sources.rss.pools import read_pool_selection
         return cls(
             folders=list(settings.get("sources.folders")),
             rss_feeds=list(settings.get("sources.rss_feeds")),
+            wallpaper_pools=read_pool_selection(settings).to_dict(),
             rss_save_to_disk=bool(settings.get("sources.rss_save_to_disk")),
             rss_save_directory=str(settings.get("sources.rss_save_directory")),
             rss_rotating_cache_size=int(settings.get("sources.rss_rotating_cache_size")),
@@ -233,6 +236,7 @@ class SourceSettings:
         return {
             "sources.folders": list(self.folders),
             "sources.rss_feeds": list(self.rss_feeds),
+            **{f"sources.wallpaper_pools.{key}": value for key, value in self.wallpaper_pools.items()},
             "sources.rss_save_to_disk": self.rss_save_to_disk,
             "sources.rss_save_directory": self.rss_save_directory,
             "sources.rss_rotating_cache_size": self.rss_rotating_cache_size,

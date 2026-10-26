@@ -211,19 +211,22 @@ class SourcesTab(QWidget):
         )
         rss_layout.setSpacing(12)
 
-        # Suggestion label (session-local; updated by "Just Make It Work")
-        self.rss_suggestion_label = QLabel(
-            "<i>RSS, Atom and JSON feeds, or JSON image listings. Only images at "
+        self.pool_status_label = QLabel()
+        self.pool_status_label.setWordWrap(True)
+        rss_layout.addWidget(self.pool_status_label)
+        custom_feed_hint = (
+            "RSS, Atom and JSON feeds, or JSON image listings. Only images at "
             "least as large as your displays are kept; smaller ones are skipped "
-            "automatically.</i>"
+            "automatically."
         )
-        self.rss_suggestion_label.setWordWrap(True)
+        self.custom_feeds_label = QLabel("Custom Feeds")
+        self.custom_feeds_label.setToolTip(custom_feed_hint)
         shared_styles.bind_shared_styles(
-            self.rss_suggestion_label,
+            self.custom_feeds_label,
             "INFO_LABEL_STYLE",
             base_style="padding: 5px;",
         )
-        rss_layout.addWidget(self.rss_suggestion_label)
+        rss_layout.addWidget(self.custom_feeds_label)
 
         # RSS list
         self.rss_list = OutlinedListWidget()
@@ -235,9 +238,8 @@ class SourcesTab(QWidget):
         rss_input.setContentsMargins(0, 8, 0, 0)
         self.rss_input = QLineEdit()
         self.rss_input.setObjectName("rssFeedInput")
-        self.rss_input.setPlaceholderText(
-            "Feed or image-listing URL (e.g. https://www.reddit.com/r/EarthPorn/top/.json?t=week)..."
-        )
+        self.rss_input.setPlaceholderText("Feed or image-listing URL…")
+        self.rss_input.setToolTip(custom_feed_hint)
         shared_styles.bind_shared_styles(
             self.rss_input, "RSS_INPUT_STYLE", base_style=""
         )
@@ -252,10 +254,8 @@ class SourcesTab(QWidget):
         self.clear_rss_cache_btn = OutlinedButton("Clear Cache", role="source")
         self.clear_rss_cache_btn.clicked.connect(self._on_clear_rss_cache_clicked)
         self.just_make_it_work_btn = OutlinedButton("Just Make It Work", role="source")
-        from sources.rss.constants import DEFAULT_RSS_FEEDS
-
         self.just_make_it_work_btn.setToolTip(
-            "Replace the list with the default feeds: " + ", ".join(DEFAULT_RSS_FEEDS)
+            "Choose themed online wallpaper pools and discovery order. Custom feeds, folders and cached images are preserved."
         )
         self.just_make_it_work_btn.clicked.connect(self._on_just_make_it_work_clicked)
         self.remove_rss_btn = OutlinedButton("Remove Selected", role="source")
@@ -655,37 +655,13 @@ class SourcesTab(QWidget):
         )
 
     def _on_just_make_it_work_clicked(self) -> None:
-        """Reset RSS feeds to a curated, known-good set.
-
-        This replaces the current RSS feed list with robust defaults without
-        deleting cached images.  Cache clearing remains an explicit action via
-        the Clear Cache button; doing it here causes a settings-exit download
-        storm and throws away still-useful wallpaper candidates.
-
-        Uses ``sources.rss.constants.DEFAULT_RSS_FEEDS``: sources measured to
-        publish images well beyond 1080p (NASA Image of the Day, NASA JPL
-        Photojournal, Wallhaven) plus Bing for 1080p setups. Images are admitted
-        only when they fill every connected display, so no feed needs rules.
-        """
-        from sources.rss.curated import apply_curated_wallpaper_feeds
-
-        self._suppress_source_change_signals = True
-        try:
-            curated_feeds = apply_curated_wallpaper_feeds(self._settings)
-
-            self.rss_list.clear()
-            for feed in curated_feeds:
-                self.rss_list.addItem(feed)
-
-            self.rss_input.clear()
-            self._update_ratio_control_state()
-        finally:
-            self._suppress_source_change_signals = False
+        """The shared staged selector preserves separately authored feed URLs."""
+        from ui.wallpaper_pool_popup import choose_wallpaper_pools
+        if not choose_wallpaper_pools(self, self._settings):
+            return
+        self._update_ratio_control_state()
         self._emit_sources_changed()
-
-        # Update suggestion label for this session to reduce confusion.
-        self.rss_suggestion_label.setText("<i>YES THESE ACTUALLY ARE SAFE FOR WORK!</i>")
-        logger.info("RSS feeds reset to curated JSON defaults via 'Just Make It Work' (cache preserved).")
+        logger.info("[WALLPAPER_POOLS] Updated pool selection; custom feeds and cache preserved")
 
     def _clear_rss_cache(self) -> int:
         """Delete all files from the shared RSS cache directory.
@@ -721,10 +697,14 @@ class SourcesTab(QWidget):
     def _update_ratio_control_state(self) -> None:
         """Update ratio control enabled state based on source availability."""
         folders = self._settings.get('sources.folders')
-        rss_feeds = self._settings.get('sources.rss_feeds')
-
+        from sources.rss.pools import online_source_count, read_pool_selection, WALLPAPER_POOLS
+        selection = read_pool_selection(self._settings)
+        count = online_source_count(self._settings)
+        labels = [pool.label for pool in WALLPAPER_POOLS if pool.pool_id in selection.active_ids]
+        self.pool_status_label.setText(f"Pools: {len(labels)} enabled" if labels else "Pools: off")
+        self.pool_status_label.setToolTip("\n".join(labels) if labels else "Custom feeds below remain independent.")
         has_folders = len(folders) > 0
-        has_rss = len(rss_feeds) > 0
+        has_rss = count > 0
         both_available = has_folders and has_rss
 
         # Only enable slider when both source types are configured
@@ -750,7 +730,7 @@ class SourcesTab(QWidget):
         # Closed buckets still say what is configured (same wording as Guided Setup).
         self.folders_toggle.setText(f"Folders  ·  {len(folders)}" if has_folders else "Folders")
         self.feeds_toggle.setText(
-            f"Online Wallpaper Feeds  ·  {len(rss_feeds)} ON" if has_rss else "Online Wallpaper Feeds"
+            f"Online Wallpaper Feeds  ·  {count} ON" if has_rss else "Online Wallpaper Feeds"
         )
 
     def _on_ratio_slider_changed(self, value: int) -> None:

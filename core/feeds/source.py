@@ -7,7 +7,9 @@ polling/churn on its own.
 from __future__ import annotations
 
 from dataclasses import replace
+from email.utils import parsedate_to_datetime
 import logging
+import math
 import time
 from typing import TYPE_CHECKING, Callable
 
@@ -47,6 +49,7 @@ class FeedSource:
         document_adapter: Callable[[bytes, str, int], object] | None = None,
         document_parser: Callable[[bytes, str, int], object] | None = None,
         response_examiner: Callable[[object, str, int], object] | None = None,
+        max_discovery_fetches: int | None = None,
     ) -> None:
         if transport is not None and transport_factory is not None:
             raise ValueError("provide transport or transport_factory, not both")
@@ -67,10 +70,13 @@ class FeedSource:
         # preserves cache-only startup neutrality and avoids importing
         # feedparser merely because a source object exists.
         self._document_parser = document_parser
-        # FEEDS runtime may isolate the whole pure document-examination step
-        # (RSS/Atom/JSON parsing plus HTML feed discovery/h-feed parsing) in its
-        # family parser child.  Wallpaper/adapter callers leave this unset.
+        # FEEDS may isolate examination in its family parser child. Wallpaper
+        # pools inject strict provider examination here; custom wallpaper URLs
+        # keep generic parsing/discovery through the document adapter above.
         self._response_examiner = response_examiner
+        if max_discovery_fetches is not None and (type(max_discovery_fetches) is not int or max_discovery_fetches < 1):
+            raise ValueError("max_discovery_fetches must be a positive integer")
+        self._max_discovery_fetches = max_discovery_fetches
 
     def _ensure_needed(self) -> None:
         if self._should_continue is not None and not self._should_continue():
@@ -215,6 +221,7 @@ class FeedSource:
                 document_adapter=self._document_adapter,
                 document_parser=self._document_parser,
                 response_examiner=self._response_examiner,
+                **({"max_fetches": self._max_discovery_fetches} if self._max_discovery_fetches is not None else {}),
             )
             self._ensure_needed()
             response = resolution.response
@@ -269,7 +276,9 @@ class FeedSource:
             return self._result_from_record(updated, status="available", changed=changed)
         except (FeedTransportError, FeedParseError, ValueError, OSError) as exc:
             self._ensure_needed()
-            return self._failure(record, now, type(exc).__name__)
+            status = getattr(exc, "status_code", None)
+            failure = f"HTTP {status}" if isinstance(status, int) else type(exc).__name__
+            return self._failure(record, now, failure, retry_after=getattr(exc, "retry_after", ""))
 
 
     def _persist_best_effort(self, record: FeedCacheRecord) -> bool:
@@ -294,14 +303,22 @@ class FeedSource:
             return None
         return record
 
-    def _failure(self, record: FeedCacheRecord, now: float, failure: str) -> FeedRefreshResult:
+    def _failure(self, record: FeedCacheRecord, now: float, failure: str, *, retry_after: str = "") -> FeedRefreshResult:
         failures = min(999, record.health.consecutive_failures + 1)
+        until = _backoff_until(now, failures)
+        if retry_after:
+            try:
+                delay = float(retry_after) if retry_after.isascii() and retry_after.isdigit() else parsedate_to_datetime(retry_after).timestamp() - now
+                if math.isfinite(delay) and delay > 0:
+                    until = max(until, now + delay)
+            except (ValueError, TypeError, OverflowError):
+                logger.warning("[FEEDS] Ignoring malformed Retry-After header")
         health = FeedHealth(
             last_checked_at=now,
             last_success_at=record.health.last_success_at,
             consecutive_failures=failures,
             last_failure=str(failure)[:240],
-            backoff_until=_backoff_until(now, failures),
+            backoff_until=until,
         )
         updated = replace(record, health=health)
         self._persist_best_effort(updated)

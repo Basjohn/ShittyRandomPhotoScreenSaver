@@ -26,9 +26,12 @@ and background refresh drive passes, one at a time.
 from __future__ import annotations
 
 from enum import Enum, auto
+from dataclasses import replace
+from functools import partial
 import math
 from pathlib import Path
 import shutil
+import secrets
 import threading
 import time
 from typing import Callable, Dict, Iterator, List, Optional, Tuple
@@ -44,7 +47,6 @@ from sources.base_provider import ImageMetadata
 from sources.rss.cache import PoolEntry, RSSCache, url_key
 from sources.rss.constants import (
     DEFAULT_MAX_CACHE_SIZE_MB,
-    DEFAULT_RSS_FEEDS,
     DEFAULT_TIMEOUT_SECONDS,
     FEED_MAX_ITEMS,
     HOST_MIN_INTERVAL_SECONDS,
@@ -54,6 +56,7 @@ from sources.rss.constants import (
     TARGET_TOTAL_IMAGES,
 )
 from sources.rss.image_fetch import fills_displays, image_size_of_file
+from sources.rss.pools import PoolEndpoint, WallpaperPoolRotation, WallpaperPoolSelection, get_wallpaper_pool, examine_pool_response, MAX_DOCUMENTS_PER_PASS, MAX_STARTUP_DOCUMENTS, STARTUP_ACQUISITION_SECONDS
 
 logger = get_logger(__name__)
 
@@ -109,10 +112,13 @@ class RSSCoordinator:
         resource_manager=None,
         shutdown_check: Optional[Callable[[], bool]] = None,
         required_size: Optional[Tuple[int, int]] = None,
+        pool_selection=None,
     ):
-        urls = feed_urls if feed_urls is not None else list(DEFAULT_RSS_FEEDS.values())
+        urls = feed_urls if feed_urls is not None else []
         self.feed_urls: List[str] = list(dict.fromkeys(
             normalize_feed_address(url) for url in urls if str(url or "").strip()))
+        self._pool_selection = pool_selection if isinstance(pool_selection, WallpaperPoolSelection) else WallpaperPoolSelection.from_mapping(pool_selection)
+        self._pool_rotation = WallpaperPoolRotation(self.feed_urls, self._pool_selection, seed=secrets.token_hex(3))
         self._state_lock = threading.Lock()
         self._state = RSSState.IDLE
         self._thread_manager = thread_manager
@@ -134,9 +140,11 @@ class RSSCoordinator:
         self._sources: Dict[str, object] = {}
         self._stop = threading.Event()
         self._pass_lock = threading.Lock()
+        self._pass_deadline: float | None = None
         self._retired_lock = threading.Lock()
         self._retired_paths: List[str] = []
         self._host_last_request: Dict[str, float] = {}
+        self._host_backoff_until: Dict[str, float] = {}
         self._cache_warmed = False
         logger.info("[RSS_COORD] Initialised: %d feeds, admission >= %dx%d (fill, no upscaling)",
                     len(self.feed_urls), *self._required)
@@ -203,21 +211,37 @@ class RSSCoordinator:
     def load_async(self, on_images: Optional[Callable[[List[ImageMetadata]], None]] = None) -> None:
         """Session pass on the IO lane: warm, rotate, top up; ``on_images`` gets new images."""
         if self._thread_manager is None:
-            new_images = self.load_sync()
-            if on_images:
-                on_images(new_images)
-            return
+            raise RuntimeError("Asynchronous wallpaper acquisition requires the existing IO owner")
+
+        self._set_state(RSSState.LOADING)
 
         def _task():
-            new_images = self.load_sync()
+            try:
+                new_images = self.load_sync(bootstrap=True)
+            except Exception:
+                self._set_state(RSSState.ERROR)
+                logger.exception("[RSS_COORD] Startup acquisition failed")
+                new_images = []
             if on_images:
-                on_images(new_images)  # always called so the engine can pre-load the pool
+                on_images(new_images)
 
-        self._thread_manager.submit_io_task(_task, category="rss_startup_load")
+        try:
+            self._thread_manager.submit_io_task(_task, category="rss_startup_load")
+        except Exception:
+            self._set_state(RSSState.ERROR)
+            raise
 
-    def load_sync(self) -> List[ImageMetadata]:
+    def load_sync(self, *, bootstrap: bool = False) -> List[ImageMetadata]:
         self.warm_cache()
-        return self._run_pass(self.feed_urls, session=True)
+        return self._run_pass(None, session=True, bootstrap=bootstrap and self._cache.count == 0)
+
+    @property
+    def source_count(self) -> int:
+        return len(self.feed_urls) + len(self._pool_selection.active_ids)
+
+    def refresh_next_sources(self) -> List[ImageMetadata]:
+        """One fair bounded opportunity on the existing engine refresh cadence."""
+        return self._run_pass(None, session=False)
 
     def refresh_single_feed(self, feed_url: str) -> List[ImageMetadata]:
         """Background top-up from one feed (conditional; no rotation). Returns new images."""
@@ -231,12 +255,18 @@ class RSSCoordinator:
         """Abort passes at their next check (interruptible waits wake at once)."""
         self._stop.set()
 
+    @property
+    def is_stopped(self) -> bool:
+        return self._stop.is_set()
+
     # ------------------------------------------------------------------
     # Pass
     # ------------------------------------------------------------------
 
     def _alive(self) -> bool:
         if self._stop.is_set():
+            return False
+        if self._pass_deadline is not None and time.monotonic() >= self._pass_deadline:
             return False
         return True if self._shutdown_check is None else bool(self._shutdown_check())
 
@@ -245,11 +275,12 @@ class RSSCoordinator:
             return True
         return fills_displays(entry.width, entry.height, self._required)
 
-    def _run_pass(self, feeds: List[str], *, session: bool) -> List[ImageMetadata]:
+    def _run_pass(self, feeds: List[str] | None, *, session: bool, bootstrap: bool = False) -> List[ImageMetadata]:
         if not self._pass_lock.acquire(blocking=False):
             logger.debug("[RSS_COORD] A pass is already running; skipped")
             return []
         self._set_state(RSSState.LOADING)
+        self._pass_deadline = time.monotonic() + STARTUP_ACQUISITION_SECONDS if bootstrap else None
         new_images: List[ImageMetadata] = []
         try:
             replace: List[PoolEntry] = []
@@ -257,24 +288,41 @@ class RSSCoordinator:
                 replace = self._begin_session_rotation()
             missing = max(0, self._target_total_images - self._cache.count)
             wanted = missing + len(replace)
-            if wanted and feeds:
+            # Advance only after this pass owns the existing lock and actually
+            # needs images. Full/offline caches are never emptied by selection.
+            document_budget = MAX_STARTUP_DOCUMENTS if bootstrap else MAX_DOCUMENTS_PER_PASS
+            attempts = [0]
+            while wanted and document_budget > 0:
+                if not self._alive():
+                    raise _PassStopped()
+                endpoints = self._pool_rotation.next_endpoints(min(MAX_DOCUMENTS_PER_PASS, document_budget)) if feeds is None else tuple(PoolEndpoint(url, url) for url in feeds)
+                if not endpoints:
+                    break
+                document_budget -= sum(2 if endpoint.pool_id == "nasa.space" else 1 for endpoint in endpoints)
                 logger.info("[RSS_COORD] Pass: pool=%d target=%d missing=%d replacing=%d feeds=%d",
-                            self._cache.count, self._target_total_images, missing, len(replace), len(feeds))
-                for entry in self._acquire(feeds, wanted):
+                            self._cache.count, self._target_total_images, missing, len(replace), len(endpoints))
+                for entry in self._acquire(endpoints, wanted, attempts=attempts):
                     new_images.append(entry.metadata)
                     if missing > 0:
                         missing -= 1
                     elif replace:
                         self._retire([replace.pop(0)])
+                # Only the one empty-cache startup job may advance after a zero
+                # opportunity. Keep one shared image-attempt budget across it.
+                if not bootstrap or new_images or attempts[0] >= MAX_IMAGE_ATTEMPTS_PER_PASS:
+                    break
+            if bootstrap and not new_images:
+                logger.warning("[RSS_COORD] Empty startup acquisition exhausted bounded source opportunities")
             self._cache.cleanup()
             self._set_state(RSSState.LOADED)
         except _PassStopped:
-            logger.info("[RSS_COORD] Pass stopped (shutdown/retirement)")
+            logger.info("[RSS_COORD] Pass stopped (retirement or startup acquisition deadline)")
             self._set_state(RSSState.LOADED)
         except Exception:
             logger.exception("[RSS_COORD] Pass failed")
             self._set_state(RSSState.ERROR)
         finally:
+            self._pass_deadline = None
             self._cache.save_state()
             self._release_transports()
             self._pass_lock.release()
@@ -310,16 +358,26 @@ class RSSCoordinator:
     # Acquisition
     # ------------------------------------------------------------------
 
-    def _acquire(self, feeds: List[str], wanted: int) -> Iterator[PoolEntry]:
+    def _acquire(self, feeds, wanted: int, *, attempts: List[int] | None = None) -> Iterator[PoolEntry]:
         """New pool entries, taken round-robin across feeds, until ``wanted`` or bounds."""
         streams = []
-        for feed_url in feeds:
+        for endpoint in feeds:
             if not self._alive():
                 raise _PassStopped()
-            document = self._document(feed_url)
+            feed_url = endpoint.url
+            document = self._document(feed_url, pool_endpoint=endpoint) if endpoint.pool_id else self._document(feed_url)
+            if document is not None and endpoint.pool_id == "nasa.space":
+                # Search plus exactly ONE manifest consumes this opportunity's
+                # two-document budget. Never fetch a manifest for every result.
+                item = document.items[endpoint.item_index % len(document.items)]
+                asset = PoolEndpoint(endpoint.source_id + ".asset", item.action_url, endpoint.pool_id)
+                document = self._document(asset.url, pool_endpoint=asset)
+                if document is not None and document.home_url != asset.url:
+                    document = None  # a different asset's last-good is not this manifest
+                feed_url = asset.url
             if document is not None:
                 streams.append((feed_url, iter(document.items)))
-        attempts = [0]
+        attempts = [0] if attempts is None else attempts
         produced = 0
         while streams and produced < wanted:
             for feed_url, items in list(streams):
@@ -390,11 +448,13 @@ class RSSCoordinator:
             return entry
         return None
 
-    def _pace(self, url: str) -> None:
+    def _pace(self, url: str, *, minimum: float | None = None) -> None:
+        if minimum is None:
+            minimum = HOST_MIN_INTERVAL_SECONDS
         host = (urlparse(url).hostname or "").casefold()
         last = self._host_last_request.get(host)
         if last is not None:
-            wait = HOST_MIN_INTERVAL_SECONDS - (time.monotonic() - last)
+            wait = minimum - (time.monotonic() - last)
             if wait > 0 and self._stop.wait(wait):
                 raise _PassStopped()
         self._host_last_request[host] = time.monotonic()
@@ -413,8 +473,9 @@ class RSSCoordinator:
     # Feed documents (shared feed core)
     # ------------------------------------------------------------------
 
-    def _source(self, feed_url: str):
-        source = self._sources.get(feed_url)
+    def _source(self, feed_url: str, *, pool_endpoint: PoolEndpoint | None = None):
+        key = "pool:" + pool_endpoint.source_id if pool_endpoint is not None else feed_url
+        source = self._sources.get(key)
         if source is None:
             from core.feeds.source import FeedSource
             from core.feeds.transport import FeedHttpTransport
@@ -424,27 +485,44 @@ class RSSCoordinator:
             if self._feed_store is None:
                 self._feed_store = FeedCacheStore(self._cache.state_dir / "feeds")
             fingerprint = endpoint_fingerprint(feed_url)
+            source_id = "wallpaper:pool:" + pool_endpoint.source_id if pool_endpoint is not None else "wallpaper:endpoint:" + fingerprint
+            provider = get_wallpaper_pool(pool_endpoint.pool_id).provider if pool_endpoint is not None else None
             timeout = float(self._timeout)
             source = FeedSource(
-                FeedSourceSpec(f"wallpaper:endpoint:{fingerprint}", feed_url,
-                               f"wallpaper_endpoint_{fingerprint}", max_items=FEED_MAX_ITEMS),
+                FeedSourceSpec(source_id, feed_url,
+                               source_id.replace(":", "_"), max_items=FEED_MAX_ITEMS,
+                               allow_endpoint_migration=pool_endpoint is not None),
                 transport_factory=lambda: FeedHttpTransport(
                     connect_timeout=min(timeout, 4.0), read_timeout=timeout,
                     user_agent=WALLPAPER_USER_AGENT, should_continue=self._alive),
                 cache=self._feed_store,
                 should_continue=self._alive,
-                document_adapter=json_image_listing,
+                document_adapter=json_image_listing if provider is None else None,
+                response_examiner=partial(examine_pool_response, provider=provider) if provider is not None else None,
+                max_discovery_fetches=1 if provider is not None else None,
             )
-            self._sources[feed_url] = source
+            self._sources[key] = source
+        elif source.spec.url != feed_url:
+            # Same logical pool, new page/subject candidate. FeedSource retains
+            # health but sends validators only for matching endpoint fingerprints.
+            source.spec = replace(source.spec, url=feed_url)
         return source
 
-    def _document(self, feed_url: str) -> Optional[FeedDocument]:
+    def _document(self, feed_url: str, *, pool_endpoint: PoolEndpoint | None = None) -> Optional[FeedDocument]:
         from core.feeds.source import FeedRefreshCancelled
 
         if not self._reddit_quota_allows(feed_url):
             return None
         try:
-            result = self._source(feed_url).refresh()
+            source = self._source(feed_url, pool_endpoint=pool_endpoint)
+            host = (urlparse(feed_url).hostname or "").casefold()
+            if self._host_backoff_until.get(host, 0) > time.time():
+                result = source.load_cached()
+            else:
+                self._pace(feed_url, minimum=max(HOST_MIN_INTERVAL_SECONDS, 1.5 if host == "wallhaven.cc" else 0.0))
+                result = source.refresh()
+            if result.failure == "HTTP 429" and result.health.backoff_until:
+                self._host_backoff_until[host] = max(self._host_backoff_until.get(host, 0), result.health.backoff_until)
         except FeedRefreshCancelled:
             raise _PassStopped()
         except Exception as exc:

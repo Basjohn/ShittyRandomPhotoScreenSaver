@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urljoin, urlparse
 
 from core.feeds.models import FeedDocument, FeedImageCandidate, FeedItem
@@ -123,7 +123,7 @@ def _published(row: dict) -> int | None:
     return None
 
 
-def json_image_listing(payload: bytes, source_url: str, max_items: int) -> FeedDocument | None:
+def json_image_listing(payload: bytes, source_url: str, max_items: int, *, row_filter: Callable[[dict], bool] | None = None) -> FeedDocument | None:
     """An image listing as a ``FeedDocument``, or ``None`` when the payload is not one."""
     try:
         data = json.loads(bytes(payload).decode("utf-8-sig"))
@@ -136,6 +136,8 @@ def json_image_listing(payload: bytes, source_url: str, max_items: int) -> FeedD
     for row in rows:
         if len(items) >= limit:
             break
+        if row_filter is not None and not row_filter(row):
+            continue
         images = _entry_images(row, source_url)
         if not images:
             continue
@@ -162,3 +164,21 @@ def json_image_listing(payload: bytes, source_url: str, max_items: int) -> FeedD
 
 
 __all__ = ["json_image_listing"]
+
+
+def safe_pool_image_listing(payload: bytes, source_url: str, max_items: int, *, provider: str) -> FeedDocument | None:
+    """Curated pools fail closed on missing/wrong provider rating metadata.
+
+    Custom URLs intentionally retain the site's ordinary generic-listing reader.
+    A requested SFW query alone must never admit a returned non-SFW row.
+    """
+    safety = {
+        "wallhaven": ("purity", "sfw"),
+        "konachan": ("rating", "s"),
+        "safebooru": ("rating", "general"),
+        "yandere": ("rating", "s"),
+    }
+    # Policy follows the configured pool, never a remote redirect's hostname.
+    # An unknown provider is a programming/admission error, not generic parsing.
+    field, required = safety[provider]
+    return json_image_listing(payload, source_url, max_items, row_filter=lambda row: row.get(field) == required)

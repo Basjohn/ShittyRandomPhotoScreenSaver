@@ -139,26 +139,16 @@ The `header` role is the same shared `BrandedHeader` primitive used by the other
 
 Wallpaper feeds (Settings → Sources → Wallpaper Feeds, `sources.rss_feeds`) are a separate product from the FEEDS widget. They maintain an image pool for wallpaper rotation, not a list of stories, but acquire through the same core. `sources/rss/coordinator.py` owns the pool.
 
-- **Documents.** Each feed is a `FeedSource`, which gives conditional requests, standards-based discovery, persisted backoff, a last-good document and bounded DNS. RSS, Atom and JSON Feed are parsed as feeds. Anything else structured goes to the JSON image-listing adapter (`sources/rss/json_listing.py`), which reads listings by shape and never by site (e.g. Reddit `.json`, Wallhaven's API). Reddit hosts share the Reddit widget's request quota.
+- **Documents.** Each feed is a `FeedSource`, which gives conditional requests, persisted backoff, a last-good document and bounded DNS. Custom URLs retain standards-based feed discovery and the generic JSON image-listing adapter. Named pools use strict provider response admission; see [Wallpaper Pool Selection](Wallpaper_Pool_Selection.md). Reddit hosts share the Reddit widget's request quota.
 - **Images.** `sources/rss/image_fetch.py` streams each image through the shared vetted public-image path (`core.feeds.artwork_transport.iter_public_image`). An image is admitted only when it fills every connected display in fill mode without upscaling. A too-small image is refused from its header after a few kilobytes, and refusals are remembered (`MAX_REJECTED_URLS`, re-judged after `REJECTED_URL_TTL_DAYS`). A far larger image is stored right-sized once.
 - **Pool and rotation.** The pool target is `TARGET_TOTAL_IMAGES`, with an on-disk byte cap. Once per process session, up to a third of the pool is replaced, stale images first. An old image is retired only after its replacement is on disk. Passes run on the engine's existing IO-lane task; there is no scheduler, timer or worker process of its own.
-- **Settings actions.** *Just Make It Work* replaces the list with `sources.rss.constants.DEFAULT_RSS_FEEDS` (its tooltip is generated from that list). *Clear Cache* deletes the pool; new images arrive on the next pass. *Save All RSS Images To Disk* copies every kept feed image (every image admitted to the wallpaper pool; too-small ones are never downloaded) to a chosen folder and never deletes from it. Folders and Online Wallpaper Feeds are two accordion buckets whose titles carry their counts; the ratio slider below both balances local folders against feeds.
-- **Defaults.** `DEFAULT_RSS_FEEDS` holds sources measured to publish images well beyond 1080p (NASA Image of the Day, NASA JPL Photojournal, Wallhaven), plus Bing for 1080p setups. Flickr and Wikimedia are deliberately absent. Existing user lists are never rewritten.
+- **Settings actions.** *Just Make It Work* opens the shared staged pool selector and preserves custom URLs, folders and accepted cached images. *Clear Cache* deletes the pool; new images arrive on the next pass. *Save All RSS Images To Disk* copies every kept feed image (every image admitted to the wallpaper pool; too-small ones are never downloaded) to a chosen folder and never deletes from it. Folders and Online Wallpaper Feeds are two accordion buckets whose titles carry their counts; the ratio slider below both balances local folders against feeds.
+- **Defaults and migration.** Canonical pool defaults remain in `core/settings/default_settings.py`; the catalogue and exact retired-URL migration are owned by `sources/rss/pools.py`. Separately authored custom addresses remain independent.
 
 
-### Curated wallpaper pool redesign (planned, not shipped)
-
-The proposed UI is based on **Wallhaven thematic searches**, not three coarse Wallhaven categories, and one
-**global provider-side discovery-order preference** (where each source supports it). It must never control the
-screensaver's wallpaper shuffle or cause one listing fetch for every checked theme. Image-board candidates require
-live SFW/full-resolution/permissions probes and are not yet configured providers.
-The proposed `Just Make It Work Pools` UI and provider selection design are documented in
-[Wallpaper Pool Selection](Wallpaper_Pool_Selection.md), with live work gated by
-`Current_Plan.md` §3 SC4. Currently, both Settings and Guided Setup still call
-`apply_curated_wallpaper_feeds`, and a coordinator pass retrieves a document from every configured
-feed before candidate round-robin. The new design must bound **listing requests** before candidate
-acquisition, not turn each selected theme into a fresh independent source task. Current user-visible
-providers, data model and settings behavior remain as stated above until SC4 is landed.
+The thematic catalogue, global provider-side discovery order, bounded listing opportunities and provider evidence
+are documented once in [Wallpaper Pool Selection](Wallpaper_Pool_Selection.md). Discovery order does not alter
+wallpaper playback shuffle. `Current_Plan.md` SC4 owns remaining execution and operator image-relevance validation.
 
 ## Cache maintenance
 

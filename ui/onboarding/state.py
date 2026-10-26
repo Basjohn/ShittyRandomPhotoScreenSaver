@@ -104,6 +104,7 @@ def saved_account_states(settings) -> dict[str, bool]:
 
 
 def current_setup_summary(settings) -> dict[str, object]:
+    from sources.rss.pools import online_source_count
     widgets = _widgets(settings)
     from core.sources.readiness import has_image_sources
     sources = has_image_sources(settings)  # the one shared readiness rule
@@ -126,4 +127,4 @@ def current_setup_summary(settings) -> dict[str, object]:
         and bool(visualizer.get("enabled"))
         and is_widget_family_effective(widgets, "visualizers")
     )
-    return {"sources": sources, "folders": len(settings.get("sources.folders") or ()), "feeds": len(settings.get("sources.rss_feeds") or ()), "displays": display, "unavailable_displays": unavailable_displays, "interaction": is_media_center_profile(settings) or bool(settings.get("input.interaction_mode")), "families": enabled, "accounts": saved_account_states(settings), "visualizer_modes": modes if visualizer_active else (), "transitions": sum(bool(value) for value in activation.values()) if isinstance(activation, Mapping) else 0}
+    return {"sources": sources, "folders": len(settings.get("sources.folders") or ()), "feeds": online_source_count(settings), "displays": display, "unavailable_displays": unavailable_displays, "interaction": is_media_center_profile(settings) or bool(settings.get("input.interaction_mode")), "families": enabled, "accounts": saved_account_states(settings), "visualizer_modes": modes if visualizer_active else (), "transitions": sum(bool(value) for value in activation.values()) if isinstance(activation, Mapping) else 0}

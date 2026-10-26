@@ -10,7 +10,7 @@ from ui.widgets.continuous_border import OutlinedListWidget
 from core.sources.folder_paths import contains_folder, display_folder_path, without_folder
 from core.sources.readiness import has_image_sources
 from ui.onboarding.state import is_media_center_profile
-from sources.rss.curated import apply_curated_wallpaper_feeds
+from sources.rss.pools import read_pool_selection, write_pool_selection, WallpaperPoolSelection, online_source_count
 from ui.onboarding.common import Page, ImagePanel, action, asset_path, checkbox, CheckList, silence_check, text_label, SILENCE_TEXT, font_with_point_delta
 from ui.settings_theme_runtime import get_active_settings_theme
 from ui.styled_popup import StyledPopup
@@ -73,7 +73,7 @@ class SourcesPage(Page):
             "Sources matter the most. Where do you want your wallpapers from?", heading=True
         ))
         folders = list(settings.get("sources.folders") or [])
-        feeds_open = bool(settings.get("sources.rss_feeds")) and not folders
+        feeds_open = bool(online_source_count(settings)) and not folders
         self.folders_toggle, _, folder_layout = build_bucket_toggle(self.body, "Folders", expanded=not feeds_open, large=True)
         folder_layout.addWidget(text_label("Picture folders on this computer or your network."))
         self.folders = OutlinedListWidget()
@@ -86,8 +86,8 @@ class SourcesPage(Page):
         folder_layout.addLayout(row)
         self.feeds_toggle, _, feed_layout = build_bucket_toggle(self.body, "Online Wallpaper Feeds", expanded=feeds_open, large=True)
         feed_layout.addWidget(text_label("Wallpapers downloaded from the internet. They need a working connection."))
-        self.feeds_enabled = checkbox("Online Wallpaper Feeds")
-        self.feeds_enabled.setToolTip("Turn on SRPSS's curated online wallpaper feeds (requires internet).")
+        self.feeds_enabled = checkbox("Just Make It Work pools enabled")
+        self.feeds_enabled.setToolTip("Enable the selected pools. Custom feeds below are independent and are never replaced by this switch.")
         self.feeds_enabled.toggled.connect(self.toggle_feeds)
         feed_layout.addWidget(self.feeds_enabled)
         self.feeds = CheckList()
@@ -115,21 +115,19 @@ class SourcesPage(Page):
         self.refresh()
 
     def refresh(self):
-        from sources.rss.constants import DEFAULT_RSS_FEEDS
         from PySide6.QtWidgets import QListWidgetItem
         self.folders.clear()
         self.folders.addItems([display_folder_path(folder) for folder in self.settings.get("sources.folders") or []])
         current = list(self.settings.get("sources.rss_feeds") or [])
         for url in current:
-            if url not in DEFAULT_RSS_FEEDS.values() and url not in self._custom_feeds:
+            if url not in self._custom_feeds:
                 self._custom_feeds.append(url)
         with QSignalBlocker(self.feeds_enabled):
-            self.feeds_enabled.setChecked(bool(current))
+            self.feeds_enabled.setChecked(read_pool_selection(self.settings).enabled)
         with QSignalBlocker(self.feeds):
             self.feeds.clear()
-            names = {url: name for name, url in DEFAULT_RSS_FEEDS.items()}
-            for url in dict.fromkeys([*DEFAULT_RSS_FEEDS.values(), *self._custom_feeds]):
-                item = QListWidgetItem(names.get(url, url))
+            for url in self._custom_feeds:
+                item = QListWidgetItem(url)
                 item.setData(Qt.ItemDataRole.UserRole, url)
                 item.setToolTip(url)
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
@@ -137,7 +135,8 @@ class SourcesPage(Page):
                 self.feeds.addItem(item)
         folders = self.folders.count()
         self.folders_toggle.setText(f"Folders  ·  {folders}" if folders else "Folders")
-        self.feeds_toggle.setText(f"Online Wallpaper Feeds  ·  {len(current)} ON" if current else "Online Wallpaper Feeds")
+        count = online_source_count(self.settings)
+        self.feeds_toggle.setText(f"Online Wallpaper Feeds  ·  {count} ON" if count else "Online Wallpaper Feeds")
         ready = self.can_continue()
         self.reason.setText("Ready to continue." if ready else "Add a folder or turn on an online wallpaper feed to continue.")
         self.readinessChanged.emit()
@@ -160,10 +159,8 @@ class SourcesPage(Page):
             self.refresh()
 
     def toggle_feeds(self, enabled):
-        if enabled:
-            apply_curated_wallpaper_feeds(self.settings)
-        else:
-            self.settings.set("sources.rss_feeds", [])
+        current = read_pool_selection(self.settings)
+        write_pool_selection(self.settings, WallpaperPoolSelection(bool(enabled), current.selected, current.discovery_order))
         self.refresh()
 
     def change_feed(self, item):
@@ -195,8 +192,12 @@ class SourcesPage(Page):
         self.refresh()
 
     def make_it_work(self):
-        apply_curated_wallpaper_feeds(self.settings)
+        from ui.wallpaper_pool_popup import choose_wallpaper_pools
+        if not choose_wallpaper_pools(self, self.settings):
+            return
         self.refresh()
+        if not self.can_continue():
+            return
         popup = StyledPopup(self, "Guided Setup", "You're Lazy And So Am I! Skip The Rest?",
                             buttons=[("No, I Can Do It!", "continue"), ("Skip", "skip")], default_button_index=0)
         popup.exec()

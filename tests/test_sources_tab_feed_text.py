@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 
-def test_default_feed_action_names_the_canonical_defaults(qt_app, tmp_path) -> None:
+def test_pool_action_describes_preserving_custom_sources(qt_app, tmp_path) -> None:
     from core.settings.settings_manager import SettingsManager
-    from sources.rss.constants import DEFAULT_RSS_FEEDS
     from ui.tabs.sources_tab import SourcesTab
 
     settings = SettingsManager(
@@ -13,11 +12,13 @@ def test_default_feed_action_names_the_canonical_defaults(qt_app, tmp_path) -> N
         application="SourcesTabFeedText",
         storage_base_dir=tmp_path,
     )
+    from sources.rss.pools import write_pool_selection, WallpaperPoolSelection
+    write_pool_selection(settings, WallpaperPoolSelection(False, (), "latest"))
     tab = SourcesTab(settings)
     try:
         tip = tab.just_make_it_work_btn.toolTip()
-        # Generated from the curated list, so it cannot name removed feeds.
-        assert all(name in tip for name in DEFAULT_RSS_FEEDS)
+        assert "pools" in tip and "discovery order" in tip
+        assert "preserved" in tip
         assert "Flickr" not in tip and "Wikimedia" not in tip
         assert tab.rss_ratio_label.text().endswith("% Feeds")
         tab.ratio_slider.setValue(70)
@@ -32,6 +33,8 @@ def test_sources_are_two_closed_buckets_with_counts_and_the_ratio_below_both(qt_
     from ui.widgets.outlined_button import OutlinedButton
 
     settings = SettingsManager(organization="TestOrg", application="SourcesTabBuckets", storage_base_dir=tmp_path)
+    from sources.rss.pools import write_pool_selection, WallpaperPoolSelection
+    write_pool_selection(settings, WallpaperPoolSelection(False, (), "latest"))
     settings.set("sources.folders", ["C:/Wallpapers", r"D:\More"])
     settings.set("sources.rss_feeds", ["https://example.test/feed.xml"])
     tab = SourcesTab(settings)

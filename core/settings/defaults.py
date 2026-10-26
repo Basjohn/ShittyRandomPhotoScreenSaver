@@ -44,6 +44,9 @@ from .structured_roots import (
 PRESERVE_ON_RESET = frozenset({
     'sources.folders',
     'sources.rss_feeds',
+    'sources.wallpaper_pools.enabled',
+    'sources.wallpaper_pools.selected',
+    'sources.wallpaper_pools.discovery_order',
     'widgets.weather.location',
     'widgets.weather.latitude',
     'widgets.weather.longitude',

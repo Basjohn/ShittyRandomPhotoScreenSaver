@@ -3,4 +3,5 @@
 
 def has_image_sources(settings) -> bool:
     """Configuration readiness, without scanning folders or contacting feeds."""
-    return bool(settings.get("sources.folders")) or bool(settings.get("sources.rss_feeds"))
+    from sources.rss.pools import online_source_count
+    return bool(settings.get("sources.folders")) or bool(online_source_count(settings))

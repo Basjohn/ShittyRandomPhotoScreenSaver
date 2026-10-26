@@ -173,6 +173,20 @@ class SettingsManager(QObject):
                 exc_info=True,
             )
 
+        # Recognize exact retired curated URLs before Sources defaults
+        # can mask whether the profile has already chosen the new pool policy.
+        from sources.rss.pools import migrate_legacy_curated_sources
+        with self._lock:
+            already_chosen = any(self._settings.contains(f"sources.wallpaper_pools.{leaf}") for leaf in ("enabled", "selected", "discovery_order"))
+            migrated_sources = None if already_chosen else migrate_legacy_curated_sources({"rss_feeds": self._settings.value("sources.rss_feeds")})
+            if migrated_sources is not None:
+                self._settings.setValue("sources.rss_feeds", migrated_sources["rss_feeds"])
+                for leaf, value in migrated_sources["wallpaper_pools"].items():
+                    self._settings.setValue(f"sources.wallpaper_pools.{leaf}", value)
+                self._settings.sync()
+                self._clear_cache_locked()
+                logger.info("[WALLPAPER_POOLS] Migrated exact retired curated URLs; other custom URLs unchanged")
+
         # Initialize defaults
         self._set_defaults()
 

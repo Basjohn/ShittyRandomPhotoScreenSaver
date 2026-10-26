@@ -109,10 +109,9 @@ def test_no_sources_uses_central_styled_popup_and_routes_result(
     assert actions == [expected_action]
 
 
-def test_add_default_sources_uses_curated_rss_contract_and_closes():
-    from sources.rss.constants import DEFAULT_RSS_FEEDS
-
-    settings = _Settings({"sources.rss_feeds": []})
+def test_add_default_sources_uses_shared_pool_selector_and_closes(monkeypatch):
+    import ui.wallpaper_pool_popup as chooser
+    settings = _Settings({"sources.rss_feeds": [], "sources.folders": ["X:/test"]})
     reload_calls = []
     close_calls = []
     sources_tab = SimpleNamespace(_load_settings=lambda: reload_calls.append(True))
@@ -121,11 +120,13 @@ def test_add_default_sources_uses_curated_rss_contract_and_closes():
         _get_tab_instance=lambda key: sources_tab if key == "sources" else None,
         close=lambda: close_calls.append(True),
     )
+    calls = []
+    monkeypatch.setattr(chooser, "choose_wallpaper_pools", lambda parent, store: calls.append((parent, store)) or True)
 
     SettingsDialog._on_add_default_sources(host)
 
-    assert settings.values["sources.rss_feeds"] == list(DEFAULT_RSS_FEEDS.values())
-    assert settings.save_calls == 1
+    assert calls == [(host, settings)]
+    assert settings.values["sources.rss_feeds"] == []
     assert reload_calls == [True]
     assert close_calls == [True]
 
