@@ -50,6 +50,7 @@ from sources.rss.constants import (
     DEFAULT_TIMEOUT_SECONDS,
     FEED_MAX_ITEMS,
     HOST_MIN_INTERVAL_SECONDS,
+    LISTING_SOCKET_TIMEOUT_SECONDS,
     MAX_IMAGE_ATTEMPTS_PER_PASS,
     SESSION_REPLACE_FRACTION,
     STALE_AFTER_HOURS,
@@ -493,7 +494,8 @@ class RSSCoordinator:
                                source_id.replace(":", "_"), max_items=FEED_MAX_ITEMS,
                                allow_endpoint_migration=pool_endpoint is not None),
                 transport_factory=lambda: FeedHttpTransport(
-                    connect_timeout=min(timeout, 4.0), read_timeout=timeout,
+                    connect_timeout=min(timeout, LISTING_SOCKET_TIMEOUT_SECONDS),
+                    read_timeout=min(timeout, LISTING_SOCKET_TIMEOUT_SECONDS),
                     user_agent=WALLPAPER_USER_AGENT, should_continue=self._alive),
                 cache=self._feed_store,
                 should_continue=self._alive,

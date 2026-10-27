@@ -127,9 +127,14 @@ class _Response:
         self.headers = {"Location": location} if location else {}
         self._body = body
         self.closed = False
+        self.raw = self
+        self._read = False
 
-    def iter_content(self, chunk_size):
-        yield self._body
+    def read1(self, amount, *, decode_content):
+        if self._read:
+            return b""
+        self._read = True
+        return self._body
 
     def close(self):
         self.closed = True

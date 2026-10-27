@@ -8,7 +8,7 @@ MultiEffect {
     // Diffuse the silhouette beyond its displacement, so small glyphs do not
     // read as a second line of text. This never changes the actual offset.
     // softness scales the whole radius curve (floor, slope, cap); 0.8 = 20 % less soft than the first profile.
-    readonly property real softness: 0.8
+    readonly property real softness: 0.5
     readonly property real softRadius: softness * Math.max(8.0, Math.min(32.0,
         Math.max(Math.abs(softOffsetX), Math.abs(softOffsetY)) * 3.0))
     // Keep the small kernel/shader fixed. Multiplier broadens this diffuse
