@@ -553,7 +553,10 @@ not audio coordinates; the onset ring continues to drive water independently. Se
 **Saver display selection:** `core/settings/display_selection.py` owns normalization and physical admission of
 `display.show_on_monitors`. `display.monitor_bindings` maps authored number strings to canonical CUSTOM signatures;
 an unresolved first-migration target stores null and cannot capture a later unrelated display. Settings captures once
-on its GUI thread and preserves metadata through unrelated saves/restart; explicit selection (including the same number),
+on its GUI thread and preserves metadata through unrelated saves/restart. JSON persistence must round-trip
+`display.monitor_bindings` as one atomic mapping within the otherwise flat `display` section, including legacy
+`display.monitor_bindings.<number>` recovery *before* the first physical capture; a temporary one-screen startup
+cannot recapture the missing screen's saved identity. Explicit selection (including the same number),
 reset and import author or restore it in the existing store transaction. ALL admits every current/future screen; NONE
 admits none. Malformed input repairs through the application profile default, while valid absent selection stays empty.
 Display tab, onboarding, Arrange, route warnings and DisplayManager consume this authority. With empty admission,

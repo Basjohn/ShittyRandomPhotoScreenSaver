@@ -54,3 +54,4 @@ RIGHT_SIZE_BELOW_SCALE = 0.8      # Only when that saves at least a fifth per si
 # Network
 # ---------------------------------------------------------------------------
 DEFAULT_TIMEOUT_SECONDS = 30
+LISTING_SOCKET_TIMEOUT_SECONDS = 3.0  # ordinary silent connect/header/body waits, not a hard total deadline

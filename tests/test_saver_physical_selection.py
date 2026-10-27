@@ -322,3 +322,39 @@ def test_ready_summary_reports_current_and_missing_displays(tmp_path, monkeypatc
     manager.set('display.show_on_monitors', 'ALL')
     ReadyPage.refresh(owner)
     assert text[-1].splitlines()[0] == 'Displays: All displays'
+
+
+def test_fresh_store_restart_while_monitor_missing_preserves_both_targets(tmp_path, monkeypatch):
+    """Real disk reload; do not share the original manager's registered store."""
+    from core.settings import settings_manager as module
+    from core.settings.json_store import JsonSettingsStore
+
+    manager, live = make_manager(tmp_path, monkeypatch, profile="DiskRestartPhysical")
+    manager.set("display.show_on_monitors", [1, 2])
+    assert manager.get(BINDINGS_KEY) == {"1": A, "2": B}
+    assert manager.flush(timeout=5.0)
+
+    # Simulate the overnight restart with only display B visible. A newly
+    # constructed JsonSettingsStore must load the actual persisted JSON image.
+    live[0] = (B,)
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            module, "get_json_settings_store",
+            lambda *, storage_path, profile, metadata=None: JsonSettingsStore(
+                storage_path=storage_path, profile=profile, metadata=metadata,
+            ),
+        )
+        restarted = SettingsManager(
+            application="DiskRestartPhysical", storage_base_dir=tmp_path,
+        )
+
+    assert restarted._settings is not manager._settings
+    assert restarted.get("display.show_on_monitors") == [1, 2]
+    assert restarted.get(BINDINGS_KEY) == {"1": A, "2": B}
+    assert admitted(restarted, live) == {0}
+
+    # An unrelated save must not recapture the missing display A as display B.
+    restarted.set("display.mode", "fit")
+    assert restarted.flush(timeout=5.0)
+    live[0] = (B, A)
+    assert admitted(restarted, live) == {0, 1}

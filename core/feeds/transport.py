@@ -185,6 +185,7 @@ class FeedHttpTransport:
         # supplies the precise RequestException class without making module
         # discovery/configuration pay the import cost.
         import requests
+        from urllib3.exceptions import HTTPError as StreamHttpError
 
         response = None
         try:
@@ -235,11 +236,15 @@ class FeedHttpTransport:
                     pass
             chunks: list[bytes] = []
             total = 0
-            for chunk in response.iter_content(chunk_size=32 * 1024):
+            while True:
                 if not self._alive():
                     raise FeedTransportError("feed fetch cancelled")
+                # read1 returns available body bytes rather than waiting to fill
+                # a 32KiB chunk. Keep urllib3's existing gzip/deflate decoder;
+                # the next read is another cancellation/decoded-byte boundary.
+                chunk = response.raw.read1(32 * 1024, decode_content=True)
                 if not chunk:
-                    continue
+                    break
                 total += len(chunk)
                 if total > self.max_bytes:
                     raise FeedTransportError("feed response exceeds byte limit")
@@ -258,7 +263,7 @@ class FeedHttpTransport:
             )
         except FeedTransportError:
             raise
-        except requests.RequestException as exc:
+        except (requests.RequestException, StreamHttpError) as exc:
             raise FeedTransportError(type(exc).__name__) from exc
         finally:
             if response is not None:

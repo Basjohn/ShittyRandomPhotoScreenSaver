@@ -139,14 +139,16 @@ class _FakeResponse:
         self.headers = dict(headers or {})
         self.url = url
         self.closed = False
+        self.raw = self
+        self._reader = iter(self._chunks)
 
     def raise_for_status(self):
         if self.status_code >= 400:
             from requests import HTTPError
             raise HTTPError(str(self.status_code))
 
-    def iter_content(self, chunk_size):
-        yield from self._chunks
+    def read1(self, amount, *, decode_content):
+        return next(self._reader, b"")
 
     def close(self):
         self.closed = True

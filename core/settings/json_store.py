@@ -22,7 +22,10 @@ from core.settings.persistence import (
     flush_settings_path,
     get_settings_persistence,
 )
-from core.settings.structured_roots import STRUCTURED_SETTINGS_ROOTS
+from core.settings.structured_roots import (
+    ATOMIC_SETTINGS_MAPPING_KEYS,
+    STRUCTURED_SETTINGS_ROOTS,
+)
 from core.settings.structured_input_compat import promote_legacy_structured_store_shape
 from core.settings.widget_theme_input_compat import promote_legacy_widget_theme_state
 
@@ -140,7 +143,7 @@ class JsonSettingsStore:
             if key == "custom_preset_backup":
                 # Legacy global preset payloads are intentionally retired.
                 continue
-            if key in _STRUCTURED_KEYS:
+            if key in _STRUCTURED_KEYS or key in ATOMIC_SETTINGS_MAPPING_KEYS:
                 flat[key] = value
                 continue
             if isinstance(value, Mapping):
@@ -148,6 +151,14 @@ class JsonSettingsStore:
                     flat[subkey] = subval
             else:
                 flat[key] = value
+
+        flat, repaired_atomic = _promote_flattened_atomic_mappings(flat)
+        if repaired_atomic:
+            logger.info(
+                "Restored flattened atomic settings mappings while loading %s: %s",
+                self._path,
+                list(repaired_atomic),
+            )
 
         flat, repaired_roots = promote_legacy_structured_store_shape(flat)
         if repaired_roots:
@@ -181,7 +192,7 @@ class JsonSettingsStore:
             ),
         }
         self._finish_load_locked()
-        if repaired_roots or widget_theme_repaired:
+        if repaired_atomic or repaired_roots or widget_theme_repaired:
             # The in-memory image now differs from disk and must be written once
             # at the next durability boundary. Mark it as a real state revision
             # so a second load does not depend on compatibility promotion again.
@@ -434,10 +445,44 @@ def _default_appdata_dir() -> Path:
     return (home / "AppData" / "Roaming").resolve()
 
 
+def _promote_flattened_atomic_mappings(
+    data: Dict[str, Any],
+) -> tuple[Dict[str, Any], tuple[str, ...]]:
+    """Recover old dotted leaves without overriding a canonical mapping.
+
+    Older JSON round trips serialized ``display.monitor_bindings`` as a map,
+    then loaded it into ``display.monitor_bindings.1`` etc. Those old leaves
+    must be folded back into the map before SettingsManager starts its one-time
+    physical identity capture. Treat only positive numeric monitor labels as
+    legacy members; unrelated dotted settings remain untouched.
+    """
+    repaired: list[str] = []
+    for root in sorted(ATOMIC_SETTINGS_MAPPING_KEYS):
+        prefix = f"{root}."
+        legacy = {
+            key: str(key)[len(prefix):]
+            for key in list(data)
+            if str(key).startswith(prefix)
+            and str(key)[len(prefix):].isdecimal()
+            and int(str(key)[len(prefix):]) > 0
+        }
+        if not legacy:
+            continue
+        canonical = data.get(root)
+        restored = dict(canonical) if isinstance(canonical, Mapping) else {}
+        for dotted, number in legacy.items():
+            restored.setdefault(number, data.pop(dotted))
+        data[root] = restored
+        repaired.append(root)
+    return data, tuple(repaired)
+
+
 def _flatten_section(prefix: str, mapping: Mapping[str, Any]) -> Iterator[Tuple[str, Any]]:
     for key, value in mapping.items():
         dotted = f"{prefix}.{key}" if prefix else key
-        if isinstance(value, Mapping) and prefix not in _STRUCTURED_KEYS:
+        if (isinstance(value, Mapping)
+                and prefix not in _STRUCTURED_KEYS
+                and dotted not in ATOMIC_SETTINGS_MAPPING_KEYS):
             yield from _flatten_section(dotted, value)
         else:
             yield dotted, value

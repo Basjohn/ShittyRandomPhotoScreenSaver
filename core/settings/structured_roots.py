@@ -22,6 +22,11 @@ STRUCTURED_SETTINGS_ROOTS = frozenset(
     }
 )
 
+# Leaf mappings nested within otherwise flat settings sections must survive
+# write -> disk -> load as *one* setting. In particular, these numeric member
+# names are authored monitor labels, not independent dotted settings keys.
+ATOMIC_SETTINGS_MAPPING_KEYS = frozenset({"display.monitor_bindings"})
+
 # Canonical defaults still enumerate these mapping members as a schema registry,
 # but persisted user state is intentionally sparse. SettingsManager must not
 # deep-fill missing child leaves inside these paths on startup or one remembered
@@ -105,6 +110,7 @@ def merge_missing_structured_defaults(
 
 
 __all__ = [
+    "ATOMIC_SETTINGS_MAPPING_KEYS",
     "SPARSE_STRUCTURED_MAPPING_PATHS",
     "STRUCTURED_SETTINGS_ROOTS",
     "merge_missing_structured_defaults",
