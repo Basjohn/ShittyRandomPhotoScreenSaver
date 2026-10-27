@@ -317,3 +317,60 @@ def test_quick_auxiliary_and_cursor_owners_preserve_native_halo_contract() -> No
         if qml_path.name == "CursorHalo.qml":
             continue  # orphan resource is an explicit Phase-I deletion candidate
         assert "CursorHalo" not in qml_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("exit_state", ["halo", "native_menu", "orbit_held", "auxiliary_closed"])
+def test_native_cursor_returns_to_arrow_when_display_retires(qt_app, exit_state: str) -> None:
+    """Retiring a Quick display must not leave the desktop pointer blank."""
+
+    screen = qt_app.primaryScreen()
+    assert screen is not None
+    window = QuickDisplayWindow(
+        screen_index=0,
+        runtime_generation=87,
+        screen=screen,
+        policy=QuickWindowPolicy(always_on_top=False, blank_cursor=True),
+    )
+    cursor = QuickCursorController(window=window, screen_index=0, runtime_generation=87)
+    auxiliary = QuickAuxiliaryController(screen_index=0, runtime_generation=87)
+    auxiliary.state_changed.connect(cursor.apply_auxiliary_state)
+    try:
+        if exit_state == "halo":
+            cursor.apply_auxiliary_state(QuickAuxiliaryState(
+                screen_index=0, runtime_generation=87, halo_enabled=True,
+            ))
+            cursor.note_pointer_motion()
+            assert window.cursor().shape() != Qt.CursorShape.ArrowCursor
+        elif exit_state == "native_menu":
+            cursor.apply_auxiliary_state(QuickAuxiliaryState(
+                screen_index=0, runtime_generation=87, native_cursor_visible=True,
+            ))
+            assert window.cursor().shape() == Qt.CursorShape.ArrowCursor
+        elif exit_state == "orbit_held":
+            assert cursor.begin_orbit_fade() is True
+            assert window.cursor().shape() == Qt.CursorShape.BlankCursor
+        else:
+            # Production closes Auxiliary before Cursor. An admission-close
+            # publication must restore the arrow, without skipping final cleanup.
+            auxiliary.close()
+            assert cursor.tracks_pointer_motion is False
+            assert window.cursor().shape() == Qt.CursorShape.ArrowCursor
+
+        assert cursor.close() is True
+        assert window.cursor().shape() == Qt.CursorShape.ArrowCursor
+        assert cursor.describe()["inactivity_timer_active"] is False
+        assert cursor.close() is False
+
+        # Reentrant display-metric or obsolete auxiliary updates cannot install
+        # a blank/custom Halo cursor after this generation has retired.
+        cursor.refresh_display_metrics()
+        assert cursor.apply_auxiliary_state(QuickAuxiliaryState(
+            screen_index=0, runtime_generation=87, halo_enabled=True,
+        )) is False
+        assert window.cursor().shape() == Qt.CursorShape.ArrowCursor
+    finally:
+        cursor.close()
+        auxiliary.close()
+        window.deleteLater()
+        qt_app.processEvents()

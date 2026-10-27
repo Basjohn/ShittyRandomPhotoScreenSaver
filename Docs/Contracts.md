@@ -20,6 +20,12 @@
 
 **Settings construction contract:** SettingsManager repairs the OpenGL-only backend and acceleration before the dialog exists. The dialog constructs its selected/restored page immediately, warms only Display/Transitions after visibility with bounded, cancellable callbacks, and constructs other tabs only when visited. Pre-UI Settings/Widget Theme activation, first-visit reload, built-only reset/import and close durability are independent of hidden pages. No silent hidden-tab normalization or speculative About/Scene3D artwork construction.
 
+**Native cursor retirement:** `QuickAuxiliaryController.close()` withdraws cursor admission before
+`QuickCursorController.close()` runs. Loss of admission and controller retirement must restore
+`ArrowCursor` on the still-live Quick window, stop the Halo fade timer, and fence late auxiliary
+publications. Repeated close is harmless. No global Windows cursor counter, extra timer, or
+retained-QML cursor may take ownership of this cleanup.
+
 `QQuickWidget`, selectable old-presenter fallback and a second accelerated runtime surface are prohibited.
 Ordinary-widget glyph capabilities are resolved by the scene factory and supplied as immutable presentation
 flags before host attachment. The presentation-only host must not import the widget registry or its transitive
