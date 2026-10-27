@@ -23,7 +23,7 @@
           28,
           255
         ],
-        "extruded_bubble_light_strength": 1.0,
+        "extruded_bubble_light_strength": 1.2,
         "extruded_bubble_light_tint": 1.0,
         "extruded_bubble_rays_enabled": true,
         "extruded_bubble_rays": [
@@ -44,10 +44,10 @@
         "extruded_bubble_ray_flicker": 0.3,
         "extruded_bubble_large_bubbles": [
           6,
-          8
+          12
         ],
         "extruded_bubble_mid_bubbles": [
-          110,
+          100,
           110
         ],
         "extruded_bubble_bead_chains": [
@@ -55,11 +55,11 @@
           5
         ],
         "extruded_bubble_large_size": 0.8,
-        "extruded_bubble_small_size": 0.75,
+        "extruded_bubble_small_size": 0.7,
         "extruded_bubble_bead_size": 1.0,
         "extruded_bubble_bead_scatter": 0.15,
         "extruded_bubble_wake_trails": 0.0,
-        "extruded_bubble_doublets": 0.3,
+        "extruded_bubble_doublets": 0.17,
         "extruded_bubble_size_variety": 0.6,
         "extruded_bubble_columns": 0.0,
         "extruded_bubble_bubble_spread": 1.0,
@@ -83,12 +83,12 @@
         "extruded_bubble_drift_direction": "Wander",
         "extruded_bubble_sway": 0.25,
         "extruded_bubble_breathing": [
-          0.3,
-          0.5
+          0.2,
+          0.71
         ],
         "extruded_bubble_small_pulse": [
           0.2,
-          0.5
+          0.6
         ],
         "extruded_bubble_sustained": 0.6,
         "extruded_bubble_smoothing": 0.5,

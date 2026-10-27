@@ -59,6 +59,7 @@ class QuickCursorController(QObject):
             None if runtime_generation is None else int(runtime_generation)
         )
         self._admission_open = True
+        self._closed = False
         self._halo_enabled = False
         self._native_cursor_visible = False
         self._halo_shape = "cursor_light"
@@ -116,6 +117,9 @@ class QuickCursorController(QObject):
 
         if not isinstance(state, QuickAuxiliaryState):
             raise TypeError("Quick cursor auxiliary state requires QuickAuxiliaryState")
+        if self._closed:
+            # A retiring generation must never reacquire native cursor ownership.
+            return False
         if (
             state.screen_index != self._screen_index
             or state.runtime_generation != self._runtime_generation
@@ -211,8 +215,11 @@ class QuickCursorController(QObject):
         self._apply_cursor(force=True)
 
     def close(self) -> bool:
-        if not self._admission_open:
+        if self._closed:
             return False
+        # Auxiliary retirement publishes admission_open=False first. Cleanup
+        # must still run once even when that publication already closed input.
+        self._closed = True
         self._admission_open = False
         self._halo_enabled = False
         self._native_cursor_visible = False
@@ -286,7 +293,12 @@ class QuickCursorController(QObject):
         self._apply_cursor(force=True)
 
     def _apply_cursor(self, *, force: bool = False) -> None:
-        if self._orbit_fade == 'held':
+        if self._closed or not self._admission_open:
+            # Relinquish cursor ownership before the Qt window is destroyed.
+            # A retiring display must not leave Windows with BlankCursor.
+            signature = ("arrow",)
+            cursor = QCursor(Qt.CursorShape.ArrowCursor)
+        elif self._orbit_fade == 'held':
             signature = ('blank',)
             cursor = QCursor(Qt.CursorShape.BlankCursor)
         elif self._halo_enabled and self._motion_visible:
