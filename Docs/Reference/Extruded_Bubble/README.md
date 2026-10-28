@@ -83,25 +83,26 @@ the useful musical breathing, not blindly reproduce the floor's adaptive behavio
 items in `Current_Plan.md`, the detailed `Target.md` reactivity contract and the `Acceptance_Runbook.md` gate.
 This is not operator acceptance of any current EB build.
 
-## Preset → target → lab registry
+## Target and lab registry
 
-P7 ↔ ExBubble6Diagonal is operator-confirmed. The other associations below follow names/order and archived
-recipes and remain **mapping candidates** until the resolved production settings and camera/source composition
-are compared. Preset labels alone are not evidence. The live mutable preset files remain their Settings authority.
+`asset_manifest.json` owns each current target path and its `lab_recipe` identity. Renamed originals were
+reconciled by exact SHA-256 equality to the historical inventory, not by guessed preset order. In particular,
+`Preset1Goal.png` is the original ExBubble3, while `AchievedPreset2Goal.png` is the original ExBubble1.
+Goal filenames are operator assignments; historical recipe identities do not renumber mutable production presets.
 
-| Preset | Original target | Lab recipe | Main parity debt |
-| --- | --- | --- | --- |
-| 1 Sunlit Surface | [ExBubble1](Targets/Originals/ExBubble1.png) | `scenes.json: ExBubble1` | Rounded clear glass, broad inset highlights, near softness, deep microbubble streams |
-| 2 Deep Blue | [ExBubble2](Targets/Originals/ExBubble2.png) | `ExBubble2` | Camera/source composition, depth attenuation and glass volume |
-| 3 Night Water | [ExBubble3](Targets/Originals/ExBubble3.png) | `ExBubble3` | Restrained light, clear sphere interiors and depth hierarchy |
-| 4 Soft Rays | [ExBubble4](Targets/Originals/ExBubble4.png) | `ExBubble4` | Broad soft shafts, coherent trails/source flow, material volume |
-| 5 Abyss | [ExBubble5CameraAbyss](Targets/Originals/ExBubble5CameraAbyss.png) | `ExBubble5CameraAbyss` | Camera freedom/centering, near/far layers, light placement |
-| 6 Looking Down | [ExBubble5Cameradown](Targets/Originals/ExBubble5Cameradown.png) | `ExBubble5Cameradown` | Real down-view composition, depth and differentiated small populations |
-| 7 Ember Drift | [ExBubble6Diagonal](Targets/Originals/ExBubble6Diagonal.png) | `ExBubble6Diagonal` | Glass/refraction, controlled important specks, ember debris, gas/smoke/fog and localized volumetric streams |
+| Current target | Historical lab recipe |
+| --- | --- |
+| [AchievedPreset2Goal](Targets/Originals/AchievedPreset2Goal.png) | ExBubble1 |
+| [ExBubble2](Targets/Originals/ExBubble2.png) | ExBubble2 |
+| [Preset1Goal](Targets/Originals/Preset1Goal.png) | ExBubble3 |
+| [Preset4Goal](Targets/Originals/Preset4Goal.png) | ExBubble4 |
+| [Preset5Goal](Targets/Originals/Preset5Goal.png) | ExBubble5CameraAbyss |
+| [Preset6Goal](Targets/Originals/Preset6Goal.png) | ExBubble5Cameradown |
+| [Preset7Goal](Targets/Originals/Preset7Goal.png) | ExBubble6Diagonal |
 
-Recipes: [scenes.json](Lab/2026-10-18/scenes.json), [scenes.py](Lab/2026-10-18/scenes.py).
-The archived scripts preserve their original bytes and context; the executable current composition lab remains
-`tools/labs/extruded_bubble_lab.py`, now reading the canonical target paths here.
+The executable composition lab `tools/labs/extruded_bubble_lab.py` resolves paths through that registry before
+creating GL resources. Missing/duplicate associations fail loudly; archived lab output is never substituted.
+Archived recipe payloads may be absent from slim handoffs and are not required by the current executable lab.
 
 Required architecture follows the gaps: scene-observing camera placement/pivot, authored world source regions,
 coherent shell/union optical paths, real layered refractive detail, correct near defocus, depth-aware particulate
