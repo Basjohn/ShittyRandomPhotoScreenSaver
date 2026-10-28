@@ -481,5 +481,5 @@ their following body-pass depth state, and the existing visualizer fence still o
 
 `core/ribbon_geometry.py` provides bounded absolute-coordinate CPU history and centripetal interpolation for
 new strips; see `Docs/Reference/Ribbon_Path.md`. The standalone CPU path probe is its current consumer.
-This does not migrate EB wakes or implement frame transport, SSBO expansion, OIT, defocus or a scene renderer.
-Those remain live WR-01b/WR-02 work in Current_Plan and the Waveform Ribbon lab plan.
+`core/ribbon_frames.py` adds the CPU transported/camera-facing width reference. Neither module migrates EB
+wakes or implements SSBO expansion, OIT, defocus or a scene renderer. GPU/native proof remains WR-02 work.
