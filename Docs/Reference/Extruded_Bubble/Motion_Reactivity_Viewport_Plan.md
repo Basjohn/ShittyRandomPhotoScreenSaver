@@ -298,7 +298,8 @@ render route, retained old shader, extra pass, simulation, clock or independentl
 
 Native checks cover depth-independent round spheres, translated/far normals and refraction, connected fused
 surfaces, front-depth/opaque occlusion, Settings persistence/reload and prepared rendering without later shader
-compilation/allocation. Frozen current-source P1/P8 basic/tall Perspective A/B is exact in three images; one image
+compilation/allocation. Before the later tiny-glass precision fix, projection-slice P1/P8 basic/tall A/B was exact
+in three images; one image
 differs by one code in one channel (mean1.89e-6 code). Switching back from Orthographic is byte-identical in all
 four. Evidence: `tmp/eb28_projection_parity/`; recorded 120-frame60Hz Orthographic motion:
 `tmp/eb28_ortho_motion_p1/`. Offscreen/source evidence is not physical audiovisual approval.
@@ -382,6 +383,57 @@ phrase/lift, target/follower, range output, light multiplier and final shader un
 light, blockers and pattern phase; inspect linear shaft buffers and final composed pixels before/after bloom.
 Test off/zero/flat ranges, modulation0/1, shimmer independently, both light types and BEAM/SCENE. Separately release
 camera/pattern motion so a beam moving out of view is not misdiagnosed as lost audio response.
+
+## 1.6 Idle tiny-shell stability
+
+The operator's later5–12px stippled-rim report was reproduced with fixed identity/radius/opacity, source,
+camera, time and actual production background/probe. Coverage and normals were comparatively stable while
+reflected/transmitted optical output jumped. Holding the probe did not change the result; changing the4-ray
+sampling pattern or using16rays did not materially fix it.
+
+The root was cancellation in `sceneSphereRay`: `b*b - (dot(C,C)-r*r)` subtracts large camera-distance squares
+to recover a tiny perpendicular distance. The shared shader and CPU mirror now compute the equivalent
+`r*r - dot(C-ray*b, C-ray*b)`. This improves geometric precision without changing physical spheres, samples,
+filtering, material, opacity, audio or clocks. The CPU mirror uses scalar locals without new tuple churn.
+
+A frozen actual idle witness moving0.1px/frame reduced composed contrast steps17.71%→2.80%, reflection
+21.14%→2.95% and transmission11.19%→3.06%; mean composed contrast increased, rather than dimming away the defect.
+Evidence: `tmp/eb28_tiny_idle_host/production/comparison.json`. The native temporal regression uses a test-owned
+scene/material with real host optics at5/8/12px, not mutable preset/profile goldens. Restoring only the old math
+makes its5px case fail. Sphere/union/near/inside geometry and material guards remain separate checks. Normal
+operator idle use is still a visual validation boundary, not a reason to retune the accepted audio response.
+
+## 2. Lossless performance assessment
+
+The audit followed behavioral verification, with frozen inputs and all optical passes retained. Bounded warmed
+RTX4090 samples showed no general penalty from the precision correction; whole-frame timer deltas changed sign
+on repeated measurements, so no causal FPS claim is made.
+
+Two exact changes were admitted:
+
+- **Empty ordinary population:** skip near-layer begin/draw/composite only when ordinary and fused record counts
+  are both zero. Free beads/snow/fizz never write that layer. Warm preparation and retained resources remain, so
+  returning near shells do not pay allocation/compile costs. Six native populated/empty/return before/after images
+  are byte-identical, with no stale bokeh. Instrumented empty near work fell from about0.19–0.21ms to zero in the
+  sampled scenes. Populated paths remain unchanged (`tmp/eb28_empty_near/`).
+- **Repeated NumPy swirl work:** the array field computed the same near-axis mask, safe denominator, cosine and
+  sine separately for each vector component. Reuse these local outputs once; scalar motion, broadcasting,
+  arithmetic order, dtype, histories and identities remain unchanged. All36 direction/amount/near-axis array
+  comparisons are byte-identical;364 complete recorded-PCM mode states hash identically, and three full native
+  optical frames are byte-identical. A30k-point local velocity sample measured median3.83→2.96ms; this is a bounded
+  diagnostic, not a native cadence guarantee (`tmp/eb28_performance/common_arrays_receipt.json`).
+
+Before the array reuse, source P1/P8 simulation samples with dormant new free gains measured approximately
+2.04/3.03ms median. A P8 stress case with all free gains1 and20chains measured13.21ms, including9.98ms free-drift
+integration/packing, peaking at1.03MB snapshot payload. These scoped offline measurements identify active field
+work as a continuing cost target, not a claim about every preset or worst-case/native refresh performance.
+
+Further targets were reviewed but not admitted as cheap changes: immutable material/wake packing must retain
+publication ownership and latent history; camera culling cannot remove logical actors, probes, blockers or wakes;
+far-only near-layer dormancy must share the exact optical admission rather than duplicate a CPU culler; layered
+probe submission would need shared-resource and bright-glint precision proof. Do not skip probe faces/refreshes,
+reduce populations/samples, quantize cadence, lower solver resolution or change precision to obtain a benchmark.
+No additional optimization is required merely to make the list longer.
 
 ## Execution order after authorization
 

@@ -39,20 +39,11 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 approved direction and detailed gates. Work in narrow tested/audited checkpoint pushes. Keep the authored lens,
 world geometry and camera fixed during resize; compare the original rectangle before accepting framing changes.
 
-- [ ] **EB28-8 — Idle tiny-bubble flicker:** reproduce the operator's stippled5–12px shells with fixed identities,
-  radii and idle-energy material, then separate subpixel coverage from normals/reflection/transmission. Fix the
-  owning AA/shading defect without hiding/dimming bubbles, changing audio/radii/motion or increasing per-pixel cost;
-  add a temporal regression and recorded/native verification before optimization acceptance.
-- [ ] **EB28-V — Final wrap gate:** confirm the idle-flicker change against recorded/native motion and reconcile
-  any new regression with the already verified drift, stream, ray, resize and camera contracts. Preserve the
-  accepted gains, genuine audio response and inherited wake inertia. Physical runtime/input use remains operator
-  validation; EB Orthographic appearance work is deferred beyond the entire backlog, not an active gate.
-- [ ] **EB28-P — Performance after EB28-8/V pass:** audit CPU/GPU waste, churn and conservative
-  occlusion/culling opportunities; prove no fidelity loss with matched recorded inputs, cameras and full optical passes.
-  - [ ] Measure stable-intersection cost against old arithmetic with warmed, matched recorded snapshots; report
-    noise honestly. Inspect CPU history/packing work before proposing any ownership or identity change.
-  - [ ] Validate an empty-near-layer guard (no ordinary/fused records) with byte-identical populated→empty→return
-    frames; retain warm-up/resources to avoid reactivation hitch. Reject blanket culling or reduced optical work.
+- [~] **EB28-8 — Awaiting validation in normal idle use:** the tiny-shell cancellation defect is repaired at shared
+  sphere intersection; fixed-ID native composition/reflection/transmission and5/8/12px temporal regressions pass
+  without added samples, filtering, dimming or audio changes. Confirm the formerly stippled shells stay stable in
+  ordinary paused/quiet playback; report a fresh example if flicker remains. The broader EB implementation and
+  lossless optimization audit are closed; Orthographic appearance work stays deferred beyond the entire backlog.
 
 ### 2B. Settings and UI (in this order)
 
