@@ -165,4 +165,18 @@ admission dormant through actual engine initialization, display admission and st
 zero-to-positive admission, stale background publication and held IO draining through the real ThreadManager/barrier.
 Existing coordinator/image-fetch/feed tests cover real size rejection, full/offline cache,
 replacement/cancellation and generic custom discovery. Use the no-env plugin and isolated basetemp in
-`Docs/TestSuite.md`. Physical image relevance remains a separate operator gate.
+`Docs/TestSuite.md`. Functional acceptance uses existing runtime logs and isolated production-seam tests; a new operator run or settings reset is not a prerequisite. Reopen relevance/yield only on a concrete bad example.
+
+### Runtime evidence assessed 28 October
+
+`F:/Programming/Apps/logsd91eb16552.zip` shows eleven enabled pools, twenty of thirty cached RSS images
+preloaded, startup and post-Settings merges, preserved refresh cadence across rebuilt coordinators, and a cached
+4K RSS image published into playback. A full cache explains the absence of a new provider listing request.
+The custom-feed count of zero does not mean pools are disabled. The source startup/pool/resume and Reddit provider
+focused checks pass on isolated test-owned profiles (70 checks); no operator Settings were changed.
+This establishes functional delivery/resume/cache behaviour, not a claim that every remote query is aesthetically ideal.
+
+The same archive's `screensaver_cache.log` lines 160–162 records loaded/saved Reddit post reservoirs under
+`SRPSS/cache/reddit/reddit__subredditdrama_posts.json`, including incoming refreshed posts. Earlier and latest
+archives show successful subreddit normalization; latest Games responses are upstream 429/403 with an explicit
+900-second cooldown and retained cache. This closes the old data-root-cache first-run evidence request.
