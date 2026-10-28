@@ -669,9 +669,30 @@ class ExtrudedBubbleFrame:
     wakes: tuple[float, ...] = ()  # stable wake emitters, live/retiring, WAKE_STRIDE floats each
     passage: float = 0.0  # how loud the passage is, 0..1: where the renderer's quiet-to-loud Ranges sit
     chain_activity: float = 0.0  # logical free-chain visibility; never inferred from audio in the renderer
+    drift_paths: bytes = b""
+    snow_drift_offsets: bytes = b""
+    speck_drift_offsets: bytes = b""
 
     def __post_init__(self) -> None:
         wakes = _float_tuple(self.wakes, name="extruded bubble wake record")
+        if (not isinstance(self.drift_paths,bytes) or not isinstance(self.snow_drift_offsets,bytes)
+                or not isinstance(self.speck_drift_offsets,bytes)):
+            raise TypeError('Extruded Bubble material payloads must be immutable bytes')
+        if self.drift_paths or self.snow_drift_offsets or self.speck_drift_offsets:
+            from widgets.spotify_visualizer.extruded_bubble_material_paths import CHAIN_PATHS, PATH_NODES
+            from core.constants.extruded_bubble_world import SPECKS_FULL, SNOW_FULL
+            material_fields=(('drift_paths',CHAIN_PATHS*PATH_NODES),('snow_drift_offsets',SNOW_FULL),('speck_drift_offsets',SPECKS_FULL))
+        else:
+            material_fields=()
+        for field,count in material_fields:
+            data=getattr(self,field)
+            if not data:
+                continue
+            import numpy as np
+            if not isinstance(data,bytes) or len(data)%16 or len(data)>count*16 or (field=='drift_paths' and len(data)!=count*16):
+                raise ValueError('Extruded Bubble material paths must be immutable complete float32 vec4 records')
+            if not np.isfinite(np.frombuffer(data,dtype=np.float32)).all():
+                raise ValueError('Extruded Bubble material paths must be finite')
         from core.constants.extruded_bubble_world import WAKE_STRIDE
         if len(wakes) % WAKE_STRIDE:
             raise ValueError(f"Extruded Bubble wake records must be whole ({WAKE_STRIDE} floats per source)")

@@ -189,7 +189,7 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
     return knobs
 
 
-SPECKS_FULL = 216000          # specks at the top of the Particles range (the lab's heaviest scene, the sixth mock)
+from core.constants.extruded_bubble_world import SPECKS_FULL
 
 
 def speck_amount(emission: float) -> tuple[float, float]:
@@ -201,8 +201,8 @@ def speck_amount(emission: float) -> tuple[float, float]:
     """
     # `emission` is already the smoothed value of the operator's Particles Range,
     # resolved exactly once by ExtrudedBubbleSimulation. Never apply that Range again.
-    value = max(0.0, min(1.0, float(emission)))
-    return value * value, 2.4
+    from core.constants.extruded_bubble_world import speck_density
+    return speck_density(emission), 2.4
 
 
 def ray_strength(parameters: Mapping[str, object], rays: float) -> float:

@@ -52,6 +52,9 @@ def run(args):
     root = Path(__file__).resolve().parents[2]
     paths = [root / p for p in (
         'widgets/spotify_visualizer/extruded_bubble_simulation.py',
+        'widgets/spotify_visualizer/extruded_bubble_drift.py',
+        'widgets/spotify_visualizer/extruded_bubble_material_paths.py',
+        'core/constants/extruded_bubble_world.py',
         'widgets/spotify_visualizer/extruded_bubble_geometry.py',
         'widgets/spotify_visualizer/extruded_bubble_frame_runtime.py',
         'widgets/spotify_visualizer/logical_frame_capture.py',

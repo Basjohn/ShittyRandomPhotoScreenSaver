@@ -31,7 +31,7 @@ from rendering.gl_programs.extruded_bubble_program import (
     NEAR_FRAGMENT, NEAR_CLUSTER_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_VERTEX, SHAFT_FRAGMENT, SPECK_VERTEX,
     TRAIL_FRAGMENT, TRAIL_SEGMENTS, TRAIL_VERTEX,
 )
-from core.constants.extruded_bubble_world import WAKE_STRIDE
+from core.constants.extruded_bubble_world import WAKE_STRIDE, SNOW_FULL
 from rendering.gl_programs.extruded_bubble_scene import (
     CLUSTER_FLOATS, PROXY_FLOATS, SHELL_FLOATS, SURFACE_Y, bubble_instances, camera,
     SPECKS_FULL, cluster_instances, wake_instances, physical_camera, speck_amount,
@@ -75,7 +75,7 @@ _CLUSTER_CAPACITY = MAX_BUBBLES // 2
 _UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE = 4, 5, 6
 # Procedural small bubbles: chains per step of the Bead Chains range, beads a chain, and marine snow motes (both
 # scaled by the tier's particle share). Beads climb by the stream's travel only, with integrated energy response.
-_CHAINS_PER_STEP, _BEADS_PER_CHAIN, _SNOW = 12, 160, 2500
+_CHAINS_PER_STEP, _BEADS_PER_CHAIN, _SNOW = 12, 160, SNOW_FULL
 _FIZZ_PER_BUBBLE, _WAKE_BINDING = 64, 7         # wake motes behind stable logical emitters; separate SSBO binding
 _BEAD_CLIMB, _SNOW_CARRY, _SPECK_CARRY = 5.0 / WORLD_UNIT, 8.0 / WORLD_UNIT, 0.30  # specks inherit 30% of integrated stream velocity
 
@@ -308,6 +308,7 @@ class QuickExtrudedBubbleRenderer:
         self._probe: SceneProbe | None = None
         self._shells = _Instances(_SHELL_CAPACITY, (4, 2, 1, 1))
         self._wakes = _Instances(MAX_BUBBLES * 2, (), floats=WAKE_STRIDE)   # read as storage (EbWakes)
+        self._drift = _Instances(0, (), floats=4)
         self._clusters = _Instances(_CLUSTER_CAPACITY, (4, 4, 4, 4, 3))
         self._proxies = _Instances(_SHELL_CAPACITY, (4, 4))
         self._empty_vao = 0                       # the procedural layers read no attributes
@@ -318,7 +319,7 @@ class QuickExtrudedBubbleRenderer:
     @property
     def has_resources(self) -> bool:
         return (self._resources.has_resources or self._target.has_resources or self._near.has_resources()
-                or self._shafts.has_resources or bool(self._shells.vao) or bool(self._wakes.vao) or bool(self._empty_vao)
+                or self._shafts.has_resources or bool(self._shells.vao) or bool(self._wakes.vao) or bool(self._drift.vao) or bool(self._empty_vao)
                 or self._probe is not None)
 
     def _probe_for(self, parameters) -> SceneProbe:
@@ -348,6 +349,10 @@ class QuickExtrudedBubbleRenderer:
             self._allocate_instances()
             return False
         width, height = item_pixel_rect(frame)[2:]
+        state=frame.snapshot.logical.mode_state
+        material_bytes=len(state.drift_paths)+len(state.snow_drift_offsets)+len(state.speck_drift_offsets)
+        if material_bytes and self._warm_material_buffer(material_bytes):
+            return False
         if not self._shafts.warm(width, height):
             return False
         if not self._probe_for(parameters).warm():
@@ -406,6 +411,15 @@ class QuickExtrudedBubbleRenderer:
         shells = bubble_instances(state.bubbles)
         shell_count = self._shells.upload(shells)
         wake_count = self._wakes.upload(wake_instances(state.wakes))
+        material_payload=b''.join((state.drift_paths,state.snow_drift_offsets,state.speck_drift_offsets))
+        if material_payload:
+            self._warm_material_buffer(len(material_payload))
+            self._drift.upload(np.frombuffer(material_payload,dtype=np.float32).reshape(-1,4))
+        drift_uniforms={'uChainDriftEnabled':int(bool(state.drift_paths)),
+            'uSnowDriftOffset':len(state.drift_paths)//16+1 if state.snow_drift_offsets else 0,
+            'uSpeckDriftOffset':(len(state.drift_paths)+len(state.snow_drift_offsets))//16+1 if state.speck_drift_offsets else 0}
+        self._uniforms.set(programs['beads'],drift_uniforms)
+        self._uniforms.set(programs['specks'],drift_uniforms)
         cluster_count = self._clusters.upload(cluster_instances(state.bubbles, state.clusters))
         proxy_count = self._proxies.upload(glint_proxies(shells, knobs["sun_below"],
                                                          float(knobs["proxy_power"]),
@@ -454,6 +468,8 @@ class QuickExtrudedBubbleRenderer:
         chain_fill, snow_fill, fizz_fill = _procedural_fill(parameters, chain_drive(state), state.emission)
         idle_activity = _idle_activity(state.level)
         beads, snow = math.ceil(chain_fill) * _BEADS_PER_CHAIN, math.ceil(snow_fill)
+        if state.snow_drift_offsets and len(state.snow_drift_offsets)<snow*16:
+            raise ValueError('Logical marine-snow drift does not cover the rendered population')
         trail_fizz = (_FIZZ_PER_BUBBLE * scene3d_detail(parameter(parameters, "scene3d_detail")).particles
                       * float(parameter(parameters, "extruded_bubble_wake_trails")))
         fizz_per = math.ceil(max(fizz_fill, trail_fizz))
@@ -494,6 +510,8 @@ class QuickExtrudedBubbleRenderer:
         glow_react = max(0.0, min(1.0, float(parameter(parameters, "extruded_bubble_particle_glow_reactivity"))))
         glow_multiplier = 1.0 + glow_react * (0.50 * float(state.rays) + 0.20 * float(state.flash))
         specks = round(SPECKS_FULL * share * scene3d_detail(parameter(parameters, "scene3d_detail")).particles)
+        if state.speck_drift_offsets and len(state.speck_drift_offsets)<specks*16:
+            raise ValueError('Logical particulate drift does not cover the rendered population')
         self._uniforms.set(programs["specks"], {
             "uWorldToView": _floats(world_to_view), "uRowMajor": 0, "uProjection": _floats(projection), "uPixel": pixel,
             "uSpecks": brightness, "uSpeckBloom": float(knobs["speck_bloom"]) * glow_multiplier,
@@ -547,7 +565,7 @@ class QuickExtrudedBubbleRenderer:
                     gl.glDepthMask(gl.GL_FALSE)
                     gl.glUseProgram(programs["specks"])
                     gl.glBindVertexArray(self._empty_vao)
-                    gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, specks)
+                    self._draw_material_instances(specks,bool(material_payload))
                     gl.glDepthMask(gl.GL_TRUE)
                     gl.glDisablei(gl.GL_BLEND, 0)
                 background, _depth = self._target.background(frame, r)
@@ -568,7 +586,7 @@ class QuickExtrudedBubbleRenderer:
                         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _WAKE_BINDING, self._wakes.buffer)
                         gl.glUseProgram(programs["beads"])
                         gl.glBindVertexArray(self._empty_vao)
-                        gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, beads + snow + fizz)
+                        self._draw_material_instances(beads+snow+fizz,bool(material_payload))
                         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _WAKE_BINDING, prior)
                     if trails > 0.0 and wake_count:
                         # Wake trails: one sheet per stable emitter, read from the same records as the fizz.
@@ -595,6 +613,33 @@ class QuickExtrudedBubbleRenderer:
             for unit in (_UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE):
                 gl.glBindTextureUnit(unit, 0)
             gl.glViewport(*scene_viewport)
+
+    def _warm_material_buffer(self,size):
+        rows=size//16
+        if self._drift.buffer and self._drift.capacity>=rows:
+            return False
+        self._drift.release()
+        self._drift.capacity=max(256,1<<(max(rows,1)-1).bit_length())
+        self._drift.allocate()
+        return True
+
+    def _draw_material_instances(self,count,enabled):
+        if not enabled:
+            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP,0,4,count)
+            return
+        previous=gl_query.get_indexed_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING,6)
+        start=gl_query.get_indexed_int64(gl.GL_SHADER_STORAGE_BUFFER_START,6)
+        size=gl_query.get_indexed_int64(gl.GL_SHADER_STORAGE_BUFFER_SIZE,6)
+        generic=gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING)
+        try:
+            gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,6,self._drift.buffer)
+            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP,0,4,count)
+        finally:
+            if previous and size:
+                gl.glBindBufferRange(gl.GL_SHADER_STORAGE_BUFFER,6,previous,start,size)
+            else:
+                gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,6,previous)
+            gl.glBindBuffer(gl.GL_SHADER_STORAGE_BUFFER,generic)
 
     def _allocate_instances(self) -> None:
         for instances in (self._shells, self._wakes, self._clusters, self._proxies):
@@ -660,7 +705,7 @@ class QuickExtrudedBubbleRenderer:
     def release_resources(self) -> None:
         errors: list[str] = []
         releases = [self._target.release, self._near.release, self._shafts.release, self._resources.release_resources,
-                    self._shells.release, self._wakes.release, self._clusters.release, self._proxies.release, self._release_empty_vao]
+                    self._shells.release, self._wakes.release, self._drift.release, self._clusters.release, self._proxies.release, self._release_empty_vao]
         if self._probe is not None:
             releases.append(self._probe.release)
         for release in releases:

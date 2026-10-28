@@ -2,10 +2,10 @@
 
 **Closed 2026-10-25 (operator):** Extruded Bubble is accepted; its recovery checklist (§4B, G00–G33, EB-*) is retired from `Current_Plan.md` (history: `git show 3c6cf7d8:Current_Plan.md`). This folder remains the reference for its targets, lab and investigation; reopen only on a concrete new defect.
 
-**28 October scoped follow-up — assessment only:** drift consumers/ranges, ordinary stream inheritance, framed viewport
-behavior, microbubble pause/resume and reliable ray controls are assessed in
-[Motion, reactivity and viewport plan](Motion_Reactivity_Viewport_Plan.md). `Current_Plan.md` §2A owns the proposed
-checklist; implementation awaits operator review. Performance work follows successful behavior proof.
+**28 October scoped follow-up — implementation authorized:** drift consumers/ranges, ordinary stream inheritance,
+framed viewport behavior, microbubble pause/resume and reliable ray controls are tracked in
+[Motion, reactivity and viewport plan](Motion_Reactivity_Viewport_Plan.md). `Current_Plan.md` §2A owns the live
+checklist and remaining combined/native gates. Performance work follows successful behavior proof.
 
 The 22–23 October notices below are historical evidence, superseded by the 25 October closure. They do not restore the
 retired recovery queue or establish that an old source-level defect remains present today.
