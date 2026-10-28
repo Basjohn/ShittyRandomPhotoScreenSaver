@@ -290,11 +290,12 @@ def test_idle_population_uniforms_preserve_counts_and_wakes_but_fade_free_chains
         return original(bank, program, values)
     monkeypatch.setattr(_Uniforms,'set',observe)
     samples=[]
-    for level in (0.,.05,.1,1.):
+    for level, chain_activity in ((0.,0.),(.05,.2),(.1,.6),(1.,1.)):
         recorded.clear()
         snapshot=_snapshot(extruded_bubble_bead_chains=[2.,2.],extruded_bubble_particles=[.4,.4])
         snapshot=dataclasses.replace(snapshot,logical=dataclasses.replace(snapshot.logical,
-            mode_state=dataclasses.replace(snapshot.logical.mode_state,level=level,emission=.4)))
+            mode_state=dataclasses.replace(snapshot.logical.mode_state,level=level,emission=.4,
+                                          chain_activity=chain_activity)))
         capture.render(host,snapshot)
         chains=next(v for v in recorded if 'uChainFill' in v)
         specks=next(v for v in recorded if 'uSpeckSize' in v)
@@ -305,7 +306,7 @@ def test_idle_population_uniforms_preserve_counts_and_wakes_but_fade_free_chains
         assert proxies['uParticleLighting']==0.  # CPU-lit radiance bypasses a second light-strength factor
         assert specks['uParticleLighting']==1.
     assert samples[0][0]['uChainFill']==samples[-1][0]['uChainFill']>0
-    assert [c['uChainActivity'] for c,s in samples] == pytest.approx((0.,.5,1.,1.))
+    assert [c['uChainActivity'] for c,s in samples] == pytest.approx((0.,.2,.6,1.))
     assert [s['uParticleActivity'] for c,s in samples] == pytest.approx((0.,.5,1.,1.))
     assert [s['uParticleRadiusShare'] for c,s in samples] == pytest.approx((.25,.625,1.,1.))
     assert len({s['uSpeckSize'] for c,s in samples})==1  # authored energy is separate from display contraction

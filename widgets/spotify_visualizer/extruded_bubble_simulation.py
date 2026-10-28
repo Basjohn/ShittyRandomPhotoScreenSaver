@@ -48,6 +48,7 @@ BUBBLE_STRIDE = 8          # x, y, z, radius, alpha, breath, identity, cluster (
 CLUSTER_STRIDE = 4         # members, then up to three member slots (indices into the bubble records), -1 if unused
 _FADE_IN = 0.6             # seconds
 _FADE_OUT = 0.9
+_CHAIN_FADE_IN = 0.35       # free-chain opacity only; preserve the existing logical-level release
 _POP_SECONDS = 2.4         # extremely gentle opacity retirement, never geometric implosion
 # Contact separation: a bounced (or popped) pair moves apart along its contact normal with a decaying
 # separation velocity, and any remaining overlap is corrected within about a tenth of a second.
@@ -155,6 +156,7 @@ class ExtrudedBubbleSnapshot:
     motion_phase: float = 0.0              # Integrated music-owned phase for surface, veils, rays and ambient effects
     wakes: tuple[float, ...] = ()          # stable live/retiring emitter records; immutable, wake-only, 8 floats each
     passage: float = 0.0                   # how loud the passage is (0 quiet .. 1 loud): where every Range sits
+    chain_activity: float = 0.0            # visibility envelope, independent of movement and shared audio response
 
     @property
     def count(self) -> int:
@@ -201,6 +203,12 @@ def stream_vector(around: float, height: float) -> tuple[float, float, float]:
 
 def _lerp(pair: tuple[float, float], t: float) -> float:
     return pair[0] + (pair[1] - pair[0]) * t
+
+
+def idle_activity(level: float) -> float:
+    """Existing quiet-band visibility/particle response; no independent clock."""
+    amount = max(0.0, min(1.0, float(level) / 0.1))
+    return amount * amount * (3.0 - 2.0 * amount)
 
 
 def _soft_top(value: float, top: float = 1.0, knee: float = 0.8) -> float:
@@ -327,6 +335,7 @@ class ExtrudedBubbleSimulation:
         self._next_ident = 1
         self._time = 0.0
         self._level = 0.0
+        self._chain_activity = 0.0
         self._flash = 0.0
         self._surge = 0.0             # the flow's beat surge: a quick push on each onset, released over half a second
         self._onset_mean = 0.0        # the recent onsets' usual weight, so only accents push the flow
@@ -515,6 +524,12 @@ class ExtrudedBubbleSimulation:
         small_body = _soft_top(vocal_body)
         intensity = min(1.0, max(bass, vocal_body))  # population/motion retain their existing normalized driver
         self._level = _follow(self._level, intensity, dt, 0.08 * soft, 0.45 * soft)
+        chain_target = idle_activity(self._level)
+        # Gentle reappearance even when capture is warm and audio rises at once.
+        # Falling visibility keeps the previous quiet-band release exactly;
+        # this follower never feeds back into sound, motion or other particles.
+        self._chain_activity = min(chain_target, _follow(self._chain_activity, chain_target, dt, _CHAIN_FADE_IN, 0.45)
+                                   if music.playing else self._chain_activity)
         # Where every quiet-to-loud Range sits: how loud the PASSAGE is (the shared PassageIntensity on the fixed
         # real-music scale, already eased by the engine), eased once more so a phrase, not a beat, moves the
         # endpoints. The band-driven drives above follow beats on a fixed scale that sits mid-range in nearly all
@@ -1188,7 +1203,7 @@ class ExtrudedBubbleSimulation:
         return ExtrudedBubbleSnapshot(self._time, tuple(bubbles), tuple(clusters), level,
                                       self._flash, direction, speed, self._drift_shown, self._emission, self._sustain,
                                       self._travel, self._rays, self._shimmer, self._motion_phase,
-                                      self._wakes(dt, controls.wake_trails), self._passage)
+                                      self._wakes(dt, controls.wake_trails), self._passage, self._chain_activity)
 
 
 __all__ = ["BUBBLE_STRIDE", "CLUSTER_MAX", "CLUSTER_STRIDE", "ExtrudedBubbleControls", "ExtrudedBubbleSimulation",
