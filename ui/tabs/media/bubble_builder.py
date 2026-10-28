@@ -13,6 +13,8 @@ def build_bubble_ui(tab, parent_layout) -> None:
     from ui.tabs.media.spec_mode_builder import build_spec_mode_ui
 
     build_spec_mode_ui(tab, parent_layout, "bubble")
+    tab.bubble_gradient_endpoints.bindRecipeChoice(tab.bubble_gradient_direction, 'custom',
+                                                 refresh=tab._bubble_apply_conditions)
     # Existing view/test names are aliases of the canonical widgets, not owners.
     tab.bubble_ghost_enabled = tab.bubble_ghosting_enabled
     tab.bubble_ghost_opacity = tab.bubble_ghost_alpha

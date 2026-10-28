@@ -443,12 +443,63 @@ class GradientMapper(_VisualControl):
         self._coords = (.2, .8, .8, .2)
         self._active = 0
         self._grab_offset = QPointF()
+        self._recipe_choice = None
+        self._recipe_refresh = None
+        self._restoring_recipe = False
         self.setMinimumSize(280, 190)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.setAccessibleDescription(self.describe())
 
     def sizeHint(self):
         return QSize(360, 220)
+
+    def bindRecipeChoice(self, choice, custom_value, *, refresh=None):
+        """An endpoint gesture selects Custom; undo restores both recipe and nodes.
+
+        Named recipes never rewrite the latent custom coordinates. This optional
+        binding adds no persistence owner; the page still collects both controls.
+        """
+        if choice.findData(custom_value) < 0:
+            raise ValueError('Gradient custom recipe is absent from the choice')
+        self._recipe_choice = (choice, custom_value)
+        self._recipe_refresh = refresh
+
+    def _set_recipe(self, value):
+        choice, _custom = self._recipe_choice
+        index = choice.findData(value)
+        if index < 0:
+            raise ValueError(f'Unknown gradient recipe: {value}')
+        if choice.currentIndex() == index:
+            return
+        previous = choice.blockSignals(True)
+        try:
+            choice.setCurrentIndex(index)
+        finally:
+            choice.blockSignals(previous)
+        if self._recipe_refresh is not None:
+            self._recipe_refresh()
+
+    def _changed(self, *, commit):
+        if self._recipe_choice is not None and not self._restoring_recipe:
+            self._set_recipe(self._recipe_choice[1])
+        super()._changed(commit=commit)
+
+    def _undo_state(self):
+        if self._recipe_choice is None:
+            return super()._undo_state()
+        return (self._recipe_choice[0].currentData(), self.value())
+
+    def _restore_undo_state(self, value):
+        if self._recipe_choice is None:
+            return super()._restore_undo_state(value)
+        recipe, coordinates = value
+        self._set_recipe(recipe)
+        self.setValue(coordinates)
+        self._restoring_recipe = True
+        try:
+            self._changed(commit=True)
+        finally:
+            self._restoring_recipe = False
 
     def setAspectRatio(self, aspect):
         if not math.isfinite(aspect) or aspect <= 0:

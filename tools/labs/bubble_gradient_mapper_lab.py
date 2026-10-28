@@ -7,6 +7,7 @@ and wide/narrow/shifted production-shader fixtures, then retires all resources.
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from pathlib import Path
 import sys
 
@@ -16,7 +17,6 @@ sys.path.insert(0, str(ROOT))
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-from core.gradient_geometry import project_linear_gradient
 from core.settings.default_contract import require_canonical_default
 from rendering.quick.visualizer.implementations.bubble import QuickBubbleRenderer
 from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
@@ -27,24 +27,15 @@ from ui.settings_theme import load_theme
 from ui.widgets.visual_controls import GradientMapper
 
 
-class _EndpointBubbleRenderer(QuickBubbleRenderer):
-    endpoints = (.2, .8, .8, .2)
-    content_aspect = 2.
-
-    def _gradient_parameters(self, parameters, layout):
-        self.content_aspect = layout.aspect_ratio
-        return (*project_linear_gradient(self.endpoints, self.content_aspect), 0.)
-
-
 class BubbleGradientMapperLab(QWidget):
     def __init__(self):
         super().__init__()
         self._target = self._host = None
-        self.setWindowTitle("Bubble — two-node gradient prototype")
+        self.setWindowTitle("Bubble — production two-node gradient")
         config = dict(require_canonical_default("widgets.spotify_visualizer"))
-        config["bubble_gradient_direction"] = "top_right"
+        config["bubble_gradient_direction"] = "custom"
         self._snapshot = _build_spectrum_preview_snapshot(width=720, height=360, mode="bubble", settings=config)
-        self._renderer = renderer = _EndpointBubbleRenderer()
+        self._renderer = renderer = QuickBubbleRenderer()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.addWidget(QLabel("Original Bubble — Dark / Light gradient endpoints"))
@@ -83,7 +74,9 @@ class BubbleGradientMapperLab(QWidget):
         self.mapper.setAccessibleDescription(text.replace("\n", ", "))
 
     def _render(self, value):
-        self._renderer.endpoints = tuple(value)
+        state = self._snapshot.logical.mode_state
+        state = replace(state, parameters={**dict(state.parameters), 'bubble_gradient_endpoints': tuple(value)})
+        self._snapshot = replace(self._snapshot, logical=replace(self._snapshot.logical, mode_state=state))
         target = self._target
         width, height = target.width, target.height
         with target.current():
@@ -96,7 +89,7 @@ class BubbleGradientMapperLab(QWidget):
             pixels = target.read_rgba()
         image = QImage(pixels.data, width, height, width * 4, QImage.Format.Format_RGBA8888_Premultiplied).copy()
         self.preview.setPixmap(QPixmap.fromImage(image))
-        self.mapper.setAspectRatio(self._renderer.content_aspect)
+        self.mapper.setAspectRatio(self._renderer._layout_cache.aspect_ratio)
 
     def _on_commit(self, value):
         try:

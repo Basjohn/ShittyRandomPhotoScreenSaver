@@ -22,6 +22,7 @@ from core.settings.visualizer_mode_settings import (
     Colour,
     Custom,
     Direction,
+    Gradient,
     ScenePath,
     SceneVolumePath,
     SceneCameraPosition,
@@ -45,7 +46,7 @@ from ui.tabs.media.builder_scaffold import (
 from ui.tabs.shared_styles import NoWheelSlider, RecommendedMarkSlider, add_aligned_row_widget
 from ui.widgets import StyledComboBox
 from ui.widgets.continuous_border import BucketToggle
-from ui.widgets.visual_controls import DirectionChoiceMapper, DirectionMapper, RangeSlider, TriangleMapper, ScenePathMapper, SceneVolumeMapper
+from ui.widgets.visual_controls import DirectionChoiceMapper, DirectionMapper, GradientMapper, RangeSlider, TriangleMapper, ScenePathMapper, SceneVolumeMapper
 from core.settings.framed_camera import spec_for_mode
 from ui.tabs.media import framed_camera_editor as fce
 
@@ -254,7 +255,7 @@ def _current_value(tab, control):
     if isinstance(control, Range):
         low, high = widget.value()
         return control.admit((low / control.scale, high / control.scale), (control.low, control.high))
-    if isinstance(control, (Triangle, Direction)):
+    if isinstance(control, (Triangle, Direction, Gradient)):
         return control.admit(widget.value(), widget.value())
     if control.indexed:
         return widget.currentIndex()
@@ -401,6 +402,9 @@ def _build_visual_control(tab, layout, control, default, *, auto_switch=True):
     elif isinstance(control, Triangle):
         widget = TriangleMapper(control.corners)
         widget.setValue(value)
+    elif isinstance(control, Gradient):
+        widget = GradientMapper()
+        widget.setValue(value)
     elif isinstance(control, (SceneVolumePath, SceneCameraPosition)):
         widget = SceneVolumeMapper(camera_only=isinstance(control, SceneCameraPosition))
         widget.setValue(value)
@@ -503,7 +507,7 @@ def load_spec_mode_settings(tab, mode_id: str, config, *, only_buckets: frozense
         try:
             if isinstance(entry, Range):
                 widget.setValue(entry.positions(value))
-            elif isinstance(entry, (Triangle, Direction)):
+            elif isinstance(entry, (Triangle, Direction, Gradient)):
                 widget.setValue(value)
             elif isinstance(entry, Slider):
                 widget.setValue(entry.position(value))

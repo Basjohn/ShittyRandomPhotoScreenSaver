@@ -47,9 +47,6 @@ world geometry and camera fixed during resize; compare the original rectangle be
 
 ### 2B. Settings and UI (in this order)
 
-- [ ] **Bubble two-node gradient — authorized production integration:** wire independent Dark/Light endpoints
-  through shared typed Settings, persistence/import/migration, undo and the production shader. Preserve existing
-  preset appearance; prove old/new geometry on native pixels and inspect the actual Settings control.
 - [~] **Display Settings capacity — awaiting physical hotplug validation:** current-screen rows have no fixed cap;
   focused six-screen/disconnect/reorder/zero-screen and retirement checks preserve canonical selections/bindings (rechecked 28 October).
   Check Settings remains coherent during actual disconnect/return and explicit reauthoring; hidden form evidence:

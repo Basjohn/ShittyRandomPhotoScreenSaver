@@ -10,6 +10,7 @@ import numpy as np
 from OpenGL import GL as gl
 
 from core.performance.frame_trace import FrameTraceEvent
+from core.gradient_geometry import project_linear_gradient
 from core.settings.bubble_gradient_semantics import (
     project_bubble_gradient,
     get_bubble_specular_shader_vector,
@@ -214,8 +215,11 @@ class QuickBubbleRenderer:
         return bool(self._program)
 
     def _gradient_parameters(self, parameters, layout: QuickBubbleLayout):
-        """One input projection; labs may supply endpoints without forking drawing."""
-        return project_bubble_gradient(str(parameter(parameters, "bubble_gradient_direction")))
+        """Named recipes retain their vectors; custom nodes use the shared physical projection."""
+        direction = str(parameter(parameters, "bubble_gradient_direction"))
+        if direction == 'custom':
+            return (*project_linear_gradient(parameter(parameters, 'bubble_gradient_endpoints'), layout.aspect_ratio), 0.)
+        return project_bubble_gradient(direction)
 
     def render(self, frame: QuickVisualizerRenderFrame) -> None:
         trace = frame.trace_context

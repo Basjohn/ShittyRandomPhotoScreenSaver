@@ -20,6 +20,7 @@ _SPECULAR_DIRECTIONS = {
 _GRADIENT_DIRECTIONS = _SPECULAR_DIRECTIONS | {
     "center_out",
     "center_out_reverse",
+    "custom",
 }
 
 # Legacy labels -> canonical "brightest point location" labels that preserve the
@@ -130,6 +131,8 @@ def get_bubble_gradient_shader_mode(direction: str) -> int:
 def get_bubble_gradient_shader_vector(direction: str) -> tuple[float, float]:
     """Return the shader vector for a canonical Bubble gradient direction."""
     normalized = normalize_bubble_gradient_direction(direction)
+    if normalized == 'custom':
+        raise ValueError('Custom Bubble gradients require endpoint projection')
     if normalized in {"center_out", "center_out_reverse"}:
         return (0.0, 0.0)
     return _DIRECTIONAL_SHADER_VECTORS.get(normalized, _DIRECTIONAL_SHADER_VECTORS["top"])
