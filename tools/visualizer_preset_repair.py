@@ -5,14 +5,19 @@ an SST snapshot, then prunes irrelevant keys and fills any missing defaults for
 that mode. Repairs keep a recoverable backup copy, but backups live under the
 repo temp area instead of polluting the curated preset tree itself.
 
-It also exposes a batch "Repair All" action (both via CLI and GUI button) that
-walks the curated preset tree, sanitising every JSON file automatically.
+Foundry UI also provides filename-first reindexing and paired preset swapping
+with transactional backups. The existing manifest is refreshed on request only
+when it already exists; its eventual retirement is tracked in Current_Plan.md.
+Batch repair and CLI auditing remain available.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import hashlib
+import os
 import shutil
+import uuid
 import sys
 from copy import deepcopy
 from dataclasses import dataclass
@@ -25,11 +30,15 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
+    QComboBox,
+    QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QMessageBox,
+    QMainWindow,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -47,7 +56,16 @@ from core.settings.visualizer_settings_snapshot import (  # noqa: E402
     normalize_visualizer_mode_payload,
 )
 from core.settings.visualizer_settings_contract import LEGACY_GLOBAL_SHARED_VISUAL_KEYS  # noqa: E402
-from core.visualizer_preset_manifest import regenerate_repo_shipped_visualizer_preset_artifacts  # noqa: E402
+from core.visualizer_preset_manifest import (  # noqa: E402
+    get_visualizer_preset_manifest_path,
+    write_curated_visualizer_preset_manifest,
+    regenerate_repo_shipped_visualizer_preset_artifacts,
+) 
+from tools.foundry_chrome import (  # noqa: E402
+    FoundryTitleBar, FoundryAppearanceDialog, apply_native_backdrop,
+    configure_frameless_window, resolve_tool_theme, save_tool_theme_id,
+)
+from tools.godzip_foundry_theme import render_foundry_stylesheet  # noqa: E402
 
 _DEFAULTS_CACHE: Dict[str, Any] | None = None
 _MANDATORY_TECH_SUFFIXES: Tuple[str, ...] = tuple(sorted(_TECHNICAL_GLOBAL_KEYS))
@@ -77,6 +95,9 @@ class UndoEntry:
     restore_path: Path
     backup_path: Path
     cleanup_path: Path | None = None
+    # One-click undo for multi-file operations, e.g. swapping two presets.
+    related: tuple[tuple[Path, Path, Path | None], ...] = ()
+    expected_hashes: tuple[str, ...] = ()  # optional for legacy Undo entries
 
 
 def _load_undo_history() -> list[UndoEntry]:
@@ -101,7 +122,18 @@ def _load_undo_history() -> list[UndoEntry]:
         cleanup_path = Path(cleanup_raw) if isinstance(cleanup_raw, str) and cleanup_raw.strip() else None
         if not backup_path.exists():
             continue
-        history.append(UndoEntry(restore_path=restore_path, backup_path=backup_path, cleanup_path=cleanup_path))
+        related = []
+        for row in item.get("related", []):
+            if not isinstance(row, Mapping):
+                continue
+            restore, backup = row.get("restore_path"), row.get("backup_path")
+            cleanup = row.get("cleanup_path")
+            if isinstance(restore, str) and isinstance(backup, str) and Path(backup).exists():
+                related.append((Path(restore), Path(backup), Path(cleanup) if isinstance(cleanup, str) and cleanup else None))
+        hashes = item.get("expected_hashes", [])
+        hashes = tuple(hashes) if isinstance(hashes, list) and all(isinstance(h, str) for h in hashes) else ()
+        history.append(UndoEntry(restore_path=restore_path, backup_path=backup_path,
+                                 cleanup_path=cleanup_path, related=tuple(related), expected_hashes=hashes))
     return history
 
 
@@ -112,6 +144,12 @@ def _save_undo_history(history: Sequence[UndoEntry]) -> None:
             "restore_path": str(entry.restore_path),
             "backup_path": str(entry.backup_path),
             "cleanup_path": str(entry.cleanup_path) if entry.cleanup_path is not None else "",
+            "related": [
+                {"restore_path": str(restore), "backup_path": str(backup),
+                 "cleanup_path": str(cleanup) if cleanup else ""}
+                for restore, backup, cleanup in entry.related
+            ],
+            "expected_hashes": list(entry.expected_hashes),
         }
         for entry in history
         if entry.backup_path.exists()
@@ -600,13 +638,22 @@ def _ensure_backup(path: Path) -> Path:
     return primary
 
 
+def _unique_transaction_backup(path: Path, group: str) -> Path:
+    """Do not rotate away a backup while it is referenced by Undo."""
+    folder = _BACKUP_ROOT / group
+    folder.mkdir(parents=True, exist_ok=True)
+    backup = folder / f"{uuid.uuid4().hex}.json"
+    shutil.copy2(path, backup)
+    return backup
+
+
 def _load_reindex_entry(mode: str, path: Path) -> ReindexEntry:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("Payload root must be a JSON object")
-    current_index = payload.get("preset_index")
-    if not isinstance(current_index, int):
-        current_index = vp._infer_preset_index_from_name(path.stem)  # type: ignore[attr-defined]
+    # Filenames are operator-authored ordering authority. Embedded metadata is
+    # deliberately ignored even when it is a valid but stale integer.
+    current_index = vp._infer_preset_index_from_name(path.stem)  # type: ignore[attr-defined]
     return ReindexEntry(
         mode=mode,
         path=path,
@@ -616,33 +663,29 @@ def _load_reindex_entry(mode: str, path: Path) -> ReindexEntry:
 
 
 def _ordered_reindex_entries(entries: List[ReindexEntry]) -> List[ReindexEntry]:
-    indexed = sorted(
-        [entry for entry in entries if entry.current_index is not None],
-        key=lambda entry: (int(entry.current_index), entry.path.name.lower()),
-    )
-    unindexed = sorted(
-        [entry for entry in entries if entry.current_index is None],
-        key=lambda entry: entry.path.name.lower(),
-    )
+    """Order by numbered filenames, then markerless files, never JSON metadata."""
+    return sorted(entries, key=lambda entry: (
+        entry.current_index is None,
+        entry.current_index if entry.current_index is not None else 0,
+        entry.path.name.casefold(),
+    ))
 
-    ordered: List[ReindexEntry] = []
-    target_index = 0
-    while indexed or unindexed:
-        if indexed and indexed[0].current_index == target_index:
-            ordered.append(indexed.pop(0))
-        elif unindexed and (not indexed or int(indexed[0].current_index) > target_index):
-            ordered.append(unindexed.pop(0))
-        elif indexed:
-            ordered.append(indexed.pop(0))
-        else:
-            ordered.append(unindexed.pop(0))
-        target_index += 1
-    return ordered
+
+def _indexed_preset_name(original_name: Any, target_index: int) -> str:
+    """Update only the Preset N prefix, preserving the human-authored label."""
+    if not isinstance(original_name, str) or not original_name.strip():
+        return f"Preset {target_index + 1}"
+    prefix = re.compile(r"^(\s*Preset\s+)\d+\b", re.IGNORECASE)
+    if prefix.match(original_name):
+        return prefix.sub(lambda match: match.group(1) + str(target_index + 1),
+                          original_name, count=1)
+    return f"Preset {target_index + 1} ({original_name})"
 
 
 def _canonical_reindexed_payload(entry: ReindexEntry, target_index: int) -> Dict[str, Any]:
     payload = deepcopy(entry.payload)
     payload["preset_index"] = target_index
+    payload["name"] = _indexed_preset_name(payload.get("name"), target_index)
     return payload
 
 
@@ -691,16 +734,26 @@ def reindex_mode_presets(mode: str) -> List[Tuple[Path, Path, Path]]:
     if not changed_plans:
         return []
 
-    temp_dir = mode_dir / ".reindex_tmp"
-    if temp_dir.exists():
-        shutil.rmtree(temp_dir)
-    temp_dir.mkdir(parents=True, exist_ok=True)
+    # Refuse conflicting targets before making a single change. The previous
+    # algorithm could overwrite a file that was not part of changed_plans.
+    changing_sources = {entry.path for entry, *_ in changed_plans}
+    targets = [final_path for _entry, final_path, *_ in plans]
+    if len(targets) != len(set(targets)):
+        raise ValueError(f"Ambiguous duplicate preset destinations in {mode_dir}")
+    for dest in targets:
+        if dest.exists() and dest not in changing_sources and not any(
+            entry.path == dest and final_path == dest for entry, final_path, *_ in plans
+        ):
+            raise ValueError(f"Destination occupied by an unrelated preset: {dest}")
+
+    temp_dir = mode_dir / f".reindex_tmp_{uuid.uuid4().hex}"
+    temp_dir.mkdir(parents=True, exist_ok=False)
 
     backups: List[Tuple[Path, Path]] = []
     results: List[Tuple[Path, Path, Path]] = []
     try:
         for index, (entry, final_path, _final_payload, final_text) in enumerate(changed_plans):
-            backup = _ensure_backup(entry.path)
+            backup = _unique_transaction_backup(entry.path, "reindex")
             backups.append((entry.path, backup))
             staged_path = temp_dir / f"{index:03d}.json"
             staged_path.write_text(final_text, encoding="utf-8")
@@ -712,8 +765,14 @@ def reindex_mode_presets(mode: str) -> List[Tuple[Path, Path, Path]]:
 
         for index, (_entry, final_path, _final_payload, _final_text) in enumerate(changed_plans):
             staged_path = temp_dir / f"{index:03d}.json"
-            final_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(staged_path), str(final_path))
+            os.replace(staged_path, final_path)
+    except Exception:
+        for _entry, final_path, _payload, _text in changed_plans:
+            if final_path.exists():
+                final_path.unlink()
+        for original, backup in backups:
+            shutil.copy2(backup, original)
+        raise
     finally:
         if temp_dir.exists():
             shutil.rmtree(temp_dir, ignore_errors=True)
@@ -744,6 +803,121 @@ def reindex_curated_presets(
             [old_path for _mode, old_path, _new_path, _backup in processed]
         )
     return processed
+
+
+def _authored_mode_entries(mode: str, mode_dir: Path | None = None) -> list[ReindexEntry]:
+    mode_dir = mode_dir or (ROOT / "presets" / "visualizer_modes" / mode)
+    if mode not in vp.MODES:
+        raise ValueError(f"Unknown visualizer mode: {mode}")
+    return _ordered_reindex_entries([_load_reindex_entry(mode, path)
+                                     for path in mode_dir.glob("*.json")])
+
+
+def swap_mode_presets(
+    mode: str, first: Path, second: Path, *, mode_dir: Path | None = None,
+) -> tuple[tuple[Path, Path, Path], tuple[Path, Path, Path]]:
+    """Swap two authored slots without changing any visualizer setting values.
+
+    Stage both replacements, check destination ownership before any mutation,
+    retain separate durable backups and roll back the pair on write failure.
+    """
+    mode_dir = (mode_dir or (ROOT / "presets" / "visualizer_modes" / mode)).resolve()
+    entries = _authored_mode_entries(mode, mode_dir)
+    by_path = {entry.path.resolve(): entry for entry in entries}
+    a, b = by_path.get(Path(first).resolve()), by_path.get(Path(second).resolve())
+    if a is None or b is None or a.path == b.path:
+        raise ValueError("Choose two different existing presets in the selected mode")
+    if a.current_index is None or b.current_index is None or a.current_index == b.current_index:
+        raise ValueError("Both presets need distinct numbered filenames. Reindex first if necessary.")
+    slots = [(entry.current_index, entry.path) for entry in entries if entry.current_index is not None]
+    if len(slots) != len({slot for slot, _ in slots}):
+        raise ValueError("Duplicate numbered slots exist in this mode; resolve them before swapping")
+
+    destinations = (
+        _canonical_reindexed_path(mode_dir, a, b.current_index),
+        _canonical_reindexed_path(mode_dir, b, a.current_index),
+    )
+    if destinations[0] == destinations[1]:
+        raise ValueError("Swap would create duplicate target filenames")
+    source_paths = {a.path, b.path}
+    for dest in destinations:
+        if dest.exists() and dest not in source_paths:
+            raise FileExistsError(f"Swap destination already exists: {dest.name}")
+
+    # Unique backups preserve previous undo transactions instead of rotating
+    # their backups out from under the persisted Undo history.
+    transaction = uuid.uuid4().hex
+    backup_dir = _BACKUP_ROOT / "swap" / transaction
+    backup_dir.mkdir(parents=True, exist_ok=False)
+    backup_a, backup_b = backup_dir / "first.json", backup_dir / "second.json"
+    shutil.copy2(a.path, backup_a)
+    shutil.copy2(b.path, backup_b)
+    stage = backup_dir / "stage"
+    stage.mkdir()
+    staged = [stage / "first.json", stage / "second.json"]
+    for target, entry, index in zip(staged, (a, b), (b.current_index, a.current_index)):
+        target.write_text(json.dumps(_canonical_reindexed_payload(entry, index), indent=2,
+                                     ensure_ascii=False) + "\n", encoding="utf-8")
+    try:
+        a.path.unlink()
+        b.path.unlink()
+        os.replace(staged[0], destinations[0])
+        os.replace(staged[1], destinations[1])
+    except Exception:
+        for dest in set(destinations):
+            if dest.exists():
+                dest.unlink()
+        shutil.copy2(backup_a, a.path)
+        shutil.copy2(backup_b, b.path)
+        raise
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+    return ((a.path, destinations[0], backup_a),
+            (b.path, destinations[1], backup_b))
+
+
+def _file_digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _undo_hashes(rows: Iterable[tuple[Path, Path, Path | None]]) -> tuple[str, ...]:
+    return tuple(_file_digest(cleanup if cleanup is not None else restore)
+                 for restore, _backup, cleanup in rows)
+
+
+def restore_undo_entry(entry: UndoEntry) -> None:
+    """Restore all files in one action, including paired swap replacements."""
+    affected = [(entry.restore_path, entry.backup_path, entry.cleanup_path), *entry.related]
+    for _restore, backup, _cleanup in affected:
+        if not backup.is_file():
+            raise FileNotFoundError(f"Missing undo backup: {backup}")
+    if entry.expected_hashes:
+        if len(entry.expected_hashes) != len(affected) or entry.expected_hashes != _undo_hashes(affected):
+            raise RuntimeError("Preset files changed since this operation. Undo refused to protect newer edits.")
+    # For swaps destination names may equal another source name: first remove
+    # the complete set of current operation destinations, then restore sources.
+    for _restore, _backup, cleanup in affected:
+        if cleanup is not None and cleanup.exists():
+            cleanup.unlink()
+    for restore, backup, _cleanup in affected:
+        restore.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(backup, restore)
+
+
+def regenerate_existing_visualizer_manifest(*, sync_release: bool = False) -> bool:
+    """Rebuild an existing source manifest without creating one after retirement.
+
+    The explicit GUI button only updates the source inventory; existing repair
+    workflows may also sync the release mirror when they have changed files.
+    """
+    root = ROOT / "presets" / "visualizer_modes"
+    if not get_visualizer_preset_manifest_path(root).is_file():
+        return False
+    if sync_release:
+        regenerate_repo_shipped_visualizer_preset_artifacts(ROOT)
+    else:
+        write_curated_visualizer_preset_manifest(root)
+    return True
 
 
 def repair_file(
@@ -803,7 +977,7 @@ def _is_curated_source_path(path: Path) -> bool:
 def _regenerate_shipped_preset_artifacts_if_needed(mutated_paths: Iterable[Path]) -> None:
     if not any(_is_curated_source_path(path) for path in mutated_paths):
         return
-    regenerate_repo_shipped_visualizer_preset_artifacts(ROOT)
+    regenerate_existing_visualizer_manifest(sync_release=True)
 
 
 def repair_all_presets(
@@ -872,210 +1046,339 @@ def audit_all_presets() -> List[Tuple[str, Path, Dict[str, Any]]]:
     return findings
 
 
-class VisualizerPresetRepairApp(QWidget):
+class VisualizerPresetRepairApp(QMainWindow):
+    """Foundry-style catalogue tools, without a second preset authority."""
+
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Visualizer Preset Repair")
-        self.resize(720, 460)
+        self.setWindowTitle("SRPSS Visualizer Preset Repair Foundry")
+        configure_frameless_window(self)
+        self.resize(1040, 760)
+        self.setMinimumSize(860, 640)
+        self._theme_id = ""
+        self._theme = None
+        self._history = _load_undo_history()
+        root = QWidget(self)
+        root.setObjectName("presetRoot")
+        self.setCentralWidget(root)
+        outer = QVBoxLayout(root)
+        outer.setContentsMargins(2, 2, 2, 2)
+        outer.setSpacing(0)
+        shell = QFrame(root)
+        shell.setObjectName("presetShell")
+        outer.addWidget(shell, 1)
+        layout = QVBoxLayout(shell)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(FoundryTitleBar("VISUALIZER PRESET REPAIR FOUNDRY", self,
+                                          settings_callback=self._appearance))
+        pane = QWidget(shell)
+        pane.setObjectName("presetPane")
+        body = QVBoxLayout(pane)
+        body.setContentsMargins(22, 17, 22, 18)
+        body.setSpacing(13)
+        layout.addWidget(pane, 1)
 
-        main_layout = QVBoxLayout(self)
-        main_layout.addWidget(QLabel("Select a visualizer mode:"))
+        intro = QLabel("Repair curated JSON, correct filename slot metadata, or swap two presets in one operation.")
+        intro.setObjectName("presetMuted")
+        intro.setWordWrap(True)
+        body.addWidget(intro)
 
-        self.mode_list = QListWidget()
+        head = QHBoxLayout()
+        head.addWidget(QLabel("VISUALIZER MODE"))
+        self.mode_combo = QComboBox(pane)
         for mode in vp.MODES:
-            QListWidgetItem(mode, self.mode_list)
-        self.mode_list.setCurrentRow(0)
-        main_layout.addWidget(self.mode_list)
+            self.mode_combo.addItem(mode.replace("_", " ").title(), mode)
+        self.mode_combo.setMinimumWidth(240)
+        self.mode_combo.currentIndexChanged.connect(self._refresh_presets)
+        head.addWidget(self.mode_combo, 1)
+        refresh = QPushButton("Refresh List")
+        refresh.clicked.connect(self._refresh_presets)
+        head.addWidget(refresh)
+        body.addLayout(head)
 
-        btn_row = QHBoxLayout()
-        self.repair_btn = QPushButton("Select File and Repair…")
+        swap_group = QFrame(pane)
+        swap_group.setObjectName("presetGroup")
+        swap_layout = QVBoxLayout(swap_group)
+        swap_layout.setContentsMargins(18, 15, 18, 15)
+        swap_layout.setSpacing(10)
+        section = QLabel("SWAP PRESET POSITIONS")
+        section.setObjectName("presetHeading")
+        swap_layout.addWidget(section)
+        tip = QLabel("Choose two presets from this mode. Their file numbers and JSON indexes are swapped together; appearance settings are preserved.")
+        tip.setObjectName("presetMuted")
+        tip.setWordWrap(True)
+        swap_layout.addWidget(tip)
+        swap_row = QHBoxLayout()
+        self.swap_first = QComboBox(swap_group)
+        self.swap_second = QComboBox(swap_group)
+        for cb in (self.swap_first, self.swap_second):
+            cb.setMinimumWidth(220)
+            cb.currentIndexChanged.connect(self._swap_selection_changed)
+            swap_row.addWidget(cb, 1)
+        swap_layout.addLayout(swap_row)
+        self.swap_hint = QLabel("Select two different numbered presets")
+        self.swap_hint.setObjectName("presetMuted")
+        self.swap_hint.setWordWrap(True)
+        swap_layout.addWidget(self.swap_hint)
+        self.swap_btn = QPushButton("Swap Selected Presets")
+        self.swap_btn.setObjectName("presetPrimary")
+        self.swap_btn.clicked.connect(self._on_swap_clicked)
+        swap_layout.addWidget(self.swap_btn)
+        body.addWidget(swap_group)
+
+        actions = QFrame(pane)
+        actions.setObjectName("presetGroup")
+        action_layout = QVBoxLayout(actions)
+        action_layout.setContentsMargins(18, 15, 18, 15)
+        action_layout.setSpacing(10)
+        action_layout.addWidget(QLabel("REPAIR & MAINTENANCE"))
+        first_row = QHBoxLayout()
+        self.repair_btn = QPushButton("Repair Selected File…")
         self.repair_btn.clicked.connect(self._on_repair_clicked)
-        btn_row.addWidget(self.repair_btn)
-
-        self.undo_btn = QPushButton("Undo Last Repair")
-        self.undo_btn.setEnabled(False)
-        self.undo_btn.clicked.connect(self._on_undo_clicked)
-        btn_row.addWidget(self.undo_btn)
-
-        self.repair_all_btn = QPushButton("Repair All Presets Found")
-        self.repair_all_btn.clicked.connect(self._on_repair_all_clicked)
-        btn_row.addWidget(self.repair_all_btn)
-
-        self.reindex_btn = QPushButton("Reindex Curated Presets")
+        first_row.addWidget(self.repair_btn, 1)
+        self.reindex_btn = QPushButton("Reindex by Filename")
+        self.reindex_btn.setToolTip("Normalize all modes in filename order. JSON index fields do not control positions.")
         self.reindex_btn.clicked.connect(self._on_reindex_clicked)
-        btn_row.addWidget(self.reindex_btn)
-        main_layout.addLayout(btn_row)
+        first_row.addWidget(self.reindex_btn, 1)
+        action_layout.addLayout(first_row)
+        second_row = QHBoxLayout()
+        self.repair_all_btn = QPushButton("Repair All")
+        self.repair_all_btn.clicked.connect(self._on_repair_all_clicked)
+        second_row.addWidget(self.repair_all_btn, 1)
+        self.manifest_btn = QPushButton("Regenerate Existing Manifest")
+        self.manifest_btn.setToolTip("Refreshes the existing source inventory without touching preset JSON")
+        self.manifest_btn.clicked.connect(self._on_manifest_clicked)
+        second_row.addWidget(self.manifest_btn, 1)
+        action_layout.addLayout(second_row)
+        self.undo_btn = QPushButton("Undo Last Change")
+        self.undo_btn.clicked.connect(self._on_undo_clicked)
+        action_layout.addWidget(self.undo_btn)
+        body.addWidget(actions)
 
-        self.status_label = QLabel("Ready.")
-        main_layout.addWidget(self.status_label)
-
-        self.log = QPlainTextEdit()
+        self.status_label = QLabel("Ready. No authored settings will be changed by Swap or Reindex.")
+        self.status_label.setObjectName("presetMuted")
+        self.status_label.setWordWrap(True)
+        body.addWidget(self.status_label)
+        self.log = QPlainTextEdit(pane)
+        self.log.setObjectName("presetLog")
         self.log.setReadOnly(True)
-        main_layout.addWidget(self.log, stretch=1)
+        self.log.setPlaceholderText("Operation history")
+        body.addWidget(self.log, 1)
+        self._apply_theme()
+        self._refresh_presets()
+        self._refresh_actions()
 
-        self._history: list[UndoEntry] = _load_undo_history()
-        self.undo_btn.setEnabled(bool(self._history))
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if self._theme is not None:
+            from types import SimpleNamespace
+            apply_native_backdrop(self, SimpleNamespace(theme=self._theme))
+
+    def _appearance(self) -> None:
+        from tools.godzip_foundry_theme import resolve_foundry_theme
+        resolution = resolve_foundry_theme(self._theme_id)
+        dialog = FoundryAppearanceDialog(self, title="Preset Repair Foundry",
+                                         resolution=resolution, apply_theme=self._set_theme)
+        dialog.show()
+        # A nonmodal dialog must remain Python-owned for its entire native life.
+        self._appearance_dialog = dialog
+
+    def _set_theme(self, theme_id: str) -> None:
+        self._theme_id = theme_id
+        save_tool_theme_id("visualizer_preset_repair", theme_id)
+        self._apply_theme()
+
+    def _apply_theme(self) -> None:
+        from types import SimpleNamespace
+        resolution = resolve_tool_theme("visualizer_preset_repair")
+        self._theme_id = resolution.theme_id
+        self._theme = resolution.theme
+        theme = resolution.theme
+        def rgba(role: str) -> str:
+            c = theme.color(role)
+            return f"rgba({c.r},{c.g},{c.b},{c.a})"
+        qss = render_foundry_stylesheet(theme, use_settings_controls=True)
+        qss += f"""
+            QWidget#presetRoot, QWidget#presetPane {{ background: transparent; }}
+            QFrame#presetShell {{ background: {rgba('window.dialog_glass')}; border: 2px solid {rgba('panel.border')}; border-radius: 10px; }}
+            QFrame#presetGroup {{ background: {rgba('panel.group.surface')}; border: 1px solid {rgba('panel.border')}; border-radius: 10px; }}
+            QLabel#presetMuted {{ color: {rgba('text.secondary')}; }}
+            QLabel#presetHeading {{ font-weight: 700; }}
+            QPushButton#presetPrimary {{ background: {rgba('control.setup_action.surface')}; color: {rgba('control.setup_action.text')}; border-color: {rgba('control.setup_action.border')}; font-weight: 700; }}
+            QPlainTextEdit#presetLog {{ border: 1px solid {rgba('panel.border')}; border-radius: 8px; }}
+        """
+        self.setStyleSheet(qss)
+        if self.isVisible():
+            apply_native_backdrop(self, SimpleNamespace(theme=theme))
 
     def _current_mode(self) -> str:
-        item = self.mode_list.currentItem()
-        if not item:
-            raise ValueError("Select a visualizer mode first")
-        return item.text()
+        value = self.mode_combo.currentData()
+        if not isinstance(value, str):
+            raise ValueError("Select a visualizer mode")
+        return value
 
-    def _on_repair_clicked(self) -> None:
+    def _refresh_actions(self) -> None:
+        self.undo_btn.setEnabled(bool(self._history))
+        self.manifest_btn.setEnabled(get_visualizer_preset_manifest_path(
+            ROOT / "presets" / "visualizer_modes").is_file())
+        self.manifest_btn.setToolTip("The source manifest is absent; no manifest is created" if not self.manifest_btn.isEnabled()
+                                     else "Regenerate only the existing source inventory; preset files are untouched")
+
+    def _refresh_presets(self, *_args) -> None:
+        mode = self._current_mode()
+        try:
+            entries = _authored_mode_entries(mode)
+        except Exception as exc:
+            self._show_error(str(exc))
+            entries = []
+        previous_first, previous_second = self.swap_first.currentData(), self.swap_second.currentData()
+        for cb in (self.swap_first, self.swap_second):
+            cb.blockSignals(True)
+            cb.clear()
+            for entry in entries:
+                slot = (entry.current_index + 1) if entry.current_index is not None else "?"
+                suffix = re.sub(r"^preset[_-]*\d+[_-]*", "", entry.path.stem, flags=re.IGNORECASE)
+                label = suffix.replace("_", " ").replace("-", " ").strip().title() or entry.path.stem
+                cb.addItem(f"{slot}  ·  {label}", str(entry.path))
+            cb.blockSignals(False)
+        if entries:
+            idx = self.swap_first.findData(previous_first)
+            self.swap_first.setCurrentIndex(idx if idx >= 0 else 0)
+            idx = self.swap_second.findData(previous_second)
+            self.swap_second.setCurrentIndex(idx if idx >= 0 else (1 if len(entries) > 1 else 0))
+        self._swap_selection_changed()
+        self._refresh_actions()
+
+    def _swap_selection_changed(self, *_args) -> None:
+        p, q = self.swap_first.currentData(), self.swap_second.currentData()
+        valid = isinstance(p, str) and isinstance(q, str) and p != q
+        self.swap_btn.setEnabled(valid)
+        self.swap_hint.setText((f"Swap {Path(p).name} ↔ {Path(q).name}" if valid
+                                else "Select two different presets from the same mode"))
+
+    def _on_swap_clicked(self) -> None:
         try:
             mode = self._current_mode()
-        except ValueError as exc:
+            p, q = Path(self.swap_first.currentData()), Path(self.swap_second.currentData())
+            (a, b) = swap_mode_presets(mode, p, q)
+            undo_rows = ((a[0], a[2], a[1]), (b[0], b[2], b[1]))
+            self._history = _record_undo_entry(UndoEntry(
+                restore_path=a[0], backup_path=a[2], cleanup_path=a[1],
+                related=(undo_rows[1],), expected_hashes=_undo_hashes(undo_rows)), self._history)
+            _regenerate_shipped_preset_artifacts_if_needed((a[0], b[0]))
+            self.status_label.setText(f"Swapped {p.stem} and {q.stem}. Undo restores both files together.")
+            self._append_log(f"Swap {a[0].name} → {a[1].name}  |  {b[0].name} → {b[1].name}")
+            self._refresh_presets()
+            for combo, new_path in ((self.swap_first, a[1]), (self.swap_second, b[1])):
+                index = combo.findData(str(new_path))
+                if index >= 0:
+                    combo.setCurrentIndex(index)
+        except Exception as exc:
             self._show_error(str(exc))
-            return
 
+    def _on_repair_clicked(self) -> None:
+        mode = self._current_mode()
         start_dir = ROOT / "presets" / "visualizer_modes" / mode
-        if not start_dir.exists():
-            start_dir = ROOT
-
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            f"Select {mode} preset JSON/SST",
-            str(start_dir),
-            "JSON/SST Files (*.json *.sst);;All Files (*)",
-        )
-        if not file_path:
-            return
-
-        self._repair(Path(file_path), mode)
+        file_path, _ = QFileDialog.getOpenFileName(self, f"Select {mode} preset JSON/SST",
+            str(start_dir if start_dir.exists() else ROOT), "JSON/SST Files (*.json *.sst);;All Files (*)")
+        if file_path:
+            self._repair(Path(file_path), mode)
 
     def _repair(self, path: Path, mode: str) -> None:
         try:
             backup, stats = repair_file(path, mode, sync_shipped_artifacts=False)
+            self._history = _record_undo_entry(UndoEntry(
+                path, backup, expected_hashes=(_file_digest(path),)), self._history)
+            _regenerate_shipped_preset_artifacts_if_needed((path,))
+            self.status_label.setText(f"Repaired {path.name}; backup saved.")
+            self._append_log(f"Repair {path.name}: +{len(stats['added'])} / -{len(stats['removed'])} / adjusted {len(stats['changed'])}")
+            self._refresh_presets()
         except Exception as exc:
             self._show_error(str(exc))
-            return
-
-        self._history = _record_undo_entry(
-            UndoEntry(restore_path=path, backup_path=backup),
-            self._history,
-        )
-        self.undo_btn.setEnabled(bool(self._history))
-
-        msg = (
-            f"Repaired {path.name} ({mode}). Updated {', '.join(stats['updated_paths'])}.\n"
-            f"Added {len(stats['added'])}, removed {len(stats['removed'])}, changed {len(stats['changed'])}."
-        )
-        self._append_log(msg)
-        self.status_label.setText(f"Saved changes to {path.name} (backup: {backup.name}).")
 
     def _on_repair_all_clicked(self) -> None:
-        files = _discover_preset_files()
-        if not files:
-            self._append_log("No preset JSON files found under presets/visualizer_modes.")
-            self.status_label.setText("No preset files found.")
+        if QMessageBox.question(self, "Repair all curated presets",
+             "Repair all preset payloads across all visualizer modes? Backups are retained.",
+             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+             QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
             return
-
-        self.repair_all_btn.setEnabled(False)
-        repaired = 0
-        failed = 0
-
-        def _handle_result(mode: str, path: Path, backup: Path, stats: Dict[str, Any]) -> None:
-            nonlocal repaired
-            repaired += 1
-            self._history = _record_undo_entry(
-                UndoEntry(restore_path=path, backup_path=backup),
-                self._history,
-            )
-            rel = path.relative_to(ROOT)
-            msg = (
-                f"Repaired {rel} ({mode}). Updated {', '.join(stats['updated_paths'])}. "
-                f"Added {len(stats['added'])}, removed {len(stats['removed'])}, changed {len(stats['changed'])}."
-            )
-            self._append_log(msg)
-
-        def _handle_error(mode: str, path: Path, exc: Exception) -> None:
-            nonlocal failed
-            failed += 1
-            rel = path.relative_to(ROOT)
-            self._append_log(f"Failed to repair {rel} ({mode}): {exc}")
-
+        failed = []
+        def done(mode, path, backup, stats):
+            self._history = _record_undo_entry(UndoEntry(
+                path, backup, expected_hashes=(_file_digest(path),)), self._history)
+            self._append_log(f"Repaired {mode}: {path.name}")
+        def error(mode, path, exc):
+            failed.append((path, exc))
+            self._append_log(f"FAILED {mode}: {path.name}: {exc}")
         try:
-            repair_all_presets(on_result=_handle_result, on_error=_handle_error)
-        finally:
-            self.repair_all_btn.setEnabled(True)
-
-        if self._history:
-            self.undo_btn.setEnabled(True)
-
-        summary = f"Batch repair complete: {repaired} updated"
-        if failed:
-            summary += f", {failed} failed"
-        summary += "."
-        self.status_label.setText(summary)
+            results = repair_all_presets(on_result=done, on_error=error)
+            self.status_label.setText(f"Repair All: {len(results)} files updated, {len(failed)} failed.")
+            self._refresh_presets()
+        except Exception as exc:
+            self._show_error(str(exc))
 
     def _on_reindex_clicked(self) -> None:
-        self.reindex_btn.setEnabled(False)
-        updated = 0
-        failed = 0
-
-        def _handle_result(mode: str, old_path: Path, new_path: Path, backup: Path) -> None:
-            nonlocal updated
-            updated += 1
-            cleanup_path = new_path if new_path != old_path else None
-            self._history = _record_undo_entry(
-                UndoEntry(restore_path=old_path, backup_path=backup, cleanup_path=cleanup_path),
-                self._history,
-            )
-            old_rel = old_path.relative_to(ROOT)
-            new_rel = new_path.relative_to(ROOT)
-            self._append_log(
-                f"Reindexed {old_rel} ({mode}) -> {new_rel}. Backup: {backup.name}."
-            )
-
-        def _handle_error(mode: str, exc: Exception) -> None:
-            nonlocal failed
-            failed += 1
-            self._append_log(f"Failed to reindex {mode}: {exc}")
-
+        # Reindex is a bulk file rename: make the impact explicit in the UI.
+        if QMessageBox.question(self, "Reindex by filename",
+             "Normalize sequential numbers across all modes in filename order?\n"
+             "Existing authored settings are retained. Backups will be created.",
+             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+             QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        failed = []
+        undo_rows = []
+        def done(mode, old, new, backup):
+            undo_rows.append((old, backup, new if old != new else None))
+            self._append_log(f"Reindexed {mode}: {old.name} → {new.name}")
+        def error(mode, exc):
+            failed.append((mode, exc))
+            self._append_log(f"FAILED {mode}: {exc}")
         try:
-            reindex_curated_presets(on_result=_handle_result, on_error=_handle_error)
-        finally:
-            self.reindex_btn.setEnabled(True)
+            changes = reindex_curated_presets(on_result=done, on_error=error)
+            if undo_rows:
+                first, *others = undo_rows
+                self._history = _record_undo_entry(UndoEntry(
+                    restore_path=first[0], backup_path=first[1], cleanup_path=first[2],
+                    related=tuple(others), expected_hashes=_undo_hashes(undo_rows)), self._history)
+            self.status_label.setText(f"Reindex: {len(changes)} files updated, {len(failed)} modes failed.")
+            self._refresh_presets()
+        except Exception as exc:
+            self._show_error(str(exc))
 
-        if self._history:
-            self.undo_btn.setEnabled(True)
-
-        summary = f"Curated preset reindex complete: {updated} updated"
-        if failed:
-            summary += f", {failed} failed"
-        summary += "."
-        self.status_label.setText(summary)
+    def _on_manifest_clicked(self) -> None:
+        try:
+            if regenerate_existing_visualizer_manifest():
+                self.status_label.setText("Existing source manifest regenerated; preset files unchanged.")
+                self._append_log("Regenerated the existing manifest from current authored filenames.")
+            else:
+                self.status_label.setText("No source manifest exists. No action taken.")
+        except Exception as exc:
+            self._show_error(str(exc))
+        self._refresh_actions()
 
     def _on_undo_clicked(self) -> None:
         if not self._history:
             return
-        entry, self._history = _pop_undo_entry(self._history)
-        if entry is None:
-            self.undo_btn.setEnabled(False)
-            return
+        entry = self._history[-1]
         try:
-            if entry.cleanup_path is not None and entry.cleanup_path.exists():
-                entry.cleanup_path.unlink()
-            entry.restore_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(entry.backup_path, entry.restore_path)
+            restore_undo_entry(entry)
+            _regenerate_shipped_preset_artifacts_if_needed(
+                [entry.restore_path, *(restore for restore, _backup, _cleanup in entry.related)])
+            _item, self._history = _pop_undo_entry(self._history)
+            self.status_label.setText("Undo restored all files in the last operation.")
+            self._append_log(f"Undo: {entry.restore_path.name} ({1 + len(entry.related)} files)")
+            self._refresh_presets()
         except Exception as exc:
-            self._show_error(f"Failed to restore backup: {exc}")
-            return
-
-        self._append_log(f"Restored {entry.restore_path.name} from {entry.backup_path.name}.")
-        self.status_label.setText(f"Undo complete for {entry.restore_path.name}.")
-        if not self._history:
-            self.undo_btn.setEnabled(False)
+            self._show_error(str(exc))
 
     def _append_log(self, text: str) -> None:
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.log.appendPlainText(f"[{timestamp}] {text}")
+        self.log.appendPlainText(f"[{datetime.now().strftime('%H:%M:%S')}] {text}")
 
     def _show_error(self, message: str) -> None:
         QMessageBox.critical(self, "Preset Repair", message)
         self._append_log(f"Error: {message}")
-        self.status_label.setText("Error")
+        self.status_label.setText("Error: " + message)
 
 
 def main(argv: Sequence[str] | None = None) -> None:

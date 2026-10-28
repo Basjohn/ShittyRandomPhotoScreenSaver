@@ -196,8 +196,7 @@
         "devcurve_smoothness": 0.5,
         "devcurve_transient_clamp": 1.61,
         "devcurve_transient_pulse_gain": 1.0,
-        "mode": "devcurve",
-        "monitor": "ALL"
+        "mode": "devcurve"
       }
     }
   },

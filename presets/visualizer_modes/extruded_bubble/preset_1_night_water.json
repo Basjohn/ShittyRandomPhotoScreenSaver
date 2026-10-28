@@ -1,8 +1,8 @@
 {
-  "description": "Dark, cool water with a pale surface far above and soft grey rays.",
+  "description": "Saved from current Settings state.",
   "mode": "extruded_bubble",
-  "name": "Preset 3 (Night Water)",
-  "preset_index": 2,
+  "name": "Preset 1 (Night Water)",
+  "preset_index": 0,
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
@@ -16,7 +16,7 @@
         "extruded_bubble_band_gather": 0.0,
         "extruded_bubble_bar_count": 32,
         "extruded_bubble_bead_chains": [
-          10,
+          8,
           10
         ],
         "extruded_bubble_bead_scatter": 0.06,
@@ -24,14 +24,14 @@
         "extruded_bubble_beam_width": 1.0,
         "extruded_bubble_breathing": [
           0.3,
-          0.5
+          0.6
         ],
         "extruded_bubble_bubble_spread": 1.0,
-        "extruded_bubble_camera_fov": 62.0,
+        "extruded_bubble_camera_fov": 62,
         "extruded_bubble_camera_position": [
           0.0,
-          0.0,
-          0.0
+          0.558909,
+          -0.012751
         ],
         "extruded_bubble_clarity": 0.0,
         "extruded_bubble_collision": [
@@ -47,7 +47,7 @@
           34,
           255
         ],
-        "extruded_bubble_doublets": 0.35,
+        "extruded_bubble_doublets": 0.14,
         "extruded_bubble_drift": [
           0.3,
           0.8
@@ -64,24 +64,28 @@
         "extruded_bubble_input_gain": 1.0,
         "extruded_bubble_iridescence": 0.3,
         "extruded_bubble_large_bubbles": [
-          16,
+          10,
           16
         ],
         "extruded_bubble_large_size": 0.95,
         "extruded_bubble_light_colour": [
-          163,
-          177,
-          191,
+          183,
+          198,
+          214,
           255
         ],
         "extruded_bubble_light_direction": [
           0.0,
-          38.7
+          1.0,
+          -0.5548,
+          -0.0,
+          -1.0,
+          0.5548
         ],
         "extruded_bubble_light_strength": 1.0,
         "extruded_bubble_light_tint": 0.45,
         "extruded_bubble_light_type": "Sunlit Surface",
-        "extruded_bubble_lighting_coverage": "BEAM",
+        "extruded_bubble_lighting_coverage": "SCENE",
         "extruded_bubble_manual_floor": 0.12,
         "extruded_bubble_mid_bubbles": [
           150,
@@ -103,7 +107,7 @@
           0.06,
           0.12
         ],
-        "extruded_bubble_ray_flicker": 0.3,
+        "extruded_bubble_ray_flicker": 0.39,
         "extruded_bubble_ray_path": [
           0.0,
           1.0,
@@ -112,11 +116,11 @@
           -1.0,
           0.0
         ],
-        "extruded_bubble_ray_reach": 0.6,
-        "extruded_bubble_ray_softness": 0.35,
+        "extruded_bubble_ray_reach": 0.65,
+        "extruded_bubble_ray_softness": 0.7,
         "extruded_bubble_rays": [
-          0.3,
-          0.5
+          0.25,
+          0.75
         ],
         "extruded_bubble_rays_enabled": true,
         "extruded_bubble_rim_glow": 1.0,
@@ -124,15 +128,19 @@
         "extruded_bubble_size_variety": 0.6,
         "extruded_bubble_small_pulse": [
           0.2,
-          0.5
+          0.55
         ],
         "extruded_bubble_small_size": 0.75,
-        "extruded_bubble_smoothing": 0.5,
+        "extruded_bubble_smoothing": 0.55,
         "extruded_bubble_softness": 0.1,
         "extruded_bubble_sparkle": 1.0,
         "extruded_bubble_stream_direction": [
+          -0.0,
+          -1.0,
           0.0,
-          0.0
+          0.0,
+          1.0,
+          -0.0
         ],
         "extruded_bubble_stream_speed": [
           0.25,
@@ -154,11 +162,11 @@
     }
   },
   "starting_view": {
-    "extruded_bubble_scene_pan_x": 0.0,
-    "extruded_bubble_scene_pan_y": 0.0,
+    "extruded_bubble_scene_pan_x": 0.15562565720294427,
+    "extruded_bubble_scene_pan_y": 0.15017667844522967,
     "extruded_bubble_scene_scale": 1.0,
-    "extruded_bubble_tilt": 0.022,
-    "extruded_bubble_turn": 0.0
+    "extruded_bubble_tilt": 0.040518518518518024,
+    "extruded_bubble_turn": 0.009259259259260189
   },
   "visualizer_preset_mode": "extruded_bubble",
   "visualizer_preset_override": true
