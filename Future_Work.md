@@ -129,6 +129,22 @@ shared shaders. A 480x270 all-recipe run still shows old recipe appearance diver
 against current shared shader semantics only if a later EB lab/visual comparison is explicitly reopened. Do not
 retune accepted production presets or expand the closed EB work to match these stale recipes.
 
+### Non-code custody and cleanup assessment (28 October)
+
+Read-only Sol Medium inventory found the bulk in ignored generated stores: logs approximately 2.8 GiB, tmp
+633 MiB, build 554 MiB, release 799 MiB. Docs are approximately 37 MiB, mostly required target/concept assets;
+rearranging or deleting those references will not solve the bulk. Navigation corrections can land independently.
+
+- [ ] Classify retained proof versus reproducible scratch before pruning; `logs/visualizer_recordings`, preset
+  backups under `temp`, operator reference ZIPs, Usu originals and onboarding sheets are protected inputs/recovery.
+- [ ] Assess the existing ignored `.artifacts/` for new generated evidence/scratch, using explicit CLI output
+  paths. Pilot one subject: copy/verify retained receipt and input hashes, update current producers/consumers,
+  then retire old output paths. Keep live logs, canonical recordings, product assets, themes/presets and release
+  products at their established owners. No bulk move or deletion has been authorized by this assessment.
+- [ ] Review dated `Docs/Audits` individually: durable rules into existing owners, significant forensic lessons
+  into Historical Bugs, ordinary completed chronology into Git. Do not create another historical index/archive.
+  Prune only demonstrated disposable output after affected path/packaging/Guided Setup checks pass.
+
 ## 5. Boundary
 
 This is not a changelog or a completed-work register. When a deferred item lands, move its durable contract to the appropriate

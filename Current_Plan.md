@@ -50,7 +50,7 @@ world geometry and camera fixed during resize; compare the original rectangle be
 - [~] **Display Settings capacity — awaiting physical hotplug validation:** current-screen rows have no fixed cap;
   focused six-screen/disconnect/reorder/zero-screen and retirement checks preserve canonical selections/bindings (rechecked 28 October).
   Check Settings remains coherent during actual disconnect/return and explicit reauthoring; hidden form evidence:
-  `tmp/pytest_display_rows_final/test_display_ui_rows_follow_to0/six_display_rows.png`.
+  `tmp/pytest_ux30_display/test_display_ui_rows_follow_to0/six_display_rows.png`.
 - [~] **R38 hover display-transfer glyphs — awaiting physical topology use:** source/model/lifecycle and native Quick
   hit/tooltip/fade checks pass on both connected physical displays (MSI G321Q and LG TV, both DPR 1.5);
   transfer Save/Cancel transaction checks pass. Remaining physical coverage is unequal-DPI screens and monitor

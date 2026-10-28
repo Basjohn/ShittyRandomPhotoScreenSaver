@@ -71,6 +71,9 @@ def test_settings_handler_cleans_dialog_animation_manager_before_runtime_restart
             self.display_manager.cleanup()
             self.display_manager = None
 
+        def _arm_replacement_watchdog(self, label):
+            events.append(("watchdog_arm", label))
+
         def _initialize_display(self):
             events.append(("initialize_display", None))
             return True
@@ -336,6 +339,9 @@ def test_custom_edit_reload_returns_then_admits_exactly_one_replacement(
             events.append(("engine_stop", exit_app))
             self.display_manager.cleanup()
             self.display_manager = None
+
+        def _arm_replacement_watchdog(self, label):
+            events.append(("watchdog_arm", label))
 
         def _initialize_display(self):
             events.append(("initialize_display", None))
