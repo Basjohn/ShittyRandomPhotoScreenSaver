@@ -477,11 +477,12 @@ their following body-pass depth state, and the existing visualizer fence still o
   overlapping translucent bars, directional-shadow positive/negative pixels, and unchanged target ownership across
   the shadow switch.
 
-## S3D-1 CPU path entry point (GPU primitive pending)
+## S3D-1 CPU test references and independent GPU prototype
 
 `core/ribbon_geometry.py` provides bounded absolute-coordinate CPU history and centripetal interpolation for
 new strips; see `Docs/Reference/Ribbon_Path.md`. The standalone CPU path probe is its current consumer.
 `core/ribbon_frames.py` adds the CPU transported/camera-facing width reference. Neither module migrates EB wakes. WR-02a adds the independent oriented SSBO strip prototype in
 `rendering/quick/scene3d/ribbon.py` and `rendering/gl_programs/ribbon.py`, admitted packets in `core/ribbon_packet.py`.
-See the focused path reference for native proof and the unaccepted CPU packet-rebuild cost. OIT, defocus,
+See the focused path reference for native proof and input-path separation: the current packet builder invokes
+the CPU test oracle, whose full rebuild timing is neither a software-rendering backend nor an app runtime cost. OIT, defocus,
 camera-facing GPU behavior, broader normal/precision/native proof and scene composition remain open.

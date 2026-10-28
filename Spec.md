@@ -775,6 +775,8 @@ projection matrices/ray origins; camera math alone does not establish scene like
 The shared bounded CPU path/history and transported width-frame references are documented in
 `Docs/Reference/Ribbon_Path.md`; an independent oriented GPU strip prototype now exists, while efficient dynamic input construction and broader
 native surface/OIT/defocus proof remain open. No runtime mode consumes it. It introduces no runtime simulation or clock.
+CPU geometry/frame references are test oracles, not a software rendering backend. Production input preparation
+must be measured separately and must not inherit the prototype's all-history oracle reconstruction each tick.
 
 Every registered original mode declares its body controls once in `core/settings/visualizer_mode_settings.py`; canonical defaults and editable
 presets remain value authorities. Lazy Settings bodies, model serialization and consumer-specific appliers use that spec.

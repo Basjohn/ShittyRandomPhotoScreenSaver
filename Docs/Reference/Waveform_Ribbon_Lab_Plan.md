@@ -23,7 +23,8 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
 - [x] WR-01b CPU transported/camera-facing frames, gap/cusp policy and width/UV stations; proposed GPU budget recorded.
 - [x] WR-02a independent oriented GPU prototype: bounded packet/ring, both projection matrices, solid geometry,
   native bounds/gaps/plane-normal/phase-rebase/depth/context/state checks and 90-frame draw timing.
-- [ ] WR-02 input-cost gate: incremental logical frame/packet construction; full reference rebuild is too costly.
+- [ ] WR-02 input-path gate: separate the CPU test oracle from actual changing-input preparation; measure each stage
+  and choose incremental reuse or justified GPU work. There is no software rendering backend to optimize.
 - [ ] WR-02 remaining: curved/edge/near-plane/normal precision, OIT/HDR/camera-facing GPU/AA/defocus and full lifecycle/cost proof.
 - [ ] WR-03 onward: actual scene blockout, material/reflection/particle work, music, production and visual acceptance.
 
@@ -253,8 +254,9 @@ placement, frame flips and capacity overflow; visual review still owns what a de
 **WR-02a implemented:** `core/ribbon_packet.py`, shared shader/primitive modules named `ribbon.py`, and
 `tools/labs/ribbon_strip_probe.py`; detailed ABI/proof/cost limits live in `Docs/Reference/Ribbon_Path.md`.
 Native receipt `.artifacts/evidence/waveform_ribbon/wr02a_native_final/receipt.json` measures cheap geometry draws
-but a 90 ms maximum full CPU input rebuild. Incremental input construction is the next required gate before any
-production use; neither this prototype nor the remaining checkboxes imply a whole-mode performance/fidelity pass.
+but approximately 90 ms for fixture creation plus full CPU-oracle frame reconstruction and packet preparation.
+That is not software rendering or current runtime cost. Separate the oracle from the actual per-tick input path
+and measure that path before production use; neither this prototype nor the remaining checkboxes imply a whole-mode performance/fidelity pass.
 
 
 - [x] Place reusable GPU resource/geometry owner in `rendering/quick/scene3d/` and import-safe shader helpers in

@@ -164,10 +164,11 @@ the archive's alternate is context only. Existing EB wakes/probes do not establi
 - [ ] **WR-00 remaining:** confirm annotation masks/crops and measured target tolerances; choose recorded-audio
   windows and fit a stable Orthographic scene eye/pivot/world/palette. Reference/projection preflight is landed;
   output `.artifacts/evidence/waveform_ribbon/wr00_reference_projection/receipt.json` records its limited scope.
-- [ ] **Next implementation: WR-02a input-cost gate:** replace full stateless frame/packet rebuild with one
-  incremental/cached logical input path; prove changed-input cost, phase/epoch/eviction continuity and dormancy.
-  The independent oriented GPU strip prototype is implemented; the maximum full CPU reference rebuild costs
-  about 90 ms and is not production-admitted. No runtime mode imports it (`Docs/Reference/Ribbon_Path.md`).
+- [ ] **Next implementation: WR-02a input-path separation:** keep the CPU geometry/frame oracle for tests;
+  remove its full-history reconstruction from the proposed per-tick upload route. Measure actual changed-input
+  history/frame preparation, packing, upload and draw separately, then choose incremental reuse or justified GPU
+  work with epoch/eviction/dormancy proof. The ~90 ms fixture+reference+packing result is not a software-rendering
+  cost or an existing runtime regression. No runtime mode consumes the prototype (`Docs/Reference/Ribbon_Path.md`).
 - [ ] **WR-02 remaining GPU/native gates:** curved-frame/normal/precision/near-plane/AA and failure coverage,
   then OIT/HDR/camera-facing/defocus and broader measured cost. Solid oriented geometry has native Ortho/Perspective,
   gap, plane-normal, phase-rebase, depth and context/state proofs; no Ribbon scene or likeness/music pass exists.
