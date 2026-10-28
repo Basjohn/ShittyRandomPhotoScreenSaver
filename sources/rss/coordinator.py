@@ -209,7 +209,8 @@ class RSSCoordinator:
             paths, self._retired_paths = self._retired_paths, []
         return paths
 
-    def load_async(self, on_images: Optional[Callable[[List[ImageMetadata]], None]] = None) -> None:
+    def load_async(self, on_images: Optional[Callable[[List[ImageMetadata]], None]] = None,
+                   *, runtime_generation: int | None = None) -> None:
         """Session pass on the IO lane: warm, rotate, top up; ``on_images`` gets new images."""
         if self._thread_manager is None:
             raise RuntimeError("Asynchronous wallpaper acquisition requires the existing IO owner")
@@ -226,6 +227,7 @@ class RSSCoordinator:
             if on_images:
                 on_images(new_images)
 
+        _task._srpss_runtime_generation = runtime_generation
         try:
             self._thread_manager.submit_io_task(_task, category="rss_startup_load")
         except Exception:

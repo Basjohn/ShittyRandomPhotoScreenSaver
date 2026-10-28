@@ -315,7 +315,6 @@ def on_settings_requested(
     lifecycle_window.open_window("settings")   # closed by the replacement's reveal
     request_start = time.perf_counter()
     engine._settings_dialog_active = True
-    engine._sources_changed_during_settings = False
 
     try:
         manager = engine.display_manager
@@ -631,6 +630,10 @@ def _restart_after_settings_dialog_destroyed(
         generation=getattr(engine, "_runtime_generation", "unknown"),
     )
     engine._settings_dialog_active = False
+    engine._sources_changed_during_settings = bool(
+        getattr(engine, "_sources_changed_during_settings", False) or sources_changed_during_settings
+    )
+    engine._image_sources_waiting_for_display = True
 
     suppress_runtime_pointer_input(
         700,

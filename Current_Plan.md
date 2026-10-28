@@ -99,18 +99,11 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 
 ### 2C. Feature work
 
-- [ ] **SC4 — Finish Just Make It Work Pools** (`Docs/Reference/Wallpaper_Pool_Selection.md` owns detailed contracts):
-  - [ ] Make listing-body cancellation responsive and cap ordinary socket waits before tagging RSS IO jobs to the
-    existing eight-second runtime destruction barrier. Prove the shared transport with bounded local-server tests,
-    preserving decoding, document caps and validators. Slow status/header trickle remains a known shared HTTP limit
-    (`Future_Work.md`); the strict barrier must reject overlap, never pretend all-phase hard cancellation is solved.
-  - [ ] Repair Settings-to-runtime source resumption: a stopped coordinator must retire, changed pool choices must
-    reach the replacement queue, and the existing background refresh must resume. Reuse display-aware source
-    admission and the strict Settings destruction barrier; no acquisition with zero selected live displays.
-  - [~] **Awaiting normal runtime image use:** after the source checkpoint, inspect subject/query relevance and usable
-    yield at actual display sizes, initial empty/cache-warm runs, and normal background top-ups. Native dark/light
-    selector navigation/circle controls/tooltips and no-env focused provider/draft/migration gates pass; image relevance
-    is not established by streamed header dimensions. Excluded providers require new sanctioned access evidence.
+- [~] **SC4 — Wallpaper pools — awaiting normal runtime image use:** inspect subject/query relevance and usable yield
+  at actual display sizes, initial empty/cache-warm runs, Settings return and normal background top-ups. Native dark/light
+  selector controls and focused source/resume/retirement gates pass; image relevance is not established by streamed
+  header dimensions. Excluded providers require new sanctioned access evidence. Detailed contracts:
+  `Docs/Reference/Wallpaper_Pool_Selection.md`.
 - [~] **Reddit's data-root cache:** the first normal saver run with Reddit on should create `SRPSS/cache/reddit` and
   refetch once per member (paced); check its log then.
 

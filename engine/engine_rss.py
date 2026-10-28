@@ -228,7 +228,7 @@ def load_rss_images_async(engine: ScreensaverEngine) -> None:
         if was_empty:
             _publish_startup_completion()
 
-    coordinator.load_async(on_images=_on_new_images)
+    coordinator.load_async(on_images=_on_new_images, runtime_generation=engine._runtime_generation)
 
 
 def startup_image_pending(engine: ScreensaverEngine) -> bool:
@@ -248,6 +248,8 @@ def start_rss_background_refresh_if_needed(engine: ScreensaverEngine) -> None:
     """Schedule background RSS refresh if RSS sources are present."""
     try:
         if not engine.thread_manager or engine.image_queue is None or not engine.rss_coordinator:
+            return
+        if engine.rss_coordinator.is_stopped or engine._display_selection_suspended():
             return
         if engine._rss_refresh_timer is not None:
             return
@@ -301,6 +303,8 @@ def background_refresh_rss(engine: ScreensaverEngine) -> None:
             return
         if not engine.thread_manager or engine.image_queue is None or not engine.rss_coordinator:
             return
+        if engine.rss_coordinator.is_stopped or engine._display_selection_suspended():
+            return
 
         cap = get_rss_background_cap(engine)
         if cap <= 0:
@@ -325,28 +329,27 @@ def background_refresh_rss(engine: ScreensaverEngine) -> None:
         logger.debug("Background RSS refresh: next bounded source opportunity")
 
         coordinator = engine.rss_coordinator
+        queue = engine.image_queue
+        generation = engine._runtime_generation
 
         def _refresh_task():
             try:
-                return coordinator.refresh_next_sources()
-            except Exception as e:
-                logger.warning(f"[FALLBACK] Background RSS refresh failed: {e}")
-                return []
-
-        def _on_done(res):
-            try:
-                images = getattr(res, 'result', None) or []
-                if not isinstance(images, list) or not images:
+                images = coordinator.refresh_next_sources()
+                if (engine._shutting_down or coordinator.is_stopped
+                        or engine.rss_coordinator is not coordinator or engine.image_queue is not queue
+                        or engine._runtime_generation != generation):
                     return
+                # Publication belongs to this tracked job as well: retirement
+                # must drain cache writes AND merges before source replacement.
                 merge_rss_images_from_refresh(engine, images)
                 drop_retired_rss_images(engine)
             except Exception as e:
-                logger.debug(f"Background RSS merge failed: {e}")
+                logger.warning(f"[FALLBACK] Background RSS refresh failed: {e}")
 
+        _refresh_task._srpss_runtime_generation = generation
         try:
             engine.thread_manager.submit_io_task(
                 _refresh_task,
-                callback=_on_done,
                 category="rss_background_refresh",
             )
         except Exception as e:

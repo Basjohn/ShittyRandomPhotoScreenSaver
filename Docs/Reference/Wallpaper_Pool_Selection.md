@@ -59,7 +59,7 @@ may replace stale entries in a full cache, retiring each old image only after it
 An empty-cache startup uses one existing IO job, with up to six document opportunities, one shared forty-image
 attempt budget and a twenty-second cooperative acquisition deadline. A zero-result opportunity advances the same
 cursor within those bounds; it does not fetch every selected source. In-flight reads retain the existing transport
-timeouts (listing reads up to thirty seconds, image reads five), so the cooperative deadline is not a hard process
+timeouts (ordinary silent listing waits up to three seconds, image reads five), so the cooperative deadline is not a hard process
 deadline. Ordinary passes retain the two-document bound. Queue construction keeps its existing synchronous disk-cache
 warm preload but performs no synchronous network acquisition.
 
@@ -68,6 +68,18 @@ fenced GUI continuation to foreground image admission. Startup hydration does no
 accepted offline images by the background TTL policy. While an empty queue genuinely awaits source IO, the existing
 reveal watchdog pauses only after display construction; the same watchdog rearms before first image admission.
 There is no GUI polling or second startup state machine. Shutdown rejects both acquisition and queued publication.
+
+Runtime teardown stops the coordinator and its existing refresh timer. Startup/background IO jobs carry the submitting
+runtime generation, including their result publication, so the existing destruction barrier drains them before Settings
+or a replacement can acquire the same disk-cache writer. Late results require the same live coordinator, queue and
+generation. The barrier timeout is unchanged; slow status/header trickle remains the shared HTTP limitation documented
+in `Future_Work.md`, rather than a claimed hard cancellation guarantee.
+
+After Settings, positive-display admission constructs a fresh coordinator; it never revives a stopped one. Unchanged
+sources retain queue identity/history, folder objects, decoded cache and prefetcher. Changed sources use the existing
+rebuild path, invalidating prefetch before clearing decoded cache and replacing queue membership. Source-change and
+pending-admission flags are consumed only after successful admission, so zero-display suspension and another Settings
+visit cannot lose pending changes. The existing background cadence is restored once, with no new scheduler.
 
 Wallhaven/board pages rotate through a bounded range; Wallhaven Random has one coordinator-generation seed.
 Stable logical FeedSource/cache identity survives page/seed changes: health stays retained, validators apply only
@@ -149,6 +161,8 @@ in real Settings. Provider descriptions and the custom-feed format/size explanat
 no-source failure, shutdown/queued callback rejection, finite document/deadline bounds and shared watchdog pause/rearm.
 `tests/test_wallpaper_pools_zero_display.py`: selected NONE and empty Qt inventory keep source/queue/cache/network
 admission dormant through actual engine initialization, display admission and start.
+`tests/test_rss_settings_resume.py`: actual post-Settings continuation, preserved unchanged playback, changed sources,
+zero-to-positive admission, stale background publication and held IO draining through the real ThreadManager/barrier.
 Existing coordinator/image-fetch/feed tests cover real size rejection, full/offline cache,
 replacement/cancellation and generic custom discovery. Use the no-env plugin and isolated basetemp in
 `Docs/TestSuite.md`. Physical image relevance remains a separate operator gate.
