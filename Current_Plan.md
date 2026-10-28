@@ -39,44 +39,19 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 approved direction and detailed gates. Work in narrow tested/audited checkpoint pushes. Keep the authored lens,
 world geometry and camera fixed during resize; compare the original rectangle before accepting framing changes.
 
-- [~] **EB28-1 — Drift — combined gate remains:** Drift bucket and signed quiet/loud gains cover
-  large/small/fused bubbles, free microbubble paths, marine snow and decorative motes. Existing direct coupling
-  defaults1; new consumers default0. Focused field/identity/record/phase/GL/count-tail checks and recorded P8 native
-  capture pass. Live0-minimum failure traced to mismatched passage/body feeds; EB now derives passage from its own
-  body tuple at the runtime boundary. Coherent PCM and native GPU traces confirm zero-min rise/release, 0…0.5 chain
-  drift and acceleration across ordinary/forming/fused/free/attached families. Finish the combined passage/visual
-  matrix under EB28-V. Wakes/attached fizz retain parent path and inertia only.
-- [~] **EB28-2 — Stream — combined capture gate remains:** ordinary/forming/fused transport now receives the shared
-  stream at1x, independent of radius. Recorded P8 no-contact measurements confirm both classes at1x; inspect the
-  wider passage/contact/pixel matrix under EB28-V before final acceptance.
-- [~] **EB28-3 — Framed viewport — combined/native gate remains:** edge resize now uses a reference-window
-  aperture with the actual pixel aspect, authored FOV/eye unchanged; uniform scaling retains prior behavior. Neon
-  terrain/events/floor use the fixed basic-rectangle world. Recorded before/after basic-rectangle and seven-extent
-  captures pass; finish chrome/DPR/optical/native resize checks under EB28-V.
-- [~] **EB28-4 — Pause/resume visibility — combined capture gate remains:** logical free-chain attack is isolated
-  from shared audio/motion and retains the existing release; focused repeated-toggle, recorded production replay and
-  renderer-uniform checks pass. Dense480-frame60Hz recorded PCM pause/resume/short-toggle isolation confirms
-  production chain visibility in final pixels. Finish combined review under EB28-V.
-- [~] **EB28-5 — Reliable rays — combined temporal gate remains:** held absolute energy replaces the adaptive
-  positive-difference lift; strength endpoints are literal, Modulation0 holds the upper strength and Shimmer is
-  independent. Schema13 migrates old cosmetic Flicker values before defaults/overlays. Focused and frozen recorded
-  pixel comparisons pass. Coherent PCM held/dip/recovery/pause/resume tests, raw-shaft/uniform/final-pixel separation
-  and moving native comparisons pass across both lights/coverage choices; finish combined review under EB28-V.
-- [~] **EB28-6 — Camera persistence / automatic motion — combined runtime gate remains:** P8→P1 Settings
-  regression reproduced; target pose now precedes XYZ/editor admission and normalization. Hidden runtime preset
-  activation rebases held orbit/flight and arms/clears Auto Rotate before capture; visible completion cannot rewind
-  it. Focused native built/unbuilt editor, manual-aim/reload, motion/flight/auto and camera-bound checks pass.
-  Six real retained-runtime delayed-completion auto/flight switches preserve camera motion records/rates; finish
-  combined review under EB28-V. Physical input/monitor use remains operator validation.
-- [~] **EB28-7 — Camera projection chooser — awaiting normal runtime use:** Camera offers Perspective /
-  Orthographic through the typed spec/default/preset owner, default Perspective. Native sphere/union normals,
-  refraction, depth/occlusion, prepared rendering, Settings persistence and frozen Perspective parity pass.
-  Exercise the choice with camera travel/orbit in normal use; orthographic removes distance-size growth and can
-  expose finite-domain boundaries. Enhancement targets need actual examples, never hidden population/lens changes.
-- [ ] **EB28-V — Combined behavioral proof:** use production recorded replay and offscreen renders for all five
-  tasks, including P8, representative other settings, BEAM/SCENE, both light types and negative/zero/max controls.
-  Canonical preset enumeration now admits P8 in the existing probes.
-- [ ] **EB28-P — Performance only after EB28-1…7/V pass:** audit CPU/GPU waste, churn and conservative
+- [ ] **EB28-8 — Idle tiny-bubble flicker:** reproduce the operator's stippled5–12px shells with fixed identities,
+  radii and idle-energy material, then separate subpixel coverage from normals/reflection/transmission. Fix the
+  owning AA/shading defect without hiding/dimming bubbles, changing audio/radii/motion or increasing per-pixel cost;
+  add a temporal regression and recorded/native verification before optimization acceptance.
+- [ ] **EB28-R — Preset Repair safety audit:** prove all today's drift/ray/projection keys survive repair and
+  missing keys come from the typed canonical defaults. Correct the reproduced Flicker→Shimmer value loss, dotted
+  SST value loss and duplicate flat-settings authority. Verify metadata, backups, atomic failure, newer edits,
+  mode mismatch, repeated repair and existing swap/reindex/Undo without mutating operator presets.
+- [ ] **EB28-V — Final wrap gate:** confirm the idle-flicker change against recorded/native motion and reconcile
+  any new regression with the already verified drift, stream, ray, resize and camera contracts. Preserve the
+  accepted gains, genuine audio response and inherited wake inertia. Physical runtime/input use remains operator
+  validation; EB Orthographic appearance work is deferred beyond the entire backlog, not an active gate.
+- [ ] **EB28-P — Performance after EB28-8/V pass:** audit CPU/GPU waste, churn and conservative
   occlusion/culling opportunities; prove no fidelity loss with matched recorded inputs, cameras and full optical passes.
 
 ### 2B. Settings and UI (in this order)

@@ -130,3 +130,12 @@ kept here as a museum list.
 ### Shared widget glyph reveal / developer captures: R38 follow-up (not closed)
 
 The open action-handoff requirement lives in `Current_Plan.md` §2B (R38). The global Edit-only glyph handoff (existing session first, then existing command) remains required across all families; no new edit model or repaint/polling service. Diagnostic `\` capture is source/diagnostic only and requires native evidence of custom GL pixels before treating it as an accepted substitute for Snipping Tool. The UI presentation transition is not acceptance.
+
+### Beyond the entire current backlog — optional EB Orthographic appearance parity
+
+Explicitly deferred by the operator until **after everything currently listed in Current_Plan.md and this file**,
+and only on a later explicit reopening. Orthographic projection itself passes geometry/depth/refraction checks;
+EB's perspective-built water, lighting, near-field and composition need a separate visual target/parity effort.
+Its Camera option stays visible but disabled. Preserve experimental authored values without rewriting presets.
+Do not reopen this while wrapping EB, optimizing it, or building the queued modes. New 3D modes should be designed
+for Orthographic by default with optional Perspective, using the shared camera primitives from the start.

@@ -253,6 +253,16 @@ do not close this issue: compare actual offscreen production pixels, then native
 
 ### Camera projection choices / spherical silhouettes
 
+Native Quick resize validation exposed an independent raster-boundary defect: Qt's binary32 transform rounded
+a630×420 integer card outward to631×421 and shifted its origin by a pixel, inconsistently with the wider view.
+`item_pixel_rect` now propagates the stored coefficient uncertainty through each corner's homogeneous division
+and snaps only within that corner's uncertainty before ordinary outward coverage/clipping. Authored fractional
+edges outside that error bound remain fractional. Frozen native GPU readback now gives exactly630×420 and
+1260×420 at the intended origin, unchanged eye/axes and matching world-pixel scale. This is a numeric-boundary
+repair, not FOV fitting or an image-alignment workaround. Evidence: `tmp/eb28_framing_native_stabilized_percorner/`.
+Central differences reduce substantially; complete optical pixels need not be identical when extra scene regions
+become available to refraction/filtering. Geometry, raw camera uniforms and raster coverage are separate gates.
+
 The later tall-view report is not evidence of deformed world geometry. Native production ordinary/fused shader
 coverage matches pinhole conics with equal X/Y focal scales. At a fixed506.98px focal scale, an on-axis sphere
 measures ratio1 in basic/tall/wide apertures; off-axis examples measure1.168 and1.307 against physical predictions
@@ -266,6 +276,11 @@ once in the existing typed mode spec with its canonical default; generated model
 preset/import and section-lazy UI paths carry it. This is an additive control, not a new schema or separate live
 camera pose. Authored preset files remain untouched. Perspective FOV remains stored and returns unchanged when
 switching back; Orthographic hides that row and magnifies through existing Scene Scale.
+The later operator decision closes this implementation effort: **Orthographic is greyed out for EB**, and its
+appearance parity is optional work deferred beyond the entire current backlog (`Future_Work.md`, final section).
+Typed per-choice availability disables user selection and supplies the tooltip; it does not delete experimental
+values during preset repair/import. Geometry tests establish that parallel projection itself is sound. Future
+3D modes should default to it, offering Perspective optionally, and design their effects for it from the start.
 
 `orthographic_matrix` supplies the shared parallel projection. EB derives its reference half-span from the
 canonical FOV at `ORBIT_DISTANCE`, divided by Scene Scale, then applies the same fixed-world aperture. The
