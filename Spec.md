@@ -317,6 +317,10 @@ demanded by their actual materials. Shared work stays import-safe/dormant for no
 not blanket prerequisites. `Current_Plan.md` owns active sequencing/acceptance, `Future_Work.md` routes deferred
 consumers, and `Docs/Reference/Scene3D_Resources.md` / `Docs/Reference/Visualizer_Reference.md` own shared contracts.
 
+The operator's scoped 28 October drift, stream, framing, visibility and ray-control assessment lives in
+`Docs/Reference/Extruded_Bubble/Motion_Reactivity_Viewport_Plan.md`, with proposed work in `Current_Plan.md` §2A.
+Its control/projection changes are proposals awaiting review, not current implemented behavior.
+
 **Extruded Bubble** owns its logical 3D population, reactive evolution, Settings and frame runtime on the sole
 Visualizer clock, using existing audio feeds. Original Bubble remains independent and supplies the minimum
 musical response-scale reference. Large-body phrase-edge support must not outlive the current positive body change

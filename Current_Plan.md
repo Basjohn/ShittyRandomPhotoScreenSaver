@@ -18,6 +18,7 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 **Accepted baseline (do not reopen as general work):** original Bubble, **Extruded Bubble (closed 2026-10-25)**, Neon
 Lake, Oscilloscope, Spectrum/Rainbow Ghost, Sphere, source routing, landed transitions and Foundry launch buttons.
 Reopen any of them only on a concrete new defect.
+The operator's 28 October EB motion/reactivity/framing follow-up below is a scoped reopening, not a general recovery restart.
 
 **Rules:** one Settings/capability/CUSTOM/render/lifecycle owner and the sole Visualizer logical clock. No new
 floor, capture/DSP, renderer-side simulation, timers/polling or camera-following replacement populations. Preserve
@@ -31,6 +32,31 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 `Docs/Reference/Extruded_Bubble/Investigation.md`. Stable IDs kept below: §2A, §3 (RM/SC/SC4), §4C, §5, R38/R41.
 
 ## 2. Before the next mode: fixes, Settings/UX, features
+
+### 2A. EB follow-up — assessment only until reviewed
+
+`Docs/Reference/Extruded_Bubble/Motion_Reactivity_Viewport_Plan.md` owns source findings, measured baselines,
+proposed semantics and detailed gates. **Do not implement these tasks before the operator reviews the assessment.**
+
+- [~] **EB28-0 — Awaiting assessment review:** settle direct/inherited drift consumers and bounded procedural
+  advection, signed gain semantics, literal stream-speed meaning, framed reference-window policy and ray zero/migration
+  semantics. Preserve the accepted baseline and operator-authored presets.
+- [ ] **EB28-1 — Drift:** after authorization, move existing controls into Drift, add per-consumer quiet/loud gains
+  in `[-1,+2]` with existing direct coupling normalized to1 and new coupling default0, prioritizing free microbubbles.
+  Prove existing/forming/fused identities, signed endpoints, audio rise/release and CPU/GPU field agreement.
+- [ ] **EB28-2 — Stream:** separate global envelope, per-class speed factors, contact corrections and projected speed
+  over recorded passages; apply only the approved correction and confirm both existing/forming classes offscreen.
+- [ ] **EB28-3 — Framed viewport:** prove the chosen fixed-world projection policy on EB and Neon Lake at extreme
+  aspects, preserving physical camera/landmark identities, authored views, clipping and optical effects.
+- [ ] **EB28-4 — Pause/resume visibility:** give free-chain visibility its own logical transition; verify gentle
+  warm/cold/repeated music return at temporal capture cadence without changing shared audio, motion or attached wakes.
+- [ ] **EB28-5 — Reliable rays:** reproduce sustained diminution through source→uniform→pixels, implement the
+  approved strength/modulation/shimmer contract and explicit migration, then validate held/dip/resume passages.
+- [ ] **EB28-V — Combined behavioral proof:** use production recorded replay and offscreen renders for all five
+  tasks, including P8, representative other settings, BEAM/SCENE, both light types and negative/zero/max controls.
+  Repair stale probe preset1–7 guards through canonical enumeration before relying on them for P8.
+- [ ] **EB28-P — Performance only after EB28-1…5/V pass:** audit CPU/GPU waste, churn and conservative
+  occlusion/culling opportunities; prove no fidelity loss with matched recorded inputs, cameras and full optical passes.
 
 ### 2B. Settings and UI (in this order)
 

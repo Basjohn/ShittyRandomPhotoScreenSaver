@@ -92,7 +92,8 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Neon Lake Basin framing, terrain authoring, editable experiments, Custom selection migration and renderer | `Docs/Reference/Neon_Lake_Basin.md`; `Current_Plan.md` §2A / §3 / §5 |
 | transitions and material surfaces (accepted work; new graphics decomposition) | `Docs/Reference/Transitions.md`, `Docs/Guides/Transition_Change_Checklist.md` and `Current_Plan.md` §4 |
 | Accepted original Bubble Settings/replay and musical response reference | `Docs/Reference/Visualizer_Reference.md` → Settings declarations; `Docs/Reference/Harness_Index.md`; `Spec.md` |
-| Active Extruded Bubble investigation/recovery and genuine acceptance debt | `Current_Plan.md` §0 / §4B; `Docs/Reference/Extruded_Bubble/README.md` |
+| EB accepted baseline, targets and historical recovery | `Docs/Reference/Extruded_Bubble/README.md`; `Current_Plan.md` §0 |
+| EB drift/stream, framed viewport, pause/resume and ray-control assessment | `Current_Plan.md` §2A; `Docs/Reference/Extruded_Bubble/Motion_Reactivity_Viewport_Plan.md` |
 | EB R42 surface retirement, birth clustering and Bounce next repair; glyph native test audit | `Current_Plan.md` §4B EB-R42; `Docs/Reference/R42_EB_Surface_Birth_Glyph_Test_Audit.md` |
 | EB architectural work order and visual acceptance falsifiers | `Current_Plan.md` §4B G00–G33; [`Docs/Reference/Extruded_Bubble/Acceptance_Runbook.md`](Docs/Reference/Extruded_Bubble/Acceptance_Runbook.md) |
 | EB viewport-sized near-shell blur/fade, off-axis continuity and native diagnostic evidence | `Current_Plan.md` G11; `rendering/gl_programs/extruded_bubble_program.py` → `EB_LENS_GLSL`; `Docs/TestSuite.md` → Extruded Bubble recovery gates |
