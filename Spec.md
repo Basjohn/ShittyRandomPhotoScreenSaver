@@ -770,6 +770,8 @@ Labs compose production primitives or the retained production render host, with 
 retirement. They introduce no runtime scheduler, palette or persistence authority.
 Waveform Ribbon must use `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` for reference custody, architecture dependencies,
 staged work packages and A–H visual evidence; the concept brief remains the intent authority and Current_Plan owns order.
+New 3D labs/modes start Orthographic with optional Perspective, using the shared admitted eye/world and actual
+projection matrices/ray origins; camera math alone does not establish scene likeness or reflection parity.
 
 Every registered original mode declares its body controls once in `core/settings/visualizer_mode_settings.py`; canonical defaults and editable
 presets remain value authorities. Lazy Settings bodies, model serialization and consumer-specific appliers use that spec.

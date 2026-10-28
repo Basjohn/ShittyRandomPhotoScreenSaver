@@ -9,6 +9,9 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 
 **Work strictly in this order:**
 
+The operator admitted the Waveform Ribbon WR-00 reference/projection preflight on 28 October alongside the
+remaining §2/§3 gates. This preparation introduces no production registration and does not bypass shared primitives.
+
 1. **§2 Everything else before the next mode**: fixes, then Settings/UX, then feature work, then guided-setup stills and cleanup (§3).
    §5 is a watchlist observed during normal use, not a task queue.
 2. **§6 Shared 3D architecture**: one step that builds the reusable 3D primitives, each proven on its own harness.
@@ -158,6 +161,11 @@ Execution must use `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`: WR-00 reference
 WR-01/02 independent S3D-1 proof before composition. The copied brief approves the primary cool hall image;
 the archive's alternate is context only. Existing EB wakes/probes do not establish a generic ribbon or floor reflection.
 
+- [ ] **WR-00 remaining:** confirm annotation masks/crops and measured target tolerances; choose recorded-audio
+  windows and fit a stable Orthographic scene eye/pivot/world/palette. Reference/projection preflight is landed;
+  output `.artifacts/evidence/waveform_ribbon/wr00_reference_projection/receipt.json` records its limited scope.
+- [ ] **Next implementation: WR-01 / S3D-1** bounded path/history CPU contract and tests, then WR-02 native GPU proof.
+  No ribbon primitive or scene lab exists yet; no likeness/music/performance gate is closed by camera math.
 - [ ] Lab: one ribbon (bass → width, mids → twist/deformation, energy → glow) toward the concept image.
 - [ ] Production: single ribbon, translucent emissive shading and bloom, then the reflective floor, then multi-ribbon,
   then particle accents, then a restrained Settings surface (gates A–H: same scene low/high, no second renderer, one

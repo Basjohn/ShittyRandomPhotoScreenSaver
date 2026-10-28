@@ -44,7 +44,7 @@ G0 measures the exact existing delta before these additions. Their opt-in alloca
 must be absent for all inactive consumers. Validate opposite-order overlapping sphere renders, near-plane crossings,
 window/card resize and mixed DPR, alpha/depth/bloom agreement, context-loss/retirement, dual-display and
 CPU/GPU budgets. Shared primitives may be proved by small test scenes without shipping a fake consumer. G4 particle
-ribbons and G5 volumes are demand-driven separate gates. `Current_Plan.md` §4A is the live implementation checklist;
+ribbons and G5 volumes are demand-driven separate gates. `Current_Plan.md` §6 is the live implementation checklist;
 `Docs/Reference/Visualizer_Reference.md` owns visible/view-pose semantics.
 
 ## Static meshes and per-draw image bindings

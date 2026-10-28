@@ -51,7 +51,7 @@ cost; a successful FBO read is not visual or musical acceptance. Native Settings
 acceptance remain separate gates. Adopters include TransitionCapture (retaining its own transition fixtures/host),
 Foundry's production visualizer captures and the Extruded Bubble composition lab.
 
-## Bubble two-node gradient prototype
+## Bubble two-node gradient
 
 `.venv\Scripts\python.exe tools/labs/bubble_gradient_mapper_lab.py` opens the interactive control. Add
 `--capture tmp/bubble_gradient_mapper/prototype.png` for a finite control render plus wide/narrow/shifted fixtures.
@@ -60,7 +60,12 @@ gesture commit and the existing undo interface. Normalized top-left content endp
 content aspect: zero/one occur at Dark/Light and the physical blend normal matches their line. A minimum span prevents
 undefined coincident endpoints. Geometry is Qt-free in `core/gradient_geometry.py`.
 
-The lab varies only Bubble's gradient-input projection. The production shader packs vector XY, centre bias and radial
-mode into one uniform; current enums project to zero bias. Directional and both centre-out choices retain existing
-pixels, settings version and presets. Endpoint persistence and enum migration require interaction review and a separate
-migration preserving authored appearance; this prototype changes neither.
+The lab uses the production Custom gradient settings/capture path, without a renderer-input override. Named
+recipes retain their existing pixels; custom endpoint persistence and compound recipe/node Undo are implemented.
+See `Docs/Reference/Bubble_Gradient.md` for the current contract.
+
+## Waveform Ribbon entry point
+
+`tools/labs/waveform_ribbon_preflight.py` performs reference/projection preparation only. The detailed live boundaries
+and Orthographic-default requirements are in `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`. No scene/ribbon renderer
+exists yet. Use `.artifacts/evidence/` for explicit retained output and `.artifacts/scratch/` for disposable checks.
