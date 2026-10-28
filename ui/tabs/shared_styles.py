@@ -1024,6 +1024,10 @@ def _build_combobox_popup_view_style(theme: SettingsThemeSpec | None = None) -> 
         border-radius: 8px;
         background: transparent;
     }
+    QListView[customComboPopup='true']::item:disabled,
+    QListWidget[customComboPopup='true']::item:disabled {
+        color: @@rgba:control.input.disabled_text@@;
+    }
     """, theme=theme)
 
 

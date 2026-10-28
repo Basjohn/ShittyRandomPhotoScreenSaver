@@ -66,6 +66,9 @@ def test_lazy_camera_choice_hides_fov_without_resetting_it(qt_app,tmp_path):
         assert values[KEY]=='Orthographic' and values[FOV]==53.
         toggle_bucket(tab,'camera')
         chooser=getattr(tab,KEY);row=tab._extruded_bubble_rows[FOV]
+        assert chooser.model().item(0).isEnabled()
+        assert not chooser.model().item(1).isEnabled()
+        assert 'Deferred' in chooser.model().item(1).toolTip()
         assert chooser.currentText()=='Orthographic' and row.isHidden()
         chooser.setCurrentText('Perspective')
         assert not row.isHidden() and getattr(tab,FOV).value()==53
@@ -83,6 +86,13 @@ def test_lazy_camera_choice_hides_fov_without_resetting_it(qt_app,tmp_path):
         assert manager.get('widgets.spotify_visualizer.'+FOV)==41.
         tab._load_settings()
         assert chooser.currentText()=='Orthographic' and row.isHidden()
+        # Existing experimental files round-trip, but normal authoring cannot
+        # enter the deferred option (including keyboard navigation).
+        chooser.setCurrentText('Perspective');tab.flush_pending_changes()
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        QTest.keyClick(chooser,Qt.Key.Key_Down)
+        assert chooser.currentText()=='Perspective' and not row.isHidden()
         tab.resize(1100,950);tab.show();qt_app.processEvents()
         from PySide6.QtCore import QEventLoop,QTimer
         settled=QEventLoop();QTimer.singleShot(350,settled.quit);settled.exec()
@@ -94,6 +104,9 @@ def test_lazy_camera_choice_hides_fov_without_resetting_it(qt_app,tmp_path):
         qt_app.processEvents()
         assert chooser.isVisibleTo(tab) and chooser.parentWidget().height()>0
         assert tab.grab().save(str(tmp_path/'camera_projection_native.png'))
+        chooser.showPopup();qt_app.processEvents()
+        assert chooser.view().grab().save(str(tmp_path/'camera_projection_options_native.png'))
+        chooser.hidePopup()
     finally:
         tab._flush_pending_visualizer_save();tab.close();tab.deleteLater()
         QCoreApplication.sendPostedEvents(tab,QEvent.Type.DeferredDelete)

@@ -348,6 +348,13 @@ def _build_control(tab, layout, control, shared_row=None, *, auto_switch=True):
                 widget.addItem(label, value)
         else:
             widget.addItems(list(control.choices))
+        for value,reason in control.unavailable_choices:
+            if value not in control.choices:
+                raise ValueError(f"{control.key}: unavailable choice {value!r} is undeclared")
+            index=control.choices.index(value)
+            item=widget.model().item(index)
+            item.setEnabled(False)
+            item.setToolTip(reason)
         if control.indexed:
             widget.setCurrentIndex(control.admit(default, default))
             bind_setting_signal(tab, widget.currentIndexChanged, auto_switch=auto_switch)

@@ -230,6 +230,9 @@ class Choice:
     labels: tuple[str, ...] = ()
     size_variant: str = ""
     direction_mapper: bool = False
+    # Authoring availability only: preserve stored experimental values during
+    # hydration/import/repair rather than destructively normalizing them away.
+    unavailable_choices: tuple[tuple[str, str], ...] = ()
 
     def _normalize(self, value: object) -> object:
         if self.normalizer:
@@ -1622,6 +1625,7 @@ _EXTRUDED_BUBBLE = ModeSettings(
         SceneCameraPosition("extruded_bubble_camera_position", "Camera Position:", bucket="camera",
                tooltip='Move the real camera eye inside the populated tank without changing FOV. The same water-clearance bounds apply here and during travel. WASD travels relative to view; Shift+WASD rotates; Q/E yaw; R resets. [NEEDS AUDIT] Confirm native drag feel and compositor presentation.'),
         Choice("extruded_bubble_camera_projection", "Projection:", ("Perspective", "Orthographic"), bucket="camera",
+               unavailable_choices=(("Orthographic", "Unavailable for Extruded Bubble: its perspective-built lighting and optical appearance need a separate parity pass. Deferred until after the current future-work backlog."),),
                tooltip='Perspective keeps the existing lens and depth scaling. Orthographic uses parallel viewing rays and equal magnification at every depth; Scene Scale adjusts its magnification.'),
         Slider("extruded_bubble_camera_fov", "Camera Field of View:", 35.0, 62.0,
                scale=1, integer=True, suffix="°", decimals=0, bucket="camera",

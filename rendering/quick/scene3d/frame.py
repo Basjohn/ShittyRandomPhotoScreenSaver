@@ -9,6 +9,10 @@ from __future__ import annotations
 import math
 from typing import Protocol
 
+# QMatrix4x4 stores binary32 coefficients. Bound their rounding relative to the
+# stored value, rather than treating cancellation noise as authored subpixels.
+_MATRIX_ROUNDING = (2.0 ** -24) / (1.0 - 2.0 ** -24)
+
 # The item quad: attribute 0 is a unit square placed in Qt Quick item pixels.
 # vUv keeps the bottom-up convention the transition fragments were authored in.
 ITEM_QUAD_VERTEX_SOURCE = """#version 460 core
@@ -35,8 +39,18 @@ class SceneFrame(Protocol):
     quad_vao: int
 
 
+def _stable_pixel_boundary(value: float, uncertainty: float):
+    integer = round(value)
+    return integer if abs(value-integer) <= uncertainty else value
+
+
 def item_pixel_rect(frame: SceneFrame) -> tuple[int, int, int, int]:
-    """The item's bounding rect in render-target pixels (GL, bottom-up), clamped to the viewport."""
+    """Outward pixel coverage, with integer boundaries stable under Qt's float32 transform.
+
+    Only a boundary inside the propagated matrix-coefficient rounding uncertainty
+    is snapped to an integer. Actual fractional edges still round outward, and
+    viewport clipping remains the final authority.
+    """
     matrix = frame.matrix_values
     width, height = frame.logical_size
     vx, vy, vw, vh = frame.viewport
@@ -44,12 +58,23 @@ def item_pixel_rect(frame: SceneFrame) -> tuple[int, int, int, int]:
     for x, y in ((0.0, 0.0), (width, 0.0), (0.0, height), (width, height)):
         clip = [matrix[row] * x + matrix[4 + row] * y + matrix[12 + row] for row in range(4)]
         w = clip[3] if clip[3] else 1.0
-        xs.append(vx + (clip[0] / w + 1.0) * 0.5 * vw)
-        ys.append(vy + (clip[1] / w + 1.0) * 0.5 * vh)
-    left = max(vx, math.floor(min(xs) + 1e-6))
-    bottom = max(vy, math.floor(min(ys) + 1e-6))
-    right = min(vx + vw, math.ceil(max(xs) - 1e-6))
-    top = min(vy + vh, math.ceil(max(ys) - 1e-6))
+        px = vx + (clip[0] / w + 1.0) * 0.5 * vw
+        py = vy + (clip[1] / w + 1.0) * 0.5 * vh
+        # Error of c/w is bounded by (error(c)+abs(c/w)*error(w)) /
+        # (abs(w)-error(w)). No snap is justified at an uncertain zero w.
+        error_w = _MATRIX_ROUNDING * (abs(matrix[3]*x) + abs(matrix[7]*y) + abs(matrix[15]))
+        denominator = abs(w) - error_w
+        if clip[3] and denominator > 0.0:
+            error_x = _MATRIX_ROUNDING * (abs(matrix[0]*x) + abs(matrix[4]*y) + abs(matrix[12]))
+            error_y = _MATRIX_ROUNDING * (abs(matrix[1]*x) + abs(matrix[5]*y) + abs(matrix[13]))
+            px = _stable_pixel_boundary(px, 0.5*vw*(error_x + abs(clip[0]/w)*error_w)/denominator)
+            py = _stable_pixel_boundary(py, 0.5*vh*(error_y + abs(clip[1]/w)*error_w)/denominator)
+        xs.append(px)
+        ys.append(py)
+    left = max(vx, math.floor(min(xs)))
+    bottom = max(vy, math.floor(min(ys)))
+    right = min(vx + vw, math.ceil(max(xs)))
+    top = min(vy + vh, math.ceil(max(ys)))
     return left, bottom, max(0, right - left), max(0, top - bottom)
 
 
