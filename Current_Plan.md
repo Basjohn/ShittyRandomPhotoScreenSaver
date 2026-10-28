@@ -39,10 +39,12 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 approved direction and detailed gates. Work in narrow tested/audited checkpoint pushes. Keep the authored lens,
 world geometry and camera fixed during resize; compare the original rectangle before accepting framing changes.
 
-- [~] **EB28-1 — Drift — combined capture gate remains:** Drift bucket and signed quiet/loud gains cover
+- [ ] **EB28-1 — Drift — live0.5× report needs reproduction:** Drift bucket and signed quiet/loud gains cover
   large/small/fused bubbles, free microbubble paths, marine snow and decorative motes. Existing direct coupling
   defaults1; new consumers default0. Focused field/identity/record/phase/GL/count-tail checks and recorded P8 native
-  capture pass; complete the broader matrix under EB28-V. Wakes/attached fizz retain parent path and inertia only.
+  capture pass, but the operator still sees straight/unreactive microbubbles at0.5×. Trace actual logs/configuration
+  through logical payload and GPU; distinguish free chains and attached wakes. Re-measure stream acceleration for
+  every visible bubble population. Wakes/attached fizz retain parent path and inertia only.
 - [~] **EB28-2 — Stream — combined capture gate remains:** ordinary/forming/fused transport now receives the shared
   stream at1x, independent of radius. Recorded P8 no-contact measurements confirm both classes at1x; inspect the
   wider passage/contact/pixel matrix under EB28-V before final acceptance.
@@ -57,14 +59,18 @@ world geometry and camera fixed during resize; compare the original rectangle be
   positive-difference lift; strength endpoints are literal, Modulation0 holds the upper strength and Shimmer is
   independent. Schema13 migrates old cosmetic Flicker values before defaults/overlays. Focused and frozen recorded
   pixel comparisons pass; complete held/dip/resume motion and shaft-buffer traces under EB28-V.
-- [ ] **EB28-6 — Camera persistence / automatic motion:** reproduce operator's P8→P1 wrong eye versus
-  P1→P2→P1 correct eye; trace preset starting view, persisted pose, physical-eye admission and retained
-  auto-rotate/orbit/flight/drag state. Repair the owning activation boundary and prove repeatable switching,
-  reset, automatic motion, Settings reopen and recorded/offscreen camera identity without losing EB28-1…5 work.
+- [~] **EB28-6 — Camera persistence / automatic motion — combined runtime gate remains:** P8→P1 Settings
+  regression reproduced; target pose now precedes XYZ/editor admission and normalization. Hidden runtime preset
+  activation rebases held orbit/flight and arms/clears Auto Rotate before capture; visible completion cannot rewind
+  it. Focused native built/unbuilt editor, manual-aim/reload, motion/flight/auto and camera-bound checks pass.
+  Finish delayed-completion runtime switching and native input/identity checks under EB28-V.
+- [ ] **EB28-7 — Tall-view bubble shape:** reproduce the operator's tall Sunlit screenshot, verify actual
+  focal X/Y, item/viewport/target clipping and shell projection at native dimensions. Separate an aspect bug from
+  off-axis perspective conics; preserve authored lens/world and basic-rectangle fidelity in any correction.
 - [ ] **EB28-V — Combined behavioral proof:** use production recorded replay and offscreen renders for all five
   tasks, including P8, representative other settings, BEAM/SCENE, both light types and negative/zero/max controls.
   Canonical preset enumeration now admits P8 in the existing probes.
-- [ ] **EB28-P — Performance only after EB28-1…6/V pass:** audit CPU/GPU waste, churn and conservative
+- [ ] **EB28-P — Performance only after EB28-1…7/V pass:** audit CPU/GPU waste, churn and conservative
   occlusion/culling opportunities; prove no fidelity loss with matched recorded inputs, cameras and full optical passes.
 
 ### 2B. Settings and UI (in this order)

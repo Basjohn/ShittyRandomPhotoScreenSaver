@@ -1972,11 +1972,9 @@ class DisplayManager(QObject):
                 "Settings authority has no atomic visualizer preset persistence"
             )
         persist(target.visualizer_config, target.custom_presets)
-        # The preset replaced the view; an orbit still held continues from it.
+        # Motion was rebased by the hidden activation transaction before its
+        # first capture. Completion must not restart it at the authored pose.
         self._quick_view_orbit_pending = None
-        from widgets.spotify_visualizer.view_orbit import rebase_view_orbit_motion
-
-        rebase_view_orbit_motion(owner.controller.presentation_state, time.time())
         self._widgets_config_snapshot["spotify_visualizer"] = deepcopy(
             target.visualizer_config
         )

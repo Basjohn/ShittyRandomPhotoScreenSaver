@@ -796,6 +796,10 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   The existing live-view owner applies a starting pose once on a changed Settings preset selection or runtime cycle.
   Missing optional metadata means canonical mode defaults on that selection. A raw activation with no live pose
   also seeds it; complete Settings hydration, restart, mode reentry and ordinary saves preserve the current pose.
+  Settings hydrates the target pose before admitting its Camera Position; persistence seeds missing pose controls
+  before normalization and preserves explicit camera edits made before the coalesced save. Runtime same-mode
+  selection rebases held orbit/flight, retires drag/inertia and arms or clears Auto Rotate in the hidden activation
+  transaction, before the first target capture. Visible completion only persists; it never restarts that motion.
   Custom artwork retains the live view and never caches a separate camera. Save Preset As offers **Include current
   camera view when saving**, checked initially for framed modes only, and exports the settled Settings pose outside
   the artwork snapshot. Ordinary orbit gestures never rewrite a preset. Explicit override and repair/reindex tooling
