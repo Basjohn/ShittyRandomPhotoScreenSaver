@@ -44,6 +44,8 @@ world geometry and camera fixed during resize; compare the original rectangle be
 - [ ] **EB28-1 — Drift:** move existing controls into Drift, add per-consumer quiet/loud gains
   in `[-1,+2]` with existing direct coupling normalized to1 and new coupling default0, prioritizing free microbubbles.
   Prove existing/forming/fused identities, signed endpoints, audio rise/release and CPU/GPU field agreement.
+  Direct large/small/fused gains and the bucket are implemented with focused logical/spec checks; finish bounded
+  procedural material paths and wake-water consumers, then recorded/offscreen evidence before acceptance.
 - [~] **EB28-2 — Stream — combined capture gate remains:** ordinary/forming/fused transport now receives the shared
   stream at1x, independent of radius. Recorded P8 no-contact measurements confirm both classes at1x; inspect the
   wider passage/contact/pixel matrix under EB28-V before final acceptance.
