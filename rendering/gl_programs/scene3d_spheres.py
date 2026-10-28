@@ -108,8 +108,10 @@ vec3 sceneSphereFacingRay(vec3 centre, float reach, vec2 corner) {
 }
 bool sceneSphereRay(vec3 ray, vec3 centre, float radius, out float tNear, out float tFar) {
     float b = dot(centre, ray);
-    float c = dot(centre, centre) - radius * radius;
-    float h = b * b - c;
+    // Subtract perpendicular distances, not two squared camera distances:
+    // at small projected radii their cancellation made shell normals flicker.
+    vec3 nearest = centre - ray * b;
+    float h = radius * radius - dot(nearest, nearest);
     if (h < 0.0) { tNear = tFar = b; return false; }
     h = sqrt(h);
     tNear = b - h;
@@ -258,7 +260,10 @@ def scene3d_sphere_facing_ray(centre: Vec3, reach: float, corner: tuple[float, f
 def scene3d_sphere_ray(ray: Vec3, centre: Vec3, radius: float) -> tuple[bool, float, float]:
     """CPU mirror of ``sceneSphereRay``: (hit, tNear, tFar)."""
     b = _dot(centre, ray)
-    h = b * b - (_dot(centre, centre) - radius * radius)
+    nx = centre[0] - ray[0] * b
+    ny = centre[1] - ray[1] * b
+    nz = centre[2] - ray[2] * b
+    h = radius * radius - (nx * nx + ny * ny + nz * nz)
     if h < 0.0:
         return False, b, b
     h = math.sqrt(h)

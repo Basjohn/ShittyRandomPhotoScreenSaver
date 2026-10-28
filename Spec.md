@@ -419,6 +419,9 @@ EB derives passage at its frame-runtime boundary from the same admitted fixed-sc
 it never reads the shared bar-loudness passage scalar. Existing simulation shaping/followers then place Range
 endpoints. Recorded PCM reanalysis must exercise this same boundary, without mixing historical passage with new
 body bands. Original Bubble and the shared analysis remain independent.
+Tiny traced shells use a perpendicular-distance sphere discriminant, avoiding subtraction of large squared
+camera distances. Idle/subpixel stability must be verified through real reflection/transmission and composition,
+not coverage alone; do not conceal numerical flicker by dimming, changing radius or increasing samples.
 
 EB view-aware overlap interactions supplement physical contacts using the existing camera's derived projection;
 they must not redefine the population around the camera or teleport separated geometry. Pops are extremely
