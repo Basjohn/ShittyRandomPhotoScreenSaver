@@ -28,6 +28,7 @@ from rendering.quick.render.gl_resources import compile_program
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.target import SCENE_OIT_GLSL, SceneTarget
 from tools.labs.render_target import OffscreenRenderTarget
+from tools.labs.extruded_bubble_references import resolve_references
 from rendering.gl_programs.extruded_bubble_scene import ENGINE, MODES
 from rendering.gl_programs.extruded_bubble_program import (  # the product's shaders, proven here
     COMMON,
@@ -139,7 +140,7 @@ ENV_FRAGMENT = "#version 460 core\nout vec4 FragColor;\nin vec2 vNdc;\n" + SCENE
 void main() {
     vec3 dir = equirectDirection(vNdc * 0.5 + 0.5);
     float shafts = waterShafts(vec3(0.0), dir, 40.0, uSunBelow, uShaftY, uTime, 12, 0.5) * 0.08;
-    FragColor = vec4(basinWater(dir, 0.6, shafts), 1.0);
+    FragColor = vec4(basinWater(dir, vec3(0.0), 0.6, shafts), 1.0);
 }
 """
 RIBBON_VERTEX = """#version 460 core
@@ -892,10 +893,7 @@ def main():
     names = [CARD] if CARD else [name for name in VARIANTS if only is None or name in only]
     if not names or (only is not None and set(only) - VARIANTS.keys()):
         raise ValueError("--only must name existing lab recipes")
-    references = {name: ROOT / "Docs/Reference/Extruded_Bubble/Targets/Originals" / f"{name}.png" for name in names}
-    missing = [str(path) for path in references.values() if not path.is_file()]
-    if missing:
-        raise FileNotFoundError("Lab reference images unavailable; supply an existing recipe with --only: " + ", ".join(missing))
+    references = resolve_references(names, ROOT / "Docs/Reference/Extruded_Bubble")
     with ExitStack() as cleanup:
         capture = OffscreenRenderTarget(W, H, label="extruded-bubble-lab")
         cleanup.callback(capture.close)

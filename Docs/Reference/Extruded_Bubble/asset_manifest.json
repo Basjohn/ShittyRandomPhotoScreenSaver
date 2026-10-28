@@ -40,46 +40,53 @@
   ],
   "assets": [
     {
-      "path": "Targets/Originals/ExBubble1.png",
+      "path": "Targets/Originals/AchievedPreset2Goal.png",
       "former_path": "tmp/Bubbleexamples/ExBubble1.png",
       "bytes": 1931411,
-      "sha256": "66b5e248f5896464295a49636006897567d3a004b2698710a3fc8eee18e3f9a1"
+      "sha256": "66b5e248f5896464295a49636006897567d3a004b2698710a3fc8eee18e3f9a1",
+      "lab_recipe": "ExBubble1"
     },
     {
       "path": "Targets/Originals/ExBubble2.png",
       "former_path": "tmp/Bubbleexamples/ExBubble2.png",
       "bytes": 2208819,
-      "sha256": "a8c68a982620aa2aea97eac8bc79702858b458cd7c6525cabc7c645a1afcdcd7"
+      "sha256": "a8c68a982620aa2aea97eac8bc79702858b458cd7c6525cabc7c645a1afcdcd7",
+      "lab_recipe": "ExBubble2"
     },
     {
-      "path": "Targets/Originals/ExBubble3.png",
+      "path": "Targets/Originals/Preset1Goal.png",
       "former_path": "tmp/Bubbleexamples/ExBubble3.png",
       "bytes": 2096489,
-      "sha256": "4a4e8ade02c6f3aee8de5918b5013f7c151f1ec6f5b77bb040e78982902cb6d2"
+      "sha256": "4a4e8ade02c6f3aee8de5918b5013f7c151f1ec6f5b77bb040e78982902cb6d2",
+      "lab_recipe": "ExBubble3"
     },
     {
-      "path": "Targets/Originals/ExBubble4.png",
+      "path": "Targets/Originals/Preset4Goal.png",
       "former_path": "tmp/Bubbleexamples/ExBubble4.png",
       "bytes": 2177869,
-      "sha256": "cb541ff0d2102af7dd13ed6b115e7af81b252ee0fadd752e1a0f68ae5ff9c9da"
+      "sha256": "cb541ff0d2102af7dd13ed6b115e7af81b252ee0fadd752e1a0f68ae5ff9c9da",
+      "lab_recipe": "ExBubble4"
     },
     {
-      "path": "Targets/Originals/ExBubble5CameraAbyss.png",
+      "path": "Targets/Originals/Preset5Goal.png",
       "former_path": "tmp/Bubbleexamples/ExBubble5CameraAbyss.png",
       "bytes": 2131997,
-      "sha256": "da9acc676a0b88fe6daff0acbd4d51f1013ddcea6807431f72ee0736880c586b"
+      "sha256": "da9acc676a0b88fe6daff0acbd4d51f1013ddcea6807431f72ee0736880c586b",
+      "lab_recipe": "ExBubble5CameraAbyss"
     },
     {
-      "path": "Targets/Originals/ExBubble5Cameradown.png",
+      "path": "Targets/Originals/Preset6Goal.png",
       "former_path": "tmp/Bubbleexamples/ExBubble5Cameradown.png",
       "bytes": 2148525,
-      "sha256": "d0160a94ab3cb2ccd618b56ffd191473fb0b6f6014c10ea77588febb2a93ddc6"
+      "sha256": "d0160a94ab3cb2ccd618b56ffd191473fb0b6f6014c10ea77588febb2a93ddc6",
+      "lab_recipe": "ExBubble5Cameradown"
     },
     {
-      "path": "Targets/Originals/ExBubble6Diagonal.png",
+      "path": "Targets/Originals/Preset7Goal.png",
       "former_path": "tmp/Bubbleexamples/ExBubble6Diagonal.png",
       "bytes": 2046965,
-      "sha256": "68d2731fbf28581ba1025f736b72f6d7350ed89528c55949a1cfbb549d541d9d"
+      "sha256": "68d2731fbf28581ba1025f736b72f6d7350ed89528c55949a1cfbb549d541d9d",
+      "lab_recipe": "ExBubble6Diagonal"
     },
     {
       "path": "Targets/Originals/Informational mock 2.png",

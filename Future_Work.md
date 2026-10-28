@@ -121,6 +121,14 @@ Keep these deferred unless new evidence or an explicit request promotes them:
   compatibility mappings, goldens, geometry/state oracles, architecture-negative bars and wording contracts; do not turn the
   advisory queues into a standing release blocker or a project-wide rewrite campaign.
 
+### EB composition-lab recipe refresh (deferred)
+
+The current composition lab resolves all renamed targets by verified historical byte identity and compiles against
+shared shaders. A 480x270 all-recipe run still shows old recipe appearance diverging substantially from targets
+(`tmp/eb30_references.png`); this is not a production EB regression or parity acceptance. Audit recipe parameters
+against current shared shader semantics only if a later EB lab/visual comparison is explicitly reopened. Do not
+retune accepted production presets or expand the closed EB work to match these stale recipes.
+
 ## 5. Boundary
 
 This is not a changelog or a completed-work register. When a deferred item lands, move its durable contract to the appropriate
