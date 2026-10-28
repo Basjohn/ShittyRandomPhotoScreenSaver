@@ -52,8 +52,10 @@ world geometry and camera fixed during resize; compare the original rectangle be
 - [~] **EB28-4 — Pause/resume visibility — combined capture gate remains:** logical free-chain attack is isolated
   from shared audio/motion and retains the existing release; focused repeated-toggle, recorded production replay and
   renderer-uniform checks pass. Complete dense temporal/layer comparisons under EB28-V before final acceptance.
-- [ ] **EB28-5 — Reliable rays:** reproduce sustained diminution through source→uniform→pixels, implement the
-  approved strength/modulation/shimmer contract and explicit migration, then validate held/dip/resume passages.
+- [~] **EB28-5 — Reliable rays — combined temporal gate remains:** held absolute energy replaces the adaptive
+  positive-difference lift; strength endpoints are literal, Modulation0 holds the upper strength and Shimmer is
+  independent. Schema13 migrates old cosmetic Flicker values before defaults/overlays. Focused and frozen recorded
+  pixel comparisons pass; complete held/dip/resume motion and shaft-buffer traces under EB28-V.
 - [ ] **EB28-V — Combined behavioral proof:** use production recorded replay and offscreen renders for all five
   tasks, including P8, representative other settings, BEAM/SCENE, both light types and negative/zero/max controls.
   Repair stale probe preset1–7 guards through canonical enumeration before relying on them for P8.

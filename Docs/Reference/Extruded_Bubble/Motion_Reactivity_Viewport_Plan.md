@@ -228,11 +228,12 @@ Flicker0 currently disables an extra cosmetic shimmer multiplier. It does not di
 suppression, sustained reach changes or ordinary time-driven shaft-pattern motion. Global Light Strength, coverage,
 blockers, camera and composition can also change visible rays. Trace these separately before retuning audio.
 
-### Recommended control model for approval
+### Approved implemented control model
 
-Use explicit strength endpoints and a single primary **Ray Modulation** amount (`0=steady at upper strength`,
-`1=full musical range`). This replaces the misleading expectation attached to the name Flicker. If independent
-cosmetic control is retained, expose it separately as **Shimmer**, not as another brightness gate.
+Explicit strength endpoints and **Ray Modulation** (`0=steady at upper strength`, `1=full musical range`) now own
+brightness. Independent cosmetic **Ray Shimmer** retains the old Flicker values. The shared input migration renames
+that key for live mappings, presets and Custom caches, and Settings schema13 runs it before default fill. No runtime
+consumer reads the retired key; authored preset files are not overwritten.
 
 One continuous brightness rule, before global physical light/coverage, is:
 
@@ -251,12 +252,11 @@ Intermediate modulation narrows musical excursions toward the upper handle. Do n
 to reconcile two contradictory zero contracts. “Always on” still respects disabled rays, global Light Strength0,
 physical visibility/occlusion and an entirely zero authored range.
 
-Alternative: retain Flicker strictly as shimmer and add a separate Music Response control with those brightness
-semantics. This is mathematically clean but does not make old Flicker0 alone mean constant rays. The control naming,
-zero contract and migration must be approved together. Existing authored flicker values represent cosmetic depth;
-do not silently reinterpret them as music-response amounts. Preserve/map them explicitly and document intended
-behavior changes; no wholesale preset overwrite. Pause behavior is part of this decision: steady mode remains steady,
-reactive mode approaches its honest quiet endpoint rather than another hidden blackout factor.
+The held driver now uses absolute band energy and passage intensity rather than a positive difference against a
+learning reference. A separate short onset accent remains transient by design. This removes the learning-dependent
+fade without suppressing source analysis or changing other musical envelopes. Steady mode remains steady on pause;
+reactive mode approaches its honest quiet endpoint. The original report's complete visible disappearance was not
+reproduced in the short P8 passage; the combined gate still traces physical pattern/coverage/occlusion separately.
 
 **Ray gates:** hold input long enough for transient references to settle; sustained brightness must not require new
 onsets. Run recorded held passages, dips/recoveries and pause/resume, tracing body bands, passage, source-ramp flag,

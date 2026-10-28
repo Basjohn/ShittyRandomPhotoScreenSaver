@@ -78,7 +78,7 @@ class SettingsManager(QObject):
     _WIDGET_CAPABILITY_SCHEMA_METADATA_KEY = "widget_capability_schema_version"
     _WIDGET_CAPABILITY_SCHEMA_VERSION = 1
     _VISUALIZER_SCHEMA_METADATA_KEY = "visualizer_schema_version"
-    _VISUALIZER_SCHEMA_VERSION = 12
+    _VISUALIZER_SCHEMA_VERSION = 13
     _MISSING = object()
     _MANUAL_FLOOR_MIN = 0.0
     _MANUAL_FLOOR_MAX = 1.0
@@ -824,6 +824,12 @@ class SettingsManager(QObject):
                                 section_dict, schema_version=self._visualizer_schema_version())
                             if remapped != section_dict:
                                 section_dict = remapped
+                                changed = True
+                        if self._visualizer_schema_version() < 13:
+                            from core.settings.visualizer_settings_contract import migrate_extruded_bubble_ray_controls
+                            migrated_rays = migrate_extruded_bubble_ray_controls(section_dict)
+                            if migrated_rays != section_dict:
+                                section_dict = migrated_rays
                                 changed = True
                         # Promote remaining persisted lender values before canonical
                         # default fill can mask which owned keys were absent.

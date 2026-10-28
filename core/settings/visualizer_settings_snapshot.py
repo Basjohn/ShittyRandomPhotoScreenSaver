@@ -237,6 +237,8 @@ def normalize_visualizer_section_mapping(
     migrated = migrate_legacy_visualizer_mode_activation_schema(data, prefix=prefix)
     migrated = migrate_legacy_sphere_finish_keys(migrated, prefix=prefix)
     migrated = migrate_legacy_sphere_control_keys(migrated, prefix=prefix)
+    from core.settings.visualizer_settings_contract import migrate_extruded_bubble_ray_controls
+    migrated = migrate_extruded_bubble_ray_controls(migrated, prefix=prefix)
     migrated = strip_retired_visualizer_settings(migrated, prefix=prefix)
     # Per-mode card-height growth was pre-Quick geometry state. The current
     # retained geometry contract is viewport/aspect driven; strip shipped

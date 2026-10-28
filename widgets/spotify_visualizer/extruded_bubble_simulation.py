@@ -357,8 +357,6 @@ class ExtrudedBubbleSimulation:
         self._small_body_reference = 0.0
         self._last_small_body: float | None = None
         self._ray_lift = 0.0
-        self._ray_body_reference: float | None = None
-        self._ray_phrase = 0.0
         self._rays = 0.0
         self._shimmer = 0.0
         self._speed: float | None = None
@@ -632,32 +630,19 @@ class ExtrudedBubbleSimulation:
             self._motion_rate = motion_target
         self._motion_rate = _follow(self._motion_rate, motion_target, dt, 0.24 * soft, 1.1 * soft)
         self._motion_phase += dt * self._motion_rate
-        # The ray brightness has its OWN phrase follower: the held musical presence
-        # opens the fan but cannot consume the whole authored brightening range.
-        # A rising bass/mid/high body, including changes WITHIN playback, adds a
-        # short lift; falls decay gently. This does not touch audio AGC, the
-        # size/body envelopes, or the operator's Ray Strength endpoints.
+        # Absolute held energy supports the rays throughout a passage. A positive
+        # difference against a learning reference used to fade away even while
+        # the body stayed loud, only rebuilding on a dip/recovery.
         ray_body = 0.34 * bass + 0.46 * mid + 0.20 * high
-        if self._ray_body_reference is None or music.play_ramping:
-            self._ray_body_reference = ray_body
-        self._ray_body_reference = _follow(self._ray_body_reference, ray_body, dt, 0.42, 0.70)
-        positive_phrase = max(0.0, ray_body - self._ray_body_reference)
-        if music.play_ramping:
-            positive_phrase = 0.0
-        self._ray_phrase = _follow(self._ray_phrase, min(1.0, positive_phrase * 2.3), dt,
-                                    0.07, 0.62)
         # Discrete musical event lifts have their own short life; following the
         # already-smoothed flash twice blended successive beats into a bright
         # plateau. Admit the real onset weight once, then decay continuously.
         if onsets and not music.play_ramping:
             self._ray_lift = max(self._ray_lift, min(1.0, max(w for _kind, w in onsets)))
         self._ray_lift = _follow(self._ray_lift, 0.0, dt, 0.08, 0.42)
-        # The passage sets where the fan sits in its Range; beats swing it around that (x0.6 .. x1.3), never
-        # lift a quiet passage off its quiet handle (additive beat terms held every passage mid-range). The swing
-        # stays wide enough to move a saturated passage under its soft top.
-        ray_beats = min(1.0, 0.35 * self._body_small_envelope + 0.6 * self._ray_phrase + 0.6 * self._ray_lift
-                        + 0.1 * sustain)
-        ray_target = _soft_top(passage * (0.6 + 0.7 * ray_beats))
+        # A small, explicitly transient onset accent is separate from the held
+        # body. No adaptive reference can consume the sustained contribution.
+        ray_target = _soft_top(passage * (0.6 + 0.4 * ray_body + 0.2 * self._ray_lift))
         ray_release = 0.58 + 0.25 * quiet * quiet
         self._rays = _follow(self._rays, ray_target, dt, 0.12,
                              ray_release + min(0.15, 0.20 * ray_release))
