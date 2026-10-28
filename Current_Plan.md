@@ -105,7 +105,7 @@ bounded, measured cost (TIME_ELAPSED, median/p90), lazy creation, zero dormant w
 consumer, and none becomes a second renderer, clock or camera. Read the 3D foundation lessons in
 `Docs/Reference/Transitions.md` before each slice. Order follows which mode needs them first.
 
-- [ ] **S3D-1 Ribbon / strip primitive — WR-01a CPU history/interpolation landed; frame/GPU work open:** generalize what Extruded Bubble's wakes proved (`extruded_bubble_wake.py`, the
+- [ ] **S3D-1 Ribbon / strip primitive — WR-01a/b CPU history/frames landed; GPU work open:** generalize what Extruded Bubble's wakes proved (`extruded_bubble_wake.py`, the
   `TRAIL_*` programs): a bounded history SSBO, centripetal Catmull-Rom strips placed by a continuous index (never by a
   share of segments), camera-facing or oriented width, OIT translucency with defined edges and inner structure,
   shared defocus. Multi-ribbon, fixed maximum history. *Consumers: Waveform Ribbon; trails anywhere.*
@@ -164,10 +164,11 @@ the archive's alternate is context only. Existing EB wakes/probes do not establi
 - [ ] **WR-00 remaining:** confirm annotation masks/crops and measured target tolerances; choose recorded-audio
   windows and fit a stable Orthographic scene eye/pivot/world/palette. Reference/projection preflight is landed;
   output `.artifacts/evidence/waveform_ribbon/wr00_reference_projection/receipt.json` records its limited scope.
-- [ ] **Next implementation: WR-01b / S3D-1** transported/oriented and camera-facing frames, degeneracy policy,
-  tangents/normals, UV/edge/end contracts and GPU capacity/packing plan; then WR-02 native GPU strip proof.
-  The bounded CPU history/interpolation reference is implemented (`Docs/Reference/Ribbon_Path.md`); no GPU ribbon
-  primitive or scene lab exists yet, and likeness/music/performance gates remain open.
+- [ ] **Next implementation: WR-02 / S3D-1 independent GPU harness:** admit the proposed knot/metadata layout,
+  anchor/phase rebasing and bounded triangle expansion; prove gaps/cusps, actual surface normals, Orthographic
+  and optional Perspective, OIT/occlusion/defocus, state restoration/retirement and measured cost.
+  CPU history/width frames and stations are implemented (`Docs/Reference/Ribbon_Path.md`); there is no GPU strip
+  or scene renderer yet. WR-00 measurements/audio and all likeness/music/performance gates remain open.
 - [ ] Lab: one ribbon (bass → width, mids → twist/deformation, energy → glow) toward the concept image.
 - [ ] Production: single ribbon, translucent emissive shading and bloom, then the reflective floor, then multi-ribbon,
   then particle accents, then a restrained Settings surface (gates A–H: same scene low/high, no second renderer, one

@@ -20,7 +20,8 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
   tests independently exercise shared Orthographic geometry, origins and occlusion.
 - [ ] Confirm annotation masks/crop boundaries, target measurements/tolerances, scene eye/pivot/world/palette and audio windows.
 - [x] WR-01a bounded absolute-coordinate CPU history and centripetal interpolation reference.
-- [ ] WR-01b width/frame/tangent/UV/edge contracts and GPU capacity/packing plan; WR-02 GPU primitive proof.
+- [x] WR-01b CPU transported/camera-facing frames, gap/cusp policy and width/UV stations; proposed GPU budget recorded.
+- [ ] WR-02 actual geometry derivatives/normals, packing/rebasing, GPU primitive/state/cost/native proof.
 - [ ] WR-03 onward: actual scene blockout, material/reflection/particle work, music, production and visual acceptance.
 
 Run `.venv\Scripts\python.exe tools/labs/waveform_ribbon_preflight.py --output .artifacts/evidence/waveform_ribbon/<new-run>`.
@@ -215,7 +216,9 @@ work; final likeness still needs the actual candidate's visual evidence.
 reference documented in `Docs/Reference/Ribbon_Path.md`. Four-knot-supported interior positions preserve absolute
 coordinates through insertion/eviction; batch partition invariance applies to identical admitted knots only.
 CPU cards/trace: `.artifacts/evidence/waveform_ribbon/wr01a_history_checked/receipt.json`. No EB code changed.
-The broader checkboxes below stay open where frames, topology, GPU packing or temporal visual proof is incomplete.
+WR-01b adds `core/ribbon_frames.py` and the CPU frame probe. Its singularity policies, station/UV contract and
+proposed GPU budget are in `Docs/Reference/Ribbon_Path.md`. CPU receipt: `.artifacts/evidence/waveform_ribbon/wr01b_frames_checked/receipt.json`.
+The broader checkboxes below stay open where actual derivatives, GPU topology/packing or native temporal proof is incomplete.
 
 
 - [ ] Specify fixed maximum ribbons, history samples, active counts, sample spacing/time interpretation, record bytes,
@@ -225,7 +228,7 @@ The broader checkboxes below stay open where frames, topology, GPU packing or te
   for geometry, internal strands and attached accents; never derive placement from the changing share of segment count.
 - [x] Promote the minimal centripetal Catmull-Rom evaluation with repeated-point/short-history handling. Preserve EB's
   existing arithmetic/call path unless an explicitly scoped migration proves unchanged output and temporal behavior.
-- [ ] Design camera-facing and oriented width modes. For a twisting sheet use a transported frame (or an equally
+- [x] Design camera-facing and oriented width modes. For a twisting sheet use a transported frame (or an equally
   continuous proven basis), then apply authored twist. A Frenet frame at zero curvature or a cross product parallel to
   the viewing ray needs deterministic continuous degeneracy handling; silent flips are unacceptable.
 - [ ] Define normals/tangents, two-sided material behavior, UV/path coordinates, edge coverage and end treatment.
@@ -564,7 +567,7 @@ camera and resource contracts rather than rebuilding them or reopening already-l
 
 ## 10. Concrete next start and unresolved decisions
 
-**Next: finish WR-00 and WR-01b, then execute WR-02 for S3D-1:** lock primary image crops/measurements, then independently
+**Next: finish WR-00 and execute WR-02 for S3D-1:** lock primary image crops/measurements, then independently
 prove one oriented continuous-history strip with no bloom/particles, followed by overlapping translucent strips and
 bounded lifetime/cost. This establishes the highest-risk shared prerequisite before artistic scene composition or Settings.
 
