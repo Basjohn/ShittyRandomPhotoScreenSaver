@@ -106,6 +106,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Reusable framed 3D internal camera, held-left orbit and per-mode view-pose contract | `Docs/Reference/Visualizer_Reference.md` → Live view pose; `Docs/Reference/Scene3D_Resources.md` → Shared framed-camera |
 | Framed 3D control hints, hover visit, global glyph/hint preferences and RCC artwork | `Docs/Reference/Visualizer_Reference.md` → framed hints; `ui/assets/widgets/visualizer/control_hint.png` |
 | Framed preset starting views, Save Preset As and camera validation | `Docs/Reference/Visualizer_Reference.md` → Framed preset starting views; `core/settings/visualizer_view_orbit.py` |
+| Preset Repair control coverage, migrations, atomic replacement and safe Undo | `Docs/Reference/Visualizer_Preset_Repair.md`; `tools/visualizer_preset_repair.py` |
 | Shared G1 attachments, G3A transparent layering, G2 shadow-map and selective G3B optics proof | `Docs/Reference/Scene3D_Resources.md`; `Current_Plan.md` §6 |
 | Usu character authoring source and static review renders | local checkout `assets/usu/README.md` (excluded from normal Godzip); media source guidance in `Current_Plan.md` §3 |
 | shared 3D resource ownership, DSA, immutable storage and state restoration | `Docs/Reference/Scene3D_Resources.md` |

@@ -43,16 +43,16 @@ world geometry and camera fixed during resize; compare the original rectangle be
   radii and idle-energy material, then separate subpixel coverage from normals/reflection/transmission. Fix the
   owning AA/shading defect without hiding/dimming bubbles, changing audio/radii/motion or increasing per-pixel cost;
   add a temporal regression and recorded/native verification before optimization acceptance.
-- [ ] **EB28-R — Preset Repair safety audit:** prove all today's drift/ray/projection keys survive repair and
-  missing keys come from the typed canonical defaults. Correct the reproduced Flicker→Shimmer value loss, dotted
-  SST value loss and duplicate flat-settings authority. Verify metadata, backups, atomic failure, newer edits,
-  mode mismatch, repeated repair and existing swap/reindex/Undo without mutating operator presets.
 - [ ] **EB28-V — Final wrap gate:** confirm the idle-flicker change against recorded/native motion and reconcile
   any new regression with the already verified drift, stream, ray, resize and camera contracts. Preserve the
   accepted gains, genuine audio response and inherited wake inertia. Physical runtime/input use remains operator
   validation; EB Orthographic appearance work is deferred beyond the entire backlog, not an active gate.
 - [ ] **EB28-P — Performance after EB28-8/V pass:** audit CPU/GPU waste, churn and conservative
   occlusion/culling opportunities; prove no fidelity loss with matched recorded inputs, cameras and full optical passes.
+  - [ ] Measure stable-intersection cost against old arithmetic with warmed, matched recorded snapshots; report
+    noise honestly. Inspect CPU history/packing work before proposing any ownership or identity change.
+  - [ ] Validate an empty-near-layer guard (no ordinary/fused records) with byte-identical populated→empty→return
+    frames; retain warm-up/resources to avoid reactivation hitch. Reject blanket culling or reduced optical work.
 
 ### 2B. Settings and UI (in this order)
 

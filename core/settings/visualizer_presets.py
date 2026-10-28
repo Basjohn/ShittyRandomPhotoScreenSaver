@@ -611,7 +611,17 @@ def _collect_visualizer_sections(payload: Mapping[str, Any]) -> List[Mapping[str
 
     settings = payload.get("settings")
     if isinstance(settings, Mapping):
-        sections.append(settings)
+        # SST's flattened settings and a preset's direct settings use the same
+        # admission path. Preserve the actual authored values before filtering
+        # mode keys; a dotted section must never be mistaken for missing art.
+        prefix = "widgets.spotify_visualizer."
+        dotted = {key[len(prefix):]: value for key, value in settings.items()
+                  if isinstance(key, str) and key.startswith(prefix)}
+        sections.append(dotted if dotted else settings)
+
+    direct = payload.get("spotify_visualizer")
+    if isinstance(direct, Mapping):
+        sections.append(direct)
 
     snapshot = payload.get("snapshot")
     if isinstance(snapshot, Mapping):

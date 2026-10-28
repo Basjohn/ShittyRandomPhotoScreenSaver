@@ -1247,7 +1247,7 @@ def test_repair_file_preserves_authored_metadata_and_non_visualizer_blocks(tmp_p
     assert "bubble_growth" not in sv
 
 
-def test_repair_file_bootstraps_parseable_snapshot_block_from_flat_settings_payload(tmp_path, monkeypatch):
+def test_repair_file_keeps_one_parseable_flat_settings_authority(tmp_path, monkeypatch):
     root = tmp_path
     mode = "spectrum"
     mode_dir = root / "presets" / "visualizer_modes" / mode
@@ -1260,7 +1260,7 @@ def test_repair_file_bootstraps_parseable_snapshot_block_from_flat_settings_payl
                 "preset_index": 0,
                 "settings": {
                     "mode": mode,
-                    "spectrum_growth": 1.9,
+                    "spectrum_wave_amplitude": .37,
                     "bubble_growth": 7.7,
                 },
             }
@@ -1274,10 +1274,13 @@ def test_repair_file_bootstraps_parseable_snapshot_block_from_flat_settings_payl
     repair.repair_file(preset_path, mode)
 
     repaired = json.loads(preset_path.read_text(encoding="utf-8"))
-    sv = repaired["snapshot"]["widgets"]["spotify_visualizer"]
+    assert 'snapshot' not in repaired
+    sv = repaired["settings"]
     assert sv["mode"] == mode
-    assert sv["spectrum_growth"] == pytest.approx(1.9)
+    assert sv["spectrum_wave_amplitude"] == pytest.approx(.37)
     assert "bubble_growth" not in sv
+    parsed=vp._parse_preset_payload(preset_path,repaired,mode)
+    assert parsed is not None and parsed[1].settings['spectrum_wave_amplitude']==pytest.approx(.37)
 
 
 def test_repair_tool_stores_backups_outside_curated_source_tree(tmp_path, monkeypatch):
@@ -1405,6 +1408,8 @@ def test_repair_file_regenerates_shipped_artifacts_for_curated_source_paths(tmp_
     )
 
     calls: list[Path] = []
+    # Only an existing manifest may be regenerated; absence means retired/no-op.
+    (root / 'presets' / 'visualizer_modes_manifest.json').write_text('{}',encoding='utf-8')
     monkeypatch.setattr(repair, "ROOT", root)
     monkeypatch.setattr(repair, "_BACKUP_ROOT", root / "temp" / "visualizer_preset_backups")
     monkeypatch.setattr(

@@ -50,6 +50,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.settings import visualizer_presets as vp  # noqa: E402
+from core.utils.atomic_files import atomic_write_bytes, atomic_write_text  # noqa: E402
 from core.settings.models import _normalize_spectrum_linear_notches  # noqa: E402
 from core.settings.visualizer_settings_snapshot import (  # noqa: E402
     _TECHNICAL_GLOBAL_KEYS,
@@ -154,7 +155,7 @@ def _save_undo_history(history: Sequence[UndoEntry]) -> None:
         for entry in history
         if entry.backup_path.exists()
     ]
-    _UNDO_STATE_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    atomic_write_text(_UNDO_STATE_PATH, json.dumps(payload, indent=2) + "\n")
 
 
 def _record_undo_entry(entry: UndoEntry, history: list[UndoEntry] | None = None) -> list[UndoEntry]:
@@ -273,10 +274,7 @@ def _strip_deprecated_curated_keys(mode: str, sanitized: Dict[str, Any]) -> None
 
 
 def _collect_sections(payload: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
-    sections = list(vp._collect_visualizer_sections(payload))  # type: ignore[attr-defined]
-    if not sections and isinstance(payload.get("spotify_visualizer"), Mapping):
-        sections.append(payload["spotify_visualizer"])  # type: ignore[arg-type]
-    return sections
+    return vp._collect_visualizer_sections(payload)  # type: ignore[attr-defined]
 
 
 def _promote_legacy_spectrum_lane_scalars(section: Mapping[str, Any]) -> Dict[str, Any]:
@@ -309,7 +307,14 @@ def _promote_legacy_spectrum_lane_scalars(section: Mapping[str, Any]) -> Dict[st
     return promoted
 
 
+def _validate_payload_mode(mode: str, payload: Mapping[str, Any]) -> None:
+    for key in ('mode', 'visualizer_preset_mode'):
+        if key in payload and payload[key] != mode:
+            raise ValueError(f"Preset {key} {payload[key]!r} does not match selected mode {mode!r}")
+
+
 def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str, Any], Dict[str, list[str]]]:
+    _validate_payload_mode(mode, payload)
     sections = _collect_sections(payload)
     if not sections:
         raise ValueError("File does not contain any spotify_visualizer settings block")
@@ -318,8 +323,6 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
     original_filtered: Dict[str, Any] = {}
     migrated_keys: set[str] = set()
     legacy_global_authored: set[str] = set()
-    mode_prefixes = tuple(vp.MODE_KEY_PREFIXES.get(mode, (_canonical_mode_prefix(mode),)))  # type: ignore[attr-defined]
-    primary_prefix = _canonical_mode_prefix(mode)
     for section in sections:
         section_payload = dict(section)
         original_section = dict(section_payload)
@@ -328,6 +331,9 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
             section_payload = _promote_legacy_spectrum_lane_scalars(section_payload)
         migrated = vp._migrate_preset_settings(mode, section_payload)  # type: ignore[attr-defined]
         filtered = vp._filter_settings_for_mode(mode, migrated)  # type: ignore[attr-defined]
+        # Every shared migration owns its output keys. A hand-maintained list
+        # here lost newly renamed values (Flicker -> Shimmer became default .3).
+        migrated_keys.update(set(filtered) - set(raw_filtered))
         for suffix in _MANDATORY_TECH_SUFFIXES:
             if suffix in original_section and suffix not in filtered:
                 filtered[suffix] = deepcopy(original_section[suffix])
@@ -346,38 +352,6 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
                 if promoted_key in filtered:
                     original_filtered[promoted_key] = filtered[promoted_key]
         sanitized.update(filtered)
-
-        if mode == "oscilloscope" and "osc_sensitivity" in original_section:
-            if "osc_line_amplitude" in filtered:
-                migrated_keys.add("osc_line_amplitude")
-        if mode == "sine_wave" and "sine_min_height" in original_section:
-            if "sine_card_adaptation" in filtered:
-                migrated_keys.add("sine_card_adaptation")
-        if mode == "spectrum":
-            if (
-                "spectrum_single_piece" in original_section
-                or "spectrum_render_mode" in original_section
-            ) and "spectrum_render_mode" in filtered:
-                migrated_keys.add("spectrum_render_mode")
-            if (
-                "spectrum_rainbow_per_bar" in original_section
-                or "rainbow_per_bar" in original_section
-            ) and "spectrum_unique_colors" in filtered:
-                migrated_keys.add("spectrum_unique_colors")
-        if "rainbow_enabled" in original_section and f"{primary_prefix}rainbow_enabled" in filtered:
-            migrated_keys.add(f"{primary_prefix}rainbow_enabled")
-        if "rainbow_speed" in original_section and f"{primary_prefix}rainbow_speed" in filtered:
-            migrated_keys.add(f"{primary_prefix}rainbow_speed")
-        for prefix in mode_prefixes:
-            if not prefix:
-                continue
-            doubled = f"{prefix}{prefix}"
-            for key in original_section.keys():
-                if not isinstance(key, str) or not key.startswith(doubled):
-                    continue
-                normalized = f"{prefix}{key[len(doubled):]}"
-                if normalized in filtered:
-                    migrated_keys.add(normalized)
 
     authored_keys = set(original_filtered.keys())
     promoted_mode_keys = {
@@ -594,13 +568,15 @@ def _apply_cleaned_payload_in_place(payload: Dict[str, Any], cleaned: Mapping[st
             for key, value in cleaned_block.items():
                 settings_section[f"{dotted_prefix}{key}"] = deepcopy(value)
             updated_paths.append("settings")
+        else:
+            payload["settings"] = deepcopy(cleaned_block)
+            updated_paths.append("settings")
 
-    if updated_paths:
+    if any(path != "snapshot.custom_preset_backup" for path in updated_paths):
         # De-duplicate while preserving first-seen order for stable reporting.
         return list(dict.fromkeys(updated_paths))
 
-    # Fallback: ensure a canonical visualizer section exists when no known target
-    # section was present in the source payload.
+    # Forward-migrate a legacy backup-only payload into its one live section.
     snapshot_map = payload.get("snapshot")
     if not isinstance(snapshot_map, dict):
         snapshot_map = {}
@@ -610,7 +586,7 @@ def _apply_cleaned_payload_in_place(payload: Dict[str, Any], cleaned: Mapping[st
         widgets_map = {}
         snapshot_map["widgets"] = widgets_map
     widgets_map["spotify_visualizer"] = deepcopy(cleaned_block)
-    return ["snapshot.widgets.spotify_visualizer"]
+    return [*updated_paths, "snapshot.widgets.spotify_visualizer"]
 
 
 def _ensure_backup(path: Path) -> Path:
@@ -651,6 +627,7 @@ def _load_reindex_entry(mode: str, path: Path) -> ReindexEntry:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("Payload root must be a JSON object")
+    _validate_payload_mode(mode, payload)
     # Filenames are operator-authored ordering authority. Embedded metadata is
     # deliberately ignored even when it is a valid but stale integer.
     current_index = vp._infer_preset_index_from_name(path.stem)  # type: ignore[attr-defined]
@@ -894,14 +871,33 @@ def restore_undo_entry(entry: UndoEntry) -> None:
     if entry.expected_hashes:
         if len(entry.expected_hashes) != len(affected) or entry.expected_hashes != _undo_hashes(affected):
             raise RuntimeError("Preset files changed since this operation. Undo refused to protect newer edits.")
-    # For swaps destination names may equal another source name: first remove
-    # the complete set of current operation destinations, then restore sources.
-    for _restore, _backup, cleanup in affected:
-        if cleanup is not None and cleanup.exists():
-            cleanup.unlink()
-    for restore, backup, _cleanup in affected:
-        restore.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(backup, restore)
+    destinations = {cleanup if cleanup is not None else restore for restore,_backup,cleanup in affected}
+    for restore,_backup,_cleanup in affected:
+        if restore.exists() and restore not in destinations:
+            raise RuntimeError(f"Undo refused: original filename is now occupied by a newer file: {restore}")
+    # Read every backup and current before-image before touching any file.
+    # Restore atomically before removing obsolete destinations; never delete a
+    # path which is also another row's restored source (same-suffix swaps).
+    restored = {restore: backup.read_bytes() for restore,backup,_cleanup in affected}
+    touched = set(restored) | {cleanup for _restore,_backup,cleanup in affected if cleanup is not None}
+    before = {path: path.read_bytes() if path.exists() else None for path in touched}
+    try:
+        for restore,data in restored.items():
+            atomic_write_bytes(restore,data)
+        for _restore,_backup,cleanup in affected:
+            if cleanup is not None and cleanup not in restored:
+                cleanup.unlink(missing_ok=True)
+    except Exception as failure:
+        rollback_errors=[]
+        for path,data in before.items():
+            try:
+                if data is None:path.unlink(missing_ok=True)
+                else:atomic_write_bytes(path,data)
+            except Exception as rollback_error:
+                rollback_errors.append(f'{path}: {rollback_error}')
+        if rollback_errors:
+            raise RuntimeError('Undo rollback failed; retained backups are required: '+ '; '.join(rollback_errors)) from failure
+        raise
 
 
 def regenerate_existing_visualizer_manifest(*, sync_release: bool = False) -> bool:
@@ -927,7 +923,8 @@ def repair_file(
     sync_shipped_artifacts: bool = True,
 ) -> Tuple[Path, Dict[str, Any]]:
     try:
-        raw_text = path.read_text(encoding="utf-8")
+        original_bytes = path.read_bytes()
+        raw_text = original_bytes.decode("utf-8")
         payload = json.loads(raw_text)
     except Exception as exc:  # pragma: no cover - GUI path
         raise ValueError(f"Failed to read JSON: {exc}") from exc
@@ -936,12 +933,19 @@ def repair_file(
         raise ValueError("Payload root must be a JSON object")
 
     cleaned, stats = _sanitize_settings(mode, payload)
+    if "starting_view" in payload:
+        from core.settings.visualizer_view_orbit import validate_visualizer_starting_view
+        validate_visualizer_starting_view(mode, payload["starting_view"])
     patched_payload = deepcopy(payload)
     updated_paths = _apply_cleaned_payload_in_place(patched_payload, cleaned)
 
-    backup_path = _ensure_backup(path)
     new_text = json.dumps(patched_payload, indent=2, sort_keys=True)
-    path.write_text(new_text + "\n", encoding="utf-8")
+    if path.read_bytes() != original_bytes:
+        raise RuntimeError(f"Preset changed during repair: {path}")
+    backup_path = _ensure_backup(path)
+    if path.read_bytes() != original_bytes:
+        raise RuntimeError(f"Preset changed while backing up repair: {path}")
+    atomic_write_text(path, new_text + "\n")
 
     stats = {
         "updated_paths": updated_paths,
