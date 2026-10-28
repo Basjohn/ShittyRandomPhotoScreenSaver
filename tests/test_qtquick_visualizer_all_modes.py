@@ -278,7 +278,7 @@ def _drive_runtime(
         )
     if mode_id == "extruded_bubble":
         resolved = runtime.advance(
-            onsets=(), now_ts=now_ts, playing=playing, intensity=0.5,
+            onsets=(), now_ts=now_ts, playing=playing,
             body_bands=(0.25, 0.5, 0.2),
             identity=(identity["runtime_generation"], identity["engine_generation"], identity["activation_id"]),
             source_identity=(identity["source_generation"], identity["source_activation_id"]),

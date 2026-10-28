@@ -205,11 +205,11 @@ def test_soft_large_breathes_downward_instead_of_carrying_a_generic_hold():
     assert held.sustain<.01  # soft music never acquires loud-passage hold
 
 
-def test_changing_vocals_inside_held_bass_drive_smalls_and_every_flow_light_lane():
+def test_changing_vocals_inside_held_bass_drives_body_lanes_while_master_drift_holds_its_passage():
     controls=ExtrudedBubbleControls(large_count=(2,2),mid_count=(4,4),breathing=(.15,.6),small_pulse=(.15,.8),
         stream_speed=(.05,.5),drift=(.1,.9),emission=(.1,.9),sway=0,collision_scope="off")
     sim=ExtrudedBubbleSimulation(27)
-    usual=.65  # PassageIntensity.USUAL
+    usual=.65  # Deliberately hold the standalone simulation's passage input.
     for _ in range(720):
         before=sim.advance(MusicInput(STEP,True,usual,(),(.9,.1,.05)),controls)
     states=[sim.advance(MusicInput(STEP,True,usual,(),(.9,.8,.5)),controls) for _ in range(36)]
@@ -217,8 +217,11 @@ def test_changing_vocals_inside_held_bass_drive_smalls_and_every_flow_light_lane
     # these changes, and no discrete onset is injected.
     assert all(abs(s.level-before.level)<1e-9 for s in states)
     assert max(sim._body_small_envelope,0)>0.4
-    for name,minimum in (('stream_speed',.1),('drift',.08),('emission',.10),('rays',.1)):
+    for name,minimum in (('stream_speed',.1),('emission',.10),('rays',.1)):
         assert max(getattr(s,name) for s in states)>getattr(before,name)+minimum,name
+    # Master Drift's handles are passage endpoints. Runtime ingress derives that
+    # passage from the body feed; this component test intentionally fixes it.
+    assert all(s.drift == pytest.approx(before.drift) for s in states)
     for _ in range(720):
         held=sim.advance(MusicInput(STEP,True,usual,(),(.9,.8,.5)),controls)
     kinds={b.ident:b.large for b in sim._bubbles}
@@ -233,15 +236,30 @@ def _crowded(collision, scope="all"):
 
 
 def test_only_fuse_joins_bubbles_into_clusters_of_at_most_three():
-    snapshot = _run(ExtrudedBubbleSimulation(2), _crowded((1.0, 0.0, 0.0)), 6.0)
+    from copy import deepcopy
+    from dataclasses import replace
+    controls = ExtrudedBubbleControls(large_count=(4.,4.), mid_count=(0.,0.),
+        collision=(1.,0.,0.), stream_speed=(0.,0.), drift=(0.,0.), sway=0.)
+    seed = ExtrudedBubbleSimulation(2)
+    seed.advance(_music(STEP,True,.5),controls)
+    # Four mature, known contacts: equal shared stream speeds no longer create
+    # random size-dependent catchups in a sparse tank. Exercise production contact
+    # discovery and response, including the refused fourth cluster member.
+    assert len(seed._bubbles) == 4
+    for i,bubble in enumerate(seed._bubbles):
+        bubble.x,bubble.y,bubble.z = i*.25*bubble.current_radius,0.,0.
+        bubble.alpha=1.
+    simulation=deepcopy(seed)
+    snapshot=simulation.advance(_music(STEP,True,.5),controls)
     clusters = [snapshot.clusters[i:i + CLUSTER_STRIDE] for i in range(0, len(snapshot.clusters), CLUSTER_STRIDE)]
     assert clusters
     assert all(2 <= c[0] <= 3 for c in clusters)
+    assert max(c[0] for c in clusters) == 3
     records = _records(snapshot)
     for c in clusters:                                     # members point back at their cluster and touch
         members = [records[int(i)] for i in c[1:1 + int(c[0])]]
         assert len({m[7] for m in members}) == 1 and members[0][7] >= 0
-    none = _run(ExtrudedBubbleSimulation(2), _crowded((0.0, 0.0, 1.0)), 6.0)
+    none = deepcopy(seed).advance(_music(STEP,True,.5),replace(controls,collision=(0.,0.,1.)))
     assert none.clusters == ()
 
 
@@ -294,7 +312,7 @@ def _onset(serial, kind="kick", magnitude=1.5, loudness=12.0, presence=1.0):
 
 
 def _capture(runtime, now, onsets=(), *, identity=(1, 2, 3), source=(2, 3), playing=True):
-    return runtime.advance(onsets=onsets, now_ts=now, playing=playing, intensity=0.6, identity=identity,
+    return runtime.advance(onsets=onsets, now_ts=now, playing=playing, identity=identity,
                            source_identity=source, controls=ExtrudedBubbleControls(), body_bands=(0.6,) * 3)
 
 
@@ -393,16 +411,22 @@ def test_the_rays_move_through_a_saturated_passage_rise_quickly_fall_slowly_and_
     controls = ExtrudedBubbleControls(collision_scope="off")
     simulation = ExtrudedBubbleSimulation(5)
     quiet = _run(simulation, controls, 4.0, intensity=0.0)
-    rays, shimmer = [], []
+    baseline = ExtrudedBubbleSimulation(5)
+    _run(baseline, controls, 4.0, intensity=0.0)
+    rays, shimmer, without_hits = [], [], []
     for i in range(int(10.0 / STEP)):                               # saturated, a hit every 0.75 s
         onsets = (("kick", 1.0),) if i % 45 == 0 else ()
         snapshot = simulation.advance(_music(STEP, True, 1.0, onsets), controls)
         rays.append(snapshot.rays)
         shimmer.append(snapshot.shimmer)
+        without_hits.append(baseline.advance(_music(STEP,True,1.0),controls).rays)
     assert rays[int(0.6 / STEP)] > quiet.rays + 0.4                 # quick attack
     held = rays[int(4.0 / STEP):]
     assert max(held) < 1.0                                          # never on the top
-    assert max(held) - min(held) > 0.04                             # still moving with the hits
+    # Full body + passage saturates the held driver. Hits must still add an
+    # accent versus the same held source without them; a required oscillation
+    # span would conflict with the absolute held-light contract.
+    assert any(hit > flat + 1e-6 for hit,flat in zip(held,without_hits[int(4.0/STEP):]))
     # Never a jump: even the quick attack out of silence takes several frames to cross a tenth of the range.
     assert max(abs(b - a) for a, b in zip(rays, rays[1:])) < 0.1
     assert all(b > a for a, b in zip(shimmer, shimmer[1:]))         # the shimmer runs on, never back

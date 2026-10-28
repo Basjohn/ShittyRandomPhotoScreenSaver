@@ -13,7 +13,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 from tools.visualizer_replay.engine import ReplayBeatEngine
-from widgets.spotify_visualizer.extruded_bubble_frame_runtime import ExtrudedBubbleFrameRuntime
+from widgets.spotify_visualizer.extruded_bubble_frame_runtime import ExtrudedBubbleFrameRuntime, passage_intensity_from_body_bands
 from widgets.spotify_visualizer.extruded_bubble_simulation import BUBBLE_STRIDE, ExtrudedBubbleControls, WORLD_UNIT
 from widgets.spotify_visualizer.feature_frame import FeatureClip
 
@@ -36,15 +36,16 @@ for row, name in enumerate(names):
         t0 = now if t0 is None else t0
         onsets = engine.get_onset_events(runtime.onset_serial)
         kicks += [now - t0 for o in onsets if o.kind == "kick"]
+        bands = engine.get_extruded_bubble_body_bands()
+        body_bands = (bands.bass, bands.mid, bands.high)
         snap = runtime.advance(onsets=onsets, now_ts=now, playing=bool(frame.playing),
-                               intensity=engine.get_musical_intensity(), identity=(1, 1, 1), source_identity=(1, 1),
-                               body_bands=tuple(getattr(engine.get_bubble_energy_bands(), n) for n in ('bass', 'mid', 'high')),
+                               identity=(1, 1, 1), source_identity=(1, 1), body_bands=body_bands,
                                controls=controls)
         records = [snap.bubbles[i:i + BUBBLE_STRIDE] for i in range(0, len(snap.bubbles), BUBBLE_STRIDE)]
         kinds = {b.ident: b.large for b in runtime._simulation._bubbles}
         mids = [r[5] for r in records if not kinds[int(r[6])] and r[4] > 0.9]
         series["t"].append(now - t0)
-        series["intensity"].append(engine.get_musical_intensity())
+        series["intensity"].append(passage_intensity_from_body_bands(body_bands))
         series["level"].append(snap.level)
         series["sustain"].append(snap.sustain)
         series["speed"].append(snap.stream_speed / (WORLD_UNIT * controls.stream_speed[1]))

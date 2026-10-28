@@ -1,6 +1,6 @@
 """Activation-fenced authored state for Extruded Bubble: its own simulation, advanced in the mode's logical capture.
 
-Each capture passes the logical time, the activation and source identities, the passage intensity and the onsets the engine published since ``onset_serial`` (each ``MusicalOnset`` is taken exactly once, by
+Each capture passes the logical time, the activation and source identities, the body bands and the onsets the engine published since ``onset_serial`` (each ``MusicalOnset`` is taken exactly once, by
 serial, however the analysis and logical cadences relate). dt is the logical time since the previous capture; a new
 activation, a source that is not ready, or a clock that goes back starts the simulation over or holds it silent.
 Nothing here touches Qt or GL.
@@ -22,12 +22,24 @@ from widgets.spotify_visualizer.transient_bus import musical_weight
 # The largest step one capture may take (a stalled clock never leaps the population).
 MAX_STEP_SECONDS = 0.1
 # Settings units -> simulation units: speed (authored normalized length/s; simulation converts once to physical world units); breathing/pulse are authored reaction strengths.
-# Full-dynamic musical body bands are read from the existing 2D Bubble engine, not a new floor/DSP.
+# EB's existing fixed-scale body feed supplies both breathing and passage; no new DSP.
 STREAM_SPEED_FULL = 0.25
 _SCOPES = {"All": "all", "Big": "big", "Small": "small", "Off": "off"}
 _DRIFT_DIRECTIONS = {"Wander": "wander", "Left": "left", "Right": "right", "Diagonal": "diagonal",
                      "Swish (Across)": "swish_across", "Swish (Depth)": "swish_depth", "Random": "random",
                      "Clockwise": "swirl_cw", "Counter-Clockwise": "swirl_ccw"}
+
+
+def passage_intensity_from_body_bands(body_bands: tuple[float, float, float]) -> float:
+    """Fixed EB passage scale from its admitted body feed, independent of the shared bar loudness.
+
+    The existing body weights .46/.34/.20 and a fixed .7 power map overall body
+    0/.25/.5/.8/1 to passage 0/.379/.616/.855/1. There is no silence threshold,
+    nonzero floor or learned track reference. Simulation owns passage shaping/following.
+    """
+    bass, mid, high = body_bands
+    overall = .46 * bass + .34 * mid + .20 * high
+    return max(0.0, min(1.0, overall)) ** .7
 
 
 def controls_from_parameters(parameters) -> ExtrudedBubbleControls:
@@ -108,7 +120,7 @@ class ExtrudedBubbleFrameRuntime(RetirableFrameRuntime):
         return self._latest
 
     @retirement_fenced
-    def advance(self, *, onsets, now_ts: float, playing: bool, intensity: float,
+    def advance(self, *, onsets, now_ts: float, playing: bool,
                 identity: tuple[int, int, int], source_identity: tuple[int, int],
                 controls: ExtrudedBubbleControls,
                 body_bands: tuple[float, float, float],
@@ -133,11 +145,12 @@ class ExtrudedBubbleFrameRuntime(RetirableFrameRuntime):
         live = bool(playing) and source_ready
         dt = 0.0 if self._last_ts is None else min(MAX_STEP_SECONDS, max(0.0, now - self._last_ts))
         self._last_ts = now
-        music = MusicInput(dt, live, float(intensity) if live else 0.0, tuple(taken) if live else (),
+        music = MusicInput(dt, live, passage_intensity_from_body_bands(body_bands) if live else 0.0, tuple(taken) if live else (),
                            tuple(body_bands) if live else (0.0, 0.0, 0.0),
                            bool(play_ramping) if live else False)
         self._latest = self._simulation.advance(music, controls)
         return self._latest
 
 
-__all__ = ["ExtrudedBubbleFrameRuntime", "MAX_STEP_SECONDS", "controls_from_parameters", "onset_weight"]
+__all__ = ["ExtrudedBubbleFrameRuntime", "MAX_STEP_SECONDS", "controls_from_parameters", "onset_weight",
+           "passage_intensity_from_body_bands"]

@@ -32,7 +32,7 @@ def run(clip, params, collision):
         engine.accept_feature_frame(frame)
         now = frame.timestamp_us / 1e6
         runtime.advance(onsets=engine.get_onset_events(runtime.onset_serial), now_ts=now, playing=bool(frame.playing),
-                        intensity=engine.get_musical_intensity(), identity=(1, 1, 1), source_identity=(1, 1),
+                        identity=(1, 1, 1), source_identity=(1, 1),
                         body_bands=tuple(getattr(engine.get_extruded_bubble_body_bands(), n)
                                          for n in ("bass", "mid", "high")),
                         controls=controls)

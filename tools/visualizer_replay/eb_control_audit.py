@@ -73,7 +73,7 @@ def _replay_all(clip, params, metrics):
     """Each metric's mean in the quietest, middle and loudest fifths of the song, from one replay."""
     from tools.visualizer_replay.engine import ReplayBeatEngine
     from widgets.spotify_visualizer.extruded_bubble_frame_runtime import (
-        ExtrudedBubbleFrameRuntime, controls_from_parameters,
+        ExtrudedBubbleFrameRuntime, controls_from_parameters, passage_intensity_from_body_bands,
     )
     engine = ReplayBeatEngine(32)
     runtime = ExtrudedBubbleFrameRuntime(1)
@@ -83,13 +83,13 @@ def _replay_all(clip, params, metrics):
         engine.accept_feature_frame(frame)
         now = frame.timestamp_us / 1e6
         onsets = engine.get_onset_events(runtime.onset_serial)
+        bands = engine.get_extruded_bubble_body_bands()
+        body_bands = (bands.bass, bands.mid, bands.high)
         snap = runtime.advance(onsets=onsets, now_ts=now, playing=bool(frame.playing),
-                               intensity=engine.get_musical_intensity(), identity=(1, 1, 1), source_identity=(1, 1),
-                               body_bands=tuple(getattr(engine.get_extruded_bubble_body_bands(), n)
-                                                for n in ("bass", "mid", "high")),
+                               identity=(1, 1, 1), source_identity=(1, 1), body_bands=body_bands,
                                controls=controls)
-        rows.append((engine.get_musical_intensity(), tuple(m(params, snap, runtime) for m in metrics.values())))
-    # Rank by the PASSAGE (a centred 4 s mean of the engine's intensity), not the instantaneous value: that snaps
+        rows.append((passage_intensity_from_body_bands(body_bands), tuple(m(params, snap, runtime) for m in metrics.values())))
+    # Rank by the PASSAGE (a centred 4 s mean of EB's body-derived intensity), not the instantaneous value: that snaps
     # to 0 in every near-silent gap between beats, so its quietest fifth was beat gaps inside loud music.
     times = [f.timestamp_us / 1e6 for f in clip.frames]
     sums = [0.0]
