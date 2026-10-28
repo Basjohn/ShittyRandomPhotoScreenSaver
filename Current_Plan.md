@@ -164,11 +164,13 @@ the archive's alternate is context only. Existing EB wakes/probes do not establi
 - [ ] **WR-00 remaining:** confirm annotation masks/crops and measured target tolerances; choose recorded-audio
   windows and fit a stable Orthographic scene eye/pivot/world/palette. Reference/projection preflight is landed;
   output `.artifacts/evidence/waveform_ribbon/wr00_reference_projection/receipt.json` records its limited scope.
-- [ ] **Next implementation: WR-02 / S3D-1 independent GPU harness:** admit the proposed knot/metadata layout,
-  anchor/phase rebasing and bounded triangle expansion; prove gaps/cusps, actual surface normals, Orthographic
-  and optional Perspective, OIT/occlusion/defocus, state restoration/retirement and measured cost.
-  CPU history/width frames and stations are implemented (`Docs/Reference/Ribbon_Path.md`); there is no GPU strip
-  or scene renderer yet. WR-00 measurements/audio and all likeness/music/performance gates remain open.
+- [ ] **Next implementation: WR-02a input-cost gate:** replace full stateless frame/packet rebuild with one
+  incremental/cached logical input path; prove changed-input cost, phase/epoch/eviction continuity and dormancy.
+  The independent oriented GPU strip prototype is implemented; the maximum full CPU reference rebuild costs
+  about 90 ms and is not production-admitted. No runtime mode imports it (`Docs/Reference/Ribbon_Path.md`).
+- [ ] **WR-02 remaining GPU/native gates:** curved-frame/normal/precision/near-plane/AA and failure coverage,
+  then OIT/HDR/camera-facing/defocus and broader measured cost. Solid oriented geometry has native Ortho/Perspective,
+  gap, plane-normal, phase-rebase, depth and context/state proofs; no Ribbon scene or likeness/music pass exists.
 - [ ] Lab: one ribbon (bass → width, mids → twist/deformation, energy → glow) toward the concept image.
 - [ ] Production: single ribbon, translucent emissive shading and bloom, then the reflective floor, then multi-ribbon,
   then particle accents, then a restrained Settings surface (gates A–H: same scene low/high, no second renderer, one

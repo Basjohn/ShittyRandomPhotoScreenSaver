@@ -84,7 +84,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Visualizer reactivity authoring | `Docs/Guides/Visualizer_Reactivity_Authoring.md` |
 | Visualizer visual tuning: offscreen preview, side-by-side sheets, measurement, pixel-identity proof | `Docs/Guides/Visualizer_Visual_Tuning.md` |
 | Shared lab context/target, production-host input experiments, bounded capture and retirement | `Docs/Guides/Visualizer_Labs.md`; `tools/labs/render_target.py` |
-| Shared ribbon CPU history/width frames and open GPU boundaries | `Docs/Reference/Ribbon_Path.md`; `core/ribbon_geometry.py` |
+| Shared ribbon history/width frames, oriented GPU prototype and open admission gates | `Docs/Reference/Ribbon_Path.md`; `core/ribbon_geometry.py` |
 | Waveform Ribbon Orthographic-first preflight, reference measurements, shared prerequisites and fidelity gates | `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`; `Docs/Future_Work/Waveform_Ribbon.md` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
 | Visualizer Previous/Next preset glyphs and default selection | `Docs/Reference/Visualizer_Reference.md` → Preset navigation glyphs |

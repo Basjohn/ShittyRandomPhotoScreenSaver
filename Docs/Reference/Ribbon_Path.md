@@ -51,8 +51,8 @@ The receipt records actual payload size, retained knots, evaluated positions and
 CPU XY plots, not GPU/scene fidelity evidence. Output directories are never silently overwritten.
 
 WR-01b CPU width frames and station construction are implemented in `core/ribbon_frames.py`; see below.
-WR-02 remains: GPU layout, strip expansion, OIT/occlusion/defocus, state/resource lifecycle proof and measured
-CPU/GPU cost. Scene composition, real audio, reflection and artistic acceptance remain later gates.
+WR-02a now supplies an independent oriented GPU strip prototype; see the admitted scope below.
+Production-efficient packet construction, broader GPU coverage, OIT/defocus and full cost acceptance remain open. Scene composition, real audio, reflection and artistic acceptance remain later gates.
 
 ## Width frames, stations and continuation (WR-01b)
 
@@ -94,21 +94,68 @@ Orthographic-facing and Perspective-facing), plus full frame/vertex/UV traces an
 `.venv\Scripts\python.exe tools/labs/ribbon_frame_probe.py --output .artifacts/evidence/ribbon_frames/<new-run>`.
 These are CPU-projected wire cards, not GL/native scene images or material/lighting acceptance.
 
-## Proposed WR-02 allocation and topology contract (not allocated yet)
+## WR-02a oriented GPU prototype and input contract
 
-- At most 8 active ribbons, each with at most 256 knots and 8 longitudinal subdivisions per interval. Proposed
-  maximum 2041 stations/ribbon; this CPU cap is enforced. The GPU population cap must be enforced at admission.
-- Vertex-stage expansion starts as independent triangles: 6 vertices per interval, at most 12240/ribbon and
-  97920/scene. No index buffer is required; explicit invalid/gap/cusp intervals emit no visible triangles.
-  No triangle may connect the samples on opposite sides of a None station or strip break. Ends are open thin
-  sheet edges, not closed volume caps. Tessellation/edge coverage remain bounded native image gates.
-- Candidate std430 knot record: four vec4s (64 bytes): position.xyz/half-width; local-coordinate/twist/valid/reserved;
-  tangent.xyz/reserved; untwisted base-side.xyz/reserved. 8*256*64 = 131072 bytes of knot payload. Proposed per-ribbon metadata budget is 64 bytes (counts/flags, phase/period,
-  two colour vectors), or 512 bytes total, giving 131584 bytes per stream slot before alignment and fences. No GL allocation or performance claim follows from this arithmetic.
-- Preserve absolute CPU coordinates. Proposed float32 upload rebases each history to its oldest coordinate;
-  enforce a declared supported local time span (initial harness ceiling 64 s). Repeating strand phase uses a
-  CPU-reduced origin phase plus local-coordinate/period, never a float32 copy of a huge absolute time. Test
-  long-running insertion/eviction with fixed material marks before admitting the packing scheme.
-- Use the existing shared stream/fence and context resource owners; no GPU live-count readback or per-frame
-  reallocation. Record actual payload/metadata/alignment/ring bytes, draw counts and maximum-emission behavior
-  in the independent harness. Change these proposed limits only with matching bounded-memory/work proof.
+`core/ribbon_packet.py` owns immutable std430 packet admission. `rendering/gl_programs/ribbon.py` expands
+centripetal centre-line knots into independent oriented triangles. `rendering/quick/scene3d/ribbon.py` owns
+only its context-local program/VAO and shared `StreamRing`; it does not own camera/target/depth/blend, a mode,
+clock, simulation or material authority. The standalone consumer is `tools/labs/ribbon_strip_probe.py`.
+No runtime mode imports this prototype; EB and all existing modes receive no work or appearance changes.
+
+- At most 8 admitted paths, 256 knots/path and 1–8 subdivisions/interval. Bounds apply before GL admission;
+  at most 12240 vertices/instance and 97920/scene. Empty/non-drawable input allocates/uploads/draws nothing.
+- Each path has 64 bytes metadata plus 256*64 bytes knot storage, even when fewer knots are live. Maximum
+  packet 131584 bytes. std430 knot = position.xyz/half-width; local-coordinate/local-twist/valid/reserved;
+  tangent.xyz/reserved; untwisted base-side.xyz/reserved. Metadata holds count/subdivision/origin phase/period,
+  reduced origin twist, diagnostic colour and reserved colour storage. This is a diagnostic RGBA material,
+  not the Ribbon scene's final shading or palette.
+- Positions upload relative to the first active knot's float64 packet origin. The owner composes the supplied
+  world MVP with that translation in float64 before float32 uniform upload; logical positions/eye remain fixed.
+  Packets enforce a 1024-unit local spatial domain and float32 quantization checks. The spline derivative uses
+  segment-local differences, so exact large-coordinate input cannot erase a tangent. Native translation to 1e6
+  world units preserves the reference image byte-for-byte. Shader position varyings are packet-local; future
+  lights/probes/eye inputs must use that same coordinate frame, not mix local and absolute spaces.
+- Absolute CPU coordinates remain unchanged. Local float32 coordinates rebase to the oldest knot with a 64-second
+  span ceiling and strictly preserved ordering. Periodic phase = CPU-reduced origin phase + local/period;
+  at most 4096 periods/window. Twist similarly rebases to a reduced origin angle with at most 32 local turns.
+  Nonfinite, collapsed-width or unrepresentable float32 positions/widths fail before upload. These limits are
+  explicit prototype admission, not silent Settings clamps. Long-record phase/native rebase comparison passes.
+- Vertex-stage expansion emits two independent triangles per subdivision. Both endpoint stations must be valid
+  before any of their six vertices emit. Invalid/gap intervals cannot leave one vertex at an offscreen sentinel
+  and stretch a surviving triangle across the viewport. Invalid outer support knots are replaced by endpoint
+  extrapolation, so they cannot pull geometry across a gap. Ends remain open thin-sheet edges.
+- GPU side frames interpolate the untwisted knot bases, project onto the local spline tangent, normalize and
+  apply local authored twist. That is an initial GPU interpolation scheme, not a claim of exact continuous
+  transported-frame equality for every curve. GPU camera-facing/pole behavior is **not implemented yet**.
+- Diagnostic surface normals derive from actual triangle world-position derivatives and face winding; the
+  native plane oracle catches reversed winding. Curved/twisted normal fidelity, near-plane/edge-on motion,
+  all dynamic width/extreme-curvature cases and anti-aliasing remain native admission gates.
+
+The primitive saves/restores program, VAO and SSBO binding 0/range, including thrown draws, and leaves inherited
+framebuffer/viewport/scissor/depth/blend/texture state untouched. Native sentinels include an existing nonzero
+SSBO range/generic binding. Legal current-context ownership is checked before GL work; foreign-context use or
+retirement fails before touching resources. Successful release is idempotent and allows later reactivation. It drops the released stream owner, so a new
+context gets a freshly sized alignment budget rather than reusing the previous context's slot shape.
+Partial-admission/retry failure coverage beyond these focused cases remains part of the broader WR-02 gate.
+
+The stream has three fixed slots, each MAX_PACKET_BYTES + actual SSBO alignment. On the measured driver this
+is 394800 bytes of mapped buffer storage, plus the dummy 8-byte mesh, program and driver overhead (not a total
+VRAM claim). Ring rotation/fences use the existing owner; no per-frame resource allocation or live-count readback.
+
+### Native proof and cost boundary
+
+Run `.venv\Scripts\python.exe tools/labs/ribbon_strip_probe.py --output .artifacts/evidence/ribbon_strip/<new-run>`
+under the bounded process-tree launcher. The receipt records driver/viewport, 90 warm frames/case, packet/draw
+caps, GPU draw query median/p90, CPU submit median/p90, and full reference packet-build CPU measurements.
+Current receipt: `.artifacts/evidence/waveform_ribbon/wr02a_native_final/receipt.json`.
+
+On RTX 4090 at 640x384: draw medians about 0.004ms (one 32-knot path) and 0.0195ms (eight 256-knot paths), CPU
+submit medians about 0.12–0.16ms; both projections tested. Draw timing excludes packing and upload; submit timing
+includes upload/bindings/fences but excludes readback/wait. Full stateless CPU fixture/frame/packet rebuilding
+measured median 1.52ms for one path and 89.49ms at the cap (three build samples, p90 96.40ms). **This rebuild is
+not admitted as a per-frame production path.** Cheap GPU draw is not a whole-mode cost or fidelity pass.
+
+Next gate: incremental/cached logical frame and packet construction with measured changed-input cost and
+continuity/epoch/eviction proof. Do not add a second cache/state authority or renderer-side simulation. After
+that, broaden native curved-frame/normal/precision/lifecycle proof, then OIT/HDR, camera-facing GPU behavior,
+AA/defocus and target composition. No GL scene likeness, music or full performance acceptance exists yet.
