@@ -263,17 +263,18 @@ def _shockwave_envelope(
     presentation: ResolvedVisualizerPresentation,
     parameters: Mapping[str, object],
 ) -> dict[str, object] | None:
-    from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_DEPTH, shockwave_half_width
+    from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_DEPTH, SHOCKWAVE_HALF_WIDTH
     from rendering.gl_programs.neon_lake_basin_program import basin_view
 
     field = _local_content_rect(presentation)
     if field[3] <= 0.0:
         return None
-    half_width = shockwave_half_width(field[2] / field[3])
+    half_width = SHOCKWAVE_HALF_WIDTH
     terrain = parameters["shockwave_grid_terrain"]
     height_scale = float(parameters["shockwave_grid_terrain_height"])*1.50
     maximum = max(0.19, float(terrain["maximum"])*height_scale)
-    view = basin_view(parameters, field)
+    from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
+    view = basin_view(parameters, field, aperture_scale=framed_aperture_scale(presentation, content=True))
 
     def project(point):
         # Points behind the eye are pushed to its near plane: the guide stays on the card.

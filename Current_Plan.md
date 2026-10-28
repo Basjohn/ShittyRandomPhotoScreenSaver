@@ -47,8 +47,10 @@ world geometry and camera fixed during resize; compare the original rectangle be
 - [~] **EB28-2 — Stream — combined capture gate remains:** ordinary/forming/fused transport now receives the shared
   stream at1x, independent of radius. Recorded P8 no-contact measurements confirm both classes at1x; inspect the
   wider passage/contact/pixel matrix under EB28-V before final acceptance.
-- [ ] **EB28-3 — Framed viewport:** prove the chosen fixed-world projection policy on EB and Neon Lake at extreme
-  aspects, preserving physical camera/landmark identities, authored views, clipping and optical effects.
+- [~] **EB28-3 — Framed viewport — combined/native gate remains:** edge resize now uses a reference-window
+  aperture with the actual pixel aspect, authored FOV/eye unchanged; uniform scaling retains prior behavior. Neon
+  terrain/events/floor use the fixed basic-rectangle world. Recorded before/after basic-rectangle and seven-extent
+  captures pass; finish chrome/DPR/optical/native resize checks under EB28-V.
 - [~] **EB28-4 — Pause/resume visibility — combined capture gate remains:** logical free-chain attack is isolated
   from shared audio/motion and retains the existing release; focused repeated-toggle, recorded production replay and
   renderer-uniform checks pass. Complete dense temporal/layer comparisons under EB28-V before final acceptance.

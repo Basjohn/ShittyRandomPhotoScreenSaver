@@ -5,6 +5,7 @@ SceneTarget draw reflected land then terrain/water. View pose never grows the
 card target. Optional sky and bloom retire with this activation.
 """
 from __future__ import annotations
+from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
 
 import math
 from contextlib import contextmanager
@@ -25,7 +26,7 @@ from rendering.gl_programs.neon_terrain_reaction import REACTION_SAMPLES
 from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
 from rendering.gl_programs.shockwave_grid_program import (
     SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_MAX_RIDGE,
-    shockwave_amplitude, shockwave_event_records, shockwave_grid_cells, shockwave_half_width,
+    shockwave_amplitude, shockwave_event_records, shockwave_grid_cells, SHOCKWAVE_HALF_WIDTH,
     shockwave_idle, shockwave_wave_speed,
 )
 from rendering.quick.scene3d.frame import item_pixel_rect
@@ -134,13 +135,14 @@ class QuickShockwaveGridRenderer:
 
     def _view(self, frame, parameters):
         field = tuple(float(value) for value in frame.logical_content_rect)
-        half_width = shockwave_half_width(field[2] / field[3])
+        half_width = SHOCKWAVE_HALF_WIDTH
         terrain = parameter(parameters, "shockwave_grid_terrain")
         if terrain["data"] is not self._terrain_data:
             self._terrain_data = terrain["data"]
         maximum = max(0.19, float(terrain["maximum"])
                       * float(parameter(parameters, "shockwave_grid_terrain_height")) * 1.50)
-        return field, half_width, basin_view(parameters, field), maximum
+        return field, half_width, basin_view(parameters, field,
+            aperture_scale=framed_aperture_scale(frame.snapshot.presentation, content=True)), maximum
 
     def _programs(self, parameters, samples, bloom):
         r = self._resources

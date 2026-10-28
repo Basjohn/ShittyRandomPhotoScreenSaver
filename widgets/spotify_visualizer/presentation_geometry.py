@@ -328,6 +328,18 @@ def resize_visualizer_presentation(
     )
 
 
+def framed_aperture_scale(presentation: ResolvedVisualizerPresentation, *, content: bool = False) -> float:
+    """Sensor height relative to the canonical authored window.
+
+    Edge resizing reveals/crops world; uniform card scaling changes display size
+    only. This never changes the authored lens, eye, world or pixel aspect.
+    """
+    inset = ((presentation.outer_rect[3] - presentation.content_rect[3]) / presentation.uniform_visual_scale
+             if content else 0.)
+    return ((presentation.viewport_extent[1] - inset)
+            / max(1e-6, presentation.baseline_viewport_size[1] - inset))
+
+
 def resize_visualizer_presentation_uniformly(
     baseline: ResolvedVisualizerPresentation,
     *,
@@ -352,4 +364,5 @@ __all__ = [
     "resize_visualizer_presentation",
     "resize_visualizer_presentation_uniformly",
     "resolve_visualizer_presentation",
+    "framed_aperture_scale",
 ]

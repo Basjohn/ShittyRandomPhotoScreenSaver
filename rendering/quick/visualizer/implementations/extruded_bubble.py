@@ -47,6 +47,7 @@ from rendering.quick.scene3d.resources import MeshResources, warm_programs
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
 from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
 from widgets.spotify_visualizer.extruded_bubble_simulation import MAX_BUBBLES, idle_activity as _idle_activity
+from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
 from widgets.spotify_visualizer.extruded_bubble_geometry import WORLD_CENTER, WORLD_HALF, WORLD_UNIT, stream_basis
 from widgets.spotify_visualizer.render_state import ExtrudedBubbleFrame
 
@@ -351,7 +352,8 @@ class QuickExtrudedBubbleRenderer:
             return False
         if not self._probe_for(parameters).warm():
             return False
-        if not self._near.warm(width, height, _near_spread(height)):
+        if not self._near.warm(width, height,
+                               _near_spread(height / framed_aperture_scale(frame.snapshot.presentation))):
             return False
         return self._target.warm((width, height), samples, overlay=True, bloom=True, depth_texture=True,
                                  background=True, oit=True, hdr=True)
@@ -368,6 +370,7 @@ class QuickExtrudedBubbleRenderer:
         x, y, width, height = item_pixel_rect(frame)
         if width <= 0 or height <= 0:
             return
+        optical_height = height / framed_aperture_scale(presentation)
         parameters = state.parameters
         if parameters != self._knobs_for:
             self._knobs, self._knobs_for = scene_knobs(parameters), parameters
@@ -390,7 +393,8 @@ class QuickExtrudedBubbleRenderer:
             pan_x=float(parameter(parameters, "extruded_bubble_scene_pan_x")),
             pan_y=float(parameter(parameters, "extruded_bubble_scene_pan_y")),
             position_offset=tuple(parameter(parameters, "extruded_bubble_camera_position")),
-            fov_y_degrees=fov_y, surface_bound=knobs["mode"] == "surface")
+            fov_y_degrees=fov_y, surface_bound=knobs["mode"] == "surface",
+            aperture_scale=framed_aperture_scale(presentation))
         if knobs["mode"] == "deep":
             to_emitter = tuple(float(p) - float(e) for p, e in zip(knobs["light_source"], eye))
             distance = math.sqrt(sum(v*v for v in to_emitter))
@@ -442,11 +446,11 @@ class QuickExtrudedBubbleRenderer:
                 "uProbeLevels": float(probe.levels), "uLensShift": shift}
         for key, near in (("shells", False), ("clusters", False), ("near", True), ("near_clusters", True), ("beads", False)):
             self._uniforms.set(programs[key], {**view, **_glass(knobs, near),
-                                             "uNearCoc": 22.0 * height / 941.0,
-                                             "uNearMax": _near_spread(height)})
+                                             "uNearCoc": 22.0 * optical_height / 941.0,
+                                             "uNearMax": _near_spread(optical_height)})
         self._uniforms.set(programs["trails"], {**view, "uFocus": float(knobs.get("focus", 4.2)),
                                                 "uAperture": float(knobs.get("aperture", 3.0)),
-                                                "uNearCoc": 22.0 * height / 941.0, "uNearMax": _near_spread(height)})
+                                                "uNearCoc": 22.0 * optical_height / 941.0, "uNearMax": _near_spread(optical_height)})
         chain_fill, snow_fill, fizz_fill = _procedural_fill(parameters, chain_drive(state), state.emission)
         idle_activity = _idle_activity(state.level)
         beads, snow = math.ceil(chain_fill) * _BEADS_PER_CHAIN, math.ceil(snow_fill)
@@ -587,7 +591,7 @@ class QuickExtrudedBubbleRenderer:
                 gl.glBindVertexArray(self._clusters.vao)
                 gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, cluster_count)
             self._near.end()
-            self._near.composite(_near_spread(height))
+            self._near.composite(_near_spread(optical_height))
             for unit in (_UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE):
                 gl.glBindTextureUnit(unit, 0)
             gl.glViewport(*scene_viewport)

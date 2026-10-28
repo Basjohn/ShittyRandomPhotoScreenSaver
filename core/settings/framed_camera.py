@@ -167,17 +167,29 @@ def admit_camera_parameters(spec: FramedCameraSpec, values: Mapping[str, object]
     return resolve_from_values(spec, values)[1]
 
 
+def viewport_tangents(fov_y_degrees: float, aspect: float, aperture_scale: float = 1.,
+                      fov_range: tuple[float, float] = FOV_RANGE) -> tuple[float, float]:
+    """Centred aperture through the authored lens; aspect always matches the real target."""
+    if not math.isfinite(aspect) or aspect <= 0 or not math.isfinite(aperture_scale) or aperture_scale <= 0:
+        raise ValueError('Framed aperture dimensions must be finite and positive')
+    tan_y = tan_half_fov(fov_y_degrees, fov_range) * aperture_scale
+    return tan_y * aspect, tan_y
+
+
+def perspective_matrix(tan: tuple[float, float], near: float, far: float):
+    """Projection from the very same aperture used by ray, optical and landmark consumers."""
+    return (1. / tan[0], 0., 0., 0., 0., 1. / tan[1], 0., 0., 0., 0.,
+            (far + near) / (near - far), -1., 0., 0., 2. * far * near / (near - far), 0.)
+
+
 def view_matrices(spec: FramedCameraSpec, turn: float, tilt: float, aspect: float, fov_y_degrees: float,
-                  near: float, far: float):
+                  near: float, far: float, *, aperture_scale: float = 1.):
     """(view_to_world, world_to_view) column-major mat3s, (tan x, tan y), and the GL mat4 projection."""
     view_to_world = camera_axes(spec, turn, tilt)
     right, up, back = view_to_world[:3], view_to_world[3:6], view_to_world[6:9]
     world_to_view = (right[0], up[0], back[0], right[1], up[1], back[1], right[2], up[2], back[2])
-    tan_y = tan_half_fov(fov_y_degrees, spec.fov_range)
-    f = 1.0 / tan_y
-    projection = (f / aspect, 0.0, 0.0, 0.0, 0.0, f, 0.0, 0.0, 0.0, 0.0,
-                  (far + near) / (near - far), -1.0, 0.0, 0.0, 2.0 * far * near / (near - far), 0.0)
-    return view_to_world, world_to_view, (tan_y * aspect, tan_y), projection
+    tan = viewport_tangents(fov_y_degrees, aspect, aperture_scale, spec.fov_range)
+    return view_to_world, world_to_view, tan, perspective_matrix(tan, near, far)
 
 
 def project_point(spec: FramedCameraSpec, point, eye, turn: float, tilt: float, aspect: float,
