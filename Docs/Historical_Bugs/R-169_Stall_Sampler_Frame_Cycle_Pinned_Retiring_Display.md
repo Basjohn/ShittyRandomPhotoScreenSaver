@@ -37,3 +37,14 @@ disabled, R-154's refcount-only standard) fails without the fix and passes with 
 Any diagnostic that takes frame objects (`sys._current_frames`, `_getframe`, tracebacks) must not let them reach a
 cycle: they pin whole call chains, including product owners, for as long as the cycle lives. Not seen yet: a timeout
 in a run without `--gui-stall-stacks`; if one appears, its snapshot names a different holder.
+
+## Different Settings-open failure, 28 October
+
+`F:/Programming/Apps/logs0e66768ed8.zip` is not another retention timeout: lifecycle line 2064 records the
+Settings barrier completing in 516 ms. Main log lines 392–414 instead report `ImportError: cannot import name
+'Gradient'` while lazily importing Settings. The saver had loaded the earlier settings module before the source
+UI integration changed on disk. This mixed-source process exited through `settings_dialog_failed`; its cached
+module cannot acquire a newly added type merely because the file changed. The coherent committed source opens
+the native Settings dialog in a fresh isolated process. No GC sweep, barrier relaxation, hot reload or import
+fallback is warranted by this evidence. Avoid interdependent source edits against a running development saver;
+validate a fresh process at the completed checkpoint.
