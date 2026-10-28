@@ -547,6 +547,12 @@ def load_mode_logical_tick_hook(mode_id: str):
 
 
 
+def is_framed_visualizer_layout_profile(profile: str) -> bool:
+    """Derived CUSTOM interaction capability; the descriptor's camera remains the authority."""
+    return any(descriptor.layout_profile==profile and bool(descriptor.framed_camera)
+               for descriptor in _ALL_DESCRIPTORS)
+
+
 def get_technical_profile_mode(mode_id: str) -> str:
     """Return the canonical technical/DSP profile backing ``mode_id``.
 

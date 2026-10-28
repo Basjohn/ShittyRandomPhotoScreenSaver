@@ -57,10 +57,14 @@ world geometry and camera fixed during resize; compare the original rectangle be
   positive-difference lift; strength endpoints are literal, Modulation0 holds the upper strength and Shimmer is
   independent. Schema13 migrates old cosmetic Flicker values before defaults/overlays. Focused and frozen recorded
   pixel comparisons pass; complete held/dip/resume motion and shaft-buffer traces under EB28-V.
+- [ ] **EB28-6 — Camera persistence / automatic motion:** reproduce operator's P8→P1 wrong eye versus
+  P1→P2→P1 correct eye; trace preset starting view, persisted pose, physical-eye admission and retained
+  auto-rotate/orbit/flight/drag state. Repair the owning activation boundary and prove repeatable switching,
+  reset, automatic motion, Settings reopen and recorded/offscreen camera identity without losing EB28-1…5 work.
 - [ ] **EB28-V — Combined behavioral proof:** use production recorded replay and offscreen renders for all five
   tasks, including P8, representative other settings, BEAM/SCENE, both light types and negative/zero/max controls.
   Canonical preset enumeration now admits P8 in the existing probes.
-- [ ] **EB28-P — Performance only after EB28-1…5/V pass:** audit CPU/GPU waste, churn and conservative
+- [ ] **EB28-P — Performance only after EB28-1…6/V pass:** audit CPU/GPU waste, churn and conservative
   occlusion/culling opportunities; prove no fidelity loss with matched recorded inputs, cameras and full optical passes.
 
 ### 2B. Settings and UI (in this order)

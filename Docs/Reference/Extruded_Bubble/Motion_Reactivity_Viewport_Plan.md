@@ -205,9 +205,16 @@ the admitted eye. This is not purely a crop of one fixed scene.
 **Approved implemented policy:** edge resizing changes the observed region of one fixed world, preserving physical
 eye, orientation, scene scale, authored FOV and world landmarks. The existing canonical presentation reference owns
 the aperture calibration: `framed_aperture_scale` compares the viewport extent to its baseline height. Neon uses its
-actual inner content field/reference after fixed chrome; EB uses its full scene item. Pixel aspect remains the real
+actual inner content field/reference after chrome, calibrated with the actual vertical scale even for historical
+independent stage aspects; EB uses its full scene item. Pixel aspect remains the real
 target aspect in both axes. Uniform card scaling leaves aperture unchanged; edge height reveals/crops above/below.
 EB near-field CoC/spread use reference pixel height, preventing height resize from changing blur strength.
+
+Runtime Edit and Settings Arrange now send those extents on actual side gestures. The existing mode descriptor's
+framed camera derives the capability through its canonical layout profile; it is not another persisted flag or mode
+map. Framed gestures use vertical pixels-per-reference-unit, including historical independent outer/world aspects.
+Unframed Sphere/Extruded Spectrum retain their stage-enlargement semantics. Profiles, authored camera values and
+layout storage schemas are unchanged. Focused tests exercise the real gesture owner before projecting landmarks.
 
 Neon's physical half-width is fixed at2.1, the previous width at the accepted basic1.5 rectangle. Terrain, event and
 celestial coordinates and camera floor all consume that same fixed dimension. The shared camera owner retains
