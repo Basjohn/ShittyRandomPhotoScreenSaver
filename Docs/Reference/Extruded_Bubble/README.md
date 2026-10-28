@@ -2,6 +2,14 @@
 
 **Closed 2026-10-25 (operator):** Extruded Bubble is accepted; its recovery checklist (§4B, G00–G33, EB-*) is retired from `Current_Plan.md` (history: `git show 3c6cf7d8:Current_Plan.md`). This folder remains the reference for its targets, lab and investigation; reopen only on a concrete new defect.
 
+**28 October scoped follow-up — assessment only:** drift consumers/ranges, ordinary stream inheritance, framed viewport
+behavior, microbubble pause/resume and reliable ray controls are assessed in
+[Motion, reactivity and viewport plan](Motion_Reactivity_Viewport_Plan.md). `Current_Plan.md` §2A owns the proposed
+checklist; implementation awaits operator review. Performance work follows successful behavior proof.
+
+The 22–23 October notices below are historical evidence, superseded by the 25 October closure. They do not restore the
+retired recovery queue or establish that an old source-level defect remains present today.
+
 **NEW 22 October independent code audit:** [Additional source-audit findings and falsifiers](Additional_Source_Audit_2026-10-22.md). Verified code behavior includes quiet/high Breathing handle coupling, Deep/SCENE water-plane EOL leakage, SCENE→BEAM cohort premature End retirement, GPU speck photometric masking, stacked quiet range compression and disabled-ray intermediate render work. These are **not visually accepted fixes**. See the single live `Current_Plan.md` §4B G00–G33 gates and [Acceptance Runbook](Acceptance_Runbook.md); retain every existing issue.
 
 **Latest review (23 October):** P1 is generally good and its latest shown idle capture is operator-accepted
