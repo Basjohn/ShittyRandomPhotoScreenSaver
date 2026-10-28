@@ -264,10 +264,17 @@ class VisualizerSettingsContextMixin:
         existing_vis = existing_widgets.get("spotify_visualizer", {})
         if not isinstance(existing_vis, dict):
             existing_vis = {}
-        previous_vis = dict(existing_vis)
 
         if hydrated:
             if isinstance(section_result, Mapping):
+                mode = str(section_result.get("mode", existing_vis.get("mode", DEFAULT_VISUALIZER_MODE)))
+                selected = self._resolve_visualizer_preset_index(mode, section_result)
+                if (selected != get_custom_preset_index(mode)
+                        and selected != self._resolve_visualizer_preset_index(mode, existing_vis)):
+                    # Orbit/pan are live pose keys, not body controls. Seed them
+                    # before normalization; explicit camera edits in this save
+                    # then take precedence over the activation's starting view.
+                    existing_vis = apply_preset_starting_view(mode, selected, existing_vis)
                 existing_vis.update(dict(section_result))
             spotify_vis_config = normalize_visualizer_section_mapping(
                 existing_vis,
@@ -285,10 +292,6 @@ class VisualizerSettingsContextMixin:
             current_vis_mode, spotify_vis_config
         )
         current_custom_index = get_custom_preset_index(current_vis_mode)
-        if (hydrated and current_preset_index != current_custom_index
-                and current_preset_index != self._resolve_visualizer_preset_index(current_vis_mode, previous_vis)):
-            spotify_vis_config = apply_preset_starting_view(current_vis_mode, current_preset_index, spotify_vis_config)
-            existing_widgets["spotify_visualizer"] = spotify_vis_config
         if hydrated and current_preset_index == current_custom_index:
             snapshot = self._extract_visualizer_snapshot(
                 current_vis_mode, spotify_vis_config
@@ -861,12 +864,16 @@ class VisualizerSettingsContextMixin:
         # preset switch when the target payload intentionally omits them.
         restore_visualizer_snapshot(mode_key, spotify_vis_config, applied)
         spotify_vis_config[f"preset_{mode_key}"] = preset_index
+        # Admit XYZ and hydrate editors against the target's complete view.
+        # Seeding at the later save boundary clamps target XYZ against the old
+        # orbit first, and can also overwrite a manual edit before that save.
+        spotify_vis_config = apply_preset_starting_view(mode_key, preset_index, spotify_vis_config)
 
         # Push preset values into UI widgets so the debounced save reads
         # the correct (preset) values instead of stale widget state.
         # Pass full widgets dict (with media intact) so load_media_settings
         # doesn't reset unrelated widgets to defaults.
-        if applied != working_config:
+        if spotify_vis_config != working_config:
             full_widgets = dict(widgets_cfg)
             # Pass the full spotify_vis_config (with all global keys) so the
             # media loader doesn't drop unrelated settings when the preset

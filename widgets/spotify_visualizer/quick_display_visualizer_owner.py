@@ -1295,6 +1295,17 @@ class QuickDisplayVisualizerOwner:
                 playing=controller.playing,
                 reason=f"quick_owner_{kind}_change",
             )
+            if kind == "preset":
+                from widgets.spotify_visualizer.view_orbit import (
+                    arm_view_auto_rotate, rebase_view_orbit_motion,
+                )
+                # The target is configured and hidden, and logical capture is
+                # stopped. Publish its complete motion state before restarting:
+                # old same-mode auto rotation must not override its first pose.
+                activation_step = "activate_target_view_motion"
+                view_now = time.time()
+                rebase_view_orbit_motion(controller.presentation_state, view_now)
+                arm_view_auto_rotate(controller.presentation_state, target, view_now, immediate=True)
             cancel = getattr(engine, "cancel_pending_compute_tasks", None)
             reset_smoothing = getattr(engine, "reset_smoothing_state", None)
             reset_floor = getattr(engine, "reset_floor_state", None)
