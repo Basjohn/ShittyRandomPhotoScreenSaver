@@ -260,7 +260,7 @@ def viewport_extent_resize_payload(
     # must enlarge the projected mesh, not expand its virtual world by the
     # same amount (which would cancel the visible resize).  Planar Visualizer
     # side handles retain their existing viewport-world editing semantics.
-    if item.geometry_kind == "freeform_3d":
+    if item.geometry_kind == "freeform_3d" and not item.framed_visualizer:
         next_extent = (float(extent[0]), float(extent[1]))
     else:
         next_extent = (
@@ -325,6 +325,7 @@ def pixels_per_world_from_geometry(
     viewport_extent: tuple[float, float] | None,
     *,
     geometry_kind: str = "planar",
+    framed_visualizer: bool = False,
 ) -> float:
     """Return a usable viewport scale, strictly enforcing planar geometry only.
 
@@ -340,6 +341,8 @@ def pixels_per_world_from_geometry(
     height = float(rect.height())
     if min(extent_width, extent_height, width, height) <= 0.0:
         raise RuntimeError("CUSTOM visualizer geometry must be positive")
+    if framed_visualizer:
+        return height/extent_height
     if geometry_kind == "freeform_3d":
         return max(1.0e-6, min(width / extent_width, height / extent_height))
     horizontal = (

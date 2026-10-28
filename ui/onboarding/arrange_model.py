@@ -724,6 +724,7 @@ class ArrangeModel:
             return pixels_per_world_from_geometry(
                 rect, (float(extent[0]), float(extent[1])),
                 geometry_kind=item.geometry_kind,
+                framed_visualizer=item.framed_visualizer,
             )
         except RuntimeError:
             # A box saved by an older build may not encode one scale exactly.
@@ -779,6 +780,8 @@ class ArrangeModel:
         snapped = resolution.rect
         rect = QRect(display.geometry.x() + snapped.x(), display.geometry.y() + snapped.y(), snapped.width(), snapped.height())
         if item.viewport_resize_capable:
+            if item.framed_visualizer and pixels_per_world is None:
+                pixels_per_world=self._pixels_per_world(item)
             if pixels_per_world is None:
                 # One axis: pixels per world unit from the axis the gesture leaves
                 # untouched, which stays exact for the whole drag (Edit's cached value).

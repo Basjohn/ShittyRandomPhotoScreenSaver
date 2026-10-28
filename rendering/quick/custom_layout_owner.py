@@ -1350,6 +1350,15 @@ class QuickCustomLayoutOwner:
         uniform_scale = None
         if is_viewport_handle:
             uniform_scale = self._visualizer_pixels_per_world.get(item.source_key)
+            if item.framed_visualizer:
+                extent=item.current_viewport_extent
+                if extent is None:
+                    raise RuntimeError('Framed viewport resize requires its admitted extent')
+                # Framed scenes calibrate their lens against the reference
+                # height. This also admits historical independent stage aspects
+                # without changing the view on the first side gesture.
+                uniform_scale=pixels_per_world_from_geometry(item.current_global_rect,extent,
+                    geometry_kind=item.geometry_kind,framed_visualizer=True)
             if (
                 uniform_scale is None
                 or not math.isfinite(float(uniform_scale))

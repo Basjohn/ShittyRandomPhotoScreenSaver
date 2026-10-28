@@ -334,10 +334,18 @@ def framed_aperture_scale(presentation: ResolvedVisualizerPresentation, *, conte
     Edge resizing reveals/crops world; uniform card scaling changes display size
     only. This never changes the authored lens, eye, world or pixel aspect.
     """
-    inset = ((presentation.outer_rect[3] - presentation.content_rect[3]) / presentation.uniform_visual_scale
-             if content else 0.)
-    return ((presentation.viewport_extent[1] - inset)
-            / max(1e-6, presentation.baseline_viewport_size[1] - inset))
+    if not content:
+        return presentation.viewport_extent[1]/presentation.baseline_viewport_size[1]
+    # Framed historical CUSTOM stages can have independent outer/world aspects.
+    # Use their actual vertical projection scale, never the width-derived mesh
+    # scale used by other freeform modes.
+    outer_height=presentation.outer_rect[3]
+    vertical_scale=outer_height/presentation.viewport_extent[1]
+    reference_height=vertical_scale*presentation.baseline_viewport_size[1]
+    style=presentation.shell_style
+    authored_inset=float(style['content_inset'])/presentation.uniform_visual_scale
+    reference_inset=2.*(float(style['authored_border_width'])+authored_inset*vertical_scale)
+    return presentation.content_rect[3]/max(1e-6,reference_height-reference_inset)
 
 
 def resize_visualizer_presentation_uniformly(

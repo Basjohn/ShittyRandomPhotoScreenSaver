@@ -384,6 +384,12 @@ class CustomLayoutSessionItem:
         if content_extent is not None:
             self.current_content_extent = normalize_viewport_extent(content_extent)
 
+    @property
+    def framed_visualizer(self) -> bool:
+        """Camera-declared viewport semantics, derived from the canonical mode profile."""
+        from core.settings.visualizer_mode_registry import is_framed_visualizer_layout_profile
+        return self.model_identity=='spotify_visualizer' and is_framed_visualizer_layout_profile(self.source_key.geometry_variant)
+
     def set_viewport_extent(self, width: float, height: float) -> None:
         """Set the current logical world (edge operation) without touching scale."""
 
