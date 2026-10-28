@@ -104,21 +104,16 @@ The executable composition lab `tools/labs/extruded_bubble_lab.py` resolves path
 creating GL resources. Missing/duplicate associations fail loudly; archived lab output is never substituted.
 Archived recipe payloads may be absent from slim handoffs and are not required by the current executable lab.
 
-Required architecture follows the gaps: scene-observing camera placement/pivot, authored world source regions,
-coherent shell/union optical paths, real layered refractive detail, correct near defocus, depth-aware particulate
-and the gas/debris/volume primitives the diagonal example needs. These remain active EB scope after a reliable
-reactivity baseline. No camera-attached replacement populations, geometry teleportation or suppressed specks.
+## Historical recovery evidence (20 October; not current acceptance)
 
-## Evidence worth opening
-
-- Current passage-role candidate: [P1](Evidence/2026-10-20/recovery/passage_roles_native_p1/contact.png),
+- Historical passage-role candidate: [P1](Evidence/2026-10-20/recovery/passage_roles_native_p1/contact.png),
   [P7](Evidence/2026-10-20/recovery/passage_roles_native_p7_1440/contact.png),
   [same-sound logical comparison](Evidence/2026-10-20/recovery/passage_roles_final/summary.json).
-  Reaction delivery is scoped evidence; the glass/depth appearance remains unacceptable.
-- Rejected latest P1: [contact sheet](Evidence/2026-10-20/recovery/clean_body_native_p1/contact.png),
+  That checkpoint was unaccepted; it does not supersede the accepted baseline at the top of this document.
+- Rejected P1 at that checkpoint: [contact sheet](Evidence/2026-10-20/recovery/clean_body_native_p1/contact.png),
   [full frame](Evidence/2026-10-20/recovery/clean_body_native_p1/frame_0060.png),
   [silent 30-fps sequence](Evidence/2026-10-20/recovery/clean_body_native_p1/motion.gif).
-- Rejected latest P7: [contact sheet](Evidence/2026-10-20/recovery/clean_body_native_p7_1440/contact.png),
+- Rejected P7 at that checkpoint: [contact sheet](Evidence/2026-10-20/recovery/clean_body_native_p7_1440/contact.png),
   [full frame](Evidence/2026-10-20/recovery/clean_body_native_p7_1440/frame_0090.png).
 - Same-sound accepted 2D reference: [contact sheet](Evidence/2026-10-20/recovery/clean_body_2d_reference/contact.png).
 - Paired source custody: [summary](Evidence/2026-10-20/recovery/matched_body_final/summary.json).

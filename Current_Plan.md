@@ -51,13 +51,14 @@ world geometry and camera fixed during resize; compare the original rectangle be
   through shared typed Settings, persistence/import/migration, undo and the production shader. Preserve existing
   preset appearance; prove old/new geometry on native pixels and inspect the actual Settings control.
 - [~] **Display Settings capacity — awaiting physical hotplug validation:** current-screen rows have no fixed cap;
-  focused six-screen/disconnect/reorder/zero-screen and retirement checks preserve canonical selections/bindings.
+  focused six-screen/disconnect/reorder/zero-screen and retirement checks preserve canonical selections/bindings (rechecked 28 October).
   Check Settings remains coherent during actual disconnect/return and explicit reauthoring; hidden form evidence:
   `tmp/pytest_display_rows_final/test_display_ui_rows_follow_to0/six_display_rows.png`.
 - [~] **R38 hover display-transfer glyphs — awaiting physical topology use:** source/model/lifecycle and native Quick
-  hit/tooltip/fade checks pass. Exercise Previous/Next Display on actual mixed-DPI screens, Save/Cancel/Undo and monitor
+  hit/tooltip/fade checks pass on both connected physical displays (MSI G321Q and LG TV, both DPR 1.5);
+  transfer Save/Cancel transaction checks pass. Remaining physical coverage is unequal-DPI screens and monitor
   unplug/return. Eligibility and transfer reuse CUSTOM; Hide Controls remains Edit-only. Native control capture:
-  `tmp/pytest_hover_transfer_native_final/test_transfer_glyphs_are_absen0/transfer_glyphs.png`.
+  `tmp/ux30_actual_displays/receipt.json` and per-screen `transfer_glyphs.png`.
 
 
 ## 3. Guided-setup stills and bounded source cleanup (at a stable checkpoint)
