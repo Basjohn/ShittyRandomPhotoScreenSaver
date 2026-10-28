@@ -107,7 +107,9 @@ def test_hidden_preset_activation_rebases_motion_before_first_target_capture(mon
     owner._runtime=NS(bind_visualizer_render_source=lambda *a,**kw:object())
     owner._pending_mode_activation=dict(kind='preset',mode=MODE,settings_model=object(),
         resolved_activation=object(),technical_cache={MODE:{}},logical_kwargs={},presentation_kwargs=target)
-    monkeypatch.setattr('widgets.spotify_visualizer.quick_display_visualizer_owner.time.time',lambda:100.)
+    import importlib
+    owner_module=importlib.import_module('widgets.spotify_visualizer.quick_display_visualizer_owner')
+    monkeypatch.setattr(owner_module.time,'time',lambda:100.)
     owner._apply_configuration=lambda **kw:apply_presentation_vis_mode_kwargs(state,kw['presentation_kwargs'])
     captures=[]
     def start():

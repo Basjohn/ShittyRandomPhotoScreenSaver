@@ -363,6 +363,14 @@ No separate rendered eye, camera-following actors, count multiplication or artif
 boundary. Legal canonical home remains unchanged. Domain containment does not establish visual density or idle readability.
 Preset starting-view metadata owns pose; independently admitted Camera Field of View remains an authorable mode
 control in the normal preset snapshot. A reset's canonical lens policy does not prohibit that authored value.
+EB Camera offers **Perspective** (the existing/default projection) and **Orthographic** through the same typed
+mode settings and preset snapshot. Orthographic uses parallel rays with individual origins, retains fixed world
+identities and the admitted physical eye, and uses Scene Scale for magnification. Its reference span derives from
+the canonical lens at the camera's reference distance; the authored perspective FOV is retained while its row is
+hidden. Sphere size then stays constant with distance; lighting, fusion, depth, refraction and focus remain 3D.
+The main projection applies consistently to geometry, ray origins, footprints and optics; cubemap probes always
+remain perspective. Both choices use one shader source, with bounded lazy specialization of traced fragments to
+preserve existing Perspective arithmetic. No post-image warp, per-bubble roundness patch or separate camera cache.
 
 EB lighting is subject to the physical-authority repair contract in `Docs/Reference/Extruded_Bubble/Lighting_Authority_Repair.md` (partially implemented, visually unaccepted): one directional Surface or positional Deep emitter governs medium light, core glow, bubble glints, world-space ray scattering and attenuation. Ray Source/End can author the illuminated region but not a contradictory second emitter. BEAM retains its accepted stylized footprint; SCENE scattering is bounded by the fixed physical tank. `Light Type` remains Surface/Deep. Independent `Lighting Coverage` BEAM/SCENE defaults to BEAM for existing presets; Beam Width defaults to1x and scales the BEAM light footprint. SCENE scattering uses the fixed tank, directional sunlight or actual Deep Light Source, ignoring the unused beam path/width. Motion `Emission Geometry` remains independent. No preset/Custom overwrite or automatic coverage migration is permitted. Physical lighting, broad-beam fidelity, native all-angle quality, SCENE grouping and surface retirement remain active visual acceptance work, not blanket spec compliance.
 

@@ -251,6 +251,48 @@ width/height/area and DPR separately. Check central calibration shapes, known wo
 camera-eye invariance, near-plane/depth, rounded clipping, rays, reflections, particles and culling. CPU equations alone
 do not close this issue: compare actual offscreen production pixels, then native resize/Settings behavior.
 
+### Camera projection choices / spherical silhouettes
+
+The later tall-view report is not evidence of deformed world geometry. Native production ordinary/fused shader
+coverage matches pinhole conics with equal X/Y focal scales. At a fixed506.98px focal scale, an on-axis sphere
+measures ratio1 in basic/tall/wide apertures; off-axis examples measure1.168 and1.307 against physical predictions
+1.167 and1.307. Native evidence: `tmp/eb28_shape/`. Enlarging the aperture reveals more off-axis rays even though
+eye, geometry, authored reference lens and pixel focal scale stay fixed. This distinguishes the established
+camera projection from aspect stretching; it does not approve the resulting artistic distortion.
+
+The operator rejected a stereographic image prototype (`tmp/eb28_camera_projection/`) and authorized a Camera
+chooser: `extruded_bubble_camera_projection`, Perspective / Orthographic, default Perspective. It is declared
+once in the existing typed mode spec with its canonical default; generated model, normalization, snapshot,
+preset/import and section-lazy UI paths carry it. This is an additive control, not a new schema or separate live
+camera pose. Authored preset files remain untouched. Perspective FOV remains stored and returns unchanged when
+switching back; Orthographic hides that row and magnifies through existing Scene Scale.
+
+`orthographic_matrix` supplies the shared parallel projection. EB derives its reference half-span from the
+canonical FOV at `ORBIT_DISTANCE`, divided by Scene Scale, then applies the same fixed-world aperture. The
+physical eye/orbit/pan/clearance stay unchanged. `FRAMED_CAMERA_GLSL` supplies per-pixel origin and direction;
+parallel origins, constant world-pixel footprints and projection-generic depth reach ordinary/fused shells,
+free/attached beads, particulate, wakes, water/floor, shafts, positional lighting and hollow-shell refraction.
+Cubemap backdrop/proxies explicitly reset to Perspective; the main backdrop restores its selected projection.
+Sphere/union coverage and traced normals are verified separately from final optical appearance.
+
+One shared shader source produces two bounded lazy **traced-fragment** specializations. Native frozen A/B
+attributed sparse Perspective glint changes to GPU compilation of a dynamic projection branch; constant folding
+the selected projection restores the existing arithmetic. Resource keys include the choice; hidden preparation
+and visible drawing use exactly the same keys, and ordinary resource retirement owns both. There is no second
+render route, retained old shader, extra pass, simulation, clock or independently authored lens authority.
+
+Native checks cover depth-independent round spheres, translated/far normals and refraction, connected fused
+surfaces, front-depth/opaque occlusion, Settings persistence/reload and prepared rendering without later shader
+compilation/allocation. Frozen current-source P1/P8 basic/tall Perspective A/B is exact in three images; one image
+differs by one code in one channel (mean1.89e-6 code). Switching back from Orthographic is byte-identical in all
+four. Evidence: `tmp/eb28_projection_parity/`; recorded 120-frame60Hz Orthographic motion:
+`tmp/eb28_ortho_motion_p1/`. Offscreen/source evidence is not physical audiovisual approval.
+
+Orthographic intentionally removes distance-based apparent growth and perspective parallax. Direction-only
+distant ambience can become spatially uniform, and a large sensor may show the finite water/domain boundary.
+Those are explicit appearance/enhancement considerations; do not secretly remap actors, reintroduce pinhole
+ray bending at rims or apply a final-image warp to conceal them. Keep the existing world, audio and wake inertia.
+
 ## 1.4 Microbubble visibility on restart
 
 Free chains multiply opacity by `_idle_activity(level)`, a smoothstep of `level/0.1`. The logical level follows audio

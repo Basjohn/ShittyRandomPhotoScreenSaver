@@ -30,19 +30,49 @@ def camera_space(points, parameters, size):
         pan_y=float(parameters['extruded_bubble_scene_pan_y']),
         position_offset=tuple(parameters['extruded_bubble_camera_position']),
         fov_y_degrees=float(parameters['extruded_bubble_camera_fov']),
-        surface_bound=parameters['extruded_bubble_light_type'] == 'Sunlit Surface')
+        surface_bound=parameters['extruded_bubble_light_type'] == 'Sunlit Surface',
+        projection_kind=parameters['extruded_bubble_camera_projection'])
     view = (np.asarray(points) - np.asarray(eye)) @ np.asarray(world_to_view).reshape(3, 3)
     return view, eye, tan
 
 
-def frustum_candidates(view, radii, tan):
+def _side_bounds(depth, radius, span, projection_kind):
+    if projection_kind == 'Orthographic':
+        return span[0]+radius,span[1]+radius
+    if projection_kind != 'Perspective':
+        raise ValueError(f'Unknown framed projection: {projection_kind!r}')
+    return (span[0]*depth+radius*math.sqrt(1.+span[0]**2),
+            span[1]*depth+radius*math.sqrt(1.+span[1]**2))
+
+
+def frustum_candidates(view, radii, tan, *, projection_kind='Perspective'):
     """Conservative sphere/side-plane intersection, not segmented visibility."""
     import numpy as np
 
     depth = -view[:, 2]
+    x,y=_side_bounds(depth,radii,tan,projection_kind)
     return ((depth + radii > .05) &
-            (np.abs(view[:, 0]) < tan[0] * depth + radii * math.sqrt(1. + tan[0] ** 2)) &
-            (np.abs(view[:, 1]) < tan[1] * depth + radii * math.sqrt(1. + tan[1] ** 2)))
+            (np.abs(view[:, 0]) < x) & (np.abs(view[:, 1]) < y))
+
+
+def projected_sphere(view, radius, span, size, *, projection_kind):
+    """Forward sphere estimate using the renderer's resolved aperture, never a second camera.
+
+    Orthographic radii are exact; perspective radii retain the forensic tool's
+    first-order estimate. Near-plane crossings need native pixels, not this estimate.
+    """
+    depth = -float(view[2])
+    if depth <= float(radius) + .05:
+        return None
+    if projection_kind not in ('Perspective','Orthographic'):
+        raise ValueError(f'Unknown framed projection: {projection_kind!r}')
+    factor = 1. if projection_kind == 'Orthographic' else depth
+    x,y=_side_bounds(depth,radius,span,projection_kind)
+    candidate=abs(float(view[0]))<x and abs(float(view[1]))<y
+    return {'projected_radius_px':float(radius)/(span[1]*factor)*size[1]/2,
+            'frustum_candidate':bool(candidate),
+            'screen_xy':[(float(view[0])/(span[0]*factor)+1)*size[0]/2,
+                         (1-float(view[1])/(span[1]*factor))*size[1]/2]}
 
 
 def main():
@@ -63,7 +93,7 @@ def main():
         'widgets/spotify_visualizer/extruded_bubble_simulation.py','widgets/spotify_visualizer/extruded_bubble_frame_runtime.py',
         'widgets/spotify_visualizer/logical_frame_capture.py','rendering/gl_programs/extruded_bubble_scene.py',
         'rendering/gl_programs/extruded_bubble_program.py','rendering/gl_programs/scene3d_spheres.py',
-        'rendering/gl_programs/scene3d_optics.py',
+        'rendering/gl_programs/scene3d_optics.py','rendering/gl_programs/framed_camera.py','core/settings/framed_camera.py',
         'rendering/quick/visualizer/implementations/extruded_bubble.py','tools/visualizer_replay/extruded_bubble_world_probe.py')]
     hashes=lambda:{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
     receipt={'commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
@@ -99,9 +129,9 @@ def main():
             rgba,gpu_ms=_draw(host,target,current,size,size)
             picture=Image.fromarray(rgba).convert('RGB');picture.save(args.output/f'view_{index:02d}.png')
             view,eye,tan=camera_space(points,parameters,size)
-            visible=frustum_candidates(view,radii,tan)
+            visible=frustum_candidates(view,radii,tan,projection_kind=parameters['extruded_bubble_camera_projection'])
             rows.append({'turn':turn,'tilt':tilt,'scale':scale,'pan_x':pan,'gpu_ms':gpu_ms,
-                         'physical_eye':eye,'tan':tan,
+                         'physical_eye':eye,'projection_kind':parameters['extruded_bubble_camera_projection'],'aperture_span':tan,
                          'ordinary_frustum_candidates':int(visible.sum()),'scope':'conservative center/radius estimate; not segmented pixel count'})
             picture.thumbnail((400,230));tile=Image.new('RGB',(400,260),'#111827');tile.paste(picture,(0,0))
             ImageDraw.Draw(tile).text((8,237),f'yaw {turn*180:.0f}  tilt {tilt:.2f}  visible ~{visible.sum()}',fill='white');tiles.append(tile)

@@ -59,6 +59,12 @@ float sceneNearCircle(float frontDepth, float focus, float aperture, float pixel
 vec4 sceneSphereClipCorner(vec3 centre, float reach, vec2 corner, mat4 projection) {
     float depth = -centre.z;
     if (reach <= 0.0 || depth + reach <= 0.05) return vec4(2.0, 2.0, 2.0, 1.0);
+    if (projection[3][3] > 0.5) {
+        // Parallel rays: the projected radius is independent of depth. Keep
+        // bounds on the sensor; the fragment owns the true surface depth.
+        vec2 ndc = (projection * vec4(centre.xy + corner * reach, centre.z, 1.0)).xy;
+        return vec4(clamp(ndc, vec2(-1.0), vec2(1.0)), 0.0, 1.0);
+    }
     if (depth - reach <= 0.05) return vec4(corner, 0.0, 1.0);
     float denominator = depth * depth - reach * reach;
     vec2 root = sqrt(max(centre.xy * centre.xy + denominator, vec2(0.0)));
@@ -132,6 +138,14 @@ float sceneSphereCoverage(vec3 ray, vec3 centre, float radius, float blur, float
 float sceneDefocusRadius(float depth, float focus, float aperture, float nearWeight, float farWeight) {
     return aperture * (max(focus - depth, 0.0) * nearWeight + max(depth - focus, 0.0) * farWeight);
 }
+float sceneSphereCoverage(vec3 ray, vec3 centre, float radius, float blur, float pixelSize, bool orthographic) {
+    if (!orthographic) return sceneSphereCoverage(ray, centre, radius, blur, pixelSize);
+    float along = dot(centre, ray);
+    float miss = length(centre - ray * along);
+    float width = max(pixelSize, max(blur, 0.0) * 2.0);
+    return clamp((radius + max(blur, 0.0) - miss) / max(width, 1e-6)
+                 + 0.5 * step(blur, 0.0), 0.0, 1.0);
+}
 float sceneSmoothMin(float a, float b, float blend) {
     if (blend <= 0.0) return min(a, b);
     float h = max(blend - abs(a - b), 0.0) / blend;
@@ -146,15 +160,16 @@ float sceneClusterDistance(vec3 p, vec4 spheres[4], int count, float blend) {
     return d;
 }
 bool sceneClusterRay(vec3 ray, vec4 spheres[4], int count, float blend, float tStart, float tEnd,
-                     out float t, out vec3 normal, out float closest) {
+                     out float t, out vec3 normal, out float closest, bool orthographic) {
     t = max(tStart, 0.0);
     closest = 1e9;
     normal = vec3(0.0, 0.0, 1.0);
     for (int i = 0; i < 64; ++i) {
         float d = sceneClusterDistance(ray * t, spheres, count, blend);
-        closest = min(closest, abs(d) / max(t, 1e-4));
-        if (abs(d) < 1e-4 * max(t, 1.0)) {
-            vec2 e = vec2(1.0, -1.0) * 1e-4 * max(t, 1.0);
+        closest = min(closest, abs(d) / (orthographic ? 1.0 : max(t, 1e-4)));
+        float tolerance = 1e-4 * (orthographic ? 1.0 : max(t, 1.0));
+        if (abs(d) < tolerance) {
+            vec2 e = vec2(1.0, -1.0) * tolerance;
             vec3 p = ray * t;
             normal = normalize(e.xyy * sceneClusterDistance(p + e.xyy, spheres, count, blend)
                              + e.yyx * sceneClusterDistance(p + e.yyx, spheres, count, blend)
@@ -167,6 +182,10 @@ bool sceneClusterRay(vec3 ray, vec4 spheres[4], int count, float blend, float tS
         if (t > tEnd) break;
     }
     return false;
+}
+bool sceneClusterRay(vec3 ray, vec4 spheres[4], int count, float blend, float tStart, float tEnd,
+                     out float t, out vec3 normal, out float closest) {
+    return sceneClusterRay(ray, spheres, count, blend, tStart, tEnd, t, normal, closest, false);
 }
 vec3 sceneSphereGlint(vec3 centre, float radius, vec3 toLight) {
     vec3 toEye = normalize(-centre);
