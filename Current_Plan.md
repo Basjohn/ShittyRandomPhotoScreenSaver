@@ -87,20 +87,6 @@ world geometry and camera fixed during resize; compare the original rectangle be
     preset values, GUI styling tests, or large suites. Keep operator-authored EB and all other current preset JSON
     untouched; preserve every existing task/status in this plan.
 
-### 2C. Feature work
-
-Use the existing zipped runtime logs under `F:/Programming/Apps` and isolated test-owned profiles to close these
-gates. Do not ask the operator to reset/delete Settings or perform fresh runs merely to supply test coverage.
-Record what the logs prove; investigate remaining gaps directly with bounded tests.
-
-- [~] **SC4 — Wallpaper pools — awaiting normal runtime image use:** inspect subject/query relevance and usable yield
-  at actual display sizes, initial empty/cache-warm runs, Settings return and normal background top-ups. Native dark/light
-  selector controls and focused source/resume/retirement gates pass; image relevance is not established by streamed
-  header dimensions. Excluded providers require new sanctioned access evidence. Detailed contracts:
-  `Docs/Reference/Wallpaper_Pool_Selection.md`.
-- [~] **Reddit's data-root cache:** the first normal saver run with Reddit on should create `SRPSS/cache/reddit` and
-  refetch once per member (paced); check its log then.
-
 ## 3. Guided-setup stills and bounded source cleanup (at a stable checkpoint)
 
 `Docs/Reference/Release_Media.md` owns inputs, encoding and manifest policy (UsuScene1–4 originals, 480 px / 24 fps
