@@ -142,6 +142,24 @@ The stream has three fixed slots, each MAX_PACKET_BYTES + actual SSBO alignment.
 is 394800 bytes of mapped buffer storage, plus the dummy 8-byte mesh, program and driver overhead (not a total
 VRAM claim). Ring rotation/fences use the existing owner; no per-frame resource allocation or live-count readback.
 
+### CPU oracle versus GPU input preparation
+
+The CPU geometry/frame reference is a correctness oracle for testing the GPU. It is **not a software rendering
+backend** and is not intended to run as a full per-frame rendering path. Its standalone execution time is not a
+runtime performance requirement or a cost inherent to ribbon rendering.
+
+The current prototype conflates two jobs: `core/ribbon_packet.py:pack_ribbons` calls the CPU reference
+`strip_path` to reconstruct every knot frame, then validates/rebases/packs the upload. The probe's full-build
+measurement additionally includes fixture/sample creation. Thus the approximately 90 ms result measures this
+particular all-history preparation route, not software rasterization, GPU draw time, or an existing app regression.
+No application runtime mode calls it. The risk would arise only if a production mode rebuilt this route every tick.
+
+Next work must separate the test oracle from the actual changing-input producer. Preserve the oracle as an
+independent correctness bar; do not make optimizing its standalone speed the objective. Measure signal/history
+updates, frame preparation, packing, upload and GPU draw separately. Consider retaining unchanged frames and
+updating affected knots, or GPU frame generation only where it removes measured work. Any retained state belongs
+to the existing logical owner, with epoch/eviction/changed-input proof; no second cache authority or clock.
+
 ### Native proof and cost boundary
 
 Run `.venv\Scripts\python.exe tools/labs/ribbon_strip_probe.py --output .artifacts/evidence/ribbon_strip/<new-run>`
@@ -155,7 +173,8 @@ includes upload/bindings/fences but excludes readback/wait. Full stateless CPU f
 measured median 1.52ms for one path and 89.49ms at the cap (three build samples, p90 96.40ms). **This rebuild is
 not admitted as a per-frame production path.** Cheap GPU draw is not a whole-mode cost or fidelity pass.
 
-Next gate: incremental/cached logical frame and packet construction with measured changed-input cost and
-continuity/epoch/eviction proof. Do not add a second cache/state authority or renderer-side simulation. After
+Next gate: an actual changing-input preparation path separated from the CPU test oracle, with measured
+cost and continuity/epoch/eviction proof. The implementation choice is measured incremental reuse or justified
+GPU work, not a requirement to accelerate the standalone oracle. After
 that, broaden native curved-frame/normal/precision/lifecycle proof, then OIT/HDR, camera-facing GPU behavior,
 AA/defocus and target composition. No GL scene likeness, music or full performance acceptance exists yet.
