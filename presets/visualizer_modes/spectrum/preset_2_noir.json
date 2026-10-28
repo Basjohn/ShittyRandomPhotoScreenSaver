@@ -1,7 +1,7 @@
 {
   "description": "Many slim black bars outlined in white with silver peak trails: crisp and quiet on any picture.",
   "mode": "spectrum",
-  "name": "Preset 5 (Noir)",
+  "name": "Preset 2 (Noir)",
   "preset_index": 1,
   "snapshot": {
     "widgets": {
@@ -55,7 +55,6 @@
           "Vocal": 0.4096
         },
         "spectrum_lane_transient_mix": 0.94,
-        "spectrum_link_fill_border": false,
         "spectrum_manual_floor": 0.42,
         "spectrum_mirrored": true,
         "spectrum_notch_positions_linear": [

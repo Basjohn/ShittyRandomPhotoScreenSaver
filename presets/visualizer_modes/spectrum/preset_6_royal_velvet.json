@@ -1,7 +1,7 @@
 {
   "description": "Deep purple bars with violet rims and a soft regal glow.",
   "mode": "spectrum",
-  "name": "Preset 15 (Royal Velvet)",
+  "name": "Preset 6 (Royal Velvet)",
   "preset_index": 5,
   "snapshot": {
     "widgets": {
@@ -55,7 +55,6 @@
           "Vocal": 0.4096
         },
         "spectrum_lane_transient_mix": 0.94,
-        "spectrum_link_fill_border": false,
         "spectrum_manual_floor": 0.42,
         "spectrum_mirrored": true,
         "spectrum_notch_positions_linear": [

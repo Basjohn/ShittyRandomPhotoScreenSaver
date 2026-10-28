@@ -7,7 +7,6 @@
     "widgets": {
       "spotify_visualizer": {
         "mode": "sine_wave",
-        "monitor": "ALL",
         "sine_card_adaptation": 1.0,
         "sine_crawl_amount": 0.0,
         "sine_density": 0.54,

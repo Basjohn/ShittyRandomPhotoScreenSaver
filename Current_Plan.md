@@ -62,6 +62,41 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
   unplug/return. Eligibility and transfer reuse CUSTOM; Hide Controls remains Edit-only. Native control capture:
   `tmp/pytest_hover_transfer_native_final/test_transfer_glyphs_are_absen0/transfer_glyphs.png`.
 
+
+- [~] **Visualizer Preset Repair Foundry — implementation candidate; operator acceptance pending** (next quick
+  Settings/tooling job after the currently in-progress §2B items, before §2C feature work):
+  - [~] Present in Foundry chrome/theming, with a single-mode catalogue, two-select Swap Presets, actionable status
+    and one-click paired Undo. Verify actual native control layout at operator DPI and a few normal swaps; no GUI
+    styling tests for this disposable tool.
+  - [~] Reindex from the **numeric filename slots**, never stale embedded `preset_index`; update index/name metadata
+    only, preserve all operator-authored visualizer settings, and prevent silent collision/overwrite. Exercise a
+    manually renamed order, gaps, duplicate slots and repeated reindex operations with independent fixture presets.
+  - [~] Existing-manifest regeneration button is conditional on `presets/visualizer_modes_manifest.json` existing;
+    absence means no-op, not recreation. Check Repair, Repair All, Reindex, Swap and Undo for current-shipped parity,
+    without treating any manifest as an authority for authored files or forcing preset overwrites.
+- [ ] **Retire the visualizer preset manifest and redundant bookkeeping** (same batch, immediately after the
+  Preset Repair Foundry is visually/operator accepted; no manifest removal in the tool-only handoff):
+  - [ ] Map every reader/writer of `presets/visualizer_modes_manifest.json`, the release/Media Center copy and
+    `managed_curated_files`: frozen SCR/Diagnostic/MC startup, onefile bootstrap, installer, Build Foundry,
+    import/export, source-vs-release auditing and preset repair. Confirm direct enumerations are authoritative.
+  - [ ] **Separate deletion scrutiny before sign-off:** audit frozen `prune_duplicate_curated_preset_slots` using
+    file `mtime` as a winner and `sync_curated_preset_tree` deleting entries not present in the manifest. Demonstrate
+    how both interact with manually renamed/moved authored presets, imported directories and simultaneous slots.
+    Remove destructive heuristics or require explicit replacement ownership before allowing deletion; never
+    silently select a newer timestamp over the user's intent. Use isolated test-owned fixtures.
+  - [ ] Replace manifest enumeration with actual directory scanning for load, mirror and export. Explicit replacement
+    may prune only obsolete **managed target copies** after the authoritative source has been snapshotted and
+    validated; missing or invalid source must never delete a target. Preserve shipped-versus-operator-owned
+    separation, exact filename slots, Custom, and onefile/ProgramData precedence.
+  - [ ] Keep strict read-only source/release content-parity checks (filenames **and bytes**) without a stored manifest;
+    audit installer clean-replace, frozen extraction, Media Center and import/export for stale-file handling and
+    accidental reintroduction of removed presets. Remove obsolete regeneration hooks and the Foundry button or
+    leave it visibly disabled/no-op once no manifest exists; do not recreate the artifact.
+  - [ ] Remove the manifest files and obsolete code/contracts/tests only after the replacement flow and rollback
+    safety pass. Validate source and frozen semantics with minimal schema/SSOT/integrity tests, never asserted mutable
+    preset values, GUI styling tests, or large suites. Keep operator-authored EB and all other current preset JSON
+    untouched; preserve every existing task/status in this plan.
+
 ### 2C. Feature work
 
 - [ ] **SC4 — Finish Just Make It Work Pools** (`Docs/Reference/Wallpaper_Pool_Selection.md` owns detailed contracts):
