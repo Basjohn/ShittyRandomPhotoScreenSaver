@@ -803,7 +803,7 @@ class ExtrudedBubbleSimulation:
                 # physical drain. MAX_BUBBLES/limits still bound total residency.
         self._filled = True
 
-        # Motion: the stream, sized (big bubbles a little faster), with drift and sway across it.
+        # Shared forward stream transport, with independent drift and sway across it.
         across, depth_axis = stream_basis(direction)
         big_scale = _reaction_scale(controls.breathing, self._body_big_envelope, *_LARGE_REACTION)
         small_scale = _reaction_scale(controls.small_pulse, self._body_small_envelope, *_SMALL_REACTION)
@@ -847,8 +847,9 @@ class ExtrudedBubbleSimulation:
         for b in self._bubbles:
             if b.cluster >= 0:
                 continue
-            size = (b.radius - _MID_RADIUS[0]) / (_LARGE_RADIUS[1] - _MID_RADIUS[0])
-            forward = speed * (0.65 + 0.6 * max(0.0, min(1.0, size)))
+            # Stream Speed is shared physical transport, independent of size,
+            # birth opacity and fusion. Drift/sway/contact pushes remain additive.
+            forward = speed
             wander = meander * drift_live * WORLD_UNIT * 0.05 * (
                 math.sin(t * 0.37 + b.phase) + 0.6 * math.sin(t * 0.83 + 2.1 * b.phase))
             # A slowly changing sine can still be a fast velocity; its amplitude must settle too.
@@ -866,7 +867,7 @@ class ExtrudedBubbleSimulation:
             members = [m for m in members if m is not None]
             if not members:
                 continue
-            forward = speed * 0.9
+            forward = speed
             wander = meander * drift_live * WORLD_UNIT * 0.04 * math.sin(t * 0.31 + c.ident)
             steer = _drift_steer(steering, (c.x, c.y, c.z), 1.3 * c.ident, t, direction, across, depth_axis,
                                  axis_origin, drift_live * WORLD_UNIT)

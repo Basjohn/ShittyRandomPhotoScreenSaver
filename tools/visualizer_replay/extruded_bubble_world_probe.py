@@ -49,7 +49,9 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--clip',type=Path,required=True)
     parser.add_argument('--output',type=Path,required=True)
-    parser.add_argument('--preset',type=int,default=1,choices=range(1,8))
+    from core.settings.visualizer_presets import get_custom_preset_index
+    parser.add_argument('--preset',type=int,default=1,
+                        choices=range(1,get_custom_preset_index('extruded_bubble')+1))
     parser.add_argument('--at',type=float,default=4.)
     parser.add_argument('--size',default='1672x941')
     args=parser.parse_args()

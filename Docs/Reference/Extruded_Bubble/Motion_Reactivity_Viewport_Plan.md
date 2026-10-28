@@ -120,7 +120,7 @@ The displayed Stream Speed range is multiplied by `STREAM_SPEED_FULL=0.25` durin
 `WORLD_UNIT=9` in simulation. Full authored speed corresponds to 2.25 world units/s **before** the musical envelope
 and per-actor factors. This is a unit calibration, not proof of an error.
 
-Ordinary forward velocity is explicitly:
+Historical baseline ordinary forward velocity before the correction:
 
 `stream_speed * (0.65 + 0.6 * clamp((nominal_radius - MID_MIN)/(LARGE_MAX - MID_MIN), 0, 1))`
 
@@ -148,9 +148,11 @@ conceal the class difference and accelerate procedural populations as well.
 
 Before choosing a correction, measure more passages and separate global-envelope responsiveness, per-class transfer,
 contact/fusion corrections and projected pixels/s. Compare drift/sway-off and original controls at the same camera.
-Decide whether “Stream Speed” means literal shared forward transport (recommended simple semantics), or nominal water
-speed with explicitly disclosed class variation. Preserve useful variation only if it is normalized/documented; do not
-introduce another hidden size-dependent attenuation while exposing an apparently literal speed control.
+The approved correction makes Stream Speed literal shared forward transport for ordinary and fused bubbles,
+independent of nominal size and birth opacity. Drift, sway and contact pushes remain additive; the global stream
+envelope and procedural layer calibrations are unchanged. Recorded P8 no-contact verification gives1x forward/global
+speed for mature large/small and forming large/small across34,000+ consecutive measurements. The broader contact,
+passage and pixel matrix remains part of the combined gate.
 
 ## 1.3 Framed viewport behavior
 
