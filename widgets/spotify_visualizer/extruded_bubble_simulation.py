@@ -117,6 +117,9 @@ class ExtrudedBubbleControls:
     stream_speed: tuple[float, float] = (0.05, 0.16)     # authored normalized length/s, converted once to physical world units
     drift: tuple[float, float] = (0.3, 0.8)  # lateral wander 0..1 at quiet, loud
     drift_direction: str = "wander"          # one of DRIFT_DIRECTIONS
+    drift_large: tuple[float, float] = (1.0, 1.0)
+    drift_small: tuple[float, float] = (1.0, 1.0)
+    drift_fused: tuple[float, float] = (1.0, 1.0)
     sway: float = 0.4                       # 0..1 side-to-side swing
     emission: tuple[float, float] = (0.3, 1.0)   # particle emission (specks, dust, trails) 0..1 at quiet, loud
     idle: float = 0.5                       # 0..1 gentle resting motion; never a size oscillator
@@ -829,20 +832,24 @@ class ExtrudedBubbleSimulation:
         axis_origin = (world_point(controls.stream_path[:3], WORLD_HALF)
                        if controls.stream_path is not None and controls.emission_geometry != "SCENE"
                        else WORLD_CENTER)
+        large_drift, small_drift, group_drift = (
+            drift_live * max(-1., min(2., _lerp(pair, self._passage)))
+            for pair in (controls.drift_large, controls.drift_small, controls.drift_fused))
         for b in self._bubbles:
             if b.cluster >= 0:
                 continue
             # Stream Speed is shared physical transport, independent of size,
             # birth opacity and fusion. Drift/sway/contact pushes remain additive.
             forward = speed
-            wander = meander * drift_live * WORLD_UNIT * 0.05 * (
+            actor_drift = large_drift if b.large else small_drift
+            wander = meander * actor_drift * WORLD_UNIT * 0.05 * (
                 math.sin(t * 0.37 + b.phase) + 0.6 * math.sin(t * 0.83 + 2.1 * b.phase))
             # A slowly changing sine can still be a fast velocity; its amplitude must settle too.
             swing = (controls.sway * WORLD_UNIT * 0.06 * min(1.0, self._motion_rate) * rest_motion_boost
                      * math.sin(t * (1.1 + 0.5 * math.sin(b.phase)) + 3.0 * b.phase))
-            deep = meander * drift_live * WORLD_UNIT * 0.015 * math.sin(t * 0.29 + 1.7 * b.phase)
+            deep = meander * actor_drift * WORLD_UNIT * 0.015 * math.sin(t * 0.29 + 1.7 * b.phase)
             steer = _drift_steer(steering, (b.x, b.y, b.z), b.phase, t, direction, across, depth_axis, axis_origin,
-                                 drift_live * WORLD_UNIT)
+                                 actor_drift * WORLD_UNIT)
             b.x += dt * (direction[0] * forward + across[0] * (wander + swing) + depth_axis[0] * deep + b.push[0] + steer[0])
             b.y += dt * (direction[1] * forward + across[1] * (wander + swing) + depth_axis[1] * deep + b.push[1] + steer[1])
             b.z += dt * (direction[2] * forward + across[2] * (wander + swing) + depth_axis[2] * deep + b.push[2] + steer[2])
@@ -853,9 +860,9 @@ class ExtrudedBubbleSimulation:
             if not members:
                 continue
             forward = speed
-            wander = meander * drift_live * WORLD_UNIT * 0.04 * math.sin(t * 0.31 + c.ident)
+            wander = meander * group_drift * WORLD_UNIT * 0.04 * math.sin(t * 0.31 + c.ident)
             steer = _drift_steer(steering, (c.x, c.y, c.z), 1.3 * c.ident, t, direction, across, depth_axis,
-                                 axis_origin, drift_live * WORLD_UNIT)
+                                 axis_origin, group_drift * WORLD_UNIT)
             c.x += dt * (direction[0] * forward + across[0] * wander + c.push[0] + steer[0])
             c.y += dt * (direction[1] * forward + across[1] * wander + c.push[1] + steer[1])
             c.z += dt * (direction[2] * forward + across[2] * wander + c.push[2] + steer[2])
