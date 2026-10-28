@@ -105,6 +105,9 @@ Keep these deferred unless new evidence or an explicit request promotes them:
 - Spectrum extreme-viewport smoothness where physical evidence demonstrates a defect;
 - installed GODZIP Foundry Windows-diff acceptance;
 - wallpaper-feed consolidation only where shared normalization simplifies code without merging cache/scheduling authorities;
+- direct live source reconfiguration outside Settings still discards its coordinator without generation retirement
+  (`engine_handlers.on_sources_changed`). Audit that separate entry point before admitting external live source edits;
+  the Settings resume path already uses the strict runtime/dialog destruction barriers.
 - shared HTTP all-phase cancellation: `requests.get` can remain inside status/header parsing while a peer trickles
   bytes, despite per-socket timeouts. Body `read1` cancellation does not solve that phase. Prove it with a bounded local
   server before admitting a transport-level correction; retain strict runtime destruction barriers and refuse source

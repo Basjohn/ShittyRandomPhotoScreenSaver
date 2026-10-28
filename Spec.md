@@ -510,6 +510,8 @@ Stable pool IDs and discovery order are stored separately from custom feed URLs;
 Setup retains its existing Finish boundary. Selected pools reuse the RSS coordinator's bounded acquisition, cache,
 backoff and fair source rotation. They add no playback shuffle or scheduler. Provider admission, exact retired-URL
 migration and the focused verification contract live in `Docs/Reference/Wallpaper_Pool_Selection.md`.
+Settings/runtime replacement retires generation-owned wallpaper jobs before re-admitting a fresh coordinator at
+positive-display admission; unchanged queue/history/cache survive, and pending source edits remain deferred with no live display.
 
 Retained Windows GSMTC event observation has a stricter ownership rule than ordinary burst IO. The manager, selected session and their subscription/remove tokens are created, rebound, detached and released only on one lazy ThreadManager-owned **affinity lane**. The general IO pool is not an apartment authority and the Qt UI thread must never clear retained WinRT wrappers. Native manager callbacks capture only a coarse edge and queue any session rebind back to that lane; session dirty callbacks remain presentation-neutral. Teardown fences the observation generation first, then synchronously executes detach/release on the affinity owner. This lane is Condition-driven and owns no polling cadence.
 

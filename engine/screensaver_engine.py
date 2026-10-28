@@ -683,13 +683,56 @@ class ScreensaverEngine(QObject):
     
     def _initialize_image_sources(self) -> bool:
         """Initialize the existing queue/cache owners when a display can consume them."""
+        if self.image_queue is not None and not self._sources_changed_during_settings:
+            # The old coordinator is terminal after stop(). Re-admit its source
+            # settings after retirement, without discarding unchanged playback.
+            self._initialize_rss_source()
+            if self.rss_coordinator is not None:
+                self._load_rss_images_async()
+            self._image_sources_waiting_for_display = False
+            return True
+
+        if self._sources_changed_during_settings:
+            # Retain the established source-rebuild ordering: invalidate work
+            # before decoded cache/queue membership changes.
+            if self._prefetcher is not None:
+                self._prefetcher.clear_inflight()
+            if self._image_cache is not None:
+                self._image_cache.clear()
         if not self._initialize_sources():
             logger.warning("[FALLBACK] No image sources initialized")
         if not self._build_image_queue():
             logger.error("Failed to build image queue")
             return False
         self._initialize_cache_prefetcher()
+        self._sources_changed_during_settings = False
         self._image_sources_waiting_for_display = False
+        return True
+
+    def _initialize_rss_source(self) -> bool:
+        """Construct the one wallpaper coordinator from current source settings."""
+        from engine.engine_rss import get_rss_startup_target_total
+        from sources.rss.pools import read_pool_selection
+
+        self.rss_coordinator = None
+        rss_feeds = self.settings_manager.get('sources.rss_feeds')
+        pool_selection = read_pool_selection(self.settings_manager)
+        if not rss_feeds and not pool_selection.active_ids:
+            return False
+        rss_save_to_disk = self.settings_manager.get('sources.rss_save_to_disk')
+        rss_save_directory = self.settings_manager.get('sources.rss_save_directory')
+        self.rss_coordinator = RSSCoordinator(
+            feed_urls=rss_feeds,
+            pool_selection=pool_selection,
+            target_total_images=get_rss_startup_target_total(self),
+            required_size=self._wallpaper_required_size(),
+            save_to_disk=bool(rss_save_to_disk and rss_save_directory),
+            save_directory=Path(rss_save_directory) if rss_save_directory else None,
+            thread_manager=self.thread_manager,
+            resource_manager=self.resource_manager,
+            shutdown_check=lambda: not self._shutting_down,
+        )
+        logger.info("RSSCoordinator created with %d custom feeds and %d pools", len(rss_feeds), len(pool_selection.active_ids))
         return True
 
     def _initialize_sources(self) -> bool:
@@ -698,6 +741,7 @@ class ScreensaverEngine(QObject):
             logger.info("Initializing image sources...")
             
             sources_initialized = 0
+            self.folder_sources.clear()
             
             # Get folder sources from settings (using dot notation)
             folder_paths = self.settings_manager.get('sources.folders')
@@ -710,33 +754,8 @@ class ScreensaverEngine(QObject):
                 except Exception as e:
                     logger.warning(f"[FALLBACK] Failed to add folder source {folder_path}: {e}")
             
-            # Get RSS sources from settings
-            rss_feeds = self.settings_manager.get('sources.rss_feeds')
-            from sources.rss.pools import read_pool_selection
-            pool_selection = read_pool_selection(self.settings_manager)
-            rss_save_to_disk = self.settings_manager.get('sources.rss_save_to_disk')
-            rss_save_directory = self.settings_manager.get('sources.rss_save_directory')
-
-            # Create single RSSCoordinator with all feed URLs
-            if rss_feeds or pool_selection.active_ids:
-                try:
-                    from engine.engine_rss import get_rss_startup_target_total
-
-                    self.rss_coordinator = RSSCoordinator(
-                        feed_urls=rss_feeds,
-                        pool_selection=pool_selection,
-                        target_total_images=get_rss_startup_target_total(self),
-                        required_size=self._wallpaper_required_size(),
-                        save_to_disk=bool(rss_save_to_disk and rss_save_directory),
-                        save_directory=Path(rss_save_directory) if rss_save_directory else None,
-                        thread_manager=self.thread_manager,
-                        resource_manager=self.resource_manager,
-                        shutdown_check=lambda: not self._shutting_down,
-                    )
-                    sources_initialized += 1
-                    logger.info("RSSCoordinator created with %d custom feeds and %d pools", len(rss_feeds), len(pool_selection.active_ids))
-                except Exception as e:
-                    logger.warning(f"[FALLBACK] Failed to create RSSCoordinator: {e}")
+            if self._initialize_rss_source():
+                sources_initialized += 1
             
             rss_count = self.rss_coordinator.source_count if self.rss_coordinator else 0
             logger.info(f"Initialized {sources_initialized} image sources "

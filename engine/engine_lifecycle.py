@@ -83,6 +83,16 @@ def teardown_display_runtime(
         gate.close()
         from core.threading.refresh_transition_gate import install_gate
         install_gate(None)
+    # RSS jobs are generation-owned producers too. Retire them before the
+    # barrier, including topology/CUSTOM paths that do not enter stop().
+    coordinator = getattr(engine, "rss_coordinator", None)
+    if coordinator is not None:
+        coordinator.request_stop()
+    rss_timer = getattr(engine, "_rss_refresh_timer", None)
+    if rss_timer is not None:
+        stop_qtimer_safe(engine, rss_timer, description="Background RSS refresh timer")
+        engine._rss_refresh_timer = None
+    engine._image_sources_waiting_for_display = True
     manager = getattr(engine, "display_manager", None)
     if manager is None:
         engine._display_initialized = False
@@ -522,19 +532,6 @@ def stop(
         logger.info("Stopping screensaver engine...")
         # exit_app parameter intentionally unused in debug log
         logger.debug("Engine stop requested (exit_app=%s)", exit_app)
-
-        # Signal RSS coordinator to abort any in-progress waits immediately
-        if engine.rss_coordinator:
-            try:
-                engine.rss_coordinator.request_stop()
-            except Exception as e:
-                logger.debug(f"RSSCoordinator request_stop failed: {e}")
-
-        # Stop background RSS refresh timer if present so no further
-        # callbacks run after teardown begins.
-        if engine._rss_refresh_timer is not None:
-            stop_qtimer_safe(engine, engine._rss_refresh_timer, description="Background RSS refresh timer")
-            engine._rss_refresh_timer = None
 
         # Stop rotation timer (do not delete here to avoid double-delete on repeated stops)
         if engine._rotation_timer:
