@@ -4,13 +4,51 @@ This is the detailed execution/evidence owner for **Waveform Ribbon**, subordina
 [`Current_Plan.md`](../../Current_Plan.md) §6 (S3D shared prerequisites) and §7.0–7.1 (lab first, then production).
 The operator's [concept brief](../Future_Work/Waveform_Ribbon.md) owns intent and hard gates A–H. This document
 decomposes those gates; it does not admit implementation, reorder the live plan, or declare any visual validation complete.
-All execution checkboxes below are open. Planning inspected source and the original images; no lab, production mode,
-render test, performance result or operator acceptance was produced by this planning pass.
+WR-00 execution is authorized and its reference/projection preflight is implemented. A scene lab, ribbon primitive,
+production mode, artistic match, music-window selection and performance acceptance are still unimplemented/unaccepted.
 
 Use this document when the mode is admitted. Recheck the named source owners before each slice. Keep live sequencing
 in Current_Plan, detailed work/evidence here, durable shared contracts at their existing owners, and failed-method
 history under the existing Historical Bugs policy. An absent reference or missing native/operator evidence remains an
 explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate, never a green checkbox.
+
+## 0. Current execution boundary
+
+- [x] WR-00 source custody: primary board rechecked/extracted unchanged; panel cards generated at original aspects.
+- [x] Diagnostic projection fixture: Orthographic default and optional Perspective use the existing shared matrix
+  helpers. Tests cover fixed world scale under resize/depth and near/far clip mapping; existing native sphere/ray
+  tests independently exercise shared Orthographic geometry, origins and occlusion.
+- [ ] Confirm annotation masks/crop boundaries, target measurements/tolerances, scene eye/pivot/world/palette and audio windows.
+- [ ] WR-01 path/history contract and CPU reference; WR-02 independent GPU ribbon primitive proof.
+- [ ] WR-03 onward: actual scene blockout, material/reflection/particle work, music, production and visual acceptance.
+
+Run `.venv\Scripts\python.exe tools/labs/waveform_ribbon_preflight.py --output .artifacts/evidence/waveform_ribbon/<new-run>`.
+It refuses overwrites, copies the unmodified primary, extracts provisional native-size low/high cards, and records
+archive/member/output/producer hashes, tracked diff hash, workspace status and both diagnostic projection matrices.
+The initial receipt is `.artifacts/evidence/waveform_ribbon/wr00_reference_projection/receipt.json`.
+It records no GL scene capture or cost: this is a preflight, not an image of a proposed Ribbon implementation.
+Diagnostic half-height 4/reference depth 10 are arbitrary calibration units, not an approved artistic camera fit.
+
+### Camera contract for all following slices
+
+Design Waveform Ribbon for **Orthographic by default**, with Perspective as a separately exercised optional choice.
+Use the shared admitted physical eye, pivot and world; record projection kind, physical half-extents/magnification,
+clip range and actual inner viewport aspect in the scene signature. Low/high never changes these values. Widening
+reveals additional fixed world at preserved scale; no actor stretch or audio-driven lens/pose/population changes.
+Perspective's FOV is relevant only in that projection. Do not fit a Perspective scene and assume a matrix swap
+establishes Orthographic likeness. A still cannot uniquely recover 3D camera position, and Orthographic has no finite
+projective horizon: fit floor boundaries and visible landmarks without warping the reference.
+
+Reuse `orthographic_matrix`/`perspective_matrix` from `core/settings/framed_camera.py` and parallel ray origins,
+directions and footprints from `rendering/gl_programs/framed_camera.py`. The existing `view_matrices` and
+`project_point` helpers are Perspective-only: Orthographic landmarks must use the actual admitted MVP/half-extents.
+A lab-only camera spec may be passed directly to shared axes/eye admission; do not register a production mode or
+copy a camera controller merely to draw a fixture. Full eye/floor/clearance bounds remain a WR-03 admission task.
+
+WR-01/02 camera-facing strips must use the parallel view direction in Orthographic, not `normalize(eye-point)`.
+WR-05 planar reflection must derive the mirrored virtual eye/projection from the admitted main camera; do not
+readmit that reflected eye through the main camera's above-floor bound. Validate reflection landmarks and clipping
+in both projections independently. Native round-sphere proof does not establish ribbon/floor/reflection fidelity.
 
 ## 1. Reference custody and target authority
 
@@ -104,7 +142,7 @@ Read [Visualizer Labs](../Guides/Visualizer_Labs.md),
 | Reflection | `rendering/quick/scene3d/probe.py:SceneProbe`; `environment.py:PhotoEnvironment`; shared reflection helpers in `rendering/gl_programs/scene3d.py` | Cubemap capture/filtering and photo-derived environment are available. Neither establishes a camera-correct reflected ribbon on a nearby floor. S3D-5 needs an independent plane/reflection proof |
 | Defocus | `rendering/quick/scene3d/defocus.py:DefocusLayer`; shared `SCENE_DEFOCUS_GLSL` | Available near-light layer. It is not a general floor roughness filter or proof that a long strip crossing focus depths is correct. Optional consumer integration only after targeted cards |
 | Particles | `rendering/quick/scene3d/particles.py`, `population.py:CompactedPopulation`; `rendering/gl_programs/particle_program.py`; `scene3d/compute.py` | Sprite/streak draw helpers and stable compacted population exist. S3D-2 owns missing bounded emitters/lifetimes/transient bursts. Small accents do not automatically justify compaction or compute |
-| Physical framed camera | `core/settings/framed_camera.py:FramedCameraSpec`; `core/settings/visualizer_view_orbit.py`; projection helpers in `rendering/gl_programs/scene3d.py` | Available shared physical eye/admission. Declare the mode's pivot, eye bounds/floor, FOV and reset pose when admitted. No copied camera controller or music-driven framing |
+| Physical framed camera | `core/settings/framed_camera.py:FramedCameraSpec`; `core/settings/visualizer_view_orbit.py`; projection helpers in `rendering/gl_programs/scene3d.py` | Available shared physical eye/admission. Declare pivot, eye bounds/floor, projection, Orthographic half-extents, optional Perspective FOV and reset pose when admitted. No copied camera controller or music-driven framing |
 | Audio and simulation | `widgets/spotify_visualizer/beat_engine.py`, `audio_worker.py`, `logical_runtime.py:VisualizerLogicalRuntime`, `runtime_controller.py:VisualizerRuntimeController` | Shared analysis and sole clock exist. Mode-local control/history evolution must use admitted active-mode hook/frame runtime and immutable publication; no new capture, FFT worker, timer or render-side integration |
 | Product registration, settings and presentation | `core/settings/visualizer_mode_registry.py`; `visualizer_mode_settings.py`; `visualizer_settings_snapshot.py`; `rendering/quick/visualizer/implementation_registry.py`, `render_host.py:QuickVisualizerRenderHost`, `node.py`, `item.py` | Integrate only after the lab. Descriptor is canonical wiring; defaults remain with current settings owners. Host owns lazy resolve, identity checks, state restoration and renderer retirement |
 
@@ -154,7 +192,7 @@ identify every artifact. Never overwrite old evidence to make the latest attempt
 
 **Entry:** mode planning or implementation is admitted; original package is available.
 
-- [ ] Recheck archive members/hash and the approved primary board. Preserve its authority unless a later operator
+- [x] Recheck archive members/hash and the approved primary board. Preserve its authority unless a later operator
   instruction changes it; keep independent target tables for any explicitly admitted future alternate.
 - [ ] Confirm scene crop boxes, annotation masks and source aspect. Extract measurement cards without modifying originals.
 - [ ] Measure the target table from §1.3; mark ambiguous body counts and occluded features rather than inventing geometry.
@@ -226,7 +264,8 @@ is held, not substituted with unbounded bloom.
   the diagnostic context. Capture errors invalidate the preview; no stale image displayed as a successful new render.
 - [ ] Place a finite floor, simple world-space vertical structures/light strips, and one continuous ribbon. Start with
   neutral opaque/flat diagnostic shading; no particles, bloom, lens blur or reflection to conceal shape differences.
-- [ ] Solve camera eye/pivot/FOV and projected scale against horizon, ribbon extrema and light positions. Record the
+- [ ] Solve Orthographic eye/pivot/half-extents and scale against floor boundaries, ribbon extrema and light positions;
+  validate optional Perspective separately. Record the
   effective physical camera values. Use the shared framed-camera math; outer card resizing is not world scaling.
 - [ ] Match both ends extending beyond the image with sufficient offscreen continuation. Do not hide end caps at one
   pose only; test a small camera move. Keep the world fixed under navigation.
@@ -336,7 +375,7 @@ stale-event controls. Operator listening/visual review closes F/H; automated cor
   Use `VisualizerLogicalRuntime` dt and `QuickVisualizerRenderHost` resource ownership. Request history/audio demands
   only while needed; release demand on replacement and retirement.
 - [ ] Port feature slices in §7.1 order. Use shared geometry/shaders; diff lab effective inputs against product inputs
-  key by key: camera/FOV/projection, world scale, target allocation, quality, HDR/exposure, material, depth, history,
+  key by key: admitted eye/pivot, projection/half-extents and optional FOV, world scale, target allocation, quality, HDR/exposure, material, depth, history,
   palette, signal scales and warm-up. Fix mappings rather than retuning a second look.
 - [ ] Use test-owned fixture configs for exact lab/product comparisons. Production captures may read the operator's
   current presets, with read-only run-local snapshots, but never pin their contents as tests or overwrite them as setup.
@@ -515,7 +554,7 @@ camera and resource contracts rather than rebuilding them or reopening already-l
 
 ## 10. Concrete next start and unresolved decisions
 
-**When admitted, start with WR-00 and WR-01/02 for S3D-1:** lock primary image crops/measurements, then independently
+**Next: finish WR-00 and execute WR-01/02 for S3D-1:** lock primary image crops/measurements, then independently
 prove one oriented continuous-history strip with no bloom/particles, followed by overlapping translucent strips and
 bounded lifetime/cost. This establishes the highest-risk shared prerequisite before artistic scene composition or Settings.
 
