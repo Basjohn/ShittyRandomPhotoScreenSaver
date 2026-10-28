@@ -782,6 +782,23 @@ def migrate_legacy_sphere_control_keys(
     return migrated
 
 
+def migrate_extruded_bubble_ray_controls(data, *, prefix="widgets.spotify_visualizer"):
+    """Rename cosmetic Flicker to Shimmer without reinterpreting authored values.
+
+    Brightness modulation is independent and defaults to full musical response.
+    Old keys are input-only and immediately removed, including dotted mappings.
+    """
+    result = dict(data)
+    for scope in ('', f'{prefix}.'):
+        old = scope + 'extruded_bubble_ray_flicker'
+        new = scope + 'extruded_bubble_ray_shimmer'
+        if old in result:
+            if new not in result:
+                result[new] = result[old]
+            result.pop(old)
+    return result
+
+
 def migrate_retired_neon_surface_style(data, *, prefix="widgets.spotify_visualizer"):
     """Forward-only persisted input migration. Runtime/spec accept canonical styles only."""
     mapped = {"Edges": "Vertices", "Both": "Vertices",

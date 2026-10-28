@@ -47,7 +47,8 @@ def _metrics():
     # key -> (what is measured, per-frame metric)
     return {
         "extruded_bubble_rays": ("ray intensity", lambda p, s, r: ray_strength(p, s.rays)),
-        "extruded_bubble_ray_flicker": ("flicker depth", lambda p, s, r: ray_motion(p, s.rays, s.sustain)[0]),
+        "extruded_bubble_ray_shimmer": ("shimmer depth", lambda p, s, r: ray_motion(p, s.rays, s.sustain)[0]),
+        "extruded_bubble_ray_modulation": ("ray intensity", lambda p, s, r: ray_strength(p, s.rays)),
         "extruded_bubble_large_bubbles": ("live large", population(True)),
         "extruded_bubble_mid_bubbles": ("live small", population(False)),
         "extruded_bubble_bead_chains": ("chains", lambda p, s, r: _procedural_fill(p, chain_drive(s), s.emission)[0]),
@@ -168,7 +169,7 @@ def main(argv=None):
         print(f"\n{key}  ({label}; preset {base[key]})")
         for case, value in _cases(control, base[key]):
             params = {**base, key: value}
-            if key == "extruded_bubble_ray_flicker" or key == "extruded_bubble_rays":
+            if key in ("extruded_bubble_ray_shimmer", "extruded_bubble_ray_modulation", "extruded_bubble_rays"):
                 params["extruded_bubble_rays_enabled"] = True
             cells = []
             for clip in clips:

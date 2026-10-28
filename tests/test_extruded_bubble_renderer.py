@@ -148,8 +148,7 @@ def test_particle_amount_changes_density_without_dimming_each_remaining_point_ag
 def test_ray_strength_reads_its_range_at_the_ray_driver_and_is_off_when_disabled():
     low, high = SETTINGS["extruded_bubble_rays"]
     on = {**SETTINGS, "extruded_bubble_rays_enabled": True}
-    assert 0 < scene.ray_strength(on, 0.0) < low * .05  # very dim rest, not the full quiet-music endpoint
-    # Inside music a quiet passage shows the authored quiet handle, no longer crushed toward the resting 3%.
+    assert scene.ray_strength(on, 0.0) == pytest.approx(low)
     assert low <= scene.ray_strength(on, .15) < scene.ray_strength(on, .75)
     assert scene.ray_strength(on, 1.0) == pytest.approx(high)
     assert scene.ray_strength(on, 2.0) == pytest.approx(high)
@@ -164,12 +163,12 @@ def test_ray_softness_reaches_the_actual_marched_shaft_consumer(light):
         assert knobs["shaft_soft"] == value
 
 
-def test_ray_flicker_deepens_as_the_rays_rise_and_a_held_passage_reaches_further():
-    on = {**SETTINGS, "extruded_bubble_rays_enabled": True, "extruded_bubble_ray_flicker": 0.5}
+def test_ray_shimmer_deepens_as_the_rays_rise_and_a_held_passage_reaches_further():
+    on = {**SETTINGS, "extruded_bubble_rays_enabled": True, "extruded_bubble_ray_shimmer": 0.5}
     quiet, loud = scene.ray_motion(on, 0.0, 0.0), scene.ray_motion(on, 1.0, 1.0)
     assert 0.0 < quiet[0] < loud[0] <= 0.5
     assert quiet[1] < loud[1]
-    assert scene.ray_motion({**on, "extruded_bubble_ray_flicker": 0.0}, 1.0, 1.0)[0] == 0.0
+    assert scene.ray_motion({**on, "extruded_bubble_ray_shimmer": 0.0}, 1.0, 1.0)[0] == 0.0
     assert scene.ray_motion({**on, "extruded_bubble_rays_enabled": False}, 1.0, 1.0) == (0.0, 1.0)
 
 

@@ -319,7 +319,7 @@ uniform float uFanRays;
 uniform vec2 uFanMix;
 uniform float uSurfaceShaft;    // Light Type only: directional Surface1, positional Deep0
 uniform float uFanReach;        // angle (rad) over which the fan fades
-uniform float uFlicker;         // Ray Flicker's depth now (0: steady rays)
+uniform float uFlicker;         // cosmetic shimmer depth (brightness modulation is independent)
 uniform float uShimmer;         // the shimmer's phase (the simulation's; faster on the hits)
 uniform vec3 uRaySource;        // physical world-space beam segment start
 uniform vec3 uRayEnd;           // physical world-space beam segment end

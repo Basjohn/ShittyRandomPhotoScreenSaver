@@ -1193,6 +1193,8 @@ class SpotifyVisualizerSettings:
         _raw = migrate_retired_neon_surface_style(data, prefix=prefix)
         _raw = migrate_legacy_sphere_finish_keys(_raw, prefix=prefix)
         _raw = migrate_legacy_sphere_control_keys(_raw, prefix=prefix)
+        from core.settings.visualizer_settings_contract import migrate_extruded_bubble_ray_controls
+        _raw = migrate_extruded_bubble_ray_controls(_raw, prefix=prefix)
         _raw = strip_retired_visualizer_settings(_raw, prefix=prefix)
         _raw = strip_legacy_global_technical_keys(_raw, prefix=prefix)
         _raw = migrate_legacy_global_visual_keys(_raw, prefix=prefix)

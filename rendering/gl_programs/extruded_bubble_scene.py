@@ -206,28 +206,22 @@ def speck_amount(emission: float) -> tuple[float, float]:
 
 
 def ray_strength(parameters: Mapping[str, object], rays: float) -> float:
-    """Resolve the authored Range once, with collapsed resting activity in silence.
-
-    A strong quiet-music endpoint must not keep the full fan bright with no musical
-    input: the light collapses to 3% only near silence (driver below ~0.15). Inside
-    music the authored quiet handle is what quiet passages show (the old factor
-    0.03 + 0.97 x driver crushed it all through quiet music); disabled rays emit no shafts.
-    """
+    """Honest endpoints; modulation zero holds the upper strength, even in silence."""
     if not bool(_p(parameters, "rays_enabled")):
         return 0.0
     low, high = (float(v) for v in _p(parameters, "rays"))
     drive = max(0.0, min(1.0, float(rays)))
-    rest = min(1.0, drive / 0.15)
-    return (low + (high - low) * drive) * (0.03 + 0.97 * rest * rest * (3.0 - 2.0 * rest))
+    modulation = max(0.0, min(1.0, float(_p(parameters, "ray_modulation"))))
+    return high + ((low + (high - low) * drive) - high) * modulation
 
 
 def ray_motion(parameters: Mapping[str, object], rays: float, sustain: float) -> tuple[float, float]:
-    """(flicker, reach scale): Ray Flicker's shimmer, deeper as the rays rise (a light shimmer stays in quiet music),
+    """(shimmer, reach scale): cosmetic shimmer, deeper as the rays rise (a light shimmer stays in quiet music),
     and the fan reaching further through a held loud passage."""
     if not bool(_p(parameters, "rays_enabled")):
         return 0.0, 1.0
     rays = max(0.0, min(1.0, float(rays)))
-    return (float(_p(parameters, "ray_flicker")) * (0.3 + 0.7 * rays),
+    return (float(_p(parameters, "ray_shimmer")) * (0.3 + 0.7 * rays),
             0.85 + 0.3 * max(0.0, min(1.0, float(sustain))))
 
 
