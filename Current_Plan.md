@@ -39,13 +39,10 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 approved direction and detailed gates. Work in narrow tested/audited checkpoint pushes. Keep the authored lens,
 world geometry and camera fixed during resize; compare the original rectangle before accepting framing changes.
 
-- [ ] **EB28-0 — Establish execution baselines:** preserve the current basic-rectangle render and resolved input
-  snapshots; finalize bounded procedural advection and explicit ray-value migration while preserving authored presets.
-- [ ] **EB28-1 — Drift:** move existing controls into Drift, add per-consumer quiet/loud gains
-  in `[-1,+2]` with existing direct coupling normalized to1 and new coupling default0, prioritizing free microbubbles.
-  Prove existing/forming/fused identities, signed endpoints, audio rise/release and CPU/GPU field agreement.
-  Direct large/small/fused gains and the bucket are implemented with focused logical/spec checks; finish bounded
-  procedural material paths and wake-water consumers, then recorded/offscreen evidence before acceptance.
+- [~] **EB28-1 — Drift — combined capture gate remains:** Drift bucket and signed quiet/loud gains cover
+  large/small/fused bubbles, free microbubble paths, marine snow and decorative motes. Existing direct coupling
+  defaults1; new consumers default0. Focused field/identity/record/phase/GL/count-tail checks and recorded P8 native
+  capture pass; complete the broader matrix under EB28-V. Wakes/attached fizz retain parent path and inertia only.
 - [~] **EB28-2 — Stream — combined capture gate remains:** ordinary/forming/fused transport now receives the shared
   stream at1x, independent of radius. Recorded P8 no-contact measurements confirm both classes at1x; inspect the
   wider passage/contact/pixel matrix under EB28-V before final acceptance.
@@ -62,7 +59,7 @@ world geometry and camera fixed during resize; compare the original rectangle be
   pixel comparisons pass; complete held/dip/resume motion and shaft-buffer traces under EB28-V.
 - [ ] **EB28-V — Combined behavioral proof:** use production recorded replay and offscreen renders for all five
   tasks, including P8, representative other settings, BEAM/SCENE, both light types and negative/zero/max controls.
-  Repair stale probe preset1–7 guards through canonical enumeration before relying on them for P8.
+  Canonical preset enumeration now admits P8 in the existing probes.
 - [ ] **EB28-P — Performance only after EB28-1…5/V pass:** audit CPU/GPU waste, churn and conservative
   occlusion/culling opportunities; prove no fidelity loss with matched recorded inputs, cameras and full optical passes.
 

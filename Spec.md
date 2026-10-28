@@ -317,9 +317,12 @@ demanded by their actual materials. Shared work stays import-safe/dormant for no
 not blanket prerequisites. `Current_Plan.md` owns active sequencing/acceptance, `Future_Work.md` routes deferred
 consumers, and `Docs/Reference/Scene3D_Resources.md` / `Docs/Reference/Visualizer_Reference.md` own shared contracts.
 
-The operator's scoped 28 October drift, stream, framing, visibility and ray-control assessment lives in
-`Docs/Reference/Extruded_Bubble/Motion_Reactivity_Viewport_Plan.md`, with proposed work in `Current_Plan.md` §2A.
-Its control/projection changes are proposals awaiting review, not current implemented behavior.
+The operator's authorized 28 October drift, stream, framing, visibility and ray-control follow-up lives in
+`Docs/Reference/Extruded_Bubble/Motion_Reactivity_Viewport_Plan.md`, with live work/acceptance in `Current_Plan.md` §2A.
+Framed edge resize changes the observed aperture of a fixed world, preserving authored lens/eye and the basic rectangle;
+stream transport is independent of bubble size/fusion. Rays have honest strength endpoints, independent modulation
+and shimmer. Drift uses signed per-consumer gains on the sole logical clock; free populations default0 while wakes
+retain parent path/history/inertia. Combined recorded/native and later performance gates remain distinct.
 
 **Extruded Bubble** owns its logical 3D population, reactive evolution, Settings and frame runtime on the sole
 Visualizer clock, using existing audio feeds. Original Bubble remains independent and supplies the minimum

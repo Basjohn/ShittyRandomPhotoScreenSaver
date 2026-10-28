@@ -1261,7 +1261,27 @@ vec3 trailWater(int owner, float c) {
     return wakeSpline(p0, p1, p2, p3, t);
 }
 """
-_BEAD_GLSL = _WAKE_PATH_GLSL + """// GPU procedural populations in the simulation's fixed physical world.
+from widgets.spotify_visualizer.extruded_bubble_material_paths import PATH_NODES
+_DRIFT_PATH_GLSL = """
+layout(std430, binding=6) readonly buffer EbMaterialDrift { vec4 ebMaterialDrift[]; };
+uniform int uChainDriftEnabled;
+uniform int uSnowDriftOffset;
+uniform int uSpeckDriftOffset;
+float chainMaterialPhase(int chain) {
+    return uChainDriftEnabled == 0 ? 0.0 : ebMaterialDrift[chain*PATH_NODE_COUNT+1].w;
+}
+vec3 chainDisplacement(int chain, float progress) {
+    if(uChainDriftEnabled==0)return vec3(0.0);
+    int base=chain*PATH_NODE_COUNT;
+    float at=clamp((progress-ebMaterialDrift[base].w)*float(PATH_NODE_COUNT-3)+1.0,0.0,float(PATH_NODE_COUNT-1));
+    int low=int(floor(at));
+    return mix(ebMaterialDrift[base+low].xyz,ebMaterialDrift[base+min(low+1,PATH_NODE_COUNT-1)].xyz,fract(at));
+}
+vec4 cloudMaterial(int encoded,int ident) {
+    return encoded==0 ? vec4(0.0) : ebMaterialDrift[encoded-1+ident];
+}
+""".replace('PATH_NODE_COUNT',str(PATH_NODES))
+_BEAD_GLSL = _DRIFT_PATH_GLSL + _WAKE_PATH_GLSL + """// GPU procedural populations in the simulation's fixed physical world.
 uniform vec3 uWorldCenter;
 uniform vec3 uWorldHalf;
 uniform vec3 uStreamWorld;
@@ -1317,7 +1337,8 @@ void beadInstance() {
         float span = uSceneEmission == 1 ? sceneEntry.w
                    : (pathEnabled ? pathLength : 2.0 * length(uWorldHalf));
         float slot = (float(k) + 0.6 * beadRandom(chain * 977 + k, 4u)) / float(uBeadsPerChain);
-        float progress = fract(slot + uBeadTravel * scale * mix(0.7, 1.3, beadRandom(chain, 5u)) / span);
+        float progress = fract(slot + uBeadTravel * scale * mix(0.7, 1.3, beadRandom(chain, 5u)) / span
+                               + chainMaterialPhase(chain));
         float s = progress * span;
         float phase = 6.2832 * beadRandom(chain, 6u);
         // The same free-chain shape, but travel now follows the authored finite Source -> End.
@@ -1340,6 +1361,7 @@ void beadInstance() {
             float plume = uBeadScatter * 0.55 * scale * (0.2 + 0.8 * progress);
             p += across * g.x * plume + depthAxis * g.y * plume;
         }
+        p += chainDisplacement(chain, progress);
         // A whole-chain lifetime, independent for each stable seed; both population changes and
         // cycling cohorts fade in and out, not jump through integer chain draw-count changes.
         float life = fract(uBeadTravel * 0.035 + beadRandom(chain, 24u));
@@ -1441,18 +1463,22 @@ void beadInstance() {
     int i = gl_InstanceID - uBeadCount;
     vOpacity = clamp(uSnowFill - float(i), 0.0, 1.0);
     vec3 seed = vec3(beadRandom(i, 13u), beadRandom(i, 14u), beadRandom(i, 15u));
+    vec4 material=cloudMaterial(uSnowDriftOffset,i);
+    vOpacity *= step(0.0,material.w); // actual recycled material starts invisibly at its inlet
     vec3 p;
     if (uSceneEmission == 1) {
         vec4 sceneEntry = sceneInlet(beadRandom(i, 34u), seed.xz, along, uWorldCenter, uWorldHalf, uSceneFaces);
-        float progress = fract(seed.y + uSnowDrift / sceneEntry.w);
+        float progress = uSnowDriftOffset==0 ? fract(seed.y+uSnowDrift/sceneEntry.w) : fract(material.w);
         p = sceneEntry.xyz + along * (progress * sceneEntry.w);
+        p += material.xyz;
         vOpacity *= scenePathFade(p, uWorldCenter, uWorldHalf, progress * sceneEntry.w, sceneEntry.w, 0.005);
     } else if (pathEnabled) {
-        float progress = fract(seed.y + uSnowDrift / pathLength);
+        float progress = uSnowDriftOffset==0 ? fract(seed.y+uSnowDrift/pathLength) : fract(material.w);
         float width = min(uWorldHalf.x, uWorldHalf.z) * 0.46 * uParticleSpread;
         p = mix(uStreamSource, uStreamEnd, progress)
           + across * (seed.x * 2.0 - 1.0) * width
           + depthAxis * (seed.z * 2.0 - 1.0) * width;
+        p += material.xyz;
         vOpacity *= smoothstep(0.0, 0.14, progress)
                   * (1.0 - smoothstep(0.82, 1.0, progress));
     } else {
@@ -1475,7 +1501,7 @@ layout(location=2) in float aOpacity; // logical lifetime, independent of physic
 layout(location=3) in float aLensRadius; // steady (nominal) radius for the lens: breathing never refocuses
 """
 assert BUBBLE_VERTEX.count(_ATTRIBUTES) == 1 and BUBBLE_VERTEX.count("void main() {\n") == 1
-_SPECK_GLSL = """// Particulate in the same fixed water domain, with seeded stream-aligned clouds.
+_SPECK_GLSL = _DRIFT_PATH_GLSL + """// Particulate in the same fixed water domain, with seeded stream-aligned clouds.
 uniform vec3 uStreamWorld;     // the stream's unit direction in the world
 uniform vec3 uStreamAcross;
 uniform vec3 uWorldCenter;
@@ -1535,13 +1561,15 @@ void speckInstance() {
     vec3 depthAxis = normalize(cross(pathDir, side));
     vec4 sceneEntry = sceneInlet(speckRandom(i, 23u), seed.xz, pathDir,
                                   uWorldCenter, uWorldHalf, uSceneFaces);
-    float progress = fract(seed.y + uSpeckTravel /
-                           (uSceneEmission == 1 ? sceneEntry.w : lengthPath));
+    vec4 material=cloudMaterial(uSpeckDriftOffset,i);
+    float progress = uSpeckDriftOffset==0 ? fract(seed.y+uSpeckTravel/
+                           (uSceneEmission==1 ? sceneEntry.w : lengthPath)) : fract(material.w);
     float sideWidth = min(uWorldHalf.x, uWorldHalf.z) * 0.52 * uParticleSpread;
     vec3 p = uSceneEmission == 1 ? sceneEntry.xyz + pathDir * (progress * sceneEntry.w)
              : mix(uSpeckSource, uSpeckEnd, progress)
                + side * (seed.x * 2.0 - 1.0) * sideWidth
                + depthAxis * (seed.z * 2.0 - 1.0) * sideWidth;
+    p += material.xyz;
     float radius = pow(mix(0.25, 1.1, speckRandom(i, 8u)), 1.3) * 0.025 * uSpeckSize;
     float ends;
     if (uSceneEmission == 1) {
@@ -1555,7 +1583,7 @@ void speckInstance() {
     }
     float cloudLight = uSceneEmission == 1 ?
         (0.35 + uClouds.z * (0.45 + 0.55 * clouds)) : (0.35 + uClouds.z * clouds);
-    float bright = exp(0.7 * speckGauss(i, 9u).x) * cloudLight * ends;
+    float bright = exp(0.7 * speckGauss(i, 9u).x) * cloudLight * ends * step(0.0,material.w);
     aPoint = vec4(p, kept ? radius : 0.0);
     aLook = vec4(kept ? bright : 0.0, speckRandom(i, 11u) < uWarmShare ? 1.0 : 0.0, speckRandom(i, 12u), 0.0);
 }

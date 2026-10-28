@@ -63,8 +63,8 @@ advection. Reuse existing motion variables only where their actual meaning match
 | Ordinary small bubbles, including forming | Yes: same owner with per-ID phase | `[1,1]` |
 | Fused groups | Yes: one centre, its own wander calibration and shared steering | `[1,1]`; apply once to the centre, never again to each member |
 | Free microbubbles / bead chains / scattered bead plumes | No; these are presentations of one population | `[0,0]`; highest-priority new consumer |
-| Parent-attached wake microbubbles/fizz | Inherit parent/path motion; no direct shared-field coupling | `[0,0]` **additional** drift; preserve inherited attachment and avoid double application |
-| Wake veils/strands and their retained water | Inherit parent history/entrainment; have independent coherent water flow | `[0,0]` additional shared-field drift; preserve existing water motion |
+| Parent-attached wake microbubbles/fizz | Inherit parent/path motion; no direct shared-field coupling | Preserve parent history/inertia; no independent drift control (operator clarification) |
+| Wake veils/strands and their retained water | Inherit parent history/entrainment; have independent coherent water flow | Preserve existing water motion/inertia; no independent drift added |
 | Marine snow | No; existing stream travel only | `[0,0]` |
 | Decorative particles/bands | No; existing stream travel only | `[0,0]` |
 
@@ -91,18 +91,46 @@ authoring retain their existing owners; adding unrelated drift controls to them 
 - Zero defaults preserve existing unconnected populations. Demonstrating the requested Preset 8 spiral therefore
   requires a captured-copy/in-memory microbubble gain override; it must not silently rewrite the operator's preset.
 
-### Architecture decision before coding
+### Bounded material-path architecture
 
 Adding UI rows alone is insufficient. CPU ordinary motion is integrated, while free GPU populations currently derive
 position from seeds and integrated stream travel. `time * current_drift` would make existing beads jump when the music
 changes; moving every procedural bead into a CPU simulation would add substantial work.
 
-First choose a bounded logical advection representation for procedural cohorts/history, projected through the existing
-snapshot and GPU instance path. Compare a small cohort/path representation against analytic integrated carriers for
-the admitted directional fields. Constant-tangential-speed spirals are radius-dependent: a single rigid rotation is
-not automatically equivalent. Keep one drift-field definition and verify CPU/GPU agreement; do not clone independent
-direction semantics. Retained wakes must receive only additional water drift after their existing parent/history motion.
-This decision is unresolved by the present source audit and is an explicit pre-implementation design gate.
+The candidate uses bounded **Lagrangian material knots** on the existing logical clock. Knots move with the stream
+and integrate the canonical field at their current deformed world position. Two boundary ghosts bracket actual
+inlet/outlet material, and bounded reindexing preserves retained knots; only fresh upstream material starts at zero.
+The GPU interpolates once between frozen knots. A rejected repeated-resampling prototype diffused strong spirals;
+the retained scheme has no repeated interpolation of history. Each path has128 knots; initial convergence against512
+and direct trajectories passes at physical field amplitudes-9/+9/+18, with a1-pixel budget at depth10/focal350.
+Near-axis, stopped/slow and0.2/36-unit tracks and nonzero-travel span/direction edits have focused gates.
+
+Free chains use240 stable seeded centreline paths. Static arc/scatter rides those paths, so this represents a plume
+centreline rather than independently solving every scattered bead. Span edits retain a modulo1 per-path progress
+phase and rebase retained world centrelines; existing independently authored arc/scatter/source geometry may still
+change on explicit geometry edits. This does not claim to repair that pre-existing authoring behavior.
+
+Snow/specks use compact NumPy arrays for actual stable mote IDs, integrating the same field at their current physical
+positions. A rejected8×8 material grid was visibly inaccurate near the spiral axis; it is not retained as a second
+path. Cached seeded inlet bases are checked against native production generators, including diagonal SCENE tracks.
+Per-ID resolved progress crosses the snapshot so CPU/GPU rounding cannot disagree about a lifetime wrap. Recycling
+starts invisibly for one logical sample, with the existing inlet fade continuing afterward; offset reset is never
+visible. Source/span/direction/width edits rebase retained cloud world positions and modulo1 progress phases.
+
+Cloud capacity follows the **actual resolved emission**, including musical lifts and Settings release tails, in
+bounded power-of-two buckets. It covers all technical quality tiers; the renderer rejects short payloads before drawing.
+Authored-off clouds retain their history through the release tail; only effective emission below1e-9 may discard it.
+This cutoff retires invisible drift history only and changes no audio/emission follower. Never-drifted zero consumers
+and actually invisible populations skip new solve/upload work. Gain0 stops new drift without erasing visible history.
+Snapshots carry immutable finite float32 vec4 bytes; one lazy, bucket-growing SSBO packs active families. The absolute
+bound is `(240×128+2500+216000)` vec4 records, with no per-mote Python objects or new render pass. Typical capacity
+depends on resolved emission; worst-case CPU/GPU cost is an explicit subsequent performance gate.
+The field expressions have one scalar/NumPy owner; the renderer owns no drift clock or independent field formula.
+Wakes and attached fizz retain their original parent history/entrainment/inertia with no extra drift, per operator.
+
+Master Drift now interpolates its actual quiet/loud handles on the passage while playing. Reusing stream's transient
+activity factor previously hid the quiet endpoint and held loud Drift below its upper endpoint. Idle slowdown is
+pause-only; existing release smoothing remains, and per-consumer gain1 retains the calibrated directional field.
 
 ### Drift acceptance
 

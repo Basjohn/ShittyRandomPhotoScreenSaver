@@ -79,3 +79,63 @@ def test_musical_gain_rises_and_releases_on_existing_identity_without_pinning():
     assert ratios[0]<.15
     assert ratios[1]>1.8
     assert ratios[2]<.15
+
+
+def test_master_drift_has_honest_playing_endpoints_and_releases_after_held_loud_input():
+    controls=ExtrudedBubbleControls(large_count=(0,0),mid_count=(0,0),drift=(.2,.8))
+    sim=ExtrudedBubbleSimulation(288)
+    observed=[]
+    for intensity in (0.,1.,0.):
+        for _ in range(900):
+            state=sim.advance(MusicInput(1/60,True,intensity,(),(.5,.3,.2)),controls)
+        observed.append(state.drift)
+    assert observed==pytest.approx((.2,.8,.2),abs=.001)
+
+
+def test_free_drift_never_changes_bubble_wake_history_or_inertia_and_zero_is_dormant():
+    controls=ExtrudedBubbleControls(large_count=(3,3),mid_count=(5,5),wake_trails=1.,
+        stream_path=(0.,-1.,0.,0.,1.,0.),emission_geometry='SCENE',collision_scope='off')
+    a,b=ExtrudedBubbleSimulation(289),ExtrudedBubbleSimulation(289)
+    for _ in range(60):
+        music=MusicInput(1/60,True,.6,(),(.6,.4,.2))
+        original=a.advance(music,controls)
+        extra=b.advance(music,replace(controls,drift_chains=(1.,1.),drift_snow=(1.,1.),drift_specks=(1.,1.)))
+        assert original.bubbles==extra.bubbles
+        assert original.wakes==extra.wakes
+        assert not original.drift_paths and not original.snow_drift_offsets and not original.speck_drift_offsets
+    assert original.wakes
+    assert extra.drift_paths and extra.snow_drift_offsets and extra.speck_drift_offsets
+
+
+def test_resolved_emission_lifts_and_settings_release_tails_always_have_complete_offset_records():
+    import math
+    import numpy as np
+    from core.constants.extruded_bubble_world import SPECKS_FULL, SNOW_FULL
+    from rendering.gl_programs.extruded_bubble_scene import speck_amount
+    from rendering.gl_programs.scene3d import SCENE3D_DETAIL_TIERS
+    controls=ExtrudedBubbleControls(large_count=(0,0),mid_count=(0,0),emission=(0.,.35),
+        stream_path=(0.,-1.,0.,0.,1.,0.),drift_snow=(1.,1.),drift_specks=(1.,1.))
+    sim=ExtrudedBubbleSimulation(290)
+    def covered(state):
+        for tier in SCENE3D_DETAIL_TIERS.values():
+            snow=math.ceil(SNOW_FULL*max(0.,min(1.,state.emission))*tier.particles)
+            specks=round(SPECKS_FULL*speck_amount(state.emission)[0]*tier.particles)
+            assert len(state.snow_drift_offsets)//16>=snow
+            assert len(state.speck_drift_offsets)//16>=specks
+    for i in range(120):
+        body=.9 if i%8<4 else .4
+        state=sim.advance(MusicInput(1/60,True,1.,(('kick',1.),), (body,body,.7)),controls)
+        covered(state)
+    assert state.emission>.35  # reproduce authored endpoint overshoot before bounding offsets
+    old=sim._free_paths['specks'].displacement.copy()
+    reduced=replace(controls,emission=(0.,0.))
+    state=sim.advance(MusicInput(1/60,True,1.,(),(.5,.5,.5)),reduced)
+    assert state.emission>0. and state.snow_drift_offsets and state.speck_drift_offsets
+    covered(state)
+    packed=np.frombuffer(state.speck_drift_offsets,dtype='f4').reshape(-1,4)
+    overlap=min(len(old),len(packed));retained=packed[:overlap,3]>=0.
+    assert np.max(np.linalg.norm(sim._free_paths['specks'].displacement[:overlap][retained]-old[:overlap][retained],axis=-1))<.15
+    for _ in range(120):
+        state=sim.advance(MusicInput(1/60,False,0.,(),(0.,)*3),reduced)
+        if state.speck_drift_offsets:
+            covered(state)

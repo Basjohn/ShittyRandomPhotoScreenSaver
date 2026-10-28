@@ -93,7 +93,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | transitions and material surfaces (accepted work; new graphics decomposition) | `Docs/Reference/Transitions.md`, `Docs/Guides/Transition_Change_Checklist.md` and `Current_Plan.md` §4 |
 | Accepted original Bubble Settings/replay and musical response reference | `Docs/Reference/Visualizer_Reference.md` → Settings declarations; `Docs/Reference/Harness_Index.md`; `Spec.md` |
 | EB accepted baseline, targets and historical recovery | `Docs/Reference/Extruded_Bubble/README.md`; `Current_Plan.md` §0 |
-| EB drift/stream, framed viewport, pause/resume and ray-control assessment | `Current_Plan.md` §2A; `Docs/Reference/Extruded_Bubble/Motion_Reactivity_Viewport_Plan.md` |
+| EB drift/stream, framed viewport, pause/resume and ray-control follow-up | `Current_Plan.md` §2A; `Docs/Reference/Extruded_Bubble/Motion_Reactivity_Viewport_Plan.md` |
 | EB R42 surface retirement, birth clustering and Bounce next repair; glyph native test audit | `Current_Plan.md` §4B EB-R42; `Docs/Reference/R42_EB_Surface_Birth_Glyph_Test_Audit.md` |
 | EB architectural work order and visual acceptance falsifiers | `Current_Plan.md` §4B G00–G33; [`Docs/Reference/Extruded_Bubble/Acceptance_Runbook.md`](Docs/Reference/Extruded_Bubble/Acceptance_Runbook.md) |
 | EB viewport-sized near-shell blur/fade, off-axis continuity and native diagnostic evidence | `Current_Plan.md` G11; `rendering/gl_programs/extruded_bubble_program.py` → `EB_LENS_GLSL`; `Docs/TestSuite.md` → Extruded Bubble recovery gates |

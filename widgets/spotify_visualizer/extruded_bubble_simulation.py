@@ -31,6 +31,9 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass, field
+from widgets.spotify_visualizer.extruded_bubble_drift import (
+    DRIFT_DIRECTIONS, _STEERED_WANDER, steer as _drift_steer, velocity as drift_velocity,
+)
 
 from core.settings.visualizer_paths import direction_of, world_point
 from itertools import chain
@@ -60,17 +63,6 @@ _OVERLAP_CORRECTION = 0.10        # seconds
 _FUSE_RATIO = 0.72                 # centre distance / (sum of the members' displayed radii) once merged
 _FUSE_SECONDS = 0.35
 # Drift Direction, in the stream's own frame (across = sideways, depth = toward/away from the stream's side).
-# "wander" is the original per-bubble meander; the others steer the field and keep some meander so it is
-# never robotic. Swirls orbit the stream axis and widen slowly, so BEAM births spiral out from the source.
-DRIFT_DIRECTIONS = ("wander", "left", "right", "diagonal", "swish_across", "swish_depth", "random",
-                    "swirl_cw", "swirl_ccw")
-_STEER_SPEED = 0.10        # x WORLD_UNIT per second at full drift (left/right/diagonal)
-_RANDOM_SPEED = 0.08
-_SWISH_SPEED = 0.14
-_SWISH_RATE = 0.55         # radians of motion phase per second of the shared swish carrier
-_SWIRL_SPEED = 0.30        # tangential
-_SWIRL_WIDEN = 0.06        # outward, so the orbit becomes a widening spiral
-_STEERED_WANDER = 0.4      # share of the original meander kept under a steered direction
 _LARGE_RADIUS = (0.075 * WORLD_UNIT, 0.16 * WORLD_UNIT)
 _MID_RADIUS = (0.025 * WORLD_UNIT, 0.07 * WORLD_UNIT)
 # (musical expansion, deepest rest). The quiet handle is a contraction depth: 0 keeps the nominal size at rest,
@@ -120,6 +112,11 @@ class ExtrudedBubbleControls:
     drift_large: tuple[float, float] = (1.0, 1.0)
     drift_small: tuple[float, float] = (1.0, 1.0)
     drift_fused: tuple[float, float] = (1.0, 1.0)
+    drift_chains: tuple[float, float] = (0.0, 0.0)
+    drift_snow: tuple[float, float] = (0.0, 0.0)
+    drift_specks: tuple[float, float] = (0.0, 0.0)
+    particle_spread: float = 1.0
+    bead_chains: tuple[float, float] = (1.0, 1.0)
     sway: float = 0.4                       # 0..1 side-to-side swing
     emission: tuple[float, float] = (0.3, 1.0)   # particle emission (specks, dust, trails) 0..1 at quiet, loud
     idle: float = 0.5                       # 0..1 gentle resting motion; never a size oscillator
@@ -160,6 +157,9 @@ class ExtrudedBubbleSnapshot:
     wakes: tuple[float, ...] = ()          # stable live/retiring emitter records; immutable, wake-only, 8 floats each
     passage: float = 0.0                   # how loud the passage is (0 quiet .. 1 loud): where every Range sits
     chain_activity: float = 0.0            # visibility envelope, independent of movement and shared audio response
+    drift_paths: bytes = b""              # frozen float32 vec4 material-path displacements
+    snow_drift_offsets: bytes = b""
+    speck_drift_offsets: bytes = b""
 
     @property
     def count(self) -> int:
@@ -257,42 +257,6 @@ def _decayed(vector: tuple[float, float, float], dt: float) -> tuple[float, floa
     return (0.0, 0.0, 0.0) if sum(v * v for v in out) < (1e-4 * WORLD_UNIT) ** 2 else out
 
 
-def _drift_steer(kind: str, position, phase: float, t: float, direction, across, depth_axis, axis_origin,
-                 amount: float) -> tuple[float, float, float]:
-    """Extra drift velocity for a Drift Direction; ``amount`` is the musical drift in world units/s."""
-    def combine(a: float, b: float) -> tuple[float, float, float]:
-        return tuple(amount * (a * u + b * v) for u, v in zip(across, depth_axis))
-
-    if kind == "left":
-        return combine(-_STEER_SPEED, 0.0)
-    if kind == "right":
-        return combine(_STEER_SPEED, 0.0)
-    if kind == "diagonal":
-        return combine(_STEER_SPEED * math.sqrt(.5), _STEER_SPEED * math.sqrt(.5))
-    if kind == "random":  # a fixed heading per bubble, from its stable phase
-        return combine(_RANDOM_SPEED * math.cos(phase), _RANDOM_SPEED * math.sin(phase))
-    if kind in ("swish_across", "swish_depth"):
-        # One shared carrier moves the field together; a small per-bubble lag keeps it organic.
-        sway = _SWISH_SPEED * math.sin(t * _SWISH_RATE - 0.35 * math.sin(phase))
-        return combine(sway, 0.0) if kind == "swish_across" else combine(0.0, sway)
-    if kind in ("swirl_cw", "swirl_ccw"):
-        r = tuple(p - o for p, o in zip(position, axis_origin))
-        along = sum(a * d for a, d in zip(r, direction))
-        radial = tuple(a - along * d for a, d in zip(r, direction))
-        distance = math.sqrt(sum(a * a for a in radial))
-        if distance < 1e-3 * WORLD_UNIT:  # on the axis: leave along the bubble's own heading
-            radial = tuple(math.cos(phase) * u + math.sin(phase) * v for u, v in zip(across, depth_axis))
-        else:
-            radial = tuple(a / distance for a in radial)
-        # Counter-clockwise seen from the stream's end looking back at its source (right-hand rule).
-        tangent = (direction[1] * radial[2] - direction[2] * radial[1],
-                   direction[2] * radial[0] - direction[0] * radial[2],
-                   direction[0] * radial[1] - direction[1] * radial[0])
-        sign = 1.0 if kind == "swirl_ccw" else -1.0
-        return tuple(amount * (sign * _SWIRL_SPEED * g + _SWIRL_WIDEN * q) for g, q in zip(tangent, radial))
-    return (0.0, 0.0, 0.0)
-
-
 def _reaction_scale(pair: tuple[float, float], drive: float, expansion: float, deepest: float) -> float:
     """Authored strength spans contracted rest and musical expansion; zero disables both.
 
@@ -339,6 +303,10 @@ class ExtrudedBubbleSimulation:
         self._time = 0.0
         self._level = 0.0
         self._chain_activity = 0.0
+        self._free_paths = {}
+        self._free_geometry = {}
+        self._drift_paths = b""
+        self._snow_drift_offsets = self._speck_drift_offsets = b""
         self._flash = 0.0
         self._surge = 0.0             # the flow's beat surge: a quick push on each onset, released over half a second
         self._onset_mean = 0.0        # the recent onsets' usual weight, so only accents push the flow
@@ -667,7 +635,10 @@ class ExtrudedBubbleSimulation:
         flow_drive = passage * (0.55 + 0.5 * change_drive)    # headroom under the loud handle for the beat surge
         speed_target = _lerp(controls.stream_speed,
                              _soft_top(flow_drive * (1.0 + 0.20 * self._flash + 0.10 * sustain))) * activity
-        drift_target = _lerp(controls.drift, _soft_top(flow_drive * (1.0 + 0.15 * sustain))) * activity
+        # The Drift handles are actual quiet/loud field strengths. Reusing
+        # stream's transient activity factor hid the quiet endpoint and kept a
+        # held loud passage below the upper one. Idle slowdown is pause-only.
+        drift_target = _lerp(controls.drift, passage) * (1.0 if music.playing else rest_activity)
         # Particles have no beat surge: they keep the full passage share.
         emission_target = _soft_top(_lerp(controls.emission, passage * (0.7 + 0.6 * change_drive))
                                     + 0.2 * (controls.emission[1] - controls.emission[0]) * self._flash * passage)
@@ -832,6 +803,7 @@ class ExtrudedBubbleSimulation:
         axis_origin = (world_point(controls.stream_path[:3], WORLD_HALF)
                        if controls.stream_path is not None and controls.emission_geometry != "SCENE"
                        else WORLD_CENTER)
+        self._advance_free_drift(controls, direction, across, depth_axis, axis_origin, drift_live, speed, dt)
         large_drift, small_drift, group_drift = (
             drift_live * max(-1., min(2., _lerp(pair, self._passage)))
             for pair in (controls.drift_large, controls.drift_small, controls.drift_fused))
@@ -842,17 +814,14 @@ class ExtrudedBubbleSimulation:
             # birth opacity and fusion. Drift/sway/contact pushes remain additive.
             forward = speed
             actor_drift = large_drift if b.large else small_drift
-            wander = meander * actor_drift * WORLD_UNIT * 0.05 * (
-                math.sin(t * 0.37 + b.phase) + 0.6 * math.sin(t * 0.83 + 2.1 * b.phase))
             # A slowly changing sine can still be a fast velocity; its amplitude must settle too.
             swing = (controls.sway * WORLD_UNIT * 0.06 * min(1.0, self._motion_rate) * rest_motion_boost
                      * math.sin(t * (1.1 + 0.5 * math.sin(b.phase)) + 3.0 * b.phase))
-            deep = meander * actor_drift * WORLD_UNIT * 0.015 * math.sin(t * 0.29 + 1.7 * b.phase)
-            steer = _drift_steer(steering, (b.x, b.y, b.z), b.phase, t, direction, across, depth_axis, axis_origin,
-                                 actor_drift * WORLD_UNIT)
-            b.x += dt * (direction[0] * forward + across[0] * (wander + swing) + depth_axis[0] * deep + b.push[0] + steer[0])
-            b.y += dt * (direction[1] * forward + across[1] * (wander + swing) + depth_axis[1] * deep + b.push[1] + steer[1])
-            b.z += dt * (direction[2] * forward + across[2] * (wander + swing) + depth_axis[2] * deep + b.push[2] + steer[2])
+            drift_vector = drift_velocity(steering, (b.x, b.y, b.z), b.phase, t, direction, across, depth_axis,
+                                          axis_origin, actor_drift * WORLD_UNIT)
+            b.x += dt * (direction[0] * forward + across[0] * swing + b.push[0] + drift_vector[0])
+            b.y += dt * (direction[1] * forward + across[1] * swing + b.push[1] + drift_vector[1])
+            b.z += dt * (direction[2] * forward + across[2] * swing + b.push[2] + drift_vector[2])
             b.push = _decayed(b.push, dt)
         for c in self._clusters.values():
             members = [self._find(i) for i in c.members]
@@ -1126,6 +1095,58 @@ class ExtrudedBubbleSimulation:
 
     # -- snapshot ----------------------------------------------------------------------------------------------------
 
+    def _advance_free_drift(self, controls, direction, across, depth_axis, origin, amount, speed, dt):
+        for family,pair,attribute in (('chains',controls.drift_chains,'_drift_paths'),
+                                      ('snow',controls.drift_snow,'_snow_drift_offsets'),
+                                      ('specks',controls.drift_specks,'_speck_drift_offsets')):
+            # Clouds use the actual emission follower, including musical lifts
+            # and Settings-reduction tails. Authored-off is not yet invisible.
+            disabled=(max(controls.bead_chains)<=0. if family=='chains' else
+                      max(controls.emission)<=0. and self._emission<1e-9)
+            if disabled:
+                self._free_paths.pop(family,None)
+                setattr(self,attribute,b'')
+                continue  # fully disabled populations retain no hidden solve/upload work
+            gain = max(-1., min(2., _lerp(pair, self._passage)))
+            if family not in self._free_paths and (gain == 0. or amount == 0. or dt <= 0.):
+                continue
+            import numpy as np
+            from widgets.spotify_visualizer.extruded_bubble_material_paths import MaterialPaths, ProceduralOffsets, chain_geometry, cloud_geometry
+            from core.constants.extruded_bubble_world import SPECKS_FULL, SNOW_FULL, particle_amount, speck_density
+            paths=self._free_paths.get(family)
+            if paths is None:
+                paths=self._free_paths[family]=MaterialPaths() if family=='chains' else ProceduralOffsets()
+            cap=SNOW_FULL if family=='snow' else SPECKS_FULL
+            required=math.ceil(cap*(particle_amount(self._emission) if family=='snow' else speck_density(self._emission)))
+            count=min(cap,max(64,1<<(max(required,1)-1).bit_length()))
+            key=(controls.stream_path,direction,controls.emission_geometry,controls.particle_spread,count if family!='chains' else None)
+            if family not in self._free_geometry or key!=self._free_geometry[family][0]:
+                if controls.stream_path is None:
+                    raise ValueError('Procedural drift requires an admitted physical stream path')
+                weights=scene_source_face_weights(controls.stream_path[:3],direction)
+                geometry=(chain_geometry(controls,direction,across,depth_axis,weights) if family=='chains' else
+                          cloud_geometry(controls,direction,across,depth_axis,weights,family,count))
+                self._free_geometry[family]=(key,geometry)
+            field=dict(kind=controls.drift_direction,phase=self._motion_phase,direction=direction,across=across,
+                       depth_axis=depth_axis,origin=origin,amount=amount*gain*WORLD_UNIT)
+            geometry=self._free_geometry[family][1]
+            if family=='chains':
+                base,spans,carry,phases=geometry
+                displacement=paths.advance(base,spans,self._travel*carry,speed*carry,phases,dt,**field)
+                if displacement is None:
+                    continue
+                packed=np.zeros((*displacement.shape[:2],4),dtype=np.float32)
+                packed[...,:3]=displacement
+                packed[:,0,3]=paths.shift;packed[:,1,3]=paths.phase_offset
+            else:
+                packed=paths.advance(geometry,key,self._travel,speed,dt,**field)
+                displacement=paths.displacement
+            if amount*gain==0. and not np.any(paths.phase_offset) and np.max(np.abs(displacement))<1e-7:
+                del self._free_paths[family]
+                setattr(self,attribute,b'')
+                continue
+            setattr(self,attribute,packed.tobytes())
+
     def _wakes(self, dt: float, share: float) -> tuple[float, ...]:
         """Logical emitter identity survives compaction, fusion, pop and surface exit.
 
@@ -1196,7 +1217,8 @@ class ExtrudedBubbleSimulation:
         return ExtrudedBubbleSnapshot(self._time, tuple(bubbles), tuple(clusters), level,
                                       self._flash, direction, speed, self._drift_shown, self._emission, self._sustain,
                                       self._travel, self._rays, self._shimmer, self._motion_phase,
-                                      self._wakes(dt, controls.wake_trails), self._passage, self._chain_activity)
+                                      self._wakes(dt, controls.wake_trails), self._passage, self._chain_activity,
+                                      self._drift_paths, self._snow_drift_offsets, self._speck_drift_offsets)
 
 
 __all__ = ["BUBBLE_STRIDE", "CLUSTER_MAX", "CLUSTER_STRIDE", "ExtrudedBubbleControls", "ExtrudedBubbleSimulation",
