@@ -2,8 +2,8 @@
 
 The eye orbits the basin centre and may look almost level across the lake (tilt 0 is a flat horizon) while it
 never enters the land or water: its floor is the authored terrain under it, with room for detail, the music's
-Terrain Reaction and the lake's ripples. Card aspect widens the basin; Settings and flight use the nominal 16:9
-width and the renderer re-bounds the eye with the card's exact width.
+Terrain Reaction and the lake's ripples. Settings, flight and rendering use the same fixed basin width;
+card resizing changes the observed aperture, never the terrain beneath the eye.
 """
 from __future__ import annotations
 

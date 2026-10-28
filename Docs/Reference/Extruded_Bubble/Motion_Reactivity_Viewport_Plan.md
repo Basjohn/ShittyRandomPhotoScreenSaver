@@ -174,12 +174,18 @@ For the captured P8 lens of 62°, the eye is identical at every tested aspect. H
 the rendered eye consume that width. Resizing can therefore change scene geometry and, where floor clearance binds,
 the admitted eye. This is not purely a crop of one fixed scene.
 
-**Proposed policy decision:** interpret resizing as changing the observed region of a fixed world, preserving the
-physical eye, orientation, scene scale and authored landmark coordinates. To make taller and wider windows reveal
-more independently, define a shared **reference-window/focal-scale** policy using the existing canonical presentation
-reference, rather than silently retaining constant-vertical-FOV behavior. Current FOV is defined against the current
-viewport, so changing that interpretation requires an explicit migration/parity decision. No new per-mode camera owner.
-If constant vertical FOV is retained, document its height/edge consequences instead of promising aperture-window behavior.
+**Approved implemented policy:** edge resizing changes the observed region of one fixed world, preserving physical
+eye, orientation, scene scale, authored FOV and world landmarks. The existing canonical presentation reference owns
+the aperture calibration: `framed_aperture_scale` compares the viewport extent to its baseline height. Neon uses its
+actual inner content field/reference after fixed chrome; EB uses its full scene item. Pixel aspect remains the real
+target aspect in both axes. Uniform card scaling leaves aperture unchanged; edge height reveals/crops above/below.
+EB near-field CoC/spread use reference pixel height, preventing height resize from changing blur strength.
+
+Neon's physical half-width is fixed at2.1, the previous width at the accepted basic1.5 rectangle. Terrain, event and
+celestial coordinates and camera floor all consume that same fixed dimension. The shared camera owner retains
+flight/orbit/pan/dolly admission. Initial recorded before/after renders at630×420 are EB pixel-identical and Neon
+within1/255 (mean absolute channel difference0.000756); wider/taller views preserve the physical scene. Seven-extent
+captures are under `tmp/eb28_framing/`; native/DPR/chrome/optical checks remain in the combined gate.
 
 Before implementation, approve the reference framing and extreme-FOV policy. A finite fixed world may expose its
 limits; do not hide them by moving the camera, stretching terrain or creating camera-following populations.

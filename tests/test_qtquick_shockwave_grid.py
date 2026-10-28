@@ -26,7 +26,7 @@ from rendering.gl_programs.shockwave_grid_program import (
     shockwave_origin,
     shockwave_strength,
 )
-from rendering.gl_programs.shockwave_grid_program import shockwave_half_width
+from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_HALF_WIDTH
 from widgets.spotify_visualizer.shockwave_frame_runtime import ShockwaveGridFrameRuntime
 from tests._visualizer_frozen_settings import frozen_visualizer_settings
 
@@ -170,7 +170,7 @@ def test_the_physical_eye_stays_above_land_and_water_for_any_admitted_view():
                   "shockwave_grid_camera_fov": rng.uniform(*SPEC.fov_range),
                   "shockwave_grid_camera_position": [rng.uniform(-8.0, 8.0) for _ in range(3)]}
         eye = basin_view(values, field).eye
-        floor = terrain_floor(terrain, values["shockwave_grid_terrain_height"], shockwave_half_width(aspect),
+        floor = terrain_floor(terrain, values["shockwave_grid_terrain_height"], SHOCKWAVE_HALF_WIDTH,
                               floor_reaction(values))
         assert eye[1] >= min(floor(eye[0], eye[2]) + SPEC.clearance,
                              SPEC.eye_center[1] + SPEC.eye_half[1] - SPEC.clearance) - 1e-9

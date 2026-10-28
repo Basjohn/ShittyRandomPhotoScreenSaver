@@ -226,7 +226,7 @@ def ray_motion(parameters: Mapping[str, object], rays: float, sustain: float) ->
 
 
 def camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
-           fov_y_degrees: float = FOV_Y_DEGREES):
+           fov_y_degrees: float = FOV_Y_DEGREES, *, aperture_scale: float = 1.):
     """(view_to_world, world_to_view, tan, projection): column-major mat3s (GL order) and the mat4 projection.
     ``turn`` -1..1 is a full circle of yaw; ``tilt`` -0.5..0.5 pitches up to +-45 degrees beyond the authored 16
     degrees up (looking toward the surface, as the mocks do). ``scale`` is a legacy
@@ -236,11 +236,9 @@ def camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
     view_to_world = camera_axes(turn, tilt)
     right, up, back = view_to_world[:3], view_to_world[3:6], view_to_world[6:9]
     world_to_view = (right[0], up[0], back[0], right[1], up[1], back[1], right[2], up[2], back[2])
-    tan_y = math.tan(math.radians(max(35.0, min(62.0, float(fov_y_degrees)))) / 2.0) / max(float(scale), 1e-3)
-    tan = (tan_y * aspect, tan_y)
-    f = 1.0 / tan_y
-    projection = (f / aspect, 0.0, 0.0, 0.0, 0.0, f, 0.0, 0.0, 0.0, 0.0,
-                  (FAR + NEAR) / (NEAR - FAR), -1.0, 0.0, 0.0, 2.0 * FAR * NEAR / (NEAR - FAR), 0.0)
+    from core.settings.framed_camera import viewport_tangents, perspective_matrix
+    tan = viewport_tangents(fov_y_degrees, aspect, aperture_scale / max(float(scale), 1e-3))
+    projection = perspective_matrix(tan, NEAR, FAR)
     return view_to_world, world_to_view, tan, projection
 
 
@@ -248,7 +246,7 @@ def camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
 def physical_camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
                     pan_x: float = 0.0, pan_y: float = 0.0,
                     fov_y_degrees: float = FOV_Y_DEGREES,
-                    position_offset=(0.0, 0.0, 0.0), surface_bound=True):
+                    position_offset=(0.0, 0.0, 0.0), surface_bound=True, *, aperture_scale: float = 1.):
     """World-space physical camera: (view_to_world, world_to_view, eye, tan, projection).
 
     Orbit rotates around a fixed WORLD pivot while the scene remains stationary;
@@ -260,7 +258,7 @@ def physical_camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
     use the returned ``eye`` to express world coordinates relative to the camera.
     """
     view_to_world, world_to_view, tan, projection = camera(
-        turn, tilt, aspect, fov_y_degrees=fov_y_degrees)
+        turn, tilt, aspect, fov_y_degrees=fov_y_degrees, aperture_scale=aperture_scale)
     eye, _ = resolve_camera_position(turn, tilt, scale, pan_x, pan_y, fov_y_degrees,
                                      position_offset, surface_bound, axes=view_to_world)
     return view_to_world, world_to_view, eye, tan, projection

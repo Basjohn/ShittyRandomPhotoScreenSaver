@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 
-from core.constants.neon_lake_world import DEPTH as NEON_LAKE_DEPTH, half_width as neon_lake_half_width
+from core.constants.neon_lake_world import DEPTH as NEON_LAKE_DEPTH, NOMINAL_HALF_WIDTH as SHOCKWAVE_HALF_WIDTH
 from rendering.gl_programs.scene3d import Scene3DStorageLayout
 from widgets.spotify_visualizer.transient_bus import musical_emphasis, musical_weight, passage_ramp
 
@@ -59,7 +59,6 @@ def shockwave_grid_cells(tier_cells: int) -> tuple[int, int]:
     return columns, max(2, round(columns * SHOCKWAVE_GRID_CELLS[1] / SHOCKWAVE_GRID_CELLS[0]))
 
 
-shockwave_half_width = neon_lake_half_width
 
 
 def shockwave_wave_speed(speed: float) -> float:

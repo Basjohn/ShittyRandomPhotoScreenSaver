@@ -19,7 +19,7 @@ from rendering.gl_programs.neon_celestial import NEON_CELESTIAL_GLSL
 from rendering.gl_programs.neon_terrain_reaction import REACTION_GLSL
 from rendering.gl_programs.scene3d import SCENE3D_GLSL, SCENE3D_ORBIT_GLSL
 from rendering.gl_programs.shockwave_grid_program import (
-    SHOCKWAVE_DEPTH, SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_WAVE_GLSL, shockwave_half_width,
+    SHOCKWAVE_DEPTH, SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_WAVE_GLSL, SHOCKWAVE_HALF_WIDTH,
 )
 
 
@@ -79,8 +79,8 @@ def orbit_view(turn: float, tilt: float, field=(0.0, 0.0, 1800.0, 1000.0), *, sc
     return BasinView(eye, axes[:3], axes[3:6], axes[6:9], (tan_y * field[2] / field[3], tan_y), tuple(field))
 
 
-def basin_view(parameters, field) -> BasinView:
-    """The frame's eye from the shared camera, bounded over the card's exact terrain width."""
+def basin_view(parameters, field, *, aperture_scale: float = 1.) -> BasinView:
+    """Shared physical eye over the fixed terrain; only the observed aperture can resize."""
     from core.settings import framed_camera as fc
     from core.settings.neon_lake_camera import SPEC, floor_reaction, terrain_floor
 
@@ -92,10 +92,10 @@ def basin_view(parameters, field) -> BasinView:
     eye, _offset = fc.resolve_camera_position(
         SPEC, turn, tilt, float(get("scene_scale")), float(get("scene_pan_x")), float(get("scene_pan_y")), fov,
         get("camera_position"), None,
-        terrain_floor(get("terrain"), float(get("terrain_height")), shockwave_half_width(aspect),
+        terrain_floor(get("terrain"), float(get("terrain_height")), SHOCKWAVE_HALF_WIDTH,
                       floor_reaction(parameters)), axes=axes)
-    tan_y = fc.tan_half_fov(fov, SPEC.fov_range)
-    return BasinView(eye, axes[:3], axes[3:6], axes[6:9], (tan_y * aspect, tan_y), tuple(field))
+    tan = fc.viewport_tangents(fov, aspect, aperture_scale, SPEC.fov_range)
+    return BasinView(eye, axes[:3], axes[3:6], axes[6:9], tan, tuple(field))
 
 
 
