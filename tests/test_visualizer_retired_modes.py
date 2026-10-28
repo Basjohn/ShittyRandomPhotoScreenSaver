@@ -15,9 +15,9 @@ from core.settings.visualizer_mode_registry import (
 from core.settings.visualizer_settings_snapshot import (
     normalize_visualizer_section_mapping,
 )
-from core.visualizer_preset_manifest import (
-    load_curated_visualizer_preset_manifest,
-    mirror_curated_visualizer_preset_tree,
+from core.visualizer_preset_tree import (
+    scan_curated_visualizer_preset_tree,
+    replace_curated_visualizer_preset_tree,
     scan_curated_visualizer_preset_tree,
 )
 
@@ -121,7 +121,7 @@ def test_retired_preset_tree_is_not_mirrored_and_stale_target_is_pruned(tmp_path
     supported = source_root / "spectrum" / "preset_1_organs.json"
     retired_source = source_root / "blob" / "preset_1_retired.json"
     retired_target = target_root / "blob" / "preset_1_retired.json"
-    supported.write_text("{}", encoding="utf-8")
+    supported.write_text('{"mode":"spectrum","settings":{"spectrum_bar_width":1}}', encoding="utf-8")
     retired_source.write_text("{}", encoding="utf-8")
     retired_target.write_text("{}", encoding="utf-8")
 
@@ -129,9 +129,9 @@ def test_retired_preset_tree_is_not_mirrored_and_stale_target_is_pruned(tmp_path
         "spectrum/preset_1_organs.json"
     }
 
-    mirrored = mirror_curated_visualizer_preset_tree(source_root, target_root)
+    mirrored = replace_curated_visualizer_preset_tree(source_root, target_root)
 
     assert mirrored == {"spectrum/preset_1_organs.json"}
     assert (target_root / "spectrum" / "preset_1_organs.json").is_file()
-    assert not retired_target.exists()
-    assert load_curated_visualizer_preset_manifest(target_root) == mirrored
+    assert retired_target.exists()  # Unsupported/operator files are outside replacement ownership.
+    assert scan_curated_visualizer_preset_tree(target_root) == mirrored

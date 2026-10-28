@@ -27,11 +27,7 @@ import sys
 from typing import Any, Dict, List, Mapping, TYPE_CHECKING
 
 from core.logging.logger import get_logger
-from core.visualizer_preset_manifest import (
-    mirror_curated_visualizer_preset_tree,
-    reconcile_curated_visualizer_preset_tree,
-    sync_curated_preset_tree,
-)
+from core.visualizer_preset_tree import replace_curated_visualizer_preset_tree
 from core.settings.default_contract import require_canonical_default
 from core.settings.visualizer_preset_indices import (
     get_missing_preset_fallback_index,          # noqa: F401  intentional re-export
@@ -381,7 +377,6 @@ _PRESETS: Dict[str, List[VisualizerPreset]] = {
 _PRESET_SOURCE_PATHS: Dict[str, List[Path]] = {mode: [] for mode in MODES}
 _PRESET_SOURCE_SLOTS: Dict[str, List[int]] = {mode: [] for mode in MODES}
 _LOADED_SOURCE_PATHS: Dict[str, Dict[int, Path]] = {mode: {} for mode in MODES}
-_CURATED_TREE_SYNCED = False
 
 
 def _looks_like_onefile_extraction_path(path: Path) -> bool:
@@ -414,22 +409,15 @@ def _presets_root() -> Path:
     if shared_root.is_dir():
         return shared_root
 
-    if bundled_root.is_dir():
-        try:
-            mirror_curated_visualizer_preset_tree(bundled_root, shared_root)
-        except Exception:
-            logger.debug("[VIS_PRESETS] Failed to bootstrap shared preset tree", exc_info=True)
-
-    if not shared_root.is_dir():
-        try:
-            shared_root.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            logger.warning(
-                "[VIS_PRESETS] Failed to ensure shared preset tree exists at %s",
-                shared_root,
-                exc_info=True,
-            )
+    if not bundled_root.is_dir():
+        raise FileNotFoundError(f"Packaged visualizer preset tree is missing: {bundled_root}")
+    try:
+        replace_curated_visualizer_preset_tree(bundled_root, shared_root)
+    except Exception:
+        logger.error("[VIS_PRESETS] Failed to bootstrap shared preset tree", exc_info=True)
+        raise
     return shared_root
+
 
 
 def get_visualizer_presets_dir(mode: str | None = None) -> Path:
@@ -927,14 +915,6 @@ def _load_mode_presets_from_disk(mode: str) -> Dict[int, VisualizerPreset]:
 
 
 def _build_presets_for_mode(mode: str) -> List[VisualizerPreset]:
-    global _CURATED_TREE_SYNCED
-    if not _CURATED_TREE_SYNCED:
-        # Runtime/source-tree reads must not mutate authored preset artifacts.
-        # Frozen managed trees may still reconcile/prune their shipped copy,
-        # while source-mode authoring/regeneration remains an explicit action.
-        reconcile_curated_visualizer_preset_tree(_presets_root())
-        sync_curated_preset_tree(_presets_root())
-        _CURATED_TREE_SYNCED = True
 
     curated = _load_mode_presets_from_disk(mode)
     snapshot_overrides = _load_snapshot_presets(mode)
@@ -1044,8 +1024,6 @@ def reload_presets(mode: str | None = None) -> None:
         mode: When provided, only rebuild presets for that visualizer mode.
             When ``None`` (default) every mode is refreshed.
     """
-    global _CURATED_TREE_SYNCED
-    _CURATED_TREE_SYNCED = False
     if mode is not None:
         if mode not in MODES:
             return

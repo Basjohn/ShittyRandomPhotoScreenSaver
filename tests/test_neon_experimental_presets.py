@@ -17,10 +17,10 @@ from core.settings.visualizer_settings_snapshot import normalize_visualizer_mode
 
 
 def test_each_current_neon_art_file_has_owned_schema_roundtrip_and_independent_view():
-    from core.visualizer_preset_manifest import load_curated_visualizer_preset_manifest
+    from core.visualizer_preset_tree import scan_curated_visualizer_preset_tree
     mode='shockwave_grid'
     root=Path(__file__).resolve().parents[1]/'presets'/'visualizer_modes'
-    manifest=load_curated_visualizer_preset_manifest(root)
+    manifest=scan_curated_visualizer_preset_tree(root)
     view=get_visualizer_view_pose_keys(mode)
     for index,preset in enumerate(get_presets(mode)):
         if preset.is_custom:

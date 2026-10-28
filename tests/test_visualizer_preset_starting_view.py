@@ -37,7 +37,6 @@ def catalog(tmp_path,monkeypatch):
         monkeypatch.setattr(vp,name,dict(getattr(vp,name)))
     monkeypatch.setattr(vp,'_presets_root',lambda:root)
     monkeypatch.setattr(vp,'_snapshot_presets_root',lambda:tmp_path/'overrides')
-    monkeypatch.setattr(vp,'_CURATED_TREE_SYNCED',True)
     vp.reload_presets(MODE)
     return folder
 

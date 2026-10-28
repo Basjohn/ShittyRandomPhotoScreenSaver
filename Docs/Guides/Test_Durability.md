@@ -128,7 +128,7 @@ Use one of these instead:
 2. a registry/catalog query plus schema/ownership assertions;
 3. a dedicated shipped-asset audit when validating the curated tree itself.
 
-Preset infrastructure tests may deliberately exercise filenames, sparse slot numbers, manifest mirroring and user-authored entries using test-owned files. Those names and payloads are fixture data, not product authority duplication.
+Preset infrastructure tests may deliberately exercise filenames, sparse slot numbers, directory mirroring and user-authored entries using test-owned files. Those names and payloads are fixture data, not product authority duplication.
 
 A golden visualizer replay must keep its *input* separate from operator-authored presets. A
 reference can contain a frozen, test-owned configuration, but a regeneration command must

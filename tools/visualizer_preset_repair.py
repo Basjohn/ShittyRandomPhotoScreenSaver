@@ -6,8 +6,8 @@ that mode. Repairs keep a recoverable backup copy, but backups live under the
 repo temp area instead of polluting the curated preset tree itself.
 
 Foundry UI also provides filename-first reindexing and paired preset swapping
-with transactional backups. The existing manifest is refreshed on request only
-when it already exists; its eventual retirement is tracked in Current_Plan.md.
+with transactional backups. The actual preset directory is the catalogue authority;
+explicit source edits refresh only the release mirror.
 Batch repair and CLI auditing remain available.
 """
 from __future__ import annotations
@@ -57,11 +57,7 @@ from core.settings.visualizer_settings_snapshot import (  # noqa: E402
     normalize_visualizer_mode_payload,
 )
 from core.settings.visualizer_settings_contract import LEGACY_GLOBAL_SHARED_VISUAL_KEYS  # noqa: E402
-from core.visualizer_preset_manifest import (  # noqa: E402
-    get_visualizer_preset_manifest_path,
-    write_curated_visualizer_preset_manifest,
-    regenerate_repo_shipped_visualizer_preset_artifacts,
-) 
+from core.visualizer_preset_tree import refresh_shipped_visualizer_presets  # noqa: E402
 from tools.foundry_chrome import (  # noqa: E402
     FoundryTitleBar, FoundryAppearanceDialog, apply_native_backdrop,
     configure_frameless_window, resolve_tool_theme, save_tool_theme_id,
@@ -900,22 +896,6 @@ def restore_undo_entry(entry: UndoEntry) -> None:
         raise
 
 
-def regenerate_existing_visualizer_manifest(*, sync_release: bool = False) -> bool:
-    """Rebuild an existing source manifest without creating one after retirement.
-
-    The explicit GUI button only updates the source inventory; existing repair
-    workflows may also sync the release mirror when they have changed files.
-    """
-    root = ROOT / "presets" / "visualizer_modes"
-    if not get_visualizer_preset_manifest_path(root).is_file():
-        return False
-    if sync_release:
-        regenerate_repo_shipped_visualizer_preset_artifacts(ROOT)
-    else:
-        write_curated_visualizer_preset_manifest(root)
-    return True
-
-
 def repair_file(
     path: Path,
     mode: str,
@@ -981,7 +961,7 @@ def _is_curated_source_path(path: Path) -> bool:
 def _regenerate_shipped_preset_artifacts_if_needed(mutated_paths: Iterable[Path]) -> None:
     if not any(_is_curated_source_path(path) for path in mutated_paths):
         return
-    regenerate_existing_visualizer_manifest(sync_release=True)
+    refresh_shipped_visualizer_presets(ROOT)
 
 
 def repair_all_presets(
@@ -1150,10 +1130,7 @@ class VisualizerPresetRepairApp(QMainWindow):
         self.repair_all_btn = QPushButton("Repair All")
         self.repair_all_btn.clicked.connect(self._on_repair_all_clicked)
         second_row.addWidget(self.repair_all_btn, 1)
-        self.manifest_btn = QPushButton("Regenerate Existing Manifest")
-        self.manifest_btn.setToolTip("Refreshes the existing source inventory without touching preset JSON")
-        self.manifest_btn.clicked.connect(self._on_manifest_clicked)
-        second_row.addWidget(self.manifest_btn, 1)
+
         action_layout.addLayout(second_row)
         self.undo_btn = QPushButton("Undo Last Change")
         self.undo_btn.clicked.connect(self._on_undo_clicked)
@@ -1224,10 +1201,7 @@ class VisualizerPresetRepairApp(QMainWindow):
 
     def _refresh_actions(self) -> None:
         self.undo_btn.setEnabled(bool(self._history))
-        self.manifest_btn.setEnabled(get_visualizer_preset_manifest_path(
-            ROOT / "presets" / "visualizer_modes").is_file())
-        self.manifest_btn.setToolTip("The source manifest is absent; no manifest is created" if not self.manifest_btn.isEnabled()
-                                     else "Regenerate only the existing source inventory; preset files are untouched")
+
 
     def _refresh_presets(self, *_args) -> None:
         mode = self._current_mode()
@@ -1349,17 +1323,6 @@ class VisualizerPresetRepairApp(QMainWindow):
             self._refresh_presets()
         except Exception as exc:
             self._show_error(str(exc))
-
-    def _on_manifest_clicked(self) -> None:
-        try:
-            if regenerate_existing_visualizer_manifest():
-                self.status_label.setText("Existing source manifest regenerated; preset files unchanged.")
-                self._append_log("Regenerated the existing manifest from current authored filenames.")
-            else:
-                self.status_label.setText("No source manifest exists. No action taken.")
-        except Exception as exc:
-            self._show_error(str(exc))
-        self._refresh_actions()
 
     def _on_undo_clicked(self) -> None:
         if not self._history:

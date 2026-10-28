@@ -43,8 +43,8 @@ if str(REPO_ROOT) not in sys.path:
 from versioning import APP_VERSION  # noqa: E402
 from core.settings.defaults_authority_audit import audit_defaults_authority  # noqa: E402
 from core.build_qml_contract import audit_qml_source_contract  # noqa: E402
-from core.visualizer_preset_manifest import (  # noqa: E402
-    write_curated_visualizer_preset_manifest,
+from core.visualizer_preset_tree import (  # noqa: E402
+    snapshot_curated_visualizer_preset_tree,
 )
 from tools.build_evidence import write_build_evidence  # noqa: E402
 from tools.regen_qrc import (  # noqa: E402
@@ -2525,11 +2525,11 @@ class BuildRunnerApp:
     ) -> None:
         try:
             preset_root = REPO_ROOT / "presets" / "visualizer_modes"
-            entries = write_curated_visualizer_preset_manifest(preset_root)
+            entries = snapshot_curated_visualizer_preset_tree(preset_root)
             self._events.put(
                 (
                     "footer",
-                    f"Regenerated the curated preset manifest for {len(entries)} artifacts.",
+                    f"Validated the authored preset directory with {len(entries)} artifacts.",
                     COLORS["green"],
                 )
             )

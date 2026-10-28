@@ -5,18 +5,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import re
-import shutil
 import tempfile
+import io
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from core.logging.logger import get_logger
-from core.visualizer_preset_manifest import (
-    mirror_curated_visualizer_preset_tree,
-    resolve_curated_visualizer_manifest_entries,
-    write_curated_visualizer_preset_manifest,
+from core.visualizer_preset_tree import (
+    apply_curated_preset_files,
+    is_managed_curated_preset_path,
+    replace_curated_visualizer_preset_tree,
+    scan_curated_visualizer_preset_tree,
+    snapshot_curated_visualizer_preset_tree,
 )
+from core.utils.atomic_files import atomic_write_bytes
 from core.settings import visualizer_presets as vp
 
 logger = get_logger(__name__)
@@ -41,21 +44,14 @@ def export_visualizer_presets_zip(
     if not root.is_dir():
         raise FileNotFoundError(f"Visualizer presets root does not exist: {root}")
 
-    entries = write_curated_visualizer_preset_manifest(
-        root,
-        resolve_curated_visualizer_manifest_entries(root),
-    )
+    files = snapshot_curated_visualizer_preset_tree(root)
     target = Path(zip_path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-
-    with ZipFile(target, "w", ZIP_DEFLATED) as archive:
-        for entry in sorted(entries):
-            source = root / Path(entry)
-            if source.is_file():
-                archive.write(source, Path("visualizer_modes") / Path(entry))
-        manifest = root.parent / "visualizer_modes_manifest.json"
-        if manifest.is_file():
-            archive.write(manifest, "visualizer_modes_manifest.json")
+    buffer = io.BytesIO()
+    with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
+        for entry, data in sorted(files.items()):
+            archive.writestr("visualizer_modes/" + entry, data)
+    atomic_write_bytes(target, buffer.getvalue())
+    entries = set(files)
 
     logger.info("[VIS_PRESET_TRANSFER] Exported %d preset file(s) to %s", len(entries), target)
     return VisualizerPresetTransferResult(files=len(entries), root=root)
@@ -99,20 +95,22 @@ def import_visualizer_preset_json_files(
     """Import loose JSON preset files into their inferred mode/slot folders."""
 
     root = Path(target_root) if target_root is not None else vp.get_visualizer_presets_dir()
-    root.mkdir(parents=True, exist_ok=True)
-
-    written = 0
+    files = {}
+    slots = set()
     for raw_path in json_paths:
         path = Path(raw_path)
         mode, index, payload = _canonicalize_loose_preset(path)
-        mode_dir = root / mode
-        mode_dir.mkdir(parents=True, exist_ok=True)
-        _remove_existing_slot_file(mode_dir, index)
-        target_path = mode_dir / _target_filename(path, payload, index)
-        target_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-        written += 1
+        if (mode, index) in slots:
+            raise ValueError(f"Duplicate incoming preset slot: {mode} {index + 1}")
+        slots.add((mode, index))
+        entry = f"{mode}/{_target_filename(path, payload, index)}"
+        files[entry] = (json.dumps(payload, indent=2) + "\n").encode('utf-8')
+    remove = {entry for entry in scan_curated_visualizer_preset_tree(root)
+              if is_managed_curated_preset_path(Path(entry))
+              and (Path(entry).parts[0], vp._infer_preset_index_from_name(Path(entry).stem)) in slots}
+    apply_curated_preset_files(root, files, remove=remove)
+    written = len(files)
 
-    write_curated_visualizer_preset_manifest(root)
     vp.reload_presets()
     logger.info("[VIS_PRESET_TRANSFER] Imported %d loose preset file(s) into %s", written, root)
     return VisualizerPresetTransferResult(files=written, root=root)
@@ -137,7 +135,7 @@ def import_visualizer_presets_path(
 
 def _replace_curated_tree(source_root: Path, *, target_root: Path | None = None) -> VisualizerPresetTransferResult:
     root = Path(target_root) if target_root is not None else vp.get_visualizer_presets_dir()
-    entries = mirror_curated_visualizer_preset_tree(source_root, root)
+    entries = replace_curated_visualizer_preset_tree(source_root, root)
     vp.reload_presets()
     logger.info("[VIS_PRESET_TRANSFER] Replaced curated preset tree at %s from %s", root, source_root)
     return VisualizerPresetTransferResult(files=len(entries), root=root)
@@ -242,14 +240,3 @@ def _target_filename(source_path: Path, payload: Mapping[str, Any], index: int) 
     if safe_suffix:
         return f"preset_{index + 1}_{safe_suffix}.json"
     return f"preset_{index + 1}.json"
-
-
-def _remove_existing_slot_file(mode_dir: Path, index: int) -> None:
-    for existing in mode_dir.glob("preset_*.json"):
-        existing_index = vp._infer_preset_index_from_name(existing.stem)  # type: ignore[attr-defined]
-        if existing_index != index:
-            continue
-        try:
-            existing.unlink()
-        except Exception as exc:
-            logger.warning("[VIS_PRESET_TRANSFER] Failed to remove stale preset %s: %s", existing, exc)

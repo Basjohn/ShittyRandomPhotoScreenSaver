@@ -47,12 +47,12 @@ def _load_transition_catalog_tokens() -> frozenset[str]:
 
 _TRANSITION_CATALOG_TOKENS = _load_transition_catalog_tokens()
 
-# These suites test preset filename/manifest/catalogue mechanics themselves and
+# These suites test preset filename/tree/catalogue mechanics themselves and
 # therefore legitimately create named preset fixtures. Behaviour/render tests do not.
 _PRESET_INFRASTRUCTURE_FILES = frozenset(
     {
         "test_visualizer_presets.py",
-        "test_visualizer_preset_manifest.py",
+        "test_visualizer_preset_tree.py",
         "test_visualizer_preset_transfer.py",
         "test_visualizer_user_authored_preset_catalog.py",
         "test_build_runner.py",

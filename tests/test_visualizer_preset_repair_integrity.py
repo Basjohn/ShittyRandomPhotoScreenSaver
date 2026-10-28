@@ -95,10 +95,6 @@ def test_swap_rejects_collision_without_modifying_files(tmp_path: Path, monkeypa
     assert occupied.exists()
 
 
-def test_missing_manifest_is_strict_noop(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr(repair, "ROOT", tmp_path)
-    def unexpected(_root):
-        raise AssertionError("No regeneration permitted when source manifest is absent")
-    monkeypatch.setattr(repair, "regenerate_repo_shipped_visualizer_preset_artifacts", unexpected)
-    assert repair.regenerate_existing_visualizer_manifest() is False
-    assert not (tmp_path / "presets" / "visualizer_modes_manifest.json").exists()
+def test_repair_has_no_manifest_regeneration_surface():
+    assert not hasattr(repair, 'regenerate_existing_visualizer_manifest')
+    assert not hasattr(repair, 'get_visualizer_preset_manifest_path')

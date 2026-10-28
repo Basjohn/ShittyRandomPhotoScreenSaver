@@ -32,9 +32,34 @@ back its before-images; rollback failures are reported with retained backups req
 preserve original line endings. Ordinary repair retains its existing two-backup rotation; paired transactions
 keep unique backups referenced by Undo.
 
-An existing source manifest may be regenerated. An absent manifest stays absent. Manifest retirement and the
-release/installer ownership audit remain separately queued; this tool audit does not authorize deleting or
-rewriting operator presets or release mirrors.
+## Directory authority and explicit replacement
+
+`core/visualizer_preset_tree.py` owns direct enumeration and explicit replacement. The retired preset inventory
+manifest has no reader, writer, regeneration action or export entry. Runtime reads and reloads never prune files,
+select a duplicate by mtime, or rewrite source presets. Duplicate runtime slots retain the reader's logged,
+deterministic filename precedence; their files remain intact. An ambiguous incoming replacement is rejected.
+
+Export snapshots the admitted directory files and writes their exact bytes; it never writes to its source.
+Folder/archive import and source-to-release refresh validate every incoming file through the preset reader before
+touching a target. Source bytes and metadata stay unchanged. Loose imports validate their entire batch and slot
+uniqueness before any target mutation, retaining their existing canonicalization behavior.
+
+Explicit replacement owns only numbered curated filenames in registered modes. Custom, unsupported-mode and
+unnumbered operator files survive; a conflicting unnumbered target is refused. Every touched target has a byte-exact
+before-image, checked again before promotion/deletion. Atomic individual writes are followed by stale-target removal;
+a failure restores prior writes. Rollback refuses to overwrite an independently changed target and reports the
+retained recovery directory containing before-images and their target paths. These checks are optimistic, not a
+cross-process filesystem transaction. No source directory or preset is deleted.
+
+A missing shared ProgramData tree may be bootstrapped once from validated bundled files. A failed bootstrap is loud
+and creates no empty replacement authority. Existing SCR/Diagnostic/MC shared catalogues are read directly, without
+startup reconciliation or deletion. Onefile payloads include the preset directory through the normal data-directory
+bundle; they do not get an independent inventory.
+
+The two Inno installers retain their established explicit clean replacement of shipped ProgramData data and the MC
+application tree. This installer policy is separate from runtime/import ownership and is unchanged by manifest
+retirement. Build Foundry validates source JSON without writing it. `tools/regenerate_visualizer_shipped_presets.py`
+explicitly refreshes the release mirror; `--check`/`--dry-run` compare directory entries and bytes without writes.
 
 ## Focused proof
 
@@ -47,3 +72,6 @@ Read-only prospective repair of all80 current curated files preserved effective 
 with zero source writes (`tmp/eb28_preset_repair_audit/readonly_catalog_receipt.json`). This receipt identifies
 that audited source state; tests never pin mutable operator preset values. `--audit-curated` is the tool's
 non-mutating structural audit; `--repair-all` is explicitly mutating and is not an audit substitute.
+
+`tests/test_visualizer_preset_tree.py` proves invalid/ambiguous-source rejection before mutation, source immutability,
+startup duplicate preservation, explicit deletion ownership, rollback/recovery and concurrent-edit protection.
