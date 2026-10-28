@@ -39,12 +39,13 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 approved direction and detailed gates. Work in narrow tested/audited checkpoint pushes. Keep the authored lens,
 world geometry and camera fixed during resize; compare the original rectangle before accepting framing changes.
 
-- [ ] **EB28-1 — Drift — live0.5× report needs reproduction:** Drift bucket and signed quiet/loud gains cover
+- [~] **EB28-1 — Drift — combined gate remains:** Drift bucket and signed quiet/loud gains cover
   large/small/fused bubbles, free microbubble paths, marine snow and decorative motes. Existing direct coupling
   defaults1; new consumers default0. Focused field/identity/record/phase/GL/count-tail checks and recorded P8 native
-  capture pass, but the operator still sees straight/unreactive microbubbles at0.5×. Trace actual logs/configuration
-  through logical payload and GPU; distinguish free chains and attached wakes. Re-measure stream acceleration for
-  every visible bubble population. Wakes/attached fizz retain parent path and inertia only.
+  capture pass. Live0-minimum failure traced to mismatched passage/body feeds; EB now derives passage from its own
+  body tuple at the runtime boundary. Coherent PCM and native GPU traces confirm zero-min rise/release, 0…0.5 chain
+  drift and acceleration across ordinary/forming/fused/free/attached families. Finish the combined passage/visual
+  matrix under EB28-V. Wakes/attached fizz retain parent path and inertia only.
 - [~] **EB28-2 — Stream — combined capture gate remains:** ordinary/forming/fused transport now receives the shared
   stream at1x, independent of radius. Recorded P8 no-contact measurements confirm both classes at1x; inspect the
   wider passage/contact/pixel matrix under EB28-V before final acceptance.
@@ -64,9 +65,10 @@ world geometry and camera fixed during resize; compare the original rectangle be
   activation rebases held orbit/flight and arms/clears Auto Rotate before capture; visible completion cannot rewind
   it. Focused native built/unbuilt editor, manual-aim/reload, motion/flight/auto and camera-bound checks pass.
   Finish delayed-completion runtime switching and native input/identity checks under EB28-V.
-- [ ] **EB28-7 — Tall-view bubble shape:** reproduce the operator's tall Sunlit screenshot, verify actual
-  focal X/Y, item/viewport/target clipping and shell projection at native dimensions. Separate an aspect bug from
-  off-axis perspective conics; preserve authored lens/world and basic-rectangle fidelity in any correction.
+- [ ] **EB28-7 — Rounder bubble silhouette prototype — authorized after native diagnosis:** native production
+  shaders confirm equal focal X/Y and physical off-axis conics (measured ratios match pinhole geometry). Build a
+  bounded rounder treatment for comparison; validate ordinary/fused geometry, depth, refraction, near-field and
+  basic-rectangle fidelity before proposing production adoption. Preserve the fixed world and authored lens.
 - [ ] **EB28-V — Combined behavioral proof:** use production recorded replay and offscreen renders for all five
   tasks, including P8, representative other settings, BEAM/SCENE, both light types and negative/zero/max controls.
   Canonical preset enumeration now admits P8 in the existing probes.

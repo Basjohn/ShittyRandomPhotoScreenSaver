@@ -69,7 +69,8 @@ class FullDynamicAudioOwnership(unittest.TestCase):
         self.assertGreater(vocal_peak[-1][1], vocal_peak[-1][0] * 0.35)
 
     def test_the_passage_places_emission_rays_and_stream_and_bands_swing_them(self):
-        # The scalar is the passage (the engine's eased PassageIntensity): it places each lane in its Range.
+        # This standalone simulation supplies passage explicitly. Runtime ingress
+        # derives that scalar from EB's body tuple; it places each lane in its Range.
         for _ in range(210):
             quiet = self.step(.5, .5, .4, scalar=.15)
         for _ in range(210):
@@ -182,11 +183,18 @@ class FullDynamicAudioOwnership(unittest.TestCase):
         self.assertTrue(np.all(raw[1:] - reference[1:] > 0.12), (reference, raw))
 
     def test_particle_range_is_consumed_only_by_simulation_not_by_renderer(self):
+        from rendering.gl_programs.extruded_bubble_scene import speck_amount
         source = SCENE.read_text()
         start = source.index('def speck_amount(')
         end = source.index('\ndef ray_strength(', start)
         self.assertNotIn('low, high', source[start:end])
-        self.assertIn('float(emission)', source[start:end])
+        # The resolved follower controls density once; per-point radiance is
+        # invariant so a quiet population is sparse, not dimmed a second time.
+        self.assertEqual(speck_amount(0.),(0.,2.4))
+        self.assertEqual(speck_amount(.5),(.25,2.4))
+        self.assertEqual(speck_amount(1.),(1.,2.4))
+        self.assertEqual(speck_amount(-1.),speck_amount(0.))
+        self.assertEqual(speck_amount(2.),speck_amount(1.))
         self.assertEqual(MODULE.read_text().count('_lerp(controls.emission,'),1)
 
 

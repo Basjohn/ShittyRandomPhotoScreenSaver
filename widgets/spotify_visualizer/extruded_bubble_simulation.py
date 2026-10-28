@@ -238,7 +238,7 @@ def _follow(current: float, target: float, dt: float, attack: float, release: fl
 
 
 def _passage_curve(intensity: float) -> float:
-    """The engine's passage intensity (0 near-silence, ~0.65 a usual passage, 1 loud) as where a Range sits: a usual
+    """EB's body-derived passage intensity (0 near-silence, ~0.65 a usual passage, 1 loud) as where a Range sits: a usual
     passage a little past the middle, the quietest music near the quiet handle, the loudest at the loud one."""
     value = max(0.0, min(1.0, float(intensity)))
     return value * value * (3.0 - 2.0 * value)
@@ -499,10 +499,9 @@ class ExtrudedBubbleSimulation:
         # this follower never feeds back into sound, motion or other particles.
         self._chain_activity = min(chain_target, _follow(self._chain_activity, chain_target, dt, _CHAIN_FADE_IN, 0.45)
                                    if music.playing else self._chain_activity)
-        # Where every quiet-to-loud Range sits: how loud the PASSAGE is (the shared PassageIntensity on the fixed
-        # real-music scale, already eased by the engine), eased once more so a phrase, not a beat, moves the
-        # endpoints. The band-driven drives above follow beats on a fixed scale that sits mid-range in nearly all
-        # music, so ranges never reached their quiet or loud ends (audit 2026-10-24); beats still add motion on top.
+        # Where every quiet-to-loud Range sits: the runtime derives one fixed-scale
+        # passage from the same EB body tuple used above. Shape and follow it here
+        # so a phrase, not a beat, moves the endpoints; onsets still add motion on top.
         passage_target = _passage_curve(music.intensity) if music.playing else 0.0
         # Activation can join music already playing: the first fill starts at the passage heard, not at silence.
         self._passage = (passage_target if not self._filled else

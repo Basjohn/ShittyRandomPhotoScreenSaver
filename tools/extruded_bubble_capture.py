@@ -7,12 +7,15 @@
     .venv/Scripts/python tools/extruded_bubble_capture.py --output Docs/Reference/Extruded_Bubble/Evidence/new_capture --clip <clip> --preset 5
 
 The clip's recorded feature frames drive the mode's own simulation through ``replay_clip`` (the production logical
-capture: real intensity and onsets on the logical clock); each sampled snapshot is drawn by the production
+capture: recorded body bands and onsets on the logical clock, with EB passage derived
+from those same body bands); each sampled snapshot is drawn by the production
 ``QuickVisualizerRenderHost`` into an offscreen target. Writes sampled frames, a contact sheet, optional silent GIF and
 ``capture.json`` (settings, per-frame simulation scalars and GPU time per frame from a TIME_ELAPSED query).
 ``--passes`` instead times every draw by its program (a query round each draw: the frame total is then their sum,
 slower than a real frame, so read the shares). Offscreen output is not physical acceptance (no real window, display
-timing or listening).
+timing or listening). This entry point uses recorded bands. For PCM technical-setting
+comparisons, callers explicitly wrap capture/replay in ``reanalyzed_bubble_bands()``
+so both EB body and passage use the configured production PCM analysis.
 """
 from __future__ import annotations
 

@@ -22,7 +22,7 @@ from rendering.gl_programs import extruded_bubble_scene as scene
 from tools.visualizer_replay.driver import replay_clip
 from tools.visualizer_replay.engine import ReplayBeatEngine
 from tools.visualizer_replay.pcm_reanalysis import PcmReanalysis
-from widgets.spotify_visualizer.extruded_bubble_frame_runtime import ExtrudedBubbleFrameRuntime
+from widgets.spotify_visualizer.extruded_bubble_frame_runtime import ExtrudedBubbleFrameRuntime, passage_intensity_from_body_bands
 from widgets.spotify_visualizer.feature_frame import FeatureClip, FeatureFrame
 from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
 
@@ -135,7 +135,6 @@ def run(args):
         if args.reanalyze_pcm:
             reanalysis.accept(engine, feature)
         observed['feature'] = feature
-        observed['intensity'] = engine.get_musical_intensity()
         if args.reanalyze_pcm:
             worker = engine._audio_worker
             observed['dsp'] = {name: getattr(worker, name) for name in (
@@ -188,7 +187,8 @@ def run(args):
         rows.append(dict(time_s=feature.timestamp_us / 1e6 - origin,
                          timestamp_us=feature.timestamp_us, playing=kwargs['playing'],
                          identity=kwargs['identity'], source_identity=kwargs['source_identity'],
-                         bands=kwargs['body_bands'], scalar=kwargs['intensity'],
+                         bands=kwargs['body_bands'], scalar=passage_intensity_from_body_bands(kwargs['body_bands']),
+                         passage=snapshot.passage,
                          onsets=[asdict(onset) for onset in kwargs['onsets']],
                          controls=asdict(kwargs['controls']),
                          dsp=observed.get('dsp'),

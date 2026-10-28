@@ -422,18 +422,16 @@ def _capture_extruded_bubble(
     parameters = config_applier.extruded_bubble_parameters(widget, context.now_ts)
     getter = getattr(engine, "get_onset_events", None) if engine is not None else None
     onsets = getter(runtime.onset_serial) if callable(getter) else ()
-    intensity = float(engine.get_musical_intensity()) if engine is not None else 0.0
     # EB's own fixed-scale body feed (see get_extruded_bubble_body_bands): 2D's feed pins
-    # at its ceilings with the floor OFF and learns a drifting level with it ON. The scalar
-    # is retained for legacy admission/diagnostic context; the band changes also drive the
-    # audio Ranges for stream, rays and emission.
+    # at its ceilings with the floor OFF and learns a drifting level with it ON.
+    # The runtime derives passage from this same tuple for all EB audio Ranges.
     body_bands = (0.0, 0.0, 0.0)
     if engine is not None and context.playing:
         bands = engine.get_extruded_bubble_body_bands()
         body_bands = (float(bands.bass), float(bands.mid), float(bands.high))
     ramp_getter = getattr(engine, "is_reactivity_play_ramping", None) if engine is not None else None
     snapshot = runtime.advance(
-        onsets=onsets, now_ts=context.now_ts, playing=context.playing, intensity=intensity,
+        onsets=onsets, now_ts=context.now_ts, playing=context.playing,
         body_bands=body_bands,
         play_ramping=bool(ramp_getter()) if context.playing and callable(ramp_getter) else False,
         identity=(context.runtime_generation, context.engine_generation, context.activation_id),

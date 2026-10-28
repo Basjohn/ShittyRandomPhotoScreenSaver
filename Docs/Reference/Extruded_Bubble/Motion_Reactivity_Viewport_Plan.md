@@ -132,6 +132,26 @@ Master Drift now interpolates its actual quiet/loud handles on the passage while
 activity factor previously hid the quiet endpoint and held loud Drift below its upper endpoint. Idle slowdown is
 pause-only; existing release smoothing remains, and per-consumer gain1 retains the calibrated directional field.
 
+### Live zero-minimum ingress correction
+
+The operator's zero-minimum report exposed a separate input-scale defect: live EB body bands were active while
+the shared bar-loudness passage stayed near zero. Earlier hybrid PCM probes recomputed body but retained the
+recording's historical passage, overstating live Range response. Those captures establish their pixels only;
+they do not close live reactivity acceptance.
+
+`ExtrudedBubbleFrameRuntime` now derives its one passage input from that same body tuple:
+`clamp(.46*bass + .34*mid + .20*high, 0, 1)**.7`. This fixed mapping has no dead band, floor, learned reference
+or extra DSP state. External passage admission was removed from the runtime and all callers. Existing simulation
+shaping/followers remain; original Bubble and shared audio analysis are untouched. Standalone simulation tests may
+still supply passage explicitly, but production and replay cannot mix an unrelated scalar with EB's body source.
+
+Recorded PCM quiet/loud/quiet probes cover 256/512/1024 blocks and forbid reads of the historical scalar. Native
+production-host readback confirms chain, snow and speck displacement and stream acceleration, including master
+Drift0 minimum and chain gain0…0.5. Mature/forming ordinary and fused transport retain forward gain1; chains retain
+their authored per-chain .7…1.3 rate and carry5/9, snow8/9 and decorative specks0.30. Attached fizz/wakes inherit
+their parent history/inertia. Fixed body-feed block-size variation remains measurable; this correction does not
+claim to retune or eliminate it. Evidence: `tmp/eb28_live_passage/` (calibration, logical traces, native GPU receipt).
+
 ### Drift acceptance
 
 Test every directional mode with equal, varying, zero, negative, doubled and sign-crossing gain endpoints. Include

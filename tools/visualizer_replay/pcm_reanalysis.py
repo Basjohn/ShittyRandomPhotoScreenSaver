@@ -6,7 +6,10 @@ settings (Dynamic Floor, manual floor, Sensitivity) cannot change them. Inside
 tail through ``compute_bars_from_samples`` with the replay worker's *configured*
 compute state, and Bubble/EB read bands through the production getter. Recorded
 onsets, loudness and sampled cadence remain unchanged: a controlled hybrid, not a
-live run. Auto's negotiated block and skipped native callbacks are not recoverable.
+live run. EB derives its passage inside its runtime from that recomputed body tuple;
+its passage never reads the retained historical loudness scalar. Other modes keep
+their existing recorded lane ownership. Auto's negotiated block and skipped native
+callbacks are not recoverable.
 """
 from __future__ import annotations
 
