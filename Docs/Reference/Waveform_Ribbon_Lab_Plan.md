@@ -21,7 +21,10 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
 - [ ] Confirm annotation masks/crop boundaries, target measurements/tolerances, scene eye/pivot/world/palette and audio windows.
 - [x] WR-01a bounded absolute-coordinate CPU history and centripetal interpolation reference.
 - [x] WR-01b CPU transported/camera-facing frames, gap/cusp policy and width/UV stations; proposed GPU budget recorded.
-- [ ] WR-02 actual geometry derivatives/normals, packing/rebasing, GPU primitive/state/cost/native proof.
+- [x] WR-02a independent oriented GPU prototype: bounded packet/ring, both projection matrices, solid geometry,
+  native bounds/gaps/plane-normal/phase-rebase/depth/context/state checks and 90-frame draw timing.
+- [ ] WR-02 input-cost gate: incremental logical frame/packet construction; full reference rebuild is too costly.
+- [ ] WR-02 remaining: curved/edge/near-plane/normal precision, OIT/HDR/camera-facing GPU/AA/defocus and full lifecycle/cost proof.
 - [ ] WR-03 onward: actual scene blockout, material/reflection/particle work, music, production and visual acceptance.
 
 Run `.venv\Scripts\python.exe tools/labs/waveform_ribbon_preflight.py --output .artifacts/evidence/waveform_ribbon/<new-run>`.
@@ -247,7 +250,14 @@ placement, frame flips and capacity overflow; visual review still owns what a de
 
 **Entry:** WR-01 contracts defined; no Waveform mode registration required.
 
-- [ ] Place reusable GPU resource/geometry owner in `rendering/quick/scene3d/` and import-safe shader helpers in
+**WR-02a implemented:** `core/ribbon_packet.py`, shared shader/primitive modules named `ribbon.py`, and
+`tools/labs/ribbon_strip_probe.py`; detailed ABI/proof/cost limits live in `Docs/Reference/Ribbon_Path.md`.
+Native receipt `.artifacts/evidence/waveform_ribbon/wr02a_native_final/receipt.json` measures cheap geometry draws
+but a 90 ms maximum full CPU input rebuild. Incremental input construction is the next required gate before any
+production use; neither this prototype nor the remaining checkboxes imply a whole-mode performance/fidelity pass.
+
+
+- [x] Place reusable GPU resource/geometry owner in `rendering/quick/scene3d/` and import-safe shader helpers in
   `rendering/gl_programs/`; use an independently named primitive harness under `tools/labs/` with `OffscreenRenderTarget`.
 - [ ] Start with bounded history SSBO + vertex-stage strip expansion through shared storage/ring facilities. Keep CPU
   state evolution batched. Benchmark a compute alternative only if it removes demonstrated work; no compute-first assumption.

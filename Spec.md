@@ -773,7 +773,8 @@ staged work packages and A–H visual evidence; the concept brief remains the in
 New 3D labs/modes start Orthographic with optional Perspective, using the shared admitted eye/world and actual
 projection matrices/ray origins; camera math alone does not establish scene likeness or reflection parity.
 The shared bounded CPU path/history and transported width-frame references are documented in
-`Docs/Reference/Ribbon_Path.md`; GPU strip expansion and native surface proof remain separate gates. It introduces no runtime simulation or clock.
+`Docs/Reference/Ribbon_Path.md`; an independent oriented GPU strip prototype now exists, while efficient dynamic input construction and broader
+native surface/OIT/defocus proof remain open. No runtime mode consumes it. It introduces no runtime simulation or clock.
 
 Every registered original mode declares its body controls once in `core/settings/visualizer_mode_settings.py`; canonical defaults and editable
 presets remain value authorities. Lazy Settings bodies, model serialization and consumer-specific appliers use that spec.
