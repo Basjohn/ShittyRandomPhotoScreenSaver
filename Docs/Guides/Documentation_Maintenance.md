@@ -159,3 +159,13 @@ Operator PowerShell tests use the **current tree's** `& '.\.venv\Scripts\python.
 ### Expected behavior record ownership
 
 Do not create a new generic `Expected_Behaviour.md` ledger by default. When a suspicious behavior is **proven expected**, record that fact at the nearest durable owner: the relevant historical-bug closeout, focused contract/guide, performance guardrail, or regression test. This prevents future agents from reopening already-cleared smells without adding another broad document that will drift.
+
+## Generated evidence cleanup
+
+Generated build/release output and completed scratch may be removed on explicit operator authorization. Before
+recursive deletion, verify absolute targets stay inside the workspace, contain no tracked files or active
+executables, and do not traverse reparse points. Preserve canonical recordings, operator source assets and preset
+recovery backups. Keep compact receipts with original path/hash custody and evidence for still-open validation
+gates. Historical references to removed local captures are provenance, not promises of available pixels.
+The local cleanup receipt under `.artifacts/cleanup/receipt.json` records deletions and retained receipt locations;
+it is diagnostic custody, not a second product/task authority.
