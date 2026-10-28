@@ -4,7 +4,7 @@ This is the detailed execution/evidence owner for **Waveform Ribbon**, subordina
 [`Current_Plan.md`](../../Current_Plan.md) §6 (S3D shared prerequisites) and §7.0–7.1 (lab first, then production).
 The operator's [concept brief](../Future_Work/Waveform_Ribbon.md) owns intent and hard gates A–H. This document
 decomposes those gates; it does not admit implementation, reorder the live plan, or declare any visual validation complete.
-WR-00 execution is authorized and its reference/projection preflight is implemented. A scene lab, ribbon primitive,
+WR-00 execution is authorized and its reference/projection preflight is implemented. A scene lab, GPU ribbon primitive,
 production mode, artistic match, music-window selection and performance acceptance are still unimplemented/unaccepted.
 
 Use this document when the mode is admitted. Recheck the named source owners before each slice. Keep live sequencing
@@ -19,7 +19,8 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
   helpers. Tests cover fixed world scale under resize/depth and near/far clip mapping; existing native sphere/ray
   tests independently exercise shared Orthographic geometry, origins and occlusion.
 - [ ] Confirm annotation masks/crop boundaries, target measurements/tolerances, scene eye/pivot/world/palette and audio windows.
-- [ ] WR-01 path/history contract and CPU reference; WR-02 independent GPU ribbon primitive proof.
+- [x] WR-01a bounded absolute-coordinate CPU history and centripetal interpolation reference.
+- [ ] WR-01b width/frame/tangent/UV/edge contracts and GPU capacity/packing plan; WR-02 GPU primitive proof.
 - [ ] WR-03 onward: actual scene blockout, material/reflection/particle work, music, production and visual acceptance.
 
 Run `.venv\Scripts\python.exe tools/labs/waveform_ribbon_preflight.py --output .artifacts/evidence/waveform_ribbon/<new-run>`.
@@ -210,21 +211,30 @@ work; final likeness still needs the actual candidate's visual evidence.
 
 **Entry:** S3D-1 admitted; exact EB wake source and regression bars reread.
 
+**WR-01a landed:** `core/ribbon_geometry.py` plus `tools/labs/ribbon_path_probe.py` implement the bounded CPU
+reference documented in `Docs/Reference/Ribbon_Path.md`. Four-knot-supported interior positions preserve absolute
+coordinates through insertion/eviction; batch partition invariance applies to identical admitted knots only.
+CPU cards/trace: `.artifacts/evidence/waveform_ribbon/wr01a_history_checked/receipt.json`. No EB code changed.
+The broader checkboxes below stay open where frames, topology, GPU packing or temporal visual proof is incomplete.
+
+
 - [ ] Specify fixed maximum ribbons, history samples, active counts, sample spacing/time interpretation, record bytes,
   topology and reset/retirement semantics. Calculate memory and worst-case vertices from these caps before allocation.
-- [ ] Define one continuous longitudinal coordinate that survives insertion, history eviction and variable dt. Use it
+- [x] Define one caller-owned absolute longitudinal coordinate that survives insertion and history eviction.
+  Identical admitted knots must be invariant under submission batch partitions; arbitrary dt resampling stays open. Use it
   for geometry, internal strands and attached accents; never derive placement from the changing share of segment count.
-- [ ] Promote the minimal centripetal Catmull-Rom evaluation with repeated-point/short-history handling. Preserve EB's
+- [x] Promote the minimal centripetal Catmull-Rom evaluation with repeated-point/short-history handling. Preserve EB's
   existing arithmetic/call path unless an explicitly scoped migration proves unchanged output and temporal behavior.
 - [ ] Design camera-facing and oriented width modes. For a twisting sheet use a transported frame (or an equally
   continuous proven basis), then apply authored twist. A Frenet frame at zero curvature or a cross product parallel to
   the viewing ray needs deterministic continuous degeneracy handling; silent flips are unacceptable.
 - [ ] Define normals/tangents, two-sided material behavior, UV/path coordinates, edge coverage and end treatment.
   Width changes must remain positive and continuous; initial empty/one-point history must not produce NaNs or full-length pops.
-- [ ] Decide whether the history represents waveform/control age or spatial path distance. EB's water physics is not
+- [x] Decide whether the history represents waveform/control age or spatial path distance. EB's water physics is not
   the model for music flowing across a hall; reuse its coordinate lesson, not its entrainment/drag constants.
 - [ ] Exercise stationary, straight, unequal-spacing, cusp-like, repeated-point, reversing, growing and saturated-history
-  fixtures. Track marked sample/strand positions before/after insert/evict. Compare dt partitions at identical logical times.
+  fixtures. Track marked sample/strand positions before/after insert/evict. Compare submission partitions for identical admitted knots. Independently resolve any future variable-dt resampler
+  before claiming equivalent nonlinear trajectories.
 
 **Exit/artifacts:** small pure record/layout contract, bounded CPU reference and path cards/trace with finite positions,
 no unexplained discontinuity, persistent identity and fixed capacity. Focused tests must falsify normalized-segment
@@ -554,7 +564,7 @@ camera and resource contracts rather than rebuilding them or reopening already-l
 
 ## 10. Concrete next start and unresolved decisions
 
-**Next: finish WR-00 and execute WR-01/02 for S3D-1:** lock primary image crops/measurements, then independently
+**Next: finish WR-00 and WR-01b, then execute WR-02 for S3D-1:** lock primary image crops/measurements, then independently
 prove one oriented continuous-history strip with no bloom/particles, followed by overlapping translucent strips and
 bounded lifetime/cost. This establishes the highest-risk shared prerequisite before artistic scene composition or Settings.
 
