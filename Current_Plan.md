@@ -44,8 +44,9 @@ world geometry and camera fixed during resize; compare the original rectangle be
 - [ ] **EB28-1 — Drift:** move existing controls into Drift, add per-consumer quiet/loud gains
   in `[-1,+2]` with existing direct coupling normalized to1 and new coupling default0, prioritizing free microbubbles.
   Prove existing/forming/fused identities, signed endpoints, audio rise/release and CPU/GPU field agreement.
-- [ ] **EB28-2 — Stream:** separate global envelope, per-class speed factors, contact corrections and projected speed
-  over recorded passages; apply only the approved correction and confirm both existing/forming classes offscreen.
+- [~] **EB28-2 — Stream — combined capture gate remains:** ordinary/forming/fused transport now receives the shared
+  stream at1x, independent of radius. Recorded P8 no-contact measurements confirm both classes at1x; inspect the
+  wider passage/contact/pixel matrix under EB28-V before final acceptance.
 - [ ] **EB28-3 — Framed viewport:** prove the chosen fixed-world projection policy on EB and Neon Lake at extreme
   aspects, preserving physical camera/landmark identities, authored views, clipping and optical effects.
 - [~] **EB28-4 — Pause/resume visibility — combined capture gate remains:** logical free-chain attack is isolated

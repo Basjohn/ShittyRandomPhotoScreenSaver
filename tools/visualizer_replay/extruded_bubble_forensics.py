@@ -312,8 +312,10 @@ def main():
     parser.add_argument('--gif', action='store_true')
     parser.add_argument('--fps', type=float, default=6)
     args = parser.parse_args()
-    if args.duration <= 0 or args.start < 0 or args.fps <= 0 or not 1 <= args.preset <= 7:
-        parser.error('duration/fps must be positive, start nonnegative, preset 1..7')
+    from core.settings.visualizer_presets import get_custom_preset_index
+    art_count = get_custom_preset_index('extruded_bubble')
+    if args.duration <= 0 or args.start < 0 or args.fps <= 0 or not 1 <= args.preset <= art_count:
+        parser.error(f'duration/fps must be positive, start nonnegative, preset 1..{art_count}')
     if args.probe_controls and (args.capture or args.reanalyze_pcm):
         parser.error('--probe-controls is separate from --capture/--reanalyze-pcm')
     if args.capture:
