@@ -46,7 +46,7 @@ from rendering.quick.scene3d.probe import SceneProbe
 from rendering.quick.scene3d.resources import MeshResources, warm_programs
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
 from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
-from widgets.spotify_visualizer.extruded_bubble_simulation import MAX_BUBBLES
+from widgets.spotify_visualizer.extruded_bubble_simulation import MAX_BUBBLES, idle_activity as _idle_activity
 from widgets.spotify_visualizer.extruded_bubble_geometry import WORLD_CENTER, WORLD_HALF, WORLD_UNIT, stream_basis
 from widgets.spotify_visualizer.render_state import ExtrudedBubbleFrame
 
@@ -82,16 +82,6 @@ _BEAD_CLIMB, _SNOW_CARRY, _SPECK_CARRY = 5.0 / WORLD_UNIT, 8.0 / WORLD_UNIT, 0.3
 def _near_spread(height: int) -> float:
     """Resolution-scaled lens budget; camera gestures do not reallocate its read level."""
     return _NEAR_SPREAD * height / 941.0
-
-
-def _idle_activity(level: float) -> float:
-    """Release through the logical follower's quiet band; no render-owned clock.
-
-    Ordinary music above the simulation's existing 0.1 quiet band keeps the
-    authored presentation. Only free-chain opacity and particle size/glow rest.
-    """
-    amount = max(0.0, min(1.0, float(level) / 0.1))
-    return amount * amount * (3.0 - 2.0 * amount)
 
 
 def chain_drive(state) -> float:
@@ -481,7 +471,7 @@ class QuickExtrudedBubbleRenderer:
             "uBeadCount": beads, "uBeadSize": float(parameter(parameters, "extruded_bubble_bead_size"))
             * (0.9 + 0.2 * max(0.0, min(1.0, float(state.level)))),
             "uBeadScatter": float(parameter(parameters, "extruded_bubble_bead_scatter")),
-            "uChainFill": chain_fill, "uChainActivity": idle_activity,
+            "uChainFill": chain_fill, "uChainActivity": float(state.chain_activity),
             "uSnowFill": snow_fill, "uFizzFill": fizz_fill, "uTrailFizz": trail_fizz,
             "uBeadTravel": _BEAD_CLIMB * float(state.travel),
             "uSnowDrift": _SNOW_CARRY * float(state.travel), "uSnowCount": snow, "uFizzPer": fizz_per,

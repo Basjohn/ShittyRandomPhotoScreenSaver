@@ -1,7 +1,9 @@
 # Extruded Bubble: drift, flow, framing and reliable musical response
 
-Assessment and proposed execution contract, 2026-10-28. **Implementation is not authorized yet.**
+Assessment and execution contract, 2026-10-28. **The operator approved implementation after reviewing the assessment.**
 `Current_Plan.md` owns admission and sequencing; this document owns the detailed assessment and proposed gates.
+The operator requires checkpointed slices audited by one Sol 6.1 High agent. Resizing must retain the authored lens,
+physical world and camera, with no aspect stretching or automatic FOV retuning, and preserve the original rectangle.
 The operator reopened these five specific issues after the 2026-10-25 acceptance. This is not a reopening of the
 entire historical EB recovery or permission to retune accepted materials, populations, lighting coverage or presets.
 
@@ -194,10 +196,11 @@ can reach full within a few frames. Warm capture resumes intentionally skip the 
 starts can mask the asymmetry. Lifetime/population fades remain separate. Attached wake beads have different opacity
 ownership and must be checked independently, not “fixed” by applying every free-chain gate to them.
 
-Recommended repair: one free-chain visibility envelope in the existing logical simulation/snapshot, with explicit
-gentle attack/release, retaining IDs and travel through retained-source warm pause/resume. Legitimate source/activation
-retirement still resets the generation. Do not slow shared audio level, size response,
-particle response or BeatEngine warmup to solve a visibility-only fault.
+The logical simulation now publishes `chain_activity`: its rise follows the existing quiet-band target with a
+0.35s exponential attack; its fall is bounded by the original quiet-band visibility target. This preserves the prior
+fade-out and stable travel/IDs while making warm return gradual. The immutable capture projects this value directly
+to `uChainActivity`; snow/specks and attached wakes retain their prior response. Legitimate source/activation retirement
+still resets the generation. No shared audio level, size response or BeatEngine warmup is slowed.
 
 Use recorded music with warm pause/resume, cold resume, short interruptions, repeated toggles and quiet playing.
 Render at least60fps around transitions and retain every logical sample; the current6fps assessment GIF cannot judge

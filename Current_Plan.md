@@ -33,23 +33,24 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 
 ## 2. Before the next mode: fixes, Settings/UX, features
 
-### 2A. EB follow-up — assessment only until reviewed
+### 2A. EB follow-up — authorized implementation
 
 `Docs/Reference/Extruded_Bubble/Motion_Reactivity_Viewport_Plan.md` owns source findings, measured baselines,
-proposed semantics and detailed gates. **Do not implement these tasks before the operator reviews the assessment.**
+approved direction and detailed gates. Work in narrow tested/audited checkpoint pushes. Keep the authored lens,
+world geometry and camera fixed during resize; compare the original rectangle before accepting framing changes.
 
-- [~] **EB28-0 — Awaiting assessment review:** settle direct/inherited drift consumers and bounded procedural
-  advection, signed gain semantics, literal stream-speed meaning, framed reference-window policy and ray zero/migration
-  semantics. Preserve the accepted baseline and operator-authored presets.
-- [ ] **EB28-1 — Drift:** after authorization, move existing controls into Drift, add per-consumer quiet/loud gains
+- [ ] **EB28-0 — Establish execution baselines:** preserve the current basic-rectangle render and resolved input
+  snapshots; finalize bounded procedural advection and explicit ray-value migration while preserving authored presets.
+- [ ] **EB28-1 — Drift:** move existing controls into Drift, add per-consumer quiet/loud gains
   in `[-1,+2]` with existing direct coupling normalized to1 and new coupling default0, prioritizing free microbubbles.
   Prove existing/forming/fused identities, signed endpoints, audio rise/release and CPU/GPU field agreement.
 - [ ] **EB28-2 — Stream:** separate global envelope, per-class speed factors, contact corrections and projected speed
   over recorded passages; apply only the approved correction and confirm both existing/forming classes offscreen.
 - [ ] **EB28-3 — Framed viewport:** prove the chosen fixed-world projection policy on EB and Neon Lake at extreme
   aspects, preserving physical camera/landmark identities, authored views, clipping and optical effects.
-- [ ] **EB28-4 — Pause/resume visibility:** give free-chain visibility its own logical transition; verify gentle
-  warm/cold/repeated music return at temporal capture cadence without changing shared audio, motion or attached wakes.
+- [~] **EB28-4 — Pause/resume visibility — combined capture gate remains:** logical free-chain attack is isolated
+  from shared audio/motion and retains the existing release; focused repeated-toggle, recorded production replay and
+  renderer-uniform checks pass. Complete dense temporal/layer comparisons under EB28-V before final acceptance.
 - [ ] **EB28-5 — Reliable rays:** reproduce sustained diminution through source→uniform→pixels, implement the
   approved strength/modulation/shimmer contract and explicit migration, then validate held/dip/resume passages.
 - [ ] **EB28-V — Combined behavioral proof:** use production recorded replay and offscreen renders for all five
