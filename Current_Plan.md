@@ -9,7 +9,7 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 
 **Work strictly in this order:**
 
-1. **§2 Everything else before the next mode**: fixes, then Settings/UX, then feature work, then release media (§3).
+1. **§2 Everything else before the next mode**: fixes, then Settings/UX, then feature work, then guided-setup stills and cleanup (§3).
    §5 is a watchlist observed during normal use, not a task queue.
 2. **§6 Shared 3D architecture**: one step that builds the reusable 3D primitives, each proven on its own harness.
 3. **§7 Visualizer modes**, one at a time, in order: **Waveform Ribbon → Reactive Liquid / Melt Pool → Concrete Rain →
@@ -47,25 +47,13 @@ world geometry and camera fixed during resize; compare the original rectangle be
 
 ### 2B. Settings and UI (in this order)
 
-- [~] **4C — Shared Settings UX audit — awaiting operator review:**
-  - [~] **Conditional/nested Settings audit — awaiting normal operator use:** source review, focused round-trips,
-    mode disable/rebuild condition checks and native changed-page rendering pass. Exercise mixed-page edits and
-    disclosures in normal use; report any irrelevant rows, clipped controls or lost latent values. Keep categorical
-    direction choices intact and use shared visual controls only where their stored meaning fits.
-  - [~] **Bubble two-node gradient prototype — awaiting operator look:** inspect independent Dark/Light endpoints,
-    direction, blend span and shifted placement in `tools/labs/bubble_gradient_mapper_lab.py`; control capture:
-    `tmp/bubble_gradient_mapper/prototype.png`, sibling wide/narrow/shifted fixtures. Geometry, gesture and driver pixel
-    compatibility pass. Keep current enums, presets and production appearance until interaction/migration review.
-  - [~] **EB lab reference associations — awaiting target confirmation:** reconcile the recipe/reference registry
-    with renamed `*Goal.png` targets before a full comparison run.
-    Six old `ExBubble*.png` originals and their README/manifest paths are absent; `--only=ExBubble2` remains valid.
-    Do not invent mappings or substitute archived lab output for operator targets. Missing references fail before GL.
-  - [~] **Advanced hierarchy — awaiting operator look:** large Advanced header contains Technical and EB Camera;
-    native real-dialog reopen/retirement and legacy-path checks pass. Inspect the nested path at operator DPI/theme;
-    capture: `tmp/pytest_advanced_render/test_visualizer_technical_path0/advanced_technical.png`.
-- [~] **Settings undo — awaiting your use:** Ctrl+Z / Ctrl+Y over the session's slider and visual-editor edits
-  (contract: `Docs/Contracts.md` "Settings undo"). Check it in normal use across pages; extend to any control found
-  missing.
+- [~] **Bubble two-node gradient prototype — awaiting design choice:** independent Dark/Light endpoints,
+  direction, blend span and shifted placement exist in `tools/labs/bubble_gradient_mapper_lab.py`.
+  Inspect `tmp/bubble_gradient_mapper/prototype.png` and sibling wide/narrow/shifted fixtures before promoting the
+  interaction and migration to production. Preserve current production enums, presets and appearance meanwhile.
+- [~] **EB lab reference associations — awaiting target identity:** reconcile the recipe/reference registry
+  with renamed `*Goal.png` targets before a full comparison run. Six old `ExBubble*.png` originals and their
+  README/manifest paths are absent; `--only=ExBubble2` remains valid. Do not invent mappings.
 - [~] **Display Settings capacity — awaiting physical hotplug validation:** current-screen rows have no fixed cap;
   focused six-screen/disconnect/reorder/zero-screen and retirement checks preserve canonical selections/bindings.
   Check Settings remains coherent during actual disconnect/return and explicit reauthoring; hidden form evidence:
@@ -76,19 +64,8 @@ world geometry and camera fixed during resize; compare the original rectangle be
   `tmp/pytest_hover_transfer_native_final/test_transfer_glyphs_are_absen0/transfer_glyphs.png`.
 
 
-- [~] **Visualizer Preset Repair Foundry — implementation candidate; operator acceptance pending** (next quick
-  Settings/tooling job after the currently in-progress §2B items, before §2C feature work):
-  - [~] Present in Foundry chrome/theming, with a single-mode catalogue, two-select Swap Presets, actionable status
-    and one-click paired Undo. Verify actual native control layout at operator DPI and a few normal swaps; no GUI
-    styling tests for this disposable tool.
-  - [~] Reindex from the **numeric filename slots**, never stale embedded `preset_index`; update index/name metadata
-    only, preserve all operator-authored visualizer settings, and prevent silent collision/overwrite. Exercise a
-    manually renamed order, gaps, duplicate slots and repeated reindex operations with independent fixture presets.
-  - [~] Existing-manifest regeneration button is conditional on `presets/visualizer_modes_manifest.json` existing;
-    absence means no-op, not recreation. Check Repair, Repair All, Reindex, Swap and Undo for current-shipped parity,
-    without treating any manifest as an authority for authored files or forcing preset overwrites.
 - [ ] **Retire the visualizer preset manifest and redundant bookkeeping** (same batch, immediately after the
-  Preset Repair Foundry is visually/operator accepted; no manifest removal in the tool-only handoff):
+  focused native Preset Repair review; implementation authorized 28 October):
   - [ ] Map every reader/writer of `presets/visualizer_modes_manifest.json`, the release/Media Center copy and
     `managed_curated_files`: frozen SCR/Diagnostic/MC startup, onefile bootstrap, installer, Build Foundry,
     import/export, source-vs-release auditing and preset repair. Confirm direct enumerations are authoritative.
@@ -112,6 +89,10 @@ world geometry and camera fixed during resize; compare the original rectangle be
 
 ### 2C. Feature work
 
+Use the existing zipped runtime logs under `F:/Programming/Apps` and isolated test-owned profiles to close these
+gates. Do not ask the operator to reset/delete Settings or perform fresh runs merely to supply test coverage.
+Record what the logs prove; investigate remaining gaps directly with bounded tests.
+
 - [~] **SC4 — Wallpaper pools — awaiting normal runtime image use:** inspect subject/query relevance and usable yield
   at actual display sizes, initial empty/cache-warm runs, Settings return and normal background top-ups. Native dark/light
   selector controls and focused source/resume/retirement gates pass; image relevance is not established by streamed
@@ -120,17 +101,14 @@ world geometry and camera fixed during resize; compare the original rectangle be
 - [~] **Reddit's data-root cache:** the first normal saver run with Reddit on should create `SRPSS/cache/reddit` and
   refetch once per member (paced); check its log then.
 
-## 3. Release media and bounded source cleanup (at a stable checkpoint)
+## 3. Guided-setup stills and bounded source cleanup (at a stable checkpoint)
 
 `Docs/Reference/Release_Media.md` owns inputs, encoding and manifest policy (UsuScene1–4 originals, 480 px / 24 fps
 transition loops, no arbitrary size cap; outputs stay outside runtime QRCs).
 
-- [ ] **RM1 Catalogue reconciliation:** compare registry variants with manifest/source hashes; generate only missing or
-  stale entries (keep the Warp Dissolve, Particle and Blinds Flat exclusions unless changed); review each new WebP.
-- [ ] **RM2 Visualizer showcases:** capture registered modes' curated presets with schema-2 real-music clips through
-  production replay/capture (Extruded Bubble is now eligible); fail loudly on missing inputs.
-- [ ] **RM3 Catalogue proof:** motion/endpoints, loop seams, dimensions, metadata; unchanged inputs skip, changed inputs
-  regenerate, mixed-revision captures are rejected.
+- [ ] **Guided-setup still images:** audit the actual guided-setup image consumers and keep their stills current;
+  generate only missing/stale stills through their existing Foundry/operator-sheet authorities and inspect the results.
+  Animated catalogues/showcases are deferred until explicitly requested; no automatic maintenance obligation.
 - [ ] **SC1 Retire the unused root `transitions.direction`:** confirm no callers, then forward-strip it (changes the
   operator's defaults: needs explicit authorization); prove import/merge/save cannot resurrect it.
 - [ ] **SC2 Blinds Flat endpoint discrepancy:** reproduce at the exact production endpoint before deciding capture vs

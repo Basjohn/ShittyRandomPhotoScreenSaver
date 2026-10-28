@@ -139,3 +139,9 @@ EB's perspective-built water, lighting, near-field and composition need a separa
 Its Camera option stays visible but disabled. Preserve experimental authored values without rewriting presets.
 Do not reopen this while wrapping EB, optimizing it, or building the queued modes. New 3D modes should be designed
 for Orthographic by default with optional Perspective, using the shared camera primitives from the start.
+
+### Release catalogue/showcase work — explicit request only
+
+Deferred by the operator on 28 October: animated catalogue reconciliation, visualizer showcases and catalogue
+loop/metadata proof (formerly RM1–RM3). Do not maintain or regenerate these automatically after graphics changes.
+Reopen only on an explicit request. Guided-setup still images and bounded source cleanup remain active in Current_Plan §3.

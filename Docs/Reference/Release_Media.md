@@ -32,11 +32,11 @@ keyframes every 150 frames. About 10 MB is comfortable, not a cap; do not squeez
 An explicit `--max-bytes` request admits the tool's bounded quality reduction and loud failure below its quality floor.
 Scene pairs/seeds remain stable in the manifest for unchanged entries; random choice does not itself stale a capture.
 
-Transition outputs default to ignored `assets/webp/trans/` and Visualizer outputs to `assets/webp/viz/` (operator layout 2026-10-17), both excluded from normal Godzips. Every new or reworked transition or Visualizer gets one rendered showcase WebP there (operator policy 2026-10-17). The agent reviews every new or
-visually changed transition's WebP before closing that implementation. The accepted catalogue exclusions are Warp
-Dissolve, Particle and Blinds Flat until the operator changes them; `catalogue()` filters these release-only cases
-before listing or capture, without changing runtime availability. Landed transitions are accepted; catalogue generation
-and capture endpoint proof do not reopen general product visual acceptance. Remaining execution lives in Current_Plan §3.
+Transition outputs default to ignored `assets/webp/trans/` and Visualizer outputs to `assets/webp/viz/`, both excluded
+from normal Godzips. As of the operator's 28 October instruction, generation and catalogue maintenance happen only
+on explicit request, including after new or changed graphics. Guided-setup still images remain maintained separately.
+The accepted catalogue exclusions remain Warp Dissolve, Particle and Blinds Flat until changed.
+Catalogue evidence does not reopen general product visual acceptance.
 These transition publication rules do not change Visualizer capture/encoding rules below.
 
 Visualizer identities come from the active canonical mode registry and each mode's actual curated preset catalogue;
