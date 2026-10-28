@@ -55,20 +55,24 @@ world geometry and camera fixed during resize; compare the original rectangle be
   captures pass; finish chrome/DPR/optical/native resize checks under EB28-V.
 - [~] **EB28-4 — Pause/resume visibility — combined capture gate remains:** logical free-chain attack is isolated
   from shared audio/motion and retains the existing release; focused repeated-toggle, recorded production replay and
-  renderer-uniform checks pass. Complete dense temporal/layer comparisons under EB28-V before final acceptance.
+  renderer-uniform checks pass. Dense480-frame60Hz recorded PCM pause/resume/short-toggle isolation confirms
+  production chain visibility in final pixels. Finish combined review under EB28-V.
 - [~] **EB28-5 — Reliable rays — combined temporal gate remains:** held absolute energy replaces the adaptive
   positive-difference lift; strength endpoints are literal, Modulation0 holds the upper strength and Shimmer is
   independent. Schema13 migrates old cosmetic Flicker values before defaults/overlays. Focused and frozen recorded
-  pixel comparisons pass; complete held/dip/resume motion and shaft-buffer traces under EB28-V.
+  pixel comparisons pass. Coherent PCM held/dip/recovery/pause/resume tests, raw-shaft/uniform/final-pixel separation
+  and moving native comparisons pass across both lights/coverage choices; finish combined review under EB28-V.
 - [~] **EB28-6 — Camera persistence / automatic motion — combined runtime gate remains:** P8→P1 Settings
   regression reproduced; target pose now precedes XYZ/editor admission and normalization. Hidden runtime preset
   activation rebases held orbit/flight and arms/clears Auto Rotate before capture; visible completion cannot rewind
   it. Focused native built/unbuilt editor, manual-aim/reload, motion/flight/auto and camera-bound checks pass.
-  Finish delayed-completion runtime switching and native input/identity checks under EB28-V.
-- [ ] **EB28-7 — Rounder bubble silhouette prototype — authorized after native diagnosis:** native production
-  shaders confirm equal focal X/Y and physical off-axis conics (measured ratios match pinhole geometry). Build a
-  bounded rounder treatment for comparison; validate ordinary/fused geometry, depth, refraction, near-field and
-  basic-rectangle fidelity before proposing production adoption. Preserve the fixed world and authored lens.
+  Six real retained-runtime delayed-completion auto/flight switches preserve camera motion records/rates; finish
+  combined review under EB28-V. Physical input/monitor use remains operator validation.
+- [~] **EB28-7 — Camera projection chooser — awaiting normal runtime use:** Camera offers Perspective /
+  Orthographic through the typed spec/default/preset owner, default Perspective. Native sphere/union normals,
+  refraction, depth/occlusion, prepared rendering, Settings persistence and frozen Perspective parity pass.
+  Exercise the choice with camera travel/orbit in normal use; orthographic removes distance-size growth and can
+  expose finite-domain boundaries. Enhancement targets need actual examples, never hidden population/lens changes.
 - [ ] **EB28-V — Combined behavioral proof:** use production recorded replay and offscreen renders for all five
   tasks, including P8, representative other settings, BEAM/SCENE, both light types and negative/zero/max controls.
   Canonical preset enumeration now admits P8 in the existing probes.

@@ -182,6 +182,20 @@ def perspective_matrix(tan: tuple[float, float], near: float, far: float):
             (far + near) / (near - far), -1., 0., 0., 2. * far * near / (near - far), 0.)
 
 
+def orthographic_matrix(half_extent: tuple[float, float], near: float, far: float):
+    """Centred parallel projection, with physical half-width/height and forward clip distances.
+
+    Column-major OpenGL matrix, matching ``perspective_matrix``'s view convention:
+    negative view z is forward, near maps to -1 NDC and far to +1.
+    """
+    x, y = (float(v) for v in half_extent)
+    near, far = float(near), float(far)
+    if not all(math.isfinite(v) for v in (x, y, near, far)) or min(x, y) <= 0. or far <= near:
+        raise ValueError('Orthographic extents must be finite and positive with far greater than near')
+    return (1. / x, 0., 0., 0., 0., 1. / y, 0., 0., 0., 0.,
+            -2. / (far - near), 0., 0., 0., -(far + near) / (far - near), 1.)
+
+
 def view_matrices(spec: FramedCameraSpec, turn: float, tilt: float, aspect: float, fov_y_degrees: float,
                   near: float, far: float, *, aperture_scale: float = 1.):
     """(view_to_world, world_to_view) column-major mat3s, (tan x, tan y), and the GL mat4 projection."""

@@ -1124,6 +1124,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'extruded_bubble_bubble_spread': 1.0,
                                     'extruded_bubble_camera_fov': 45,
                                     'extruded_bubble_camera_position': [0.0, 0.0, 0.0],
+                                    'extruded_bubble_camera_projection': 'Perspective',
                                     'extruded_bubble_clarity': 0.0,
                                     'extruded_bubble_collision': [0.4, 0.3, 0.3],
                                     'extruded_bubble_collision_scope': 'All',

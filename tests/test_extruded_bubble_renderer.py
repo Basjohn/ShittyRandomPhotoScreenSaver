@@ -219,7 +219,8 @@ def target(qt_app):
 
 
 @pytest.mark.qt
-def test_a_prepared_renderer_draws_without_compiling_or_allocating_and_releases_everything(target, monkeypatch):
+@pytest.mark.parametrize('projection_kind',('Perspective','Orthographic'))
+def test_a_prepared_renderer_draws_without_compiling_or_allocating_and_releases_everything(target, monkeypatch, projection_kind):
     from OpenGL import GL as gl
 
     from rendering.quick.render import gl_resources
@@ -227,10 +228,10 @@ def test_a_prepared_renderer_draws_without_compiling_or_allocating_and_releases_
     from rendering.quick.visualizer.implementations.extruded_bubble import QuickExtrudedBubbleRenderer
 
     capture, host = target
-    snapshot = _snapshot()
+    snapshot = _snapshot(extruded_bubble_camera_projection=projection_kind)
     renderer = QuickExtrudedBubbleRenderer()
     host._implementations["extruded_bubble"] = renderer
-    capture.render(host, _snapshot(fade=0.0))                          # establishes the frame; draws nothing
+    capture.render(host, _snapshot(fade=0.0,extruded_bubble_camera_projection=projection_kind))
     frame = _frame(snapshot, capture.capture.vao)
     for _ in range(80):
         if renderer.prepare_step(frame):
@@ -248,7 +249,8 @@ def test_a_prepared_renderer_draws_without_compiling_or_allocating_and_releases_
                  "glCreateVertexArrays", "glCreateFramebuffers", "glCreateRenderbuffers", "glTextureStorage2D",
                  "glTexStorage2D", "glTextureStorage2DMultisample", "glNamedBufferStorage"):
         monkeypatch.setattr(gl, name, forbidden)
-    turned = _snapshot(extruded_bubble_turn=0.4, extruded_bubble_tilt=0.2, extruded_bubble_scene_scale=1.7)
+    turned = _snapshot(extruded_bubble_turn=0.4, extruded_bubble_tilt=0.2, extruded_bubble_scene_scale=1.7,
+                       extruded_bubble_camera_projection=projection_kind)
     pictures = [capture.render(host, frame_) for frame_ in (snapshot, turned, snapshot)]
     assert renderer._target._names == names and renderer._target.allocation == allocation
     assert np.abs(pictures[0] - pictures[0][0, 0]).max() > 0           # it draws

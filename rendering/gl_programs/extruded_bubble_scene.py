@@ -26,6 +26,7 @@ from __future__ import annotations
 from core.settings.visualizer_paths import admit_path, direction_of, world_point
 
 import math
+from functools import lru_cache
 from collections.abc import Mapping
 
 import numpy as np
@@ -243,10 +244,17 @@ def camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
 
 
 
+@lru_cache(maxsize=1)
+def _orthographic_reference_fov() -> float:
+    from core.settings.default_contract import require_canonical_default
+    return float(require_canonical_default('widgets.spotify_visualizer.extruded_bubble_camera_fov'))
+
+
 def physical_camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
                     pan_x: float = 0.0, pan_y: float = 0.0,
                     fov_y_degrees: float = FOV_Y_DEGREES,
-                    position_offset=(0.0, 0.0, 0.0), surface_bound=True, *, aperture_scale: float = 1.):
+                    position_offset=(0.0, 0.0, 0.0), surface_bound=True, *, aperture_scale: float = 1.,
+                    projection_kind: str = 'Perspective'):
     """World-space physical camera: (view_to_world, world_to_view, eye, tan, projection).
 
     Orbit rotates around a fixed WORLD pivot while the scene remains stationary;
@@ -261,6 +269,18 @@ def physical_camera(turn: float, tilt: float, aspect: float, scale: float = 1.0,
         turn, tilt, aspect, fov_y_degrees=fov_y_degrees, aperture_scale=aperture_scale)
     eye, _ = resolve_camera_position(turn, tilt, scale, pan_x, pan_y, fov_y_degrees,
                                      position_offset, surface_bound, axes=view_to_world)
+    if projection_kind == 'Orthographic':
+        from core.settings.framed_camera import orthographic_matrix, viewport_tangents
+        # The canonical lens at the authored reference distance calibrates the
+        # parallel view. Scene Scale magnifies it; the saved perspective FOV and
+        # the admitted physical eye remain independent and unchanged.
+        reference_fov = _orthographic_reference_fov()
+        angular = viewport_tangents(reference_fov, aspect, aperture_scale)
+        distance = ORBIT_DISTANCE / max(float(scale), 1e-3)
+        tan = tuple(value * distance for value in angular)
+        projection = orthographic_matrix(tan, NEAR, FAR)
+    elif projection_kind != 'Perspective':
+        raise ValueError(f'Unknown framed projection: {projection_kind!r}')
     return view_to_world, world_to_view, eye, tan, projection
 
 
