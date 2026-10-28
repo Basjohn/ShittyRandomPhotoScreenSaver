@@ -23,12 +23,13 @@ the membership authority. Canonical defaults and editable presets own values. Th
 the same declared type/range/owner, while bespoke editors retain named Custom build/load/collect entries.
 
 Control types: `Slider`, `Toggle`, `Choice`, `Colour` and the **visual controls** (2026-10-18) `Range` (two
-values on one bar, low <= high, persisted `[low, high]`: the reactive quiet..loud span), `Triangle` (three shares
+values on one bar, low <= high, persisted `[low, high]`: the reactive quiet..loud span), `Gradient` (independent
+Dark/Light XY endpoints controlling direction, span and placement), `Triangle` (three shares
 summing to 1 placed by one node, e.g. Fuse / Pop / Bounce) and `Direction` (`[around, height]` degrees on a disc,
 around wrapping, height clamped; "arrow" for a stream, "light" for a light; equal height bounds make a compact
 angle dial for 2D directions such as gradients, shadows or screen-plane rays, a visual replacement for 8-way
 direction drop-downs). Their widgets live in
-`ui/widgets/visual_controls.py` (`RangeSlider`, `TriangleMapper`, `DirectionMapper`) so any Settings builder
+`ui/widgets/visual_controls.py` (`RangeSlider`, `GradientMapper`, `TriangleMapper`, `DirectionMapper`) so any Settings builder
 (Transitions, widgets) can adopt them: they paint the shared slider's theme tokens (groove, fill, 16x10 pill
 handle, hover/pressed, and the page's single last-moved highlight via `shared_styles.mark_last_moved_control`),
 repaint on theme change, ignore the wheel, offer keyboard control and an accessible description, and save once per
@@ -38,7 +39,7 @@ nested buckets heavily so a body shows only what the current choices use.
 `Choice(direction_mapper=True)` adds a shared `DirectionChoiceMapper` beside an existing compass enum combo.
 The combo remains the sole value; the dial snaps to its admitted compass choices and disables for nonspatial values
 such as Random or Center Out. Signal-blocked loads refresh the dial without writes. Undo restores the enum even
-when a later selection or conditional has disabled interactive input. Bubble's gradient/specular directions and
+when a later selection or conditional has disabled interactive input. Bubble's specular direction and
 Sphere's light direction use this adapter without changing their persisted meaning. Bubble's Stream Direction uses
 the same adapter; None and Random retain their existing enum semantics and disable the compass.
 The shared Transitions Direction row uses the same adapter, refreshing from each spec's own label-to-code mapping.
@@ -96,7 +97,10 @@ memberships are cached as immutable declaration data, so frame extraction adds n
 Bubble's body settings use that same spec for model fields, admission, serialization, lazy controls and existing
 logical/presentation consumers. Drift plus Swirl is a Custom projection of the single `bubble_drift_direction` key;
 it creates no persisted Swirl toggle. The core gradient semantic resolver promotes old directions once at model/UI
-ingress, and collection/serialization stamps the current version. Ghost enablement feeds both existing consumers
+ingress, and collection/serialization stamps the current version. The original gradient recipes retain their
+literal renderer vectors and radial geometry; Custom consumes the shared two-node physical projection. Node gestures
+select Custom and undo restores recipe plus nodes together; another recipe preserves those latent coordinates.
+`Bubble_Gradient.md` owns the geometry, persistence and native pixel proof. Ghost enablement feeds both existing consumers
 once, while opacity/decay remain presentation-owned and tail length remains logical-owned. Rainbow, Bar Appearance
 and Technical keep their external owners; the existing Layout bucket has no body controls.
 

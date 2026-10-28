@@ -93,6 +93,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Neon Lake Basin framing, terrain authoring, editable experiments, Custom selection migration and renderer | `Docs/Reference/Neon_Lake_Basin.md`; `Current_Plan.md` §2A / §3 / §5 |
 | transitions and material surfaces (accepted work; new graphics decomposition) | `Docs/Reference/Transitions.md`, `Docs/Guides/Transition_Change_Checklist.md` and `Current_Plan.md` §4 |
 | Accepted original Bubble Settings/replay and musical response reference | `Docs/Reference/Visualizer_Reference.md` → Settings declarations; `Docs/Reference/Harness_Index.md`; `Spec.md` |
+| Original Bubble two-node gradient, named recipe compatibility and gesture undo | `Docs/Reference/Bubble_Gradient.md`; `core/gradient_geometry.py`; `ui/widgets/visual_controls.py` |
 | EB accepted baseline, targets and historical recovery | `Docs/Reference/Extruded_Bubble/README.md`; `Current_Plan.md` §0 |
 | EB drift/stream, framed viewport, Perspective/Orthographic camera, pause/resume and rays | `Current_Plan.md` §2A; `Docs/Reference/Extruded_Bubble/Motion_Reactivity_Viewport_Plan.md` |
 | EB R42 surface retirement, birth clustering and Bounce next repair; glyph native test audit | `Current_Plan.md` §4B EB-R42; `Docs/Reference/R42_EB_Surface_Birth_Glyph_Test_Audit.md` |

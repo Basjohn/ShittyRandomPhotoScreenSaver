@@ -995,6 +995,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'bubble_ghosting_enabled': True,
                                     'bubble_gradient_dark': [0, 4, 11, 255],
                                     'bubble_gradient_direction': 'top',
+                                    'bubble_gradient_endpoints': [0.5, 1.0, 0.5, 0.0],
                                     'bubble_gradient_light': [43, 61, 80, 255],
                                     'bubble_gradient_semantics_version': 2,
                                     'bubble_group_drift': False,

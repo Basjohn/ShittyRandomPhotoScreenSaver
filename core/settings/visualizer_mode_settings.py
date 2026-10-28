@@ -395,6 +395,37 @@ class Triangle:
 
 
 @dataclass(frozen=True)
+class Gradient:
+    """Dark/Light XY endpoints in normalized top-left coordinates, shown by GradientMapper."""
+    key: str
+    label: str
+    tooltip: str = ""
+    bucket: str = ""
+    logical: bool = False
+    when: When = ()
+    enabled_when: EnabledWhen = ()
+    source: bool = False
+    availability: tuple[str, str] = ()
+
+    def admit(self, value: object, default: object) -> list[float]:
+        from core.gradient_geometry import admit_gradient_endpoints
+        try:
+            return list(admit_gradient_endpoints(value))
+        except ValueError:
+            return list(admit_gradient_endpoints(default))
+
+    def coerce(self, value: object) -> list:
+        return list(value)
+
+    def admit_runtime(self, value: object, default: object) -> tuple:
+        return tuple(self.admit(value, default))
+
+    def text(self, value: object) -> str:
+        x, y, u, v = self.admit(value, value)
+        return f'Dark {x:.2f}, {y:.2f} · Light {u:.2f}, {v:.2f}'
+
+
+@dataclass(frozen=True)
 class Direction:
     """A direction persisted as ``[around, height]`` degrees and placed on the shared direction mapper's
     disc: ``around`` is the angle round it (0 up, clockwise, wrapped to [-180, 180)), ``height`` its
@@ -498,10 +529,10 @@ class Custom:
     keys: tuple[str, ...] = ()
 
 
-Control = Union[Slider, Toggle, Choice, Colour, Range, Triangle, Direction, SceneVolumePath, SceneCameraPosition]
-Entry = Union[Slider, Toggle, Choice, Colour, Range, Triangle, Direction, SceneVolumePath, SceneCameraPosition, Custom]
+Control = Union[Slider, Toggle, Choice, Colour, Range, Triangle, Gradient, Direction, SceneVolumePath, SceneCameraPosition]
+Entry = Union[Slider, Toggle, Choice, Colour, Range, Triangle, Gradient, Direction, SceneVolumePath, SceneCameraPosition, Custom]
 # Controls shown by a shared visual control (``ui/widgets/visual_controls.py``) rather than a stock widget.
-VISUAL_CONTROLS = (Range, Triangle, Direction, ScenePath, SceneVolumePath, SceneCameraPosition)
+VISUAL_CONTROLS = (Range, Triangle, Gradient, Direction, ScenePath, SceneVolumePath, SceneCameraPosition)
 
 
 @dataclass(frozen=True)
@@ -1398,10 +1429,14 @@ _BUBBLE = ModeSettings(
                normalizer="core.settings.bubble_gradient_semantics:normalize_bubble_specular_direction", direction_mapper=True),
         Choice("bubble_gradient_direction", "Gradient Direction:",
                ("top", "bottom", "left", "right", "top_left", "top_right", "bottom_left", "bottom_right",
-                "center_out", "center_out_reverse"), bucket="appearance", size_variant="mini",
+                "center_out", "center_out_reverse", "custom"), bucket="appearance", size_variant="mini",
                labels=("Top", "Bottom", "Left", "Right", "Top Left", "Top Right", "Bottom Left", "Bottom Right",
-                       "Center Out", "Center Out Reverse"),
-               normalizer="core.settings.bubble_gradient_semantics:normalize_bubble_gradient_direction", direction_mapper=True),
+                       "Center Out", "Center Out Reverse", "Custom"),
+               normalizer="core.settings.bubble_gradient_semantics:normalize_bubble_gradient_direction"),
+        Gradient("bubble_gradient_endpoints", "Custom Gradient:", bucket="appearance",
+                 tooltip="Drag Dark and Light independently to set direction, blend span and placement. Moving a node selects Custom; named recipes retain their existing appearance. Other recipes keep your custom nodes for later.",
+                 when=("bubble_gradient_direction", ("top", "bottom", "left", "right", "top_left", "top_right",
+                                                     "bottom_left", "bottom_right", "custom"))),
         Colour("bubble_outline_color", "Outline Colour:", "Choose Bubble Outline Color", bucket="appearance"),
         Colour("bubble_specular_color", "Specular Colour:", "Choose Bubble Specular Color", bucket="appearance"),
         Colour("bubble_gradient_light", "Gradient Light:", "Choose Bubble Gradient Light", bucket="appearance"),
@@ -1760,6 +1795,7 @@ __all__ = [
     "Control",
     "Custom",
     "Direction",
+    "Gradient",
     "ScenePath",
     "SceneVolumePath",
     "SceneCameraPosition",

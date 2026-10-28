@@ -16,6 +16,7 @@ from core.settings.visualizer_mode_settings import (
     Colour,
     Custom,
     Direction,
+    Gradient,
     ScenePath,
     SceneCameraPosition,
     Range,
@@ -60,6 +61,8 @@ def open_gate(monkeypatch):
 
 
 def _different(control, value):
+    if isinstance(control, Gradient):
+        return [.1, .8, .7, .15] if list(value) != [.1, .8, .7, .15] else [.2, .6, .85, .3]
     if isinstance(control, Range):
         low, high = value
         changed = [control.low, control.high] if [low, high] != [control.low, control.high] else \

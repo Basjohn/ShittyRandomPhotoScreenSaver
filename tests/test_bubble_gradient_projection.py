@@ -1,5 +1,6 @@
 """Driver-rendered compatibility for packed Bubble gradient inputs."""
 import numpy as np
+import pytest
 
 from core.settings.default_contract import require_canonical_default
 from rendering.quick.visualizer.implementations import bubble
@@ -8,7 +9,8 @@ from tools.labs.render_target import OffscreenRenderTarget
 from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
 
 
-def test_existing_gradient_pixels_match_the_original_formula_on_the_driver(qt_app, monkeypatch):
+@pytest.mark.parametrize('size', ((160, 80), (120, 240), (480, 120)))
+def test_existing_gradient_pixels_match_the_original_formula_on_the_driver(qt_app, monkeypatch, size):
     source = bubble.load_fragment_shader("bubble")
     # Original shader's centred dot product and integer radial branching. Keep
     # only the transport packed so both programs receive identical input data.
@@ -16,14 +18,15 @@ def test_existing_gradient_pixels_match_the_original_formula_on_the_driver(qt_ap
     reference = reference.replace("gradient_mode == 1.0", "gradient_mode == 1").replace("gradient_mode == 2.0", "gradient_mode == 2")
     reference = reference.replace("dot(uv - center, grad_dir) + 0.5 + u_gradient.z", "dot(uv - center, grad_dir) + 0.5")
     assert reference != source
-    target = OffscreenRenderTarget(160, 80)
+    width, height = size
+    target = OffscreenRenderTarget(width, height)
     host = QuickVisualizerRenderHost()
     config = dict(require_canonical_default("widgets.spotify_visualizer"))
-    matrix = (2/160, 0, 0, 0, 0, -2/80, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1)
+    matrix = (2/width, 0, 0, 0, 0, -2/height, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1)
 
     def draw():
         target.bind()
-        host.render(snapshot=snapshot, viewport=(0, 0, 160, 80), logical_size=(160., 80.), matrix_values=matrix)
+        host.render(snapshot=snapshot, viewport=(0, 0, width, height), logical_size=(float(width), float(height)), matrix_values=matrix)
         return target.read_rgba()
 
     try:
@@ -31,7 +34,7 @@ def test_existing_gradient_pixels_match_the_original_formula_on_the_driver(qt_ap
         for direction in ("top", "bottom", "left", "right", "top_left", "top_right", "bottom_left", "bottom_right",
                           "center_out", "center_out_reverse"):
             config["bubble_gradient_direction"] = direction
-            snapshots.append(_build_spectrum_preview_snapshot(width=160, height=80, mode="bubble", settings=config))
+            snapshots.append(_build_spectrum_preview_snapshot(width=width, height=height, mode="bubble", settings=config))
         expected = []
         with monkeypatch.context() as patch:
             patch.setattr(bubble, "load_fragment_shader", lambda _mode: reference)

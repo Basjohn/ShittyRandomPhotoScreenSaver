@@ -779,6 +779,10 @@ availability. A declaration migration preserves rendering, saved intent, explici
 Bubble keeps one persisted drift/Swirl choice, one versioned gradient-direction input migration and one ghost-enable
 intent feeding both existing consumers. Slider, stored and runtime bounds are distinct declarations where required;
 the precise Bubble ranges and external accessory owners live in Reference → Settings declarations.
+Bubble's Appearance group offers a shared two-node Custom Gradient editor. Its single endpoint field is active only
+for Custom; existing directional/radial recipes retain their literal inputs and appearance. A node gesture selects
+Custom, while session undo restores recipe and nodes together. `Docs/Reference/Bubble_Gradient.md` owns the endpoint,
+aspect, import and native compatibility contract. This changes no Bubble audio or motion input.
 
 ## Visualizer preset catalogue ownership
 
