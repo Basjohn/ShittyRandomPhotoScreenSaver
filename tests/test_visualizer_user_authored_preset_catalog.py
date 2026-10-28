@@ -41,7 +41,6 @@ def _build_sphere_from(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(vp, "_presets_root", lambda: root)
     monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: overrides)
     # These tests exercise catalogue construction, not manifest reconciliation.
-    monkeypatch.setattr(vp, "_CURATED_TREE_SYNCED", True)
     presets = vp._build_presets_for_mode("sphere")
     vp._PRESETS["sphere"] = presets
     return root, presets

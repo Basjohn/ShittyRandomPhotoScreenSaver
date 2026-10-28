@@ -263,7 +263,7 @@ def test_foundry_runs_one_qrc_prerequisite_only_for_selected_runtime_products(mo
         "standard_installer", "Installer", "inno", tmp_path / "setup.iss", tmp_path, tmp_path / "setup.exe"
     )
     calls: list[tuple[str, object]] = []
-    monkeypatch.setattr(build_runner, "write_curated_visualizer_preset_manifest", lambda _root: ())
+    monkeypatch.setattr(build_runner, "snapshot_curated_visualizer_preset_tree", lambda _root: ())
     monkeypatch.setattr(
         build_runner,
         "ensure_selected_qrc_current",
@@ -333,7 +333,7 @@ def test_foundry_does_not_launch_product_jobs_after_qrc_prerequisite_failure(mon
         "standard", "Standard", "powershell", tmp_path / "standard.ps1", tmp_path, tmp_path / "SRPSS.scr"
     )
     launched: list[str] = []
-    monkeypatch.setattr(build_runner, "write_curated_visualizer_preset_manifest", lambda _root: ())
+    monkeypatch.setattr(build_runner, "snapshot_curated_visualizer_preset_tree", lambda _root: ())
     monkeypatch.setattr(
         build_runner,
         "ensure_selected_qrc_current",
@@ -377,7 +377,7 @@ def test_foundry_marks_selected_jobs_cancelled_when_qrc_sidecar_is_aborted(monke
     job = build_runner.Job(
         "standard", "Standard", "powershell", tmp_path / "standard.ps1", tmp_path, tmp_path / "SRPSS.scr"
     )
-    monkeypatch.setattr(build_runner, "write_curated_visualizer_preset_manifest", lambda _root: ())
+    monkeypatch.setattr(build_runner, "snapshot_curated_visualizer_preset_tree", lambda _root: ())
     monkeypatch.setattr(
         build_runner,
         "ensure_selected_qrc_current",

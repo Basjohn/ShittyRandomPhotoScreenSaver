@@ -1,7 +1,7 @@
 """Validate or regenerate repo-local shipped visualizer preset artifacts.
 
 Source of truth is ``presets/visualizer_modes``.  Generated artifacts are the
-source manifest plus the Media Center release mirror/manifest.  ``--check`` and
+the Media Center release mirror.  ``--check`` and
 ``--dry-run`` are deliberately read-only so operators/CI can prove parity
 without mutating curated preset files or release artifacts.
 """
@@ -18,19 +18,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from core.visualizer_preset_manifest import (  # noqa: E402
-    build_curated_visualizer_manifest_payload,
-    get_visualizer_preset_manifest_path,
-    regenerate_repo_shipped_visualizer_preset_artifacts,
+from core.visualizer_preset_tree import (  # noqa: E402
+    refresh_shipped_visualizer_presets,
     scan_curated_visualizer_preset_tree,
+    snapshot_curated_visualizer_preset_tree,
 )
-
-
-def _load_json(path: Path) -> object:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
 
 
 def audit_repo_shipped_visualizer_preset_artifacts(
@@ -49,16 +41,11 @@ def audit_repo_shipped_visualizer_preset_artifacts(
     if not source_entries:
         return (f"no curated visualizer presets found under {source_root}",)
 
-    expected_manifest = build_curated_visualizer_manifest_payload(source_entries)
+    try:
+        snapshot_curated_visualizer_preset_tree(source_root)
+    except Exception as exc:
+        return (f"invalid authoritative source tree: {exc}",)
     drifts: list[str] = []
-
-    source_manifest = get_visualizer_preset_manifest_path(source_root)
-    if _load_json(source_manifest) != expected_manifest:
-        drifts.append("source manifest drift")
-
-    release_manifest = get_visualizer_preset_manifest_path(release_root)
-    if _load_json(release_manifest) != expected_manifest:
-        drifts.append("release manifest drift")
 
     release_entries = scan_curated_visualizer_preset_tree(release_root)
     missing = sorted(source_entries - release_entries)
@@ -88,7 +75,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     mode.add_argument(
         "--check",
         action="store_true",
-        help="Read-only: return non-zero if source manifest/release mirror drift.",
+        help="Read-only: return non-zero if source/release directory drift.",
     )
     mode.add_argument(
         "--dry-run",
@@ -107,7 +94,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         print(f"[VIS_PRESET_ARTIFACTS] drift_count={len(drifts)} writes=0")
         return 0 if args.dry_run else 1
 
-    artifacts = regenerate_repo_shipped_visualizer_preset_artifacts(REPO_ROOT)
+    artifacts = refresh_shipped_visualizer_presets(REPO_ROOT)
     print(
         "Regenerated shipped visualizer preset artifacts: "
         f"{artifacts['entry_count']} curated files mirrored into "

@@ -289,7 +289,7 @@ def test_pipeline_cancellation_completes_one_job_and_a_fresh_owner_can_rerun(
 
     monkeypatch.setattr(
         build_runner,
-        "write_curated_visualizer_preset_manifest",
+        "snapshot_curated_visualizer_preset_tree",
         lambda _root: (),
     )
     monkeypatch.setattr(

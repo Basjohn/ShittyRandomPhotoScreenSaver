@@ -64,41 +64,16 @@ world geometry and camera fixed during resize; compare the original rectangle be
   `tmp/pytest_hover_transfer_native_final/test_transfer_glyphs_are_absen0/transfer_glyphs.png`.
 
 
-- [ ] **Retire the visualizer preset manifest and redundant bookkeeping** (same batch, immediately after the
-  focused native Preset Repair review; implementation authorized 28 October):
-  - [ ] Map every reader/writer of `presets/visualizer_modes_manifest.json`, the release/Media Center copy and
-    `managed_curated_files`: frozen SCR/Diagnostic/MC startup, onefile bootstrap, installer, Build Foundry,
-    import/export, source-vs-release auditing and preset repair. Confirm direct enumerations are authoritative.
-  - [ ] **Separate deletion scrutiny before sign-off:** audit frozen `prune_duplicate_curated_preset_slots` using
-    file `mtime` as a winner and `sync_curated_preset_tree` deleting entries not present in the manifest. Demonstrate
-    how both interact with manually renamed/moved authored presets, imported directories and simultaneous slots.
-    Remove destructive heuristics or require explicit replacement ownership before allowing deletion; never
-    silently select a newer timestamp over the user's intent. Use isolated test-owned fixtures.
-  - [ ] Replace manifest enumeration with actual directory scanning for load, mirror and export. Explicit replacement
-    may prune only obsolete **managed target copies** after the authoritative source has been snapshotted and
-    validated; missing or invalid source must never delete a target. Preserve shipped-versus-operator-owned
-    separation, exact filename slots, Custom, and onefile/ProgramData precedence.
-  - [ ] Keep strict read-only source/release content-parity checks (filenames **and bytes**) without a stored manifest;
-    audit installer clean-replace, frozen extraction, Media Center and import/export for stale-file handling and
-    accidental reintroduction of removed presets. Remove obsolete regeneration hooks and the Foundry button or
-    leave it visibly disabled/no-op once no manifest exists; do not recreate the artifact.
-  - [ ] Remove the manifest files and obsolete code/contracts/tests only after the replacement flow and rollback
-    safety pass. Validate source and frozen semantics with minimal schema/SSOT/integrity tests, never asserted mutable
-    preset values, GUI styling tests, or large suites. Keep operator-authored EB and all other current preset JSON
-    untouched; preserve every existing task/status in this plan.
-
 ## 3. Guided-setup stills and bounded source cleanup (at a stable checkpoint)
 
-`Docs/Reference/Release_Media.md` owns inputs, encoding and manifest policy (UsuScene1–4 originals, 480 px / 24 fps
-transition loops, no arbitrary size cap; outputs stay outside runtime QRCs).
+`Docs/Reference/Guided_Setup.md` owns still-image consumers and authoring. Animated publication contracts remain
+in `Docs/Reference/Release_Media.md` for explicit future requests.
 
 - [ ] **Guided-setup still images:** audit the actual guided-setup image consumers and keep their stills current;
   generate only missing/stale stills through their existing Foundry/operator-sheet authorities and inspect the results.
   Animated catalogues/showcases are deferred until explicitly requested; no automatic maintenance obligation.
 - [ ] **SC1 Retire the unused root `transitions.direction`:** confirm no callers, then forward-strip it (changes the
-  operator's defaults: needs explicit authorization); prove import/merge/save cannot resurrect it.
-- [ ] **SC2 Blinds Flat endpoint discrepancy:** reproduce at the exact production endpoint before deciding capture vs
-  rendering.
+  operator's defaults; authorized cleanup); prove import/merge/save cannot resurrect it.
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 

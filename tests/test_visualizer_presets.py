@@ -17,21 +17,16 @@ from ui.tabs.visualizers_tab import VisualizersTab
 @pytest.fixture(autouse=True)
 def _restore_visualizer_preset_registry():
     original_presets = {mode: list(presets) for mode, presets in vp._PRESETS.items()}
-    original_synced = vp._CURATED_TREE_SYNCED
     yield
     vp._PRESETS.clear()
     vp._PRESETS.update(original_presets)
-    vp._CURATED_TREE_SYNCED = original_synced
 
 
 def _seed_curated_slots(curated_root: Path, mode: str, count: int) -> None:
     """Write ``count`` contiguous authored curated preset files for ``mode``.
 
-    The fail-loud preset builder requires authored, contiguous curated slots on
-    disk -- snapshots override those slots, they never stand alone or grow the
-    count -- so any test exercising snapshot overrides must seed real curated
-    presets first. Callers set ``vp._CURATED_TREE_SYNCED = True`` (restored by the
-    autouse fixture) so the bundled-tree sync does not touch the seeded root.
+    Snapshot overrides require real authored base slots; runtime compacts their
+    ordering without modifying the source files.
     """
     mode_dir = curated_root / mode
     mode_dir.mkdir(parents=True, exist_ok=True)
@@ -65,7 +60,6 @@ def test_snapshot_override_replaces_authored_slot_and_filters_settings(tmp_path,
 
     monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
     monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
-    vp._CURATED_TREE_SYNCED = True
 
     payload = {
         "visualizer_preset_override": True,
@@ -143,7 +137,7 @@ def test_frozen_presets_root_bootstraps_shared_programdata_tree_from_bundled_cop
     bundled_mode = bundled_root / "spectrum"
     bundled_mode.mkdir(parents=True)
     (bundled_mode / "preset_1_alpha.json").write_text(
-        json.dumps({"name": "Preset 1 (Alpha)", "preset_index": 0}),
+        json.dumps({"name": "Preset 1 (Alpha)", "preset_index": 0, "settings": {"spectrum_bar_width": 1.}}),
         encoding="utf-8",
     )
 
@@ -169,14 +163,11 @@ def test_frozen_presets_root_never_falls_back_to_bundled_when_bootstrap_fails(tm
     def _raise(*_args, **_kwargs):
         raise RuntimeError("mirror failed")
 
-    monkeypatch.setattr(vp, "mirror_curated_visualizer_preset_tree", _raise)
+    monkeypatch.setattr(vp, "replace_curated_visualizer_preset_tree", _raise)
 
-    resolved = vp.get_visualizer_presets_dir()
-
-    assert resolved == shared_root
-    assert "\\onefile\\" not in str(resolved).lower().replace("/", "\\")
-    assert shared_root.exists()
-    assert shared_root.is_dir()
+    with pytest.raises(RuntimeError, match="mirror failed"):
+        vp.get_visualizer_presets_dir()
+    assert not shared_root.exists()
 
 
 def test_frozen_presets_root_stays_on_shared_path_even_without_bundled_tree(tmp_path, monkeypatch):
@@ -187,11 +178,9 @@ def test_frozen_presets_root_stays_on_shared_path_even_without_bundled_tree(tmp_
     monkeypatch.setattr(vp, "_bundled_presets_root", lambda: bundled_root)
     monkeypatch.setattr(vp, "_shared_presets_root", lambda: shared_root)
 
-    resolved = vp.get_visualizer_presets_dir()
-
-    assert resolved == shared_root
-    assert shared_root.exists()
-    assert shared_root.is_dir()
+    with pytest.raises(FileNotFoundError, match="Packaged visualizer preset tree is missing"):
+        vp.get_visualizer_presets_dir()
+    assert not shared_root.exists()
 
 
 def test_onefile_like_runtime_uses_shared_programdata_even_when_not_marked_frozen(tmp_path, monkeypatch):
@@ -224,7 +213,7 @@ def test_onefile_like_runtime_bootstraps_shared_programdata_from_bundled(tmp_pat
     bundled_mode = bundled_root / "bubble"
     bundled_mode.mkdir(parents=True)
     (bundled_mode / "preset_1_demo.json").write_text(
-        json.dumps({"name": "Preset 1 (Demo)", "preset_index": 0}),
+        json.dumps({"name": "Preset 1 (Demo)", "preset_index": 0, "settings": {"bubble_big_size_max": 1.}}),
         encoding="utf-8",
     )
 
@@ -306,7 +295,6 @@ def test_generic_sst_snapshot_does_not_override_curated_presets(tmp_path, monkey
 
     monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
     monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
-    vp._CURATED_TREE_SYNCED = True
 
     generic_sst = {
         "snapshot": {
@@ -328,7 +316,6 @@ def test_generic_sst_snapshot_does_not_override_curated_presets(tmp_path, monkey
     # Rebuild without the markerless snapshot: slot 0 must be identical, proving
     # the generic SST contributed nothing (it did not override the authored slot).
     (snapshots_root / "preset_1_exported_profile.json").unlink()
-    vp._CURATED_TREE_SYNCED = True
     baseline = vp._build_presets_for_mode("spectrum")
     assert presets[0].settings == baseline[0].settings
 
@@ -342,7 +329,6 @@ def test_snapshot_override_fallback_without_marker(tmp_path, monkeypatch):
 
     monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
     monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
-    vp._CURATED_TREE_SYNCED = True
 
     payload = {
         # No visualizer_preset_override / visualizer_preset_mode markers
@@ -438,7 +424,6 @@ def test_snapshot_widgets_override_custom_backup(tmp_path, monkeypatch):
     _seed_curated_slots(curated_root, "spectrum", 1)
 
     monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
-    vp._CURATED_TREE_SYNCED = True
 
     payload = {
         "mode": "spectrum",
@@ -743,7 +728,6 @@ def test_snapshot_override_keeps_curated_slot_name(tmp_path, monkeypatch):
 
     monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
     monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
-    vp._CURATED_TREE_SYNCED = True
 
     presets = vp._build_presets_for_mode(mode)
     assert presets[0].name == "Preset 1 (Deep Sea)"
@@ -1015,20 +999,20 @@ def test_reindex_curated_presets_fills_gaps_with_markerless_files(tmp_path, monk
     names = sorted(path.name for path in mode_dir.glob("*.json"))
     assert names == [
         "preset_1_alpha.json",
-        "preset_2_thunder.json",
-        "preset_3_delta.json",
-        "preset_4_echo.json",
-        "preset_5_foxtrot.json",
+        "preset_2_delta.json",
+        "preset_3_echo.json",
+        "preset_4_foxtrot.json",
+        "preset_5_thunder.json",
     ]
 
-    thunder_payload = json.loads((mode_dir / "preset_2_thunder.json").read_text(encoding="utf-8"))
-    assert thunder_payload["preset_index"] == 1
-    assert thunder_payload["name"] == "Thunder"
+    thunder_payload = json.loads((mode_dir / "preset_5_thunder.json").read_text(encoding="utf-8"))
+    assert thunder_payload["preset_index"] == 4
+    assert thunder_payload["name"] == "Preset 5 (Thunder)"
     assert thunder_payload["snapshot"]["widgets"]["spotify_visualizer"]["spectrum_growth"] == 2.0
 
-    delta_payload = json.loads((mode_dir / "preset_3_delta.json").read_text(encoding="utf-8"))
-    assert delta_payload["preset_index"] == 2
-    assert delta_payload["name"] == "Preset 4 (Delta)"
+    delta_payload = json.loads((mode_dir / "preset_2_delta.json").read_text(encoding="utf-8"))
+    assert delta_payload["preset_index"] == 1
+    assert delta_payload["name"] == "Preset 2 (Delta)"
     assert delta_payload["snapshot"]["widgets"]["spotify_visualizer"]["spectrum_growth"] == 4.0
 
 
@@ -1072,7 +1056,7 @@ def test_reindex_curated_presets_normalizes_first_remaining_slot_to_preset_1(tmp
 
     second_payload = json.loads((mode_dir / "preset_1_second.json").read_text(encoding="utf-8"))
     assert second_payload["preset_index"] == 0
-    assert second_payload["name"] == "Preset 2 (Second)"
+    assert second_payload["name"] == "Preset 1 (Second)"
     assert second_payload["snapshot"]["widgets"]["spotify_visualizer"]["spectrum_growth"] == 2.0
 
 
@@ -1108,7 +1092,7 @@ def test_reindex_curated_presets_unwraps_nested_preset_name_suffixes(tmp_path, m
     assert results
     _old_path, new_path, _backup = results[0]
     payload = json.loads(new_path.read_text(encoding="utf-8"))
-    assert payload["name"] == "Preset 4 (Preset 4 (Preset 4 (Slobber)))"
+    assert payload["name"] == "Preset 1 (Preset 4 (Preset 4 (Slobber)))"
 
 
 def test_reindex_curated_presets_preserves_arbitrary_fields_and_devcurve_payload(tmp_path, monkeypatch):
@@ -1143,7 +1127,7 @@ def test_reindex_curated_presets_preserves_arbitrary_fields_and_devcurve_payload
     _old_path, new_path, _backup = results[0]
     payload = json.loads(new_path.read_text(encoding="utf-8"))
     assert payload["preset_index"] == 0
-    assert payload["name"] == "Spline V1"
+    assert payload["name"] == "Preset 1 (Spline V1)"
     assert payload["author_note"] == "keep me"
     assert payload["snapshot"]["widgets"]["spotify_visualizer"]["devcurve_growth"] == pytest.approx(3.14)
 
@@ -1408,13 +1392,11 @@ def test_repair_file_regenerates_shipped_artifacts_for_curated_source_paths(tmp_
     )
 
     calls: list[Path] = []
-    # Only an existing manifest may be regenerated; absence means retired/no-op.
-    (root / 'presets' / 'visualizer_modes_manifest.json').write_text('{}',encoding='utf-8')
     monkeypatch.setattr(repair, "ROOT", root)
     monkeypatch.setattr(repair, "_BACKUP_ROOT", root / "temp" / "visualizer_preset_backups")
     monkeypatch.setattr(
         repair,
-        "regenerate_repo_shipped_visualizer_preset_artifacts",
+        "refresh_shipped_visualizer_presets",
         lambda repo_root: calls.append(Path(repo_root)),
     )
 
@@ -1487,7 +1469,7 @@ def test_reindex_curated_presets_regenerates_shipped_artifacts_once(tmp_path, mo
     monkeypatch.setattr(repair, "ROOT", root)
     monkeypatch.setattr(
         repair,
-        "regenerate_repo_shipped_visualizer_preset_artifacts",
+        "refresh_shipped_visualizer_presets",
         lambda repo_root: calls.append(Path(repo_root)),
     )
 

@@ -131,6 +131,12 @@ kept here as a museum list.
 
 The open action-handoff requirement lives in `Current_Plan.md` §2B (R38). The global Edit-only glyph handoff (existing session first, then existing command) remains required across all families; no new edit model or repaint/polling service. Diagnostic `\` capture is source/diagnostic only and requires native evidence of custom GL pixels before treating it as an accepted substitute for Snipping Tool. The UI presentation transition is not acceptance.
 
+### Release catalogue/showcase work — explicit request only
+
+Deferred by the operator on 28 October: animated catalogue reconciliation, visualizer showcases and catalogue
+loop/metadata proof (formerly RM1–RM3), plus the Blinds Flat publication endpoint investigation (SC2). Do not maintain or regenerate these automatically after graphics changes.
+Reopen only on an explicit request. Guided-setup still images and bounded source cleanup remain active in Current_Plan §3.
+
 ### Beyond the entire current backlog — optional EB Orthographic appearance parity
 
 Explicitly deferred by the operator until **after everything currently listed in Current_Plan.md and this file**,
@@ -139,9 +145,3 @@ EB's perspective-built water, lighting, near-field and composition need a separa
 Its Camera option stays visible but disabled. Preserve experimental authored values without rewriting presets.
 Do not reopen this while wrapping EB, optimizing it, or building the queued modes. New 3D modes should be designed
 for Orthographic by default with optional Perspective, using the shared camera primitives from the start.
-
-### Release catalogue/showcase work — explicit request only
-
-Deferred by the operator on 28 October: animated catalogue reconciliation, visualizer showcases and catalogue
-loop/metadata proof (formerly RM1–RM3). Do not maintain or regenerate these automatically after graphics changes.
-Reopen only on an explicit request. Guided-setup still images and bounded source cleanup remain active in Current_Plan §3.
