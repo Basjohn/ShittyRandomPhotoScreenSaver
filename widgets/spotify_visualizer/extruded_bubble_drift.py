@@ -45,9 +45,14 @@ def steer(kind: str, position, phase: float, t: float, direction, across, depth_
             radial = (tuple(math.cos(phase) * u + math.sin(phase) * v for u, v in zip(across, depth_axis))
                       if distance < 1e-3 * WORLD_UNIT else tuple(a / distance for a in radial))
         else:
-            radial = tuple(ops.where(distance < 1e-3 * WORLD_UNIT,
-                                    ops.cos(phase) * u + ops.sin(phase) * v,
-                                    a / ops.maximum(distance, 1e-12))
+            # These arrays are identical for all three vector components.
+            # Reuse them without changing elementwise arithmetic or history.
+            near_axis = distance < 1e-3 * WORLD_UNIT
+            safe_distance = ops.maximum(distance, 1e-12)
+            cosine, sine = ops.cos(phase), ops.sin(phase)
+            radial = tuple(ops.where(near_axis,
+                                    cosine * u + sine * v,
+                                    a / safe_distance)
                            for a, u, v in zip(radial, across, depth_axis))
         # Counter-clockwise seen from the stream's end looking back at its source (right-hand rule).
         tangent = (direction[1] * radial[2] - direction[2] * radial[1],

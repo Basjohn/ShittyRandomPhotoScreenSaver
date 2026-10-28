@@ -630,17 +630,20 @@ class QuickExtrudedBubbleRenderer:
                         gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, _WAKE_BINDING, prior)
             # Only ordinary large bubbles whose front surface actually reaches the focus region enter this layer.
             # BUBBLE_VERTEX makes the same depth decision in both passes so a bubble is never drawn twice.
-            self._near.begin(width, height)
-            gl.glViewport(0, 0, width, height)
-            gl.glUseProgram(programs["near"])
-            gl.glBindVertexArray(self._shells.vao)
-            gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, shell_count)
-            if cluster_count:
-                gl.glUseProgram(programs["near_clusters"])
-                gl.glBindVertexArray(self._clusters.vao)
-                gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, cluster_count)
-            self._near.end()
-            self._near.composite(_near_spread(optical_height))
+            # Procedural beads/snow/fizz never write this layer. Keep its warmed
+            # resources, but an absent ordinary population has no optics to composite.
+            if shell_count or cluster_count:
+                self._near.begin(width, height)
+                gl.glViewport(0, 0, width, height)
+                gl.glUseProgram(programs["near"])
+                gl.glBindVertexArray(self._shells.vao)
+                gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, shell_count)
+                if cluster_count:
+                    gl.glUseProgram(programs["near_clusters"])
+                    gl.glBindVertexArray(self._clusters.vao)
+                    gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, cluster_count)
+                self._near.end()
+                self._near.composite(_near_spread(optical_height))
             for unit in (_UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE):
                 gl.glBindTextureUnit(unit, 0)
             gl.glViewport(*scene_viewport)
