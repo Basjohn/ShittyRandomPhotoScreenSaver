@@ -292,10 +292,10 @@ class DefocusLayer:
                          gl_query.get_indexed_int(gl.GL_BLEND_SRC_ALPHA, i), gl_query.get_indexed_int(gl.GL_BLEND_DST_ALPHA, i),
                          gl_query.get_indexed_int(gl.GL_BLEND_EQUATION_RGB, i),
                          gl_query.get_indexed_int(gl.GL_BLEND_EQUATION_ALPHA, i)) for i in range(2)],
-                       bool(gl.glGetBooleanv(gl.GL_DEPTH_WRITEMASK)), gl_query.is_enabled(gl.GL_DEPTH_TEST),
+                       gl_query.get_bool(gl.GL_DEPTH_WRITEMASK), gl_query.is_enabled(gl.GL_DEPTH_TEST),
                        # Colour masks are per draw buffer index, not per framebuffer: a caller's masked index (a
                        # scene target's emission outside emission_writes()) would drop the circles here.
-                       [[bool(v) for v in gl.glGetBooleani_v(gl.GL_COLOR_WRITEMASK, i)] for i in range(2)])
+                       [gl_query.get_indexed_bools(gl.GL_COLOR_WRITEMASK, i) for i in range(2)])
         gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._fbo)
         for i in range(2):
             gl.glColorMaski(i, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)

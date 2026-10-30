@@ -61,6 +61,13 @@ def get_indexed_int(name: int, index: int) -> int:
     return value.value
 
 
+def get_indexed_bools(name: int, index: int, count: int = 4) -> list[bool]:
+    """An indexed boolean state such as one draw buffer's ``GL_COLOR_WRITEMASK``."""
+    values = (ctypes.c_ubyte * count)()
+    _gl30.glGetBooleani_v(name, index, values)
+    return [bool(value) for value in values]
+
+
 def get_indexed_int64(name: int, index: int) -> int:
     value = ctypes.c_int64()
     _gl32.glGetInteger64i_v(name, index, ctypes.byref(value))
