@@ -130,10 +130,33 @@ Frame validation is a Python `_finite` per float over about 7,000 wake/bubble fl
 - **216k specks:** 152 → 80 ms per tick, still about 7× the budget.
 - **GIL experiment, rerun:** with the render loop running, preset 1's logical tick stretches to 10–14 ms, and render submit is still 13.5–22 ms, against 5.5–8 ms solo. The machine was under 53% outside CPU load. Both Python threads together still need about a core of GIL time per second.
 
+### Landed (2026-10-31, continued)
+
+| Commit | Change | Proof |
+|---|---|---|
+| `a053189d` | Raw getters for the per-frame write-mask, depth-mask, framebuffer and viewport reads (shafts, scene target, defocus) | Same values; Python calls per frame 8,128 → 7,789 |
+| `12144ffa` | The scalar drift field is written out per component in the generator/`sum()` evaluation order. Collisions test distance first among side-effect-free rejections. | Bit-identical per tick against `a053189d` (Clockwise, Wander, Left, Random) |
+| `63e336d3` | **GPU drift solver (§1).** The logical tick publishes a float64 step log and per-family geometry. `DriftSolver` integrates it with compute into the unchanged `ebMaterialDrift` layout. | Log + CPU reference = previous live payloads bit for bit per tick. GPU = reference to float32 precision for all nine directions, multi-step frames, a geometry edit and capacity changes (`tests/test_extruded_bubble_drift_solver.py`). Frames differ only in isolated sparkle pixels (about 0.13% of pixels, 9–58 above 2 levels). |
+
+**Measured after the solver:**
+- **Logical tick, preset 1 on heavy1:** 3.0 ms median (14.5 at baseline). Free drift now costs 0.05 ms per tick. At 216k specks it's also 3.0 ms (was 152).
+- **GIL experiment:** render submit is 7.0 ms with the preset-1 logical thread running and 4.2 ms solo, a 1.7× ratio (was 3.7×). The contended logical tick is 3.8 ms.
+- **Live MC run (2026-10-31, 90 s):**
+
+  | | Collapse (2026-10-29) | 2026-10-31, before the solver, heavy GPU load | 2026-10-31, after the solver |
+  |---|---|---|---|
+  | Draw rate | about 30 fps | 38–55 fps | 90.0 fps median (p10 89.8) |
+  | Logical revisions | about 48 Hz | 88–91 Hz | 90.0 Hz |
+  | Frame age | about 93 ms | 42–70 ms | 18 ms |
+
+  The external GPU load had mostly stopped during the "after" run (41% → 3%). Repeat it under the same heavy load before calling the collapse closed.
+
+**Behaviour change:** a free-drift family now retires once every knot or mote has recycled after its signed drift reaches zero. It used to retire when displacement fell below 1e-7, which happens at the same recycling.
+
 **Remaining, ranked:**
-1. **Render thread:** about 1,300 per-frame uniform value rebuilds and compares across 46 `_Uniforms.set` calls. Move the shared per-frame values into one uniform block (3D lesson). Also cut the 69 per-frame state queries.
-2. **Logical simulation:** per-bubble Python 1.5 ms, collisions 0.65 ms, wakes 0.54 ms.
-3. **Specks at high Particles:** NumPy cannot reach the budget at 216k. Build the §1 GPU-resident solver. The logical side publishes each tick's drift step (dt, phase, amount, serial) in the snapshot. The render thread applies every step it has not yet applied, in order, in one compute dispatch over persistent per-mote state, with no readback. A gap beyond the published history restarts drift, as a family restart does today.
+1. **Heavy-load confirmation:** one MC run on preset 1 under the operator's external GPU load, compared with the 38–55 fps run.
+2. **Render thread:** about 4.2 ms solo submit, still Python-heavy (7,789 calls per frame, about 750 GL calls). Each remaining item is small: uniform handling 0.4 ms, probe 0.7 ms, about 69 state queries.
+3. **Logical simulation:** per-bubble Python 1.2 ms, collisions 0.6 ms, wakes 0.5 ms, frame validation 0.3 ms.
 
 ## Absolute acceptance rules
 
