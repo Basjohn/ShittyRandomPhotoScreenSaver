@@ -48,12 +48,17 @@ def steer(kind: str, position, phase: float, t: float, direction, across, depth_
             # These arrays are identical for all three vector components.
             # Reuse them without changing elementwise arithmetic or history.
             near_axis = distance < 1e-3 * WORLD_UNIT
-            safe_distance = ops.maximum(distance, 1e-12)
-            cosine, sine = ops.cos(phase), ops.sin(phase)
-            radial = tuple(ops.where(near_axis,
-                                    cosine * u + sine * v,
-                                    a / safe_distance)
-                           for a, u, v in zip(radial, across, depth_axis))
+            if not near_axis.any():
+                # Nothing sits on the axis: the where() below would take a / distance for every record
+                # (distance is then above the 1e-12 guard), so skip the fallback's trig and selects.
+                radial = tuple(a / distance for a in radial)
+            else:
+                safe_distance = ops.maximum(distance, 1e-12)
+                cosine, sine = ops.cos(phase), ops.sin(phase)
+                radial = tuple(ops.where(near_axis,
+                                        cosine * u + sine * v,
+                                        a / safe_distance)
+                               for a, u, v in zip(radial, across, depth_axis))
         # Counter-clockwise seen from the stream's end looking back at its source (right-hand rule).
         tangent = (direction[1] * radial[2] - direction[2] * radial[1],
                    direction[2] * radial[0] - direction[0] * radial[2],
