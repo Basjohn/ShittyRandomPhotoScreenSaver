@@ -9,7 +9,7 @@ The clip's recorded feature frames drive the production logical tick through ``r
 tick, EB capture, mailbox and Quick snapshot sync; deterministic logical clock at the recording's ~90 Hz). While it
 runs, this tool wraps the phases of that path with ``perf_counter`` timers (tool-only patches, restored after) so the
 coarse ``publish`` tick phase of ``--perf`` splits into: Settings read, controls, the simulation (collisions, free
-drift per family and its packing, wakes, snapshot records), frame validation, render-parameter freezing, mailbox
+drift step logging (integration runs on the GPU since 2026-10-31), wakes, snapshot records), frame validation, render-parameter freezing, mailbox
 insertion, plus the presentation sync the GUI side runs afterwards. Every figure is inclusive wall time per logical
 tick; ``*_self`` rows subtract the nested rows. Payload sizes and populations are reported per tick.
 
@@ -130,8 +130,7 @@ def _patches(clock: _PhaseClock, counts: list[dict[str, float]]):
         counts.append({
             "bubbles": len(result.bubbles) // 8, "clusters": len(result.clusters) // 4,
             "wake_floats": len(result.wakes),
-            "chain_bytes": len(result.drift_paths), "snow_bytes": len(result.snow_drift_offsets),
-            "speck_bytes": len(result.speck_drift_offsets),
+            "drift_families": len(result.drift_families), "drift_step_bytes": len(result.drift_steps),
         })
         return result
 

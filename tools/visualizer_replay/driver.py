@@ -163,6 +163,25 @@ def _configure(controller, mode, preset: int = 0, overrides=None, settings=None)
     state._waiting_for_fresh_engine_frame = False
 
 
+def _record_drift_step(logical, history: list[bytes]) -> None:
+    """Keep each Extruded Bubble drift step once (the newest record of the published history)."""
+    steps = getattr(logical.mode_state, "drift_steps", b"")
+    if steps:
+        from widgets.spotify_visualizer.extruded_bubble_drift_log import STEP_FLOATS
+        newest = steps[-8 * STEP_FLOATS:]
+        if not history or history[-1] != newest:
+            history.append(newest)
+
+
+def _with_drift_history(snapshot, history: list[bytes]):
+    """A sparse capture skips presentations, so its renderer never saw the steps in between: hand it every step
+    since the previous returned snapshot (the live runtime presents each revision and needs no such help)."""
+    state = snapshot.logical.mode_state
+    if not getattr(state, "drift_families", ()) or not history:
+        return snapshot
+    return replace(snapshot, logical=replace(snapshot.logical, mode_state=replace(state, drift_steps=b"".join(history))))
+
+
 def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset: int = 0, overrides=None,
                 snapshots_at=(), settings=None):
     """Replay ``clip`` through ``mode`` (curated ``preset``, or ``settings``: frozen complete settings, a mapping
@@ -186,6 +205,7 @@ def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset:
         _configure(controller, controller.mode_id, preset, overrides, settings)
         snapshots = {}
         wanted = frozenset(snapshots_at)
+        drift_history: list[bytes] = []   # EB drift steps since the last returned snapshot
         sync = QuickVisualizerPresentationSync(
             controller,
             resolve_presentation=lambda: resolve_visualizer_presentation(
@@ -211,6 +231,7 @@ def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset:
                 if logical is None:
                     raise RuntimeError(f"missing logical frame {clip.name}:{index}")
                 logical_series.append(logical)
+                _record_drift_step(logical, drift_history)
                 row = {
                     "timestamp_us": feature.timestamp_us,
                     "display_bars": list(logical.common.bars),
@@ -242,7 +263,8 @@ def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset:
                         raise RuntimeError(f"Quick snapshot rejected {clip.name}:{index}")
                     presentation_trace.append(index)
                     if index in wanted:
-                        snapshots[index] = controller.render_bridge.peek()
+                        snapshots[index] = _with_drift_history(controller.render_bridge.peek(), drift_history)
+                        drift_history = []
         finally:
             controller.close_render_admission()
             # Offline replay owns this engine. Retire only its queued QObject

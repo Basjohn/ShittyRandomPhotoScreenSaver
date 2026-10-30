@@ -102,9 +102,10 @@ def test_free_drift_never_changes_bubble_wake_history_or_inertia_and_zero_is_dor
         extra=b.advance(music,replace(controls,drift_chains=(1.,1.),drift_snow=(1.,1.),drift_specks=(1.,1.)))
         assert original.bubbles==extra.bubbles
         assert original.wakes==extra.wakes
-        assert not original.drift_paths and not original.snow_drift_offsets and not original.speck_drift_offsets
+        assert not original.drift_families and not original.drift_steps
     assert original.wakes
-    assert extra.drift_paths and extra.snow_drift_offsets and extra.speck_drift_offsets
+    assert {family.family for family in extra.drift_families} == {'chains', 'snow', 'specks'}
+    assert extra.drift_steps
 
 
 def test_resolved_emission_lifts_and_settings_release_tails_always_have_complete_offset_records():
@@ -115,27 +116,36 @@ def test_resolved_emission_lifts_and_settings_release_tails_always_have_complete
     from rendering.gl_programs.scene3d import SCENE3D_DETAIL_TIERS
     controls=ExtrudedBubbleControls(large_count=(0,0),mid_count=(0,0),emission=(0.,.35),
         stream_path=(0.,-1.,0.,0.,1.,0.),drift_snow=(1.,1.),drift_specks=(1.,1.))
+    from widgets.spotify_visualizer.extruded_bubble_drift_log import MaterialDriftReference, STEP_INDEX, unpack_steps
     sim=ExtrudedBubbleSimulation(290)
+    reference=MaterialDriftReference()
+    def offsets(state):
+        payload=reference.apply(state.drift_families,state.drift_steps)
+        return payload.get('snow',b''),payload.get('specks',b'')
     def covered(state):
+        # The published counts cover what every tier draws, and the integrated records exist for each of them.
+        last=unpack_steps(state.drift_steps)[-1]
+        snow_offsets,speck_offsets=offsets(state)
         for tier in SCENE3D_DETAIL_TIERS.values():
             snow=math.ceil(SNOW_FULL*max(0.,min(1.,state.emission))*tier.particles)
             specks=round(SPECKS_FULL*speck_amount(state.emission)[0]*tier.particles)
-            assert len(state.snow_drift_offsets)//16>=snow
-            assert len(state.speck_drift_offsets)//16>=specks
+            assert last[STEP_INDEX['count_snow']]>=snow and len(snow_offsets)//16>=snow
+            assert last[STEP_INDEX['count_specks']]>=specks and len(speck_offsets)//16>=specks
     for i in range(120):
         body=.9 if i%8<4 else .4
         state=sim.advance(MusicInput(1/60,True,1.,(('kick',1.),), (body,body,.7)),controls)
         covered(state)
     assert state.emission>.35  # reproduce authored endpoint overshoot before bounding offsets
-    old=sim._free_paths['specks'].displacement.copy()
+    old=np.frombuffer(offsets(state)[1],dtype='f4').reshape(-1,4)[:,:3].copy()
     reduced=replace(controls,emission=(0.,0.))
     state=sim.advance(MusicInput(1/60,True,1.,(),(.5,.5,.5)),reduced)
-    assert state.emission>0. and state.snow_drift_offsets and state.speck_drift_offsets
+    families={family.family for family in state.drift_families}
+    assert state.emission>0. and {'snow','specks'}<=families
     covered(state)
-    packed=np.frombuffer(state.speck_drift_offsets,dtype='f4').reshape(-1,4)
+    packed=np.frombuffer(offsets(state)[1],dtype='f4').reshape(-1,4)
     overlap=min(len(old),len(packed));retained=packed[:overlap,3]>=0.
-    assert np.max(np.linalg.norm(sim._free_paths['specks'].displacement[:overlap][retained]-old[:overlap][retained],axis=-1))<.15
+    assert np.max(np.linalg.norm(packed[:overlap,:3][retained]-old[:overlap][retained],axis=-1))<.15
     for _ in range(120):
         state=sim.advance(MusicInput(1/60,False,0.,(),(0.,)*3),reduced)
-        if state.speck_drift_offsets:
+        if any(family.family=='specks' for family in state.drift_families):
             covered(state)

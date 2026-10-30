@@ -88,7 +88,11 @@ def test_live_equivalent_pcm_drives_zero_minimum_ranges_and_releases_without_sha
         released = window(15., 16., field)
         assert loud > quiet + minimum_lift, (block, field, quiet, loud, released)
         assert released < quiet + .10, (block, field, quiet, loud, released)
-    active_paths = [np.frombuffer(frame.mode_state.drift_paths, dtype='f4').reshape(-1, 4)[:, :3]
-                    for frame, feature in zip(frames, scaled_recording.frames)
-                    if 7. <= (feature.timestamp_us - origin) / 1e6 < 8. and frame.mode_state.drift_paths]
+    from widgets.spotify_visualizer.extruded_bubble_drift_log import MaterialDriftReference
+    reference = MaterialDriftReference()
+    active_paths = []
+    for frame, feature in zip(frames, scaled_recording.frames):
+        chains = reference.apply(frame.mode_state.drift_families, frame.mode_state.drift_steps).get('chains', b'')
+        if 7. <= (feature.timestamp_us - origin) / 1e6 < 8. and chains:
+            active_paths.append(np.frombuffer(chains, dtype='f4').reshape(-1, 4)[:, :3])
     assert active_paths and max(np.max(np.linalg.norm(paths, axis=-1)) for paths in active_paths) > .01
