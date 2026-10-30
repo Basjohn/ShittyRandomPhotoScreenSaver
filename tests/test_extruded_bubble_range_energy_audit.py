@@ -20,12 +20,16 @@ EXPECTED = {
     "extruded_bubble_bead_chains", "extruded_bubble_stream_speed", "extruded_bubble_drift",
     "extruded_bubble_breathing", "extruded_bubble_small_pulse", "extruded_bubble_particles",
 }
+# Signed per-family Drift multipliers (quiet/loud on the same passage), scaling the Drift Range above.
+DRIFT_FAMILIES = {
+    f"extruded_bubble_drift_{family}" for family in ("large", "small", "fused", "chains", "snow", "specks")
+}
 
 
 def test_all_eb_music_ranges_have_two_admitted_ends():
     spec = require_mode_settings('extruded_bubble')
     controls = {c.key: c for c in spec.controls if isinstance(c, Range)}
-    assert set(controls) == EXPECTED
+    assert set(controls) == EXPECTED | DRIFT_FAMILIES
     for item in controls.values():
         midpoint = (item.low + item.high) / 2
         admitted = item.admit([item.low, midpoint], [item.low, item.high])

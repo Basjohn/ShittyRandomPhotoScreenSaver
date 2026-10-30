@@ -95,11 +95,16 @@ def test_all_render_pass_world_positions_use_same_physical_eye():
     assert 'uWorldToView * (centre - uEye)' in shader
     assert 'toView * (aPoint.xyz - uEye)' in shader
     assert 'uWorldToView * (p - uEye)' in shader
-    assert 'vec3 p = uEye + ray * s;' in shader
-    assert 'float distance_ = (SURFACE_Y - uEye.y) / ray.y;' in shader
-    assert 'vec2 hit = uEye.xz + (ray * distance_).xz;' in shader
-    assert '"uNearCoc": 22.0 * height / 941.0' in owner
-    assert '"uNearMax": _near_spread(height)' in owner
+    # Full-screen passes march from the physical eye; orthographic framing offsets
+    # each pixel's origin on the view plane, it never relocates the eye.
+    eye_origin = 'vec3 rayOrigin = uEye + uViewToWorld * framedRayOrigin(vNdc, uTan);'
+    assert shader.count(eye_origin) >= 2  # water and shaft mains
+    assert 'vec3 p = rayOrigin + ray * s;' in shader
+    assert 'vec3 p = rayOrigin + ray*s;' in shader
+    assert 'float distance_ = (SURFACE_Y - rayOrigin.y) / ray.y;' in shader
+    assert 'vec2 hit = rayOrigin.xz + (ray * distance_).xz;' in shader
+    assert '"uNearCoc": 22.0 * optical_height / 941.0' in owner
+    assert '"uNearMax": _near_spread(optical_height)' in owner
     assert 'shift = (0.0, 0.0)' in owner
 
 

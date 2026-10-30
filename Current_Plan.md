@@ -50,11 +50,6 @@ world geometry and camera fixed during resize; compare the original rectangle be
 - [ ] **EB performance (logical CPU first):** `Docs/Audits/EB_Performance_Investigation_2026-10-29.md` owns the
   measured ranking and checkpoints. The logical tick overruns its 11 ms budget and starves the render thread through
   the GIL. Work through the ranked items losslessly, re-measuring with `tools/eb_logical_cost_probe.py`.
-- [ ] **Pre-existing EB test reds (present at `850b1c37`):** `test_extruded_bubble_world_shaft_gpu.py` (16 errors:
-  the world-shafts density fragment shader fails to compile on NVIDIA, C7011 implicit float→vec3 cast at line 721,
-  plus 1 failure); `test_extruded_bubble_range_energy_audit.py` (2 failures);
-  `test_extruded_bubble_physical_camera_contract.py::test_all_render_pass_world_positions_use_same_physical_eye`.
-  Reconcile each against current source: fix a real defect, or delete the test if it is stale.
 
 ### 2B. Settings and UI (in this order)
 
