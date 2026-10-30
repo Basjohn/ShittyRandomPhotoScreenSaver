@@ -519,7 +519,7 @@ class SceneTarget:
         if not self._names["shafts"]:
             yield
             return
-        prior = [bool(value) for value in gl.glGetBooleani_v(gl.GL_COLOR_WRITEMASK, 1)]
+        prior = gl_query.get_indexed_bools(gl.GL_COLOR_WRITEMASK, 1)
         blend = bool(gl.glIsEnabledi(gl.GL_BLEND, 2))
         gl.glColorMaski(0, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE)
         gl.glColorMaski(1, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE)
@@ -556,7 +556,7 @@ class SceneTarget:
         prior_active = gl_query.get_int(gl.GL_ACTIVE_TEXTURE)
         prior_viewport = gl_query.get_ints(gl.GL_VIEWPORT, 4)
         blend, depth_test = gl_query.is_enabled(gl.GL_BLEND), gl_query.is_enabled(gl.GL_DEPTH_TEST)
-        masks = [[bool(v) for v in gl.glGetBooleani_v(gl.GL_COLOR_WRITEMASK, i)] for i in range(2)]
+        masks = [gl_query.get_indexed_bools(gl.GL_COLOR_WRITEMASK, i) for i in range(2)]
         units = []
         for unit in range(2):
             gl.glActiveTexture(gl.GL_TEXTURE0 + unit)
@@ -627,8 +627,8 @@ class SceneTarget:
                         gl_query.get_indexed_int(gl.GL_BLEND_EQUATION_RGB, i),
                         gl_query.get_indexed_int(gl.GL_BLEND_EQUATION_ALPHA, i),
                         bool(gl.glIsEnabledi(gl.GL_BLEND, i))) for i in indices]
-        saved_masks = [[bool(v) for v in gl.glGetBooleani_v(gl.GL_COLOR_WRITEMASK, i)] for i in indices]
-        depth_test, depth_mask = gl_query.is_enabled(gl.GL_DEPTH_TEST), bool(gl.glGetBooleanv(gl.GL_DEPTH_WRITEMASK))
+        saved_masks = [gl_query.get_indexed_bools(gl.GL_COLOR_WRITEMASK, i) for i in indices]
+        depth_test, depth_mask = gl_query.is_enabled(gl.GL_DEPTH_TEST), gl_query.get_bool(gl.GL_DEPTH_WRITEMASK)
         gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._names["oit_fbo"])
         for i in indices:
             gl.glColorMaski(i, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)
@@ -672,7 +672,7 @@ class SceneTarget:
         for unit in range(2):
             gl.glActiveTexture(gl.GL_TEXTURE0 + unit)
             units.append(gl_query.get_int(binding))
-        masks = [[bool(v) for v in gl.glGetBooleani_v(gl.GL_COLOR_WRITEMASK, i)] for i in range(1, 3)]
+        masks = [gl_query.get_indexed_bools(gl.GL_COLOR_WRITEMASK, i) for i in range(1, 3)]
         try:
             for i in (1, 2):
                 gl.glColorMaski(i, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE)

@@ -713,8 +713,8 @@ class QuickExtrudedBubbleRenderer:
 
     def _draw_shafts(self, programs, quad_vao: int) -> None:
         """The volumetric light at half resolution, then a separable blur back into the first target."""
-        prior_framebuffer = int(gl.glGetIntegerv(gl.GL_DRAW_FRAMEBUFFER_BINDING))
-        prior_viewport = [int(v) for v in gl.glGetIntegerv(gl.GL_VIEWPORT)]
+        prior_framebuffer = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING)
+        prior_viewport = list(gl_query.get_ints(gl.GL_VIEWPORT, 4))
         textures, framebuffers = self._shafts.textures, self._shafts.framebuffers
         try:
             gl.glViewport(0, 0, *self._shafts.size)
