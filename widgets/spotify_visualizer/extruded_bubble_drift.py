@@ -21,8 +21,11 @@ _STEERED_WANDER = 0.4      # share of the original meander kept under a steered 
 def steer(kind: str, position, phase: float, t: float, direction, across, depth_axis, axis_origin,
                  amount: float, *, ops=math):
     """Extra drift velocity for a Drift Direction; ``amount`` is the musical drift in world units/s."""
+    # Written out per component (no generators or sum()): this runs once per bubble per logical tick. Each
+    # expression keeps the original evaluation order, including sum()'s leading integer 0.
     def combine(a: float, b: float) -> tuple[float, float, float]:
-        return tuple(amount * (a * u + b * v) for u, v in zip(across, depth_axis))
+        return (amount * (a * across[0] + b * depth_axis[0]), amount * (a * across[1] + b * depth_axis[1]),
+                amount * (a * across[2] + b * depth_axis[2]))
 
     if kind == "left":
         return combine(-_STEER_SPEED, 0.0)
@@ -37,13 +40,18 @@ def steer(kind: str, position, phase: float, t: float, direction, across, depth_
         sway = _SWISH_SPEED * ops.sin(t * _SWISH_RATE - 0.35 * ops.sin(phase))
         return combine(sway, 0.0) if kind == "swish_across" else combine(0.0, sway)
     if kind in ("swirl_cw", "swirl_ccw"):
-        r = tuple(p - o for p, o in zip(position, axis_origin))
-        along = sum(a * d for a, d in zip(r, direction))
-        radial = tuple(a - along * d for a, d in zip(r, direction))
-        distance = ops.sqrt(sum(a * a for a in radial))
+        d0, d1, d2 = direction
+        r0, r1, r2 = position[0] - axis_origin[0], position[1] - axis_origin[1], position[2] - axis_origin[2]
+        along = 0 + r0 * d0 + r1 * d1 + r2 * d2
+        radial = (r0 - along * d0, r1 - along * d1, r2 - along * d2)
+        distance = ops.sqrt(0 + radial[0] * radial[0] + radial[1] * radial[1] + radial[2] * radial[2])
         if ops is math:
-            radial = (tuple(math.cos(phase) * u + math.sin(phase) * v for u, v in zip(across, depth_axis))
-                      if distance < 1e-3 * WORLD_UNIT else tuple(a / distance for a in radial))
+            if distance < 1e-3 * WORLD_UNIT:
+                cosine, sine = math.cos(phase), math.sin(phase)
+                radial = (cosine * across[0] + sine * depth_axis[0], cosine * across[1] + sine * depth_axis[1],
+                          cosine * across[2] + sine * depth_axis[2])
+            else:
+                radial = (radial[0] / distance, radial[1] / distance, radial[2] / distance)
         else:
             # These arrays are identical for all three vector components.
             # Reuse them without changing elementwise arithmetic or history.
@@ -64,7 +72,9 @@ def steer(kind: str, position, phase: float, t: float, direction, across, depth_
                    direction[2] * radial[0] - direction[0] * radial[2],
                    direction[0] * radial[1] - direction[1] * radial[0])
         sign = 1.0 if kind == "swirl_ccw" else -1.0
-        return tuple(amount * (sign * _SWIRL_SPEED * g + _SWIRL_WIDEN * q) for g, q in zip(tangent, radial))
+        return (amount * (sign * _SWIRL_SPEED * tangent[0] + _SWIRL_WIDEN * radial[0]),
+                amount * (sign * _SWIRL_SPEED * tangent[1] + _SWIRL_WIDEN * radial[1]),
+                amount * (sign * _SWIRL_SPEED * tangent[2] + _SWIRL_WIDEN * radial[2]))
     return (0.0, 0.0, 0.0)
 
 
@@ -74,4 +84,6 @@ def velocity(kind, position, phase, t, direction, across, depth_axis, axis_origi
     wander = meander * amount * .05 * (ops.sin(t * .37 + phase) + .6 * ops.sin(t * .83 + 2.1 * phase))
     deep = meander * amount * .015 * ops.sin(t * .29 + 1.7 * phase)
     directed = steer(kind, position, phase, t, direction, across, depth_axis, axis_origin, amount, ops=ops)
-    return tuple(u * wander + v * deep + d for u, v, d in zip(across, depth_axis, directed))
+    return (across[0] * wander + depth_axis[0] * deep + directed[0],
+            across[1] * wander + depth_axis[1] * deep + directed[1],
+            across[2] * wander + depth_axis[2] * deep + directed[2])
