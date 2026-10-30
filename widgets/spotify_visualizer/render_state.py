@@ -177,7 +177,11 @@ def freeze_render_fields(
 
 
 def _float_tuple(values: Sequence[object], *, name: str) -> tuple[float, ...]:
-    return tuple(_finite(value, name=name) for value in values)
+    # Same conversion and check as _finite per value, in C-level loops (wake records run to thousands of floats).
+    numbers = tuple(map(float, values))
+    if not all(map(math.isfinite, numbers)):
+        raise ValueError(f"{name} must be finite")
+    return numbers
 
 
 def _float_tuple_rows(

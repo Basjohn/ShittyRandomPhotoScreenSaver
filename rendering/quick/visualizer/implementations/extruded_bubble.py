@@ -252,10 +252,10 @@ class _Uniforms:
                 gl.glProgramUniform3f(program, location, *value)
             elif len(value) == 4:
                 gl.glProgramUniform4f(program, location, *value)
-            elif len(value) == 9:
-                gl.glProgramUniformMatrix3fv(program, location, 1, gl.GL_FALSE, value)
+            elif len(value) == 9:   # as a C array: PyOpenGL converts a tuple element by element
+                gl.glProgramUniformMatrix3fv(program, location, 1, gl.GL_FALSE, (ctypes.c_float * 9)(*value))
             elif len(value) == 16:
-                gl.glProgramUniformMatrix4fv(program, location, 1, gl.GL_FALSE, value)
+                gl.glProgramUniformMatrix4fv(program, location, 1, gl.GL_FALSE, (ctypes.c_float * 16)(*value))
             else:
                 raise ValueError(f"uniform {name}: unsupported value {value!r}")
             self._values[key] = value  # Cache only values actually accepted by the uploader.

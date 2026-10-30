@@ -221,6 +221,7 @@ class DefocusLayer:
         self._program = 0
         self._sprites = 0
         self._clip = 0
+        self._locations: dict[tuple[int, str], int] = {}
         self._below = 0
         self._below_fbo = 0
         self._below_size = (0, 0)
@@ -324,6 +325,14 @@ class DefocusLayer:
         (gl.glEnable if depth_test else gl.glDisable)(gl.GL_DEPTH_TEST)
         self._saved = None
 
+    def _location(self, program: int, name: str) -> int:
+        """A uniform's location, looked up once per linked program (they are fixed at link time)."""
+        key = (program, name)
+        location = self._locations.get(key)
+        if location is None:
+            location = self._locations[key] = int(gl.glGetUniformLocation(program, name))
+        return location
+
     def composite(self, max_radius: float, highlight: float = 0.25) -> None:
         """Spread the layer over its circles and lay it over the bound framebuffer (premultiplied over); light above
         ``highlight`` (texel-averaged luminance) and its surroundings becomes round discs."""
@@ -357,11 +366,11 @@ class DefocusLayer:
             gl.glViewport(0, 0, width, height)
             gl.glDisablei(gl.GL_BLEND, 0)
             gl.glUseProgram(self._clip)
-            gl.glUniform1i(gl.glGetUniformLocation(self._clip, "uColour"), 0)
-            gl.glUniform1i(gl.glGetUniformLocation(self._clip, "uCircle"), 1)
-            gl.glUniform1i(gl.glGetUniformLocation(self._clip, "uLevel"), level)
-            gl.glUniform1f(gl.glGetUniformLocation(self._clip, "uHighlight"), float(highlight))
-            gl.glUniform1f(gl.glGetUniformLocation(self._clip, "uMaxRadius"), float(max_radius))
+            gl.glUniform1i(self._location(self._clip, "uColour"), 0)
+            gl.glUniform1i(self._location(self._clip, "uCircle"), 1)
+            gl.glUniform1i(self._location(self._clip, "uLevel"), level)
+            gl.glUniform1f(self._location(self._clip, "uHighlight"), float(highlight))
+            gl.glUniform1f(self._location(self._clip, "uMaxRadius"), float(max_radius))
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, framebuffer)
             gl.glViewport(*viewport)
@@ -370,20 +379,20 @@ class DefocusLayer:
             gl.glActiveTexture(gl.GL_TEXTURE2)
             gl.glBindTexture(gl.GL_TEXTURE_2D, self._below)
             gl.glUseProgram(program)
-            gl.glUniform1i(gl.glGetUniformLocation(program, "uColour"), 0)
-            gl.glUniform1i(gl.glGetUniformLocation(program, "uCircle"), 1)
-            gl.glUniform1i(gl.glGetUniformLocation(program, "uBelow"), 2)
-            gl.glUniform1f(gl.glGetUniformLocation(program, "uMaxRadius"), float(max_radius))
+            gl.glUniform1i(self._location(program, "uColour"), 0)
+            gl.glUniform1i(self._location(program, "uCircle"), 1)
+            gl.glUniform1i(self._location(program, "uBelow"), 2)
+            gl.glUniform1f(self._location(program, "uMaxRadius"), float(max_radius))
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
             if max_radius >= 0.5:
                 gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ZERO, gl.GL_ONE)
                 gl.glUseProgram(self._sprites)
-                gl.glUniform1i(gl.glGetUniformLocation(self._sprites, "uColour"), 0)
-                gl.glUniform1i(gl.glGetUniformLocation(self._sprites, "uCircle"), 1)
-                gl.glUniform1i(gl.glGetUniformLocation(self._sprites, "uLevel"), level)
-                gl.glUniform1f(gl.glGetUniformLocation(self._sprites, "uHighlight"), float(highlight))
-                gl.glUniform1f(gl.glGetUniformLocation(self._sprites, "uMaxRadius"), float(max_radius))
-                gl.glUniform2f(gl.glGetUniformLocation(self._sprites, "uSize"), float(self._size[0]), float(self._size[1]))
+                gl.glUniform1i(self._location(self._sprites, "uColour"), 0)
+                gl.glUniform1i(self._location(self._sprites, "uCircle"), 1)
+                gl.glUniform1i(self._location(self._sprites, "uLevel"), level)
+                gl.glUniform1f(self._location(self._sprites, "uHighlight"), float(highlight))
+                gl.glUniform1f(self._location(self._sprites, "uMaxRadius"), float(max_radius))
+                gl.glUniform2f(self._location(self._sprites, "uSize"), float(self._size[0]), float(self._size[1]))
                 gl.glDrawArraysInstanced(gl.GL_TRIANGLE_STRIP, 0, 4, width * height)
         finally:
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, framebuffer)
@@ -442,6 +451,7 @@ class DefocusLayer:
             if program:
                 gl.glDeleteProgram(program)
         self._program = self._sprites = self._clip = self._vao = 0
+        self._locations.clear()
 
 
 __all__ = ["DEFOCUS_TAPS", "DefocusLayer", "SCENE_DEFOCUS_GLSL"]

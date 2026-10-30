@@ -101,6 +101,11 @@ def scene3d_probe_face_rotation(face: int) -> tuple[float, ...]:
     return (*right, *up, *back)
 
 
+# Each face's rotation as a ready C array: the prefilter uploads one per face per level every frame, and
+# PyOpenGL converts a Python tuple element by element.
+_FACE_ROTATION_ARRAYS = tuple((ctypes.c_float * 9)(*scene3d_probe_face_rotation(face)) for face in range(6))
+
+
 def scene3d_probe_face_of(direction) -> int:
     """The cube face a world direction falls on (GL's major-axis rule)."""
     x, y, z = direction
@@ -173,6 +178,14 @@ class SceneProbe:
         gl.glCreateVertexArrays(1, name)
         self._vao = int(name[0])
         self._program = compile_program(_PREFILTER_VERTEX, _PREFILTER_FRAGMENT, label=f"{self.label} prefilter")
+        self._locations = {name: int(gl.glGetUniformLocation(self._program, name))
+                           for name in ("uSource", "uWorldToFace", "uCone", "uSourceLod")}
+        # Every face's attachment has fixed storage: completeness is a property of the allocation, checked once.
+        gl.glNamedFramebufferDrawBuffer(self._fbo, gl.GL_COLOR_ATTACHMENT0)
+        for face in range(6):
+            gl.glNamedFramebufferTextureLayer(self._fbo, gl.GL_COLOR_ATTACHMENT0, self._texture, 0, face)
+            if gl.glCheckNamedFramebufferStatus(self._fbo, gl.GL_DRAW_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
+                raise RuntimeError(f"{self.label}: probe face {face} incomplete")
 
     def _prefilter(self) -> None:
         program = self._program
@@ -182,8 +195,9 @@ class SceneProbe:
         gl.glDisable(gl.GL_BLEND)
         gl.glActiveTexture(gl.GL_TEXTURE0)
         gl.glBindTexture(gl.GL_TEXTURE_CUBE_MAP, self._texture)
-        gl.glUniform1i(gl.glGetUniformLocation(program, "uSource"), 0)
-        rotation, cone, lod = (gl.glGetUniformLocation(program, name) for name in ("uWorldToFace", "uCone", "uSourceLod"))
+        locations = self._locations
+        gl.glUniform1i(locations["uSource"], 0)
+        rotation, cone, lod = locations["uWorldToFace"], locations["uCone"], locations["uSourceLod"]
         try:
             for level in range(1, self.levels):
                 side = max(self.size >> level, 1)
@@ -195,7 +209,7 @@ class SceneProbe:
                 gl.glViewport(0, 0, side, side)
                 for face in range(6):
                     gl.glNamedFramebufferTextureLayer(self._fbo, gl.GL_COLOR_ATTACHMENT0, self._texture, level, face)
-                    gl.glUniformMatrix3fv(rotation, 1, gl.GL_TRUE, scene3d_probe_face_rotation(face))
+                    gl.glUniformMatrix3fv(rotation, 1, gl.GL_TRUE, _FACE_ROTATION_ARRAYS[face])
                     gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
         finally:
             gl.glTexParameteri(gl.GL_TEXTURE_CUBE_MAP, gl.GL_TEXTURE_BASE_LEVEL, 0)
@@ -208,8 +222,8 @@ class SceneProbe:
         prior_viewport = gl_query.get_ints(gl.GL_VIEWPORT, 4)
         scissor = gl_query.is_enabled(gl.GL_SCISSOR_TEST)
         depth_test = gl_query.is_enabled(gl.GL_DEPTH_TEST)
-        depth_mask = bool(gl.glGetBooleanv(gl.GL_DEPTH_WRITEMASK))
-        clear_colour = [float(v) for v in gl.glGetFloatv(gl.GL_COLOR_CLEAR_VALUE)]
+        depth_mask = gl_query.get_bool(gl.GL_DEPTH_WRITEMASK)
+        clear_colour = gl_query.get_floats(gl.GL_COLOR_CLEAR_VALUE, 4)
         blend = gl_query.is_enabled(gl.GL_BLEND)
         prior_program = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
         prior_vao = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING)
@@ -224,9 +238,6 @@ class SceneProbe:
             gl.glClearColor(0.0, 0.0, 0.0, 1.0)
             for face in range(6):
                 gl.glNamedFramebufferTextureLayer(self._fbo, gl.GL_COLOR_ATTACHMENT0, self._texture, 0, face)
-                gl.glNamedFramebufferDrawBuffer(self._fbo, gl.GL_COLOR_ATTACHMENT0)
-                if gl.glCheckNamedFramebufferStatus(self._fbo, gl.GL_DRAW_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
-                    raise RuntimeError(f"{self.label}: probe face {face} incomplete")
                 gl.glEnable(gl.GL_DEPTH_TEST)
                 gl.glDepthMask(gl.GL_TRUE)
                 gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
