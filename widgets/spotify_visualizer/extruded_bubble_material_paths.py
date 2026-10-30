@@ -4,12 +4,14 @@ Lagrangian material knots retain history while stream material moves through an
 inlet. The GPU samples these frozen paths; it never advances a solver.
 """
 from __future__ import annotations
+import math
 import numpy as np
 from core.constants.extruded_bubble_world import WORLD_CENTER, WORLD_HALF, WORLD_UNIT
 from widgets.spotify_visualizer.extruded_bubble_drift import velocity
 
 PATH_NODES = 128
 CHAIN_PATHS = 240
+CHAINS_PER_STEP = 12  # free chains per step of the Bead Chains Range (the renderer's _CHAINS_PER_STEP)
 BEAD_CARRY = 5. / WORLD_UNIT
 
 
@@ -54,6 +56,21 @@ class MaterialPaths:
         self.displacement = None
         self.base = self.spans = self.travel = None
         self.shift = self.phase_offset = self._definition = None
+        self._source = None  # the caller's (never mutated) definition array last seen, for an identity fast path
+
+    def _resize(self, definition, spans, travel):
+        """Keep the retained rows' state; a newly admitted row starts fresh, exactly as a new path would."""
+        count, keep = len(definition), min(len(definition), len(self.displacement))
+        displacement = np.zeros_like(definition); displacement[:keep] = self.displacement[:keep]
+        shift = np.zeros(count); shift[:keep] = self.shift[:keep]
+        phase_offset = np.zeros(count); phase_offset[:keep] = self.phase_offset[:keep]
+        fresh = definition[keep:, :1] + (definition[keep:, -1:] - definition[keep:, :1]) * self.progress[None, :, None]
+        self.displacement, self.shift, self.phase_offset = displacement, shift, phase_offset
+        self.base = np.concatenate((self.base[:keep], fresh))
+        self.spans = np.concatenate((self.spans[:keep], spans[keep:]))
+        self.travel = np.concatenate((self.travel[:keep], travel[keep:]))
+        self._definition = np.concatenate((self._definition[:keep], definition[keep:]))
+        self._source = None
 
     def _sample(self, rows, coordinates, *, linear=True):
         at = (np.asarray(coordinates)-self.shift[:,None])*(self.nodes-3.)+1.
@@ -73,7 +90,10 @@ class MaterialPaths:
         if self.displacement is None:
             self.displacement=np.zeros_like(definition)
             self.shift=np.zeros(count);self.phase_offset=np.zeros(count)
-        elif not np.array_equal(definition,self._definition):
+        else:
+            if count!=len(self.displacement):
+                self._resize(definition,spans,travel)
+        if self._definition is not None and base is not self._source and not np.array_equal(definition,self._definition):
             # Preserve progress phase and world centreline at a path edit.
             # Static bead arc/scatter is still authored by the existing shader;
             # this does not claim to preserve that independently edited geometry.
@@ -100,13 +120,22 @@ class MaterialPaths:
         self.displacement += np.stack(np.broadcast_arrays(*field),axis=-1)*available[...,None]
         self.displacement[q<=0.]=0.
         self.base,self.spans,self.travel=node_base,spans.copy(),travel.copy()
-        self._definition=definition.copy()
+        if base is not self._source:
+            # The caller's cached geometry is never mutated: the same object means the same definition.
+            self._definition=definition.copy();self._source=base
         return self.displacement
 
 
-def chain_geometry(controls, direction, across, depth_axis, face_weights, nodes=PATH_NODES):
+def drawable_chains(bead_chains) -> int:
+    """The most free chains the renderer can ever draw for this Bead Chains Range (its high end x chains per step at
+    the full particle share); rows past it are never read, so the logical side need not solve them."""
+    return min(CHAIN_PATHS, math.ceil(max(float(v) for v in bead_chains) * CHAINS_PER_STEP))
+
+
+def chain_geometry(controls, direction, across, depth_axis, face_weights, nodes=PATH_NODES, paths=CHAIN_PATHS):
+    """The first ``paths`` stable chains: each row depends only on its own seeded identity."""
     from core.settings.visualizer_paths import world_point
-    ids=np.arange(CHAIN_PATHS,dtype=np.uint32)
+    ids=np.arange(paths,dtype=np.uint32)
     source=np.asarray(world_point(controls.stream_path[:3],WORLD_HALF))
     end=np.asarray(world_point(controls.stream_path[3:],WORLD_HALF))
     if controls.emission_geometry=='SCENE':
@@ -116,7 +145,7 @@ def chain_geometry(controls, direction, across, depth_axis, face_weights, nodes=
         width=min(WORLD_HALF[0],WORLD_HALF[2])*.28*controls.particle_spread
         start=(source+np.asarray(across)[None,:]*(seeded_random(ids,1)*2.-1.)[:,None]*width
                +np.asarray(depth_axis)[None,:]*(seeded_random(ids,3)*2.-1.)[:,None]*width)
-        spans=np.full(CHAIN_PATHS,np.linalg.norm(end-source))
+        spans=np.full(paths,np.linalg.norm(end-source))
     q=np.linspace(0.,1.,nodes)
     base=start[:,None,:]+np.asarray(direction)[None,None,:]*spans[:,None,None]*q[None,:,None]
     return base,spans,BEAD_CARRY*(.7+.6*seeded_random(ids,5)),6.2832*seeded_random(ids,6)
