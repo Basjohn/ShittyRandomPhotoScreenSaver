@@ -689,7 +689,9 @@ class ExtrudedBubbleFrame:
             if not data:
                 continue
             import numpy as np
-            if not isinstance(data,bytes) or len(data)%16 or len(data)>count*16 or (field=='drift_paths' and len(data)!=count*16):
+            # Chain paths are whole chains (only those the Bead Chains Range can draw); clouds are whole motes.
+            whole=16*(PATH_NODES if field=='drift_paths' else 1)
+            if not isinstance(data,bytes) or len(data)%whole or len(data)>count*16:
                 raise ValueError('Extruded Bubble material paths must be immutable complete float32 vec4 records')
             if not np.isfinite(np.frombuffer(data,dtype=np.float32)).all():
                 raise ValueError('Extruded Bubble material paths must be finite')

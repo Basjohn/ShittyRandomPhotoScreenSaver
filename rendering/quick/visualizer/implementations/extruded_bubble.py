@@ -48,6 +48,7 @@ from rendering.quick.scene3d.resources import MeshResources, warm_programs
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
 from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
 from widgets.spotify_visualizer.extruded_bubble_simulation import MAX_BUBBLES, idle_activity as _idle_activity
+from widgets.spotify_visualizer.extruded_bubble_material_paths import CHAINS_PER_STEP
 from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
 from widgets.spotify_visualizer.extruded_bubble_geometry import WORLD_CENTER, WORLD_HALF, WORLD_UNIT, stream_basis
 from widgets.spotify_visualizer.render_state import ExtrudedBubbleFrame
@@ -102,7 +103,7 @@ _CLUSTER_CAPACITY = MAX_BUBBLES // 2
 _UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE = 4, 5, 6
 # Procedural small bubbles: chains per step of the Bead Chains range, beads a chain, and marine snow motes (both
 # scaled by the tier's particle share). Beads climb by the stream's travel only, with integrated energy response.
-_CHAINS_PER_STEP, _BEADS_PER_CHAIN, _SNOW = 12, 160, SNOW_FULL
+_CHAINS_PER_STEP, _BEADS_PER_CHAIN, _SNOW = CHAINS_PER_STEP, 160, SNOW_FULL
 _FIZZ_PER_BUBBLE, _WAKE_BINDING = 64, 7         # wake motes behind stable logical emitters; separate SSBO binding
 _BEAD_CLIMB, _SNOW_CARRY, _SPECK_CARRY = 5.0 / WORLD_UNIT, 8.0 / WORLD_UNIT, 0.30  # specks inherit 30% of integrated stream velocity
 

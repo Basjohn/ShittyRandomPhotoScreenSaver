@@ -1110,20 +1110,24 @@ class ExtrudedBubbleSimulation:
             if family not in self._free_paths and (gain == 0. or amount == 0. or dt <= 0.):
                 continue
             import numpy as np
-            from widgets.spotify_visualizer.extruded_bubble_material_paths import MaterialPaths, ProceduralOffsets, chain_geometry, cloud_geometry
+            from widgets.spotify_visualizer.extruded_bubble_material_paths import MaterialPaths, ProceduralOffsets, chain_geometry, cloud_geometry, drawable_chains
             from core.constants.extruded_bubble_world import SPECKS_FULL, SNOW_FULL, particle_amount, speck_density
             paths=self._free_paths.get(family)
             if paths is None:
                 paths=self._free_paths[family]=MaterialPaths() if family=='chains' else ProceduralOffsets()
-            cap=SNOW_FULL if family=='snow' else SPECKS_FULL
-            required=math.ceil(cap*(particle_amount(self._emission) if family=='snow' else speck_density(self._emission)))
-            count=min(cap,max(64,1<<(max(required,1)-1).bit_length()))
-            key=(controls.stream_path,direction,controls.emission_geometry,controls.particle_spread,count if family!='chains' else None)
+            if family=='chains':
+                # Only the chains the Bead Chains Range can ever draw: the rest are never read.
+                count=drawable_chains(controls.bead_chains)
+            else:
+                cap=SNOW_FULL if family=='snow' else SPECKS_FULL
+                required=math.ceil(cap*(particle_amount(self._emission) if family=='snow' else speck_density(self._emission)))
+                count=min(cap,max(64,1<<(max(required,1)-1).bit_length()))
+            key=(controls.stream_path,direction,controls.emission_geometry,controls.particle_spread,count)
             if family not in self._free_geometry or key!=self._free_geometry[family][0]:
                 if controls.stream_path is None:
                     raise ValueError('Procedural drift requires an admitted physical stream path')
                 weights=scene_source_face_weights(controls.stream_path[:3],direction)
-                geometry=(chain_geometry(controls,direction,across,depth_axis,weights) if family=='chains' else
+                geometry=(chain_geometry(controls,direction,across,depth_axis,weights,paths=count) if family=='chains' else
                           cloud_geometry(controls,direction,across,depth_axis,weights,family,count))
                 self._free_geometry[family]=(key,geometry)
             field=dict(kind=controls.drift_direction,phase=self._motion_phase,direction=direction,across=across,
