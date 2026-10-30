@@ -117,6 +117,24 @@ Frame validation is a Python `_finite` per float over about 7,000 wake/bubble fl
 4. **Render-thread CPU submit, about 9 ms per EB frame** (Bubble: 0.2 ms). Cut GL call count. Move the drift upload to the existing `StreamRing` (3D foundation lesson S14).
 5. **GPU passes** (near layer, shells, shafts, backdrop, probe): 0.3–0.4 ms each at 2560×1440.
 
+### Landed (2026-10-31): lossless, bit- or pixel-identical
+
+| Commit | Change | Proof |
+|---|---|---|
+| `573a799d` | Solve only the chains the Bead Chains Range can draw (`min(240, high × 12)`); skip the definition compare and copy when the cached geometry is unchanged | Drawn rows bit-identical per tick against `850b1c37` |
+| `129a8983` | Validation checks floats in C-level loops. Probe: face rotations are prebuilt C arrays, uniform locations are cached, face completeness is checked once at allocation. Defocus caches uniform locations. EB matrix uniforms upload from C arrays. | 12 frames pixel-identical against `850b1c37`; Python calls per frame 10,288 → 8,128 |
+| `f6bd6c5a` | The swirl field skips the on-axis fallback when no record is on the axis. Chains shift history only for the paths that moved. Clouds reuse last tick's progress. Both integrate per component in place. | Bit-identical per tick against `850b1c37` (preset 1 Clockwise, mid Particles, Wander) |
+
+**Results:**
+- **Preset 1 logical tick on heavy1, single-threaded:** 14.5 → 6.6 ms median. Chains went from 6.1 to 1.5 ms, specks from 0.7 to 0.34 ms, and validation from 1.4 to 0.35 ms. Machine CPU load was 30% before and 23% after.
+- **216k specks:** 152 → 80 ms per tick, still about 7× the budget.
+- **GIL experiment, rerun:** with the render loop running, preset 1's logical tick stretches to 10–14 ms, and render submit is still 13.5–22 ms, against 5.5–8 ms solo. The machine was under 53% outside CPU load. Both Python threads together still need about a core of GIL time per second.
+
+**Remaining, ranked:**
+1. **Render thread:** about 1,300 per-frame uniform value rebuilds and compares across 46 `_Uniforms.set` calls. Move the shared per-frame values into one uniform block (3D lesson). Also cut the 69 per-frame state queries.
+2. **Logical simulation:** per-bubble Python 1.5 ms, collisions 0.65 ms, wakes 0.54 ms.
+3. **Specks at high Particles:** NumPy cannot reach the budget at 216k. Build the §1 GPU-resident solver. The logical side publishes each tick's drift step (dt, phase, amount, serial) in the snapshot. The render thread applies every step it has not yet applied, in order, in one compute dispatch over persistent per-mote state, with no readback. A gap beyond the published history restarts drift, as a family restart does today.
+
 ## Absolute acceptance rules
 
 - [ ] Preserve existing EB appearance, underwater scattering, glass, highlights, blur, reflections, motion history, composition, musical response, breathing, identity, continuity, fade, and frame pacing. No reduced simulation precision/rate, particle counts, sample counts, resolution or quality as a *claimed* optimization. Such reductions may be used temporarily as diagnostic ablations only; restore them.
