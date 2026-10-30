@@ -47,9 +47,12 @@ world geometry and camera fixed during resize; compare the original rectangle be
   without added samples, filtering, dimming or audio changes. Confirm the formerly stippled shells stay stable in
   ordinary paused/quiet playback; report a fresh example if flicker remains. The broader EB implementation and
   lossless optimization audit are closed; Orthographic appearance work stays deferred beyond the entire backlog.
-- [ ] **EB performance (logical CPU first):** `Docs/Audits/EB_Performance_Investigation_2026-10-29.md` owns the
-  measured ranking and checkpoints. The logical tick overruns its 11 ms budget and starves the render thread through
-  the GIL. Work through the ranked items losslessly, re-measuring with `tools/eb_logical_cost_probe.py`.
+- [~] **EB performance — awaiting a heavy-load live check:** `Docs/Audits/EB_Performance_Investigation_2026-10-29.md`
+  owns the measured ranking and checkpoints. The logical tick (3.0 ms) is back under budget, and free drift now runs
+  on the GPU. Confirm the collapse is gone in one MC run under the operator's external GPU load; then work the
+  remaining ranked items losslessly, re-measuring with `tools/eb_logical_cost_probe.py`.
+- [ ] **`test_extruded_bubble_empty_near.py::test_empty_ordinary_population_skips_near_and_cannot_replay_stale_bokeh`**
+  fails only in the full `tests/test_extruded_bubble*.py` run and passes alone: find the shared state it depends on.
 
 ### 2B. Settings and UI (in this order)
 

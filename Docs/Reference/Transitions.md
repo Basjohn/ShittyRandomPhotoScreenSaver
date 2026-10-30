@@ -228,6 +228,16 @@ Each foundation slice adds what it learned here.
 - The writer issues the barrier its reader needs, straight after the dispatch. NVIDIA hid a missing barrier completely,
   so test the dispatch -> barrier -> reader order and bits, not pixels alone.
 - Image units are not fenced by the host: bind them through `bound_image`, which hands the unit back.
+- Large per-tick state that only the GPU reads (EB's drift history, 2026-10-31) belongs on the GPU. The logical side
+  publishes a small float64 step log; a render-thread compute solver applies each unapplied step once, in order.
+  Prove it in two stages: a CPU reference replaying the log must match the old live path bit for bit, then the GPU must
+  match the reference.
+- Discrete decisions in a ported integrator (`floor` of a knot shift) need the CPU's precision in their inputs: float32
+  span/carry moved a chain's knot step one tick early. Keep the inputs of those decisions in fp64, plus ever-growing
+  phase and travel arguments (reduce mod 2π in fp64 before `sin`).
+- Offline captures that sample sparse frames must hand the renderer every step in between
+  (`tools/visualizer_replay/driver.py`). Otherwise stateful GPU work restarts, and pixel comparisons fail by hundreds of
+  levels.
 
 **Materials and new looks on old transitions (S17)**
 - Lighting a photograph changes its pixels: blend the lit look in by how far a piece is from rest (Blinds' lift,
