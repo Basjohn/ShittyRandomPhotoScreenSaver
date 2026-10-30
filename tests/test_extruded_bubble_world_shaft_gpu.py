@@ -39,7 +39,7 @@ void main() {
     } else {
         float distance;
         float coverage;
-        float integral = worldShafts(uTestRay, uTestJitter, distance, coverage);
+        float integral = worldShafts(uTestRay, uEye, uTestJitter, distance, coverage);
         FragColor = vec4(integral, distance, 0., 1.);
     }
 }
@@ -311,7 +311,7 @@ def test_scene_main_shadows_actual_contribution_centroid_not_fixed_depth(qt_app)
     jitter = 'float jitter = fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))));'
     assert source.count(jitter) == 1
     source = source.replace(jitter, 'float jitter = 0.25;')
-    former = source.replace('sceneTransmittance(uEye+ray*atDistance)', 'sceneTransmittance(uEye+ray*18.0)')
+    former = source.replace('sceneTransmittance(rayOrigin+ray*atDistance)', 'sceneTransmittance(rayOrigin+ray*18.0)')
     assert former != source
     target = TransitionCapture(1, 1)
     programs = []

@@ -28,10 +28,13 @@ _AUDIT = dict(large_count=(4., 16.), mid_count=(12., 48.), stream_speed=(.2, .8)
 
 def controlled_probe(*, playing: bool, bands: tuple[float, float, float], frames: int = 900) -> dict:
     mod = simulation_module()
+    # The runtime's own fixed passage scale from the same body bands (the drive every Range sits on).
+    from widgets.spotify_visualizer.extruded_bubble_frame_runtime import passage_intensity_from_body_bands
+    intensity = passage_intensity_from_body_bands(bands) if playing else 0.0
     controls = mod.ExtrudedBubbleControls(**_AUDIT, collision_scope="off", sustained=0.4, idle=0.5)
     sim = mod.ExtrudedBubbleSimulation(54)
     for _ in range(frames):
-        snapshot = sim.advance(mod.MusicInput(1 / 90, playing, 1.0 if playing else 0.0, (), bands), controls)
+        snapshot = sim.advance(mod.MusicInput(1 / 90, playing, intensity, (), bands), controls)
     strength = lambda pair, drive: pair[0] + (pair[1] - pair[0]) * drive
     chains = strength((2.0, 8.0), snapshot.level)  # actual renderer Bead Chains Range read
     return {
