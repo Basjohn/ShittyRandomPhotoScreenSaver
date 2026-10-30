@@ -107,17 +107,20 @@ class MaterialPaths:
         moved=np.floor(shifted/step+1e-10).astype(np.intp)
         self.shift=shifted-moved*step
         if np.any(moved):
-            source=np.arange(self.nodes)[None,:]-moved[:,None]
-            retained=source>=0
-            self.displacement=self.displacement[np.arange(count)[:,None],np.maximum(source,0)]
-            self.displacement[~retained]=0.
+            # Only the paths that advanced a knot shift their history; the others keep theirs as it is.
+            rows=np.flatnonzero(moved)
+            source=np.arange(self.nodes)[None,:]-moved[rows,None]
+            shifted_rows=self.displacement[rows[:,None],np.maximum(source,0)]
+            shifted_rows[source<0]=0.
+            self.displacement[rows]=shifted_rows
         q=self.progress[None,:]+self.shift[:,None]
         node_base=definition[:,:1]+(definition[:,-1:]-definition[:,:1])*q[...,None]
         world=node_base+self.displacement
         field=velocity(kind,tuple(world[...,i] for i in range(3)),np.asarray(phases)[:,None],phase,
                        direction,across,depth_axis,origin,amount,ops=np)
         available=np.maximum(0.,np.minimum(dt,q/np.maximum(rate[:,None],1e-12)))
-        self.displacement += np.stack(np.broadcast_arrays(*field),axis=-1)*available[...,None]
+        for axis,component in enumerate(field):
+            self.displacement[...,axis] += component*available
         self.displacement[q<=0.]=0.
         self.base,self.spans,self.travel=node_base,spans.copy(),travel.copy()
         if base is not self._source:
@@ -186,6 +189,7 @@ class ProceduralOffsets:
         self.previous_base=np.zeros((0,3))
         self.geometry_key=None
         self.spans=np.zeros(0);self.carry=0.;self.travel=0.
+        self._geometry=self._progress=None  # last call's geometry object and progress, reused when unchanged
 
     def advance(self, geometry, key, travel, speed, dt, *, kind, phase, direction, across, depth_axis, origin, amount):
         start,spans,seed,carry,phases=geometry
@@ -200,7 +204,10 @@ class ProceduralOffsets:
             previous_q=np.mod(seed[:overlap]+self.travel*carry/spans[:overlap]+self.phase_offset[:overlap],1.)
             new_previous_base=start[:overlap]+np.asarray(direction)[None,:]*(previous_q*spans[:overlap])[:,None]
             self.displacement[:overlap]+=self.previous_base[:overlap]-new_previous_base
-        previous_q=np.mod(seed+self.travel*carry/spans+self.phase_offset,1.)
+        if geometry is self._geometry and key==self.geometry_key and count==old_count:
+            previous_q=self._progress   # the same expression over the same arrays as last call's progress
+        else:
+            previous_q=np.mod(seed+self.travel*carry/spans+self.phase_offset,1.)
         progress=np.mod(seed+travel*carry/spans+self.phase_offset,1.)
         recycled=(progress<previous_q-1e-10)|((travel-self.travel)*carry/spans>=1.) if old_count else np.zeros(count,dtype=bool)
         self.displacement[recycled]=0.
@@ -208,10 +215,12 @@ class ProceduralOffsets:
         world=base+self.displacement
         field=velocity(kind,tuple(world.T),phases,phase,direction,across,depth_axis,origin,amount,ops=np)
         available=np.where(recycled,np.minimum(dt,progress*spans/max(speed*carry,1e-12)),dt)
-        self.displacement+=np.stack(np.broadcast_arrays(*field),axis=-1)*available[:,None]
+        for axis,component in enumerate(field):
+            self.displacement[:,axis]+=component*available
         packed=np.empty((count,4),dtype=np.float32);packed[:,:3]=self.displacement
         # Publish resolved progress too: the renderer must not independently
         # round a lifetime wrap from a large travel/span quotient.
         packed[:,3]=progress-recycled.astype(float)
         self.previous_base=base;self.spans=spans;self.carry=carry;self.travel=travel;self.geometry_key=key
+        self._geometry,self._progress=geometry,progress
         return packed
