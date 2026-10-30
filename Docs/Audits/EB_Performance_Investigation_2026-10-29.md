@@ -30,13 +30,92 @@
 
 ### New targeted measurement / diagnosis checklist prompted by this capture
 
-- [ ] **First instrument EB `publish_ms` subphases:** effective configuration/readback; EB `runtime.advance`; chain-path definition generation, equality/identity checks and 30,720-node history; snow; speck/216k offset history; wake generation; bytes/payload freezing; `ExtrudedBubbleFrame` construction and parameter deep-copy/validation; mailbox insertion. Report median, p90, p99, allocation bytes and total tick budget for solo vs external GPU activity. Source-confirmed coarse `publish_ms` cannot distinguish these.
+- [x] (Offline, 2026-10-30 baselines; `tools/eb_logical_cost_probe.py`.) **First instrument EB `publish_ms` subphases:** effective configuration/readback; EB `runtime.advance`; chain-path definition generation, equality/identity checks and 30,720-node history; snow; speck/216k offset history; wake generation; bytes/payload freezing; `ExtrudedBubbleFrame` construction and parameter deep-copy/validation; mailbox insertion. Report median, p90, p99, allocation bytes and total tick budget for solo vs external GPU activity. Source-confirmed coarse `publish_ms` cannot distinguish these.
 - [ ] **Test whether logical and GL render slowdowns share a resource bottleneck:** correlate per-frame EB capture interval, QQuick render-mode interval, CPU scheduling, GIL ownership/NumPy call duration, driver-call time, per-engine GPU queue, upload stalls and OS process CPU quotas/priority. Use same wall clock/frame revision where possible. Avoid treating `publish` spikes as proof the original logical drift algorithm suddenly doubled its intrinsic arithmetic cost.
 - [ ] **Sample GPU hardware time around identical EB passes:** probe six faces + filtering, procedural particle draw, near begin/composite, OIT/MSAA, shafts and resolves using deferred nonblocking timer queries, combined with ETW/Nsight system scheduling. If hardware GPU time stays steady but GL call wall time doubles, prioritize driver/queue/fence/VRAM or CPU contention; if GPU times also double, prioritize actual GPU resource competition and pass reduction.
 - [ ] **Investigate 13:25:27–13:25:30 outliers directly:** align `render_mode_begin`→`ready` (455/419 ms), logical `publish` (440/468 ms), GUI stack captures, GPU memory snapshots and OS workload transitions. Determine whether one blocked resource triggers cascading missed logical and presentation deadlines rather than independent slow paths.
 - [ ] **Re-run with diagnostic controls:** same effective mutable settings, display extent/DPR and audio workload, first solo/contended with light diagnostics, then opt-in full trace; record instrumentation overhead and whether the severe collapse survives. Keep the accepted visualizer and pacing unchanged.
 
 **Implication for rank:** Promote **EB logical capture/material-path drift and snapshot allocation** into the top priority alongside the previously suspected **GL driver submission/synchronization** issue. Empty-near optimization, cubemap refresh strategy and repeated per-speck vertex work remain valuable **source-proven candidates**, but the existing trace does not provide their individual GPU costs or justify blaming any one of them yet.
+
+## 2026-10-30 offline baselines (headless, real recordings)
+
+**Tools:** `tools/eb_logical_cost_probe.py` (new). It replays the production logical tick from a real recording at 91 Hz and splits the `publish` phase with tool-only timers. `tools/extruded_bubble_capture.py` gives whole-frame and `--passes` GPU time. A scratch GIL experiment ran the production render host on the main thread while a paced logical thread ticked.
+**Conditions:** RTX 4090, run while the operator's heavy external GPU workload was active the whole time (card 50–99% busy; other processes 25–60% CPU). Absolute milliseconds move with machine CPU load, so compare rows within one table.
+**Workloads:** preset 1 (all three drift families, Clockwise; the same drift values as the 2026-10-29 Custom run) and preset 3 (no free drift), on `anything_mixed2` and `heavy1`.
+
+**Logical tick, median / p99 ms (budget 11.0 ms at 91 Hz)**
+
+| Workload | anything_mixed2 | heavy1 |
+|---|---:|---:|
+| Preset 3 | 1.9 / 3.6 | 1.8 / 4.4 |
+| Preset 1, free drift off | 6.4 / 10.4 | 6.9 / 11.0 |
+| Preset 1, specks only | 8.0 / 13.1 | 8.3 / 12.3 |
+| Preset 1, chains only | 13.7 / 20.6 | 14.5 / 20.1 |
+| Preset 1, all drift (live workload) | 19.2 / 27.7 (others 48% CPU) | 14.5 / 25.4 (others 30% CPU) |
+| Preset 1, all drift, Particles 0.85–1.0 | 165 / 207 | 152 / 209 |
+
+**Phase split, preset 1 all drift (heavy1, median ms):**
+
+| Phase | ms |
+|---|---:|
+| Chain material paths | 6.1 |
+| Specks | 0.7 |
+| Snow | 0.3 |
+| Drift packing / `tobytes` | 0.5 |
+| Per-bubble simulation (own time) | 2.1 |
+| Collisions | 0.9 |
+| Wakes | 1.0 |
+| `ExtrudedBubbleFrame` validation | 1.4 |
+| Settings read, controls and render parameters | 0.5 |
+| Mailbox | 0.01 |
+
+Frame validation is a Python `_finite` per float over about 7,000 wake/bubble floats, plus `np.isfinite` over the payloads.
+
+- [x] **The live workload's logical capture overruns the 11 ms budget under moderate machine CPU load.** Chain material paths are the largest single item, at about 6–7.7 ms and fixed in size. All 240×128 knots are solved every tick. The renderer can draw at most `bead_chains_high × 12 × detail share` chains: 120 for preset 1.
+- [x] **Specks scale with musical emission × Particles, in power-of-two capacity steps.** Preset 1 has 2,048–4,096 specks, costing about 1 ms. Particles 0.85–1.0 gives 216,000 specks at 134–146 ms per tick, about 13× the budget.
+- [x] **Allocation:** preset 1 allocates a 6.2 MB transient peak every tick (about 570 MB/s). With free drift off the peak is 0.19 MB.
+- [x] **GIL coupling reproduced** (scratch experiment, 1672×941):
+
+  | Render-thread EB submit | Wall median | Wall p90 | Render thread's own CPU |
+  |---|---:|---:|---:|
+  | Solo | 9.2–9.7 ms | 11.3–11.8 ms | 9.3–9.7 ms |
+  | + preset 3 logical thread (2.5 ms ticks) | 12.5–12.8 ms | 16.8–17.8 ms | 9.2–9.4 ms |
+  | + preset 1 logical thread (19.6–20.0 ms ticks) | 20.6 ms | 24.9 ms | 12.3 ms |
+
+  The render thread's own CPU hardly changes, so the extra wall time is spent waiting for the GIL, not on GPU work. This matches the collapse: Qt pass recording grew 2.44×, and revisions ran at about 48–55 Hz from 13:26 to 13:29, which corresponds to 18–21 ms per logical tick.
+- **Interpretation:** the 13:25 collapse can be explained without GPU contention.
+  1. Extra CPU demand pushes EB's logical tick past 11 ms. The external workload here also used 25–60% CPU.
+  2. The logical thread then runs back-to-back and holds the GIL for most of the time.
+  3. The render thread's ~9 ms of PyOpenGL submission stretches to more than 20 ms.
+
+  SRPSS's own GPU use falls because the GPU is underfed. Other visualizers don't collapse because their logical ticks use a fraction of the budget.
+- [ ] **Confirm on the live runtime:** one MC run, preset 1, with and without the external load. Read the HUD `viz_revision_hz` and the frame trace's `render_mode` interval.
+
+**GPU (offscreen, production host, with the external load running)**
+
+| ms | 1672×941 | 2560×1440 |
+|---|---:|---:|
+| Preset 1, whole frame median / p90 | 6.2 / 13.0 | 6.6 / 8.1 |
+| Preset 3, whole frame median / p90 | 5.1 / 8.6 | 7.0 / 8.4 |
+| Preset 1, sum of draw calls | 1.5 | 2.6 |
+| Preset 3, sum of draw calls | 1.6 | 3.5 |
+
+- Largest draws for preset 1 at 2560×1440: near-layer defocus 0.42, shells 0.40, shafts 0.34, backdrop 0.31, beads 0.31, probe prefilter 0.29 ms.
+- About 3–4 ms per frame is not yet attributed (whole frame minus draws). It is non-draw GPU work (mip generation, clears, the per-frame `glNamedBufferSubData` drift upload) plus idle time inside the query while the GPU waits on CPU submission. These have not been separated yet.
+- `visualizer_cost_probe` (preview snapshot, 2560×1440): EB costs 778 Crossfade frames of GPU against Bubble's 1.24. EB's CPU submit is 4.4 ms against Bubble's 0.2 ms.
+- On this card, draw work is small next to the CPU work. The §3–5 GPU candidates remain valid but rank below the CPU items.
+
+**Re-ranked by measured milliseconds**
+
+1. **Chain material paths, 6–8 ms per tick.** Lossless candidates:
+   - Solve only the chains the authored Bead Chains range can ever draw (`high × 12`: 120 of 240 for preset 1). A raised range would start the newly admitted chains with fresh history.
+   - When the cached geometry object is unchanged, skip `array_equal` and the 737 KB definition copy.
+   - Use fewer NumPy temporaries.
+2. **Speck offsets at high Particles, 134–146 ms per tick at 216k.** This is already NumPy-batched, so it needs an order-of-magnitude change: in-place buffers or per-mote work, or the §1 GPU-resident design. Measure before choosing.
+3. **Frame validation, 1.2–2.1 ms per tick:** Python per-float finiteness checks over the wake and bubble records.
+4. **Render-thread CPU submit, about 9 ms per EB frame** (Bubble: 0.2 ms). Cut GL call count. Move the drift upload to the existing `StreamRing` (3D foundation lesson S14).
+5. **GPU passes** (near layer, shells, shafts, backdrop, probe): 0.3–0.4 ms each at 2560×1440.
 
 ## Absolute acceptance rules
 
@@ -64,7 +143,7 @@
 - [x] Confirmed scale: at maximum population, specks have **216,000** displacement records (`216000 × 16 = 3,456,000` bytes). The fixed chain field is **240 × 128 = 30,720** vec4 records (491,520 bytes), and snow can have 2,500 (40,000 bytes). Together, the three maximum payloads are approximately **3.99 MB per logical snapshot**, before Python/NumPy temporary arrays and downstream copies. Actual population depends on current *effective*, mutable settings and emission state.
 - [x] Confirmed: `ProceduralOffsets.advance()` is NumPy-batched, not a Python per-speck object loop; however it creates fresh arrays for base/progress/world, drift velocity, masks and `packed`, and publishes `packed.tobytes()` every update. The simulation may choose power-of-two population capacities, not necessarily exactly the rendered count.
 - [x] Confirmed: `MaterialPaths.advance()` regenerates node-base/world/velocity arrays for all chain knots, compares full definitions, reindexes history as needed, and stores copies. Chain paths are solved regardless of the exact active number of drawn chains while the family remains active.
-- [ ] **Measure CPU per family** on full input ticks, including operations independent of GPU draw and their peak allocation rates. Attribute the reported factor-of-two to family/phase rather than assuming every drift flavour has the same cost.
+- [x] (2026-10-30 baselines: chains 6–8 ms, specks 0.7–1.3 ms at preset 1 and 134–146 ms at 216k, snow 0.3–1.2 ms.) **Measure CPU per family** on full input ticks, including operations independent of GPU draw and their peak allocation rates. Attribute the reported factor-of-two to family/phase rather than assuming every drift flavour has the same cost.
 - [ ] Evaluate in-place scratch-buffer reuse, fewer NumPy temporaries, reusing unchanged geometry/definitions, cached path invariants, and avoiding repeated `array_equal`/whole-array copies when immutable geometry keys already prove equality. Maintain ownership so published snapshots never alias mutable next-frame arrays.
 - [ ] For modes whose velocity depends only on chain identity, phase and time, calculate velocity **once per chain** and broadcast over nodes (only where mathematically exact); keep position-dependent per-node steering for swirl. Verify bitwise/controlled-tolerance trajectories and inlet carry.
 - [ ] For swirls, reuse per-record intermediate vector terms (stream-axis dot, radial vector, normalization, tangent, phase carrier) and calculate one result per actual logical mote, not separately for its four GPU billboard corners. Compare CPU vectorization vs a single authoritative GPU integration design (see below).
