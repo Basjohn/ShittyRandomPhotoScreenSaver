@@ -943,16 +943,17 @@ class ExtrudedBubbleSimulation:
                             and not (a.cluster >= 0 and a.cluster == b.cluster) and self._bounce(a, b, dt):
                         touching.add((a.ident, b.ident))
                 continue
-            if not self._admitted(a, scope) or not self._admitted(b, scope):
-                continue
-            if a.cluster >= 0 and a.cluster == b.cluster:
-                continue
+            # Three side-effect-free rejections; the distance test goes first because most candidates are apart.
             dx, dy, dz = b.x - a.x, b.y - a.y, b.z - a.z
             reach = a.current_radius + b.current_radius
             pair = (a.ident, b.ident)
             if pair in self._contacts:
                 reach *= 1.03  # avoid reselecting an event at a grazing numerical boundary
             if dx * dx + dy * dy + dz * dz >= reach * reach:
+                continue
+            if not self._admitted(a, scope) or not self._admitted(b, scope):
+                continue
+            if a.cluster >= 0 and a.cluster == b.cluster:
                 continue
             touching.add(pair)
             if pair not in self._contacts:
