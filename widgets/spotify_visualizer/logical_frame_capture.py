@@ -449,9 +449,8 @@ def _capture_extruded_bubble(
         travel=snapshot.travel, rays=snapshot.rays, shimmer=snapshot.shimmer,
         motion_phase=snapshot.motion_phase, wakes=snapshot.wakes, passage=snapshot.passage,
         chain_activity=snapshot.chain_activity,
-        drift_paths=snapshot.drift_paths,
-        snow_drift_offsets=snapshot.snow_drift_offsets,
-        speck_drift_offsets=snapshot.speck_drift_offsets,
+        drift_families=snapshot.drift_families,
+        drift_steps=snapshot.drift_steps,
         parameters=_render_parameters({name: value for name, value in extra.items() if not name.startswith("_quick_")}),
     )
     return frame, extra

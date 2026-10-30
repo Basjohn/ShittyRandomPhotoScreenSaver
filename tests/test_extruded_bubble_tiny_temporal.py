@@ -53,7 +53,7 @@ def test_tiny_thin_shell_material_stays_continuous_during_subpixel_motion(qt_app
     radius = radius_pixels * world_pixel
     state = replace(state, time=6., motion_phase=0., level=0., flash=0., rays=.15,
                     emission=0., chain_activity=0., bubbles=(), clusters=(), wakes=(),
-                    drift_paths=b'', snow_drift_offsets=b'', speck_drift_offsets=b'')
+                    drift_families=(), drift_steps=b'')
     snapshot = replace(snapshot, logical=replace(snapshot.logical, mode_state=state))
     target, host = OffscreenRenderTarget(width, height), QuickVisualizerRenderHost()
     original_glass = renderer._glass

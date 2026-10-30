@@ -157,9 +157,8 @@ class ExtrudedBubbleSnapshot:
     wakes: tuple[float, ...] = ()          # stable live/retiring emitter records; immutable, wake-only, 8 floats each
     passage: float = 0.0                   # how loud the passage is (0 quiet .. 1 loud): where every Range sits
     chain_activity: float = 0.0            # visibility envelope, independent of movement and shared audio response
-    drift_paths: bytes = b""              # frozen float32 vec4 material-path displacements
-    snow_drift_offsets: bytes = b""
-    speck_drift_offsets: bytes = b""
+    drift_families: tuple = ()             # live DriftFamily descriptors (extruded_bubble_drift_log)
+    drift_steps: bytes = b""               # the last STEP_HISTORY float64 drift steps, oldest first
 
     @property
     def count(self) -> int:
@@ -303,10 +302,8 @@ class ExtrudedBubbleSimulation:
         self._time = 0.0
         self._level = 0.0
         self._chain_activity = 0.0
-        self._free_paths = {}
-        self._free_geometry = {}
-        self._drift_paths = b""
-        self._snow_drift_offsets = self._speck_drift_offsets = b""
+        from widgets.spotify_visualizer.extruded_bubble_drift_log import DriftLog
+        self._drift_log = DriftLog()   # the free chains/snow/specks step log the GPU solver integrates
         self._flash = 0.0
         self._surge = 0.0             # the flow's beat surge: a quick push on each onset, released over half a second
         self._onset_mean = 0.0        # the recent onsets' usual weight, so only accents push the flow
@@ -1096,26 +1093,24 @@ class ExtrudedBubbleSimulation:
     # -- snapshot ----------------------------------------------------------------------------------------------------
 
     def _advance_free_drift(self, controls, direction, across, depth_axis, origin, amount, speed, dt):
-        for family,pair,attribute in (('chains',controls.drift_chains,'_drift_paths'),
-                                      ('snow',controls.drift_snow,'_snow_drift_offsets'),
-                                      ('specks',controls.drift_specks,'_speck_drift_offsets')):
+        """Record this tick's free-drift step for the GPU solver (``extruded_bubble_drift_log``): the chains,
+        snow and specks are integrated on the GPU from this log, never here."""
+        from widgets.spotify_visualizer.extruded_bubble_drift_log import chain_lifetime, cloud_lifetime
+        from widgets.spotify_visualizer.extruded_bubble_material_paths import chain_geometry, cloud_geometry, drawable_chains
+        from core.constants.extruded_bubble_world import SPECKS_FULL, SNOW_FULL, particle_amount, speck_density
+        log = self._drift_log
+        amounts, counts, chain_rows = {}, {}, 0
+        for family,pair in (('chains',controls.drift_chains),('snow',controls.drift_snow),('specks',controls.drift_specks)):
             # Clouds use the actual emission follower, including musical lifts
             # and Settings-reduction tails. Authored-off is not yet invisible.
             disabled=(max(controls.bead_chains)<=0. if family=='chains' else
                       max(controls.emission)<=0. and self._emission<1e-9)
             if disabled:
-                self._free_paths.pop(family,None)
-                setattr(self,attribute,b'')
+                log.retire(family)
                 continue  # fully disabled populations retain no hidden solve/upload work
             gain = max(-1., min(2., _lerp(pair, self._passage)))
-            if family not in self._free_paths and (gain == 0. or amount == 0. or dt <= 0.):
+            if log.family(family) is None and (gain == 0. or amount == 0. or dt <= 0.):
                 continue
-            import numpy as np
-            from widgets.spotify_visualizer.extruded_bubble_material_paths import MaterialPaths, ProceduralOffsets, chain_geometry, cloud_geometry, drawable_chains
-            from core.constants.extruded_bubble_world import SPECKS_FULL, SNOW_FULL, particle_amount, speck_density
-            paths=self._free_paths.get(family)
-            if paths is None:
-                paths=self._free_paths[family]=MaterialPaths() if family=='chains' else ProceduralOffsets()
             if family=='chains':
                 # Only the chains the Bead Chains Range can ever draw: the rest are never read.
                 count=drawable_chains(controls.bead_chains)
@@ -1123,33 +1118,31 @@ class ExtrudedBubbleSimulation:
                 cap=SNOW_FULL if family=='snow' else SPECKS_FULL
                 required=math.ceil(cap*(particle_amount(self._emission) if family=='snow' else speck_density(self._emission)))
                 count=min(cap,max(64,1<<(max(required,1)-1).bit_length()))
-            key=(controls.stream_path,direction,controls.emission_geometry,controls.particle_spread,count)
-            if family not in self._free_geometry or key!=self._free_geometry[family][0]:
-                if controls.stream_path is None:
-                    raise ValueError('Procedural drift requires an admitted physical stream path')
-                weights=scene_source_face_weights(controls.stream_path[:3],direction)
-                geometry=(chain_geometry(controls,direction,across,depth_axis,weights,paths=count) if family=='chains' else
-                          cloud_geometry(controls,direction,across,depth_axis,weights,family,count))
-                self._free_geometry[family]=(key,geometry)
-            field=dict(kind=controls.drift_direction,phase=self._motion_phase,direction=direction,across=across,
-                       depth_axis=depth_axis,origin=origin,amount=amount*gain*WORLD_UNIT)
-            geometry=self._free_geometry[family][1]
+            if controls.stream_path is None:
+                raise ValueError('Procedural drift requires an admitted physical stream path')
+            key=(controls.stream_path,direction,controls.emission_geometry,controls.particle_spread)
+            current=log.family(family)
+            capacity=count if current is None or current.capacity<count or family=='chains' else current.capacity
+            weights=lambda:scene_source_face_weights(controls.stream_path[:3],direction)
+            log.admit(family,key,capacity,
+                      (lambda rows:chain_geometry(controls,direction,across,depth_axis,weights(),paths=rows))
+                      if family=='chains' else
+                      (lambda rows,family=family:cloud_geometry(controls,direction,across,depth_axis,weights(),family,rows)),
+                      chain_lifetime if family=='chains' else cloud_lifetime)
+            signed=amount*gain
+            amounts[family]=signed*WORLD_UNIT
             if family=='chains':
-                base,spans,carry,phases=geometry
-                displacement=paths.advance(base,spans,self._travel*carry,speed*carry,phases,dt,**field)
-                if displacement is None:
-                    continue
-                packed=np.zeros((*displacement.shape[:2],4),dtype=np.float32)
-                packed[...,:3]=displacement
-                packed[:,0,3]=paths.shift;packed[:,1,3]=paths.phase_offset
+                chain_rows=count
             else:
-                packed=paths.advance(geometry,key,self._travel,speed,dt,**field)
-                displacement=paths.displacement
-            if amount*gain==0. and not np.any(paths.phase_offset) and np.max(np.abs(displacement))<1e-7:
-                del self._free_paths[family]
-                setattr(self,attribute,b'')
-                continue
-            setattr(self,attribute,packed.tobytes())
+                counts[family]=count
+            if log.zero_gain(family,self._travel,signed==0.):
+                log.retire(family)
+                amounts.pop(family);counts.pop(family,None)
+                if family=='chains':
+                    chain_rows=0
+        log.record(dt=dt,phase=self._motion_phase,travel=self._travel,speed=speed,kind=controls.drift_direction,
+                   amounts=amounts,counts=counts,chain_rows=chain_rows,direction=direction,across=across,
+                   depth_axis=depth_axis,origin=origin)
 
     def _wakes(self, dt: float, share: float) -> tuple[float, ...]:
         """Logical emitter identity survives compaction, fusion, pop and surface exit.
@@ -1222,7 +1215,7 @@ class ExtrudedBubbleSimulation:
                                       self._flash, direction, speed, self._drift_shown, self._emission, self._sustain,
                                       self._travel, self._rays, self._shimmer, self._motion_phase,
                                       self._wakes(dt, controls.wake_trails), self._passage, self._chain_activity,
-                                      self._drift_paths, self._snow_drift_offsets, self._speck_drift_offsets)
+                                      self._drift_log.families, self._drift_log.steps)
 
 
 __all__ = ["BUBBLE_STRIDE", "CLUSTER_MAX", "CLUSTER_STRIDE", "ExtrudedBubbleControls", "ExtrudedBubbleSimulation",

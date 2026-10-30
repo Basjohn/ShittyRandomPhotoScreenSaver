@@ -54,20 +54,29 @@ void main() {
         target.close()
 
 
-def test_production_host_uploads_only_active_history_and_restores_zero_picture(target):
+def test_production_host_integrates_only_live_drift_and_restores_zero_picture(target):
     from dataclasses import replace
-    from widgets.spotify_visualizer.extruded_bubble_material_paths import PATH_NODES,CHAIN_PATHS
+    from widgets.spotify_visualizer.extruded_bubble_simulation import (
+        ExtrudedBubbleControls, ExtrudedBubbleSimulation, MusicInput)
     capture,host=target
     snap=_snapshot(extruded_bubble_bead_chains=[2.,2.],extruded_bubble_particles=[0.,0.])
     state=replace(snap.logical.mode_state,chain_activity=1.)
     snap=replace(snap,logical=replace(snap.logical,mode_state=state))
     capture.render(host,snap);base=capture.render(host,snap)
     renderer=host._implementations['extruded_bubble']
-    assert not renderer._drift.buffer
-    paths=np.zeros((CHAIN_PATHS,PATH_NODES,4),dtype='f4');paths[...,:3]=(1.25,0.,-.75)
-    changed=replace(snap,logical=replace(snap.logical,mode_state=replace(state,drift_paths=paths.tobytes())))
-    moved=capture.render(host,changed)
-    assert renderer._drift.buffer
+    assert not renderer._drift.output
+    # A real logical drift log: chains only, strong Clockwise drift for two seconds.
+    controls=ExtrudedBubbleControls(large_count=(0,0),mid_count=(0,0),bead_chains=(2.,2.),emission=(0.,0.),
+        stream_path=(0.,-1.,0.,0.,1.,0.),drift=(1.,1.),drift_chains=(2.,2.),drift_direction='swirl_cw',
+        stream_speed=(.1,.1))
+    sim=ExtrudedBubbleSimulation(7)
+    for _ in range(120):
+        logical=sim.advance(MusicInput(1/60,True,1.,(),(.6,.5,.3)),controls)
+        assert [family.family for family in logical.drift_families]==['chains']
+        changed=replace(snap,logical=replace(snap.logical,mode_state=replace(
+            state,drift_families=logical.drift_families,drift_steps=logical.drift_steps)))
+        moved=capture.render(host,changed)
+    assert renderer._drift.output
     assert np.abs(moved-base).mean()>.01
     assert np.array_equal(capture.render(host,snap),base)
 
