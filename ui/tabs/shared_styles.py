@@ -1033,6 +1033,14 @@ def _build_combobox_popup_view_style(theme: SettingsThemeSpec | None = None) -> 
 
 COMBOBOX_POPUP_VIEW_STYLE = _build_combobox_popup_view_style()
 
+# The popup view above owns the popup's one rounded outline and surface. Qt's
+# private popup container (a QFrame the native style frames and fills, e.g. the
+# Windows 11 style's StyledPanel) must contribute neither, or its rectangle
+# shows around the rounded view as a second, nested outline.
+COMBOBOX_POPUP_CONTAINER_STYLE = (
+    "QComboBoxPrivateContainer { background: transparent; border: none; margin: 0px; padding: 0px; }"
+)
+
 def _build_tooltip_style() -> str:
     return _theme_qss("""
     QToolTip {
