@@ -126,18 +126,15 @@ class Flow:  # Lab Plan section 4A: history enters at the head (world +x) and dr
     fade_out: float = 5.            # seconds of age over which the tail fades out
 
 
-PALETTE = (((.0, .75, 1.), (.05, .45, 1.)),   # electric cyan -> blue (mock: saturated, blue-dominant)
-           ((.15, .2, 1.), (.45, .12, 1.)),    # blue -> violet
-           ((.5, .1, 1.), (.95, .1, .8)),      # violet -> magenta
-           ((.05, .4, 1.), (.3, .25, 1.)),     # deep blue
-           ((.35, .15, 1.), (.75, .2, 1.)))    # violet
+PALETTE = (((0., .52, 1.), (0., .22, 1.)),    # cyan -> electric blue
+           ((.055, .015, 1.), (.30, .01, 1.)), # blue -> violet
+           ((.38, .006, 1.), (1., .012, .62))) # violet -> magenta
 # Per-ribbon character (amplitude, width, wave frequency, phase, light): identical sheets on even phases braid into a
 # regular lattice and sum to white; the mock's sheets differ and cross irregularly.
-CHARACTER = ((1.0, 1.0, 1.0, 0.0, 1.0), (.7, .6, 1.13, 2.1, .8), (1.15, 1.2, .9, 4.0, 1.0), (.55, .45, 1.22, 1.2, .7),
-             (.85, .8, .95, 5.3, .85))
+CHARACTER = ((1., 1., 1., 0., 1.), (.72, .72, .96, 1.1, 1.1), (1.05, .9, 1.07, .55, .7))
 STATES = {  # labelled synthetic controls sized from the WR-00 target table; not music
-    'low': dict(width=.11, width_swell=.04, twist=1.1, emission=.42, spread=.32, amplitude=.55, lift=0., sparkle=.18),
-    'high': dict(width=.32, width_swell=.12, twist=2.4, emission=.4, spread=1.1, amplitude=.85, lift=.5, sparkle=.85),
+    'low': dict(width=.22, width_swell=.04, twist=1.1, emission=.19, spread=.32, amplitude=.58, lift=0., sparkle=.18),
+    'high': dict(width=.46, width_swell=.16, twist=2.4, emission=.75, spread=1.35, amplitude=1.05, lift=.5, sparkle=.85),
 }
 
 
@@ -148,9 +145,9 @@ class Recipe:
     flow: Flow = field(default_factory=Flow)
     # Mock-directed look (WR-04): saturated darker body, thin near-white irregular strands and rims, visible glints.
     material: RibbonMaterial = field(default_factory=lambda: RibbonMaterial(
-        strands=16., strand_half_width=.06, strand_light=2.4, strand_white=.25, strand_jitter=.6, strand_warp=.1,
-        rim_light=1.6, rim_white=.35, rim_half_width=.015, fill_light=.2, fill_centre=.5, rim_glow_light=.15,
-        rim_glow_width=.05, body_alpha=.05, body_tint=.5, glint_density=1.4, glint_chance=.18, glint_light=7.,
+        strands=14., strand_half_width=.065, strand_light=4., strand_white=.035, strand_jitter=.4, strand_warp=.07,
+        warp_frequency=.11, rim_light=1.7, rim_white=.06, rim_half_width=.015, fill_light=.06, fill_centre=.5, rim_glow_light=.15,
+        rim_glow_width=.05, body_alpha=.018, body_tint=.5, glint_density=1.4, glint_chance=.18, glint_light=7.,
         glint_radius=.35, glint_min_pixels=1.3))
     sparks: RibbonSparks = field(default_factory=lambda: RibbonSparks(per_knot=16, lifetime=4.5, drift=1.2, rise=.4,
                                                                        smallest=1.6, largest=5., light=16., white=.25))
@@ -406,7 +403,7 @@ def fill_ring(recipe: Recipe, state: str, knots: int = 256) -> tuple[RibbonRing,
         t = i/flow.knot_hz
         positions, widths, twists, light, sparkle = [], [], [], [], []
         for r in range(count):
-            k = r - (count - 1)/2  # -2..2: a fan in height and depth
+            k = r - (count - 1)/2  # a fixed fan in height and depth, identical in low/high
             amplitude, width, frequency, offset, brightness = CHARACTER[r]
             phase = 2*math.pi*flow.head_hz*frequency*t + offset
             section = 1. if math.sin(2*math.pi*.3*t + r*2.) > .2 else 0.
@@ -415,7 +412,7 @@ def fill_ring(recipe: Recipe, state: str, knots: int = 256) -> tuple[RibbonRing,
             swell = stages[r][1]
             positions.append((flow.speed*t, pivot_y + s['lift'] + s['amplitude']*amplitude*math.sin(phase)
                               + .5*k*s['spread']*math.cos(.37*phase), .3*k + .35*math.cos(phase*.8)))
-            widths.append(width*(s['width'] + s['width_swell']*swell))
+            widths.append(width*(s['width'] + s['width_swell']*swell)*(1.0 + .2*math.sin(phase)))
             twists.append(s['twist']*math.sin(2*math.pi*.07*t + r*2.))
             light.append(brightness*s['emission']*(.85 + .3*swell))
             highs = .5 + .5*math.sin(2*math.pi*.53*t + r*1.7)  # synthetic highs: sparkle density

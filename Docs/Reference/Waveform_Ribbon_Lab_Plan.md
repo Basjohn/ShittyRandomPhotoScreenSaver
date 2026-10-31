@@ -11,7 +11,7 @@ durable shared contracts at their existing owners (`Ribbon_Path.md` for the S3D-
 history under the existing Historical Bugs policy. An absent reference or missing native/operator evidence remains an
 explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate, never a green checkbox.
 
-## 0. Where the work stands (live, 31 October)
+## 0. Where the work stands (live, 1 November)
 
 **Landed** (detail in the WR sections and `Ribbon_Path.md`):
 - WR-00: reference custody, annotation masks, measured target table (section 1.3), the operator's flowing-history
@@ -62,7 +62,9 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
   reactive density, and whether a reduced-resolution volume (S3D-7) is ever needed.
 - [~] **WR-04 parity with the mock:** in progress; weaknesses, viewing method and decision rules in section 0A.
   Passes so far: 1 ribbon material/sheets, floor diffuse light, light-column pillars (`wr04_parity_pass1/`); 2
-  history-attached sparks (`wr04_parity_pass2/`); 3 pillar halos and white-hot bases (`wr04_parity_pass3/`).
+  history-attached sparks (`wr04_parity_pass2/`); 3 pillar halos and white-hot bases (`wr04_parity_pass3/`);
+  4 three distinct coloured sheets and history-carried width fanning (`wr04_parity_pass4/ribbon_fan/`).
+  Visual parity remains unaccepted; finish it before audio mapping/reactivity.
 - [ ] **WR-00 audio windows and WR-07 music in the lab:** choose recorded windows (quiet, transition, bass, mids,
   highs, chorus, pause/resume, hot start). Map bass → width, mids → twist/deformation, energy → whole-ribbon light,
   with band-limited history controls (section 4A).
@@ -111,6 +113,14 @@ picture and the operator's judgement override them.
     not just a fault check.
   - G3 All tuning uses the synthetic head. The balance must be rechecked on recorded music (WR-07) before
     production; nothing tuned here is a promise about music.
+  - G4 Perspective shows a horizontal seam at the far floor boundary: its deep mist tends to a darker colour
+    than the cleared backdrop. Reproduce with no pillars, then make the backdrop agree with that asymptote.
+
+**Current candidate evidence:** pass 4 restores three fixed ribbon identities (pass 3 had five), reduces white mixing,
+and fans width smoothly with the admitted head phase. The high envelope is 0.231–0.660 against 0.240–0.663; low is
+0.391–0.581 against 0.388–0.592. Floor contact is unchanged. Five focused lab tests pass. R1/R2/R5 improved, but the
+low strands still read as even sine bands, floor contrast remains weak, and the pillar halos remain too wide.
+All five poses are captured; G4 was discovered in the Perspective review. No musical acceptance is implied.
 
 **How samples are viewed, every iteration:**
 1. Full sheet, mock | flat landmark render | lit lab, both states at the panel size (640x709).
@@ -118,6 +128,9 @@ picture and the operator's judgement override them.
    field, a pillar and its base. The downscaled sheet alone has hidden faults before (lumps, sub-pixel strands).
 3. Fixed-ROI numbers per layer: luminance median/p90, saturation median, mean RGB
    (`tools/labs/waveform_ribbon_targets.py` ROIs and the per-layer audit boxes).
+   Repeatable native-size comparison: run that tool with `--cards <WR-00 directory> --renders <lab capture directory>
+   --output <new comparison directory>`. It writes masked ROI statistics, the full pair, and 2x nearest-pixel crops;
+   high's original 638 px card is preserved without stretching to the lab's 640 px.
 4. Fault pass at the five navigation poses and in Perspective: banding, gaps, overflow and pose-dependent faults.
 5. Flat landmark render: the floor contact line and ribbon envelopes stay on the target table.
 

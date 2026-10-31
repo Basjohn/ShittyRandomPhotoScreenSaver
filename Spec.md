@@ -773,8 +773,9 @@ staged work packages and A–H visual evidence; the concept brief remains the in
 New 3D labs/modes start Orthographic with optional Perspective, using the shared admitted eye/world and actual
 projection matrices/ray origins; camera math alone does not establish scene likeness or reflection parity.
 The shared bounded CPU path/history and transported width-frame references are documented in
-`Docs/Reference/Ribbon_Path.md`; an independent oriented GPU strip prototype now exists, while efficient dynamic input construction and broader
-native surface/OIT/defocus proof remain open. No runtime mode consumes it. It introduces no runtime simulation or clock.
+`Docs/Reference/Ribbon_Path.md`; the incremental ring producer and oriented OIT/HDR strip are consumed by the Waveform
+lab. Remaining native surface/defocus and cost gates live there and in the Lab Plan. No runtime mode consumes it;
+it introduces no runtime simulation or clock.
 CPU geometry/frame references are test oracles, not a software rendering backend. Production input preparation
 must be measured separately and must not inherit the prototype's all-history oracle reconstruction each tick.
 
