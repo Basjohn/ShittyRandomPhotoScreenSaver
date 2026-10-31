@@ -233,7 +233,19 @@ All of these need measuring against the 60% reference load (submit-to-completion
   (`QuickVisualizerPresentationSync.admit_latest_at_sync`, through `VisualizerSnapshotBridge.publish`). Steady state
   only; mode transitions, Edit framing and CUSTOM rebasing keep the GUI path. No timer, poll or extra frame: emptying
   the mailbox leaves the next publication's wake to drive the next frame. Trace event `quick_sync_latest_admitted`.
-  Expected: about 15 ms off the age. Needs one live confirmation.
+  Live confirmation (`68db98a3`, same tool, operator's load at GPU ~64% mean):
+
+  | Measure (median) | Before | After |
+  |---|---|---|
+  | Consumed revision's age at sync | 19.9 ms | 5.3 ms (always the newest) |
+  | Publish to swap | 36.6 ms | 22.5 ms |
+  | HUD age (p90) | 49.4 ms (55.5) | 31.0 ms (39.3) |
+  | Steady swaps over 25 ms | 7.1% | 7.5% |
+  | EB render-mode time | 10.7 ms | 10.5 ms |
+
+  The first 2 s after startup had 18 of 84 frames over 25 ms (2 of 138 before). Every one carried a 12–22 ms EB
+  render, and the render path is unchanged, so this reads as scene/load phase, not the admission. Recheck that
+  window on the next live run.
 - **Render thread stalls behind the logical tick:** every GL call releases the GIL; while the pure-Python tick runs
   (52% of each 11.1 ms period live), the render thread gets about one call through per 5 ms switch interval, so a
   ~4.5 ms frame spreads to ~10.7 ms. Cutting the logical tick's Python therefore pays twice (age and render). The
