@@ -88,7 +88,9 @@ class Hall:
     floor_z: tuple = (-60., 30.)
     # Pillar rows (depth, mean spacing, seed), authored in world units; spacing jitters deterministically.
     rows: tuple = ((-2.3, 1.9, 1), (-6.5, 3.4, 2), (-12., 4.6, 3), (-19., 5.8, 4))
-    pillar_half: float = .12
+    pillar_half: float = .05
+    halo_half: float = .65         # world half-width of a pillar's scattered-light halo
+    halo_light: float = .35
     pillar_height: float = 14.
     pillar_light: float = 1.0
     pillar_colours: tuple = ((.2, .55, 1.), (.5, .35, 1.), (.25, .6, 1.), (.35, .45, 1.), (.2, .65, 1.), (.45, .5, 1.))
@@ -192,9 +194,9 @@ void main() {
         float height=vLocal.y, seed=vSeed;
         float h1=1.6+2.6*fract(sin(seed*91.7)*4375.85), h2=3.8+3.0*fract(sin(seed*37.1)*9123.17);
         float segments=exp(-pow((height-h1)/0.45,2.0))+0.7*exp(-pow((height-h2)/0.7,2.0));
-        float profile=0.025+segments+1.4*exp(-height*2.4);
+        float profile=0.025+segments+3.0*exp(-height*3.0);  // white-hot base pool
         float bright=0.12+0.88*pow(fract(sin(seed*17.13)*29871.7),2.0);  // most pillars dim, a few bright
-        light=mix(colour,vec3(1.0),0.12*core*core)*vColour.a*bright*core*profile*smoothstep(0.0,0.05,height);
+        light=mix(colour,vec3(1.0),0.12*core*core+0.6*exp(-height*3.0))*vColour.a*bright*core*profile*smoothstep(0.0,0.05,height);
         // A column of light, not a dark solid: its body takes the mist behind it, so only its light shows
         // (black bodies read as dark bars against the lit haze).
         colour=mistColour(uBackdrop,vWorldPos);
@@ -205,6 +207,49 @@ void main() {
     Emission=vec4(light*clear,dot(light*clear,vec3(0.2126,0.7152,0.0722)));
 }
 """
+# A pillar's scattered light: a soft additive glow turned toward the camera about the pillar's own vertical axis
+# (world-anchored, so any pose sees it right), brightening where the core does. The mock's columns are cores in haze.
+HALO_VERTEX = """#version 460 core
+layout(location=0) in vec3 aBase;      // pillar base (world)
+layout(location=1) in vec4 aColour;    // rgb, light
+layout(location=2) in vec3 aLocal;     // across (-1..1), height (world), seed
+uniform mat4 uMvp;
+uniform vec3 uRight;                   // camera right projected to the floor plane (unit)
+uniform float uHalfWidth;
+out vec3 vWorldPos;
+out vec4 vColour;
+out vec2 vLocal;
+flat out float vSeed;
+void main() {
+    vec3 position=aBase+uRight*aLocal.x*uHalfWidth+vec3(0.0,aLocal.y,0.0);
+    vWorldPos=position; vColour=aColour; vLocal=aLocal.xy; vSeed=aLocal.z;
+    gl_Position=uMvp*vec4(position,1.0);
+}
+"""
+HALO_FRAGMENT = """#version 460 core
+in vec3 vWorldPos;
+in vec4 vColour;
+in vec2 vLocal;
+flat in float vSeed;
+uniform float uHaloLight;
+layout(location=0) out vec4 FragColor;
+layout(location=1) out vec4 Emission;
+""" + MIST_GLSL + """
+void main() {
+    float height=vLocal.y, seed=vSeed;
+    float h1=1.6+2.6*fract(sin(seed*91.7)*4375.85), h2=3.8+3.0*fract(sin(seed*37.1)*9123.17);
+    float segments=exp(-pow((height-h1)/0.9,2.0))+0.7*exp(-pow((height-h2)/1.2,2.0));
+    float profile=0.025+1.3*segments+1.6*exp(-height*1.5);
+    float bright=0.12+0.88*pow(fract(sin(seed*17.13)*29871.7),2.0);
+    float across=clamp(vLocal.x,-1.0,1.0);
+    float glow=exp(-across*across*5.0)*(1.0-across*across);
+    vec3 light=vColour.rgb*vColour.a*uHaloLight*bright*profile*glow*mistTransmittance(vWorldPos);
+    FragColor=vec4(light,0.0);
+    Emission=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722)));
+}
+"""
+
+
 FLOOR_VERTEX = """#version 460 core
 layout(location=0) in vec3 aPosition;
 uniform mat4 uMvp;
@@ -280,6 +325,18 @@ def pillar_positions(hall: Hall):
             if abs(x) < hall.floor_x:
                 out.append((x, z, row, seed*100 + k))
     return out
+
+
+def halo_vertices(hall: Hall) -> bytes:
+    """One camera-turned quad per pillar: base, colour+light, (across, height, seed)."""
+    rows = []
+    h = hall.pillar_height
+    for x, z, _row, seed in pillar_positions(hall):
+        colour = hall.pillar_colours[int(seed) % len(hall.pillar_colours)]
+        corners = ((-1., 0.), (-1., h), (1., h), (1., 0.))
+        for i in (0, 1, 2, 0, 2, 3):
+            rows.append((x, 0., z, *colour, hall.pillar_light, corners[i][0], corners[i][1], float(seed)))
+    return b''.join(struct.pack('10f', *row) for row in rows)
 
 
 def floor_vertices(hall: Hall) -> bytes:
@@ -367,6 +424,10 @@ def fill_ring(recipe: Recipe, state: str, knots: int = 256) -> tuple[RibbonRing,
     return ring, t
 
 
+def gl_query_blend() -> bool:
+    return bool(gl.glIsEnabledi(gl.GL_BLEND, 0))
+
+
 class Lab:
     """Owns the diagnostic target and lab GL resources; `close()` retires them under the target's context."""
 
@@ -433,6 +494,7 @@ class Lab:
                     self._flat_ribbons(packet, ribbon_mvp)
                 else:
                     self._floor(hall_mvp, eye, view, orthographic, (width, height))
+                    self._halos(hall_mvp, view)
             if not flat:
                 with self.scene.transparent_writes(card, self.resources):
                     self.ribbons.draw(packet, ribbon_mvp, shading='body', **draw)
@@ -469,6 +531,7 @@ class Lab:
             gl.glDepthMask(gl.GL_FALSE)
             reflected_view = mirrored @ scroll
             reflected_mvp = tuple((projection @ reflected_view).flatten(order='F'))
+            self._halos((projection @ mirrored).flatten(order='F'), mirrored)
             self.ribbons.draw(packet, reflected_mvp, shading='light', **{**draw, 'view': tuple(reflected_view.flatten(order='F'))})
             self.ribbons.draw(packet, reflected_mvp, shading='sparks', sparks=self.recipe.sparks, now=draw['age_fade'][0],
                               mist=draw['mist'], mist_frame=draw['mist_frame'])
@@ -476,6 +539,33 @@ class Lab:
             gl.glDisablei(gl.GL_BLEND, 0)
         finally:
             self.reflection.end()
+
+    def _halos(self, mvp, view):
+        """Pillar halos, additive over what is drawn (depth-tested, no depth writes)."""
+        hall = self.recipe.hall
+        vao, count = self.resources.mesh('halos', halo_vertices(hall), (3, 4, 3))
+        program = self.resources.program('halos', HALO_VERTEX, HALO_FRAGMENT)
+        u = self.resources.uniforms('halos', ('uMvp', 'uRight', 'uHalfWidth', 'uHaloLight', 'uMist', 'uMistShape'),
+                                    required=False)
+        right = np.array((view[0, 0], 0., view[0, 2]))
+        right = right/np.linalg.norm(right) if np.linalg.norm(right) > 1e-6 else np.array((1., 0., 0.))
+        gl.glUseProgram(program)
+        gl.glUniformMatrix4fv(u['uMvp'], 1, gl.GL_FALSE, np.asarray(mvp, np.float32))
+        gl.glUniform3f(u['uRight'], *right)
+        gl.glUniform1f(u['uHalfWidth'], hall.halo_half)
+        gl.glUniform1f(u['uHaloLight'], hall.halo_light)
+        gl.glUniform4f(u['uMist'], *hall.mist['uMist'])
+        gl.glUniform4f(u['uMistShape'], *hall.mist['uMistShape'])
+        blend = gl_query_blend()
+        gl.glEnablei(gl.GL_BLEND, 0)
+        gl.glBlendEquationSeparatei(0, gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
+        gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ZERO, gl.GL_ONE)
+        gl.glDepthMask(gl.GL_FALSE)
+        gl.glBindVertexArray(vao)
+        gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
+        gl.glDepthMask(gl.GL_TRUE)
+        if not blend:
+            gl.glDisablei(gl.GL_BLEND, 0)
 
     def _floor(self, mvp, eye, view, orthographic, size):
         recipe = self.recipe
