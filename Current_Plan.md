@@ -145,19 +145,15 @@ Where it stands (landed work, evidence, scene principles and the full ordered li
 world-first and navigable through the shared framed camera (Orthographic default) from the start: no walls, a fine
 floor, pillars and distance mist; the fitted mock pose is for comparison only. Open work, in order:
 
-- [ ] **World-first hall and navigation:** world-authored floor/pillar layout without the back wall, viewed and
-  navigated through the shared framed camera.
-
-- [ ] **S3D-5 floor reflection → WR-05 floor in the lab (next):** planar reflection in its own harness (registration
-  under a moving eye, roughness/normal from the operator's matched pack
-  `assets/textures/Dark_Concrete_PBR_Matched_Set_DarkGrey.zip`, resize/retirement, cost), then the lab floor. The
-  blockout's largest gap: the mock's floor carries about half the light.
-- [ ] **Distance mist** thickening into the backdrop, reflected by the floor, gently reactive.
-- [~] **WR-04 lab look** (`tools/labs/waveform_ribbon_lab.py`, far from the mock): haze and bloom, fanning strands,
-  blue-violet palette, more and wider sheets in high, softer columns.
+- [~] **Floor reflection and mist follow-ups:** S3D-5 planar reflection, the PBR floor and world mist are landed
+  (Lab Plan §0). Open: reflection pass cost and resize proof, reflecting the ribbons' OIT body, reactive mist density.
+- [~] **WR-04 parity with the mock (current work):** three measured passes landed; the explicit weakness list (floor
+  F1-F3, ribbons R1-R5, sparks S1-S2, pillars P1-P2, atmosphere A1, global G1-G3), how samples are viewed and the
+  decision rules live in Lab Plan §0A.
 - [ ] **WR-00 audio windows and WR-07 music in the lab:** recorded windows; bass → width, mids → twist/deformation,
   energy → whole-ribbon light, history-carried controls band-limited (Lab Plan §4A); tolerances from candidates.
-- [ ] **S3D-2 emitters → WR-06 accents** (sparks/glints riding the ribbons).
+- [ ] **S3D-2 beyond ribbon sparks, only if parity needs it:** history sparks are in the ribbon primitive;
+  free-floating particles and consume-once bursts remain S3D-2.
 - [ ] **S3D-1 remaining for this scene:** near-plane behaviour under navigation, AA under slow motion, defocus,
   full lifecycle/cost (`Docs/Reference/Ribbon_Path.md`). Camera-facing width is not used here.
 - [ ] **WR-08 production → WR-09 acceptance:** single ribbon and material, then floor, multi-ribbon, accents, a
