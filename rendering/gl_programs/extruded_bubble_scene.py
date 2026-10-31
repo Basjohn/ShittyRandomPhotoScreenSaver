@@ -307,6 +307,8 @@ def wake_instances(records) -> np.ndarray:
     xyz, reacted radius, stable ID, retirement, opacity, nominal radius, trail lead and settle directions.
     """
     from core.constants.extruded_bubble_world import WAKE_STRIDE
+    if isinstance(records, bytes):            # the frame's float32 records: a view, no conversion
+        return np.frombuffer(records, dtype=np.float32).reshape(-1, WAKE_STRIDE)
     return np.asarray(records, dtype=np.float32).reshape(-1, WAKE_STRIDE)
 
 

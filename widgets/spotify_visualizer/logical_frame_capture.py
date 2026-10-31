@@ -7,6 +7,7 @@ QQuickItem, paint callback, render cadence, or compatibility presenter.
 
 from __future__ import annotations
 
+from array import array
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
@@ -447,7 +448,9 @@ def _capture_extruded_bubble(
         flash=snapshot.flash, sustain=snapshot.sustain, drift=snapshot.drift,
         emission=snapshot.emission, stream=snapshot.stream, stream_speed=snapshot.stream_speed,
         travel=snapshot.travel, rays=snapshot.rays, shimmer=snapshot.shimmer,
-        motion_phase=snapshot.motion_phase, wakes=snapshot.wakes, passage=snapshot.passage,
+        # The float32 records the renderer uploads, cast once here (as it cast them itself) rather than as a
+        # thousands-long float tuple converted and checked at every boundary.
+        motion_phase=snapshot.motion_phase, wakes=array("f", snapshot.wakes).tobytes(), passage=snapshot.passage,
         chain_activity=snapshot.chain_activity,
         drift_families=snapshot.drift_families,
         drift_steps=snapshot.drift_steps,
