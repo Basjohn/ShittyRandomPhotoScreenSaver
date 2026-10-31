@@ -232,6 +232,18 @@ additive light gives, and the faint body keeps strands readable through each oth
 - The across-width coordinate is clamped before use. MSAA shades a covered sample at the pixel centre, which on
   an edge-on sliver lies far outside the triangle, and `exp(-edge/width)` overflowed into solid bloom blocks.
 - Glints are sparse hashed points on strands, fixed to the absolute path phase, so they travel with the history.
+  They fade with the strands once those are sub-pixel; before that they smeared into white dashes on thin sheets.
+- **Folds (edge-on sheets).** A thin emissive translucent sheet seen at an angle gets brighter and more opaque
+  with its path length 1/|N.V|, while its projected width shrinks by the same factor, so its light per unit
+  length is conserved. The material applies exactly that (light times path; opacity 1-(1-a)^path). A fixed
+  "grazing" boost (the operator's "odd bright blue fold") lit the whole near-edge-on stretch as one flat neon band.
+  - Where the projected width drops below `min_pixels` (2 px), the vertex stage widens the sheet across the screen
+    tangent and the fragment's gain becomes face-on width over drawn width. That equals the path length where
+    widening starts, so light per unit length stays continuous through the fold. Without it, edge-on stretches
+    rasterised into dashes and gaps; at 1.25 px, real geometry just above the threshold still dashed.
+  - Widened edges are oriented by the sheet's facing, sign(N.V) in world space, which flips once where the sheet
+    turns over. The sign of the projected width is noise along a long near-edge-on stretch.
+  - Folds now render as thin, intense lines that turn white after tone mapping, like the mock's crests.
 - Colours run across the width from `colourA` to `colourB` (`RibbonRing(colours=, edge_colours=)`).
 - The material knows only the ribbon (widths, strands, light): no music, palette or scene.
 - The view matrix is rebased with the same float64 origin as the MVP, so eye/forward/view depth stay packet-local.
@@ -246,7 +258,7 @@ without the clamp the low scene had 4,862 garbage pixels and the test fails.
 
 Cards: `tools/labs/ribbon_material_probe.py` renders three flowing-history ribbons (labelled synthetic head, no
 music) with the WR-00 proposed camera, beside the mock's low/high crops, plus a wide card. Evidence:
-`.artifacts/evidence/ribbon_material/s3d1_filament_material_v3/` (`mock_vs_material.png`). Warm GPU at 960x540
+`.artifacts/evidence/ribbon_material/s3d1_filament_material_v4/` (`mock_vs_material.png`). Warm GPU at 960x540
 with both passes is about 0.1-0.25 ms (absolute figures swing about 2x with GPU clocks). The probe's synthetic
 head band-limits its shape controls (Lab Plan section 4A); raw steps drew lumps.
 
