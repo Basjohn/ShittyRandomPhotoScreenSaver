@@ -25,7 +25,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from rendering.gl_error_policy import disable_per_call_gl_error_checking
-if not disable_per_call_gl_error_checking():
+# Measured as a script, GL must load under the production error policy; imported (tests) it reuses the caller's GL.
+if not disable_per_call_gl_error_checking() and __name__ == '__main__':
     raise RuntimeError('GL imported before benchmark production policy')
 from OpenGL import GL as gl
 from OpenGL.raw.GL.VERSION.GL_3_3 import glGetQueryObjectui64v
@@ -43,12 +44,13 @@ from tools.labs.render_target import OffscreenRenderTarget
 HALF_HEIGHT, PITCH, PIVOT = 4.975, math.radians(15.), np.array((0., 2., 0.))
 # Flowing history (Lab Plan section 4A): newest knot at the right, history drifts left.
 FLOW_SPEED, HEAD_HZ, KNOT_HZ = 1.6, .4, 20.
+SHAPE_TAU = .45  # seconds per smoothing stage of history-carried shape controls (see fill)
 PALETTE = (((.08, .62, 1., 1.), (.15, .42, 1., 1.)),   # electric cyan -> blue
            ((.2, .28, 1., 1.), (.42, .24, 1., 1.)),    # blue -> violet
            ((.62, .2, 1., 1.), (.95, .2, .85, 1.)))    # violet -> magenta
 STATES = {  # labelled synthetic controls, sized from the WR-00 target table (body width ~3.5x, emission up)
-    'low': dict(width=.11, width_pulse=.04, twist=.5, emission=.9, spread=.32, amplitude=.55),
-    'high': dict(width=.42, width_pulse=.14, twist=1.6, emission=1.25, spread=.8, amplitude=.65),
+    'low': dict(width=.11, width_pulse=.04, twist=1.1, emission=.9, spread=.32, amplitude=.55),
+    'high': dict(width=.42, width_pulse=.14, twist=2.4, emission=1.25, spread=.8, amplitude=.65),
 }
 BACKDROP = (.012, .016, .035, 1.)
 
@@ -68,17 +70,26 @@ def fill(ring, state, knots):
     """Admit `knots` lattice steps of the synthetic head; returns the newest knot time."""
     s = STATES[state]
     t = 0.
+    # Anything admitted into history becomes shape at FLOW_SPEED: a control changing over d seconds draws a
+    # feature FLOW_SPEED*d long. For graceful curves every shape control is band-limited to features of about
+    # half a wavelength or longer: bass sections pass two cascaded one-pole stages (tau SHAPE_TAU, C1 swells,
+    # ~1.5 world units). Raw steps or a 0.45 s settle made bumps ~0.7 units long against a 4-unit wave (lumps).
+    alpha = 1 - math.exp(-1/KNOT_HZ/SHAPE_TAU)
+    stages = [[0., 0.] for _ in range(3)]
     for i in range(knots):
         t = i/KNOT_HZ
         positions, widths, twists, light = [], [], [], []
         for r in range(3):
             phase = 2*math.pi*HEAD_HZ*t + r*1.1
-            beat = max(0., math.sin(2*math.pi*.9*t + r))**6  # bass pulses travel with the history
+            section = 1. if math.sin(2*math.pi*.3*t + r*2.) > .2 else 0.  # bass sections, ~1-2 s each
+            stages[r][0] += (section - stages[r][0])*alpha
+            stages[r][1] += (stages[r][0] - stages[r][1])*alpha
+            swell = stages[r][1]
             positions.append((FLOW_SPEED*t, PIVOT[1] + s['amplitude']*math.sin(phase) + (r-1)*s['spread']*math.cos(.37*phase),
                               (r-1)*.5 + .35*math.cos(phase*.8)))
-            widths.append(s['width'] + s['width_pulse']*beat)
-            twists.append(s['twist']*math.sin(2*math.pi*.23*t + r*2.))
-            light.append(s['emission']*(.8 + .4*beat))
+            widths.append(s['width'] + s['width_pulse']*swell)
+            twists.append(s['twist']*math.sin(2*math.pi*.07*t + r*2.))  # slow and broad: no tight rolls
+            light.append(s['emission']*(.85 + .3*swell))
         ring.append(t, positions, widths, twists, light)
     return t
 
