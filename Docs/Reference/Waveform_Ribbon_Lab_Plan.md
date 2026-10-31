@@ -51,8 +51,10 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
   unmirrored view lands elsewhere), state restoration and context-owned retirement.
 - [~] **WR-05 floor in the lab:** the operator's PBR pack (sRGB albedo, OpenGL normal, roughness, world-tiled,
   anisotropic) with Fresnel-weighted wet reflection of pillars and ribbon light feeding bloom. Evidence:
-  `wr05_floor_reflection/`. Open: reflection pass cost and resize proof, the ribbons' faint OIT body is not reflected,
-  the mock's brighter bluish near-floor sheen.
+  `wr05_floor_reflection/`. Pillars now vary in brightness (most dim, a few bright) and the third ribbon leans violet.
+  Fixed on the way: Perspective-only pillar banding (an interpolated seed fed a sine hash; now a flat varying, with a
+  regression test). Open: reflection pass cost and resize proof, the ribbons' faint OIT body is not reflected, the
+  mock's brighter bluish near-floor sheen.
 - [~] **Distance mist:** world-space analytic mist (`rendering/gl_programs/mist.py`) shared by hall, floor, ribbon body
   and light: clear air over the ribbon and the viewer's side (centre z +6, radii 30 x 9), thickening beyond the front
   pillar row and far along x, more near the floor. Its colour glows just beyond the clear air and darkens deeper in:

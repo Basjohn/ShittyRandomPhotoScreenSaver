@@ -262,6 +262,9 @@ Each foundation slice adds what it learned here.
   set to face-on width over drawn width. A fixed grazing boost made flat neon bands; unwidened edge-on stretches
   rasterised as dashes. Orient any screen-space widening by a smooth world quantity (sign of N.V), never by the sign
   of a projected length that is near zero: that sign is noise and draws bow-tie gaps (ribbon folds, 2026-10-31).
+- Hash per-object constants only through `flat` varyings. Perspective-correct interpolation reproduces a constant
+  attribute only to ~1e-7 relative; a large-argument sine hash turned that into row-by-row banding in Perspective
+  while Orthographic looked perfect (Waveform pillars, 2026-10-31). Check new looks in both projections.
 
 **Materials and new looks on old transitions (S17)**
 - Lighting a photograph changes its pixels: blend the lit look in by how far a piece is from rest (Blinds' lift,
