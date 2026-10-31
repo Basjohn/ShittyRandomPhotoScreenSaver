@@ -257,6 +257,11 @@ Each foundation slice adds what it learned here.
   musical punch belongs to whole-ribbon light, which needs no history (Waveform Ribbon, 2026-10-31).
 - Judge a look at native-pixel zoom beside the reference before calling it close. A downscaled sheet hid lumpy
   curves, neon-tube fill and sub-pixel strands averaged into a smooth body.
+- Thin emissive translucent sheets: scale light and opacity by path length 1/|N.V|, which conserves light per unit
+  length as the projected width shrinks, and widen sub-pixel stretches to a minimum screen width (2 px) with the gain
+  set to face-on width over drawn width. A fixed grazing boost made flat neon bands; unwidened edge-on stretches
+  rasterised as dashes. Orient any screen-space widening by a smooth world quantity (sign of N.V), never by the sign
+  of a projected length that is near zero: that sign is noise and draws bow-tie gaps (ribbon folds, 2026-10-31).
 
 **Materials and new looks on old transitions (S17)**
 - Lighting a photograph changes its pixels: blend the lit look in by how far a piece is from rest (Blinds' lift,
