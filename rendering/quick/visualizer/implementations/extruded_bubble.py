@@ -48,7 +48,7 @@ from rendering.quick.scene3d.resources import MeshResources, warm_programs
 from rendering.quick.scene3d.target import SceneTarget, scene_target_programs
 from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
 from widgets.spotify_visualizer.extruded_bubble_simulation import MAX_BUBBLES, idle_activity as _idle_activity
-from widgets.spotify_visualizer.extruded_bubble_material_paths import CHAINS_PER_STEP
+from widgets.spotify_visualizer.extruded_bubble_material_paths import CHAINS_PER_STEP, chain_draw_count
 from widgets.spotify_visualizer.extruded_bubble_drift_log import STEP_FLOATS, STEP_INDEX
 from .extruded_bubble_drift_solver import PROGRAMS as _DRIFT_PROGRAMS, DriftSolver
 from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
@@ -116,8 +116,8 @@ def _near_spread(height: int) -> float:
 
 
 def chain_drive(state) -> float:
-    """Where the Bead Chains Range sits: how loud the passage is, swung a little by the beat-level follower."""
-    return min(1.0, float(getattr(state, "passage", 0.0)) * (0.8 + 0.4 * float(state.level)))
+    """Where the Bead Chains Range sits: the simulation's slow, rate-capped chain drive (never the beat follower here)."""
+    return float(state.chain_drive)
 
 
 def _procedural_fill(parameters, level: float, emission: float) -> tuple[float, float, float]:
@@ -497,7 +497,8 @@ class QuickExtrudedBubbleRenderer:
                                                 "uNearCoc": 22.0 * optical_height / 941.0, "uNearMax": _near_spread(optical_height)})
         chain_fill, snow_fill, fizz_fill = _procedural_fill(parameters, chain_drive(state), state.emission)
         idle_activity = _idle_activity(state.level)
-        beads, snow = math.ceil(chain_fill) * _BEADS_PER_CHAIN, math.ceil(snow_fill)
+        beads = chain_draw_count(chain_fill, parameter(parameters, "extruded_bubble_bead_chains")) * _BEADS_PER_CHAIN
+        snow = math.ceil(snow_fill)
         if drift_uniforms['uSnowDriftOffset'] and drift_counts[STEP_INDEX['count_snow']]<snow:
             raise ValueError('Logical marine-snow drift does not cover the rendered population')
         trail_fizz = (_FIZZ_PER_BUBBLE * scene3d_detail(parameter(parameters, "scene3d_detail")).particles

@@ -451,7 +451,7 @@ def _capture_extruded_bubble(
         # The float32 records the renderer uploads, cast once here (as it cast them itself) rather than as a
         # thousands-long float tuple converted and checked at every boundary.
         motion_phase=snapshot.motion_phase, wakes=array("f", snapshot.wakes).tobytes(), passage=snapshot.passage,
-        chain_activity=snapshot.chain_activity,
+        chain_activity=snapshot.chain_activity, chain_drive=snapshot.chain_drive,
         drift_families=snapshot.drift_families,
         drift_steps=snapshot.drift_steps,
         parameters=_render_parameters({name: value for name, value in extra.items() if not name.startswith("_quick_")}),
