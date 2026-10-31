@@ -68,10 +68,12 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
   mist darkens with depth. Pass 2 (`wr04_parity_pass2/`): history-attached sparks in the ribbon primitive
   (`shading='sparks'`, `RibbonSparks`; per-knot sparkle in `tangent.w`; stateless re-emission for as long as a knot
   lives; integer hash on the knot's absolute coordinate; tests with a negative control) drawn on the ribbons and in
-  the floor reflection; high floor 0.33 vs 0.36. Still short, largest first:
-  1. Pillars read as uniform glowing bars; the mock's are soft cores in haze with white-hot bases and floor pools.
-  2. Upper field haze (median 0.03 vs 0.12 high, 0.02 vs 0.06 low) and soft glow around bright crossings.
-  3. High ribbons sweep much higher in the mock; spark density and colour still below the mock.
+  the floor reflection; high floor 0.33 vs 0.36. Pass 3 (`wr04_parity_pass3/`): pillar halos (camera-turned about
+  each pillar's own axis, world-anchored, brightening with the core) and white-hot bases; upper field 0.04/0.08 vs
+  0.06/0.12. Still short, largest first:
+  1. Floor near the camera: the mock's vivid crisp coloured streaks (saturation 0.67 vs 0.54, p90 0.66 vs 0.52).
+  2. High ribbon saturation (0.54 vs 0.65) and sweep height; spark density and colour.
+  3. Glow around bright crossings; pillar glow still more uniform than the mock's localized spindles.
 - [ ] **WR-00 audio windows and WR-07 music in the lab:** choose recorded windows (quiet, transition, bass, mids,
   highs, chorus, pause/resume, hot start). Map bass → width, mids → twist/deformation, energy → whole-ribbon light,
   with band-limited history controls (section 4A).
