@@ -1209,6 +1209,19 @@ vec4 sceneInlet(float faceSeed, vec2 uv, vec3 direction, vec3 centre, vec3 halfE
 // SCENE fades describe physical entry/exit and an actor crossing a wall. A
 // percentage of the whole tank used to erase a wide, otherwise valid lateral
 // interior slab. The small footprint owns these distances, not the camera.
+// Drift can carry a mote sideways out of the tank, where scenePathFade's hard wall (two radii) would cut it off
+// mid-air. Fade it instead, over a band, as drift carries it toward a wall. The band is shifted so the undrifted
+// place always has full opacity: an undrifted mote (or one drifted inward) looks exactly as before, a path deep inside
+// fades over the whole band, and a path that already hugs a face dims only by how far drift moved it out.
+const float DRIFT_WALL_BAND = 0.06;  // share of the tank's smallest half-extent (~0.5 world unit)
+float driftWallFade(vec3 drifted, vec3 base, vec3 centre, vec3 halfExt) {
+    vec3 insideDrifted = halfExt - abs(drifted - centre), insideBase = halfExt - abs(base - centre);
+    float clearance = min(insideDrifted.x, min(insideDrifted.y, insideDrifted.z));
+    float baseClearance = min(insideBase.x, min(insideBase.y, insideBase.z));
+    if (clearance >= baseClearance) return 1.0;
+    float band = DRIFT_WALL_BAND * min(halfExt.x, min(halfExt.y, halfExt.z));
+    return smoothstep(0.0, band, clearance + max(0.0, band - baseClearance));
+}
 float scenePathFade(vec3 p, vec3 centre, vec3 halfExt, float travelled, float span, float radius) {
     vec3 inside = halfExt - abs(p - centre);
     float clearance = min(inside.x, min(inside.y, inside.z));
@@ -1382,6 +1395,7 @@ void beadInstance() {
             float plume = uBeadScatter * 0.55 * scale * (0.2 + 0.8 * progress);
             p += across * g.x * plume + depthAxis * g.y * plume;
         }
+        vec3 undrifted = p;
         p += chainDisplacement(chain, progress);
         // A whole-chain lifetime, independent for each stable seed; both population changes and
         // cycling cohorts fade in and out, not jump through integer chain draw-count changes.
@@ -1392,7 +1406,8 @@ void beadInstance() {
         float px = size * pow(mix(0.3, 1.4, beadRandom(chain * 977 + k, 10u)), 1.5)
                  * (beadRandom(chain * 977 + k, 11u) > 0.94 ? 2.4 : 1.0);
         if (uSceneEmission == 1) {
-            vOpacity *= scenePathFade(p, uWorldCenter, uWorldHalf, s, span, px);
+            vOpacity *= scenePathFade(p, uWorldCenter, uWorldHalf, s, span, px)
+                      * driftWallFade(p, undrifted, uWorldCenter, uWorldHalf);
         } else {
             float ends = smoothstep(0.0, 0.10, progress) * (1.0 - smoothstep(0.84, 1.0, progress));
             vec3 edge = abs((p - uWorldCenter) / uWorldHalf);
@@ -1491,8 +1506,10 @@ void beadInstance() {
         vec4 sceneEntry = sceneInlet(beadRandom(i, 34u), seed.xz, along, uWorldCenter, uWorldHalf, uSceneFaces);
         float progress = uSnowDriftOffset==0 ? fract(seed.y+uSnowDrift/sceneEntry.w) : fract(material.w);
         p = sceneEntry.xyz + along * (progress * sceneEntry.w);
+        vec3 undrifted = p;
         p += material.xyz;
-        vOpacity *= scenePathFade(p, uWorldCenter, uWorldHalf, progress * sceneEntry.w, sceneEntry.w, 0.005);
+        vOpacity *= scenePathFade(p, uWorldCenter, uWorldHalf, progress * sceneEntry.w, sceneEntry.w, 0.005)
+                  * driftWallFade(p, undrifted, uWorldCenter, uWorldHalf);
     } else if (pathEnabled) {
         float progress = uSnowDriftOffset==0 ? fract(seed.y+uSnowDrift/pathLength) : fract(material.w);
         float width = min(uWorldHalf.x, uWorldHalf.z) * 0.46 * uParticleSpread;
@@ -1590,12 +1607,14 @@ void speckInstance() {
              : mix(uSpeckSource, uSpeckEnd, progress)
                + side * (seed.x * 2.0 - 1.0) * sideWidth
                + depthAxis * (seed.z * 2.0 - 1.0) * sideWidth;
+    vec3 undrifted = p;
     p += material.xyz;
     float radius = pow(mix(0.25, 1.1, speckRandom(i, 8u)), 1.3) * 0.025 * uSpeckSize;
     float ends;
     if (uSceneEmission == 1) {
         ends = scenePathFade(p, uWorldCenter, uWorldHalf, progress * sceneEntry.w, sceneEntry.w,
-                             radius * uParticleRadiusShare);
+                             radius * uParticleRadiusShare)
+             * driftWallFade(p, undrifted, uWorldCenter, uWorldHalf);
     } else {
         vec3 edge = abs((p - uWorldCenter) / uWorldHalf);
         float boundsFade = 1.0 - smoothstep(0.88, 1.0, max(edge.x, max(edge.y,edge.z)));
