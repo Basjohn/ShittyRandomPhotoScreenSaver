@@ -26,11 +26,29 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
   0.987), roughness (0.38-0.81 in large patches, suited to the mock's patchy wet reflections) and a tiling QA sheet;
   a 2x2 tile shows no seam. Other tileables in `assets/textures/` are albedo only.
 
+**Scene principles (operator, 31 October):**
+- **World first, navigable from the start.** The hall is authored in world units and viewed through the shared
+  framed camera (Orthographic default, optional Perspective), navigable as in Extruded Bubble. The WR-00 fitted pose
+  only reproduces the mock's view for comparison; nothing is placed relative to it or to the card. The blockout's back
+  wall and column spacing were derived from the mock panel's width: replace them with world-authored layout.
+- **No walls:** a very nice floor, pillars, and mist that thickens with distance to blend the floor and pillars into the
+  far backdrop. Mist is part of the scene, so it is reactive where it should be.
+- **Parity+ with every graphical feature the scene needs,** implemented once, intelligently (no churn or waste) and
+  reactively. The ribbons are real twisting sheets, so the primitive's camera-facing (billboard) width is not used here.
+- **Shipped assets** go to `assets/production/` (tracked, loaded by path); `assets/` otherwise stays local and
+  untracked. Large GL textures do not go into the Qt resource pack.
+
 **Next, in order** (each a stop point with evidence before the next):
+- [ ] **World-first hall and navigation:** author floor extent, pillar layout and spacing in world units, drop the
+  back wall, and drive the lab view through the shared framed camera with navigation. Keep the fitted pose as one
+  comparison pose.
 - [ ] **S3D-5 floor reflection harness (WR-05):** planar reflection of a bounded scene through the admitted camera's
   mirrored eye, roughness-blurred by the pack's roughness map, normal-perturbed, in its own offscreen harness with
   registration, moving-camera, resize/retirement and cost proof. Then the floor in the lab. Largest gap: the mock's
   floor carries about half the light (median luminance 0.14 low / 0.38 high).
+- [ ] **Distance mist:** bounded, thickening with distance (and height) to merge the floor and pillars into the
+  backdrop, with no permanent extra target. Prove it reflects correctly in the floor, then make it gently reactive.
+  Extend into S3D-7 volumes only if a measured gap needs it.
 - [ ] **WR-04 look tuning in the lab,** against both references at native zoom: thinner haze and a tighter bloom; strands
   that fan and gather; a mostly electric-blue to violet palette; more, wider layered sheets with bigger sweeps in high;
   softer, dimmer light columns.
@@ -38,8 +56,8 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
   highs, chorus, pause/resume, hot start). Map bass → width, mids → twist/deformation, energy → whole-ribbon light,
   with band-limited history controls (section 4A).
 - [ ] **S3D-2 emitters, then WR-06 accents:** sparks and glints riding the ribbons, bounded and consume-once.
-- [ ] **S3D-1 remaining, only where the scene needs it:** camera-facing GPU width, near-plane motion, AA under slow
-  motion, defocus, full lifecycle/cost proof. Waveform's oriented sheets do not need camera-facing width.
+- [ ] **S3D-1 remaining for this scene:** near-plane behaviour under navigation, AA under slow motion, shared defocus
+  (depth-varying along a strip), full lifecycle/cost proof.
 - [ ] **WR-08 production port, then WR-09 acceptance** with `tools/visualizer_live_check.py --load game60` (which runs
   `--usage` like the operator) and the operator's A–H sign-off.
 

@@ -141,19 +141,25 @@ Execution must use `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`: WR-00 reference
 WR-01/02 independent S3D-1 proof before composition. The copied brief approves the primary cool hall image;
 the archive's alternate is context only. Existing EB wakes/probes do not establish a generic ribbon or floor reflection.
 
-Where it stands (landed work, evidence and the full ordered list): Lab Plan §0. Open work, in order:
+Where it stands (landed work, evidence, scene principles and the full ordered list): Lab Plan §0. The scene is
+world-first and navigable through the shared framed camera (Orthographic default) from the start: no walls, a fine
+floor, pillars and distance mist; the fitted mock pose is for comparison only. Open work, in order:
+
+- [ ] **World-first hall and navigation:** world-authored floor/pillar layout without the back wall, viewed and
+  navigated through the shared framed camera.
 
 - [ ] **S3D-5 floor reflection → WR-05 floor in the lab (next):** planar reflection in its own harness (registration
   under a moving eye, roughness/normal from the operator's matched pack
   `assets/textures/Dark_Concrete_PBR_Matched_Set_DarkGrey.zip`, resize/retirement, cost), then the lab floor. The
   blockout's largest gap: the mock's floor carries about half the light.
+- [ ] **Distance mist** thickening into the backdrop, reflected by the floor, gently reactive.
 - [~] **WR-04 lab look** (`tools/labs/waveform_ribbon_lab.py`, far from the mock): haze and bloom, fanning strands,
   blue-violet palette, more and wider sheets in high, softer columns.
 - [ ] **WR-00 audio windows and WR-07 music in the lab:** recorded windows; bass → width, mids → twist/deformation,
   energy → whole-ribbon light, history-carried controls band-limited (Lab Plan §4A); tolerances from candidates.
 - [ ] **S3D-2 emitters → WR-06 accents** (sparks/glints riding the ribbons).
-- [ ] **S3D-1 remaining, only as the scene needs:** camera-facing GPU width, near-plane motion, AA under slow motion,
-  defocus, full lifecycle/cost (`Docs/Reference/Ribbon_Path.md`).
+- [ ] **S3D-1 remaining for this scene:** near-plane behaviour under navigation, AA under slow motion, defocus,
+  full lifecycle/cost (`Docs/Reference/Ribbon_Path.md`). Camera-facing width is not used here.
 - [ ] **WR-08 production → WR-09 acceptance:** single ribbon and material, then floor, multi-ribbon, accents, a
   restrained Settings surface; gates A–H, `tools/visualizer_live_check.py --load game60` and operator sign-off.
 
