@@ -11,143 +11,57 @@ durable shared contracts at their existing owners (`Ribbon_Path.md` for the S3D-
 history under the existing Historical Bugs policy. An absent reference or missing native/operator evidence remains an
 explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate, never a green checkbox.
 
-## 0. Where the work stands (live, 1 November)
+## 0. Live goal and sequence (1 November)
 
-**Landed** (detail in the WR sections and `Ribbon_Path.md`):
-- WR-00: reference custody, annotation masks, measured target table (section 1.3), the operator's flowing-history
-  motion model (section 4A), and the Orthographic camera fit, verified on the blockout's pixels.
-- S3D-1 primitive (WR-01/02): bounded history and frames, the oriented GPU strip, the incremental ring producer
-  (0.2 ms per knot at the 8 x 256 cap), and the filament material. The material has an OIT body and additive HDR light
-  (sheet glow, rims, strands, glints), physical edge-on folds with a 2 px minimum width, and C1 width/twist.
-- WR-03 blockout: `tools/labs/waveform_ribbon_lab.py` renders the hall, light columns and three flowing ribbons, with
-  flat landmark renders and lit renders beside the mock. It is far from the mock (gaps in WR-03 status).
-- Floor assets: `assets/textures/Dark_Concrete_PBR_Matched_Set_DarkGrey.zip` (operator-supplied,
-  git-ignored local asset). It holds 1254 px albedo (mean ~0.24), an OpenGL-convention normal map (subtle; mean z
-  0.987), roughness (0.38-0.81 in large patches, suited to the mock's patchy wet reflections) and a tiling QA sheet;
-  a 2x2 tile shows no seam. Other tileables in `assets/textures/` are albedo only.
+**Operator direction supersedes the earlier column studies:** floor, waveform and strong, thick distance mist only.
+Pillars are removed, not an active tuning target. The mist hides all horizon/sky/floor boundaries. Only a small region
+around the waveform and camera is clear; the waveform's shape pushes back the volume and softly lights it. Establish
+this with explicit static/synthetic lab inputs first. Audio-driven deformation and fog reactivity are much later.
 
-**Scene principles (operator, 31 October):**
-- **World first, navigable from the start.** The hall is authored in world units and viewed through the shared
-  framed camera (Orthographic default, optional Perspective), navigable as in Extruded Bubble. The WR-00 fitted pose
-  only reproduces the mock's view for comparison; nothing is placed relative to it or to the card. The blockout's back
-  wall and column spacing were derived from the mock panel's width: replace them with world-authored layout.
-- **No walls:** a very nice floor, pillars, and mist that thickens with distance to blend the floor and pillars into the
-  far backdrop. Mist is part of the scene, so it is reactive where it should be.
-- **Parity+ with every graphical feature the scene needs,** implemented once, intelligently (no churn or waste) and
-  reactively. The ribbons are real twisting sheets, so the primitive's camera-facing (billboard) width is not used here.
-- **Shipped assets** go to `assets/production/` (tracked, loaded by path); `assets/` otherwise stays local and
-  untracked. Large GL textures do not go into the Qt resource pack.
+Both supplied mock boards are examples of the range eventual live presets must support (operator, 1 November).
+Continue measuring the primary's native low/high cards; retain the alternate's flowing folds/filament and warm high
+look as a second authoring target. A preset must remain one scene across its low/high states.
 
-**Next, in order** (each a stop point with evidence before the next):
-- [x] **World-first hall and navigation:** the lab authors floor and four staggered pillar rows in world units (no
-  walls) and renders through a lab-local spec on the shared framed camera at five poses (mock, turned, raised,
-  dolly+pan, Perspective). The ribbon's head and tail sit at fixed world x and fade by age (`age_fade`). At the mock
-  pose the front row meets the floor at 0.636 (target 0.635) and the envelopes match within ~0.007; a test proves every
-  front pillar is drawn where the shared camera projects its world base. Evidence: `wr03_world_hall/`.
-- [x] **S3D-5 planar reflection** (`rendering/quick/scene3d/reflection.py`, `rendering/gl_programs/reflection.py`):
-  the scene through the camera mirrored in the floor into a half-resolution mipmapped HDR target, sampled at the
-  receiver's own screen position, streaked vertically and blurred by roughness, perturbed by the normal map.
-  `tests/test_scene3d_reflection.py` proves registration from four eyes in both projections (negative control: the
-  unmirrored view lands elsewhere), state restoration and context-owned retirement.
-- [~] **WR-05 floor in the lab:** the operator's PBR pack (sRGB albedo, OpenGL normal, roughness, world-tiled,
-  anisotropic) with Fresnel-weighted wet reflection of pillars and ribbon light feeding bloom. Evidence:
-  `wr05_floor_reflection/`. Pillars now vary in brightness (most dim, a few bright) and the third ribbon leans violet.
-  Fixed on the way: Perspective-only pillar banding (an interpolated seed fed a sine hash; now a flat varying, with a
-  regression test). Open: reflection pass cost and resize proof, the ribbons' faint OIT body is not reflected, the
-  mock's brighter bluish near-floor sheen.
-- [~] **Distance mist:** world-space analytic mist (`rendering/gl_programs/mist.py`) shared by hall, floor, ribbon body
-  and light: clear air over the ribbon and the viewer's side (centre z +6, radii 30 x 9), thickening beyond the front
-  pillar row and far along x, more near the floor. Its colour glows just beyond the clear air and darkens deeper in:
-  glow by height alone lit the entire far floor, which an Orthographic view shows as the whole upper field. Open:
-  reactive density, and whether a reduced-resolution volume (S3D-7) is ever needed.
-- [~] **WR-04 parity with the mock:** in progress; weaknesses, viewing method and decision rules in section 0A.
-  Passes so far: 1 ribbon material/sheets, floor diffuse light, light-column pillars (`wr04_parity_pass1/`); 2
-  history-attached sparks (`wr04_parity_pass2/`); 3 pillar halos and white-hot bases (`wr04_parity_pass3/`);
-  4 three distinct coloured sheets and history-carried width fanning (`wr04_parity_pass4/ribbon_fan/`).
-  Visual parity remains unaccepted; finish it before audio mapping/reactivity.
-- [ ] **WR-00 audio windows and WR-07 music in the lab:** choose recorded windows (quiet, transition, bass, mids,
-  highs, chorus, pause/resume, hot start). Map bass → width, mids → twist/deformation, energy → whole-ribbon light,
-  with band-limited history controls (section 4A).
-- [ ] **S3D-2 beyond ribbon sparks, only if parity needs it:** the ribbon primitive's history sparks cover sparks on
-  and around the sheets; free-floating particles, consume-once transient bursts and indirect draws remain S3D-2.
-- [ ] **S3D-1 remaining for this scene:** near-plane behaviour under navigation, AA under slow motion, shared defocus
-  (depth-varying along a strip), full lifecycle/cost proof.
-- [ ] **WR-08 production port, then WR-09 acceptance** with `tools/visualizer_live_check.py --load game60` (which runs
-  `--usage` like the operator) and the operator's A–H sign-off.
+**Existing substrate:** shared framed camera, bounded incremental ribbon history, oriented OIT/HDR filament material,
+history sparks, half-resolution planar reflection, and the operator's world-tiled concrete PBR maps. Contracts live
+in `Ribbon_Path.md`, `Visualizer_Labs.md` and `Scene3D_Resources.md`. Earlier captures remain under
+`.artifacts/evidence/waveform_ribbon/`; the rejected column appearance is not authority. Pass 4 (`66ab3918`)
+restored three distinct ribbon identities; it did not establish fidelity.
 
-## 0A. Parity with the mock: remaining weaknesses, viewing method, decision rules (live)
+**Open, in order:**
+- [ ] **S3D-7 bounded world fog, static first:** replace the analytic floor-colour approximation with a reduced-resolution
+  volume. Carve clearance and soft illumination from the actual ribbon packet, with no second path/simulation/clock.
+  Correct Orthographic/Perspective rays, opaque depth clipping, and source-depth attenuation of ribbon light. Prove a
+  homogeneous slab, nearer occluder, translated clearance, resize/context/retirement, and measured warm GPU cost.
+- [ ] **Waveform structure and light:** richer smooth folds, depth separation, fine fanning/gathering filaments,
+  readable quiet detail, coloured hot crossings. Current bands remain too regularly sinusoidal. Inspect the primary
+  and alternate at native resolution; do not hide shape faults with bloom.
+- [ ] **Floor fidelity:** crisp coloured reflections and fine wet concrete detail with dark gaps, consistent at all
+  poses. Wet/dry optical roughness and pore coverage are now authored from the same PBR set; avoid smooth pools or
+  a diffuse carpet. Reflection OIT-body inclusion, resize and full cost proof remain open.
+- [ ] **Accents and optics:** bounded cyan/magenta sparks with a meaningful size range; tight filament glow and broad
+  local hot spots. Shared defocus/slow-motion AA only after the underlying geometry/material match.
+- [ ] **Both board looks through lab recipe controls:** show the cool primary low/high and alternate-inspired range
+  without changing world identities between quiet/loud. Production presets and Settings remain WR-08.
+- [ ] **Awaiting Validation:** operator review of floor/waveform/volumetric-mist appearance. No candidate is accepted.
+- [ ] **After visual fidelity:** WR-00 recorded windows → WR-07 audio mappings → remaining shared primitive/lifecycle
+  gates → WR-08 production → WR-09 performance and operator acceptance. No reactivity work is admitted ahead of visuals.
 
-Operator, 1 November: "not even half as good" (pass 0), then "improving" (pass 3). Parity is judged against the
-approved primary board (low and high panels); the alternate board informs structure only. Figures below are
-mock / ours from pass 3, crop luminance median (p90) and saturation median on fixed ROIs; they are guides, and the
-picture and the operator's judgement override them.
+## 0A. Evidence and decision rules
 
-**Remaining weaknesses** (ID, largest first within each layer; delete an item only when crops and numbers agree):
-
-- Floor
-  - F1 Near-camera vivid, crisp coloured streaks: saturation 0.67 / 0.54, p90 0.66 / 0.52 (high).
-  - F2 Wet texture: the mock shows specular grain and sparkle on the concrete and mirror-like wet patches; ours
-    smears into soft colour.
-  - F3 Ribbon reflections near the floor line are sharper and brighter in the mock.
-- Ribbons
-  - R1 High-react saturation 0.65 / 0.54: strands whiten into a lavender cast where the mock stays electric blue,
-    violet and magenta.
-  - R2 Sweep and layering: the mock's high sheets reach higher (envelope top 0.24) with larger vertical excursions
-    and clear depth layering; ours form a more even braided band.
-  - R3 Strand structure: the mock's filaments fan at crests and gather at troughs, with bright edge filaments;
-    ours run mostly parallel.
-  - R4 Glow: bright crossings in the mock become white-hot cores with soft halos; ours stay flatter.
-  - R5 Low react is too bright and thick: crop median 0.15 / 0.26. The mock's low bundles are thinner and calmer.
-- Sparks
-  - S1 Density and colour: the mock has many magenta and cyan points, many of them in the air above the sheets;
-    ours are sparser and whiter.
-  - S2 Size range: the mock has a few large, soft, bright points among many fine ones.
-- Pillars
-  - P1 Glow: the mock's columns are localized bright spindles; ours read as more uniform haze columns.
-  - P2 Colour: the mock has bright cyan/white cores with some violet columns.
-- Atmosphere
-  - A1 Upper field 0.12 / 0.08 (high). The mock has a haze gradient and blue glow around the pillars' bright heights.
-- Global
-  - G1 Bloom character: the mock is tight on lines and broad on hot spots.
-  - G2 Look judged only at the mock pose and 640x709. Wide cards and the navigation poses still need a look review,
-    not just a fault check.
-  - G3 All tuning uses the synthetic head. The balance must be rechecked on recorded music (WR-07) before
-    production; nothing tuned here is a promise about music.
-  - G4 Perspective shows a horizontal seam at the far floor boundary: its deep mist tends to a darker colour
-    than the cleared backdrop. Reproduce with no pillars, then make the backdrop agree with that asymptote.
-
-**Current candidate evidence:** pass 4 restores three fixed ribbon identities (pass 3 had five), reduces white mixing,
-and fans width smoothly with the admitted head phase. The high envelope is 0.231–0.660 against 0.240–0.663; low is
-0.391–0.581 against 0.388–0.592. Floor contact is unchanged. Five focused lab tests pass. R1/R2/R5 improved, but the
-low strands still read as even sine bands, floor contrast remains weak, and the pillar halos remain too wide.
-All five poses are captured; G4 was discovered in the Perspective review. No musical acceptance is implied.
-
-**How samples are viewed, every iteration:**
-1. Full sheet, mock | flat landmark render | lit lab, both states at the panel size (640x709).
-2. Native-resolution crops side by side at 2x, mock | ours: ribbon crest/crossings, floor near the camera, upper
-   field, a pillar and its base. The downscaled sheet alone has hidden faults before (lumps, sub-pixel strands).
-3. Fixed-ROI numbers per layer: luminance median/p90, saturation median, mean RGB
-   (`tools/labs/waveform_ribbon_targets.py` ROIs and the per-layer audit boxes).
-   Repeatable native-size comparison: run that tool with `--cards <WR-00 directory> --renders <lab capture directory>
-   --output <new comparison directory>`. It writes masked ROI statistics, the full pair, and 2x nearest-pixel crops;
-   high's original 638 px card is preserved without stretching to the lab's 640 px.
-4. Fault pass at the five navigation poses and in Perspective: banding, gaps, overflow and pose-dependent faults.
-5. Flat landmark render: the floor contact line and ribbon envelopes stay on the target table.
-
-**Decision rules going forward:**
-- Measure first, state the gap with numbers, change one layer, re-measure. Revert a change that moves its layer away
-  from the mock, even if it looks plausible in isolation. Within a layer, fix structure first, then tone, then glow.
-- The look lives in the lab recipe (palette, material knobs, pillar/floor/mist values). The shared primitives change
-  only for physically justified behaviour (light conservation, AA, stability, statelessness), each with a test and
-  a negative control. Primitive defaults stay neutral.
-- Never claim parity or "close". Every report lists the remaining items here with their numbers. The operator sees
-  milestones, not every iteration.
-- Every pass is retained as `.artifacts/evidence/waveform_ribbon/wr04_parity_passN/` with a receipt. Commits go
-  through only when the tests' own exit code is zero (a piped status once let a red test through).
-- Every new look is checked in both projections and at the navigation poses before it counts.
-- Look work does not bend the architecture. Flowing history, world-first layout, the shared camera, the
-  shared mist and reflection, and lean per-tick cost are fixed; a look that needs to break one is raised with the
-  operator first.
+- Compare **mock | flat landmark render | lit lab** and **native crops at 2x** for both synthetic states. The historical
+  pillar-contact line is no longer a scene silhouette: the floor must disappear into mist, not form a visible horizon.
+  Keep measuring ribbon envelopes; all camera/world identities remain fixed between low/high.
+- Run `tools/labs/waveform_ribbon_targets.py --cards <WR-00 directory> --renders <capture directory> --output <new directory>`
+  for fixed annotation-masked ROI luminance/saturation/RGB, native-size pairs and nearest-pixel crops. High's 638 px
+  reference is never stretched to the lab's 640 px. Numbers guide inspection; they cannot establish visual acceptance.
+- Inspect all five navigation poses and wide cards in both projections after every look change. Check geometry,
+  reflection registration, horizon/edge concealment, banding, discontinuities and excessive haze separately.
+- Change one material/geometry layer at a time, compare against its previous candidate and the mocks, retain rejected
+  trials in scratch, and retain milestones under `wr04_parity_passN/` with source/recipe receipts.
+- Shared primitives change only for real reusable behaviour, with a focused falsification test and bounded measured
+  cost. Keep artistic look controls in the lab recipe; no global retuning of accepted visualizers.
+- A test result is valid only when pytest itself exits zero. GL pixels/tests are scoped evidence, not operator sign-off.
 
 Run `.venv\Scripts\python.exe tools/labs/waveform_ribbon_preflight.py --output .artifacts/evidence/waveform_ribbon/<new-run>`.
 It refuses overwrites, copies the unmodified primary, extracts provisional native-size low/high cards, and records
@@ -198,11 +112,11 @@ This scratch extraction is not a new asset authority or guaranteed handoff paylo
 package when necessary; never replace a missing original with a generated approximation. Hashes identify this
 reference review, not mutable operator presets or permanent artistic test goldens.
 
-**Reference authority:** the copied operator brief explicitly names the primary as the single approved concept image.
+**Original reference authority (superseded in scope on 1 November):** the copied brief names the primary as the approved concept image.
 The archive's extra alternate does not override that instruction or require another approval before work can begin.
-Its high panel has orange/peach light and a sparse black background; the approved primary retains cool
+Its high panel has orange/peach light and a sparse black background; the primary retains cool
 cyan/blue/violet/magenta light columns and hall structure. Do not average them into a third look or switch to the
-easier one. An alternate variant requires a later explicit operator instruction and independent target measurements.
+easier one. The operator has now explicitly admitted both boards as eventual preset targets; measure the alternate separately instead of averaging their looks.
 
 ### 1.2 What the pictures establish
 
@@ -449,13 +363,8 @@ Evidence: `.artifacts/evidence/waveform_ribbon/wr03_blockout/` (`mock_flat_lit.p
 lit; wide 16:9 cards). Test: `tests/test_waveform_ribbon_lab.py` pins the floor line and low envelope.
 High needs an energy lift of about 0.5 world units to match; that is now a declared synthetic control.
 
-Gaps, largest first:
-1. **No floor reflection.** The floor is empty; in the mock its reflections carry about half the light
-   (floor median luminance 0.14 low / 0.38 high). S3D-5 is the next primitive. The operator supplied a matched
-   dark-concrete PBR pack (albedo, normal, roughness) for it (section 0); Blender is not needed for the floor.
-2. **Columns are too bright and too crisp.** They read as spindles; the mock's are dimmer, softer secondary glows.
-3. **Ribbons:** haze too milky, strands parallel, palette too magenta, too few layered sheets in high (Ribbon_Path).
-4. **No particles or sparkle** (S3D-2).
+The blockout's remaining appearance work is superseded by the live floor/waveform/volume checklist in section 0.
+Pillars and their visible contact landmark are removed; earlier blockout measurements are historical evidence.
 
 A readback upside-down bug hid behind near-symmetric ribbons until the flat hall showed the floor on top:
 `OffscreenRenderTarget.read_rgba()` is already top-left; never flip it again.
