@@ -5,6 +5,8 @@ from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
 
+from core.settings.transition_retired import RETIRED_ROOT_SETTING_KEYS
+
 
 LEGACY_DOTTED_SETTING_ALIASES = {
     "input.hard_exit": "input.interaction_mode",
@@ -20,7 +22,7 @@ RETIRED_SETTING_KEYS = frozenset({
     "transitions.detail_3d",
     "workers.rss.enabled",
     "workers.fft.enabled",
-})
+}) | frozenset(RETIRED_ROOT_SETTING_KEYS)  # transitions.direction (SC1)
 
 
 def is_legacy_setting_alias(key: object) -> bool:

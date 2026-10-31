@@ -34,7 +34,7 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 
 **Retired section IDs.** §4/§4A/§4B, G00–G33, EB-A…EB-S and EB-R25…EB-R43 (Extruded Bubble recovery) were retired
 when Extruded Bubble closed; documents citing them refer to that history: `git show 3c6cf7d8:Current_Plan.md` and
-`Docs/Reference/Extruded_Bubble/Investigation.md`. Stable IDs kept below: §3 (SC1), §5 (including R38). §2 retired 2026-10-31 (§2A with the EB follow-up; §2B's
+`Docs/Reference/Extruded_Bubble/Investigation.md`. Stable IDs kept below: §5 (including R38); SC1 closed 2026-10-31. §2 retired 2026-10-31 (§2A with the EB follow-up; §2B's
 last physical-validation items moved to §5); RM, SC4, §4C and R41 closed earlier (source control).
 
 ## 3. Guided-setup stills and bounded source cleanup (at a stable checkpoint)
@@ -45,8 +45,6 @@ in `Docs/Reference/Release_Media.md` for explicit future requests.
 - [ ] **Guided-setup still images:** audit the actual guided-setup image consumers and keep their stills current;
   generate only missing/stale stills through their existing Foundry/operator-sheet authorities and inspect the results.
   Animated catalogues/showcases are deferred until explicitly requested; no automatic maintenance obligation.
-- [ ] **SC1 Retire the unused root `transitions.direction`:** confirm no callers, then forward-strip it (changes the
-  operator's defaults; authorized cleanup); prove import/merge/save cannot resurrect it.
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 

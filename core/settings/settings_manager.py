@@ -45,7 +45,7 @@ from core.settings.visualizer_settings_snapshot import (
     migrate_legacy_visualizer_mode_activation_schema,
     normalize_visualizer_section_mapping,
 )
-from core.settings.transition_retired import strip_retired_transition_settings
+from core.settings.transition_retired import RETIRED_ROOT_SETTING_KEYS, strip_retired_transition_settings
 from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
 from core.settings.visualizer_settings_contract import (
     strip_legacy_global_technical_keys,
@@ -373,7 +373,7 @@ class SettingsManager(QObject):
             raise KeyError(
                 f"Retired setting key {text!r}; use current key {canonical!r}"
             )
-        if text in (LEGACY_USE_LANCZOS_KEY, LEGACY_TRANSITIONS_DETAIL_KEY):
+        if text in (LEGACY_USE_LANCZOS_KEY, LEGACY_TRANSITIONS_DETAIL_KEY, *RETIRED_ROOT_SETTING_KEYS):
             raise KeyError(f"Retired setting key {text!r}")
         return text
 

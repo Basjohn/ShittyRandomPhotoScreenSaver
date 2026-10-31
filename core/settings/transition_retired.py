@@ -4,7 +4,8 @@ Retired 2026-10-10 on the operator's call: Diffuse, Block Puzzle Flip, Ink Bloom
 Accordion Fold. A stored profile may still name them in the per-transition activation, pool and
 duration maps, select one as the current type, or hold their own settings section; startup drops
 all of it. A retired current type falls back through the registry's canonicalisation (Crossfade).
-Settings retired inside a kept transition's section (``RETIRED_SECTION_KEYS``) are dropped too.
+Settings retired inside a kept transition's section (``RETIRED_SECTION_KEYS``) and at the
+``transitions`` root (``RETIRED_ROOT_KEYS``) are dropped too.
 """
 from __future__ import annotations
 
@@ -21,6 +22,10 @@ _NAMED_MAPS = ("activation", "pool", "durations")
 # Settings retired inside a kept transition's section (2026-10-11: Liquid Lens always starts in the
 # middle and lost its droplets).
 RETIRED_SECTION_KEYS = {"liquid_lens": ("direction", "droplets")}
+# Leaves retired at the ``transitions`` root itself (2026-10-31, SC1: the root ``direction`` was
+# never read; every directional transition keeps its own ``<section>.direction``).
+RETIRED_ROOT_KEYS = ("direction",)
+RETIRED_ROOT_SETTING_KEYS = tuple(f"transitions.{key}" for key in RETIRED_ROOT_KEYS)
 
 
 def strip_retired_transition_settings(transitions: Mapping[str, Any]) -> tuple[Dict[str, Any], bool]:
@@ -28,7 +33,7 @@ def strip_retired_transition_settings(transitions: Mapping[str, Any]) -> tuple[D
     cleaned: Dict[str, Any] = {}
     changed = False
     for key, value in transitions.items():
-        if key in RETIRED_TRANSITIONS.values():
+        if key in RETIRED_TRANSITIONS.values() or key in RETIRED_ROOT_KEYS:
             changed = True
             continue
         if key in RETIRED_SECTION_KEYS and isinstance(value, Mapping):
