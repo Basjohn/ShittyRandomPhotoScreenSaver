@@ -567,3 +567,21 @@ def test_handle_attribution_summary_groups_resolved_and_unresolved_types():
 
     assert counts == {"Event": 2, "File": 1, "type_13": 1}
     assert indices == {"7": "Event", "11": "File", "13": "type_13"}
+
+
+def test_collector_names_processes_entering_and_leaving_the_tree(caplog):
+    # A sample's cost scales with the tree; a grown tree hitched every thread (2026-10-31) and counts alone could
+    # not say which processes had joined. Changes are named once, never per sample.
+    import os
+    proc = _CountingProc()
+    tree = {proc.pid: 23, os.getpid(): 40}
+    collector = ProcessUsageCollector(proc, heavy_refresh_samples=1, topology_snapshot_provider=lambda pid: dict(tree))
+    with caplog.at_level(logging.INFO, logger="core.performance.usage_sampler"):
+        collector.collect()
+        collector.collect()
+        added = [r.getMessage() for r in caplog.records if "topology added" in r.getMessage()]
+        assert len(added) == 1 and f"pid={os.getpid()}" in added[0] and "threads=40" in added[0] and "name=" in added[0]
+        del tree[os.getpid()]
+        collector.collect()
+    removed = [r.getMessage() for r in caplog.records if "topology removed" in r.getMessage()]
+    assert len(removed) == 1 and f"pid={os.getpid()}" in removed[0]

@@ -60,6 +60,8 @@ _FLAGS = (
     ("render_mode_ms", 8.0, "render-mode time over 8 ms: the frame no longer fits half a 60 Hz period"),
     ("steady_late_pct", 10.0, "over 10% of steady frames later than 25 ms"),
     ("post_startup_late_pct", 20.0, "over 20% of the first 2 s after startup later than 25 ms"),
+    ("hitches_per_min", 0.5, "steady frames over 50 ms: a visible hitch (periodic ones point at a timer-driven GIL holder)"),
+    ("usage_collect_ms", 40.0, "a usage sample takes over 40 ms of a worker thread, much of it GIL-held: it stalls every thread"),
 )
 
 
@@ -129,6 +131,7 @@ def analyse_trace(path: Path) -> dict:
         "render_mode_ms": _stats(render_mode),
         "swap_gap_ms": _stats(gaps),
         "steady_late_pct": round(100.0 * sum(g > LATE_MS for g in gaps) / max(len(gaps), 1), 1),
+        "hitches_per_min": round(60.0 * sum(g > 50.0 for g in gaps) / seconds, 2),
         "post_startup_frames": len(early),
         "post_startup_late_pct": round(100.0 * sum(g > LATE_MS for g in early_gaps) / max(len(early_gaps), 1), 1),
         "sync_admissions_per_s": round(sum(1 for _, e, _ in steady if e == 74) / seconds, 1),
@@ -148,7 +151,8 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
     os.chdir(ROOT)
     from tools import eb_live_phases as phases
 
-    sys.argv = [str(ROOT / "main_mc.py"), "--perf", "--frame-trace", "--exit-after", str(int(seconds)), "/s"]
+    # --usage as the operator always runs: its sampler is part of the live shape (a 15 s GIL-held hitch, 2026-10-31).
+    sys.argv = [str(ROOT / "main_mc.py"), "--perf", "--usage", "--frame-trace", "--exit-after", str(int(seconds)), "/s"]
     phases.production_startup()
     if not visible:
         # Invisible but presented like a visible window: an empty window region clips every pixel and every click,
@@ -226,6 +230,36 @@ def _visible_window_violations(pids: set[int]) -> list[str]:
 
     _user32.EnumWindows(_EnumWindowsProc(check), 0)
     return found
+
+
+def usage_summary(usage_log: Path) -> dict | None:
+    """The usage sampler's cost and what it walks (the operator always runs with --usage)."""
+    if not usage_log.exists():
+        return None
+    rows = re.findall(r"collect_ms=([\d.]+).*?processes=(\d+) children=(\d+).*?threads_app=(\d+) handles_app=(\d+)",
+                      usage_log.read_text(encoding="utf-8", errors="replace"))[1:]  # the first sample primes caches
+    if not rows:
+        return None
+    column = lambda i: [float(row[i]) for row in rows]
+    return {"samples": len(rows), "collect_ms": _stats(column(0)), "processes": statistics.median(column(1)),
+            "threads": statistics.median(column(3)), "handles": statistics.median(column(4))}
+
+
+def _tree_snapshot(pid: int) -> list[dict]:
+    """Name, thread count and command of every process in the saver's tree (what the usage sampler walks)."""
+    import psutil
+    snapshot = []
+    try:
+        processes = [psutil.Process(pid), *psutil.Process(pid).children(recursive=True)]
+    except psutil.Error:
+        return snapshot
+    for process in processes:
+        try:
+            snapshot.append({"pid": process.pid, "parent": process.ppid(), "name": process.name(),
+                             "threads": process.num_threads(), "cmd": " ".join(process.cmdline())[:200]})
+        except psutil.Error:
+            continue
+    return snapshot
 
 
 def _process_tree(pid: int) -> set[int]:
@@ -313,11 +347,13 @@ def main() -> int:
     sampler, conditions = SystemSampler(), []
     runner = subprocess.Popen(command, env=env, cwd=ROOT, stdout=(out / "runner.txt").open("w"),
                               stderr=subprocess.STDOUT)
-    violation = None
+    violation, tree, started = None, None, time.monotonic()
     try:
         while runner.poll() is None:
             time.sleep(1.0)
             conditions.append(sampler.sample())
+            if tree is None and time.monotonic() - started > min(30.0, args.seconds / 2):
+                tree = _tree_snapshot(runner.pid)
             if not args.visible:
                 found = _visible_window_violations(_process_tree(runner.pid))
                 if found:
@@ -340,6 +376,10 @@ def main() -> int:
                "clip": clip.name if clip else None, "clip_start": args.clip_start,
                "visible": args.visible, "conditions": summarise_environment(conditions), **analyse_trace(trace)}
     summary["hud_age_ms"] = hud_ages(out / "logs" / "screensaver_perf.log", args.mode)
+    usage = usage_summary(out / "logs" / "screensaver_usage.log")
+    summary["usage"] = usage
+    summary["usage_collect_ms"] = usage["collect_ms"] if usage else None
+    summary["process_tree"] = tree
     phases_path = out / "phases.json"
     if phases_path.exists():
         phases = json.loads(phases_path.read_text(encoding="utf-8"))
@@ -351,7 +391,7 @@ def main() -> int:
                                        if isinstance(v, dict) and k != "logical_publish"}
     (out / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
     for key, value in summary.items():
-        if key != "render_stages_ms":
+        if key not in ("render_stages_ms", "process_tree"):
             print(f"{key:28s} {value}")
     for key, limit, message in _FLAGS:
         value = summary.get(key)
