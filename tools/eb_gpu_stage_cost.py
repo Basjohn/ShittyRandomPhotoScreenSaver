@@ -44,6 +44,8 @@ def _skips():
         "shafts": [(eb.QuickExtrudedBubbleRenderer, "_draw_shafts", noop)],
         "near layer": [(defocus.DefocusLayer, "begin", noop), (defocus.DefocusLayer, "end", noop),
                        (defocus.DefocusLayer, "composite", noop)],
+        "near composite": [(defocus.DefocusLayer, "composite", noop)],
+        "near mipmaps": [(defocus.DefocusLayer, "end", noop)],
         "material draws": [(eb.QuickExtrudedBubbleRenderer, "_draw_material_instances", noop)],
         "drift compute": [(solver.DriftSolver, "_dispatch", noop)],
         "background capture": [(target.SceneTarget, "background",

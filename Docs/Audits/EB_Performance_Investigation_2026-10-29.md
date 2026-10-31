@@ -153,6 +153,39 @@ Frame validation is a Python `_finite` per float over about 7,000 wake/bubble fl
 
 **Behaviour change:** a free-drift family now retires once every knot or mote has recycled after its signed drift reaches zero. It used to retire when displacement fell below 1e-7, which happens at the same recycling.
 
+### 2026-10-31, after the operator's heavy-load MC run
+
+**The live run:**
+
+| | Value |
+|---|---|
+| Draw rate | about 59–64 fps (median 58.8) |
+| Logical revisions | 90 Hz |
+| Frame age | about 40–42 ms |
+
+Screen 1 is the 4K panel at **60 Hz**. Steady swaps sat at the refresh rate (16.65 ms), with 4% of frames missing a vblank. In the low-load MC run, EB drew every revision (90 fps) at 18 ms age, so the 40 ms comes from the render cycle stretching past the 11 ms revision interval under contention. Live EB render-mode time was 10.4 ms under load, against 4–5 ms offline.
+
+**Offline findings** (`tools/eb_gpu_stage_cost.py`, `tools/gpu_load_generator.py`):
+
+- **EB's GPU frame, truly idle, at 1662×888:** 2.32 ms. The probe prefilter took 1.07 ms of that, as 48 dependent tiny draws with GPU pipeline drains between them. Next were the near-layer composite (about 0.44 ms) and shafts (about 0.3 ms).
+- **`8a67a808`:** the prefilter now does one layered draw per level (geometry-shader `gl_Layer`), at 0.68 ms. The whole frame is 1.93 ms, pixel-identical.
+- **Under a 60% game-like competing load:** submit-to-completion is about 9.1 ms both before and after that change. EB waits behind the other process's in-flight GPU packets, and the wait barely depends on how much work EB submits. So trimming EB's GPU work alone will not halve the frame age under load.
+- **Rejected, measured:**
+  - *Prefilter tap table:* the arithmetic was not the cost.
+  - *GL calls holding the GIL:* no reliable gain, and blocking calls would freeze the logical thread.
+  - *A CPU near-layer skip gate:* a near bubble was present in 600 of 600 frames.
+- **Measurement traps:**
+  - `GL_TIME_ELAPSED` timers inside a frame charge the previous stage's draining work to the next stage. Use skip variants instead.
+  - Stray load generators must be stopped by PID; killing the shell launcher leaves the Python child running.
+- **Vanishing streams:** the GPU solver reproduces the pre-solver frames over 900 consecutive frames (at most 30 differing pixels per frame, never clustered). The cut-off mechanism was SCENE's two-radius wall cut, which predates this work. `68515506` fades drifted motes before the wall instead.
+
+**Next candidates for the frame age under load:**
+- Fewer separate GPU submissions per frame, so EB queues behind fewer competitor packets.
+- Render-cycle phase and latency inside Qt's loop.
+- The near-layer composite region of interest.
+
+All of these need measuring against the 60% reference load (submit-to-completion latency, not idle GPU time).
+
 **Remaining, ranked:**
 1. **Heavy-load confirmation:** one MC run on preset 1 under the operator's external GPU load, compared with the 38–55 fps run.
 2. **Render thread:** about 4.2 ms solo submit, still Python-heavy (7,789 calls per frame, about 750 GL calls). Each remaining item is small: uniform handling 0.4 ms, probe 0.7 ms, about 69 state queries.
