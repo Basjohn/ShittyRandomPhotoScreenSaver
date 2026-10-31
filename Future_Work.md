@@ -155,6 +155,17 @@ Deferred by the operator on 28 October: animated catalogue reconciliation, visua
 loop/metadata proof (formerly RM1–RM3), plus the Blinds Flat publication endpoint investigation (SC2). Do not maintain or regenerate these automatically after graphics changes.
 Reopen only on an explicit request. Guided-setup still images and bounded source cleanup remain active in Current_Plan §3.
 
+### EB vectorised logical simulation (deferred by the operator, 2026-10-31)
+
+The last measured lever on Extruded Bubble's frame age. Under the calibrated game-like load the logical tick is
+~4.2 ms and holds the GIL ~38% of the time, which stalls the render and GUI threads. It is pure-Python per-bubble
+motion, collision and wake work, and the bit-identical trims are exhausted
+(`Docs/Audits/EB_Performance_Investigation_2026-10-29.md`). A NumPy structure-of-arrays rewrite is estimated at a
+~2 ms tick and ~7-10 ms less frame age (22 → about 13-16 ms). It cannot be bit-identical: collisions are chaotic, so
+it needs behavioural proof that reactivity, population, fusion and pop rates are unchanged on recorded music, plus
+`tools/visualizer_live_check.py --load game60` evidence. The operator chose not to risk it now; reopen only on an
+explicit request.
+
 ### Beyond the entire current backlog — optional EB Orthographic appearance parity
 
 Explicitly deferred by the operator until **after everything currently listed in Current_Plan.md and this file**,

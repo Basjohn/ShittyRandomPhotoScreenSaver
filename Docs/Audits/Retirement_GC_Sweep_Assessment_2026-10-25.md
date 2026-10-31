@@ -2,7 +2,7 @@
 
 **Status:** assessment only. **Cause found (R-169):** the opt-in GUI stall sampler's frame-map cycle, fixed
 without any sweep (option A); this stays as the record of why a sweep was not adopted. The per-retirement sweep (commit `c8a00d08`) was reverted in `635587c3`; nothing here is
-implemented. Live task: `Current_Plan.md` §2A "Settings-open lifecycle barrier timeout". First find the actual cycle
+implemented. The former live task ("Settings-open lifecycle barrier timeout") is no longer in `Current_Plan.md`. First find the actual cycle
 (referrer snapshot now on in source runs, `ec2f0920`), then decide whether any sweep mechanism is wanted.
 
 ## The failure being solved
