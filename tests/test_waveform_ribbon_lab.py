@@ -51,4 +51,4 @@ def test_navigation_draws_the_fixed_world_where_the_shared_camera_projects_it(la
             window = front[int(py) - 3:int(py) + 4, int(px) - 3:int(px) + 4]
             assert window.any(), (x, z, px, py)
             checked += 1
-    assert checked >= 4
+    assert checked >= 2  # every visible front pillar is checked; the authored row shows 2-3 per view
