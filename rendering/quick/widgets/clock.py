@@ -331,6 +331,10 @@ class ClockPresentationConfig:
             defaults=style_defaults,
             text_color=config.text_color,
         )
+        if config.display_mode == "analog" and not config.show_background:
+            # A cardless analogue face sits on the photograph, not on a theme
+            # card: a light theme's dark card text would not belong there.
+            text_color = config.text_color
         return replace(
             config,
             text_color=text_color,

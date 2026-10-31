@@ -1285,3 +1285,26 @@ def test_clock_selected_edit_proxies_follow_actual_applied_transforms_in_both_fa
         factory.deleteLater()
         window.deleteLater()
         qt_app.processEvents()
+
+
+@pytest.mark.parametrize("display_mode,show_background,themed", [
+    ("analog", False, False), ("analog", True, True), ("digital", False, True),
+])
+def test_only_a_cardless_analogue_face_keeps_its_colour_against_the_theme_text_role(
+    monkeypatch, display_mode, show_background, themed,
+) -> None:
+    # A light theme's dark card text belongs on its card; a cardless analogue
+    # face sits on the photograph and keeps its own (inherited) colour.
+    from ui.settings_theme_spec import Rgba
+    import rendering.quick.widgets.theme_projection as projection
+
+    sentinel = Rgba(1, 2, 3, 255)  # test-owned, not a theme value
+
+    class _Theme:
+        def color(self, _token):
+            return sentinel
+
+    monkeypatch.setattr(projection, "get_active_widget_theme", lambda: _Theme())
+    config = ClockPresentationConfig.from_widgets_mapping(
+        "clock", {"clock": {"display_mode": display_mode, "show_background": show_background}})
+    assert (tuple(config.text_color) == sentinel.as_tuple()) is themed
