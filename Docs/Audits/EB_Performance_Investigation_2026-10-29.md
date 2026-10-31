@@ -251,6 +251,21 @@ All of these need measuring against the 60% reference load (submit-to-completion
   and the A/B hold. The first corrected run, `tools/visualizer_live_check.py` invisible on recorded music under the
   game at ~67% system CPU, still measured render-mode 11.5 ms, tick 5.3 ms (GIL share 0.47) and HUD age 32 ms. The
   render figure is not an error-checking artefact.
+- **Bit-identical trims, second round (`0a61756e`, operator's choice over a vectorised rewrite):**
+  - What changed:
+    - per-bubble motion, radius and fade loops hoist each product's per-tick head and steer fixed headings once per
+      class;
+    - wake membership is tracked locally;
+    - wakes cross to the renderer as the float32 bytes it uploads (byte-identical to its own cast).
+  - Light load, preset 1:
+    - logical tick 2.37 → 2.17 ms median;
+    - frame validation 0.22 → 0.07 ms;
+    - renderer wake packing 0.13 → 0.003 ms.
+  - Verification: all 8 presets and all 9 drift directions are bit-identical against HEAD.
+  - Exhausted: what remains is inherent per-bubble work (outside tests, radius clamps, ~380 `abs` and ~300 `max`
+    a tick) and collision neighbour enumeration in a grid dense in columns (~730 column hits, ~2,200 depth lookups,
+    ~380 occupied). Each remaining exact trim is worth about 0.05 ms. Together the two rounds took about 15-20% off
+    the tick (expected live ~5.3 → ~4.4 ms). Further logical gains need the vectorised rewrite.
 - **Render thread stalls behind the logical tick:** every GL call releases the GIL; while the pure-Python tick runs
   (52% of each 11.1 ms period live), the render thread gets about one call through per 5 ms switch interval, so a
   ~4.5 ms frame spreads to ~10.7 ms. Cutting the logical tick's Python therefore pays twice (age and render). The
