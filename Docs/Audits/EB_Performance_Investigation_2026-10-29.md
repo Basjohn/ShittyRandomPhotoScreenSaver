@@ -275,6 +275,25 @@ All of these need measuring against the 60% reference load (submit-to-completion
     Python less (1.5x idle against ~1.8x). Neither long GPU passes nor a HIGH-priority feeder raised EB's render time.
   - Needed: one run of the current code under the game, both to measure the improvements live and to calibrate
     `game60`.
+- **Calibrated `game60` and the same-load A/B (2026-10-31):**
+  - Calibration: the operator's game at its menu (Borderlands 4, system CPU 56-58%, GPU 48-60%) slowed EB's
+    single-thread tick to 3.56 ms. `game60` workers at 8000 compute steps per 256 KB copy give 3.56 ms.
+  - Live check, current code: `game60` against the game menu matched closely. Frames 72.1 / 71.6 fps, publish to
+    swap 17.44 / 17.42 ms, render 5.03 / 4.93 ms, tick 4.20 / 4.26 ms, GIL share 0.38 / 0.38, HUD 22.4 / 25.1 ms.
+  - A/B under calibrated `game60`, pre-change `01e3ccb6` against current code:
+
+    | Measure (median) | `01e3ccb6` | Current |
+    |---|---|---|
+    | HUD age | 38.8 ms | 22.4 ms |
+    | Publish to swap | 28.4 ms | 17.4 ms |
+    | Consumed age at sync | 15.5 ms (1 waiting) | ~5.5 ms (0 waiting) |
+    | Render-mode | 9.1 ms | 5.0 ms |
+    | Logical tick | 4.9 ms | 4.2 ms |
+    | Frames | 67.9 fps | 72.1 fps |
+
+  - The old code reproduces the operator's reported ~40 ms, which validates load and harness together.
+  - The render drop exceeds the trims: admitting the newest revision at sync starts each render just after a
+    publication, so it mostly completes in the gap before the next tick instead of stalling behind it.
 - **Tool corrections found on the way:**
   - `game60` first saturated all 24 logical cores (memory-bandwidth contention made bursts overrun, so workers never
     idled) and its utilisation-chasing GPU calibration spiralled to 17 fps.
