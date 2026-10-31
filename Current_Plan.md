@@ -12,11 +12,11 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 The operator admitted the Waveform Ribbon WR-00 reference/projection preflight on 28 October alongside the
 then-remaining §2/§3 gates. This preparation introduces no production registration and does not bypass shared primitives.
 
-1. **§3 Guided-setup stills and bounded source cleanup**: the last work before the next mode (§2 fixes and
-   Settings/UX closed 2026-10-31).
-   §5 is a watchlist observed during normal use, not a task queue.
-2. **§6 Shared 3D architecture**: one step that builds the reusable 3D primitives, each proven on its own harness.
-3. **§7 Visualizer modes**, one at a time, in order: **Waveform Ribbon → Reactive Liquid / Melt Pool → Concrete Rain →
+§2 (fixes, Settings/UX) and §3 (guided-setup stills, bounded cleanup) closed 2026-10-31. §5 is a watchlist
+observed during normal use, not a task queue.
+
+1. **§6 Shared 3D architecture**: one step that builds the reusable 3D primitives, each proven on its own harness.
+2. **§7 Visualizer modes**, one at a time, in order: **Waveform Ribbon → Reactive Liquid / Melt Pool → Concrete Rain →
    Usu Moonscape**. Each is built lab-first (§7.0).
 
 **Accepted baseline (do not reopen as general work):** original Bubble, **Extruded Bubble (closed 2026-10-25)**, Neon
@@ -34,17 +34,10 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 
 **Retired section IDs.** §4/§4A/§4B, G00–G33, EB-A…EB-S and EB-R25…EB-R43 (Extruded Bubble recovery) were retired
 when Extruded Bubble closed; documents citing them refer to that history: `git show 3c6cf7d8:Current_Plan.md` and
-`Docs/Reference/Extruded_Bubble/Investigation.md`. Stable IDs kept below: §5 (including R38); SC1 closed 2026-10-31. §2 retired 2026-10-31 (§2A with the EB follow-up; §2B's
-last physical-validation items moved to §5); RM, SC4, §4C and R41 closed earlier (source control).
-
-## 3. Guided-setup stills and bounded source cleanup (at a stable checkpoint)
-
-`Docs/Reference/Guided_Setup.md` owns still-image consumers and authoring. Animated publication contracts remain
-in `Docs/Reference/Release_Media.md` for explicit future requests.
-
-- [ ] **Guided-setup still images:** audit the actual guided-setup image consumers and keep their stills current;
-  generate only missing/stale stills through their existing Foundry/operator-sheet authorities and inspect the results.
-  Animated catalogues/showcases are deferred until explicitly requested; no automatic maintenance obligation.
+`Docs/Reference/Extruded_Bubble/Investigation.md`. Stable IDs kept below: §5 (including R38). §2 and §3 retired 2026-10-31 (§2A with the EB follow-up; §2B's
+last physical-validation items moved to §5; SC1 and the guided-setup stills audit landed); RM, SC4, §4C and R41
+closed earlier (source control). Guided-setup still authoring lives in `Docs/Reference/Guided_Setup.md`; animated
+publication in `Docs/Reference/Release_Media.md` (explicit requests only).
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 

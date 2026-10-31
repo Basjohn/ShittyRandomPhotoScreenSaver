@@ -197,6 +197,16 @@ run by onboarding.
   24 MiB on 2026-10-10: each transition strip adds about 1 MB and the planned T5-T10 transitions must fit); a rebuild
   removes generated files the new set no longer contains.
 
+**Stills audit, 2026-10-31.** Consumers: `widget_<family>.png` (Widgets page), `visualizer_<mode>.png` (every
+registered mode is offered; none missing or orphaned), the manifest's 28 transition strips plus
+`transition_source/destination.png`, and `context_menu_edit.png` (Ready page). Fresh foundry renders matched every
+transition strip and `widget_clocks.png` byte-for-byte in effect (mean difference 0.00); the context-menu capture
+still shows the menu's current Settings / Edit Widget Layout rows. The four rendered mode previews were stale against
+their modes' current look and were regenerated: Extruded Bubble (Ember Drift after the recovery), Extruded Spectrum
+(current first preset), Oscilloscope (trace under the card border) and Shockwave Grid (current terrain). Sheet-cut
+previews (other widgets; Spectrum, Sine Wave, Bubble, Dev Curve, Sphere) follow the operator's unchanged sheets and
+were left as they are; refreshing them needs new operator screenshots.
+
 The build resource prerequisite checks the preview sources and operator-provided `ui/assets/onboarding/source/SRPSSWitch.png`,
 then regenerates the binary `ui/resources/onboarding_assets.rcc` pack when stale. Runtime registers that pack through
 `QResource` only when Guided Setup explicitly requests an asset; its existing `:/srpss/onboarding/...` identities do
