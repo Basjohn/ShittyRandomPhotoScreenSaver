@@ -111,6 +111,17 @@ These are approximately 640 × 709 and 638 × 709, **not 16:9**. Do not squash e
 The overall board includes headings, annotation boxes and a side legend, which are not scene pixels. Confirm exact
 crop boundaries at reference lock, retain separate masks for text/arrows, and preserve unmodified originals.
 
+**Annotation masks (verified by overlay on the extracted cards, 31 October).** Crop-local pixels, right/bottom
+exclusive, deliberately padded; they cover title panels, callout boxes, leader lines and their end dots.
+Low: `(10,10,300,85)`. High: `(10,10,385,85)`, `(400,74,582,131)`, `(405,125,420,180)`, `(36,189,229,244)`,
+`(165,238,195,300)`, `(24,459,219,516)`, `(130,395,165,465)`, `(420,592,584,650)`, `(398,582,416,598)`.
+
+**Segmentation finding.** Neither saturation/hue thresholds nor high-pass filament detail isolates the ribbon
+bodies. The high panel's bloom haze is as saturated and textured as the ribbons, and the low panel's light-column
+halos pass both tests. Body width, path extrema and envelope are therefore hand-traced at sampled columns on
+gridded cards and labelled as estimates. Automatic statistics are kept for colour, luminance and clipped area
+inside fixed ROIs, where no segmentation is needed.
+
 Record measurements in coordinates normalized within each scene crop, with native-pixel values alongside them:
 
 | ROI/card | Initial source-pixel guide | Required comparison |
