@@ -52,7 +52,7 @@ CPU XY plots, not GPU/scene fidelity evidence. Output directories are never sile
 
 WR-01b CPU width frames and station construction are implemented in `core/ribbon_frames.py`; see below.
 WR-02a now supplies an independent oriented GPU strip prototype; see the admitted scope below.
-Production-efficient packet construction, broader GPU coverage, OIT/defocus and full cost acceptance remain open. Scene composition, real audio, reflection and artistic acceptance remain later gates.
+`core/ribbon_ring.py` is the incremental per-tick producer (below). Broader GPU coverage, OIT/defocus and full cost acceptance remain open. Scene composition, real audio, reflection and artistic acceptance remain later gates.
 
 ## Width frames, stations and continuation (WR-01b)
 
@@ -154,11 +154,34 @@ measurement additionally includes fixture/sample creation. Thus the approximatel
 particular all-history preparation route, not software rasterization, GPU draw time, or an existing app regression.
 No application runtime mode calls it. The risk would arise only if a production mode rebuilt this route every tick.
 
-Next work must separate the test oracle from the actual changing-input producer. Preserve the oracle as an
-independent correctness bar; do not make optimizing its standalone speed the objective. Measure signal/history
-updates, frame preparation, packing, upload and GPU draw separately. Consider retaining unchanged frames and
-updating affected knots, or GPU frame generation only where it removes measured work. Any retained state belongs
-to the existing logical owner, with epoch/eviction/changed-input proof; no second cache authority or clock.
+### Incremental producer (WR-02 input path, landed)
+
+`core/ribbon_ring.py:RibbonRing` is the per-tick producer; the stateless route stays the oracle. It keeps the
+packet ABI as one persistent float32 staging array per ribbon and addresses knots as a ring: chronological knot
+`i` lives in slot `(start+i)%capacity`, with `start` in `extra.y` and `capacity` in `extra.z` (a stateless
+packet writes start 0, capacity 256). Admitting a knot writes one 64-byte record per ribbon; nothing retained is
+rewritten, so a published packet is just `tobytes()` of the staging array, cached until the next change.
+
+- **One lattice:** all ribbons of a ring share one coordinate per knot, one cursor and one epoch. Independent
+  per-trail lattices are separate rings. The consuming logical owner calls `append`/`packet` from its own tick.
+- **Frames:** each knot's untwisted base is transported along the chord into it with the oracle's
+  minimal-rotation formula (the first knot uses the forward chord). The shader already re-projects the
+  interpolated base onto the actual spline tangent, so chord transport is all it needs.
+- **Breaks:** a knot after a start, `clear()` or reversal (chord cosine <= -1+1e-6) is pending (invalid) until
+  the next chord seeds it from the seed side. It is then marked as a strip start (`q.w`). The shader draws no
+  interval into a strip start and uses no guard knot across one, so a reseed never bridges or flips roll.
+  A repeated point keeps its frame. A seed parallel to the chord keeps the knot pending.
+- **Local precision:** float64 truth (coordinate, positions, twist) stays on the CPU. Float32 locals rebase in
+  bulk only when the newest knot drifts past 16 s, 64 world units or 16 pi from its origin; retained spans must
+  fit 64 s, 128 world units and 64 pi, so every local is within float32 rounding of 3.9e-6 world units.
+  Knot step >= 1e-4 s and half-width >= 1e-4 keep ordering and edges resolvable. All admission (finite, bounded,
+  increasing, spans) happens before mutation: a rejected knot leaves the ring and its cached packet untouched.
+
+Proof (`tests/test_ribbon_ring.py`, `tests/test_ribbon_gpu.py`): ring fields match the oracle's frames, positions,
+widths, strand phase and twist through eviction and all three rebases. A wrapped ring renders pixel-identically
+to the oracle packet of the same window (negative control: forcing `start` to 0 changes 1,799 pixels). A
+strip-start flag removes exactly the joining interval. Admitted knots are byte-unchanged by later appends below
+a rebase. Rejected knots leave everything untouched.
 
 ### Native proof and cost boundary
 
@@ -173,8 +196,12 @@ includes upload/bindings/fences but excludes readback/wait. Full stateless CPU f
 measured median 1.52ms for one path and 89.49ms at the cap (three build samples, p90 96.40ms). **This rebuild is
 not admitted as a per-frame production path.** Cheap GPU draw is not a whole-mode cost or fidelity pass.
 
-Next gate: an actual changing-input preparation path separated from the CPU test oracle, with measured
-cost and continuity/epoch/eviction proof. The implementation choice is measured incremental reuse or justified
-GPU work, not a requirement to accelerate the standalone oracle. After
-that, broaden native curved-frame/normal/precision/lifecycle proof, then OIT/HDR, camera-facing GPU behavior,
-AA/defocus and target composition. No GL scene likeness, music or full performance acceptance exists yet.
+Incremental input path, same machine and probe, 8 ribbons x 256 knots full and evicting, 2,000 knots
+(receipt `.artifacts/evidence/waveform_ribbon/wr02_incremental_ring/receipt.json`): append median 0.17 ms
+(p90 0.25-0.30, max 0.65 ms at a rebase), publish 0.04 ms, CPU submit 0.18-0.19 ms, GPU draw 0.018 ms.
+The stateless rebuild of the same packet measured 102.6 ms. Append and publish are per admitted knot for
+all ribbons, not per frame: a tick that admits no knot reuses the cached packet. GPU frame generation would
+remove no measured work, so it is not pursued.
+
+Next gate: broaden native curved-frame/normal/precision/lifecycle proof, then OIT/HDR, camera-facing GPU
+behaviour, AA/defocus and target composition. No GL scene likeness, music or full performance acceptance exists yet.

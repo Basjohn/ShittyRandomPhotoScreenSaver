@@ -23,8 +23,9 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
 - [x] WR-01b CPU transported/camera-facing frames, gap/cusp policy and width/UV stations; proposed GPU budget recorded.
 - [x] WR-02a independent oriented GPU prototype: bounded packet/ring, both projection matrices, solid geometry,
   native bounds/gaps/plane-normal/phase-rebase/depth/context/state checks and 90-frame draw timing.
-- [ ] WR-02 input-path gate: separate the CPU test oracle from actual changing-input preparation; measure each stage
-  and choose incremental reuse or justified GPU work. There is no software rendering backend to optimize.
+- [x] WR-02 input-path gate: `core/ribbon_ring.py` admits one knot per ribbon in O(ribbons) work into a
+  ring-addressed staging packet (0.17 ms append + 0.04 ms publish at 8 x 256, against 102.6 ms for the
+  stateless rebuild); the stateless route stays the oracle. Contract and proof: `Ribbon_Path.md`.
 - [ ] WR-02 remaining: curved/edge/near-plane/normal precision, OIT/HDR/camera-facing GPU/AA/defocus and full lifecycle/cost proof.
 - [ ] WR-03 onward: actual scene blockout, material/reflection/particle work, music, production and visual acceptance.
 

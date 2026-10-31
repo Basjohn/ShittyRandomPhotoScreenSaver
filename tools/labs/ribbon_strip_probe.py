@@ -22,7 +22,9 @@ import numpy as np
 from PIL import Image
 from PySide6.QtWidgets import QApplication
 from core.ribbon_geometry import PathSample
-from core.ribbon_packet import pack_ribbons
+from core.ribbon_geometry import MAX_PATH_SAMPLES
+from core.ribbon_packet import MAX_RIBBONS, pack_ribbons
+from core.ribbon_ring import RibbonRing
 from core.settings.framed_camera import orthographic_matrix, perspective_matrix
 from rendering.quick.scene3d.ribbon import RibbonPrimitive
 from tools.labs.render_target import OffscreenRenderTarget
@@ -40,6 +42,59 @@ def fixture(count, knots):
             tangents.append((1., math.cos(phase), -.3*math.sin(phase)))
         result.append((samples, tangents, None))
     return pack_ribbons(result)
+
+
+def ring_knot(ribbons, i):
+    """Lattice step i of `fixture`'s shapes, continued indefinitely (knots stay where they were admitted)."""
+    t = i*6/255
+    positions = [(t-3, math.sin(t+r*.4)+(r-(ribbons-1)/2)*.4, -10+.3*math.cos(t+r*.4)) for r in range(ribbons)]
+    return 1e9+i/60, positions, .18, [1e5+t*.4 for _ in range(ribbons)]
+
+
+def scrolled(mvp, x):
+    """Uniform scroll in the MVP, as a flowing consumer draws: newest knot stays at the fixture's right edge."""
+    moved = list(mvp)
+    moved[12] -= moved[0]*(x-3)
+    return moved
+
+
+def stats(values):
+    return dict(median=float(np.median(values)), p90=float(np.percentile(values, 90)), max=float(np.max(values)))
+
+
+def ring_costs(primitive, target, query, mvp, frames):
+    """Separate the per-tick producer stages from upload/draw at the cap, steady state (full, evicting)."""
+    ring = RibbonRing(MAX_RIBBONS)
+    i = 0
+    for i in range(MAX_PATH_SAMPLES + 64):
+        ring.append(*ring_knot(MAX_RIBBONS, i))
+    append, publish = [], []
+    for _ in range(2000):  # includes eviction every knot and the rebases a long run meets
+        i += 1
+        knot = ring_knot(MAX_RIBBONS, i)
+        start = time.perf_counter()
+        ring.append(*knot)
+        middle = time.perf_counter()
+        ring.packet()
+        append.append((middle-start)*1000)
+        publish.append((time.perf_counter()-middle)*1000)
+    gpu, cpu = [], []
+    for _ in range(frames):
+        i += 1
+        knot = ring_knot(MAX_RIBBONS, i)
+        ring.append(*knot)
+        packet = ring.packet()
+        target.bind()
+        start = time.perf_counter()
+        primitive.draw(packet, scrolled(mvp, knot[1][0][0]), timing_query=query)
+        cpu.append((time.perf_counter()-start)*1000)
+        gl.glFlush()
+        elapsed = ctypes.c_uint64()
+        glGetQueryObjectui64v(query, gl.GL_QUERY_RESULT, ctypes.byref(elapsed))
+        gpu.append(elapsed.value/1e6)
+    return dict(ribbons=MAX_RIBBONS, knots=len(ring), vertices_per_instance=packet.vertices,
+                packet_bytes=len(packet.payload), append_ms=stats(append), publish_ms=stats(publish),
+                cpu_submit_ms=stats(cpu), gpu_draw_ms=stats(gpu)), target.read_rgba()
 
 
 def run(output, frames):
@@ -90,12 +145,21 @@ def run(output, frames):
                     packet_bytes=len(packet.payload), stream_bytes=primitive.stream_bytes,
                     gpu_draw_ms=dict(median=float(np.median(gpu)), p90=float(np.percentile(gpu, 90))),
                     cpu_submit_ms=dict(median=float(np.median(cpu)), p90=float(np.percentile(cpu, 90))))
-        receipt = dict(stage='WR-02a oriented geometry only', driver=driver, frames=frames, viewport=[640, 384],
-            results=results, full_reference_packet_build_ms=builds, dynamic_cpu_budget_accepted=False, oit=False, defocus=False, scene_likeness_accepted=False,
-            timing='TIME_ELAPSED around draw only; CPU includes bindings/upload/fences, excludes readback/wait/packing',
+        incremental = {}
+        for projection in ('orthographic', 'perspective'):
+            mvp = orthographic_matrix((5, 3), .1, 100) if projection == 'orthographic' else perspective_matrix((.5, .3), .1, 100)
+            incremental[projection], pixels = ring_costs(primitive, target, query, mvp, frames)
+            if not pixels[:, :, 3].any():
+                raise RuntimeError('Incremental ring produced no coverage')
+            Image.fromarray(pixels).save(output/f'ring_maximum_{projection}.png')
+        receipt = dict(stage='WR-02 oriented geometry and incremental input path', driver=driver, frames=frames, viewport=[640, 384],
+            results=results, full_reference_packet_build_ms=builds, incremental_ring=incremental,
+            dynamic_cpu_budget_accepted=False, oit=False, defocus=False, scene_likeness_accepted=False,
+            timing='TIME_ELAPSED around draw only; CPU submit includes bindings/upload/fences, excludes readback/wait/packing. '
+                   'Ring append/publish are per admitted knot across all ribbons, measured full and evicting',
             producer_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
         receipt['implementation_sha256'] = {name: hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in (
-            'core/ribbon_packet.py', 'core/ribbon_frames.py', 'rendering/gl_programs/ribbon.py',
+            'core/ribbon_packet.py', 'core/ribbon_ring.py', 'core/ribbon_frames.py', 'rendering/gl_programs/ribbon.py',
             'rendering/quick/scene3d/ribbon.py', 'rendering/quick/scene3d/stream.py')}
         receipt['source_revision'] = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
         receipt['tracked_diff_sha256'] = hashlib.sha256(subprocess.check_output(['git', 'diff', '--binary', 'HEAD'], cwd=ROOT)).hexdigest()

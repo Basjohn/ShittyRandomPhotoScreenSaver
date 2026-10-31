@@ -212,3 +212,61 @@ def test_context_reactivation_recomputes_larger_alignment_budget(qt_app, monkeyp
             primitive.release()
         first.close()
         second.close()
+
+
+def test_native_wrapped_ring_renders_like_the_stateless_oracle(qt_app):
+    import math
+    from core.ribbon_frames import strip_path
+    from core.ribbon_ring import RibbonRing
+    # Dyadic positions keep both packets' float32 locals exact, so any pixel difference is ring addressing.
+    points = [(i/16 - 2, round(math.sin(i*.6)*32)/64, -10.) for i in range(40)]
+    ring = RibbonRing(1, capacity=16, subdivisions=4)
+    for i, point in enumerate(points):
+        ring.append(i/8, [point], .125)
+    tangents = [np.subtract(points[1], points[0])] + [np.subtract(b, a) for a, b in zip(points, points[1:])]
+    samples = [PathSample(i/8, p, .125) for i, p in enumerate(points)]
+    anchor = strip_path(samples, tangents)[-17].frame
+    oracle = pack_ribbons([(samples[-16:], tangents[-16:], anchor)], subdivisions=4)
+    packet = ring.packet()
+    assert np.frombuffer(packet.payload, np.float32)[4+1] != 0  # ring start is mid-buffer
+    target = OffscreenRenderTarget(320, 240)
+    primitive = RibbonPrimitive()
+    mvp = orthographic_matrix((2, 1.5), .1, 100)
+    try:
+        images = []
+        for candidate in (oracle, packet):
+            target.bind()
+            primitive.draw(candidate, mvp, diagnostic=1)
+            images.append(target.read_rgba())
+        assert images[0][:, :, 3].any()
+        np.testing.assert_array_equal(images[0], images[1])
+    finally:
+        primitive.release()
+        target.close()
+
+
+def test_native_strip_start_flag_cuts_the_joining_interval(qt_app):
+    from core.ribbon_packet import RibbonPacket
+    from core.ribbon_ring import HEADER_ROWS, RibbonRing
+    ring = RibbonRing(1, capacity=8)
+    for i in range(6):
+        ring.append(i, [(i*.5 - 1.25, 0., -10.)], .2)
+    packet = ring.packet()
+    data = np.frombuffer(packet.payload, np.float32).copy().reshape(-1, 4)
+    data[HEADER_ROWS + 4*3 + 1, 3] = 1  # knot 3 starts a new strip
+    cut = RibbonPacket(data.tobytes(), packet.instances, packet.vertices, packet.world_origin)
+    target = OffscreenRenderTarget(160, 120)
+    primitive = RibbonPrimitive()
+    mvp = orthographic_matrix((2, 1.5), .1, 100)
+    try:
+        rows = []
+        for candidate in (packet, cut):
+            target.bind()
+            primitive.draw(candidate, mvp)
+            rows.append(target.read_rgba()[60, :, 3] > 0)
+        # Interval knot2 -> knot3 spans x in [-0.25, 0.25]: pixels 70..89 at 40 px per unit.
+        assert rows[0][72:88].all() and not rows[1][72:88].any()
+        assert rows[1][40:68].all() and rows[1][92:120].all()
+    finally:
+        primitive.release()
+        target.close()

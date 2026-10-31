@@ -66,6 +66,7 @@ def pack_ribbons(paths, *, subdivisions=8, period=1., colour=(.1, .7, .9, 1.)):
         data[0] = (len(samples), subdivisions, phase, period)
         twist_origin = float(samples[0].twist)
         data[1, 0] = twist_origin % (2*math.pi)
+        data[1, 2] = MAX_PATH_SAMPLES  # ring capacity; start (data[1, 1]) stays 0: chronological order
         data[2] = colour
         data[3] = colour
         for i, (sample, station) in enumerate(zip(samples, stations)):
