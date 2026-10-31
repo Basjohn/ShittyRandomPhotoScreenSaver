@@ -4,6 +4,17 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
+# The NVIDIA driver swaps in re-optimized variants of already-used programs a
+# few draws after compiling them, and how many draws depends on how often the
+# same sources were compiled earlier in the process (other GPU test files). A
+# swap moves a handful of pixels by one 8-bit step, so repeat renders of one
+# snapshot are compared within that step; stale near light is far larger.
+_DRIVER_STEP = 1
+
+
+def _same(a, b) -> bool:
+    return int(np.abs(a - b).max()) <= _DRIVER_STEP
+
 
 @pytest.mark.qt
 def test_empty_ordinary_population_skips_near_and_cannot_replay_stale_bokeh(qt_app, monkeypatch):
@@ -37,7 +48,7 @@ def test_empty_ordinary_population_skips_near_and_cannot_replay_stale_bokeh(qt_a
         capture.render(host, snapshot)
         capture.render(host, snapshot)
         populated = capture.render(host, snapshot)
-        assert np.array_equal(populated, capture.render(host, snapshot))
+        assert _same(populated, capture.render(host, snapshot))
         resources = (renderer._near._fbo, renderer._near._colour, renderer._near._circle)
         assert all(resources)
         previous = int(gl.glGetIntegerv(gl.GL_TEXTURE_BINDING_2D))
@@ -57,12 +68,12 @@ def test_empty_ordinary_population_skips_near_and_cannot_replay_stale_bokeh(qt_a
         assert resources == (renderer._near._fbo, renderer._near._colour, renderer._near._circle)
         # A second retained renderer has no prior near light to accidentally replay.
         clean_empty = capture.render(fresh, empty)
-        assert np.array_equal(cleared, clean_empty)
+        assert _same(cleared, clean_empty)
         returned = capture.render(host, snapshot)
         assert near_calls == ['begin', 'end', 'composite']
         assert resources == (renderer._near._fbo, renderer._near._colour, renderer._near._circle)
-        assert np.array_equal(populated, returned)
-        assert not np.array_equal(populated, cleared)
+        assert _same(populated, returned)
+        assert not _same(populated, cleared)
     finally:
         assert capture.capture.context.makeCurrent(capture.capture.surface)
         fresh.release_resources()
