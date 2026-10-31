@@ -12,7 +12,9 @@ whose head and tail sit at fixed world x and fade by age. Two renders per state 
   floor contact are measured from its pixels against the WR-00 target table.
 - ``lit``: ribbon material, emissive pillars, mist and bloom through the Visualizer-shaped scope.
 
-Missing until their steps land: floor material and reflection (S3D-5, PBR pack), particles (S3D-2).
+The floor is the operator's matched PBR pack (albedo, normal, roughness) with the shared planar reflection
+(S3D-5): pillars and ribbon light drawn through the mirrored camera, sampled at the floor's own screen position,
+streaked and blurred by roughness and perturbed by the normal map. Missing until their step lands: particles (S3D-2).
 
     .venv\\Scripts\\python.exe tools/labs/waveform_ribbon_lab.py --output .artifacts/evidence/waveform_ribbon/<new-run>
         [--cards .artifacts/evidence/waveform_ribbon/wr00_reference_projection]
@@ -20,6 +22,8 @@ Missing until their steps land: floor material and reflection (S3D-5, PBR pack),
 from __future__ import annotations
 
 import argparse
+import io
+import zipfile
 from dataclasses import asdict, dataclass, field
 import hashlib
 import json
@@ -45,6 +49,8 @@ from PIL import Image, ImageDraw
 from core.ribbon_ring import RibbonRing
 from core.settings import framed_camera as fc
 from rendering.gl_programs.mist import MIST_GLSL, mist_uniforms
+from rendering.gl_programs.reflection import PLANAR_REFLECTION_GLSL, mirror_view
+from rendering.quick.scene3d.reflection import PlanarReflection
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.ribbon import RibbonMaterial, RibbonPrimitive
 from rendering.quick.scene3d.target import SceneTarget
@@ -81,15 +87,28 @@ class Hall:
     floor_x: float = 70.
     floor_z: tuple = (-60., 30.)
     # Pillar rows (depth, mean spacing, seed), authored in world units; spacing jitters deterministically.
-    rows: tuple = ((-2.3, 1.7, 1), (-6.5, 2.6, 2), (-12., 3.4, 3), (-19., 4.2, 4))
+    rows: tuple = ((-2.3, 3.2, 1), (-6.5, 4.4, 2), (-12., 5.6, 3), (-19., 6.8, 4))
     pillar_half: float = .08
     pillar_height: float = 14.
-    pillar_light: float = 2.2
+    pillar_light: float = 1.5
     pillar_colours: tuple = ((.35, .7, 1.), (.7, .55, 1.), (.4, .75, 1.), (.55, .6, 1.), (.4, .8, 1.), (.6, .7, 1.))
     floor_colour: tuple = (.018, .024, .045)
     backdrop: tuple = (.010, .013, .030)
-    mist: dict = field(default_factory=lambda: mist_uniforms(radii_xz=(26., 3.2), falloff=.55, floor_thickening=1.2,
-                                                             thickening_height=1.2))
+    mist: dict = field(default_factory=lambda: mist_uniforms(centre_xz=(0., 6.), radii_xz=(30., 9.), falloff=.45, floor_thickening=1.2,
+                                                             thickening_height=1.2, low_glow=5.))
+
+
+@dataclass(frozen=True)
+class Floor:
+    pack: str = 'assets/textures/Dark_Concrete_PBR_Matched_Set_DarkGrey.zip'  # operator's local matched set
+    tile: float = 3.5               # world units per texture repeat
+    ambient: tuple = (.24, .27, .40)  # cool hall light on the bare concrete
+    reflection: float = 2.6         # wet film: reflection strength before Fresnel
+    f0: float = .04
+    normal_shift: float = .012      # screen-uv shift of the reflection lookup per unit normal tilt
+    streak: float = .22             # vertical reflection streak (uv) at roughness 1
+    lod: tuple = (.5, 4.)           # reflection mip at roughness 0 and 1 (half-resolution target)
+    resolution: float = .5          # reflection target size relative to the view
 
 
 @dataclass(frozen=True)
@@ -115,6 +134,7 @@ STATES = {  # labelled synthetic controls sized from the WR-00 target table; not
 @dataclass(frozen=True)
 class Recipe:
     hall: Hall = field(default_factory=Hall)
+    floor: Floor = field(default_factory=Floor)
     flow: Flow = field(default_factory=Flow)
     material: RibbonMaterial = field(default_factory=RibbonMaterial)
     bloom: float = .55
@@ -151,13 +171,51 @@ void main() {
         float height=vLocal.y, seed=vLocal.z;
         float h1=1.6+2.6*fract(sin(seed*91.7)*4375.85), h2=3.8+3.0*fract(sin(seed*37.1)*9123.17);
         float segments=exp(-pow((height-h1)/0.45,2.0))+0.7*exp(-pow((height-h2)/0.7,2.0));
-        float profile=0.07+segments+1.4*exp(-height*2.4);
+        float profile=0.025+segments+1.4*exp(-height*2.4);
         light=mix(colour,vec3(1.0),0.35*core*core)*vColour.a*core*profile*smoothstep(0.0,0.05,height);
         colour=vec3(0.0);
     }
     float clear=mistTransmittance(vWorldPos);
-    vec3 shaded=mix(uBackdrop,colour,clear)+light*clear;
+    vec3 shaded=mix(mistColour(uBackdrop,vWorldPos),colour,clear)+light*clear;
     FragColor=vec4(shaded,1.0);
+    Emission=vec4(light*clear,dot(light*clear,vec3(0.2126,0.7152,0.0722)));
+}
+"""
+FLOOR_VERTEX = """#version 460 core
+layout(location=0) in vec3 aPosition;
+uniform mat4 uMvp;
+out vec3 vWorldPos;
+void main() { vWorldPos=aPosition; gl_Position=uMvp*vec4(aPosition,1.0); }
+"""
+FLOOR_FRAGMENT = """#version 460 core
+in vec3 vWorldPos;
+uniform sampler2D uAlbedo;
+uniform sampler2D uNormal;
+uniform sampler2D uRoughness;
+uniform vec2 uViewport;
+uniform vec3 uBackdrop;
+uniform vec3 uAmbient;
+uniform vec4 uFloor;        // tile, reflection strength, f0, normal shift
+uniform vec3 uEye;
+uniform vec3 uForward;
+uniform int uOrthographic;
+layout(location=0) out vec4 FragColor;
+layout(location=1) out vec4 Emission;
+""" + MIST_GLSL + PLANAR_REFLECTION_GLSL + """
+void main() {
+    vec2 uv=vWorldPos.xz/uFloor.x;
+    vec3 albedo=texture(uAlbedo,uv).rgb;                 // sRGB texture: already linear here
+    vec3 tangent=texture(uNormal,uv).rgb*2.0-1.0;         // OpenGL convention: +y up the texture (world -z)
+    vec3 normal=normalize(vec3(tangent.x,tangent.z,-tangent.y));
+    float roughness=texture(uRoughness,uv).r;
+    vec3 view=uOrthographic==1?normalize(uForward):normalize(vWorldPos-uEye);
+    float cosine=clamp(abs(dot(normal,view)),0.0,1.0);
+    float fresnel=uFloor.z+(1.0-uFloor.z)*pow(1.0-cosine,5.0);
+    vec3 reflected=planarReflection(gl_FragCoord.xy/uViewport,tangent.xy*uFloor.w,roughness);
+    vec3 light=reflected*fresnel*uFloor.y*(1.0-0.45*roughness);
+    float clear=mistTransmittance(vWorldPos);
+    vec3 colour=mix(mistColour(uBackdrop,vWorldPos),albedo*uAmbient,clear)+light*clear;
+    FragColor=vec4(colour,1.0);
     Emission=vec4(light*clear,dot(light*clear,vec3(0.2126,0.7152,0.0722)));
 }
 """
@@ -196,8 +254,40 @@ def pillar_positions(hall: Hall):
     return out
 
 
-def hall_vertices(hall: Hall, flat: bool) -> bytes:
-    """Floor and pillar prisms as one static triangle list: position, colour+emission, local."""
+def floor_vertices(hall: Hall) -> bytes:
+    (z0, z1), fx = hall.floor_z, hall.floor_x
+    corners = ((-fx, 0., z0), (fx, 0., z0), (fx, 0., z1), (-fx, 0., z0), (fx, 0., z1), (-fx, 0., z1))
+    return b''.join(struct.pack('3f', *c) for c in corners)
+
+
+def load_floor_textures(floor: Floor) -> dict:
+    """The matched pack's maps as mipmapped, repeating GL textures (albedo sRGB, normal and roughness linear)."""
+    from PIL import Image as PILImage
+    textures = {}
+    with zipfile.ZipFile(ROOT/floor.pack) as pack:
+        members = {name.rsplit('_', 1)[-1].split('.')[0].lower(): name for name in pack.namelist() if name.endswith('.png')}
+        for key, member, internal in (('albedo', members['albedo'], gl.GL_SRGB8_ALPHA8),
+                                      ('normal', members['opengl'], gl.GL_RGBA8),
+                                      ('roughness', members['roughness'], gl.GL_RGBA8)):
+            image = PILImage.open(io.BytesIO(pack.read(member))).convert('RGBA')
+            data = np.asarray(image, np.uint8)
+            name = (gl.GLuint*1)()
+            gl.glCreateTextures(gl.GL_TEXTURE_2D, 1, name)
+            texture = int(name[0])
+            gl.glTextureStorage2D(texture, max(image.size).bit_length(), internal, *image.size)
+            gl.glTextureSubImage2D(texture, 0, 0, 0, *image.size, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, data)
+            gl.glGenerateTextureMipmap(texture)
+            gl.glTextureParameteri(texture, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR_MIPMAP_LINEAR)
+            gl.glTextureParameteri(texture, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
+            gl.glTextureParameterf(texture, 0x84FE, 8.)  # GL_TEXTURE_MAX_ANISOTROPY: the floor is seen at a glancing angle
+            for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
+                gl.glTextureParameteri(texture, wrap, gl.GL_REPEAT)
+            textures[key] = texture
+    return textures
+
+
+def hall_vertices(hall: Hall, flat: bool, *, include_floor: bool = True) -> bytes:
+    """Pillar prisms (and the flat floor) as one static triangle list: position, colour+emission, local."""
     rows = []
 
     def quad(corners, colour, emission, locals_):
@@ -205,7 +295,8 @@ def hall_vertices(hall: Hall, flat: bool) -> bytes:
             rows.append((*corners[i], *colour, emission, *locals_[i]))
     zero = ((0., 0., 0.),)*4
     (z0, z1), fx = hall.floor_z, hall.floor_x
-    quad(((-fx, 0., z0), (fx, 0., z0), (fx, 0., z1), (-fx, 0., z1)), FLAT['floor'] if flat else hall.floor_colour, 0., zero)
+    if include_floor:
+        quad(((-fx, 0., z0), (fx, 0., z0), (fx, 0., z1), (-fx, 0., z1)), FLAT['floor'] if flat else hall.floor_colour, 0., zero)
     h, w = hall.pillar_height, hall.pillar_half
     for x, z, row, seed in pillar_positions(hall):
         colour = (FLAT['front_pillar'] if row == 0 else FLAT['pillar']) if flat else \
@@ -250,9 +341,15 @@ class Lab:
         self.recipe, self.size = recipe, size
         self.target = OffscreenRenderTarget(*size)
         self.resources, self.scene, self.ribbons = MeshResources('waveform lab'), SceneTarget('waveform lab'), RibbonPrimitive()
+        self.reflection = PlanarReflection('waveform lab floor')
+        self.textures = {}
 
     def close(self):
         with self.target.current():
+            if self.textures:
+                gl.glDeleteTextures(len(self.textures), list(self.textures.values()))
+                self.textures = {}
+            self.reflection.release()
             self.ribbons.release()
             self.scene.release()
             self.resources.release_resources()
@@ -262,21 +359,27 @@ class Lab:
         recipe, (width, height) = self.recipe, self.size
         hall, flow = recipe.hall, recipe.flow
         ring, now = fill_ring(recipe, state)
-        view, projection, _eye = camera(POSES[pose], width/height)
+        view, projection, eye = camera(POSES[pose], width/height)
         scroll = np.identity(4)
         scroll[0, 3] = flow.head_x - flow.speed*now  # the flow frame's knot at time t sits at head_x - speed*(now - t)
         hall_mvp = (projection @ view).flatten(order='F')
         ribbon_view = view @ scroll
         ribbon_mvp = tuple((projection @ ribbon_view).flatten(order='F'))
-        key = 'hall_flat' if flat else 'hall'
-        vao, count = self.resources.mesh(key, hall_vertices(hall, flat), (3, 4, 3))
+        key = 'hall_flat' if flat else 'pillars'
+        vao, count = self.resources.mesh(key, hall_vertices(hall, flat, include_floor=flat), (3, 4, 3))
         program = self.resources.program('hall', HALL_VERTEX, HALL_FRAGMENT)
         uniforms = self.resources.uniforms('hall', ('uMvp', 'uFlat', 'uBackdrop', 'uMist', 'uMistShape'), required=False)
+        orthographic = POSES[pose].projection == 'Orthographic'
+        draw = dict(view=tuple(ribbon_view.flatten(order='F')), material=recipe.material, orthographic=orthographic,
+                    age_fade=(now, flow.fade_in, (ring.capacity - 1)/flow.knot_hz, flow.fade_out),
+                    mist=hall.mist, mist_frame=(scroll[0, 3], 0., 0.))
         card = SimpleNamespace(viewport=(0, 0, width, height), logical_size=(float(width), float(height)),
                                matrix_values=(2/width, 0, 0, 0, 0, -2/height, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1),
                                quad_vao=self.target.vao)
         packet = ring.packet()
         self.target.bind(clear=(0., 0., 0., 0.))
+        if not flat:
+            self._reflect(packet, projection, view, scroll, program, uniforms, vao, count, draw)
         with self.scene.scope(card, 4, self.resources, overlay=1.0, bloom=0. if flat else recipe.bloom,
                               oit=True, hdr=None if flat else recipe.exposure):
             gl.glViewport(0, 0, width, height)
@@ -295,11 +398,9 @@ class Lab:
                 gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
                 if flat:
                     self._flat_ribbons(packet, ribbon_mvp)
+                else:
+                    self._floor(hall_mvp, eye, view, orthographic, (width, height))
             if not flat:
-                draw = dict(view=tuple(ribbon_view.flatten(order='F')), material=recipe.material,
-                            orthographic=POSES[pose].projection == 'Orthographic',
-                            age_fade=(now, flow.fade_in, (ring.capacity - 1)/flow.knot_hz, flow.fade_out),
-                            mist=hall.mist, mist_frame=(scroll[0, 3], 0., 0.))
                 with self.scene.transparent_writes(card, self.resources):
                     self.ribbons.draw(packet, ribbon_mvp, shading='body', **draw)
                 with self.scene.emission_writes():
@@ -311,6 +412,65 @@ class Lab:
                     gl.glDepthMask(gl.GL_TRUE)
                     gl.glDisablei(gl.GL_BLEND, 0)
         return self.target.read_rgba()
+
+    def _reflect(self, packet, projection, view, scroll, program, uniforms, vao, count, draw):
+        """Pillars and ribbon light through the mirrored camera (the floor, the receiver, is not drawn)."""
+        floor, (width, height) = self.recipe.floor, self.size
+        mirrored = mirror_view(view, 0.)
+        self.reflection.begin(int(width*floor.resolution), int(height*floor.resolution))
+        try:
+            gl.glDepthFunc(gl.GL_LESS)
+            gl.glUseProgram(program)
+            gl.glUniformMatrix4fv(uniforms['uMvp'], 1, gl.GL_FALSE, np.asarray((projection @ mirrored).flatten(order='F'), np.float32))
+            gl.glUniform1i(uniforms['uFlat'], 0)
+            gl.glUniform3f(uniforms['uBackdrop'], 0., 0., 0.)  # mist dims reflected light toward no light
+            gl.glUniform4f(uniforms['uMist'], *self.recipe.hall.mist['uMist'])
+            gl.glUniform4f(uniforms['uMistShape'], *self.recipe.hall.mist['uMistShape'])
+            gl.glBindVertexArray(vao)
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
+            gl.glEnablei(gl.GL_BLEND, 0)
+            gl.glBlendEquationSeparatei(0, gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
+            gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ZERO, gl.GL_ONE)
+            gl.glDepthMask(gl.GL_FALSE)
+            reflected_view = mirrored @ scroll
+            self.ribbons.draw(packet, tuple((projection @ reflected_view).flatten(order='F')), shading='light',
+                              **{**draw, 'view': tuple(reflected_view.flatten(order='F'))})
+            gl.glDepthMask(gl.GL_TRUE)
+            gl.glDisablei(gl.GL_BLEND, 0)
+        finally:
+            self.reflection.end()
+
+    def _floor(self, mvp, eye, view, orthographic, size):
+        recipe = self.recipe
+        floor, hall = recipe.floor, recipe.hall
+        if not self.textures:
+            self.textures = load_floor_textures(floor)
+        vao, count = self.resources.mesh('floor', floor_vertices(hall), (3,))
+        program = self.resources.program('floor', FLOOR_VERTEX, FLOOR_FRAGMENT)
+        names = ('uMvp', 'uAlbedo', 'uNormal', 'uRoughness', 'uReflection', 'uReflectionLook', 'uViewport', 'uBackdrop',
+                 'uAmbient', 'uFloor', 'uEye', 'uForward', 'uOrthographic', 'uMist', 'uMistShape')
+        u = self.resources.uniforms('floor', names, required=False)
+        gl.glUseProgram(program)
+        gl.glUniformMatrix4fv(u['uMvp'], 1, gl.GL_FALSE, np.asarray(mvp, np.float32))
+        for unit, (name, texture) in enumerate((('uAlbedo', self.textures['albedo']), ('uNormal', self.textures['normal']),
+                                                ('uRoughness', self.textures['roughness']),
+                                                ('uReflection', self.reflection.texture))):
+            gl.glBindTextureUnit(unit, texture)
+            gl.glUniform1i(u[name], unit)
+        gl.glUniform4f(u['uReflectionLook'], floor.streak, floor.lod[0], floor.lod[1], 0.)
+        gl.glUniform2f(u['uViewport'], *size)
+        gl.glUniform3f(u['uBackdrop'], *hall.backdrop)
+        gl.glUniform3f(u['uAmbient'], *floor.ambient)
+        gl.glUniform4f(u['uFloor'], floor.tile, floor.reflection, floor.f0, floor.normal_shift)
+        gl.glUniform3f(u['uEye'], *eye)
+        gl.glUniform3f(u['uForward'], *(-view[2, :3]))
+        gl.glUniform1i(u['uOrthographic'], int(orthographic))
+        gl.glUniform4f(u['uMist'], *hall.mist['uMist'])
+        gl.glUniform4f(u['uMistShape'], *hall.mist['uMistShape'])
+        gl.glBindVertexArray(vao)
+        gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
+        for unit in range(4):
+            gl.glBindTextureUnit(unit, 0)
 
     def _flat_ribbons(self, packet, mvp):
         """Flat ribbon silhouettes in one known colour: rewrite every ribbon's colours in a copy of the packet."""
@@ -398,7 +558,7 @@ def run(output: Path, cards: Path | None) -> dict:
         for column, pose in enumerate(POSES):
             poses.paste(Image.open(output/f'wide_{state}_{pose}.png').convert('RGB').resize((640, 360)), (column*640, row*360))
     poses.save(output/'navigation_poses.png')
-    receipt = dict(stage='WR-03 world-first hall: floor, pillar rows, world mist, navigation poses; no floor material',
+    receipt = dict(stage='WR-05 world-first hall with PBR floor and planar reflection, world mist, navigation poses',
                    recipe=json.loads(json.dumps(asdict(recipe), default=str)), states=STATES,
                    poses={k: asdict(v) for k, v in POSES.items()}, landmarks=report,
                    producer_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
