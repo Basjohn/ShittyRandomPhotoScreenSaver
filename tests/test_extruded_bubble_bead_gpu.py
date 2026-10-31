@@ -275,3 +275,70 @@ void main(){vOpacity=1.0;beadInstance();results[gl_InstanceID]=aSphere;gl_Positi
         if buffers:gl.glDeleteBuffers(len(buffers),buffers)
         if program:gl.glDeleteProgram(program)
         target.close()
+
+
+@pytest.mark.qt
+def test_free_chain_population_band_on_gpu_matches_its_cpu_mirror(qt_app):
+    """The bead shader's population edge is chain_opacity (the renderer sizes the draw by its CPU mirror)."""
+    from OpenGL import GL as gl
+    from rendering.gl_programs.extruded_bubble_program import BEAD_VERTEX
+    from rendering.quick.render.gl_resources import compile_program
+    from tools.transition_contact_sheet import TransitionCapture
+    from widgets.spotify_visualizer.extruded_bubble_material_paths import chain_opacity
+    prefix = BEAD_VERTEX.split('void main() {\n    vOpacity = 1.0;\n')[0]
+    vertex = prefix + '''
+layout(std430, binding=6) buffer BeadResults { vec4 beadResults[]; };
+void main() {
+    vOpacity = 1.0;
+    beadInstance();
+    beadResults[gl_InstanceID] = vec4(aSphere.w, aSphere.z, vOpacity, aSphere.x);
+    gl_Position = vec4(0.0,0.0,0.0,1.0);
+}
+'''
+    target = TransitionCapture(64, 64)
+    program = buffer = 0
+    chains, per = 12, 16
+    try:
+        program = compile_program(vertex, '#version 460 core\nout vec4 colour;\nvoid main(){colour=vec4(0);}',
+                                  label='free-chain population band')
+        gl.glUseProgram(program)
+        names = np.empty(1, dtype='u4')
+        gl.glCreateBuffers(1, names)
+        buffer = int(names[0])
+        gl.glNamedBufferData(buffer, chains * per * 16, None, gl.GL_DYNAMIC_READ)
+        gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, 6, buffer)
+        for name, value in (('uBeadCount', chains * per), ('uBeadsPerChain', per), ('uSnowCount', 0), ('uFizzPer', 0),
+                            ('uWakeCount', 0)):
+            gl.glUniform1i(gl.glGetUniformLocation(program, name), value)
+        for name, value in (('uBeadTravel', .2), ('uBeadSize', 1.), ('uChainActivity', 1.), ('uParticleSpread', 1.)):
+            gl.glUniform1f(gl.glGetUniformLocation(program, name), value)
+        gl.glUniform3f(gl.glGetUniformLocation(program, 'uStreamWorld'), 0, 1, 0)
+        gl.glUniform3f(gl.glGetUniformLocation(program, 'uStreamAcross'), 1, 0, 0)
+        gl.glUniform3f(gl.glGetUniformLocation(program, 'uStreamDepth'), 0, 0, -1)
+        gl.glUniform3f(gl.glGetUniformLocation(program, 'uWorldHalf'), 18, 8, 18)
+        gl.glBindVertexArray(target.vao)
+        gl.glEnable(gl.GL_RASTERIZER_DISCARD)
+
+        def opacities(fill):
+            gl.glUniform1f(gl.glGetUniformLocation(program, 'uChainFill'), fill)
+            gl.glDrawArraysInstanced(gl.GL_POINTS, 0, 1, chains * per)
+            gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT | gl.GL_SHADER_STORAGE_BARRIER_BIT)
+            rows = np.empty((chains * per, 4), dtype='f4')
+            gl.glGetNamedBufferSubData(buffer, 0, rows.nbytes, rows)
+            return rows[:, 2].reshape(chains, per)
+
+        full = opacities(100.)
+        seen = full > 1e-3
+        assert seen.any(axis=1).all()  # every chain has visible beads to compare
+        for fill in (0., .4, 1., 1.6, 3.25, 5.5, 8.9):
+            expected = np.array([chain_opacity(fill, c) for c in range(chains)], dtype='f4')[:, None]
+            got = opacities(fill)
+            assert got[seen] == pytest.approx((full * expected)[seen], abs=1e-5)
+    finally:
+        gl.glDisable(gl.GL_RASTERIZER_DISCARD)
+        gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, 6, 0)
+        if buffer:
+            gl.glDeleteBuffers(1, [buffer])
+        if program:
+            gl.glDeleteProgram(program)
+        target.close()

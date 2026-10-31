@@ -3092,4 +3092,16 @@ Steady GPU for P7 at 1672x941: 4.2-4.5 ms median. Presets 1/2 render pixel-ident
 - **Presets 3-6 by measured water colour** (3x3 grid of 35th-percentile colours, mock vs render from the files):
   P3 ~5x too dark, P4/P6 3-8x too dark below, P6's top twice too bright; re-authored to the measurements. P6 also
   gets a fuller floor and larger bubbles; P5's deep light moves just outside the frame.
+- **Free-chain blink (2026-10-31):** with music a microbubble column vanished for under a second and returned, in
+  place, keeping its drift and shape. Cause: each free chain's population opacity was `clamp(uChainFill - chain)`, a
+  one-chain ramp, and the fill came from `passage * (0.8 + 0.4 * level)` with `level` the 0.08/0.45 s beat follower.
+  On `anything_mixed2` (40 s) Preset 1 ([7, 10] chains, fill 84-108) had 154 whole fades of 22-80 ms and 50 chains
+  that left and returned within 2 s (e.g. chain 105 off at 3.21, 4.02, 6.86 s); Presets 2/3 the same (25/106).
+  Fix: the simulation publishes `chain_drive`, that drive followed (1.5 s up, 3 s down) and capped at
+  `CHAIN_FADE_RATE` = 4 chains/s, and the bead shader fades the edge across `CHAIN_FADE_BAND` = 4 chains (sum of
+  opacities still equals the fill; narrower below two chains so zero draws nothing). Each chain now takes >= 1 s to
+  fade (shortest measured 0.79 s for 90%->10%) and no chain returns within 2 s on Presets 1-3. All other logical
+  state is bit-identical (15 s replay hash); logical tick and material GPU time unchanged within noise. Probe:
+  `tools/visualizer_replay/eb_chain_population_probe.py`; tests in `test_extruded_bubble_chain_visibility.py`
+  and `test_extruded_bubble_bead_gpu.py`. Not yet seen on a real display.
 Methods are in [Visualizer_Visual_Tuning.md](../../Guides/Visualizer_Visual_Tuning.md).

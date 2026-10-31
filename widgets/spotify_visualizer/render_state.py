@@ -680,6 +680,7 @@ class ExtrudedBubbleFrame:
     chain_activity: float = 0.0  # logical free-chain visibility; never inferred from audio in the renderer
     drift_families: tuple = ()  # live free-drift families (extruded_bubble_drift_log.DriftFamily)
     drift_steps: bytes = b""    # their step log, float64 records, oldest first; the GPU solver integrates it
+    chain_drive: float = 0.0    # where the free chains sit in their Bead Chains Range (the simulation's slow drive)
 
     def __post_init__(self) -> None:
         import numpy as np
@@ -713,7 +714,7 @@ class ExtrudedBubbleFrame:
             raise ValueError("Extruded Bubble stream must be a 3D direction")
         object.__setattr__(self, "stream", stream)
         for name in ("time", "level", "flash", "sustain", "drift", "emission", "stream_speed", "travel",
-                     "rays", "shimmer", "motion_phase", "passage", "chain_activity"):
+                     "rays", "shimmer", "motion_phase", "passage", "chain_activity", "chain_drive"):
             object.__setattr__(self, name, _finite(getattr(self, name), name=f"extruded bubble {name}"))
         object.__setattr__(self, "parameters",
                            _coerce_frozen_fields(self.parameters, name="extruded bubble parameters"))

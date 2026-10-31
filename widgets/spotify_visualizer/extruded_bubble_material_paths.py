@@ -13,6 +13,12 @@ PATH_NODES = 128
 CHAIN_PATHS = 240
 CHAINS_PER_STEP = 12  # free chains per step of the Bead Chains Range (the renderer's _CHAINS_PER_STEP)
 BEAD_CARRY = 5. / WORLD_UNIT
+# A free chain enters and leaves the drawn population across a band of this many chains of fill (narrower only below
+# two chains, so no fill still draws nothing), and the logical fill moves at most CHAIN_FADE_RATE chains a second: a
+# chain takes at least CHAIN_FADE_BAND / CHAIN_FADE_RATE seconds to fade in or out, however the music moves the fill.
+# With a one-chain band and the beat follower in the fill, a column at the fill's edge blinked off and on (2026-10-31).
+CHAIN_FADE_BAND = 4.0
+CHAIN_FADE_RATE = 4.0
 
 
 def seeded_random(indices, salt):
@@ -133,6 +139,24 @@ def drawable_chains(bead_chains) -> int:
     """The most free chains the renderer can ever draw for this Bead Chains Range (its high end x chains per step at
     the full particle share); rows past it are never read, so the logical side need not solve them."""
     return min(CHAIN_PATHS, math.ceil(max(float(v) for v in bead_chains) * CHAINS_PER_STEP))
+
+
+def chain_band(fill: float) -> float:
+    """How many chains of fill the edge of the free-chain population fades across (the bead shader's band)."""
+    return min(CHAIN_FADE_BAND, max(1.0, 2.0 * float(fill)))
+
+
+def chain_opacity(fill: float, chain: int) -> float:
+    """Free chain ``chain``'s population opacity at this fill; the opacities sum to the fill. Mirrors the shader."""
+    return min(1.0, max(0.0, (float(fill) - (chain + 0.5)) / chain_band(fill) + 0.5))
+
+
+def chain_draw_count(fill: float, bead_chains) -> int:
+    """The chains whose population opacity can be above zero at this fill, within the rows the logical side solves."""
+    fill = float(fill)
+    if fill <= 0.0:
+        return 0
+    return max(0, min(drawable_chains(bead_chains), math.ceil(fill + 0.5 * chain_band(fill) - 0.5)))
 
 
 def chain_geometry(controls, direction, across, depth_axis, face_weights, nodes=PATH_NODES, paths=CHAIN_PATHS):

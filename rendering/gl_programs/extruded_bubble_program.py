@@ -1295,7 +1295,7 @@ vec3 trailWater(int owner, float c) {
     return wakeSpline(p0, p1, p2, p3, t);
 }
 """
-from widgets.spotify_visualizer.extruded_bubble_material_paths import PATH_NODES
+from widgets.spotify_visualizer.extruded_bubble_material_paths import CHAIN_FADE_BAND, PATH_NODES
 _DRIFT_PATH_GLSL = """
 layout(std430, binding=6) readonly buffer EbMaterialDrift { vec4 ebMaterialDrift[]; };
 uniform int uChainDriftEnabled;
@@ -1315,7 +1315,7 @@ vec4 cloudMaterial(int encoded,int ident) {
     return encoded==0 ? vec4(0.0) : ebMaterialDrift[encoded-1+ident];
 }
 """.replace('PATH_NODE_COUNT',str(PATH_NODES))
-_BEAD_GLSL = _DRIFT_PATH_GLSL + _WAKE_PATH_GLSL + """// GPU procedural populations in the simulation's fixed physical world.
+_BEAD_GLSL = _DRIFT_PATH_GLSL + _WAKE_PATH_GLSL + f"const float CHAIN_FADE_BAND = {CHAIN_FADE_BAND:.1f};\n" + """// GPU procedural populations in the simulation's fixed physical world.
 uniform vec3 uWorldCenter;
 uniform vec3 uWorldHalf;
 uniform vec3 uStreamWorld;
@@ -1401,7 +1401,9 @@ void beadInstance() {
         // cycling cohorts fade in and out, not jump through integer chain draw-count changes.
         float life = fract(uBeadTravel * 0.035 + beadRandom(chain, 24u));
         float lifetimeFade = smoothstep(0.0, 0.18, life) * (1.0 - smoothstep(0.82, 1.0, life));
-        vOpacity = clamp(uChainFill - float(chain), 0.0, 1.0) * lifetimeFade * uChainActivity;
+        // The population's edge fades across a band of chains (chain_opacity in extruded_bubble_material_paths).
+        float band = clamp(2.0 * uChainFill, 1.0, CHAIN_FADE_BAND);
+        vOpacity = clamp((uChainFill - (float(chain) + 0.5)) / band + 0.5, 0.0, 1.0) * lifetimeFade * uChainActivity;
         float size = mix(0.014, 0.040, beadRandom(chain, 9u)) * uBeadSize;
         float px = size * pow(mix(0.3, 1.4, beadRandom(chain * 977 + k, 10u)), 1.5)
                  * (beadRandom(chain * 977 + k, 11u) > 0.94 ? 2.4 : 1.0);

@@ -82,3 +82,60 @@ def test_recorded_warm_resume_projects_visibility_through_production_snapshot(qt
     assert value(6.5).chain_activity < idle_activity(value(6.5).level)
     assert value(8).chain_activity > .98
     assert result['snapshots'][len(frames)-1].logical.mode_state.chain_activity == rows[-1][1].chain_activity
+
+
+def _population_opacities(fill):
+    from widgets.spotify_visualizer.extruded_bubble_material_paths import chain_opacity
+    return [chain_opacity(fill, chain) for chain in range(80)]
+
+
+def test_beat_swing_at_the_population_edge_fades_a_free_chain_instead_of_blinking_it():
+    """A steady passage with a 2 Hz beat: the chain at the fill's edge must not drop out and return (2026-10-31)."""
+    from rendering.quick.visualizer.implementations.extruded_bubble import _procedural_fill, chain_drive
+    from widgets.spotify_visualizer.extruded_bubble_material_paths import CHAIN_FADE_BAND, CHAIN_FADE_RATE
+    chains = (2.0, 5.0)  # test-owned Range, not a preset's
+    settings = {'scene3d_detail': 'High', 'extruded_bubble_bead_chains': chains}
+    sim = ExtrudedBubbleSimulation(31)
+    controls = ExtrudedBubbleControls(large_count=(0, 0), mid_count=(0, 0), bead_chains=chains)
+    dt = 1 / 90
+    rows = []
+    for tick in range(int(20 / dt)):
+        t = tick * dt
+        bass = .95 if (t % .5) < .12 else .25           # kick on every beat, deep release between
+        intensity = .6 if t < 10 else .4                  # one phrase change half way
+        snap = sim.advance(MusicInput(dt, True, intensity, (), (bass, .3, .2)), controls)
+        rows.append((t, _population_opacities(_procedural_fill(settings, chain_drive(snap), snap.emission)[0])))
+    rows = rows[90:]  # the first second is activation
+    shortest = CHAIN_FADE_BAND / CHAIN_FADE_RATE
+    for chain in range(80):
+        state, left, entered = None, None, None
+        for t, opacity in rows:
+            value = opacity[chain]
+            now = 1 if value > .9 else 0 if value < .1 else None
+            if now is None and entered is None and state is not None:
+                entered = t
+            if now is not None:
+                if state is not None and now != state:
+                    # A whole fade (on to off or back) takes at least most of the band at the capped rate.
+                    assert t - entered >= .75 * shortest, (chain, t)
+                    if now == 0:
+                        left = t
+                    else:
+                        assert left is None or t - left >= 2.0, f'chain {chain} blinked off at {left:.2f}, back at {t:.2f}'
+                state, entered = now, None
+    for (_, before), (_, after) in zip(rows, rows[1:]):
+        assert max(abs(a - b) for a, b in zip(before, after)) <= dt * CHAIN_FADE_RATE / CHAIN_FADE_BAND + 1e-6
+
+
+def test_population_band_preserves_the_fill_and_draws_nothing_at_zero():
+    from widgets.spotify_visualizer.extruded_bubble_material_paths import (
+        chain_draw_count, chain_opacity, drawable_chains)
+    chains = (2.0, 5.0)
+    assert chain_draw_count(0.0, chains) == 0
+    for fill in (.0, .3, 1., 1.7, 2.5, 7.25, 30., 41.6):
+        opacities = [chain_opacity(fill, c) for c in range(drawable_chains(chains) + 8)]
+        # Exact once the band is whole; below two chains of fill it narrows and stays within a twentieth of a chain.
+        assert sum(opacities) == pytest.approx(fill, abs=1e-9 if fill >= 2 else .05)
+        count = chain_draw_count(fill, chains)
+        assert all(v == 0. for v in opacities[count:]) and (fill == 0 or opacities[count - 1] > 0)
+    assert chain_draw_count(1e6, chains) == drawable_chains(chains)

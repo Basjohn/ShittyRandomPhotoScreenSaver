@@ -39,6 +39,7 @@ from core.settings.visualizer_paths import direction_of, world_point
 from itertools import chain
 
 from core.constants.extruded_bubble_world import WAKE_POINTS
+from widgets.spotify_visualizer.extruded_bubble_material_paths import CHAIN_FADE_RATE, CHAINS_PER_STEP
 from widgets.spotify_visualizer.extruded_bubble_wake import WakeField, trails as wake_trails
 from widgets.spotify_visualizer.extruded_bubble_geometry import (
     WORLD_CENTER, WORLD_HALF, WORLD_MARGIN, WORLD_UNIT, WATER_SURFACE_Y, stream_basis,
@@ -52,6 +53,7 @@ CLUSTER_STRIDE = 4         # members, then up to three member slots (indices int
 _FADE_IN = 0.6             # seconds
 _FADE_OUT = 0.9
 _CHAIN_FADE_IN = 0.35       # free-chain opacity only; preserve the existing logical-level release
+_CHAIN_DRIVE_ATTACK, _CHAIN_DRIVE_RELEASE = 1.5, 3.0  # the chain drive follows phrases, not beats
 _POP_SECONDS = 2.4         # extremely gentle opacity retirement, never geometric implosion
 # Contact separation: a bounced (or popped) pair moves apart along its contact normal with a decaying
 # separation velocity, and any remaining overlap is corrected within about a tenth of a second.
@@ -159,6 +161,7 @@ class ExtrudedBubbleSnapshot:
     chain_activity: float = 0.0            # visibility envelope, independent of movement and shared audio response
     drift_families: tuple = ()             # live DriftFamily descriptors (extruded_bubble_drift_log)
     drift_steps: bytes = b""               # the last STEP_HISTORY float64 drift steps, oldest first
+    chain_drive: float = 0.0               # where the free chains sit in their Bead Chains Range (slow, rate-capped)
 
     @property
     def count(self) -> int:
@@ -302,6 +305,7 @@ class ExtrudedBubbleSimulation:
         self._time = 0.0
         self._level = 0.0
         self._chain_activity = 0.0
+        self._chain_drive = 0.0       # where the free chains sit in their Range (see advance)
         from widgets.spotify_visualizer.extruded_bubble_drift_log import DriftLog
         self._drift_log = DriftLog()   # the free chains/snow/specks step log the GPU solver integrates
         self._flash = 0.0
@@ -499,6 +503,19 @@ class ExtrudedBubbleSimulation:
         self._passage = (passage_target if not self._filled else
                          _follow(self._passage, passage_target, dt, 0.6 * soft, 1.5 * soft))
         passage = self._passage
+        # Where the free chains sit in their Bead Chains Range: the passage swung a little by the beat follower, but
+        # followed slowly and moved at most CHAIN_FADE_RATE chains a second. Read straight from the beat follower,
+        # the fill swung across the chain at its edge on every beat and that whole column blinked off and on.
+        drive_target = min(1.0, passage * (0.8 + 0.4 * self._level))
+        if not self._filled:
+            self._chain_drive = drive_target
+        else:
+            followed = _follow(self._chain_drive, drive_target, dt, _CHAIN_DRIVE_ATTACK, _CHAIN_DRIVE_RELEASE)
+            span = abs(float(controls.bead_chains[1]) - float(controls.bead_chains[0])) * CHAINS_PER_STEP
+            if span > 0.0:
+                step = CHAIN_FADE_RATE * dt / span
+                followed = max(self._chain_drive - step, min(self._chain_drive + step, followed))
+            self._chain_drive = followed
         onsets = music.onsets if music.playing else ()
         if onsets:
             self._flash = max(self._flash, max(w for _kind, w in onsets))
@@ -1258,7 +1275,8 @@ class ExtrudedBubbleSimulation:
                                       self._flash, direction, speed, self._drift_shown, self._emission, self._sustain,
                                       self._travel, self._rays, self._shimmer, self._motion_phase,
                                       self._wakes(dt, controls.wake_trails), self._passage, self._chain_activity,
-                                      self._drift_log.families, self._drift_log.steps)
+                                      self._drift_log.families, self._drift_log.steps,
+                                      chain_drive=self._chain_drive)
 
 
 __all__ = ["BUBBLE_STRIDE", "CLUSTER_MAX", "CLUSTER_STRIDE", "ExtrudedBubbleControls", "ExtrudedBubbleSimulation",

@@ -207,6 +207,10 @@ Each foundation slice adds what it learned here.
 - Allocate per run or per 64 px bucket and release at `park()` (transitions) or retirement (modes); nothing per frame.
 - Interactions between pieces (Glass depth layers and collisions, Crumble Slabs Collide) are solved once per run on
   the CPU/COMPUTE and evaluated analytically on the GPU.
+- A population sized by a continuous count fades its edge across a band of several members, and the count is a slow,
+  rate-capped logical follower, never a beat follower: a one-member ramp driven by the beat let the same Extruded
+  Bubble chain cross its ramp in 20-80 ms several times a second, so one column blinked off and on (2026-10-31).
+  Bound the fade (band / rate seconds) and prove it per member over recorded music, not by eye.
 
 **Streaming per-frame data (S14)**
 - Changing per-frame bytes go into the persistently mapped ring and are bound with multi-bind, which leaves the
