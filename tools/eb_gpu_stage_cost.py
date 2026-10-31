@@ -19,6 +19,7 @@ import argparse
 import ctypes
 import statistics
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,7 +54,8 @@ def _skips():
     }
 
 
-def measure(clip: Path, *, preset: int, size: tuple[int, int], frames: int, rounds: int) -> dict:
+def measure(clip: Path, *, preset: int, size: tuple[int, int], frames: int, rounds: int, wall: bool = False,
+            throughput: bool = False) -> dict:
     import numpy as np
     from PySide6.QtGui import QGuiApplication
     QGuiApplication.instance() or QGuiApplication(sys.argv)
@@ -83,9 +85,35 @@ def measure(clip: Path, *, preset: int, size: tuple[int, int], frames: int, roun
     sampler = SystemSampler()
     conditions = [sampler.sample()]
 
+    fences: list = []
+    last = [time.perf_counter()]
+
     def frame(snapshot) -> float:
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, target.fbo)
         gl.glViewport(0, 0, width, height)
+        if throughput:
+            # Back to back with at most two frames in flight (a swap chain's queue): the interval between frames is
+            # what the render loop can sustain, GPU and CPU together, with no per-frame finish hiding the backlog.
+            host.render(snapshot=snapshot, viewport=(0, 0, width, height),
+                        logical_size=(float(width), float(height)), matrix_values=matrix)
+            fences.append(gl.glFenceSync(gl.GL_SYNC_GPU_COMMANDS_COMPLETE, 0))
+            gl.glFlush()
+            if len(fences) > 2:
+                fence = fences.pop(0)
+                gl.glClientWaitSync(fence, gl.GL_SYNC_FLUSH_COMMANDS_BIT, 1_000_000_000)
+                gl.glDeleteSync(fence)
+            now = time.perf_counter()
+            interval, last[0] = (now - last[0]) * 1000.0, now
+            return interval
+        if wall:
+            # Submit -> GPU completion on the wall clock: what a contended GPU makes the render thread wait for.
+            start = time.perf_counter()
+            host.render(snapshot=snapshot, viewport=(0, 0, width, height),
+                        logical_size=(float(width), float(height)), matrix_values=matrix)
+            gl.glFinish()
+            elapsed = (time.perf_counter() - start) * 1000.0
+            time.sleep(0.004)
+            return elapsed
         gl.glBeginQuery(gl.GL_TIME_ELAPSED, query)
         host.render(snapshot=snapshot, viewport=(0, 0, width, height), logical_size=(float(width), float(height)),
                     matrix_values=matrix)
@@ -127,12 +155,17 @@ def main() -> int:
     parser.add_argument("--size", default="1662x888", help="card size in device pixels")
     parser.add_argument("--frames", type=int, default=60, help="distinct snapshots per round")
     parser.add_argument("--rounds", type=int, default=3)
+    parser.add_argument("--throughput", action="store_true",
+                        help="score the sustained frame interval with two frames in flight (no per-frame finish)")
+    parser.add_argument("--wall", action="store_true",
+                        help="score submit -> GPU completion wall time (use under tools/gpu_load_generator.py)")
     args = parser.parse_args()
     if not disable_per_call_gl_error_checking():
         raise SystemExit("could not disable per-call GL error checking")
     width, height = (int(v) for v in args.size.split("x"))
-    result = measure(args.clip, preset=args.preset, size=(width, height), frames=args.frames, rounds=args.rounds)
-    print(f"{width}x{height} preset {args.preset}: whole frame GPU median {result['full_ms']:.2f} ms "
+    result = measure(args.clip, preset=args.preset, size=(width, height), frames=args.frames, rounds=args.rounds,
+                     wall=args.wall, throughput=args.throughput)
+    print(f"{width}x{height} preset {args.preset}: whole frame {'sustained interval' if args.throughput else 'submit->finish wall' if args.wall else 'GPU'} median {result['full_ms']:.2f} ms "
           f"(p90 {result['full_p90_ms']:.2f})")
     for name, ms in sorted(result["stage_ms"].items(), key=lambda kv: -kv[1]):
         print(f"  {name:20s} {ms:6.2f} ms")

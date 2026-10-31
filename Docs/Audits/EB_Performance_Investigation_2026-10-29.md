@@ -179,6 +179,35 @@ Screen 1 is the 4K panel at **60 Hz**. Steady swaps sat at the refresh rate (16.
   - Stray load generators must be stopped by PID; killing the shell launcher leaves the Python child running.
 - **Vanishing streams:** the GPU solver reproduces the pre-solver frames over 900 consecutive frames (at most 30 differing pixels per frame, never clustered). The cut-off mechanism was SCENE's two-radius wall cut, which predates this work. `68515506` fades drifted motes before the wall instead.
 
+**What the HUD age measures:** `viz_age_ms` is the wall time since the logical timestamp of the last drawn revision, sampled once a second. It adds up three parts:
+
+1. **The logical tick:** the timestamp is taken at the start of the tick and the frame is published after its work.
+2. **Publish to the next render-loop sync.**
+3. **The time since the last draw:** about 8 ms on average at 60 fps, about 5.5 ms at 90 fps.
+
+The age reaches about 20 ms only when the render loop keeps up with the 90 Hz revisions.
+
+**Measured this round (2026-10-31):**
+
+- **Sustained throughput** (`eb_gpu_stage_cost --throughput`, two frames in flight): EB sustains 4.35 ms per frame idle and 4.67 ms (p90 7.9) under a 60% game-like GPU load. GPU work does not limit EB offline.
+- **Synthetic draws under the 60% load** are delayed by only 0.5–1 ms, so the GPU preempts plain draws fine.
+- **Combined 60% CPU and 70% GPU load** (`gpu_load_generator --busy 60 --cpu 45`):
+
+  | Measure | Result |
+  |---|---|
+  | EB render submit, alone | 4.1 ms |
+  | EB render submit, with the preset-1 logical thread running | 5.8 ms median (p90 9.2) |
+  | Contended logical tick | 4.2 ms |
+
+  CPU work on the two Python threads is the remaining lever, not GPU stages.
+- **State-read syncs are not a lever.** A per-thread GL state mirror, verified exact against GL over 784 frames, gave no gain (6.65 against 6.74 ms) and was reverted. The earlier "cache every read" estimate (2 ms) was invalid: wrong cached state made the frames cheaper.
+
+**Next candidates (CPU, both threads):**
+- **Wakes as a float32 byte payload:** about 0.3 ms render (array conversion) and about 0.1 ms logical (per-float validation). It changes the `wakes` schema used by a dozen tests.
+- **Probe face capture:** about 0.47 ms CPU and about 150 GL calls; layered capture would need a cube depth target and per-face uniforms in the backdrop shader.
+- **Uniform distribution:** about 0.42 ms.
+- **The logical simulation's per-bubble motion, collisions and wakes:** about 2.8 ms. A NumPy rewrite cannot be bit-identical, so it needs a behavioural proof instead.
+
 **Next candidates for the frame age under load:**
 - Fewer separate GPU submissions per frame, so EB queues behind fewer competitor packets.
 - Render-cycle phase and latency inside Qt's loop.
