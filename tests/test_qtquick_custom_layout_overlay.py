@@ -1484,3 +1484,45 @@ def test_parent_resize_and_floor_do_not_advance_child_edit_revision(qt_app) -> N
     child.current_child_sizes["backlog_block"] = CustomChildSize(x_offset=0.20)
     session.notify_item_changed(child)
     assert model.data(idx, roles["childStateRevision"]) == revision + 1
+
+
+def test_glyph_tip_hosts_reparent_onto_their_controls_without_stacking_warnings(qt_app) -> None:
+    # Each glyph tip host reparents onto its own control; a Repeater stacked it
+    # after the previous host (another parent) and warned per glyph, per frame.
+    from PySide6.QtCore import QtMsgType, qInstallMessageHandler
+
+    owner = QObject()
+    factory = QuickSceneFactory()
+    context, root = factory.create_display_root(owner=owner, screen_index=0, runtime_generation=72)
+    root.setWidth(800.0)
+    root.setHeight(600.0)
+    overlay_item = root.findChildren(QQuickItem, "customLayoutOverlay")[0]
+    overlay = RetainedCustomLayoutOverlay(overlay_item)
+    session = CustomLayoutSession()
+    for index, widget_id in enumerate(("clock", "weather")):
+        session.add_item(_item(widget_id, "display:a", QRect(20 + 300 * index, 30, 180, 80), resizable=True))
+    warnings: list[str] = []
+    previous = qInstallMessageHandler(
+        lambda kind, _context, message: warnings.append(message) if kind != QtMsgType.QtDebugMsg else None)
+    try:
+        overlay.bind_session(session, display_identity="display:a")
+        overlay_item.setProperty("editActive", True)
+        qt_app.processEvents()
+    finally:
+        qInstallMessageHandler(previous)
+
+    assert not [message for message in warnings if "stackAfter" in message]
+    for widget_id in ("clock", "weather"):
+        frame = _quick_items_named(overlay_item, "customLayoutEditFrame-" + widget_id)[0]
+        hosts = frame.findChildren(QObject, "customLayoutGlyphTipHosts-" + widget_id)
+        assert len(hosts) == 1
+        count = hosts[0].property("count")
+        assert count > 1
+        tips = [child for child in hosts[0].children() if isinstance(child, QQuickItem)]
+        assert len(tips) == count
+        # Glyphs a frame does not offer (orbit, display hops) have no control.
+        parents = [tip.parentItem() for tip in tips if tip.parentItem() is not None]
+        assert len(parents) > 1
+        assert len({id(parent) for parent in parents}) == len(parents)
+    overlay.clear_session()
+    del context

@@ -1,4 +1,5 @@
 import QtQuick
+import QtQml.Models
 
 // One retained, display-local edit layer. Python's CustomLayoutSession remains
 // the only working geometry/enabled/removal authority; this item renders model
@@ -802,7 +803,11 @@ Item {
                 to: 1
                 duration: 1800
             }
-            Repeater {
+            // An Instantiator, not a Repeater: each delegate reparents onto its
+            // own glyph control, and a Repeater would try to stack it after the
+            // previous delegate (a different parent), warning once per glyph.
+            Instantiator {
+                objectName: "customLayoutGlyphTipHosts-" + editFrame.widgetId
                 model: [
                     {control: closeControl, text: "CLOSE & DISABLE WIDGET"},
                     {control: restoreSizeControl, text: "RESTORE WIDGET SIZE"},
