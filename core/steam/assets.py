@@ -41,6 +41,16 @@ _STEAM_APP_ARTWORK_URLS = {
     "square": "https://cdn.akamai.steamstatic.com/steam/apps/{appid}/library_600x900.jpg",
     "portrait": "https://cdn.akamai.steamstatic.com/steam/apps/{appid}/library_600x900.jpg",
 }
+# Newer apps publish artwork only at hashed Store paths (the legacy URLs above
+# 404); the public Store item API names them. Its assets, in preference order.
+_STORE_ITEMS_URL = "https://api.steampowered.com/IStoreBrowseService/GetItems/v1/"
+_STORE_ITEM_ASSET_KEYS = {
+    "wide": ("library_hero", "header"),
+    "square": ("library_capsule",),
+    "portrait": ("library_capsule",),
+}
+_STORE_ITEM_ASSET_FILE = re.compile(r"(?:[0-9a-f]{40}/)?[A-Za-z0-9_]+\.(?:jpg|png)")
+MAX_STORE_ITEMS_BYTES = 64_000
 
 
 @dataclass(frozen=True)
@@ -139,8 +149,12 @@ def fetch_steam_app_artwork(
     appid: int,
     artwork_shape: str,
     fetcher: Callable[[str], bytes] | None = None,
+    store_items_fetcher: Callable[[int], bytes] | None = None,
 ) -> SteamAssetRecord | SteamResult:
-    """Load the public header or portrait library capsule for one app."""
+    """Load the public header or portrait library capsule for one app.
+
+    An injected ``fetcher`` alone never reaches the Store item API (tests stay
+    offline); production and ``store_items_fetcher`` callers may."""
 
     url = steam_app_artwork_url(appid, artwork_shape)
     cached = find_cached_steam_app_artwork(
@@ -160,15 +174,94 @@ def fetch_steam_app_artwork(
     primary = fetch_and_cache_asset(
         cache_dir=cache_dir, url=url, fetcher=selected_fetcher,
     )
-    if isinstance(primary, SteamAssetRecord) or _normalize_steam_app_artwork_shape(artwork_shape) != "wide":
+    if isinstance(primary, SteamAssetRecord):
         return primary
-    # Hero is not available for every game. One bounded same-shape fallback,
-    # never tied to size/Save/drag, keeps older titles working without switching
-    # an authored wide panel to portrait.
-    fallback = fetch_steam_app_header(
-        cache_dir=cache_dir, appid=appid, fetcher=selected_fetcher,
+    if _normalize_steam_app_artwork_shape(artwork_shape) == "wide":
+        # Hero is not available for every game. One bounded same-shape fallback,
+        # never tied to size/Save/drag, keeps older titles working without switching
+        # an authored wide panel to portrait.
+        fallback = fetch_steam_app_header(
+            cache_dir=cache_dir, appid=appid, fetcher=selected_fetcher,
+        )
+        if isinstance(fallback, SteamAssetRecord):
+            return fallback
+    if primary.status is not SteamResultStatus.NOT_FOUND or (fetcher is not None and store_items_fetcher is None):
+        return primary
+    store = _fetch_store_item_artwork(
+        cache_dir=cache_dir, appid=appid, artwork_shape=artwork_shape, canonical_url=url,
+        fetcher=selected_fetcher, store_items_fetcher=store_items_fetcher or _default_fetch_store_items,
     )
-    return fallback if isinstance(fallback, SteamAssetRecord) else primary
+    return store if isinstance(store, SteamAssetRecord) else primary
+
+
+def _store_item_asset_urls(payload: object, appid: int, artwork_shape: str) -> tuple[str, ...]:
+    """Validated hashed CDN URLs for one app's shape, from a Store GetItems payload."""
+    try:
+        items = payload["response"]["store_items"]  # type: ignore[index]
+        item = next(row for row in items if isinstance(row, dict) and row.get("appid") == appid)
+        assets = item["assets"]
+    except (KeyError, TypeError, StopIteration):
+        return ()
+    if not isinstance(assets, dict):
+        return ()
+    urls = []
+    for key in _STORE_ITEM_ASSET_KEYS[_normalize_steam_app_artwork_shape(artwork_shape)]:
+        name = assets.get(key)
+        if isinstance(name, str) and _STORE_ITEM_ASSET_FILE.fullmatch(name):
+            urls.append(f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{appid}/{name}")
+    return tuple(urls)
+
+
+def _fetch_store_item_artwork(
+    *,
+    cache_dir: Path,
+    appid: int,
+    artwork_shape: str,
+    canonical_url: str,
+    fetcher: Callable[[str], bytes],
+    store_items_fetcher: Callable[[int], bytes],
+) -> SteamAssetRecord | SteamResult:
+    """Fetch the hashed Store asset, cached under the canonical per-app URL so
+    every cache-first lookup (rotation, paint) finds it without network IO."""
+    import json
+
+    try:
+        payload = json.loads(store_items_fetcher(appid).decode("utf-8"))
+    except Exception as exc:
+        logger.warning("[STEAM] Store item lookup failed appid_hash=%s error=%s",
+                       hashlib.sha256(str(appid).encode()).hexdigest()[:12], exc)
+        return SteamResult(status=SteamResultStatus.NETWORK_ERROR, message="Steam store item lookup failed.")
+    result: SteamAssetRecord | SteamResult = SteamResult(
+        status=SteamResultStatus.NOT_FOUND, message="Steam store item has no artwork for this shape.")
+    for asset_url in _store_item_asset_urls(payload, appid, artwork_shape):
+        try:
+            data = fetcher(asset_url)
+        except Exception:
+            continue
+        result = cache_asset_from_bytes(cache_dir=cache_dir, url=canonical_url, data=data)
+        if isinstance(result, SteamAssetRecord):
+            return result
+    return result
+
+
+def _default_fetch_store_items(appid: int) -> bytes:
+    import json
+    from urllib.parse import urlencode
+    from core.network.http import bounded_urlopen
+
+    query = json.dumps({"ids": [{"appid": int(appid)}],
+                        "context": {"language": "english", "country_code": "US"},
+                        "data_request": {"include_assets": True}}, separators=(",", ":"))
+    request = urllib.request.Request(f"{_STORE_ITEMS_URL}?{urlencode({'input_json': query})}",
+                                     headers={"User-Agent": "SRPSS-Steam/0.1"})
+    with bounded_urlopen(request, 10.0) as response:
+        final = urlparse(response.geturl())
+        if final.scheme != "https" or final.hostname != "api.steampowered.com":
+            raise ValueError("Steam store item lookup redirected outside the Steam API")
+        data = response.read(MAX_STORE_ITEMS_BYTES + 1)
+    if len(data) > MAX_STORE_ITEMS_BYTES:
+        raise ValueError("Steam store item response exceeded the size limit")
+    return data
 
 
 def abandonment_desaturation_bucket(

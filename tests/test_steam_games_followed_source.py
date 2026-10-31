@@ -542,3 +542,39 @@ def test_steam_preview_removes_bbcode_and_image_macros_without_source_urls():
     assert 'Update' in result and 'You can play now!' in result
     assert '[p]' not in result and '[b]' not in result and 'STEAM_CLAN_IMAGE' not in result
     assert 'evil.example' not in result and 'http' not in result
+
+
+def test_one_unusable_feed_is_skipped_so_the_sweep_and_its_artwork_advance(tmp_path):
+    # A single malformed or oversized app feed used to abort every batch at the
+    # same window, so later games (and their artwork) were never reached.
+    follow_set = tuple(range(41, 51))
+    base = _opener(follow_set)
+
+    def provider(request, timeout):
+        params = parse_qs(urlsplit(request.full_url).query)
+        if "GetNewsForApp" in request.full_url and int(params["appid"][0]) == 43:
+            return _Response({"appnews": {"appid": 43, "newsitems": [{"gid": "x"}]}})
+        return base(request, timeout)
+
+    source = _source(tmp_path)
+    offsets = [source.refresh(FAKE_STEAMID, opener=provider).window_offset for _ in range(3)]
+    assert offsets == [0, 4, 8]
+    final = source.cached()
+    assert final.covered_count == len(follow_set)
+    assert {story.appid for story in final.stories} <= set(follow_set) - {43}
+    assert len(final.stories) == MAX_SELECTED_STORIES
+
+
+def test_a_batch_with_no_usable_feed_still_fails_and_backs_off(tmp_path):
+    source = _source(tmp_path)
+    good = source.refresh(FAKE_STEAMID, opener=_opener())
+
+    def malformed(request, timeout):
+        if "GetNewsForApp" in request.full_url:
+            appid = int(parse_qs(urlsplit(request.full_url).query)["appid"][0])
+            return _Response({"appnews": {"appid": appid, "newsitems": "invalid"}})
+        return _opener()(request, timeout)
+
+    stale = source.refresh(FAKE_STEAMID, opener=malformed)
+    assert stale.status == "stale_cache" and stale.failure == "invalid_response"
+    assert stale.stories == good.stories
