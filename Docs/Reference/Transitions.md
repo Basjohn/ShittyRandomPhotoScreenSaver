@@ -238,6 +238,11 @@ Each foundation slice adds what it learned here.
 - Offline captures that sample sparse frames must hand the renderer every step in between
   (`tools/visualizer_replay/driver.py`). Otherwise stateful GPU work restarts, and pixel comparisons fail by hundreds of
   levels.
+- Offline speed is not live speed (EB, 2026-10-31). Offline, EB sustained 4.7 ms a frame under a 60% GPU load; live
+  under a game its frame age was ~40 ms. The logical tick's GIL-held Python stalled the render thread (every GL call
+  hands the GIL over), and Qt held the GUI thread in sync while the long frame rendered, so a stale revision was drawn.
+  Judge a mode with `tools/visualizer_live_check.py` under `--load game60` on recorded music, and keep within the
+  budgets in `Docs/Guides/Visualizer_Change_Checklist.md` 1C.
 
 **Materials and new looks on old transitions (S17)**
 - Lighting a photograph changes its pixels: blend the lit look in by how far a piece is from rest (Blinds' lift,

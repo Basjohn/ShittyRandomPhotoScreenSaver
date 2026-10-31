@@ -78,6 +78,34 @@ When a visible freeze, jump or flicker is reported:
 - [ ] A periodic diagnostics task that correlates with hitches is not exempt because it is "only diagnostics"; redesign it without losing needed observability.
 - [ ] A GC hitch is an allocation/lifetime/scheduling problem to attribute, not permission to globally disable GC or accept unbounded retention.
 
+## 1C. Live-shape performance (new or reworked modes)
+
+Offline costs understate the live process. There the logical, GUI, audio and render threads share one GIL, and Qt's
+threaded loop couples the GUI and render threads. Extruded Bubble passed every offline benchmark and still drew under
+a game at ~40 ms frame age (2026-10-31, `Docs/Audits/EB_Performance_Investigation_2026-10-29.md`). Design against
+these traps from the first slice, not after:
+
+- [ ] **Live check before acceptance:** `tools/visualizer_live_check.py --mode <mode> --preset N --load game60`
+      (recorded music, invisible window, game-shaped load) for each preset that differs materially in population or
+      effects. No `FLAG` lines, or each one explained in the mode's own doc with the run's `summary.json`.
+- [ ] **Logical tick budget:** median 2.5 ms or less live at the ~90 Hz cadence (about a quarter of the GIL). Under a
+      game the live tick runs ~1.4x its offline single-thread time. Every millisecond counts twice: each GL call
+      releases the GIL, and while pure-Python logical work runs a waiting render or GUI thread gets about one call
+      through per 5 ms switch interval, so a ~4.5 ms frame spread to ~10.7 ms behind a ~5.8 ms tick.
+- [ ] **No per-object Python over hundreds of objects per tick.** Vectorize from the start, or integrate on the GPU from
+      a step log (EB's free drift had to be rebuilt that way after the fact). Pure-Python per-bubble motion, collision
+      and wake loops are what remain of EB's tick.
+- [ ] **Render thread:** render-mode time 8 ms or less live (half a 60 Hz period). Count GL calls (each one is a GIL
+      handoff), keep Python packing out of the frame, and never read GL state per call.
+- [ ] **Payloads:** hand the renderer bytes or arrays, not long Python float tuples that each boundary converts and
+      validates again (EB's ~6,000-float wake tuple was converted three times per tick).
+- [ ] **Freshness is infrastructure:** the Quick sync admits the newest logical revision itself
+      (`QuickVisualizerPresentationSync.admit_latest_at_sync`). Never shrink frame age with a shorter GIL switch
+      interval (R-87 CHK18), thread priority, a pacer, a timer or polling.
+- [ ] **Measurement hygiene:** a tool that runs the saver must apply `main.py`'s preamble before importing OpenGL
+      (`tools/eb_live_phases.production_startup`), or PyOpenGL's per-call error checking inflates every render timing.
+      Record conditions with every result and change one variable per A/B.
+
 ## 2. One authored clock
 
 `VisualizerLogicalRuntime` remains sole mode-general authored cadence. No QML/render-thread/per-mode replacement clock,
