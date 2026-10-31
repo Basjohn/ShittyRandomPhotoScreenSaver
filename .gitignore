@@ -228,7 +228,10 @@ output/
 
 # Jank Ass Shit I Don't Want Being Jank In Public
 /assets/usu
-/assets/
+# Local reference/working assets stay untracked; shipped runtime assets live in assets/production/ (tracked,
+# loaded by path: large GL textures do not belong in the Qt resource pack).
+/assets/*
+!/assets/production/
 # Transition showcase WebPs (tools/release_media.py), release-only and regenerable.
 /assets/webp/
 # Machine-local MCP servers for Claude Code (e.g. Blender via uvx mcp-for-blender).
