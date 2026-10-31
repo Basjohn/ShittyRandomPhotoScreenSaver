@@ -134,15 +134,19 @@ Execution must use `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`: WR-00 reference
 WR-01/02 independent S3D-1 proof before composition. The copied brief approves the primary cool hall image;
 the archive's alternate is context only. Existing EB wakes/probes do not establish a generic ribbon or floor reflection.
 
-- [ ] **WR-00 remaining:** verify the proposed Orthographic camera fit in the WR-03 blockout render, choose
-  recorded-audio windows, and set tolerances from candidate comparisons. Masks, the measured target table and the
-  operator's flowing-history motion model are landed (Lab Plan §1.3 and §4A; `.artifacts/evidence/waveform_ribbon/wr00_targets/`).
+- [ ] **WR-00 remaining:** choose recorded-audio windows and set tolerances from candidate comparisons. Masks, the
+  measured target table, the operator's flowing-history motion model and the Orthographic camera fit (verified on the
+  blockout's pixels) are landed (Lab Plan §1.3, §4A and WR-03).
 - [ ] **WR-02 remaining GPU/native gates:** camera-facing GPU width, near-plane/edge-on motion, AA under slow
   motion, defocus and broader measured cost. Landed (`Docs/Reference/Ribbon_Path.md`): oriented geometry with
   native proofs, the incremental per-tick producer (`core/ribbon_ring.py`, 0.2 ms per knot at 8 x 256), and the
   filament material (OIT body plus additive HDR light, order-independent crossings, ~0.1-0.25 ms GPU at 960x540).
-  No Ribbon scene or likeness/music pass exists, and no runtime mode consumes the primitive.
-- [ ] Lab: one ribbon (bass → width, mids → twist/deformation, energy → glow) toward the concept image.
+  No music pass exists, and no runtime mode consumes the primitive.
+- [ ] **Next: S3D-5 floor reflection** (the blockout's largest gap: the mock's floor carries about half the light),
+  proven on its own harness, then into the lab.
+- [~] **Lab:** `tools/labs/waveform_ribbon_lab.py` blockout (hall, columns, three flowing ribbons, flat landmark and lit
+  renders) is far from the mock: no reflection, columns too bright and crisp, ribbon haze/palette/layering, no
+  particles (Lab Plan WR-03 status). Then bass → width, mids → twist/deformation, energy → glow on recorded music.
 - [ ] Production: single ribbon, translucent emissive shading and bloom, then the reflective floor, then multi-ribbon,
   then particle accents, then a restrained Settings surface (gates A–H: same scene low/high, no second renderer, one
   clock, dormancy, bounded cost, legible bands, clean transparency, attractive quiet passages).

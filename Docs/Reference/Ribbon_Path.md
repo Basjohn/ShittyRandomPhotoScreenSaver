@@ -246,7 +246,7 @@ without the clamp the low scene had 4,862 garbage pixels and the test fails.
 
 Cards: `tools/labs/ribbon_material_probe.py` renders three flowing-history ribbons (labelled synthetic head, no
 music) with the WR-00 proposed camera, beside the mock's low/high crops, plus a wide card. Evidence:
-`.artifacts/evidence/ribbon_material/s3d1_filament_material_v2/` (`mock_vs_material.png`). Warm GPU at 960x540
+`.artifacts/evidence/ribbon_material/s3d1_filament_material_v3/` (`mock_vs_material.png`). Warm GPU at 960x540
 with both passes is about 0.1-0.25 ms (absolute figures swing about 2x with GPU clocks). The probe's synthetic
 head band-limits its shape controls (Lab Plan section 4A); raw steps drew lumps.
 

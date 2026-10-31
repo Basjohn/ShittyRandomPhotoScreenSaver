@@ -166,7 +166,7 @@ def run(output: Path, cards: Path | None, frames: int):
                 pixels, _ = render(primitive, render_target, resources, scene, card, size, state, material)
                 if not pixels[:, :, :3].any():
                     raise RuntimeError('Material produced no light')
-                images[f'{kind}_{state}'] = Image.fromarray(pixels[::-1].copy())
+                images[f'{kind}_{state}'] = Image.fromarray(pixels)
                 images[f'{kind}_{state}'].save(output/f'{kind}_{state}.png')
         card = card_frame(render_target, *sizes['wide'])
         for state in STATES:
