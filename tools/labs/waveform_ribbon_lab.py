@@ -90,10 +90,10 @@ class Hall:
     rows: tuple = ((-2.3, 1.9, 1), (-6.5, 3.4, 2), (-12., 4.6, 3), (-19., 5.8, 4))
     pillar_half: float = .12
     pillar_height: float = 14.
-    pillar_light: float = 1.5
-    pillar_colours: tuple = ((.35, .7, 1.), (.7, .55, 1.), (.4, .75, 1.), (.55, .6, 1.), (.4, .8, 1.), (.6, .7, 1.))
+    pillar_light: float = 1.0
+    pillar_colours: tuple = ((.2, .55, 1.), (.5, .35, 1.), (.25, .6, 1.), (.35, .45, 1.), (.2, .65, 1.), (.45, .5, 1.))
     floor_colour: tuple = (.018, .024, .045)
-    backdrop: tuple = (.010, .013, .030)
+    backdrop: tuple = (.022, .036, .10)
     mist: dict = field(default_factory=lambda: mist_uniforms(centre_xz=(0., 6.), radii_xz=(30., 9.), falloff=.45, floor_thickening=1.2,
                                                              thickening_height=1.2, low_glow=5.))
 
@@ -102,13 +102,15 @@ class Hall:
 class Floor:
     pack: str = 'assets/textures/Dark_Concrete_PBR_Matched_Set_DarkGrey.zip'  # operator's local matched set
     tile: float = 3.5               # world units per texture repeat
-    ambient: tuple = (.24, .27, .40)  # cool hall light on the bare concrete
+    ambient: tuple = (.20, .24, .52)  # cool blue-violet hall light on the bare concrete
     reflection: float = 2.6         # wet film: reflection strength before Fresnel
     f0: float = .04
     normal_shift: float = .012      # screen-uv shift of the reflection lookup per unit normal tilt
-    streak: float = .22             # vertical reflection streak (uv) at roughness 1
-    lod: tuple = (.5, 4.)           # reflection mip at roughness 0 and 1 (half-resolution target)
+    streak: float = .14             # vertical reflection streak (uv) at roughness 1
+    lod: tuple = (0., 2.2)          # reflection mip at roughness 0 and 1 (half-resolution target)
     resolution: float = .5          # reflection target size relative to the view
+    diffuse: float = 9.             # light from the glowing scene above, on the albedo
+    diffuse_lod: float = 5.5        # mip of the reflection used as that light (wide)
 
 
 @dataclass(frozen=True)
@@ -122,12 +124,18 @@ class Flow:  # Lab Plan section 4A: history enters at the head (world +x) and dr
     fade_out: float = 5.            # seconds of age over which the tail fades out
 
 
-PALETTE = (((.08, .62, 1.), (.15, .42, 1.)),    # electric cyan -> blue
-           ((.2, .28, 1.), (.42, .24, 1.)),     # blue -> violet
-           ((.45, .24, 1.), (.82, .24, .95)))   # violet -> magenta, kept mostly violet
+PALETTE = (((.0, .55, 1.), (.1, .3, 1.)),     # electric cyan -> blue (mock: saturated, blue-dominant)
+           ((.15, .2, 1.), (.45, .12, 1.)),    # blue -> violet
+           ((.5, .1, 1.), (.95, .1, .8)),      # violet -> magenta
+           ((.05, .4, 1.), (.3, .25, 1.)),     # deep blue
+           ((.35, .15, 1.), (.75, .2, 1.)))    # violet
+# Per-ribbon character (amplitude, width, wave frequency, phase, light): identical sheets on even phases braid into a
+# regular lattice and sum to white; the mock's sheets differ and cross irregularly.
+CHARACTER = ((1.0, 1.0, 1.0, 0.0, 1.0), (.7, .6, 1.13, 2.1, .8), (1.15, 1.2, .9, 4.0, 1.0), (.55, .45, 1.22, 1.2, .7),
+             (.85, .8, .95, 5.3, .85))
 STATES = {  # labelled synthetic controls sized from the WR-00 target table; not music
-    'low': dict(width=.11, width_swell=.04, twist=1.1, emission=.9, spread=.32, amplitude=.55, lift=0.),
-    'high': dict(width=.32, width_swell=.12, twist=2.4, emission=1.25, spread=1.1, amplitude=.85, lift=.5),
+    'low': dict(width=.11, width_swell=.04, twist=1.1, emission=.42, spread=.32, amplitude=.55, lift=0.),
+    'high': dict(width=.32, width_swell=.12, twist=2.4, emission=.4, spread=1.1, amplitude=.85, lift=.5),
 }
 
 
@@ -136,8 +144,13 @@ class Recipe:
     hall: Hall = field(default_factory=Hall)
     floor: Floor = field(default_factory=Floor)
     flow: Flow = field(default_factory=Flow)
-    material: RibbonMaterial = field(default_factory=RibbonMaterial)
-    bloom: float = .55
+    # Mock-directed look (WR-04): saturated darker body, thin near-white irregular strands and rims, visible glints.
+    material: RibbonMaterial = field(default_factory=lambda: RibbonMaterial(
+        strands=16., strand_half_width=.06, strand_light=2.4, strand_white=.25, strand_jitter=.6, strand_warp=.1,
+        rim_light=1.6, rim_white=.35, rim_half_width=.015, fill_light=.2, fill_centre=.5, rim_glow_light=.15,
+        rim_glow_width=.05, body_alpha=.05, body_tint=.5, glint_density=1.4, glint_chance=.18, glint_light=7.,
+        glint_radius=.35, glint_min_pixels=1.3))
+    bloom: float = .32
     exposure: float = 1.
 
 
@@ -173,14 +186,16 @@ void main() {
         // it meets the floor. Uniform full-height tubes read as neon signage.
         // Clamped: MSAA shades sliver faces (seen edge-on) at pixel centres outside the triangle, where the across
         // coordinate extrapolates and the profile collapsed on alternate rows (banded pillars in Perspective).
-        float core=exp(-pow(clamp(vLocal.x,-1.0,1.0)*1.6,2.0));
+        float core=exp(-pow(clamp(vLocal.x,-1.0,1.0)*1.1,2.0));
         float height=vLocal.y, seed=vSeed;
         float h1=1.6+2.6*fract(sin(seed*91.7)*4375.85), h2=3.8+3.0*fract(sin(seed*37.1)*9123.17);
         float segments=exp(-pow((height-h1)/0.45,2.0))+0.7*exp(-pow((height-h2)/0.7,2.0));
         float profile=0.025+segments+1.4*exp(-height*2.4);
         float bright=0.12+0.88*pow(fract(sin(seed*17.13)*29871.7),2.0);  // most pillars dim, a few bright
-        light=mix(colour,vec3(1.0),0.35*core*core)*vColour.a*bright*core*profile*smoothstep(0.0,0.05,height);
-        colour=vec3(0.0);
+        light=mix(colour,vec3(1.0),0.12*core*core)*vColour.a*bright*core*profile*smoothstep(0.0,0.05,height);
+        // A column of light, not a dark solid: its body takes the mist behind it, so only its light shows
+        // (black bodies read as dark bars against the lit haze).
+        colour=mistColour(uBackdrop,vWorldPos);
     }
     float clear=mistTransmittance(vWorldPos);
     vec3 shaded=mix(mistColour(uBackdrop,vWorldPos),colour,clear)+light*clear;
@@ -203,6 +218,7 @@ uniform vec2 uViewport;
 uniform vec3 uBackdrop;
 uniform vec3 uAmbient;
 uniform vec4 uFloor;        // tile, reflection strength, f0, normal shift
+uniform vec2 uFloorLight;   // diffuse gain, diffuse mip: the glowing scene above lights the concrete
 uniform vec3 uEye;
 uniform vec3 uForward;
 uniform int uOrthographic;
@@ -219,7 +235,10 @@ void main() {
     float cosine=clamp(abs(dot(normal,view)),0.0,1.0);
     float fresnel=uFloor.z+(1.0-uFloor.z)*pow(1.0-cosine,5.0);
     vec3 reflected=planarReflection(gl_FragCoord.xy/uViewport,tangent.xy*uFloor.w,roughness);
-    vec3 light=reflected*fresnel*uFloor.y*(1.0-0.45*roughness);
+    // Diffuse light from the emissive ribbons and pillars above: the mirrored scene's widest blur approximates the
+    // light arriving over the floor (a mirror alone left the concrete dark between reflections).
+    vec3 above=textureLod(uReflection,gl_FragCoord.xy/uViewport,uFloorLight.y).rgb;
+    vec3 light=reflected*fresnel*uFloor.y*(1.0-0.45*roughness)+albedo*above*uFloorLight.x;
     float clear=mistTransmittance(vWorldPos);
     vec3 colour=mix(mistColour(uBackdrop,vWorldPos),albedo*uAmbient,clear)+light*clear;
     FragColor=vec4(colour,1.0);
@@ -318,25 +337,28 @@ def hall_vertices(hall: Hall, flat: bool, *, include_floor: bool = True) -> byte
 def fill_ring(recipe: Recipe, state: str, knots: int = 256) -> tuple[RibbonRing, float]:
     """Synthetic head: band-limited shape controls (Lab Plan section 4A); returns the ring and newest time."""
     s, flow = STATES[state], recipe.flow
-    ring = RibbonRing(3, colours=[(*a, 1.) for a, _ in PALETTE], edge_colours=[(*b, 1.) for _, b in PALETTE], period=.5)
+    ring = RibbonRing(len(PALETTE), colours=[(*a, 1.) for a, _ in PALETTE], edge_colours=[(*b, 1.) for _, b in PALETTE], period=.5)
     alpha = 1 - math.exp(-1/flow.knot_hz/flow.shape_tau)
-    stages = [[0., 0.] for _ in range(3)]
+    count = len(PALETTE)
+    stages = [[0., 0.] for _ in range(count)]
     pivot_y = SPEC.pivot[1]
     t = 0.
     for i in range(knots):
         t = i/flow.knot_hz
         positions, widths, twists, light = [], [], [], []
-        for r in range(3):
-            phase = 2*math.pi*flow.head_hz*t + r*1.1
+        for r in range(count):
+            k = r - (count - 1)/2  # -2..2: a fan in height and depth
+            amplitude, width, frequency, offset, brightness = CHARACTER[r]
+            phase = 2*math.pi*flow.head_hz*frequency*t + offset
             section = 1. if math.sin(2*math.pi*.3*t + r*2.) > .2 else 0.
             stages[r][0] += (section - stages[r][0])*alpha
             stages[r][1] += (stages[r][0] - stages[r][1])*alpha
             swell = stages[r][1]
-            positions.append((flow.speed*t, pivot_y + s['lift'] + s['amplitude']*math.sin(phase)
-                              + (r-1)*s['spread']*math.cos(.37*phase), (r-1)*.5 + .35*math.cos(phase*.8)))
-            widths.append(s['width'] + s['width_swell']*swell)
+            positions.append((flow.speed*t, pivot_y + s['lift'] + s['amplitude']*amplitude*math.sin(phase)
+                              + .5*k*s['spread']*math.cos(.37*phase), .3*k + .35*math.cos(phase*.8)))
+            widths.append(width*(s['width'] + s['width_swell']*swell))
             twists.append(s['twist']*math.sin(2*math.pi*.07*t + r*2.))
-            light.append(s['emission']*(.85 + .3*swell))
+            light.append(brightness*s['emission']*(.85 + .3*swell))
         ring.append(t, positions, widths, twists, light)
     return ring, t
 
@@ -455,7 +477,7 @@ class Lab:
         vao, count = self.resources.mesh('floor', floor_vertices(hall), (3,))
         program = self.resources.program('floor', FLOOR_VERTEX, FLOOR_FRAGMENT)
         names = ('uMvp', 'uAlbedo', 'uNormal', 'uRoughness', 'uReflection', 'uReflectionLook', 'uViewport', 'uBackdrop',
-                 'uAmbient', 'uFloor', 'uEye', 'uForward', 'uOrthographic', 'uMist', 'uMistShape')
+                 'uAmbient', 'uFloor', 'uFloorLight', 'uEye', 'uForward', 'uOrthographic', 'uMist', 'uMistShape')
         u = self.resources.uniforms('floor', names, required=False)
         gl.glUseProgram(program)
         gl.glUniformMatrix4fv(u['uMvp'], 1, gl.GL_FALSE, np.asarray(mvp, np.float32))
@@ -469,6 +491,7 @@ class Lab:
         gl.glUniform3f(u['uBackdrop'], *hall.backdrop)
         gl.glUniform3f(u['uAmbient'], *floor.ambient)
         gl.glUniform4f(u['uFloor'], floor.tile, floor.reflection, floor.f0, floor.normal_shift)
+        gl.glUniform2f(u['uFloorLight'], floor.diffuse, floor.diffuse_lod)
         gl.glUniform3f(u['uEye'], *eye)
         gl.glUniform3f(u['uForward'], *(-view[2, :3]))
         gl.glUniform1i(u['uOrthographic'], int(orthographic))

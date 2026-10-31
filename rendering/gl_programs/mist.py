@@ -24,7 +24,8 @@ vec3 mistColour(vec3 backdrop, vec3 world) {
     vec2 radii=max(uMist.zw,vec2(1e-3));
     float beyond=max(0.0,length((world.xz-uMist.xy)/radii)-1.0)/max(uMistShape.x,1e-3);
     float low=uMistShape.z>0.0?exp(-max(world.y,0.0)/uMistShape.z):0.0;
-    return backdrop*(1.0+uMistShape.w*low*exp(-0.6*beyond*beyond));
+    // Deeper mist also darkens (the far floor is the Orthographic upper field: dark at the top, lit low).
+    return backdrop*(0.35+0.65*exp(-0.25*beyond))*(1.0+uMistShape.w*low*exp(-0.6*beyond*beyond));
 }
 """
 

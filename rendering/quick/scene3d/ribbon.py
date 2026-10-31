@@ -22,7 +22,7 @@ from rendering.quick.scene3d.stream import StreamRing
 
 _FRAGMENTS = {'diagnostic': RIBBON_FRAGMENT, 'body': RIBBON_BODY_FRAGMENT, 'light': RIBBON_LIGHT_FRAGMENT}
 _MATERIAL_UNIFORMS = ('uViewZ', 'uEye', 'uForward', 'uOrthographic', 'uStrands', 'uRim', 'uBody', 'uFill', 'uGlint', 'uAge',
-                      'uMist', 'uMistShape', 'uMistOrigin',
+                      'uMist', 'uMistShape', 'uMistOrigin', 'uTone',
                       'uViewport')
 
 
@@ -47,14 +47,19 @@ class RibbonMaterial:
     glint_density: float = .5       # glint cells per strand per strand-phase unit
     glint_chance: float = .2
     glint_light: float = 5.
-    glint_radius: float = .3        # strand spacings (at least ~0.75 px)
+    glint_radius: float = .3        # strand spacings (at least glint_min_pixels)
+    glint_min_pixels: float = .75
+    strand_white: float = 0.        # strands' mix toward white (0 = the ribbon colour)
+    rim_white: float = 0.
+    strand_jitter: float = 0.       # irregular strand spacing, 0..0.9 (monotone)
 
     def __post_init__(self):
         values = astuple(self)
         if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v >= 0 for v in values):
             raise ValueError('Ribbon material values must be finite and non-negative')
         if (not 1 <= self.strands <= 256 or not 0 < self.strand_half_width <= .5 or not 0 < self.rim_half_width <= .5
-                or not 0 < self.rim_glow_width <= .5 or self.fill_centre > 1 or self.glint_chance > 1):
+                or not 0 < self.rim_glow_width <= .5 or self.fill_centre > 1 or self.glint_chance > 1
+                or self.strand_white > 1 or self.rim_white > 1 or self.strand_jitter > .9):
             raise ValueError('Ribbon strands need 1..256 lines and positive half-widths up to half a spacing')
         if self.body_alpha > .95 or self.path_cap < 1 or self.min_pixels > 8:
             raise ValueError('Ribbon body alpha must stay below 0.95, path cap at least 1, minimum width at most 8 px')
@@ -64,7 +69,8 @@ class RibbonMaterial:
                     uRim=(self.rim_half_width, self.rim_light, self.path_cap, self.min_pixels),
                     uBody=(self.body_alpha, self.body_tint, 0., self.warp_frequency),
                     uFill=(self.fill_light, self.fill_centre, self.rim_glow_width, self.rim_glow_light),
-                    uGlint=(self.glint_density, self.glint_chance, self.glint_light, self.glint_radius))
+                    uGlint=(self.glint_density, self.glint_chance, self.glint_light, self.glint_radius),
+                    uTone=(self.strand_white, self.rim_white, self.strand_jitter, self.glint_min_pixels))
 
 
 class RibbonPrimitive:
