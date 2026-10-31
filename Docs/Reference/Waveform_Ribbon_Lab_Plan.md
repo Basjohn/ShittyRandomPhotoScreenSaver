@@ -18,7 +18,8 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
 - [x] Diagnostic projection fixture: Orthographic default and optional Perspective use the existing shared matrix
   helpers. Tests cover fixed world scale under resize/depth and near/far clip mapping; existing native sphere/ray
   tests independently exercise shared Orthographic geometry, origins and occlusion.
-- [ ] Confirm annotation masks/crop boundaries, target measurements/tolerances, scene eye/pivot/world/palette and audio windows.
+- [x] Annotation masks, target table (section 1.3), proposed Orthographic fit and the flowing-history motion model (section 4A).
+- [ ] Verify the camera fit in the WR-03 blockout render; select recorded-audio windows; set tolerances from candidates.
 - [x] WR-01a bounded absolute-coordinate CPU history and centripetal interpolation reference.
 - [x] WR-01b CPU transported/camera-facing frames, gap/cusp policy and width/UV stations; proposed GPU budget recorded.
 - [x] WR-02a independent oriented GPU prototype: bounded packet/ring, both projection matrices, solid geometry,
@@ -121,6 +122,28 @@ bodies. The high panel's bloom haze is as saturated and textured as the ribbons,
 halos pass both tests. Body width, path extrema and envelope are therefore hand-traced at sampled columns on
 gridded cards and labelled as estimates. Automatic statistics are kept for colour, luminance and clipped area
 inside fixed ROIs, where no segmentation is needed.
+
+**Target table (31 October).** `tools/labs/waveform_ribbon_targets.py` holds the hand-traced geometry, measures
+ROI statistics with the masks applied, and draws annotated cards. Receipt and sheet:
+`.artifacts/evidence/waveform_ribbon/wr00_targets/` (`targets.json`, `targets_sheet.png`). Fractions are of panel height.
+
+| Measure | Low | High | What it says |
+| --- | --- | --- | --- |
+| Union envelope, top to bottom | 0.39-0.59 | 0.24-0.66 | High spreads about 2.5x vertically |
+| Centre-line mean / wave amplitude | 0.50 / 0.041 | 0.46 / 0.042 | The centre-line wave barely changes: it is the authored oscillator (section 4A) |
+| Single body width | 10-25 px | 40-90 px | Bass width about 3.5x |
+| Wavelength (cyan peaks) | ~285 px | ~245 px | About 14% shorter: mids add complexity, not a new scene |
+| Bodies | 3 | 3 | Cyan/light blue, blue/violet, magenta; inner lines are structure |
+| Floor contact line | 0.635 | 0.637 | Same camera and world |
+| Upper environment, median luminance | 0.065 | 0.072 | Same environment and exposure |
+| Floor median luminance / clipped | 0.14 / 2% | 0.38 / 39% | Floor reflection tracks ribbon emission strongly |
+| Body / crest ROI clipped | 4% | 20-36% | White-hot cores only where high sheets cross |
+
+Proposed Orthographic fit (analytic, unverified until the WR-03 blockout render): half-height 4.98 world units
+at a 4-unit wavelength, pitch 15 degrees down, pivot at ribbon centre 2 units above the floor, back wall 2.3 units
+behind, floor visible to 11.8 units in front, ribbon reflection centred at 0.89 of the height. Light columns stand
+at about 0.04, 0.14, 0.30, 0.50, 0.74 and 0.95 of the width. Tolerances are still set from candidate comparisons
+with operator review, never invented ahead of them.
 
 Record measurements in coordinates normalized within each scene crop, with native-pixel values alongside them:
 
@@ -445,6 +468,26 @@ regression control captures and documented remaining native gates. Presets remai
 
 **Exit/artifacts:** native run receipt, gate matrix, operator decision and scoped remaining defects. Completion needs
 the mock-directed visual result, not merely matching a lab that missed the target.
+
+## 4A. Motion model: flowing history (operator decision, 31 October)
+
+The ribbons are **music history flowing across the hall**, not shapes animated in place:
+
+- At a head beyond one edge of the view, each logical knot records the music-driven controls at that moment:
+  centre-line offset, half-width, twist, and later emission/hue. An admitted knot never changes
+  (`core/ribbon_ring.py`). Music therefore travels along the ribbon: a bass hit becomes a wide stretch that
+  drifts across the hall.
+- The whole history moves by one uniform translation derived from logical time, composed into the MVP.
+  No knot is rewritten to move. Flow direction and speed are fixed authored scene constants. Music never changes
+  them, because a speed change would read as a different scene (gate A).
+- The large smooth waves come from an authored head oscillator whose phase advances with logical time; music
+  modulates its amplitude and rate. Raw band envelopes plotted as height make jagged plateaus, not the mock's waves.
+- Any per-frame animation must be a pure shader function of (knot coordinate, logical time). Nothing may
+  rewrite history, because that would bring back the per-tick cost the ring removed.
+- The head and tail stay off-view by at least two knot spacings plus the visible end margin, so the provisional
+  boundary segments and evictions are never seen.
+- Capacity follows from the scene: knots = (visible span + both margins) / flow speed x knot rate. The lab chooses
+  speed and knot rate, then checks that the result fits the 256-knot cap at the widest admitted aspect.
 
 ## 5. Low/high reactivity contract
 

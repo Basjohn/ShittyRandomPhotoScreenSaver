@@ -134,9 +134,9 @@ Execution must use `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`: WR-00 reference
 WR-01/02 independent S3D-1 proof before composition. The copied brief approves the primary cool hall image;
 the archive's alternate is context only. Existing EB wakes/probes do not establish a generic ribbon or floor reflection.
 
-- [ ] **WR-00 remaining:** confirm annotation masks/crops and measured target tolerances; choose recorded-audio
-  windows and fit a stable Orthographic scene eye/pivot/world/palette. Reference/projection preflight is landed;
-  output `.artifacts/evidence/waveform_ribbon/wr00_reference_projection/receipt.json` records its limited scope.
+- [ ] **WR-00 remaining:** verify the proposed Orthographic camera fit in the WR-03 blockout render, choose
+  recorded-audio windows, and set tolerances from candidate comparisons. Masks, the measured target table and the
+  operator's flowing-history motion model are landed (Lab Plan §1.3 and §4A; `.artifacts/evidence/waveform_ribbon/wr00_targets/`).
 - [ ] **WR-02 remaining GPU/native gates:** curved-frame/normal/precision/near-plane/AA and failure coverage,
   then OIT/HDR/camera-facing/defocus and broader measured cost. Solid oriented geometry has native Ortho/Perspective,
   gap, plane-normal, phase-rebase, depth and context/state proofs; the incremental per-tick producer
