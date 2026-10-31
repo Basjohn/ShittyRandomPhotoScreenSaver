@@ -273,5 +273,6 @@ Still missing, for the WR-03/04 lab, judged at native zoom against both referenc
 - Strand density must suit on-screen width (the mock's lines are about 3-4 px apart). 16 lines across suit
   these widths; 32 averaged into a smooth body.
 
-Next gate: camera-facing GPU width, near-plane/edge-on motion and AA coverage under slow motion, defocus, then
-the WR-03 scene blockout. No scene likeness, music or full performance acceptance exists yet.
+Remaining for the primitive, only as a consuming scene needs it: camera-facing GPU width, near-plane motion, AA
+coverage under slow motion, defocus, and full lifecycle/cost proof. The Waveform scene's live order is in
+`Waveform_Ribbon_Lab_Plan.md` section 0. No scene likeness, music or full performance acceptance exists yet.

@@ -57,6 +57,13 @@ publication in `Docs/Reference/Release_Media.md` (explicit requests only).
   Interaction Mode and wake/exit input (history: R-79).
 - [ ] **Refresh contention:** correlate FEEDS/Gmail/Reddit queue/claim/publish/retire with transition delays in a natural
   dual-display trace (fairness, no post-transition stampede, retained last-good content).
+- [ ] **15 s usage-sample hitch (unexplained, not reproduced):** 31 Oct 19:28-19:33 MC run, a 95-121 ms freeze of the
+  GUI, render and logical threads at every `--usage` sample (20 in 5 min, `gui_stall_stacks.log` and frame trace
+  agree). Each sample took ~95 ms because the sampled tree held 7 processes / 233 threads (normal 3 / ~55, ~16-24 ms);
+  the four extra descendants used the GPU (counters 17 → 70), existed from the first sample and are unidentified.
+  The next MC run (19:47) and an invisible live check on current code were normal. On recurrence the sampler now
+  logs `[USAGE] topology added ... name= parent= threads=` for every process entering the tree: identify them, then
+  decide whether the sampler must exclude/outsource them. Not the Extruded Bubble chain fix (no processes, tick unchanged).
 - [ ] **Cross-display Media shortcuts** delivered once on the other display, when exercised.
 - [ ] **Music recorder** 60-second clip, signal/history, cancel and mixed-DPR UI, when recording is needed.
 - [ ] **Frozen release gate (operator scheduled):** Standard/Diagnostic from one compile, MC and Reddit Helper installed
@@ -95,7 +102,7 @@ consumer, and none becomes a second renderer, clock or camera. Read the 3D found
   ripples/puddles.*
 - [ ] **S3D-5 Reflections and wet surfaces:** a bounded planar/probe reflection for floors and pools, wet-surface and
   puddle masks over authored ground, and reflection-distortion sampling driven by a surface field. No screen-space trick
-  that collapses under camera motion. *Consumers: Waveform Ribbon floor, Melt Pool, Concrete Rain.*
+  that collapses under camera motion. *Consumers: Waveform Ribbon floor (next: §7.1), Melt Pool, Concrete Rain.*
 - [ ] **S3D-6 Shared shadows (G2 / S25):** one fitted directional depth map, bounded soft PCF/bias, caster/receiver
   admission, resize/teardown/dormancy and tier cost on a real test scene (also Usu's S25; not a revival of the rejected
   Extruded cast shadows).
@@ -134,22 +141,21 @@ Execution must use `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`: WR-00 reference
 WR-01/02 independent S3D-1 proof before composition. The copied brief approves the primary cool hall image;
 the archive's alternate is context only. Existing EB wakes/probes do not establish a generic ribbon or floor reflection.
 
-- [ ] **WR-00 remaining:** choose recorded-audio windows and set tolerances from candidate comparisons. Masks, the
-  measured target table, the operator's flowing-history motion model and the Orthographic camera fit (verified on the
-  blockout's pixels) are landed (Lab Plan §1.3, §4A and WR-03).
-- [ ] **WR-02 remaining GPU/native gates:** camera-facing GPU width, near-plane/edge-on motion, AA under slow
-  motion, defocus and broader measured cost. Landed (`Docs/Reference/Ribbon_Path.md`): oriented geometry with
-  native proofs, the incremental per-tick producer (`core/ribbon_ring.py`, 0.2 ms per knot at 8 x 256), and the
-  filament material (OIT body plus additive HDR light, order-independent crossings, ~0.1-0.25 ms GPU at 960x540).
-  No music pass exists, and no runtime mode consumes the primitive.
-- [ ] **Next: S3D-5 floor reflection** (the blockout's largest gap: the mock's floor carries about half the light),
-  proven on its own harness, then into the lab.
-- [~] **Lab:** `tools/labs/waveform_ribbon_lab.py` blockout (hall, columns, three flowing ribbons, flat landmark and lit
-  renders) is far from the mock: no reflection, columns too bright and crisp, ribbon haze/palette/layering, no
-  particles (Lab Plan WR-03 status). Then bass → width, mids → twist/deformation, energy → glow on recorded music.
-- [ ] Production: single ribbon, translucent emissive shading and bloom, then the reflective floor, then multi-ribbon,
-  then particle accents, then a restrained Settings surface (gates A–H: same scene low/high, no second renderer, one
-  clock, dormancy, bounded cost, legible bands, clean transparency, attractive quiet passages).
+Where it stands (landed work, evidence and the full ordered list): Lab Plan §0. Open work, in order:
+
+- [ ] **S3D-5 floor reflection → WR-05 floor in the lab (next):** planar reflection in its own harness (registration
+  under a moving eye, roughness/normal from the operator's matched pack
+  `assets/textures/Dark_Concrete_PBR_Matched_Set_DarkGrey.zip`, resize/retirement, cost), then the lab floor. The
+  blockout's largest gap: the mock's floor carries about half the light.
+- [~] **WR-04 lab look** (`tools/labs/waveform_ribbon_lab.py`, far from the mock): haze and bloom, fanning strands,
+  blue-violet palette, more and wider sheets in high, softer columns.
+- [ ] **WR-00 audio windows and WR-07 music in the lab:** recorded windows; bass → width, mids → twist/deformation,
+  energy → whole-ribbon light, history-carried controls band-limited (Lab Plan §4A); tolerances from candidates.
+- [ ] **S3D-2 emitters → WR-06 accents** (sparks/glints riding the ribbons).
+- [ ] **S3D-1 remaining, only as the scene needs:** camera-facing GPU width, near-plane motion, AA under slow motion,
+  defocus, full lifecycle/cost (`Docs/Reference/Ribbon_Path.md`).
+- [ ] **WR-08 production → WR-09 acceptance:** single ribbon and material, then floor, multi-ribbon, accents, a
+  restrained Settings surface; gates A–H, `tools/visualizer_live_check.py --load game60` and operator sign-off.
 
 ### 7.2 Reactive Liquid / Audio Melt Pool
 
