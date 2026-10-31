@@ -23,6 +23,7 @@ from core.settings.resample_filter_input_compat import (
     promote_legacy_display_resample_filter,
 )
 from core.settings.structured_roots import STRUCTURED_SETTINGS_ROOTS
+from core.settings.transition_retired import strip_retired_transition_settings
 from core.settings.structured_input_compat import normalize_legacy_structured_mapping_shape
 from core.settings.widget_theme_input_compat import promote_legacy_widget_theme_state
 from core.settings.visualizer_presets import (
@@ -234,6 +235,8 @@ def _project_import_state(
             )
             if promoted is not None and "transitions_detail" in promoted:
                 state[SCENE3D_TRANSITIONS_DETAIL_KEY] = promoted["transitions_detail"]
+            # Retired leaves are input-only: drop them before coercion (which refuses retired keys).
+            section_value, _retired_changed = strip_retired_transition_settings(section_value)
             incoming = _coerce_nested_import_mapping(mgr, "transitions", section_value)
             existing = state.get("transitions", {})
             if merge and isinstance(existing, Mapping):

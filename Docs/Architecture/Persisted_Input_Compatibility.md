@@ -129,6 +129,10 @@ without the safe path below.
   2026-10-10) leave the activation, pool and duration maps and lose their own
   sections; a retired current type becomes Crossfade. It replaced the Block
   Puzzle Flip `columns` → `cols` rename, which retired with its transition.
+  The never-read root `transitions.direction` (retired 2026-10-31, SC1; each
+  directional transition keeps its own `<section>.direction`) is dropped the
+  same way, and SST import strips it before coercion; it is also in
+  `RETIRED_SETTING_KEYS` and `SettingsManager` refuses it as a key.
   *Blocked:* resurrecting a retired transition's settings to satisfy an old
   profile, or keeping its section "just in case".
 

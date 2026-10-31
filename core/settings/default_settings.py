@@ -128,7 +128,6 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                    'direction': 'Random',
                                    'gloss': 0.4,
                                    'shadows': True},
-                 'direction': 'Random',
                  'disintegrate': {'antialiasing': 'Auto',
                                   'direction': 'Random',
                                   'grain_size': 3,
