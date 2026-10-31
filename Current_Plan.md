@@ -57,8 +57,8 @@ world geometry and camera fixed during resize; compare the original rectangle be
   Bit-identical tick trims are exhausted (~15-20% off the tick, `0a61756e`). **Next:** measure them live with
   `tools/visualizer_live_check.py` (invisible, recorded music, `--load game60` when no game is running; recheck the
   first 2 s after startup), and validate `game60` against the operator's game. Further logical gains need the
-  vectorised rewrite (operator chose trims only, 2026-10-31). Under `game60` the current code measures HUD age ~20 ms;
-  one run under the operator's game is still needed to compare and to calibrate `game60` (it is lighter than the game).
+  vectorised rewrite (operator chose trims only, 2026-10-31). `game60` is calibrated to the operator's game (menu)
+  and matches it live; under it, HUD age went 38.8 → 22.4 ms against the pre-change code (audit doc).
 - [ ] **`test_qtquick_h_cutover.py::test_display_manager_admits_exactly_one_configured_quick_visualizer_owner`** fails
   at HEAD (`01e3ccb6`): after the transition the controller still reports `extruded_bubble`, not `devcurve`.
 - [ ] **`test_extruded_bubble_empty_near.py::test_empty_ordinary_population_skips_near_and_cannot_replay_stale_bokeh`**

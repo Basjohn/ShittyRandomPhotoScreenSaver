@@ -45,6 +45,9 @@ PROFILES = {
     "game85": (120.0, 85.0, 75.0, 32),
 }
 PROFILE_PRIORITY: dict[str, str] = {}
+# Worker memory intensity per profile, calibrated (2026-10-31) so EB's single-thread logical tick slows as much as
+# under the operator's reference game at its menu: 3.56 ms against 2.08-2.16 idle (Borderlands 4: 3.56 ms).
+PROFILE_COMPUTE: dict[str, int] = {"game60": 8000, "game85": 5000}
 
 _VERTEX = """#version 460 core
 out vec2 uv;
@@ -63,7 +66,7 @@ void main() {
 """
 
 
-def _cpu_worker(deadline: float, fps: float, duty, buffer_mb: int) -> None:
+def _cpu_worker(deadline: float, fps: float, duty, buffer_mb: int, compute: int) -> None:
     """One game thread: every frame a burst of compute and streaming copies (``duty.value`` of the frame, shared so
     the parent can calibrate it), then idle. A burst that overruns drops the frame but still idles, as a game
     thread waits on its frame fence, so contention can never turn a worker into a spinning core."""
@@ -77,12 +80,12 @@ def _cpu_worker(deadline: float, fps: float, duty, buffer_mb: int) -> None:
         share = duty.value
         burst_end = time.perf_counter() + period * share
         while time.perf_counter() < burst_end:
-            # ~1 GB/s of streaming per worker (a 256 KB copy per ~0.5 ms of compute): real memory traffic without
+            # A 256 KB copy per ``compute`` loop steps: real memory traffic (15000 steps is ~1 GB/s a worker) without
             # saturating DRAM, which starved every thread of the machine (and the GPU feeder) when copies ran flat out.
             np.copyto(target[offset:offset + chunk], source[offset:offset + chunk])
             offset = (offset + chunk) % (len(source) - chunk)
             total = 0
-            for i in range(15000):                                                    # core compute
+            for i in range(compute):                                                  # core compute
                 total += i * i
         now = time.monotonic()
         next_frame = frame_start + period
@@ -151,6 +154,8 @@ def main() -> int:
     parser.add_argument("--cpu", type=float, default=None, help="share of all logical cores kept busy, percent")
     parser.add_argument("--passes", type=int, help="draws per frame")
     parser.add_argument("--buffer-mb", type=int, default=64, help="each CPU worker's streaming buffer")
+    parser.add_argument("--compute-per-copy", type=int, default=None,
+                        help="worker loop steps per 256 KB copy: lower means more memory traffic")
     parser.add_argument("--priority", choices=("normal", "above", "high"), default=None,
                         help="process priority class of the GPU feeder (WDDM derives GPU scheduling priority from it, "
                              "standing in for the boost a foreground game gets)")
@@ -170,8 +175,9 @@ def main() -> int:
     if cpu > 0:
         import multiprocessing
         duty = multiprocessing.Value("d", 0.6, lock=False)
+        compute = args.compute_per_copy or PROFILE_COMPUTE.get(args.profile, 15000)
         count = max(1, round(cores * min(cpu, 100.0) / 100.0 / 0.6))
-        workers = [multiprocessing.Process(target=_cpu_worker, args=(deadline, fps, duty, args.buffer_mb), daemon=True)
+        workers = [multiprocessing.Process(target=_cpu_worker, args=(deadline, fps, duty, args.buffer_mb, compute), daemon=True)
                    for _ in range(count)]
         for worker in workers:
             worker.start()
