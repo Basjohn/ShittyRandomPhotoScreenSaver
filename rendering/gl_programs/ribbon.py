@@ -37,26 +37,33 @@ bool station(vec3 a, vec3 b, vec3 c, vec3 d, Knot left, Knot right, float origin
     lo=at-width*side; hi=at+width*side;
     return !all(equal(lo,hi));
 }
+// Chronological knot i lives in ring slot (start+i)%capacity; a stateless packet has start 0.
+int ringStart, ringCapacity;
+Knot knotAt(int owner, int i) { return paths[owner].knots[(ringStart+i)%ringCapacity]; }
 void main() {
     int owner=gl_InstanceID;
-    int count=clamp(int(paths[owner].meta.x),0,MAX_KNOTS);
+    ringCapacity=clamp(int(paths[owner].extra.z),1,MAX_KNOTS);
+    ringStart=clamp(int(paths[owner].extra.y),0,ringCapacity-1);
+    int count=clamp(int(paths[owner].meta.x),0,ringCapacity);
     int divisions=clamp(int(paths[owner].meta.y),1,8);
     int interval=gl_VertexID/6, corner=gl_VertexID%6;
     int segment=interval/divisions;
     gl_Position=vec4(2,2,2,1); vWorld=vec3(0); vPhase=0; vColour=vec4(0);
     if(segment>=count-1) return;
-    Knot left=paths[owner].knots[segment], right=paths[owner].knots[segment+1];
-    if(left.q.z<0.5 || right.q.z<0.5 || all(equal(left.p.xyz,right.p.xyz))) return;
+    Knot left=knotAt(owner,segment), right=knotAt(owner,segment+1);
+    // q.w marks a knot that starts a new strip (ring break/reseed): nothing joins into it.
+    if(left.q.z<0.5 || right.q.z<0.5 || right.q.w>0.5 || all(equal(left.p.xyz,right.p.xyz))) return;
     // Independent triangles: L0 L1 R0, R0 L1 R1. No bridge across invalid intervals.
     bool next=corner==1 || corner>=4;
     float signWidth=(corner==2 || corner==3 || corner==5)?1.0:-1.0;
     float u=float(interval%divisions+(next?1:0))/float(divisions);
     vec3 b=left.p.xyz,c=right.p.xyz;
-    vec3 a=segment>0?paths[owner].knots[segment-1].p.xyz:2*b-c;
-    vec3 d=segment+2<count?paths[owner].knots[segment+2].p.xyz:2*c-b;
+    Knot before=knotAt(owner,max(segment-1,0)), after=knotAt(owner,min(segment+2,count-1));
+    vec3 a=segment>0?before.p.xyz:2*b-c;
+    vec3 d=segment+2<count?after.p.xyz:2*c-b;
     // Invalid guard knots must not pull an otherwise valid interval across a gap.
-    if(segment>0 && paths[owner].knots[segment-1].q.z<0.5) a=2*b-c;
-    if(segment+2<count && paths[owner].knots[segment+2].q.z<0.5) d=2*c-b;
+    if(segment>0 && (before.q.z<0.5 || left.q.w>0.5)) a=2*b-c;
+    if(segment+2<count && (after.q.z<0.5 || after.q.w>0.5)) d=2*c-b;
     float u0=float(interval%divisions)/float(divisions), u1=float(interval%divisions+1)/float(divisions);
     vec3 l0,r0,l1,r1;
     // Both endpoints must admit before ANY corner is emitted; partial rejection
