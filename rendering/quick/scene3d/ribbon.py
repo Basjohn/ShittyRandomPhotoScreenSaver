@@ -21,7 +21,8 @@ from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.stream import StreamRing
 
 _FRAGMENTS = {'diagnostic': RIBBON_FRAGMENT, 'body': RIBBON_BODY_FRAGMENT, 'light': RIBBON_LIGHT_FRAGMENT}
-_MATERIAL_UNIFORMS = ('uViewZ', 'uEye', 'uForward', 'uOrthographic', 'uStrands', 'uRim', 'uBody', 'uFill', 'uGlint')
+_MATERIAL_UNIFORMS = ('uViewZ', 'uEye', 'uForward', 'uOrthographic', 'uStrands', 'uRim', 'uBody', 'uFill', 'uGlint',
+                      'uViewport')
 
 
 @dataclass(frozen=True)
@@ -34,11 +35,10 @@ class RibbonMaterial:
     warp_frequency: float = .25     # warp cycles per strand-phase unit along the path
     rim_half_width: float = .02     # of the width
     rim_light: float = 1.4
-    fold_light: float = 1.5         # extra light where the sheet turns edge-on
-    fold_power: float = 3.
+    path_cap: float = 64.           # max path-length gain 1/|N.V| where the sheet is not widened
+    min_pixels: float = 2.          # edge-on sheets stay this wide on screen, light scaled by true width
     body_alpha: float = .035
     body_tint: float = .35
-    fold_alpha: float = 1.          # extra body opacity where edge-on
     fill_light: float = .12         # the sheet's own glow
     fill_centre: float = .3         # fill level at the centre line (edges are 1)
     rim_glow_width: float = .05     # of the width, exponential falloff from each edge
@@ -55,13 +55,13 @@ class RibbonMaterial:
         if (not 1 <= self.strands <= 256 or not 0 < self.strand_half_width <= .5 or not 0 < self.rim_half_width <= .5
                 or not 0 < self.rim_glow_width <= .5 or self.fill_centre > 1 or self.glint_chance > 1):
             raise ValueError('Ribbon strands need 1..256 lines and positive half-widths up to half a spacing')
-        if self.body_alpha > .95 or self.fold_power <= 0:
-            raise ValueError('Ribbon body alpha must stay below 0.95 and fold power positive')
+        if self.body_alpha > .95 or self.path_cap < 1 or self.min_pixels > 8:
+            raise ValueError('Ribbon body alpha must stay below 0.95, path cap at least 1, minimum width at most 8 px')
 
     def uniforms(self):
         return dict(uStrands=(self.strands, self.strand_half_width, self.strand_light, self.strand_warp),
-                    uRim=(self.rim_half_width, self.rim_light, self.fold_light, self.fold_power),
-                    uBody=(self.body_alpha, self.body_tint, self.fold_alpha, self.warp_frequency),
+                    uRim=(self.rim_half_width, self.rim_light, self.path_cap, self.min_pixels),
+                    uBody=(self.body_alpha, self.body_tint, 0., self.warp_frequency),
                     uFill=(self.fill_light, self.fill_centre, self.rim_glow_width, self.rim_glow_light),
                     uGlint=(self.glint_density, self.glint_chance, self.glint_light, self.glint_radius))
 
@@ -107,6 +107,9 @@ class RibbonPrimitive:
         if shading != 'diagnostic':
             shaded = self._material_uniforms(view, translate, bool(orthographic), material or RibbonMaterial())
         self._check_context(admit=True)
+        if shaded is not None:
+            # Edge-on widening works in pixels: the caller's current viewport is the scene target's.
+            shaded['uViewport'] = tuple(float(v) for v in np.asarray(gl.glGetIntegerv(gl.GL_VIEWPORT)).reshape(-1)[2:4])
         program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
         vao_before = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING)
         try:
@@ -128,6 +131,8 @@ class RibbonPrimitive:
                 for name, value in shaded.items():
                     if name == 'uOrthographic':
                         gl.glUniform1i(uniforms[name], value)
+                    elif len(value) == 2:
+                        gl.glUniform2f(uniforms[name], *value)
                     elif len(value) == 3:
                         gl.glUniform3f(uniforms[name], *value)
                     else:

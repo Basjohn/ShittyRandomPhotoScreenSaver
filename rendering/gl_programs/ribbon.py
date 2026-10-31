@@ -5,7 +5,7 @@ Three fragment programs share one vertex stage:
 - ``RIBBON_FRAGMENT``: diagnostics (flat colour, face normals, strand phase).
 - ``RIBBON_BODY_FRAGMENT``: the faint translucent sheet, written inside ``SceneTarget.transparent_writes``
   through the shared weighted-blended OIT (order-independent, depth-tested, no depth writes).
-- ``RIBBON_LIGHT_FRAGMENT``: rims, longitudinal filament strands and fold glow, added to colour (location 0)
+- ``RIBBON_LIGHT_FRAGMENT``: sheet glow, rims, longitudinal filament strands and glints, added to colour (location 0)
   and to the overlay's emission (location 1) after the OIT resolve. Addition is order-independent, and
   crossings sum in HDR until the target's single tone map turns them white-hot.
 
@@ -21,11 +21,19 @@ struct Knot { vec4 p; vec4 q; vec4 tangent; vec4 side; };
 struct Ribbon { vec4 meta; vec4 extra; vec4 colourA; vec4 colourB; Knot knots[MAX_KNOTS]; };
 layout(std430, binding=0) readonly buffer Paths { Ribbon paths[]; };
 uniform mat4 uMvp;
+uniform vec2 uViewport;     // pixels; with uRim.w (minimum on-screen width) zero, no widening
+uniform vec4 uRim;
+uniform vec3 uEye;
+uniform vec3 uForward;
+uniform int uOrthographic;
 out vec3 vWorld;
 out vec3 vNormal;
 out float vPhase;
 out float vAcross;
 out float vEmission;
+out float vCoverage;
+out float vExpanded;
+out float vFaceScale;
 flat out vec4 vColour;
 flat out vec4 vColourB;
 vec3 curve(vec3 a, vec3 b, vec3 c, vec3 d, float u) {
@@ -123,6 +131,39 @@ void main() {
     vColour=paths[owner].colourA;
     vColourB=paths[owner].colourB;
     gl_Position=uMvp*vec4(vWorld,1);
+    vCoverage=1.0; vExpanded=0.0; vFaceScale=1.0;
+    // An edge-on sheet projects narrower than a pixel and MSAA catches it in dashes. Keep at least uRim.w pixels
+    // across the screen-space tangent. Light per unit length must stay that of the real sheet through the fold:
+    // the fragment's path-length gain becomes (face-on width)/(drawn width), which equals 1/|N.V| where widening
+    // starts, so the two meet continuously (a capped gain times shrinking coverage went dark at the fold).
+    float minimum=uRim.w;
+    if(minimum>0.0) {
+        vec3 lo=next?l1:l0, hi=next?r1:r0;
+        vec4 clo=uMvp*vec4(lo,1.0), chi=uMvp*vec4(hi,1.0), cc=uMvp*vec4((lo+hi)*0.5,1.0);
+        vec2 half_=0.5*uViewport;
+        float drawn=length((chi.xy/chi.w-clo.xy/clo.w)*half_);
+        vec4 ca=uMvp*vec4((l0+r0)*0.5,1.0), cb=uMvp*vec4((l1+r1)*0.5,1.0);
+        vec2 along=(cb.xy/cb.w-ca.xy/ca.w)*half_;
+        if(drawn<minimum && dot(along,along)>1e-8) {
+            vec3 middle=(lo+hi)*0.5;
+            vec3 view=uOrthographic==1?normalize(uForward):normalize(middle-uEye);
+            // Orient the widened edges by the sheet's facing, sign(N.V), computed in world space: it flips once
+            // where the sheet turns over. The sign of the projected width is numerical noise along a long
+            // near-edge-on stretch, and each flip drew a bow-tie (the fold broke into a gap). In screen space
+            // the projected across direction is -sign(N.V) times the tangent's left normal.
+            vec2 perp=normalize(vec2(-along.y,along.x))*(dot(next?n1:n0,view)>0.0?-1.0:1.0);
+            vec2 centre=cc.xy/cc.w*half_+perp*signWidth*0.5*minimum;
+            gl_Position=vec4(centre/half_*cc.w,cc.z,cc.w);
+            vCoverage=max(drawn,1e-3)/minimum;
+            vec3 across=cross(view,(l1+r1)*0.5-(l0+r0)*0.5);
+            if(dot(across,across)>1e-24) {
+                across=normalize(across)*0.5*length(hi-lo);
+                vec4 fa=uMvp*vec4(middle+across,1.0), fb=uMvp*vec4(middle-across,1.0);
+                vFaceScale=length((fa.xy/fa.w-fb.xy/fb.w)*half_)/minimum;
+                vExpanded=1.0;
+            }
+        }
+    }
 }
 """.replace('MAX_KNOTS', str(MAX_PATH_SAMPLES))
 
@@ -151,15 +192,18 @@ in vec3 vNormal;
 in float vPhase;
 in float vAcross;
 in float vEmission;
+in float vCoverage;
+in float vExpanded;
+in float vFaceScale;
 flat in vec4 vColour;
 flat in vec4 vColourB;
 uniform vec4 uViewZ;        // local -> view-space z (row 2 of the rebased view matrix)
 uniform vec3 uEye;          // local eye (Perspective)
 uniform vec3 uForward;      // view direction (Orthographic; directions are unchanged by rebasing)
 uniform int uOrthographic;
+uniform vec4 uRim;          // half-width (across units), light, path-length cap, minimum on-screen width (px)
 uniform vec4 uStrands;      // count across the width, half-width (strand spacing units), light, warp
-uniform vec4 uRim;          // half-width (across units), light, fold boost, fold power
-uniform vec4 uBody;         // alpha, tint, fold alpha boost, warp frequency (per phase unit)
+uniform vec4 uBody;         // alpha, tint, unused, warp frequency (per phase unit)
 uniform vec4 uFill;         // emissive sheet light, its centre level (edges are 1), rim glow width (across), rim glow light
 uniform vec4 uGlint;        // glints per strand per phase unit, chance, light, radius (strand units)
 
@@ -178,10 +222,14 @@ float rimCoverage(float edgeDistance, float h, float w) {
     return clamp((h-edgeDistance)/max(w,1e-4)+0.5,0.0,1.0)*min(1.0,2.0*h/max(w,1e-4)+0.25);
 }
 float viewDepth() { return -dot(uViewZ,vec4(vWorld,1.0)); }
-float grazing() {
+// A thin emissive translucent sheet seen at an angle: light and optical depth grow with the path through it,
+// 1/|N.V| (capped), while its projected width shrinks by the same factor, so light per unit length is conserved.
+// A fixed "grazing" boost instead lit the whole near-edge-on stretch as one flat neon band.
+float pathLength() {
     vec3 n=normalize(vNormal);
     vec3 view=uOrthographic==1?normalize(uForward):normalize(vWorld-uEye);
-    return 1.0-abs(dot(n,view));
+    float path=min(1.0/max(abs(dot(n,view)),1e-4),max(uRim.z,1.0));
+    return mix(path,vFaceScale,clamp(vExpanded,0.0,1.0));
 }
 // MSAA shades a covered sample at the pixel centre, which on an edge-on sliver lies far outside the triangle:
 // interpolants extrapolate there (across reached -50 and exp() overflowed into the bloom). Clamp before use.
@@ -192,8 +240,7 @@ vec3 ribbonColour() { return mix(vColour.rgb,vColourB.rgb,acrossClamped()); }
 RIBBON_BODY_FRAGMENT = ("#version 460 core\n" + SCENE_OIT_GLSL + "layout(location=2) out vec4 Emission;\n"
                         + _RIBBON_MATERIAL_GLSL + """
 void main() {
-    float fold=pow(grazing(),max(uRim.w,1e-3));
-    float alpha=clamp(uBody.x*(1.0+uBody.z*fold),0.0,0.95);
+    float alpha=clamp((1.0-pow(1.0-uBody.x,pathLength()))*clamp(vCoverage,0.0,1.0),0.0,0.95);
     sceneTransparent(ribbonColour()*uBody.y*alpha,alpha,viewDepth());
     Emission=vec4(0.0);
 }
@@ -210,7 +257,6 @@ void main() {
     float strands=strandCoverage(x,uStrands.y,w)*(0.55+0.45*strandHash(floor(x)));
     float wa=max(fwidth(across),1e-5);
     float rims=rimCoverage(across,uRim.x,wa)+rimCoverage(1.0-across,uRim.x,wa);
-    float fold=pow(grazing(),max(uRim.w,1e-3));
     // The sheet itself glows (both references): a fill brightening toward the edges, a wide rim glow beside
     // the crisp rim line, then strands and their glints on top.
     float edge=min(across,1.0-across);
@@ -227,11 +273,13 @@ void main() {
             float acrossPx=(fract(x)-0.5)/max(w,1e-4);
             float radiusPx=max(uGlint.w/max(w,1e-4),0.75);
             float r2=(alongPx*alongPx+acrossPx*acrossPx)/(radiusPx*radiusPx);
-            glints=exp(-3.0*r2)*min(1.0,radiusPx*radiusPx);
+            // Glints belong to resolved strands: they fade with them, never smear across a sub-pixel sheet.
+            glints=exp(-3.0*r2)*min(1.0,radiusPx*radiusPx)*(1.0-smoothstep(0.35,0.9,w));
         }
     }
-    vec3 light=ribbonColour()*(fill+rimGlow+strands*uStrands.z+rims*uRim.y)*(1.0+uRim.z*fold);
-    light=(light+mix(ribbonColour(),vec3(1.0),0.6)*glints*uGlint.z)*max(vEmission,0.0);
+    vec3 light=ribbonColour()*(fill+rimGlow+strands*uStrands.z+rims*uRim.y);
+    light=(light+mix(ribbonColour(),vec3(1.0),0.6)*glints*uGlint.z)*max(vEmission,0.0)
+         *pathLength()*clamp(vCoverage,0.0,1.0);
     FragColor=vec4(light,0.0);
     Emission=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722)));
 }
