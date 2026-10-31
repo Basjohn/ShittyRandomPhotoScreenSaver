@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, replace
+from typing import Callable
 
 from widgets.spotify_visualizer.render_state import (
     VisualizerProtectedEdge,
@@ -52,6 +53,9 @@ class VisualizerSnapshotBridge:
         self._superseded_count = 0
         self._rejected_count = 0
         self._presentation_mismatch_count = 0
+        # Owner-installed admission run at the synchronization consume, before
+        # the slot is taken (see ``admit_at_sync``). Never a queue or a clock.
+        self._sync_admission: Callable[[], object] | None = None
 
     @property
     def identity(self) -> VisualizerRenderIdentity | None:
@@ -171,6 +175,29 @@ class VisualizerSnapshotBridge:
             self._snapshot = snapshot
             self._last_revision = snapshot.logical_revision
             return True
+
+    def set_sync_admission(self, admission: Callable[[], object] | None) -> None:
+        """Bind/clear the owner's synchronization-time admission (``admit_at_sync``)."""
+
+        if admission is not None and not callable(admission):
+            raise TypeError("sync admission must be callable or None")
+        with self._lock:
+            self._sync_admission = admission
+
+    def admit_at_sync(self) -> None:
+        """Quick synchronization, just before ``take_for_render``: let the owner
+        admit a newer logical publication through ``publish``.
+
+        Qt's threaded render loop holds the GUI thread from its sync request
+        until the previous frame is finished, so under a long frame the GUI's
+        last snapshot is one or two logical revisions old when it is consumed.
+        Runs outside the lock; ``publish`` keeps every admission rule.
+        """
+
+        with self._lock:
+            admission = self._sync_admission
+        if admission is not None:
+            admission()
 
     def peek(self) -> VisualizerRenderSnapshot | None:
         """Inspect the current slot without acknowledging presentation."""

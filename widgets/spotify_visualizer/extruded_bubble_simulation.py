@@ -467,8 +467,10 @@ class ExtrudedBubbleSimulation:
                 return
 
     def _outside(self, b: _Bubble, *, surface_scene: bool) -> bool:
-        return (any(abs(p - c) > h + WORLD_MARGIN + b.current_radius
-                    for p, c, h in zip((b.x, b.y, b.z), WORLD_CENTER, WORLD_HALF))
+        # Written out per axis (no generator): this runs for every bubble on every logical tick.
+        (cx, cy, cz), (hx, hy, hz), r = WORLD_CENTER, WORLD_HALF, b.current_radius
+        return (abs(b.x - cx) > hx + WORLD_MARGIN + r or abs(b.y - cy) > hy + WORLD_MARGIN + r
+                or abs(b.z - cz) > hz + WORLD_MARGIN + r
                 or (surface_scene and b.y - b.current_radius > WATER_SURFACE_Y))
 
     # -- one step ----------------------------------------------------------------------------------------------------
@@ -819,8 +821,9 @@ class ExtrudedBubbleSimulation:
             b.y += dt * (direction[1] * forward + across[1] * swing + b.push[1] + drift_vector[1])
             b.z += dt * (direction[2] * forward + across[2] * swing + b.push[2] + drift_vector[2])
             b.push = _decayed(b.push, dt)
+        by_ident = {b.ident: b for b in self._bubbles} if self._clusters else {}
         for c in self._clusters.values():
-            members = [self._find(i) for i in c.members]
+            members = [by_ident.get(i) for i in c.members]
             members = [m for m in members if m is not None]
             if not members:
                 continue
@@ -916,15 +919,28 @@ class ExtrudedBubbleSimulation:
         # Neighboring cells suffice only when a cell covers the largest contact diameter.
         cell = max(.1, 2.0 * max((b.current_radius for b in self._bubbles), default=0.0))
         grid: dict[tuple[int, int, int], list[_Bubble]] = {}
+        every, big = scope == "all", scope == "big"
         for b in self._bubbles:
-            if self._admitted(b, scope) or self._obstacle(b, scope):
+            # _admitted(b) or _obstacle(b), written out: a live bubble needs alpha >= 0.6, a fading pop alpha > 0.05.
+            if not b.leaving and (every or big == b.large) and (b.alpha >= 0.6 if b.popping < 0.0 else b.alpha > 0.05):
                 grid.setdefault((int(math.floor(b.x / cell)), int(math.floor(b.y / cell)),
                                  int(math.floor(b.z / cell))), []).append(b)
+        # Cells are mostly isolated: look a neighbour column up once, then only its occupied depths.
+        columns: dict[tuple[int, int], dict[int, list[_Bubble]]] = {}
+        for (cx, cy, cz), bucket in grid.items():
+            columns.setdefault((cx, cy), {})[cz] = bucket
         # Freeze discovery before any response moves a member or changes cluster ownership.
         candidates: list[tuple[_Bubble, _Bubble]] = []
         for (cx, cy, cz), bucket in grid.items():
-            neighbours = [b for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1)
-                          for b in grid.get((cx + dx, cy + dy, cz + dz), ())]
+            neighbours: list[_Bubble] = []     # in (dx, dy, dz) order, as the 27-cell scan visits them
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    column = columns.get((cx + dx, cy + dy))
+                    if column is not None:
+                        for dz in (-1, 0, 1):
+                            near = column.get(cz + dz)
+                            if near is not None:
+                                neighbours.extend(near)
             for a in bucket:
                 for b in neighbours:
                     if b.ident <= a.ident:
@@ -968,11 +984,12 @@ class ExtrudedBubbleSimulation:
             if self._contacts[pair] in ("bounce", "pop"):
                 self._bounce(a, b, dt)
         # Contacts end when the pair separates (so a later meeting resolves anew).
+        by_ident = {b.ident: b for b in self._bubbles} if self._contacts else {}
         self._contacts = {pair: response for pair, response in self._contacts.items()
-                          if pair in touching or self._clustered(pair)}
+                          if pair in touching or self._clustered(pair, by_ident)}
 
-    def _clustered(self, pair: tuple[int, int]) -> bool:
-        a, b = self._find(pair[0]), self._find(pair[1])
+    def _clustered(self, pair: tuple[int, int], by_ident: dict[int, _Bubble]) -> bool:
+        a, b = by_ident.get(pair[0]), by_ident.get(pair[1])
         return a is not None and b is not None and a.cluster >= 0 and a.cluster == b.cluster
 
     def _fuse(self, a: _Bubble, b: _Bubble) -> bool:

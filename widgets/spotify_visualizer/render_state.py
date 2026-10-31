@@ -178,8 +178,10 @@ def freeze_render_fields(
 
 def _float_tuple(values: Sequence[object], *, name: str) -> tuple[float, ...]:
     # Same conversion and check as _finite per value, in C-level loops (wake records run to thousands of floats).
+    # A finite sum proves every value finite (a NaN or infinity always reaches the sum); only a non-finite sum,
+    # which finite values can also give by overflowing, needs the per-value check.
     numbers = tuple(map(float, values))
-    if not all(map(math.isfinite, numbers)):
+    if not math.isfinite(sum(numbers)) and not all(map(math.isfinite, numbers)):
         raise ValueError(f"{name} must be finite")
     return numbers
 

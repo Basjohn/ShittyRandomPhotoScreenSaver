@@ -51,9 +51,12 @@ world geometry and camera fixed during resize; compare the original rectangle be
   owns the measured ranking and checkpoints. The logical tick (3.0 ms) is back under budget, and free drift now runs
   on the GPU. Live under the operator's heavy load: 90 Hz revisions, about 60 fps draws on the 60 Hz panel, about 40 ms
   frame age (target about 20). Offline, EB sustains 4.7 ms per frame under a 60% GPU load (5.8 ms median, 9.2 ms p90
-  under combined CPU and GPU load), against 10.4 ms render-mode time live. **Next:** one heavy-load run of
-  `tools/eb_live_phases.py` (logs to a scratch folder) to attribute the live-only time. Then work the ranked items in
-  the audit doc.
+  under combined CPU and GPU load), against 10.4 ms render-mode time live. The 2026-10-31 instrumented live run
+  attributed the age: the sync consumed a revision ~20 ms old while the newest was ~3 ms old (fixed by sync-time
+  latest admission), and the render thread stalls behind the logical tick's GIL time. **Next:** one heavy-load MC run
+  to confirm the age drop, then the logical tick's Python (audit doc, "Live attribution").
+- [ ] **`test_qtquick_h_cutover.py::test_display_manager_admits_exactly_one_configured_quick_visualizer_owner`** fails
+  at HEAD (`01e3ccb6`): after the transition the controller still reports `extruded_bubble`, not `devcurve`.
 - [ ] **`test_extruded_bubble_empty_near.py::test_empty_ordinary_population_skips_near_and_cannot_replay_stale_bokeh`**
   fails only in the full `tests/test_extruded_bubble*.py` run and passes alone: find the shared state it depends on.
 

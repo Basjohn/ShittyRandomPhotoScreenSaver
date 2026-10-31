@@ -665,6 +665,31 @@ class VisualizerRuntimeController:
         )
         return self._render_bridge.publish(snapshot)
 
+    def admit_render_snapshot(
+        self,
+        logical: VisualizerLogicalFrame,
+        presentation: ResolvedVisualizerPresentation,
+        *,
+        logical_revision: int,
+    ) -> bool:
+        """Admit a newer logical frame under an already published presentation.
+
+        The Quick synchronization edge (``QuickVisualizerPresentationSync.
+        admit_latest_at_sync``): ``presentation`` is the one the GUI resolved,
+        checked and committed for the snapshot this supersedes, so nothing is
+        committed again here.
+        """
+
+        if logical.mode_id != self._mode_id:
+            return False
+        return self._render_bridge.publish(
+            compose_visualizer_render_snapshot(
+                logical,
+                presentation,
+                logical_revision=logical_revision,
+            )
+        )
+
     @property
     def logical_runtime(self) -> VisualizerLogicalRuntime | None:
         return self._logical_runtime

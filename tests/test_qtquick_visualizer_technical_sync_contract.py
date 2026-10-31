@@ -432,3 +432,78 @@ def test_sync_commits_same_presentation_to_retained_item_and_item_consumes_snaps
         runtime.close_runtime()
         factory.deleteLater()
         qt_app.processEvents()
+
+
+def _publish(state) -> None:
+    for _ in range(6):
+        if tick_pipeline.logical_tick(state) is not None:
+            return
+    raise AssertionError("no logical publication")
+
+
+@pytest.mark.qt
+def test_quick_sync_consumes_the_newest_logical_revision_not_the_gui_snapshot_it_waited_with(
+    qt_app,
+    monkeypatch,
+) -> None:
+    """Revisions published while the GUI waits on Qt's sync are drawn at that sync, under the GUI's presentation.
+
+    The mailbox is left empty, so the next publication's wake still drives the next frame; Edit framing and mode
+    transitions keep every presentable frame on the GUI path.
+    """
+
+    _quiet(monkeypatch)
+    runtime, factory = _make_runtime(qt_app, 73)
+    try:
+        owner = _make_owner(runtime, bar_count=32, initial_mode="spectrum",
+                            engine_factory=lambda _count: _CaptureEngine())
+        owner.configure(logical_kwargs={}, presentation_kwargs={}, playing=False)
+        owner.bind(engine_generation=_ENGINE_GEN, activation_id=_ACT_ID)
+        state = owner.controller.logical_tick_state
+        state._mode_teardown_block_until_ready = False
+        state._mode_transition_ready = True
+        state._waiting_for_fresh_engine_frame = False
+        mailbox = owner.controller.logical_mailbox
+        item = runtime.scene_controller.visualizer_item
+
+        def gui_hop_then_publish(count: int) -> tuple[int, int]:
+            _publish(state)
+            assert owner.sync_present() is True
+            gui_revision = owner.controller.render_bridge.peek().logical_revision
+            for _ in range(count):
+                _publish(state)
+            return gui_revision, mailbox.peek().revision
+
+        gui_revision, newest = gui_hop_then_publish(2)
+        assert newest > gui_revision
+        node = item.updatePaintNode(None, None)  # type: ignore[arg-type]
+        assert node.snapshot.logical_revision == newest
+        assert node.snapshot.presentation == item.presentation
+        assert mailbox.peek() is None
+        assert owner.sync_present() is False          # nothing left for the GUI hop: no extra frame request
+
+        # Nothing pending from the GUI: the sync neither consumes nor re-presents anything.
+        _publish(state)
+        unread = mailbox.peek().revision
+        node = item.updatePaintNode(node, None)  # type: ignore[arg-type]
+        assert mailbox.peek().revision == unread
+
+        # Edit framing observes every presentable frame on the GUI edge.
+        owner.set_edit_orbit_publication_callback(lambda *_args: None)
+        gui_revision, newest = gui_hop_then_publish(1)
+        node = item.updatePaintNode(node, None)  # type: ignore[arg-type]
+        assert node.snapshot.logical_revision == gui_revision
+        assert mailbox.peek().revision == newest
+        owner.set_edit_orbit_publication_callback(None)
+
+        # A mode transition sequences its fades one GUI publication at a time.
+        monkeypatch.setattr(owner, "_mode_transition_phase", "fading_in")
+        assert owner._admit_latest_at_sync() is False
+        assert mailbox.peek().revision == newest
+
+        assert owner.retire() is True
+        assert owner.controller.render_bridge._sync_admission is None
+    finally:
+        runtime.close_runtime()
+        factory.deleteLater()
+        qt_app.processEvents()

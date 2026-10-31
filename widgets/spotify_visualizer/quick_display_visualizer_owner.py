@@ -401,8 +401,21 @@ class QuickDisplayVisualizerOwner:
         self._controller.logical_mailbox.set_wake_callback(
             self._publication_wake.request
         )
+        self._controller.render_bridge.set_sync_admission(self._admit_latest_at_sync)
         self._bound = True
         return self._render_identity
+
+    def _admit_latest_at_sync(self) -> bool:
+        """Render thread, at Quick synchronization: the steady-state freshest-revision admission.
+
+        Mode transitions keep their GUI-side, one-publication-per-wake fade
+        sequencing, so they are left entirely to ``sync_present``.
+        """
+
+        sync = self._sync
+        if self._retired or sync is None or self._mode_transition_phase != "idle":
+            return False
+        return sync.admit_latest_at_sync()
 
     def _request_retained_present(self) -> None:
         """Request one retained visualizer sync after a new revision is published.
@@ -1461,6 +1474,7 @@ class QuickDisplayVisualizerOwner:
         # start must not leave a logical-thread callback targeting a retired Qt
         # object, so detach this edge regardless of whether logical cadence ran.
         self._controller.logical_mailbox.set_wake_callback(None)
+        self._controller.render_bridge.set_sync_admission(None)
         wake = self._publication_wake
         if wake is not None:
             wake.close()

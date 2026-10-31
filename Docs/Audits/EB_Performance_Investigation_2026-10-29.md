@@ -215,6 +215,32 @@ The age reaches about 20 ms only when the render loop keeps up with the 90 Hz re
 
 All of these need measuring against the 60% reference load (submit-to-completion latency, not idle GPU time).
 
+**Live attribution (2026-10-31, operator's heavy load, GPU 80–95%, `tools/eb_live_phases.py` + `--frame-trace`):**
+
+| Step (median) | Live |
+|---|---|
+| Logical tick, timestamp to publish | 5.8 ms (4.0 offline single-thread under the same load) |
+| Publish to GUI snapshot | 3.1 ms |
+| GUI snapshot to Quick sync | 15.5 ms |
+| Sync to EB render begin | 3.4 ms |
+| EB render | 10.7 ms (sum of wrapped stages ~3.4 ms; sub-stage p90s at 3–7 ms) |
+| Draw to swap | 0.8 ms |
+
+- **Stale revision at sync (fixed):** at each sync the consumed revision was ~20 ms old while the newest publication
+  was ~3 ms old, 1–2 revisions ahead. Qt's threaded loop holds the GUI thread from its sync request until the render
+  thread finishes the previous frame, so the GUI cannot hop the publications made meanwhile. The Quick sync now admits
+  the newest mailbox publication under the presentation the GUI resolved for that frame
+  (`QuickVisualizerPresentationSync.admit_latest_at_sync`, through `VisualizerSnapshotBridge.publish`). Steady state
+  only; mode transitions, Edit framing and CUSTOM rebasing keep the GUI path. No timer, poll or extra frame: emptying
+  the mailbox leaves the next publication's wake to drive the next frame. Trace event `quick_sync_latest_admitted`.
+  Expected: about 15 ms off the age. Needs one live confirmation.
+- **Render thread stalls behind the logical tick:** every GL call releases the GIL; while the pure-Python tick runs
+  (52% of each 11.1 ms period live), the render thread gets about one call through per 5 ms switch interval, so a
+  ~4.5 ms frame spreads to ~10.7 ms. Cutting the logical tick's Python therefore pays twice (age and render). The
+  1 ms switch interval stays rejected (R-87 CHK18). First bit-identical step: collision neighbour lookups by column,
+  inline admission/outside tests, id maps for cluster members and contacts, sum-first finite check
+  (4.1–4.6 → 3.6–3.8 ms under load; all 8 presets identical over 1,820 ticks).
+
 **Remaining, ranked:**
 1. **Heavy-load confirmation:** one MC run on preset 1 under the operator's external GPU load, compared with the 38–55 fps run.
 2. **Render thread:** about 4.2 ms solo submit, still Python-heavy (7,789 calls per frame, about 750 GL calls). Each remaining item is small: uniform handling 0.4 ms, probe 0.7 ms, about 69 state queries.
