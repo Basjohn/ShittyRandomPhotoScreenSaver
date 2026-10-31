@@ -60,28 +60,81 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
   pillar row and far along x, more near the floor. Its colour glows just beyond the clear air and darkens deeper in:
   glow by height alone lit the entire far floor, which an Orthographic view shows as the whole upper field. Open:
   reactive density, and whether a reduced-resolution volume (S3D-7) is ever needed.
-- [~] **WR-04 parity, measured per layer against the mock** (crop luminance median/p90 and saturation; operator: the
-  first scene was "not even half as good"). Pass 1 (`wr04_parity_pass1/`): ribbons now match (high median 0.39 vs
-  0.40, saturation 0.58 vs 0.65): saturated darker body, ~16 thin irregular near-white strands, five sheets with
-  individual amplitude/width/frequency/phase (identical sheets braided and summed to white). Floor lit diffusely by
-  the glowing scene (the reflection's widest mip) besides the mirror; pillars are light columns (no dark bodies);
-  mist darkens with depth. Pass 2 (`wr04_parity_pass2/`): history-attached sparks in the ribbon primitive
-  (`shading='sparks'`, `RibbonSparks`; per-knot sparkle in `tangent.w`; stateless re-emission for as long as a knot
-  lives; integer hash on the knot's absolute coordinate; tests with a negative control) drawn on the ribbons and in
-  the floor reflection; high floor 0.33 vs 0.36. Pass 3 (`wr04_parity_pass3/`): pillar halos (camera-turned about
-  each pillar's own axis, world-anchored, brightening with the core) and white-hot bases; upper field 0.04/0.08 vs
-  0.06/0.12. Still short, largest first:
-  1. Floor near the camera: the mock's vivid crisp coloured streaks (saturation 0.67 vs 0.54, p90 0.66 vs 0.52).
-  2. High ribbon saturation (0.54 vs 0.65) and sweep height; spark density and colour.
-  3. Glow around bright crossings; pillar glow still more uniform than the mock's localized spindles.
+- [~] **WR-04 parity with the mock:** in progress; weaknesses, viewing method and decision rules in section 0A.
+  Passes so far: 1 ribbon material/sheets, floor diffuse light, light-column pillars (`wr04_parity_pass1/`); 2
+  history-attached sparks (`wr04_parity_pass2/`); 3 pillar halos and white-hot bases (`wr04_parity_pass3/`).
 - [ ] **WR-00 audio windows and WR-07 music in the lab:** choose recorded windows (quiet, transition, bass, mids,
   highs, chorus, pause/resume, hot start). Map bass → width, mids → twist/deformation, energy → whole-ribbon light,
   with band-limited history controls (section 4A).
-- [ ] **S3D-2 emitters, then WR-06 accents:** sparks and glints riding the ribbons, bounded and consume-once.
+- [ ] **S3D-2 beyond ribbon sparks, only if parity needs it:** the ribbon primitive's history sparks cover sparks on
+  and around the sheets; free-floating particles, consume-once transient bursts and indirect draws remain S3D-2.
 - [ ] **S3D-1 remaining for this scene:** near-plane behaviour under navigation, AA under slow motion, shared defocus
   (depth-varying along a strip), full lifecycle/cost proof.
 - [ ] **WR-08 production port, then WR-09 acceptance** with `tools/visualizer_live_check.py --load game60` (which runs
   `--usage` like the operator) and the operator's A–H sign-off.
+
+## 0A. Parity with the mock: remaining weaknesses, viewing method, decision rules (live)
+
+Operator, 1 November: "not even half as good" (pass 0), then "improving" (pass 3). Parity is judged against the
+approved primary board (low and high panels); the alternate board informs structure only. Figures below are
+mock / ours from pass 3, crop luminance median (p90) and saturation median on fixed ROIs; they are guides, and the
+picture and the operator's judgement override them.
+
+**Remaining weaknesses** (ID, largest first within each layer; delete an item only when crops and numbers agree):
+
+- Floor
+  - F1 Near-camera vivid, crisp coloured streaks: saturation 0.67 / 0.54, p90 0.66 / 0.52 (high).
+  - F2 Wet texture: the mock shows specular grain and sparkle on the concrete and mirror-like wet patches; ours
+    smears into soft colour.
+  - F3 Ribbon reflections near the floor line are sharper and brighter in the mock.
+- Ribbons
+  - R1 High-react saturation 0.65 / 0.54: strands whiten into a lavender cast where the mock stays electric blue,
+    violet and magenta.
+  - R2 Sweep and layering: the mock's high sheets reach higher (envelope top 0.24) with larger vertical excursions
+    and clear depth layering; ours form a more even braided band.
+  - R3 Strand structure: the mock's filaments fan at crests and gather at troughs, with bright edge filaments;
+    ours run mostly parallel.
+  - R4 Glow: bright crossings in the mock become white-hot cores with soft halos; ours stay flatter.
+  - R5 Low react is too bright and thick: crop median 0.15 / 0.26. The mock's low bundles are thinner and calmer.
+- Sparks
+  - S1 Density and colour: the mock has many magenta and cyan points, many of them in the air above the sheets;
+    ours are sparser and whiter.
+  - S2 Size range: the mock has a few large, soft, bright points among many fine ones.
+- Pillars
+  - P1 Glow: the mock's columns are localized bright spindles; ours read as more uniform haze columns.
+  - P2 Colour: the mock has bright cyan/white cores with some violet columns.
+- Atmosphere
+  - A1 Upper field 0.12 / 0.08 (high). The mock has a haze gradient and blue glow around the pillars' bright heights.
+- Global
+  - G1 Bloom character: the mock is tight on lines and broad on hot spots.
+  - G2 Look judged only at the mock pose and 640x709. Wide cards and the navigation poses still need a look review,
+    not just a fault check.
+  - G3 All tuning uses the synthetic head. The balance must be rechecked on recorded music (WR-07) before
+    production; nothing tuned here is a promise about music.
+
+**How samples are viewed, every iteration:**
+1. Full sheet, mock | flat landmark render | lit lab, both states at the panel size (640x709).
+2. Native-resolution crops side by side at 2x, mock | ours: ribbon crest/crossings, floor near the camera, upper
+   field, a pillar and its base. The downscaled sheet alone has hidden faults before (lumps, sub-pixel strands).
+3. Fixed-ROI numbers per layer: luminance median/p90, saturation median, mean RGB
+   (`tools/labs/waveform_ribbon_targets.py` ROIs and the per-layer audit boxes).
+4. Fault pass at the five navigation poses and in Perspective: banding, gaps, overflow and pose-dependent faults.
+5. Flat landmark render: the floor contact line and ribbon envelopes stay on the target table.
+
+**Decision rules going forward:**
+- Measure first, state the gap with numbers, change one layer, re-measure. Revert a change that moves its layer away
+  from the mock, even if it looks plausible in isolation. Within a layer, fix structure first, then tone, then glow.
+- The look lives in the lab recipe (palette, material knobs, pillar/floor/mist values). The shared primitives change
+  only for physically justified behaviour (light conservation, AA, stability, statelessness), each with a test and
+  a negative control. Primitive defaults stay neutral.
+- Never claim parity or "close". Every report lists the remaining items here with their numbers. The operator sees
+  milestones, not every iteration.
+- Every pass is retained as `.artifacts/evidence/waveform_ribbon/wr04_parity_passN/` with a receipt. Commits go
+  through only when the tests' own exit code is zero (a piped status once let a red test through).
+- Every new look is checked in both projections and at the navigation poses before it counts.
+- Look work does not bend the architecture. Flowing history, world-first layout, the shared camera, the
+  shared mist and reflection, and lean per-tick cost are fixed; a look that needs to break one is raised with the
+  operator first.
 
 Run `.venv\Scripts\python.exe tools/labs/waveform_ribbon_preflight.py --output .artifacts/evidence/waveform_ribbon/<new-run>`.
 It refuses overwrites, copies the unmodified primary, extracts provisional native-size low/high cards, and records
