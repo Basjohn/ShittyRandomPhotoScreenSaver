@@ -11,11 +11,15 @@ def _info_text(value: object) -> str:
     return str(value)
 
 
-def compile_program(vertex_source: str, fragment_source: str, *, label: str) -> int:
-    """Compile and link one program in the caller's current GL context."""
+def compile_program(vertex_source: str, fragment_source: str, *, label: str,
+                    geometry_source: str | None = None) -> int:
+    """Compile and link one program in the caller's current GL context (optionally with a geometry stage)."""
 
-    return _link(((gl.GL_VERTEX_SHADER, vertex_source, "vertex"),
-                  (gl.GL_FRAGMENT_SHADER, fragment_source, "fragment")), label)
+    stages = [(gl.GL_VERTEX_SHADER, vertex_source, "vertex")]
+    if geometry_source is not None:
+        stages.append((gl.GL_GEOMETRY_SHADER, geometry_source, "geometry"))
+    stages.append((gl.GL_FRAGMENT_SHADER, fragment_source, "fragment"))
+    return _link(tuple(stages), label)
 
 
 def compile_compute_program(source: str, *, label: str) -> int:
