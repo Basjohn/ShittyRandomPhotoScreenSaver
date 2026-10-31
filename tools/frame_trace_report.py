@@ -85,6 +85,7 @@ EVENT_NAMES = {
     71: "transition_first_render_ready",
     72: "retained_node_create_begin",
     73: "retained_node_create_ready",
+    74: "quick_sync_latest_admitted",
 }
 
 # Startup/teardown windows are not stall points (core/diagnostics/lifecycle_window.py):

@@ -118,6 +118,9 @@ class FrameTraceEvent(IntEnum):
     TRANSITION_FIRST_RENDER_READY = 71
     RETAINED_NODE_CREATE_BEGIN = 72
     RETAINED_NODE_CREATE_READY = 73
+    # A newer logical publication admitted at the Quick sync itself, under the
+    # GUI-resolved presentation of the snapshot it supersedes.
+    QUICK_SYNC_LATEST_ADMITTED = 74
 
 
 _MAGIC: Final[bytes] = b"SRPSSFT1"

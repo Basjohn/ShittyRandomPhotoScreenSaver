@@ -269,6 +269,53 @@ class QuickVisualizerPresentationSync:
             )
         return True
 
+    def admit_latest_at_sync(self) -> bool:
+        """Render thread, inside Quick synchronization (the GUI thread is held):
+        admit the newest logical publication under the pending snapshot.
+
+        The GUI publishes a snapshot, requests a frame, then waits in Qt's sync
+        request until the render thread has finished the previous frame. Under
+        a long frame the publications made meanwhile stay in the mailbox: EB
+        under heavy load consumed a revision ~20 ms old while the newest was
+        ~3 ms old. This is ``sync_latest``'s own latest-wins admission at the
+        moment of consumption, under the presentation the GUI just resolved,
+        checked and committed for this frame. It runs only when such a GUI
+        snapshot is pending and no authored-view observer needs every
+        presentable frame; taking the slot leaves the mailbox empty, so the
+        next publication's wake still drives the next frame.
+        """
+
+        if self._authored_view_publication_callback is not None:
+            return False
+        controller = self._controller
+        pending = controller.render_bridge.peek()
+        if pending is None:
+            return False
+        publication = controller.logical_mailbox.take()
+        if publication is None:
+            return False
+        logical = publication.state
+        if logical is None or not self._identity_is_current(logical):
+            return False
+        if not controller.admit_render_snapshot(
+            logical,
+            pending.presentation,
+            logical_revision=publication.revision,
+        ):
+            return False
+        trace = self._frame_trace
+        if trace is not None:
+            trace.record(
+                FrameTraceEvent.QUICK_SYNC_LATEST_ADMITTED,
+                screen_index=self._screen_index(),
+                revision=publication.revision,
+                logical_timestamp_ns=logical_timestamp_ns(
+                    getattr(logical, "logical_timestamp", 0.0)
+                ),
+                auxiliary=int(getattr(logical, "runtime_generation", -1)),
+            )
+        return True
+
 
 __all__ = [
     "QuickVisualizerPresentationSync",

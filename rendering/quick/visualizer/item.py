@@ -355,6 +355,10 @@ class VisualizerRenderItem(QQuickItem):
         snapshot = None
         clear_snapshot = presentation is None or identity is None
         if bridge is not None and identity is not None and presentation is not None:
+            if not self._custom_layout_presentation_authority:
+                # The freshest logical revision, not the one the GUI published
+                # before Qt held it for this sync (CUSTOM rebases its own).
+                bridge.admit_at_sync()
             snapshot = bridge.take_for_render(
                 runtime_generation=identity.runtime_generation,
                 engine_generation=identity.engine_generation,
