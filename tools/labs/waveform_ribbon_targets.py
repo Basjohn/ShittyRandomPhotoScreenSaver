@@ -71,6 +71,8 @@ def roi_stats(pixels: np.ndarray, valid: np.ndarray) -> dict:
                                p90=float(np.percentile(luminance, 90))),
                 median_rgb=[float(v) for v in np.median(rgb, axis=0)],
                 chroma_median=float(np.median(chroma)),
+                saturation_median=float(np.median(chroma/np.maximum(peak, 1e-6))),
+                mean_rgb=[float(v) for v in rgb.mean(axis=0)],
                 clipped_fraction=float((pixels[valid].max(1) >= 250).mean()),
                 dark_fraction=float((luminance < .05).mean()))
 
@@ -163,10 +165,58 @@ def run(cards: Path, output: Path) -> dict:
     return receipt
 
 
+def compare(cards: Path, renders: Path, output: Path) -> dict:
+    """Fixed masked ROIs and native-size crops; neither reference nor render is stretched to match the other."""
+    if output.exists() and any(output.iterdir()):
+        raise FileExistsError(f'Refusing to overwrite evidence: {output}')
+    output.mkdir(parents=True, exist_ok=True)
+    report = {'rois': ROIS, 'masks': MASKS, 'panels': {}, 'inputs': {}}
+    full = Image.new('RGB', (1280, 1418))
+    for row, state in enumerate(('low', 'high')):
+        paths = {'mock': cards/f'{state}.png', 'lab': renders/f'lit_{state}.png'}
+        images = {label: Image.open(path).convert('RGB') for label, path in paths.items()}
+        if images['mock'].size != ((640 if state == 'low' else 638), 709) or images['lab'].size != (640, 709):
+            raise ValueError('Comparison needs the native WR-00 cards and 640x709 lab captures')
+        report['inputs'][state] = {label: dict(path=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+                                   for label, path in paths.items()}
+        report['panels'][state] = {}
+        crop_width = max(x1-x0 for x0,y0,x1,y1 in ROIS[state].values())*2
+        crop_height = sum((y1-y0)*2+24 for x0,y0,x1,y1 in ROIS[state].values())
+        crops = Image.new('RGB', (crop_width*2+8, crop_height), (12,12,16))
+        pen = ImageDraw.Draw(crops)
+        for column, (label, image) in enumerate(images.items()):
+            full.paste(image, (column*640,row*709))
+            pixels = np.asarray(image)
+            valid = np.ones(pixels.shape[:2], bool)
+            for x0,y0,x1,y1 in MASKS[state]:
+                valid[y0:y1,x0:x1] = False
+            report['panels'][state][label] = {}
+            y = 0
+            for region, box in ROIS[state].items():
+                x0,y0,x1,y1 = box
+                select = np.zeros_like(valid)
+                select[y0:y1,x0:x1] = True
+                report['panels'][state][label][region] = roi_stats(pixels, valid & select)
+                x = column*(crop_width+8)
+                pen.text((x,y+4), f'{label} | {region} | native pixels at 2x', fill='white')
+                crops.paste(image.crop(box).resize(((x1-x0)*2,(y1-y0)*2), Image.Resampling.NEAREST), (x,y+24))
+                y += (y1-y0)*2+24
+        crops.save(output/f'crops_{state}.png')
+    full.save(output/'mock_lab.png')
+    report['producer_sha256'] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    (output/'comparison.json').write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')
+    return report
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--cards', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--renders', type=Path, help='Compare a lab capture using fixed masked ROIs and 2x crops')
     args = parser.parse_args()
-    result = run(args.cards, args.output)
-    json.dump(dict(envelope={k: v['envelope'] for k, v in result['panels'].items()}, camera=result['camera']), sys.stdout, indent=2)
+    if args.renders:
+        compare(args.cards, args.renders, args.output)
+        print(f'Comparison saved to {args.output}')
+    else:
+        result = run(args.cards, args.output)
+        json.dump(dict(envelope={k: v['envelope'] for k, v in result['panels'].items()}, camera=result['camera']), sys.stdout, indent=2)

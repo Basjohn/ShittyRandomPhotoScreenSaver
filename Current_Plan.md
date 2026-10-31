@@ -147,7 +147,7 @@ floor, pillars and distance mist; the fitted mock pose is for comparison only. O
 
 - [~] **Floor reflection and mist follow-ups:** S3D-5 planar reflection, the PBR floor and world mist are landed
   (Lab Plan §0). Open: reflection pass cost and resize proof, reflecting the ribbons' OIT body, reactive mist density.
-- [~] **WR-04 parity with the mock (current work):** three measured passes landed; the explicit weakness list (floor
+- [~] **WR-04 parity with the mock (current work, before any reactivity):** the explicit weakness list (floor
   F1-F3, ribbons R1-R5, sparks S1-S2, pillars P1-P2, atmosphere A1, global G1-G3), how samples are viewed and the
   decision rules live in Lab Plan §0A.
 - [ ] **WR-00 audio windows and WR-07 music in the lab:** recorded windows; bass → width, mids → twist/deformation,
