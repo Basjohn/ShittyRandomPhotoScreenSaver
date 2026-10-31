@@ -203,5 +203,43 @@ The stateless rebuild of the same packet measured 102.6 ms. Append and publish a
 all ribbons, not per frame: a tick that admits no knot reuses the cached packet. GPU frame generation would
 remove no measured work, so it is not pursued.
 
-Next gate: broaden native curved-frame/normal/precision/lifecycle proof, then OIT/HDR, camera-facing GPU
-behaviour, AA/defocus and target composition. No GL scene likeness, music or full performance acceptance exists yet.
+## Filament material (S3D-1, landed 31 October)
+
+`RibbonPrimitive.draw(..., shading='body'|'light', view=, material=RibbonMaterial(...))` draws the ribbon look in
+two passes over the same geometry (`rendering/gl_programs/ribbon.py`):
+
+- **Body:** a faint translucent sheet, drawn inside `SceneTarget.transparent_writes` through the shared
+  weighted-blended OIT. It is order-independent and depth-tested, and writes no depth.
+- **Light:** rims, longitudinal filament strands and fold glow (more light where the sheet turns edge-on),
+  drawn after the OIT resolve inside `emission_writes`. The caller sets additive blending on colour,
+  `(ONE, ONE, ZERO, ONE)`, with depth testing on and depth writes off. Addition is order-independent; crossings
+  sum in HDR and turn white only after the scope's single tone map.
+
+Why the split: weighted-blended OIT averages overlapping colours. The mock's crossings get brighter, which only
+additive light gives, and the faint body keeps strands readable through each other.
+
+- Strands and rims are box-filtered over the pixel footprint (`fwidth` of the strand coordinate). They fade to
+  their mean density once a strand spacing nears a pixel, so narrow or distant ribbons neither crawl nor alias.
+- Strand spread/gather follows the absolute path phase, so it moves with history and never slides.
+- The vertex stage now carries smooth centre-line normals, the across-width coordinate and per-knot emission
+  (`side.w`, admitted by `RibbonRing.append(..., emission=)`, 0..64; the stateless packer writes 1).
+- Colours run across the width from `colourA` to `colourB` (`RibbonRing(colours=, edge_colours=)`).
+- The material knows only the ribbon (widths, strands, light): no music, palette or scene.
+- The view matrix is rebased with the same float64 origin as the MVP, so eye/forward/view depth stay packet-local.
+- Unused material uniforms are compiled out per pass; diagnostic-only use never compiles the material programs.
+
+Proof (`tests/test_ribbon_material.py`, through overlay + bloom + OIT + HDR, 4x MSAA): crossing ribbons are
+identical in either draw order (max difference 1) and brighter than either alone. An opaque strip in front hides
+the body and light behind it, matching the wall drawn alone; negative control: with depth testing off for the
+light pass the test fails. Eight overlapping ribbons at emission 64 with maximal light and body stay finite
+(saturated white, no NaN holes).
+
+Cards: `tools/labs/ribbon_material_probe.py` renders three flowing-history ribbons (labelled synthetic head, no
+music) with the WR-00 proposed camera, beside the mock's low/high crops, plus a wide card. Evidence:
+`.artifacts/evidence/ribbon_material/s3d1_filament_material/` (`mock_vs_material.png`). Warm GPU at 960x540 with
+both passes: body 0.04-0.13 ms, light 0.05-0.11 ms (low-high; absolute figures swing about 2x with GPU clocks).
+The fixture's sharp bass pulses notch the edges: width needs a musical attack/settle at WR-07, not material
+changes. Palette, strand density and glow balance are scene choices for the WR-03/04 lab.
+
+Next gate: camera-facing GPU width, near-plane/edge-on motion and AA coverage under slow motion, defocus, then
+the WR-03 scene blockout. No scene likeness, music or full performance acceptance exists yet.
