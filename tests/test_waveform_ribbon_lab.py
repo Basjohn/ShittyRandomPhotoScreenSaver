@@ -52,3 +52,18 @@ def test_navigation_draws_the_fixed_world_where_the_shared_camera_projects_it(la
             assert window.any(), (x, z, px, py)
             checked += 1
     assert checked >= 2  # every visible front pillar is checked; the authored row shows 2-3 per view
+
+
+def test_perspective_pillars_do_not_band(qt_app):
+    # A per-pillar seed hashed through a large sine was an interpolated vertex attribute: Perspective-correct
+    # interpolation wobbled it by ~1e-7 and the hash turned that into row-by-row banding (p99.9 jump 120.7 before
+    # the seed became a flat varying; Orthographic measures ~3).
+    import dataclasses
+    base = lab_module.Recipe()
+    recipe = dataclasses.replace(base, hall=dataclasses.replace(base.hall, rows=base.hall.rows[:1]), bloom=0.)
+    lab = lab_module.Lab(recipe, (1280, 720))
+    try:
+        upper = lab.render('low', flat=False, pose='perspective')[:200, :, :3].astype(int).mean(2)
+    finally:
+        lab.close()
+    assert np.percentile(np.abs(np.diff(upper, axis=0)), 99.9) < 15

@@ -87,8 +87,8 @@ class Hall:
     floor_x: float = 70.
     floor_z: tuple = (-60., 30.)
     # Pillar rows (depth, mean spacing, seed), authored in world units; spacing jitters deterministically.
-    rows: tuple = ((-2.3, 3.2, 1), (-6.5, 4.4, 2), (-12., 5.6, 3), (-19., 6.8, 4))
-    pillar_half: float = .08
+    rows: tuple = ((-2.3, 1.9, 1), (-6.5, 3.4, 2), (-12., 4.6, 3), (-19., 5.8, 4))
+    pillar_half: float = .12
     pillar_height: float = 14.
     pillar_light: float = 1.5
     pillar_colours: tuple = ((.35, .7, 1.), (.7, .55, 1.), (.4, .75, 1.), (.55, .6, 1.), (.4, .8, 1.), (.6, .7, 1.))
@@ -124,7 +124,7 @@ class Flow:  # Lab Plan section 4A: history enters at the head (world +x) and dr
 
 PALETTE = (((.08, .62, 1.), (.15, .42, 1.)),    # electric cyan -> blue
            ((.2, .28, 1.), (.42, .24, 1.)),     # blue -> violet
-           ((.62, .2, 1.), (.95, .2, .85)))     # violet -> magenta
+           ((.45, .24, 1.), (.82, .24, .95)))   # violet -> magenta, kept mostly violet
 STATES = {  # labelled synthetic controls sized from the WR-00 target table; not music
     'low': dict(width=.11, width_swell=.04, twist=1.1, emission=.9, spread=.32, amplitude=.55, lift=0.),
     'high': dict(width=.32, width_swell=.12, twist=2.4, emission=1.25, spread=1.1, amplitude=.85, lift=.5),
@@ -148,13 +148,17 @@ layout(location=2) in vec3 aLocal;    // across (-1..1), height (world), pillar 
 uniform mat4 uMvp;
 out vec3 vWorldPos;
 out vec4 vColour;
-out vec3 vLocal;
-void main() { vWorldPos=aPosition; vColour=aColour; vLocal=aLocal; gl_Position=uMvp*vec4(aPosition,1.0); }
+out vec2 vLocal;
+// Flat: a per-pillar constant hashed through a large sine must not be interpolated. Perspective-correct interpolation
+// reproduces a "constant" only to ~1e-7 relative, and the hash amplified that into per-row banding of the glow.
+flat out float vSeed;
+void main() { vWorldPos=aPosition; vColour=aColour; vLocal=aLocal.xy; vSeed=aLocal.z; gl_Position=uMvp*vec4(aPosition,1.0); }
 """
 HALL_FRAGMENT = """#version 460 core
 in vec3 vWorldPos;
 in vec4 vColour;
-in vec3 vLocal;
+in vec2 vLocal;
+flat in float vSeed;
 uniform int uFlat;
 uniform vec3 uBackdrop;
 layout(location=0) out vec4 FragColor;
@@ -167,12 +171,15 @@ void main() {
     if(vColour.a>0.0) {
         // A light pillar: mostly dim haze, two localized bright segments at seeded heights, and a bright pool where
         // it meets the floor. Uniform full-height tubes read as neon signage.
-        float core=exp(-pow(vLocal.x*2.2,2.0));
-        float height=vLocal.y, seed=vLocal.z;
+        // Clamped: MSAA shades sliver faces (seen edge-on) at pixel centres outside the triangle, where the across
+        // coordinate extrapolates and the profile collapsed on alternate rows (banded pillars in Perspective).
+        float core=exp(-pow(clamp(vLocal.x,-1.0,1.0)*1.6,2.0));
+        float height=vLocal.y, seed=vSeed;
         float h1=1.6+2.6*fract(sin(seed*91.7)*4375.85), h2=3.8+3.0*fract(sin(seed*37.1)*9123.17);
         float segments=exp(-pow((height-h1)/0.45,2.0))+0.7*exp(-pow((height-h2)/0.7,2.0));
         float profile=0.025+segments+1.4*exp(-height*2.4);
-        light=mix(colour,vec3(1.0),0.35*core*core)*vColour.a*core*profile*smoothstep(0.0,0.05,height);
+        float bright=0.12+0.88*pow(fract(sin(seed*17.13)*29871.7),2.0);  // most pillars dim, a few bright
+        light=mix(colour,vec3(1.0),0.35*core*core)*vColour.a*bright*core*profile*smoothstep(0.0,0.05,height);
         colour=vec3(0.0);
     }
     float clear=mistTransmittance(vWorldPos);
@@ -236,7 +243,7 @@ def camera(pose: Pose, aspect: float):
         distance = SPEC.orbit_distance/max(pose.scale, 1e-3)
         projection = fc.orthographic_matrix((tan[0]*distance, tan[1]*distance), .1, 200.)
     else:
-        projection = fc.perspective_matrix(fc.viewport_tangents(pose.fov, aspect), .05, 200.)
+        projection = fc.perspective_matrix(fc.viewport_tangents(pose.fov, aspect), .3, 200.)
     return view, np.asarray(projection).reshape(4, 4, order='F'), np.asarray(eye)
 
 
@@ -381,7 +388,7 @@ class Lab:
         if not flat:
             self._reflect(packet, projection, view, scroll, program, uniforms, vao, count, draw)
         with self.scene.scope(card, 4, self.resources, overlay=1.0, bloom=0. if flat else recipe.bloom,
-                              oit=True, hdr=None if flat else recipe.exposure):
+                              oit=True, hdr=None if flat or not recipe.bloom else recipe.exposure):
             gl.glViewport(0, 0, width, height)
             gl.glClearBufferfv(gl.GL_COLOR, 0, (*hall.backdrop, 1.))
             gl.glEnable(gl.GL_DEPTH_TEST)
