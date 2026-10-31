@@ -16,12 +16,12 @@ def lab(qt_app):
     lab.close()
 
 
-def test_flat_render_puts_floor_and_low_envelope_on_the_targets(lab):
-    pixels = lab.render('low', flat=True)
-    # Floor at the bottom (an upside-down readback once put it on top), on the traced contact line.
-    assert (pixels[-5, :, :3].astype(int) == pixels[-5, 0, :3]).all() and not (pixels[5, :, :3] == pixels[-5, 0, :3]).all()
-    report = lab_module.landmark_report(lab_module.measure_flat(pixels), 'low')
-    assert abs(report['floor']['lab'] - report['floor']['target']) < .005
+@pytest.mark.parametrize('state', ('low', 'high'))
+def test_flat_envelope_survives_an_interleaved_lit_capture(lab, state):
+    # A reflected additive pass once leaked blend state into the next diagnostic render.
+    lab.render('low', flat=False)
+    pixels = lab.render(state, flat=True)
+    report = lab_module.landmark_report(lab_module.measure_flat(pixels), state)
     for lab_edge, target_edge in zip(report['lab_envelope'], report['target_envelope']):
         assert abs(lab_edge - target_edge) < .03
 
@@ -33,37 +33,36 @@ def test_lit_render_has_light_and_no_overflow(lab):
     assert rgb.max() > 200 and not garbage.any()
 
 
-@pytest.mark.parametrize('pose', ('turned', 'perspective'))
-def test_navigation_draws_the_fixed_world_where_the_shared_camera_projects_it(lab, pose):
-    # World-first: pillars are authored in world units, so every visible front pillar sits exactly where the shared
-    # framed camera projects its world base, from any pose (nothing is placed relative to the view or the card).
-    width, height = lab.size
-    pixels = lab.render('low', flat=True, pose=pose)[:, :, :3].astype(int)
-    front = (np.abs(pixels - np.array(lab_module.FLAT['front_pillar'])*255).max(2) <= 6)
-    view, projection, _ = lab_module.camera(lab_module.POSES[pose], width/height)
-    checked = 0
-    for x, z, row, _seed in lab_module.pillar_positions(lab.recipe.hall):
-        if row:
-            continue
-        clip = projection @ view @ np.array((x, .3, z, 1.))
-        px, py = (clip[0]/clip[3] + 1)*width/2, (1 - clip[1]/clip[3])*height/2
-        if 4 <= px < width - 4 and 4 <= py < height - 4:
-            window = front[int(py) - 3:int(py) + 4, int(px) - 3:int(px) + 4]
-            assert window.any(), (x, z, px, py)
-            checked += 1
-    assert checked >= 2  # every visible front pillar is checked; the authored row shows 2-3 per view
+def test_perspective_far_floor_dissolves_into_the_same_background(lab):
+    upper = lab.render('low', flat=False, pose='perspective')[:190, :, :3].astype(int).mean(2)
+    # A different clear colour exposed the finite ground as a straight horizontal seam.
+    assert np.abs(np.diff(upper, axis=0)).mean(1).max() < 2.
 
 
-def test_perspective_pillars_do_not_band(qt_app):
-    # A per-pillar seed hashed through a large sine was an interpolated vertex attribute: Perspective-correct
-    # interpolation wobbled it by ~1e-7 and the hash turned that into row-by-row banding (p99.9 jump 120.7 before
-    # the seed became a flat varying; Orthographic measures ~3).
-    import dataclasses
-    base = lab_module.Recipe()
-    recipe = dataclasses.replace(base, hall=dataclasses.replace(base.hall, rows=base.hall.rows[:1]), bloom=0.)
-    lab = lab_module.Lab(recipe, (1280, 720))
+def test_reflected_additive_light_never_writes_depth(lab, monkeypatch):
+    from OpenGL import GL as gl
+    observed = []
+    draw = lab.ribbons.draw
+
+    def checked(*args, **kwargs):
+        if kwargs.get('shading') in ('light', 'sparks'):
+            observed.append((kwargs['shading'], bool(gl.glGetBooleanv(gl.GL_DEPTH_WRITEMASK))))
+        return draw(*args, **kwargs)
+
+    monkeypatch.setattr(lab.ribbons, 'draw', checked)
+    lab.render('high', flat=False)
+    assert len(observed) == 4  # reflected light/sparks, then direct light/sparks
+    assert all(not depth_write for _, depth_write in observed), observed
+
+
+def test_render_admits_its_context_before_allocating_and_restores_the_caller(lab):
+    from PySide6.QtGui import QOpenGLContext
+    from tools.labs.render_target import OffscreenRenderTarget
+    foreign = OffscreenRenderTarget(32, 32)
     try:
-        upper = lab.render('low', flat=False, pose='perspective')[:200, :, :3].astype(int).mean(2)
+        assert QOpenGLContext.currentContext() == foreign.context
+        pixels = lab.render('low', flat=False)
+        assert pixels.max() > 200
+        assert QOpenGLContext.currentContext() == foreign.context
     finally:
-        lab.close()
-    assert np.percentile(np.abs(np.diff(upper, axis=0)), 99.9) < 15
+        foreign.close()

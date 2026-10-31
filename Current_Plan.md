@@ -106,7 +106,8 @@ consumer, and none becomes a second renderer, clock or camera. Read the 3D found
 - [ ] **S3D-6 Shared shadows (G2 / S25):** one fitted directional depth map, bounded soft PCF/bias, caster/receiver
   admission, resize/teardown/dormancy and tier cost on a real test scene (also Usu's S25; not a revival of the rejected
   Extruded cast shadows).
-- [ ] **S3D-7 Lightning, then reduced-resolution volumes (G5):** bounded procedural bolt geometry/light, then fog/smoke
+- [ ] **S3D-7 Reduced-resolution volumes, then lightning (G5):** the operator admitted a bounded static fog slice for
+  Waveform Ribbon on 1 November (§7.1); no audio reactivity yet. Then bounded procedural bolt geometry/light and fog/smoke
   volumes with advection/reprojection and no permanent extra targets or separate cadence (from the volumetric chamber and
   storm concepts). *Consumers: chamber/street atmosphere.*
 
@@ -141,23 +142,18 @@ Execution must use `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`: WR-00 reference
 WR-01/02 independent S3D-1 proof before composition. The copied brief approves the primary cool hall image;
 the archive's alternate is context only. Existing EB wakes/probes do not establish a generic ribbon or floor reflection.
 
-Where it stands (landed work, evidence, scene principles and the full ordered list): Lab Plan §0. The scene is
-world-first and navigable through the shared framed camera (Orthographic default) from the start: no walls, a fine
-floor, pillars and distance mist; the fitted mock pose is for comparison only. Open work, in order:
+The scene is world-first through the shared framed camera (Orthographic default). **Operator, 1 November: floor,
+waveform and strong thick mist only; pillars removed.** No horizon, sky or floor edges should be visible. The waveform
+carves clear space in the fog and softly lights it; audio-driven fog changes are for much later. Both supplied mock
+boards describe looks the eventual live presets should support. Detailed live checklist: Lab Plan §0–0A.
 
-- [~] **Floor reflection and mist follow-ups:** S3D-5 planar reflection, the PBR floor and world mist are landed
-  (Lab Plan §0). Open: reflection pass cost and resize proof, reflecting the ribbons' OIT body, reactive mist density.
-- [~] **WR-04 parity with the mock (current work, before any reactivity):** the explicit weakness list (floor
-  F1-F3, ribbons R1-R5, sparks S1-S2, pillars P1-P2, atmosphere A1, global G1-G3), how samples are viewed and the
-  decision rules live in Lab Plan §0A.
-- [ ] **WR-00 audio windows and WR-07 music in the lab:** recorded windows; bass → width, mids → twist/deformation,
-  energy → whole-ribbon light, history-carried controls band-limited (Lab Plan §4A); tolerances from candidates.
-- [ ] **S3D-2 beyond ribbon sparks, only if parity needs it:** history sparks are in the ribbon primitive;
-  free-floating particles and consume-once bursts remain S3D-2.
-- [ ] **S3D-1 remaining for this scene:** near-plane behaviour under navigation, AA under slow motion, defocus,
-  full lifecycle/cost (`Docs/Reference/Ribbon_Path.md`). Camera-facing width is not used here.
-- [ ] **WR-08 production → WR-09 acceptance:** single ribbon and material, then floor, multi-ribbon, accents, a
-  restrained Settings surface; gates A–H, `tools/visualizer_live_check.py --load game60` and operator sign-off.
+- [ ] **Volumetric fog (S3D-7 bounded slice):** static field from the actual ribbon shape, reduced-resolution integration,
+  opaque clipping and correct source-depth attenuation; independent harness and measured cost before scene acceptance.
+- [~] **WR-04 visual fidelity:** waveform folds/filaments/quiet detail, wet reflective floor and fog, then sparks/optics.
+  Judge native crops, both states and every navigation pose. Current images remain far from the mocks.
+- [ ] **Awaiting Validation:** operator sign-off on the floor/waveform/volume look before reactivity.
+- [ ] **Only after visuals:** recorded audio windows and WR-07 mappings; remaining S3D-1/2/5 lifecycle/cost gates;
+  WR-08 production and tunable presets, then WR-09 acceptance with `tools/visualizer_live_check.py --load game60`.
 
 ### 7.2 Reactive Liquid / Audio Melt Pool
 
