@@ -77,7 +77,7 @@ bounded, measured cost (TIME_ELAPSED, median/p90), lazy creation, zero dormant w
 consumer, and none becomes a second renderer, clock or camera. Read the 3D foundation lessons in
 `Docs/Reference/Transitions.md` before each slice. Order follows which mode needs them first.
 
-- [ ] **S3D-1 Ribbon / strip primitive — CPU history/frames, oriented GPU strip and incremental ring producer landed; OIT/defocus/camera-facing GPU open:** generalize what Extruded Bubble's wakes proved (`extruded_bubble_wake.py`, the
+- [ ] **S3D-1 Ribbon / strip primitive — CPU history/frames, oriented GPU strip, incremental ring producer and OIT/HDR filament material landed; defocus/camera-facing GPU open:** generalize what Extruded Bubble's wakes proved (`extruded_bubble_wake.py`, the
   `TRAIL_*` programs): a bounded history SSBO, centripetal Catmull-Rom strips placed by a continuous index (never by a
   share of segments), camera-facing or oriented width, OIT translucency with defined edges and inner structure,
   shared defocus. Multi-ribbon, fixed maximum history. *Consumers: Waveform Ribbon; trails anywhere.*
@@ -137,10 +137,10 @@ the archive's alternate is context only. Existing EB wakes/probes do not establi
 - [ ] **WR-00 remaining:** verify the proposed Orthographic camera fit in the WR-03 blockout render, choose
   recorded-audio windows, and set tolerances from candidate comparisons. Masks, the measured target table and the
   operator's flowing-history motion model are landed (Lab Plan §1.3 and §4A; `.artifacts/evidence/waveform_ribbon/wr00_targets/`).
-- [ ] **WR-02 remaining GPU/native gates:** curved-frame/normal/precision/near-plane/AA and failure coverage,
-  then OIT/HDR/camera-facing/defocus and broader measured cost. Solid oriented geometry has native Ortho/Perspective,
-  gap, plane-normal, phase-rebase, depth and context/state proofs; the incremental per-tick producer
-  (`core/ribbon_ring.py`, 0.2 ms per knot at the 8 x 256 cap) is landed (`Docs/Reference/Ribbon_Path.md`).
+- [ ] **WR-02 remaining GPU/native gates:** camera-facing GPU width, near-plane/edge-on motion, AA under slow
+  motion, defocus and broader measured cost. Landed (`Docs/Reference/Ribbon_Path.md`): oriented geometry with
+  native proofs, the incremental per-tick producer (`core/ribbon_ring.py`, 0.2 ms per knot at 8 x 256), and the
+  filament material (OIT body plus additive HDR light, order-independent crossings, ~0.1-0.25 ms GPU at 960x540).
   No Ribbon scene or likeness/music pass exists, and no runtime mode consumes the primitive.
 - [ ] Lab: one ribbon (bass → width, mids → twist/deformation, energy → glow) toward the concept image.
 - [ ] Production: single ribbon, translucent emissive shading and bloom, then the reflective floor, then multi-ribbon,

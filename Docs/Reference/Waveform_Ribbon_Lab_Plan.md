@@ -27,7 +27,9 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
 - [x] WR-02 input-path gate: `core/ribbon_ring.py` admits one knot per ribbon in O(ribbons) work into a
   ring-addressed staging packet (0.17 ms append + 0.04 ms publish at 8 x 256, against 102.6 ms for the
   stateless rebuild); the stateless route stays the oracle. Contract and proof: `Ribbon_Path.md`.
-- [ ] WR-02 remaining: curved/edge/near-plane/normal precision, OIT/HDR/camera-facing GPU/AA/defocus and full lifecycle/cost proof.
+- [x] WR-02 material: OIT body plus additive HDR light (rims, filament strands, fold glow) with box-filtered AA,
+  per-knot emission and order-independent crossings; native proofs and mock-beside cards (`Ribbon_Path.md`).
+- [ ] WR-02 remaining: camera-facing GPU width, near-plane/edge-on motion, AA under slow motion, defocus and full lifecycle/cost proof.
 - [ ] WR-03 onward: actual scene blockout, material/reflection/particle work, music, production and visual acceptance.
 
 Run `.venv\Scripts\python.exe tools/labs/waveform_ribbon_preflight.py --output .artifacts/evidence/waveform_ribbon/<new-run>`.

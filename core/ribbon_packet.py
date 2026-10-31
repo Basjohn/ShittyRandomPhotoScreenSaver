@@ -90,6 +90,7 @@ def pack_ribbons(paths, *, subdivisions=8, period=1., colour=(.1, .7, .9, 1.)):
                     raise ValueError('GPU ribbon edges collapse; rebase geometry')
                 data[at+2, :3] = station.frame.tangent
                 data[at+3, :3] = station.frame.base_side
+            data[at+3, 3] = 1.  # unit emission: the stateless oracle carries no per-knot light
         if not np.isfinite(data).all() or data[0, 3] <= 0:
             raise ValueError('GPU packet exceeds finite float32 range')
         admitted.append(data.tobytes())

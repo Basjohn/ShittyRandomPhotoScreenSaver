@@ -32,13 +32,14 @@ MAX_POSITION_SPREAD = 128.  # every |local| <= 128 -> float32 rounding <= 3.9e-6
 TWIST_REBASE = 16*math.pi
 MAX_TWIST_SPREAD = 64*math.pi
 MIN_COORDINATE_STEP = 1e-4  # stays strictly ordered in float32 anywhere in the +/-64 s local window
+MAX_EMISSION = 64.  # bounded HDR light per knot; OIT/emission accumulation stays finite
 _CHORD_EPSILON = 1e-12
 _NO_KNOT, _PENDING, _ACTIVE = 0, 1, 2
 
 
 class RibbonRing:
     def __init__(self, ribbons: int, *, capacity: int = MAX_PATH_SAMPLES, subdivisions: int = 8,
-                 period: float = 1., colours=None, seed_side=(0., 1., 0.)):
+                 period: float = 1., colours=None, edge_colours=None, seed_side=(0., 1., 0.)):
         if isinstance(ribbons, bool) or not isinstance(ribbons, int) or not 1 <= ribbons <= MAX_RIBBONS:
             raise ValueError('Ribbon count must be an integer in 1..8')
         if isinstance(capacity, bool) or not isinstance(capacity, int) or not 2 <= capacity <= MAX_PATH_SAMPLES:
@@ -50,7 +51,8 @@ class RibbonRing:
         if MAX_LOCAL_SPAN/period > 4096:
             raise ValueError('Strand period too short for the local phase window')
         colours = np.broadcast_to(np.asarray((.1, .7, .9, 1.) if colours is None else colours, dtype=np.float64), (ribbons, 4))
-        if not (np.isfinite(colours).all() and (colours >= 0).all() and (colours <= 1).all()):
+        edge_colours = colours if edge_colours is None else np.broadcast_to(np.asarray(edge_colours, dtype=np.float64), (ribbons, 4))
+        if not all(np.isfinite(c).all() and (c >= 0).all() and (c <= 1).all() for c in (colours, edge_colours)):
             raise ValueError('Ribbon colours require finite normalized channels')
         seed = np.asarray(seed_side, dtype=np.float64)
         if seed.shape != (3,) or not np.isfinite(seed).all() or not np.linalg.norm(seed) > 0:
@@ -60,7 +62,7 @@ class RibbonRing:
         self._gpu = np.zeros((ribbons, HEADER_ROWS + MAX_PATH_SAMPLES*4, 4), dtype=np.float32)
         self._gpu[:, 0, 1], self._gpu[:, 0, 3] = subdivisions, period
         self._gpu[:, 1, 2] = capacity
-        self._gpu[:, 2] = self._gpu[:, 3] = colours
+        self._gpu[:, 2], self._gpu[:, 3] = colours, edge_colours  # across the width: left edge -> right edge
         self._coordinate = np.zeros(capacity)
         self._position = np.zeros((ribbons, capacity, 3))
         self._twist = np.zeros((ribbons, capacity))
@@ -91,12 +93,18 @@ class RibbonRing:
         self._state[:] = _NO_KNOT
         self._packet = None
 
-    def append(self, coordinate: float, positions, half_widths, twists=0.):
-        """Admit one knot per ribbon at one shared lattice coordinate; validated before any mutation."""
+    def append(self, coordinate: float, positions, half_widths, twists=0., emission=1.):
+        """Admit one knot per ribbon at one shared lattice coordinate; validated before any mutation.
+
+        ``emission`` scales the material's light at this knot, so light travels with the history it was admitted with.
+        """
         q = float(coordinate)
         p = np.asarray(positions, dtype=np.float64)
         w = np.broadcast_to(np.asarray(half_widths, dtype=np.float64), (self.ribbons,))
         tw = np.broadcast_to(np.asarray(twists, dtype=np.float64), (self.ribbons,))
+        light = np.broadcast_to(np.asarray(emission, dtype=np.float64), (self.ribbons,))
+        if not (np.isfinite(light).all() and (light >= 0).all() and (light <= MAX_EMISSION).all()):
+            raise ValueError('Ribbon emission must be finite and within 0..64')
         if p.shape != (self.ribbons, 3):
             raise ValueError('One 3D position per ribbon required')
         if not math.isfinite(q) or abs(q) > MAX_COORDINATE_MAGNITUDE:
@@ -193,6 +201,7 @@ class RibbonRing:
         self._gpu[:, row + 1, 2] = valid
         self._gpu[:, row + 2, 0:3] = tangent
         self._gpu[:, row + 3, 0:3] = np.where(valid[:, None], base, 0.)
+        self._gpu[:, row + 3, 3] = light
         if resolve_previous.any() and count > 1:
             previous_row = HEADER_ROWS + 4*((slot - 1) % self.capacity)
             self._gpu[resolve_previous, previous_row + 1, 2:4] = 1.  # valid, and starts a strip
