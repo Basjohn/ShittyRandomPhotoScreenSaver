@@ -466,13 +466,6 @@ class ExtrudedBubbleSimulation:
                 self._bubbles.pop()
                 return
 
-    def _outside(self, b: _Bubble, *, surface_scene: bool) -> bool:
-        # Written out per axis (no generator): this runs for every bubble on every logical tick.
-        (cx, cy, cz), (hx, hy, hz), r = WORLD_CENTER, WORLD_HALF, b.current_radius
-        return (abs(b.x - cx) > hx + WORLD_MARGIN + r or abs(b.y - cy) > hy + WORLD_MARGIN + r
-                or abs(b.z - cz) > hz + WORLD_MARGIN + r
-                or (surface_scene and b.y - b.current_radius > WATER_SURFACE_Y))
-
     # -- one step ----------------------------------------------------------------------------------------------------
 
     def advance(self, music: MusicInput, controls: ExtrudedBubbleControls) -> ExtrudedBubbleSnapshot:
@@ -776,25 +769,32 @@ class ExtrudedBubbleSimulation:
         visual_smoothing = max(0.0, min(1.0, float(controls.smoothing)))
         attack = 0.010 + 0.085 * visual_smoothing
         release = 0.012 + 0.165 * visual_smoothing
+        # Per class, the factors each bubble's expressions below would otherwise rebuild (same values, same order).
+        classes = {large: (self._applied_sizes[large], low, high - low, amplitude, spread, rest, class_scale - rest,
+                           top, top - rest)
+                   for large, (low, high), (amplitude, spread), (class_scale, rest, top) in (
+                       (True, _LARGE_RADIUS, _PER_ID_LARGE, (big_scale, big_rest, big_top)),
+                       (False, _MID_RADIUS, _PER_ID_SMALL, (small_scale, small_rest, small_top)))}
         for b in self._bubbles:
             # Per-identity response, as accepted 2D sizes each bubble's sensitivity and
             # timing by its own size: within its class a smaller bubble swings a little
             # further above the authored rest and settles a little faster, so identities
             # stop breathing in lockstep. The rest itself is shared and unchanged.
             # Deterministic from nominal size; no oscillator or randomness.
-            low, high = _LARGE_RADIUS if b.large else _MID_RADIUS
-            size_t = max(0.0, min(1.0, (b.radius / self._applied_sizes[b.large] - low) / (high - low)))
-            amplitude, spread = _PER_ID_LARGE if b.large else _PER_ID_SMALL
-            class_scale, rest, top = (big_scale, big_rest, big_top) if b.large else (small_scale, small_rest, small_top)
-            scale = rest + (class_scale - rest) * (amplitude - spread * size_t)
+            applied, low, span, amplitude, spread, rest, swell, top, headroom = classes[b.large]
+            size_t = max(0.0, min(1.0, (b.radius / applied - low) / span))
+            scale = rest + swell * (amplitude - spread * size_t)
             if scale > rest and top > rest:
-                scale = rest + _soft_top(scale - rest, top - rest, 0.85)
-            b.current_radius = b.radius * scale
+                scale = rest + _soft_top(scale - rest, headroom, 0.85)
+            current = b.current_radius = b.radius * scale
             pace = 0.75 + 0.5 * size_t
-            if b.visual_radius <= 0.0:
-                b.visual_radius = b.current_radius
+            shown = b.visual_radius
+            if shown <= 0.0:
+                b.visual_radius = current
             else:
-                b.visual_radius = _follow(b.visual_radius, b.current_radius, dt, attack * pace, release * pace)
+                # _follow, written out: this runs for every bubble on every tick.
+                tau = attack * pace if current > shown else release * pace
+                b.visual_radius = current + (shown - current) * math.exp(-dt / max(tau, 1e-4))
         t = self._motion_phase
         steering = controls.drift_direction if controls.drift_direction in DRIFT_DIRECTIONS else "wander"
         meander = 1.0 if steering == "wander" else _STEERED_WANDER
@@ -805,22 +805,39 @@ class ExtrudedBubbleSimulation:
         large_drift, small_drift, group_drift = (
             drift_live * max(-1., min(2., _lerp(pair, self._passage)))
             for pair in (controls.drift_large, controls.drift_small, controls.drift_fused))
+        # drift_velocity written out for the per-bubble loop: each left-to-right product's per-tick head is computed
+        # once (same values, same order), and a heading that ignores position and phase is steered once per class.
+        # A slowly changing sine can still be a fast velocity; its amplitude must settle too.
+        sway = controls.sway * WORLD_UNIT * 0.06 * min(1.0, self._motion_rate) * rest_motion_boost
+        # Stream Speed is shared physical transport, independent of size,
+        # birth opacity and fusion. Drift/sway/contact pushes remain additive.
+        stream = (direction[0] * speed, direction[1] * speed, direction[2] * speed)
+        t37, t83, t29 = t * .37, t * .83, t * .29
+        fixed_heading = steering in ("wander", "left", "right", "diagonal")
+        actors = {}
+        for large, actor_drift in ((True, large_drift), (False, small_drift)):
+            amount = actor_drift * WORLD_UNIT
+            heading = (_drift_steer(steering, WORLD_CENTER, 0.0, t, direction, across, depth_axis, axis_origin, amount)
+                       if fixed_heading else None)
+            actors[large] = (amount, meander * amount * .05, meander * amount * .015, heading)
+        (a0, a1, a2), (e0, e1, e2) = across, depth_axis
         for b in self._bubbles:
             if b.cluster >= 0:
                 continue
-            # Stream Speed is shared physical transport, independent of size,
-            # birth opacity and fusion. Drift/sway/contact pushes remain additive.
-            forward = speed
-            actor_drift = large_drift if b.large else small_drift
-            # A slowly changing sine can still be a fast velocity; its amplitude must settle too.
-            swing = (controls.sway * WORLD_UNIT * 0.06 * min(1.0, self._motion_rate) * rest_motion_boost
-                     * math.sin(t * (1.1 + 0.5 * math.sin(b.phase)) + 3.0 * b.phase))
-            drift_vector = drift_velocity(steering, (b.x, b.y, b.z), b.phase, t, direction, across, depth_axis,
-                                          axis_origin, actor_drift * WORLD_UNIT)
-            b.x += dt * (direction[0] * forward + across[0] * swing + b.push[0] + drift_vector[0])
-            b.y += dt * (direction[1] * forward + across[1] * swing + b.push[1] + drift_vector[1])
-            b.z += dt * (direction[2] * forward + across[2] * swing + b.push[2] + drift_vector[2])
-            b.push = _decayed(b.push, dt)
+            amount, wander_scale, deep_scale, heading = actors[b.large]
+            phase = b.phase
+            swing = sway * math.sin(t * (1.1 + 0.5 * math.sin(phase)) + 3.0 * phase)
+            wander = wander_scale * (math.sin(t37 + phase) + .6 * math.sin(t83 + 2.1 * phase))
+            deep = deep_scale * math.sin(t29 + 1.7 * phase)
+            if heading is None:
+                heading = _drift_steer(steering, (b.x, b.y, b.z), phase, t, direction, across, depth_axis,
+                                       axis_origin, amount)
+            push = b.push
+            b.x += dt * (stream[0] + a0 * swing + push[0] + (a0 * wander + e0 * deep + heading[0]))
+            b.y += dt * (stream[1] + a1 * swing + push[1] + (a1 * wander + e1 * deep + heading[1]))
+            b.z += dt * (stream[2] + a2 * swing + push[2] + (a2 * wander + e2 * deep + heading[2]))
+            if push != (0.0, 0.0, 0.0):
+                b.push = _decayed(push, dt)
         by_ident = {b.ident: b for b in self._bubbles} if self._clusters else {}
         for c in self._clusters.values():
             members = [by_ident.get(i) for i in c.members]
@@ -871,12 +888,16 @@ class ExtrudedBubbleSimulation:
 
         # Fades, pops and leaving.
         kept: list[_Bubble] = []
+        # _outside(b), written out with its per-axis bounds (each `half + WORLD_MARGIN`, as summed there) hoisted.
+        (cx, cy, cz), surface_scene = WORLD_CENTER, controls.surface_scene
+        bx, by, bz = (h + WORLD_MARGIN for h in WORLD_HALF)
         for b in self._bubbles:
             if b.popping >= 0.0:
                 b.popping += dt
                 t = min(1.0, b.popping / _POP_SECONDS)
                 b.alpha = b.pop_alpha * (1.0 - t * t * (3.0 - 2.0 * t))
-            elif b.leaving or self._outside(b, surface_scene=controls.surface_scene):
+            elif b.leaving or (abs(b.x - cx) > bx + (r := b.current_radius) or abs(b.y - cy) > by + r
+                               or abs(b.z - cz) > bz + r or (surface_scene and b.y - r > WATER_SURFACE_Y)):
                 b.leaving = True
                 b.alpha = max(0.0, b.alpha - dt / _FADE_OUT)
             else:
@@ -929,18 +950,19 @@ class ExtrudedBubbleSimulation:
         columns: dict[tuple[int, int], dict[int, list[_Bubble]]] = {}
         for (cx, cy, cz), bucket in grid.items():
             columns.setdefault((cx, cy), {})[cz] = bucket
+        # Each column's occupied neighbour columns, in (dx, dy) order, found once for all the cells it holds.
+        around = {(cx, cy): [column for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+                             if (column := columns.get((cx + dx, cy + dy))) is not None]
+                  for cx, cy in columns}
         # Freeze discovery before any response moves a member or changes cluster ownership.
         candidates: list[tuple[_Bubble, _Bubble]] = []
         for (cx, cy, cz), bucket in grid.items():
             neighbours: list[_Bubble] = []     # in (dx, dy, dz) order, as the 27-cell scan visits them
-            for dx in (-1, 0, 1):
-                for dy in (-1, 0, 1):
-                    column = columns.get((cx + dx, cy + dy))
-                    if column is not None:
-                        for dz in (-1, 0, 1):
-                            near = column.get(cz + dz)
-                            if near is not None:
-                                neighbours.extend(near)
+            for column in around[(cx, cy)]:
+                for dz in (-1, 0, 1):
+                    near = column.get(cz + dz)
+                    if near is not None:
+                        neighbours.extend(near)
             for a in bucket:
                 for b in neighbours:
                     if b.ident <= a.ident:
@@ -1173,25 +1195,29 @@ class ExtrudedBubbleSimulation:
         if share != self._wake_share:                    # the trailing set is chosen once per Wake Trails value
             self._wake_share, self._wake_chosen = share, {}
         current: dict[int, tuple[float, ...]] = {}
+        chosen_by_ident, retiring = self._wake_chosen, self._wake_retiring
         for b in self._bubbles:
             if b.cluster < 0 and b.popping < 0 and not b.leaving and b.alpha > 0.02:
-                head = (b.x, b.y, b.z)
-                chosen = self._wake_chosen.get(b.ident)
+                ident, head = b.ident, (b.x, b.y, b.z)
+                chosen = chosen_by_ident.get(ident)
                 if chosen is None:
-                    chosen = self._wake_chosen[b.ident] = wake_trails(b.ident, share)
-                if chosen and b.ident in field and b.ident in self._wake_retiring:
-                    field.remove(b.ident)                # back from a fusion: its old wake stays behind, a new one starts
-                if chosen and b.ident not in field:
-                    field.add(b.ident, b.radius, head)
-                elif not chosen and b.ident in field:
-                    field.remove(b.ident)
-                if b.ident in field:
-                    field.follow(b.ident, head, b.visual_radius, dt, max(4.0 * b.radius, 0.1 * WORLD_UNIT))
-                    current[b.ident] = (b.x, b.y, b.z, b.visual_radius, b.ident, -1.0, b.alpha, b.radius,
-                                        1.0, *field.record(b.ident, head))
+                    chosen = chosen_by_ident[ident] = wake_trails(ident, share)
+                trailing = ident in field                # kept current below rather than asked again
+                if chosen and trailing and ident in retiring:
+                    field.remove(ident)                  # back from a fusion: its old wake stays behind, a new one starts
+                    trailing = False
+                if chosen and not trailing:
+                    trailing = field.add(ident, b.radius, head)
+                elif not chosen and trailing:
+                    field.remove(ident)
+                    trailing = False
+                if trailing:
+                    field.follow(ident, head, b.visual_radius, dt, max(4.0 * b.radius, 0.1 * WORLD_UNIT))
+                    current[ident] = (b.x, b.y, b.z, b.visual_radius, ident, -1.0, b.alpha, b.radius,
+                                      1.0, *field.record(ident, head))
                 else:
-                    current[b.ident] = (b.x, b.y, b.z, b.visual_radius, b.ident, -1.0, b.alpha, b.radius,
-                                        *_NO_WAKE_PATH)
+                    current[ident] = (b.x, b.y, b.z, b.visual_radius, ident, -1.0, b.alpha, b.radius,
+                                      *_NO_WAKE_PATH)
         # Advance existing tombstones on the sole logical tick, never in the renderer; a retiring wake's water keeps
         # drifting as it dissolves.
         retained = {}

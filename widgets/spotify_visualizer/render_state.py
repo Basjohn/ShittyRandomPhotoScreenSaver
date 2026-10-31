@@ -11,6 +11,7 @@ registry.
 from __future__ import annotations
 
 import math
+from array import array
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
@@ -672,18 +673,25 @@ class ExtrudedBubbleFrame:
     shimmer: float = 0.0
     parameters: FrozenFields = FrozenFields()
     motion_phase: float = 0.0  # music-owned integrated visual phase; never elapsed wall time
-    wakes: tuple[float, ...] = ()  # stable wake emitters, live/retiring, WAKE_STRIDE floats each
+    # Stable wake emitters, live/retiring, WAKE_STRIDE floats each, as the float32 records the renderer uploads
+    # (native little-endian bytes; a float sequence is converted here). See ``wake_floats`` for the values.
+    wakes: bytes = b""
     passage: float = 0.0  # how loud the passage is, 0..1: where the renderer's quiet-to-loud Ranges sit
     chain_activity: float = 0.0  # logical free-chain visibility; never inferred from audio in the renderer
     drift_families: tuple = ()  # live free-drift families (extruded_bubble_drift_log.DriftFamily)
     drift_steps: bytes = b""    # their step log, float64 records, oldest first; the GPU solver integrates it
 
     def __post_init__(self) -> None:
-        wakes = _float_tuple(self.wakes, name="extruded bubble wake record")
+        import numpy as np
+
+        wakes = self.wakes
+        if not isinstance(wakes, bytes):
+            wakes = array("f", _float_tuple(wakes, name="extruded bubble wake record")).tobytes()
+        if wakes and not np.isfinite(np.frombuffer(wakes, dtype=np.float32)).all():
+            raise ValueError("extruded bubble wake record must be finite")
         if not isinstance(self.drift_steps, bytes) or not isinstance(self.drift_families, tuple):
             raise TypeError("Extruded Bubble drift log must be immutable")
         if self.drift_families:
-            import numpy as np
             from widgets.spotify_visualizer.extruded_bubble_drift_log import DriftFamily, unpack_steps
             if not all(isinstance(family, DriftFamily) for family in self.drift_families):
                 raise TypeError("Extruded Bubble drift families must be DriftFamily descriptors")
@@ -691,7 +699,7 @@ class ExtrudedBubbleFrame:
             if not len(steps) or not np.isfinite(steps).all():
                 raise ValueError("Extruded Bubble drift steps must be present and finite")
         from core.constants.extruded_bubble_world import WAKE_STRIDE
-        if len(wakes) % WAKE_STRIDE:
+        if len(wakes) % (4 * WAKE_STRIDE):
             raise ValueError(f"Extruded Bubble wake records must be whole ({WAKE_STRIDE} floats per source)")
         object.__setattr__(self, "wakes", wakes)
         bubbles = _float_tuple(self.bubbles, name="extruded bubble record")
@@ -713,6 +721,10 @@ class ExtrudedBubbleFrame:
     @property
     def mode_id(self) -> str:
         return "extruded_bubble"
+
+    def wake_floats(self) -> tuple[float, ...]:
+        """The wake records as Python floats (their float32 values), for tools and checks."""
+        return tuple(array("f", self.wakes))
 
 
 ModeFrame: TypeAlias = (

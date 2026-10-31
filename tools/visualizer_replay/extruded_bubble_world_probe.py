@@ -142,7 +142,7 @@ def main():
         metadata={**receipt,'renderer':target.driver,'scope':__doc__,'clip':str(args.clip.resolve()),
                   'size':size,'preset_path':activation.preset_path,'settings':dict(state.parameters),
                   'source_timestamp_us':clip.frames[-1].timestamp_us,'logical_time':state.time,
-                  'world_bubbles':state.bubbles,'world_wakes':state.wakes,'world_clusters':state.clusters,
+                  'world_bubbles':state.bubbles,'world_wakes':state.wake_floats(),'world_clusters':state.clusters,
                   'global_bubble_count':len(state.bubbles)//8,'views':rows}
         (args.output/'metadata.json').write_text(json.dumps(metadata,indent=2,default=dict)+'\n',encoding='utf-8')
         print(json.dumps({'global_count':metadata['global_bubble_count'],'views':rows},indent=2))
