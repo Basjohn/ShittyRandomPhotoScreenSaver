@@ -54,8 +54,8 @@ world geometry and camera fixed during resize; compare the original rectangle be
   under combined CPU and GPU load), against 10.4 ms render-mode time live. The 2026-10-31 instrumented live run
   attributed the age: the sync consumed a revision ~20 ms old while the newest was ~3 ms old (fixed by sync-time
   latest admission; live HUD age median 49 → 31 ms), and the render thread stalls behind the logical tick's GIL time.
-  **Next:** the logical tick's Python (audit doc, "Live attribution"); on the next live run, recheck the first 2 s
-  after startup (18 of 84 frames late once, with heavy EB renders).
+  **Next:** the logical tick's Python (audit doc, "Live attribution"), judged with `tools/visualizer_live_check.py`
+  (invisible, recorded music, `--load game60` when no game is running); recheck the first 2 s after startup there.
 - [ ] **`test_qtquick_h_cutover.py::test_display_manager_admits_exactly_one_configured_quick_visualizer_owner`** fails
   at HEAD (`01e3ccb6`): after the transition the controller still reports `extruded_bubble`, not `devcurve`.
 - [ ] **`test_extruded_bubble_empty_near.py::test_empty_ordinary_population_skips_near_and_cannot_replay_stale_bokeh`**

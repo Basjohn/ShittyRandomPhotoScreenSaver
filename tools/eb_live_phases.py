@@ -45,6 +45,22 @@ def _wrap(owner, attr, label):
     setattr(owner, attr, timed)
 
 
+def production_startup() -> None:
+    """``main.py``'s process preamble, before anything here imports numpy, OpenGL or Qt.
+
+    The wrappers below import OpenGL; done first, they would leave PyOpenGL's per-call error checking on (45-60% of
+    render-thread CPU, ``rendering/gl_error_policy.py``) and measure a slower renderer than the product runs.
+    """
+    from core.native_threads import configure_native_thread_pools
+    from rendering.gl_error_policy import disable_per_call_gl_error_checking
+    from rendering.quick.bootstrap import configure_quick_environment
+
+    configure_native_thread_pools()
+    if not disable_per_call_gl_error_checking():
+        raise RuntimeError("OpenGL.GL was imported before the production GL error policy")
+    configure_quick_environment()
+
+
 def _install() -> None:
     from rendering.quick import gl_query
     from rendering.quick.scene3d import defocus, probe, target
@@ -122,6 +138,7 @@ def main() -> int:
     sys.path.insert(0, str(ROOT))
     os.chdir(ROOT)
     sys.argv = [str(ROOT / "main_mc.py"), *mc_args]
+    production_startup()
     _install()
     atexit.register(lambda: args.out.write_text(json.dumps(_summary(), indent=1), encoding="utf-8"))
     runpy.run_path(str(ROOT / "main_mc.py"), run_name="__main__")

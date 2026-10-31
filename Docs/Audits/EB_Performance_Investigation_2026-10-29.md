@@ -246,6 +246,11 @@ All of these need measuring against the 60% reference load (submit-to-completion
   The first 2 s after startup had 18 of 84 frames over 25 ms (2 of 138 before). Every one carried a 12–22 ms EB
   render, and the render path is unchanged, so this reads as scene/load phase, not the admission. Recheck that
   window on the next live run.
+- **Measurement caveat:** both instrumented live runs above had PyOpenGL's per-call error checking on, because
+  `tools/eb_live_phases.py` imported OpenGL before `main.py`'s preamble (fixed: `production_startup`). The age chain
+  and the A/B hold. The first corrected run, `tools/visualizer_live_check.py` invisible on recorded music under the
+  game at ~67% system CPU, still measured render-mode 11.5 ms, tick 5.3 ms (GIL share 0.47) and HUD age 32 ms. The
+  render figure is not an error-checking artefact.
 - **Render thread stalls behind the logical tick:** every GL call releases the GIL; while the pure-Python tick runs
   (52% of each 11.1 ms period live), the render thread gets about one call through per 5 ms switch interval, so a
   ~4.5 ms frame spreads to ~10.7 ms. Cutting the logical tick's Python therefore pays twice (age and render). The
