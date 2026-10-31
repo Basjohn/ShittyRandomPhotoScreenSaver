@@ -14,6 +14,7 @@ from core.steam.assets import (
     fetch_steam_avatar,
     fetch_steam_app_artwork,
     fetch_steam_app_header,
+    find_cached_steam_app_artwork,
     prune_asset_cache,
     steam_app_artwork_variant_order,
 )
@@ -154,6 +155,35 @@ def test_missing_steam_artwork_is_classified_as_not_found(tmp_path: Path) -> Non
     assert isinstance(result, SteamResult)
     assert result.status == SteamResultStatus.NOT_FOUND
     assert result.http_status == 404
+
+
+@pytest.mark.parametrize("artwork_shape,asset_key", [("portrait", "library_capsule"), ("wide", "library_hero")])
+def test_new_app_artwork_falls_back_to_the_hashed_store_asset_under_the_canonical_key(
+    tmp_path: Path, artwork_shape: str, asset_key: str,
+) -> None:
+    # Newer apps 404 at every legacy CDN path; the Store item API names the
+    # hashed asset, which then caches where cache-first lookups already look.
+    import json
+
+    hashed = "b3622e7f61da3bc81b39e9f7714820af26e22e54/" + asset_key + ".jpg"
+    calls: list[str] = []
+
+    def fetch(url: str) -> bytes:
+        calls.append(url)
+        if "/store_item_assets/" not in url:
+            raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
+        return b"\xff\xd8\xfffake-jpeg"
+
+    def store_items(appid: int) -> bytes:
+        return json.dumps({"response": {"store_items": [{"appid": appid, "assets": {
+            asset_key: hashed, "header": "../../escape.jpg"}}]}}).encode()
+
+    asset = fetch_steam_app_artwork(cache_dir=tmp_path, appid=3985950, artwork_shape=artwork_shape,
+                                    fetcher=fetch, store_items_fetcher=store_items)
+    assert isinstance(asset, SteamAssetRecord)
+    assert calls[-1] == ("https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3985950/" + hashed)
+    assert not any("escape" in url for url in calls)
+    assert find_cached_steam_app_artwork(cache_dir=tmp_path, appid=3985950, artwork_shape=artwork_shape) == asset.path
 
 
 def test_achievement_icon_accepts_schema_host_and_reuses_cache(tmp_path: Path) -> None:

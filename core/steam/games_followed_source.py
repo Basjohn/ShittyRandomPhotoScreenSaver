@@ -32,6 +32,7 @@ from core.steam.cache import (
 from core.steam.games_followed_probe import (
     fetch_followed_appids_for_news_probe, normalize_followed_appids,
 )
+from core.steam.backend import MAX_RESPONSE_BYTES
 from core.steam.credentials import derive_profile_cache_key
 from core.steam.links import news_article_target
 from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
@@ -51,7 +52,9 @@ MAX_PERSISTED_FOLLOWED_APPS = 512
 # Membership is a different, much slower-changing source than per-app news.
 # Revalidate it once per day, not for every bounded maintenance session.
 FOLLOWED_MEMBERSHIP_TTL_SECONDS = 24 * 60 * 60
-NEWS_MAX_RESPONSE_BYTES = 192_000
+# Eight full patch-note bodies routinely pass 200 KB (one followed game at
+# 211 KB wedged every sweep); news shares the backend's ordinary Steam bound.
+NEWS_MAX_RESPONSE_BYTES = MAX_RESPONSE_BYTES
 NEWS_TIMEOUT_SECONDS = 6.0
 
 # Existing source backoff, not a new schedule or a recurring retry owner.
@@ -741,6 +744,7 @@ class FollowedNewsSource:
                 selected = tuple(followed[(offset + i) % len(followed)] for i in range(batch_size))
             candidates: list[FollowedNewsStory] = []
             newly_checked: dict[int, tuple[FollowedNewsStory, ...]] = {}
+            unusable: list[int] = []
             for appid in selected:
                 endpoint = replace(
                     build_endpoint(SteamSourceId.APP_NEWS, appid=appid, count=MAX_NEWS_ITEMS_PER_APP),
@@ -748,19 +752,30 @@ class FollowedNewsSource:
                     max_response_bytes=NEWS_MAX_RESPONSE_BYTES,
                 )
                 result = fetch_json(endpoint, opener=opener)
-                if result.status is not SteamResultStatus.SUCCESS:
+                rows = (normalize_app_news(result.payload or {}, appid)
+                        if result.status is SteamResultStatus.SUCCESS else None)
+                if rows is None and result.status not in (SteamResultStatus.SUCCESS,
+                                                          SteamResultStatus.INVALID_RESPONSE):
                     return self._finish_failure(handle, previous, result.status.value)
-                rows = normalize_app_news(result.payload or {}, appid)
                 if rows is None:
-                    return self._finish_failure(handle, previous, "invalid_response")
+                    # One game's unusable feed (malformed or oversized) keeps its
+                    # earlier stories and the sweep moves on; aborting here held
+                    # every later game, and its artwork, behind it indefinitely.
+                    unusable.append(appid)
+                    continue
                 newly_checked[appid] = rows
                 candidates.extend(rows)
+            if unusable:
+                logger.info("[STEAM][FOLLOWED_NEWS] unusable_feeds=%d of=%d", len(unusable), len(selected))
+                if len(unusable) == len(selected):
+                    return self._finish_failure(handle, previous, "invalid_response")
             # Keep the latest eight discovered across successive bounded source
             # windows. Rechecking an app replaces its older entries (including
             # when that app now has no news), while unfollowed apps are removed.
             # This is still a sampled public-news view, NOT Steam's separately
             # personalized What's New feed or proof all follows were checked.
-            selected_ids = set(selected)
+            # Only apps whose rows were actually replaced; an unusable feed keeps its own.
+            selected_ids = set(newly_checked)
             followed_ids = set(followed)
             buckets = _cached_news_buckets(self._path, followed, record=record)
             if not buckets and previous is not None:
