@@ -146,6 +146,21 @@ class ProcessUsageCollector:
         self._processes.pop(value, None)
 
     @staticmethod
+    def _log_topology_change(change: str, process: psutil.Process, threads: int | None) -> None:
+        """Name each process entering or leaving the sampled tree (only on topology change, never per sample).
+
+        The sample's cost scales with the tree: a run whose tree grew from 3 to 7 processes and 233 threads made
+        each 15 s sample ~95 ms, much of it GIL-held, and every thread hitched (2026-10-31). Counts alone could
+        not say which processes they were.
+        """
+        try:
+            name, parent = process.name(), process.ppid()
+        except (psutil.Error, OSError):
+            name, parent = "<gone>", None
+        logger.info("[USAGE] topology %s pid=%d name=%s parent=%s threads=%s", change, process.pid, name, parent,
+                    "na" if threads is None else threads)
+
+    @staticmethod
     def _prime_cpu(process: psutil.Process) -> None:
         try:
             process.cpu_percent(interval=None)
@@ -183,8 +198,12 @@ class ProcessUsageCollector:
                             continue
                         self._processes[pid] = cached
                         self._prime_cpu(cached)
+                        self._log_topology_change("added", cached, discovered.get(pid, 0))
                     live.append(cached)
                     live_pids.add(pid)
+                for pid, process in self._processes.items():
+                    if pid not in live_pids:
+                        self._log_topology_change("removed", process, None)
                 self._processes = {
                     pid: process
                     for pid, process in self._processes.items()
