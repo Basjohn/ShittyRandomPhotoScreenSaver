@@ -111,7 +111,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Framed preset starting views, Save Preset As and camera validation | `Docs/Reference/Visualizer_Reference.md` → Framed preset starting views; `core/settings/visualizer_view_orbit.py` |
 | Preset Repair control coverage, migrations, atomic replacement and safe Undo | `Docs/Reference/Visualizer_Preset_Repair.md`; `tools/visualizer_preset_repair.py` |
 | Shared G1 attachments, G3A transparent layering, G2 shadow-map and selective G3B optics proof | `Docs/Reference/Scene3D_Resources.md`; `Current_Plan.md` §6 |
-| Usu character authoring source and static review renders | local checkout `assets/usu/README.md` (excluded from normal Godzip); still authoring in `Docs/Reference/Guided_Setup.md` |
+| Usu character authoring source and static review renders | local checkout `assets/usu/README.md` (excluded from normal Godzip) |
 | shared 3D resource ownership, DSA, immutable storage and state restoration | `Docs/Reference/Scene3D_Resources.md` |
 | runtime audit 2026-09-22 outcomes and rejected ideas (closed) | `Docs/Guardrails/Performance_Optimization_Contract.md` |
 | FEEDS architecture, terminal failure/queued settlement, bundle admission and open physical acceptance | `Docs/Reference/Feeds.md`; `Docs/TestSuite.md` → FEEDS |
