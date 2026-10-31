@@ -22,6 +22,9 @@ class RibbonPacket:
     instances: int
     vertices: int
     world_origin: tuple[float, float, float] = (0., 0., 0.)
+    # Absolute coordinate of local q = 0, so age fades can compare knots with an absolute "now". A stateless packet
+    # uses its first path's origin: age fades assume its paths share one lattice, as a RibbonRing's always do.
+    coordinate_origin: float = 0.
 
 
 def pack_ribbons(paths, *, subdivisions=8, period=1., colour=(.1, .7, .9, 1.)):
@@ -40,6 +43,7 @@ def pack_ribbons(paths, *, subdivisions=8, period=1., colour=(.1, .7, .9, 1.)):
     admitted = []
     vertices = 0
     world_origin = None
+    first_origin = 0.
     for index, (samples, tangents, anchor) in enumerate(paths):
         if index >= MAX_RIBBONS:
             raise ValueError('Ribbon population exceeds 8')
@@ -52,6 +56,7 @@ def pack_ribbons(paths, *, subdivisions=8, period=1., colour=(.1, .7, .9, 1.)):
             continue
         if world_origin is None:
             world_origin = tuple(float(v) for v in samples[0].position)
+            first_origin = float(samples[0].coordinate)
         origin = float(samples[0].coordinate)
         local = np.array([float(s.coordinate)-origin for s in samples], dtype=np.float64)
         if local[-1] > MAX_LOCAL_SPAN:
@@ -95,4 +100,4 @@ def pack_ribbons(paths, *, subdivisions=8, period=1., colour=(.1, .7, .9, 1.)):
             raise ValueError('GPU packet exceeds finite float32 range')
         admitted.append(data.tobytes())
         vertices = max(vertices, (len(samples)-1)*subdivisions*6)
-    return RibbonPacket(b''.join(admitted), len(admitted), vertices, world_origin or (0., 0., 0.))
+    return RibbonPacket(b''.join(admitted), len(admitted), vertices, world_origin or (0., 0., 0.), first_origin)

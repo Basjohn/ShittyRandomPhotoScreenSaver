@@ -21,7 +21,8 @@ from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.stream import StreamRing
 
 _FRAGMENTS = {'diagnostic': RIBBON_FRAGMENT, 'body': RIBBON_BODY_FRAGMENT, 'light': RIBBON_LIGHT_FRAGMENT}
-_MATERIAL_UNIFORMS = ('uViewZ', 'uEye', 'uForward', 'uOrthographic', 'uStrands', 'uRim', 'uBody', 'uFill', 'uGlint',
+_MATERIAL_UNIFORMS = ('uViewZ', 'uEye', 'uForward', 'uOrthographic', 'uStrands', 'uRim', 'uBody', 'uFill', 'uGlint', 'uAge',
+                      'uMist', 'uMistShape', 'uMistOrigin',
                       'uViewport')
 
 
@@ -81,7 +82,13 @@ class RibbonPrimitive:
         return self.stream.capacity if self.stream is not None and self.stream.has_resources else 0
 
     def draw(self, packet: RibbonPacket, mvp, *, diagnostic=0, timing_query=None, shading='diagnostic',
-             view=None, orthographic=True, material: RibbonMaterial | None = None):
+             view=None, orthographic=True, material: RibbonMaterial | None = None, age_fade=None,
+             mist=None, mist_frame=(0., 0., 0.)):
+        """``age_fade`` = (absolute now, fade-in s, maximum age s, fade-out s) fades the head and tail by age.
+
+        ``mist`` (``rendering.gl_programs.mist.mist_uniforms``) dims light and coverage by the scene's world mist;
+        ``mist_frame`` translates the packet's frame into the mist's world (a flowing consumer's scroll).
+        """
         if not 0 <= packet.instances <= MAX_RIBBONS or len(packet.payload) != packet.instances*RIBBON_BYTES:
             raise ValueError('Invalid ribbon packet shape')
         if shading not in _FRAGMENTS:
@@ -106,6 +113,19 @@ class RibbonPrimitive:
         shaded = None
         if shading != 'diagnostic':
             shaded = self._material_uniforms(view, translate, bool(orthographic), material or RibbonMaterial())
+            shaded['uAge'] = (0., 0., 0., 0.)
+            shaded.update(uMist=(0., 0., 1., 1.), uMistShape=(0., 0., 0., 0.))
+            if mist is not None:
+                shaded.update(mist)
+            frame = np.asarray(packet.world_origin, float) + np.asarray(mist_frame, float)
+            if frame.shape != (3,) or not np.isfinite(frame).all():
+                raise ValueError('Finite mist frame required')
+            shaded['uMistOrigin'] = tuple(frame.tolist())
+            if age_fade is not None:
+                now, fade_in, max_age, fade_out = (float(v) for v in age_fade)
+                if not all(math.isfinite(v) for v in (now, fade_in, max_age, fade_out)) or min(fade_in, max_age, fade_out) < 0:
+                    raise ValueError('Ribbon age fade needs finite non-negative times')
+                shaded['uAge'] = (now - float(packet.coordinate_origin), fade_in, max_age, fade_out)
         self._check_context(admit=True)
         if shaded is not None:
             # Edge-on widening works in pixels: the caller's current viewport is the scene target's.

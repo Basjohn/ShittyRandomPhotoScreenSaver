@@ -39,16 +39,19 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
   untracked. Large GL textures do not go into the Qt resource pack.
 
 **Next, in order** (each a stop point with evidence before the next):
-- [ ] **World-first hall and navigation:** author floor extent, pillar layout and spacing in world units, drop the
-  back wall, and drive the lab view through the shared framed camera with navigation. Keep the fitted pose as one
-  comparison pose.
+- [x] **World-first hall and navigation:** the lab authors floor and four staggered pillar rows in world units (no
+  walls) and renders through a lab-local spec on the shared framed camera at five poses (mock, turned, raised,
+  dolly+pan, Perspective). The ribbon's head and tail sit at fixed world x and fade by age (`age_fade`). At the mock
+  pose the front row meets the floor at 0.636 (target 0.635) and the envelopes match within ~0.007; a test proves every
+  front pillar is drawn where the shared camera projects its world base. Evidence: `wr03_world_hall/`.
 - [ ] **S3D-5 floor reflection harness (WR-05):** planar reflection of a bounded scene through the admitted camera's
   mirrored eye, roughness-blurred by the pack's roughness map, normal-perturbed, in its own offscreen harness with
   registration, moving-camera, resize/retirement and cost proof. Then the floor in the lab. Largest gap: the mock's
   floor carries about half the light (median luminance 0.14 low / 0.38 high).
-- [ ] **Distance mist:** bounded, thickening with distance (and height) to merge the floor and pillars into the
-  backdrop, with no permanent extra target. Prove it reflects correctly in the floor, then make it gently reactive.
-  Extend into S3D-7 volumes only if a measured gap needs it.
+- [~] **Distance mist:** world-space analytic mist (`rendering/gl_programs/mist.py`): an elliptical corridor of clear
+  air around the ribbon, thickening outward and near the floor, shared by hall, ribbon body and light. Required by an
+  Orthographic floor with no walls, which otherwise climbs the whole view. Open: reflected mist (WR-05), reactive
+  density, and tuning against the mock's dark upper field.
 - [ ] **WR-04 look tuning in the lab,** against both references at native zoom: thinner haze and a tighter bloom; strands
   that fan and gather; a mostly electric-blue to violet palette; more, wider layered sheets with bigger sweeps in high;
   softer, dimmer light columns.
