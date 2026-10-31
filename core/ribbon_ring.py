@@ -227,7 +227,8 @@ class RibbonRing:
                 drawable = bool((live[:, :-1] & live[:, 1:] & ~starts[:, 1:]).any())
             if drawable:
                 self._packet = RibbonPacket(self._gpu.tobytes(), self.ribbons,
-                                            (self._count - 1)*self.subdivisions*6, tuple(self._position_origin.tolist()))
+                                            (self._count - 1)*self.subdivisions*6, tuple(self._position_origin.tolist()),
+                                            self._coordinate_origin)
             else:
                 self._packet = RibbonPacket(b'', 0, 0)
         return self._packet

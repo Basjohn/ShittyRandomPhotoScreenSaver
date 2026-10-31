@@ -1,14 +1,18 @@
-"""Waveform Ribbon scene lab (WR-03 onward): the mock's hall composed by hand over the shared primitives.
+"""Waveform Ribbon scene lab: a world-first, navigable hall composed by hand over the shared primitives.
 
-The lab owns its recipe (camera, hall, flow, synthetic head, palette) and explicit time. No Settings, presets,
-registration, clock or music yet. Ribbons come from one `RibbonRing` drawn by `RibbonPrimitive`; the hall is
-lab-local geometry. Two renders per state:
+The world is authored in world units and viewed through the shared framed camera (``core.settings.framed_camera``)
+with a lab-local spec; nothing is placed relative to the camera or the card. ``POSES['mock']`` reproduces the mock's
+view for comparison; the other poses navigate the same world. No walls: a floor, staggered pillar rows receding from
+the ribbon, and world-space mist (``rendering.gl_programs.mist``) that thickens beyond a corridor of clear air.
 
-- ``flat``: solid colours, no light or bloom. The ribbon envelope and floor line are measured from its pixels and
-  compared with the WR-00 target table, so the camera fit is checked against the picture, not assumed.
-- ``lit``: ribbon material, emissive light columns and bloom through the Visualizer-shaped scope.
+Ribbons are flowing history (Lab Plan section 4A): one ``RibbonRing`` fed by a labelled synthetic head (no music)
+whose head and tail sit at fixed world x and fade by age. Two renders per state and pose:
 
-Missing by design until their primitives land: floor reflection (S3D-5) and particles (S3D-2).
+- ``flat``: solid colours, no light, bloom or mist. At the mock pose the ribbon envelope and the first pillar row's
+  floor contact are measured from its pixels against the WR-00 target table.
+- ``lit``: ribbon material, emissive pillars, mist and bloom through the Visualizer-shaped scope.
+
+Missing until their steps land: floor material and reflection (S3D-5, PBR pack), particles (S3D-2).
 
     .venv\\Scripts\\python.exe tools/labs/waveform_ribbon_lab.py --output .artifacts/evidence/waveform_ribbon/<new-run>
         [--cards .artifacts/evidence/waveform_ribbon/wr00_reference_projection]
@@ -39,44 +43,64 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from core.ribbon_ring import RibbonRing
-from core.settings.framed_camera import orthographic_matrix
+from core.settings import framed_camera as fc
+from rendering.gl_programs.mist import MIST_GLSL, mist_uniforms
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.ribbon import RibbonMaterial, RibbonPrimitive
 from rendering.quick.scene3d.target import SceneTarget
 from tools.labs.render_target import OffscreenRenderTarget
 from tools.labs.waveform_ribbon_targets import ENVELOPE, TRACED
 
+# Lab-local framed camera on the shared API (no production registration). Orthographic half-extents follow the
+# shared rule: the reference lens's tangents at the orbit distance, divided by Scene Scale. At the mock pose that is
+# the WR-00 fit: pivot 2 above the floor, 15 degrees down, half-height 12*tan(22.5 deg) = 4.97.
+SPEC = fc.FramedCameraSpec(
+    prefix='waveform_ribbon_', pivot=(0., 2., 0.), orbit_distance=12., pitch_base_degrees=-15.,
+    pitch_span_degrees=60., yaw_span=math.pi, tilt_range=(-.5, .5), eye_center=(0., 8., 0.), eye_half=(60., 8., 60.),
+    clearance=.4, offset_scale=(60., 8., 60.), travel_speed=4.)
+ORTHO_REFERENCE_FOV = 45.
+
 
 @dataclass(frozen=True)
-class Camera:  # WR-00 analytic proposal (Lab Plan section 1.3)
-    half_height: float = 4.975
-    pitch_degrees: float = 15.
-    pivot: tuple = (0., 2., 0.)
-    distance: float = 30.
+class Pose:
+    turn: float = 0.
+    tilt: float = 0.
+    scale: float = 1.
+    pan_x: float = 0.
+    pan_y: float = 0.
+    projection: str = 'Orthographic'
+    fov: float = 45.
+
+
+POSES = {'mock': Pose(), 'turned': Pose(turn=.14), 'raised': Pose(tilt=-.12), 'dolly': Pose(scale=1.6, pan_x=.12),
+         'perspective': Pose(projection='Perspective', fov=40.)}
 
 
 @dataclass(frozen=True)
 class Hall:
-    back_wall: float = 2.29         # behind the pivot
-    near_floor: float = 14.         # floor extent toward the camera
-    half_length: float = 40.        # along the flow
-    # Light columns at the measured fractions of the reference panel width (WR-00), on the back wall.
-    column_fractions: tuple = (.04, .14, .30, .50, .74, .95)
-    column_half_width: float = .07
-    column_height: float = 12.
-    column_colours: tuple = ((.35, .7, 1.), (.7, .55, 1.), (.4, .75, 1.), (.55, .6, 1.), (.4, .8, 1.), (.6, .7, 1.))
-    column_light: float = 2.2
+    floor_x: float = 70.
+    floor_z: tuple = (-60., 30.)
+    # Pillar rows (depth, mean spacing, seed), authored in world units; spacing jitters deterministically.
+    rows: tuple = ((-2.3, 1.7, 1), (-6.5, 2.6, 2), (-12., 3.4, 3), (-19., 4.2, 4))
+    pillar_half: float = .08
+    pillar_height: float = 14.
+    pillar_light: float = 2.2
+    pillar_colours: tuple = ((.35, .7, 1.), (.7, .55, 1.), (.4, .75, 1.), (.55, .6, 1.), (.4, .8, 1.), (.6, .7, 1.))
     floor_colour: tuple = (.018, .024, .045)
-    wall_colour: tuple = (.008, .011, .024)
+    backdrop: tuple = (.010, .013, .030)
+    mist: dict = field(default_factory=lambda: mist_uniforms(radii_xz=(26., 3.2), falloff=.55, floor_thickening=1.2,
+                                                             thickening_height=1.2))
 
 
 @dataclass(frozen=True)
-class Flow:  # Lab Plan section 4A: newest knot just off the right edge, history drifts left
+class Flow:  # Lab Plan section 4A: history enters at the head (world +x) and drifts toward the tail
     speed: float = 1.6
     head_hz: float = .4
-    knot_hz: float = 20.
+    knot_hz: float = 6.
     shape_tau: float = .45          # per smoothing stage of history-carried shape controls
-    head_margin: float = 1.5
+    head_x: float = 34.
+    fade_in: float = 2.5            # seconds of age over which the head fades in
+    fade_out: float = 5.            # seconds of age over which the tail fades out
 
 
 PALETTE = (((.08, .62, 1.), (.15, .42, 1.)),    # electric cyan -> blue
@@ -90,7 +114,6 @@ STATES = {  # labelled synthetic controls sized from the WR-00 target table; not
 
 @dataclass(frozen=True)
 class Recipe:
-    camera: Camera = field(default_factory=Camera)
     hall: Hall = field(default_factory=Hall)
     flow: Flow = field(default_factory=Flow)
     material: RibbonMaterial = field(default_factory=RibbonMaterial)
@@ -100,76 +123,97 @@ class Recipe:
 
 HALL_VERTEX = """#version 460 core
 layout(location=0) in vec3 aPosition;
-layout(location=1) in vec4 aColour;   // rgb, emission
-layout(location=2) in vec3 aLocal;    // across (-1..1), height (world), column seed; unused for planes
+layout(location=1) in vec4 aColour;   // rgb, emission (pillars)
+layout(location=2) in vec3 aLocal;    // across (-1..1), height (world), pillar seed
 uniform mat4 uMvp;
+out vec3 vWorldPos;
 out vec4 vColour;
 out vec3 vLocal;
-void main() { vColour=aColour; vLocal=aLocal; gl_Position=uMvp*vec4(aPosition,1.0); }
+void main() { vWorldPos=aPosition; vColour=aColour; vLocal=aLocal; gl_Position=uMvp*vec4(aPosition,1.0); }
 """
 HALL_FRAGMENT = """#version 460 core
+in vec3 vWorldPos;
 in vec4 vColour;
 in vec3 vLocal;
 uniform int uFlat;
+uniform vec3 uBackdrop;
 layout(location=0) out vec4 FragColor;
 layout(location=1) out vec4 Emission;
+""" + MIST_GLSL + """
 void main() {
     if(uFlat==1) { FragColor=vec4(vColour.rgb,1.0); Emission=vec4(0.0); return; }
     vec3 colour=vColour.rgb;
-    float light=0.0;
+    vec3 light=vec3(0.0);
     if(vColour.a>0.0) {
-        // A light column as in the mock: mostly dim haze, two localized bright segments at seeded heights, and a
-        // bright pool where it meets the floor. Uniform full-height tubes read as neon signage.
+        // A light pillar: mostly dim haze, two localized bright segments at seeded heights, and a bright pool where
+        // it meets the floor. Uniform full-height tubes read as neon signage.
         float core=exp(-pow(vLocal.x*2.2,2.0));
         float height=vLocal.y, seed=vLocal.z;
         float h1=1.6+2.6*fract(sin(seed*91.7)*4375.85), h2=3.8+3.0*fract(sin(seed*37.1)*9123.17);
         float segments=exp(-pow((height-h1)/0.45,2.0))+0.7*exp(-pow((height-h2)/0.7,2.0));
-        float base=1.4*exp(-height*2.4);
-        float profile=0.07+segments+base;
-        light=vColour.a*core*profile*smoothstep(0.0,0.05,height);
-        colour=mix(colour,vec3(1.0),0.35*core*core)*light;
+        float profile=0.07+segments+1.4*exp(-height*2.4);
+        light=mix(colour,vec3(1.0),0.35*core*core)*vColour.a*core*profile*smoothstep(0.0,0.05,height);
+        colour=vec3(0.0);
     }
-    FragColor=vec4(colour,1.0);
-    Emission=vec4(colour*step(0.001,light),dot(colour,vec3(0.2126,0.7152,0.0722))*step(0.001,light));
+    float clear=mistTransmittance(vWorldPos);
+    vec3 shaded=mix(uBackdrop,colour,clear)+light*clear;
+    FragColor=vec4(shaded,1.0);
+    Emission=vec4(light*clear,dot(light*clear,vec3(0.2126,0.7152,0.0722)));
 }
 """
-FLAT = {'floor': (.25, .25, .25), 'wall': (.1, .1, .1), 'column': (.6, .6, .1), 'ribbon': (1., 0., 1.)}
+FLAT = {'floor': (.25, .25, .25), 'pillar': (.6, .6, .1), 'front_pillar': (.1, .6, .6), 'ribbon': (1., 0., 1.)}
 
 
-def look_at(eye, target, up=(0., 1., 0.)):
-    forward = (target-eye)/np.linalg.norm(target-eye)
-    side = np.cross(forward, up)
-    side /= np.linalg.norm(side)
-    upward = np.cross(side, forward)
+def camera(pose: Pose, aspect: float):
+    """(world->view 4x4, projection 4x4, eye) from the shared framed camera; the world never moves."""
+    axes = fc.camera_axes(SPEC, pose.turn, pose.tilt)
+    eye, _ = fc.resolve_camera_position(SPEC, pose.turn, pose.tilt, pose.scale, pose.pan_x, pose.pan_y, pose.fov,
+                                        (0., 0., 0.), None, lambda x, z: 0., axes=axes)
+    right, up, back = (np.asarray(axes[i:i + 3]) for i in (0, 3, 6))
     view = np.identity(4)
-    view[0, :3], view[1, :3], view[2, :3] = side, upward, -forward
-    view[:3, 3] = -view[:3, :3] @ eye
-    return view
+    view[0, :3], view[1, :3], view[2, :3] = right, up, back
+    view[:3, 3] = -view[:3, :3] @ np.asarray(eye)
+    if pose.projection == 'Orthographic':
+        tan = fc.viewport_tangents(ORTHO_REFERENCE_FOV, aspect)
+        distance = SPEC.orbit_distance/max(pose.scale, 1e-3)
+        projection = fc.orthographic_matrix((tan[0]*distance, tan[1]*distance), .1, 200.)
+    else:
+        projection = fc.perspective_matrix(fc.viewport_tangents(pose.fov, aspect), .05, 200.)
+    return view, np.asarray(projection).reshape(4, 4, order='F'), np.asarray(eye)
 
 
-def hall_vertices(hall: Hall, flat: bool, reference_width: float) -> bytes:
-    """Floor, back wall and columns as one static triangle list: position, colour+emission, local."""
+def pillar_positions(hall: Hall):
+    """World pillars: (x, z, row, seed). Spacing jitters by a fixed hash per row, never by the view."""
+    out = []
+    for row, (z, spacing, seed) in enumerate(hall.rows):
+        x, k = -hall.floor_x, 0
+        while x < hall.floor_x:
+            jitter = math.sin(seed*12.9898 + k*78.233)*43758.5453 % 1.
+            x += spacing*(.55 + .9*jitter)
+            k += 1
+            if abs(x) < hall.floor_x:
+                out.append((x, z, row, seed*100 + k))
+    return out
+
+
+def hall_vertices(hall: Hall, flat: bool) -> bytes:
+    """Floor and pillar prisms as one static triangle list: position, colour+emission, local."""
     rows = []
 
     def quad(corners, colour, emission, locals_):
         for i in (0, 1, 2, 0, 2, 3):
             rows.append((*corners[i], *colour, emission, *locals_[i]))
-    z_wall, near, half = -hall.back_wall, hall.near_floor, hall.half_length
     zero = ((0., 0., 0.),)*4
-    quad(((-half, 0., z_wall), (half, 0., z_wall), (half, 0., near), (-half, 0., near)),
-         FLAT['floor'] if flat else hall.floor_colour, 0., zero)
-    quad(((-half, 0., z_wall), (-half, hall.column_height, z_wall), (half, hall.column_height, z_wall), (half, 0., z_wall)),
-         FLAT['wall'] if flat else hall.wall_colour, 0., zero)
-    # The measured pattern repeats along the hall, so a wider card reveals more hall at the same scale.
-    repeats = range(-int(half/reference_width) - 1, int(half/reference_width) + 2)
-    columns = [((fraction - .5 + k)*reference_width, colour, 1 + i + 7*(k - repeats[0]))
-               for k in repeats for i, (fraction, colour) in enumerate(zip(hall.column_fractions, hall.column_colours))]
-    for x, colour, seed in columns:
-        if abs(x) > half:
-            continue
-        w, h, z = hall.column_half_width*(2.5 if not flat else 1.), hall.column_height, z_wall + .02
-        quad(((x - w, 0., z), (x - w, h, z), (x + w, h, z), (x + w, 0., z)), FLAT['column'] if flat else colour,
-             0. if flat else hall.column_light, ((-1., 0., seed), (-1., h, seed), (1., h, seed), (1., 0., seed)))
+    (z0, z1), fx = hall.floor_z, hall.floor_x
+    quad(((-fx, 0., z0), (fx, 0., z0), (fx, 0., z1), (-fx, 0., z1)), FLAT['floor'] if flat else hall.floor_colour, 0., zero)
+    h, w = hall.pillar_height, hall.pillar_half
+    for x, z, row, seed in pillar_positions(hall):
+        colour = (FLAT['front_pillar'] if row == 0 else FLAT['pillar']) if flat else \
+            hall.pillar_colours[int(seed) % len(hall.pillar_colours)]
+        light = 0. if flat else hall.pillar_light
+        for (ax, az), (bx, bz) in (((-w, w), (w, w)), ((w, w), (w, -w)), ((w, -w), (-w, -w)), ((-w, -w), (-w, w))):
+            quad(((x + ax, 0., z + az), (x + ax, h, z + az), (x + bx, h, z + bz), (x + bx, 0., z + bz)), colour, light,
+                 ((-1., 0., seed), (-1., h, seed), (1., h, seed), (1., 0., seed)))
     return b''.join(struct.pack('10f', *row) for row in rows)
 
 
@@ -179,7 +223,7 @@ def fill_ring(recipe: Recipe, state: str, knots: int = 256) -> tuple[RibbonRing,
     ring = RibbonRing(3, colours=[(*a, 1.) for a, _ in PALETTE], edge_colours=[(*b, 1.) for _, b in PALETTE], period=.5)
     alpha = 1 - math.exp(-1/flow.knot_hz/flow.shape_tau)
     stages = [[0., 0.] for _ in range(3)]
-    pivot_y = recipe.camera.pivot[1]
+    pivot_y = SPEC.pivot[1]
     t = 0.
     for i in range(knots):
         t = i/flow.knot_hz
@@ -190,8 +234,8 @@ def fill_ring(recipe: Recipe, state: str, knots: int = 256) -> tuple[RibbonRing,
             stages[r][0] += (section - stages[r][0])*alpha
             stages[r][1] += (stages[r][0] - stages[r][1])*alpha
             swell = stages[r][1]
-            positions.append((flow.speed*t, pivot_y + s['lift'] + s['amplitude']*math.sin(phase) + (r-1)*s['spread']*math.cos(.37*phase),
-                              (r-1)*.5 + .35*math.cos(phase*.8)))
+            positions.append((flow.speed*t, pivot_y + s['lift'] + s['amplitude']*math.sin(phase)
+                              + (r-1)*s['spread']*math.cos(.37*phase), (r-1)*.5 + .35*math.cos(phase*.8)))
             widths.append(s['width'] + s['width_swell']*swell)
             twists.append(s['twist']*math.sin(2*math.pi*.07*t + r*2.))
             light.append(s['emission']*(.85 + .3*swell))
@@ -214,39 +258,29 @@ class Lab:
             self.resources.release_resources()
         self.target.close()
 
-    def matrices(self, now: float):
-        camera, (width, height) = self.recipe.camera, self.size
-        aspect = width/height
-        pitch = math.radians(camera.pitch_degrees)
-        pivot = np.asarray(camera.pivot, float)
-        eye = pivot + camera.distance*np.array((0., math.sin(pitch), math.cos(pitch)))
-        view = look_at(eye, pivot)
-        projection = np.asarray(orthographic_matrix((camera.half_height*aspect, camera.half_height), .1, 80.)).reshape(4, 4, order='F')
-        flow = np.identity(4)
-        flow[0, 3] = camera.half_height*aspect + self.recipe.flow.head_margin - self.recipe.flow.speed*now
-        return projection, view, flow
-
-    def render(self, state: str, *, flat: bool) -> np.ndarray:
+    def render(self, state: str, *, flat: bool, pose: str = 'mock') -> np.ndarray:
         recipe, (width, height) = self.recipe, self.size
+        hall, flow = recipe.hall, recipe.flow
         ring, now = fill_ring(recipe, state)
-        projection, view, flow = self.matrices(now)
-        hall_mvp = tuple((projection @ view).flatten(order='F'))
-        ribbon_view = view @ flow
+        view, projection, _eye = camera(POSES[pose], width/height)
+        scroll = np.identity(4)
+        scroll[0, 3] = flow.head_x - flow.speed*now  # the flow frame's knot at time t sits at head_x - speed*(now - t)
+        hall_mvp = (projection @ view).flatten(order='F')
+        ribbon_view = view @ scroll
         ribbon_mvp = tuple((projection @ ribbon_view).flatten(order='F'))
-        reference_width = 2*recipe.camera.half_height*640/709  # the panel the column fractions were measured on
         key = 'hall_flat' if flat else 'hall'
-        vao, count = self.resources.mesh(key, hall_vertices(recipe.hall, flat, reference_width), (3, 4, 3))
+        vao, count = self.resources.mesh(key, hall_vertices(hall, flat), (3, 4, 3))
         program = self.resources.program('hall', HALL_VERTEX, HALL_FRAGMENT)
-        uniforms = self.resources.uniforms('hall', ('uMvp', 'uFlat'))
+        uniforms = self.resources.uniforms('hall', ('uMvp', 'uFlat', 'uBackdrop', 'uMist', 'uMistShape'), required=False)
         card = SimpleNamespace(viewport=(0, 0, width, height), logical_size=(float(width), float(height)),
                                matrix_values=(2/width, 0, 0, 0, 0, -2/height, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1),
                                quad_vao=self.target.vao)
         packet = ring.packet()
         self.target.bind(clear=(0., 0., 0., 0.))
-        bloom = 0. if flat else recipe.bloom
-        with self.scene.scope(card, 4, self.resources, overlay=1.0, bloom=bloom if bloom else 0.,
-                              oit=True, hdr=recipe.exposure if bloom else None):
+        with self.scene.scope(card, 4, self.resources, overlay=1.0, bloom=0. if flat else recipe.bloom,
+                              oit=True, hdr=None if flat else recipe.exposure):
             gl.glViewport(0, 0, width, height)
+            gl.glClearBufferfv(gl.GL_COLOR, 0, (*hall.backdrop, 1.))
             gl.glEnable(gl.GL_DEPTH_TEST)
             gl.glDepthFunc(gl.GL_LESS)
             gl.glDepthMask(gl.GL_TRUE)
@@ -254,20 +288,26 @@ class Lab:
                 gl.glUseProgram(program)
                 gl.glUniformMatrix4fv(uniforms['uMvp'], 1, gl.GL_FALSE, np.asarray(hall_mvp, np.float32))
                 gl.glUniform1i(uniforms['uFlat'], int(flat))
+                gl.glUniform3f(uniforms['uBackdrop'], *hall.backdrop)
+                gl.glUniform4f(uniforms['uMist'], *hall.mist['uMist'])
+                gl.glUniform4f(uniforms['uMistShape'], *hall.mist['uMistShape'])
                 gl.glBindVertexArray(vao)
                 gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
                 if flat:
                     self._flat_ribbons(packet, ribbon_mvp)
             if not flat:
-                view_values = tuple(ribbon_view.flatten(order='F'))
+                draw = dict(view=tuple(ribbon_view.flatten(order='F')), material=recipe.material,
+                            orthographic=POSES[pose].projection == 'Orthographic',
+                            age_fade=(now, flow.fade_in, (ring.capacity - 1)/flow.knot_hz, flow.fade_out),
+                            mist=hall.mist, mist_frame=(scroll[0, 3], 0., 0.))
                 with self.scene.transparent_writes(card, self.resources):
-                    self.ribbons.draw(packet, ribbon_mvp, shading='body', view=view_values, material=recipe.material)
+                    self.ribbons.draw(packet, ribbon_mvp, shading='body', **draw)
                 with self.scene.emission_writes():
                     gl.glEnablei(gl.GL_BLEND, 0)
                     gl.glBlendEquationSeparatei(0, gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
                     gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ZERO, gl.GL_ONE)
                     gl.glDepthMask(gl.GL_FALSE)
-                    self.ribbons.draw(packet, ribbon_mvp, shading='light', view=view_values, material=recipe.material)
+                    self.ribbons.draw(packet, ribbon_mvp, shading='light', **draw)
                     gl.glDepthMask(gl.GL_TRUE)
                     gl.glDisablei(gl.GL_BLEND, 0)
         return self.target.read_rgba()
@@ -276,12 +316,12 @@ class Lab:
         """Flat ribbon silhouettes in one known colour: rewrite every ribbon's colours in a copy of the packet."""
         data = np.frombuffer(packet.payload, np.float32).copy().reshape(packet.instances, -1, 4)
         data[:, 2] = data[:, 3] = (*FLAT['ribbon'], 1.)
-        flat = type(packet)(data.tobytes(), packet.instances, packet.vertices, packet.world_origin)
+        flat = type(packet)(data.tobytes(), packet.instances, packet.vertices, packet.world_origin, packet.coordinate_origin)
         self.ribbons.draw(flat, mvp)
 
 
 def measure_flat(pixels: np.ndarray) -> dict:
-    """Envelope, floor line and column positions read from a flat render, as fractions like the target table."""
+    """Ribbon envelope and the front pillar row's floor contact from a flat mock-pose render, as panel fractions."""
     height, width = pixels.shape[:2]
     rgb = pixels[:, :, :3].astype(int)
     ribbon = (rgb[:, :, 0] > 120) & (rgb[:, :, 2] > 120) & (rgb[:, :, 1] < 60)  # FLAT['ribbon'] magenta
@@ -289,8 +329,9 @@ def measure_flat(pixels: np.ndarray) -> dict:
     for x in ENVELOPE['low']:
         column = np.where(ribbon[:, min(x, width - 1)])[0]
         envelope[str(x)] = [float(column.min()/height), float(column.max()/height)] if column.size else None
-    floor_rows = np.where((np.abs(rgb - rgb[height - 2, width//2]).max(2) <= 6).mean(1) > .5)[0]
-    return dict(envelope=envelope, floor_top=float(floor_rows.min()/height) if floor_rows.size else None)
+    front = (np.abs(rgb - np.array(FLAT['front_pillar'])*255).max(2) <= 6)
+    rows = np.where(front.any(1))[0]
+    return dict(envelope=envelope, floor_top=float((rows.max() + 1)/height) if rows.size else None)
 
 
 def landmark_report(measured: dict, state: str, height: int = 709) -> dict:
@@ -302,10 +343,10 @@ def landmark_report(measured: dict, state: str, height: int = 709) -> dict:
             continue
         rows[x] = dict(lab=value, target=list(goal))
         errors += [value[0] - goal[0], value[1] - goal[1]]
-    floor_goal = TRACED['floor_contact_y'][state]/height
+    present = [v for v in measured['envelope'].values() if v]
     return dict(rows=rows, envelope_mean_abs_error=float(np.mean(np.abs(errors))) if errors else None,
-                floor=dict(lab=measured['floor_top'], target=floor_goal),
-                lab_envelope=[min(v[0] for v in measured['envelope'].values() if v), max(v[1] for v in measured['envelope'].values() if v)],
+                floor=dict(lab=measured['floor_top'], target=TRACED['floor_contact_y'][state]/height),
+                lab_envelope=[min(v[0] for v in present), max(v[1] for v in present)] if present else None,
                 target_envelope=[min(t for t, _ in target.values()), max(b for _, b in target.values())])
 
 
@@ -341,19 +382,25 @@ def run(output: Path, cards: Path | None) -> dict:
     wide = Lab(recipe, (1280, 720))
     try:
         for state in STATES:
-            Image.fromarray(wide.render(state, flat=False)).save(output/f'wide_{state}.png')
+            for pose in POSES:
+                Image.fromarray(wide.render(state, flat=False, pose=pose)).save(output/f'wide_{state}_{pose}.png')
     finally:
         wide.close()
     if cards is not None:
         sheet = Image.new('RGB', (640*3 + 16, 709*2 + 8))
         for row, state in enumerate(STATES):
-            mock = Image.open(cards/f'{state}.png')
-            sheet.paste(overlay(mock, state), (0, row*717))
+            sheet.paste(overlay(Image.open(cards/f'{state}.png'), state), (0, row*717))
             sheet.paste(overlay(images[state][0], state), (648, row*717))
             sheet.paste(images[state][1].convert('RGB'), (1296, row*717))
         sheet.save(output/'mock_flat_lit.png')
-    receipt = dict(stage='WR-03 blockout: hall, flat and lit ribbons; no floor reflection or particles',
-                   recipe=json.loads(json.dumps(asdict(recipe), default=str)), states=STATES, landmarks=report,
+    poses = Image.new('RGB', (640*len(POSES), 360*2))
+    for row, state in enumerate(STATES):
+        for column, pose in enumerate(POSES):
+            poses.paste(Image.open(output/f'wide_{state}_{pose}.png').convert('RGB').resize((640, 360)), (column*640, row*360))
+    poses.save(output/'navigation_poses.png')
+    receipt = dict(stage='WR-03 world-first hall: floor, pillar rows, world mist, navigation poses; no floor material',
+                   recipe=json.loads(json.dumps(asdict(recipe), default=str)), states=STATES,
+                   poses={k: asdict(v) for k, v in POSES.items()}, landmarks=report,
                    producer_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                    source_revision=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip())
     (output/'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')

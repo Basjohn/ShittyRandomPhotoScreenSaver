@@ -14,6 +14,7 @@ per-ribbon colours, and choose the knobs. Strands and rims are box-filtered over
 to their average density once sub-pixel, so slow motion cannot make them crawl or sparkle.
 """
 from core.ribbon_geometry import MAX_PATH_SAMPLES
+from rendering.gl_programs.mist import MIST_GLSL
 from rendering.quick.scene3d.target import SCENE_OIT_GLSL
 
 RIBBON_VERTEX = """#version 460 core
@@ -31,6 +32,7 @@ out vec3 vNormal;
 out float vPhase;
 out float vAcross;
 out float vEmission;
+out float vLocal;
 out float vCoverage;
 out float vExpanded;
 out float vFaceScale;
@@ -127,6 +129,7 @@ void main() {
     vNormal=next?n1:n0;
     vAcross=signWidth<0?0.0:1.0;
     vEmission=monotone(guardBefore.side.w,left.side.w,right.side.w,guardAfter.side.w,u);
+    vLocal=mix(left.q.x,right.q.x,u);
     vPhase=paths[owner].meta.z+mix(left.q.x,right.q.x,u)/paths[owner].meta.w;
     vColour=paths[owner].colourA;
     vColourB=paths[owner].colourB;
@@ -192,6 +195,7 @@ in vec3 vNormal;
 in float vPhase;
 in float vAcross;
 in float vEmission;
+in float vLocal;
 in float vCoverage;
 in float vExpanded;
 in float vFaceScale;
@@ -206,6 +210,9 @@ uniform vec4 uStrands;      // count across the width, half-width (strand spacin
 uniform vec4 uBody;         // alpha, tint, unused, warp frequency (per phase unit)
 uniform vec4 uFill;         // emissive sheet light, its centre level (edges are 1), rim glow width (across), rim glow light
 uniform vec4 uGlint;        // glints per strand per phase unit, chance, light, radius (strand units)
+uniform vec4 uAge;          // local now, fade-in, maximum age, fade-out (seconds); fades off when both are zero
+uniform vec3 uMistOrigin;   // packet-local -> mist world translation (packet origin plus the caller's frame)
+""" + MIST_GLSL + """
 
 // Box filter of the unit-spaced lines |x - (k + 0.5)| <= halfWidth over a pixel footprint w (strand units).
 // Once w nears a strand spacing the pattern is sub-pixel: it fades to its mean density instead of aliasing.
@@ -234,13 +241,22 @@ float pathLength() {
 // MSAA shades a covered sample at the pixel centre, which on an edge-on sliver lies far outside the triangle:
 // interpolants extrapolate there (across reached -50 and exp() overflowed into the bloom). Clamp before use.
 float acrossClamped() { return clamp(vAcross,0.0,1.0); }
+// The ribbon's ends live in the world where a navigating camera can see them: the head fades in and the tail
+// fades out by AGE (continuous logical time), never by knot index, which would step at every admitted knot.
+float ageFade() {
+    float age=uAge.x-vLocal;
+    float fadeIn=uAge.y>0.0?smoothstep(0.0,uAge.y,age):1.0;
+    float fadeOut=uAge.w>0.0?1.0-smoothstep(uAge.z-uAge.w,uAge.z,age):1.0;
+    return fadeIn*fadeOut;
+}
 vec3 ribbonColour() { return mix(vColour.rgb,vColourB.rgb,acrossClamped()); }
 """
 
 RIBBON_BODY_FRAGMENT = ("#version 460 core\n" + SCENE_OIT_GLSL + "layout(location=2) out vec4 Emission;\n"
                         + _RIBBON_MATERIAL_GLSL + """
 void main() {
-    float alpha=clamp((1.0-pow(1.0-uBody.x,pathLength()))*clamp(vCoverage,0.0,1.0),0.0,0.95);
+    float alpha=clamp((1.0-pow(1.0-uBody.x,pathLength()))*clamp(vCoverage,0.0,1.0)*ageFade()
+                      *mistTransmittance(vWorld+uMistOrigin),0.0,0.95);
     sceneTransparent(ribbonColour()*uBody.y*alpha,alpha,viewDepth());
     Emission=vec4(0.0);
 }
@@ -278,7 +294,8 @@ void main() {
         }
     }
     vec3 light=ribbonColour()*(fill+rimGlow+strands*uStrands.z+rims*uRim.y);
-    light=(light+mix(ribbonColour(),vec3(1.0),0.6)*glints*uGlint.z)*max(vEmission,0.0)
+    light=(light+mix(ribbonColour(),vec3(1.0),0.6)*glints*uGlint.z)*max(vEmission,0.0)*ageFade()
+         *mistTransmittance(vWorld+uMistOrigin)
          *pathLength()*clamp(vCoverage,0.0,1.0);
     FragColor=vec4(light,0.0);
     Emission=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722)));
