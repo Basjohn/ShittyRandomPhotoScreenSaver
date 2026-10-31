@@ -95,8 +95,16 @@ def test_every_ordinary_model_exposes_its_projected_soft_style_to_qml(module_nam
     ("achievement_pulse", "_shadows"), ("abandonment_issues", "_shadows"),
 ])
 def test_native_smoke_fixture_supplies_the_complete_strict_shadow_contract(family, helper):
-    smoke = import_module("tools.qtquick_" + family + "_smoke")
-    resolved = QuickShadowSnapshot.from_mapping(getattr(smoke, helper)("NW"))
+    # The smoke scripts bootstrap Qt graphics on import (which must precede any
+    # QApplication), so load only the self-contained helper from their source.
+    import ast
+    from pathlib import Path
+    source = Path(__file__).resolve().parents[1] / "tools" / f"qtquick_{family}_smoke.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == helper)
+    namespace: dict = {}
+    exec(compile(ast.Module(body=[function], type_ignores=[]), str(source), "exec"), namespace)
+    resolved = QuickShadowSnapshot.from_mapping(namespace[helper]("NW"))
     assert resolved.direction.value == "NW"
 
 
