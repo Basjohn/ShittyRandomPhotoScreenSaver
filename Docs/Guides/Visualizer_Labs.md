@@ -67,5 +67,6 @@ See `Docs/Reference/Bubble_Gradient.md` for the current contract.
 ## Waveform Ribbon entry point
 
 `tools/labs/waveform_ribbon_preflight.py` performs reference/projection preparation only. The detailed live boundaries
-and Orthographic-default requirements are in `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`. No scene/ribbon renderer
-exists yet. Use `.artifacts/evidence/` for explicit retained output and `.artifacts/scratch/` for disposable checks.
+and Orthographic-default requirements are in `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`. The scene lab is
+`tools/labs/waveform_ribbon_lab.py` (flat landmark renders and lit renders beside the mock; status in Lab Plan WR-03).
+Use `.artifacts/evidence/` for explicit retained output and `.artifacts/scratch/` for disposable checks.

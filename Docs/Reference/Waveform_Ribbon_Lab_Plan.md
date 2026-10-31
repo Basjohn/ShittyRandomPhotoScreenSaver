@@ -19,7 +19,9 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
   helpers. Tests cover fixed world scale under resize/depth and near/far clip mapping; existing native sphere/ray
   tests independently exercise shared Orthographic geometry, origins and occlusion.
 - [x] Annotation masks, target table (section 1.3), proposed Orthographic fit and the flowing-history motion model (section 4A).
-- [ ] Verify the camera fit in the WR-03 blockout render; select recorded-audio windows; set tolerances from candidates.
+- [x] Camera fit verified in the WR-03 blockout: the flat render's floor line lands on the traced 0.635 exactly and both
+  ribbon envelopes within about 0.012 of panel height (section WR-03 status).
+- [ ] Select recorded-audio windows; set tolerances from candidates.
 - [x] WR-01a bounded absolute-coordinate CPU history and centripetal interpolation reference.
 - [x] WR-01b CPU transported/camera-facing frames, gap/cusp policy and width/UV stations; proposed GPU budget recorded.
 - [x] WR-02a independent oriented GPU prototype: bounded packet/ring, both projection matrices, solid geometry,
@@ -30,7 +32,8 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
 - [x] WR-02 material: OIT body plus additive HDR light (sheet glow, rims, filament strands, glints, fold glow), box-filtered AA,
   per-knot emission and order-independent crossings; native proofs and mock-beside cards (`Ribbon_Path.md`).
 - [ ] WR-02 remaining: camera-facing GPU width, near-plane/edge-on motion, AA under slow motion, defocus and full lifecycle/cost proof.
-- [ ] WR-03 onward: actual scene blockout, material/reflection/particle work, music, production and visual acceptance.
+- [~] WR-03 blockout: `tools/labs/waveform_ribbon_lab.py` (status in section WR-03). Far from the mock.
+- [ ] WR-04 onward: material/reflection/particle work, music, production and visual acceptance.
 
 Run `.venv\Scripts\python.exe tools/labs/waveform_ribbon_preflight.py --output .artifacts/evidence/waveform_ribbon/<new-run>`.
 It refuses overwrites, copies the unmodified primary, extracts provisional native-size low/high cards, and records
@@ -319,6 +322,29 @@ is held, not substituted with unbounded bloom.
 ### WR-03 — Camera and scene blockout with one ribbon
 
 **Entry:** S3D-1 proof admitted; WR-00 primary-target measurements exist.
+
+**Status (31 October): blockout exists, far from the mock.** `tools/labs/waveform_ribbon_lab.py` composes a static
+hall under the WR-00 camera: floor, back wall, and light columns at the measured fractions, repeated along the hall
+so wide cards reveal more hall. Three flowing-history ribbons from one `RibbonRing` use a labelled synthetic head
+(no music). Two renders per state:
+- **Flat:** solid colours. The floor line (0.6347 against 0.6347) and ribbon envelopes (low 0.389-0.604 against
+  0.388-0.592; high 0.251-0.674 against 0.240-0.663) are measured from its pixels, not assumed.
+- **Lit:** material, emissive columns and bloom through the Visualizer-shaped scope.
+
+Evidence: `.artifacts/evidence/waveform_ribbon/wr03_blockout/` (`mock_flat_lit.png`: mock with target overlay | flat |
+lit; wide 16:9 cards). Test: `tests/test_waveform_ribbon_lab.py` pins the floor line and low envelope.
+High needs an energy lift of about 0.5 world units to match; that is now a declared synthetic control.
+
+Gaps, largest first:
+1. **No floor reflection.** The floor is empty; in the mock its reflections carry about half the light
+   (floor median luminance 0.14 low / 0.38 high). S3D-5 is the next primitive. A wet, rough concrete normal/roughness
+   texture may be worth authoring in Blender (operator offered sessions).
+2. **Columns are too bright and too crisp.** They read as spindles; the mock's are dimmer, softer secondary glows.
+3. **Ribbons:** haze too milky, strands parallel, palette too magenta, too few layered sheets in high (Ribbon_Path).
+4. **No particles or sparkle** (S3D-2).
+
+A readback upside-down bug hid behind near-symmetric ribbons until the flat hall showed the floor on top:
+`OffscreenRenderTarget.read_rgba()` is already top-left; never flip it again.
 
 - [ ] Create `tools/labs/waveform_ribbon_lab.py` as a scene-input authoring tool over shared primitives, with explicit CLI
   paths/seed/time/size/recipe and no Settings or preset writes. Do not invent a universal lab recipe schema.
