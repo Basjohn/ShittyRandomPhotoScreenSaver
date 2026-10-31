@@ -25,6 +25,11 @@ def simulation_module():
             package = types.ModuleType(name)
             package.__path__ = [str(location)]
             sys.modules[name] = package
+    # A stub placed straight into sys.modules bypasses the import system's
+    # parent binding; bind it so dotted lookups (monkeypatch "widgets.x.y",
+    # pkgutil.resolve_name) still reach the subpackage later in the process.
+    if getattr(sys.modules["widgets"], "spotify_visualizer", None) is None:
+        sys.modules["widgets"].spotify_visualizer = sys.modules["widgets.spotify_visualizer"]
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
     return importlib.import_module("widgets.spotify_visualizer.extruded_bubble_simulation")

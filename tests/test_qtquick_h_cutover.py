@@ -17,7 +17,10 @@ import pytest
 from PySide6.QtCore import QObject, QPoint, QRect, QSize
 from PySide6.QtGui import QColor, QImage
 
-from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+from core.settings.visualizer_mode_registry import (
+    VISUALIZER_MODE_IDS,
+    get_visualizer_presentation_policy,
+)
 from core.settings.settings_manager import SettingsManager
 import engine.engine_handlers as engine_handlers_module
 import engine.display_manager as display_manager_module
@@ -338,6 +341,13 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
                     "visualizers_enabled": True,
                     "monitor": "ALL",
                     "mode": "bubble",
+                    # Cycling admits only enabled modes; pin the set this test
+                    # walks (bubble -> devcurve, then spectrum) instead of
+                    # inheriting the operator-editable default activation.
+                    "mode_activation": {
+                        mode_id: mode_id in {"bubble", "devcurve", "spectrum"}
+                        for mode_id in VISUALIZER_MODE_IDS
+                    },
                     "preset_bubble": 3,
                     "bubble_bar_count": 32,
                     "bubble_big_count": 7,

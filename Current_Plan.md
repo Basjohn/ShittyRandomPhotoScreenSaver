@@ -20,8 +20,9 @@ remaining §2/§3 gates. This preparation introduces no production registration 
 
 **Accepted baseline (do not reopen as general work):** original Bubble, **Extruded Bubble (closed 2026-10-25)**, Neon
 Lake, Oscilloscope, Spectrum/Rainbow Ghost, Sphere, source routing, landed transitions and Foundry launch buttons.
-Reopen any of them only on a concrete new defect.
-The operator's 28 October EB motion/reactivity/framing follow-up below is a scoped reopening, not a general recovery restart.
+Reopen any of them only on a concrete new defect. Extruded Bubble's 28 October follow-up and its performance
+investigation closed on 31 October (status in `Docs/Reference/Extruded_Bubble/` and
+`Docs/Audits/EB_Performance_Investigation_2026-10-29.md`; the deferred vectorised rewrite is in `Future_Work.md`).
 
 **Rules:** one Settings/capability/CUSTOM/render/lifecycle owner and the sole Visualizer logical clock. No new
 floor, capture/DSP, renderer-side simulation, timers/polling or camera-following replacement populations. Preserve
@@ -32,37 +33,9 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 
 **Retired section IDs.** §4/§4A/§4B, G00–G33, EB-A…EB-S and EB-R25…EB-R43 (Extruded Bubble recovery) were retired
 when Extruded Bubble closed; documents citing them refer to that history: `git show 3c6cf7d8:Current_Plan.md` and
-`Docs/Reference/Extruded_Bubble/Investigation.md`. Stable IDs kept below: §2A, §3 (RM/SC/SC4), §4C, §5, R38/R41.
+`Docs/Reference/Extruded_Bubble/Investigation.md`. Stable IDs kept below: §3 (RM/SC/SC4), §4C, §5, R38/R41 (§2A retired 2026-10-31 with the EB follow-up).
 
 ## 2. Before the next mode: fixes, Settings/UX, features
-
-### 2A. EB follow-up — authorized implementation
-
-`Docs/Reference/Extruded_Bubble/Motion_Reactivity_Viewport_Plan.md` owns source findings, measured baselines,
-approved direction and detailed gates. Work in narrow tested/audited checkpoint pushes. Keep the authored lens,
-world geometry and camera fixed during resize; compare the original rectangle before accepting framing changes.
-
-- [~] **EB28-8 — Awaiting validation in normal idle use:** the tiny-shell cancellation defect is repaired at shared
-  sphere intersection; fixed-ID native composition/reflection/transmission and5/8/12px temporal regressions pass
-  without added samples, filtering, dimming or audio changes. Confirm the formerly stippled shells stay stable in
-  ordinary paused/quiet playback; report a fresh example if flicker remains. The broader EB implementation and
-  lossless optimization audit are closed; Orthographic appearance work stays deferred beyond the entire backlog.
-- [~] **EB performance — awaiting a heavy-load live check:** `Docs/Audits/EB_Performance_Investigation_2026-10-29.md`
-  owns the measured ranking and checkpoints. The logical tick (3.0 ms) is back under budget, and free drift now runs
-  on the GPU. Live under the operator's heavy load: 90 Hz revisions, about 60 fps draws on the 60 Hz panel, about 40 ms
-  frame age (target about 20). Offline, EB sustains 4.7 ms per frame under a 60% GPU load (5.8 ms median, 9.2 ms p90
-  under combined CPU and GPU load), against 10.4 ms render-mode time live. The 2026-10-31 instrumented live run
-  attributed the age: the sync consumed a revision ~20 ms old while the newest was ~3 ms old (fixed by sync-time
-  latest admission; live HUD age median 49 → 31 ms), and the render thread stalls behind the logical tick's GIL time.
-  Bit-identical tick trims are exhausted (~15-20% off the tick, `0a61756e`). **Next:** measure them live with
-  `tools/visualizer_live_check.py` (invisible, recorded music, `--load game60` when no game is running; recheck the
-  first 2 s after startup), and validate `game60` against the operator's game. Further logical gains need the
-  vectorised rewrite (operator chose trims only, 2026-10-31). `game60` is calibrated to the operator's game (menu)
-  and matches it live; under it, HUD age went 38.8 → 22.4 ms against the pre-change code (audit doc).
-- [ ] **`test_qtquick_h_cutover.py::test_display_manager_admits_exactly_one_configured_quick_visualizer_owner`** fails
-  at HEAD (`01e3ccb6`): after the transition the controller still reports `extruded_bubble`, not `devcurve`.
-- [ ] **`test_extruded_bubble_empty_near.py::test_empty_ordinary_population_skips_near_and_cannot_replay_stale_bokeh`**
-  fails only in the full `tests/test_extruded_bubble*.py` run and passes alone: find the shared state it depends on.
 
 ### 2B. Settings and UI (in this order)
 
@@ -165,8 +138,9 @@ then closed the gap by measuring against both. Do the same for every new mode:
    capture tool (`tools/<mode>_capture.py` on recorded real music) and measurements (regional colour, on-screen size
    bands, Range audits), as in `Docs/Guides/Visualizer_Visual_Tuning.md`.
 4. **The lab is a waypoint, not the goal:** keep going toward the mock; keep the lab (it costs the product nothing).
-5. **Same-scene low/high proof, measured cost, dormancy and retirement** before calling any stage done; the operator
-   gives final sign-off.
+5. **Same-scene low/high proof, measured cost, dormancy and retirement** before calling any stage done, including the
+   live-shape check under the calibrated game load (`tools/visualizer_live_check.py --load game60`, budgets in
+   `Docs/Guides/Visualizer_Change_Checklist.md` 1C); the operator gives final sign-off.
 
 ### 7.1 Waveform Ribbon (next)
 
