@@ -27,7 +27,7 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
 - [x] WR-02 input-path gate: `core/ribbon_ring.py` admits one knot per ribbon in O(ribbons) work into a
   ring-addressed staging packet (0.17 ms append + 0.04 ms publish at 8 x 256, against 102.6 ms for the
   stateless rebuild); the stateless route stays the oracle. Contract and proof: `Ribbon_Path.md`.
-- [x] WR-02 material: OIT body plus additive HDR light (rims, filament strands, fold glow) with box-filtered AA,
+- [x] WR-02 material: OIT body plus additive HDR light (sheet glow, rims, filament strands, glints, fold glow), box-filtered AA,
   per-knot emission and order-independent crossings; native proofs and mock-beside cards (`Ribbon_Path.md`).
 - [ ] WR-02 remaining: camera-facing GPU width, near-plane/edge-on motion, AA under slow motion, defocus and full lifecycle/cost proof.
 - [ ] WR-03 onward: actual scene blockout, material/reflection/particle work, music, production and visual acceptance.
@@ -484,6 +484,9 @@ The ribbons are **music history flowing across the hall**, not shapes animated i
   them, because a speed change would read as a different scene (gate A).
 - The large smooth waves come from an authored head oscillator whose phase advances with logical time; music
   modulates its amplitude and rate. Raw band envelopes plotted as height make jagged plateaus, not the mock's waves.
+- Every history-carried shape control (width, twist, offsets) is band-limited to features of about half a
+  wavelength or longer. A control changing over d seconds draws a feature flow speed x d long, so fast changes
+  draw lumps. Immediate musical punch comes from whole-ribbon light, which needs no history.
 - Any per-frame animation must be a pure shader function of (knot coordinate, logical time). Nothing may
   rewrite history, because that would bring back the per-tick cost the ring removed.
 - The head and tail stay off-view by at least two knot spacings plus the visible end margin, so the provisional

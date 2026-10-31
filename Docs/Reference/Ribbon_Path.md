@@ -210,8 +210,10 @@ two passes over the same geometry (`rendering/gl_programs/ribbon.py`):
 
 - **Body:** a faint translucent sheet, drawn inside `SceneTarget.transparent_writes` through the shared
   weighted-blended OIT. It is order-independent and depth-tested, and writes no depth.
-- **Light:** rims, longitudinal filament strands and fold glow (more light where the sheet turns edge-on),
-  drawn after the OIT resolve inside `emission_writes`. The caller sets additive blending on colour,
+- **Light:** the sheet's own glow (a fill brightening toward the edges), a wide rim glow beside a crisp rim line,
+  longitudinal filament strands, glints riding the strands, and fold glow (more light where the sheet turns
+  edge-on). Both references show the body glowing in its colour; a dark tint with lines alone read thin and flat.
+  Drawn after the OIT resolve inside `emission_writes`. The caller sets additive blending on colour,
   `(ONE, ONE, ZERO, ONE)`, with depth testing on and depth writes off. Addition is order-independent; crossings
   sum in HDR and turn white only after the scope's single tone map.
 
@@ -223,6 +225,13 @@ additive light gives, and the faint body keeps strands readable through each oth
 - Strand spread/gather follows the absolute path phase, so it moves with history and never slides.
 - The vertex stage now carries smooth centre-line normals, the across-width coordinate and per-knot emission
   (`side.w`, admitted by `RibbonRing.append(..., emission=)`, 0..64; the stateless packer writes 1).
+- Width, twist and emission interpolate with a monotone cubic (Fritsch-Carlson limited) and the base side with a
+  Catmull-Rom Hermite over the guard knots. They are C1 through every knot and never overshoot, so width stays
+  positive. Linear interpolation left a corner at every knot, which showed as lumps along the curves.
+  Guard knots across a break or beyond the run repeat the endpoint.
+- The across-width coordinate is clamped before use. MSAA shades a covered sample at the pixel centre, which on
+  an edge-on sliver lies far outside the triangle, and `exp(-edge/width)` overflowed into solid bloom blocks.
+- Glints are sparse hashed points on strands, fixed to the absolute path phase, so they travel with the history.
 - Colours run across the width from `colourA` to `colourB` (`RibbonRing(colours=, edge_colours=)`).
 - The material knows only the ribbon (widths, strands, light): no music, palette or scene.
 - The view matrix is rebased with the same float64 origin as the MVP, so eye/forward/view depth stay packet-local.
@@ -232,14 +241,25 @@ Proof (`tests/test_ribbon_material.py`, through overlay + bloom + OIT + HDR, 4x 
 identical in either draw order (max difference 1) and brighter than either alone. An opaque strip in front hides
 the body and light behind it, matching the wall drawn alone; negative control: with depth testing off for the
 light pass the test fails. Eight overlapping ribbons at emission 64 with maximal light and body stay finite
-(saturated white, no NaN holes).
+(saturated white, no NaN holes). The probe's low and high scenes render no overflow garbage; negative control:
+without the clamp the low scene had 4,862 garbage pixels and the test fails.
 
 Cards: `tools/labs/ribbon_material_probe.py` renders three flowing-history ribbons (labelled synthetic head, no
 music) with the WR-00 proposed camera, beside the mock's low/high crops, plus a wide card. Evidence:
-`.artifacts/evidence/ribbon_material/s3d1_filament_material/` (`mock_vs_material.png`). Warm GPU at 960x540 with
-both passes: body 0.04-0.13 ms, light 0.05-0.11 ms (low-high; absolute figures swing about 2x with GPU clocks).
-The fixture's sharp bass pulses notch the edges: width needs a musical attack/settle at WR-07, not material
-changes. Palette, strand density and glow balance are scene choices for the WR-03/04 lab.
+`.artifacts/evidence/ribbon_material/s3d1_filament_material_v2/` (`mock_vs_material.png`). Warm GPU at 960x540
+with both passes is about 0.1-0.25 ms (absolute figures swing about 2x with GPU clocks). The probe's synthetic
+head band-limits its shape controls (Lab Plan section 4A); raw steps drew lumps.
+
+**Honest status: far from the mock.** Fixed at the primitive: lumpy curves, stray edges and bloom blocks.
+Still missing, for the WR-03/04 lab, judged at native zoom against both references:
+- The milky haze between strands is too strong and the bloom halo too wide, so it still leans to neon tubes;
+  the mock keeps dark, saturated gaps and a tighter glow.
+- Strands run parallel; the mock's fan out and gather.
+- Glints and sparkle are nearly absent. Particles are S3D-2.
+- The palette is too magenta; the primary mock is mostly electric blue to violet.
+- Both mocks show more, wider layered sheets with larger vertical sweeps in high.
+- Strand density must suit on-screen width (the mock's lines are about 3-4 px apart). 16 lines across suit
+  these widths; 32 averaged into a smooth body.
 
 Next gate: camera-facing GPU width, near-plane/edge-on motion and AA coverage under slow motion, defocus, then
 the WR-03 scene blockout. No scene likeness, music or full performance acceptance exists yet.

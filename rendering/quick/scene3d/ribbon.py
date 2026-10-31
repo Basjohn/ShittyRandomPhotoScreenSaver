@@ -21,15 +21,15 @@ from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.stream import StreamRing
 
 _FRAGMENTS = {'diagnostic': RIBBON_FRAGMENT, 'body': RIBBON_BODY_FRAGMENT, 'light': RIBBON_LIGHT_FRAGMENT}
-_MATERIAL_UNIFORMS = ('uViewZ', 'uEye', 'uForward', 'uOrthographic', 'uStrands', 'uRim', 'uBody')
+_MATERIAL_UNIFORMS = ('uViewZ', 'uEye', 'uForward', 'uOrthographic', 'uStrands', 'uRim', 'uBody', 'uFill', 'uGlint')
 
 
 @dataclass(frozen=True)
 class RibbonMaterial:
     """Filament look, in units of the ribbon itself; no music, palette or scene authority."""
-    strands: float = 24.            # filament lines across the width
-    strand_half_width: float = .12  # of one strand spacing
-    strand_light: float = 1.
+    strands: float = 16.            # filament lines across the width
+    strand_half_width: float = .11  # of one strand spacing
+    strand_light: float = 1.7
     strand_warp: float = .06        # across-width spread/gather amplitude
     warp_frequency: float = .25     # warp cycles per strand-phase unit along the path
     rim_half_width: float = .02     # of the width
@@ -39,12 +39,21 @@ class RibbonMaterial:
     body_alpha: float = .035
     body_tint: float = .35
     fold_alpha: float = 1.          # extra body opacity where edge-on
+    fill_light: float = .12         # the sheet's own glow
+    fill_centre: float = .3         # fill level at the centre line (edges are 1)
+    rim_glow_width: float = .05     # of the width, exponential falloff from each edge
+    rim_glow_light: float = .25
+    glint_density: float = .5       # glint cells per strand per strand-phase unit
+    glint_chance: float = .2
+    glint_light: float = 5.
+    glint_radius: float = .3        # strand spacings (at least ~0.75 px)
 
     def __post_init__(self):
         values = astuple(self)
         if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v >= 0 for v in values):
             raise ValueError('Ribbon material values must be finite and non-negative')
-        if not 1 <= self.strands <= 256 or not 0 < self.strand_half_width <= .5 or not 0 < self.rim_half_width <= .5:
+        if (not 1 <= self.strands <= 256 or not 0 < self.strand_half_width <= .5 or not 0 < self.rim_half_width <= .5
+                or not 0 < self.rim_glow_width <= .5 or self.fill_centre > 1 or self.glint_chance > 1):
             raise ValueError('Ribbon strands need 1..256 lines and positive half-widths up to half a spacing')
         if self.body_alpha > .95 or self.fold_power <= 0:
             raise ValueError('Ribbon body alpha must stay below 0.95 and fold power positive')
@@ -52,7 +61,9 @@ class RibbonMaterial:
     def uniforms(self):
         return dict(uStrands=(self.strands, self.strand_half_width, self.strand_light, self.strand_warp),
                     uRim=(self.rim_half_width, self.rim_light, self.fold_light, self.fold_power),
-                    uBody=(self.body_alpha, self.body_tint, self.fold_alpha, self.warp_frequency))
+                    uBody=(self.body_alpha, self.body_tint, self.fold_alpha, self.warp_frequency),
+                    uFill=(self.fill_light, self.fill_centre, self.rim_glow_width, self.rim_glow_light),
+                    uGlint=(self.glint_density, self.glint_chance, self.glint_light, self.glint_radius))
 
 
 class RibbonPrimitive:

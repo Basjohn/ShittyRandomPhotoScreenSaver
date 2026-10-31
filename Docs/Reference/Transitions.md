@@ -243,6 +243,16 @@ Each foundation slice adds what it learned here.
   hands the GIL over), and Qt held the GUI thread in sync while the long frame rendered, so a stale revision was drawn.
   Judge a mode with `tools/visualizer_live_check.py` under `--load game60` on recorded music, and keep within the
   budgets in `Docs/Guides/Visualizer_Change_Checklist.md` 1C.
+- MSAA shades a covered sample at the pixel centre, which on an edge-on sliver lies far outside the triangle;
+  interpolants extrapolate there (ribbon across-width reached about -50). Clamp every interpolant before `exp`,
+  `pow` or division: one overflow became solid colour blocks across the bloom (ribbon material, 2026-10-31).
+- Anything recorded into a flowing history becomes shape at flow speed: a control changing over d seconds draws a
+  feature speed x d long. Band-limit history-carried shape controls to features of about half a wavelength or longer
+  (cascaded smoothing, C1), and interpolate per-knot values with a monotone cubic, never linearly. Linear
+  interpolation left a corner at every knot, and a 0.45 s settle drew 0.7-unit lumps on a 4-unit wave. Quick
+  musical punch belongs to whole-ribbon light, which needs no history (Waveform Ribbon, 2026-10-31).
+- Judge a look at native-pixel zoom beside the reference before calling it close. A downscaled sheet hid lumpy
+  curves, neon-tube fill and sub-pixel strands averaged into a smooth body.
 
 **Materials and new looks on old transitions (S17)**
 - Lighting a photograph changes its pixels: blend the lit look in by how far a piece is from rest (Blinds' lift,

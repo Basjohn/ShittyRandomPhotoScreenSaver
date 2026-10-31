@@ -110,3 +110,25 @@ def test_material_programs_compile_only_when_used_and_inputs_are_validated(scene
     for bad in (dict(strands=0), dict(body_alpha=1.), dict(rim_light=-1.), dict(strand_half_width=float('nan'))):
         with pytest.raises(ValueError):
             RibbonMaterial(**bad)
+
+
+
+def test_edge_on_slivers_cannot_overflow_into_the_bloom(qt_app):
+    # The probe's high scene folds sheets edge-on: MSAA shades sliver pixels at centres far outside the triangle.
+    # Unclamped across-width inputs there overflowed exp() to infinity and the bloom spread solid colour blocks.
+    from tools.labs import ribbon_material_probe as probe
+    target = OffscreenRenderTarget(640, 709)
+    primitive, resources, scene = RibbonPrimitive(), MeshResources('sliver test'), SceneTarget('sliver test')
+    try:
+        for state in probe.STATES:  # without the clamp the low scene showed 4862 garbage pixels, high none
+            pixels, _ = probe.render(primitive, target, resources, scene, probe.card_frame(target, 640, 709),
+                                     (640, 709), state, RibbonMaterial())
+            rgb = pixels[:, :, :3].astype(int)
+            garbage = (rgb.max(2) >= 250) & (np.sort(rgb, axis=2)[:, :, 1] < 20)  # a saturated pure primary/secondary
+            assert rgb.max() > 200 and not garbage.any(), state
+    finally:
+        with target.current():
+            primitive.release()
+            scene.release()
+            resources.release_resources()
+        target.close()
