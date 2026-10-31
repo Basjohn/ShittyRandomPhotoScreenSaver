@@ -1,7 +1,14 @@
 # Extruded Bubble — performance and GPU-contention investigation
 
 **Read-only source audit:** GODZIP `d2b0a73b06`, 2026-10-29 13:00 snapshot.  
-**Status:** Investigation checklist; no implementation approved or attempted.  
+**Status: closed 2026-10-31 (operator).** Under the calibrated game-like load (`game60`, matched live to the
+operator's game) EB's median frame age went 38.8 → 22.4 ms, render-mode 9.1 → 5.0 ms and the logical tick
+4.9 → 4.2 ms against the pre-investigation code, with no visual or reactive change: the logical changes are
+bit-identical and the renderer's pixels unchanged. The collapse that opened this audit is gone. The remaining ~2 ms
+to the 20 ms target needs the vectorised logical rewrite, deferred by the operator (`Future_Work.md`). The sections
+below are the historical record; reopen only on a new measured symptom, judged with `tools/visualizer_live_check.py
+--load game60`.  
+**Original status (2026-10-29):** Investigation checklist; no implementation approved or attempted.  
 **Operator observations:** EB remains visually and musically accepted. Under moderate/heavy competing GPU load, EB frame delivery collapses while ordinary Bubble and other visualizers remain stable. EB alone reportedly consumes ~25% GPU versus ~2–10% for Bubble. Enabling all drift controls versus an otherwise comparable setup approximately doubles the reported frame delay. The supplied underwater image shows that spiralling/clockwise microbubble drift is a valuable visual feature to **preserve**, not a setting to switch off.
 
 

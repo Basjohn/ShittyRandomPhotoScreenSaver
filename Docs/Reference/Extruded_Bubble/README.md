@@ -4,8 +4,9 @@
 
 **28 October scoped follow-up — implementation authorized:** drift consumers/ranges, ordinary stream inheritance,
 framed viewport behavior, microbubble pause/resume and reliable ray controls are tracked in
-[Motion, reactivity and viewport plan](Motion_Reactivity_Viewport_Plan.md). `Current_Plan.md` §2A owns the live
-checklist and remaining combined/native gates. Performance work follows successful behavior proof.
+[Motion, reactivity and viewport plan](Motion_Reactivity_Viewport_Plan.md), which also holds the remaining
+idle-use observation (EB28-8). EB has no live `Current_Plan.md` tasks (closed 2026-10-31); performance is closed in
+`Docs/Audits/EB_Performance_Investigation_2026-10-29.md`, its deferred rewrite in `Future_Work.md`.
 
 The 22–23 October notices below are historical evidence, superseded by the 25 October closure. They do not restore the
 retired recovery queue or establish that an old source-level defect remains present today.

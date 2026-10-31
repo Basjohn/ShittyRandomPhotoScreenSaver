@@ -4,7 +4,7 @@
 
 Neon Lake Basin replaces the flat Shockwave Grid picture. The stable mode ID, settings prefix and layout profile remain
 `shockwave_grid`, `shockwave_grid_*` and `3d:shockwave_grid`. The operator accepted the existing mode and its existing graphics/behavior baseline;
-`Current_Plan.md` §2A is the current status authority. Its future water/brush/glow extensions below are **not**
+it is an accepted baseline in `Current_Plan.md` §0 with no live tasks. Its future water/brush/glow extensions below are **not**
 retroactive acceptance failures. The supplied low/high mock in
 `Docs/Future_Work/Additional_Future_Transitions_Package.zip` is concept provenance, **not** the
 accepted artistic reference. The **operator's current** Preset 1 is the working visual comparison,
@@ -15,7 +15,7 @@ not a permit to copy its special-case view code into each future mode. The share
 §4A prerequisite for Extruded Bubble and other framed 3D visualizers. Preserve this mode's authored
 landscape angles, existing Settings/presentation pose and card/CUSTOM behavior when promoting the common
 input/bounds/projection ownership; other modes supply their own bounds and visual target. Current acceptance
-is tracked only in `Current_Plan.md` §2A; the existing Preset 1 remains the
+is the accepted baseline (`Current_Plan.md` §0); the existing Preset 1 remains the
 working visual reference while six new experimental presets are temporary and may all be rejected.
 Every preset remains operator-editable, including Preset 1 and all six experiments. The historical
 audio-reactivity acceptance gate included deterministic and operator real-music recordings; future additions
@@ -375,9 +375,8 @@ need physical viewport/DPR-aware antialiased point coverage and readable glow,
 The viewport-scaling behavior must derive from the actual card/render-target dimensions
 within the existing SceneTarget and mode-owned presentation path, maintain continuous
 results across resize/zoom/aspect, preserve canonical glow/density input authority and
-avoid per-frame mesh rebuilds or unrelated-mode costs. `Current_Plan.md` §2A contains
-mutable operator-provided size examples and hands-on GPU visual acceptance criteria.
-The exact changes and audio/visual acceptance gates remain in `Current_Plan.md` §2A.
+avoid per-frame mesh rebuilds or unrelated-mode costs. Any reopening is admitted as a new
+`Current_Plan.md` item with its own size examples and hands-on GPU visual acceptance criteria.
 
 ## Landscape camera, clipping and terrain skyline
 
@@ -439,7 +438,7 @@ regression/extension proof standards, not an unclosed launch gate. The operator'
 A local agent may run real-music replays and compare before/after clips. Six new experimental
 editable presets must be delivered without silently replacing the operator's current Preset 1 edits; their eventual aesthetic
 rejection does not invalidate verified implementation contracts. The live checklists and
-closure criteria live **only** in `Current_Plan.md` §2A, not a second checklist here.
+closure criteria live **only** in `Current_Plan.md` (none are open), not a second checklist here.
 Rejected attempts and old checkpoint evidence belong in
 `Docs/Audits/Neon_Lake_V4A_Historical_Checkpoints_2026-10-14.md` and Historical Bugs,
 not in this live behavior reference.

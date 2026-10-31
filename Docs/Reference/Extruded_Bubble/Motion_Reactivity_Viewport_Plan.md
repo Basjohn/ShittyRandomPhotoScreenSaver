@@ -403,6 +403,10 @@ scene/material with real host optics at5/8/12px, not mutable preset/profile gold
 makes its5px case fail. Sphere/union/near/inside geometry and material guards remain separate checks. Normal
 operator idle use is still a visual validation boundary, not a reason to retune the accepted audio response.
 
+**Status (2026-10-31, moved out of `Current_Plan.md` when EB work closed):** EB28-8 stands as repaired and is
+observed in ordinary paused/quiet use only. Reopen it only on a fresh example of stippled or flickering small shells,
+reproduced before any change.
+
 ## 2. Lossless performance assessment
 
 The audit followed behavioral verification, with frozen inputs and all optical passes retained. Bounded warmed
