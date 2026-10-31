@@ -51,15 +51,36 @@ void main() {
     gl_Position = vec4(vNdc, 0.0, 1.0);
 }
 """
+# One draw filters a whole level: each geometry invocation writes one cube face (gl_Layer), so the six faces of a
+# level go in a single pass instead of six dependent draws with attachment changes between them.
+_PREFILTER_GEOMETRY = """#version 460 core
+layout(triangles, invocations = 6) in;
+layout(triangle_strip, max_vertices = 3) out;
+in vec2 vNdc[];
+out vec2 fNdc;
+flat out int fFace;
+void main() {
+    for (int i = 0; i < 3; ++i) {
+        fNdc = vNdc[i];
+        fFace = gl_InvocationID;
+        gl_Layer = gl_InvocationID;
+        gl_Position = gl_in[i].gl_Position;
+        EmitVertex();
+    }
+    EndPrimitive();
+}
+"""
+
 _PREFILTER_FRAGMENT = """#version 460 core
-in vec2 vNdc;
+in vec2 fNdc;
+flat in int fFace;
 out vec4 FragColor;
 uniform samplerCube uSource;
-uniform mat3 uWorldToFace;
+uniform mat3 uWorldToFace[6];
 uniform float uCone;        // half-angle of the filter cone, radians
 uniform float uSourceLod;
 void main() {
-    vec3 axis = transpose(uWorldToFace) * normalize(vec3(vNdc, -1.0));
+    vec3 axis = transpose(uWorldToFace[fFace]) * normalize(vec3(fNdc, -1.0));
     vec3 helper = abs(axis.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
     vec3 u = normalize(cross(helper, axis));
     vec3 v = cross(axis, u);
@@ -101,11 +122,6 @@ def scene3d_probe_face_rotation(face: int) -> tuple[float, ...]:
     return (*right, *up, *back)
 
 
-# Each face's rotation as a ready C array: the prefilter uploads one per face per level every frame, and
-# PyOpenGL converts a Python tuple element by element.
-_FACE_ROTATION_ARRAYS = tuple((ctypes.c_float * 9)(*scene3d_probe_face_rotation(face)) for face in range(6))
-
-
 def scene3d_probe_face_of(direction) -> int:
     """The cube face a world direction falls on (GL's major-axis rule)."""
     x, y, z = direction
@@ -133,6 +149,7 @@ class SceneProbe:
         self._texture = 0
         self._depth = 0
         self._fbo = 0
+        self._layers = 0   # colour-only framebuffer holding one whole (layered) cube level for the prefilter
         self._program = 0
         self._vao = 0
 
@@ -141,7 +158,7 @@ class SceneProbe:
         return self._texture
 
     def has_resources(self) -> bool:
-        return bool(self._texture or self._depth or self._fbo or self._program or self._vao)
+        return bool(self._texture or self._depth or self._fbo or self._layers or self._program or self._vao)
 
     def warm(self) -> bool:
         """One warm-up step: True when the probe is already allocated (and its prefilter compiled), else
@@ -177,9 +194,20 @@ class SceneProbe:
         gl.glNamedFramebufferRenderbuffer(self._fbo, gl.GL_DEPTH_ATTACHMENT, gl.GL_RENDERBUFFER, self._depth)
         gl.glCreateVertexArrays(1, name)
         self._vao = int(name[0])
-        self._program = compile_program(_PREFILTER_VERTEX, _PREFILTER_FRAGMENT, label=f"{self.label} prefilter")
+        self._program = compile_program(_PREFILTER_VERTEX, _PREFILTER_FRAGMENT, label=f"{self.label} prefilter",
+                                        geometry_source=_PREFILTER_GEOMETRY)
         self._locations = {name: int(gl.glGetUniformLocation(self._program, name))
                            for name in ("uSource", "uWorldToFace", "uCone", "uSourceLod")}
+        gl.glProgramUniformMatrix3fv(self._program, self._locations["uWorldToFace"], 6, gl.GL_TRUE,
+                                     (ctypes.c_float * 54)(*(v for face in range(6)
+                                                              for v in scene3d_probe_face_rotation(face))))
+        gl.glCreateFramebuffers(1, name)
+        self._layers = int(name[0])
+        gl.glNamedFramebufferDrawBuffer(self._layers, gl.GL_COLOR_ATTACHMENT0)
+        for level in range(1, self.levels):
+            gl.glNamedFramebufferTexture(self._layers, gl.GL_COLOR_ATTACHMENT0, self._texture, level)
+            if gl.glCheckNamedFramebufferStatus(self._layers, gl.GL_DRAW_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE:
+                raise RuntimeError(f"{self.label}: probe level {level} incomplete")
         # Every face's attachment has fixed storage: completeness is a property of the allocation, checked once.
         gl.glNamedFramebufferDrawBuffer(self._fbo, gl.GL_COLOR_ATTACHMENT0)
         for face in range(6):
@@ -197,7 +225,8 @@ class SceneProbe:
         gl.glBindTexture(gl.GL_TEXTURE_CUBE_MAP, self._texture)
         locations = self._locations
         gl.glUniform1i(locations["uSource"], 0)
-        rotation, cone, lod = locations["uWorldToFace"], locations["uCone"], locations["uSourceLod"]
+        cone, lod = locations["uCone"], locations["uSourceLod"]
+        gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._layers)   # the caller restores its framebuffer
         try:
             for level in range(1, self.levels):
                 side = max(self.size >> level, 1)
@@ -207,10 +236,8 @@ class SceneProbe:
                 gl.glUniform1f(cone, min(2.2 * (math.pi / 2.0) / side, math.pi / 2.0))
                 gl.glUniform1f(lod, float(level - 1))
                 gl.glViewport(0, 0, side, side)
-                for face in range(6):
-                    gl.glNamedFramebufferTextureLayer(self._fbo, gl.GL_COLOR_ATTACHMENT0, self._texture, level, face)
-                    gl.glUniformMatrix3fv(rotation, 1, gl.GL_TRUE, _FACE_ROTATION_ARRAYS[face])
-                    gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+                gl.glNamedFramebufferTexture(self._layers, gl.GL_COLOR_ATTACHMENT0, self._texture, level)
+                gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
         finally:
             gl.glTexParameteri(gl.GL_TEXTURE_CUBE_MAP, gl.GL_TEXTURE_BASE_LEVEL, 0)
             gl.glTexParameteri(gl.GL_TEXTURE_CUBE_MAP, gl.GL_TEXTURE_MAX_LEVEL, self.levels - 1)
@@ -258,6 +285,8 @@ class SceneProbe:
             gl.glActiveTexture(prior_active)
 
     def release(self) -> None:
+        if self._layers:
+            gl.glDeleteFramebuffers(1, [self._layers])
         if self._fbo:
             gl.glDeleteFramebuffers(1, [self._fbo])
         if self._depth:
@@ -268,7 +297,7 @@ class SceneProbe:
             gl.glDeleteVertexArrays(1, [self._vao])
         if self._program:
             gl.glDeleteProgram(self._program)
-        self._texture = self._depth = self._fbo = self._program = self._vao = 0
+        self._texture = self._depth = self._fbo = self._layers = self._program = self._vao = 0
 
 
 __all__ = ["SCENE3D_PROBE_GLSL", "SceneProbe", "scene3d_probe_face_of", "scene3d_probe_face_rotation",
