@@ -52,7 +52,7 @@ from rendering.gl_programs.mist import MIST_GLSL, mist_uniforms
 from rendering.gl_programs.reflection import PLANAR_REFLECTION_GLSL, mirror_view
 from rendering.quick.scene3d.reflection import PlanarReflection
 from rendering.quick.scene3d.resources import MeshResources
-from rendering.quick.scene3d.ribbon import RibbonMaterial, RibbonPrimitive
+from rendering.quick.scene3d.ribbon import RibbonMaterial, RibbonPrimitive, RibbonSparks
 from rendering.quick.scene3d.target import SceneTarget
 from tools.labs.render_target import OffscreenRenderTarget
 from tools.labs.waveform_ribbon_targets import ENVELOPE, TRACED
@@ -124,7 +124,7 @@ class Flow:  # Lab Plan section 4A: history enters at the head (world +x) and dr
     fade_out: float = 5.            # seconds of age over which the tail fades out
 
 
-PALETTE = (((.0, .55, 1.), (.1, .3, 1.)),     # electric cyan -> blue (mock: saturated, blue-dominant)
+PALETTE = (((.0, .75, 1.), (.05, .45, 1.)),   # electric cyan -> blue (mock: saturated, blue-dominant)
            ((.15, .2, 1.), (.45, .12, 1.)),    # blue -> violet
            ((.5, .1, 1.), (.95, .1, .8)),      # violet -> magenta
            ((.05, .4, 1.), (.3, .25, 1.)),     # deep blue
@@ -134,8 +134,8 @@ PALETTE = (((.0, .55, 1.), (.1, .3, 1.)),     # electric cyan -> blue (mock: sat
 CHARACTER = ((1.0, 1.0, 1.0, 0.0, 1.0), (.7, .6, 1.13, 2.1, .8), (1.15, 1.2, .9, 4.0, 1.0), (.55, .45, 1.22, 1.2, .7),
              (.85, .8, .95, 5.3, .85))
 STATES = {  # labelled synthetic controls sized from the WR-00 target table; not music
-    'low': dict(width=.11, width_swell=.04, twist=1.1, emission=.42, spread=.32, amplitude=.55, lift=0.),
-    'high': dict(width=.32, width_swell=.12, twist=2.4, emission=.4, spread=1.1, amplitude=.85, lift=.5),
+    'low': dict(width=.11, width_swell=.04, twist=1.1, emission=.42, spread=.32, amplitude=.55, lift=0., sparkle=.18),
+    'high': dict(width=.32, width_swell=.12, twist=2.4, emission=.4, spread=1.1, amplitude=.85, lift=.5, sparkle=.85),
 }
 
 
@@ -150,6 +150,8 @@ class Recipe:
         rim_light=1.6, rim_white=.35, rim_half_width=.015, fill_light=.2, fill_centre=.5, rim_glow_light=.15,
         rim_glow_width=.05, body_alpha=.05, body_tint=.5, glint_density=1.4, glint_chance=.18, glint_light=7.,
         glint_radius=.35, glint_min_pixels=1.3))
+    sparks: RibbonSparks = field(default_factory=lambda: RibbonSparks(per_knot=16, lifetime=4.5, drift=1.2, rise=.4,
+                                                                       smallest=1.6, largest=5., light=16., white=.25))
     bloom: float = .32
     exposure: float = 1.
 
@@ -345,7 +347,7 @@ def fill_ring(recipe: Recipe, state: str, knots: int = 256) -> tuple[RibbonRing,
     t = 0.
     for i in range(knots):
         t = i/flow.knot_hz
-        positions, widths, twists, light = [], [], [], []
+        positions, widths, twists, light, sparkle = [], [], [], [], []
         for r in range(count):
             k = r - (count - 1)/2  # -2..2: a fan in height and depth
             amplitude, width, frequency, offset, brightness = CHARACTER[r]
@@ -359,7 +361,9 @@ def fill_ring(recipe: Recipe, state: str, knots: int = 256) -> tuple[RibbonRing,
             widths.append(width*(s['width'] + s['width_swell']*swell))
             twists.append(s['twist']*math.sin(2*math.pi*.07*t + r*2.))
             light.append(brightness*s['emission']*(.85 + .3*swell))
-        ring.append(t, positions, widths, twists, light)
+            highs = .5 + .5*math.sin(2*math.pi*.53*t + r*1.7)  # synthetic highs: sparkle density
+            sparkle.append(min(1., s['sparkle']*(.35 + .65*highs)))
+        ring.append(t, positions, widths, twists, light, sparkle)
     return ring, t
 
 
@@ -438,6 +442,8 @@ class Lab:
                     gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ZERO, gl.GL_ONE)
                     gl.glDepthMask(gl.GL_FALSE)
                     self.ribbons.draw(packet, ribbon_mvp, shading='light', **draw)
+                    self.ribbons.draw(packet, ribbon_mvp, shading='sparks', sparks=recipe.sparks, now=now,
+                                      mist=hall.mist, mist_frame=draw['mist_frame'])
                     gl.glDepthMask(gl.GL_TRUE)
                     gl.glDisablei(gl.GL_BLEND, 0)
         return self.target.read_rgba()
@@ -462,8 +468,10 @@ class Lab:
             gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ZERO, gl.GL_ONE)
             gl.glDepthMask(gl.GL_FALSE)
             reflected_view = mirrored @ scroll
-            self.ribbons.draw(packet, tuple((projection @ reflected_view).flatten(order='F')), shading='light',
-                              **{**draw, 'view': tuple(reflected_view.flatten(order='F'))})
+            reflected_mvp = tuple((projection @ reflected_view).flatten(order='F'))
+            self.ribbons.draw(packet, reflected_mvp, shading='light', **{**draw, 'view': tuple(reflected_view.flatten(order='F'))})
+            self.ribbons.draw(packet, reflected_mvp, shading='sparks', sparks=self.recipe.sparks, now=draw['age_fade'][0],
+                              mist=draw['mist'], mist_frame=draw['mist_frame'])
             gl.glDepthMask(gl.GL_TRUE)
             gl.glDisablei(gl.GL_BLEND, 0)
         finally:

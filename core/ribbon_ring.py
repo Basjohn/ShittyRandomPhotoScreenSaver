@@ -93,7 +93,7 @@ class RibbonRing:
         self._state[:] = _NO_KNOT
         self._packet = None
 
-    def append(self, coordinate: float, positions, half_widths, twists=0., emission=1.):
+    def append(self, coordinate: float, positions, half_widths, twists=0., emission=1., sparkle=0.):
         """Admit one knot per ribbon at one shared lattice coordinate; validated before any mutation.
 
         ``emission`` scales the material's light at this knot, so light travels with the history it was admitted with.
@@ -103,6 +103,9 @@ class RibbonRing:
         w = np.broadcast_to(np.asarray(half_widths, dtype=np.float64), (self.ribbons,))
         tw = np.broadcast_to(np.asarray(twists, dtype=np.float64), (self.ribbons,))
         light = np.broadcast_to(np.asarray(emission, dtype=np.float64), (self.ribbons,))
+        sparks = np.broadcast_to(np.asarray(sparkle, dtype=np.float64), (self.ribbons,))
+        if not (np.isfinite(sparks).all() and (sparks >= 0).all() and (sparks <= 1).all()):
+            raise ValueError('Ribbon sparkle must be finite and within 0..1')
         if not (np.isfinite(light).all() and (light >= 0).all() and (light <= MAX_EMISSION).all()):
             raise ValueError('Ribbon emission must be finite and within 0..64')
         if p.shape != (self.ribbons, 3):
@@ -200,6 +203,7 @@ class RibbonRing:
         self._gpu[:, row + 1, 1] = tw - self._twist_origin
         self._gpu[:, row + 1, 2] = valid
         self._gpu[:, row + 2, 0:3] = tangent
+        self._gpu[:, row + 2, 3] = sparks  # share of this knot's spark slots alive
         self._gpu[:, row + 3, 0:3] = np.where(valid[:, None], base, 0.)
         self._gpu[:, row + 3, 3] = light
         if resolve_previous.any() and count > 1:

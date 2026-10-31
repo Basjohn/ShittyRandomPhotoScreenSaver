@@ -132,3 +132,29 @@ def test_edge_on_slivers_cannot_overflow_into_the_bloom(qt_app):
             scene.release()
             resources.release_resources()
         target.close()
+
+
+def test_history_sparks_cover_the_whole_ribbon_statelessly(scene):
+    # Sparks re-emit for as long as their knot lives (knots are born far off view at a flowing head), are gated by
+    # per-knot sparkle, and are a pure function of the packet and the clock: no state, nothing per tick.
+    from rendering.quick.scene3d.ribbon import RibbonSparks
+    sparks = RibbonSparks(light=40., lifetime=2., per_knot=12, rise=0.)
+
+    def draw(sparkle, now):
+        ring = RibbonRing(1)
+        for i in range(48):
+            ring.append(i*.25, [(i*.1 - 2.4, 0., -10.)], .3, 0., 1., sparkle)
+        scene.target.bind(clear=(0., 0., 0., 1.))
+        gl.glDisable(gl.GL_DEPTH_TEST)
+        gl.glEnable(gl.GL_BLEND)
+        gl.glBlendFunc(gl.GL_ONE, gl.GL_ONE)
+        scene.primitive.draw(ring.packet(), MVP, shading='sparks', sparks=sparks, now=now)
+        gl.glDisable(gl.GL_BLEND)
+        return scene.target.read_rgba()[:, :, :3].max(2) > 30
+    lit = draw(1., 11.75)
+    columns = np.where(lit.any(0))[0]
+    # The oldest knots (11.75 s old, far beyond the 2 s lifetime) still carry sparks: across most of the ribbon.
+    assert lit.sum() > 40 and columns.min() < W*.3 and columns.max() > W*.7
+    assert not draw(0., 11.75).any()
+    np.testing.assert_array_equal(lit, draw(1., 11.75))
+    assert (lit != draw(1., 12.6)).any()
