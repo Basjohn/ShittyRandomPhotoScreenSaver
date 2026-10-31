@@ -69,18 +69,34 @@ class StyledComboBox(QComboBox):
         self.setProperty("comboSize", self._size_variant)
 
     def _style_popup_view(self) -> None:
-        popup_view = self.view()
-        if popup_view is None:
-            return
-        popup_view.setProperty("customComboPopup", True)
-        popup_view.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        if self._popup_stylesheet:
-            popup_view.setStyleSheet(self._popup_stylesheet)
-        else:
-            # Do not snapshot the construction-time rendered string. Bind the
-            # popup view to the live semantic role so theme switches propagate.
-            shared_styles.bind_shared_styles(
-                popup_view,
-                "COMBOBOX_POPUP_VIEW_STYLE",
-                base_style="",
-            )
+        style_combo_popup(self, self._popup_stylesheet)
+
+
+def style_combo_popup(combo: QComboBox, popup_stylesheet: Optional[str] = None) -> None:
+    """Skin a custom combo's popup: one rounded outline, drawn by the view only.
+
+    Called from ``showPopup`` (never the constructor: ``view()`` creates Qt's
+    popup container, and constructor-time containers caused Settings flicker).
+    """
+    popup_view = combo.view()
+    if popup_view is None:
+        return
+    popup_view.setProperty("customComboPopup", True)
+    popup_view.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+    if popup_stylesheet:
+        popup_view.setStyleSheet(popup_stylesheet)
+    else:
+        # Do not snapshot the construction-time rendered string. Bind the
+        # popup view to the live semantic role so theme switches propagate.
+        shared_styles.bind_shared_styles(
+            popup_view,
+            "COMBOBOX_POPUP_VIEW_STYLE",
+            base_style="",
+        )
+    container = popup_view.parentWidget()
+    if container is not None and container.inherits("QComboBoxPrivateContainer"):
+        # The container is a top-level popup window: its corners outside the
+        # view's rounded border must be see-through, not the style's framed fill.
+        container.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        if container.styleSheet() != shared_styles.COMBOBOX_POPUP_CONTAINER_STYLE:
+            container.setStyleSheet(shared_styles.COMBOBOX_POPUP_CONTAINER_STYLE)

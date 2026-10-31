@@ -39,7 +39,6 @@ when Extruded Bubble closed; documents citing them refer to that history: `git s
 
 ### 2B. Settings and UI (in this order)
 
-- [ ] **3D Settings combobox double-border regression:** reproduce the extra nested outline visible when opening the `3D Visualizers` quality selectors, identify the introducing shared-style change from source-control history if practical, and fix it at the common combobox/popup ownership (`StyledComboBox` / shared popup view/container styling), not with an Extruded Bubble or tab-local override. Restore one intentional outline for the control/popup while preserving theme semantics, focus/hover/on states, scrollbar/layout behaviour and all combo sizes; inspect other Settings comboboxes for the same regression and verify the corrected native rendering.
 - [~] **Display Settings capacity — awaiting physical hotplug validation:** current-screen rows have no fixed cap;
   focused six-screen/disconnect/reorder/zero-screen and retirement checks preserve canonical selections/bindings (rechecked 28 October).
   Check Settings remains coherent during actual disconnect/return and explicit reauthoring; hidden form evidence:

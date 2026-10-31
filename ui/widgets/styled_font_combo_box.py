@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QFontComboBox
 from ui.tabs import shared_styles
 from ui.widgets.combo_knob_overlay import ComboKnobController
 from ui.widgets.control_shadow import attach_control_shadow
-from ui.widgets.styled_combo_box import SizeVariant
+from ui.widgets.styled_combo_box import SizeVariant, style_combo_popup
 
 
 class StyledFontComboBox(QFontComboBox):
@@ -55,18 +55,4 @@ class StyledFontComboBox(QFontComboBox):
         self.setEditable(False)
 
     def _style_popup_view(self) -> None:
-        popup_view = self.view()
-        if popup_view is None:
-            return
-        popup_view.setProperty("customComboPopup", True)
-        popup_view.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        if self._popup_stylesheet:
-            popup_view.setStyleSheet(self._popup_stylesheet)
-        else:
-            # Do not snapshot the construction-time rendered string. Bind the
-            # popup view to the live semantic role so theme switches propagate.
-            shared_styles.bind_shared_styles(
-                popup_view,
-                "COMBOBOX_POPUP_VIEW_STYLE",
-                base_style="",
-            )
+        style_combo_popup(self, self._popup_stylesheet)
