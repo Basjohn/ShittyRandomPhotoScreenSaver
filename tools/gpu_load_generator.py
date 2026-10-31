@@ -2,11 +2,13 @@
 
     .venv/Scripts/python tools/gpu_load_generator.py --seconds 120 --fps 75 --packet-ms 8
     .venv/Scripts/python tools/gpu_load_generator.py --seconds 120 --busy 60          # calibrates the packet
+    .venv/Scripts/python tools/gpu_load_generator.py --seconds 120 --busy 60 --cpu 40  # plus 40% of all cores
 
 Each "frame" draws one full-screen 4K fragment-heavy packet, finishes it, and sleeps to the next frame deadline, like
 a game at ``--fps`` whose GPU work takes ``--packet-ms``; ``--busy`` instead calibrates the packet to that share of
 the GPU at ``--fps``. A ~60% game-like load is the reference case for SRPSS (operator, 2026-10-31); 90%+ only for
-diagnosis. The process stops itself at ``--seconds`` (a hard deadline: it can never outlive a benchmark) and prints
+diagnosis. ``--cpu`` adds busy worker processes on that share of all cores (a game's simulation and driver threads):
+the operator's heavy load used 30-60% CPU besides the GPU, and SRPSS's Python threads feel CPU contention first. The process stops itself at ``--seconds`` (a hard deadline: it can never outlive a benchmark) and prints
 its PID, achieved frame rate and packet time.
 
 Measure SRPSS against it from the benchmark's own process; record ``tools/bench_stability.SystemSampler`` conditions
@@ -40,14 +42,32 @@ void main() {
 """
 
 
+def _cpu_worker(deadline: float, duty: float) -> None:
+    """Busy for ``duty`` of every 10 ms slice until the deadline (a game's simulation/driver threads)."""
+    while time.monotonic() < deadline:
+        start = time.perf_counter()
+        while time.perf_counter() - start < 0.010 * duty:
+            pass
+        time.sleep(0.010 * (1.0 - duty))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--seconds", type=float, required=True)
     parser.add_argument("--fps", type=float, default=75.0)
     parser.add_argument("--packet-ms", type=float, default=8.0)
     parser.add_argument("--busy", type=float, help="calibrate the packet to this GPU share (percent) at --fps")
+    parser.add_argument("--cpu", type=float, default=0.0, help="also keep this share of all CPU cores busy (percent)")
     args = parser.parse_args()
     deadline = time.monotonic() + args.seconds
+    workers = []
+    if args.cpu > 0:
+        import multiprocessing
+        cores = os.cpu_count() or 1
+        count = max(1, round(cores * min(args.cpu, 100.0) / 100.0))
+        workers = [multiprocessing.Process(target=_cpu_worker, args=(deadline, 0.95), daemon=True) for _ in range(count)]
+        for worker in workers:
+            worker.start()
     from PySide6.QtGui import QGuiApplication
     QGuiApplication.instance() or QGuiApplication(sys.argv)
     from OpenGL import GL as gl
@@ -93,6 +113,10 @@ def main() -> int:
     print(f"gpu load done: {frames / elapsed:.1f} fps achieved, packet median ~{spent / max(frames, 1):.2f} ms",
           flush=True)
     target.close()
+    for worker in workers:
+        worker.join(timeout=2)
+        if worker.is_alive():
+            worker.terminate()
     return 0
 
 
