@@ -153,7 +153,7 @@ The open action-handoff requirement lives in `Current_Plan.md` §2B (R38). The g
 
 Deferred by the operator on 28 October: animated catalogue reconciliation, visualizer showcases and catalogue
 loop/metadata proof (formerly RM1–RM3), plus the Blinds Flat publication endpoint investigation (SC2). Do not maintain or regenerate these automatically after graphics changes.
-Reopen only on an explicit request. Guided-setup still images and bounded source cleanup remain active in Current_Plan §3.
+Reopen only on an explicit request. Guided-setup stills are maintained per `Docs/Reference/Guided_Setup.md` (audited 2026-10-31).
 
 ### EB vectorised logical simulation (deferred by the operator, 2026-10-31)
 
