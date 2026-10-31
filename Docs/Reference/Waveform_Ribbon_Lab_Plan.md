@@ -60,9 +60,16 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
   pillar row and far along x, more near the floor. Its colour glows just beyond the clear air and darkens deeper in:
   glow by height alone lit the entire far floor, which an Orthographic view shows as the whole upper field. Open:
   reactive density, and whether a reduced-resolution volume (S3D-7) is ever needed.
-- [ ] **WR-04 look tuning in the lab,** against both references at native zoom: thinner haze and a tighter bloom; strands
-  that fan and gather; a mostly electric-blue to violet palette; more, wider layered sheets with bigger sweeps in high;
-  softer, dimmer light columns.
+- [~] **WR-04 parity, measured per layer against the mock** (crop luminance median/p90 and saturation; operator: the
+  first scene was "not even half as good"). Pass 1 (`wr04_parity_pass1/`): ribbons now match (high median 0.39 vs
+  0.40, saturation 0.58 vs 0.65): saturated darker body, ~16 thin irregular near-white strands, five sheets with
+  individual amplitude/width/frequency/phase (identical sheets braided and summed to white). Floor lit diffusely by
+  the glowing scene (the reflection's widest mip) besides the mirror; pillars are light columns (no dark bodies);
+  mist darkens with depth. Still short, largest first:
+  1. Particles/sparkle around and on the ribbons (S3D-2): the biggest remaining difference in high.
+  2. Floor brightness and crisp coloured streaks (high median 0.27 vs 0.36); white-hot pillar bases and pools.
+  3. Upper field haze and soft pillar halos (median 0.03 vs 0.12 high, 0.02 vs 0.06 low).
+  4. Bloom softness around bright strands and crossings.
 - [ ] **WR-00 audio windows and WR-07 music in the lab:** choose recorded windows (quiet, transition, bass, mids,
   highs, chorus, pause/resume, hot start). Map bass → width, mids → twist/deformation, energy → whole-ribbon light,
   with band-limited history controls (section 4A).

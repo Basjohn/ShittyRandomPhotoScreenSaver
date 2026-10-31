@@ -210,6 +210,7 @@ uniform vec4 uStrands;      // count across the width, half-width (strand spacin
 uniform vec4 uBody;         // alpha, tint, unused, warp frequency (per phase unit)
 uniform vec4 uFill;         // emissive sheet light, its centre level (edges are 1), rim glow width (across), rim glow light
 uniform vec4 uGlint;        // glints per strand per phase unit, chance, light, radius (strand units)
+uniform vec4 uTone;         // strand whiteness, rim whiteness, strand spacing jitter, glint minimum radius (px)
 uniform vec4 uAge;          // local now, fade-in, maximum age, fade-out (seconds); fades off when both are zero
 uniform vec3 uMistOrigin;   // packet-local -> mist world translation (packet origin plus the caller's frame)
 """ + MIST_GLSL + """
@@ -268,7 +269,9 @@ void main() {
     float across=acrossClamped();
     // Strands spread and gather along the path: a warp fixed to the absolute path phase, zero at both edges.
     float warp=uStrands.w*sin(6.2831853*vPhase*uBody.w+across*3.0)*across*(1.0-across)*4.0;
-    float x=(across+warp)*uStrands.x;
+    // Irregular spacing (monotone while jitter < 1): real filament bundles are never evenly combed.
+    float spaced=across+uTone.z*sin(6.2831853*across*3.0+1.3)/(6.2831853*3.0);
+    float x=(spaced+warp)*uStrands.x;
     float w=max(fwidth(x),1e-4);
     float strands=strandCoverage(x,uStrands.y,w)*(0.55+0.45*strandHash(floor(x)));
     float wa=max(fwidth(across),1e-5);
@@ -287,13 +290,16 @@ void main() {
         if(cellHash(k,j)<uGlint.y) {
             float alongPx=(fract(along)-0.5)/max(fwidth(along),1e-4);
             float acrossPx=(fract(x)-0.5)/max(w,1e-4);
-            float radiusPx=max(uGlint.w/max(w,1e-4),0.75);
+            float radiusPx=max(uGlint.w/max(w,1e-4),max(uTone.w,0.75));
             float r2=(alongPx*alongPx+acrossPx*acrossPx)/(radiusPx*radiusPx);
             // Glints belong to resolved strands: they fade with them, never smear across a sub-pixel sheet.
             glints=exp(-3.0*r2)*min(1.0,radiusPx*radiusPx)*(1.0-smoothstep(0.35,0.9,w));
         }
     }
-    vec3 light=ribbonColour()*(fill+rimGlow+strands*uStrands.z+rims*uRim.y);
+    // The body glows in its saturated colour; strands and rims carry the near-white light (the mock's look).
+    vec3 colour=ribbonColour();
+    vec3 light=colour*(fill+rimGlow)+mix(colour,vec3(1.0),uTone.x)*strands*uStrands.z
+              +mix(colour,vec3(1.0),uTone.y)*rims*uRim.y;
     light=(light+mix(ribbonColour(),vec3(1.0),0.6)*glints*uGlint.z)*max(vEmission,0.0)*ageFade()
          *mistTransmittance(vWorld+uMistOrigin)
          *pathLength()*clamp(vCoverage,0.0,1.0);
