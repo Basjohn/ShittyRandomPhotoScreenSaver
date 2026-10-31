@@ -11,7 +11,7 @@ per 5 ms switch interval). This runs the real ``main_mc.py`` and reports that wh
 meets it before the operator does.
 
 * **Display safety:** the saver runs from a COPY of ``%APPDATA%\\SRPSS`` (mode, preset and ``--set`` overrides are
-  written into the copy only) with its windows at opacity 0, click-through, never topmost and never focused. A guard
+  written into the copy only) with its display windows given an empty window region (no pixel and no click, yet presented as an ordinary window: opacity 0 or click-through would make it layered), never topmost and never focused. A guard
   checks every visible window of the run once a second and kills the run if any is not; ``--visible`` opts out (an
   ordinary MC run, one display).
 * **Music:** ``--clip`` (default a ~2 min mixed real-music recording) is played as the loopback in real time
@@ -151,25 +151,30 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
     sys.argv = [str(ROOT / "main_mc.py"), "--perf", "--frame-trace", "--exit-after", str(int(seconds)), "/s"]
     phases.production_startup()
     if not visible:
+        # Invisible but presented like a visible window: an empty window region clips every pixel and every click,
+        # while the window stays an ordinary (non-layered) one, so its swap is paced by its own display. Opacity 0 or
+        # WindowTransparentForInput would make it layered, and a layered window's swap is not vsync-paced (it ran at
+        # the 90 Hz publication rate on a 60 Hz panel).
         from PySide6.QtCore import Qt
-        from PySide6.QtQuick import QQuickWindow
         from rendering.quick import state, window
 
         flags = state.QuickWindowPolicy.flags
 
         def invisible_flags(self):
             return ((flags(self) & ~Qt.WindowType.WindowStaysOnTopHint) | Qt.WindowType.Tool
-                    | Qt.WindowType.WindowTransparentForInput | Qt.WindowType.WindowDoesNotAcceptFocus)
+                    | Qt.WindowType.WindowDoesNotAcceptFocus)
 
-        init = window.QuickDisplayWindow.__init__
+        show_on_screen = window.QuickDisplayWindow.show_on_screen
+        gdi32 = ctypes.WinDLL("gdi32")
 
-        def invisible_init(self, *args, **kwargs):
-            init(self, *args, **kwargs)
-            QQuickWindow.setOpacity(self, 0.0)
+        def invisible_show(self):
+            # Placement is committed and the show is only queued: create the native window now, on its screen
+            # (earlier, in __init__, it is created before its screen and the display reads as displaced).
+            show_on_screen(self)
+            _user32.SetWindowRgn(int(self.winId()), gdi32.CreateRectRgn(0, 0, 0, 0), False)
 
         state.QuickWindowPolicy.flags = invisible_flags
-        window.QuickDisplayWindow.__init__ = invisible_init
-        window.QuickDisplayWindow.setOpacity = lambda self, _opacity: QQuickWindow.setOpacity(self, 0.0)
+        window.QuickDisplayWindow.show_on_screen = invisible_show
     if clip is not None:
         # Recorded music where the loopback would deliver it, and playback truth to match: the whole live audio
         # path runs (capture callback, mono mix, DSP, analysis lane) whatever the machine is playing.
@@ -195,19 +200,24 @@ _EnumWindowsProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPA
 
 
 def _visible_window_violations(pids: set[int]) -> list[str]:
-    """Visible windows of ``pids`` that are not fully transparent, click-through and non-topmost."""
+    """Visible windows of ``pids`` that could show a pixel or take a click: anything but a non-topmost window
+    with an empty window region (or one fully transparent, click-through and layered)."""
     found: list[str] = []
+    gdi32 = ctypes.WinDLL("gdi32")
 
     def check(hwnd, _lparam):
         pid = wintypes.DWORD()
         _user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
         if pid.value in pids and _user32.IsWindowVisible(hwnd):
             style = _user32.GetWindowLongW(hwnd, -20)                       # GWL_EXSTYLE
+            region = gdi32.CreateRectRgn(0, 0, 0, 0)
+            empty = _user32.GetWindowRgn(hwnd, region) == 1                 # NULLREGION
+            gdi32.DeleteObject(region)
             alpha, flags, key = ctypes.c_ubyte(), wintypes.DWORD(), wintypes.DWORD()
             layered = _user32.GetLayeredWindowAttributes(hwnd, ctypes.byref(key), ctypes.byref(alpha),
                                                          ctypes.byref(flags))
-            if not (style & 0x80000 and style & 0x20 and not style & 0x8 and layered and flags.value & 2
-                    and alpha.value == 0):
+            transparent = (style & 0x80000 and style & 0x20 and layered and flags.value & 2 and alpha.value == 0)
+            if style & 0x8 or not (empty or transparent):
                 title, name = ctypes.create_unicode_buffer(256), ctypes.create_unicode_buffer(256)
                 _user32.GetWindowTextW(hwnd, title, 256)
                 _user32.GetClassNameW(hwnd, name, 256)

@@ -266,6 +266,23 @@ All of these need measuring against the 60% reference load (submit-to-completion
     a tick) and collision neighbour enumeration in a grid dense in columns (~730 column hits, ~2,200 depth lookups,
     ~380 occupied). Each remaining exact trim is worth about 0.05 ms. Together the two rounds took about 15-20% off
     the tick (expected live ~5.3 → ~4.4 ms). Further logical gains need the vectorised rewrite.
+- **Live check under `game60` (current code, `113ce92d` + tool fixes, game closed):**
+  - Results: HUD age 19-20 ms median, publish to swap 15.2-15.5 ms, render-mode 4.2-4.4 ms, logical tick 3.7-3.8 ms
+    (GIL share 0.33-0.34), 88 fps, steady late frames 0.1-0.2%.
+  - Idle reference: 16 ms HUD age at 90 fps, matching the earlier visible low-load MC run (18 ms at 90 fps).
+  - Not yet comparable with the game: the last Borderlands run (invisible, before the trims) measured render 11.5 ms
+    and tick 5.3 ms. The trims and wake bytes explain only ~0.2 ms of each; `game60` also slows single-thread
+    Python less (1.5x idle against ~1.8x). Neither long GPU passes nor a HIGH-priority feeder raised EB's render time.
+  - Needed: one run of the current code under the game, both to measure the improvements live and to calibrate
+    `game60`.
+- **Tool corrections found on the way:**
+  - `game60` first saturated all 24 logical cores (memory-bandwidth contention made bursts overrun, so workers never
+    idled) and its utilisation-chasing GPU calibration spiralled to 17 fps.
+  - Now each GPU frame is sized by timer query, the workers are steered by their measured CPU time, and each streams
+    ~1 GB/s.
+  - The invisible window now uses an empty window region instead of opacity 0. Creating the native window in
+    `__init__` read as a topology-displaced display, and the saver fell back to its configuration dialog, which the
+    guard stopped.
 - **Render thread stalls behind the logical tick:** every GL call releases the GIL; while the pure-Python tick runs
   (52% of each 11.1 ms period live), the render thread gets about one call through per 5 ms switch interval, so a
   ~4.5 ms frame spreads to ~10.7 ms. Cutting the logical tick's Python therefore pays twice (age and render). The
