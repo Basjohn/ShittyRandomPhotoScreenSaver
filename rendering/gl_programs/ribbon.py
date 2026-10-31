@@ -170,6 +170,83 @@ void main() {
 }
 """.replace('MAX_KNOTS', str(MAX_PATH_SAMPLES))
 
+# Sparks attached to the ribbon's history (no state, no CPU per tick): every knot owns a few spark slots; tangent.w
+# is the share alive (the highs when the knot was admitted). A spark is born on the ribbon between its knot and the
+# next, then drifts off along a hashed direction as it ages on the ribbon's own clock, fading over its lifetime. Its
+# identity hashes the knot's absolute coordinate (stable across rebases) with integers: a sine hash of an interpolated
+# or large float is not stable (3D foundation lessons).
+RIBBON_SPARK_VERTEX = """#version 460 core
+struct Knot { vec4 p; vec4 q; vec4 tangent; vec4 side; };
+struct Ribbon { vec4 meta; vec4 extra; vec4 colourA; vec4 colourB; Knot knots[MAX_KNOTS]; };
+layout(std430, binding=0) readonly buffer Paths { Ribbon paths[]; };
+uniform mat4 uMvp;
+uniform vec4 uSpark;       // slots per knot, lifetime (s), drift speed (units/s), rise bias
+uniform vec4 uSparkLook;   // smallest size (px), largest size (px), light, twinkle (Hz)
+uniform vec2 uSparkClock;  // local now (s), absolute coordinate origin mod 1000 (stable identity)
+out vec3 vWorld;
+out float vBright;
+flat out vec3 vColour;
+int ringStart, ringCapacity;
+Knot knotAt(int owner, int i) { return paths[owner].knots[(ringStart+i)%ringCapacity]; }
+uint mixBits(uint x) { x^=x>>16; x*=0x7feb352dU; x^=x>>15; x*=0x846ca68bU; x^=x>>16; return x; }
+float unit(uint x) { return float(mixBits(x)&0xffffffU)/16777216.0; }
+void main() {
+    int owner=gl_InstanceID;
+    ringCapacity=clamp(int(paths[owner].extra.z),1,MAX_KNOTS);
+    ringStart=clamp(int(paths[owner].extra.y),0,ringCapacity-1);
+    int count=clamp(int(paths[owner].meta.x),0,ringCapacity);
+    int perKnot=max(int(uSpark.x),1);
+    int index=gl_VertexID/perKnot, slot=gl_VertexID%perKnot;
+    gl_Position=vec4(2.0,2.0,2.0,1.0); gl_PointSize=0.0; vBright=0.0; vWorld=vec3(0.0); vColour=vec3(0.0);
+    if(index>=count-1) return;
+    Knot k=knotAt(owner,index), n=knotAt(owner,index+1);
+    if(k.q.z<0.5 || n.q.z<0.5 || n.q.w>0.5 || k.tangent.w<=0.0) return;
+    // Each slot re-emits in staggered cycles for as long as its knot lives: knots are born at the head, far off
+    // view, so sparks tied to the knot's birth died before the ribbon carried them into the hall.
+    uint key=uint(floor(mod(k.q.x+uSparkClock.y,1000.0)*256.0+0.5));
+    uint base=mixBits(key*747796405U+uint(slot)*2891336453U+uint(owner)*104729U);
+    float cycle=uSpark.y*1.6;
+    float since=uSparkClock.x-k.q.x+unit(base)*cycle;
+    if(since<0.0) return;
+    float generation=floor(since/cycle);
+    float age=since-generation*cycle;
+    if(age>uSpark.y) return;
+    uint seed=mixBits(base+uint(generation)*2246822519U);
+    float r1=unit(seed), r2=unit(seed+1U), r3=unit(seed+2U), r4=unit(seed+3U), r5=unit(seed+4U), r6=unit(seed+5U);
+    if(r1>k.tangent.w) return;                       // the knot's sparkle is the share of its slots alive
+    vec3 side=normalize(k.side.xyz);
+    vec3 chord=n.p.xyz-k.p.xyz;
+    vec3 along=normalize(chord+vec3(1e-6,0.0,0.0));
+    float twist=paths[owner].extra.x+k.q.y;
+    side=cos(twist)*side+sin(twist)*cross(along,side);
+    vec3 birth=k.p.xyz+chord*r3+side*(r2*2.0-1.0)*k.p.w;
+    vec3 direction=normalize(vec3(r4-0.5,r5-0.5+uSpark.w,r6-0.5)+vec3(1e-4));
+    vec3 position=birth+direction*uSpark.z*(0.25+r1)*age/(1.0+0.5*age);
+    float life=age/uSpark.y;
+    float fade=smoothstep(0.0,0.06,life)*(1.0-smoothstep(0.55,1.0,life));
+    float twinkle=0.55+0.45*sin(6.2831853*(uSparkLook.w*age+r2));
+    vBright=uSparkLook.z*fade*twinkle*(0.35+0.65*r5)*mix(k.side.w,n.side.w,r3);
+    gl_PointSize=mix(uSparkLook.x,uSparkLook.y,r6*r6);
+    vColour=mix(paths[owner].colourA.rgb,paths[owner].colourB.rgb,r2);
+    vWorld=position;
+    gl_Position=uMvp*vec4(position,1.0);
+}
+""".replace('MAX_KNOTS', str(MAX_PATH_SAMPLES))
+
+RIBBON_SPARK_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\n"
+                         "in vec3 vWorld;\nin float vBright;\nflat in vec3 vColour;\nuniform vec3 uMistOrigin;\n"
+                         "uniform float uSparkWhite;\n" + MIST_GLSL + """
+void main() {
+    vec2 c=gl_PointCoord*2.0-1.0;
+    float d2=dot(c,c);
+    if(d2>1.0) discard;
+    float core=exp(-d2*4.0)*(1.0-d2);
+    vec3 light=mix(vColour,vec3(1.0),uSparkWhite)*core*vBright*mistTransmittance(vWorld+uMistOrigin);
+    FragColor=vec4(light,0.0);
+    Emission=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722)));
+}
+""")
+
 RIBBON_FRAGMENT = """#version 460 core
 in vec3 vWorld;
 in float vPhase;
