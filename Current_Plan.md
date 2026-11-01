@@ -162,6 +162,9 @@ and remaining visual gaps: Lab Plan §0–0B. **No full-scene or floor parity is
   Live checklist: Lab Plan §0.
 - [ ] **Accents and optics:** sparks, glow and defocus after the underlying waveform/floor/mist match.
 - [ ] **Awaiting Validation:** operator sign-off on the floor/waveform/volume look before reactivity.
+- [~] **Second look (operator's alternate board) and migration plan:** `alternate` recipe with free strands, glow and
+  floor contact (tag `waveform-alternate-baseline-2026-11-01`). WR-08 plan, full controls with visual editors and
+  reactivity: `Docs/Reference/Waveform_Ribbon_Migration_Plan.md`.
 - [ ] **Only after visuals:** recorded audio windows and WR-07 mappings; remaining S3D-1/2/5 lifecycle/cost gates;
   WR-08 production and tunable presets, then WR-09 acceptance with `tools/visualizer_live_check.py --load game60`.
 
