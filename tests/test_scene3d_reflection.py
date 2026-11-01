@@ -135,3 +135,62 @@ def test_reflection_allocates_lazily_and_retires_in_its_own_context(gl_scene):
     reflection.release()
     assert not reflection.has_resources
     reflection.release()
+
+
+def test_rough_reflection_stretches_a_highlight_without_repeating_it(gl_scene):
+    target,_flat,_floor,vbo,reflection=gl_scene
+    # A single small HDR highlight exposes the old seven separated tap copies. Keep the actual reflection
+    # owner and production sampling code; the input texture is an independent diagnostic fixture.
+    reflection.begin(W,H)
+    pixels=np.zeros((H,W,4),np.float32)
+    pixels[H//2-2:H//2+2,W//2-2:W//2+2,:3]=8.
+    gl.glTextureSubImage2D(reflection.texture,0,0,0,W,H,gl.GL_RGBA,gl.GL_FLOAT,pixels)
+    reflection.end()
+    fragment=_FLOOR.replace('vec2(0.0),0.0)','vec2(0.0),1.0)')
+    program=compile_program(_VERTEX,fragment,label='stretched reflection')
+    try:
+        target.bind(clear=(0.,0.,0.,1.))
+        gl.glDisable(gl.GL_DEPTH_TEST)
+        gl.glUseProgram(program)
+        gl.glUniform2f(gl.glGetUniformLocation(program,'uViewport'),W,H)
+        gl.glUniform1i(gl.glGetUniformLocation(program,'uReflection'),0)
+        gl.glUniform4f(gl.glGetUniformLocation(program,'uReflectionLook'),.3,0.,0.,0.)
+        gl.glBindTextureUnit(0,reflection.texture)
+        draw(program,vbo,quad_vertices((-1.,-1.,0.),(1.,1.,0.)),np.identity(4))
+        result=target.read_rgba()[:,:,0]
+        rows=np.where(result[:,W//2]>2)[0]
+        columns=np.where(result[H//2,:]>2)[0]
+        assert len(rows)>20 and len(columns)<len(rows)*.35
+        assert np.diff(rows).max()==1, rows
+    finally:
+        gl.glDeleteProgram(program)
+
+
+@pytest.mark.parametrize('scale', (1,2))
+def test_gentle_gaussian_spreads_light_without_shifting_or_destroying_it(gl_scene,scale):
+    target,_flat,program,vbo,reflection=gl_scene
+    reflection.begin(W*scale,H*scale)
+    pixels=np.zeros((H*scale,W*scale,4),np.float32)
+    pixels[(H//2-2)*scale:(H//2+2)*scale,(W//2-2)*scale:(W//2+2)*scale,:3]=.4
+    gl.glTextureSubImage2D(reflection.texture,0,0,0,W*scale,H*scale,gl.GL_RGBA,gl.GL_FLOAT,pixels)
+    reflection.end()
+    measurements=[]
+    for sigma in (0.,1.5):
+        target.bind(clear=(0.,0.,0.,1.))
+        gl.glDisable(gl.GL_DEPTH_TEST)
+        gl.glUseProgram(program)
+        gl.glUniform2f(gl.glGetUniformLocation(program,'uViewport'),W,H)
+        gl.glUniform1i(gl.glGetUniformLocation(program,'uReflection'),0)
+        gl.glUniform4f(gl.glGetUniformLocation(program,'uReflectionLook'),0.,0.,0.,sigma)
+        gl.glBindTextureUnit(0,reflection.texture)
+        draw(program,vbo,quad_vertices((-1.,-1.,0.),(1.,1.,0.)),np.identity(4))
+        value=target.read_rgba()[:,:,0].astype(float)
+        y,x=np.indices(value.shape)
+        centre=np.array([(value*x).sum(),(value*y).sum()])/value.sum()
+        variance=np.array([(value*(x-centre[0])**2).sum(),(value*(y-centre[1])**2).sum()])/value.sum()
+        measurements.append((value.sum(),value.max(),centre,variance))
+    sharp,soft=measurements
+    assert soft[1]<sharp[1] and np.isclose(soft[0],sharp[0],rtol=.12)
+    np.testing.assert_allclose(soft[2],sharp[2],atol=.15)
+    assert np.all((soft[3]-sharp[3]>1.)&(soft[3]-sharp[3]<4.))
+    assert abs(soft[3][0]-soft[3][1])<.5

@@ -104,6 +104,29 @@ Named construction removes three owned-texture active/bind calls from allocation
 construction saving, with no measured steady-frame FPS claim. Eighteen representative Block Spins / Glass Shatter
 captures matched the preceding implementation byte-for-byte.
 
+## Planar reflections and rough receivers (S3D-5)
+
+`scene3d/reflection.py:PlanarReflection` owns one mipmapped RGBA16F target and depth renderbuffer, allocated lazily
+at the requested size. `gl_programs/reflection.py:mirror_view` mirrors the physical camera in a horizontal plane.
+The caller draws the same scene snapshot, excludes the receiver, disables winding culling and admits only geometry
+above the plane: this primitive does not yet clip crossing geometry. `end()` builds mips and restores the saved
+framebuffer, viewport, depth test/write mask and colour mask. Release belongs to the owning current context.
+
+The receiver samples the reflected scene at its projected position. Optical roughness defines a short-axis mip
+footprint and a longer vertical footprint; `textureGrad` integrates it using anisotropy capped at the lesser of
+16 and the OpenGL 4.6 device limit. The capability query occurs only on allocation. This replaces seven discrete
+samples that copied a bright highlight into seven separated bands. It adds no targets or passes; hardware sampling
+cost must be measured rather than inferred from shader call count. This is a bounded directional filter, not a full
+microfacet ray-traced reflection. In `wr05_floor_candidate/filter_cost.json`, 45 warm draws per state at 820x718 on
+RTX 4090 measured the same low/high medians before and after (0.039/0.040 ms); p90 rose by about 0.002 ms. This
+same-recipe comparison measures only the floor draw, excluding reflection generation and every other scene pass.
+
+`tests/test_scene3d_reflection.py` proves mirrored object registration in both projections with camera translation,
+foreign-context rejection, lazy reuse/retirement, and a continuous elongated highlight. The highlight regression
+fails the old kernel with twelve-pixel gaps between copies. Consumer OIT-body/volume inclusion, clipping, resize and
+failure-path proof, whole-scene cost and visual acceptance remain in the Waveform Lab Plan; existing focused checks
+must not be cited as completion of those gates.
+
 ## Fixed-size scene and post-process allocations
 
 The existing target, bloom, motion and trail owners construct named framebuffers and immutable textures at their

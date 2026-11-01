@@ -59,6 +59,10 @@ class PlanarReflection:
         gl.glTextureStorage2D(self._colour, max(width, height).bit_length(), gl.GL_RGBA16F, width, height)
         gl.glTextureParameteri(self._colour, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR_MIPMAP_LINEAR)
         gl.glTextureParameteri(self._colour, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
+        # OpenGL 4.6 anisotropy bounds the elongated roughness footprint. Query only on allocation;
+        # no extra target, pass or per-frame capability query. A wider footprint selects coarser mips.
+        gl.glTextureParameterf(self._colour, gl.GL_TEXTURE_MAX_ANISOTROPY,
+                               min(16., float(gl.glGetFloatv(gl.GL_MAX_TEXTURE_MAX_ANISOTROPY))))
         for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
             gl.glTextureParameteri(self._colour, wrap, gl.GL_CLAMP_TO_EDGE)
         gl.glCreateRenderbuffers(1, name)

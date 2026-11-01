@@ -146,7 +146,15 @@ The scene is world-first through the shared framed camera (Orthographic default)
 waveform and strong thick mist only; pillars removed.** No horizon, sky or floor edges should be visible. The waveform
 carves clear space in the fog and softly lights it; audio-driven fog changes are for much later. Both supplied mock
 boards describe looks the eventual live presets should support. The new complete-scene fog board is the main target
-(`references/Waveform_Ribbon_Fog_Complete_Scene_Mock.png`, source custody in Lab Plan §1.1). Detailed live checklist: Lab Plan §0–0A.
+(`references/Waveform_Ribbon_Fog_Complete_Scene_Mock.png`, source custody in Lab Plan §1.1). Detailed live checklist
+and remaining visual gaps: Lab Plan §0–0B. **No full-scene or floor parity is established.**
+
+- [~] **Immediate floor correction, Awaiting Validation:** establish smooth finished concrete plus gentle Gaussian
+  reflection blur together. Replace coarse aggregate colour, retain shallow independent height/roughness, and correct
+  illumination beneath the actual ribbons. Current floor studies still read as a dark mirrored waveform or a broad
+  coloured band; neither matches the mock's softly lit wet concrete. Compare native low/high floor crops, five poses
+  and bounded motion. Resolve current filtering checks and measure the final combined GPU work before checkpointing.
+  Wet/dry patch contrast is rejected; hold the preferred waveform fixed during this slice.
 
 - [~] **WR-04 waveform now:** smooth cloth-like folds and edges at every admitted shape, fine fanning/gathering
   filaments and readable quiet detail. No sharp/spiky bends. Judge both mocks and all navigation poses; parity is open.
@@ -154,8 +162,6 @@ boards describe looks the eventual live presets should support. The new complete
   Both boundary rims now have independent filament light; validate their balance through folds and motion.
   Broader swept sheets and smooth phase/amplitude/depth variation are in the lab; skew-stretched glints are corrected.
   Biggest waveform gaps: fine-detail stability, convincing depth/light and the remaining difference from reference shapes.
-- [~] **Floor optics, Awaiting Validation:** generated albedo/roughness maps are placed in the native scene;
-  compare wet reflection detail, dark gaps and distance falloff against the main mock. Keep temporary mist for composition.
 - [ ] **Volumetric mist third (S3D-7 bounded slice):** static field from the actual ribbon shape, reduced-resolution
   integration, opaque clipping and source-depth attenuation; independent harness and measured cost before acceptance.
 - [ ] **Accents and optics:** sparks, glow and defocus after the underlying waveform/floor/mist match.

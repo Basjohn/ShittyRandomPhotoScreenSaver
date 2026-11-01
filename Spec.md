@@ -770,13 +770,17 @@ Labs compose production primitives or the retained production render host, with 
 retirement. They introduce no runtime scheduler, palette or persistence authority.
 Waveform Ribbon must use `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` for reference custody, architecture dependencies,
 staged work packages, current operator mock authority and A–H visual evidence. The concept brief supplies original
-intent; newer operator direction is recorded in that lab plan, and Current_Plan owns order.
+intent; newer operator direction and the current visual gap checklist (§0B) are recorded in that lab plan, and
+Current_Plan owns order. Surface smoothness, optical reflection blur and source illumination are separate controls;
+visual mock parity must precede audio-response and production admission.
 New 3D labs/modes start Orthographic with optional Perspective, using the shared admitted eye/world and actual
 projection matrices/ray origins; camera math alone does not establish scene likeness or reflection parity.
 The shared bounded CPU path/history and transported width-frame references are documented in
 `Docs/Reference/Ribbon_Path.md`; the incremental ring producer and oriented OIT/HDR strip are consumed by the Waveform
 lab. Remaining native surface/defocus and cost gates live there and in the Lab Plan. No runtime mode consumes it;
 it introduces no runtime simulation or clock.
+Shared planar reflection ownership, mirrored-camera requirements and anisotropic receiver sampling are documented
+in `Docs/Reference/Scene3D_Resources.md`; consumer inclusion and visual acceptance remain in the Waveform Lab Plan.
 CPU geometry/frame references are test oracles, not a software rendering backend. Production input preparation
 must be measured separately and must not inherit the prototype's all-history oracle reconstruction each tick.
 
