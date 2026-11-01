@@ -176,7 +176,9 @@ void main() {
         if(density>0.0) {
             vec3 toward=fogLightDirection(p);
             vec3 q=p+toward*uMarchShade.x;
-            float shade=exp(-uMarchShade.y*uMarch.y*eroded(fogCoverage(q,coarse(q).a/max(uMarch.y,1e-6)),q)*uMarchShade.x);
+            // Self-shadow from the coarse coverage at the probe (one texture fetch): evaluating the consumer's fine
+            // shape a second time per step doubled the march's cost for detail the shadow blurs anyway.
+            float shade=exp(-uMarchShade.y*uMarch.y*eroded(coarse(q).a/max(uMarch.y,1e-6),q)*uMarchShade.x);
             float slice=exp(-density*step*stretch);
             // A floor on self-shadow keeps the cloud bodies' own structure visible behind their lit faces.
             // Thin, eroded wisps let light through and read as bright curl rims around denser cores.
