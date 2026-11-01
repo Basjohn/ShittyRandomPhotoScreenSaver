@@ -403,8 +403,9 @@ void main() {
     bool outer=corner==2 || corner==3 || corner==5;
     float s=float(segment+(next?1:0))/float(STRAY_SEGMENTS);
     float ds=1.0/float(STRAY_SEGMENTS);
-    // Strays leave from near an edge (where the board's tendrils come from), on either side.
-    float across=r2<0.5?0.08*r3:1.0-0.08*r3;
+    // Strays grow out of a rim line, exactly on it (the bow is zero at the edges), so each emerges from a line
+    // instead of starting in mid-air.
+    float across=r2<0.5?0.0:1.0;
     float theta=(r4-0.5)*2.4+(r2<0.5?-0.6:0.6);
     float age=max(uStrayClock.x-k.q.x,0.0);
     float peel=(0.35+0.65*r5)*(1.0-exp(-age/max(uStrayLook.w,1e-3)));
@@ -431,8 +432,9 @@ void main() {
     vAcross=outer?1.0:-1.0;
     vSeed=r4;
     float tip=1.0-smoothstep(0.75,1.0,s);
-    float attach=smoothstep(0.0,0.08,s);
-    vBright=uStrayLook.y*k.side.w*tip*mix(0.6,1.0,attach)*(0.5+0.5*r5);
+    // From nothing on the rim to full as it peels away: no visible start.
+    float attach=smoothstep(0.0,0.25,s);
+    vBright=uStrayLook.y*k.side.w*tip*attach*(0.5+0.5*r5);
     vec3 own=mix(paths[owner].colourA.rgb,paths[owner].colourB.rgb,across);
     vColour=mix(own,k.tint.rgb,clamp(k.tint.a,0.0,1.0));
 }
