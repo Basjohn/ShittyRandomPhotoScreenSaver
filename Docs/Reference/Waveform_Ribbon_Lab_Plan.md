@@ -78,6 +78,9 @@ implementer's call without further confirmation; the operator judges much later.
     strays is the first cut if needed.
   - **Glow pass (`wr08_alternate_glow/`):** each tendril has a soft halo (`halo`) and its own bloom share (`glow`),
     so it reads as a brighter, fuzzier splash.
+  - **Attached to a rim (operator: "they should attach to the rim or a waveform line on one side"):** each strand
+    starts exactly on a sheet's rim line and fades in from nothing as it peels away. Starting just inside the
+    edge at 60% light showed every start as a break in mid-air (`strays_on_rims_dolly.png`).
   - **Operator preference:** longer, more numerous strands that curl far (reach 1.6, 6 knots). Rejected: gating
     them by loudness squared and toward crests with a shorter reach ("these strands aren't as good as a moment
     ago"; `rejected_gated_strays.png`).
