@@ -97,14 +97,17 @@ class Floor:
     roughness: str = 'assets/textures/waveform_floor/concrete_roughness.png'
     height: str = 'assets/textures/waveform_floor/wet_surface_height.png'
     tile: float = 12.               # broad world-space patch, blended at a second incommensurate orientation/scale
-    ambient: tuple = (.6, .7, .9)
-    reflection: float = .8          # continuous wet film: reflection strength before Fresnel
+    ambient: tuple = (.25, .28, .35)
+    reflection: float = 3.          # continuous wet film: reflection strength before Fresnel (look gain)
     f0: float = .04
-    normal_shift: float = .15       # screen-uv shift of the reflection lookup per unit normal tilt
-    streak: float = .04             # restrained directional footprint; smoothness is not reflection blur
+    normal_shift: float = 1.5       # screen-uv shift of the reflection lookup per unit normal tilt: smooth wobble
+    streak: float = .4              # gentle vertical elongation at roughness 1; wetness before streakiness
     lod: tuple = (0., 1.5)          # short-axis footprint; retain reflected detail
-    reflection_blur: float = 1.5    # gentle Gaussian sigma in receiver pixels, independent of surface relief
-    surface: tuple = (.015, .06, .10, .65)  # nearly flat relief, restrained roughness range, wet albedo gain
+    reflection_blur: float = 1.    # gentle Gaussian sigma in receiver pixels, independent of surface relief
+    # Contact hardening: reflections stay crisp near the floor and spread (uv per world unit of the reflected
+    # light's height), mostly vertically, as on wet concrete; the probe mip keeps the spread continuous.
+    contact: tuple = (.0015, 15., 7.)
+    surface: tuple = (.04, .06, .10, .65)  # smooth relief slope scale, restrained roughness range, wet albedo gain
     texture_detail: tuple = (.8, 2., 1.5, 2.5) # roughness UV scale; roughness, albedo and height mip biases
     resolution: float = 2.          # supersampled sharp reflections; receiver footprint downsamples without added blur
     diffuse: float = 4.             # diffuse irradiance from the admitted 3D ribbon history
@@ -187,20 +190,23 @@ void main() {
     vec2 uv=vWorldPos.xz/uFloor.x;
     // Same saved scan in two world-fixed, differently scaled orientations: no recognisable tile lattice.
     // No lighting/reflections are baked into this asset. sRGB reads decode the base colour into linear light.
-    vec2 other=mat2(0.6,-0.8,0.8,0.6)*uv*1.37+vec2(.31,.47);
+    mat2 turn=mat2(0.6,-0.8,0.8,0.6);
+    vec2 other=turn*uv*1.37+vec2(.31,.47);
     vec3 albedo=mix(texture(uAlbedo,uv,uTextureDetail.z).rgb,texture(uAlbedo,other,uTextureDetail.z).rgb,.4);
     // Continuous smooth wet concrete. The saved data modulates roughness gently; thresholding it into
     // a wet/dry coverage mask produced the rejected mottled/chipped-paint appearance.
     float rough=mix(texture(uRoughness,uv*uTextureDetail.x,uTextureDetail.y).r,
                     texture(uRoughness,other*uTextureDetail.x,uTextureDetail.y).r,.4);
-    float relief=mix(texture(uHeight,uv,uTextureDetail.w).r,texture(uHeight,other,uTextureDetail.w).r,.4);
-    // A separate smooth height map describes the continuous wet film. Colour pores are not geometry.
-    // Screen derivatives include both world-space UV fields and their mip footprints.
-    float bump=uSurface.x;
-    vec3 dx=dFdx(vWorldPos)+vec3(0,bump*dFdx(relief),0);
-    vec3 dy=dFdy(vWorldPos)+vec3(0,bump*dFdy(relief),0);
-    vec3 normal=normalize(cross(dx,dy));
-    if(normal.y<0.0) normal=-normal;
+    // A separate smooth height map describes the continuous wet film; colour pores are not geometry. Its slope
+    // comes from texture-space central differences: screen-derivative normals are constant per 2x2 pixel quad
+    // and stair-stepped the reflection once its wobble was visible.
+    float e=4.0/float(textureSize(uHeight,0).x);
+    vec2 near=vec2(texture(uHeight,uv+vec2(e,0),uTextureDetail.w).r-texture(uHeight,uv-vec2(e,0),uTextureDetail.w).r,
+                   texture(uHeight,uv+vec2(0,e),uTextureDetail.w).r-texture(uHeight,uv-vec2(0,e),uTextureDetail.w).r);
+    vec2 far=vec2(texture(uHeight,other+vec2(e,0),uTextureDetail.w).r-texture(uHeight,other-vec2(e,0),uTextureDetail.w).r,
+                  texture(uHeight,other+vec2(0,e),uTextureDetail.w).r-texture(uHeight,other-vec2(0,e),uTextureDetail.w).r);
+    vec2 slope=(.6*near+.4*1.37*(transpose(turn)*far))/(2.0*e*uFloor.x);  // height per world unit along x, z
+    vec3 normal=normalize(vec3(-uSurface.x*slope.x,1.0,-uSurface.x*slope.y));
     float roughness=mix(uSurface.y,uSurface.z,rough);
     albedo*=uSurface.w;
     vec3 view=uOrthographic==1?normalize(uForward):normalize(vWorldPos-uEye);
@@ -398,7 +404,7 @@ class Lab:
             gl.glDepthFunc(gl.GL_LESS)
             gl.glEnablei(gl.GL_BLEND, 0)
             gl.glBlendEquationSeparatei(0, gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
-            gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ZERO, gl.GL_ONE)
+            gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ONE, gl.GL_ONE)  # alpha: weighted height
             gl.glDepthMask(gl.GL_FALSE)
             reflected_view = mirrored @ scroll
             reflected_mvp = tuple((projection @ reflected_view).flatten(order='F'))
@@ -417,7 +423,7 @@ class Lab:
             self.textures = load_floor_textures(floor)
         vao, count = self.resources.mesh('floor', floor_vertices(floor), (3,))
         program = self.resources.program('floor', FLOOR_VERTEX, FLOOR_FRAGMENT)
-        names = ('uMvp', 'uFlat', 'uAlbedo', 'uRoughness', 'uHeight', 'uReflection', 'uReflectionLook', 'uViewport', 'uBackdrop',
+        names = ('uMvp', 'uFlat', 'uAlbedo', 'uRoughness', 'uHeight', 'uReflection', 'uReflectionLook', 'uReflectionContact', 'uViewport', 'uBackdrop',
                  'uAmbient', 'uFloor', 'uFloorLight', 'uLightCount', 'uLightPosition[0]', 'uLightFlux[0]',
                  'uSurface', 'uTextureDetail', 'uEye', 'uForward', 'uOrthographic', 'uMist', 'uMistShape')
         u = self.resources.uniforms('floor', names, required=False)
@@ -429,6 +435,7 @@ class Lab:
             gl.glBindTextureUnit(unit, texture)
             gl.glUniform1i(u[name], unit)
         gl.glUniform4f(u['uReflectionLook'], floor.streak, floor.lod[0], floor.lod[1], floor.reflection_blur)
+        gl.glUniform4f(u['uReflectionContact'], 0., *floor.contact)
         gl.glUniform2f(u['uViewport'], *size)
         gl.glUniform3f(u['uBackdrop'], *environment.backdrop)
         gl.glUniform3f(u['uAmbient'], *floor.ambient)

@@ -297,7 +297,7 @@ void main() {
     if(d2>1.0) discard;
     float core=exp(-d2*4.0)*(1.0-d2);
     vec3 light=mix(vColour,vec3(1.0),uSparkWhite)*core*vBright*mistTransmittance(vWorld+uMistOrigin);
-    FragColor=vec4(light,0.0);
+    FragColor=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722))*(vWorld.y+uMistOrigin.y));  // as the light pass
     Emission=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722)));
 }
 """)
@@ -457,7 +457,9 @@ void main() {
     vec3 boundary=colour*rimGlow+mix(colour,vec3(1.0),uTone.y)*rims*uRim.y;
     vec3 light=(sheet*pathLength()*clamp(vCoverage,0.0,1.0)+boundary)*max(vEmission,0.0)*ageFade()
                 *mistTransmittance(vWorld+uMistOrigin);
-    FragColor=vec4(light,0.0);
+    // Alpha: luminance-weighted world height, for contact-hardened reflections. Scene targets keep their
+    // alpha (blend ZERO, ONE); a reflection target accumulates it (ONE, ONE).
+    FragColor=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722))*(vWorld.y+uMistOrigin.y));
     Emission=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722)));
 }
 """)

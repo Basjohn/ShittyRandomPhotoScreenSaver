@@ -49,8 +49,15 @@ from parity. §0B is the current visual audit, not an acceptance report.
   phase/amplitude/depth variation improve the wire-like interior and repeated fold rhythm. Skew-stretched glints
   are corrected. Still open: fine-detail stability, depth/light and reference shape fidelity. Inspect all boards
   at native resolution and explicit motion times; do not hide shape faults with bloom.
-- [~] **Floor fidelity, Awaiting Validation:** generated maps are placed; inspect fine wet detail and dark gaps at
-  every pose against the main mock. **Operator rejected the mottled wet/dry candidate:** the target is smooth wet
+- [~] **Floor fidelity, Awaiting Validation:** smooth wet candidate `wr05_wet_contact/`. The receiver keeps long
+  streaks narrow (segmented footprints), and reflections are contact-hardened: crisp near the floor, spreading
+  mostly vertically with the reflected light's height. Smooth relief normals come from texture-space differences
+  and give a gentle wet wobble with no grain or patches. The blue ambient wash is reduced. Operator priority:
+  smoothness, reflection and wetness before streakiness; never blotchy or patterned. Still open: the floor reads
+  lower-contrast than the mock. The mock's bright pools at the contact line come from its lit mist base and
+  concentrated hot crossings; ours from evenly lit sheets. That moves to the mist and waveform slices, not to more
+  floor blur. Low react keeps a dark hover gap under the sheets until lit mist is reflected. Generated maps are
+  placed; inspect fine wet detail and dark gaps at every pose against the main mock. **Operator rejected the mottled wet/dry candidate:** the target is smooth wet
   concrete, not a high-contrast patch mask. Retain the preferred waveform and the independently proven continuous
   reflection filter; rebuild the floor around a continuous wet film, subtle grain and restrained roughness variation.
   **Smoothness takes priority over wet patches (operator clarification):** establish a nearly flat surface with
@@ -136,7 +143,10 @@ regression and same-recipe GPU cost comparison. Small normal perturbations follo
 - [ ] **Concrete finish:** the rejected floor looks gritty/mottled; the target is smooth finished wet concrete with
   restrained fine material detail. Inspect the newly generated smooth albedo under actual scene light. Do not use
   texture blur to conceal coarse aggregate, or reintroduce wet/dry coverage masks. Keep surface relief nearly flat.
-- [ ] **Reflection character:** floor-only comparisons still show large duplicated sine ribbons against black,
+- [~] **Reflection character:** `wr05_wet_contact/` replaces the sharp duplicated mirror with contact-hardened,
+  gently elongated wet reflections. Floor ROI (fog high, mock / ours): median 0.23 / 0.21, p90 0.58 / 0.41,
+  p99 0.92 / 0.52. Mock rows fall from bright at the contact; ours peak mid-floor. Earlier: floor-only comparisons
+  showed large duplicated sine ribbons against black,
   whereas the main mock has gently softened coloured highlights over visible concrete. Keep gentle Gaussian blur
   independent of physical smoothness; retain coloured dark gaps without turning the floor into a sharp mirror or
   a uniformly hazy smear. Gaussian energy/centroid/isotropy checks pass at 1x and 2x reflection scale. Earlier

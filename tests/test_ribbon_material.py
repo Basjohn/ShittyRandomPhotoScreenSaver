@@ -260,3 +260,30 @@ void main() {
                          [np.sum(x*y*crop),np.sum(y*y*crop)]])/crop.sum()
     eigenvalues=np.linalg.eigvalsh(covariance)
     assert eigenvalues[-1]/eigenvalues[0]<1.3, eigenvalues
+
+
+def test_light_pass_alpha_carries_luminance_weighted_world_height(scene):
+    # Reflection receivers recover the height of reflected light as alpha/luminance (contact hardening).
+    # The packet's own rebased origin and the caller's frame both count; scene targets keep their alpha.
+    from rendering.quick.scene3d.reflection import PlanarReflection
+    reflection = PlanarReflection('height test')
+    try:
+        for height in (.6, 1.8):
+            scene.target.bind()
+            reflection.begin(W, H)
+            gl.glEnablei(gl.GL_BLEND, 0)
+            gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ONE, gl.GL_ONE)
+            gl.glDisable(gl.GL_DEPTH_TEST)
+            scene.primitive.draw(strip(height - 1., -10., (.1, .7, 1., 1.)), MVP, shading='light', view=VIEW,
+                                 mist_frame=(0., 1., 0.))
+            gl.glDisablei(gl.GL_BLEND, 0)
+            reflection.end()
+            pixels = np.empty((H, W, 4), np.float32)
+            gl.glGetTextureImage(reflection.texture, 0, gl.GL_RGBA, gl.GL_FLOAT, pixels.nbytes, pixels)
+            luminance = pixels[..., :3] @ np.array((.2126, .7152, .0722), np.float32)
+            lit = luminance > .05
+            assert lit.sum() > 100
+            np.testing.assert_allclose(pixels[..., 3][lit].sum()/luminance[lit].sum(), height, rtol=.02)
+    finally:
+        with scene.target.current():
+            reflection.release()

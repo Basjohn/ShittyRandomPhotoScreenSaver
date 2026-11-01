@@ -114,7 +114,12 @@ framebuffer, viewport, depth test/write mask and colour mask. Release belongs to
 
 The receiver samples the reflected scene at its projected position. Optical roughness defines a short-axis mip
 footprint and a longer vertical footprint; `textureGrad` integrates it using anisotropy capped at the lesser of
-16 and the OpenGL 4.6 device limit. The capability query occurs only on allocation. This replaces seven discrete
+16 and the OpenGL 4.6 device limit. A streak longer than 16:1 is split into up to eight abutting, Gaussian-weighted
+segments so the short axis keeps its mip (one long footprint washed neighbouring highlights together).
+Optional contact hardening (`uReflectionContact`: plane height, spread per unit height, along/across ratio, probe
+mip) reads the light-weighted height of what is reflected from a coarse probe of the target's alpha and widens the
+footprint with it. Emitters opt in by writing luminance x world height into alpha and blending alpha ONE, ONE in
+the reflection pass. The ribbon light and spark passes do; scene targets keep alpha with ZERO, ONE. The capability query occurs only on allocation. This replaces seven discrete
 samples that copied a bright highlight into seven separated bands. It adds no targets or passes; hardware sampling
 cost must be measured rather than inferred from shader call count. This is a bounded directional filter, not a full
 microfacet ray-traced reflection. In `wr05_floor_candidate/filter_cost.json`, 45 warm draws per state at 820x718 on
@@ -122,7 +127,11 @@ RTX 4090 measured the same low/high medians before and after (0.039/0.040 ms); p
 same-recipe comparison measures only the floor draw, excluding reflection generation and every other scene pass.
 
 `tests/test_scene3d_reflection.py` proves mirrored object registration in both projections with camera translation,
-foreign-context rejection, lazy reuse/retirement, and a continuous elongated highlight. The highlight regression
+foreign-context rejection, lazy reuse/retirement, a continuous elongated highlight, a narrow segmented long streak
+(negative control: one footprint, more than twice as wide and displaced) and height-proportional contact spread
+(negative control: spread off ignores height); `test_ribbon_material.py` proves the light pass's height alpha.
+Same-code floor draw at 820x718 on RTX 4090 (`wr05_wet_contact/floor_cost.json`): 0.162 to 0.222 ms median for the
+wet recipe; reflection generation medians are unchanged, and its p90 is spiky in both recipes and unexplained. The highlight regression
 fails the old kernel with twelve-pixel gaps between copies. Consumer OIT-body/volume inclusion, clipping, resize and
 failure-path proof, whole-scene cost and visual acceptance remain in the Waveform Lab Plan; existing focused checks
 must not be cited as completion of those gates.

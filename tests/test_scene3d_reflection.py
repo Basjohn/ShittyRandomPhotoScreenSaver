@@ -194,3 +194,67 @@ def test_gentle_gaussian_spreads_light_without_shifting_or_destroying_it(gl_scen
     np.testing.assert_allclose(soft[2],sharp[2],atol=.15)
     assert np.all((soft[3]-sharp[3]>1.)&(soft[3]-sharp[3]<4.))
     assert abs(soft[3][0]-soft[3][1])<.5
+
+
+def _receive(target, vbo, reflection, fragment, look, contact=(0., 0., 0., 0.)):
+    program = compile_program(_VERTEX, fragment, label='receiver probe')
+    try:
+        target.bind(clear=(0., 0., 0., 1.))
+        gl.glDisable(gl.GL_DEPTH_TEST)
+        gl.glUseProgram(program)
+        gl.glUniform2f(gl.glGetUniformLocation(program, 'uViewport'), W, H)
+        gl.glUniform1i(gl.glGetUniformLocation(program, 'uReflection'), 0)
+        gl.glUniform4f(gl.glGetUniformLocation(program, 'uReflectionLook'), *look)
+        gl.glUniform4f(gl.glGetUniformLocation(program, 'uReflectionContact'), *contact)
+        gl.glBindTextureUnit(0, reflection.texture)
+        draw(program, vbo, quad_vertices((-1., -1., 0.), (1., 1., 0.)), np.identity(4))
+        return target.read_rgba()[:, :, 0].astype(int)
+    finally:
+        gl.glDeleteProgram(program)
+
+
+def _upload(reflection, highlights):
+    """Small HDR highlights at (row, column) with luminance-weighted world height in alpha."""
+    reflection.begin(W, H)
+    pixels = np.zeros((H, W, 4), np.float32)
+    for row, column, height in highlights:
+        pixels[row-2:row+2, column-2:column+2] = (8., 8., 8., 8.*height)
+    gl.glTextureSubImage2D(reflection.texture, 0, 0, 0, W, H, gl.GL_RGBA, gl.GL_FLOAT, pixels)
+    reflection.end()
+
+
+def test_long_streak_stays_narrow_across_by_segmenting_the_footprint(gl_scene):
+    # Hardware anisotropy integrates at most 16:1: one footprint as long as the streak coarsened the short axis
+    # and washed neighbouring highlights together. Negative control: the same streak forced into one footprint.
+    target, _flat, _floor, vbo, reflection = gl_scene
+    _upload(reflection, [(H//2, W//2, 0.)])
+    fragment = _FLOOR.replace('vec2(0.0),0.0)', 'vec2(0.0),1.0)')
+    single = fragment.replace('int(clamp(ceil(2.0*streak*size.y/(16.0*span)),1.0,8.0))', '1')
+    assert single != fragment
+    width = {}
+    for name, source in (('segmented', fragment), ('single', single)):
+        result = _receive(target, vbo, reflection, source, (.4, 0., 0., 0.))
+        lit = result > 2
+        rows, columns = np.where(lit.any(1))[0], np.where(lit.any(0))[0]
+        width[name] = len(columns)
+        assert len(rows) > 40 and np.diff(rows).max() == 1, name
+    # The single footprint also drifts sideways (its coarse mip's texel centres); the segments stay on the source.
+    assert width['segmented'] <= 6 and width['single'] > 2*width['segmented'], width
+
+
+def test_contact_hardening_spreads_reflections_with_the_height_of_their_light(gl_scene):
+    # Light from just above the plane reflects crisply; the same light three units up spreads, mostly vertically.
+    target, _flat, _floor, vbo, reflection = gl_scene
+    low, high = (H//2, W//4, .1), (H//2, 3*W//4, 3.)
+    _upload(reflection, [low, high])
+
+    def extent(result, column):
+        rows = np.where(result[:, column] > 2)[0]
+        return len(rows), len(np.where(result[H//2, column-30:column+30] > 2)[0])
+    off = _receive(target, vbo, reflection, _FLOOR, (0., 0., 0., 0.))
+    on = _receive(target, vbo, reflection, _FLOOR, (0., 0., 0., 0.), contact=(0., .01, 6., 5.))
+    assert extent(off, low[1]) == extent(off, high[1])  # without contact hardening height is ignored
+    low_rows, low_columns = extent(on, low[1])
+    high_rows, high_columns = extent(on, high[1])
+    assert low_rows <= extent(off, low[1])[0] + 2
+    assert high_rows > 3*low_rows and high_rows > 2*high_columns
