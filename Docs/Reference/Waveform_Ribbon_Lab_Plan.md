@@ -24,23 +24,20 @@ support. Preserve native low/high crops separately for each board; never average
 one scene across its low/high states. Exact source custody is in §1.1.
 
 **Existing substrate:** shared framed camera, bounded incremental ribbon history, oriented OIT/HDR filament material,
-history sparks, half-resolution planar reflection, and the operator's world-tiled concrete PBR maps. Contracts live
+history sparks, half-resolution planar reflection, and saved generated concrete albedo/roughness maps. Contracts live
 in `Ribbon_Path.md`, `Visualizer_Labs.md` and `Scene3D_Resources.md`. Earlier captures remain under
 `.artifacts/evidence/waveform_ribbon/`; the rejected column appearance is not authority. Pass 4 (`66ab3918`)
 restored three distinct ribbon identities; it did not establish fidelity.
 
 **Open, in order:**
-- [ ] **Immediate floor texture correction (latest operator direction):** generate and save a new concrete material,
-  place it on the real 3D floor, and remove the visibly repeated pattern; then return to waveform authoring.
 - [ ] **Waveform structure and light:** richer smooth folds, depth separation, fine fanning/gathering filaments,
   readable quiet detail, coloured hot crossings. Every admitted shape must remain smooth like folding cloth, never
   sharp or spiky, including wide inner bends. Outer boundary lines must be brighter and glow more than the interior
   strands even at low react, to describe the translucent 3D sheet. Current bands remain too regularly sinusoidal. Inspect all boards
   at native resolution and explicit motion times; do not hide shape faults with bloom.
-- [ ] **Floor fidelity:** crisp coloured reflections and fine wet concrete detail with dark gaps, consistent at all
-  poses. Wet/dry optical roughness and pore coverage are now authored from the same PBR set; avoid smooth pools or
-  a diffuse carpet. Visible repetition in the current map is rejected: generate and save new textures when this pass begins. Reflection
-  OIT-body inclusion, resize and full cost proof remain open.
+- [~] **Floor fidelity, Awaiting Validation:** generated maps are placed; inspect fine wet detail and dark gaps at
+  every pose against the main mock. Reflections are still broader and softer than the target. Tune optical sharpness
+  and streaking without restoring repeated pools or a diffuse carpet. Reflection OIT-body inclusion, resize and full cost proof remain open.
 - [ ] **S3D-7 bounded world fog, third:** retain the simple thick mist for composition until waveform and floor improve,
   then replace the analytic floor-colour approximation with a reduced-resolution volume. Carve clearance and soft
   illumination from the actual ribbon packet, with no second path/simulation/clock. Correct Orthographic/Perspective
@@ -48,7 +45,7 @@ restored three distinct ribbon identities; it did not establish fidelity.
   clearance, resize/context/retirement, and measured warm GPU cost. Audio-driven fog changes remain deferred.
 - [ ] **Accents and optics:** bounded cyan/magenta sparks with a meaningful size range; tight filament glow and broad
   local hot spots. Shared defocus/slow-motion AA only after the underlying geometry/material match.
-- [ ] **Both board looks through lab recipe controls:** show the cool primary low/high and alternate-inspired range
+- [ ] **Reference looks through lab recipe controls:** show the cool whole-scene low/high and alternate-inspired range
   without changing world identities between quiet/loud. Production presets and Settings remain WR-08.
 - [ ] **Awaiting Validation:** operator review of floor/waveform/volumetric-mist appearance. No candidate is accepted.
 - [ ] **After visual fidelity:** WR-00 recorded windows → WR-07 audio mappings → remaining shared primitive/lifecycle
@@ -84,7 +81,13 @@ Diagnostic half-height 4/reference depth 10 are arbitrary calibration units, not
 Current geometry evidence: `wr04_parity_pass7/` (under `.artifacts/evidence/waveform_ribbon/`) includes low/high
 native captures, five wide poses, explicit-time sequences, main fog-board pairs and measured surface draw cost.
 These prove the bounded 3D surface/capture paths, not resemblance or operator acceptance. The scene remains far
-from the target and the immediate texture/rim-light work above remains live.
+from the target and the waveform/rim-light work above remains live.
+
+Generated material custody and prompts: `assets/textures/waveform_floor/Source.md`. The albedo is sampled in sRGB;
+the roughness map is linear data. Two differently oriented/scaled world-space samples suppress the old tile pattern,
+with a restrained grain-derived micro-normal and smoother wet-film patches. Native pose evidence:
+`wr04_generated_floor/`. Missing maps raise an error, and partial texture allocation is retired. This establishes
+generation and 3D placement; the floor appearance remains unaccepted.
 
 ### Camera contract for all following slices
 
@@ -122,6 +125,8 @@ Archive member paths are exact:
 | `waveform_ribbon_package/Waveform_Ribbon_Alternate_Annotated_Mock.png` | Original 1240 × 396 pixels; SHA-256 `19161837f26e2b38005b0ca781e256ff5a96fe5b006b954cc300809f6472adb2` | Admitted alternate preset target (1 November) |
 | `references/Waveform_Ribbon_Fog_Complete_Scene_Mock.png` | Original supplied 1 November, preserved byte-for-byte; SHA-256 `02129185dbccbbe9331f0bcd650eeb6853de9ea73186c5e6a6ea926cb96e28b3` | Main whole-scene target: smooth ribbons, wet floor, thick mist shaped and softly lit by the ribbons |
 | `references/Waveform_Ribbon_Rejected_Curve_Detail.png` | Operator crop, preserved byte-for-byte; SHA-256 `5c2ccbbe98cd2474d8de3a2d0f2c5ae2165d935f5f9922f71caa1e63e158de7c` | Rejection evidence: uneven strand slopes and bends; never an artistic target |
+| `references/Waveform_Ribbon_Fog_Preset_Range_Mock.png` | Additional supplied board, preserved byte-for-byte; SHA-256 `6bd7cc073f4192a6acecfa4e000fbb8c185f867f7e1089a3a5c028321b0a1dde` | Additional whole-scene/preset target: cool quiet sheets and warm high arcs, shaped fog, wet reflection detail |
+| `references/Waveform_Ribbon_Rejected_Upper_Rim.png` | Operator crop, preserved byte-for-byte; SHA-256 `05020984b0475d80fb9c1373859c0a4b9ac3b965890b64300fab86efdd6392c1` | Rejection evidence: upper/far rim remains too dim; both boundary lines must glow more than the interior |
 | `waveform_ribbon_package/Waveform_Ribbon_Architecture.md` | Package prose inspected; existing brief reproduces it | Intent, suggested mappings, gates A–H; feasibility prose is not implementation proof |
 
 Original image bytes were extracted without editing to

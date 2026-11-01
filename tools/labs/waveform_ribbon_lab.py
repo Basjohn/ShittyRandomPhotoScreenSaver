@@ -11,9 +11,9 @@ whose head and tail sit at fixed world x and fade by age. Two renders per state 
 - ``flat``: solid colours, no light, bloom or mist; ribbon envelopes measured against the WR-00 target table.
 - ``lit``: ribbon material, wet floor, mist and bloom through the Visualizer-shaped scope.
 
-The floor is the operator's matched PBR pack (albedo, normal, roughness) with the shared planar reflection
+The floor uses a saved generated concrete albedo with a restrained derived micro-surface and the shared planar reflection
 (S3D-5): ribbon light drawn through the mirrored camera, sampled at the floor's own screen position,
-streaked and blurred by wet/dry roughness and perturbed by the normal map.
+streaked and blurred by wet roughness and perturbed by the micro-surface.
 
     .venv\\Scripts\\python.exe tools/labs/waveform_ribbon_lab.py --output .artifacts/evidence/waveform_ribbon/<new-run>
         [--cards .artifacts/evidence/waveform_ribbon/wr00_reference_projection]
@@ -21,8 +21,6 @@ streaked and blurred by wet/dry roughness and perturbed by the normal map.
 from __future__ import annotations
 
 import argparse
-import io
-import zipfile
 from dataclasses import asdict, dataclass, field
 import hashlib
 import json
@@ -93,19 +91,19 @@ class Environment:
 class Floor:
     half_span: float = 100.
     depth_bounds: tuple = (-80., 60.)
-    pack: str = 'assets/textures/Dark_Concrete_PBR_Matched_Set_DarkGrey.zip'  # operator's local matched set
-    tile: float = 1.8               # world units per texture repeat
-    ambient: tuple = (.5, .75, 2.)  # cool blue-violet hall light on the bare concrete
-    reflection: float = 5.0         # wet film: reflection strength before Fresnel
+    albedo: str = 'assets/textures/waveform_floor/concrete_albedo.png'
+    roughness: str = 'assets/textures/waveform_floor/concrete_roughness.png'
+    tile: float = 12.               # broad world-space patch, blended at a second incommensurate orientation/scale
+    ambient: tuple = (.6, .75, 1.1)
+    reflection: float = 3.5         # wet film: reflection strength before Fresnel
     f0: float = .04
-    normal_shift: float = .035      # screen-uv shift of the reflection lookup per unit normal tilt
-    streak: float = .07             # vertical reflection streak (uv) at roughness 1
-    lod: tuple = (0., 2.2)          # reflection mip at roughness 0 and 1 (half-resolution target)
-    wet: tuple = (.42, .70, .045, .64)  # pack's wet/dry thresholds, wet/dry optical roughness
+    normal_shift: float = .025      # screen-uv shift of the reflection lookup per unit normal tilt
+    streak: float = .22             # vertical reflection streak (uv) at roughness 1
+    lod: tuple = (1., 6.)           # blur footprint covers the streak taps, avoiding repeated reflection bands
+    surface: tuple = (.06, .12, .65, .7)  # dry bump (world), wet/dry optical roughness, wet albedo gain
     resolution: float = .5          # reflection target size relative to the view
     diffuse: float = 6.             # light from the glowing scene above, on the albedo
     diffuse_lod: float = 5.5        # mip of the reflection used as that light (wide)
-    pore: float = .025             # linear albedo above which the pitted aggregate carries a full wet film
 
 
 @dataclass(frozen=True)
@@ -161,15 +159,14 @@ void main() { vWorldPos=aPosition; gl_Position=uMvp*vec4(aPosition,1.0); }
 FLOOR_FRAGMENT = """#version 460 core
 in vec3 vWorldPos;
 uniform sampler2D uAlbedo;
-uniform int uFlat;
-uniform sampler2D uNormal;
 uniform sampler2D uRoughness;
+uniform int uFlat;
 uniform vec2 uViewport;
 uniform vec3 uBackdrop;
 uniform vec3 uAmbient;
 uniform vec4 uFloor;        // tile, reflection strength, f0, normal shift
-uniform vec3 uFloorLight;   // diffuse gain, diffuse mip, pore threshold in linear albedo
-uniform vec4 uWet;          // pack wet/dry thresholds, wet/dry optical roughness
+uniform vec2 uFloorLight;   // diffuse gain, diffuse mip
+uniform vec4 uSurface;      // dry micro-height scale (world), wet/dry optical roughness, wet albedo gain
 uniform vec3 uEye;
 uniform vec3 uForward;
 uniform int uOrthographic;
@@ -179,23 +176,29 @@ layout(location=1) out vec4 Emission;
 void main() {
     if(uFlat==1) { FragColor=vec4(vec3(0.25),1.0); Emission=vec4(0.0); return; }
     vec2 uv=vWorldPos.xz/uFloor.x;
-    vec3 albedo=texture(uAlbedo,uv).rgb;                 // sRGB texture: already linear here
-    vec3 tangent=texture(uNormal,uv).rgb*2.0-1.0;         // OpenGL convention: +y up the texture (world -z)
-    float wet=1.0-smoothstep(uWet.x,uWet.y,texture(uRoughness,uv).r);
-    wet*=smoothstep(0.0,uFloorLight.z,dot(albedo,vec3(0.2126,0.7152,0.0722)));
-    // Water fills the concrete's pores: wet patches have a smoother normal and a narrow specular lobe;
-    // the exposed aggregate between them remains rough. Both come from the same world-tiled PBR set.
-    tangent.xy*=mix(1.5,0.8,wet);
-    vec3 normal=normalize(vec3(tangent.x,tangent.z,-tangent.y));
-    float roughness=mix(uWet.w,uWet.z,wet);
+    // Same saved scan in two world-fixed, differently scaled orientations: no recognisable tile lattice.
+    // No lighting/reflections are baked into this asset. sRGB reads decode the base colour into linear light.
+    vec2 other=mat2(0.6,-0.8,0.8,0.6)*uv*1.37+vec2(.31,.47);
+    vec3 albedo=mix(texture(uAlbedo,uv).rgb,texture(uAlbedo,other).rgb,.4);
+    float mask=mix(texture(uRoughness,uv*3.1).r,texture(uRoughness,other*3.1).r,.4);
+    float wet=1.0-smoothstep(.22,.45,mask);
+    float stone=dot(sqrt(max(albedo,vec3(0.0))),vec3(.2126,.7152,.0722));
+    // A small authored micro-height from the same grain; screen derivatives include both UV fields and mips.
+    float bump=uSurface.x*mix(1.0,.05,wet);
+    vec3 dx=dFdx(vWorldPos)+vec3(0,bump*dFdx(stone),0);
+    vec3 dy=dFdy(vWorldPos)+vec3(0,bump*dFdy(stone),0);
+    vec3 normal=normalize(cross(dx,dy));
+    if(normal.y<0.0) normal=-normal;
+    float roughness=mix(uSurface.z,uSurface.y,wet);
+    albedo*=uSurface.w;
     vec3 view=uOrthographic==1?normalize(uForward):normalize(vWorldPos-uEye);
     float cosine=clamp(abs(dot(normal,view)),0.0,1.0);
     float fresnel=uFloor.z+(1.0-uFloor.z)*pow(1.0-cosine,5.0);
-    vec3 reflected=planarReflection(gl_FragCoord.xy/uViewport,tangent.xy*uFloor.w,roughness);
+    vec3 reflected=planarReflection(gl_FragCoord.xy/uViewport,vec2(normal.x,-normal.z)*uFloor.w,roughness);
     // Diffuse light from the emissive ribbons above: the mirrored scene's widest blur approximates the
     // light arriving over the floor (a mirror alone left the concrete dark between reflections).
     vec3 above=textureLod(uReflection,gl_FragCoord.xy/uViewport,uFloorLight.y).rgb;
-    vec3 specular=reflected*fresnel*uFloor.y*mix(0.3,1.0,wet);
+    vec3 specular=reflected*fresnel*uFloor.y*mix(.12,1.0,wet);
     vec3 light=specular+albedo*above*uFloorLight.x;
     float clear=mistTransmittance(vWorldPos);
     vec3 colour=mix(mistColour(uBackdrop,vWorldPos),albedo*uAmbient,clear)+light*clear;
@@ -231,29 +234,28 @@ def floor_vertices(floor: Floor) -> bytes:
 
 
 def load_floor_textures(floor: Floor) -> dict:
-    """The matched pack's maps as mipmapped, repeating GL textures (albedo sRGB, normal and roughness linear)."""
-    from PIL import Image as PILImage
-    textures = {}
-    with zipfile.ZipFile(ROOT/floor.pack) as pack:
-        members = {name.rsplit('_', 1)[-1].split('.')[0].lower(): name for name in pack.namelist() if name.endswith('.png')}
-        for key, member, internal in (('albedo', members['albedo'], gl.GL_SRGB8_ALPHA8),
-                                      ('normal', members['opengl'], gl.GL_RGBA8),
-                                      ('roughness', members['roughness'], gl.GL_RGBA8)):
-            image = PILImage.open(io.BytesIO(pack.read(member))).convert('RGBA')
-            data = np.asarray(image, np.uint8)
+    """Saved generated maps: colour decoded from sRGB, roughness sampled as linear data. Missing assets fail."""
+    textures={}
+    try:
+        for key,path,storage in (('albedo',floor.albedo,gl.GL_SRGB8_ALPHA8),('roughness',floor.roughness,gl.GL_RGBA8)):
+            with Image.open(ROOT/path) as source:
+                image=source.convert('RGBA')
             name = (gl.GLuint*1)()
-            gl.glCreateTextures(gl.GL_TEXTURE_2D, 1, name)
-            texture = int(name[0])
-            gl.glTextureStorage2D(texture, max(image.size).bit_length(), internal, *image.size)
-            gl.glTextureSubImage2D(texture, 0, 0, 0, *image.size, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, data)
+            gl.glCreateTextures(gl.GL_TEXTURE_2D,1,name)
+            texture=textures[key]=int(name[0])
+            gl.glTextureStorage2D(texture,max(image.size).bit_length(),storage,*image.size)
+            gl.glTextureSubImage2D(texture,0,0,0,*image.size,gl.GL_RGBA,gl.GL_UNSIGNED_BYTE,np.asarray(image,np.uint8))
             gl.glGenerateTextureMipmap(texture)
-            gl.glTextureParameteri(texture, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR_MIPMAP_LINEAR)
-            gl.glTextureParameteri(texture, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
-            gl.glTextureParameterf(texture, 0x84FE, 8.)  # GL_TEXTURE_MAX_ANISOTROPY: the floor is seen at a glancing angle
-            for wrap in (gl.GL_TEXTURE_WRAP_S, gl.GL_TEXTURE_WRAP_T):
-                gl.glTextureParameteri(texture, wrap, gl.GL_REPEAT)
-            textures[key] = texture
-    return textures
+            gl.glTextureParameteri(texture,gl.GL_TEXTURE_MIN_FILTER,gl.GL_LINEAR_MIPMAP_LINEAR)
+            gl.glTextureParameteri(texture,gl.GL_TEXTURE_MAG_FILTER,gl.GL_LINEAR)
+            gl.glTextureParameterf(texture,0x84FE,8.)  # anisotropy at glancing floor angles
+            for wrap in (gl.GL_TEXTURE_WRAP_S,gl.GL_TEXTURE_WRAP_T):
+                gl.glTextureParameteri(texture,wrap,gl.GL_REPEAT)
+        return textures
+    except Exception:
+        if textures:
+            gl.glDeleteTextures(len(textures),list(textures.values()))
+        raise
 
 
 def fill_ring(recipe: Recipe, state: str, knots: int = 256, *, at: float | None = None) -> tuple[RibbonRing, float]:
@@ -395,15 +397,14 @@ class Lab:
             self.textures = load_floor_textures(floor)
         vao, count = self.resources.mesh('floor', floor_vertices(floor), (3,))
         program = self.resources.program('floor', FLOOR_VERTEX, FLOOR_FRAGMENT)
-        names = ('uMvp', 'uFlat', 'uAlbedo', 'uNormal', 'uRoughness', 'uReflection', 'uReflectionLook', 'uViewport', 'uBackdrop',
-                 'uAmbient', 'uFloor', 'uFloorLight', 'uWet', 'uEye', 'uForward', 'uOrthographic', 'uMist', 'uMistShape')
+        names = ('uMvp', 'uFlat', 'uAlbedo', 'uRoughness', 'uReflection', 'uReflectionLook', 'uViewport', 'uBackdrop',
+                 'uAmbient', 'uFloor', 'uFloorLight', 'uSurface', 'uEye', 'uForward', 'uOrthographic', 'uMist', 'uMistShape')
         u = self.resources.uniforms('floor', names, required=False)
         gl.glUseProgram(program)
         gl.glUniform1i(u['uFlat'], int(flat))
         gl.glUniformMatrix4fv(u['uMvp'], 1, gl.GL_FALSE, np.asarray(mvp, np.float32))
-        for unit, (name, texture) in enumerate((('uAlbedo', self.textures['albedo']), ('uNormal', self.textures['normal']),
-                                                ('uRoughness', self.textures['roughness']),
-                                                ('uReflection', self.reflection.texture))):
+        for unit, (name, texture) in enumerate((('uAlbedo', self.textures['albedo']),('uRoughness',self.textures['roughness']),
+                                               ('uReflection', self.reflection.texture))):
             gl.glBindTextureUnit(unit, texture)
             gl.glUniform1i(u[name], unit)
         gl.glUniform4f(u['uReflectionLook'], floor.streak, floor.lod[0], floor.lod[1], 0.)
@@ -411,8 +412,8 @@ class Lab:
         gl.glUniform3f(u['uBackdrop'], *environment.backdrop)
         gl.glUniform3f(u['uAmbient'], *floor.ambient)
         gl.glUniform4f(u['uFloor'], floor.tile, floor.reflection, floor.f0, floor.normal_shift)
-        gl.glUniform3f(u['uFloorLight'], floor.diffuse, floor.diffuse_lod, floor.pore)
-        gl.glUniform4f(u['uWet'], *floor.wet)
+        gl.glUniform2f(u['uFloorLight'], floor.diffuse, floor.diffuse_lod)
+        gl.glUniform4f(u['uSurface'], *floor.surface)
         gl.glUniform3f(u['uEye'], *eye)
         gl.glUniform3f(u['uForward'], *(-view[2, :3]))
         gl.glUniform1i(u['uOrthographic'], int(orthographic))
@@ -420,7 +421,7 @@ class Lab:
         gl.glUniform4f(u['uMistShape'], *environment.mist['uMistShape'])
         gl.glBindVertexArray(vao)
         gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
-        for unit in range(4):
+        for unit in range(3):
             gl.glBindTextureUnit(unit, 0)
 
     def _flat_ribbons(self, packet, mvp):

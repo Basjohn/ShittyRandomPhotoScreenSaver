@@ -148,13 +148,11 @@ carves clear space in the fog and softly lights it; audio-driven fog changes are
 boards describe looks the eventual live presets should support. The new complete-scene fog board is the main target
 (`references/Waveform_Ribbon_Fog_Complete_Scene_Mock.png`, source custody in Lab Plan §1.1). Detailed live checklist: Lab Plan §0–0A.
 
-- [ ] **Floor texture correction now (operator, 1 November):** generate and save a new material, place it in the
-  native 3D scene and eliminate the rejected obvious repetition; then return to waveform fidelity.
-- [~] **WR-04 waveform next:** smooth cloth-like folds and edges at every admitted shape, fine fanning/gathering
+- [~] **WR-04 waveform now:** smooth cloth-like folds and edges at every admitted shape, fine fanning/gathering
   filaments and readable quiet detail. No sharp/spiky bends. Judge both mocks and all navigation poses; parity is open.
   The outer sheet edges must be brighter and glow more than the interior strands even in quiet states.
-- [ ] **Floor optics:** wet reflective concrete with fine detail and dark gaps. Keep the temporary thick mist for
-  composition while waveform and floor improve.
+- [~] **Floor optics, Awaiting Validation:** generated albedo/roughness maps are placed in the native scene;
+  compare wet reflection detail, dark gaps and distance falloff against the main mock. Keep temporary mist for composition.
 - [ ] **Volumetric mist third (S3D-7 bounded slice):** static field from the actual ribbon shape, reduced-resolution
   integration, opaque clipping and source-depth attenuation; independent harness and measured cost before acceptance.
 - [ ] **Accents and optics:** sparks, glow and defocus after the underlying waveform/floor/mist match.
