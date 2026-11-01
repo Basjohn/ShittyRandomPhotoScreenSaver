@@ -150,6 +150,7 @@ boards describe looks the eventual live presets should support. The new complete
 
 - [~] **WR-04 waveform now:** smooth cloth-like folds and edges at every admitted shape, fine fanning/gathering
   filaments and readable quiet detail. No sharp/spiky bends. Judge both mocks and all navigation poses; parity is open.
+  Compare new candidates against the operator's preferred waveform checkpoint recorded in Lab Plan §0A.
   Both boundary rims now have independent filament light; validate their balance through folds and motion.
   Broader swept sheets and smooth phase/amplitude/depth variation are in the lab; skew-stretched glints are corrected.
   Biggest waveform gaps: fine-detail stability, convincing depth/light and the remaining difference from reference shapes.
