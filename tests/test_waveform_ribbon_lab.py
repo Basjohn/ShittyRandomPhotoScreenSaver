@@ -65,3 +65,19 @@ def test_render_admits_its_context_before_allocating_and_restores_the_caller(lab
         assert QOpenGLContext.currentContext() == foreign.context
     finally:
         foreign.close()
+
+
+def test_missing_second_floor_map_retires_the_first_texture(lab, monkeypatch, tmp_path):
+    from dataclasses import replace
+    from OpenGL import GL as gl
+    created=[]
+    create=gl.glCreateTextures
+    def record(*args):
+        result=create(*args)
+        created.append(int(args[2][0]))
+        return result
+    monkeypatch.setattr(gl,'glCreateTextures',record)
+    with lab.target.current():
+        with pytest.raises(FileNotFoundError):
+            lab_module.load_floor_textures(replace(lab.recipe.floor,roughness=str(tmp_path/'missing.png')))
+        assert len(created)==1 and not gl.glIsTexture(created[0])
