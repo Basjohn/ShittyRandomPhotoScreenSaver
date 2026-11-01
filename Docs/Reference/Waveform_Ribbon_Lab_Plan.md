@@ -97,6 +97,19 @@ from parity. §0B is the current visual audit, not an acceptance report.
       intruding tips are cut there.
     - Remaining: the light is slightly dimmer than at `12d5d2f3`, and the coarse light cells faintly stair-step the
       cloud bodies.
+  - **Projected clearance, floor and end mist (`wr07_mist_projected`):**
+    - The envelope is projected along the admitted base view (world-fixed, `VIEW_SLOPE`). The mist edge now follows
+      the waveform's visible outline whichever sheet's depth defines it; the dark strip from front-sheet/back-mist
+      parallax is gone.
+    - The clearance is 0.3/0.25. The notch wall directly behind the sheets is dark grey haze (ambient, barely lit),
+      not black.
+    - Floor mist: low billowed banks that reach forward at the sides, lit from above by the sheets' lower colour.
+    - End mist comes forward where the sheets fade (head and tail), so they blend into it in wide 3D views.
+  - **Self-review of this pass:**
+    - The corner banks are small and dim in the mock framing, and read as puffs in wide views; the mock's fill the
+      lower corners up to the sheets.
+    - A lavender floor-mist band runs across the middle at the contact line, which the mock keeps darker.
+    - The edge colour is still blue-violet; the floor reflection is busy.
   - **Still far from the mock:**
     - The lit edge is soft and dim, not the mock's bright fibrous crackle.
     - The colour is a blue-violet blend rather than cyan left and magenta right.

@@ -105,7 +105,7 @@ def test_mist_band_contains_every_visible_sheet_and_closes_where_none_is(state):
         count, start, capacity = int(path[0, 0]), int(path[1, 1]), int(path[1, 2])
         knots = path[4:].reshape(-1, 4, 4)[(start + np.arange(count)) % capacity]
         x = knots[:, 0, 0] + packet.world_origin[0] + translation[0]
-        y = knots[:, 0, 1] + packet.world_origin[1]
+        y = knots[:, 0, 1] + packet.world_origin[1] - lab_module.VIEW_SLOPE*(knots[:, 0, 2] + packet.world_origin[2])
         half = fog.envelope_width*knots[:, 0, 3]
         visible = (np.abs(x) < 6.) & (knots[:, 1, 2] > .5)
         band_low, band_high = np.interp(x[visible], xs, lower), np.interp(x[visible], xs, upper)
