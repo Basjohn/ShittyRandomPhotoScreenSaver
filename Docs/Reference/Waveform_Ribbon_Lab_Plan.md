@@ -40,7 +40,8 @@ implementer's call without further confirmation; the operator judges much later.
 return to waveform fidelity, followed by real volumetric mist. The floor, waveform and complete scene remain far
 from parity. §0B is the current visual audit, not an acceptance report.
 
-**Baseline (operator, 1 November: "you're getting close"):** git tag `waveform-baseline-2026-11-01` (`f4825432`),
+**Baseline (operator, 1 November: "best so far"):** git tag `waveform-baseline-2026-11-01b` (`ed6003c4`, evidence
+`wr07_mist_3d_tube/`). Earlier baseline: `waveform-baseline-2026-11-01` (`f4825432`),
 evidence `wr07_floor_columns/`. Compare every later candidate against it and revert to it if a pass makes things
 worse. The operator named the floor of this baseline and of the `wr07_colour_grade` capture the best floors so far.
 
@@ -75,6 +76,16 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
   - low: 0.114 / 0.269 vs 0.079 / 0.22 (baseline 0.033);
   - high: 0.208 / 0.569 vs 0.307 / 0.538.
   The loud floor's median is high; the quiet floor is still somewhat dark.
+- [~] **Continuous lit edge (`wr07_mist_continuous`, after baseline `waveform-baseline-2026-11-01b`):**
+  - **Cause of the break:** the operator saw the lit fringe break between the blue and purple stretches. It was a
+    large billow that lifted the mist face far above the waveform there, out of the rim light's reach. With billows
+    off, the edge was unbroken.
+  - **Fix:**
+    - billow lift 2.6 -> 1.8 and rim fall per unit of lift 2.2 -> 1.5, so the edge runs blue -> purple -> pink
+      without a gap and keeps its fragmenting character;
+    - fringe brightness evened along x (`edge_evening`), so a dimmer topmost sheet does not dim a stretch.
+  - **Rejected:** a slow fall-off alone (0.6-1.1). It lit every lifted lobe into a wash.
+  - **Checked:** avoidance in the turned view still holds.
 - [~] **True 3D clearance (`wr07_mist_3d_tube`; operator: "is it truly 3D? It needs to truly avoid the waveform"):**
   - **Before:** the envelope was a 2D band projected along the default view. From turned angles the mist passed
     behind and through sheets that the projection missed.
