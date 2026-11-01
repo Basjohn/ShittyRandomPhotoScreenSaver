@@ -92,6 +92,11 @@ The scene remains far from the target and the waveform/floor/volume work above r
 footprints exposed by the visual audit. The production-fragment regression and before/after GPU draw measurement
 are scoped to that correction; they do not close motion or whole-scene performance acceptance.
 
+**Operator checkpoint, 1 November — `0ca9fd27`:** "the best the waveforms have looked so far" and "definitely the
+correct direction", with more work explicitly required. Preserve this exact recipe/source and the
+`wr04_round_glints/` captures as the preferred comparison baseline for further passes. This endorses the direction
+of the waveform, not full mock parity, the floor, fog, motion or production readiness.
+
 Generated material custody and prompts: `assets/textures/waveform_floor/Source.md`. The albedo is sampled in sRGB;
 the roughness map is linear data. Two differently oriented/scaled world-space samples suppress the old tile pattern,
 with a restrained grain-derived micro-normal and smoother wet-film patches. Native pose evidence:
