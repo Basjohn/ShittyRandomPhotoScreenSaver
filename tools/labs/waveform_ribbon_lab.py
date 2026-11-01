@@ -110,7 +110,10 @@ class Floor:
 class Flow:  # Lab Plan section 4A: history enters at the head (world +x) and drifts toward the tail
     speed: float = 1.6
     head_hz: float = .33
-    phase: float = 3.45            # explicit synthetic start phase, not a second clock
+    phase: float = 4.2             # explicit synthetic start phase, not a second clock
+    phase_swell: float = .35       # broad smooth compression/expansion of neighbouring folds
+    amplitude_swell: float = .3
+    depth_sway: float = 1.
     knot_hz: float = 6.
     shape_tau: float = .45          # per smoothing stage of history-carried shape controls
     head_x: float = 34.
@@ -125,9 +128,9 @@ PALETTE = (((0., .52, 1.), (0., .22, 1.)),    # cyan -> electric blue
 # regular lattice and sum to white; the mock's sheets differ and cross irregularly.
 CHARACTER = ((1., 1., 1., 0., 1.), (.85, 1.1, .96, 1.1, 1.5), (.72, .75, 1.07, .55, .65))
 STATES = {  # labelled synthetic controls, authored toward the complete-scene fog board; not music
-    'low': dict(width=.30, width_swell=.05, twist=.85, emission=.7, spread=.32, amplitude=.5, lift=-.35, sparkle=.18,
+    'low': dict(width=.40, width_swell=.08, twist=.85, emission=.7, spread=.32, amplitude=.5, lift=-.35, sparkle=.18,
                 deformation=.15),
-    'high': dict(width=.62, width_swell=.22, twist=1.45, emission=.85, spread=1.25, amplitude=1.2, lift=.2, sparkle=.85,
+    'high': dict(width=.78, width_swell=.28, twist=1.85, emission=.85, spread=1.25, amplitude=1.2, lift=.2, sparkle=.85,
                  deformation=.3),
 }
 
@@ -139,10 +142,10 @@ class Recipe:
     flow: Flow = field(default_factory=Flow)
     # Mock-directed look (WR-04): saturated darker body, thin near-white irregular strands and rims, visible glints.
     material: RibbonMaterial = field(default_factory=lambda: RibbonMaterial(
-        strands=26., strand_half_width=.018, strand_light=4., strand_white=.04, strand_jitter=.35, strand_warp=.18,
+        strands=40., strand_half_width=.018, strand_light=3.2, strand_white=.04, strand_jitter=.35, strand_warp=.18,
         strand_variation=.9, cross_curve=.35, warp_frequency=.2, rim_light=3.5, rim_white=.08, rim_half_width=.009,
-        fill_light=.08, fill_centre=.3, rim_glow_light=.3,
-        rim_glow_width=.025, body_alpha=.025, body_tint=.4, glint_density=1.4, glint_chance=.12, glint_light=3.,
+        fill_light=.20, fill_centre=.3, rim_glow_light=.5,
+        rim_glow_width=.04, body_alpha=.025, body_tint=.4, glint_density=1.4, glint_chance=.12, glint_light=3.,
         glint_radius=.25, glint_min_pixels=.8))
     sparks: RibbonSparks = field(default_factory=lambda: RibbonSparks(per_knot=16, lifetime=4.5, drift=1.2, rise=.4,
                                                                        smallest=1.6, largest=5., light=16., white=.25))
@@ -277,13 +280,15 @@ def fill_ring(recipe: Recipe, state: str, knots: int = 256, *, at: float | None 
             k = r - (count - 1)/2  # a fixed fan in height and depth, identical in low/high
             amplitude, width, frequency, offset, brightness = CHARACTER[r]
             phase = 2*math.pi*flow.head_hz*frequency*t + offset + flow.phase
+            phase += flow.phase_swell*math.sin(.31*phase+r*.6)
+            envelope = 1. + flow.amplitude_swell*math.sin(.23*phase+.4)
             section = 1. if math.sin(2*math.pi*.3*t + r*2.) > .2 else 0.
             stages[r][0] += (section - stages[r][0])*alpha
             stages[r][1] += (stages[r][0] - stages[r][1])*alpha
             swell = stages[r][1]
             deformation = s['deformation']*(.24*math.sin(2*phase+.7)+.18*math.sin(.61*phase+offset))
-            positions.append((flow.speed*t, pivot_y + s['lift'] + s['amplitude']*amplitude*(math.sin(phase)+deformation)
-                              + .5*k*s['spread']*math.cos(.37*phase), .65*k + .55*math.cos(phase*.55+r)))
+            positions.append((flow.speed*t, pivot_y + s['lift'] + s['amplitude']*amplitude*envelope*(math.sin(phase)+deformation)
+                              + .5*k*s['spread']*math.cos(.37*phase), .65*k + flow.depth_sway*math.cos(phase*.55+r)))
             widths.append(width*(s['width'] + s['width_swell']*swell)*(1.0 + .2*math.sin(phase)))
             twists.append(s['twist']*(.7*math.sin(.48*phase+r*1.3)+.3*math.sin(.87*phase+.4)))
             light.append(brightness*s['emission']*(.85 + .3*swell))
