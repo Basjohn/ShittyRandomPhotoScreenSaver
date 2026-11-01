@@ -9,7 +9,8 @@ from core.ribbon_frames import MAX_SUBDIVISIONS, strip_path
 from core.ribbon_geometry import MAX_PATH_SAMPLES
 
 MAX_RIBBONS = 8
-KNOT_BYTES = 64
+KNOT_ROWS = 5  # p, q, tangent, side, tint (vec4 each)
+KNOT_BYTES = KNOT_ROWS*16
 METADATA_BYTES = 64
 RIBBON_BYTES = METADATA_BYTES + MAX_PATH_SAMPLES*KNOT_BYTES
 MAX_PACKET_BYTES = MAX_RIBBONS*RIBBON_BYTES
@@ -64,7 +65,7 @@ def pack_ribbons(paths, *, subdivisions=8, period=1., colour=(.1, .7, .9, 1.)):
         local32 = local.astype(np.float32)
         if np.any(np.diff(local32) <= 0):
             raise ValueError('GPU local coordinates lose ordering; rebase/resample')
-        data = np.zeros((4+MAX_PATH_SAMPLES*4, 4), dtype=np.float32)
+        data = np.zeros((4+MAX_PATH_SAMPLES*KNOT_ROWS, 4), dtype=np.float32)
         phase = (origin % period)/period
         if local[-1]/period > 4096 or not np.finfo(np.float32).tiny <= period <= np.finfo(np.float32).max:
             raise ValueError('GPU strand period exceeds supported phase precision')
@@ -76,7 +77,7 @@ def pack_ribbons(paths, *, subdivisions=8, period=1., colour=(.1, .7, .9, 1.)):
         data[3] = colour
         for i, (sample, station) in enumerate(zip(samples, stations)):
             value = sample.admitted()
-            at = 4+i*4
+            at = 4+i*KNOT_ROWS  # tint row stays zero: the header colours
             local_position = np.asarray(value.position)-world_origin
             if np.max(np.abs(local_position)) > 1024:
                 raise ValueError('GPU packet spatial span exceeds local precision domain')

@@ -17,8 +17,23 @@ from core.ribbon_geometry import MAX_PATH_SAMPLES
 from rendering.gl_programs.mist import MIST_GLSL
 from rendering.quick.scene3d.target import SCENE_OIT_GLSL
 
+RIBBON_GRADE_GLSL = """
+// World colour grade (a preset look): left/mid/right colours across a world-x range and the share they take of the
+// ribbon's own colour. Share 0 leaves every ribbon its own colours.
+uniform vec4 uGradeLeft;   // rgb, world x of the left stop
+uniform vec4 uGradeMid;    // rgb, share
+uniform vec4 uGradeRight;  // rgb, world x of the right stop
+vec3 graded(vec3 colour, float worldX) {
+    if(uGradeMid.w<=0.0) return colour;
+    float t=clamp((worldX-uGradeLeft.w)/max(uGradeRight.w-uGradeLeft.w,1e-3),0.0,1.0);
+    vec3 grade=t<0.5?mix(uGradeLeft.rgb,uGradeMid.rgb,smoothstep(0.0,0.5,t))
+                    :mix(uGradeMid.rgb,uGradeRight.rgb,smoothstep(0.5,1.0,t));
+    return mix(colour,grade,clamp(uGradeMid.w,0.0,1.0));
+}
+"""
+
 _RIBBON_SURFACE_GLSL = """
-struct Knot { vec4 p; vec4 q; vec4 tangent; vec4 side; };
+struct Knot { vec4 p; vec4 q; vec4 tangent; vec4 side; vec4 tint; };  // tint: colour and its share
 uniform vec2 uSurface;     // camber in half-widths; transverse subdivision count
 uniform vec3 uSweepAxis;   // zero: transported width; otherwise fixed cross-section plane
 vec3 curve(vec3 a, vec3 b, vec3 c, vec3 d, float u) {
@@ -122,6 +137,7 @@ out float vExpanded;
 out float vFaceScale;
 flat out vec4 vColour;
 flat out vec4 vColourB;
+out vec4 vTint;
 // Chronological knot i lives in ring slot (start+i)%capacity; a stateless packet has start 0.
 int ringStart, ringCapacity;
 Knot knotAt(int owner, int i) { return paths[owner].knots[(ringStart+i)%ringCapacity]; }
@@ -136,7 +152,7 @@ void main() {
     int acrossStrip=(gl_VertexID/6)%crossDiv;
     int segment=interval/divisions;
     gl_Position=vec4(2,2,2,1); vWorld=vec3(0); vNormal=vec3(0,0,1); vPhase=0; vAcross=0; vEmission=0;
-    vColour=vec4(0); vColourB=vec4(0);
+    vColour=vec4(0); vColourB=vec4(0); vTint=vec4(0);
     if(segment>=count-1) return;
     Knot left=knotAt(owner,segment), right=knotAt(owner,segment+1);
     // q.w marks a knot that starts a new strip (ring break/reseed): nothing joins into it.
@@ -185,6 +201,7 @@ void main() {
     vPhase=paths[owner].meta.z+mix(left.q.x,right.q.x,u)/paths[owner].meta.w;
     vColour=paths[owner].colourA;
     vColourB=paths[owner].colourB;
+    vTint=mix(left.tint,right.tint,u);
     gl_Position=uMvp*vec4(vWorld,1);
     vCoverage=1.0; vExpanded=0.0; vFaceScale=1.0;
     // An edge-on sheet projects narrower than a pixel and MSAA catches it in dashes. Keep at least uRim.w pixels
@@ -282,7 +299,8 @@ void main() {
     float twinkle=0.55+0.45*sin(6.2831853*(uSparkLook.w*age+r2));
     vBright=uSparkLook.z*fade*twinkle*(0.35+0.65*r5)*mix(k.side.w,n.side.w,r3);
     gl_PointSize=mix(uSparkLook.x,uSparkLook.y,r6*r6);
-    vColour=mix(paths[owner].colourA.rgb,paths[owner].colourB.rgb,r2);
+    vec4 tint=mix(k.tint,n.tint,r3);
+    vColour=mix(mix(paths[owner].colourA.rgb,paths[owner].colourB.rgb,r2),tint.rgb,clamp(tint.a,0.0,1.0));
     vWorld=position;
     gl_Position=uMvp*vec4(position,1.0);
 }
@@ -290,13 +308,14 @@ void main() {
 
 RIBBON_SPARK_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\n"
                          "in vec3 vWorld;\nin float vBright;\nflat in vec3 vColour;\nuniform vec3 uMistOrigin;\n"
-                         "uniform float uSparkWhite;\n" + MIST_GLSL + """
+                         "uniform float uSparkWhite;\n" + MIST_GLSL + RIBBON_GRADE_GLSL + """
 void main() {
     vec2 c=gl_PointCoord*2.0-1.0;
     float d2=dot(c,c);
     if(d2>1.0) discard;
     float core=exp(-d2*4.0)*(1.0-d2);
-    vec3 light=mix(vColour,vec3(1.0),uSparkWhite)*core*vBright*mistTransmittance(vWorld+uMistOrigin);
+    vec3 light=mix(graded(vColour,vWorld.x+uMistOrigin.x),vec3(1.0),uSparkWhite)*core*vBright
+               *mistTransmittance(vWorld+uMistOrigin);
     FragColor=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722))*(vWorld.y+uMistOrigin.y));  // as the light pass
     Emission=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722)));
 }
@@ -343,6 +362,7 @@ in float vExpanded;
 in float vFaceScale;
 flat in vec4 vColour;
 flat in vec4 vColourB;
+in vec4 vTint;
 uniform vec4 uViewZ;        // local -> view-space z (row 2 of the rebased view matrix)
 uniform vec3 uEye;          // local eye (Perspective)
 uniform vec3 uForward;      // view direction (Orthographic; directions are unchanged by rebasing)
@@ -355,6 +375,19 @@ uniform vec4 uGlint;        // glints per strand per phase unit, chance, light, 
 uniform vec4 uTone;         // strand whiteness, rim whiteness, strand spacing jitter, glint minimum radius (px)
 uniform vec4 uAge;          // local now, fade-in, maximum age, fade-out (seconds); fades off when both are zero
 uniform vec3 uMistOrigin;   // packet-local -> mist world translation (packet origin plus the caller's frame)
+// World colour grade (a preset look): left/mid/right colours across a world-x range and the share they take of the
+// ribbon's own colour. Share 0 leaves every ribbon its own colours.
+uniform vec4 uGradeLeft;   // rgb, world x of the left stop
+uniform vec4 uGradeMid;    // rgb, share
+uniform vec4 uGradeRight;  // rgb, world x of the right stop
+vec3 graded(vec3 colour, float worldX) {
+    if(uGradeMid.w<=0.0) return colour;
+    float t=clamp((worldX-uGradeLeft.w)/max(uGradeRight.w-uGradeLeft.w,1e-3),0.0,1.0);
+    vec3 grade=t<0.5?mix(uGradeLeft.rgb,uGradeMid.rgb,smoothstep(0.0,0.5,t))
+                    :mix(uGradeMid.rgb,uGradeRight.rgb,smoothstep(0.5,1.0,t));
+    return mix(colour,grade,clamp(uGradeMid.w,0.0,1.0));
+}
+
 """ + MIST_GLSL + RIBBON_STRAND_COORDINATE_GLSL + """
 
 // Integral of the periodic pulse, then exact box filtering over the pixel footprint. The old single-line
@@ -393,7 +426,10 @@ float ageFade() {
     float fadeOut=uAge.w>0.0?1.0-smoothstep(uAge.z-uAge.w,uAge.z,age):1.0;
     return fadeIn*fadeOut;
 }
-vec3 ribbonColour() { return mix(vColour.rgb,vColourB.rgb,acrossClamped()); }
+vec3 ribbonColour() {
+    vec3 own=mix(mix(vColour.rgb,vColourB.rgb,acrossClamped()),vTint.rgb,clamp(vTint.a,0.0,1.0));
+    return graded(own,vWorld.x+uMistOrigin.x);
+}
 """
 
 RIBBON_BODY_FRAGMENT = ("#version 460 core\n" + SCENE_OIT_GLSL + "layout(location=2) out vec4 Emission;\n"

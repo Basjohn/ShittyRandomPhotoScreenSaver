@@ -281,13 +281,14 @@ def test_native_wrapped_ring_renders_like_the_stateless_oracle(qt_app):
 
 def test_native_strip_start_flag_cuts_the_joining_interval(qt_app):
     from core.ribbon_packet import RibbonPacket
+    from core.ribbon_packet import KNOT_ROWS
     from core.ribbon_ring import HEADER_ROWS, RibbonRing
     ring = RibbonRing(1, capacity=8)
     for i in range(6):
         ring.append(i, [(i*.5 - 1.25, 0., -10.)], .2)
     packet = ring.packet()
     data = np.frombuffer(packet.payload, np.float32).copy().reshape(-1, 4)
-    data[HEADER_ROWS + 4*3 + 1, 3] = 1  # knot 3 starts a new strip
+    data[HEADER_ROWS + KNOT_ROWS*3 + 1, 3] = 1  # knot 3 starts a new strip
     cut = RibbonPacket(data.tobytes(), packet.instances, packet.vertices, packet.world_origin)
     target = OffscreenRenderTarget(160, 120)
     primitive = RibbonPrimitive()

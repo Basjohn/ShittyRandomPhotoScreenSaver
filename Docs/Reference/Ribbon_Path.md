@@ -104,9 +104,16 @@ No runtime mode imports this prototype; EB and all existing modes receive no wor
 
 - At most 8 admitted paths, 256 knots/path and 1–8 subdivisions/interval. Bounds apply before GL admission;
   at most 12240 vertices/instance and 97920/scene. Empty/non-drawable input allocates/uploads/draws nothing.
-- Each path has 64 bytes metadata plus 256*64 bytes knot storage, even when fewer knots are live. Maximum
-  packet 131584 bytes. std430 knot = position.xyz/half-width; local-coordinate/local-twist/valid/reserved;
-  tangent.xyz/reserved; untwisted base-side.xyz/reserved. Metadata holds count/subdivision/origin phase/period,
+- Each path has 64 bytes metadata plus 256*80 bytes knot storage (`KNOT_ROWS` = 5), even when fewer knots are
+  live. Maximum packet 164352 bytes.
+  - std430 knot rows: position.xyz/half-width; local-coordinate/local-twist/valid/strip-start;
+    tangent.xyz/sparkle; untwisted base-side.xyz/emission; tint rgb/share.
+  - The tint is a history-carried colour: `RibbonRing.append(..., tint=)` sets it per knot, and its share replaces
+    the header colours. Colour then flows and mutates along the history like shape does. Share 0 (the stateless
+    oracle, the default) keeps the header colours.
+  - A world colour grade (`ribbon_grade`: three stops across a world-x range and a share) is a separate preset look
+    applied by the light pass and sparks.
+  - Earlier: 64-byte knots, 131584-byte packets. Metadata holds count/subdivision/origin phase/period,
   reduced origin twist, diagnostic colour and reserved colour storage. This is a diagnostic RGBA material,
   not the Ribbon scene's final shading or palette.
 - Positions upload relative to the first active knot's float64 packet origin. The owner composes the supplied
