@@ -102,11 +102,11 @@ class Fog:
     clearance: tuple = (.3, .25)    # push of the whole field from the envelope; the mist never enters within
     ends: float = 6.                # the mist comes this far forward where the sheets fade (world units)
     floor: tuple = (0., 5.5, 2.5)   # floor bank height, forward reach at the sides, |x| where the sides begin
-    interior: tuple = (.25, .22, 2.2)   # unlit body lumps: floor, frequency; rim fall per unit of billow push
+    interior: tuple = (.25, .22, 1.5)   # unlit body lumps: floor, frequency; rim fall per unit of billow push
     floor_light: tuple = (0., 2., .08)  # floor mist light share, its reach from the sheets; wall-behind light
     softness: float = 1.5           # depth over which coarse coverage rises: the detail march erodes within it
     noise_scale: float = .35        # lobe frequency of the band's edge (per world unit)
-    noise: float = 2.6              # lobe displacement of the edge (world units)
+    noise: float = 1.8              # lobe displacement of the edge (world units)
     start_z: float = -1.7           # the mist begins behind this world z (just behind the sheets)
     band_depth: float = 1.          # the clear band reaches this far behind start_z; the far wall closes it
     sheets_z: tuple = (-1.7, 1.7)   # depth range of the sheets, for the rim light's distance
@@ -117,6 +117,7 @@ class Fog:
     haze: float = 0.                # faint haze in the clear band behind the sheets (never eroded)
     envelope_range: tuple = (-40., 40., 640)  # world x span and samples of the envelope reduction
     envelope_smoothing: float = .25 # Gaussian along x (world units)
+    edge_evening: float = 4.        # world-x width over which the fringe's brightness is evened
     envelope_width: float = .5      # share of a sheet's half-width counted as its vertical extent (twisted sheets)
     depth_range: tuple = (3., 90.)
     cell: int = 16                  # viewport pixels per coarse cell (light and coverage only)
@@ -603,6 +604,13 @@ def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None) -> np
     upper, lower = blur(upper, fog.envelope_smoothing), blur(lower, fog.envelope_smoothing)
     upper_colour = np.stack([blur(c, 4*fog.envelope_smoothing) for c in upper_colour.T], 1)
     lower_colour = np.stack([blur(c, 4*fog.envelope_smoothing) for c in lower_colour.T], 1)
+    # The fringe's brightness follows a broad average, not whichever sheet happens to be outermost: a dimmer
+    # topmost sheet otherwise dimmed a stretch of the lit edge into a visible break in the bank.
+    luma = np.array((.2126, .7152, .0722))
+    for c in (upper_colour, lower_colour):
+        level = c @ luma
+        even = blur(level, fog.edge_evening)
+        c *= (even/np.maximum(level, 1e-4))[:, None]
     table = np.zeros((3 + ENVELOPE_RIBBONS, xs.size, 4), np.float32)
     table[0, :, 0], table[0, :, 1], table[0, :, 2] = lower, upper, presence
     table[1, :, :3], table[2, :, :3] = upper_colour, lower_colour
