@@ -150,7 +150,8 @@ boards describe looks the eventual live presets should support. The new complete
 
 - [~] **WR-04 waveform now:** smooth cloth-like folds and edges at every admitted shape, fine fanning/gathering
   filaments and readable quiet detail. No sharp/spiky bends. Judge both mocks and all navigation poses; parity is open.
-  The outer sheet edges must be brighter and glow more than the interior strands even in quiet states.
+  Both boundary rims now have independent filament light; validate their balance through folds and motion.
+  Biggest gaps: wire-like interiors, regular fold rhythm and insufficient depth separation.
 - [~] **Floor optics, Awaiting Validation:** generated albedo/roughness maps are placed in the native scene;
   compare wet reflection detail, dark gaps and distance falloff against the main mock. Keep temporary mist for composition.
 - [ ] **Volumetric mist third (S3D-7 bounded slice):** static field from the actual ribbon shape, reduced-resolution

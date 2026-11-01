@@ -418,12 +418,15 @@ void main() {
     strength=mix(strength,mix(0.775,0.78,uBody.z),smoothstep(0.65,1.2,w));
     float strands=strandCoverage(x,uStrands.y,w)*strength;
     float wa=max(fwidth(across),1e-5);
-    float rims=rimCoverage(across,uRim.x,wa)+rimCoverage(1.0-across,uRim.x,wa);
+    // The boundaries are luminous filaments, not a slab of emissive sheet. Give both a resolved core even in
+    // quiet/narrow sheets. Their brightness must not depend on the two edges' different surface normals.
+    float rimWidth=max(uRim.x,min(.5,1.2*wa));
+    float rims=rimCoverage(across,rimWidth,wa)+rimCoverage(1.0-across,rimWidth,wa);
     // The sheet itself glows (both references): a fill brightening toward the edges, a wide rim glow beside
     // the crisp rim line, then strands and their glints on top.
     float edge=min(across,1.0-across);
     float fill=uFill.x*mix(uFill.y,1.0,pow(1.0-2.0*edge,2.0));
-    float rimGlow=uFill.w*exp(-edge/max(uFill.z,1e-4));
+    float rimGlow=uFill.w*exp(-edge/max(uFill.z,min(.5,2.0*wa)));
     float glints=0.0;
     if(uGlint.x>0.0 && uGlint.z>0.0) {
         // Sparse bright points riding strands, fixed to the absolute path phase: they travel with the history.
@@ -441,11 +444,11 @@ void main() {
     }
     // The body glows in its saturated colour; strands and rims carry the near-white light (the mock's look).
     vec3 colour=ribbonColour();
-    vec3 light=colour*(fill+rimGlow)+mix(colour,vec3(1.0),uTone.x)*strands*uStrands.z
-              +mix(colour,vec3(1.0),uTone.y)*rims*uRim.y;
-    light=(light+mix(ribbonColour(),vec3(1.0),0.6)*glints*uGlint.z)*max(vEmission,0.0)*ageFade()
-         *mistTransmittance(vWorld+uMistOrigin)
-         *pathLength()*clamp(vCoverage,0.0,1.0);
+    vec3 sheet=colour*fill+mix(colour,vec3(1.0),uTone.x)*strands*uStrands.z
+               +mix(colour,vec3(1.0),0.6)*glints*uGlint.z;
+    vec3 boundary=colour*rimGlow+mix(colour,vec3(1.0),uTone.y)*rims*uRim.y;
+    vec3 light=(sheet*pathLength()*clamp(vCoverage,0.0,1.0)+boundary)*max(vEmission,0.0)*ageFade()
+                *mistTransmittance(vWorld+uMistOrigin);
     FragColor=vec4(light,0.0);
     Emission=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722)));
 }

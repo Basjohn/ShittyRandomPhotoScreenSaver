@@ -33,7 +33,9 @@ restored three distinct ribbon identities; it did not establish fidelity.
 - [ ] **Waveform structure and light:** richer smooth folds, depth separation, fine fanning/gathering filaments,
   readable quiet detail, coloured hot crossings. Every admitted shape must remain smooth like folding cloth, never
   sharp or spiky, including wide inner bends. Outer boundary lines must be brighter and glow more than the interior
-  strands even at low react, to describe the translucent 3D sheet. Current bands remain too regularly sinusoidal. Inspect all boards
+  strands even at low react, to describe the translucent 3D sheet. Both rims now have independent boundary emission;
+  the native low/high candidate resolves the reported imbalance, but interior light still reads too much like wires
+  and the folds are too regularly sinusoidal. Improve the continuous translucent body and irregular broad folds. Inspect all boards
   at native resolution and explicit motion times; do not hide shape faults with bloom.
 - [~] **Floor fidelity, Awaiting Validation:** generated maps are placed; inspect fine wet detail and dark gaps at
   every pose against the main mock. Reflections are still broader and softer than the target. Tune optical sharpness

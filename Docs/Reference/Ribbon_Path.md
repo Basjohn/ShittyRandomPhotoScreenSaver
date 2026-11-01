@@ -222,6 +222,13 @@ additive light gives, and the faint body keeps strands readable through each oth
 
 - Strands and rims are box-filtered over the pixel footprint (`fwidth` of the strand coordinate). They fade to
   their mean density once a strand spacing nears a pixel, so narrow or distant ribbons neither crawl nor alias.
+- Both boundary filaments have the same authored emission independent of the sheet's local grazing/path-length
+  gain. A bowed cross section gave the far/upper rim a different normal and left it visibly dimmer. Each rim has
+  a minimum resolved core (1.2 pixels inward) and a minimum glow width (2 pixels), still bounded by half the sheet.
+  Boundary light also bypasses the flat sheet's artificial-widening coverage factor: these line emitters remain
+  visible when the surface turns edge-on; only the sheet interior uses projected surface-area compensation.
+  Age, authored emission and mist attenuation apply to both boundaries. A native curved-sheet regression reproduces
+  the former unequal edge energy; this is a material correctness check, not visual acceptance of the lab look.
 - Strand spread/gather follows the absolute path phase, so it moves with history and never slides.
 - The vertex stage now carries smooth centre-line normals, the across-width coordinate and per-knot emission
   (`side.w`, admitted by `RibbonRing.append(..., emission=)`, 0..64; the stateless packer writes 1).
@@ -235,7 +242,8 @@ additive light gives, and the faint body keeps strands readable through each oth
   They fade with the strands once those are sub-pixel; before that they smeared into white dashes on thin sheets.
 - **Folds (edge-on sheets).** A thin emissive translucent sheet seen at an angle gets brighter and more opaque
   with its path length 1/|N.V|, while its projected width shrinks by the same factor, so its light per unit
-  length is conserved. The material applies exactly that (light times path; opacity 1-(1-a)^path). A fixed
+  length is conserved for the sheet interior (light times path; opacity 1-(1-a)^path). Boundary filaments are separate
+  line sources and do not receive this sheet gain. A fixed
   "grazing" boost (the operator's "odd bright blue fold") lit the whole near-edge-on stretch as one flat neon band.
   - Where the projected width drops below `min_pixels` (2 px), the vertex stage widens the sheet across the screen
     tangent and the fragment's gain becomes face-on width over drawn width. That equals the path length where
