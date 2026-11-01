@@ -100,6 +100,7 @@ class Fog:
     clearance: tuple = (.3, .25)    # push of the whole field from the envelope; the mist never enters within
     ends: float = 6.                # the mist comes this far forward where the sheets fade (world units)
     floor: tuple = (2., 5.5, 2.5)   # floor bank height, forward reach at the sides, |x| where the sides begin
+    interior: tuple = (.25, .22, 2.2)   # unlit body lumps: floor, frequency; rim fall per unit of billow push
     floor_light: tuple = (.08, 2., .08)  # floor mist light share, its reach from the sheets; wall-behind light
     softness: float = 1.5           # depth over which coarse coverage rises: the detail march erodes within it
     noise_scale: float = .35        # lobe frequency of the band's edge (per world unit)
@@ -166,6 +167,9 @@ class Floor:
     contact: tuple = (.002, 6., 6.)  # spread (uv) per unit of reflected height; along/across; probe mip
     resolution: float = .5          # reflection target scale
     blur: float = 0.               # horizontal Gaussian across each column (receiver pixels)
+    # Column fade toward the camera and its far level; a sparkle threshold above 0 adds wet-film grain (rejected:
+    # it read as the mottled wet/dry floor).
+    column: tuple = (6., .6, 0.)
     pool: tuple = (14., 1., 1.5, 1.5)  # waveform light on the concrete: gain, height, depth falloffs behind/front
     hot: tuple = (.5, .7, 1.5)       # reflected luminance at full strength; wet-film breakup share; suppression power
     mist_reflection: float = .35   # share of the mist the floor mirrors: the mock's floor mirrors the hot light
@@ -193,9 +197,9 @@ PALETTE = (((0., .52, 1.), (0., .22, 1.)),    # cyan -> electric blue
 # regular lattice and sum to white; the mock's sheets differ and cross irregularly.
 CHARACTER = ((1., 1., 1., 0., 1.), (.85, 1.1, .96, 1.1, 1.5), (.72, .75, 1.07, .55, .65))
 STATES = {  # labelled synthetic controls, authored toward the complete-scene fog board; not music
-    'low': dict(width=.40, width_swell=.08, twist=.85, emission=.7, spread=.32, amplitude=.5, lift=-.35, sparkle=.18,
+    'low': dict(react=0., width=.40, width_swell=.08, twist=.85, emission=.7, spread=.32, amplitude=.5, lift=-.35, sparkle=.18,
                 deformation=.15),
-    'high': dict(width=.78, width_swell=.28, twist=1.85, emission=.85, spread=1.25, amplitude=1.2, lift=.2, sparkle=.85,
+    'high': dict(react=1., width=.78, width_swell=.28, twist=1.85, emission=.85, spread=1.25, amplitude=1.2, lift=.2, sparkle=.85,
                  deformation=.3),
 }
 
@@ -219,7 +223,14 @@ class Recipe:
     # taking this share of each ribbon's own colour so identities still read. History tint carries reactivity.
     # (left, mid, right, world x range, ribbon share, mist share): mixing a magenta sheet far toward cyan passes
     # through grey, so the sheets take a small share and keep their identities; the mist takes most of it.
-    grade: tuple = ((0., .85, 1.), (.25, .2, 1.), (1., .1, .85), (-6., 6.), .3, .75)
+    # Preset colour data: a low-reactivity and a high-reactivity colour pair (left, right across the view). The
+    # middle stop is derived by hue, so cyan -> magenta passes through blue, not lavender. Reactivity blends the
+    # pairs (the lab's synthetic states are react 0 and 1). Settings (WR-08) edits these as gradient nodes.
+    palette: dict = field(default_factory=lambda: dict(low=((0., .85, 1.), (1., .1, .85)),
+                                                       high=((0., .85, 1.), (1., .1, .85))))
+    # World x range of the pair, the sheets' share (small: identities hold), the mist's share.
+    grade_range: tuple = (-6., 6.)
+    grade_share: tuple = (.3, .75)
     bloom: float = .18
     exposure: float = 1.
 
@@ -249,6 +260,7 @@ uniform sampler2D uEnvelope;  // the waveform's envelope table (lower/upper, col
 uniform vec2 uEnvelopeSpan;
 uniform vec4 uPool;         // gain, height falloff, depth falloff behind, depth falloff toward the camera
 uniform float uPoolZ;       // the sheets' depth (world z)
+uniform vec3 uColumn;       // fade length toward the camera, far sparkle strength, sparkle threshold
 uniform vec3 uEye;
 uniform vec3 uForward;
 uniform int uOrthographic;
@@ -289,6 +301,12 @@ void main() {
     reflected*=pow(clamp(hot/max(uHot.x,1e-4),0.0,1.0),uHot.z);
     float film=texture(uAlbedo,uv*2.3+vec2(.17,.61)).r/max(texture(uAlbedo,uv*2.3+vec2(.17,.61),6.0).r,1e-3);
     reflected*=mix(1.0,smoothstep(0.6,1.25,film),uHot.y);
+    // Column shaping: brightest at the contact under the sheets, fading toward the camera, where only the
+    // wet film's brighter grains still catch it (sparkle).
+    float toward=max(vWorldPos.z-uPoolZ,0.0);
+    float near=exp(-toward/max(uColumn.x,1e-3));
+    float grain=smoothstep(uColumn.z,1.0,film);
+    reflected*=mix(grain*uColumn.y,1.0,near);
     vec3 specular=reflected*fresnel*uFloor.z;
     vec3 field=uFogLit==1?texture(uFogLight,clamp(fogCoordinate(vWorldPos+vec3(0,0.05,0))/vec3(1,1,uFogRange.z),
                                                    vec3(0.0),vec3(1.0))).rgb:vec3(0.0);
@@ -329,6 +347,7 @@ uniform vec2 uFogClearance;   // push of the whole field from the envelope; dist
 uniform float uFogSlope;      // admitted base view rise per unit z
 uniform float uFogEnds;       // how far the mist comes forward where the sheets fade (world units)
 uniform vec3 uFogFloor;       // floor bank height, forward reach at the sides, |x| where the sides begin
+uniform vec3 uFogInterior;   // lump floor (0..1), lump frequency, rim fall per unit of push
 uniform vec3 uFogFloorLight;  // floor mist light share, its reach from the sheets, light of the wall behind them
 float fogHash(vec3 p) { p=fract(p*0.3183099+0.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
 float fogNoise(vec3 x) {
@@ -412,7 +431,9 @@ void fogMedium(vec3 world, out vec3 radiance, out float extinction, out float st
              :mix(lowerColour,upperColour,clamp(-below/max(band.y-band.x,1e-3),0.0,1.0));
     float dy=max(max(above,below),0.0);
     float dz=max(max(uFogRim.y-world.z,world.z-uFogRim.z),0.0);
-    float rim=exp(-length(vec2(dy,dz))/uFogRim.x)*exp(-max(inside,0.0)*uFogShape.w);
+    // The face glows wherever the billows pushed it (a gentle fall with the push, uFogInterior.z), and fades into
+    // the mist from that face. Falling off by distance from the envelope left pushed stretches dark: a broken edge.
+    float rim=exp(-dz/uFogRim.x)*exp(-max(dy-uFogForm.y,0.0)*uFogInterior.z)*exp(-max(inside,0.0)*uFogShape.w);
     // The wall directly behind the sheets (inside their outline) is distant haze: dark grey, barely lit.
     if(above<0.0 && below<0.0) rim*=uFogFloorLight.z;
     // Floor mist is lit from above by the sheets' lower edge colour, with a longer reach than the rims.
@@ -421,7 +442,10 @@ void fogMedium(vec3 world, out vec3 radiance, out float extinction, out float st
     float sides=smoothstep(uFogFloor.z,uFogFloor.z+3.0,abs(world.x));  // the mock's lit corner banks
     float floorLit=low*mix(0.15,1.0,sides)*smoothstep(0.0,0.3,below)*uFogFloorLight.x*exp(-below/uFogFloorLight.y)
                    *exp(-max(inside,0.0)*uFogShape.w*0.5);
-    radiance=uFogLook.rgb+edge*uFogLook.w*rim+lowerColour*uFogLook.w*floorLit;
+    // Interior volume: large dim lumps in the unlit body, so the mass away from its edges is not one flat grey.
+    float lumps=mix(1.0,uFogInterior.x+(2.0-2.0*uFogInterior.x)*fogBillow(world*uFogInterior.y+vec3(7.7,3.1,1.9)),
+                    smoothstep(0.0,1.5,inside));
+    radiance=uFogLook.rgb*lumps+edge*uFogLook.w*rim+lowerColour*uFogLook.w*floorLit;
 }
 """
 
@@ -533,6 +557,22 @@ def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None) -> np
     table[0, :, 0], table[0, :, 1], table[0, :, 2] = lower, upper, presence
     table[1, :, :3], table[2, :, :3] = upper_colour, lower_colour
     return table
+
+
+def colour_grade(recipe, react: float) -> tuple:
+    """(left, mid, right, x range, sheet share, mist share) from the preset's low/high colour pairs at a reactivity.
+
+    The pairs blend linearly in RGB; the middle stop takes the hue halfway between the two ends (the short way
+    round), at their mean saturation and value, so complementary-ish pairs pass through a clean colour, not grey."""
+    import colorsys
+    react = min(max(float(react), 0.), 1.)
+    low, high = recipe.palette['low'], recipe.palette['high']
+    left, right = (tuple(a + (b - a)*react for a, b in zip(low[i], high[i])) for i in (0, 1))
+    (h0, s0, v0), (h1, s1, v1) = colorsys.rgb_to_hsv(*left), colorsys.rgb_to_hsv(*right)
+    if abs(h1 - h0) > .5:
+        h1 += -1. if h1 > h0 else 1.
+    mid = colorsys.hsv_to_rgb(((h0 + h1)/2) % 1., (s0 + s1)/2, (v0 + v1)/2)
+    return (left, mid, right, recipe.grade_range, *recipe.grade_share)
 
 
 def lens(pose: Pose, aspect: float) -> tuple[float, float, bool]:
@@ -683,13 +723,14 @@ class Lab:
                     sweep_axis=(1.,0.,0.),
                     age_fade=(now, flow.fade_in, (ring.capacity - 1)/flow.knot_hz, flow.fade_out),
                     mist=environment.mist, mist_frame=(scroll[0, 3], 0., 0.),
-                    grade=None if recipe.grade is None else ribbon_grade(*recipe.grade[:5]))
+                    grade=ribbon_grade(*colour_grade(recipe, STATES[state]['react'])[:5]))
         card = SimpleNamespace(viewport=(0, 0, width, height), logical_size=(float(width), float(height)),
                                matrix_values=(2/width, 0, 0, 0, 0, -2/height, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1),
                                quad_vao=self.target.vao)
         packet = ring.packet()
         envelope = None if flat or recipe.fog is None else waveform_envelope(packet, scroll[:3, 3], draw['age_fade'],
-                                                                              recipe.fog, recipe.grade)
+                                                                              recipe.fog,
+                                                                              colour_grade(recipe, STATES[state]['react']))
         self.target.bind(clear=(0., 0., 0., 0.))
         fogged = not flat and recipe.fog is not None
         if fogged:
@@ -742,6 +783,7 @@ class Lab:
         gl.glUniform1f(location('uFogEnds'), fog.ends)
         gl.glUniform3f(location('uFogFloor'), *fog.floor)
         gl.glUniform3f(location('uFogFloorLight'), *fog.floor_light)
+        gl.glUniform3f(location('uFogInterior'), *fog.interior)
         gl.glUniform4f(location('uFogLook'), *fog.ambient, fog.rim)
         gl.glUniform3f(location('uFogRim'), fog.reach, *fog.sheets_z)
         gl.glUniform1f(location('uFogHaze'), fog.haze)
@@ -828,7 +870,7 @@ class Lab:
         names = ('uMvp', 'uFlat', 'uAlbedo', 'uSlope', 'uFogLight', 'uFogLit', 'uReflection', 'uReflectionLook',
                  'uReflectionContact', 'uViewport', 'uBackdrop', 'uAmbient', 'uFloor', 'uFloorTone', 'uRipple', 'uEye',
                  'uForward', 'uOrthographic', 'uMist', 'uMistShape', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange',
-                 'uStreak', 'uHot', 'uEnvelope', 'uEnvelopeSpan', 'uPool', 'uPoolZ')
+                 'uStreak', 'uHot', 'uEnvelope', 'uEnvelopeSpan', 'uPool', 'uPoolZ', 'uColumn')
         u = self.resources.uniforms('floor', names, required=False)
         gl.glUseProgram(program)
         gl.glUniform1i(u['uFlat'], int(flat))
@@ -847,6 +889,7 @@ class Lab:
         envelope = self.textures.get('envelope') if lit else None
         gl.glUniform4f(u['uPool'], floor.pool[0] if envelope else 0., *floor.pool[1:])
         gl.glUniform1f(u['uPoolZ'], 0.)
+        gl.glUniform3f(u['uColumn'], *floor.column)
         if envelope:
             x0, x1, _ = self.recipe.fog.envelope_range
             gl.glBindTextureUnit(14, envelope)
