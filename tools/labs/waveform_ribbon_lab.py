@@ -171,7 +171,7 @@ class Floor:
     # it read as the mottled wet/dry floor).
     column: tuple = (6., .6, 0.)
     pool: tuple = (14., 1., 1.5, 1.5)  # waveform light on the concrete: gain, height, depth falloffs behind/front
-    hot: tuple = (.5, .7, 1.5)       # reflected luminance at full strength; wet-film breakup share; suppression power
+    hot: tuple = (3., .7, 1.5)       # full strength at this multiple of the mean reflected light; wet-film breakup; power
     mist_reflection: float = .35   # share of the mist the floor mirrors: the mock's floor mirrors the hot light
 
 
@@ -212,9 +212,9 @@ class Recipe:
     flow: Flow = field(default_factory=Flow)
     # Mock-directed look (WR-04): saturated darker body, thin near-white irregular strands and rims, visible glints.
     material: RibbonMaterial = field(default_factory=lambda: RibbonMaterial(
-        strands=40., strand_half_width=.018, strand_light=3.2, strand_white=.04, strand_jitter=.35, strand_warp=.18,
-        strand_variation=.9, cross_curve=.35, warp_frequency=.2, rim_light=3.5, rim_white=.08, rim_half_width=.009,
-        fill_light=.20, fill_centre=.3, rim_glow_light=.5,
+        strands=40., strand_half_width=.018, strand_light=1.5, strand_white=.04, strand_jitter=.35, strand_warp=.18,
+        strand_variation=.9, cross_curve=.35, warp_frequency=.2, rim_light=2.9, rim_white=.08, rim_half_width=.009,
+        fill_light=.12, fill_centre=.3, rim_glow_light=.35,
         rim_glow_width=.04, body_alpha=.025, body_tint=.4, glint_density=1.4, glint_chance=.12, glint_light=3.,
         glint_radius=.25, glint_min_pixels=.8))
     sparks: RibbonSparks = field(default_factory=lambda: RibbonSparks(per_knot=16, lifetime=4.5, drift=1.2, rise=.4,
@@ -231,7 +231,7 @@ class Recipe:
     # World x range of the pair, the sheets' share (small: identities hold), the mist's share.
     grade_range: tuple = (-6., 6.)
     grade_share: tuple = (.3, .75)
-    bloom: float = .18
+    bloom: float = .14
     exposure: float = 1.
 
 
@@ -297,8 +297,11 @@ void main() {
     float fresnel=uFloor.w+(1.0-uFloor.w)*pow(1.0-cosine,5.0);
     // A rough wet floor shows its hot light, not a dim copy of everything: reflected light below uHot.x falls
     // away quadratically, so columns stand over dark concrete. The wet film breaks them up gently (uHot.y).
+    // Relative to the scene's own reflected light (the reflection's coarsest mip): quiet and loud states both keep
+    // columns over dark concrete. A fixed threshold blacked out the quiet floor and washed the loud one.
     float hot=dot(reflected,vec3(0.2126,0.7152,0.0722));
-    reflected*=pow(clamp(hot/max(uHot.x,1e-4),0.0,1.0),uHot.z);
+    float scene=dot(textureLod(uReflection,vec2(0.5),20.0).rgb,vec3(0.2126,0.7152,0.0722));
+    reflected*=pow(clamp(hot/max(uHot.x*scene,1e-4),0.0,1.0),uHot.z);
     float film=texture(uAlbedo,uv*2.3+vec2(.17,.61)).r/max(texture(uAlbedo,uv*2.3+vec2(.17,.61),6.0).r,1e-3);
     reflected*=mix(1.0,smoothstep(0.6,1.25,film),uHot.y);
     // Column shaping: brightest at the contact under the sheets, fading toward the camera, where only the

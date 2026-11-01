@@ -69,6 +69,12 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
     - the sheets' own colours do not yet follow the recipe pair, so an alternate look keeps cyan/magenta sheets;
     - warm colours turn brown in dim mist;
     - prove the preset-range board's look as a second named recipe.
+- [~] **Low-state floor brightness:** the hot-light threshold is now relative to the scene's own mean reflected light
+  (the reflection's coarsest mip, at 3x). A fixed threshold blacked out the quiet floor and washed the loud one.
+  Floor luminance median / p90, mock vs ours (`wr07_sheet_tone`):
+  - low: 0.114 / 0.269 vs 0.079 / 0.22 (baseline 0.033);
+  - high: 0.208 / 0.569 vs 0.307 / 0.538.
+  The loud floor's median is high; the quiet floor is still somewhat dark.
 - [~] **Floor column shaping:** a mild fade toward the camera (`column`) puts the high state's brightness at the
   contact line. Wet-film sparkle grain was tried and rejected: it brought back the mottled floor. The fade darkens
   the already too-dark low-state floor further, so it stays mild. Earlier state: the columns ran the full floor
@@ -78,7 +84,10 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
   baseline's smooth wet character.
 - [ ] **Mist edge character:** soft and dim, where the mock shows a bright fibrous crackle. In wide views the
   corner banks read as separate cotton mounds; the mock's form a continuous bank.
-- [ ] **Waveform:** the sheets are paler and whiter than the mock's saturated ribbons (strand whiteness). Remaining
+- [~] **Waveform:** the sheets were too bright and washed toward white. Mock / ours, crest strands: luminance
+  0.195 / 0.32, saturation 0.84 / 0.67. Less strand, fill and bloom light, with rims kept brighter than strands,
+  brings this to 0.225 / 0.72; the quiet sheets go from 0.28 to 0.205 against the mock's 0.19 (`wr07_sheet_tone`).
+  Still paler than the mock's deep blue-violet body; the mock's brightness gathers at rims and crossings. Remaining
   structure work: fine-detail stability, depth and light, and reference shape fidelity. Every admitted shape stays
   smooth like folding cloth.
 - [ ] **Cost (RTX 4090, 820x718 medians):**
