@@ -9,13 +9,15 @@ operator-authored and never test oracles.
 **Operator direction (1 November):**
 - The migration is a **full Visualizer migration**: full controls, Settings and the preset/control systems, designed
   as a whole. Nothing is half-built ahead of it in the lab.
-- **Everything a 3D Framed mode like Extruded Bubble has**, with the projection **defaulting to Orthographic**.
+- **Everything a 3D Framed mode like Extruded Bubble has** (scaffolding, camera, presets, technical profile), with
+  the projection **defaulting to Orthographic**. Its reactivity and most of its controls are its own: a waveform
+  ribbon reacts very differently from EB's bubbles, and its visual editors are unique to it.
 - **Every look value is adjustable** in the builder through **user-friendly visual editors**, not raw numbers alone.
 - The **shape and reactivity tuner** is the most important new control. It is a tuner, not a free shape builder:
   it can never break the smooth-curve rules. Musical history stays the dominant force.
 - **Mist is core** to every preset (the design direction) and becomes optional in Settings.
 
-## 1. Mode shape (as Extruded Bubble)
+## 1. Mode shape (shared 3D Framed scaffolding)
 
 - Canonical descriptor and implementation wiring with the framed scene capability; lazy imports; only the active
   mode does per-frame work (Visualizer guardrails).
@@ -112,15 +114,21 @@ Each bucket lists its controls and the editor that shows them. "Existing" editor
 - Wetness/Reflection, Streak Length, Column Fade, Mist Reflection.
 - Floor contact (sheets deform onto the floor) is a rule, not a control.
 
-### Reaction (as EB)
-- Sensitivity, Smoothing, Idle Energy, and the shared audio controls EB uses (input gain, adaptive sensitivity, audio
-  block size) at their shared owners. No new normaliser or per-mode follower.
+### Reaction
+Waveform Ribbon's own controls, following the reactivity guide (`Docs/Guides/Visualizer_Reactivity_Authoring.md`);
+the shared audio controls (sensitivity, input gain, block size) stay at their shared technical owners.
+- **Passage Response:** how far quiet → loud passages move the tuner's ranges (the eased passage drive, §4.2).
+- **Beat Pulse:** how much a hit lifts height and light, and how gently it settles (rise about 45 ms, settle about
+  0.65 s as DevCurve).
+- **Accent Threshold:** how far an onset must stand out from the recent ones to throw sparks and strands.
+- **Idle Motion:** the head wave's own drift in silence (honest idle, no fake music).
+These sit beside the Shape Tuner, which says *what* each source moves; these say *how* the music arrives.
 
-### Camera (advanced, as EB)
+### Camera (advanced, shared framed camera)
 - Camera Position (Existing: `SceneCameraPosition`), Projection (Orthographic default, Perspective), FOV (Perspective
   only), Auto Rotate with After and Speed.
 
-### Lens (advanced, as EB)
+### Lens (advanced)
 - Exposure, Bloom; Focus and Aperture only once shared defocus exists for this mode.
 
 ### Technical profile
@@ -137,34 +145,63 @@ Each bucket lists its controls and the editor that shows them. "Existing" editor
 
 ## 4. Reactivity
 
-### 4.1 Practice (research, 1 November)
-Typical audio-reactive visualisers drive geometry, colour and light from bass/mid/treble band energy plus the
-time-domain waveform (e.g. a waveform rendered as a flowing 3D ribbon; bass scaling, mids rotating, snare hits
-bursting light). Smoothing uses envelope followers with separate attack and release, with fast attack and slower
-release as the usual starting point; values are tuned by ear. Sources:
-- [3D Audio Visualizer (teamzlab)](https://tool.teamzlab.com/3d/audio-visualizer/)
+Binding guide: `Docs/Guides/Visualizer_Reactivity_Authoring.md` (signal jobs §1-2, real-music scales §2A, loud
+passages §3, timescales §5, anti-patterns §11, new-mode workflow §12, passage ranges §13C). Waveform Ribbon is a
+flowing history, so it reacts unlike Extruded Bubble: music is *written into the ribbon at its head* and then
+travels across the hall, plus immediate light and accents that need no history.
+
+### 4.1 Waveform ribbon practice (research, 1 November)
+Waveform ribbon visualisers commonly render the signal or its band energies as a flowing 3D ribbon. Bass, mids and
+treble drive the geometry and colour, and hits drive bursts of light. Smoothing uses envelope followers with
+separate attack and release. Sources:
+- [3D Audio Visualizer, waveform as a flowing 3D ribbon (teamzlab)](https://tool.teamzlab.com/3d/audio-visualizer/)
 - [How to Make a 3D Music Visualizer (Violet Recording)](https://violetrecording.com/how-to-make-a-3d-music-visualizer/)
 - [Envelope detector (musicdsp)](https://www.musicdsp.org/en/latest/Analysis/97-envelope-detector.html),
   [Faust analyzers](https://faustlibraries.grame.fr/libs/analyzers)
 
-**Chosen concept (averaging the pleasant parts):**
-- The **head wave carries the shape** and music modulates its height, swell and rate. Raw bands plotted as height
-  make jagged plateaus.
-- **Bands shape their own ribbon** (bass the broad one, mids the twisting one, highs the fine one), each through the
-  tuner.
-- **Onsets and highs light things up immediately** (whole-ribbon light, sparks, strands), since light needs no
-  history.
-- **Loudness sweeps the quiet → loud ranges.**
-- Attack/release live in the shared audio analysis. The ribbon's own smoothing is only the band-limit rule.
+**Chosen concept (the pleasant common ground, in our terms):**
+- **The head wave carries the shape.** Music modulates its height, swell and rate. Raw bands plotted as height make
+  jagged plateaus (lab plan §4A).
+- **One ribbon per band** (alternate board: bass, mid, high), each through the tuner; the complete scene's sheets
+  share all bands with different characters.
+- **Hits light things up immediately:** whole-ribbon light, sparks, free strands. Light needs no history, so it can
+  be fast.
+- **The passage sweeps the quiet → loud ranges**, slowly, never per beat.
 
-### 4.2 Where to calibrate: the migration, with a lab smoke first (recommendation)
-- **Final calibration belongs in the migration.** It needs the real BeatEngine features and scales (loudness 3-17
-  in music), the shared sensitivity/adaptive controls and the preset system, all only in production. EB did the
-  same: production recorded-feature replay (`logs/visualizer_recordings/*.jsonl`) plus offscreen production renders,
-  then `tools/visualizer_live_check.py` with recorded music and `--load game60`.
-- **Cheap lab smoke before porting (WR-07):** replay one quiet and one loud recorded feature window into the lab's
-  tuner sources. This checks that the tuner model reaches the boards' low/high shapes from real signal shapes. It
-  does not calibrate; it only catches a model that cannot get there before production code depends on it.
+### 4.2 Reaction vocabulary (guide §12)
+
+| Musical moment | Waveform Ribbon response | Signal (existing authority) |
+|---|---|---|
+| Idle / silence | Head wave keeps a slow honest drift; no sparks, strands or pulses; fade, never vanish | presence from `musical_weight`; an explicit idle lane, never fake energy |
+| Sustained quiet passage | Ranges near their quiet handles: low waves, narrow sheets, quiet colours | eased passage intensity on the fixed real-music scale (guide §2A, §5 "slow passage drive": two even ~1.2 s stages) |
+| Sustained loud passage | Ranges near their loud handles: tall sweeps, wide sheets, loud colours, more sparkle; beat contrast kept inside the chorus | same passage drive; beats multiply inside it, never add a floor (§13C) |
+| Kick / bass hit | Height pulse at the head (written into history, so it travels), bass ribbon wider; a bass passage can raise one taller arc | bass transient through `passage_ramp`, asymmetric envelope (rise ~45 ms, settle ~0.65 s) |
+| Snare / generic onset | Light flash along the ribbons, sparks; free strands peel off on accents | typed event bus, consume once; accents = onsets above the recent mean (§13C) |
+| Vocal rise / swell | Twist and depth sway grow; colour moves toward loud | mid/vocal lane, medium continuous envelope |
+| Highs | Fine shimmer: glints, sparkle density | high band, control-normalised, ramped by the passage |
+| Release to calm | Ranges ease back over the passage stages; flow speed never changes | passage drive |
+
+**History rules specific to this mode:**
+- **Written at the head, never rewritten.** History-carried controls (height, width, twist, lift, tint) are sampled
+  when a knot is admitted. A control changing over d seconds draws a feature flow speed × d long, so every one passes
+  the two-stage band-limit (lab plan §4A).
+- **Immediate channels** (whole-ribbon light, sparks, strands, glow) may follow the beat directly; they need no
+  history.
+- **Flow speed never follows the music** (gate A). DevCurve's lesson: a ±10% beat nudge on travel read as
+  fast/slow/fast/slow.
+
+### 4.3 Where to calibrate (recommendation)
+- **Look and the tuner model: the lab** (done for both boards, synthetic sources).
+- **A cheap lab smoke (WR-07):** replay one quiet and one loud recorded feature window
+  (`logs/visualizer_recordings/*.jsonl`) into the lab's tuner sources. It checks that the model reaches the boards'
+  quiet and loud shapes from real signal shapes before production code depends on it. It does not calibrate.
+- **Calibration: the migration**, because it needs the real BeatEngine lanes on their real scales, the shared
+  sensitivity and technical profile, and the preset system, which exist only in production. Follow guide §12:
+  - neutral to maximum synthetic cases with monotonic ordering;
+  - silence, quiet song, ordinary, hot chorus and isolated hits over a loud bed;
+  - the share of frames at each driver's ceiling (pinned drivers, §13B);
+  - preset-to-source reachability;
+  - then `tools/visualizer_live_check.py` with recorded music and `--load game60`, and installed eyes-on review.
 
 ## 5. Port order
 
