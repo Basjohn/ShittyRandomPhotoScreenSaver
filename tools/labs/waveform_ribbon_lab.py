@@ -129,6 +129,9 @@ class Fog:
     # the in-scatter's share of bloom.
     march_scale: float = .5
     reflection_march_scale: float = .25
+    # Shape bake box (world min, max) and cell size: the march reads the shape from it; outside, exact.
+    bake_box: tuple = ((-30., 0., -12.), (30., 12., 4.))
+    bake_cell: float = .2
     steps: int = 96
     step: tuple = (.15, 1.)
     erosion: float = .75
@@ -436,11 +439,23 @@ FOG_COVERAGE_GLSL = FOG_SHAPE_GLSL + """
 // side (above/below the band) remembered for the direction (the shape and its noise dominate the march's cost).
 vec3 fogLastWorld=vec3(1e30);
 float fogLastSide=0.0;
+uniform sampler3D uShapeBake;  // per-frame bake of the shape: inside-distance (r), side above/below the band (g)
+uniform vec3 uBakeMin;
+uniform vec3 uBakeSize;
+uniform int uBaked;
 float fogCoverage(vec3 world, float coarse) {
-    vec4 band; float above, below;
-    float inside=fogInside(world,band,above,below);
+    vec3 t=(world-uBakeMin)/uBakeSize;
+    float inside;
+    if(uBaked==1 && all(greaterThanEqual(t,vec3(0.0))) && all(lessThanEqual(t,vec3(1.0)))) {
+        vec2 baked=texture(uShapeBake,t).rg;
+        inside=baked.r;
+        fogLastSide=baked.g;
+    } else {
+        vec4 band; float above, below;
+        inside=fogInside(world,band,above,below);
+        fogLastSide=above>0.0?1.0:below>0.0?-1.0:0.0;
+    }
     fogLastWorld=world;
-    fogLastSide=above>0.0?1.0:below>0.0?-1.0:0.0;
     return smoothstep(0.0,uFogForm.z,inside);
 }
 // Each lobe is lit from the waveform: mist above the band from below, mist below it from above, the far wall from
@@ -453,6 +468,24 @@ vec3 fogLightDirection(vec3 world) {
         side=above>0.0?1.0:below>0.0?-1.0:0.0;
     }
     return normalize(side>0.5?vec3(0.0,-1.0,0.35):side<-0.5?vec3(0.0,1.0,0.35):vec3(0.0,0.0,1.0));
+}
+"""
+
+# Per-frame shape bake: the march samples the shape many times per pixel; evaluating it once per cell of a world
+# grid (trilinear in the march) is several times cheaper. The coarse medium keeps the exact shape.
+SHAPE_BAKE_COMPUTE = """#version 460 core
+layout(local_size_x=8,local_size_y=8,local_size_z=4) in;
+layout(rg16f,binding=0) uniform writeonly image3D uShapeOut;
+uniform vec3 uBakeMin;
+uniform vec3 uBakeCell;
+""" + FOG_SHAPE_GLSL + """
+void main() {
+    ivec3 cell=ivec3(gl_GlobalInvocationID);
+    if(any(greaterThanEqual(cell,imageSize(uShapeOut)))) return;
+    vec3 world=uBakeMin+(vec3(cell)+0.5)*uBakeCell;
+    vec4 band; float above, below;
+    float inside=fogInside(world,band,above,below);
+    imageStore(uShapeOut,cell,vec4(clamp(inside,-64.0,64.0),above>0.0?1.0:below>0.0?-1.0:0.0,0.0,0.0));
 }
 """
 
@@ -776,6 +809,7 @@ class Lab:
         self.fog, self.reflected_fog = FogVolume('waveform lab mist'), FogVolume('waveform lab reflected mist')
         self.march = FogMarch('waveform lab mist', FOG_COVERAGE_GLSL)
         self._crackle_limit = None
+        self._bake_grid = None
         self._slopes = (0., VIEW_SLOPE)
         self.reflected_march = FogMarch('waveform lab reflected mist', FOG_COVERAGE_GLSL)
         self.textures = {}
@@ -830,6 +864,7 @@ class Lab:
         if fogged:
             camera_lens = lens(POSES[pose], width/height)
             self._update_fog(self.fog, view, camera_lens, (width, height), recipe.fog.cell, recipe.fog.slices, envelope)
+            self._bake_shape()
             self._crackle_limit = crackle_limit(envelope, recipe.fog, projection @ view, width, slopes=self._slopes)
             self._update_fog(self.reflected_fog, mirror_view(view, 0.), camera_lens, (width, height),
                              recipe.fog.reflection_cell, recipe.fog.reflection_slices, envelope)
@@ -855,6 +890,36 @@ class Lab:
         from contextlib import nullcontext
         return volume.bound() if volume is not None else nullcontext(dict(FOG_OFF))
 
+    def _bake_shape(self):
+        """Evaluate the mist shape once per cell of the bake box (RG16F, allocated once per box size)."""
+        fog = self.recipe.fog
+        if fog.bake_cell <= 0:
+            return
+        from rendering.quick.scene3d.compute import bound_image, dispatch
+        lo, hi = (np.asarray(v, float) for v in fog.bake_box)
+        grid = tuple(int(math.ceil(v)) for v in (hi - lo)/fog.bake_cell)
+        texture = self.textures.get('shape')
+        if texture is None or self._bake_grid != grid:
+            if texture is not None:
+                gl.glDeleteTextures(1, [texture])
+            name = (gl.GLuint*1)()
+            gl.glCreateTextures(gl.GL_TEXTURE_3D, 1, name)
+            texture = self.textures['shape'] = int(name[0])
+            gl.glTextureStorage3D(texture, 1, gl.GL_RG16F, *grid)
+            for parameter, value in ((gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR), (gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR),
+                                     (gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP_TO_EDGE), (gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_EDGE),
+                                     (gl.GL_TEXTURE_WRAP_R, gl.GL_CLAMP_TO_EDGE)):
+                gl.glTextureParameteri(texture, parameter, value)
+            self._bake_grid = grid
+        program = self.resources.compute_program('shape bake', SHAPE_BAKE_COMPUTE)
+        gl.glUseProgram(program)
+        self._fog_uniforms(program)
+        gl.glUniform3f(gl.glGetUniformLocation(program, 'uBakeMin'), *lo)
+        gl.glUniform3f(gl.glGetUniformLocation(program, 'uBakeCell'), *((hi - lo)/np.asarray(grid, float)))
+        with bound_image(0, texture, gl.GL_WRITE_ONLY, gl.GL_RG16F, layered=True):
+            dispatch((-(-grid[0]//8), -(-grid[1]//8), -(-grid[2]//4)), gl.GL_TEXTURE_FETCH_BARRIER_BIT)
+        gl.glUseProgram(0)
+
     def _update_fog(self, volume, view, camera_lens, size, cell, slices, envelope):
         fog = self.recipe.fog
         grid = (-(-size[0]//cell), -(-size[1]//cell), slices)
@@ -875,6 +940,14 @@ class Lab:
         gl.glUniform4f(location('uFogShape'), fog.start_z, fog.band_depth, fog.noise, fog.light_decay)
         gl.glUniform2f(location('uFogClearance'), *fog.clearance)
         gl.glUniform1f(location('uFogTube'), fog.tube)
+        bake = self.textures.get('shape')
+        gl.glUniform1i(location('uBaked'), int(bake is not None and fog.bake_cell > 0))
+        if bake is not None:
+            lo, hi = (np.asarray(v, float) for v in fog.bake_box)
+            gl.glBindTextureUnit(13, bake)
+            gl.glUniform1i(location('uShapeBake'), 13)
+            gl.glUniform3f(location('uBakeMin'), *lo)
+            gl.glUniform3f(location('uBakeSize'), *(hi - lo))
         gl.glUniform2f(location('uFogSlope'), *self._slopes)
         gl.glUniform1f(location('uFogEnds'), fog.ends)
         gl.glUniform3f(location('uFogFloor'), *fog.floor)
