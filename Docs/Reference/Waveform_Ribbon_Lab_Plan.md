@@ -78,7 +78,21 @@ from parity. §0B is the current visual audit, not an acceptance report.
   - **Lab medium:** a clear room around the camera; a cloud base on the admitted ribbons' crest envelope that rises
     toward the camera; carving and light from the ribbon history; light attenuated by depth into the mist; a thin
     ground fog that thickens with distance. The mirrored camera gets its own volume and march.
-  - **Remaining gaps (`r1` scratch / `wr07_mist_substrate`):**
+  - **Waveform-shaped mist (`wr07_mist_envelope`):** the clear band now follows the admitted sheets' exact
+    lower/upper envelope along x. That envelope is reduced per frame from the same packet, with edge colours blended
+    from nearby sheets.
+    - The march evaluates the same shape per sample (consumer `fogCoverage`), so edges no longer stair-step at the
+      coarse cells.
+    - Lobes are self-shadowed toward the waveform (consumer `fogLightDirection`), and a shadow floor keeps cloud
+      bodies visible.
+    - Faces are rim-lit in the nearest sheet colour.
+    - The floor's diffuse light reads the mist's light field.
+  - **Still far from the mock:**
+    - The fringes are softer and less saturated, not the mock's electric cyan/magenta crackle.
+    - There are no bright corner banks at floor level.
+    - The lower lobe between sheets and floor reads as a pink smear.
+    - The floor's micro-ripple reflection is too busy and noisy, and too bright on high react.
+  - **Earlier gaps (`r1` scratch / `wr07_mist_substrate`):**
     - The fringe is blue-violet and dim, where the mock's is saturated cyan/magenta, bright and close to the crests.
       Mist colour follows the ribbon colours, so this waits on waveform colour.
     - No bottom-corner cloud banks: the first attempt glowed white.
