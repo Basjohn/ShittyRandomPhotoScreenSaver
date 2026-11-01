@@ -276,6 +276,18 @@ Each foundation slice adds what it learned here.
   - **Relief normals:** take relief normals from texture-space differences, not dFdx/dFdy. Screen-derivative normals
     are constant per 2x2 quad and stair-step a visible reflection wobble.
   - **Order:** smoothness and wetness come before streakiness (operator).
+- Volume mist (Waveform, 2026-11-01):
+  - **Detail per pixel:** froxel resolution alone draws washes. Keep lighting and coverage coarse; erode detail in a
+    reduced-resolution per-pixel march.
+  - **Shaped edges:** billows displace the mist's edge, never only its density; an averaged interior shows nothing.
+  - **Light by depth into the mist:** attenuate source light by depth into the mist, with a finite reach through
+    clear air. Inverse-square sums from many sources lit every bank evenly.
+  - **Adaptive steps:** use them inside the medium. Exponential steps were about 2 units long at the mist and aliased
+    billows into speckle; interleaved gradient noise jitter drew hatching.
+  - **Ceilings in Orthographic:** a clear-air ceiling must rise toward the camera faster than the view rays
+    descend, or the upper field is mist starting at the eye.
+  - **Never erode haze:** keep smooth haze in a steady share; erosion removes thin fog entirely.
+  - **GLSL `smoothstep`:** it is undefined with edge0 >= edge1; a reversed ramp turned the scene white.
 
 **Materials and new looks on old transitions (S17)**
 - Lighting a photograph changes its pixels: blend the lit look in by how far a piece is from rest (Blinds' lift,

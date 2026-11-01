@@ -162,8 +162,10 @@ and remaining visual gaps: Lab Plan §0–0B. **No full-scene or floor parity is
   Both boundary rims now have independent filament light; validate their balance through folds and motion.
   Broader swept sheets and smooth phase/amplitude/depth variation are in the lab; skew-stretched glints are corrected.
   Biggest waveform gaps: fine-detail stability, convincing depth/light and the remaining difference from reference shapes.
-- [ ] **Volumetric mist third (S3D-7 bounded slice):** static field from the actual ribbon shape, reduced-resolution
-  integration, opaque clipping and source-depth attenuation; independent harness and measured cost before acceptance.
+- [~] **Volumetric mist (S3D-7 bounded slice):** the shared froxel volume and half-resolution detail march are in the
+  lab, ribbon-carved and ribbon-lit, with slab/anchoring/steady-share tests. The look is still far from the mock:
+  fringe colour and brightness, corner banks, haze lines in turned views. March cost must drop before production.
+  Detail is in Lab Plan §0.
 - [ ] **Accents and optics:** sparks, glow and defocus after the underlying waveform/floor/mist match.
 - [ ] **Awaiting Validation:** operator sign-off on the floor/waveform/volume look before reactivity.
 - [ ] **Only after visuals:** recorded audio windows and WR-07 mappings; remaining S3D-1/2/5 lifecycle/cost gates;

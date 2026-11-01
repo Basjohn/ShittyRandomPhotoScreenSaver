@@ -71,11 +71,22 @@ from parity. §0B is the current visual audit, not an acceptance report.
   Bound/count and translation/fade checks, native floor crops, navigation and GPU cost precede a checkpoint. CPU
   packet reduction in this synthetic lab is not admitted as a production per-frame preparation path.
   Reflection OIT-body inclusion, resize and full cost proof remain open.
-- [ ] **S3D-7 bounded world fog, third:** retain the simple thick mist for composition until waveform and floor improve,
-  then replace the analytic floor-colour approximation with a reduced-resolution volume. Carve clearance and soft
-  illumination from the actual ribbon packet, with no second path/simulation/clock. Correct Orthographic/Perspective
-  rays, opaque depth clipping and source-depth attenuation. Prove a homogeneous slab, nearer occluder, translated
-  clearance, resize/context/retirement, and measured warm GPU cost. Audio-driven fog changes remain deferred.
+- [~] **S3D-7 volume mist (operator: "your mist sucks"; substrate landed, look far from the mock):**
+  - **Shared primitive:** coarse froxel `FogVolume` (medium, steady share, front-to-back integral) plus a
+    half-resolution `FogMarch` that erodes coverage with tiling noise, self-shadows toward clear air and stops at the
+    ground plane. All passes sample it through `MIST_GLSL`.
+  - **Lab medium:** a clear room around the camera; a cloud base on the admitted ribbons' crest envelope that rises
+    toward the camera; carving and light from the ribbon history; light attenuated by depth into the mist; a thin
+    ground fog that thickens with distance. The mirrored camera gets its own volume and march.
+  - **Remaining gaps (`r1` scratch / `wr07_mist_substrate`):**
+    - The fringe is blue-violet and dim, where the mock's is saturated cyan/magenta, bright and close to the crests.
+      Mist colour follows the ribbon colours, so this waits on waveform colour.
+    - No bottom-corner cloud banks: the first attempt glowed white.
+    - Horizontal haze lines in the turned and raised views.
+    - The wide views carry too much low-contrast fog.
+    - Detail march cost (see `Scene3D_Resources.md`) needs a precomputed clear-air direction and fewer steps before
+      production.
+  - Audio-driven fog changes remain deferred.
 - [ ] **Accents and optics:** bounded cyan/magenta sparks with a meaningful size range; tight filament glow and broad
   local hot spots. Shared defocus/slow-motion AA only after the underlying geometry/material match.
 - [ ] **Reference looks through lab recipe controls:** show the cool whole-scene low/high and alternate-inspired range
@@ -160,10 +171,9 @@ regression and same-recipe GPU cost comparison. Small normal perturbations follo
 - [ ] **Waveform shape and depth:** preserve preferred checkpoint `0ca9fd27`. The real swept 3D sheets and both bright
   rims are progress; folded-cloth depth, natural variation, richer fanning/gathering, hot crossings and readable low
   detail still fall short of the mocks. Reject sharp bends and flat wire-bundle readings in enlarged crops and motion.
-- [ ] **Mist/scene depth:** current analytic distance colour is not the target's thick volumetric fog. There are no
-  sculpted turbulent banks, real ribbon-shaped clearance or source-depth lighting yet. Build the bounded shared
-  volume only after the immediate floor and waveform work; it must hide sky, horizon and floor boundaries from every
-  admitted camera pose. No pillars. Missing fog light also limits complete-scene floor comparison today.
+- [~] **Mist/scene depth:** the volume (S3D-7 item in §0) now gives billowed, ribbon-carved, ribbon-lit mist with a
+  dark top and clear air around the sheets. It is still far from the mock's bright saturated fringes and corner
+  banks, and it must hide sky, horizon and floor boundaries from every admitted pose (haze lines remain).
 - [ ] **Motion and cost:** capture explicit-time slow motion for floor grain/reflection stability and both waveform
   rims; then five camera poses in both projections. Measure final floor draw, reflection generation and whole scene
   separately, plus CPU light preparation. Check Off/lazy/resize/context retirement at their owners. Current static

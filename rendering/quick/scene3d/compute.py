@@ -33,8 +33,9 @@ def dispatch(groups: tuple[int, int, int], barriers: int) -> None:
 
 
 @contextmanager
-def bound_image(unit: int, texture: int, access: int, image_format: int) -> Iterator[None]:
-    """Bind level 0 of ``texture`` to image ``unit`` for the scope, then restore the unit."""
+def bound_image(unit: int, texture: int, access: int, image_format: int, *, layered: bool = False) -> Iterator[None]:
+    """Bind level 0 of ``texture`` to image ``unit`` for the scope, then restore the unit. ``layered`` exposes every
+    layer (a 3D texture's whole depth to ``image3D``)."""
     previous = gl_query.get_indexed_int(gl.GL_IMAGE_BINDING_NAME, unit)
     if previous:
         inherited = (previous,
@@ -43,7 +44,7 @@ def bound_image(unit: int, texture: int, access: int, image_format: int) -> Iter
                      gl_query.get_indexed_int(gl.GL_IMAGE_BINDING_LAYER, unit),
                      gl_query.get_indexed_int(gl.GL_IMAGE_BINDING_ACCESS, unit),
                      gl_query.get_indexed_int(gl.GL_IMAGE_BINDING_FORMAT, unit))
-    gl.glBindImageTexture(unit, texture, 0, gl.GL_FALSE, 0, access, image_format)
+    gl.glBindImageTexture(unit, texture, 0, gl.GL_TRUE if layered else gl.GL_FALSE, 0, access, image_format)
     try:
         yield
     finally:

@@ -45,9 +45,11 @@ from PIL import Image, ImageDraw
 
 from core.ribbon_ring import RibbonRing
 from core.settings import framed_camera as fc
-from rendering.gl_programs.mist import MIST_GLSL, mist_uniforms
+from rendering.gl_programs.fog_volume import fog_inject_source
+from rendering.gl_programs.mist import FOG_OFF, MIST_GLSL, mist_uniforms
 from rendering.gl_programs.lighting import SOFT_LIGHT_GLSL
 from rendering.gl_programs.reflection import PLANAR_REFLECTION_GLSL, mirror_view
+from rendering.quick.scene3d.fog_volume import FogMarch, FogVolume
 from rendering.quick.scene3d.reflection import PlanarReflection
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.ribbon import RibbonMaterial, RibbonPrimitive, RibbonSparks
@@ -87,6 +89,48 @@ class Environment:
     # Clear around the waveform, dense immediately beyond it, then continuous with the far background.
     mist: dict = field(default_factory=lambda: mist_uniforms(centre_xz=(0., 9.), radii_xz=(24., 10.), falloff=.25,
                                     floor_thickening=2., thickening_height=2., low_glow=.5))
+
+
+@dataclass(frozen=True)
+class Fog:
+    """S3D-7 volume mist: thick beyond the camera's clear room, its cloud base following the admitted ribbons' crest
+    envelope, carved and lit by the ribbon history (the floor's soft sources); a detail march adds the billows."""
+    density: float = .6             # extinction per world unit inside the mist
+    clear_margin: float = .5        # clear air beyond each ribbon source's own radius (world units)
+    softness: float = 2.5           # depth over which coarse coverage rises: the detail march erodes within it
+    noise_scale: float = .6         # coarse billow frequency (per world unit)
+    noise: float = 2.2              # coarse billow displacement of the edge (world units)
+    ambient: tuple = (.002, .003, .008)  # radiance of unlit mist
+    light: float = 1500.            # scattering gain of the ribbon sources
+    light_decay: float = 1.2        # their light's extinction per world unit of depth into the mist
+    reach: float = 2.               # e-folding distance of their light through clear air (world units)
+    bank: tuple = (1.2, 1.4)        # extra density near the floor, its height scale
+    # Cloud base: the ribbons' smoothed crest envelope along x plus this gap (world), over this x width; the plane
+    # ceiling applies where no ribbon light is near. Both rise toward the camera (per unit z, from z), so every
+    # admitted pose keeps a clear view while the mist's lit underside is seen above the sheets.
+    envelope: tuple = (.3, 2.5)
+    ceiling: tuple = (3., 1.4, -1.5)
+    room: tuple = (0., 9., 24., 13.)  # the camera's clear air: centre x, z and radii x, z on the floor (world)
+    banks: tuple = (100., 0.)       # floor-level banks beyond |x|, up to this height (world); off
+    # Ground fog that thickens with distance from the camera, so the floor fades into lit mist: extinction at full
+    # depth, height scale, z where it starts and where it is full (world). Carved around the ribbons like the mist.
+    haze: tuple = (.06, .9, 0., -10.)
+    depth_range: tuple = (.5, 150.)
+    cell: int = 16                  # viewport pixels per coarse cell (light and coverage only)
+    slices: int = 48
+    reflection_cell: int = 24
+    reflection_slices: int = 32
+    # Detail march (per pixel at a reduced scale): bound on adaptive steps and their lengths in and out of the mist,
+    # erosion by the tiling noise and its frequency (per world unit), self-shadow reach (world) and strength, and
+    # the in-scatter's share of bloom.
+    march_scale: float = .5
+    reflection_march_scale: float = .25
+    steps: int = 96
+    step: tuple = (.2, 1.)
+    erosion: float = .8
+    detail_frequency: float = .12
+    shadow: tuple = (.5, 1.5)
+    glow: float = .3
 
 
 @dataclass(frozen=True)
@@ -145,6 +189,7 @@ STATES = {  # labelled synthetic controls, authored toward the complete-scene fo
 @dataclass(frozen=True)
 class Recipe:
     environment: Environment = field(default_factory=Environment)
+    fog: Fog | None = field(default_factory=Fog)
     floor: Floor = field(default_factory=Floor)
     flow: Flow = field(default_factory=Flow)
     # Mock-directed look (WR-04): saturated darker body, thin near-white irregular strands and rims, visible glints.
@@ -230,6 +275,73 @@ void main() {
 """
 FLAT = {'ribbon': (1., 0., 1.)}
 
+# The lab's mist medium for the S3D-7 volume: the Environment ellipse is the camera's clear air, the admitted ribbon
+# history (the same soft sources that light the floor) carves its own clearance and lights the mist around it.
+# Static billows anchored in the world; nothing below the floor. No clock and no second ribbon path.
+FOG_MEDIUM_GLSL = """
+uniform vec4 uMist;
+uniform vec4 uMistShape;
+uniform int uLightCount;
+uniform vec4 uLightPosition[96];
+uniform vec3 uLightFlux[96];
+uniform vec4 uFogMedium;   // density, clear margin, edge softness, billow frequency
+uniform vec4 uFogLook;     // ambient rgb, light gain
+uniform float uFogReach;   // e-folding distance of ribbon light (world units)
+uniform vec4 uFogBank;     // floor bank density, height scale, billow displacement, light decay
+uniform vec3 uFogCeiling;  // clear-air ceiling height, rise toward the camera per unit z, z where it starts
+uniform vec4 uFogRoom;     // clear-air centre x, z and radii x, z
+uniform vec2 uFogEdges;    // bank inner |x|, bank height
+uniform vec4 uFogHaze;     // ground fog extinction, height scale, z where it starts, z where it is full
+uniform vec2 uFogEnvelope; // cloud-base gap over the ribbons' crest envelope, its x smoothing width
+float fogHash(vec3 p) { p=fract(p*0.3183099+0.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+float fogNoise(vec3 x) {
+    vec3 i=floor(x), f=fract(x);
+    f=f*f*(3.0-2.0*f);
+    return mix(mix(mix(fogHash(i),fogHash(i+vec3(1,0,0)),f.x),mix(fogHash(i+vec3(0,1,0)),fogHash(i+vec3(1,1,0)),f.x),f.y),
+               mix(mix(fogHash(i+vec3(0,0,1)),fogHash(i+vec3(1,0,1)),f.x),mix(fogHash(i+vec3(0,1,1)),fogHash(i+vec3(1,1,1)),f.x),f.y),f.z);
+}
+float fogBillow(vec3 p) {
+    float sum=0.0, amplitude=0.5;
+    for(int i=0;i<4;i++) { sum+=amplitude*fogNoise(p); p=p*2.03+vec3(1.7,9.2,3.1); amplitude*=0.5; }
+    return sum/0.9375;
+}
+void fogMedium(vec3 world, out vec3 radiance, out float extinction, out float steady) {
+    radiance=vec3(0.0); extinction=0.0; steady=0.0;
+    if(world.y<0.0) return;
+    // Depth into the mist (world units): beyond the camera's clear ellipse and beyond every ribbon's clear margin.
+    // Billows displace this edge, so the mist's visible boundary is shaped, not its averaged interior.
+    vec2 radii=max(uFogRoom.zw,vec2(1e-3));
+    float rise=max(world.z-uFogCeiling.z,0.0)*uFogCeiling.y;
+    vec3 light=vec3(0.0);
+    float carve=1e9, weights=0.0, crest=0.0;
+    for(int i=0;i<uLightCount;i++) {
+        vec3 delta=uLightPosition[i].xyz-world;
+        float d2=dot(delta,delta);
+        float beyond=sqrt(max(d2-uLightPosition[i].w,0.0));
+        carve=min(carve,beyond-uFogMedium.y);
+        light+=uLightFlux[i]*exp(-beyond/uFogReach)/(d2+uLightPosition[i].w);
+        float along=delta.x/uFogEnvelope.y;
+        float weight=exp(-along*along);
+        weights+=weight;
+        crest+=weight*(uLightPosition[i].y+sqrt(uLightPosition[i].w));
+    }
+    // The cloud base follows the admitted waveform: its smoothed crest envelope plus a gap, where ribbons are near.
+    float base=mix(uFogCeiling.x,crest/max(weights,1e-6)+uFogEnvelope.x,clamp(weights,0.0,1.0));
+    float banks=min(abs(world.x)-uFogEdges.x,uFogEdges.y-world.y);
+    float inside=max(max((length((world.xz-uFogRoom.xy)/radii)-1.0)*radii.y,world.y-base-rise),banks);
+    inside=min(inside,carve);
+    inside+=uFogBank.z*(fogBillow(world*uFogMedium.w)-0.5);
+    // Light reaches the mist through its clear-air face: attenuate by depth into the mist, so faces toward the
+    // ribbons glow and interiors stay dark (distance from the source alone lit whole banks evenly).
+    light*=exp(-uFogBank.w*max(inside,0.0));
+    float bank=uFogBank.x*exp(-world.y/max(uFogBank.y,1e-3));
+    float ground=uFogHaze.x*exp(-world.y/uFogHaze.y)*(1.0-smoothstep(uFogHaze.w,uFogHaze.z,world.z))*clamp(carve/0.5,0.0,1.0);
+    steady=ground;
+    extinction=uFogMedium.x*(1.0+bank)*smoothstep(0.0,uFogMedium.z,inside)+ground;
+    radiance=uFogLook.rgb+light*uFogLook.w/12.566;
+}
+"""
+
 
 def camera(pose: Pose, aspect: float):
     """(world->view 4x4, projection 4x4, eye) from the shared framed camera; the world never moves."""
@@ -247,6 +359,16 @@ def camera(pose: Pose, aspect: float):
     else:
         projection = fc.perspective_matrix(fc.viewport_tangents(pose.fov, aspect), .3, 200.)
     return view, np.asarray(projection).reshape(4, 4, order='F'), np.asarray(eye)
+
+
+def lens(pose: Pose, aspect: float) -> tuple[float, float, bool]:
+    """The fog volume's lens for a pose: Orthographic half-extents, or Perspective tangents."""
+    if pose.projection == 'Orthographic':
+        tan = fc.viewport_tangents(ORTHO_REFERENCE_FOV, aspect)
+        distance = SPEC.orbit_distance/max(pose.scale, 1e-3)
+        return tan[0]*distance, tan[1]*distance, True
+    tan = fc.viewport_tangents(pose.fov, aspect)
+    return tan[0], tan[1], False
 
 
 def floor_vertices(floor: Floor) -> bytes:
@@ -326,6 +448,8 @@ class Lab:
         self.target = OffscreenRenderTarget(*size)
         self.resources, self.scene, self.ribbons = MeshResources('waveform lab'), SceneTarget('waveform lab'), RibbonPrimitive()
         self.reflection = PlanarReflection('waveform lab floor')
+        self.fog, self.reflected_fog = FogVolume('waveform lab mist'), FogVolume('waveform lab reflected mist')
+        self.march, self.reflected_march = FogMarch('waveform lab mist'), FogMarch('waveform lab reflected mist')
         self.textures = {}
 
     def close(self):
@@ -334,6 +458,10 @@ class Lab:
                 gl.glDeleteTextures(len(self.textures), list(self.textures.values()))
                 self.textures = {}
             self.reflection.release()
+            self.fog.release()
+            self.reflected_fog.release()
+            self.march.release()
+            self.reflected_march.release()
             self.ribbons.release()
             self.scene.release()
             self.resources.release_resources()
@@ -364,8 +492,62 @@ class Lab:
         packet = ring.packet()
         lights = None if flat else ribbon_lights(packet,scroll[:3,3],draw['age_fade'])
         self.target.bind(clear=(0., 0., 0., 0.))
+        fogged = not flat and recipe.fog is not None
+        if fogged:
+            camera_lens = lens(POSES[pose], width/height)
+            self._update_fog(self.fog, view, camera_lens, (width, height), recipe.fog.cell, recipe.fog.slices, lights)
+            self._update_fog(self.reflected_fog, mirror_view(view, 0.), camera_lens, (width, height),
+                             recipe.fog.reflection_cell, recipe.fog.reflection_slices, lights)
+            fog = recipe.fog
+            march = dict(steps=fog.steps, max_extinction=fog.density*(1. + fog.bank[0]), erosion=fog.erosion,
+                         detail_frequency=fog.detail_frequency, shadow=fog.shadow, step=fog.step)
+            self.march.march(self.fog, size=(width*fog.march_scale, height*fog.march_scale), ground=0., **march)
+            # The mirrored camera starts below the floor (no medium there) and sees the mist above it.
+            self.reflected_march.march(self.reflected_fog, size=(width*fog.reflection_march_scale,
+                                                                 height*fog.reflection_march_scale), **march)
         if not flat:
-            self._reflect(packet, projection, view, scroll, draw)
+            with self._fog_bound(self.reflected_fog if fogged else None) as fog:
+                self._reflect(packet, projection, view, scroll, {**draw, 'mist': {**draw['mist'], **fog}})
+        with self._fog_bound(self.fog if fogged else None) as fog:
+            draw = {**draw, 'mist': {**draw['mist'], **fog}}
+            self._draw_scene(state, flat, packet, draw, mvp, eye, view, orthographic, ribbon_mvp, card, lights, now,
+                             fogged)
+        return self.target.read_rgba()
+
+    def _fog_bound(self, volume):
+        """The volume bound for its passes, or a no-op scope with the analytic-mist uniforms."""
+        from contextlib import nullcontext
+        return volume.bound() if volume is not None else nullcontext(dict(FOG_OFF))
+
+    def _update_fog(self, volume, view, camera_lens, size, cell, slices, lights):
+        fog, environment = self.recipe.fog, self.recipe.environment
+        grid = (-(-size[0]//cell), -(-size[1]//cell), slices)
+        program = self.resources.compute_program('fog medium', fog_inject_source(FOG_MEDIUM_GLSL))
+
+        def medium(program):
+            location = lambda name: gl.glGetUniformLocation(program, name)
+            gl.glUniform4f(location('uMist'), *environment.mist['uMist'])
+            gl.glUniform4f(location('uMistShape'), *environment.mist['uMistShape'])
+            gl.glUniform4f(location('uFogMedium'), fog.density, fog.clear_margin, fog.softness, fog.noise_scale)
+            gl.glUniform4f(location('uFogLook'), *fog.ambient, fog.light)
+            gl.glUniform4f(location('uFogBank'), *fog.bank, fog.noise, fog.light_decay)
+            gl.glUniform3f(location('uFogCeiling'), *fog.ceiling)
+            gl.glUniform1f(location('uFogReach'), fog.reach)
+            gl.glUniform4f(location('uFogRoom'), *fog.room)
+            gl.glUniform2f(location('uFogEdges'), *fog.banks)
+            gl.glUniform4f(location('uFogHaze'), *fog.haze)
+            gl.glUniform2f(location('uFogEnvelope'), *fog.envelope)
+            count = 0 if lights is None else len(lights[0])
+            gl.glUniform1i(location('uLightCount'), count)
+            if count:
+                gl.glUniform4fv(location('uLightPosition[0]'), count, lights[0])
+                gl.glUniform3fv(location('uLightFlux[0]'), count, lights[1])
+        volume.update(program, view=view, lens=camera_lens, depth_range=fog.depth_range, grid=grid, medium=medium)
+
+    def _draw_scene(self, state, flat, packet, draw, mvp, eye, view, orthographic, ribbon_mvp, card, lights, now,
+                    fogged):
+        recipe, (width, height) = self.recipe, self.size
+        environment = recipe.environment
         with self.scene.scope(card, 4, self.resources, overlay=1.0, bloom=0. if flat else recipe.bloom,
                               oit=True, hdr=None if flat or not recipe.bloom else recipe.exposure):
             gl.glViewport(0, 0, width, height)
@@ -376,9 +558,12 @@ class Lab:
             gl.glDepthFunc(gl.GL_LESS)
             gl.glDepthMask(gl.GL_TRUE)
             with self.scene.emission_writes():
-                self._floor(mvp, eye, view, orthographic, (width, height), flat=flat, lights=lights)
+                # With the volume, the march composite owns the floor's mist (in front of it, to the plane).
+                self._floor(mvp, eye, view, orthographic, (width, height), flat=flat, lights=lights, mist_off=fogged)
                 if flat:
                     self._flat_ribbons(packet, ribbon_mvp)
+                if fogged:
+                    self.march.composite(glow=recipe.fog.glow)
             if not flat:
                 with self.scene.transparent_writes(card, self.resources):
                     self.ribbons.draw(packet, ribbon_mvp, shading='body', **draw)
@@ -389,11 +574,10 @@ class Lab:
                     gl.glDepthMask(gl.GL_FALSE)
                     self.ribbons.draw(packet, ribbon_mvp, shading='light', **draw)
                     self.ribbons.draw(packet, ribbon_mvp, shading='sparks', sparks=recipe.sparks, now=now,
-                                      mist=environment.mist, mist_frame=draw['mist_frame'], material=recipe.material,
+                                      mist=draw['mist'], mist_frame=draw['mist_frame'], material=recipe.material,
                                       sweep_axis=draw['sweep_axis'])
                     gl.glDepthMask(gl.GL_TRUE)
                     gl.glDisablei(gl.GL_BLEND, 0)
-        return self.target.read_rgba()
 
     def _reflect(self, packet, projection, view, scroll, draw):
         """Ribbon light through the mirrored camera; the receiver is never drawn into its own reflection."""
@@ -406,6 +590,9 @@ class Lab:
             gl.glBlendEquationSeparatei(0, gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
             gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ONE, gl.GL_ONE)  # alpha: weighted height
             gl.glDepthMask(gl.GL_FALSE)
+            if draw['mist'].get('uFogRange', (0., 0., 0., 0.))[3] > .5:
+                # The mist's own light, mirrored (additive); alpha stays the emitters' weighted height.
+                self.reflected_march.composite(additive=True)
             reflected_view = mirrored @ scroll
             reflected_mvp = tuple((projection @ reflected_view).flatten(order='F'))
             self.ribbons.draw(packet, reflected_mvp, shading='light', **{**draw, 'view': tuple(reflected_view.flatten(order='F'))})
@@ -416,7 +603,7 @@ class Lab:
             gl.glDisablei(gl.GL_BLEND, 0)
             self.reflection.end()
 
-    def _floor(self, mvp, eye, view, orthographic, size, *, flat=False, lights=None):
+    def _floor(self, mvp, eye, view, orthographic, size, *, flat=False, lights=None, mist_off=False):
         recipe = self.recipe
         floor, environment = recipe.floor, recipe.environment
         if not self.textures:
@@ -425,7 +612,8 @@ class Lab:
         program = self.resources.program('floor', FLOOR_VERTEX, FLOOR_FRAGMENT)
         names = ('uMvp', 'uFlat', 'uAlbedo', 'uRoughness', 'uHeight', 'uReflection', 'uReflectionLook', 'uReflectionContact', 'uViewport', 'uBackdrop',
                  'uAmbient', 'uFloor', 'uFloorLight', 'uLightCount', 'uLightPosition[0]', 'uLightFlux[0]',
-                 'uSurface', 'uTextureDetail', 'uEye', 'uForward', 'uOrthographic', 'uMist', 'uMistShape')
+                 'uSurface', 'uTextureDetail', 'uEye', 'uForward', 'uOrthographic', 'uMist', 'uMistShape',
+                 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange')
         u = self.resources.uniforms('floor', names, required=False)
         gl.glUseProgram(program)
         gl.glUniform1i(u['uFlat'], int(flat))
@@ -452,7 +640,9 @@ class Lab:
         gl.glUniform3f(u['uForward'], *(-view[2, :3]))
         gl.glUniform1i(u['uOrthographic'], int(orthographic))
         gl.glUniform4f(u['uMist'], *environment.mist['uMist'])
-        gl.glUniform4f(u['uMistShape'], *environment.mist['uMistShape'])
+        gl.glUniform4f(u['uMistShape'], *((0., 0., 0., 0.) if mist_off else environment.mist['uMistShape']))
+        gl.glUniform1i(u['uFogVolume'], FOG_OFF['uFogVolume'])
+        gl.glUniform4f(u['uFogRange'], *FOG_OFF['uFogRange'])
         gl.glBindVertexArray(vao)
         gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
         for unit in range(4):
