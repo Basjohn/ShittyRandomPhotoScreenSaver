@@ -20,6 +20,8 @@ def lab(qt_app):
 def test_flat_envelope_survives_an_interleaved_lit_capture(lab, state):
     # A reflected additive pass once leaked blend state into the next diagnostic render.
     before = lab.render(state, flat=True)
+    rgb=before[:,:,:3].astype(int)
+    assert ((rgb.max(2)-rgb.min(2)==0)&(rgb.min(2)>20)).sum()>100 # floor geometry actually drew
     lab.render('low', flat=False)
     pixels = lab.render(state, flat=True)
     np.testing.assert_array_equal(pixels,before)
@@ -67,7 +69,8 @@ def test_render_admits_its_context_before_allocating_and_restores_the_caller(lab
         foreign.close()
 
 
-def test_missing_second_floor_map_retires_the_first_texture(lab, monkeypatch, tmp_path):
+@pytest.mark.parametrize('missing,allocated', [('roughness',1),('height',2)])
+def test_missing_floor_map_retires_preceding_textures(lab, monkeypatch, tmp_path, missing, allocated):
     from dataclasses import replace
     from OpenGL import GL as gl
     created=[]
@@ -79,5 +82,5 @@ def test_missing_second_floor_map_retires_the_first_texture(lab, monkeypatch, tm
     monkeypatch.setattr(gl,'glCreateTextures',record)
     with lab.target.current():
         with pytest.raises(FileNotFoundError):
-            lab_module.load_floor_textures(replace(lab.recipe.floor,roughness=str(tmp_path/'missing.png')))
-        assert len(created)==1 and not gl.glIsTexture(created[0])
+            lab_module.load_floor_textures(replace(lab.recipe.floor,**{missing:str(tmp_path/'missing.png')}))
+        assert len(created)==allocated and all(not gl.glIsTexture(name) for name in created)

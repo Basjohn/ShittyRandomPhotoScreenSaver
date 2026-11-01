@@ -24,12 +24,23 @@ support. Preserve native low/high crops separately for each board; never average
 one scene across its low/high states. Exact source custody is in §1.1.
 
 **Existing substrate:** shared framed camera, bounded incremental ribbon history, oriented OIT/HDR filament material,
-history sparks, half-resolution planar reflection, and saved generated concrete albedo/roughness maps. Contracts live
+history sparks, planar reflection, and saved generated concrete albedo/roughness/smooth-height maps. Contracts live
 in `Ribbon_Path.md`, `Visualizer_Labs.md` and `Scene3D_Resources.md`. Earlier captures remain under
 `.artifacts/evidence/waveform_ribbon/`; the rejected column appearance is not authority. Pass 4 (`66ab3918`)
 restored three distinct ribbon identities; it did not establish fidelity.
 
-**Open, in order:**
+**Operator direction, 1 November (later):** all three boards (complete-scene fog, preset range, original) describe
+colours and shapes that presets and reactivity must be able to reach. Colour, shape, light, particles and fog are
+all later reactivity areas, so build *achievable ranges that can flow and mutate*, not today's fixed colours. Colour
+is both: each ribbon has its own base, and reactivity changes it along the flowing history (the boards' left-to-right
+cyan → blue → violet → magenta/orange drift inside one sheet). Floor first, then the remaining order is the
+implementer's call without further confirmation; the operator judges much later.
+
+**Open sequence:** finish the immediate floor correction below while holding the preferred waveform fixed; then
+return to waveform fidelity, followed by real volumetric mist. The floor, waveform and complete scene remain far
+from parity. §0B is the current visual audit, not an acceptance report.
+
+**Live work:**
 - [ ] **Waveform structure and light:** richer smooth folds, depth separation, fine fanning/gathering filaments,
   readable quiet detail, coloured hot crossings. Every admitted shape must remain smooth like folding cloth, never
   sharp or spiky, including wide inner bends. Outer boundary lines must be brighter and glow more than the interior
@@ -39,8 +50,20 @@ restored three distinct ribbon identities; it did not establish fidelity.
   are corrected. Still open: fine-detail stability, depth/light and reference shape fidelity. Inspect all boards
   at native resolution and explicit motion times; do not hide shape faults with bloom.
 - [~] **Floor fidelity, Awaiting Validation:** generated maps are placed; inspect fine wet detail and dark gaps at
-  every pose against the main mock. Reflections are still broader and softer than the target. Tune optical sharpness
-  and streaking without restoring repeated pools or a diffuse carpet. Reflection OIT-body inclusion, resize and full cost proof remain open.
+  every pose against the main mock. **Operator rejected the mottled wet/dry candidate:** the target is smooth wet
+  concrete, not a high-contrast patch mask. Retain the preferred waveform and the independently proven continuous
+  reflection filter; rebuild the floor around a continuous wet film, subtle grain and restrained roughness variation.
+  **Smoothness takes priority over wet patches (operator clarification):** establish a nearly flat surface with
+  restrained grain. The mock also needs gentle Gaussian reflection blur: keep physical surface smoothness and
+  optical blur as independent controls, hold the former fixed and compare native floor-only crops for the latter.
+  Do not alternate between mottled roughness, broad blur and a sharp mirror as substitutes for the combined target.
+  Replace the blurred-mirror diffuse-light shortcut: it illuminates the reflected image instead of the concrete
+  under the sources. First prove bounded soft emitters derived from the admitted history (position, width, colour,
+  emission and age fade), held in absolute history bins. This is a lab optical approximation, without shadows;
+  it must not become a second waveform or clock. Keep physical relief and Gaussian blur fixed during that comparison.
+  Bound/count and translation/fade checks, native floor crops, navigation and GPU cost precede a checkpoint. CPU
+  packet reduction in this synthetic lab is not admitted as a production per-frame preparation path.
+  Reflection OIT-body inclusion, resize and full cost proof remain open.
 - [ ] **S3D-7 bounded world fog, third:** retain the simple thick mist for composition until waveform and floor improve,
   then replace the analytic floor-colour approximation with a reduced-resolution volume. Carve clearance and soft
   illumination from the actual ribbon packet, with no second path/simulation/clock. Correct Orthographic/Perspective
@@ -98,10 +121,46 @@ correct direction", with more work explicitly required. Preserve this exact reci
 of the waveform, not full mock parity, the floor, fog, motion or production readiness.
 
 Generated material custody and prompts: `assets/textures/waveform_floor/Source.md`. The albedo is sampled in sRGB;
-the roughness map is linear data. Two differently oriented/scaled world-space samples suppress the old tile pattern,
-with a restrained grain-derived micro-normal and smoother wet-film patches. Native pose evidence:
-`wr04_generated_floor/`. Missing maps raise an error, and partial texture allocation is retired. This establishes
-generation and 3D placement; the floor appearance remains unaccepted.
+roughness and the separate smooth-height map are linear data. Colour pores no longer supply surface normals.
+Two differently oriented/scaled world-space samples reduce visible tiling. The first aggregate albedo still read
+as grit under direct illumination and is being replaced with smooth finished concrete. Missing maps raise an error,
+and partial texture allocation is retired. Asset generation/placement is established; appearance remains unaccepted.
+
+Rejected floor study: `wr05_floor_candidate/`, preserving waveform checkpoint `0ca9fd27`. The operator rejected
+its mottled appearance in favour of the mocks' smooth wet concrete. Do not retain its wet/dry contrast or patch scale
+as a target. The shared receiver filter separately resolves the reproduced repeated-highlight defect, with a native
+regression and same-recipe GPU cost comparison. Small normal perturbations follow the viewed ground axes under yaw.
+
+## 0B. Remaining visual gaps and immediate verification
+
+- [ ] **Concrete finish:** the rejected floor looks gritty/mottled; the target is smooth finished wet concrete with
+  restrained fine material detail. Inspect the newly generated smooth albedo under actual scene light. Do not use
+  texture blur to conceal coarse aggregate, or reintroduce wet/dry coverage masks. Keep surface relief nearly flat.
+- [ ] **Reflection character:** floor-only comparisons still show large duplicated sine ribbons against black,
+  whereas the main mock has gently softened coloured highlights over visible concrete. Keep gentle Gaussian blur
+  independent of physical smoothness; retain coloured dark gaps without turning the floor into a sharp mirror or
+  a uniformly hazy smear. Gaussian energy/centroid/isotropy checks pass at 1x and 2x reflection scale. Earlier
+  single-sample cost figures do not cover 25-tap blur.
+- [ ] **Floor illumination:** remove the spatially incorrect blurred-mirror diffuse lookup. The unaccepted soft-source
+  candidate now reads position/width/colour/emission/age from admitted 3D history, but the first capture exposed a
+  broad violet band and coarse albedo. Refine source/material balance against native crops, not just overall brightness.
+  Recapture after the corrected floor vertex-count wiring; `wr05_concrete_light/` predates that correction and is
+  diagnostic only. This reduction is unshadowed and low frequency, not exact sheet-area light or a volume-clearance
+  field. No runtime per-frame CPU path is admitted by it.
+- [ ] **Waveform shape and depth:** preserve preferred checkpoint `0ca9fd27`. The real swept 3D sheets and both bright
+  rims are progress; folded-cloth depth, natural variation, richer fanning/gathering, hot crossings and readable low
+  detail still fall short of the mocks. Reject sharp bends and flat wire-bundle readings in enlarged crops and motion.
+- [ ] **Mist/scene depth:** current analytic distance colour is not the target's thick volumetric fog. There are no
+  sculpted turbulent banks, real ribbon-shaped clearance or source-depth lighting yet. Build the bounded shared
+  volume only after the immediate floor and waveform work; it must hide sky, horizon and floor boundaries from every
+  admitted camera pose. No pillars. Missing fog light also limits complete-scene floor comparison today.
+- [ ] **Motion and cost:** capture explicit-time slow motion for floor grain/reflection stability and both waveform
+  rims; then five camera poses in both projections. Measure final floor draw, reflection generation and whole scene
+  separately, plus CPU light preparation. Check Off/lazy/resize/context retirement at their owners. Current static
+  images and earlier narrow timings do not close these gates.
+- [ ] **Preset range and acceptance:** keep the complete-scene and preset-range mocks as distinct attainable looks,
+  including the latter's warm high accents. Prove paired low/high in the same world. Operator visual acceptance stays
+  open; audio response, live presets/Settings and production registration follow fidelity, never precede it.
 
 ### Camera contract for all following slices
 
@@ -436,8 +495,9 @@ to hide segmented geometry. This stage may match one band's character; it is not
 
 **Entry:** S3D-5 admitted in Current_Plan; independent reflection harness before the consumer.
 
-**Implemented:** shared `PlanarReflection`, mirrored physical camera and lab light/spark inclusion; generated albedo
-and linear roughness maps with allocation-failure cleanup. Asset custody/prompts: `assets/textures/waveform_floor/Source.md`.
+**Implemented:** shared `PlanarReflection`, mirrored physical camera and lab light/spark inclusion; generated albedo,
+linear roughness and independent smooth-height maps with allocation-failure cleanup. Asset custody/prompts:
+`assets/textures/waveform_floor/Source.md`. Current fidelity gaps and pending filter/illumination proof live in §0B.
 Remaining proof and fidelity work:
 
 - [ ] Complete the reflection inclusion/clip contract, including OIT body and eventual volume. Use the same scene
@@ -445,7 +505,8 @@ Remaining proof and fidelity work:
 - [ ] Prove floor-to-object registration with an asymmetric coloured object/light fixture at known positions; translate
   and orbit the physical eye. Check reflected high/low changes use the exact same logical snapshot, without one-frame lag.
 - [ ] Refine bounded roughness/filtering, world-space material scale, normal detail and distance-dependent appearance
-  using the placed generated maps. Match wet reflection detail and dark gaps; current reflections remain too broad.
+  using the placed generated maps. Match smooth concrete plus gentle reflection blur and coloured dark gaps together;
+  neither increasing blur nor sharpening the existing mirror is sufficient (see §0B).
   Production packaging must include these owned assets at WR-08. Do not substitute painted glow for reflected geometry.
 - [ ] State pass count, target resolution/sample count, memory, scene inclusion, update invalidation and Off behavior.
   Static environment reuse must be dependency-correct; reacting ribbons cannot use a stale reflection on a separate clock.
