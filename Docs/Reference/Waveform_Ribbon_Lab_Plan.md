@@ -75,6 +75,13 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
   - low: 0.114 / 0.269 vs 0.079 / 0.22 (baseline 0.033);
   - high: 0.208 / 0.569 vs 0.307 / 0.538.
   The loud floor's median is high; the quiet floor is still somewhat dark.
+- [~] **Floor mist split (operator, 1 November):**
+  - **Reactive coloured volume mist only above the waveform and at the edges** the camera does not see. The coloured
+    floor banks, the floor light and any volume mist under the waveform are off: eroded lumps there read as stray
+    puffs at the contact line, and the bank term floated noise puffs once the banks were off.
+  - **The floor takes the cheap analytic mist instead:** slightly tinted, thickening toward the camera-side floor
+    edges, the extreme sides and most of all into the distance, where it is thick dark grey and hides the horizon.
+  - **Open:** an optional thin, cheap floor-edge mist, kept only if it helps the blend.
 - [~] **Floor column shaping:** a mild fade toward the camera (`column`) puts the high state's brightness at the
   contact line. Wet-film sparkle grain was tried and rejected: it brought back the mottled floor. The fade darkens
   the already too-dark low-state floor further, so it stays mild. Earlier state: the columns ran the full floor
@@ -94,6 +101,8 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
     - fine per-pixel filaments: sand;
     - the unlimited line: lit the floor-mist boundary as a white bar along the contact line, and crackled the floor
       banks' edges (operator: regressed).
+  - **Operator follow-up:** the fibrous, lightly blurred line (`wr07_mist_floor_split`) is the target; the heavily
+    smoothed band read worse.
   - **Open:**
     - filaments are screen-anchored: check them in motion and camera moves;
     - the mock's line is brighter at its core with fibrous tendrils into the bank.

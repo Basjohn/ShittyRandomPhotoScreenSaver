@@ -84,10 +84,11 @@ POSES = {'mock': Pose(), 'turned': Pose(turn=.14), 'raised': Pose(tilt=-.12), 'd
 
 @dataclass(frozen=True)
 class Environment:
-    backdrop: tuple = (.12, .16, .24)
-    # Clear around the waveform, dense immediately beyond it, then continuous with the far background.
-    mist: dict = field(default_factory=lambda: mist_uniforms(centre_xz=(0., 9.), radii_xz=(24., 10.), falloff=.25,
-                                    floor_thickening=2., thickening_height=2., low_glow=.5))
+    backdrop: tuple = (.18, .19, .23)
+    # Floor mist (analytic, cheap): clear around the waveform, thickening toward the camera-side floor edges, the
+    # extreme sides and most of all into the distance, where it is thick dark grey and hides the horizon.
+    mist: dict = field(default_factory=lambda: mist_uniforms(centre_xz=(0., -1.), radii_xz=(9., 7.5), falloff=1.6,
+                                    floor_thickening=1., thickening_height=1.5, low_glow=0.))
 
 
 @dataclass(frozen=True)
@@ -99,9 +100,9 @@ class Fog:
     margin: float = .1              # clear air beyond the envelope (world units)
     clearance: tuple = (.3, .25)    # push of the whole field from the envelope; the mist never enters within
     ends: float = 6.                # the mist comes this far forward where the sheets fade (world units)
-    floor: tuple = (2., 5.5, 2.5)   # floor bank height, forward reach at the sides, |x| where the sides begin
+    floor: tuple = (0., 5.5, 2.5)   # floor bank height, forward reach at the sides, |x| where the sides begin
     interior: tuple = (.25, .22, 2.2)   # unlit body lumps: floor, frequency; rim fall per unit of billow push
-    floor_light: tuple = (.08, 2., .08)  # floor mist light share, its reach from the sheets; wall-behind light
+    floor_light: tuple = (0., 2., .08)  # floor mist light share, its reach from the sheets; wall-behind light
     softness: float = 1.5           # depth over which coarse coverage rises: the detail march erodes within it
     noise_scale: float = .35        # lobe frequency of the band's edge (per world unit)
     noise: float = 2.6              # lobe displacement of the edge (world units)
@@ -385,6 +386,9 @@ float fogInside(vec3 world, out vec4 band, out float above, out float below) {
     float front=uFogShape.x+(1.0-band.z)*uFogEnds;
     float behind=front-world.z+uFogShape.z*(fogBillow(world.zyx*uFogForm.w*0.8+vec3(5.3))-0.5)*1.5;
     float field=min(behind,max(outside,behind-uFogShape.y));
+    // Under the waveform (where sheets are present) the reactive mist is absent: the floor takes the cheap analytic
+    // mist. Isolated eroded lumps survived there and read as stray puffs at the contact line.
+    field=below>0.0?mix(field,-1.0,smoothstep(0.0,0.3,below)*band.z):field;
     // Floor mist: low billowed banks on the floor, reaching toward the camera at the sides (the mock's lower
     // corners), thin under the sheets and never within their clearance.
     float side=smoothstep(uFogFloor.z,uFogFloor.z+3.0,abs(world.x));
@@ -394,7 +398,8 @@ float fogInside(vec3 world, out vec4 band, out float above, out float below) {
     float reach=max(side*uFogFloor.y,1e-3);
     float mound=height*(1.0-length(vec2(world.y/max(height,1e-3),max(world.z-uFogShape.x,0.0)/reach)))
                 +uFogShape.z*0.9*(fogBillow(world*uFogForm.w*1.3+vec3(2.1))-0.5);
-    float floorMist=min(mound,raw-uFogClearance.y);
+    // Banks off: no mound at all (its billow term alone would float noise puffs anywhere in the world).
+    float floorMist=uFogFloor.x>0.0?min(mound,raw-uFogClearance.y):-1e3;
     return world.y<0.0?-1.0:max(field,floorMist);
 }
 """
@@ -843,7 +848,9 @@ class Lab:
             gl.glDepthMask(gl.GL_TRUE)
             with self.scene.emission_writes():
                 # With the volume, the march composite owns the floor's mist (in front of it, to the plane).
-                self._floor(mvp, eye, view, orthographic, (width, height), flat=flat, mist_off=fogged)
+                # The floor takes the cheap analytic mist (slightly tinted, dark with distance); the reactive volume
+                # mist is for the space above and the edges.
+                self._floor(mvp, eye, view, orthographic, (width, height), flat=flat)
                 if flat:
                     self._flat_ribbons(packet, ribbon_mvp)
                 if fogged:
