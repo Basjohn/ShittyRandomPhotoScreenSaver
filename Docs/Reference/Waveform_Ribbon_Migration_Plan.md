@@ -50,6 +50,17 @@ Names are suggestions for the operator to rename.
 Each bucket lists its controls and the editor that shows them. "Existing" editors are already in the codebase;
 "New" editors are built in this migration and shared by later modes where they fit.
 
+**Range sliders (operator, 1 November).** Every control that can be a range is one: the existing `Range` control
+(`core/settings/visualizer_mode_settings.py`, the shared range slider in `ui/widgets/visual_controls.py`), persisted
+as `[low, high]`. The meaning is strict:
+- **low** is the value with almost no sound (quiet music, the start of a fade-in);
+- **high** is the value at the peak (the loudest passage).
+- **In between:** the passage drive (§4.2) places the value; beats swing it inside the range and never past high.
+- Controls marked **(R)** below are ranges; the rest are single values.
+- A range never stands for anything else (for example, a random spread). Its tooltip says "quiet → peak".
+
+The Shape Tuner's per-target quiet/loud values are these same ranges, edited on the tuner and shown in the bucket.
+
 ### Ribbons
 - **Ribbon Count:** 1-3. The cap follows the mist's per-sheet clearance rows (`ENVELOPE_RIBBONS`, 3 in the lab)
   and the packet's `MAX_RIBBONS` (8); raising it past 3 needs more envelope rows and a cost check first.
@@ -57,9 +68,11 @@ Each bucket lists its controls and the editor that shows them. "Existing" editor
   - band it follows (Bass, Mids, Highs, All);
   - character: height share, width share, wave rate share, phase offset, light share;
   - quiet and loud colours, as two swatch pairs (centre and edge);
-  - how far loud colour replaces quiet (the tuner's `tint` target, per ribbon).
-- **Sheet Look:** strand count and fineness, strand light, body fill, rim light and rim glow, glints. Sliders over a
-  live close-up of one sheet (Glow Preview, New).
+  - Colour Reactivity (R): how far loud colour replaces quiet (the tuner's `tint` target, per ribbon).
+- **Ribbon Count changes** fade: a removed ribbon fades out over its history and a new one fades in from the head
+  (fade, never vanish); the ring keeps its capacity.
+- **Sheet Look:** strand count and fineness, Strand Light (R), body fill, Rim Light (R), rim glow, glints. Sliders over
+  a live close-up of one sheet (Glow Preview, New).
 
 ### Shape and Reactivity (Shape Tuner, New)
 - **Matrix editor:** rows are energy sources, columns are ribbon properties; each cell has a gain and a response
@@ -68,7 +81,7 @@ Each bucket lists its controls and the editor that shows them. "Existing" editor
     the musical history's carrier).
   - **Targets:** height, swell (local compression of neighbouring folds), width, twist, lift, spread between ribbons,
     depth sway, secondary deformation, light, sparkle, colour (tint), bass arc (one taller arc per bass passage).
-  - Per target: quiet and loud values (the range the source sweeps) and a smoothing time with an enforced minimum.
+  - Per target: a quiet → peak range (R) and a smoothing time with an enforced minimum.
 - **Character presets inside the tuner:** e.g. Even Swell (complete scene), Dominant Peak (preset range), Silk Sweep
   (alternate).
 - **Live preview:** a 3D or angled-2D ribbon driven by a synthetic sweep (bass, mids, highs, loud passage) so the user
@@ -91,33 +104,38 @@ Each bucket lists its controls and the editor that shows them. "Existing" editor
   as gold).
 
 ### Glow
-- **Sheet Glow:** the share of sheet light sent to the bloom (local glow without blooming the mist).
-- **White-Hot Cores:** the brightest strands burn white; the rest keep their colour.
+- **Sheet Glow (R):** the share of sheet light sent to the bloom (local glow without blooming the mist).
+- **White-Hot Cores (R):** the brightest strands burn white; the rest keep their colour.
 - **Bloom, Exposure:** scene-wide (also mirrored in Lens).
 
 ### Free Strands
-- **Free Strands** toggle, then: count per knot, length, reach (how far they curl away), halo (fuzzy splash), glow,
-  droplets, peel time. Previewed on a sheet during a synthetic loud passage (Glow Preview).
+- **Free Strands** toggle, then: Count (R), Length, Reach (R, how far they curl away), Halo (fuzzy splash), Glow
+  (R), Droplets, Peel Time. Previewed on a sheet during a synthetic loud passage (Glow Preview).
 - Strands always grow out of a rim line and fade in. Their gating follows sparkle (loud passages throw off more).
 
 ### Sparks
-- **Sparks** toggle, then: count per knot, size range (smallest/largest), drift, rise, light, lifetime, whiteness.
+- **Sparks** toggle, then: Count (R), Size (a smallest/largest pair, not a quiet → peak range), Drift (R), Rise,
+  Light (R), Lifetime, Whiteness.
 
 ### Mist
 - **Mist** toggle (on in every starting preset; off removes all of its passes and resources).
-- Density, Clearance (how far the waveform repels it, with a minimum), Billows, Edge Line (strength and fibre),
-  Fringe Colour (gradient share), Distance Haze (darkness, never pure black), Floor Mist (thickness toward edges and
-  distance).
+- Density, Clearance (how far the waveform repels it, with a minimum), Billows, Edge Line (R, strength) and fibre,
+  Fringe Light (R), Fringe Colour (gradient share), Distance Haze (darkness, never pure black), Floor Mist (thickness
+  toward edges and distance), Side Walls (where the edge mist closes in beyond the framed view).
+- Mist reactivity (fringe light, edge line) arrives later than the shape: operator direction keeps audio-driven fog
+  for after the look is accepted; the ranges exist from the start with low = high in the starting presets.
 - Preview: the scene itself; a small turned-view inset helps judge 3D clearance.
 
 ### Floor
-- Wetness/Reflection, Streak Length, Column Fade, Mist Reflection.
+- **Reflection Intensity (R)** (operator, 1 November): how strongly the floor mirrors the scene, quiet → peak.
+- Wetness, Streak Length, Column Fade, Mist Reflection.
 - Floor contact (sheets deform onto the floor) is a rule, not a control.
 
 ### Reaction
 Waveform Ribbon's own controls, following the reactivity guide (`Docs/Guides/Visualizer_Reactivity_Authoring.md`);
 the shared audio controls (sensitivity, input gain, block size) stay at their shared technical owners.
-- **Passage Response:** how far quiet → loud passages move the tuner's ranges (the eased passage drive, §4.2).
+- **Passage Response:** how far quiet → loud passages move every (R) control across its range (the eased passage
+  drive, §4.2).
 - **Beat Pulse:** how much a hit lifts height and light, and how gently it settles (rise about 45 ms, settle about
   0.65 s as DevCurve).
 - **Accent Threshold:** how far an onset must stand out from the recent ones to throw sparks and strands.
@@ -129,7 +147,7 @@ These sit beside the Shape Tuner, which says *what* each source moves; these say
   only), Auto Rotate with After and Speed.
 
 ### Lens (advanced)
-- Exposure, Bloom; Focus and Aperture only once shared defocus exists for this mode.
+- Exposure, Bloom (R); Focus and Aperture only once shared defocus exists for this mode.
 
 ### Technical profile
 - **Quality tier:** one Low/Medium/High setting for the large-display caps (march heights, mirrored march, floor
@@ -203,6 +221,35 @@ separate attack and release. Sources:
   - preset-to-source reachability;
   - then `tools/visualizer_live_check.py` with recorded music and `--load game60`, and installed eyes-on review.
 
+### 4.4 Reactivity testing notes
+Taken from the guide (§3, §5, §7, §8, §12, §13A-C) and the lab plan's WR-07 checks, specific to a flowing history:
+- **Fixtures, not presets:** test-owned ranges and synthetic sources (neutral, weak, medium, strong, maximum) with
+  monotonic ordering of each target. Never assert preset values.
+- **Recorded music:** quiet song, ordinary, hot chorus, isolated kick/snare/vocal over a loud bed, from
+  `logs/visualizer_recordings/*.jsonl` through the production lanes, with pre-roll so the history is warm. Measure:
+  - each driver's p05/p50/p95 as a fraction of its range, and the share of frames at the top 15% (pinned drivers);
+  - beat contrast inside a loud passage, not only quiet vs loud means;
+  - attack and settle times of the height pulse and the light flash.
+- **History-specific checks:**
+  - a bass hit written at the head travels across the hall unchanged (the knot never rewrites);
+  - a control that changes faster than the band-limit allows shows no lump or kink in the drawn ribbon (crops);
+  - flow speed is identical across quiet, loud and silent windows.
+- **Silence and state:**
+  - silence → music, music → silence, pause/resume (warm and cold), short dropouts;
+  - no sparks, strands or pulses in silence;
+  - the idle drift is honest (no fake energy) and nothing vanishes.
+- **Events:** one event authors one pulse (consume once; the latest-event snapshot never re-fires); an old
+  activation's events never reach a new one.
+- **Hot start:** activation into an already loud passage seeds the passage drive (no full-width first frame or
+  overshoot), and a preset hot-swap does not reseed history into a jump.
+- **Render rate:** identical logical history at 30, 60 and 144 fps and with irregular frame delivery. Frames read the
+  latest state; they never append history or integrate.
+- **Reachability:** preset → Settings → technical profile → audio lanes → mode capture, live, not only from
+  pre-built features (guide §10).
+- **Floor independence:** reactions hold with Dynamic Floor off (guide §13A).
+- **Acceptance:** `tools/visualizer_live_check.py` with recorded music and `--load game60` (invisible saver), plus
+  installed eyes-on review; automated correlation alone never closes it.
+
 ## 5. Port order
 
 1. Descriptor, logical runtime, ring/packet ownership, empty scene with the framed camera (Orthographic default) and
@@ -216,14 +263,41 @@ separate attack and release. Sources:
 7. Reactivity: recorded-feature replay calibration, then the live check with recorded music and game load.
 8. WR-09 acceptance: mock | lab | production sheets, all camera views, cost at 1080p/1440p/4K, operator review.
 
-## 6. Open findings carried into the migration (camera sweep, 1 November)
+## 6. Camera sweep findings (1 November)
 
 Twelve views per look, both projections (`wr08_camera_sweep/`):
-- **Fixed:** in zoomed-out and low Orthographic views the floor near the camera was clipped into a black band. The
-  near plane now sits behind the eye; the mock pose is unchanged (7 pixels moved by more than 8/255).
-- **Open: end-on views (turn about ±0.35, 63°).** Looking along the ribbons, their light stacks along the line of
-  sight and the floor reflection blows out into white columns. Black sky shows past the mist's ends at the top
-  corners.
-- **Open: turned Perspective view.** The far floor stays bright and streaked up to its far edge (horizon visible);
-  the distance mist does not hide it along every view direction.
-These are lab look fixes, owed before WR-09; production must not paper over them with per-view limits.
+- **Fixed: near clip.** Zoomed-out and low Orthographic views clipped the floor near the camera into a black band.
+  The near plane now sits behind the eye; the mock pose is unchanged.
+- **Fixed: clear corridor along the ribbons.** The clear room in front of the sheets ran unbounded along x, so end-on
+  and turned Perspective views saw the far floor, the horizon and black sky. The clear band and the sheets' 3D
+  clearance now close beyond |x| 8-13, and a billowed side wall of dark haze stands there at every depth, so the
+  ribbons run into the off-screen edge mist (`*_walls.png`). Mock pose: only a 4-pixel sliver at the right edge of
+  the quiet state moved.
+- **Accepted (operator rules):** the side wall's face is near-black distant haze. End-on views keep bright coloured
+  reflection columns: real light stacked along the line of sight, no longer clipped white.
+- **Rejected:** a soft luminance roll-off on the floor reflection barely changed end-on views and moved the mock pose
+  (mean 2.5/255 over 77k pixels). A clear room around the eye did nothing: the dark shape was the wall's face, not a
+  wall in front of the lens.
+
+## 7. Gaps to design before or during the port
+
+- **Aspect and the side walls:** the walls sit at fixed world |x| 8-13, outside today's widest framing. Widening
+  reveals more fixed world (camera contract), so at ultra-wide aspects or zoomed-out Scene Scale the walls must
+  stay outside the view. Derive their position from the widest admitted framing, never per frame from the camera.
+- **History capacity at the widest aspect:** knots = (visible span + both margins) / flow speed × knot rate must fit
+  the 256-knot cap at the widest admitted aspect and lowest flow speed; Flow Speed's range follows from it.
+- **Ribbon count above 3:** needs more envelope rows (mist clearance per sheet) and a cost check.
+- **Warm-up:** many programs (ribbon passes, strays, sparks, floor and its pre-pass, mist volume, march, bake,
+  composite). Prewarm one per already-rendered frame, next-likely first; never in a burst (warm-up rule).
+- **Off paths:** Mist, Free Strands, Sparks, reflections and the mirrored passes each cost nothing when off (no
+  programs, targets or per-frame work).
+- **Cost by quality tier:** per-tier budgets at 1080p/1440p/4K for the whole frame; the mirrored strays and mirrored
+  march are the first cuts.
+- **Multiple displays:** one scene per display, each with its own volume and targets; check that memory and cost
+  scale acceptably with two 4K displays.
+- **Preset repair:** every control above is authored into every preset (repair fill and completeness guard); ranges
+  are filled as `[low, high]`, never as a single value.
+- **Editors share the real renderer:** the Shape Tuner, Gradient Node Editor, Ribbon Cards and Glow Preview preview
+  through the production renderer, not a second drawing path.
+- **Motion check:** explicit-time slow motion for mist anchoring, the screen-space edge line's fibres, floor streak
+  stability and strands, in both projections, before WR-09.
