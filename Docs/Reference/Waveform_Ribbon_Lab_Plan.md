@@ -171,6 +171,31 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
     - **Drift:** mean 1.8/255, both projections' default and turned views; the edge line is unchanged in 2x crops.
     - **Cost:** total mist (main + mirrored march + bake) relative to the floor, 5.1 / 2.2 -> 3.9 / 1.36
       (low / high). The bake itself is 0.1-0.3 ms.
+  - **Display-size check (`wr07_cost_4k`; medians, absolute ms, RTX 4090; clock swings apply):**
+    - **Before caps, fixed-fraction targets grew with the screen:**
+      - 4K mist (marches, bake, updates, composite): 8-10.5 ms;
+      - 4K floor: 4-7 ms;
+      - against a whole-frame budget of 8 ms (Visualizer_Change_Checklist 1C).
+    - **Landed, height caps:** main march at most 540 rows, mirrored march at most 270, floor reflection target at
+      most 360. The 718-pixel lab is pixel-identical (its targets are under the caps), and 4K keeps the approved
+      look's detail per screen fraction.
+    - **After caps:**
+
+      | Size | Mist (low/high) | Floor (low/high) |
+      |---|---|---|
+      | 1080p | 2.5 / 3.9 ms | 0.9 / 1.6 ms |
+      | 1440p | 2.5 / 3.9 ms | 1.8 / 3.7 ms |
+      | 4K | 3.1 / 4.2 ms | 2.8 / 5.0 ms |
+
+      The 4K floor's 360-row cap brings its streak back to the lab's 11 samples (16 at a 720 cap: 4.9 / 7.2 ms).
+    - **Rejected:** anisotropy 16 -> 8. It halved the 4K floor (1.8 / 2.7 ms) but blurred the vertical columns the
+      operator chose.
+    - **Open:**
+      - 4K high still sums to about 9 ms for mist and floor before ribbons, bloom and composition;
+      - candidates: the floor's per-pixel reflection at reduced resolution with a depth-aware upsample, or
+        fewer streak segments with per-pixel offsets judged in crops;
+      - a whole-frame measurement in the live check (`--load game60`) is the acceptance gate, not these isolated
+        stage timings.
   - **Scale note:** the main march is about 1 ms at 820x718 at half resolution. It scales with pixels, so 4K needs
     the bake or a lower march scale before production.
 - [ ] **Motion:** explicit-time slow-motion captures of mist anchoring, streak stability and sheet rims; five poses
