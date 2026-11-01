@@ -1,5 +1,4 @@
 import QtQuick
-import QtQml.Models
 
 // One retained, display-local edit layer. Python's CustomLayoutSession remains
 // the only working geometry/enabled/removal authority; this item renders model

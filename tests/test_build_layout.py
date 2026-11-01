@@ -523,16 +523,22 @@ def test_publication_uses_bounded_retry_for_late_windows_locks() -> None:
 
 def test_qml_sources_import_only_the_frozen_packaging_allowlist() -> None:
     """The build refuses QML Qt imports outside build_layout.ps1's allowlist; catch them here, not at release time.
-    (Qt 6's QtQuick already provides Window/Screen attached properties: QtQuick.Window is not needed for them.)"""
-    import re
-    script = LAYOUT_SCRIPT.read_text(encoding="utf-8")
-    block = re.search(r"\$allowedImports = @\((.*?)\)", script, re.S)
-    assert block, "allowlist not found in build_layout.ps1"
-    allowed = set(re.findall(r"'([^']+)'", block.group(1)))
-    unexpected = []
-    for qml in sorted((REPO_ROOT / "rendering" / "quick" / "qml").rglob("*.qml")):
-        for number, line in enumerate(qml.read_text(encoding="utf-8").splitlines(), 1):
-            match = re.match(r"\s*import\s+([A-Za-z0-9_.]+)(?:\s|$)", line)
-            if match and match.group(1).startswith("Qt") and match.group(1) not in allowed:
-                unexpected.append(f"{qml.relative_to(REPO_ROOT)}:{number}: {match.group(1)}")
-    assert not unexpected, unexpected
+    (Qt 6's QtQuick already provides Window/Screen attached properties and Instantiator: neither QtQuick.Window nor
+    QtQml.Models is needed for them.)"""
+    from tools.qml_import_contract import violations
+    assert not violations(), violations()
+
+
+def test_qml_import_contract_flags_a_new_namespace_and_reads_the_build_allowlist(tmp_path):
+    from tools.qml_import_contract import allowed_imports, violations
+    assert {"QtQuick", "QtQuick.Effects"} <= allowed_imports()
+    (tmp_path / "Ok.qml").write_text("import QtQuick\nimport QtQuick.Effects\nItem {}\n", encoding="utf-8")
+    assert violations(tmp_path) == []
+    (tmp_path / "New.qml").write_text("import QtQuick\nimport QtQml.Models\nItem {}\n", encoding="utf-8")
+    assert len(violations(tmp_path)) == 1 and violations(tmp_path)[0].endswith("QtQml.Models")
+
+
+def test_every_pytest_session_fails_on_a_qml_import_outside_the_build_allowlist() -> None:
+    # Focused runs never collect this file; the session hook makes every run catch it (31 October slipped past).
+    conftest = (REPO_ROOT / "tests" / "conftest.py").read_text(encoding="utf-8")
+    assert "qml_import_contract" in conftest and "def pytest_sessionfinish" in conftest
