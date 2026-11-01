@@ -45,8 +45,11 @@ evidence `wr07_floor_columns/`. Compare every later candidate against it and rev
 worse. The operator named the floor of this baseline and of the `wr07_colour_grade` capture the best floors so far.
 
 **Live work (open gaps, largest first):**
-- [ ] **Mist continuity and volume:** the mist breaks completely apart in places (holes through the bank where
-  erosion meets thin coverage). Away from its lit edges it reads flat: there is no interior structure or depth.
+- [~] **Mist continuity and volume (`wr07_mist_lumps`):** the breaks were in the lit fringe, not the mass. The rim
+  light fell off with distance from the envelope, so stretches the billows pushed further away went dark. It now
+  glows wherever the push left the face (gentle fall per unit of push), so the fringe is continuous across the
+  width. The unlit body has large dim lumps instead of one flat grey. Still to check: motion, and whether the lumps
+  read as volume at wide poses.
 - [ ] **Colour and shape mutability (presets and reactivity):** every board's colours and shapes must be reachable
   by presets and reactivity.
   - **Colour pairs:** a low-reactivity colour pair and a high-reactivity colour pair, chosen per preset; reactivity
@@ -57,9 +60,17 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
     - the per-knot tint row for colour that flows along the history;
     - the world grade (three stops over x) for a static layout;
     - the mist and banks take their colour from the envelope.
-  - **Still open:** the lab recipe as low/high pairs; shape character per preset (amplitude, swell, width, twist
-    ranges) as data, not code.
-- [ ] **Floor column shaping:** the columns run the full floor height at even brightness. The mock's are brightest
+  - **Lab recipe colour pairs:** `Recipe.palette` holds the low and high pairs, blended by reactivity. The middle
+    stop comes from the hue between them (`colour_grade`). An alternate pair (blue/teal low, orange/pink high)
+    recolours the mist, banks and floor.
+  - **Still open:**
+    - the sheets' own base colours (`PALETTE`) are not preset data yet, so sheets stay cyan/magenta under any pair;
+    - warm colours turn brown in dim mist;
+    - shape character per preset (amplitude, swell, width, twist ranges) as data, not code.
+- [~] **Floor column shaping:** a mild fade toward the camera (`column`) puts the high state's brightness at the
+  contact line. Wet-film sparkle grain was tried and rejected: it brought back the mottled floor. The fade darkens
+  the already too-dark low-state floor further, so it stays mild. Earlier state: the columns ran the full floor
+  height at even brightness. The mock's are brightest
   at the contact line and break into sparkle toward the camera. In low react the floor is much darker than the
   mock's; its cyan and magenta columns are distinct even then. No concrete structure is visible. Keep the
   baseline's smooth wet character.
