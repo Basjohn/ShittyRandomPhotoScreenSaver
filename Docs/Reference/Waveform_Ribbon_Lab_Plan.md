@@ -76,6 +76,18 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
   - low: 0.114 / 0.269 vs 0.079 / 0.22 (baseline 0.033);
   - high: 0.208 / 0.569 vs 0.307 / 0.538.
   The loud floor's median is high; the quiet floor is still somewhat dark.
+- [~] **Band along the camera's own direction (`wr07_mist_view_band`; operator: "good at normal, bad at turned";
+  "this goes deep into the waveform"):**
+  - **Cause:** the clear band was extruded along the default view's pitch only. Under yaw it no longer matched the
+    outline the camera sees, so the mist's lit face sat inside the waveform.
+  - **Fix:** the band (and the edge-line limit) is now projected along the actual camera direction (x and y per unit
+    z). The 3D tube clearance stays in true world space; the mirrored camera shares the main camera's medium.
+  - **Consequence:** the band follows the camera. A camera move reshapes the mist's clear space accordingly, since
+    the mist is repelled by the waveform as seen.
+  - **Checked:**
+    - default view pixel-identical (forward has no x component);
+    - the turned view hugs the outline with no mist inside the sheets;
+    - all five poses checked.
 - [~] **Continuous lit edge (`wr07_mist_continuous`, after baseline `waveform-baseline-2026-11-01b`):**
   - **Cause of the break:** the operator saw the lit fringe break between the blue and purple stretches. It was a
     large billow that lifted the mist face far above the waveform there, out of the rim light's reach. With billows

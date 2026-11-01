@@ -357,7 +357,7 @@ uniform vec4 uFogForm;      // density, margin, edge softness, billow frequency
 uniform vec4 uFogShape;       // start z, band depth, billow displacement, light decay
 uniform float uFogTube;       // true 3D clearance around every sheet (world units)
 uniform vec2 uFogClearance;   // push of the whole field from the envelope; distance the mist never enters
-uniform float uFogSlope;      // admitted base view rise per unit z
+uniform vec2 uFogSlope;       // the camera's view direction: x and y change per unit z (band projection)
 uniform float uFogEnds;       // how far the mist comes forward where the sheets fade (world units)
 uniform vec3 uFogFloor;       // floor bank height, forward reach at the sides, |x| where the sides begin
 uniform vec3 uFogInterior;   // lump floor (0..1), lump frequency, rim fall per unit of push
@@ -392,10 +392,13 @@ float fogSheetDistance(vec3 world) {
 // Depth into the mist (world units): behind the start plane, and outside the clear band around the waveform's
 // envelope unless beyond the band's depth. Billows displace the band's edge.
 float fogInside(vec3 world, out vec4 band, out float above, out float below) {
-    band=texture(uEnvelope,vec2((world.x-uEnvelopeSpan.x)*uEnvelopeSpan.y,0.5/ENV_ROWS));
+    // Projected along the camera's view direction onto z = 0 (see waveform_envelope): the band follows the
+    // waveform's outline as this camera sees it, at any yaw or pitch.
+    float px=world.x-uFogSlope.x*world.z;
+    band=texture(uEnvelope,vec2((px-uEnvelopeSpan.x)*uEnvelopeSpan.y,0.5/ENV_ROWS));
     // The waveform repels the mist: the whole field (shape and light) is pushed out from the envelope by the
     // first clearance; billow tips that still come closer than the second are cut, so the cut face is lit.
-    float y=world.y-uFogSlope*world.z;  // projected along the admitted base view (see waveform_envelope)
+    float y=world.y-uFogSlope.y*world.z;
     float raw=max(y-band.y,band.x-y);
     // Only the mist above is pushed up: pushing the lower mist down squashed it into a flat lit slab on the floor.
     above=y-band.y-uFogClearance.x; below=band.x-y;
@@ -465,7 +468,7 @@ void fogMedium(vec3 world, out vec3 radiance, out float extinction, out float st
     float inside=fogInside(world,band,above,below);
     steady=world.z<uFogShape.x+1.0?uFogHaze:0.0;
     extinction=uFogForm.x*smoothstep(0.0,uFogForm.z,inside)+steady;
-    float u=(world.x-uEnvelopeSpan.x)*uEnvelopeSpan.y;
+    float u=(world.x-uFogSlope.x*world.z-uEnvelopeSpan.x)*uEnvelopeSpan.y;
     vec3 upperColour=texture(uEnvelope,vec2(u,1.5/ENV_ROWS)).rgb;
     vec3 lowerColour=texture(uEnvelope,vec2(u,2.5/ENV_ROWS)).rgb;
     // The nearest sheet edge lights the mist in its colour, by distance from the sheets (outside the envelope and
@@ -516,7 +519,7 @@ def camera(pose: Pose, aspect: float):
 VIEW_SLOPE = math.tan(math.radians(-SPEC.pitch_base_degrees))
 
 
-def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None) -> np.ndarray:
+def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None, slopes=(0., VIEW_SLOPE)) -> np.ndarray:
     """Lower/upper sheet bounds and their colours along world x from the admitted ring packet (3 x samples x RGBA).
 
     Each ribbon's knots are monotone in x (the history flows along +x), so its centre height and half-width
@@ -548,10 +551,15 @@ def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None) -> np
         x = knots[:, 0, 0] + origin[0]
         order = np.argsort(x)
         x, knots = x[order], knots[order]
+        true_x = x
+        z = knots[:, 0, 2] + origin[2]
+        x = x - slopes[0]*z  # projected along the camera direction for the band
+        order = np.argsort(x)
+        x, knots, true_x, z = x[order], knots[order], true_x[order], z[order]
         age = now - (knots[:, 1, 0] + packet.coordinate_origin)
         fade = smooth(age/fade_in) if fade_in > 0 else np.ones_like(age)
         fade = fade*(smooth((lifetime - age)/fade_out) if fade_out > 0 else 1.)
-        projected = knots[:, 0, 1] + origin[1] - VIEW_SLOPE*(knots[:, 0, 2] + origin[2])
+        projected = knots[:, 0, 1] + origin[1] - slopes[1]*z
         centre = np.interp(xs, x, projected, left=np.nan, right=np.nan)
         half = fog.envelope_width*np.interp(xs, x, knots[:, 0, 3])*np.interp(xs, x, fade, left=0., right=0.)
         light = np.interp(xs, x, knots[:, 3, 3]*fade, left=0., right=0.)
@@ -564,10 +572,12 @@ def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None) -> np
         sheets.append((top, bottom, colour*light[:, None]))  # per-x colour: it flows along the history
         if len(sheets) <= ENVELOPE_RIBBONS:  # the sheet itself in 3D (unprojected), for true 3D clearance
             tube = tubes[len(sheets) - 1]
-            tube[:, 0] = np.interp(xs, x, knots[:, 0, 1] + origin[1])
-            tube[:, 1] = np.interp(xs, x, knots[:, 0, 2] + origin[2])
-            tube[:, 2] = np.interp(xs, x, knots[:, 0, 3])*np.interp(xs, x, fade, left=0., right=0.)
-            tube[:, 3] = np.where(here, np.interp(xs, x, fade), 0.)
+            t_order = np.argsort(true_x)
+            tx, tk, tf = true_x[t_order], knots[t_order], fade[t_order]
+            tube[:, 0] = np.interp(xs, tx, tk[:, 0, 1] + origin[1])
+            tube[:, 1] = np.interp(xs, tx, tk[:, 0, 2] + origin[2])
+            tube[:, 2] = np.interp(xs, tx, tk[:, 0, 3])*np.interp(xs, tx, tf, left=0., right=0.)
+            tube[:, 3] = np.interp(xs, tx, tf, left=0., right=0.)
         upper, lower = np.maximum(upper, top), np.minimum(lower, bottom)
         presence = np.maximum(presence, np.where(here, np.interp(xs, x, fade), 0.))
     # Each edge glows in a blend of the sheets near it (by proximity), never a hard switch to whichever is outermost.
@@ -634,7 +644,7 @@ def colour_grade(recipe, react: float) -> tuple:
     return (left, mid, right, recipe.grade_range, *recipe.grade_share)
 
 
-def crackle_limit(envelope, fog: Fog, mvp, width: int, samples: int = 256) -> np.ndarray:
+def crackle_limit(envelope, fog: Fog, mvp, width: int, samples: int = 256, slopes=(0., VIEW_SLOPE)) -> np.ndarray:
     """Per screen column, the screen v (0..1, up) of the waveform's projected top outline: the mist's edge line
     belongs to the bank above the waveform, never to boundaries below it (floor mist, the contact line)."""
     x0, x1, n = fog.envelope_range
@@ -642,7 +652,7 @@ def crackle_limit(envelope, fog: Fog, mvp, width: int, samples: int = 256) -> np
     upper = envelope[0, :, 1]
     limit = np.full(samples, -1.)
     for z in np.linspace(fog.sheets_z[0], fog.sheets_z[1], 5):
-        world = np.stack((xs, upper + VIEW_SLOPE*z, np.full_like(xs, z), np.ones_like(xs)))
+        world = np.stack((xs + slopes[0]*z, upper + slopes[1]*z, np.full_like(xs, z), np.ones_like(xs)))
         clip = mvp @ world
         sx, sy = (clip[0]/clip[3]*.5 + .5), (clip[1]/clip[3]*.5 + .5)
         column = np.clip((sx*samples).astype(int), 0, samples - 1)
@@ -766,6 +776,7 @@ class Lab:
         self.fog, self.reflected_fog = FogVolume('waveform lab mist'), FogVolume('waveform lab reflected mist')
         self.march = FogMarch('waveform lab mist', FOG_COVERAGE_GLSL)
         self._crackle_limit = None
+        self._slopes = (0., VIEW_SLOPE)
         self.reflected_march = FogMarch('waveform lab reflected mist', FOG_COVERAGE_GLSL)
         self.textures = {}
 
@@ -808,15 +819,18 @@ class Lab:
                                matrix_values=(2/width, 0, 0, 0, 0, -2/height, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1),
                                quad_vao=self.target.vao)
         packet = ring.packet()
+        forward = -view[2, :3]
+        self._slopes = (float(forward[0]/forward[2]), float(forward[1]/forward[2]))
         envelope = None if flat or recipe.fog is None else waveform_envelope(packet, scroll[:3, 3], draw['age_fade'],
                                                                               recipe.fog,
-                                                                              colour_grade(recipe, STATES[state]['react']))
+                                                                              colour_grade(recipe, STATES[state]['react']),
+                                                                              self._slopes)
         self.target.bind(clear=(0., 0., 0., 0.))
         fogged = not flat and recipe.fog is not None
         if fogged:
             camera_lens = lens(POSES[pose], width/height)
             self._update_fog(self.fog, view, camera_lens, (width, height), recipe.fog.cell, recipe.fog.slices, envelope)
-            self._crackle_limit = crackle_limit(envelope, recipe.fog, projection @ view, width)
+            self._crackle_limit = crackle_limit(envelope, recipe.fog, projection @ view, width, slopes=self._slopes)
             self._update_fog(self.reflected_fog, mirror_view(view, 0.), camera_lens, (width, height),
                              recipe.fog.reflection_cell, recipe.fog.reflection_slices, envelope)
             fog = recipe.fog
@@ -861,7 +875,7 @@ class Lab:
         gl.glUniform4f(location('uFogShape'), fog.start_z, fog.band_depth, fog.noise, fog.light_decay)
         gl.glUniform2f(location('uFogClearance'), *fog.clearance)
         gl.glUniform1f(location('uFogTube'), fog.tube)
-        gl.glUniform1f(location('uFogSlope'), VIEW_SLOPE)
+        gl.glUniform2f(location('uFogSlope'), *self._slopes)
         gl.glUniform1f(location('uFogEnds'), fog.ends)
         gl.glUniform3f(location('uFogFloor'), *fog.floor)
         gl.glUniform3f(location('uFogFloorLight'), *fog.floor_light)
