@@ -243,7 +243,7 @@ float crackleNoise(vec2 x) {
 // Full resolution and screen space: a volume cannot confine a line to a silhouette.
 float crackleLum(vec2 uv, vec2 t) {
     vec3 w=vec3(0.2126,0.7152,0.0722);
-    vec2 h=t*0.5;
+    vec2 h=t*0.25;   // a light blur only: grain off, fibre kept
     return 0.25*(dot(texture(uFogMarch,uv+vec2(h.x,h.y)).rgb,w)+dot(texture(uFogMarch,uv+vec2(-h.x,h.y)).rgb,w)
                 +dot(texture(uFogMarch,uv+vec2(h.x,-h.y)).rgb,w)+dot(texture(uFogMarch,uv+vec2(-h.x,-h.y)).rgb,w));
 }
@@ -285,7 +285,7 @@ vec3 crackle(vec2 uv, vec4 fog) {
     edge*=smoothstep(0.35,0.6,(top-min(tone.r,min(tone.g,tone.b)))/top);
     vec3 hue=tone/top;
     hue=mix(vec3(dot(hue,w)),hue,1.4);
-    return max(hue,vec3(0.0))*edge*allowed*(0.7+0.3*ridge)*uFogCrackle.x;  // mostly a smooth line, gently fibrous
+    return max(hue,vec3(0.0))*edge*allowed*(0.35+ridge)*uFogCrackle.x;  // fibrous line
 }
 void main() {
     // A tent over the march's texels: its per-pixel step jitter is grain, not detail.
