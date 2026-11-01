@@ -160,9 +160,14 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
     - longer steps (0.3, 1.5): mean drift 8-10.
   - **Absolute timings swing about 3x with GPU clock state.** Quiet-state ratios are noisy because the floor is only
     about 0.2 ms.
-  - **Remaining ideas:**
-    - fewer steps for the mirrored march only (the floor takes 0.35 of its light);
-    - bake the shape into a 3D texture per envelope update.
+  - **Rejected:** coarser steps for the mirrored march (0.5, 2.0). There was no measurable saving (it runs at quarter
+    resolution and is not step-bound) and the floor drifted 9-12/255.
+  - **Remaining structural step:** bake the lab shape (inside-distance incl. billows and the 3D tube, in the
+    camera-projected band coordinates) once per frame into a coarse 3D texture at about 0.2 world units. That is
+    about 5x fewer shape evaluations than per-sample marching. It must be judged in native crops of the edge line,
+    which depends on that shape's fine detail.
+  - **Scale note:** the main march is about 1 ms at 820x718 at half resolution. It scales with pixels, so 4K needs
+    the bake or a lower march scale before production.
 - [ ] **Motion:** explicit-time slow-motion captures of mist anchoring, streak stability and sheet rims; five poses
   in both projections.
 - [ ] **Accents:** cyan/magenta sparks with a real size range; tight filament glow plus broad hot spots.
