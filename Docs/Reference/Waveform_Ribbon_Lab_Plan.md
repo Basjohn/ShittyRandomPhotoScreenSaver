@@ -114,6 +114,28 @@ from parity. §0B is the current visual audit, not an acceptance report.
       is a colour-along-x gap in the waveform itself, which the mist only inherits: next slice.
     - The mist is still softer than the mock's crackling edge, and the floor reflection is horizontal shimmer where
       the mock has vertical streaks.
+  - **Floor: vertical wet columns (`wr07_floor_columns`):**
+    - **Horizontal shimmer:** per-pixel micro-facet reflection offsets aliased at this grazing view. They are
+      replaced by a roughness footprint, a long vertical streak.
+    - **Streak segments:** the receiver now allows up to 16 segments, offset per pixel against copy banding.
+    - **Hot light:** reflected light below a luminance threshold falls away (power 1.5), so columns stand over dark
+      concrete. A wet-film mask breaks them gently.
+    - **Mist reflection:** the mirror takes a reduced share of the mist (0.35).
+    - **Concrete light:** waveform-coloured pools come from the envelope's lower edge, falling off toward the camera.
+    - **Bands traced and removed:** regularly spaced horizontal bands came from the floor's diffuse term sampling
+      the mist's coarse light field, whose 64 exponential depth slices land on the floor as rows. That term is off,
+      and the pools replace it.
+    - **Cost, RTX 4090, 820x718 (medians):**
+      - floor: 0.21 / 1.18 ms (low/high), from 1.7 / 2.8 ms once the 5-tap cross blur was dropped;
+      - main mist march: 1.07 / 3.07 ms at half resolution;
+      - mirrored march: about 0.9-1.6 ms.
+      Still too costly for production. The march needs fewer or adaptive steps.
+    - **Self-review:**
+      - The columns run the full floor height at even brightness. The mock's are brightest near the contact and
+        break into sparkle toward the camera.
+      - The low state's floor is much darker than the mock's, whose cyan and magenta columns are distinct even in
+        low.
+      - No concrete structure is visible.
   - **Colour flow and world grade (`wr07_colour_grade`):**
     - Per-knot tint row added to the ring ABI, for reactive colour that flows with the history.
     - The world grade gives the mock's cyan left, blue-violet middle and magenta right. Shares: ribbons 0.3, so a

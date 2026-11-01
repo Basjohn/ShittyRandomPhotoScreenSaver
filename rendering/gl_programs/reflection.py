@@ -25,7 +25,7 @@ def mirror_view(view: np.ndarray, plane_y: float) -> np.ndarray:
 # Receiver side. screenUv is gl_FragCoord.xy over the receiver's viewport; the reflection target covers the same view
 # at its own resolution. Roughness defines an elongated texture footprint: wet rough floors stretch reflections
 # toward the viewer. Hardware anisotropy integrates at most 16:1, so one footprint longer than that coarsens the
-# short axis too and washes neighbouring highlights into one smear; a long streak is split into abutting segments,
+# short axis too and washes neighbouring highlights into one smear; a long streak is split into up to sixteen abutting segments,
 # each within the sampler's ratio and Gaussian-weighted along the streak. Separated point taps stamped copies.
 # Contact hardening (optional): emitters that write luminance-weighted world height into the reflection's alpha
 # (the ribbon light and spark passes do) reflect crisply near the plane and spread with height, as on a wet floor.
@@ -64,12 +64,12 @@ vec3 planarReflection(vec2 screenUv, vec2 offset, float roughness) {
         span=max(span,spread*size.x);
         streak=max(streak,spread*uReflectionContact.z);
     }
-    int segments=int(clamp(ceil(2.0*streak*size.y/(16.0*span)),1.0,8.0));
+    int segments=int(clamp(ceil(2.0*streak*size.y/(16.0*span)),1.0,16.0));
     vec2 dx=vec2(span/size.x,0.0), dy=vec2(0.0,max(span/size.y,2.0*streak/float(segments)));
     vec2 pixelUv=vec2(abs(dFdx(screenUv.x)),abs(dFdy(screenUv.y)));
     // Gentle Gaussian blur samples the full-resolution footprint: blur must not change the mip (NPOT receivers
     // otherwise spread unequally in X/Y). Along a segmented streak only its across-axis Gaussian remains.
-    float across[5], acrossWeights[5], along[8], alongWeights[8];
+    float across[5], acrossWeights[5], along[16], alongWeights[16];
     reflectionGaussian(sigma,across,acrossWeights);
     int rows=segments;
     if(segments==1) {
@@ -79,8 +79,14 @@ vec3 planarReflection(vec2 screenUv, vec2 offset, float roughness) {
         for(int i=0;i<5;i++) { along[i]=(sigma>0.0?o[i]:0.0)*pixelUv.y; alongWeights[i]=sigma>0.0?w[i]:1.0; }
     } else {
         float total=0.0;
+        // Offset the segments per pixel by up to one spacing: fixed offsets copied a thin highlight into evenly
+        // spaced horizontal bands (an unstructured hash; neighbouring pixels average it out).
+        uvec2 cell=uvec2(gl_FragCoord.xy);
+        uint bits=cell.x*2654435761u^(cell.y*2246822519u+374761393u);
+        bits^=bits>>15; bits*=2246822519u; bits^=bits>>13;
+        float shift=float(bits&0xffffu)/65536.0-0.5;
         for(int i=0;i<segments;i++) {
-            float t=(float(i)+0.5)*2.0/float(segments)-1.0;
+            float t=(float(i)+0.5+shift)*2.0/float(segments)-1.0;
             along[i]=t*streak; alongWeights[i]=exp(-2.0*t*t); total+=alongWeights[i];
         }
         for(int i=0;i<segments;i++) alongWeights[i]/=total;

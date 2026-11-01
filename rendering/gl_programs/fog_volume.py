@@ -228,11 +228,13 @@ uniform sampler2D uFogMarch;
 layout(location=0) out vec4 FragColor;
 layout(location=1) out vec4 Emission;
 uniform float uFogGlow;          // share of the in-scatter that feeds bloom
+uniform float uFogScale;         // in-scatter gain (a reflection may take less of the mist than the eye sees)
 void main() {
     // A tent over the march's texels: its per-pixel step jitter is grain, not detail.
     vec2 uv=vNdc*0.5+0.5, texel=0.75/vec2(textureSize(uFogMarch,0));
     vec4 fog=0.25*(texture(uFogMarch,uv+vec2(-texel.x,-texel.y))+texture(uFogMarch,uv+vec2(texel.x,-texel.y))
                   +texture(uFogMarch,uv+vec2(-texel.x,texel.y))+texture(uFogMarch,uv+vec2(texel.x,texel.y)));
+    fog.rgb*=uFogScale;
     FragColor=fog;               // blend: dst x src alpha + src
     Emission=vec4(fog.rgb*uFogGlow,dot(fog.rgb*uFogGlow,vec3(0.2126,0.7152,0.0722)));
 }

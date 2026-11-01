@@ -123,7 +123,7 @@ class Fog:
     # Detail march (per pixel at a reduced scale): bound on adaptive steps and their lengths in and out of the mist,
     # erosion by the tiling noise and its frequency (per world unit), self-shadow reach (world) and strength, and
     # the in-scatter's share of bloom.
-    march_scale: float = .75
+    march_scale: float = .5
     reflection_march_scale: float = .25
     steps: int = 96
     step: tuple = (.15, 1.)
@@ -149,17 +149,26 @@ class Floor:
     height: str = 'assets/textures/waveform_floor/wet_surface_height.png'
     tile: float = 12.               # concrete colour and broad relief patch (world units)
     micro_tile: float = 1.6         # micro relief patch (world units); the same smooth height data, finer
-    albedo_gain: float = .35        # wet concrete is dark
-    ambient: tuple = (.010, .012, .020)
-    diffuse: float = .8             # gain on the mist's light field at the floor (the ribbon light, shared)
-    reflection: float = 1.2         # reflection strength before Fresnel (look gain)
+    albedo_gain: float = 1.        # wet concrete is dark
+    albedo_bias: float = 2.5        # mip bias of the colour scan (grazing aliasing)
+    ambient: tuple = (.03, .035, .05)
+    diffuse: float = 0.             # gain on the mist's coarse light field (off: its depth slices band the floor)
+    reflection: float = 6.         # reflection strength before Fresnel (look gain)
     f0: float = .02                 # water film
     relief: tuple = (.03, .4)       # height amplitude of the broad and micro relief (world units)
     # Reflection offset per unit slope (uv): broad wobble, micro offset across and along the view.
-    ripple: tuple = (.25, .01, .12)
+    ripple: tuple = (.25, 0., 0.)
+    # Micro facets are many per pixel at this grazing view: their average is a vertical streak (the receiver's
+    # roughness footprint), never per-pixel offsets, which aliased into horizontal scanlines. Streak half-length
+    # (uv) and the roughness range across the surface (from the broad relief's slope).
+    streak: tuple = (.5, .8, 1.)
     lod: tuple = (1., 1.)           # reflection mip (half-resolution target: already soft)
     contact: tuple = (.002, 6., 6.)  # spread (uv) per unit of reflected height; along/across; probe mip
     resolution: float = .5          # reflection target scale
+    blur: float = 0.               # horizontal Gaussian across each column (receiver pixels)
+    pool: tuple = (14., 1., 1.5, 1.5)  # waveform light on the concrete: gain, height, depth falloffs behind/front
+    hot: tuple = (.5, .7, 1.5)       # reflected luminance at full strength; wet-film breakup share; suppression power
+    mist_reflection: float = .35   # share of the mist the floor mirrors: the mock's floor mirrors the hot light
 
 
 @dataclass(frozen=True)
@@ -234,6 +243,12 @@ uniform vec3 uAmbient;
 uniform vec4 uFloor;        // tile, micro tile, reflection gain, f0
 uniform vec4 uFloorTone;    // albedo gain, diffuse gain, broad relief amplitude, micro relief amplitude
 uniform vec3 uRipple;       // reflection offset per unit slope: broad, micro across, micro along
+uniform vec4 uStreak;       // unused, roughness min/max, broad-slope gain to roughness
+uniform vec4 uHot;          // reflected luminance at full strength; wet-film breakup share; suppression power; albedo mip bias
+uniform sampler2D uEnvelope;  // the waveform's envelope table (lower/upper, colours), shared with the mist
+uniform vec2 uEnvelopeSpan;
+uniform vec4 uPool;         // gain, height falloff, depth falloff behind, depth falloff toward the camera
+uniform float uPoolZ;       // the sheets' depth (world z)
 uniform vec3 uEye;
 uniform vec3 uForward;
 uniform int uOrthographic;
@@ -252,7 +267,9 @@ void main() {
     if(uFlat==1) { FragColor=vec4(vec3(0.25),1.0); Emission=vec4(0.0); return; }
     mat2 turn=mat2(0.6,-0.8,0.8,0.6);
     vec2 uv=vWorldPos.xz/uFloor.x;
-    vec3 albedo=mix(texture(uAlbedo,uv).rgb,texture(uAlbedo,turn*uv*1.37+vec2(.31,.47)).rgb,.4)*uFloorTone.x;
+    // Mip-biased and toned down: at this grazing angle the colour scan aliases into horizontal bands once lit.
+    vec3 albedo=mix(texture(uAlbedo,uv,uHot.w).rgb,texture(uAlbedo,turn*uv*1.37+vec2(.31,.47),uHot.w).rgb,.4);
+    albedo=mix(vec3(dot(textureLod(uAlbedo,vec2(.5),20.0).rgb,vec3(.333))),albedo,0.5)*uFloorTone.x;
     vec2 broad=slopeAt(vWorldPos.xz,uFloor.x)*uFloorTone.z;
     vec2 micro=slopeAt(vWorldPos.xz,uFloor.y)*uFloorTone.w;
     // Offsets follow the viewed ground axes, so a turned camera streaks along its own view.
@@ -261,14 +278,36 @@ void main() {
     vec2 axes=vec2(dot(vec3(broad.x,0,broad.y),groundRight),dot(vec3(broad.x,0,broad.y),groundForward));
     vec2 fine=vec2(dot(vec3(micro.x,0,micro.y),groundRight),dot(vec3(micro.x,0,micro.y),groundForward));
     vec2 offset=axes*uRipple.x+fine*vec2(uRipple.y,uRipple.z);
-    vec3 reflected=planarReflection(gl_FragCoord.xy/uViewport,offset,0.0);
+    float roughness=mix(uStreak.y,uStreak.z,clamp(length(broad)*uStreak.w,0.0,1.0));
+    vec3 reflected=planarReflection(gl_FragCoord.xy/uViewport,offset,roughness);
     vec3 view=uOrthographic==1?normalize(uForward):normalize(vWorldPos-uEye);
     float cosine=clamp(abs(view.y),0.0,1.0);
     float fresnel=uFloor.w+(1.0-uFloor.w)*pow(1.0-cosine,5.0);
+    // A rough wet floor shows its hot light, not a dim copy of everything: reflected light below uHot.x falls
+    // away quadratically, so columns stand over dark concrete. The wet film breaks them up gently (uHot.y).
+    float hot=dot(reflected,vec3(0.2126,0.7152,0.0722));
+    reflected*=pow(clamp(hot/max(uHot.x,1e-4),0.0,1.0),uHot.z);
+    float film=texture(uAlbedo,uv*2.3+vec2(.17,.61)).r/max(texture(uAlbedo,uv*2.3+vec2(.17,.61),6.0).r,1e-3);
+    reflected*=mix(1.0,smoothstep(0.6,1.25,film),uHot.y);
     vec3 specular=reflected*fresnel*uFloor.z;
     vec3 field=uFogLit==1?texture(uFogLight,clamp(fogCoordinate(vWorldPos+vec3(0,0.05,0))/vec3(1,1,uFogRange.z),
                                                    vec3(0.0),vec3(1.0))).rgb:vec3(0.0);
-    vec3 colour=albedo*(uAmbient+field*uFloorTone.y)+specular;
+    // Coloured pools under the waveform: its lower edge lights the concrete beneath it, falling off with the edge's
+    // height and with depth away from the sheets (further toward the camera), smoothed along x.
+    vec3 pool=vec3(0.0);
+    if(uPool.x>0.0) {
+        float u=(vWorldPos.x-uEnvelopeSpan.x)*uEnvelopeSpan.y;
+        float du=0.6*uEnvelopeSpan.y;
+        for(int i=-2;i<=2;i++) {
+            vec2 at=vec2(u+float(i)*du,0.0);
+            float lower=texture(uEnvelope,at+vec2(0,0.5/3.0)).x;
+            vec3 tone=texture(uEnvelope,at+vec2(0,2.5/3.0)).rgb;
+            pool+=tone*exp(-max(lower,0.0)/uPool.y)*(1.0-abs(float(i))*0.3);
+        }
+        float dz=vWorldPos.z-uPoolZ;
+        pool*=uPool.x*0.25*exp(-max(dz,0.0)/uPool.w)*exp(-max(-dz,0.0)/uPool.z);
+    }
+    vec3 colour=albedo*(uAmbient+field*uFloorTone.y+pool)+specular;
     float clear=mistTransmittance(vWorldPos);
     colour=mix(mistColour(uBackdrop,vWorldPos),colour,clear);
     FragColor=vec4(colour,1.0);
@@ -768,7 +807,7 @@ class Lab:
             gl.glDepthMask(gl.GL_FALSE)
             if draw['mist'].get('uFogRange', (0., 0., 0., 0.))[3] > .5:
                 # The mist's own light, mirrored (additive); alpha stays the emitters' weighted height.
-                self.reflected_march.composite(additive=True)
+                self.reflected_march.composite(additive=True, scale=self.recipe.floor.mist_reflection)
             reflected_view = mirrored @ scroll
             reflected_mvp = tuple((projection @ reflected_view).flatten(order='F'))
             self.ribbons.draw(packet, reflected_mvp, shading='light', **{**draw, 'view': tuple(reflected_view.flatten(order='F'))})
@@ -788,7 +827,8 @@ class Lab:
         program = self.resources.program('floor', FLOOR_VERTEX, FLOOR_FRAGMENT)
         names = ('uMvp', 'uFlat', 'uAlbedo', 'uSlope', 'uFogLight', 'uFogLit', 'uReflection', 'uReflectionLook',
                  'uReflectionContact', 'uViewport', 'uBackdrop', 'uAmbient', 'uFloor', 'uFloorTone', 'uRipple', 'uEye',
-                 'uForward', 'uOrthographic', 'uMist', 'uMistShape', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange')
+                 'uForward', 'uOrthographic', 'uMist', 'uMistShape', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange',
+                 'uStreak', 'uHot', 'uEnvelope', 'uEnvelopeSpan', 'uPool', 'uPoolZ')
         u = self.resources.uniforms('floor', names, required=False)
         gl.glUseProgram(program)
         gl.glUniform1i(u['uFlat'], int(flat))
@@ -802,7 +842,17 @@ class Lab:
             gl.glBindTextureUnit(unit, texture)
             gl.glUniform1i(u[name], unit)
         gl.glUniform1i(u['uFogLit'], int(lit))
-        gl.glUniform4f(u['uReflectionLook'], 0., floor.lod[0], floor.lod[1], 0.)
+        gl.glUniform4f(u['uReflectionLook'], floor.streak[0], floor.lod[0], floor.lod[1], floor.blur)
+        gl.glUniform4f(u['uHot'], *floor.hot, floor.albedo_bias)
+        envelope = self.textures.get('envelope') if lit else None
+        gl.glUniform4f(u['uPool'], floor.pool[0] if envelope else 0., *floor.pool[1:])
+        gl.glUniform1f(u['uPoolZ'], 0.)
+        if envelope:
+            x0, x1, _ = self.recipe.fog.envelope_range
+            gl.glBindTextureUnit(14, envelope)
+            gl.glUniform1i(u['uEnvelope'], 14)
+            gl.glUniform2f(u['uEnvelopeSpan'], x0, 1./(x1 - x0))
+        gl.glUniform4f(u['uStreak'], 0., floor.streak[1], floor.streak[2], 8.)
         gl.glUniform4f(u['uReflectionContact'], 0., *floor.contact)
         gl.glUniform2f(u['uViewport'], *size)
         gl.glUniform3f(u['uBackdrop'], *environment.backdrop)
@@ -825,7 +875,7 @@ class Lab:
             gl.glUniform4f(u['uFogRange'], *FOG_OFF['uFogRange'])
         gl.glBindVertexArray(vao)
         gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
-        for unit in (0, 1, 2, 13):
+        for unit in (0, 1, 2, 13, 14):
             gl.glBindTextureUnit(unit, 0)
 
     def _flat_ribbons(self, packet, mvp):

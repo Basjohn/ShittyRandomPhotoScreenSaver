@@ -308,7 +308,7 @@ class FogMarch:
             (gl.glEnable if depth_test else gl.glDisable)(gl.GL_DEPTH_TEST)
             (gl.glEnablei if blend else gl.glDisablei)(gl.GL_BLEND, 0)
 
-    def composite(self, *, glow: float = 0., additive: bool = False) -> None:
+    def composite(self, *, glow: float = 0., additive: bool = False, scale: float = 1.) -> None:
         """Draw the last march over the bound framebuffer: dst x transmittance + in-scatter (``additive``: + in-scatter
         only, for a target that holds light alone, such as a reflection)."""
         self._check_context()
@@ -326,6 +326,7 @@ class FogMarch:
             gl.glBindTextureUnit(self.MARCH_UNIT, self._colour)
             gl.glUniform1i(gl.glGetUniformLocation(program, 'uFogMarch'), self.MARCH_UNIT)
             gl.glUniform1f(gl.glGetUniformLocation(program, 'uFogGlow'), glow)
+            gl.glUniform1f(gl.glGetUniformLocation(program, 'uFogScale'), scale)
             gl.glDisable(gl.GL_DEPTH_TEST)
             gl.glDepthMask(gl.GL_FALSE)
             gl.glEnablei(gl.GL_BLEND, 0)
