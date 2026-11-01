@@ -27,6 +27,19 @@ _MATERIAL_UNIFORMS = ('uViewZ', 'uEye', 'uForward', 'uOrthographic', 'uStrands',
                       'uViewport')
 
 
+def _sweep_axis(value):
+    if value is None:
+        return (0.,0.,0.)
+    if len(value) != 3 or not all(math.isfinite(v) for v in value):
+        raise ValueError('A supplied sweep axis must be a finite non-zero world vector')
+    scale = max(abs(v) for v in value)
+    if scale < 1e-8:
+        raise ValueError('A supplied sweep axis must be a finite non-zero world vector')
+    scaled = tuple(v/scale for v in value)
+    length = math.hypot(*scaled)
+    return tuple(v/length for v in scaled)
+
+
 @dataclass(frozen=True)
 class RibbonSparks:
     """Sparks attached to the ribbon's history; per-knot sparkle (0..1, ``RibbonRing.append(sparkle=)``) gates them."""
@@ -75,6 +88,8 @@ class RibbonMaterial:
     strand_white: float = 0.        # strands' mix toward white (0 = the ribbon colour)
     rim_white: float = 0.
     strand_jitter: float = 0.       # irregular strand spacing, 0..0.9 (monotone)
+    strand_variation: float = 0.    # energy-neutral contrast between fine and dominant filaments
+    cross_curve: float = 0.         # smooth transverse bow in half-widths; 0 retains the flat strip
 
     def __post_init__(self):
         values = astuple(self)
@@ -82,15 +97,15 @@ class RibbonMaterial:
             raise ValueError('Ribbon material values must be finite and non-negative')
         if (not 1 <= self.strands <= 256 or not 0 < self.strand_half_width <= .5 or not 0 < self.rim_half_width <= .5
                 or not 0 < self.rim_glow_width <= .5 or self.fill_centre > 1 or self.glint_chance > 1
-                or self.strand_white > 1 or self.rim_white > 1 or self.strand_jitter > .9):
+                or self.strand_white > 1 or self.rim_white > 1 or self.strand_jitter > .9 or self.strand_variation > 1):
             raise ValueError('Ribbon strands need 1..256 lines and positive half-widths up to half a spacing')
-        if self.body_alpha > .95 or self.path_cap < 1 or self.min_pixels > 8:
+        if self.body_alpha > .95 or self.path_cap < 1 or self.min_pixels > 8 or self.cross_curve > 1:
             raise ValueError('Ribbon body alpha must stay below 0.95, path cap at least 1, minimum width at most 8 px')
 
     def uniforms(self):
         return dict(uStrands=(self.strands, self.strand_half_width, self.strand_light, self.strand_warp),
                     uRim=(self.rim_half_width, self.rim_light, self.path_cap, self.min_pixels),
-                    uBody=(self.body_alpha, self.body_tint, 0., self.warp_frequency),
+                    uBody=(self.body_alpha, self.body_tint, self.strand_variation, self.warp_frequency),
                     uFill=(self.fill_light, self.fill_centre, self.rim_glow_width, self.rim_glow_light),
                     uGlint=(self.glint_density, self.glint_chance, self.glint_light, self.glint_radius),
                     uTone=(self.strand_white, self.rim_white, self.strand_jitter, self.glint_min_pixels))
@@ -112,16 +127,20 @@ class RibbonPrimitive:
 
     def draw(self, packet: RibbonPacket, mvp, *, diagnostic=0, timing_query=None, shading='diagnostic',
              view=None, orthographic=True, material: RibbonMaterial | None = None, age_fade=None,
-             mist=None, mist_frame=(0., 0., 0.), sparks: RibbonSparks | None = None, now=None):
+             mist=None, mist_frame=(0., 0., 0.), sparks: RibbonSparks | None = None, now=None, sweep_axis=None):
         """``age_fade`` = (absolute now, fade-in s, maximum age s, fade-out s) fades the head and tail by age.
 
         ``mist`` (``rendering.gl_programs.mist.mist_uniforms``) dims light and coverage by the scene's world mist;
         ``mist_frame`` translates the packet's frame into the mist's world (a flowing consumer's scroll).
+        ``sweep_axis`` admits a monotonic world axis: cross sections remain perpendicular to it, and history knots
+        become cubic B-spline controls for position/side/width/twist, with continuous slope and curvature. General
+        paths without a monotonic axis retain transported strips. ``cross_curve`` adds transverse camber.
         """
         if not 0 <= packet.instances <= MAX_RIBBONS or len(packet.payload) != packet.instances*RIBBON_BYTES:
             raise ValueError('Invalid ribbon packet shape')
         if shading == 'sparks':
-            return self._draw_sparks(packet, mvp, sparks or RibbonSparks(), now, mist, mist_frame)
+            return self._draw_sparks(packet, mvp, sparks or RibbonSparks(), now, mist, mist_frame,
+                                     material or RibbonMaterial(), _sweep_axis(sweep_axis))
         if shading not in _FRAGMENTS:
             raise ValueError(f'Unknown ribbon shading: {shading}')
         if packet.instances == 0:
@@ -142,8 +161,11 @@ class RibbonPrimitive:
         if not np.isfinite(matrix).all():
             raise ValueError('Rebased MVP exceeds float32 range')
         shaded = None
+        material = material or RibbonMaterial()
+        cross_divisions = 8 if material.cross_curve > 0 else 1
+        axis = _sweep_axis(sweep_axis)
         if shading != 'diagnostic':
-            shaded = self._material_uniforms(view, translate, bool(orthographic), material or RibbonMaterial())
+            shaded = self._material_uniforms(view, translate, bool(orthographic), material)
             shaded['uAge'] = (0., 0., 0., 0.)
             shaded.update(uMist=(0., 0., 1., 1.), uMistShape=(0., 0., 0., 0.))
             if mist is not None:
@@ -166,7 +188,7 @@ class RibbonPrimitive:
         try:
             program = self.resources.program(shading, RIBBON_VERTEX, _FRAGMENTS[shading])
             vao, _ = self.resources.mesh('empty', (0., 0.), (2,))
-            names = ('uMvp', 'uDiagnostic') if shaded is None else ('uMvp', *_MATERIAL_UNIFORMS)
+            names = ('uMvp', 'uDiagnostic', 'uSurface', 'uSweepAxis') if shaded is None else ('uMvp', 'uSurface', 'uSweepAxis', *_MATERIAL_UNIFORMS)
             # Each pass reads only part of the material, so its unused uniforms are compiled out (location -1).
             uniforms = self.resources.uniforms(shading, names, required=shaded is None)
             if self.stream is None:
@@ -176,6 +198,8 @@ class RibbonPrimitive:
             gl.glUseProgram(program)
             gl.glBindVertexArray(vao)
             gl.glUniformMatrix4fv(uniforms['uMvp'], 1, gl.GL_FALSE, matrix.flatten(order='F'))
+            gl.glUniform2f(uniforms['uSurface'], material.cross_curve, float(cross_divisions))
+            gl.glUniform3f(uniforms['uSweepAxis'], *axis)
             if shaded is None:
                 gl.glUniform1i(uniforms['uDiagnostic'], diagnostic)
             else:
@@ -192,7 +216,7 @@ class RibbonPrimitive:
                 if timing_query is not None:
                     gl.glBeginQuery(gl.GL_TIME_ELAPSED, timing_query)
                 try:
-                    gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, packet.vertices, packet.instances)
+                    gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, packet.vertices*cross_divisions, packet.instances)
                 finally:
                     if timing_query is not None:
                         gl.glEndQuery(gl.GL_TIME_ELAPSED)
@@ -200,7 +224,7 @@ class RibbonPrimitive:
             gl.glBindVertexArray(vao_before)
             gl.glUseProgram(program_before)
 
-    def _draw_sparks(self, packet, mvp, sparks, now, mist, mist_frame):
+    def _draw_sparks(self, packet, mvp, sparks, now, mist, mist_frame, material, sweep_axis):
         """Additive point sprites on the bound target (the caller sets blending, as for the light pass)."""
         if packet.instances == 0:
             return
@@ -217,7 +241,8 @@ class RibbonPrimitive:
         try:
             program = self.resources.program('sparks', RIBBON_SPARK_VERTEX, RIBBON_SPARK_FRAGMENT)
             vao, _ = self.resources.mesh('empty', (0., 0.), (2,))
-            names = ('uMvp', 'uSpark', 'uSparkLook', 'uSparkClock', 'uSparkWhite', 'uMist', 'uMistShape', 'uMistOrigin')
+            names = ('uMvp', 'uSpark', 'uSparkLook', 'uSparkClock', 'uSparkWhite', 'uMist', 'uMistShape', 'uMistOrigin',
+                     'uSurface','uSweepAxis')
             u = self.resources.uniforms('sparks', names, required=False)
             if self.stream is None:
                 alignment = gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT)
@@ -227,6 +252,8 @@ class RibbonPrimitive:
             gl.glBindVertexArray(vao)
             gl.glEnable(gl.GL_PROGRAM_POINT_SIZE)
             gl.glUniformMatrix4fv(u['uMvp'], 1, gl.GL_FALSE, matrix.astype(np.float32).flatten(order='F'))
+            gl.glUniform3f(u['uSweepAxis'],*sweep_axis)
+            gl.glUniform2f(u['uSurface'],material.cross_curve,1.)
             gl.glUniform4f(u['uSpark'], float(sparks.per_knot), sparks.lifetime, sparks.drift, sparks.rise)
             gl.glUniform4f(u['uSparkLook'], sparks.smallest, sparks.largest, sparks.light, sparks.twinkle)
             gl.glUniform2f(u['uSparkClock'], float(now) - float(packet.coordinate_origin), float(packet.coordinate_origin) % 1000.)

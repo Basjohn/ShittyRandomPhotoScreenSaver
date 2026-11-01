@@ -14,6 +14,40 @@ from tools.labs.render_target import OffscreenRenderTarget
 pytestmark = pytest.mark.qt
 
 
+def capture_vertices(primitive, packet, matrix, *, is_sparks=False, **kwargs):
+    """Instrument the real vertex stage with a test-owned SSBO, retaining all production calculations."""
+    from rendering.gl_programs import ribbon as shaders
+    from core.ribbon_geometry import MAX_PATH_SAMPLES
+    source = shaders.RIBBON_SPARK_VERTEX if is_sparks else shaders.RIBBON_VERTEX
+    key = 'sparks' if is_sparks else 'diagnostic'
+    fields = 'vec4(vWorld, vBright); captured[2*gl_VertexID+1]=vec4(testU,testAcross,0,0)' if is_sparks else (
+        'vec4(vWorld,vLocal); captured[2*gl_VertexID+1]=vec4(vNormal,vAcross)')
+    if is_sparks:
+        source = source.replace('void main()', 'float testU=-1.0,testAcross=-1.0;\nvoid main()')
+        source = source.replace('vWorld=position;', 'vWorld=position; testU=mix(k.q.x,n.q.x,r3); testAcross=r2;')
+    source = source.replace('void main()', 'void ribbonMain()') + '''
+layout(std430,binding=1) buffer Captured { vec4 captured[]; };
+void main() { ribbonMain(); captured[2*gl_VertexID]=''' + fields + '; }'
+    target_fragment = shaders.RIBBON_SPARK_FRAGMENT if is_sparks else shaders.RIBBON_FRAGMENT
+    primitive.resources.program(key, source, target_fragment)
+    vertices = MAX_PATH_SAMPLES*kwargs['sparks'].per_knot if is_sparks else packet.vertices*(8 if kwargs['material'].cross_curve else 1)
+    buffer = int(np.asarray(gl.glGenBuffers(1)).reshape(-1)[0])
+    try:
+        gl.glBindBuffer(gl.GL_SHADER_STORAGE_BUFFER, buffer)
+        gl.glBufferData(gl.GL_SHADER_STORAGE_BUFFER, vertices*32, None, gl.GL_STREAM_READ)
+        gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, 1, buffer)
+        gl.glEnable(gl.GL_RASTERIZER_DISCARD)
+        primitive.draw(packet, matrix, shading=key, **kwargs)
+        gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT)
+        gl.glBindBuffer(gl.GL_SHADER_STORAGE_BUFFER, buffer)
+        return np.frombuffer(gl.glGetBufferSubData(gl.GL_SHADER_STORAGE_BUFFER, 0, vertices*32), np.float32).reshape(-1,2,4).copy()
+    finally:
+        gl.glDisable(gl.GL_RASTERIZER_DISCARD)
+        gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER, 1, 0)
+        gl.glBindBuffer(gl.GL_SHADER_STORAGE_BUFFER, 0)
+        gl.glDeleteBuffers(1, [buffer])
+
+
 def line(origin=0):
     return ([PathSample(origin, (-1, 0, -10), .25), PathSample(origin+1, (1, 0, -10), .25)], [(1, 0, 0)]*2, None)
 
@@ -267,6 +301,110 @@ def test_native_strip_start_flag_cuts_the_joining_interval(qt_app):
         # Interval knot2 -> knot3 spans x in [-0.25, 0.25]: pixels 70..89 at 40 px per unit.
         assert rows[0][72:88].all() and not rows[1][72:88].any()
         assert rows[1][40:68].all() and rows[1][92:120].all()
+    finally:
+        primitive.release()
+        target.close()
+
+
+def test_axial_sweep_cannot_fold_wide_inner_bends_back_along_the_path(qt_app):
+    from rendering.quick.scene3d.ribbon import RibbonMaterial
+    points = [(i, y, -10.) for i, y in enumerate((0., 1., 0., -1., 0.))]
+    samples = [PathSample(i, point, 1.8, i*.4) for i, point in enumerate(points)]
+    packet = pack_ribbons([(samples, [(1., 0., 0.)]*5, None)])
+    target, primitive = OffscreenRenderTarget(64, 64), RibbonPrimitive()
+    try:
+        target.bind()
+        args = dict(material=RibbonMaterial(cross_curve=.35))
+        fixed = capture_vertices(primitive, packet, orthographic_matrix((5,5), .1,100), sweep_axis=(1.,0.,0.), **args)
+        # Equal chord lengths make centre X equal to the path coordinate. Every vertex must stay in that
+        # cross-section plane, even when the half-width exceeds the inner bend radius.
+        assert np.isfinite(fixed).all()
+        assert np.max(np.abs(fixed[:,0,0]-fixed[:,0,3])) < 2e-6
+        transported = capture_vertices(primitive, packet, orthographic_matrix((5,5), .1,100), **args)
+        assert np.max(np.abs(transported[:,0,0]-transported[:,0,3])) > .2
+    finally:
+        primitive.release()
+        target.close()
+
+
+def test_swept_normals_and_zero_drift_sparks_follow_the_emitted_cloth(qt_app):
+    from core.ribbon_ring import RibbonRing
+    from rendering.quick.scene3d.ribbon import RibbonMaterial, RibbonSparks
+    ring = RibbonRing(1)
+    for i in range(6):
+        ring.append(i, [(i, 0., -10.)], .8+.1*i, i*.6, 1., 1.)
+    packet = ring.packet()
+    target, primitive = OffscreenRenderTarget(64,64), RibbonPrimitive()
+    matrix = orthographic_matrix((6,6), .1,100)
+    args = dict(material=RibbonMaterial(cross_curve=.35), sweep_axis=(1.,0.,0.))
+    try:
+        target.bind()
+        data = capture_vertices(primitive,packet,matrix,**args)
+        grid = {(round(float(row[0,3])*8), round(float(row[1,3])*8)): row for row in data}
+        errors = []
+        for (t,a),row in grid.items():
+            if 2 <= t <= 38 and 1 <= a <= 7:
+                normal = row[1,:3]
+                along = grid[t+1,a][0,:3]-grid[t-1,a][0,:3]
+                across = grid[t,a+1][0,:3]-grid[t,a-1][0,:3]
+                errors.extend(abs(np.dot(normal,v))/np.linalg.norm(v) for v in (along,across))
+        assert max(errors) < .025, 'normals must follow changing width/twist, not just the centreline'
+        sparks = capture_vertices(primitive,packet,matrix,is_sparks=True,now=7.,
+                                  **{**args,'sparks':RibbonSparks(per_knot=16,drift=0.)})
+        visible = sparks[sparks[:,0,3] > .001]
+        assert len(visible) > 15
+        errors = []
+        for row in visible:
+            t,a = row[1,:2]*8
+            ti,ai = int(t),int(a)
+            along,across = t-ti,a-ai
+            expected = sum(grid[ti+dt,ai+da][0,:3]*wt*wa
+                           for dt,wt in ((0,1-along),(1,along)) for da,wa in ((0,1-across),(1,across)))
+            errors.append(np.linalg.norm(row[0,:3]-expected))
+        assert max(errors) < .012, 'spark births must lie on the same interpolated sheet (within tessellation error)'
+    finally:
+        primitive.release()
+        target.close()
+
+
+def test_axial_cloth_has_one_surface_slope_on_both_sides_of_each_knot(qt_app):
+    from core.ribbon_ring import RibbonRing
+    from rendering.quick.scene3d.ribbon import RibbonMaterial
+    ring = RibbonRing(1)
+    for i,(y,width) in enumerate(zip((0.,.4,1.8,1.7,-1.1,0.),(.3,.9,1.,.95,.4,.8))):
+        ring.append(i,[(i,y,-10.)],width,i*.3,1.)
+    target,primitive = OffscreenRenderTarget(64,64),RibbonPrimitive()
+    try:
+        target.bind()
+        data = capture_vertices(primitive,ring.packet(),orthographic_matrix((6,6),.1,100),
+                                sweep_axis=(1.,0.,0.),material=RibbonMaterial(cross_curve=.35))
+        # At each shared vertex the previous interval evaluates u=1 and the next u=0. Their surface normals
+        # must agree. Testing only the centreline misses the visible kink on variable-width sheet edges.
+        discrepancies = []
+        for knot in range(1,5):
+            for across in np.linspace(0.,1.,9):
+                normals=data[(data[:,0,3]==knot) & (data[:,1,3]==across),1,:3]
+                assert len(normals)>=2
+                discrepancies.append(np.max(np.linalg.norm(normals-normals[0],axis=1)))
+        assert max(discrepancies)<.015, 'shared knots must not leave corners in the swept surface'
+    finally:
+        primitive.release()
+        target.close()
+
+
+def test_axial_sweep_stays_monotone_with_unequal_sample_spacing(qt_app):
+    from core.ribbon_ring import RibbonRing
+    from rendering.quick.scene3d.ribbon import RibbonMaterial
+    ring=RibbonRing(1)
+    for i,x in enumerate((0.,1.,1.01,2.)):
+        ring.append(i,[(x,0.,-10.)],.8,i*.3)
+    target,primitive=OffscreenRenderTarget(64,64),RibbonPrimitive()
+    try:
+        target.bind()
+        data=capture_vertices(primitive,ring.packet(),orthographic_matrix((4,4),.1,100),
+                              sweep_axis=(1.,0.,0.),material=RibbonMaterial(cross_curve=.35))
+        points=sorted(set((float(v[0,3]),float(v[0,0])) for v in data))
+        assert np.min(np.diff([x for t,x in points]))>0., 'unequal spacing must not reintroduce a fold-back'
     finally:
         primitive.release()
         target.close()

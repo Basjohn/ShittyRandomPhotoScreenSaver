@@ -225,9 +225,9 @@ additive light gives, and the faint body keeps strands readable through each oth
 - Strand spread/gather follows the absolute path phase, so it moves with history and never slides.
 - The vertex stage now carries smooth centre-line normals, the across-width coordinate and per-knot emission
   (`side.w`, admitted by `RibbonRing.append(..., emission=)`, 0..64; the stateless packer writes 1).
-- Width, twist and emission interpolate with a monotone cubic (Fritsch-Carlson limited) and the base side with a
-  Catmull-Rom Hermite over the guard knots. They are C1 through every knot and never overshoot, so width stays
-  positive. Linear interpolation left a corner at every knot, which showed as lumps along the curves.
+- Width, twist and emission interpolate with shape-preserving cubic Hermite using one harmonic-mean slope per
+  knot; the base side uses Catmull-Rom Hermite. Scalar values stay inside the interval's endpoints, keeping widths
+  positive. The former per-interval slope limiter could assign two different slopes to one knot and left corners.
   Guard knots across a break or beyond the run repeat the endpoint.
 - The across-width coordinate is clamped before use. MSAA shades a covered sample at the pixel centre, which on
   an edge-on sliver lies far outside the triangle, and `exp(-edge/width)` overflowed into solid bloom blocks.
@@ -249,6 +249,46 @@ additive light gives, and the faint body keeps strands readable through each oth
 - The view matrix is rebased with the same float64 origin as the MVP, so eye/forward/view depth stay packet-local.
 - Unused material uniforms are compiled out per pass; diagnostic-only use never compiles the material programs.
 
+### Smooth swept sheets
+
+`sweep_axis=(x,y,z)` is optional. It admits paths sampled along one monotonic world axis, such as the
+lab's `x=speed*time`; consumers with arbitrary paths keep the transported strip. Cross sections stay perpendicular
+to that axis, so wide inner bends cannot fold back along it. Position, width and twist use the same
+uniform cubic B-spline: history knots are controls rather than forced interpolation points, with continuous slope
+and curvature at the joins. Convex weights preserve positive widths and monotonic axial progression even with
+unequal spacing. Mixing centripetal speed with uniform width/twist slopes left
+corners in the offset edges despite a direction-continuous centreline. This is a surface representation, not a new
+simulation or clock; the history packet is unchanged.
+
+The axial cross section has a fixed world reference (projected Y, or projected Z when the axis is within the
+specified .95 alignment threshold of Y). Authored twist is its sole rotation. Projecting a transported frame into
+the fixed plane amplified torsion at steep bends and produced overly tight turns. General transported strips keep
+their carried side frames. The reference choice is fixed for a fixed sweep axis, not camera dependent.
+
+`RibbonMaterial.cross_curve` (0..1, default 0) bows the cross section in half-width units. Enabled sheets have eight
+transverse strips; flat sheets retain the original vertex count. Width and twist remain authored in history.
+The normals differentiate the actual surface including width, twist and camber changes; a centreline-only normal
+miscomputed grazing light. Sparks sample the same surface evaluator at birth, including interpolated controls and
+break guards. Both paths use the same sweep axis and material. Cross-curved sheets retain physical geometry through
+folds rather than applying the flat strip's pixel widening.
+
+Filament gather uses a monotone rational stretch instead of an additive warp that could reverse the material
+coordinate. `strand_variation` (0..1, default 0) controls the contrast of fine and dominant lines at equal average
+energy. Exact periodic box integration preserves still-resolved lines; unresolved lines fade to mean density.
+
+Focused native proof captures the production vertex outputs: a wide swept bend stays in each axial plane;
+normals agree with actual surface derivatives and across shared knots; zero-drift sparks lie on the tessellated
+sheet within tessellation error. The joint regression failed before the interpolation correction (normal-vector
+disagreement 0.1169). A GLSL compute check verifies monotone filament coordinates at maximum gather/jitter.
+General strip geometry, context affinity, breaks, OIT and large-origin regressions remain separate tests.
+
+Measured draw-only cost in `wr04_parity_pass7/surface_cost.json` (RTX 4090, 640x709, 45 warm samples/state):
+cambered sheets' direct body/light plus half-resolution reflected light sum to median 0.102–0.111 ms, p90
+0.114–0.119 ms. The same input with camber disabled measured median 0.043–0.049 ms. Enabled camber draws
+293,760 vertices/pass for three full histories versus 36,720 flat. This explicitly adds GPU work; it is not
+performance neutral. Queries exclude packing, upload, sparks, floor, bloom, readback and the lab's CPU fixture
+rebuild. Whole-scene and runtime admission remain separate gates.
+
 Proof (`tests/test_ribbon_material.py`, through overlay + bloom + OIT + HDR, 4x MSAA): crossing ribbons are
 identical in either draw order (max difference 1) and brighter than either alone. An opaque strip in front hides
 the body and light behind it, matching the wall drawn alone; negative control: with depth testing off for the
@@ -262,16 +302,8 @@ music) with the WR-00 proposed camera, beside the mock's low/high crops, plus a 
 with both passes is about 0.1-0.25 ms (absolute figures swing about 2x with GPU clocks). The probe's synthetic
 head band-limits its shape controls (Lab Plan section 4A); raw steps drew lumps.
 
-**Honest status: far from the mock.** Fixed at the primitive: lumpy curves, stray edges and bloom blocks.
-Still missing, for the WR-03/04 lab, judged at native zoom against both references:
-- The milky haze between strands is too strong and the bloom halo too wide, so it still leans to neon tubes;
-  the mock keeps dark, saturated gaps and a tighter glow.
-- Strands run parallel; the mock's fan out and gather.
-- Glints and sparkle are nearly absent. Particles are S3D-2.
-- The palette is too magenta; the primary mock is mostly electric blue to violet.
-- Both mocks show more, wider layered sheets with larger vertical sweeps in high.
-- Strand density must suit on-screen width (the mock's lines are about 3-4 px apart). 16 lines across suit
-  these widths; 32 averaged into a smooth body.
+Scene parity is unaccepted. Current waveform/material/texture/mist deficits and the newly supplied whole-scene
+reference are owned by `Waveform_Ribbon_Lab_Plan.md` §0–1; historical material cards above are primitive evidence.
 
 Remaining for the primitive, only as a consuming scene needs it: camera-facing GPU width, near-plane motion, AA
 coverage under slow motion, defocus, and full lifecycle/cost proof. The Waveform scene's live order is in

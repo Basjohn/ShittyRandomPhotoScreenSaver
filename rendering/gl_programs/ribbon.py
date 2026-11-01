@@ -11,14 +11,98 @@ Three fragment programs share one vertex stage:
 
 The material knows widths, strands and light, never music: callers feed per-knot emission (``side.w``) and
 per-ribbon colours, and choose the knobs. Strands and rims are box-filtered over the pixel footprint and fade
-to their average density once sub-pixel, so slow motion cannot make them crawl or sparkle.
+to their average density once sub-pixel to limit crawling under slow motion.
 """
 from core.ribbon_geometry import MAX_PATH_SAMPLES
 from rendering.gl_programs.mist import MIST_GLSL
 from rendering.quick.scene3d.target import SCENE_OIT_GLSL
 
-RIBBON_VERTEX = """#version 460 core
+_RIBBON_SURFACE_GLSL = """
 struct Knot { vec4 p; vec4 q; vec4 tangent; vec4 side; };
+uniform vec2 uSurface;     // camber in half-widths; transverse subdivision count
+uniform vec3 uSweepAxis;   // zero: transported width; otherwise fixed cross-section plane
+vec3 curve(vec3 a, vec3 b, vec3 c, vec3 d, float u) {
+    if(u==0.0 || all(equal(b,c))) return b;
+    if(u==1.0) return c;
+    float t1=sqrt(max(distance(a,b),1e-6));
+    float t2=t1+sqrt(max(distance(b,c),1e-6));
+    float t3=t2+sqrt(max(distance(c,d),1e-6));
+    float t=mix(t1,t2,u);
+    vec3 a1=mix(a,b,t/t1), a2=mix(b,c,(t-t1)/(t2-t1)), a3=mix(c,d,(t-t2)/(t3-t2));
+    return mix(mix(a1,a2,t/t2),mix(a2,a3,(t-t1)/(t3-t1)),(t-t1)/(t2-t1));
+}
+// A knot owns ONE slope, the harmonic mean of its two adjacent secants. Limiting separately against each
+// interval's delta gave different slopes at the same knot, leaving little corners on the edges of the sheet.
+float monotoneSlope(float a, float b, float c) {
+    float left=b-a, right=c-b;
+    if(left==0.0 || right==0.0 || sign(left)!=sign(right)) return 0.0;
+    float small=min(abs(left),abs(right)), large=max(abs(left),abs(right));
+    return sign(left)*2.0*small/(1.0+small/large);
+}
+// Shape-preserving cubic Hermite on the uniform knot lattice: C1 and bounded by the endpoint values.
+float monotone(float a, float b, float c, float d, float u) {
+    float m1=monotoneSlope(a,b,c), m2=monotoneSlope(b,c,d);
+    float u2=u*u, u3=u2*u;
+    return (2.0*u3-3.0*u2+1.0)*b+(u3-2.0*u2+u)*m1+(3.0*u2-2.0*u3)*c+(u3-u2)*m2;
+}
+vec3 hermite(vec3 a, vec3 b, vec3 c, vec3 d, float u) {
+    float u2=u*u, u3=u2*u;
+    return (2.0*u3-3.0*u2+1.0)*b+(u3-2.0*u2+u)*0.5*(c-a)+(3.0*u2-2.0*u3)*c+(u3-u2)*0.5*(d-b);
+}
+vec4 clothWeights(float u) {
+    // Uniform cubic B-spline: convex weights keep positive widths and monotone axial samples monotone.
+    // Both slope and curvature agree across knots. History samples are controls, not forced interpolation
+    // points; forcing every control point left small shoulders even after the slope discontinuity was fixed.
+    float u2=u*u, u3=u2*u, v=1.0-u;
+    return vec4(v*v*v,3.0*u3-6.0*u2+4.0,-3.0*u3+3.0*u2+3.0*u+1.0,u3)/6.0;
+}
+vec3 clothPoint(vec3 a, vec3 b, vec3 c, vec3 d, float u) {
+    vec4 w=clothWeights(u);
+    return a*w.x+b*w.y+c*w.z+d*w.w;
+}
+vec3 pathPoint(vec3 a, vec3 b, vec3 c, vec3 d, float u) {
+    return dot(uSweepAxis,uSweepAxis)>0.5?clothPoint(a,b,c,d,u):curve(a,b,c,d,u);
+}
+// Guard knots outside the drawable run repeat the endpoint: zero slope there, never a value from across a break.
+Knot guardBefore, guardAfter;
+bool station(vec3 a, vec3 b, vec3 c, vec3 d, Knot left, Knot right, float originTwist, float u,
+             out vec3 lo, out vec3 hi, out vec3 normal, out vec3 pathTangent) {
+    vec3 localA=a-b, localC=c-b, localD=d-b;
+    vec3 at=b+pathPoint(localA,vec3(0),localC,localD,u);
+    vec3 tangent=pathPoint(localA,vec3(0),localC,localD,min(1.0,u+0.001))
+                -pathPoint(localA,vec3(0),localC,localD,max(0.0,u-0.001));
+    if(dot(tangent,tangent)<1e-18) return false;
+    tangent=normalize(tangent);
+    pathTangent=tangent;
+    bool cloth=dot(uSweepAxis,uSweepAxis)>0.5;
+    vec3 axis=cloth?uSweepAxis:tangent;
+    // A fixed sweep plane has a fixed world reference: authored twist is its sole rotation. Projecting a
+    // transported path frame into this plane amplified its torsion near steep bends, creating tight turns.
+    vec3 reference=abs(axis.y)<0.95?vec3(0,1,0):vec3(0,0,1);
+    vec3 side=cloth?reference:hermite(guardBefore.side.xyz,left.side.xyz,right.side.xyz,guardAfter.side.xyz,u);
+    side-=axis*dot(side,axis);
+    if(dot(side,side)<1e-12) return false;
+    side=normalize(side);
+    vec4 weights=clothWeights(u);
+    float twist=originTwist+(cloth?dot(weights,vec4(guardBefore.q.y,left.q.y,right.q.y,guardAfter.q.y))
+                                 :monotone(guardBefore.q.y,left.q.y,right.q.y,guardAfter.q.y,u));
+    side=cos(twist)*side+sin(twist)*cross(axis,side);
+    float width=cloth?dot(weights,vec4(guardBefore.p.w,left.p.w,right.p.w,guardAfter.p.w))
+                      :clamp(monotone(guardBefore.p.w,left.p.w,right.p.w,guardAfter.p.w,u),
+                      min(left.p.w,right.p.w),max(left.p.w,right.p.w));
+    lo=at-width*side; hi=at+width*side;
+    normal=normalize(cross(tangent,side));
+    return !all(equal(lo,hi));
+}
+vec3 surfacePoint(vec3 low, vec3 high, vec3 normal, float across) {
+    vec3 side=normalize(high-low);
+    vec3 bow=dot(uSweepAxis,uSweepAxis)>0.5?cross(uSweepAxis,side):normal;
+    float q=2.0*across-1.0;
+    return mix(low,high,across)+bow*0.5*length(high-low)*uSurface.x*(1.0-q*q);
+}
+"""
+
+RIBBON_VERTEX = ("#version 460 core\n" + _RIBBON_SURFACE_GLSL + """
 struct Ribbon { vec4 meta; vec4 extra; vec4 colourA; vec4 colourB; Knot knots[MAX_KNOTS]; };
 layout(std430, binding=0) readonly buffer Paths { Ribbon paths[]; };
 uniform mat4 uMvp;
@@ -38,55 +122,6 @@ out float vExpanded;
 out float vFaceScale;
 flat out vec4 vColour;
 flat out vec4 vColourB;
-vec3 curve(vec3 a, vec3 b, vec3 c, vec3 d, float u) {
-    if(u==0.0 || all(equal(b,c))) return b;
-    if(u==1.0) return c;
-    float t1=sqrt(max(distance(a,b),1e-6));
-    float t2=t1+sqrt(max(distance(b,c),1e-6));
-    float t3=t2+sqrt(max(distance(c,d),1e-6));
-    float t=mix(t1,t2,u);
-    vec3 a1=mix(a,b,t/t1), a2=mix(b,c,(t-t1)/(t2-t1)), a3=mix(c,d,(t-t2)/(t3-t2));
-    return mix(mix(a1,a2,t/t2),mix(a2,a3,(t-t1)/(t3-t1)),(t-t1)/(t2-t1));
-}
-// Monotone cubic Hermite (Fritsch-Carlson limited) on the uniform knot lattice: C1 through every knot, never
-// outside [min(b,c), max(b,c)], so widths stay positive and no knot leaves a corner (linear did: lumps).
-float monotone(float a, float b, float c, float d, float u) {
-    float delta=c-b;
-    float m1=0.5*(c-a), m2=0.5*(d-b);
-    if(abs(delta)<=1e-12*max(abs(b),abs(c))) { m1=0.0; m2=0.0; }
-    else {
-        m1=m1*delta<=0.0?0.0:sign(m1)*min(abs(m1),3.0*abs(delta));
-        m2=m2*delta<=0.0?0.0:sign(m2)*min(abs(m2),3.0*abs(delta));
-    }
-    float u2=u*u, u3=u2*u;
-    return (2.0*u3-3.0*u2+1.0)*b+(u3-2.0*u2+u)*m1+(3.0*u2-2.0*u3)*c+(u3-u2)*m2;
-}
-vec3 hermite(vec3 a, vec3 b, vec3 c, vec3 d, float u) {
-    float u2=u*u, u3=u2*u;
-    return (2.0*u3-3.0*u2+1.0)*b+(u3-2.0*u2+u)*0.5*(c-a)+(3.0*u2-2.0*u3)*c+(u3-u2)*0.5*(d-b);
-}
-// Guard knots outside the drawable run repeat the endpoint: zero slope there, never a value from across a break.
-Knot guardBefore, guardAfter;
-bool station(vec3 a, vec3 b, vec3 c, vec3 d, Knot left, Knot right, float originTwist, float u,
-             out vec3 lo, out vec3 hi, out vec3 normal) {
-    vec3 localA=a-b, localC=c-b, localD=d-b;
-    vec3 at=b+curve(localA,vec3(0),localC,localD,u);
-    vec3 tangent=curve(localA,vec3(0),localC,localD,min(1.0,u+0.001))
-                -curve(localA,vec3(0),localC,localD,max(0.0,u-0.001));
-    if(dot(tangent,tangent)<1e-18) return false;
-    tangent=normalize(tangent);
-    vec3 side=hermite(guardBefore.side.xyz,left.side.xyz,right.side.xyz,guardAfter.side.xyz,u);
-    side-=tangent*dot(side,tangent);
-    if(dot(side,side)<1e-12) return false;
-    side=normalize(side);
-    float twist=originTwist+monotone(guardBefore.q.y,left.q.y,right.q.y,guardAfter.q.y,u);
-    side=cos(twist)*side+sin(twist)*cross(tangent,side);
-    float width=clamp(monotone(guardBefore.p.w,left.p.w,right.p.w,guardAfter.p.w,u),
-                      min(left.p.w,right.p.w),max(left.p.w,right.p.w));
-    lo=at-width*side; hi=at+width*side;
-    normal=cross(tangent,side);
-    return !all(equal(lo,hi));
-}
 // Chronological knot i lives in ring slot (start+i)%capacity; a stateless packet has start 0.
 int ringStart, ringCapacity;
 Knot knotAt(int owner, int i) { return paths[owner].knots[(ringStart+i)%ringCapacity]; }
@@ -96,7 +131,9 @@ void main() {
     ringStart=clamp(int(paths[owner].extra.y),0,ringCapacity-1);
     int count=clamp(int(paths[owner].meta.x),0,ringCapacity);
     int divisions=clamp(int(paths[owner].meta.y),1,8);
-    int interval=gl_VertexID/6, corner=gl_VertexID%6;
+    int crossDiv=max(int(uSurface.y),1);
+    int interval=gl_VertexID/(6*crossDiv), corner=gl_VertexID%6;
+    int acrossStrip=(gl_VertexID/6)%crossDiv;
     int segment=interval/divisions;
     gl_Position=vec4(2,2,2,1); vWorld=vec3(0); vNormal=vec3(0,0,1); vPhase=0; vAcross=0; vEmission=0;
     vColour=vec4(0); vColourB=vec4(0);
@@ -106,7 +143,9 @@ void main() {
     if(left.q.z<0.5 || right.q.z<0.5 || right.q.w>0.5 || all(equal(left.p.xyz,right.p.xyz))) return;
     // Independent triangles: L0 L1 R0, R0 L1 R1. No bridge across invalid intervals.
     bool next=corner==1 || corner>=4;
-    float signWidth=(corner==2 || corner==3 || corner==5)?1.0:-1.0;
+    bool highAcross=corner==2 || corner==3 || corner==5;
+    float acrossFraction=float(acrossStrip+(highAcross?1:0))/float(crossDiv);
+    float signWidth=acrossFraction*2.0-1.0;
     float u=float(interval%divisions+(next?1:0))/float(divisions);
     vec3 b=left.p.xyz,c=right.p.xyz;
     Knot before=knotAt(owner,max(segment-1,0)), after=knotAt(owner,min(segment+2,count-1));
@@ -120,14 +159,27 @@ void main() {
     guardBefore=joinsBefore?before:left;
     guardAfter=joinsAfter?after:right;
     float u0=float(interval%divisions)/float(divisions), u1=float(interval%divisions+1)/float(divisions);
-    vec3 l0,r0,l1,r1,n0,n1;
+    vec3 l0,r0,l1,r1,n0,n1,t0,t1;
     // Both endpoints must admit before ANY corner is emitted; partial rejection
     // would stretch the surviving triangle towards the offscreen sentinel.
-    if(!station(a,b,c,d,left,right,paths[owner].extra.x,u0,l0,r0,n0) ||
-       !station(a,b,c,d,left,right,paths[owner].extra.x,u1,l1,r1,n1)) return;
-    vWorld=next?(signWidth<0?l1:r1):(signWidth<0?l0:r0);
-    vNormal=next?n1:n0;
-    vAcross=signWidth<0?0.0:1.0;
+    if(!station(a,b,c,d,left,right,paths[owner].extra.x,u0,l0,r0,n0,t0) ||
+       !station(a,b,c,d,left,right,paths[owner].extra.x,u1,l1,r1,n1,t1)) return;
+    vec3 low=next?l1:l0, high=next?r1:r0;
+    vec3 side=normalize(high-low), normal=next?n1:n0;
+    float halfWidth=0.5*length(high-low);
+    // A bowed cross section remains a smooth sheet through an edge-on fold instead of pinching to a flat line.
+    // Edges are unchanged; the surface and its analytic cross derivative are continuous across all eight strips.
+    vec3 bow=dot(uSweepAxis,uSweepAxis)>0.5?cross(uSweepAxis,side):normal;
+    vWorld=surfacePoint(low,high,normal,acrossFraction);
+    // Differentiate the actual swept surface, including width, twist and camber changes along its length.
+    // Centreline tangents alone give incorrect grazing light on a twisting sheet. Both samples are local to
+    // this interval, so breaks never enter the derivative; shared knot slopes make the one-sided limits agree.
+    vec3 lm,hm,nm,tm,lp,hp,np,tp;
+    if(!station(a,b,c,d,left,right,paths[owner].extra.x,max(0.0,u-0.002),lm,hm,nm,tm) ||
+       !station(a,b,c,d,left,right,paths[owner].extra.x,min(1.0,u+0.002),lp,hp,np,tp)) return;
+    vec3 along=surfacePoint(lp,hp,np,acrossFraction)-surfacePoint(lm,hm,nm,acrossFraction);
+    vNormal=normalize(cross(along,side-2.0*uSurface.x*signWidth*bow));
+    vAcross=acrossFraction;
     vEmission=monotone(guardBefore.side.w,left.side.w,right.side.w,guardAfter.side.w,u);
     vLocal=mix(left.q.x,right.q.x,u);
     vPhase=paths[owner].meta.z+mix(left.q.x,right.q.x,u)/paths[owner].meta.w;
@@ -139,7 +191,7 @@ void main() {
     // across the screen-space tangent. Light per unit length must stay that of the real sheet through the fold:
     // the fragment's path-length gain becomes (face-on width)/(drawn width), which equals 1/|N.V| where widening
     // starts, so the two meet continuously (a capped gain times shrinking coverage went dark at the fold).
-    float minimum=uRim.w;
+    float minimum=uSurface.x>0.0?0.0:uRim.w;
     if(minimum>0.0) {
         vec3 lo=next?l1:l0, hi=next?r1:r0;
         vec4 clo=uMvp*vec4(lo,1.0), chi=uMvp*vec4(hi,1.0), cc=uMvp*vec4((lo+hi)*0.5,1.0);
@@ -168,15 +220,14 @@ void main() {
         }
     }
 }
-""".replace('MAX_KNOTS', str(MAX_PATH_SAMPLES))
+""").replace('MAX_KNOTS', str(MAX_PATH_SAMPLES))
 
 # Sparks attached to the ribbon's history (no state, no CPU per tick): every knot owns a few spark slots; tangent.w
 # is the share alive (the highs when the knot was admitted). A spark is born on the ribbon between its knot and the
 # next, then drifts off along a hashed direction as it ages on the ribbon's own clock, fading over its lifetime. Its
 # identity hashes the knot's absolute coordinate (stable across rebases) with integers: a sine hash of an interpolated
 # or large float is not stable (3D foundation lessons).
-RIBBON_SPARK_VERTEX = """#version 460 core
-struct Knot { vec4 p; vec4 q; vec4 tangent; vec4 side; };
+RIBBON_SPARK_VERTEX = ("#version 460 core\n" + _RIBBON_SURFACE_GLSL + """
 struct Ribbon { vec4 meta; vec4 extra; vec4 colourA; vec4 colourB; Knot knots[MAX_KNOTS]; };
 layout(std430, binding=0) readonly buffer Paths { Ribbon paths[]; };
 uniform mat4 uMvp;
@@ -214,12 +265,16 @@ void main() {
     uint seed=mixBits(base+uint(generation)*2246822519U);
     float r1=unit(seed), r2=unit(seed+1U), r3=unit(seed+2U), r4=unit(seed+3U), r5=unit(seed+4U), r6=unit(seed+5U);
     if(r1>k.tangent.w) return;                       // the knot's sparkle is the share of its slots alive
-    vec3 side=normalize(k.side.xyz);
-    vec3 chord=n.p.xyz-k.p.xyz;
-    vec3 along=normalize(chord+vec3(1e-6,0.0,0.0));
-    float twist=paths[owner].extra.x+k.q.y;
-    side=cos(twist)*side+sin(twist)*cross(along,side);
-    vec3 birth=k.p.xyz+chord*r3+side*(r2*2.0-1.0)*k.p.w;
+    Knot before=knotAt(owner,max(index-1,0)), after=knotAt(owner,min(index+2,count-1));
+    bool joinsBefore=index>0 && before.q.z>0.5 && k.q.w<0.5;
+    bool joinsAfter=index+2<count && after.q.z>0.5 && after.q.w<0.5;
+    guardBefore=joinsBefore?before:k;
+    guardAfter=joinsAfter?after:n;
+    vec3 a=joinsBefore?before.p.xyz:2.0*k.p.xyz-n.p.xyz;
+    vec3 d=joinsAfter?after.p.xyz:2.0*n.p.xyz-k.p.xyz;
+    vec3 lo,hi,normal,tangent;
+    if(!station(a,k.p.xyz,n.p.xyz,d,k,n,paths[owner].extra.x,r3,lo,hi,normal,tangent)) return;
+    vec3 birth=surfacePoint(lo,hi,normal,r2);
     vec3 direction=normalize(vec3(r4-0.5,r5-0.5+uSpark.w,r6-0.5)+vec3(1e-4));
     vec3 position=birth+direction*uSpark.z*(0.25+r1)*age/(1.0+0.5*age);
     float life=age/uSpark.y;
@@ -231,7 +286,7 @@ void main() {
     vWorld=position;
     gl_Position=uMvp*vec4(position,1.0);
 }
-""".replace('MAX_KNOTS', str(MAX_PATH_SAMPLES))
+""").replace('MAX_KNOTS', str(MAX_PATH_SAMPLES))
 
 RIBBON_SPARK_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\n"
                          "in vec3 vWorld;\nin float vBright;\nflat in vec3 vColour;\nuniform vec3 uMistOrigin;\n"
@@ -265,6 +320,16 @@ void main() {
 }
 """
 
+RIBBON_STRAND_COORDINATE_GLSL = """
+// A monotone stretch of the material coordinate: gather at one edge and fan at the other, without folding or
+// creating/destroying strand identities. An additive sine warp could reverse its derivative at large strengths.
+float ribbonStrandCoordinate(float across,float phase,float strength,float frequency,float jitter) {
+    float stretch=exp(clamp(4.0*strength*sin(6.2831853*phase*frequency),-4.0,4.0));
+    float warped=across/max(across+(1.0-across)*stretch,1e-6);
+    return warped+jitter*sin(6.2831853*warped*3.0+1.3)/(6.2831853*3.0);
+}
+"""
+
 # Shared by the body and light passes; every input is packet-local (the owner rebases eye/view with the MVP).
 _RIBBON_MATERIAL_GLSL = """
 in vec3 vWorld;
@@ -284,21 +349,22 @@ uniform vec3 uForward;      // view direction (Orthographic; directions are unch
 uniform int uOrthographic;
 uniform vec4 uRim;          // half-width (across units), light, path-length cap, minimum on-screen width (px)
 uniform vec4 uStrands;      // count across the width, half-width (strand spacing units), light, warp
-uniform vec4 uBody;         // alpha, tint, unused, warp frequency (per phase unit)
+uniform vec4 uBody;         // alpha, tint, strand intensity variation, warp frequency (per phase unit)
 uniform vec4 uFill;         // emissive sheet light, its centre level (edges are 1), rim glow width (across), rim glow light
 uniform vec4 uGlint;        // glints per strand per phase unit, chance, light, radius (strand units)
 uniform vec4 uTone;         // strand whiteness, rim whiteness, strand spacing jitter, glint minimum radius (px)
 uniform vec4 uAge;          // local now, fade-in, maximum age, fade-out (seconds); fades off when both are zero
 uniform vec3 uMistOrigin;   // packet-local -> mist world translation (packet origin plus the caller's frame)
-""" + MIST_GLSL + """
+""" + MIST_GLSL + RIBBON_STRAND_COORDINATE_GLSL + """
 
-// Box filter of the unit-spaced lines |x - (k + 0.5)| <= halfWidth over a pixel footprint w (strand units).
-// Once w nears a strand spacing the pattern is sub-pixel: it fades to its mean density instead of aliasing.
+// Integral of the periodic pulse, then exact box filtering over the pixel footprint. The old single-line
+// approximation faded at 0.35 spacings/pixel and erased still-resolved filaments into a solid sheet.
+float strandIntegral(float x, float halfWidth) {
+    return floor(x)*2.0*halfWidth+clamp(fract(x)-(0.5-halfWidth),0.0,2.0*halfWidth);
+}
 float strandCoverage(float x, float halfWidth, float w) {
-    float d=abs(fract(x)-0.5);
-    float overlap=max(0.0,min(d+0.5*w,halfWidth)-max(d-0.5*w,-halfWidth));
-    float filtered=overlap/max(w,1e-4);
-    return mix(filtered,2.0*halfWidth,smoothstep(0.35,0.9,w));
+    float filtered=(strandIntegral(x+0.5*w,halfWidth)-strandIntegral(x-0.5*w,halfWidth))/max(w,1e-4);
+    return mix(filtered,2.0*halfWidth,smoothstep(0.65,1.2,w));
 }
 float strandHash(float k) { return fract(sin(k*12.9898+3.1)*43758.5453); }
 float cellHash(float k, float j) { return fract(sin(k*12.9898+j*78.233+1.7)*43758.5453); }
@@ -344,13 +410,13 @@ RIBBON_LIGHT_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragCol
                          "layout(location=1) out vec4 Emission;\n" + _RIBBON_MATERIAL_GLSL + """
 void main() {
     float across=acrossClamped();
-    // Strands spread and gather along the path: a warp fixed to the absolute path phase, zero at both edges.
-    float warp=uStrands.w*sin(6.2831853*vPhase*uBody.w+across*3.0)*across*(1.0-across)*4.0;
-    // Irregular spacing (monotone while jitter < 1): real filament bundles are never evenly combed.
-    float spaced=across+uTone.z*sin(6.2831853*across*3.0+1.3)/(6.2831853*3.0);
-    float x=(spaced+warp)*uStrands.x;
+    float x=ribbonStrandCoordinate(across,vPhase,uStrands.w,uBody.w,uTone.z)*uStrands.x;
     float w=max(fwidth(x),1e-4);
-    float strands=strandCoverage(x,uStrands.y,w)*(0.55+0.45*strandHash(floor(x)));
+    float hash=strandHash(floor(x));
+    float strength=mix(0.55+0.45*hash,0.08+2.1*hash*hash,uBody.z);
+    // Once unresolved, preserve the average emitted energy instead of hashing whichever line the pixel lands on.
+    strength=mix(strength,mix(0.775,0.78,uBody.z),smoothstep(0.65,1.2,w));
+    float strands=strandCoverage(x,uStrands.y,w)*strength;
     float wa=max(fwidth(across),1e-5);
     float rims=rimCoverage(across,uRim.x,wa)+rimCoverage(1.0-across,uRim.x,wa);
     // The sheet itself glows (both references): a fill brightening toward the edges, a wide rim glow beside
