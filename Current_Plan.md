@@ -149,23 +149,16 @@ boards describe looks the eventual live presets should support. The new complete
 (`references/Waveform_Ribbon_Fog_Complete_Scene_Mock.png`, source custody in Lab Plan §1.1). Detailed live checklist
 and remaining visual gaps: Lab Plan §0–0B. **No full-scene or floor parity is established.**
 
-- [~] **Immediate floor correction, Awaiting Validation:** establish smooth finished concrete plus gentle Gaussian
-  reflection blur together. Replace coarse aggregate colour, retain shallow independent height/roughness, and correct
-  illumination beneath the actual ribbons. Current floor studies still read as a dark mirrored waveform or a broad
-  coloured band; neither matches the mock's softly lit wet concrete. Compare native low/high floor crops, five poses
-  and bounded motion. Resolve current filtering checks and measure the final combined GPU work before checkpointing.
-  Wet/dry patch contrast is rejected; hold the preferred waveform fixed during this slice.
-
-- [~] **WR-04 waveform now:** smooth cloth-like folds and edges at every admitted shape, fine fanning/gathering
-  filaments and readable quiet detail. No sharp/spiky bends. Judge both mocks and all navigation poses; parity is open.
-  Compare new candidates against the operator's preferred waveform checkpoint recorded in Lab Plan §0A.
-  Both boundary rims now have independent filament light; validate their balance through folds and motion.
-  Broader swept sheets and smooth phase/amplitude/depth variation are in the lab; skew-stretched glints are corrected.
-  Biggest waveform gaps: fine-detail stability, convincing depth/light and the remaining difference from reference shapes.
-- [~] **Volumetric mist (S3D-7 bounded slice):** the shared froxel volume and half-resolution detail march are in the
-  lab, ribbon-carved and ribbon-lit, with slab/anchoring/steady-share tests. The look is still far from the mock:
-  fringe colour and brightness, corner banks, haze lines in turned views. March cost must drop before production.
-  Detail is in Lab Plan §0.
+- [~] **Baseline `waveform-baseline-2026-11-01` (operator: "getting close"):** waveform-shaped mist, colour grade,
+  vertical wet floor columns. Open gaps, in order:
+  - mist continuity (holes) and interior volume;
+  - low/high colour pairs and preset-data shape character for reactivity, with a gradient-node colour editor in
+    Settings at WR-08;
+  - floor column shaping toward the contact line, and a brighter low-react floor;
+  - mist edge crackle;
+  - sheet saturation;
+  - fog march cost.
+  Live checklist: Lab Plan §0.
 - [ ] **Accents and optics:** sparks, glow and defocus after the underlying waveform/floor/mist match.
 - [ ] **Awaiting Validation:** operator sign-off on the floor/waveform/volume look before reactivity.
 - [ ] **Only after visuals:** recorded audio windows and WR-07 mappings; remaining S3D-1/2/5 lifecycle/cost gates;

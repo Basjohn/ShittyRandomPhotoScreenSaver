@@ -40,7 +40,50 @@ implementer's call without further confirmation; the operator judges much later.
 return to waveform fidelity, followed by real volumetric mist. The floor, waveform and complete scene remain far
 from parity. §0B is the current visual audit, not an acceptance report.
 
-**Live work:**
+**Baseline (operator, 1 November: "you're getting close"):** git tag `waveform-baseline-2026-11-01` (`f4825432`),
+evidence `wr07_floor_columns/`. Compare every later candidate against it and revert to it if a pass makes things
+worse. The operator named the floor of this baseline and of the `wr07_colour_grade` capture the best floors so far.
+
+**Live work (open gaps, largest first):**
+- [ ] **Mist continuity and volume:** the mist breaks completely apart in places (holes through the bank where
+  erosion meets thin coverage). Away from its lit edges it reads flat: there is no interior structure or depth.
+- [ ] **Colour and shape mutability (presets and reactivity):** every board's colours and shapes must be reachable
+  by presets and reactivity.
+  - **Colour pairs:** a low-reactivity colour pair and a high-reactivity colour pair, chosen per preset; reactivity
+    blends between them.
+  - **Settings UI (operator suggestion, WR-08):** a gradient tool whose circular nodes are clickable and draggable;
+    clicking a node opens a colour picker.
+  - **Already in place:**
+    - the per-knot tint row for colour that flows along the history;
+    - the world grade (three stops over x) for a static layout;
+    - the mist and banks take their colour from the envelope.
+  - **Still open:** the lab recipe as low/high pairs; shape character per preset (amplitude, swell, width, twist
+    ranges) as data, not code.
+- [ ] **Floor column shaping:** the columns run the full floor height at even brightness. The mock's are brightest
+  at the contact line and break into sparkle toward the camera. In low react the floor is much darker than the
+  mock's; its cyan and magenta columns are distinct even then. No concrete structure is visible. Keep the
+  baseline's smooth wet character.
+- [ ] **Mist edge character:** soft and dim, where the mock shows a bright fibrous crackle. In wide views the
+  corner banks read as separate cotton mounds; the mock's form a continuous bank.
+- [ ] **Waveform:** the sheets are paler and whiter than the mock's saturated ribbons (strand whiteness). Remaining
+  structure work: fine-detail stability, depth and light, and reference shape fidelity. Every admitted shape stays
+  smooth like folding cloth.
+- [ ] **Cost (RTX 4090, 820x718 medians):**
+  - main mist march 1.07/3.07 ms (low/high), mirrored march 0.9-1.6 ms: too costly for production;
+  - floor 0.21/1.18 ms.
+  The march needs adaptive or fewer steps and a cheaper light direction.
+- [ ] **Motion:** explicit-time slow-motion captures of mist anchoring, streak stability and sheet rims; five poses
+  in both projections.
+- [ ] **Accents:** cyan/magenta sparks with a real size range; tight filament glow plus broad hot spots.
+- [ ] **Awaiting Validation:** operator review. No candidate is accepted.
+- [ ] **After visual fidelity:** WR-00 recorded windows, WR-07 audio mappings (colour pairs, shape, light, particles
+  and fog are all reactivity areas), the remaining shared lifecycle gates, WR-08 production with presets and Settings,
+  WR-09 performance and operator acceptance.
+
+Pass history and the reasons behind current settings (newest first) follow in the S3D-7, floor and waveform notes
+below; they are records, not open items.
+
+**Pass history:**
 - [ ] **Waveform structure and light:** richer smooth folds, depth separation, fine fanning/gathering filaments,
   readable quiet detail, coloured hot crossings. Every admitted shape must remain smooth like folding cloth, never
   sharp or spiky, including wide inner bends. Outer boundary lines must be brighter and glow more than the interior
