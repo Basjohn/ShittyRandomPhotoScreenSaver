@@ -104,6 +104,9 @@ class Fog:
     tube: float = .3                # true 3D clearance around every sheet (world units)
     clearance: tuple = (.3, .25)    # push of the whole field from the envelope; the mist never enters within
     ends: float = 6.                # the mist comes this far forward where the sheets fade (world units)
+    # |world x| where the clear band and the sheets' clearance start to close, and where they are closed: beyond the
+    # framed view the ribbons run into mist (the off-screen edge mist), so no view along them sees a clear corridor.
+    sides: tuple = (8., 13.)
     floor: tuple = (0., 5.5, 2.5)   # floor bank height, forward reach at the sides, |x| where the sides begin
     interior: tuple = (.25, .22, 1.5)   # unlit body lumps: floor, frequency; rim fall per unit of billow push
     floor_light: tuple = (0., 2., .08)  # floor mist light share, its reach from the sheets; wall-behind light
@@ -476,6 +479,7 @@ uniform float uFogTube;       // true 3D clearance around every sheet (world uni
 uniform vec2 uFogClearance;   // push of the whole field from the envelope; distance the mist never enters
 uniform vec2 uFogSlope;       // the camera's view direction: x and y change per unit z (band projection)
 uniform float uFogEnds;       // how far the mist comes forward where the sheets fade (world units)
+uniform vec2 uFogSides;       // |world x| where the clear room starts to close, and where the side wall stands
 uniform vec3 uFogFloor;       // floor bank height, forward reach at the sides, |x| where the sides begin
 uniform vec3 uFogInterior;   // lump floor (0..1), lump frequency, rim fall per unit of push
 uniform vec3 uFogFloorLight;  // floor mist light share, its reach from the sheets, light of the wall behind them
@@ -528,6 +532,10 @@ float fogInside(vec3 world, out vec4 band, out float above, out float below) {
     float front=uFogShape.x+(1.0-band.z)*uFogEnds;
     float behind=front-world.z+uFogShape.z*(fogBillow(world.zyx*uFogForm.w*0.8+vec3(5.3))-0.5)*1.5;
     float field=min(behind,max(outside,behind-uFogShape.y));
+    // Side walls beyond the framed view, at every depth: views along the ribbons see them run into mist instead of
+    // a clear slab to the far floor and the sky. Billows break the wall's face.
+    float sideWall=abs(world.x)-uFogSides.y+uFogShape.z*(fogBillow(world.zyx*uFogForm.w*0.7+vec3(2.9))-0.5)*1.5;
+    field=max(field,sideWall);
     // Under the waveform (where sheets are present) the reactive mist is absent: the floor takes the cheap analytic
     // mist. Isolated eroded lumps survived there and read as stray puffs at the contact line. Only near the sheets:
     // beyond the band's depth the distant wall returns, or high sheets left the sky down to the horizon unfilled
@@ -771,6 +779,12 @@ def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None, slope
         level = c @ luma
         even = blur(level, fog.edge_evening)
         c *= (even/np.maximum(level, 1e-4))[:, None]
+    # Off the framed view's sides the band closes: views along the ribbons see them run into mist, not a clear
+    # corridor to the horizon (black sky, unmisted far sheets and reflections stacking along the line of sight).
+    side = 1. - smooth((np.abs(xs) - fog.sides[0])/max(fog.sides[1] - fog.sides[0], 1e-6))
+    upper, lower = closed + (upper - closed)*side, closed + (lower - closed)*side
+    presence = presence*side
+    tubes[:, :, 2:] *= side[None, :, None]
     table = np.zeros((3 + ENVELOPE_RIBBONS, xs.size, 4), np.float32)
     table[0, :, 0], table[0, :, 1], table[0, :, 2] = lower, upper, presence
     table[1, :, :3], table[2, :, :3] = upper_colour, lower_colour
@@ -1105,6 +1119,7 @@ class Lab:
             gl.glUniform3f(location('uBakeSize'), *(hi - lo))
         gl.glUniform2f(location('uFogSlope'), *self._slopes)
         gl.glUniform1f(location('uFogEnds'), fog.ends)
+        gl.glUniform2f(location('uFogSides'), *fog.sides)
         gl.glUniform3f(location('uFogFloor'), *fog.floor)
         gl.glUniform3f(location('uFogFloorLight'), *fog.floor_light)
         gl.glUniform3f(location('uFogInterior'), *fog.interior)
