@@ -152,8 +152,9 @@ and remaining visual gaps: Lab Plan §0–0B. **No full-scene or floor parity is
 - [~] **Baseline `waveform-baseline-2026-11-01` (operator: "getting close"):** waveform-shaped mist, colour grade,
   vertical wet floor columns. Open gaps, in order:
   - mist continuity (holes) and interior volume;
-  - low/high colour pairs and preset-data shape character for reactivity, with a gradient-node colour editor in
-    Settings at WR-08;
+  - achievable looks proven as named lab recipes (sheet colours following the recipe pair). Presets, controls and
+    Settings stay with the full WR-08 migration; the operator's low/high colour-pair gradient-node editor is
+    recorded for that design;
   - floor column shaping toward the contact line, and a brighter low-react floor;
   - mist edge crackle;
   - sheet saturation;

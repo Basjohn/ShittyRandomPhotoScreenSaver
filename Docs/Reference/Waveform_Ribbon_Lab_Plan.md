@@ -50,23 +50,25 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
   glows wherever the push left the face (gentle fall per unit of push), so the fringe is continuous across the
   width. The unlit body has large dim lumps instead of one flat grey. Still to check: motion, and whether the lumps
   read as volume at wide poses.
-- [ ] **Colour and shape mutability (presets and reactivity):** every board's colours and shapes must be reachable
-  by presets and reactivity.
-  - **Colour pairs:** a low-reactivity colour pair and a high-reactivity colour pair, chosen per preset; reactivity
-    blends between them.
-  - **Settings UI (operator suggestion, WR-08):** a gradient tool whose circular nodes are clickable and draggable;
-    clicking a node opens a colour picker.
-  - **Already in place:**
+- [ ] **Achievable looks (lab capability, not presets):** every board's colours and shapes must be reachable.
+  - **Boundary (operator, 1 November):** presets, controls, Settings and the preset/control systems arrive only with
+    the full Visualizer migration (WR-08), designed there as a whole. The lab records the values each look needs
+    and proves the mechanisms; it builds no preset data model, preset plumbing or Settings.
+  - **Recorded for WR-08 design:**
+    - a low-reactivity and a high-reactivity colour pair, blended by reactivity;
+    - the operator's gradient tool: circular nodes, clickable and draggable, each click opening a colour picker;
+    - shape character ranges (amplitude, swell, width, twist).
+  - **Lab mechanisms in place:**
     - the per-knot tint row for colour that flows along the history;
-    - the world grade (three stops over x) for a static layout;
-    - the mist and banks take their colour from the envelope.
-  - **Lab recipe colour pairs:** `Recipe.palette` holds the low and high pairs, blended by reactivity. The middle
-    stop comes from the hue between them (`colour_grade`). An alternate pair (blue/teal low, orange/pink high)
-    recolours the mist, banks and floor.
-  - **Still open:**
-    - the sheets' own base colours (`PALETTE`) are not preset data yet, so sheets stay cyan/magenta under any pair;
+    - the world grade (three stops over x, the middle derived by hue);
+    - mist and banks coloured from the envelope;
+    - the recipe's low/high colour pair, blended by the synthetic reactivity.
+  - **Other looks:** alternate looks (the preset-range board, warm accents) are named recipes run by the same lab
+    (`--recipe`), sharing every program and function (Extruded Bubble's lab pattern). Never a copied lab.
+  - **Open:**
+    - the sheets' own colours do not yet follow the recipe pair, so an alternate look keeps cyan/magenta sheets;
     - warm colours turn brown in dim mist;
-    - shape character per preset (amplitude, swell, width, twist ranges) as data, not code.
+    - prove the preset-range board's look as a second named recipe.
 - [~] **Floor column shaping:** a mild fade toward the camera (`column`) puts the high state's brightness at the
   contact line. Wet-film sparkle grain was tried and rejected: it brought back the mottled floor. The fade darkens
   the already too-dark low-state floor further, so it stays mild. Earlier state: the columns ran the full floor
