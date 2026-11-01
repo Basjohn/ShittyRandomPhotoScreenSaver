@@ -18,17 +18,20 @@ from rendering.gl_programs.mist import MIST_GLSL
 from rendering.quick.scene3d.target import SCENE_OIT_GLSL
 
 RIBBON_GRADE_GLSL = """
-// World colour grade (a preset look): left/mid/right colours across a world-x range and the share they take of the
-// ribbon's own colour. Share 0 leaves every ribbon its own colours.
-uniform vec4 uGradeLeft;   // rgb, world x of the left stop
-uniform vec4 uGradeMid;    // rgb, share
-uniform vec4 uGradeRight;  // rgb, world x of the right stop
+// World colour grade (a preset look): up to GRADE_STOPS colour nodes at ascending positions across a world-x range,
+// and the share they take of the ribbon's own colour. Share 0 leaves every ribbon its own colours. Between two nodes
+// the colour eases (smoothstep), so a node is a soft waypoint, never a visible seam.
+const int GRADE_STOPS=6;
+uniform vec4 uGradeStops[GRADE_STOPS];  // rgb, position along the range (0..1, strictly ascending)
+uniform vec4 uGrade;                    // world x of position 0, world x of position 1, share, node count
 vec3 graded(vec3 colour, float worldX) {
-    if(uGradeMid.w<=0.0) return colour;
-    float t=clamp((worldX-uGradeLeft.w)/max(uGradeRight.w-uGradeLeft.w,1e-3),0.0,1.0);
-    vec3 grade=t<0.5?mix(uGradeLeft.rgb,uGradeMid.rgb,smoothstep(0.0,0.5,t))
-                    :mix(uGradeMid.rgb,uGradeRight.rgb,smoothstep(0.5,1.0,t));
-    return mix(colour,grade,clamp(uGradeMid.w,0.0,1.0));
+    if(uGrade.z<=0.0) return colour;
+    float t=clamp((worldX-uGrade.x)/max(uGrade.y-uGrade.x,1e-3),0.0,1.0);
+    int count=clamp(int(uGrade.w),1,GRADE_STOPS);
+    vec3 grade=uGradeStops[0].rgb;
+    for(int i=1;i<count;++i)
+        grade=mix(grade,uGradeStops[i].rgb,smoothstep(uGradeStops[i-1].w,uGradeStops[i].w,t));
+    return mix(colour,grade,clamp(uGrade.z,0.0,1.0));
 }
 """
 
@@ -109,11 +112,27 @@ bool station(vec3 a, vec3 b, vec3 c, vec3 d, Knot left, Knot right, float origin
     normal=normalize(cross(tangent,side));
     return !all(equal(lo,hi));
 }
+// Floor contact: where the sheet would pass below the floor it deforms along it, like cloth settling. Height is eased
+// (softplus) onto the floor plus a small gap: a smooth, strictly increasing map of y alone, so the sheet can never
+// fold over itself or crease, and points clear of the floor keep their shape. A sideways spread was rejected: it
+// folded the sheet at its centre into sharp corners. Softness 0 is off.
+uniform vec3 uFloorContact;  // floor height (packet-local y), gap, softness
+float floorEased(float y) {
+    float low=uFloorContact.x+uFloorContact.y;
+    float x=(y-low)/uFloorContact.z;
+    return low+uFloorContact.z*(x>0.0?x+log(1.0+exp(-x)):log(1.0+exp(x)));
+}
+float floorSlope(float y) {  // d floorEased / dy
+    return 1.0/(1.0+exp(-(y-uFloorContact.x-uFloorContact.y)/uFloorContact.z));
+}
+vec3 floorContact(vec3 p) {
+    return uFloorContact.z>0.0?vec3(p.x,floorEased(p.y),p.z):p;
+}
 vec3 surfacePoint(vec3 low, vec3 high, vec3 normal, float across) {
     vec3 side=normalize(high-low);
     vec3 bow=dot(uSweepAxis,uSweepAxis)>0.5?cross(uSweepAxis,side):normal;
     float q=2.0*across-1.0;
-    return mix(low,high,across)+bow*0.5*length(high-low)*uSurface.x*(1.0-q*q);
+    return floorContact(mix(low,high,across)+bow*0.5*length(high-low)*uSurface.x*(1.0-q*q));
 }
 """
 
@@ -194,7 +213,11 @@ void main() {
     if(!station(a,b,c,d,left,right,paths[owner].extra.x,max(0.0,u-0.002),lm,hm,nm,tm) ||
        !station(a,b,c,d,left,right,paths[owner].extra.x,min(1.0,u+0.002),lp,hp,np,tp)) return;
     vec3 along=surfacePoint(lp,hp,np,acrossFraction)-surfacePoint(lm,hm,nm,acrossFraction);
-    vNormal=normalize(cross(along,side-2.0*uSurface.x*signWidth*bow));
+    vec3 acrossSlope=side-2.0*uSurface.x*signWidth*bow;
+    // The floor contact squashes height: the across derivative's y scales with the eased height's slope.
+    vec3 unsquashed=mix(low,high,acrossFraction)+bow*0.5*length(high-low)*uSurface.x*(1.0-signWidth*signWidth);
+    if(uFloorContact.z>0.0) acrossSlope.y*=floorSlope(unsquashed.y);
+    vNormal=normalize(cross(along,acrossSlope));
     vAcross=acrossFraction;
     vEmission=monotone(guardBefore.side.w,left.side.w,right.side.w,guardAfter.side.w,u);
     vLocal=mix(left.q.x,right.q.x,u);
@@ -294,6 +317,7 @@ void main() {
     vec3 birth=surfacePoint(lo,hi,normal,r2);
     vec3 direction=normalize(vec3(r4-0.5,r5-0.5+uSpark.w,r6-0.5)+vec3(1e-4));
     vec3 position=birth+direction*uSpark.z*(0.25+r1)*age/(1.0+0.5*age);
+    if(uFloorContact.z>0.0) position.y=floorEased(position.y);
     float life=age/uSpark.y;
     float fade=smoothstep(0.0,0.06,life)*(1.0-smoothstep(0.55,1.0,life));
     float twinkle=0.55+0.45*sin(6.2831853*(uSparkLook.w*age+r2));
@@ -375,20 +399,7 @@ uniform vec4 uGlint;        // glints per strand per phase unit, chance, light, 
 uniform vec4 uTone;         // strand whiteness, rim whiteness, strand spacing jitter, glint minimum radius (px)
 uniform vec4 uAge;          // local now, fade-in, maximum age, fade-out (seconds); fades off when both are zero
 uniform vec3 uMistOrigin;   // packet-local -> mist world translation (packet origin plus the caller's frame)
-// World colour grade (a preset look): left/mid/right colours across a world-x range and the share they take of the
-// ribbon's own colour. Share 0 leaves every ribbon its own colours.
-uniform vec4 uGradeLeft;   // rgb, world x of the left stop
-uniform vec4 uGradeMid;    // rgb, share
-uniform vec4 uGradeRight;  // rgb, world x of the right stop
-vec3 graded(vec3 colour, float worldX) {
-    if(uGradeMid.w<=0.0) return colour;
-    float t=clamp((worldX-uGradeLeft.w)/max(uGradeRight.w-uGradeLeft.w,1e-3),0.0,1.0);
-    vec3 grade=t<0.5?mix(uGradeLeft.rgb,uGradeMid.rgb,smoothstep(0.0,0.5,t))
-                    :mix(uGradeMid.rgb,uGradeRight.rgb,smoothstep(0.5,1.0,t));
-    return mix(colour,grade,clamp(uGradeMid.w,0.0,1.0));
-}
-
-""" + MIST_GLSL + RIBBON_STRAND_COORDINATE_GLSL + """
+""" + RIBBON_GRADE_GLSL + MIST_GLSL + RIBBON_STRAND_COORDINATE_GLSL + """
 
 // Integral of the periodic pulse, then exact box filtering over the pixel footprint. The old single-line
 // approximation faded at 0.35 spacings/pixel and erased still-resolved filaments into a solid sheet.

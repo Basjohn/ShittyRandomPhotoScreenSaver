@@ -16,12 +16,14 @@ The floor uses saved generated concrete colour, roughness and smooth wet-surface
 streaked and blurred by wet roughness and perturbed by the micro-surface.
 
     .venv\\Scripts\\python.exe tools/labs/waveform_ribbon_lab.py --output .artifacts/evidence/waveform_ribbon/<new-run>
-        [--cards .artifacts/evidence/waveform_ribbon/wr00_reference_projection]
+        [--cards .artifacts/evidence/waveform_ribbon/wr00_reference_projection] [--recipe complete|alternate|range]
+
+Named looks (``RECIPES``) share every program and function; they differ in values only.
 """
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 import hashlib
 import json
 import math
@@ -52,7 +54,7 @@ from rendering.gl_programs.reflection import PLANAR_REFLECTION_GLSL, mirror_view
 from rendering.quick.scene3d.fog_volume import FogMarch, FogVolume
 from rendering.quick.scene3d.reflection import PlanarReflection
 from rendering.quick.scene3d.resources import MeshResources
-from rendering.quick.scene3d.ribbon import RibbonMaterial, RibbonPrimitive, RibbonSparks, ribbon_grade
+from rendering.quick.scene3d.ribbon import GRADE_STOPS, RibbonMaterial, RibbonPrimitive, RibbonSparks, ribbon_grade
 from rendering.quick.scene3d.target import SceneTarget
 from tools.labs.render_target import OffscreenRenderTarget
 from tools.labs.waveform_ribbon_targets import ENVELOPE
@@ -207,15 +209,55 @@ class Flow:  # Lab Plan section 4A: history enters at the head (world +x) and dr
 PALETTE = (((0., .52, 1.), (0., .22, 1.)),    # cyan -> electric blue
            ((.03, .08, 1.), (.24, .025, 1.)),  # blue -> violet
            ((.38, .006, 1.), (1., .012, .62))) # violet -> magenta
-# Per-ribbon character (amplitude, width, wave frequency, phase, light): identical sheets on even phases braid into a
-# regular lattice and sum to white; the mock's sheets differ and cross irregularly.
-CHARACTER = ((1., 1., 1., 0., 1.), (.85, 1.1, .96, 1.1, 1.5), (.72, .75, 1.07, .55, .65))
-STATES = {  # labelled synthetic controls, authored toward the complete-scene fog board; not music
-    'low': dict(react=0., width=.40, width_swell=.08, twist=.85, emission=.7, spread=.32, amplitude=.5, lift=-.35, sparkle=.18,
-                deformation=.15),
-    'high': dict(react=1., width=.78, width_swell=.28, twist=1.85, emission=.85, spread=1.25, amplitude=1.2, lift=.2, sparkle=.85,
-                 deformation=.3),
-}
+STATES = {'low': dict(react=0.), 'high': dict(react=1.)}  # labelled synthetic reactivity, not music
+SOURCES = ('loudness', 'bass')  # the synthetic energy sources a tuner target can follow (see synthetic_sources)
+
+
+def hue_between(a, b) -> tuple:
+    """The colour halfway between two in hue (the short way round), at their mean saturation and value, so a
+    cyan -> magenta gradient passes through blue, not lavender."""
+    import colorsys
+    (h0, s0, v0), (h1, s1, v1) = colorsys.rgb_to_hsv(*a), colorsys.rgb_to_hsv(*b)
+    if abs(h1 - h0) > .5:
+        h1 += -1. if h1 > h0 else 1.
+    return colorsys.hsv_to_rgb(((h0 + h1)/2) % 1., (s0 + s1)/2, (v0 + v1)/2)
+
+
+@dataclass(frozen=True)
+class Shaping:
+    """Shape and reactivity tuner (Lab Plan section 0, the WR-08 tuner control's model): which energy shapes which
+    ribbon property, and how far. A tuner, not a shape builder: the head oscillator (musical history) still draws the
+    waves; every target is a smooth function of band-limited history (two smoothing stages of at least
+    ``Flow.shape_tau``), so no setting can make a sharp or jagged ribbon."""
+    # target -> (quiet, loud): the range its source's 0..1 level sweeps.
+    ranges: dict = field(default_factory=lambda: dict(
+        width=(.40, .78), width_swell=(.08, .28), twist=(.85, 1.85), emission=(.7, .85), spread=(.32, 1.25),
+        amplitude=(.5, 1.2), lift=(-.35, .2), sparkle=(.18, .85), deformation=(.15, .3), arc=(0., 0.),
+        tint=(0., 0.)))
+    # target -> source (SOURCES); targets not named follow loudness.
+    drive: dict = field(default_factory=dict)
+    # The bass arc: wave height grows by up to ``arc`` (a target above) where the bass source swells, so a bass
+    # passage draws one taller arc that flows along the history (the preset-range board's dominant peak).
+    # Synthetic bass timing: (every, length, offset) seconds; a raised cosine, the length about one wave.
+    bass: tuple = (12., 3., 0.)
+    # ``tint`` is how far each knot takes its ribbon's loud colours (Recipe.ribbon_colours): colour reactivity that
+    # flows along the history like the shape does.
+    # Per-ribbon character (amplitude, width, wave frequency, phase, light): identical sheets on even phases braid
+    # into a regular lattice and sum to white; the mock's sheets differ and cross irregularly.
+    characters: tuple = ((1., 1., 1., 0., 1.), (.85, 1.1, .96, 1.1, 1.5), (.72, .75, 1.07, .55, .65))
+
+
+# A sheet that reaches the floor deforms along it (rule, not a tuner setting): world floor height, gap, softness.
+FLOOR_CONTACT = (0., .03, .15)
+
+
+def synthetic_sources(state: str, t: float, shaping: Shaping) -> dict:
+    """The labelled states' synthetic energy (0..1), not music: loudness holds the state's reactivity; bass swells
+    for ``length`` seconds once every ``every`` seconds (a raised cosine), scaled by the reactivity."""
+    react = STATES[state]['react']
+    every, length, offset = shaping.bass
+    u = ((t - offset) % every)/length
+    return dict(loudness=react, bass=react*(.5 - .5*math.cos(2*math.pi*u)) if u < 1. else 0.)
 
 
 @dataclass(frozen=True)
@@ -224,6 +266,11 @@ class Recipe:
     fog: Fog | None = field(default_factory=Fog)
     floor: Floor = field(default_factory=Floor)
     flow: Flow = field(default_factory=Flow)
+    shaping: Shaping = field(default_factory=Shaping)
+    # Each ribbon's own colours, (centre, edge) per ribbon: quiet (the ribbon's base) and loud (taken per knot by
+    # the tuner's tint target). A look coloured by ribbon (bass, mid, high) rather than by the world grade sets the
+    # grade's sheet share near 0.
+    ribbon_colours: dict = field(default_factory=lambda: dict(low=PALETTE, high=PALETTE))
     # Mock-directed look (WR-04): saturated darker body, thin near-white irregular strands and rims, visible glints.
     material: RibbonMaterial = field(default_factory=lambda: RibbonMaterial(
         strands=40., strand_half_width=.018, strand_light=1.5, strand_white=.04, strand_jitter=.35, strand_warp=.18,
@@ -240,13 +287,58 @@ class Recipe:
     # Preset colour data: a low-reactivity and a high-reactivity colour pair (left, right across the view). The
     # middle stop is derived by hue, so cyan -> magenta passes through blue, not lavender. Reactivity blends the
     # pairs (the lab's synthetic states are react 0 and 1). Settings (WR-08) edits these as gradient nodes.
-    palette: dict = field(default_factory=lambda: dict(low=((0., .85, 1.), (1., .1, .85)),
-                                                       high=((0., .85, 1.), (1., .1, .85))))
+    # Nodes are (position 0..1 across grade_range, rgb): the WR-08 gradient editor's circles. Up to six positions
+    # across both pairs together; reactivity blends the two gradients position by position.
+    palette: dict = field(default_factory=lambda: dict(
+        low=((0., (0., .85, 1.)), (.5, hue_between((0., .85, 1.), (1., .1, .85))), (1., (1., .1, .85))),
+        high=((0., (0., .85, 1.)), (.5, hue_between((0., .85, 1.), (1., .1, .85))), (1., (1., .1, .85)))))
     # World x range of the pair, the sheets' share (small: identities hold), the mist's share.
     grade_range: tuple = (-6., 6.)
     grade_share: tuple = (.3, .75)
     bloom: float = .14
     exposure: float = 1.
+
+
+# Second look: the preset-range board (Lab Plan section 0). The same lab, programs and functions with other values
+# only: a tight braided bundle, more and smaller waves, one bass arc that towers over the rest when loud, and a
+# gradient that runs on to orange at the right in high react. The sheets take most of the gradient, so the whole
+# bundle shares one colour at each x as on the board. Mist stays (core to every look).
+PRESET_RANGE = Recipe(
+    flow=Flow(head_hz=.42, phase_swell=.2, amplitude_swell=.1, depth_sway=.5),
+    shaping=Shaping(
+        ranges=dict(width=(.16, .5), width_swell=(.04, .16), twist=(.9, 1.6), emission=(.7, .9), spread=(.12, .45),
+                    amplitude=(.3, .8), lift=(.35, .55), sparkle=(.18, .9), deformation=(.08, .15), arc=(.15, 1.8),
+                    tint=(0., 0.)),
+        bass=(12., 2.4, 8.8),
+        characters=((1., 1., 1., 0., 1.), (.92, .9, 1., .35, 1.2), (.85, .8, 1., .7, .8))),
+    material=replace(Recipe().material, strand_white=0., rim_white=.03),
+    palette=dict(low=((0., (0., .9, 1.)), (.3, (.1, .3, 1.)), (.55, (.55, .12, 1.)), (.8, (1., .15, .85)),
+                      (1., (1., .15, .85))),
+                 high=((0., (0., .9, 1.)), (.3, (.15, .25, 1.)), (.55, (1., .1, .8)), (.8, (1., .22, .03)),
+                       (1., (1., .22, .03)))),
+    grade_range=(-5.5, 5.5), grade_share=(.8, .85))
+# Second goal (operator, 1 November): the package's alternate board. Three broad ribbons, one per band (bass, mid,
+# high), coloured by ribbon rather than by the world grade: blue, teal and lavender when quiet; magenta, orange and
+# blue-violet when loud, taken knot by knot so the colour flows with the history. Long sweeping waves with large
+# depth sway, dense bright filaments, many sparks when loud. Mist stays.
+ALTERNATE = Recipe(
+    flow=Flow(head_hz=.2, phase_swell=.3, amplitude_swell=.3, depth_sway=2.),
+    shaping=Shaping(
+        ranges=dict(width=(.95, .9), width_swell=(.1, .3), twist=(.9, 1.7), emission=(.75, .75), spread=(1.6, 2.4),
+                    amplitude=(1.2, 1.5), lift=(.3, .6), sparkle=(.25, 1.), deformation=(.15, .3), arc=(0., 0.),
+                    tint=(0., .9)),
+        characters=((1., 1., 1., 0., 1.), (.8, 1.2, .9, 1.6, 1.3), (.7, .85, 1.15, 2.8, .9))),
+    # Colours are linear light: orange is about (1, .2, .03); (1, .4, .05) displays as gold.
+    ribbon_colours=dict(low=(((.15, .35, 1.), (.35, .25, 1.)), ((0., .7, .9), (.1, .4, 1.)), ((.5, .2, 1.), (.4, .15, 1.))),
+                        high=(((1., .1, .7), (.6, .05, 1.)), ((1., .2, .03), (1., .13, .06)), ((.15, .2, 1.), (.45, .1, 1.)))),
+    # Loud ribbons stay narrower and further apart than quiet ones: broad overlapping sheets summed to pastel pink.
+    material=replace(Recipe().material, strands=48., strand_half_width=.022, strand_light=2.2, strand_white=0.,
+                     rim_white=.02, fill_light=.04, body_tint=.7, glint_density=3., glint_chance=.3, glint_light=5.),
+    # Sparks hug the ribbons (little drift or rise), mostly fine with a few large.
+    sparks=replace(Recipe().sparks, drift=1.1, rise=.15, light=40., smallest=1.2, largest=11., lifetime=6., white=.1),
+    palette=dict(low=((0., (.2, .6, 1.)), (1., (.55, .35, 1.))), high=((0., (1., .3, .85)), (1., (1., .22, .05)))),
+    grade_share=(0., .35), bloom=.12)
+RECIPES = {'complete': Recipe(), 'alternate': ALTERNATE, 'range': PRESET_RANGE}
 
 
 FLOOR_VERTEX = """#version 460 core
@@ -429,8 +521,11 @@ float fogInside(vec3 world, out vec4 band, out float above, out float below) {
     float behind=front-world.z+uFogShape.z*(fogBillow(world.zyx*uFogForm.w*0.8+vec3(5.3))-0.5)*1.5;
     float field=min(behind,max(outside,behind-uFogShape.y));
     // Under the waveform (where sheets are present) the reactive mist is absent: the floor takes the cheap analytic
-    // mist. Isolated eroded lumps survived there and read as stray puffs at the contact line.
-    field=below>0.0?mix(field,-1.0,smoothstep(0.0,0.3,below)*band.z):field;
+    // mist. Isolated eroded lumps survived there and read as stray puffs at the contact line. Only near the sheets:
+    // beyond the band's depth the distant wall returns, or high sheets left the sky down to the horizon unfilled
+    // (black) under them.
+    field=below>0.0?mix(field,-1.0,smoothstep(0.0,0.3,below)*band.z
+                         *(1.0-smoothstep(uFogShape.y-2.0,uFogShape.y,behind))):field;
     // Floor mist: low billowed banks on the floor, reaching toward the camera at the sides (the mock's lower
     // corners), thin under the sheets and never within their clearance.
     float side=smoothstep(uFogFloor.z,uFogFloor.z+3.0,abs(world.x));
@@ -528,8 +623,9 @@ void fogMedium(vec3 world, out vec3 radiance, out float extinction, out float st
     // The face glows wherever the billows pushed it (a gentle fall with the push, uFogInterior.z), and fades into
     // the mist from that face. Falling off by distance from the envelope left pushed stretches dark: a broken edge.
     float rim=exp(-dz/uFogRim.x)*exp(-max(dy-uFogForm.y,0.0)*uFogInterior.z)*exp(-max(inside,0.0)*uFogShape.w);
-    // The wall directly behind the sheets (inside their outline) is distant haze: dark grey, barely lit.
-    if(above<0.0 && below<0.0) rim*=uFogFloorLight.z;
+    // The wall directly behind the sheets (inside their outline) and the far wall under them (the only volume mist
+    // below the band) are distant haze: dark grey, barely lit. Lit, the far wall showed as puffs at the contact line.
+    if(above<=0.0) rim*=uFogFloorLight.z;
     // Floor mist is lit from above by the sheets' lower edge colour, with a longer reach than the rims.
     float low=1.0-smoothstep(0.0,uFogFloor.x*1.5,world.y);
     // Only mist below the sheets' outline: the wall behind them must stay dark grey haze.
@@ -638,11 +734,8 @@ def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None, slope
         lower_colour += w_down[:, None]*light; lower_weight += w_down
     upper_colour /= upper_weight[:, None]; lower_colour /= lower_weight[:, None]
     if grade is not None:  # the mist glows in the graded colour, as the sheets do
-        (left, mid, right, (g0, g1), _, share) = grade
-        t = np.clip((xs - g0)/(g1 - g0), 0., 1.)
-        ramp = lambda a, b, u: np.asarray(a)[None]*(1 - u[:, None]) + np.asarray(b)[None]*u[:, None]
-        sm = lambda u: u*u*(3 - 2*u)
-        tone = np.where((t < .5)[:, None], ramp(left, mid, sm(np.clip(t*2, 0, 1))), ramp(mid, right, sm(np.clip(t*2 - 1, 0, 1))))
+        (nodes, (g0, g1), _, share) = grade
+        tone = gradient_at(nodes, np.clip((xs - g0)/(g1 - g0), 0., 1.))
         luma = np.array((.2126, .7152, .0722))
         for c in (upper_colour, lower_colour):  # hue changes, the mist's light level does not
             level = (c @ luma)[:, None]/np.maximum(tone @ luma, 1e-6)[:, None]
@@ -675,20 +768,29 @@ def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None, slope
     return table
 
 
-def colour_grade(recipe, react: float) -> tuple:
-    """(left, mid, right, x range, sheet share, mist share) from the preset's low/high colour pairs at a reactivity.
+def gradient_at(stops, t) -> np.ndarray:
+    """Colours of gradient nodes ``((position, rgb), ...)`` at positions ``t``, exactly as RIBBON_GRADE_GLSL eases
+    between neighbouring nodes."""
+    t = np.asarray(t, float)
+    colour = np.broadcast_to(np.asarray(stops[0][1], float), t.shape + (3,)).copy()
+    for (p0, _), (p1, c1) in zip(stops, stops[1:]):
+        u = np.clip((t - p0)/(p1 - p0), 0., 1.)
+        colour += (np.asarray(c1, float) - colour)*(u*u*(3. - 2.*u))[..., None]
+    return colour
 
-    The pairs blend linearly in RGB; the middle stop takes the hue halfway between the two ends (the short way
-    round), at their mean saturation and value, so complementary-ish pairs pass through a clean colour, not grey."""
-    import colorsys
+
+def colour_grade(recipe, react: float) -> tuple:
+    """(nodes, x range, sheet share, mist share) from the recipe's low/high gradients at a reactivity: both are
+    evaluated at the union of their node positions and blended linearly there."""
     react = min(max(float(react), 0.), 1.)
     low, high = recipe.palette['low'], recipe.palette['high']
-    left, right = (tuple(a + (b - a)*react for a, b in zip(low[i], high[i])) for i in (0, 1))
-    (h0, s0, v0), (h1, s1, v1) = colorsys.rgb_to_hsv(*left), colorsys.rgb_to_hsv(*right)
-    if abs(h1 - h0) > .5:
-        h1 += -1. if h1 > h0 else 1.
-    mid = colorsys.hsv_to_rgb(((h0 + h1)/2) % 1., (s0 + s1)/2, (v0 + v1)/2)
-    return (left, mid, right, recipe.grade_range, *recipe.grade_share)
+    positions = sorted({float(p) for p, _ in (*low, *high)})
+    if len(positions) > GRADE_STOPS:
+        raise ValueError(f'The low and high gradients together use more than {GRADE_STOPS} node positions')
+    a, b = gradient_at(low, positions), gradient_at(high, positions)
+    nodes = tuple((p, tuple(float(v) for v in np.clip(a[i] + (b[i] - a[i])*react, 0., 1.)))
+                  for i, p in enumerate(positions))
+    return (nodes, recipe.grade_range, *recipe.grade_share)
 
 
 def crackle_limit(envelope, fog: Fog, mvp, width: int, samples: int = 256, slopes=(0., VIEW_SLOPE)) -> np.ndarray:
@@ -783,23 +885,38 @@ def load_floor_textures(floor: Floor) -> dict:
 
 
 def fill_ring(recipe: Recipe, state: str, knots: int = 256, *, at: float | None = None) -> tuple[RibbonRing, float]:
-    """Synthetic head: band-limited shape controls (Lab Plan section 4A); returns the ring and newest time."""
-    s, flow = STATES[state], recipe.flow
+    """Synthetic head: band-limited shape controls (Lab Plan section 4A) through the recipe's shape tuner; returns
+    the ring and newest time."""
+    flow, shaping = recipe.flow, recipe.shaping
     now = (knots-1)/flow.knot_hz if at is None else float(at)
     if not math.isfinite(now) or not (knots-1)/flow.knot_hz <= now <= 120.:
         raise ValueError('Lab sample time must contain warm history and stay within 120 seconds')
-    ring = RibbonRing(len(PALETTE), colours=[(*a, 1.) for a, _ in PALETTE], edge_colours=[(*b, 1.) for _, b in PALETTE], period=.5)
+    quiet, loud = recipe.ribbon_colours['low'], recipe.ribbon_colours['high']
+    ring = RibbonRing(len(PALETTE), colours=[(*a, 1.) for a, _ in quiet], edge_colours=[(*b, 1.) for _, b in quiet], period=.5)
+    loud_colours = [tuple((np.asarray(a) + np.asarray(b))/2) for a, b in loud]
     alpha = 1 - math.exp(-1/flow.knot_hz/flow.shape_tau)
     count = len(PALETTE)
+    if len(shaping.characters) != count:
+        raise ValueError('The shape tuner needs one character per ribbon')
     stages = [[0., 0.] for _ in range(count)]
+    levels = None  # per source, the two smoothing stages (band-limited like every history-carried control)
     pivot_y = SPEC.pivot[1]
     t = 0.
     for i in range(math.floor(now*flow.knot_hz)+1):
         t = i/flow.knot_hz
-        positions, widths, twists, light, sparkle = [], [], [], [], []
+        positions, widths, twists, light, sparkle, tints = [], [], [], [], [], []
+        raw = synthetic_sources(state, t, shaping)
+        if levels is None:
+            levels = {k: [v, v] for k, v in raw.items()}
+        for k, v in raw.items():
+            levels[k][0] += (v - levels[k][0])*alpha
+            levels[k][1] += (levels[k][0] - levels[k][1])*alpha
+        s = {target: quiet + (loud - quiet)*levels[shaping.drive.get(target, 'loudness')][1]
+             for target, (quiet, loud) in shaping.ranges.items()}
+        arc = 1. + s['arc']*levels['bass'][1]
         for r in range(count):
             k = r - (count - 1)/2  # a fixed fan in height and depth, identical in low/high
-            amplitude, width, frequency, offset, brightness = CHARACTER[r]
+            amplitude, width, frequency, offset, brightness = shaping.characters[r]
             phase = 2*math.pi*flow.head_hz*frequency*t + offset + flow.phase
             phase += flow.phase_swell*math.sin(.31*phase+r*.6)
             envelope = 1. + flow.amplitude_swell*math.sin(.23*phase+.4)
@@ -808,14 +925,17 @@ def fill_ring(recipe: Recipe, state: str, knots: int = 256, *, at: float | None 
             stages[r][1] += (stages[r][0] - stages[r][1])*alpha
             swell = stages[r][1]
             deformation = s['deformation']*(.24*math.sin(2*phase+.7)+.18*math.sin(.61*phase+offset))
-            positions.append((flow.speed*t, pivot_y + s['lift'] + s['amplitude']*amplitude*envelope*(math.sin(phase)+deformation)
-                              + .5*k*s['spread']*math.cos(.37*phase), .65*k + flow.depth_sway*math.cos(phase*.55+r)))
-            widths.append(width*(s['width'] + s['width_swell']*swell)*(1.0 + .2*math.sin(phase)))
+            half = width*(s['width'] + s['width_swell']*swell)*(1.0 + .2*math.sin(phase))
+            y = pivot_y + s['lift'] + s['amplitude']*arc*amplitude*envelope*(math.sin(phase)+deformation) \
+                + .5*k*s['spread']*math.cos(.37*phase)
+            positions.append((flow.speed*t, y, .65*k + flow.depth_sway*math.cos(phase*.55+r)))
+            widths.append(half)
             twists.append(s['twist']*(.7*math.sin(.48*phase+r*1.3)+.3*math.sin(.87*phase+.4)))
             light.append(brightness*s['emission']*(.85 + .3*swell))
             highs = .5 + .5*math.sin(2*math.pi*.53*t + r*1.7)  # synthetic highs: sparkle density
             sparkle.append(min(1., s['sparkle']*(.35 + .65*highs)))
-        ring.append(t, positions, widths, twists, light, sparkle)
+            tints.append((*loud_colours[r], min(max(s['tint'], 0.), 1.)))
+        ring.append(t, positions, widths, twists, light, sparkle, tints)
     return ring, now
 
 
@@ -868,10 +988,10 @@ class Lab:
         ribbon_mvp = tuple((projection @ ribbon_view).flatten(order='F'))
         orthographic = POSES[pose].projection == 'Orthographic'
         draw = dict(view=tuple(ribbon_view.flatten(order='F')), material=recipe.material, orthographic=orthographic,
-                    sweep_axis=(1.,0.,0.),
+                    sweep_axis=(1.,0.,0.), floor=FLOOR_CONTACT,
                     age_fade=(now, flow.fade_in, (ring.capacity - 1)/flow.knot_hz, flow.fade_out),
                     mist=environment.mist, mist_frame=(scroll[0, 3], 0., 0.),
-                    grade=ribbon_grade(*colour_grade(recipe, STATES[state]['react'])[:5]))
+                    grade=ribbon_grade(*colour_grade(recipe, STATES[state]['react'])[:3]))
         card = SimpleNamespace(viewport=(0, 0, width, height), logical_size=(float(width), float(height)),
                                matrix_values=(2/width, 0, 0, 0, 0, -2/height, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1),
                                quad_vao=self.target.vao)
@@ -1029,7 +1149,7 @@ class Lab:
                     self.ribbons.draw(packet, ribbon_mvp, shading='light', **draw)
                     self.ribbons.draw(packet, ribbon_mvp, shading='sparks', sparks=recipe.sparks, now=now,
                                       mist=draw['mist'], mist_frame=draw['mist_frame'], material=recipe.material,
-                                      sweep_axis=draw['sweep_axis'], grade=draw['grade'])
+                                      sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'])
                     gl.glDepthMask(gl.GL_TRUE)
                     gl.glDisablei(gl.GL_BLEND, 0)
 
@@ -1052,7 +1172,7 @@ class Lab:
             self.ribbons.draw(packet, reflected_mvp, shading='light', **{**draw, 'view': tuple(reflected_view.flatten(order='F'))})
             self.ribbons.draw(packet, reflected_mvp, shading='sparks', sparks=self.recipe.sparks, now=draw['age_fade'][0],
                               mist=draw['mist'], mist_frame=draw['mist_frame'], material=self.recipe.material,
-                              sweep_axis=draw['sweep_axis'], grade=draw['grade'])
+                              sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'])
         finally:
             gl.glDisablei(gl.GL_BLEND, 0)
             self.reflection.end()
@@ -1216,14 +1336,14 @@ def overlay(image: Image.Image, state: str) -> Image.Image:
     return sheet
 
 
-def run(output: Path, cards: Path | None, *, board: str = 'primary') -> dict:
+def run(output: Path, cards: Path | None, *, board: str = 'primary', recipe_name: str = 'complete') -> dict:
     if output.exists() and any(output.iterdir()):
         raise FileExistsError(f'Refusing to overwrite evidence: {output}')
     output.mkdir(parents=True, exist_ok=True)
     if board not in ('primary','fog'):
         raise ValueError('Unknown reference board')
     width,height = (820,718) if board=='fog' else (640,709)
-    recipe = Recipe()
+    recipe = RECIPES[recipe_name]
     report, images = {}, {}
     lab = Lab(recipe, (width,height))
     try:
@@ -1261,7 +1381,8 @@ def run(output: Path, cards: Path | None, *, board: str = 'primary') -> dict:
         for column, pose in enumerate(POSES):
             poses.paste(Image.open(output/f'wide_{state}_{pose}.png').convert('RGB').resize((640, 360)), (column*640, row*360))
     poses.save(output/'navigation_poses.png')
-    receipt = dict(stage='WR-04 floor, waveform and dense distance mist; navigation poses', board=board, card_size=(width,height),
+    receipt = dict(stage='WR-04 floor, waveform and dense distance mist; navigation poses', board=board, recipe_name=recipe_name,
+                   card_size=(width,height),
                    recipe=json.loads(json.dumps(asdict(recipe), default=str)), states=STATES,
                    poses={k: asdict(v) for k, v in POSES.items()}, landmarks=report,
                    producer_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -1275,6 +1396,8 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--cards', type=Path)
     parser.add_argument('--board', choices=('primary','fog'), default='primary')
+    parser.add_argument('--recipe', choices=tuple(RECIPES), default='complete',
+                        help='named look: the complete-scene board, the alternate board, or the preset-range board')
     args = parser.parse_args()
-    result = run(args.output, args.cards, board=args.board)
+    result = run(args.output, args.cards, board=args.board, recipe_name=args.recipe)
     print(json.dumps({state: {k: v for k, v in r.items() if k != 'rows'} for state, r in result['landmarks'].items()}, indent=2))

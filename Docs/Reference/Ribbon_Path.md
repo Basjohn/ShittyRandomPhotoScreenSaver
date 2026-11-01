@@ -111,8 +111,13 @@ No runtime mode imports this prototype; EB and all existing modes receive no wor
   - The tint is a history-carried colour: `RibbonRing.append(..., tint=)` sets it per knot, and its share replaces
     the header colours. Colour then flows and mutates along the history like shape does. Share 0 (the stateless
     oracle, the default) keeps the header colours.
-  - A world colour grade (`ribbon_grade`: three stops across a world-x range and a share) is a separate preset look
-    applied by the light pass and sparks.
+  - A world colour grade (`ribbon_grade(stops, x_range, share)`: 1-6 `(position, rgb)` nodes at strictly ascending
+    0..1 positions across a world-x range, eased between neighbours) is a separate preset look applied by the light
+    pass and sparks.
+  - Floor contact (`draw(..., floor=(world height, gap, softness))`): every surface point's height is eased
+    (softplus) onto the floor plus the gap, a smooth strictly increasing map of height alone, so a sheet that
+    reaches the floor flattens along it without folding, creasing or passing through. Sparks are eased the same
+    way; None is off.
   - Earlier: 64-byte knots, 131584-byte packets. Metadata holds count/subdivision/origin phase/period,
   reduced origin twist, diagnostic colour and reserved colour storage. This is a diagnostic RGBA material,
   not the Ribbon scene's final shading or palette.
