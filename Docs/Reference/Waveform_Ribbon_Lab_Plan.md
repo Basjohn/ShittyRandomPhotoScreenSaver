@@ -82,7 +82,12 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
   at the contact line and break into sparkle toward the camera. In low react the floor is much darker than the
   mock's; its cyan and magenta columns are distinct even then. No concrete structure is visible. Keep the
   baseline's smooth wet character.
-- [ ] **Mist edge character:** soft and dim, where the mock shows a bright fibrous crackle. In wide views the
+- [ ] **Mist edge character:** soft and dim, where the mock shows a bright fibrous crackle. **Rejected, 1 November:**
+  volumetric crackle (sharpened ridge noise emitted in a band at the eroded face, per march sample). Anything placed
+  in the volume is integrated through the bank's whole depth along each ray, so it mottled the mist into blocky
+  texture instead of drawing a line. The mock's crackle is a silhouette effect: the next approach works in screen
+  space on the march's own transmittance edge (where the bank turns opaque as seen), with ridge noise along that edge
+  at full resolution. In wide views the
   corner banks read as separate cotton mounds; the mock's form a continuous bank.
 - [~] **Waveform:** the sheets were too bright and washed toward white. Mock / ours, crest strands: luminance
   0.195 / 0.32, saturation 0.84 / 0.67. Less strand, fill and bloom light, with rims kept brighter than strands,
