@@ -84,3 +84,35 @@ def test_missing_floor_map_retires_preceding_textures(lab, monkeypatch, tmp_path
         with pytest.raises(FileNotFoundError):
             lab_module.load_floor_textures(replace(lab.recipe.floor,**{missing:str(tmp_path/'missing.png')}))
         assert len(created)==allocated and all(not gl.glIsTexture(name) for name in created)
+
+
+@pytest.mark.parametrize('state', ('low', 'high'))
+def test_mist_band_contains_every_visible_sheet_and_closes_where_none_is(state):
+    # The mist is shaped by the waveform: each admitted knot's counted vertical extent lies inside the clear band
+    # at its x (the sheets never sit in mist); beyond the flowing head, where no sheet exists, the band closes.
+    recipe = lab_module.Recipe()
+    ring, now = lab_module.fill_ring(recipe, state)
+    packet, flow, fog = ring.packet(), recipe.flow, recipe.fog
+    translation = (flow.head_x - flow.speed*now, 0., 0.)
+    age_fade = (now, flow.fade_in, (ring.capacity - 1)/flow.knot_hz, flow.fade_out)
+    table = lab_module.waveform_envelope(packet, translation, age_fade, fog)
+    x0, x1, samples = fog.envelope_range
+    xs = np.linspace(x0, x1, int(samples))
+    lower, upper, presence = table[0, :, 0], table[0, :, 1], table[0, :, 2]
+    rows = np.frombuffer(packet.payload, np.float32).reshape(packet.instances, -1, 4)
+    checked = 0
+    for path in rows:
+        count, start, capacity = int(path[0, 0]), int(path[1, 1]), int(path[1, 2])
+        knots = path[4:].reshape(-1, 4, 4)[(start + np.arange(count)) % capacity]
+        x = knots[:, 0, 0] + packet.world_origin[0] + translation[0]
+        y = knots[:, 0, 1] + packet.world_origin[1]
+        half = fog.envelope_width*knots[:, 0, 3]
+        visible = (np.abs(x) < 6.) & (knots[:, 1, 2] > .5)
+        band_low, band_high = np.interp(x[visible], xs, lower), np.interp(x[visible], xs, upper)
+        # The band is smoothed along x; a smoothing width's worth of slack, never more.
+        assert (y[visible] - half[visible] >= band_low - .15).all() and (y[visible] + half[visible] <= band_high + .15).all()
+        checked += visible.sum()
+    assert checked > 50
+    beyond = xs > flow.head_x + 2.
+    assert (presence[beyond] == 0.).all() and np.allclose(upper[beyond], lower[beyond])
+    assert (upper[np.abs(xs) < 6.] - lower[np.abs(xs) < 6.] > .5).all()

@@ -20,7 +20,7 @@ import numpy as np
 from OpenGL import GL as gl
 
 from rendering.gl_programs.fog_volume import (FOG_COMPOSITE_FRAGMENT, FOG_FULLSCREEN_VERTEX, FOG_INTEGRATE_COMPUTE,
-                                              FOG_MARCH_FRAGMENT, fog_detail_noise)
+                                              fog_detail_noise, fog_march_source)
 from rendering.gl_programs.mist import FOG_TEXTURE_UNIT
 from rendering.quick import gl_query
 from rendering.quick.render.gl_resources import compile_compute_program
@@ -195,8 +195,9 @@ class FogMarch:
 
     DETAIL_UNIT, MEDIUM_UNIT, MARCH_UNIT, STEADY_UNIT = 9, 10, 11, 12
 
-    def __init__(self, label: str) -> None:
+    def __init__(self, label: str, coverage_glsl: str | None = None) -> None:
         self.label = label
+        self._source = fog_march_source(coverage_glsl)
         self._size = (0, 0)
         self._colour = self._fbo = self._detail = self._vao = 0
         self._programs = {}
@@ -259,14 +260,15 @@ class FogMarch:
             self._vao = int(name[0])
 
     def march(self, volume: FogVolume, *, size, steps=96, max_extinction=1., erosion=.6, detail_frequency=1.,
-              shadow=(.5, 1.), ground=None, step=(.2, 1.)) -> None:
-        """Integrate the eroded medium per pixel of ``size`` along ``volume``'s camera rays (its last update)."""
+              shadow=(.5, 1.), ground=None, step=(.2, 1.), medium=None, shadow_floor=0.) -> None:
+        """Integrate the eroded medium per pixel of ``size`` along ``volume``'s camera rays (its last update).
+        ``medium(program)`` sets a consumer coverage's own uniforms."""
         self._check_context()
         width, height = max(1, int(size[0])), max(1, int(size[1]))
         if (width, height) != self._size or not self._fbo:
             self._allocate(width, height)
         fog = volume.uniforms
-        program = self._program('march', FOG_MARCH_FRAGMENT)
+        program = self._program('march', self._source)
         saved = (gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING), gl_query.get_ints(gl.GL_VIEWPORT, 4),
                  gl_query.get_int(gl.GL_CURRENT_PROGRAM), gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING),
                  gl_query.is_enabled(gl.GL_DEPTH_TEST), gl.glIsEnabledi(gl.GL_BLEND, 0))
@@ -289,9 +291,11 @@ class FogMarch:
             gl.glUniform4f(location('uFogLens'), *fog['uFogLens'])
             gl.glUniform4f(location('uFogRange'), *fog['uFogRange'])
             gl.glUniform4f(location('uMarch'), float(steps), max_extinction, erosion, detail_frequency)
-            gl.glUniform2f(location('uMarchStep'), *step)
+            gl.glUniform3f(location('uMarchStep'), *step, shadow_floor)
             gl.glUniform4f(location('uMarchShade'), *shadow, 0. if ground is None else float(ground),
                            0. if ground is None else 1.)
+            if medium is not None:
+                medium(program)
             gl.glBindVertexArray(self._vao)
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
         finally:

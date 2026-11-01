@@ -89,7 +89,7 @@ void main() {
 # air (where a consumer's lights sit) and stops at an analytic ground plane. Output: in-scatter (rgb) and
 # transmittance (a) to the ground or the far depth, composited as dst x a + rgb. Froxel resolution alone smears
 # clouds into washes; the detail lives here, the expensive lighting stays coarse.
-FOG_MARCH_FRAGMENT = """#version 460 core
+_FOG_MARCH_HEAD = """#version 460 core
 in vec2 vNdc;
 uniform sampler3D uFogMedium;    // coarse medium: radiance rgb, extinction a
 uniform sampler3D uFogDetail;    // tiling detail noise in [0, 1]
@@ -100,7 +100,7 @@ uniform vec4 uFogLens;
 uniform vec4 uFogRange;
 uniform vec4 uMarch;             // maximum steps, maximum extinction, erosion, detail frequency (per world unit)
 uniform vec4 uMarchShade;        // shadow reach (world), shadow strength, ground height, ground enabled
-uniform vec2 uMarchStep;         // view-depth step inside the medium, through clear air
+uniform vec3 uMarchStep;         // view-depth step inside the medium, through clear air; least self-shadow
 uniform vec2 uViewportSize;
 layout(location=0) out vec4 FragColor;
 vec3 coarseUvw(vec3 world) {
@@ -116,6 +116,9 @@ vec4 coarse(vec3 world) {
     vec4 medium=texture(uFogMedium,uvw);
     return vec4(medium.rgb,max(medium.a-texture(uFogSteady,uvw).r,0.0));
 }
+"""
+
+_FOG_MARCH_MAIN = """
 float detail(vec3 p) {
     vec3 q=p*uMarch.w;
     return 0.62*texture(uFogDetail,q).r+0.38*texture(uFogDetail,q*2.71+vec3(0.31,0.17,0.53)).r;
@@ -149,27 +152,33 @@ void main() {
     vec3 scatter=vec3(0.0);
     float transmittance=1.0;
     float depth=uFogRange.x+jitter*uMarchStep.y;
+    // On meeting the medium after a long clear-air step, step back and enter at fine steps (a jittered long-step
+    // entry speckled the edges); stay fine until a long step's length of clear air has passed.
+    float clearRun=uMarchStep.y;
     for(int i=0;i<int(uMarch.x) && depth<end;i++) {
         vec3 p=origin+direction*depth*stretch;
         vec3 uvw=coarseUvw(p);
         vec4 total=texture(uFogMedium,uvw);
         float steady=texture(uFogSteady,uvw).r;
-        if(total.a<=0.002*uMarch.y) { depth+=uMarchStep.y; continue; }
         vec4 medium=vec4(total.rgb,max(total.a-steady,0.0));
-        float coverage=medium.a/max(uMarch.y,1e-6);
+        float coverage=fogCoverage(p,medium.a/max(uMarch.y,1e-6));
+        if(coverage<=0.002 && steady<=0.002*uMarch.y) {
+            bool coarseStep=clearRun>=uMarchStep.y;
+            float advance=coarseStep?uMarchStep.y:uMarchStep.x;
+            clearRun+=advance; depth+=advance;
+            continue;
+        }
+        if(clearRun>=uMarchStep.y && i>0) { depth=max(depth-uMarchStep.y,uFogRange.x); clearRun=0.0; continue; }
+        clearRun=0.0;
         float step=min(uMarchStep.x,end-depth);
         float density=uMarch.y*eroded(coverage,p)+steady;
         if(density>0.0) {
-            // Toward clearer air: the coarse coverage gradient (lights sit in the clear air).
-            float h=0.6;
-            vec3 gradient=vec3(coarse(p+vec3(h,0,0)).a-coarse(p-vec3(h,0,0)).a,
-                               coarse(p+vec3(0,h,0)).a-coarse(p-vec3(0,h,0)).a,
-                               coarse(p+vec3(0,0,h)).a-coarse(p-vec3(0,0,h)).a);
-            vec3 toward=-gradient/max(length(gradient),1e-6);
+            vec3 toward=fogLightDirection(p);
             vec3 q=p+toward*uMarchShade.x;
-            float shade=exp(-uMarchShade.y*uMarch.y*eroded(coarse(q).a/max(uMarch.y,1e-6),q)*uMarchShade.x);
+            float shade=exp(-uMarchShade.y*uMarch.y*eroded(fogCoverage(q,coarse(q).a/max(uMarch.y,1e-6)),q)*uMarchShade.x);
             float slice=exp(-density*step*stretch);
-            scatter+=transmittance*medium.rgb*shade*(1.0-slice);
+            // A floor on self-shadow keeps the cloud bodies' own structure visible behind their lit faces.
+            scatter+=transmittance*medium.rgb*mix(uMarchStep.z,1.0,shade)*(1.0-slice);
             transmittance*=slice;
             if(transmittance<0.003) break;
         }
@@ -178,6 +187,35 @@ void main() {
     FragColor=vec4(scatter,transmittance);
 }
 """
+
+_FOG_COARSE_COVERAGE = """
+float fogCoverage(vec3 world, float coarse) { return coarse; }
+"""
+
+# Self-shadow direction: toward clearer air by default (the coarse coverage gradient; lights sit in the clear air).
+_FOG_GRADIENT_DIRECTION = """
+vec3 fogLightDirection(vec3 p) {
+    float h=0.6;
+    vec3 gradient=vec3(coarse(p+vec3(h,0,0)).a-coarse(p-vec3(h,0,0)).a,
+                       coarse(p+vec3(0,h,0)).a-coarse(p-vec3(0,h,0)).a,
+                       coarse(p+vec3(0,0,h)).a-coarse(p-vec3(0,0,h)).a);
+    return -gradient/max(length(gradient),1e-6);
+}
+"""
+
+
+def fog_march_source(coverage_glsl: str | None = None) -> str:
+    """The detail march; ``coverage_glsl`` may define ``float fogCoverage(vec3 world, float coarse)`` returning the
+    erodible coverage (0..1) from the consumer's own fine shape (a coarse grid stair-steps shapes that change within
+    a cell), and ``vec3 fogLightDirection(vec3 world)``, the unit direction toward its light for self-shadowing
+    (default: toward clearer air). The coarse grid still supplies the light and the steady share."""
+    coverage = _FOG_COARSE_COVERAGE if coverage_glsl is None else coverage_glsl
+    if 'fogCoverage' not in coverage:
+        raise ValueError('A coverage source must define float fogCoverage(vec3 world, float coarse)')
+    if 'fogLightDirection' not in coverage:
+        coverage += _FOG_GRADIENT_DIRECTION
+    return _FOG_MARCH_HEAD + coverage + _FOG_MARCH_MAIN
+
 
 FOG_COMPOSITE_FRAGMENT = """#version 460 core
 in vec2 vNdc;

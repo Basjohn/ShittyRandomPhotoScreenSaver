@@ -22,14 +22,18 @@ uniform sampler3D uFogVolume; // integrated in-scatter (rgb) and transmittance (
 uniform mat4 uFogView;     // world -> the volume camera's view
 uniform vec4 uFogLens;     // half-extent x, y (Orthographic) or tangent x, y (Perspective); orthographic flag; unused
 uniform vec4 uFogRange;    // near, far view depth, slices, enabled
-vec4 fogVolumeAt(vec3 world) {
+// Volume coordinates of a world point: xy over the view, z the continuous slice (0 at near, slices at far).
+vec3 fogCoordinate(vec3 world) {
     vec3 v=(uFogView*vec4(world,1.0)).xyz;
     float depth=max(-v.z,1e-4);
     vec2 ndc=uFogLens.z>0.5?v.xy/uFogLens.xy:v.xy/(uFogLens.xy*depth);
-    float f=log(max(depth,uFogRange.x)/uFogRange.x)/log(uFogRange.y/uFogRange.x)*uFogRange.z;
+    return vec3(ndc*0.5+0.5,log(max(depth,uFogRange.x)/uFogRange.x)/log(uFogRange.y/uFogRange.x)*uFogRange.z);
+}
+vec4 fogVolumeAt(vec3 world) {
+    vec3 c=fogCoordinate(world);
     // Texel k holds the integral to the far boundary of slice k; before the first boundary blend from clear air.
-    vec4 s=texture(uFogVolume,clamp(vec3(ndc*0.5+0.5,(f-0.5)/uFogRange.z),vec3(0.0),vec3(1.0)));
-    return mix(vec4(0.0,0.0,0.0,1.0),s,clamp(f,0.0,1.0));
+    vec4 s=texture(uFogVolume,clamp(vec3(c.xy,(c.z-0.5)/uFogRange.z),vec3(0.0),vec3(1.0)));
+    return mix(vec4(0.0,0.0,0.0,1.0),s,clamp(c.z,0.0,1.0));
 }
 float mistTransmittance(vec3 world) {
     if(uFogRange.w>0.5) return fogVolumeAt(world).a;
