@@ -129,6 +129,10 @@ class Fog:
     # the in-scatter's share of bloom.
     march_scale: float = .5
     reflection_march_scale: float = .25
+    # Height caps (pixels) of the reduced-resolution targets: they leave the 718-pixel lab untouched and keep 1440p
+    # and 4K at the approved look's detail per screen fraction instead of quadrupling the cost.
+    march_max_height: int = 540
+    reflection_march_max_height: int = 270
     # Shape bake box (world min, max) and cell size: the march reads the shape from it; outside, exact.
     bake_box: tuple = ((-30., 0., -12.), (30., 12., 4.))
     bake_cell: float = .2
@@ -174,6 +178,7 @@ class Floor:
     lod: tuple = (1., 1.)           # reflection mip (half-resolution target: already soft)
     contact: tuple = (.002, 6., 6.)  # spread (uv) per unit of reflected height; along/across; probe mip
     resolution: float = .5          # reflection target scale
+    resolution_max_height: int = 360  # reflection target height cap (pixels)
     blur: float = 0.               # horizontal Gaussian across each column (receiver pixels)
     # Column fade toward the camera and its far level; a sparkle threshold above 0 adds wet-film grain (rejected:
     # it read as the mottled wet/dry floor).
@@ -697,6 +702,13 @@ def crackle_limit(envelope, fog: Fog, mvp, width: int, samples: int = 256, slope
     return (limit - .02).astype(np.float32)
 
 
+def capped(size, scale: float, max_height: int) -> tuple[float, float]:
+    """A reduced-resolution target: ``scale`` of the viewport, but never taller than ``max_height`` (same aspect).
+    Detail per screen fraction stays that of the approved look; cost stops growing with display resolution."""
+    factor = min(scale, max_height/max(size[1], 1))
+    return size[0]*factor, size[1]*factor
+
+
 def lens(pose: Pose, aspect: float) -> tuple[float, float, bool]:
     """The fog volume's lens for a pose: Orthographic half-extents, or Perspective tangents."""
     if pose.projection == 'Orthographic':
@@ -873,10 +885,12 @@ class Lab:
                          detail_frequency=fog.detail_frequency, shadow=fog.shadow, step=fog.step,
                          medium=self._fog_uniforms, shadow_floor=fog.shadow_floor, edge_glow=fog.edge_glow,
                          base=fog.ambient)
-            self.march.march(self.fog, size=(width*fog.march_scale, height*fog.march_scale), ground=0., **march)
+            self.march.march(self.fog, size=capped((width, height), fog.march_scale, fog.march_max_height), ground=0.,
+                             **march)
             # The mirrored camera starts below the floor (no medium there) and sees the mist above it.
-            self.reflected_march.march(self.reflected_fog, size=(width*fog.reflection_march_scale,
-                                                                 height*fog.reflection_march_scale), **march)
+            self.reflected_march.march(self.reflected_fog,
+                                       size=capped((width, height), fog.reflection_march_scale,
+                                                   fog.reflection_march_max_height), **march)
         if not flat:
             with self._fog_bound(self.reflected_fog if fogged else None) as fog:
                 self._reflect(packet, projection, view, scroll, {**draw, 'mist': {**draw['mist'], **fog}})
@@ -1012,7 +1026,7 @@ class Lab:
         """Ribbon light through the mirrored camera; the receiver is never drawn into its own reflection."""
         floor, (width, height) = self.recipe.floor, self.size
         mirrored = mirror_view(view, 0.)
-        self.reflection.begin(int(width*floor.resolution), int(height*floor.resolution))
+        self.reflection.begin(*(int(v) for v in capped((width, height), floor.resolution, floor.resolution_max_height)))
         try:
             gl.glDepthFunc(gl.GL_LESS)
             gl.glEnablei(gl.GL_BLEND, 0)
