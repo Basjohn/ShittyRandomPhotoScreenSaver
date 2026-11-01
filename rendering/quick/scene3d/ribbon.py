@@ -17,6 +17,7 @@ from core.ribbon_frames import MAX_STRIP_STATIONS
 from rendering.gl_programs.ribbon import (RIBBON_BODY_FRAGMENT, RIBBON_FRAGMENT, RIBBON_LIGHT_FRAGMENT,
                                           RIBBON_SPARK_FRAGMENT, RIBBON_SPARK_VERTEX, RIBBON_VERTEX)
 from core.ribbon_geometry import MAX_PATH_SAMPLES
+from rendering.gl_programs.mist import FOG_OFF
 from rendering.quick import gl_query
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.stream import StreamRing
@@ -24,7 +25,7 @@ from rendering.quick.scene3d.stream import StreamRing
 _FRAGMENTS = {'diagnostic': RIBBON_FRAGMENT, 'body': RIBBON_BODY_FRAGMENT, 'light': RIBBON_LIGHT_FRAGMENT}
 _MATERIAL_UNIFORMS = ('uViewZ', 'uEye', 'uForward', 'uOrthographic', 'uStrands', 'uRim', 'uBody', 'uFill', 'uGlint', 'uAge',
                       'uMist', 'uMistShape', 'uMistOrigin', 'uTone',
-                      'uViewport')
+                      'uViewport', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange')
 
 
 def _sweep_axis(value):
@@ -167,7 +168,7 @@ class RibbonPrimitive:
         if shading != 'diagnostic':
             shaded = self._material_uniforms(view, translate, bool(orthographic), material)
             shaded['uAge'] = (0., 0., 0., 0.)
-            shaded.update(uMist=(0., 0., 1., 1.), uMistShape=(0., 0., 0., 0.))
+            shaded.update(uMist=(0., 0., 1., 1.), uMistShape=(0., 0., 0., 0.), **FOG_OFF)
             if mist is not None:
                 shaded.update(mist)
             frame = np.asarray(packet.world_origin, float) + np.asarray(mist_frame, float)
@@ -204,8 +205,10 @@ class RibbonPrimitive:
                 gl.glUniform1i(uniforms['uDiagnostic'], diagnostic)
             else:
                 for name, value in shaded.items():
-                    if name == 'uOrthographic':
+                    if name in ('uOrthographic', 'uFogVolume'):
                         gl.glUniform1i(uniforms[name], value)
+                    elif len(value) == 16:
+                        gl.glUniformMatrix4fv(uniforms[name], 1, gl.GL_FALSE, np.asarray(value, np.float32))
                     elif len(value) == 2:
                         gl.glUniform2f(uniforms[name], *value)
                     elif len(value) == 3:
@@ -242,7 +245,7 @@ class RibbonPrimitive:
             program = self.resources.program('sparks', RIBBON_SPARK_VERTEX, RIBBON_SPARK_FRAGMENT)
             vao, _ = self.resources.mesh('empty', (0., 0.), (2,))
             names = ('uMvp', 'uSpark', 'uSparkLook', 'uSparkClock', 'uSparkWhite', 'uMist', 'uMistShape', 'uMistOrigin',
-                     'uSurface','uSweepAxis')
+                     'uSurface','uSweepAxis', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange')
             u = self.resources.uniforms('sparks', names, required=False)
             if self.stream is None:
                 alignment = gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT)
@@ -258,9 +261,14 @@ class RibbonPrimitive:
             gl.glUniform4f(u['uSparkLook'], sparks.smallest, sparks.largest, sparks.light, sparks.twinkle)
             gl.glUniform2f(u['uSparkClock'], float(now) - float(packet.coordinate_origin), float(packet.coordinate_origin) % 1000.)
             gl.glUniform1f(u['uSparkWhite'], sparks.white)
-            mist_values = {'uMist': (0., 0., 1., 1.), 'uMistShape': (0., 0., 0., 0.), **(mist or {})}
+            mist_values = {'uMist': (0., 0., 1., 1.), 'uMistShape': (0., 0., 0., 0.), **FOG_OFF, **(mist or {})}
             gl.glUniform4f(u['uMist'], *mist_values['uMist'])
             gl.glUniform4f(u['uMistShape'], *mist_values['uMistShape'])
+            gl.glUniform1i(u['uFogVolume'], mist_values['uFogVolume'])
+            gl.glUniform4f(u['uFogRange'], *mist_values['uFogRange'])
+            if 'uFogView' in mist_values:
+                gl.glUniformMatrix4fv(u['uFogView'], 1, gl.GL_FALSE, np.asarray(mist_values['uFogView'], np.float32))
+                gl.glUniform4f(u['uFogLens'], *mist_values['uFogLens'])
             gl.glUniform3f(u['uMistOrigin'], *frame)
             with self.stream.bound(gl.GL_SHADER_STORAGE_BUFFER, 0, packet.payload):
                 gl.glDrawArraysInstanced(gl.GL_POINTS, 0, MAX_PATH_SAMPLES*sparks.per_knot, packet.instances)

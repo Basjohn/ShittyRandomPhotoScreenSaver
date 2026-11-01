@@ -5,12 +5,34 @@ so mist by view distance would breathe with the camera. Here clear air fills an 
 floor plane (radii along x and z) and the mist thickens beyond it, and more near the floor. Opaque surfaces mix
 toward the backdrop colour by ``1 - mistTransmittance``; additive light and translucent coverage are multiplied by it.
 With ``uMist.w`` (falloff) zero the function returns 1 and the scene is unchanged.
+
+With a bound S3D-7 volume (``rendering.quick.scene3d.fog_volume.FogVolume``: ``uFogRange.w`` 1) every pass reads the
+same integrated froxel volume instead: ``mistTransmittance`` is the transmittance from the volume's eye to the point,
+and ``mistOver`` puts the in-scattered light in front of an opaque surface. Each pass binds the volume of the camera it
+draws with (a reflection pass binds its mirrored volume). Programs including this must keep ``uFogVolume`` on
+``FOG_TEXTURE_UNIT`` so it never shares a unit with a 2D sampler.
 """
+
+FOG_TEXTURE_UNIT = 8
 
 MIST_GLSL = """
 uniform vec4 uMist;        // clear-air centre x, centre z, radius x, radius z (world units)
 uniform vec4 uMistShape;   // falloff (radii beyond the edge per e-fold), floor thickening, thickening height, low glow
+uniform sampler3D uFogVolume; // integrated in-scatter (rgb) and transmittance (a), exponential view-depth slices
+uniform mat4 uFogView;     // world -> the volume camera's view
+uniform vec4 uFogLens;     // half-extent x, y (Orthographic) or tangent x, y (Perspective); orthographic flag; unused
+uniform vec4 uFogRange;    // near, far view depth, slices, enabled
+vec4 fogVolumeAt(vec3 world) {
+    vec3 v=(uFogView*vec4(world,1.0)).xyz;
+    float depth=max(-v.z,1e-4);
+    vec2 ndc=uFogLens.z>0.5?v.xy/uFogLens.xy:v.xy/(uFogLens.xy*depth);
+    float f=log(max(depth,uFogRange.x)/uFogRange.x)/log(uFogRange.y/uFogRange.x)*uFogRange.z;
+    // Texel k holds the integral to the far boundary of slice k; before the first boundary blend from clear air.
+    vec4 s=texture(uFogVolume,clamp(vec3(ndc*0.5+0.5,(f-0.5)/uFogRange.z),vec3(0.0),vec3(1.0)));
+    return mix(vec4(0.0,0.0,0.0,1.0),s,clamp(f,0.0,1.0));
+}
 float mistTransmittance(vec3 world) {
+    if(uFogRange.w>0.5) return fogVolumeAt(world).a;
     if(uMistShape.x<=0.0) return 1.0;
     vec2 radii=max(uMist.zw,vec2(1e-3));
     float beyond=max(0.0,length((world.xz-uMist.xy)/radii)-1.0)/uMistShape.x;
@@ -27,7 +49,14 @@ vec3 mistColour(vec3 backdrop, vec3 world) {
     // Deeper mist also darkens (the far floor is the Orthographic upper field: dark at the top, lit low).
     return backdrop*(0.35+0.65*exp(-0.25*beyond))*(1.0+uMistShape.w*low*exp(-0.6*beyond*beyond));
 }
+// An opaque surface seen through the mist: the volume's in-scatter in front of it, or the analytic mix.
+vec3 mistOver(vec3 surface, vec3 backdrop, vec3 world) {
+    if(uFogRange.w>0.5) { vec4 fog=fogVolumeAt(world); return surface*fog.a+fog.rgb; }
+    return mix(mistColour(backdrop,world),surface,mistTransmittance(world));
+}
 """
+
+FOG_OFF = dict(uFogVolume=FOG_TEXTURE_UNIT, uFogRange=(1., 2., 1., 0.))
 
 
 def mist_uniforms(centre_xz=(0., 0.), radii_xz=(30., 3.), falloff=.6, floor_thickening=1.5, thickening_height=1.5,

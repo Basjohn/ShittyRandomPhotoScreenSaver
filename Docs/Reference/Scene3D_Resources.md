@@ -104,6 +104,36 @@ Named construction removes three owned-texture active/bind calls from allocation
 construction saving, with no measured steady-frame FPS claim. Eighteen representative Block Spins / Glass Shatter
 captures matched the preceding implementation byte-for-byte.
 
+## Fog volume and detail march (S3D-7)
+
+- **`scene3d/fog_volume.py:FogVolume`:** one camera's coarse froxel grid.
+  - x and y follow the viewport; z is exponential in view depth. One view matrix and lens serve both projections.
+  - A consumer's `fogMedium(world, radiance, extinction, steady)` compute source (`gl_programs/fog_volume.py`) is
+    evaluated per cell.
+  - The front-to-back integral is exact per slice and lands in an RGBA16F 3D texture that `MIST_GLSL` samples:
+    `mistTransmittance` for additive and OIT passes, `mistOver` for opaque surfaces.
+  - The analytic mist path is unchanged when no volume is bound.
+- **`FogMarch`:** reads the coarse medium at reduced resolution.
+  - It erodes the non-steady coverage with a baked tiling 3D noise and self-shadows toward lower coverage, where a
+    consumer's lights sit.
+  - Steps are adaptive: long through clear air, short in the medium.
+  - It stops at an optional analytic ground plane and composites `dst x T + S`, plus a bloom share.
+  - The steady share, smooth haze for example, is never eroded.
+- **Resources and lifecycle:**
+  - Three 3D textures per volume, plus one 2D target and the noise per march. All allocate at first use, are reused
+    at a size, and are released in the owning context.
+  - A mirrored reflection camera uses its own instances.
+- **Proof:** `tests/test_scene3d_fog_volume.py` proves exact slab transmittance and in-scatter in both projections,
+  world anchoring (a moved clear sphere; a moved eye), the steady share surviving full erosion with erodible coverage
+  as the control, and lazy allocation, bounds, foreign-context rejection and release.
+- **Cost:** `wr07_mist_substrate/fog_cost.json` on an RTX 4090 at 820x718 (warm-clock medians):
+  - coarse updates: about 0.03-0.15 ms;
+  - main march: 0.4-1.2 ms;
+  - mirrored march: 0.2-0.7 ms.
+
+  That is too costly for full-screen production. The planned reductions are a precomputed clear-air direction instead
+  of six gradient fetches per step, fewer steps, and a lower march scale.
+
 ## Planar reflections and rough receivers (S3D-5)
 
 `scene3d/reflection.py:PlanarReflection` owns one mipmapped RGBA16F target and depth renderbuffer, allocated lazily
