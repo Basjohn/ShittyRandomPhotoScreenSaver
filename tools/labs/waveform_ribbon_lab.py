@@ -95,21 +95,22 @@ class Fog:
     exact lower/upper envelope along x (reduced per frame from the admitted history). The band's rim glows in the
     colour of the nearest sheet edge and darkens into the mass; a detail march adds the billows."""
     density: float = 1.6            # extinction per world unit inside the mist
-    margin: float = .2              # clear air the waveform keeps around itself (world units)
+    margin: float = .1              # clear air beyond the envelope (world units)
+    clearance: tuple = (.6, .45)    # push of the whole field from the envelope; the mist never enters within
     softness: float = 1.5           # depth over which coarse coverage rises: the detail march erodes within it
     noise_scale: float = .35        # lobe frequency of the band's edge (per world unit)
-    noise: float = 1.6              # lobe displacement of the edge (world units)
+    noise: float = 2.6              # lobe displacement of the edge (world units)
     start_z: float = -1.7           # the mist begins behind this world z (just behind the sheets)
-    band_depth: float = 1.6          # the clear band reaches this far behind start_z; the far wall closes it
+    band_depth: float = 7.          # the clear band reaches this far behind start_z; the far wall closes it
     sheets_z: tuple = (-1.7, 1.7)   # depth range of the sheets, for the rim light's distance
-    ambient: tuple = (.05, .06, .1)  # radiance of unlit mist: the cloud bodies' own dim structure
+    ambient: tuple = (.09, .1, .17)  # radiance of unlit mist: the cloud bodies' own dim structure
     rim: float = 120.               # rim light gain on the nearest sheet edge colour
-    reach: float = .25              # e-folding distance of the rim light from the envelope (world units)
-    light_decay: float = 3.         # its extinction per world unit of depth into the mist
-    haze: float = 0.               # faint haze in the clear band behind the sheets (never eroded)
+    reach: float = .35              # e-folding distance of the rim light from the envelope (world units)
+    light_decay: float = 2.         # its extinction per world unit of depth into the mist
+    haze: float = 0.                # faint haze in the clear band behind the sheets (never eroded)
     envelope_range: tuple = (-40., 40., 640)  # world x span and samples of the envelope reduction
     envelope_smoothing: float = .25 # Gaussian along x (world units)
-    envelope_width: float = .8      # share of a sheet's half-width counted as its vertical extent (twisted sheets)
+    envelope_width: float = .5      # share of a sheet's half-width counted as its vertical extent (twisted sheets)
     depth_range: tuple = (3., 90.)
     cell: int = 16                  # viewport pixels per coarse cell (light and coverage only)
     slices: int = 64
@@ -122,8 +123,8 @@ class Fog:
     reflection_march_scale: float = .25
     steps: int = 96
     step: tuple = (.15, 1.)
-    erosion: float = .85
-    detail_frequency: float = 2.
+    erosion: float = .75
+    detail_frequency: float = .8
     shadow: tuple = (.6, 4.)
     shadow_floor: float = .5
     glow: float = .3
@@ -275,6 +276,7 @@ uniform sampler2D uEnvelope;  // rows: (lower, upper, presence), upper edge colo
 uniform vec2 uEnvelopeSpan;   // world x at u=0, 1/(world span)
 uniform vec4 uFogForm;      // density, margin, edge softness, billow frequency
 uniform vec4 uFogShape;       // start z, band depth, billow displacement, light decay
+uniform vec2 uFogClearance;   // push of the whole field from the envelope; distance the mist never enters
 float fogHash(vec3 p) { p=fract(p*0.3183099+0.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
 float fogNoise(vec3 x) {
     vec3 i=floor(x), f=fract(x);
@@ -291,45 +293,22 @@ float fogBillow(vec3 p) {
 // envelope unless beyond the band's depth. Billows displace the band's edge.
 float fogInside(vec3 world, out vec4 band, out float above, out float below) {
     band=texture(uEnvelope,vec2((world.x-uEnvelopeSpan.x)*uEnvelopeSpan.y,0.5/3.0));
-    above=world.y-band.y; below=band.x-world.y;
-    // The waveform repels the mist: billows only push the edge further away, never into the sheets.
-    float outside=max(above,below)-uFogForm.y-uFogShape.z*fogBillow(world*uFogForm.w);
+    // The waveform repels the mist: the whole field (shape and light) is pushed out from the envelope by the
+    // first clearance; billow tips that still come closer than the second are cut, so the cut face is lit.
+    float raw=max(world.y-band.y,band.x-world.y);
+    // Only the mist above is pushed up: pushing the lower mist down squashed it into a flat lit slab on the floor.
+    above=world.y-band.y-uFogClearance.x; below=band.x-world.y;
+    // Billows shape the mist freely, but the waveform repels it: nothing within the clearance of the sheets
+    // (measured from the envelope, which counts part of each sheet's width) survives.
+    float outside=min(max(above,below)-uFogForm.y+uFogShape.z*(fogBillow(world*uFogForm.w)-0.5),
+                      raw-uFogClearance.y);
     float behind=uFogShape.x-world.z+uFogShape.z*(fogBillow(world.zyx*uFogForm.w*0.8+vec3(5.3))-0.5)*1.5;
     return world.y<0.0?-1.0:min(behind,max(outside,behind-uFogShape.y));
 }
 """
 
-
-
-# The coarse medium: the same shape, lit by the nearest sheet edge's colour.
-# The mist's light, shared by the coarse medium and the per-sample march: the repelled faces glow in the nearest
-# sheet edge's colour by in-plane distance from the waveform outline; the notch's back wall is distant haze.
-FOG_LIGHT_GLSL = """
-uniform vec4 uFogLook;        // ambient rgb, rim gain
-uniform vec3 uFogRim;         // reach, sheets back z, sheets front z
-uniform float uFogHaze;       // extinction of the dim distant haze behind the sheets (steady)
-vec3 fogLight(vec3 world, float inside, vec4 band, float above, float below, float mistShare) {
-    float u=(world.x-uEnvelopeSpan.x)*uEnvelopeSpan.y;
-    vec3 upperColour=texture(uEnvelope,vec2(u,1.5/3.0)).rgb;
-    vec3 lowerColour=texture(uEnvelope,vec2(u,2.5/3.0)).rgb;
-    vec3 edge=above>0.0?upperColour:below>0.0?lowerColour
-             :mix(lowerColour,upperColour,clamp(-below/max(band.y-band.x,1e-3),0.0,1.0));
-    float dy=max(max(above,below),0.0);
-    float dz=max(max(uFogRim.y-world.z,world.z-uFogRim.z),0.0);
-    float rim=exp(-max(dy-uFogForm.y,0.0)/uFogRim.x)*exp(-dz*0.25)*exp(-max(inside,0.0)*uFogShape.w);
-    if(above<0.0 && below<0.0) rim*=0.06;
-    return uFogLook.rgb+edge*uFogLook.w*rim*mistShare;
-}
-"""
-
-# The march's fine coverage and light: the same shape and light per sample, so the thin lit edge never
-# stair-steps at the coarse cells.
-FOG_COVERAGE_GLSL = FOG_SHAPE_GLSL + FOG_LIGHT_GLSL + """
-vec3 fogRadiance(vec3 world, vec3 coarse) {
-    vec4 band; float above, below;
-    float inside=fogInside(world,band,above,below);
-    return fogLight(world,inside,band,above,below,1.0);
-}
+# The march's fine coverage: the same shape per sample, so the band's edge never stair-steps at the coarse cells.
+FOG_COVERAGE_GLSL = FOG_SHAPE_GLSL + """
 float fogCoverage(vec3 world, float coarse) {
     vec4 band; float above, below;
     return smoothstep(0.0,uFogForm.z,fogInside(world,band,above,below));
@@ -343,16 +322,30 @@ vec3 fogLightDirection(vec3 world) {
 }
 """
 
-FOG_MEDIUM_GLSL = FOG_SHAPE_GLSL + FOG_LIGHT_GLSL + """
+# The coarse medium: the same shape, lit by the nearest sheet edge's colour.
+FOG_MEDIUM_GLSL = FOG_SHAPE_GLSL + """
+uniform vec4 uFogLook;        // ambient rgb, rim gain
+uniform vec3 uFogRim;         // reach, sheets back z, sheets front z
+uniform float uFogHaze;       // extinction of the faint haze in the clear band (steady)
 void fogMedium(vec3 world, out vec3 radiance, out float extinction, out float steady) {
     radiance=vec3(0.0); extinction=0.0; steady=0.0;
     if(world.y<0.0) return;
     vec4 band; float above, below;
     float inside=fogInside(world,band,above,below);
-    // Behind the sheets: dim distant haze (dark grey, not black), thickening with depth; never rim-lit.
-    steady=uFogHaze*clamp((uFogShape.x-world.z)/max(uFogShape.y,1e-3),0.0,1.0);
+    steady=world.z<uFogShape.x+1.0?uFogHaze:0.0;
     extinction=uFogForm.x*smoothstep(0.0,uFogForm.z,inside)+steady;
-    radiance=fogLight(world,inside,band,above,below,(extinction-steady)/max(extinction,1e-6));
+    float u=(world.x-uEnvelopeSpan.x)*uEnvelopeSpan.y;
+    vec3 upperColour=texture(uEnvelope,vec2(u,1.5/3.0)).rgb;
+    vec3 lowerColour=texture(uEnvelope,vec2(u,2.5/3.0)).rgb;
+    // The nearest sheet edge lights the mist in its colour, by distance from the sheets (outside the envelope and
+    // behind or before their depth): continuous, since the light lives on the coarse cells. The far wall behind
+    // the band stays dark; light fades with depth into the mist, so rims glow and interiors stay dark.
+    vec3 edge=above>0.0?upperColour:below>0.0?lowerColour
+             :mix(lowerColour,upperColour,clamp(-below/max(band.y-band.x,1e-3),0.0,1.0));
+    float dy=max(max(above,below),0.0);
+    float dz=max(max(uFogRim.y-world.z,world.z-uFogRim.z),0.0);
+    float rim=exp(-length(vec2(dy,dz))/uFogRim.x)*exp(-max(inside,0.0)*uFogShape.w);
+    radiance=uFogLook.rgb+edge*uFogLook.w*rim;
 }
 """
 
@@ -645,6 +638,7 @@ class Lab:
         gl.glUniform2f(location('uEnvelopeSpan'), x0, 1./(x1 - x0))
         gl.glUniform4f(location('uFogForm'), fog.density, fog.margin, fog.softness, fog.noise_scale)
         gl.glUniform4f(location('uFogShape'), fog.start_z, fog.band_depth, fog.noise, fog.light_decay)
+        gl.glUniform2f(location('uFogClearance'), *fog.clearance)
         gl.glUniform4f(location('uFogLook'), *fog.ambient, fog.rim)
         gl.glUniform3f(location('uFogRim'), fog.reach, *fog.sheets_z)
         gl.glUniform1f(location('uFogHaze'), fog.haze)
