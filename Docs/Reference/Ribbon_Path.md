@@ -122,7 +122,9 @@ No runtime mode imports this prototype; EB and all existing modes receive no wor
     sheet surface. Each is attached at its knot and leaves along a smooth curl, growing with distance along it and
     with the knot's age, and carries droplet beads toward its free tip. Per-knot sparkle times `chance` gates them;
     they are drawn additively in the emission pass, like sparks. Stateless: a pure function of the packet and
-    the clock.
+    the clock. `halo` adds a soft glow around each filament and `glow` scales its bloom share.
+  - Material `glow` scales the light pass's emission (its bloom share) without changing its colour output;
+    `hot` whitens the brightest hashed strands' cores. Defaults 1 and 0 leave every earlier look unchanged.
   - Earlier: 64-byte knots, 131584-byte packets. Metadata holds count/subdivision/origin phase/period,
   reduced origin twist, diagnostic colour and reserved colour storage. This is a diagnostic RGBA material,
   not the Ribbon scene's final shading or palette.

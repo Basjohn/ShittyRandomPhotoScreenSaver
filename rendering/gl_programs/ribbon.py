@@ -441,6 +441,7 @@ void main() {
 RIBBON_STRAY_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\n"
                          "in vec3 vWorld;\nin float vAlong;\nin float vAcross;\nin float vBright;\nin float vSeed;\n"
                          "flat in vec3 vColour;\nuniform vec3 uMistOrigin;\nuniform vec4 uStrayLook;\n"
+                         "uniform vec2 uStrayGlow;  // soft halo around the filament, share sent to the bloom\n"
                          + MIST_GLSL + RIBBON_GRADE_GLSL + """
 void main() {
     float a=vAcross*vAcross;
@@ -448,11 +449,12 @@ void main() {
     float along=fract(vAlong*uStrayLook.z+vSeed)-0.5;         // droplets strung along it, round over the full quad
     // Droplets gather toward the free tip, where the liquid breaks up.
     float bead=exp(-(along*along*uStrayLook.z*uStrayLook.z*0.35+a)*3.5)*smoothstep(0.3,0.9,vAlong);
-    float light=(line+1.6*bead)*vBright;
+    float halo=uStrayGlow.x*exp(-a*1.2)*(1.0-0.5*vAlong);  // a fuzzy splash around the clean line
+    float light=(line+halo+1.6*bead)*vBright;
     if(light<=1e-4) discard;
     vec3 colour=graded(vColour,vWorld.x+uMistOrigin.x)*light*mistTransmittance(vWorld+uMistOrigin);
     FragColor=vec4(colour,dot(colour,vec3(0.2126,0.7152,0.0722))*(vWorld.y+uMistOrigin.y));  // as the light pass
-    Emission=vec4(colour,dot(colour,vec3(0.2126,0.7152,0.0722)));
+    Emission=vec4(colour,dot(colour,vec3(0.2126,0.7152,0.0722)))*uStrayGlow.y;
 }
 """)
 
@@ -526,6 +528,7 @@ uniform vec4 uGlint;        // glints per strand per phase unit, chance, light, 
 uniform vec4 uTone;         // strand whiteness, rim whiteness, strand spacing jitter, glint minimum radius (px)
 uniform vec4 uAge;          // local now, fade-in, maximum age, fade-out (seconds); fades off when both are zero
 uniform vec3 uMistOrigin;   // packet-local -> mist world translation (packet origin plus the caller's frame)
+uniform vec2 uGlow;         // share of the light sent to the bloom (local glow), white-hot share of the brightest strands
 """ + RIBBON_GRADE_GLSL + MIST_GLSL + RIBBON_STRAND_COORDINATE_GLSL + """
 
 // Integral of the periodic pulse, then exact box filtering over the pixel footprint. The old single-line
@@ -626,7 +629,9 @@ void main() {
     }
     // The body glows in its saturated colour; strands and rims carry the near-white light (the mock's look).
     vec3 colour=ribbonColour();
-    vec3 sheet=colour*fill+mix(colour,vec3(1.0),uTone.x)*strands*uStrands.z
+    // The brightest strands burn white-hot at their cores; the rest keep their colour.
+    float hot=clamp(uTone.x+uGlow.y*smoothstep(0.9,1.9,strength),0.0,1.0);
+    vec3 sheet=colour*fill+mix(colour,vec3(1.0),hot)*strands*uStrands.z
                +mix(colour,vec3(1.0),0.6)*glints*uGlint.z;
     vec3 boundary=colour*rimGlow+mix(colour,vec3(1.0),uTone.y)*rims*uRim.y;
     vec3 light=(sheet*pathLength()*clamp(vCoverage,0.0,1.0)+boundary)*max(vEmission,0.0)*ageFade()
@@ -634,6 +639,6 @@ void main() {
     // Alpha: luminance-weighted world height, for contact-hardened reflections. Scene targets keep their
     // alpha (blend ZERO, ONE); a reflection target accumulates it (ONE, ONE).
     FragColor=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722))*(vWorld.y+uMistOrigin.y));
-    Emission=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722)));
+    Emission=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722)))*uGlow.x;
 }
 """)
