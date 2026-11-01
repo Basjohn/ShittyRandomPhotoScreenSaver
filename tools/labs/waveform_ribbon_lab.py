@@ -179,6 +179,7 @@ class Floor:
     contact: tuple = (.002, 6., 6.)  # spread (uv) per unit of reflected height; along/across; probe mip
     resolution: float = .5          # reflection target scale
     resolution_max_height: int = 360  # reflection target height cap (pixels)
+    specular_max_height: int = 1080  # the reflection term is evaluated at most this tall, then read back
     blur: float = 0.               # horizontal Gaussian across each column (receiver pixels)
     # Column fade toward the camera and its far level; a sparkle threshold above 0 adds wet-film grain (rejected:
     # it read as the mottled wet/dry floor).
@@ -278,6 +279,8 @@ uniform vec2 uEnvelopeSpan;
 uniform vec4 uPool;         // gain, height falloff, depth falloff behind, depth falloff toward the camera
 uniform float uPoolZ;       // the sheets' depth (world z)
 uniform vec3 uColumn;       // fade length toward the camera, far sparkle strength, sparkle threshold
+uniform int uSpecMode;      // reflection term: 0 inline, 1 write it alone (pre-pass), 2 read it from uSpecular
+uniform sampler2D uSpecular;
 uniform vec3 uEye;
 uniform vec3 uForward;
 uniform int uOrthographic;
@@ -299,6 +302,10 @@ void main() {
     // Mip-biased and toned down: at this grazing angle the colour scan aliases into horizontal bands once lit.
     vec3 albedo=mix(texture(uAlbedo,uv,uHot.w).rgb,texture(uAlbedo,turn*uv*1.37+vec2(.31,.47),uHot.w).rgb,.4);
     albedo=mix(vec3(dot(textureLod(uAlbedo,vec2(.5),20.0).rgb,vec3(.333))),albedo,0.5)*uFloorTone.x;
+    vec3 specular;
+    if(uSpecMode==2) {
+        specular=texture(uSpecular,gl_FragCoord.xy/uViewport).rgb;
+    } else {
     vec2 broad=slopeAt(vWorldPos.xz,uFloor.x)*uFloorTone.z;
     vec2 micro=slopeAt(vWorldPos.xz,uFloor.y)*uFloorTone.w;
     // Offsets follow the viewed ground axes, so a turned camera streaks along its own view.
@@ -327,7 +334,9 @@ void main() {
     float near=exp(-toward/max(uColumn.x,1e-3));
     float grain=smoothstep(uColumn.z,1.0,film);
     reflected*=mix(grain*uColumn.y,1.0,near);
-    vec3 specular=reflected*fresnel*uFloor.z;
+    specular=reflected*fresnel*uFloor.z;
+    }
+    if(uSpecMode==1) { FragColor=vec4(specular,1.0); Emission=vec4(0.0); return; }
     vec3 field=uFogLit==1?texture(uFogLight,clamp(fogCoordinate(vWorldPos+vec3(0,0.05,0))/vec3(1,1,uFogRange.z),
                                                    vec3(0.0),vec3(1.0))).rgb:vec3(0.0);
     // Coloured pools under the waveform: its lower edge lights the concrete beneath it, falling off with the edge's
@@ -822,6 +831,7 @@ class Lab:
         self.march = FogMarch('waveform lab mist', FOG_COVERAGE_GLSL)
         self._crackle_limit = None
         self._bake_grid = None
+        self._specular, self._specular_size = None, None
         self._slopes = (0., VIEW_SLOPE)
         self.reflected_march = FogMarch('waveform lab reflected mist', FOG_COVERAGE_GLSL)
         self.textures = {}
@@ -832,6 +842,7 @@ class Lab:
                 gl.glDeleteTextures(len(self.textures), list(self.textures.values()))
                 self.textures = {}
             self.reflection.release()
+            self._release_specular()
             self.fog.release()
             self.reflected_fog.release()
             self.march.release()
@@ -1056,7 +1067,8 @@ class Lab:
         names = ('uMvp', 'uFlat', 'uAlbedo', 'uSlope', 'uFogLight', 'uFogLit', 'uReflection', 'uReflectionLook',
                  'uReflectionContact', 'uViewport', 'uBackdrop', 'uAmbient', 'uFloor', 'uFloorTone', 'uRipple', 'uEye',
                  'uForward', 'uOrthographic', 'uMist', 'uMistShape', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange',
-                 'uStreak', 'uHot', 'uEnvelope', 'uEnvelopeSpan', 'uPool', 'uPoolZ', 'uColumn')
+                 'uStreak', 'uHot', 'uEnvelope', 'uEnvelopeSpan', 'uPool', 'uPoolZ', 'uColumn', 'uSpecMode',
+                 'uSpecular')
         u = self.resources.uniforms('floor', names, required=False)
         gl.glUseProgram(program)
         gl.glUniform1i(u['uFlat'], int(flat))
@@ -1103,9 +1115,60 @@ class Lab:
         else:
             gl.glUniform4f(u['uFogRange'], *FOG_OFF['uFogRange'])
         gl.glBindVertexArray(vao)
-        gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
-        for unit in (0, 1, 2, 13, 14):
+        # The reflection term (streak taps, contact probe) holds no detail finer than its reflection target, so on
+        # large displays it is evaluated at a capped height and read back by the full-resolution pass.
+        factor = min(1., floor.specular_max_height/max(size[1], 1))
+        if flat or factor >= 1.:
+            gl.glUniform1i(u['uSpecMode'], 0)
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
+        else:
+            texture, target = self._specular_target((int(size[0]*factor), int(size[1]*factor)))
+            framebuffer = int(gl.glGetIntegerv(gl.GL_DRAW_FRAMEBUFFER_BINDING))
+            viewport = [int(v) for v in np.asarray(gl.glGetIntegerv(gl.GL_VIEWPORT)).reshape(-1)[:4]]
+            depth_test = gl.glIsEnabled(gl.GL_DEPTH_TEST)
+            gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, target)
+            gl.glViewport(0, 0, *self._specular_size)
+            gl.glDisable(gl.GL_DEPTH_TEST)
+            gl.glClearBufferfv(gl.GL_COLOR, 0, (0., 0., 0., 0.))
+            gl.glUniform1i(u['uSpecMode'], 1)
+            gl.glUniform2f(u['uViewport'], *self._specular_size)
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
+            gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, framebuffer)
+            gl.glViewport(*viewport)
+            if depth_test:
+                gl.glEnable(gl.GL_DEPTH_TEST)
+            gl.glUniform1i(u['uSpecMode'], 2)
+            gl.glUniform2f(u['uViewport'], *size)
+            gl.glBindTextureUnit(3, texture)
+            gl.glUniform1i(u['uSpecular'], 3)
+            gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
+        for unit in (0, 1, 2, 3, 13, 14):
             gl.glBindTextureUnit(unit, 0)
+
+    def _specular_target(self, size):
+        """RGBA16F target for the floor's reflection pre-pass, reallocated only when its size changes."""
+        if self._specular_size != size:
+            self._release_specular()
+            name = (gl.GLuint*1)()
+            gl.glCreateTextures(gl.GL_TEXTURE_2D, 1, name)
+            texture = int(name[0])
+            gl.glTextureStorage2D(texture, 1, gl.GL_RGBA16F, *size)
+            for parameter, value in ((gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR), (gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR),
+                                     (gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP_TO_EDGE), (gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_EDGE)):
+                gl.glTextureParameteri(texture, parameter, value)
+            gl.glCreateFramebuffers(1, name)
+            target = int(name[0])
+            gl.glNamedFramebufferTexture(target, gl.GL_COLOR_ATTACHMENT0, texture, 0)
+            self._specular = (texture, target)
+            self._specular_size = size
+        return self._specular
+
+    def _release_specular(self):
+        if self._specular:
+            texture, target = self._specular
+            gl.glDeleteFramebuffers(1, [target])
+            gl.glDeleteTextures(1, [texture])
+        self._specular, self._specular_size = None, None
 
     def _flat_ribbons(self, packet, mvp):
         """Flat ribbon silhouettes in one known colour: rewrite every ribbon's colours in a copy of the packet."""
