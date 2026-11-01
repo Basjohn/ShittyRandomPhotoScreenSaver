@@ -87,12 +87,16 @@ from parity. §0B is the current visual audit, not an acceptance report.
       bodies visible.
     - Faces are rim-lit in the nearest sheet colour.
     - The floor's diffuse light reads the mist's light field.
-  - **Repelled mist (`wr07_mist_repelled`, after operator review):**
-    - The waveform repels the mist: billows only push its edge away, with a clear margin around the sheets.
-    - The clear notch is shallow (1.6 units) and sits directly behind the sheets. The earlier deep tunnel showed
-      its ceiling receding at 15 degrees and pushed the lit edge far up the frame.
-    - The edge light is computed per pixel (`fogRadiance` hook) by in-plane distance from the outline, so it
-      traces the crests without blocks. The notch back wall is barely lit; the upper bodies are dark grey, not black.
+  - **Repelled mist (`wr07_mist_repelled_v2`):**
+    - `935bb00c` (shallow notch, per-sample light) lost density and volume; the operator rejected it, so it is
+      reverted.
+    - The `12d5d2f3` field is kept whole. Above the sheets it is pushed up from the envelope by 0.6, with its light,
+      so the lobes keep their volume.
+    - Billow tips that still come within 0.45 are cut.
+    - Below the sheets nothing is pushed: pushing squashed the lower mist into a flat lit slab on the floor. Only
+      intruding tips are cut there.
+    - Remaining: the light is slightly dimmer than at `12d5d2f3`, and the coarse light cells faintly stair-step the
+      cloud bodies.
   - **Still far from the mock:**
     - The lit edge is soft and dim, not the mock's bright fibrous crackle.
     - The colour is a blue-violet blend rather than cyan left and magenta right.
