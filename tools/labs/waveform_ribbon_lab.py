@@ -54,7 +54,8 @@ from rendering.gl_programs.reflection import PLANAR_REFLECTION_GLSL, mirror_view
 from rendering.quick.scene3d.fog_volume import FogMarch, FogVolume
 from rendering.quick.scene3d.reflection import PlanarReflection
 from rendering.quick.scene3d.resources import MeshResources
-from rendering.quick.scene3d.ribbon import GRADE_STOPS, RibbonMaterial, RibbonPrimitive, RibbonSparks, ribbon_grade
+from rendering.quick.scene3d.ribbon import (GRADE_STOPS, RibbonMaterial, RibbonPrimitive, RibbonSparks, RibbonStrays,
+                                            ribbon_grade)
 from rendering.quick.scene3d.target import SceneTarget
 from tools.labs.render_target import OffscreenRenderTarget
 from tools.labs.waveform_ribbon_targets import ENVELOPE
@@ -280,6 +281,7 @@ class Recipe:
         glint_radius=.25, glint_min_pixels=.8))
     sparks: RibbonSparks = field(default_factory=lambda: RibbonSparks(per_knot=16, lifetime=4.5, drift=1.2, rise=.4,
                                                                        smallest=1.6, largest=5., light=16., white=.25))
+    strays: RibbonStrays | None = None  # free liquid strands peeling off the sheets (the alternate board)
     # World colour grade (preset look): the mock's cyan left, blue-violet middle, magenta right across the view,
     # taking this share of each ribbon's own colour so identities still read. History tint carries reactivity.
     # (left, mid, right, world x range, ribbon share, mist share): mixing a magenta sheet far toward cyan passes
@@ -335,8 +337,10 @@ ALTERNATE = Recipe(
     material=replace(Recipe().material, strands=48., strand_half_width=.022, strand_light=2.2, strand_white=0.,
                      rim_white=.02, fill_light=.04, body_tint=.7, glint_density=3., glint_chance=.3, glint_light=5.),
     # Sparks hug the ribbons (little drift or rise), mostly fine with a few large.
-    sparks=replace(Recipe().sparks, drift=1.1, rise=.15, light=40., smallest=1.2, largest=11., lifetime=6., white=.1),
+    sparks=replace(Recipe().sparks, drift=1.1, rise=.15, light=40., smallest=1.2, largest=8., lifetime=6., white=.1),
     palette=dict(low=((0., (.2, .6, 1.)), (1., (.55, .35, 1.))), high=((0., (1., .3, .85)), (1., (1., .22, .05)))),
+    # Free strands splash off the sheets and curl away, droplets toward their tips (short, far-reaching).
+    strays=RibbonStrays(per_knot=4, length=6., reach=1.6, chance=.6, width=1.6, light=2.5, beads=4., peel_time=1.5),
     grade_share=(0., .35), bloom=.12)
 RECIPES = {'complete': Recipe(), 'alternate': ALTERNATE, 'range': PRESET_RANGE}
 
@@ -1150,6 +1154,10 @@ class Lab:
                     self.ribbons.draw(packet, ribbon_mvp, shading='sparks', sparks=recipe.sparks, now=now,
                                       mist=draw['mist'], mist_frame=draw['mist_frame'], material=recipe.material,
                                       sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'])
+                    if recipe.strays is not None:
+                        self.ribbons.draw(packet, ribbon_mvp, shading='strays', strays=recipe.strays, now=now,
+                                          mist=draw['mist'], mist_frame=draw['mist_frame'], material=recipe.material,
+                                          sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'])
                     gl.glDepthMask(gl.GL_TRUE)
                     gl.glDisablei(gl.GL_BLEND, 0)
 
@@ -1173,6 +1181,11 @@ class Lab:
             self.ribbons.draw(packet, reflected_mvp, shading='sparks', sparks=self.recipe.sparks, now=draw['age_fade'][0],
                               mist=draw['mist'], mist_frame=draw['mist_frame'], material=self.recipe.material,
                               sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'])
+            if self.recipe.strays is not None:
+                self.ribbons.draw(packet, reflected_mvp, shading='strays', strays=self.recipe.strays,
+                                  now=draw['age_fade'][0], mist=draw['mist'], mist_frame=draw['mist_frame'],
+                                  material=self.recipe.material, sweep_axis=draw['sweep_axis'], grade=draw['grade'],
+                                  floor=draw['floor'])
         finally:
             gl.glDisablei(gl.GL_BLEND, 0)
             self.reflection.end()

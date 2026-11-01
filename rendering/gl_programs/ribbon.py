@@ -330,6 +330,133 @@ void main() {
 }
 """).replace('MAX_KNOTS', str(MAX_PATH_SAMPLES))
 
+# Free strands: liquid filaments that peel off a sheet and flow with its history. Each is attached at its first knot
+# and leaves the surface along a smooth curve (offset zero and flat at the attachment, growing with distance along
+# it and with the knot's age), wobbles gently, tapers to a free tip and carries droplet beads. Every term is a smooth
+# function of (stray coordinate, knot age), so no setting can kink one. The knot's sparkle gates how many live.
+RIBBON_STRAY_VERTEX = ("#version 460 core\n" + _RIBBON_SURFACE_GLSL + """
+struct Ribbon { vec4 meta; vec4 extra; vec4 colourA; vec4 colourB; Knot knots[MAX_KNOTS]; };
+layout(std430, binding=0) readonly buffer Paths { Ribbon paths[]; };
+uniform mat4 uMvp;
+uniform vec2 uViewport;
+uniform vec4 uStray;       // strays per knot, length (knots), reach (world units), chance
+uniform vec4 uStrayLook;   // width (px), light, beads per stray, peel time (s)
+uniform vec2 uStrayClock;  // local now (s), absolute coordinate origin mod 1000 (stable identity)
+out vec3 vWorld;
+out float vAlong;
+out float vAcross;
+out float vBright;
+out float vSeed;
+flat out vec3 vColour;
+const int STRAY_SEGMENTS=24;
+int ringStart, ringCapacity, ringCount;
+Knot knotAt(int owner, int i) { return paths[owner].knots[(ringStart+i)%ringCapacity]; }
+uint mixBits(uint x) { x^=x>>16; x*=0x7feb352dU; x^=x>>15; x*=0x846ca68bU; x^=x>>16; return x; }
+float unit(uint x) { return float(mixBits(x)&0xffffffU)/16777216.0; }
+// The sheet point at fractional knot coordinate kp and across fraction, with its across and normal directions.
+bool sheetAt(int owner, float kp, float across, out vec3 p, out vec3 side, out vec3 normal) {
+    int segment=int(floor(kp));
+    float u=kp-float(segment);
+    if(segment<0 || segment>=ringCount-1) return false;
+    Knot left=knotAt(owner,segment), right=knotAt(owner,segment+1);
+    if(left.q.z<0.5 || right.q.z<0.5 || right.q.w>0.5) return false;
+    Knot before=knotAt(owner,max(segment-1,0)), after=knotAt(owner,min(segment+2,ringCount-1));
+    bool joinsBefore=segment>0 && before.q.z>0.5 && left.q.w<0.5;
+    bool joinsAfter=segment+2<ringCount && after.q.z>0.5 && after.q.w<0.5;
+    guardBefore=joinsBefore?before:left;
+    guardAfter=joinsAfter?after:right;
+    vec3 a=joinsBefore?before.p.xyz:2.0*left.p.xyz-right.p.xyz;
+    vec3 d=joinsAfter?after.p.xyz:2.0*right.p.xyz-left.p.xyz;
+    vec3 lo,hi,t;
+    if(!station(a,left.p.xyz,right.p.xyz,d,left,right,paths[owner].extra.x,u,lo,hi,normal,t)) return false;
+    p=surfacePoint(lo,hi,normal,across);
+    side=normalize(hi-lo);
+    return true;
+}
+vec3 strayPoint(vec3 p, vec3 side, vec3 normal, float s, float peel, float theta, float wobble) {
+    float leave=s*s*(3.0-2.0*s);  // zero and flat at the attachment
+    // The leaving direction turns along the stray (a curl, like a splash leaving the crest), smoothly in s.
+    float curl=theta+(wobble-0.5)*4.0*s;
+    vec3 away=normalize(normal*cos(curl)+side*sin(curl));
+    vec3 q=p+away*uStray.z*peel*leave+side*uStray.z*0.25*peel*leave*sin(6.2831853*(1.2*s+wobble));
+    return floorContact(q);
+}
+void main() {
+    int owner=gl_InstanceID;
+    ringCapacity=clamp(int(paths[owner].extra.z),1,MAX_KNOTS);
+    ringStart=clamp(int(paths[owner].extra.y),0,ringCapacity-1);
+    ringCount=clamp(int(paths[owner].meta.x),0,ringCapacity);
+    int perKnot=max(int(uStray.x),1);
+    int stray=gl_VertexID/(6*STRAY_SEGMENTS), corner=gl_VertexID%6, segment=(gl_VertexID/6)%STRAY_SEGMENTS;
+    int index=stray/perKnot, slot=stray%perKnot;
+    gl_Position=vec4(2.0,2.0,2.0,1.0); vWorld=vec3(0.0); vAlong=0.0; vAcross=0.0; vBright=0.0; vSeed=0.0;
+    vColour=vec3(0.0);
+    float length_=max(uStray.y,1.0);
+    if(index+int(ceil(length_))>=ringCount) return;
+    Knot k=knotAt(owner,index);
+    if(k.q.z<0.5) return;
+    uint key=uint(floor(mod(k.q.x+uStrayClock.y,1000.0)*256.0+0.5));
+    uint seed=mixBits(key*747796405U+uint(slot)*2891336453U+uint(owner)*104729U+17U);
+    float r1=unit(seed), r2=unit(seed+1U), r3=unit(seed+2U), r4=unit(seed+3U), r5=unit(seed+4U);
+    if(r1>k.tangent.w*uStray.w) return;
+    bool next=corner==1 || corner>=4;
+    bool outer=corner==2 || corner==3 || corner==5;
+    float s=float(segment+(next?1:0))/float(STRAY_SEGMENTS);
+    float ds=1.0/float(STRAY_SEGMENTS);
+    // Strays leave from near an edge (where the board's tendrils come from), on either side.
+    float across=r2<0.5?0.08*r3:1.0-0.08*r3;
+    float theta=(r4-0.5)*2.4+(r2<0.5?-0.6:0.6);
+    float age=max(uStrayClock.x-k.q.x,0.0);
+    float peel=(0.35+0.65*r5)*(1.0-exp(-age/max(uStrayLook.w,1e-3)));
+    float kp=float(index)+s*length_;
+    float kq=float(index)+min(s+ds,1.0)*length_;
+    float kr=float(index)+max(s-ds,0.0)*length_;
+    vec3 p,side,normal,pq,sq,nq,pr,sr,nr;
+    if(!sheetAt(owner,kp,across,p,side,normal) || !sheetAt(owner,kq,across,pq,sq,nq)
+       || !sheetAt(owner,kr,across,pr,sr,nr)) return;
+    vec3 here=strayPoint(p,side,normal,s,peel,theta,r3);
+    vec3 ahead=strayPoint(pq,sq,nq,min(s+ds,1.0),peel,theta,r3);
+    vec3 behind=strayPoint(pr,sr,nr,max(s-ds,0.0),peel,theta,r3);
+    vec4 c=uMvp*vec4(here,1.0), ca=uMvp*vec4(ahead,1.0), cb=uMvp*vec4(behind,1.0);
+    vec2 half_=0.5*uViewport;
+    vec2 along=(ca.xy/ca.w-cb.xy/cb.w)*half_;
+    if(dot(along,along)<1e-10) return;
+    vec2 perp=normalize(vec2(-along.y,along.x));
+    // Quad twice the line's width: the droplet beads fill it, the line's core stays narrow.
+    float width=uStrayLook.x*(1.0-0.6*s);
+    vec2 offset=perp*(outer?1.0:-1.0)*width;
+    gl_Position=vec4((c.xy/c.w*half_+offset)/half_*c.w,c.z,c.w);
+    vWorld=here;
+    vAlong=s;
+    vAcross=outer?1.0:-1.0;
+    vSeed=r4;
+    float tip=1.0-smoothstep(0.75,1.0,s);
+    float attach=smoothstep(0.0,0.08,s);
+    vBright=uStrayLook.y*k.side.w*tip*mix(0.6,1.0,attach)*(0.5+0.5*r5);
+    vec3 own=mix(paths[owner].colourA.rgb,paths[owner].colourB.rgb,across);
+    vColour=mix(own,k.tint.rgb,clamp(k.tint.a,0.0,1.0));
+}
+""").replace('MAX_KNOTS', str(MAX_PATH_SAMPLES))
+
+RIBBON_STRAY_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\n"
+                         "in vec3 vWorld;\nin float vAlong;\nin float vAcross;\nin float vBright;\nin float vSeed;\n"
+                         "flat in vec3 vColour;\nuniform vec3 uMistOrigin;\nuniform vec4 uStrayLook;\n"
+                         + MIST_GLSL + RIBBON_GRADE_GLSL + """
+void main() {
+    float a=vAcross*vAcross;
+    float line=exp(-a*9.0);                                   // the filament: narrow core in a quad twice its width
+    float along=fract(vAlong*uStrayLook.z+vSeed)-0.5;         // droplets strung along it, round over the full quad
+    // Droplets gather toward the free tip, where the liquid breaks up.
+    float bead=exp(-(along*along*uStrayLook.z*uStrayLook.z*0.35+a)*3.5)*smoothstep(0.3,0.9,vAlong);
+    float light=(line+1.6*bead)*vBright;
+    if(light<=1e-4) discard;
+    vec3 colour=graded(vColour,vWorld.x+uMistOrigin.x)*light*mistTransmittance(vWorld+uMistOrigin);
+    FragColor=vec4(colour,dot(colour,vec3(0.2126,0.7152,0.0722))*(vWorld.y+uMistOrigin.y));  // as the light pass
+    Emission=vec4(colour,dot(colour,vec3(0.2126,0.7152,0.0722)));
+}
+""")
+
+
 RIBBON_SPARK_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\n"
                          "in vec3 vWorld;\nin float vBright;\nflat in vec3 vColour;\nuniform vec3 uMistOrigin;\n"
                          "uniform float uSparkWhite;\n" + MIST_GLSL + RIBBON_GRADE_GLSL + """
