@@ -23,11 +23,28 @@ def mirror_view(view: np.ndarray, plane_y: float) -> np.ndarray:
 
 
 # Receiver side. screenUv is gl_FragCoord.xy over the receiver's viewport; the reflection target covers the same view
-# at its own resolution. Roughness defines an elongated texture footprint. The reflection owner's
-# anisotropic sampler integrates that footprint continuously instead of stamping seven separated highlight copies.
+# at its own resolution. Roughness defines an elongated texture footprint: wet rough floors stretch reflections
+# toward the viewer. Hardware anisotropy integrates at most 16:1, so one footprint longer than that coarsens the
+# short axis too and washes neighbouring highlights into one smear; a long streak is split into abutting segments,
+# each within the sampler's ratio and Gaussian-weighted along the streak. Separated point taps stamped copies.
+# Contact hardening (optional): emitters that write luminance-weighted world height into the reflection's alpha
+# (the ribbon light and spark passes do) reflect crisply near the plane and spread with height, as on a wet floor.
 PLANAR_REFLECTION_GLSL = """
 uniform sampler2D uReflection;
 uniform vec4 uReflectionLook;   // streak half-length (uv), min/max optical mip, Gaussian sigma (receiver pixels)
+uniform vec4 uReflectionContact; // plane height (world), spread (uv per world unit of height; 0 off), along/across, probe mip
+// A discrete nine-tap Gaussian folded into five bilinear taps (offsets in texels of the sampled level), weights sum 1.
+void reflectionGaussian(float sigma, out float offsets[5], out float weights[5]) {
+    float s=max(sigma,0.05);
+    vec4 w=exp(-vec4(0.5,2.0,4.5,8.0)/(s*s));
+    float nearWeight=w.x+w.y, farWeight=w.z+w.w;
+    float nearOffset=(w.x+2.0*w.y)/max(nearWeight,1e-30);
+    float farOffset=(3.0*w.z+4.0*w.w)/max(farWeight,1e-30);
+    float total=1.0+2.0*(nearWeight+farWeight);
+    offsets=float[5](-farOffset,-nearOffset,0.0,nearOffset,farOffset);
+    weights=float[5](farWeight/total,nearWeight/total,1.0/total,nearWeight/total,farWeight/total);
+    if(sigma<=0.0) weights=float[5](0.0,0.0,1.0,0.0,0.0);
+}
 vec3 planarReflection(vec2 screenUv, vec2 offset, float roughness) {
     float lod=mix(uReflectionLook.y,uReflectionLook.z,roughness);
     float streak=uReflectionLook.x*roughness;
@@ -38,24 +55,42 @@ vec3 planarReflection(vec2 screenUv, vec2 offset, float roughness) {
     float pixelSpan=max(length(dFdx(screenUv)*size),length(dFdy(screenUv)*size));
     float sigma=max(uReflectionLook.w,0.0);
     float span=max(exp2(lod),pixelSpan);
-    vec2 dx=vec2(span/size.x,0.0), dy=vec2(0.0,max(span/size.y,2.0*streak));
-    if(sigma<=0.0) return textureGrad(uReflection,clamp(uv,vec2(0),vec2(1)),dx,dy).rgb;
-    vec2 pixelUv=vec2(abs(dFdx(screenUv.x)),abs(dFdy(screenUv.y)));
-    // Pair adjacent samples of a discrete nine-tap Gaussian through bilinear filtering. Scaling sparse taps
-    // apart and forcing a coarser mip gave NPOT receivers unequal X/Y spread. Blur must not change the mip.
-    float s=max(sigma,0.05);
-    vec4 w=exp(-vec4(0.5,2.0,4.5,8.0)/(s*s));
-    float nearWeight=w.x+w.y, farWeight=w.z+w.w;
-    float nearOffset=(w.x+2.0*w.y)/max(nearWeight,1e-30);
-    float farOffset=(3.0*w.z+4.0*w.w)/max(farWeight,1e-30);
-    float total=1.0+2.0*(nearWeight+farWeight);
-    float weights[5]=float[5](farWeight,nearWeight,1.0,nearWeight,farWeight);
-    float offsets[5]=float[5](-farOffset,-nearOffset,0.0,nearOffset,farOffset);
-    vec3 colour=vec3(0.0);
-    for(int y=0;y<5;y++) for(int x=0;x<5;x++) {
-        vec2 tap=clamp(uv+vec2(offsets[x],offsets[y])*pixelUv,vec2(0),vec2(1));
-        colour+=weights[x]*weights[y]*textureGrad(uReflection,tap,dx,dy).rgb;
+    if(uReflectionContact.y>0.0) {
+        // Alpha over luminance at a coarse probe is the light-weighted height of what is reflected here.
+        vec4 probe=textureLod(uReflection,clamp(uv,vec2(0),vec2(1)),uReflectionContact.w);
+        float luminance=dot(probe.rgb,vec3(0.2126,0.7152,0.0722));
+        float height=luminance>1e-6?max(probe.a/luminance-uReflectionContact.x,0.0):0.0;
+        float spread=uReflectionContact.y*height;
+        span=max(span,spread*size.x);
+        streak=max(streak,spread*uReflectionContact.z);
     }
-    return colour/(total*total);
+    int segments=int(clamp(ceil(2.0*streak*size.y/(16.0*span)),1.0,8.0));
+    vec2 dx=vec2(span/size.x,0.0), dy=vec2(0.0,max(span/size.y,2.0*streak/float(segments)));
+    vec2 pixelUv=vec2(abs(dFdx(screenUv.x)),abs(dFdy(screenUv.y)));
+    // Gentle Gaussian blur samples the full-resolution footprint: blur must not change the mip (NPOT receivers
+    // otherwise spread unequally in X/Y). Along a segmented streak only its across-axis Gaussian remains.
+    float across[5], acrossWeights[5], along[8], alongWeights[8];
+    reflectionGaussian(sigma,across,acrossWeights);
+    int rows=segments;
+    if(segments==1) {
+        float o[5], w[5];
+        reflectionGaussian(sigma,o,w);
+        rows=sigma>0.0?5:1;
+        for(int i=0;i<5;i++) { along[i]=(sigma>0.0?o[i]:0.0)*pixelUv.y; alongWeights[i]=sigma>0.0?w[i]:1.0; }
+    } else {
+        float total=0.0;
+        for(int i=0;i<segments;i++) {
+            float t=(float(i)+0.5)*2.0/float(segments)-1.0;
+            along[i]=t*streak; alongWeights[i]=exp(-2.0*t*t); total+=alongWeights[i];
+        }
+        for(int i=0;i<segments;i++) alongWeights[i]/=total;
+    }
+    vec3 colour=vec3(0.0);
+    for(int y=0;y<rows;y++) for(int x=0;x<5;x++) {
+        if(acrossWeights[x]<=0.0) continue;
+        vec2 tap=clamp(uv+vec2(across[x]*pixelUv.x,along[y]),vec2(0),vec2(1));
+        colour+=acrossWeights[x]*alongWeights[y]*textureGrad(uReflection,tap,dx,dy).rgb;
+    }
+    return colour;
 }
 """

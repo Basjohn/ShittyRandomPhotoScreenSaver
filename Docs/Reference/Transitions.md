@@ -265,6 +265,17 @@ Each foundation slice adds what it learned here.
 - Hash per-object constants only through `flat` varyings. Perspective-correct interpolation reproduces a constant
   attribute only to ~1e-7 relative; a large-argument sine hash turned that into row-by-row banding in Perspective
   while Orthographic looked perfect (Waveform pillars, 2026-10-31). Check new looks in both projections.
+- Wet reflective floors (Waveform floor, 2026-11-01):
+  - **Long streaks:** hardware anisotropy integrates at most 16:1. One footprint as long as a wet streak forces a
+    coarse mip on the short axis too, and every highlight washes into one smear. Split long footprints into abutting
+    segments, each within the ratio.
+  - **Contact hardening:** a wet floor reads wet when reflections stay crisp near the contact line and spread with
+    the reflected light's height. Emitters write luminance-weighted height into the reflection's alpha.
+  - **Smooth spatial controls:** drive any spatially varying filter parameter from a coarse, continuous probe. A
+    fine probe switched between "no light: crisp" and "lit: wide" and drew blocks.
+  - **Relief normals:** take relief normals from texture-space differences, not dFdx/dFdy. Screen-derivative normals
+    are constant per 2x2 quad and stair-step a visible reflection wobble.
+  - **Order:** smoothness and wetness come before streakiness (operator).
 
 **Materials and new looks on old transitions (S17)**
 - Lighting a photograph changes its pixels: blend the lit look in by how far a piece is from rest (Blinds' lift,
