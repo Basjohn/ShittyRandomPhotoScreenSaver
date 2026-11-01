@@ -111,7 +111,8 @@ class Floor:
 @dataclass(frozen=True)
 class Flow:  # Lab Plan section 4A: history enters at the head (world +x) and drifts toward the tail
     speed: float = 1.6
-    head_hz: float = .4
+    head_hz: float = .33
+    phase: float = 3.45            # explicit synthetic start phase, not a second clock
     knot_hz: float = 6.
     shape_tau: float = .45          # per smoothing stage of history-carried shape controls
     head_x: float = 34.
@@ -120,14 +121,16 @@ class Flow:  # Lab Plan section 4A: history enters at the head (world +x) and dr
 
 
 PALETTE = (((0., .52, 1.), (0., .22, 1.)),    # cyan -> electric blue
-           ((.055, .015, 1.), (.30, .01, 1.)), # blue -> violet
+           ((.03, .08, 1.), (.24, .025, 1.)),  # blue -> violet
            ((.38, .006, 1.), (1., .012, .62))) # violet -> magenta
 # Per-ribbon character (amplitude, width, wave frequency, phase, light): identical sheets on even phases braid into a
 # regular lattice and sum to white; the mock's sheets differ and cross irregularly.
-CHARACTER = ((1., 1., 1., 0., 1.), (.72, .72, .96, 1.1, 1.1), (1.05, .9, 1.07, .55, .7))
-STATES = {  # labelled synthetic controls sized from the WR-00 target table; not music
-    'low': dict(width=.22, width_swell=.04, twist=1.1, emission=.19, spread=.32, amplitude=.58, lift=0., sparkle=.18),
-    'high': dict(width=.46, width_swell=.16, twist=2.4, emission=.75, spread=1.35, amplitude=1.05, lift=.5, sparkle=.85),
+CHARACTER = ((1., 1., 1., 0., 1.), (.85, 1.1, .96, 1.1, 1.5), (.72, .75, 1.07, .55, .65))
+STATES = {  # labelled synthetic controls, authored toward the complete-scene fog board; not music
+    'low': dict(width=.30, width_swell=.05, twist=.85, emission=.7, spread=.32, amplitude=.5, lift=-.35, sparkle=.18,
+                deformation=.15),
+    'high': dict(width=.62, width_swell=.22, twist=1.45, emission=.85, spread=1.25, amplitude=1.2, lift=.2, sparkle=.85,
+                 deformation=.3),
 }
 
 
@@ -138,13 +141,14 @@ class Recipe:
     flow: Flow = field(default_factory=Flow)
     # Mock-directed look (WR-04): saturated darker body, thin near-white irregular strands and rims, visible glints.
     material: RibbonMaterial = field(default_factory=lambda: RibbonMaterial(
-        strands=14., strand_half_width=.065, strand_light=4., strand_white=.035, strand_jitter=.4, strand_warp=.07,
-        warp_frequency=.11, rim_light=1.7, rim_white=.06, rim_half_width=.015, fill_light=.06, fill_centre=.5, rim_glow_light=.15,
-        rim_glow_width=.05, body_alpha=.018, body_tint=.5, glint_density=1.4, glint_chance=.18, glint_light=7.,
-        glint_radius=.35, glint_min_pixels=1.3))
+        strands=26., strand_half_width=.018, strand_light=7., strand_white=.04, strand_jitter=.35, strand_warp=.18,
+        strand_variation=.9, cross_curve=.35, warp_frequency=.2, rim_light=1.6, rim_white=.12, rim_half_width=.009,
+        fill_light=.008, fill_centre=.3, rim_glow_light=.015,
+        rim_glow_width=.05, body_alpha=.006, body_tint=.4, glint_density=1.4, glint_chance=.12, glint_light=3.,
+        glint_radius=.25, glint_min_pixels=.8))
     sparks: RibbonSparks = field(default_factory=lambda: RibbonSparks(per_knot=16, lifetime=4.5, drift=1.2, rise=.4,
                                                                        smallest=1.6, largest=5., light=16., white=.25))
-    bloom: float = .32
+    bloom: float = .18
     exposure: float = 1.
 
 
@@ -252,35 +256,39 @@ def load_floor_textures(floor: Floor) -> dict:
     return textures
 
 
-def fill_ring(recipe: Recipe, state: str, knots: int = 256) -> tuple[RibbonRing, float]:
+def fill_ring(recipe: Recipe, state: str, knots: int = 256, *, at: float | None = None) -> tuple[RibbonRing, float]:
     """Synthetic head: band-limited shape controls (Lab Plan section 4A); returns the ring and newest time."""
     s, flow = STATES[state], recipe.flow
+    now = (knots-1)/flow.knot_hz if at is None else float(at)
+    if not math.isfinite(now) or not (knots-1)/flow.knot_hz <= now <= 120.:
+        raise ValueError('Lab sample time must contain warm history and stay within 120 seconds')
     ring = RibbonRing(len(PALETTE), colours=[(*a, 1.) for a, _ in PALETTE], edge_colours=[(*b, 1.) for _, b in PALETTE], period=.5)
     alpha = 1 - math.exp(-1/flow.knot_hz/flow.shape_tau)
     count = len(PALETTE)
     stages = [[0., 0.] for _ in range(count)]
     pivot_y = SPEC.pivot[1]
     t = 0.
-    for i in range(knots):
+    for i in range(math.floor(now*flow.knot_hz)+1):
         t = i/flow.knot_hz
         positions, widths, twists, light, sparkle = [], [], [], [], []
         for r in range(count):
             k = r - (count - 1)/2  # a fixed fan in height and depth, identical in low/high
             amplitude, width, frequency, offset, brightness = CHARACTER[r]
-            phase = 2*math.pi*flow.head_hz*frequency*t + offset
+            phase = 2*math.pi*flow.head_hz*frequency*t + offset + flow.phase
             section = 1. if math.sin(2*math.pi*.3*t + r*2.) > .2 else 0.
             stages[r][0] += (section - stages[r][0])*alpha
             stages[r][1] += (stages[r][0] - stages[r][1])*alpha
             swell = stages[r][1]
-            positions.append((flow.speed*t, pivot_y + s['lift'] + s['amplitude']*amplitude*math.sin(phase)
-                              + .5*k*s['spread']*math.cos(.37*phase), .3*k + .35*math.cos(phase*.8)))
+            deformation = s['deformation']*(.24*math.sin(2*phase+.7)+.18*math.sin(.61*phase+offset))
+            positions.append((flow.speed*t, pivot_y + s['lift'] + s['amplitude']*amplitude*(math.sin(phase)+deformation)
+                              + .5*k*s['spread']*math.cos(.37*phase), .65*k + .55*math.cos(phase*.55+r)))
             widths.append(width*(s['width'] + s['width_swell']*swell)*(1.0 + .2*math.sin(phase)))
-            twists.append(s['twist']*math.sin(2*math.pi*.07*t + r*2.))
+            twists.append(s['twist']*(.7*math.sin(.48*phase+r*1.3)+.3*math.sin(.87*phase+.4)))
             light.append(brightness*s['emission']*(.85 + .3*swell))
             highs = .5 + .5*math.sin(2*math.pi*.53*t + r*1.7)  # synthetic highs: sparkle density
             sparkle.append(min(1., s['sparkle']*(.35 + .65*highs)))
         ring.append(t, positions, widths, twists, light, sparkle)
-    return ring, t
+    return ring, now
 
 
 class Lab:
@@ -304,14 +312,14 @@ class Lab:
             self.resources.release_resources()
         self.target.close()
 
-    def render(self, state: str, *, flat: bool, pose: str = 'mock') -> np.ndarray:
+    def render(self, state: str, *, flat: bool, pose: str = 'mock', at: float | None = None) -> np.ndarray:
         with self.target.current():
-            return self._render(state, flat=flat, pose=pose)
+            return self._render(state, flat=flat, pose=pose, at=at)
 
-    def _render(self, state: str, *, flat: bool, pose: str) -> np.ndarray:
+    def _render(self, state: str, *, flat: bool, pose: str, at: float | None) -> np.ndarray:
         recipe, (width, height) = self.recipe, self.size
         environment, flow = recipe.environment, recipe.flow
-        ring, now = fill_ring(recipe, state)
+        ring, now = fill_ring(recipe, state, at=at)
         view, projection, eye = camera(POSES[pose], width/height)
         scroll = np.identity(4)
         scroll[0, 3] = flow.head_x - flow.speed*now
@@ -320,6 +328,7 @@ class Lab:
         ribbon_mvp = tuple((projection @ ribbon_view).flatten(order='F'))
         orthographic = POSES[pose].projection == 'Orthographic'
         draw = dict(view=tuple(ribbon_view.flatten(order='F')), material=recipe.material, orthographic=orthographic,
+                    sweep_axis=(1.,0.,0.),
                     age_fade=(now, flow.fade_in, (ring.capacity - 1)/flow.knot_hz, flow.fade_out),
                     mist=environment.mist, mist_frame=(scroll[0, 3], 0., 0.))
         card = SimpleNamespace(viewport=(0, 0, width, height), logical_size=(float(width), float(height)),
@@ -352,7 +361,8 @@ class Lab:
                     gl.glDepthMask(gl.GL_FALSE)
                     self.ribbons.draw(packet, ribbon_mvp, shading='light', **draw)
                     self.ribbons.draw(packet, ribbon_mvp, shading='sparks', sparks=recipe.sparks, now=now,
-                                      mist=environment.mist, mist_frame=draw['mist_frame'])
+                                      mist=environment.mist, mist_frame=draw['mist_frame'], material=recipe.material,
+                                      sweep_axis=draw['sweep_axis'])
                     gl.glDepthMask(gl.GL_TRUE)
                     gl.glDisablei(gl.GL_BLEND, 0)
         return self.target.read_rgba()
@@ -372,7 +382,8 @@ class Lab:
             reflected_mvp = tuple((projection @ reflected_view).flatten(order='F'))
             self.ribbons.draw(packet, reflected_mvp, shading='light', **{**draw, 'view': tuple(reflected_view.flatten(order='F'))})
             self.ribbons.draw(packet, reflected_mvp, shading='sparks', sparks=self.recipe.sparks, now=draw['age_fade'][0],
-                              mist=draw['mist'], mist_frame=draw['mist_frame'])
+                              mist=draw['mist'], mist_frame=draw['mist_frame'], material=self.recipe.material,
+                              sweep_axis=draw['sweep_axis'])
         finally:
             gl.glDisablei(gl.GL_BLEND, 0)
             self.reflection.end()
@@ -417,7 +428,7 @@ class Lab:
         data = np.frombuffer(packet.payload, np.float32).copy().reshape(packet.instances, -1, 4)
         data[:, 2] = data[:, 3] = (*FLAT['ribbon'], 1.)
         flat = type(packet)(data.tobytes(), packet.instances, packet.vertices, packet.world_origin, packet.coordinate_origin)
-        self.ribbons.draw(flat, mvp)
+        self.ribbons.draw(flat, mvp, material=self.recipe.material, sweep_axis=(1.,0.,0.))
 
 
 def measure_flat(pixels: np.ndarray) -> dict:
@@ -449,7 +460,7 @@ def landmark_report(measured: dict, state: str, height: int = 709) -> dict:
 
 def overlay(image: Image.Image, state: str) -> Image.Image:
     """Target ribbon envelope over an image; the scene has no visible horizon/contact boundary."""
-    sheet = image.convert('RGB').resize((640, 709))
+    sheet = image.convert('RGB')
     draw = ImageDraw.Draw(sheet)
     xs = sorted(ENVELOPE[state])
     for edge in (0, 1):
@@ -457,13 +468,16 @@ def overlay(image: Image.Image, state: str) -> Image.Image:
     return sheet
 
 
-def run(output: Path, cards: Path | None) -> dict:
+def run(output: Path, cards: Path | None, *, board: str = 'primary') -> dict:
     if output.exists() and any(output.iterdir()):
         raise FileExistsError(f'Refusing to overwrite evidence: {output}')
     output.mkdir(parents=True, exist_ok=True)
+    if board not in ('primary','fog'):
+        raise ValueError('Unknown reference board')
+    width,height = (820,718) if board=='fog' else (640,709)
     recipe = Recipe()
     report, images = {}, {}
-    lab = Lab(recipe, (640, 709))
+    lab = Lab(recipe, (width,height))
     try:
         for state in STATES:
             flat = lab.render(state, flat=True)
@@ -471,7 +485,8 @@ def run(output: Path, cards: Path | None) -> dict:
             images[state] = (Image.fromarray(flat), Image.fromarray(lit))
             Image.fromarray(flat).save(output/f'flat_{state}.png')
             Image.fromarray(lit).save(output/f'lit_{state}.png')
-            report[state] = landmark_report(measure_flat(flat), state)
+            report[state] = (landmark_report(measure_flat(flat), state) if board=='primary'
+                             else dict(status='Use fog ROI comparisons; no ribbon envelope has been traced for this board'))
     finally:
         lab.close()
     wide = Lab(recipe, (1280, 720))
@@ -482,18 +497,23 @@ def run(output: Path, cards: Path | None) -> dict:
     finally:
         wide.close()
     if cards is not None:
-        sheet = Image.new('RGB', (640*3 + 16, 709*2 + 8))
+        sheet = Image.new('RGB', (width*3 + 16, height*2 + 8))
         for row, state in enumerate(STATES):
-            sheet.paste(overlay(Image.open(cards/f'{state}.png'), state), (0, row*717))
-            sheet.paste(overlay(images[state][0], state), (648, row*717))
-            sheet.paste(images[state][1].convert('RGB'), (1296, row*717))
+            mock = Image.open(cards/f'{state}.png')
+            expected = (width if board=='fog' or state=='low' else 638,height)
+            if mock.size != expected:
+                raise ValueError(f'Expected native {board} {state} card of size {expected}')
+            picture = (lambda im: overlay(im,state)) if board=='primary' else (lambda im: im.convert('RGB'))
+            sheet.paste(picture(mock), (0,row*(height+8)))
+            sheet.paste(picture(images[state][0]), (width+8,row*(height+8)))
+            sheet.paste(images[state][1].convert('RGB'), (2*width+16,row*(height+8)))
         sheet.save(output/'mock_flat_lit.png')
     poses = Image.new('RGB', (640*len(POSES), 360*2))
     for row, state in enumerate(STATES):
         for column, pose in enumerate(POSES):
             poses.paste(Image.open(output/f'wide_{state}_{pose}.png').convert('RGB').resize((640, 360)), (column*640, row*360))
     poses.save(output/'navigation_poses.png')
-    receipt = dict(stage='WR-04 floor, waveform and dense distance mist; navigation poses',
+    receipt = dict(stage='WR-04 floor, waveform and dense distance mist; navigation poses', board=board, card_size=(width,height),
                    recipe=json.loads(json.dumps(asdict(recipe), default=str)), states=STATES,
                    poses={k: asdict(v) for k, v in POSES.items()}, landmarks=report,
                    producer_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -506,6 +526,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--cards', type=Path)
+    parser.add_argument('--board', choices=('primary','fog'), default='primary')
     args = parser.parse_args()
-    result = run(args.output, args.cards)
+    result = run(args.output, args.cards, board=args.board)
     print(json.dumps({state: {k: v for k, v in r.items() if k != 'rows'} for state, r in result['landmarks'].items()}, indent=2))

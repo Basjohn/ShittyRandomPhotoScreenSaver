@@ -1,4 +1,4 @@
-"""The Waveform Ribbon lab's camera fit holds against the WR-00 targets (offscreen, flat render)."""
+"""Waveform lab GL ownership and repeatable diagnostic captures; artistic recipes remain editable."""
 import numpy as np
 import pytest
 
@@ -19,11 +19,10 @@ def lab(qt_app):
 @pytest.mark.parametrize('state', ('low', 'high'))
 def test_flat_envelope_survives_an_interleaved_lit_capture(lab, state):
     # A reflected additive pass once leaked blend state into the next diagnostic render.
+    before = lab.render(state, flat=True)
     lab.render('low', flat=False)
     pixels = lab.render(state, flat=True)
-    report = lab_module.landmark_report(lab_module.measure_flat(pixels), state)
-    for lab_edge, target_edge in zip(report['lab_envelope'], report['target_envelope']):
-        assert abs(lab_edge - target_edge) < .03
+    np.testing.assert_array_equal(pixels,before)
 
 
 def test_lit_render_has_light_and_no_overflow(lab):

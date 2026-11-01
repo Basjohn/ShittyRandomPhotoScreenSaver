@@ -18,9 +18,10 @@ Pillars are removed, not an active tuning target. The mist hides all horizon/sky
 around the waveform and camera is clear; the waveform's shape pushes back the volume and softly lights it. Establish
 this with explicit static/synthetic lab inputs first. Audio-driven deformation and fog reactivity are much later.
 
-Both supplied mock boards are examples of the range eventual live presets must support (operator, 1 November).
-Continue measuring the primary's native low/high cards; retain the alternate's flowing folds/filament and warm high
-look as a second authoring target. A preset must remain one scene across its low/high states.
+The **complete-scene fog board supplied on 1 November is the main visual target**, showing waveform, wet floor and
+shaped illuminated mist together. The two original boards remain examples of the range eventual live presets must
+support. Preserve native low/high crops separately for each board; never average their looks. A preset must remain
+one scene across its low/high states. Exact source custody is in §1.1.
 
 **Existing substrate:** shared framed camera, bounded incremental ribbon history, oriented OIT/HDR filament material,
 history sparks, half-resolution planar reflection, and the operator's world-tiled concrete PBR maps. Contracts live
@@ -29,16 +30,22 @@ in `Ribbon_Path.md`, `Visualizer_Labs.md` and `Scene3D_Resources.md`. Earlier ca
 restored three distinct ribbon identities; it did not establish fidelity.
 
 **Open, in order:**
-- [ ] **S3D-7 bounded world fog, static first:** replace the analytic floor-colour approximation with a reduced-resolution
-  volume. Carve clearance and soft illumination from the actual ribbon packet, with no second path/simulation/clock.
-  Correct Orthographic/Perspective rays, opaque depth clipping, and source-depth attenuation of ribbon light. Prove a
-  homogeneous slab, nearer occluder, translated clearance, resize/context/retirement, and measured warm GPU cost.
+- [ ] **Immediate floor texture correction (latest operator direction):** generate and save a new concrete material,
+  place it on the real 3D floor, and remove the visibly repeated pattern; then return to waveform authoring.
 - [ ] **Waveform structure and light:** richer smooth folds, depth separation, fine fanning/gathering filaments,
-  readable quiet detail, coloured hot crossings. Current bands remain too regularly sinusoidal. Inspect the primary
-  and alternate at native resolution; do not hide shape faults with bloom.
+  readable quiet detail, coloured hot crossings. Every admitted shape must remain smooth like folding cloth, never
+  sharp or spiky, including wide inner bends. Outer boundary lines must be brighter and glow more than the interior
+  strands even at low react, to describe the translucent 3D sheet. Current bands remain too regularly sinusoidal. Inspect all boards
+  at native resolution and explicit motion times; do not hide shape faults with bloom.
 - [ ] **Floor fidelity:** crisp coloured reflections and fine wet concrete detail with dark gaps, consistent at all
   poses. Wet/dry optical roughness and pore coverage are now authored from the same PBR set; avoid smooth pools or
-  a diffuse carpet. Reflection OIT-body inclusion, resize and full cost proof remain open.
+  a diffuse carpet. Visible repetition in the current map is rejected: generate and save new textures when this pass begins. Reflection
+  OIT-body inclusion, resize and full cost proof remain open.
+- [ ] **S3D-7 bounded world fog, third:** retain the simple thick mist for composition until waveform and floor improve,
+  then replace the analytic floor-colour approximation with a reduced-resolution volume. Carve clearance and soft
+  illumination from the actual ribbon packet, with no second path/simulation/clock. Correct Orthographic/Perspective
+  rays, opaque depth clipping and source-depth attenuation. Prove a homogeneous slab, nearer occluder, translated
+  clearance, resize/context/retirement, and measured warm GPU cost. Audio-driven fog changes remain deferred.
 - [ ] **Accents and optics:** bounded cyan/magenta sparks with a meaningful size range; tight filament glow and broad
   local hot spots. Shared defocus/slow-motion AA only after the underlying geometry/material match.
 - [ ] **Both board looks through lab recipe controls:** show the cool primary low/high and alternate-inspired range
@@ -55,6 +62,10 @@ restored three distinct ribbon identities; it did not establish fidelity.
 - Run `tools/labs/waveform_ribbon_targets.py --cards <WR-00 directory> --renders <capture directory> --output <new directory>`
   for fixed annotation-masked ROI luminance/saturation/RGB, native-size pairs and nearest-pixel crops. High's 638 px
   reference is never stretched to the lab's 640 px. Numbers guide inspection; they cannot establish visual acceptance.
+- For the main fog board, extract with `waveform_ribbon_preflight.py --fog-board references/Waveform_Ribbon_Fog_Complete_Scene_Mock.png
+  --output <new cards directory>`, then use `--board fog` for both the lab capture and target comparison commands.
+  Its two native panels are 820x718; only their borders are cropped. Named ROIs compare waveform, floor and mist;
+  no primary-board envelope is silently reused for this differently composed board.
 - Inspect all five navigation poses and wide cards in both projections after every look change. Check geometry,
   reflection registration, horizon/edge concealment, banding, discontinuities and excessive haze separately.
 - Change one material/geometry layer at a time, compare against its previous candidate and the mocks, retain rejected
@@ -69,6 +80,11 @@ archive/member/output/producer hashes, tracked diff hash, workspace status and b
 The initial receipt is `.artifacts/evidence/waveform_ribbon/wr00_reference_projection/receipt.json`.
 It records no GL scene capture or cost: this is a preflight, not an image of a proposed Ribbon implementation.
 Diagnostic half-height 4/reference depth 10 are arbitrary calibration units, not an approved artistic camera fit.
+
+Current geometry evidence: `wr04_parity_pass7/` (under `.artifacts/evidence/waveform_ribbon/`) includes low/high
+native captures, five wide poses, explicit-time sequences, main fog-board pairs and measured surface draw cost.
+These prove the bounded 3D surface/capture paths, not resemblance or operator acceptance. The scene remains far
+from the target and the immediate texture/rim-light work above remains live.
 
 ### Camera contract for all following slices
 
@@ -103,7 +119,9 @@ Archive member paths are exact:
 | Member | Evidence inspected | Role |
 | --- | --- | --- |
 | `waveform_ribbon_package/Waveform_Ribbon_Concept.png` | Original 1672 × 941 pixels; SHA-256 `f8a4808f0bc781ec3d6cdf7dae7b98f01a5a12e939ddfb1f9d49d74eb368eadf` | Primary annotated board with low/high panels, palette and explicit stable-scene instructions |
-| `waveform_ribbon_package/Waveform_Ribbon_Alternate_Annotated_Mock.png` | Original 1240 × 396 pixels; SHA-256 `19161837f26e2b38005b0ca781e256ff5a96fe5b006b954cc300809f6472adb2` | Context only; the copied brief approves the primary board, not this alternate |
+| `waveform_ribbon_package/Waveform_Ribbon_Alternate_Annotated_Mock.png` | Original 1240 × 396 pixels; SHA-256 `19161837f26e2b38005b0ca781e256ff5a96fe5b006b954cc300809f6472adb2` | Admitted alternate preset target (1 November) |
+| `references/Waveform_Ribbon_Fog_Complete_Scene_Mock.png` | Original supplied 1 November, preserved byte-for-byte; SHA-256 `02129185dbccbbe9331f0bcd650eeb6853de9ea73186c5e6a6ea926cb96e28b3` | Main whole-scene target: smooth ribbons, wet floor, thick mist shaped and softly lit by the ribbons |
+| `references/Waveform_Ribbon_Rejected_Curve_Detail.png` | Operator crop, preserved byte-for-byte; SHA-256 `5c2ccbbe98cd2474d8de3a2d0f2c5ae2165d935f5f9922f71caa1e63e158de7c` | Rejection evidence: uneven strand slopes and bends; never an artistic target |
 | `waveform_ribbon_package/Waveform_Ribbon_Architecture.md` | Package prose inspected; existing brief reproduces it | Intent, suggested mappings, gates A–H; feasibility prose is not implementation proof |
 
 Original image bytes were extracted without editing to

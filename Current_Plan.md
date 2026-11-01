@@ -139,18 +139,25 @@ and it proves the lab-first pipeline before the bigger scenes. Brief and gates: 
 (mocks in `references/waveform_ribbon_concept_package.zip`).
 
 Execution must use `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`: WR-00 reference/crop/recording custody, then
-WR-01/02 independent S3D-1 proof before composition. The copied brief approves the primary cool hall image;
-the archive's alternate is context only. Existing EB wakes/probes do not establish a generic ribbon or floor reflection.
+WR-01/02 independent S3D-1 proof before composition. Both mock boards are now admitted look targets (operator,
+1 November). Existing EB wakes/probes do not establish a generic ribbon or floor reflection.
 
 The scene is world-first through the shared framed camera (Orthographic default). **Operator, 1 November: floor,
 waveform and strong thick mist only; pillars removed.** No horizon, sky or floor edges should be visible. The waveform
 carves clear space in the fog and softly lights it; audio-driven fog changes are for much later. Both supplied mock
-boards describe looks the eventual live presets should support. Detailed live checklist: Lab Plan §0–0A.
+boards describe looks the eventual live presets should support. The new complete-scene fog board is the main target
+(`references/Waveform_Ribbon_Fog_Complete_Scene_Mock.png`, source custody in Lab Plan §1.1). Detailed live checklist: Lab Plan §0–0A.
 
-- [ ] **Volumetric fog (S3D-7 bounded slice):** static field from the actual ribbon shape, reduced-resolution integration,
-  opaque clipping and correct source-depth attenuation; independent harness and measured cost before scene acceptance.
-- [~] **WR-04 visual fidelity:** waveform folds/filaments/quiet detail, wet reflective floor and fog, then sparks/optics.
-  Judge native crops, both states and every navigation pose. Current images remain far from the mocks.
+- [ ] **Floor texture correction now (operator, 1 November):** generate and save a new material, place it in the
+  native 3D scene and eliminate the rejected obvious repetition; then return to waveform fidelity.
+- [~] **WR-04 waveform next:** smooth cloth-like folds and edges at every admitted shape, fine fanning/gathering
+  filaments and readable quiet detail. No sharp/spiky bends. Judge both mocks and all navigation poses; parity is open.
+  The outer sheet edges must be brighter and glow more than the interior strands even in quiet states.
+- [ ] **Floor optics:** wet reflective concrete with fine detail and dark gaps. Keep the temporary thick mist for
+  composition while waveform and floor improve.
+- [ ] **Volumetric mist third (S3D-7 bounded slice):** static field from the actual ribbon shape, reduced-resolution
+  integration, opaque clipping and source-depth attenuation; independent harness and measured cost before acceptance.
+- [ ] **Accents and optics:** sparks, glow and defocus after the underlying waveform/floor/mist match.
 - [ ] **Awaiting Validation:** operator sign-off on the floor/waveform/volume look before reactivity.
 - [ ] **Only after visuals:** recorded audio windows and WR-07 mappings; remaining S3D-1/2/5 lifecycle/cost gates;
   WR-08 production and tunable presets, then WR-09 acceptance with `tools/visualizer_live_check.py --load game60`.

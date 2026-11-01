@@ -769,7 +769,8 @@ Future modes use the lab-first method and shared offscreen target described in `
 Labs compose production primitives or the retained production render host, with explicit time and legal context-owned
 retirement. They introduce no runtime scheduler, palette or persistence authority.
 Waveform Ribbon must use `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` for reference custody, architecture dependencies,
-staged work packages and A–H visual evidence; the concept brief remains the intent authority and Current_Plan owns order.
+staged work packages, current operator mock authority and A–H visual evidence. The concept brief supplies original
+intent; newer operator direction is recorded in that lab plan, and Current_Plan owns order.
 New 3D labs/modes start Orthographic with optional Perspective, using the shared admitted eye/world and actual
 projection matrices/ray origins; camera math alone does not establish scene likeness or reflection parity.
 The shared bounded CPU path/history and transported width-frame references are documented in

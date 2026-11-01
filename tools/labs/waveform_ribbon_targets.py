@@ -59,6 +59,12 @@ ROIS = {
     'high': {'crest_strands': (199, 172, 379, 342), 'overlap_trough': (314, 332, 539, 482), 'floor': (14, 502, 619, 697),
              'environment_upper': (0, 90, 380, 180)},
 }
+FOG_MASKS = {'low': ((16,12,340,92),), 'high': ((16,12,440,92),)}
+FOG_ROIS = {
+    'low': {'waveform': (8,290,812,450), 'floor': (8,510,812,710), 'mist': (8,95,812,290)},
+    'high': {'crest_strands': (160,180,410,375), 'overlap_trough': (340,350,610,480),
+             'floor': (8,510,812,710), 'mist': (8,95,812,180)},
+}
 
 
 def roi_stats(pixels: np.ndarray, valid: np.ndarray) -> dict:
@@ -165,34 +171,39 @@ def run(cards: Path, output: Path) -> dict:
     return receipt
 
 
-def compare(cards: Path, renders: Path, output: Path) -> dict:
+def compare(cards: Path, renders: Path, output: Path, *, board: str = 'primary') -> dict:
     """Fixed masked ROIs and native-size crops; neither reference nor render is stretched to match the other."""
     if output.exists() and any(output.iterdir()):
         raise FileExistsError(f'Refusing to overwrite evidence: {output}')
     output.mkdir(parents=True, exist_ok=True)
-    report = {'rois': ROIS, 'masks': MASKS, 'panels': {}, 'inputs': {}}
-    full = Image.new('RGB', (1280, 1418))
+    if board not in ('primary','fog'):
+        raise ValueError('Unknown reference board')
+    rois,masks = (FOG_ROIS,FOG_MASKS) if board=='fog' else (ROIS,MASKS)
+    width,height = (820,718) if board=='fog' else (640,709)
+    report = {'board': board, 'rois': rois, 'masks': masks, 'panels': {}, 'inputs': {}}
+    full = Image.new('RGB', (width*2, height*2))
     for row, state in enumerate(('low', 'high')):
         paths = {'mock': cards/f'{state}.png', 'lab': renders/f'lit_{state}.png'}
         images = {label: Image.open(path).convert('RGB') for label, path in paths.items()}
-        if images['mock'].size != ((640 if state == 'low' else 638), 709) or images['lab'].size != (640, 709):
-            raise ValueError('Comparison needs the native WR-00 cards and 640x709 lab captures')
+        mock_size = (width if board=='fog' or state=='low' else 638,height)
+        if images['mock'].size != mock_size or images['lab'].size != (width,height):
+            raise ValueError(f'Comparison needs native {board} cards and {width}x{height} lab captures')
         report['inputs'][state] = {label: dict(path=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest())
                                    for label, path in paths.items()}
         report['panels'][state] = {}
-        crop_width = max(x1-x0 for x0,y0,x1,y1 in ROIS[state].values())*2
-        crop_height = sum((y1-y0)*2+24 for x0,y0,x1,y1 in ROIS[state].values())
+        crop_width = max(x1-x0 for x0,y0,x1,y1 in rois[state].values())*2
+        crop_height = sum((y1-y0)*2+24 for x0,y0,x1,y1 in rois[state].values())
         crops = Image.new('RGB', (crop_width*2+8, crop_height), (12,12,16))
         pen = ImageDraw.Draw(crops)
         for column, (label, image) in enumerate(images.items()):
-            full.paste(image, (column*640,row*709))
+            full.paste(image, (column*width,row*height))
             pixels = np.asarray(image)
             valid = np.ones(pixels.shape[:2], bool)
-            for x0,y0,x1,y1 in MASKS[state]:
+            for x0,y0,x1,y1 in masks[state]:
                 valid[y0:y1,x0:x1] = False
             report['panels'][state][label] = {}
             y = 0
-            for region, box in ROIS[state].items():
+            for region, box in rois[state].items():
                 x0,y0,x1,y1 = box
                 select = np.zeros_like(valid)
                 select[y0:y1,x0:x1] = True
@@ -213,10 +224,13 @@ if __name__ == '__main__':
     parser.add_argument('--cards', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--renders', type=Path, help='Compare a lab capture using fixed masked ROIs and 2x crops')
+    parser.add_argument('--board', choices=('primary','fog'), default='primary')
     args = parser.parse_args()
     if args.renders:
-        compare(args.cards, args.renders, args.output)
+        compare(args.cards, args.renders, args.output, board=args.board)
         print(f'Comparison saved to {args.output}')
     else:
+        if args.board != 'primary':
+            parser.error('The fog board currently has ROI comparisons only; pass --renders')
         result = run(args.cards, args.output)
         json.dump(dict(envelope={k: v['envelope'] for k, v in result['panels'].items()}, camera=result['camera']), sys.stdout, indent=2)

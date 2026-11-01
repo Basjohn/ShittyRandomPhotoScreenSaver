@@ -107,9 +107,49 @@ def test_material_programs_compile_only_when_used_and_inputs_are_validated(scene
         scene.primitive.draw(packet, MVP, shading='light')
     with pytest.raises(ValueError):
         scene.primitive.draw(packet, MVP, shading='glow', view=VIEW)
-    for bad in (dict(strands=0), dict(body_alpha=1.), dict(rim_light=-1.), dict(strand_half_width=float('nan'))):
+    for bad in (dict(strands=0), dict(body_alpha=1.), dict(rim_light=-1.), dict(strand_half_width=float('nan')),
+                dict(cross_curve=1.1), dict(strand_variation=1.1)):
         with pytest.raises(ValueError):
             RibbonMaterial(**bad)
+    from rendering.quick.scene3d.ribbon import _sweep_axis
+    assert _sweep_axis((1e308,0.,0.)) == (1.,0.,0.)
+    np.testing.assert_allclose(_sweep_axis((1.7e308,1.7e308,0.)), (2**-.5,2**-.5,0.))
+    for axis in ((0.,0.,0.), (1.,2.), (1.,float('nan'),0.)):
+        with pytest.raises(ValueError):
+            scene.primitive.draw(packet,MVP,sweep_axis=axis)
+
+
+def test_native_filament_coordinates_never_reverse_even_at_maximum_gather(scene):
+    from rendering.gl_programs.ribbon import RIBBON_STRAND_COORDINATE_GLSL
+    # Evaluate the actual GLSL over width and phase; reversing this mapping produces sharp folds in the lines.
+    source = '#version 460 core\n' + RIBBON_STRAND_COORDINATE_GLSL + '''
+layout(local_size_x=64) in;
+layout(std430,binding=1) buffer Results { float values[]; };
+void main() {
+    uint i=gl_GlobalInvocationID.x;
+    float across=float(i%257U)/256.0, phase=float(i/257U)/32.0;
+    values[i]=ribbonStrandCoordinate(across,phase,4.0,1.0,.9);
+}
+'''
+    scene.target.bind()
+    program = scene.resources.compute_program('monotone strands', source)
+    count = 257*33
+    allocation = ((count+63)//64)*64
+    buffer = int(np.asarray(gl.glGenBuffers(1)).reshape(-1)[0])
+    try:
+        gl.glBindBuffer(gl.GL_SHADER_STORAGE_BUFFER,buffer)
+        gl.glBufferData(gl.GL_SHADER_STORAGE_BUFFER,allocation*4,None,gl.GL_STREAM_READ)
+        gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,1,buffer)
+        gl.glUseProgram(program)
+        gl.glDispatchCompute(allocation//64,1,1)
+        gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT)
+        values = np.frombuffer(gl.glGetBufferSubData(gl.GL_SHADER_STORAGE_BUFFER,0,count*4),np.float32).reshape(33,257)
+        assert np.isfinite(values).all() and (np.diff(values,axis=1)>0).all()
+    finally:
+        gl.glUseProgram(0)
+        gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,1,0)
+        gl.glBindBuffer(gl.GL_SHADER_STORAGE_BUFFER,0)
+        gl.glDeleteBuffers(1,[buffer])
 
 
 
