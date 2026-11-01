@@ -26,7 +26,7 @@ from rendering.quick.scene3d.stream import StreamRing
 _FRAGMENTS = {'diagnostic': RIBBON_FRAGMENT, 'body': RIBBON_BODY_FRAGMENT, 'light': RIBBON_LIGHT_FRAGMENT}
 _MATERIAL_UNIFORMS = ('uViewZ', 'uEye', 'uForward', 'uOrthographic', 'uStrands', 'uRim', 'uBody', 'uFill', 'uGlint', 'uAge',
                       'uMist', 'uMistShape', 'uMistOrigin', 'uTone',
-                      'uViewport', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange', 'uGradeStops', 'uGrade', 'uFloorContact')
+                      'uViewport', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange', 'uGradeStops', 'uGrade', 'uFloorContact', 'uGlow')
 GRADE_STOPS = 6
 STRAY_SEGMENTS = 24  # matches RIBBON_STRAY_VERTEX
 GRADE_OFF = dict(uGradeStops=(0.,)*(4*GRADE_STOPS), uGrade=(0., 1., 0., 1.))
@@ -115,11 +115,14 @@ class RibbonStrays:
     light: float = 2.
     beads: float = 5.               # droplets per stray
     peel_time: float = 2.           # seconds of knot age to peel most of the way
+    halo: float = 0.                # soft glow around each filament (a fuzzy splash), relative to its core
+    glow: float = 1.                # share of its light sent to the bloom
 
     def __post_init__(self):
         if isinstance(self.per_knot, bool) or not isinstance(self.per_knot, int) or not 1 <= self.per_knot <= 8:
             raise ValueError('Strays per knot must be an integer in 1..8')
-        values = (self.length, self.reach, self.chance, self.width, self.light, self.beads, self.peel_time)
+        values = (self.length, self.reach, self.chance, self.width, self.light, self.beads, self.peel_time, self.halo,
+                  self.glow)
         if (not all(math.isfinite(v) and v >= 0 for v in values) or not 1 <= self.length <= 32
                 or self.chance > 1 or not 0 < self.width <= 16 or self.peel_time <= 0):
             raise ValueError('Ribbon strays need finite non-negative values, a length in 1..32 knots, a 0..1 chance, '
@@ -154,6 +157,8 @@ class RibbonMaterial:
     strand_jitter: float = 0.       # irregular strand spacing, 0..0.9 (monotone)
     strand_variation: float = 0.    # energy-neutral contrast between fine and dominant filaments
     cross_curve: float = 0.         # smooth transverse bow in half-widths; 0 retains the flat strip
+    glow: float = 1.                # share of the sheet's light sent to the bloom (local glow, not the mist's)
+    hot: float = 0.                 # white-hot cores on the brightest strands (0..1), the rest keep their colour
 
     def __post_init__(self):
         values = astuple(self)
@@ -161,7 +166,8 @@ class RibbonMaterial:
             raise ValueError('Ribbon material values must be finite and non-negative')
         if (not 1 <= self.strands <= 256 or not 0 < self.strand_half_width <= .5 or not 0 < self.rim_half_width <= .5
                 or not 0 < self.rim_glow_width <= .5 or self.fill_centre > 1 or self.glint_chance > 1
-                or self.strand_white > 1 or self.rim_white > 1 or self.strand_jitter > .9 or self.strand_variation > 1):
+                or self.strand_white > 1 or self.rim_white > 1 or self.strand_jitter > .9 or self.strand_variation > 1
+                or self.hot > 1):
             raise ValueError('Ribbon strands need 1..256 lines and positive half-widths up to half a spacing')
         if self.body_alpha > .95 or self.path_cap < 1 or self.min_pixels > 8 or self.cross_curve > 1:
             raise ValueError('Ribbon body alpha must stay below 0.95, path cap at least 1, minimum width at most 8 px')
@@ -172,7 +178,8 @@ class RibbonMaterial:
                     uBody=(self.body_alpha, self.body_tint, self.strand_variation, self.warp_frequency),
                     uFill=(self.fill_light, self.fill_centre, self.rim_glow_width, self.rim_glow_light),
                     uGlint=(self.glint_density, self.glint_chance, self.glint_light, self.glint_radius),
-                    uTone=(self.strand_white, self.rim_white, self.strand_jitter, self.glint_min_pixels))
+                    uTone=(self.strand_white, self.rim_white, self.strand_jitter, self.glint_min_pixels),
+                    uGlow=(self.glow, self.hot))
 
 
 class RibbonPrimitive:
@@ -316,7 +323,7 @@ class RibbonPrimitive:
             vao, _ = self.resources.mesh('empty', (0., 0.), (2,))
             names = ('uMvp', 'uSpark', 'uSparkLook', 'uSparkClock', 'uSparkWhite', 'uMist', 'uMistShape', 'uMistOrigin',
                      'uSurface','uSweepAxis', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange', 'uGradeStops',
-                     'uGrade', 'uFloorContact', 'uStray', 'uStrayLook', 'uStrayClock', 'uViewport')
+                     'uGrade', 'uFloorContact', 'uStray', 'uStrayLook', 'uStrayClock', 'uViewport', 'uStrayGlow')
             u = self.resources.uniforms(kind, names, required=False)
             if self.stream is None:
                 alignment = gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT)
@@ -338,6 +345,7 @@ class RibbonPrimitive:
                 gl.glUniform4f(u['uStray'], float(strays.per_knot), strays.length, strays.reach, strays.chance)
                 gl.glUniform4f(u['uStrayLook'], strays.width, strays.light, strays.beads, strays.peel_time)
                 gl.glUniform2f(u['uStrayClock'], *clock)
+                gl.glUniform2f(u['uStrayGlow'], strays.halo, strays.glow)
                 gl.glUniform2f(u['uViewport'], *(float(v) for v in
                                                  np.asarray(gl.glGetIntegerv(gl.GL_VIEWPORT)).reshape(-1)[2:4]))
             mist_values = {'uMist': (0., 0., 1., 1.), 'uMistShape': (0., 0., 0., 0.), **FOG_OFF, **(mist or {})}

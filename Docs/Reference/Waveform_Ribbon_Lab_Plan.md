@@ -76,9 +76,21 @@ implementer's call without further confirmation; the operator judges much later.
     strands (`strays_rejected_parallel.png`).
   - **Cost:** 0.3-0.4 ms a frame, main plus mirrored (vertex-bound, flat with resolution). Drawing no mirrored
     strays is the first cut if needed.
-  - **Still short of the board:** its tendrils are brighter, fuzzier splashes; ours are clean lines.
+  - **Glow pass (`wr08_alternate_glow/`):** each tendril has a soft halo (`halo`) and its own bloom share (`glow`),
+    so it reads as a brighter, fuzzier splash.
+  - **Operator preference:** longer, more numerous strands that curl far (reach 1.6, 6 knots). Rejected: gating
+    them by loudness squared and toward crests with a shorter reach ("these strands aren't as good as a moment
+    ago"; `rejected_gated_strays.png`).
+- **Glow (operator: "good baseline", tag `waveform-alternate-baseline-2026-11-01` = `d04d542f`; then
+  "enhanced glow next"):**
+  - **Material `glow`:** the share of a sheet's light sent to the bloom, so the sheets glow locally while the
+    mist does not.
+  - **Material `hot`:** white-hot cores on the brightest strands only; the rest keep their colour.
+  - **Body:** more fill and rim glow, so the sheets read as luminous silk under the strands.
+  - **Defaults** reproduce every earlier look (the complete look is pixel-identical).
+  - **Test:** `test_glow_sends_more_light_to_the_bloom_without_brightening_the_sheet`.
 - **Open:**
-  - the board's strands glow hotter, with white-hot cores and stronger local bloom;
+  - the board's loud panel still burns brighter, with blown warm highlights;
   - the mist's lit edge reads whitish lavender over blue sheets;
   - the floor keeps our vertical wet columns where the board has a soft blurred mirror (accepted floor style).
 - **Accepted differences for this look:** mist kept (core); smooth ribbons where the board's loud orange ribbon
@@ -151,6 +163,18 @@ hit a look or a cost target.
 - **Sparks:** count and size range, light, lifetime.
 - **Sheets:** count (1-3), strand density, rim glow versus body, bloom.
 - **Quality tier:** the large-display caps above as one Low/Medium/High setting, not separate sliders.
+- **Every look value is a builder control (operator, 1 November).** All of them must be adjustable in the eventual
+  builder through user-friendly visual editors, not raw numbers. The lab's named recipes are the first presets
+  built from them:
+  - **Ribbon colours:** per-ribbon quiet/loud pairs as swatches on each ribbon in the preview; the world gradient
+    as the node editor.
+  - **Shape tuner:** the source-to-target matrix with curve handles and the live sweep preview (above).
+  - **Glow:** sheet glow, white-hot cores, body fill and rim glow, as sliders over a live close-up of one sheet.
+  - **Free strands:** count, length, reach (curl), halo, glow, droplets and peel time, previewed on a sheet
+    while a synthetic loud passage plays.
+  - **Sparks:** count, size range, drift, rise and light, previewed on the same sheet.
+  - **Rules stay out of the editors:** floor contact and the smoothing minimums, so no setting can break the
+    smooth-curve rule.
 
 **Baseline (operator, 1 November: "looks good"):** git tag `waveform-baseline-2026-11-01c` (`abd7db76`, evidence
 `wr07_mist_view_band/`). Earlier: `waveform-baseline-2026-11-01b` (`ed6003c4`). Earlier baseline: `waveform-baseline-2026-11-01` (`f4825432`),

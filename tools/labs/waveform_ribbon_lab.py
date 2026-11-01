@@ -334,13 +334,16 @@ ALTERNATE = Recipe(
     ribbon_colours=dict(low=(((.15, .35, 1.), (.35, .25, 1.)), ((0., .7, .9), (.1, .4, 1.)), ((.5, .2, 1.), (.4, .15, 1.))),
                         high=(((1., .1, .7), (.6, .05, 1.)), ((1., .2, .03), (1., .13, .06)), ((.15, .2, 1.), (.45, .1, 1.)))),
     # Loud ribbons stay narrower and further apart than quiet ones: broad overlapping sheets summed to pastel pink.
-    material=replace(Recipe().material, strands=48., strand_half_width=.022, strand_light=2.2, strand_white=0.,
-                     rim_white=.02, fill_light=.04, body_tint=.7, glint_density=3., glint_chance=.3, glint_light=5.),
+    # Luminous silk: a glowing body, local bloom on the sheets only (glow), white-hot cores on the brightest strands.
+    material=replace(Recipe().material, strands=48., strand_half_width=.022, strand_light=2.4, strand_white=0.,
+                     rim_white=.02, fill_light=.1, rim_glow_light=.45, body_tint=.7, glint_density=3.,
+                     glint_chance=.3, glint_light=5., glow=2., hot=.5),
     # Sparks hug the ribbons (little drift or rise), mostly fine with a few large.
     sparks=replace(Recipe().sparks, drift=1.1, rise=.15, light=40., smallest=1.2, largest=8., lifetime=6., white=.1),
     palette=dict(low=((0., (.2, .6, 1.)), (1., (.55, .35, 1.))), high=((0., (1., .3, .85)), (1., (1., .22, .05)))),
     # Free strands splash off the sheets and curl away, droplets toward their tips (short, far-reaching).
-    strays=RibbonStrays(per_knot=4, length=6., reach=1.6, chance=.6, width=1.6, light=2.5, beads=4., peel_time=1.5),
+    strays=RibbonStrays(per_knot=4, length=6., reach=1.6, chance=.6, width=1.6, light=3.2, beads=4., peel_time=1.5,
+                        halo=.5, glow=2.2),
     grade_share=(0., .35), bloom=.12)
 RECIPES = {'complete': Recipe(), 'alternate': ALTERNATE, 'range': PRESET_RANGE}
 

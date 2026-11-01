@@ -245,7 +245,7 @@ void main() {
     program=scene.resources.program('skewed glint',vertex,RIBBON_LIGHT_FRAGMENT)
     gl.glUseProgram(program)
     for name,value in material.uniforms().items():
-        gl.glUniform4f(gl.glGetUniformLocation(program,name),*value)
+        (gl.glUniform2f if len(value)==2 else gl.glUniform4f)(gl.glGetUniformLocation(program,name),*value)
     gl.glUniform1i(gl.glGetUniformLocation(program,'uOrthographic'),1)
     gl.glUniform3f(gl.glGetUniformLocation(program,'uForward'),0.,0.,-1.)
     gl.glDisable(gl.GL_DEPTH_TEST)
@@ -350,3 +350,15 @@ def test_free_strands_follow_sparkle_and_leave_the_sheet(scene):
             assert lit.max() - lit.min() > 24
     with pytest.raises(ValueError):
         RibbonStrays(per_knot=9)
+
+
+def test_glow_sends_more_light_to_the_bloom_without_brightening_the_sheet(scene):
+    packet = strip(0., -10., (.2, .5, 1., 1.), width=.2)
+    plain, glowing = (render(scene, [packet], material=RibbonMaterial(glow=g)) for g in (1., 3.))
+    rows = np.arange(H)
+    # Strip rows +-0.2 world units around the centre (H/2); bloom spreads light well beyond them.
+    inside, outside = abs(rows - H//2) <= 6, (abs(rows - H//2) >= 14) & (abs(rows - H//2) <= 30)
+    assert glowing[outside, 40:-40, :3].sum() > 1.5*plain[outside, 40:-40, :3].sum()
+    assert glowing[inside, 40:-40, :3].sum() < 1.6*plain[inside, 40:-40, :3].sum()
+    with pytest.raises(ValueError):
+        RibbonMaterial(hot=1.5)
