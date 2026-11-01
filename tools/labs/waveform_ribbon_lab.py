@@ -98,8 +98,8 @@ class Fog:
     margin: float = .1              # clear air beyond the envelope (world units)
     clearance: tuple = (.3, .25)    # push of the whole field from the envelope; the mist never enters within
     ends: float = 6.                # the mist comes this far forward where the sheets fade (world units)
-    floor: tuple = (.9, 4.5, 2.5)   # floor bank height, forward reach at the sides, |x| where the sides begin
-    floor_light: tuple = (.12, 1.5, .08)  # floor mist light share, its reach from the sheets; wall-behind light
+    floor: tuple = (2., 5.5, 2.5)   # floor bank height, forward reach at the sides, |x| where the sides begin
+    floor_light: tuple = (.12, 2., .08)  # floor mist light share, its reach from the sheets; wall-behind light
     softness: float = 1.5           # depth over which coarse coverage rises: the detail march erodes within it
     noise_scale: float = .35        # lobe frequency of the band's edge (per world unit)
     noise: float = 2.6              # lobe displacement of the edge (world units)
@@ -122,14 +122,15 @@ class Fog:
     # Detail march (per pixel at a reduced scale): bound on adaptive steps and their lengths in and out of the mist,
     # erosion by the tiling noise and its frequency (per world unit), self-shadow reach (world) and strength, and
     # the in-scatter's share of bloom.
-    march_scale: float = .5
+    march_scale: float = .75
     reflection_march_scale: float = .25
     steps: int = 96
     step: tuple = (.15, 1.)
     erosion: float = .75
     detail_frequency: float = .8
     shadow: tuple = (.6, 4.)
-    shadow_floor: float = .5
+    shadow_floor: float = .3
+    edge_glow: float = 3.          # extra light on thin eroded wisps (curl rims)
     glow: float = .3
 
 
@@ -636,7 +637,8 @@ class Lab:
             fog = recipe.fog
             march = dict(steps=fog.steps, max_extinction=fog.density, erosion=fog.erosion,
                          detail_frequency=fog.detail_frequency, shadow=fog.shadow, step=fog.step,
-                         medium=self._fog_uniforms, shadow_floor=fog.shadow_floor)
+                         medium=self._fog_uniforms, shadow_floor=fog.shadow_floor, edge_glow=fog.edge_glow,
+                         base=fog.ambient)
             self.march.march(self.fog, size=(width*fog.march_scale, height*fog.march_scale), ground=0., **march)
             # The mirrored camera starts below the floor (no medium there) and sees the mist above it.
             self.reflected_march.march(self.reflected_fog, size=(width*fog.reflection_march_scale,
