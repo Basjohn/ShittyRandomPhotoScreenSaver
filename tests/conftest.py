@@ -288,3 +288,24 @@ def temp_image(tmp_path):
     image.save(str(image_path))
     
     return image_path
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Every run, focused ones included, fails on a QML import the frozen build would refuse. The release build
+    rejects it anyway; this catches it on the commit that adds it (QtQml.Models slipped through a focused run)."""
+    from tools.qml_import_contract import violations
+    found = violations()
+    if found:
+        session.config._srpss_qml_import_violations = found
+        session.exitstatus = 1
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    found = getattr(config, "_srpss_qml_import_violations", None)
+    if found:
+        terminalreporter.section("QML import contract", sep="=", red=True, bold=True)
+        terminalreporter.write_line("Qt QML imports outside tools/build_layout.ps1's frozen packaging allowlist; "
+                                    "the release build refuses them. Remove the import or review the packaging:")
+        for line in found:
+            terminalreporter.write_line(f"  {line}")
+
