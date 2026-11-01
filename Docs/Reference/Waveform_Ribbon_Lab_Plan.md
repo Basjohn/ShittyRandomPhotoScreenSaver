@@ -40,8 +40,8 @@ implementer's call without further confirmation; the operator judges much later.
 return to waveform fidelity, followed by real volumetric mist. The floor, waveform and complete scene remain far
 from parity. §0B is the current visual audit, not an acceptance report.
 
-**Baseline (operator, 1 November: "best so far"):** git tag `waveform-baseline-2026-11-01b` (`ed6003c4`, evidence
-`wr07_mist_3d_tube/`). Earlier baseline: `waveform-baseline-2026-11-01` (`f4825432`),
+**Baseline (operator, 1 November: "looks good"):** git tag `waveform-baseline-2026-11-01c` (`abd7db76`, evidence
+`wr07_mist_view_band/`). Earlier: `waveform-baseline-2026-11-01b` (`ed6003c4`). Earlier baseline: `waveform-baseline-2026-11-01` (`f4825432`),
 evidence `wr07_floor_columns/`. Compare every later candidate against it and revert to it if a pass makes things
 worse. The operator named the floor of this baseline and of the `wr07_colour_grade` capture the best floors so far.
 
@@ -146,23 +146,23 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
   Still paler than the mock's deep blue-violet body; the mock's brightness gathers at rims and crossings. Remaining
   structure work: fine-detail stability, depth and light, and reference shape fidelity. Every admitted shape stays
   smooth like folding cloth.
-- [ ] **Cost (settled shape, `wr07_mist_floor_split`; RTX 4090, 820x718):**
-  - **Medians in a stable-clock run (low/high react):**
-    - main mist march: 1.05 / 1.73 ms;
-    - mirrored march: 0.43 / 0.90 ms;
-    - floor: 0.21 / 0.44 ms;
-    - edge-line composite: about 0.02 ms;
-    - coarse volume updates: under 0.15 ms.
-  - **Absolute timings are unreliable:** GPU clock states swing the march between about 0.8 and 2.9 ms whatever the
-    code. Judge only control-relative figures (march / floor in the same frames).
-  - **Step taken:** the shape is evaluated once per step for coverage and light direction. Pixel-identical;
-    march / floor at low react went from about 3.9 to 3.7.
-  - **The march is still dominated by evaluating the lab shape per sample:** envelope lookup plus two 3-octave
-    noise fields, three times per step with the shadow probe.
-  - **Next, structural:**
-    - bake the shape's inside-distance into a finer, camera-independent 3D texture once per envelope update;
-    - adaptive step count from the coarse coverage;
-    - the mirrored march at fewer steps, since the floor takes only 0.35 of its light.
+- [~] **Cost (baseline `waveform-baseline-2026-11-01c`, RTX 4090, 820x718; control-relative = stage / floor):**
+  - **Profile by switching parts off (loud react):**
+    - the self-shadow probe was about half the march (relative 5.0 -> 2.25 without it);
+    - step count is next (1.55 with longer steps);
+    - billows are 3.7;
+    - the 3D tube is negligible.
+  - **Landed:** the self-shadow reads the coarse coverage at its probe (one fetch) instead of evaluating the fine
+    shape again. Main march relative 4.7 / 5.0 -> 3.5 / 1.5 (low / high), mirrored 2.3 -> 1.6 / 0.7. Drift from
+    the baseline: mean 3.4/255, no visible change in native crops.
+  - **Rejected:**
+    - longer steps (0.25, 1.2): another 23% but at 2x the edge line loses fibre and the mass gets grainy;
+    - longer steps (0.3, 1.5): mean drift 8-10.
+  - **Absolute timings swing about 3x with GPU clock state.** Quiet-state ratios are noisy because the floor is only
+    about 0.2 ms.
+  - **Remaining ideas:**
+    - fewer steps for the mirrored march only (the floor takes 0.35 of its light);
+    - bake the shape into a 3D texture per envelope update.
 - [ ] **Motion:** explicit-time slow-motion captures of mist anchoring, streak stability and sheet rims; five poses
   in both projections.
 - [ ] **Accents:** cyan/magenta sparks with a real size range; tight filament glow plus broad hot spots.
