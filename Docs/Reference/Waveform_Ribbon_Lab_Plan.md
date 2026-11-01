@@ -36,9 +36,114 @@ is both: each ribbon has its own base, and reactivity changes it along the flowi
 cyan → blue → violet → magenta/orange drift inside one sheet). Floor first, then the remaining order is the
 implementer's call without further confirmation; the operator judges much later.
 
-**Open sequence:** finish the immediate floor correction below while holding the preferred waveform fixed; then
-return to waveform fidelity, followed by real volumetric mist. The floor, waveform and complete scene remain far
-from parity. §0B is the current visual audit, not an acceptance report.
+**Open sequence (1 November, after baseline `c` and the cost passes):**
+1. Done: one whole-frame 4K measurement pass, recorded under Cost below.
+2. In progress: **the second goal is the package's alternate board** (operator, 1 November: "the better second
+   goal/preset"; `references/Waveform_Ribbon_Alternate_Annotated_Mock.png`, extracted unmodified from the package,
+   SHA-256 `19161837…eadf`). It is the lab's `alternate` recipe; see "Second look" below. Next in it: free
+   liquid/particle strands.
+3. The preset-range board stays a range example. Its recipe (`range`) is parked after two passes: tight bundle,
+   a bass arc 2.5x the other crests, and a gradient running on to orange. Evidence `wr08_alternate_look/preset_range_parked.png`.
+4. The remaining fidelity gaps below, then motion.
+§0B is the current visual audit, not an acceptance report.
+
+**Second look: the alternate board (`wr08_alternate_look/`, `--recipe alternate`):**
+- **What it is:** three broad ribbons, one per band (bass, mid, high), coloured by ribbon, not by the world grade.
+  - quiet: blue, teal, lavender;
+  - loud: magenta, orange, blue-violet, taken knot by knot (the tuner's `tint` target), so colour flows with the
+    history.
+  Also: long sweeping waves (head 0.2 Hz) with large depth sway, dense bright filaments, and sparks that hug the
+  ribbons. Loud ribbons are narrower and further apart than quiet ones: broad overlapping sheets summed to pastel
+  pink.
+- **Mechanisms it needed (shared, no copied code):**
+  - **Shape and reactivity tuner model (`Shaping`):** targets with quiet/loud ranges, each following a source
+    (loudness, bass), a bass arc, and per-ribbon characters. Every target passes the history's two smoothing
+    stages, so no value can make a sharp ribbon. Default values reproduce the complete look pixel-identically.
+  - **Gradient nodes:** the shared ribbon grade takes 1-6 nodes at ascending positions (`ribbon_grade(stops,
+    x_range, share)`), the lab form of the WR-08 gradient editor. The duplicated grade block in the material shader
+    is folded into `RIBBON_GRADE_GLSL`.
+  - **Per-ribbon quiet/loud colours** (`Recipe.ribbon_colours`).
+- **Colour lesson:** recipe colours are linear light. (1, .4, .05) displays as gold; orange is about (1, .2, .03)
+  (operator: "you pushed out yellow instead of orange").
+- **Self-review at the board's scale (`mock_vs_lab_native_scale.png`):**
+  - quiet is close: saturated blue/teal/violet sheets with distinct filaments;
+  - loud has the board's magenta, orange and blue ribbons, separated, with sparks along them.
+- **Open:**
+  - **free liquid/particle strands** (operator): filaments that peel off the sheets as tendrils, with droplets
+    along them; the board's loud panel is full of them. Needs a new pass in the ribbon primitive (next slice);
+  - the board's strands glow hotter, with white-hot cores and stronger local bloom;
+  - the mist's lit edge reads whitish lavender over blue sheets;
+  - the floor keeps our vertical wet columns where the board has a soft blurred mirror (accepted floor style).
+- **Accepted differences for this look:** mist kept (core); smooth ribbons where the board's loud orange ribbon
+  breaks into jagged spikes (smooth-curve rule); vertical wet floor columns.
+
+**Floor contact (operator, 1 November: "if the waveform hits the floor it should deform there, not clip"):**
+- **Rule, not a setting:** the ribbon primitive eases every surface point's height onto the floor (softplus to a
+  0.03 gap, softness 0.15; `draw(..., floor=)`). It is a smooth, strictly increasing map of height alone, so the
+  sheet flattens like cloth settling and can never fold or crease. Clear of the floor the shape is unchanged (lift
+  below 0.02 at 0.3 units). The normal uses the eased height's slope. Sparks are eased the same way.
+- **Rejected:**
+  - lifting each knot's centre by its half-width ("do not force a shape, deform");
+  - spreading the pressed part sideways along the floor: it folded the sheet at its centre into sharp corners
+    (`floor_contact_spread_rejected_vs_eased.png`);
+  - softness 0.45: it lifted sheets a unit above the floor and moved the complete look.
+- **Test:** `test_floor_contact_deforms_a_sheet_onto_the_floor_instead_of_through_it` (with the uncontacted
+  strip as negative control).
+
+**Far wall under high sheets:** the reactive mist under the waveform was removed along the whole view prism, so
+sheets riding high (the alternate look) left the sky down to the horizon black under them. The cut now applies
+only within the band's depth; beyond it the far wall returns. All mist below the band is lit only at the
+wall-behind-the-sheets share (0.08), so it is near-black haze (operator: "close to black, just not quite"). Lit,
+it came back as magenta puffs at the contact line. Complete look: mean drift 1.2-1.3/255, the change confined to
+the far wall behind the sheets (`complete_look_far_wall_haze_diff.png`).
+
+**Mist is core to every look (operator, 1 November).** Each recipe, including alternate looks, keeps the volume
+mist: it is the design direction. Production may later make it optional in Settings (WR-08). No recipe drops it to
+hit a look or a cost target.
+
+**Accepted differences from the mocks (operator decisions; permanent unless the operator reopens them):**
+- **No pillars or hall structure.** Floor, waveform and mist only (original board's columns are not a target).
+- **Horizon invisible.** Distance mist hides every floor, sky and horizon boundary from every admitted pose.
+- **Distant haze is dark grey, never black.** The notch wall behind the sheets is barely lit haze, not a void.
+- **Mist is repelled by the waveform with a small margin, in true 3D.** The mocks let fringes touch or cross the
+  sheets; ours keep 0.3 units clear of every sheet's tube from any angle. The clear band follows the camera's own
+  direction, so a camera move reshapes the clear space.
+- **Coloured reactive mist only above the waveform and at off-screen edges.** The mocks' coloured floor-level corner
+  banks are replaced by cheap, slightly tinted analytic floor mist that thickens toward the camera-side edges, the
+  extreme sides and the distance. Volume mist under the waveform is off (it read as stray puffs at the contact line).
+- **Fragmenting extras on the mist edge are kept** ("they give character"); only a break in the lit edge is a fault.
+- **Edge line is smoother than the mocks' crackle** but still focused on the edge: fibrous and lightly blurred, never
+  the over-smoothed band.
+- **Floor: smoothness, reflection and wetness before streakiness.** The mocks' visible cracks, aggregate and wet/dry
+  patches are not targets; nothing blotchy or patterned. Vertical columns stay.
+- **Large-display caps (engineering, my decision):** the mist and floor reduced-resolution targets stop growing
+  above fixed heights (march 540, mirrored march 270, reflection 360, floor reflection term 1080 rows). At 4K the
+  floor's columns are very slightly softer at 1:1 than uncapped; the 718-pixel lab is pixel-identical.
+
+**Control ideas recorded for the WR-08 migration (not built in the lab as controls):**
+- **Waveform shape and reactivity tuner (operator, 1 November), the most important new control.** A tuner, not a
+  free shape builder: the user chooses which energy shapes which ribbon property and how strongly, and it can never
+  break the motion rules (smooth folding-cloth curves, band-limited history, no jagged plateaus, fixed flow speed).
+  - **Rows (energy sources):** bass, mids, highs, overall loudness, transients/onsets, and the head oscillator
+    (musical history stays the dominant force).
+  - **Columns (ribbon targets):** amplitude (wave height), swell (local compression of neighbouring folds), width,
+    twist, lift, spread between sheets, depth sway, deformation (secondary harmonic), emission, sparkle.
+  - **Per cell:** gain plus a response curve; per target, a smoothing time with an enforced minimum so history stays
+    band-limited (about half a wavelength).
+  - **Per ribbon:** a character row (its own share of each target), so sheets keep distinct identities.
+  - **Shape character presets** inside the tuner: e.g. "even swell" (the complete-scene board) and "dominant peak"
+    (the preset-range board's single tall arc).
+  - **Preview:** a live 3D or angled-2D ribbon driven by a synthetic sweep (bass, mid, high, loud) so the user sees
+    the result without music.
+- **Gradient colour editor:** circular nodes, clickable and draggable, each opening a colour picker; a low-reactivity
+  and a high-reactivity pair, blended by reactivity (and more than two nodes for looks like the preset-range board's
+  cyan → violet → magenta → orange).
+- **Mist:** density, clearance margin, edge-line strength and fibre, fringe colour share, distance haze darkness,
+  billow scale; an on/off for users who want it off.
+- **Floor:** wetness/reflection strength, streak length, column fade, mist reflection share.
+- **Sparks:** count and size range, light, lifetime.
+- **Sheets:** count (1-3), strand density, rim glow versus body, bloom.
+- **Quality tier:** the large-display caps above as one Low/Medium/High setting, not separate sliders.
 
 **Baseline (operator, 1 November: "looks good"):** git tag `waveform-baseline-2026-11-01c` (`abd7db76`, evidence
 `wr07_mist_view_band/`). Earlier: `waveform-baseline-2026-11-01b` (`ed6003c4`). Earlier baseline: `waveform-baseline-2026-11-01` (`f4825432`),
@@ -55,10 +160,8 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
   - **Boundary (operator, 1 November):** presets, controls, Settings and the preset/control systems arrive only with
     the full Visualizer migration (WR-08), designed there as a whole. The lab records the values each look needs
     and proves the mechanisms; it builds no preset data model, preset plumbing or Settings.
-  - **Recorded for WR-08 design:**
-    - a low-reactivity and a high-reactivity colour pair, blended by reactivity;
-    - the operator's gradient tool: circular nodes, clickable and draggable, each click opening a colour picker;
-    - shape character ranges (amplitude, swell, width, twist).
+  - **Recorded for WR-08 design:** the control ideas list above (shape and reactivity tuner, gradient colour editor,
+    mist, floor, sparks, sheets, quality tier).
   - **Lab mechanisms in place:**
     - the per-knot tint row for colour that flows along the history;
     - the world grade (three stops over x, the middle derived by hue);
@@ -67,9 +170,10 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
   - **Other looks:** alternate looks (the preset-range board, warm accents) are named recipes run by the same lab
     (`--recipe`), sharing every program and function (Extruded Bubble's lab pattern). Never a copied lab.
   - **Open:**
-    - the sheets' own colours do not yet follow the recipe pair, so an alternate look keeps cyan/magenta sheets;
     - warm colours turn brown in dim mist;
-    - prove the preset-range board's look as a second named recipe.
+    - the alternate look's free strands (see "Second look" above).
+  - **Landed:** sheets follow the recipe through per-ribbon quiet/loud colours and gradient nodes; named recipes
+    `complete`, `alternate`, `range` (`--recipe`).
 - [~] **Low-state floor brightness:** the hot-light threshold is now relative to the scene's own mean reflected light
   (the reflection's coarsest mip, at 3x). A fixed threshold blacked out the quiet floor and washed the loud one.
   Floor luminance median / p90, mock vs ours (`wr07_sheet_tone`):
@@ -202,7 +306,33 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
     - **Measurement lesson:** sequential stage timings at 4K are dominated by GPU clock and power state. The
       first-measured state ran about 6x faster whichever it was. Only interleaved A/B within one process is
       trustworthy.
+    - **Whole-frame pass (`wr07_cost_frame/frame_cost.json`, one pass, 1 November):**
+      - **Method:** GPU timestamps around every stage, low/high alternating frame by frame in one process.
+      - **Conditions:** RTX 4090 at 225-765 MHz graphics clock, 36% utilisation. The Python harness keeps the GPU
+        in a low power state, so absolute figures are inflated, perhaps 2-3x.
+      - **Caveat:** spans that contain Python draw submission include GPU idle gaps. The "whole frame" span also
+        holds the CPU history build and a full-frame readback (lab-only), so it is not a GPU figure. The stage rows
+        are single passes and close to true GPU time.
+
+      | Stage, median ms (low / high) | 1080p | 4K |
+      |---|---|---|
+      | mist volumes (both) | 0.20 / 0.23 | 0.57 / 0.57 |
+      | shape bake | 0.24 / 0.24 | 0.29 / 0.29 |
+      | mist marches (both) | 4.26 / 4.43 | 5.18 / 5.38 |
+      | mist composite | 0.31 / 0.48 | 1.79 / 1.84 |
+      | mirrored scene | 0.22 / 0.24 | 0.29 / 0.30 |
+      | floor | 2.21 / 2.21 | 4.96 / 5.09 |
+      | ribbons, sparks, bloom, tone (main scene minus floor and composite) | 1.4 / 1.4 | 9.5 / 11.2 |
+      | sum of GPU stages (upper bound) | 8.9 / 9.2 | 22.6 / 24.6 |
+
+      - **Reading:**
+        - Caps hold the marches nearly flat from 1080p to 4K.
+        - The largest 4K item is now the ribbon/bloom/composition remainder. It grows about 7-8x for 4x the pixels,
+          so a full-resolution target in it (bloom chain or OIT accumulation) is the next cap candidate. The mist
+          composite (full resolution, edge-line blur) is next after it.
+        - Nothing here is an acceptance figure. The live check under `--load game60` remains the gate.
     - **Open:**
+      - cap or reduce the 4K ribbon/bloom/composition remainder (above);
       - 4K high still sums to about 9 ms for mist and floor before ribbons, bloom and composition;
       - candidates: the floor's per-pixel reflection at reduced resolution with a depth-aware upsample, or
         fewer streak segments with per-pixel offsets judged in crops;

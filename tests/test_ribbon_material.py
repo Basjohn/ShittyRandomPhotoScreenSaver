@@ -287,3 +287,40 @@ def test_light_pass_alpha_carries_luminance_weighted_world_height(scene):
     finally:
         with scene.target.current():
             reflection.release()
+
+
+def _light_only(parts, packet, **draw):
+    parts.target.bind(clear=(0., 0., 0., 0.))
+    gl.glViewport(0, 0, W, H)
+    gl.glDisable(gl.GL_DEPTH_TEST)
+    gl.glEnablei(gl.GL_BLEND, 0)
+    gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ONE, gl.GL_ONE)
+    parts.primitive.draw(packet, MVP, shading='light', view=VIEW, **draw)
+    gl.glDisablei(gl.GL_BLEND, 0)
+    return parts.target.read_rgba().astype(int)
+
+
+def test_floor_contact_deforms_a_sheet_onto_the_floor_instead_of_through_it(scene):
+    # The strip's centre is below the floor (world y 0, screen row H/2): without contact it is drawn there; with
+    # contact every lit row stays above the floor and the sheet is still drawn (squashed, not culled).
+    sunk = strip(-.5, -10., (.1, .7, 1., 1.))
+    free = _light_only(scene, sunk)
+    pressed = _light_only(scene, sunk, floor=(0., .03, .2))
+    rows = lambda image: np.nonzero(image[..., :3].max(axis=(1, 2)) > 20)[0]
+    assert rows(free).max() > H//2 + 10
+    assert rows(pressed).size > 0 and rows(pressed).max() <= H//2
+    with pytest.raises(ValueError):
+        _light_only(scene, sunk, floor=(0., .03, 0.))
+
+
+def test_grade_nodes_colour_the_sheet_across_world_x(scene):
+    from rendering.quick.scene3d.ribbon import ribbon_grade
+    nodes = ((0., (1., 0., 0.)), (.5, (0., 1., 0.)), (1., (0., 0., 1.)))
+    image = _light_only(scene, strip(0., -10., (1., 1., 1., 1.)), grade=ribbon_grade(nodes, (-2., 2.), 1.))
+    lit = image[..., :3].max(axis=2) > 20
+    for column, channel in ((int(W*.12), 0), (W//2, 1), (int(W*.88), 2)):
+        colour = image[lit[:, column], column, :3].sum(axis=0)
+        assert colour.argmax() == channel
+    for bad in (((.5, (1., 0., 0.)), (.5, (0., 1., 0.))), ((0., (2., 0., 0.)),), ()):
+        with pytest.raises(ValueError):
+            ribbon_grade(bad, (-2., 2.), 1.)
