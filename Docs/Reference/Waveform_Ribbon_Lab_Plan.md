@@ -40,8 +40,7 @@ implementer's call without further confirmation; the operator judges much later.
 1. Done: one whole-frame 4K measurement pass, recorded under Cost below.
 2. In progress: **the second goal is the package's alternate board** (operator, 1 November: "the better second
    goal/preset"; `references/Waveform_Ribbon_Alternate_Annotated_Mock.png`, extracted unmodified from the package,
-   SHA-256 `19161837…eadf`). It is the lab's `alternate` recipe; see "Second look" below. Next in it: free
-   liquid/particle strands.
+   SHA-256 `19161837…eadf`). It is the lab's `alternate` recipe; see "Second look" below.
 3. The preset-range board stays a range example. Its recipe (`range`) is parked after two passes: tight bundle,
    a bass arc 2.5x the other crests, and a gradient running on to orange. Evidence `wr08_alternate_look/preset_range_parked.png`.
 4. The remaining fidelity gaps below, then motion.
@@ -68,9 +67,17 @@ implementer's call without further confirmation; the operator judges much later.
 - **Self-review at the board's scale (`mock_vs_lab_native_scale.png`):**
   - quiet is close: saturated blue/teal/violet sheets with distinct filaments;
   - loud has the board's magenta, orange and blue ribbons, separated, with sparks along them.
+- **Free strands (operator: "we need free liquid/particle like strands as well"; `wr08_alternate_strays/`):**
+  - **What:** a new ribbon primitive pass (`shading='strays'`, `RibbonStrays`). Liquid filaments leave near a
+    sheet's edge and splash away from it along a smooth curl, taper to a free tip and carry droplets gathering
+    toward the tip. They flow with the history, and more peel off in loud passages (gated by the knot's sparkle).
+    Every term is a smooth function of the stray coordinate and the knot's age, so none can kink.
+  - **Rejected first pass:** long strands with a small reach ran parallel to the sheets and read as more sheet
+    strands (`strays_rejected_parallel.png`).
+  - **Cost:** 0.3-0.4 ms a frame, main plus mirrored (vertex-bound, flat with resolution). Drawing no mirrored
+    strays is the first cut if needed.
+  - **Still short of the board:** its tendrils are brighter, fuzzier splashes; ours are clean lines.
 - **Open:**
-  - **free liquid/particle strands** (operator): filaments that peel off the sheets as tendrils, with droplets
-    along them; the board's loud panel is full of them. Needs a new pass in the ribbon primitive (next slice);
   - the board's strands glow hotter, with white-hot cores and stronger local bloom;
   - the mist's lit edge reads whitish lavender over blue sheets;
   - the floor keeps our vertical wet columns where the board has a soft blurred mirror (accepted floor style).

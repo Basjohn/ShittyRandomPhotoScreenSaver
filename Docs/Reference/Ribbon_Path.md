@@ -118,6 +118,11 @@ No runtime mode imports this prototype; EB and all existing modes receive no wor
     (softplus) onto the floor plus the gap, a smooth strictly increasing map of height alone, so a sheet that
     reaches the floor flattens along it without folding, creasing or passing through. Sparks are eased the same
     way; None is off.
+  - Free strands (`shading='strays'`, `RibbonStrays`): liquid filaments drawn as screen-width quads from the
+    sheet surface. Each is attached at its knot and leaves along a smooth curl, growing with distance along it and
+    with the knot's age, and carries droplet beads toward its free tip. Per-knot sparkle times `chance` gates them;
+    they are drawn additively in the emission pass, like sparks. Stateless: a pure function of the packet and
+    the clock.
   - Earlier: 64-byte knots, 131584-byte packets. Metadata holds count/subdivision/origin phase/period,
   reduced origin twist, diagnostic colour and reserved colour storage. This is a diagnostic RGBA material,
   not the Ribbon scene's final shading or palette.

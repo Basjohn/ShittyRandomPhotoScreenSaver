@@ -324,3 +324,29 @@ def test_grade_nodes_colour_the_sheet_across_world_x(scene):
     for bad in (((.5, (1., 0., 0.)), (.5, (0., 1., 0.))), ((0., (2., 0., 0.)),), ()):
         with pytest.raises(ValueError):
             ribbon_grade(bad, (-2., 2.), 1.)
+
+
+def test_free_strands_follow_sparkle_and_leave_the_sheet(scene):
+    from rendering.quick.scene3d.ribbon import RibbonStrays
+
+    def sheet(sparkle):
+        ring = RibbonRing(1, colours=[(1., .5, .1, 1.)])
+        for i in range(24):
+            ring.append(i*.25, [(i*.2 - 2.3, 0., -10.)], .15, 0., 1., sparkle)
+        return ring.packet()
+    strays = RibbonStrays(per_knot=4, length=4., reach=.8, chance=1., width=2., light=4., peel_time=.5)
+    rows = lambda image: np.nonzero(image[..., :3].max(axis=(1, 2)) > 20)[0]
+    for sparkle, expect in ((0., False), (1., True)):
+        scene.target.bind(clear=(0., 0., 0., 0.))
+        gl.glViewport(0, 0, W, H)
+        gl.glDisable(gl.GL_DEPTH_TEST)
+        gl.glEnablei(gl.GL_BLEND, 0)
+        gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ONE, gl.GL_ONE)
+        scene.primitive.draw(sheet(sparkle), MVP, shading='strays', strays=strays, now=12., view=VIEW)
+        gl.glDisablei(gl.GL_BLEND, 0)
+        lit = rows(scene.target.read_rgba().astype(int))
+        assert (lit.size > 0) == expect
+        if expect:  # the sheet spans 0.3 world units (12 rows); peeled strands reach well beyond it
+            assert lit.max() - lit.min() > 24
+    with pytest.raises(ValueError):
+        RibbonStrays(per_knot=9)
