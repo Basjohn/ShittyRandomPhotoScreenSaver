@@ -73,7 +73,7 @@ class RibbonMaterial:
     rim_half_width: float = .02     # of the width
     rim_light: float = 1.4
     path_cap: float = 64.           # max path-length gain 1/|N.V| where the sheet is not widened
-    min_pixels: float = 2.          # edge-on sheets stay this wide on screen, light scaled by true width
+    min_pixels: float = 2.          # edge-on flat sheets stay this wide; interior light compensates true width
     body_alpha: float = .035
     body_tint: float = .35
     fill_light: float = .12         # the sheet's own glow

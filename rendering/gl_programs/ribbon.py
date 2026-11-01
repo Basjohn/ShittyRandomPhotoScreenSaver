@@ -430,14 +430,22 @@ void main() {
     float glints=0.0;
     if(uGlint.x>0.0 && uGlint.z>0.0) {
         // Sparse bright points riding strands, fixed to the absolute path phase: they travel with the history.
+        // Differentiate continuous coordinates before the divergent cell test. The hashed cell offset is
+        // constant within each cell and must never enter derivatives at a neighbouring strand boundary.
+        vec2 alongGradient=vec2(dFdx(vPhase),dFdy(vPhase))*uGlint.x;
+        vec2 acrossGradient=vec2(dFdx(x),dFdy(x));
+        float determinant=alongGradient.x*acrossGradient.y-alongGradient.y*acrossGradient.x;
         float k=floor(x);
         float along=vPhase*uGlint.x+strandHash(k)*7.0;
         float j=floor(along);
-        if(cellHash(k,j)<uGlint.y) {
-            float alongPx=(fract(along)-0.5)/max(fwidth(along),1e-4);
-            float acrossPx=(fract(x)-0.5)/max(w,1e-4);
+        if(cellHash(k,j)<uGlint.y && abs(determinant)>1e-10) {
+            // Invert the local surface-to-screen Jacobian. Dividing each coordinate by fwidth separately
+            // assumes perpendicular projected axes and stretches points into dashes on skewed folds.
+            vec2 delta=vec2(fract(along)-0.5,fract(x)-0.5);
+            vec2 pixel=vec2(acrossGradient.y*delta.x-alongGradient.y*delta.y,
+                            -acrossGradient.x*delta.x+alongGradient.x*delta.y)/determinant;
             float radiusPx=max(uGlint.w/max(w,1e-4),max(uTone.w,0.75));
-            float r2=(alongPx*alongPx+acrossPx*acrossPx)/(radiusPx*radiusPx);
+            float r2=dot(pixel,pixel)/(radiusPx*radiusPx);
             // Glints belong to resolved strands: they fade with them, never smear across a sub-pixel sheet.
             glints=exp(-3.0*r2)*min(1.0,radiusPx*radiusPx)*(1.0-smoothstep(0.35,0.9,w));
         }

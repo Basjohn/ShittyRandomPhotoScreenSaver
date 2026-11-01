@@ -217,3 +217,46 @@ def test_both_boundary_filaments_keep_their_light_on_a_curved_quiet_sheet(scene)
     assert len(groups)==2
     energies=[profile[g].sum() for g in groups]
     assert min(energies)>15 and max(energies)/min(energies)<1.25, energies
+
+
+def test_surface_glints_stay_round_when_sheet_coordinates_are_skewed(scene):
+    from rendering.gl_programs.ribbon import RIBBON_LIGHT_FRAGMENT
+    # Feed the production fragment a sheared surface coordinate grid. Orthogonal per-coordinate fwidths
+    # make its glint a diagonal dash; screen-space distance must recover a round point in the centre cell.
+    vertex = '''#version 460 core
+out vec3 vWorld; out vec3 vNormal; out float vPhase; out float vAcross;
+out float vEmission; out float vLocal; out float vCoverage; out float vExpanded; out float vFaceScale;
+flat out vec4 vColour; flat out vec4 vColourB;
+void main() {
+    vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2)*2.0-1.0;
+    gl_Position=vec4(p,0,1);
+    vec2 pixel=p*vec2(100,60);
+    float h=fract(sin(3.1)*43758.5453);
+    vPhase=.5-h*7.0+pixel.x*.01+pixel.y*.035;
+    vAcross=.5+pixel.y*.01;
+    vWorld=vec3(0,0,-10); vNormal=vec3(0,0,1); vEmission=.2; vLocal=0;
+    vCoverage=1; vExpanded=0; vFaceScale=1; vColour=vec4(1); vColourB=vec4(1);
+}
+'''
+    material=RibbonMaterial(strands=1.,strand_warp=0.,strand_light=0.,rim_light=0.,rim_glow_light=0.,
+                            fill_light=0.,glint_density=1.,glint_chance=1.,glint_light=1.,
+                            glint_radius=.03,glint_min_pixels=3.)
+    scene.target.bind(clear=(0.,0.,0.,0.))
+    program=scene.resources.program('skewed glint',vertex,RIBBON_LIGHT_FRAGMENT)
+    gl.glUseProgram(program)
+    for name,value in material.uniforms().items():
+        gl.glUniform4f(gl.glGetUniformLocation(program,name),*value)
+    gl.glUniform1i(gl.glGetUniformLocation(program,'uOrthographic'),1)
+    gl.glUniform3f(gl.glGetUniformLocation(program,'uForward'),0.,0.,-1.)
+    gl.glDisable(gl.GL_DEPTH_TEST)
+    gl.glDisable(gl.GL_BLEND)
+    gl.glBindVertexArray(scene.target.vao)
+    gl.glDrawArrays(gl.GL_TRIANGLES,0,3)
+    crop=scene.target.read_rgba()[H//2-15:H//2+15,W//2-15:W//2+15,0].astype(float)
+    y,x=np.indices(crop.shape,dtype=float)
+    assert crop.sum()>30
+    x-=np.sum(x*crop)/crop.sum(); y-=np.sum(y*crop)/crop.sum()
+    covariance=np.array([[np.sum(x*x*crop),np.sum(x*y*crop)],
+                         [np.sum(x*y*crop),np.sum(y*y*crop)]])/crop.sum()
+    eigenvalues=np.linalg.eigvalsh(covariance)
+    assert eigenvalues[-1]/eigenvalues[0]<1.3, eigenvalues

@@ -240,6 +240,13 @@ additive light gives, and the faint body keeps strands readable through each oth
   an edge-on sliver lies far outside the triangle, and `exp(-edge/width)` overflowed into solid bloom blocks.
 - Glints are sparse hashed points on strands, fixed to the absolute path phase, so they travel with the history.
   They fade with the strands once those are sub-pixel; before that they smeared into white dashes on thin sheets.
+  Their radial distance uses the inverse local surface-to-screen Jacobian: separate `fwidth` divisions assumed
+  orthogonal projected axes and stretched dots into dashes on skewed folds. Continuous phase/across derivatives
+  are evaluated before cell selection; hashed offsets never enter them. Singular coordinate grids emit no glint.
+  A sheared-grid test runs the production fragment and verifies a round footprint; the previous shader's footprint
+  covariance eigenvalues were 0.891 and 40.139. Native candidate and scoped draw cost: `wr04_round_glints/`.
+  At 820x718 on RTX 4090 (45 warm samples), direct plus reflected light draw medians were 0.070/0.072 ms
+  before and 0.070/0.074 ms after (low/high). This excludes every other pass, upload and CPU work.
 - **Folds (edge-on sheets).** A thin emissive translucent sheet seen at an angle gets brighter and more opaque
   with its path length 1/|N.V|, while its projected width shrinks by the same factor, so its light per unit
   length is conserved for the sheet interior (light times path; opacity 1-(1-a)^path). Boundary filaments are separate

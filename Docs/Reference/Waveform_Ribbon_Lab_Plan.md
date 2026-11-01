@@ -35,8 +35,8 @@ restored three distinct ribbon identities; it did not establish fidelity.
   sharp or spiky, including wide inner bends. Outer boundary lines must be brighter and glow more than the interior
   strands even at low react, to describe the translucent 3D sheet. Both rims now have independent boundary emission;
   the native low/high candidate resolves the reported imbalance. Broader sheets, continuous body light and slow
-  phase/amplitude/depth variation improve the wire-like interior and repeated fold rhythm. Still open: glint streaking
-  where filaments compress, fine-detail stability, depth/light and reference shape fidelity. Inspect all boards
+  phase/amplitude/depth variation improve the wire-like interior and repeated fold rhythm. Skew-stretched glints
+  are corrected. Still open: fine-detail stability, depth/light and reference shape fidelity. Inspect all boards
   at native resolution and explicit motion times; do not hide shape faults with bloom.
 - [~] **Floor fidelity, Awaiting Validation:** generated maps are placed; inspect fine wet detail and dark gaps at
   every pose against the main mock. Reflections are still broader and softer than the target. Tune optical sharpness
@@ -87,6 +87,10 @@ the boundary-light correction; `wr04_parity_pass7/surface_cost.json` owns the ea
 The lab authors broad phase/amplitude modulation and depth sway before immutable knots enter the shared ring;
 there is no renderer-side simulation or new clock. These captures do not establish resemblance or operator acceptance.
 The scene remains far from the target and the waveform/floor/volume work above remains live.
+
+`wr04_round_glints/` is the latest still candidate: it retains the sheet recipe and corrects the stretched glint
+footprints exposed by the visual audit. The production-fragment regression and before/after GPU draw measurement
+are scoped to that correction; they do not close motion or whole-scene performance acceptance.
 
 Generated material custody and prompts: `assets/textures/waveform_floor/Source.md`. The albedo is sampled in sRGB;
 the roughness map is linear data. Two differently oriented/scaled world-space samples suppress the old tile pattern,
