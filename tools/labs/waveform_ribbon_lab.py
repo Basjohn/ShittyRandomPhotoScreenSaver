@@ -84,7 +84,7 @@ POSES = {'mock': Pose(), 'turned': Pose(turn=.14), 'raised': Pose(tilt=-.12), 'd
 
 @dataclass(frozen=True)
 class Environment:
-    backdrop: tuple = (.18, .19, .23)
+    backdrop: tuple = (.05, .055, .07)  # the cheap floor mist: barely tinted, dark
     # Floor mist (analytic, cheap): clear around the waveform, thickening toward the camera-side floor edges, the
     # extreme sides and most of all into the distance, where it is thick dark grey and hides the horizon.
     mist: dict = field(default_factory=lambda: mist_uniforms(centre_xz=(0., -1.), radii_xz=(9., 7.5), falloff=1.6,
@@ -98,6 +98,7 @@ class Fog:
     colour of the nearest sheet edge and darkens into the mass; a detail march adds the billows."""
     density: float = 1.6            # extinction per world unit inside the mist
     margin: float = .1              # clear air beyond the envelope (world units)
+    tube: float = .3                # true 3D clearance around every sheet (world units)
     clearance: tuple = (.3, .25)    # push of the whole field from the envelope; the mist never enters within
     ends: float = 6.                # the mist comes this far forward where the sheets fade (world units)
     floor: tuple = (0., 5.5, 2.5)   # floor bank height, forward reach at the sides, |x| where the sides begin
@@ -244,6 +245,10 @@ uniform mat4 uMvp;
 out vec3 vWorldPos;
 void main() { vWorldPos=aPosition; gl_Position=uMvp*vec4(aPosition,1.0); }
 """
+ENVELOPE_RIBBONS = 3   # sheets with their own 3D rows in the envelope table (true 3D clearance)
+ENVELOPE_ROWS_GLSL = (f"const float ENV_ROWS={3 + ENVELOPE_RIBBONS}.0;\n"
+                      f"const int ENV_RIBBONS={ENVELOPE_RIBBONS};\n")
+
 FLOOR_FRAGMENT = """#version 460 core
 in vec3 vWorldPos;
 uniform sampler2D uAlbedo;
@@ -269,7 +274,7 @@ uniform vec3 uForward;
 uniform int uOrthographic;
 layout(location=0) out vec4 FragColor;
 layout(location=1) out vec4 Emission;
-""" + MIST_GLSL + PLANAR_REFLECTION_GLSL + """
+""" + ENVELOPE_ROWS_GLSL + MIST_GLSL + PLANAR_REFLECTION_GLSL + """
 // World-space slope of one height sample set at two incommensurate orientations (no visible tile lattice).
 vec2 slopeAt(vec2 xz, float tile) {
     mat2 turn=mat2(0.6,-0.8,0.8,0.6);
@@ -324,8 +329,8 @@ void main() {
         float du=0.6*uEnvelopeSpan.y;
         for(int i=-2;i<=2;i++) {
             vec2 at=vec2(u+float(i)*du,0.0);
-            float lower=texture(uEnvelope,at+vec2(0,0.5/3.0)).x;
-            vec3 tone=texture(uEnvelope,at+vec2(0,2.5/3.0)).rgb;
+            float lower=texture(uEnvelope,at+vec2(0,0.5/ENV_ROWS)).x;
+            vec3 tone=texture(uEnvelope,at+vec2(0,2.5/ENV_ROWS)).rgb;
             pool+=tone*exp(-max(lower,0.0)/uPool.y)*(1.0-abs(float(i))*0.3);
         }
         float dz=vWorldPos.z-uPoolZ;
@@ -344,11 +349,12 @@ FLAT = {'ribbon': (1., 0., 1.)}
 # sheet bounds along world x, with the colours of the sheets that define them), reduced per frame from the same
 # admitted history the ribbons draw. Static billows anchored in the world; nothing below the floor. No clock and
 # no second ribbon path.
-FOG_SHAPE_GLSL = """
+FOG_SHAPE_GLSL = ENVELOPE_ROWS_GLSL + """
 uniform sampler2D uEnvelope;  // rows: (lower, upper, presence), upper edge colour, lower edge colour
 uniform vec2 uEnvelopeSpan;   // world x at u=0, 1/(world span)
 uniform vec4 uFogForm;      // density, margin, edge softness, billow frequency
 uniform vec4 uFogShape;       // start z, band depth, billow displacement, light decay
+uniform float uFogTube;       // true 3D clearance around every sheet (world units)
 uniform vec2 uFogClearance;   // push of the whole field from the envelope; distance the mist never enters
 uniform float uFogSlope;      // admitted base view rise per unit z
 uniform float uFogEnds;       // how far the mist comes forward where the sheets fade (world units)
@@ -367,10 +373,25 @@ float fogBillow(vec3 p) {
     for(int i=0;i<3;i++) { sum+=amplitude*fogNoise(p); p=p*2.03+vec3(1.7,9.2,3.1); amplitude*=0.5; }
     return sum/0.875;
 }
+// True 3D distance to the nearest sheet (a tube of its half-width around its centreline), sampled at a few x
+// offsets so steep stretches are not under-measured. Every view angle sees the mist keep this clearance.
+float fogSheetDistance(vec3 world) {
+    float d=1e3;
+    for(int r=0;r<ENV_RIBBONS;r++) {
+        float v=(3.5+float(r))/ENV_ROWS;
+        for(int k=-2;k<=2;k++) {
+            float xo=float(k)*0.35;
+            vec4 s=texture(uEnvelope,vec2((world.x+xo-uEnvelopeSpan.x)*uEnvelopeSpan.y,v));
+            if(s.w<0.02) continue;
+            d=min(d,length(vec3(xo,world.y-s.x,world.z-s.y))-s.z);
+        }
+    }
+    return d;
+}
 // Depth into the mist (world units): behind the start plane, and outside the clear band around the waveform's
 // envelope unless beyond the band's depth. Billows displace the band's edge.
 float fogInside(vec3 world, out vec4 band, out float above, out float below) {
-    band=texture(uEnvelope,vec2((world.x-uEnvelopeSpan.x)*uEnvelopeSpan.y,0.5/3.0));
+    band=texture(uEnvelope,vec2((world.x-uEnvelopeSpan.x)*uEnvelopeSpan.y,0.5/ENV_ROWS));
     // The waveform repels the mist: the whole field (shape and light) is pushed out from the envelope by the
     // first clearance; billow tips that still come closer than the second are cut, so the cut face is lit.
     float y=world.y-uFogSlope*world.z;  // projected along the admitted base view (see waveform_envelope)
@@ -400,7 +421,8 @@ float fogInside(vec3 world, out vec4 band, out float above, out float below) {
                 +uFogShape.z*0.9*(fogBillow(world*uFogForm.w*1.3+vec3(2.1))-0.5);
     // Banks off: no mound at all (its billow term alone would float noise puffs anywhere in the world).
     float floorMist=uFogFloor.x>0.0?min(mound,raw-uFogClearance.y):-1e3;
-    return world.y<0.0?-1.0:max(field,floorMist);
+    // The waveform truly repels the mist in 3D: nothing within the tube clearance of any sheet, from any angle.
+    return world.y<0.0?-1.0:min(max(field,floorMist),fogSheetDistance(world)-uFogTube);
 }
 """
 
@@ -443,8 +465,8 @@ void fogMedium(vec3 world, out vec3 radiance, out float extinction, out float st
     steady=world.z<uFogShape.x+1.0?uFogHaze:0.0;
     extinction=uFogForm.x*smoothstep(0.0,uFogForm.z,inside)+steady;
     float u=(world.x-uEnvelopeSpan.x)*uEnvelopeSpan.y;
-    vec3 upperColour=texture(uEnvelope,vec2(u,1.5/3.0)).rgb;
-    vec3 lowerColour=texture(uEnvelope,vec2(u,2.5/3.0)).rgb;
+    vec3 upperColour=texture(uEnvelope,vec2(u,1.5/ENV_ROWS)).rgb;
+    vec3 lowerColour=texture(uEnvelope,vec2(u,2.5/ENV_ROWS)).rgb;
     // The nearest sheet edge lights the mist in its colour, by distance from the sheets (outside the envelope and
     // behind or before their depth): continuous, since the light lives on the coarse cells. The far wall behind
     // the band stays dark; light fades with depth into the mist, so rims glow and interiors stay dark.
@@ -510,6 +532,7 @@ def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None) -> np
     lower, upper = np.full(xs.shape, np.inf), np.full(xs.shape, -np.inf)
     presence = np.zeros(xs.shape)
     sheets = []
+    tubes = np.zeros((ENVELOPE_RIBBONS, xs.size, 4))  # per sheet: centre y, centre z, faded half-width, presence
 
     def smooth(x):
         x = np.clip(x, 0., 1.)
@@ -538,6 +561,12 @@ def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None) -> np
         here = ~np.isnan(centre)
         top, bottom = np.where(here, centre + half, -np.inf), np.where(here, centre - half, np.inf)
         sheets.append((top, bottom, colour*light[:, None]))  # per-x colour: it flows along the history
+        if len(sheets) <= ENVELOPE_RIBBONS:  # the sheet itself in 3D (unprojected), for true 3D clearance
+            tube = tubes[len(sheets) - 1]
+            tube[:, 0] = np.interp(xs, x, knots[:, 0, 1] + origin[1])
+            tube[:, 1] = np.interp(xs, x, knots[:, 0, 2] + origin[2])
+            tube[:, 2] = np.interp(xs, x, knots[:, 0, 3])*np.interp(xs, x, fade, left=0., right=0.)
+            tube[:, 3] = np.where(here, np.interp(xs, x, fade), 0.)
         upper, lower = np.maximum(upper, top), np.minimum(lower, bottom)
         presence = np.maximum(presence, np.where(here, np.interp(xs, x, fade), 0.))
     # Each edge glows in a blend of the sheets near it (by proximity), never a hard switch to whichever is outermost.
@@ -574,9 +603,10 @@ def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None) -> np
     upper, lower = blur(upper, fog.envelope_smoothing), blur(lower, fog.envelope_smoothing)
     upper_colour = np.stack([blur(c, 4*fog.envelope_smoothing) for c in upper_colour.T], 1)
     lower_colour = np.stack([blur(c, 4*fog.envelope_smoothing) for c in lower_colour.T], 1)
-    table = np.zeros((3, xs.size, 4), np.float32)
+    table = np.zeros((3 + ENVELOPE_RIBBONS, xs.size, 4), np.float32)
     table[0, :, 0], table[0, :, 1], table[0, :, 2] = lower, upper, presence
     table[1, :, :3], table[2, :, :3] = upper_colour, lower_colour
+    table[3:] = tubes
     return table
 
 
@@ -822,6 +852,7 @@ class Lab:
         gl.glUniform4f(location('uFogForm'), fog.density, fog.margin, fog.softness, fog.noise_scale)
         gl.glUniform4f(location('uFogShape'), fog.start_z, fog.band_depth, fog.noise, fog.light_decay)
         gl.glUniform2f(location('uFogClearance'), *fog.clearance)
+        gl.glUniform1f(location('uFogTube'), fog.tube)
         gl.glUniform1f(location('uFogSlope'), VIEW_SLOPE)
         gl.glUniform1f(location('uFogEnds'), fog.ends)
         gl.glUniform3f(location('uFogFloor'), *fog.floor)

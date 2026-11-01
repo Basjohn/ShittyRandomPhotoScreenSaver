@@ -75,6 +75,14 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
   - low: 0.114 / 0.269 vs 0.079 / 0.22 (baseline 0.033);
   - high: 0.208 / 0.569 vs 0.307 / 0.538.
   The loud floor's median is high; the quiet floor is still somewhat dark.
+- [~] **True 3D clearance (`wr07_mist_3d_tube`; operator: "is it truly 3D? It needs to truly avoid the waveform"):**
+  - **Before:** the envelope was a 2D band projected along the default view. From turned angles the mist passed
+    behind and through sheets that the projection missed.
+  - **Now:** the envelope table carries every sheet's own 3D centreline (y, z), faded half-width and presence
+    per x. The shape takes the true 3D distance to each sheet's tube, sampled at five x offsets, and keeps the
+    mist 0.3 units clear of every sheet from any angle.
+  - **Rejected:** a 0.6 clearance carved gaps in the bank at the mock pose.
+  - **Also:** the cheap floor mist is darkened (backdrop 0.05/0.055/0.07). Operator: "way too bright".
 - [~] **Floor mist split (operator, 1 November):**
   - **Reactive coloured volume mist only above the waveform and at the edges** the camera does not see. The coloured
     floor banks, the floor light and any volume mist under the waveform are off: eroded lumps there read as stray
