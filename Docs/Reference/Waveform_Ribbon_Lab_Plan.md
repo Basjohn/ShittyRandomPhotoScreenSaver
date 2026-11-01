@@ -190,6 +190,18 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
       The 4K floor's 360-row cap brings its streak back to the lab's 11 samples (16 at a 720 cap: 4.9 / 7.2 ms).
     - **Rejected:** anisotropy 16 -> 8. It halved the 4K floor (1.8 / 2.7 ms) but blurred the vertical columns the
       operator chose.
+    - **Landed: floor reflection pre-pass (`wr07_cost_floor_prepass`).** The floor's reflection term (streak taps,
+      contact probe, hot-light shaping) is evaluated in a pre-pass at most 1080 rows tall, then read back by the
+      full-resolution floor pass.
+      - At 718 rows the lab is pixel-identical (the term stays inline).
+      - Interleaved 4K A/B (alternating frames, so clock state hits all configs equally):
+        - floor 10.4 / 9.6 ms without the pre-pass (high / low);
+        - 3.2 / 4.9 ms at a 1080 cap;
+        - 2.0 / 3.6 ms at a 720 cap.
+      - A 720 cap visibly softened the grain inside the columns at 1:1 4K; 1080 keeps it nearly intact.
+    - **Measurement lesson:** sequential stage timings at 4K are dominated by GPU clock and power state. The
+      first-measured state ran about 6x faster whichever it was. Only interleaved A/B within one process is
+      trustworthy.
     - **Open:**
       - 4K high still sums to about 9 ms for mist and floor before ribbons, bloom and composition;
       - candidates: the floor's per-pixel reflection at reduced resolution with a depth-aware upsample, or
