@@ -95,14 +95,14 @@ class Floor:
     roughness: str = 'assets/textures/waveform_floor/concrete_roughness.png'
     tile: float = 12.               # broad world-space patch, blended at a second incommensurate orientation/scale
     ambient: tuple = (.6, .75, 1.1)
-    reflection: float = 3.5         # wet film: reflection strength before Fresnel
+    reflection: float = 1.8         # wet film: reflection strength before Fresnel
     f0: float = .04
     normal_shift: float = .025      # screen-uv shift of the reflection lookup per unit normal tilt
     streak: float = .22             # vertical reflection streak (uv) at roughness 1
     lod: tuple = (1., 6.)           # blur footprint covers the streak taps, avoiding repeated reflection bands
     surface: tuple = (.06, .12, .65, .7)  # dry bump (world), wet/dry optical roughness, wet albedo gain
     resolution: float = .5          # reflection target size relative to the view
-    diffuse: float = 6.             # light from the glowing scene above, on the albedo
+    diffuse: float = 3.             # light from the glowing scene above, on the albedo
     diffuse_lod: float = 5.5        # mip of the reflection used as that light (wide)
 
 
@@ -139,10 +139,10 @@ class Recipe:
     flow: Flow = field(default_factory=Flow)
     # Mock-directed look (WR-04): saturated darker body, thin near-white irregular strands and rims, visible glints.
     material: RibbonMaterial = field(default_factory=lambda: RibbonMaterial(
-        strands=26., strand_half_width=.018, strand_light=7., strand_white=.04, strand_jitter=.35, strand_warp=.18,
-        strand_variation=.9, cross_curve=.35, warp_frequency=.2, rim_light=1.6, rim_white=.12, rim_half_width=.009,
-        fill_light=.008, fill_centre=.3, rim_glow_light=.015,
-        rim_glow_width=.05, body_alpha=.006, body_tint=.4, glint_density=1.4, glint_chance=.12, glint_light=3.,
+        strands=26., strand_half_width=.018, strand_light=4., strand_white=.04, strand_jitter=.35, strand_warp=.18,
+        strand_variation=.9, cross_curve=.35, warp_frequency=.2, rim_light=3.5, rim_white=.08, rim_half_width=.009,
+        fill_light=.08, fill_centre=.3, rim_glow_light=.3,
+        rim_glow_width=.025, body_alpha=.025, body_tint=.4, glint_density=1.4, glint_chance=.12, glint_light=3.,
         glint_radius=.25, glint_min_pixels=.8))
     sparks: RibbonSparks = field(default_factory=lambda: RibbonSparks(per_knot=16, lifetime=4.5, drift=1.2, rise=.4,
                                                                        smallest=1.6, largest=5., light=16., white=.25))

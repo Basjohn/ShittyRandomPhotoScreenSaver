@@ -198,3 +198,22 @@ def test_history_sparks_cover_the_whole_ribbon_statelessly(scene):
     assert not draw(0., 11.75).any()
     np.testing.assert_array_equal(lit, draw(1., 11.75))
     assert (lit != draw(1., 12.6)).any()
+
+
+def test_both_boundary_filaments_keep_their_light_on_a_curved_quiet_sheet(scene):
+    # The two boundaries have different normals on a bowed sheet. Multiplying their light by the sheet's
+    # grazing path length made one bright and the other disappear, despite identical authored boundary light.
+    ring=RibbonRing(1,colours=[(1.,1.,1.,1.)])
+    for i in range(6):
+        ring.append(i,[(i-2.5,0.,-10.)],.6,.6,.2)
+    material=RibbonMaterial(cross_curve=.35,strand_light=0.,fill_light=0.,rim_glow_light=0.,
+                            glint_light=0.,rim_light=1.,rim_white=1.)
+    scene.target.bind(clear=(0.,0.,0.,0.))
+    gl.glDisable(gl.GL_DEPTH_TEST)
+    scene.primitive.draw(ring.packet(),MVP,shading='light',view=VIEW,material=material,sweep_axis=(1.,0.,0.))
+    profile=scene.target.read_rgba()[:,W//2,0].astype(float)
+    rows=np.where(profile>2)[0]
+    groups=np.split(rows,np.where(np.diff(rows)>1)[0]+1)
+    assert len(groups)==2
+    energies=[profile[g].sum() for g in groups]
+    assert min(energies)>15 and max(energies)/min(energies)<1.25, energies
