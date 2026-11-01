@@ -82,13 +82,21 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
   at the contact line and break into sparkle toward the camera. In low react the floor is much darker than the
   mock's; its cyan and magenta columns are distinct even then. No concrete structure is visible. Keep the
   baseline's smooth wet character.
-- [ ] **Mist edge character:** soft and dim, where the mock shows a bright fibrous crackle. **Rejected, 1 November:**
-  volumetric crackle (sharpened ridge noise emitted in a band at the eroded face, per march sample). Anything placed
-  in the volume is integrated through the bank's whole depth along each ray, so it mottled the mist into blocky
-  texture instead of drawing a line. The mock's crackle is a silhouette effect: the next approach works in screen
-  space on the march's own transmittance edge (where the bank turns opaque as seen), with ridge noise along that edge
-  at full resolution. In wide views the
-  corner banks read as separate cotton mounds; the mock's form a continuous bank.
+- [~] **Mist edge character (`wr07_mist_edge_line`; operator: "definitely the right direction. Closest. Keep note"):**
+  - **Mechanism:** a screen-space edge line in the mist composite, at full resolution.
+    - The edge is where the march's lit in-scatter falls into the dark body (blurred log-luminance gradient).
+      Transmittance has no edge there: the bank is opaque, and behind it is more mist.
+    - Only faces lit from below count (the bank's underside), only saturated fringes, and only above the waveform's
+      projected top outline (a per-column limit from the lab envelope).
+    - The fringe's own hue at full saturation; mostly a smooth line, gently fibrous; its own bloom share.
+  - **Rejected:**
+    - volumetric crackle: mottled the whole bank;
+    - fine per-pixel filaments: sand;
+    - the unlimited line: lit the floor-mist boundary as a white bar along the contact line, and crackled the floor
+      banks' edges (operator: regressed).
+  - **Open:**
+    - filaments are screen-anchored: check them in motion and camera moves;
+    - the mock's line is brighter at its core with fibrous tendrils into the bank.
 - [~] **Waveform:** the sheets were too bright and washed toward white. Mock / ours, crest strands: luminance
   0.195 / 0.32, saturation 0.84 / 0.67. Less strand, fill and bloom light, with rims kept brighter than strands,
   brings this to 0.225 / 0.72; the quiet sheets go from 0.28 to 0.205 against the mock's 0.19 (`wr07_sheet_tone`).

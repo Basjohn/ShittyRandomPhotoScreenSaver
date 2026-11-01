@@ -229,14 +229,74 @@ layout(location=0) out vec4 FragColor;
 layout(location=1) out vec4 Emission;
 uniform float uFogGlow;          // share of the in-scatter that feeds bloom
 uniform float uFogScale;         // in-scatter gain (a reflection may take less of the mist than the eye sees)
+uniform vec4 uFogCrackle;        // gain, filament frequency (per pixel), sharpness, edge width (march texels); 0 off
+uniform vec2 uFogCrackleSeed;    // the line's bloom share; unused
+uniform sampler2D uFogCrackleLimit; // per screen column: the lowest screen v (0..1, up) the line may reach
+uniform int uFogCrackleLimited;
+float crackleHash(vec2 p) { p=fract(p*vec2(0.1031,0.1030)); p+=dot(p,p.yx+33.33); return fract((p.x+p.y)*p.x); }
+float crackleNoise(vec2 x) {
+    vec2 i=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
+    return mix(mix(crackleHash(i),crackleHash(i+vec2(1,0)),f.x),mix(crackleHash(i+vec2(0,1)),crackleHash(i+vec2(1,1)),f.x),f.y);
+}
+// Silhouette crackle: the bank's edge as seen is where its transmittance changes fastest. Thin ridged filaments run
+// along that edge (ridges of noise warped along the edge direction), lit in the in-scatter's own colour there.
+// Full resolution and screen space: a volume cannot confine a line to a silhouette.
+float crackleLum(vec2 uv, vec2 t) {
+    vec3 w=vec3(0.2126,0.7152,0.0722);
+    vec2 h=t*0.5;
+    return 0.25*(dot(texture(uFogMarch,uv+vec2(h.x,h.y)).rgb,w)+dot(texture(uFogMarch,uv+vec2(-h.x,h.y)).rgb,w)
+                +dot(texture(uFogMarch,uv+vec2(h.x,-h.y)).rgb,w)+dot(texture(uFogMarch,uv+vec2(-h.x,-h.y)).rgb,w));
+}
+vec3 crackle(vec2 uv, vec4 fog) {
+    if(uFogCrackle.x<=0.0) return vec3(0.0);
+    float limit=uFogCrackleLimited==1?texture(uFogCrackleLimit,vec2(uv.x,0.5)).r:-1.0;
+    float allowed=smoothstep(limit-0.01,limit+0.02,uv.y);
+    if(allowed<=0.0) return vec3(0.0);
+    // The edge as seen: where lit in-scatter falls off into the dark body (log luminance gradient). Behind the bank
+    // is more mist, so transmittance is ~0 across it and has no edge.
+    vec2 t=uFogCrackle.w/vec2(textureSize(uFogMarch,0));
+    vec3 w=vec3(0.2126,0.7152,0.0722);
+    // Each gradient tap is a small blur: the march's per-pixel step jitter otherwise turns the line into sand.
+    float lx=log(crackleLum(uv+vec2(t.x,0),t)+1e-3)-log(crackleLum(uv-vec2(t.x,0),t)+1e-3);
+    float ly=log(crackleLum(uv+vec2(0,t.y),t)+1e-3)-log(crackleLum(uv-vec2(0,t.y),t)+1e-3);
+    float tx=lx, ty=ly;
+    float edge=smoothstep(0.15,0.9,length(vec2(tx,ty)));
+    if(edge<=0.01) return vec3(0.0);
+    vec2 normal=normalize(vec2(tx,ty)+1e-6), along=vec2(-normal.y,normal.x);
+    // Faces lit from below (the light lies above the edge, toward the bank): the bank's underside facing the waveform.
+    // Its top against the dark sky stays dark, as in the mock. uFogCrackleSeed.y blends toward all edges.
+    edge*=mix(smoothstep(0.1,0.6,normal.y),1.0,uFogCrackleSeed.y);
+    vec2 p=gl_FragCoord.xy;
+    // Coordinates stretched along the edge: filaments run with it and wander across it.
+    // Only the bright side of the edge: the gradient points into the light, so step against it and compare.
+    float here=crackleLum(uv,t);
+    float darker=crackleLum(uv-normal*t*2.0,t);
+    edge*=smoothstep(1.2,2.5,(here+1e-3)/(darker+1e-3));
+    vec2 q=vec2(dot(p,along)*0.08,dot(p,normal)*0.5)*uFogCrackle.y;
+    q.y+=2.0*crackleNoise(vec2(q.x*0.6,0.0)+7.1);   // filaments wander slowly across the edge
+    float r1=1.0-abs(2.0*crackleNoise(q)-1.0);
+    float r2=1.0-abs(2.0*crackleNoise(q*vec2(1.7,2.3)+vec2(3.7,1.3))-1.0);
+    float ridge=pow(r1,uFogCrackle.z)+0.6*pow(r2,uFogCrackle.z);
+    // The fringe's own hue at full saturation (normalised by its strongest channel), at an absolute brightness:
+    // the mock's edge is a luminous line, far brighter than the dim mist it sits on.
+    vec3 tone=texture(uFogMarch,uv,1.0).rgb;  // the fringe colour, not its grain
+    float top=max(max(tone.r,max(tone.g,tone.b)),1e-4);
+    // Only coloured fringes: a pale edge (the floor mist's boundary, low haze) is not a rim and bloomed into a bar.
+    edge*=smoothstep(0.35,0.6,(top-min(tone.r,min(tone.g,tone.b)))/top);
+    vec3 hue=tone/top;
+    hue=mix(vec3(dot(hue,w)),hue,1.4);
+    return max(hue,vec3(0.0))*edge*allowed*(0.7+0.3*ridge)*uFogCrackle.x;  // mostly a smooth line, gently fibrous
+}
 void main() {
     // A tent over the march's texels: its per-pixel step jitter is grain, not detail.
     vec2 uv=vNdc*0.5+0.5, texel=0.75/vec2(textureSize(uFogMarch,0));
     vec4 fog=0.25*(texture(uFogMarch,uv+vec2(-texel.x,-texel.y))+texture(uFogMarch,uv+vec2(texel.x,-texel.y))
                   +texture(uFogMarch,uv+vec2(-texel.x,texel.y))+texture(uFogMarch,uv+vec2(texel.x,texel.y)));
-    fog.rgb*=uFogScale;
+    vec3 line=crackle(uv,fog)*uFogScale;
+    fog.rgb=fog.rgb*uFogScale+line;
     FragColor=fog;               // blend: dst x src alpha + src
-    Emission=vec4(fog.rgb*uFogGlow,dot(fog.rgb*uFogGlow,vec3(0.2126,0.7152,0.0722)));
+    vec3 glow=fog.rgb*uFogGlow+line*uFogCrackleSeed.x;   // the line blooms broadly (its own share)
+    Emission=vec4(glow,dot(glow,vec3(0.2126,0.7152,0.0722)));
 }
 """
 

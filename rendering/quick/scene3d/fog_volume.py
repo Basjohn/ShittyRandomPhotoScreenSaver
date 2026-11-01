@@ -193,13 +193,14 @@ class FogMarch:
     are reused. ``march`` restores the caller's framebuffer, viewport, program and blend state.
     """
 
-    DETAIL_UNIT, MEDIUM_UNIT, MARCH_UNIT, STEADY_UNIT = 9, 10, 11, 12
+    DETAIL_UNIT, MEDIUM_UNIT, MARCH_UNIT, STEADY_UNIT, LIMIT_UNIT = 9, 10, 11, 12, 15
 
     def __init__(self, label: str, coverage_glsl: str | None = None) -> None:
         self.label = label
         self._source = fog_march_source(coverage_glsl)
         self._size = (0, 0)
         self._colour = self._fbo = self._detail = self._vao = 0
+        self._limit, self._limit_size = 0, 0
         self._programs = {}
         self._context_ref = None
 
@@ -308,7 +309,8 @@ class FogMarch:
             (gl.glEnable if depth_test else gl.glDisable)(gl.GL_DEPTH_TEST)
             (gl.glEnablei if blend else gl.glDisablei)(gl.GL_BLEND, 0)
 
-    def composite(self, *, glow: float = 0., additive: bool = False, scale: float = 1.) -> None:
+    def composite(self, *, glow: float = 0., additive: bool = False, scale: float = 1., crackle=(0., 0., 1., 1.),
+                  crackle_glow: float = 0., crackle_limit=None) -> None:
         """Draw the last march over the bound framebuffer: dst x transmittance + in-scatter (``additive``: + in-scatter
         only, for a target that holds light alone, such as a reflection)."""
         self._check_context()
@@ -327,6 +329,14 @@ class FogMarch:
             gl.glUniform1i(gl.glGetUniformLocation(program, 'uFogMarch'), self.MARCH_UNIT)
             gl.glUniform1f(gl.glGetUniformLocation(program, 'uFogGlow'), glow)
             gl.glUniform1f(gl.glGetUniformLocation(program, 'uFogScale'), scale)
+            gl.glUniform4f(gl.glGetUniformLocation(program, 'uFogCrackle'), *crackle)
+            gl.glUniform2f(gl.glGetUniformLocation(program, 'uFogCrackleSeed'), crackle_glow, 0.)
+            # Optional per-column limit (float32 array over screen x, values in screen v): the consumer's own geometry.
+            gl.glUniform1i(gl.glGetUniformLocation(program, 'uFogCrackleLimited'), int(crackle_limit is not None))
+            if crackle_limit is not None:
+                self._upload_limit(np.ascontiguousarray(crackle_limit, np.float32))
+                gl.glBindTextureUnit(self.LIMIT_UNIT, self._limit)
+                gl.glUniform1i(gl.glGetUniformLocation(program, 'uFogCrackleLimit'), self.LIMIT_UNIT)
             gl.glDisable(gl.GL_DEPTH_TEST)
             gl.glDepthMask(gl.GL_FALSE)
             gl.glEnablei(gl.GL_BLEND, 0)
@@ -348,9 +358,25 @@ class FogMarch:
             (gl.glEnablei if blend else gl.glDisablei)(gl.GL_BLEND, 0)
             (gl.glEnablei if blend_emission else gl.glDisablei)(gl.GL_BLEND, 1)
 
+    def _upload_limit(self, limit) -> None:
+        if not self._limit or self._limit_size != limit.size:
+            if self._limit:
+                gl.glDeleteTextures(1, [self._limit])
+            name = (ctypes.c_uint*1)()
+            gl.glCreateTextures(gl.GL_TEXTURE_2D, 1, name)
+            self._limit, self._limit_size = int(name[0]), limit.size
+            gl.glTextureStorage2D(self._limit, 1, gl.GL_R32F, limit.size, 1)
+            for parameter, value in ((gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR), (gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR),
+                                     (gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP_TO_EDGE), (gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_EDGE)):
+                gl.glTextureParameteri(self._limit, parameter, value)
+        gl.glTextureSubImage2D(self._limit, 0, 0, 0, limit.size, 1, gl.GL_RED, gl.GL_FLOAT, limit)
+
     def release(self) -> None:
         if self.has_resources:
             self._check_context()
+        if self._limit:
+            gl.glDeleteTextures(1, [self._limit])
+        self._limit, self._limit_size = 0, 0
         if self._fbo:
             gl.glDeleteFramebuffers(1, [self._fbo])
         live = [t for t in (self._colour, self._detail) if t]
