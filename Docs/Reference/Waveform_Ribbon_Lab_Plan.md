@@ -44,7 +44,8 @@ implementer's call without further confirmation; the operator judges much later.
 3. The preset-range board stays a range example. Its recipe (`range`) is parked after two passes: tight bundle,
    a bass arc 2.5x the other crests, and a gradient running on to orange. Evidence `wr08_alternate_look/preset_range_parked.png`.
 4. Camera sweep done (`wr08_camera_sweep/`): twelve views per look, both projections. The near-clip band is fixed;
-   the end-on blowout and the turned-Perspective far floor are open (Migration Plan §6).
+   side walls of edge mist now close the clear corridor along the ribbons (end-on and turned-Perspective views),
+   see Migration Plan §6.
 5. **Migration plan written:** [`Waveform_Ribbon_Migration_Plan.md`](Waveform_Ribbon_Migration_Plan.md) owns WR-08's
    full controls (Extruded Bubble's 3D Framed shape, Orthographic default), visual editors, reactivity and port
    order. Reactivity: final calibration in the migration through production recorded-feature replay, with a
