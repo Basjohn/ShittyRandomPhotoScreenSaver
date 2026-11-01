@@ -406,16 +406,27 @@ float fogInside(vec3 world, out vec4 band, out float above, out float below) {
 
 # The march's fine coverage: the same shape per sample, so the band's edge never stair-steps at the coarse cells.
 FOG_COVERAGE_GLSL = FOG_SHAPE_GLSL + """
+// The march asks for coverage and then the light direction at the same sample: the shape is evaluated once and its
+// side (above/below the band) remembered for the direction (the shape and its noise dominate the march's cost).
+vec3 fogLastWorld=vec3(1e30);
+float fogLastSide=0.0;
 float fogCoverage(vec3 world, float coarse) {
     vec4 band; float above, below;
-    return smoothstep(0.0,uFogForm.z,fogInside(world,band,above,below));
+    float inside=fogInside(world,band,above,below);
+    fogLastWorld=world;
+    fogLastSide=above>0.0?1.0:below>0.0?-1.0:0.0;
+    return smoothstep(0.0,uFogForm.z,inside);
 }
 // Each lobe is lit from the waveform: mist above the band from below, mist below it from above, the far wall from
 // the front. Shading toward clearer air pointed at the camera and left the lobes flat.
 vec3 fogLightDirection(vec3 world) {
-    vec4 band; float above, below;
-    fogInside(world,band,above,below);
-    return normalize(above>0.0?vec3(0.0,-1.0,0.35):below>0.0?vec3(0.0,1.0,0.35):vec3(0.0,0.0,1.0));
+    float side=fogLastSide;
+    if(world!=fogLastWorld) {
+        vec4 band; float above, below;
+        fogInside(world,band,above,below);
+        side=above>0.0?1.0:below>0.0?-1.0:0.0;
+    }
+    return normalize(side>0.5?vec3(0.0,-1.0,0.35):side<-0.5?vec3(0.0,1.0,0.35):vec3(0.0,0.0,1.0));
 }
 """
 

@@ -115,10 +115,23 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
   Still paler than the mock's deep blue-violet body; the mock's brightness gathers at rims and crossings. Remaining
   structure work: fine-detail stability, depth and light, and reference shape fidelity. Every admitted shape stays
   smooth like folding cloth.
-- [ ] **Cost (RTX 4090, 820x718 medians):**
-  - main mist march 1.07/3.07 ms (low/high), mirrored march 0.9-1.6 ms: too costly for production;
-  - floor 0.21/1.18 ms.
-  The march needs adaptive or fewer steps and a cheaper light direction.
+- [ ] **Cost (settled shape, `wr07_mist_floor_split`; RTX 4090, 820x718):**
+  - **Medians in a stable-clock run (low/high react):**
+    - main mist march: 1.05 / 1.73 ms;
+    - mirrored march: 0.43 / 0.90 ms;
+    - floor: 0.21 / 0.44 ms;
+    - edge-line composite: about 0.02 ms;
+    - coarse volume updates: under 0.15 ms.
+  - **Absolute timings are unreliable:** GPU clock states swing the march between about 0.8 and 2.9 ms whatever the
+    code. Judge only control-relative figures (march / floor in the same frames).
+  - **Step taken:** the shape is evaluated once per step for coverage and light direction. Pixel-identical;
+    march / floor at low react went from about 3.9 to 3.7.
+  - **The march is still dominated by evaluating the lab shape per sample:** envelope lookup plus two 3-octave
+    noise fields, three times per step with the shadow probe.
+  - **Next, structural:**
+    - bake the shape's inside-distance into a finer, camera-independent 3D texture once per envelope update;
+    - adaptive step count from the coarse coverage;
+    - the mirrored march at fewer steps, since the floor takes only 0.35 of its light.
 - [ ] **Motion:** explicit-time slow-motion captures of mist anchoring, streak stability and sheet rims; five poses
   in both projections.
 - [ ] **Accents:** cyan/magenta sparks with a real size range; tight filament glow plus broad hot spots.
