@@ -114,6 +114,17 @@ from parity. §0B is the current visual audit, not an acceptance report.
       is a colour-along-x gap in the waveform itself, which the mist only inherits: next slice.
     - The mist is still softer than the mock's crackling edge, and the floor reflection is horizontal shimmer where
       the mock has vertical streaks.
+  - **Colour flow and world grade (`wr07_colour_grade`):**
+    - Per-knot tint row added to the ring ABI, for reactive colour that flows with the history.
+    - The world grade gives the mock's cyan left, blue-violet middle and magenta right. Shares: ribbons 0.3, so a
+      magenta sheet is not dragged through grey and identities hold; mist 0.75, luminance-preserving.
+    - Floor banks are rounded mounds: the box faces in the turned view are gone.
+    - **Self-review:**
+      - The sheets are still paler and whiter than the mock's saturated ribbons (material whiteness: waveform pass).
+      - The mist edge is softer and dimmer than the mock's crackle.
+      - The banks read as discrete cotton mounds in wide views.
+      - The floor reflection is still horizontal shimmer.
+      - The history tint is not authored yet: share 0 in the lab until the WR-07 colour reactivity mapping.
   - **Self-review of the previous pass:**
     - The corner banks are small and dim in the mock framing, and read as puffs in wide views; the mock's fill the
       lower corners up to the sheets.

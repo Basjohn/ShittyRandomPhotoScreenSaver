@@ -25,7 +25,19 @@ from rendering.quick.scene3d.stream import StreamRing
 _FRAGMENTS = {'diagnostic': RIBBON_FRAGMENT, 'body': RIBBON_BODY_FRAGMENT, 'light': RIBBON_LIGHT_FRAGMENT}
 _MATERIAL_UNIFORMS = ('uViewZ', 'uEye', 'uForward', 'uOrthographic', 'uStrands', 'uRim', 'uBody', 'uFill', 'uGlint', 'uAge',
                       'uMist', 'uMistShape', 'uMistOrigin', 'uTone',
-                      'uViewport', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange')
+                      'uViewport', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange', 'uGradeLeft', 'uGradeMid',
+                      'uGradeRight')
+GRADE_OFF = dict(uGradeLeft=(0., 0., 0., 0.), uGradeMid=(0., 0., 0., 0.), uGradeRight=(0., 0., 0., 1.))
+
+
+def ribbon_grade(left, mid, right, x_range, share):
+    """World colour grade uniforms: three normalized RGB stops across a world-x range, taking ``share`` of colour."""
+    colours = [tuple(float(v) for v in c) for c in (left, mid, right)]
+    x0, x1 = (float(v) for v in x_range)
+    if (any(len(c) != 3 or not all(math.isfinite(v) and 0 <= v <= 1 for v in c) for c in colours)
+            or not (math.isfinite(x0) and math.isfinite(x1) and x0 < x1) or not 0 <= float(share) <= 1):
+        raise ValueError('A ribbon grade needs three normalized colours, an ordered finite range and a 0..1 share')
+    return dict(uGradeLeft=(*colours[0], x0), uGradeMid=(*colours[1], float(share)), uGradeRight=(*colours[2], x1))
 
 
 def _sweep_axis(value):
@@ -128,7 +140,8 @@ class RibbonPrimitive:
 
     def draw(self, packet: RibbonPacket, mvp, *, diagnostic=0, timing_query=None, shading='diagnostic',
              view=None, orthographic=True, material: RibbonMaterial | None = None, age_fade=None,
-             mist=None, mist_frame=(0., 0., 0.), sparks: RibbonSparks | None = None, now=None, sweep_axis=None):
+             mist=None, mist_frame=(0., 0., 0.), sparks: RibbonSparks | None = None, now=None, sweep_axis=None,
+             grade=None):
         """``age_fade`` = (absolute now, fade-in s, maximum age s, fade-out s) fades the head and tail by age.
 
         ``mist`` (``rendering.gl_programs.mist.mist_uniforms``) dims light and coverage by the scene's world mist;
@@ -140,7 +153,7 @@ class RibbonPrimitive:
         if not 0 <= packet.instances <= MAX_RIBBONS or len(packet.payload) != packet.instances*RIBBON_BYTES:
             raise ValueError('Invalid ribbon packet shape')
         if shading == 'sparks':
-            return self._draw_sparks(packet, mvp, sparks or RibbonSparks(), now, mist, mist_frame,
+            return self._draw_sparks(packet, mvp, sparks or RibbonSparks(), now, mist, mist_frame, grade,
                                      material or RibbonMaterial(), _sweep_axis(sweep_axis))
         if shading not in _FRAGMENTS:
             raise ValueError(f'Unknown ribbon shading: {shading}')
@@ -168,7 +181,7 @@ class RibbonPrimitive:
         if shading != 'diagnostic':
             shaded = self._material_uniforms(view, translate, bool(orthographic), material)
             shaded['uAge'] = (0., 0., 0., 0.)
-            shaded.update(uMist=(0., 0., 1., 1.), uMistShape=(0., 0., 0., 0.), **FOG_OFF)
+            shaded.update({'uMist': (0., 0., 1., 1.), 'uMistShape': (0., 0., 0., 0.), **FOG_OFF, **GRADE_OFF, **(grade or {})})
             if mist is not None:
                 shaded.update(mist)
             frame = np.asarray(packet.world_origin, float) + np.asarray(mist_frame, float)
@@ -227,7 +240,7 @@ class RibbonPrimitive:
             gl.glBindVertexArray(vao_before)
             gl.glUseProgram(program_before)
 
-    def _draw_sparks(self, packet, mvp, sparks, now, mist, mist_frame, material, sweep_axis):
+    def _draw_sparks(self, packet, mvp, sparks, now, mist, mist_frame, grade, material, sweep_axis):
         """Additive point sprites on the bound target (the caller sets blending, as for the light pass)."""
         if packet.instances == 0:
             return
@@ -245,7 +258,8 @@ class RibbonPrimitive:
             program = self.resources.program('sparks', RIBBON_SPARK_VERTEX, RIBBON_SPARK_FRAGMENT)
             vao, _ = self.resources.mesh('empty', (0., 0.), (2,))
             names = ('uMvp', 'uSpark', 'uSparkLook', 'uSparkClock', 'uSparkWhite', 'uMist', 'uMistShape', 'uMistOrigin',
-                     'uSurface','uSweepAxis', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange')
+                     'uSurface','uSweepAxis', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange', 'uGradeLeft',
+                     'uGradeMid', 'uGradeRight')
             u = self.resources.uniforms('sparks', names, required=False)
             if self.stream is None:
                 alignment = gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT)
@@ -270,6 +284,8 @@ class RibbonPrimitive:
                 gl.glUniformMatrix4fv(u['uFogView'], 1, gl.GL_FALSE, np.asarray(mist_values['uFogView'], np.float32))
                 gl.glUniform4f(u['uFogLens'], *mist_values['uFogLens'])
             gl.glUniform3f(u['uMistOrigin'], *frame)
+            for name, value in {**GRADE_OFF, **(grade or {})}.items():
+                gl.glUniform4f(u[name], *value)
             with self.stream.bound(gl.GL_SHADER_STORAGE_BUFFER, 0, packet.payload):
                 gl.glDrawArraysInstanced(gl.GL_POINTS, 0, MAX_PATH_SAMPLES*sparks.per_knot, packet.instances)
         finally:

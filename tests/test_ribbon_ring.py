@@ -6,6 +6,7 @@ import pytest
 from core.ribbon_frames import strip_path
 from core.ribbon_geometry import PathSample
 from core.ribbon_packet import RIBBON_BYTES
+from core.ribbon_packet import KNOT_ROWS
 from core.ribbon_ring import HEADER_ROWS, RibbonRing
 
 
@@ -24,7 +25,7 @@ def chronological(packet, ribbon):
     """(header, knots[count, 4, 4]) in chronological order from a ring packet."""
     data = np.frombuffer(packet.payload, np.float32).reshape(-1, RIBBON_BYTES//16, 4)[ribbon]
     count, start, capacity = int(data[0, 0]), int(data[1, 1]), int(data[1, 2])
-    rows = data[HEADER_ROWS:].reshape(-1, 4, 4)
+    rows = data[HEADER_ROWS:].reshape(-1, KNOT_ROWS, 4)
     return data[:HEADER_ROWS], rows[(start + np.arange(count)) % capacity]
 
 

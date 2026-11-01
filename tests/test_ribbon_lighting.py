@@ -1,4 +1,5 @@
 """The lab optical reduction must follow admitted history, never the camera or a second path."""
+from core.ribbon_packet import KNOT_ROWS
 from dataclasses import replace
 
 import numpy as np
@@ -34,7 +35,7 @@ def test_reduction_never_bridges_a_break_or_silently_truncates_sources():
         ring.append(float(i),((float(i),2.,0.),),.5)
     packet=ring.packet()
     data=np.frombuffer(packet.payload,np.float32).copy().reshape(-1,4)
-    data[4+4*4+1,3]=1. # knot four starts a separate strip
+    data[4+KNOT_ROWS*4+1,3]=1. # knot four starts a separate strip
     broken=replace(packet,payload=data.tobytes())
     _,flux=ribbon_lights(broken,(0.,0.,0.),(7.,0.,7.,0.),bin_seconds=10.)
     assert len(flux)==2

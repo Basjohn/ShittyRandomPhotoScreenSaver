@@ -43,6 +43,7 @@ from OpenGL import GL as gl
 import numpy as np
 from PIL import Image, ImageDraw
 
+from core.ribbon_packet import KNOT_ROWS
 from core.ribbon_ring import RibbonRing
 from core.settings import framed_camera as fc
 from rendering.gl_programs.fog_volume import fog_inject_source
@@ -51,7 +52,7 @@ from rendering.gl_programs.reflection import PLANAR_REFLECTION_GLSL, mirror_view
 from rendering.quick.scene3d.fog_volume import FogMarch, FogVolume
 from rendering.quick.scene3d.reflection import PlanarReflection
 from rendering.quick.scene3d.resources import MeshResources
-from rendering.quick.scene3d.ribbon import RibbonMaterial, RibbonPrimitive, RibbonSparks
+from rendering.quick.scene3d.ribbon import RibbonMaterial, RibbonPrimitive, RibbonSparks, ribbon_grade
 from rendering.quick.scene3d.target import SceneTarget
 from tools.labs.render_target import OffscreenRenderTarget
 from tools.labs.waveform_ribbon_targets import ENVELOPE
@@ -99,7 +100,7 @@ class Fog:
     clearance: tuple = (.3, .25)    # push of the whole field from the envelope; the mist never enters within
     ends: float = 6.                # the mist comes this far forward where the sheets fade (world units)
     floor: tuple = (2., 5.5, 2.5)   # floor bank height, forward reach at the sides, |x| where the sides begin
-    floor_light: tuple = (.12, 2., .08)  # floor mist light share, its reach from the sheets; wall-behind light
+    floor_light: tuple = (.08, 2., .08)  # floor mist light share, its reach from the sheets; wall-behind light
     softness: float = 1.5           # depth over which coarse coverage rises: the detail march erodes within it
     noise_scale: float = .35        # lobe frequency of the band's edge (per world unit)
     noise: float = 2.6              # lobe displacement of the edge (world units)
@@ -205,6 +206,11 @@ class Recipe:
         glint_radius=.25, glint_min_pixels=.8))
     sparks: RibbonSparks = field(default_factory=lambda: RibbonSparks(per_knot=16, lifetime=4.5, drift=1.2, rise=.4,
                                                                        smallest=1.6, largest=5., light=16., white=.25))
+    # World colour grade (preset look): the mock's cyan left, blue-violet middle, magenta right across the view,
+    # taking this share of each ribbon's own colour so identities still read. History tint carries reactivity.
+    # (left, mid, right, world x range, ribbon share, mist share): mixing a magenta sheet far toward cyan passes
+    # through grey, so the sheets take a small share and keep their identities; the mist takes most of it.
+    grade: tuple = ((0., .85, 1.), (.25, .2, 1.), (1., .1, .85), (-6., 6.), .3, .75)
     bloom: float = .18
     exposure: float = 1.
 
@@ -319,9 +325,13 @@ float fogInside(vec3 world, out vec4 band, out float above, out float below) {
     // Floor mist: low billowed banks on the floor, reaching toward the camera at the sides (the mock's lower
     // corners), thin under the sheets and never within their clearance.
     float side=smoothstep(uFogFloor.z,uFogFloor.z+3.0,abs(world.x));
-    float height=uFogFloor.x*(0.2+1.2*side)+uFogShape.z*0.6*(fogBillow(world*uFogForm.w*1.3+vec3(2.1))-0.5);
-    float reach=uFogShape.x+side*uFogFloor.y-world.z;
-    float floorMist=min(min(height-world.y,reach),raw-uFogClearance.y);
+    // A rounded mound (height over its forward reach, an ellipse in y/z), so banks never show a flat top or a
+    // vertical face where a height limit meets a depth limit; billows break its surface.
+    float height=uFogFloor.x*(0.2+1.2*side);
+    float reach=max(side*uFogFloor.y,1e-3);
+    float mound=height*(1.0-length(vec2(world.y/max(height,1e-3),max(world.z-uFogShape.x,0.0)/reach)))
+                +uFogShape.z*0.9*(fogBillow(world*uFogForm.w*1.3+vec3(2.1))-0.5);
+    float floorMist=min(mound,raw-uFogClearance.y);
     return world.y<0.0?-1.0:max(field,floorMist);
 }
 """
@@ -399,7 +409,7 @@ def camera(pose: Pose, aspect: float):
 VIEW_SLOPE = math.tan(math.radians(-SPEC.pitch_base_degrees))
 
 
-def waveform_envelope(packet, translation, age_fade, fog: Fog) -> np.ndarray:
+def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None) -> np.ndarray:
     """Lower/upper sheet bounds and their colours along world x from the admitted ring packet (3 x samples x RGBA).
 
     Each ribbon's knots are monotone in x (the history flows along +x), so its centre height and half-width
@@ -422,7 +432,7 @@ def waveform_envelope(packet, translation, age_fade, fog: Fog) -> np.ndarray:
         return x*x*(3. - 2.*x)
     for path in rows:
         count, start, capacity = int(path[0, 0]), int(path[1, 1]), int(path[1, 2])
-        knots = path[4:].reshape(-1, 4, 4)[(start + np.arange(count)) % capacity].astype(float)
+        knots = path[4:].reshape(-1, KNOT_ROWS, 4)[(start + np.arange(count)) % capacity].astype(float)
         valid = knots[:, 1, 2] > .5
         knots = knots[valid]
         if len(knots) < 2:
@@ -437,10 +447,13 @@ def waveform_envelope(packet, translation, age_fade, fog: Fog) -> np.ndarray:
         centre = np.interp(xs, x, projected, left=np.nan, right=np.nan)
         half = fog.envelope_width*np.interp(xs, x, knots[:, 0, 3])*np.interp(xs, x, fade, left=0., right=0.)
         light = np.interp(xs, x, knots[:, 3, 3]*fade, left=0., right=0.)
-        colour = .5*(path[2, :3] + path[3, :3])
+        header = .5*(path[2, :3] + path[3, :3])
+        share = np.clip(knots[:, 4, 3], 0., 1.)[:, None]
+        colour = np.stack([np.interp(xs, x, c, left=0., right=0.)
+                           for c in ((1. - share)*header + share*knots[:, 4, :3]).T], 1)
         here = ~np.isnan(centre)
         top, bottom = np.where(here, centre + half, -np.inf), np.where(here, centre - half, np.inf)
-        sheets.append((top, bottom, colour*light[:, None]))
+        sheets.append((top, bottom, colour*light[:, None]))  # per-x colour: it flows along the history
         upper, lower = np.maximum(upper, top), np.minimum(lower, bottom)
         presence = np.maximum(presence, np.where(here, np.interp(xs, x, fade), 0.))
     # Each edge glows in a blend of the sheets near it (by proximity), never a hard switch to whichever is outermost.
@@ -453,6 +466,16 @@ def waveform_envelope(packet, translation, age_fade, fog: Fog) -> np.ndarray:
         upper_colour += w_up[:, None]*light; upper_weight += w_up
         lower_colour += w_down[:, None]*light; lower_weight += w_down
     upper_colour /= upper_weight[:, None]; lower_colour /= lower_weight[:, None]
+    if grade is not None:  # the mist glows in the graded colour, as the sheets do
+        (left, mid, right, (g0, g1), _, share) = grade
+        t = np.clip((xs - g0)/(g1 - g0), 0., 1.)
+        ramp = lambda a, b, u: np.asarray(a)[None]*(1 - u[:, None]) + np.asarray(b)[None]*u[:, None]
+        sm = lambda u: u*u*(3 - 2*u)
+        tone = np.where((t < .5)[:, None], ramp(left, mid, sm(np.clip(t*2, 0, 1))), ramp(mid, right, sm(np.clip(t*2 - 1, 0, 1))))
+        luma = np.array((.2126, .7152, .0722))
+        for c in (upper_colour, lower_colour):  # hue changes, the mist's light level does not
+            level = (c @ luma)[:, None]/np.maximum(tone @ luma, 1e-6)[:, None]
+            c[:] = c*(1 - share) + tone*level*share
     closed = SPEC.pivot[1]
     upper = np.where(np.isfinite(upper), upper, closed)
     lower = np.where(np.isfinite(lower), lower, closed)
@@ -620,13 +643,14 @@ class Lab:
         draw = dict(view=tuple(ribbon_view.flatten(order='F')), material=recipe.material, orthographic=orthographic,
                     sweep_axis=(1.,0.,0.),
                     age_fade=(now, flow.fade_in, (ring.capacity - 1)/flow.knot_hz, flow.fade_out),
-                    mist=environment.mist, mist_frame=(scroll[0, 3], 0., 0.))
+                    mist=environment.mist, mist_frame=(scroll[0, 3], 0., 0.),
+                    grade=None if recipe.grade is None else ribbon_grade(*recipe.grade[:5]))
         card = SimpleNamespace(viewport=(0, 0, width, height), logical_size=(float(width), float(height)),
                                matrix_values=(2/width, 0, 0, 0, 0, -2/height, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1),
                                quad_vao=self.target.vao)
         packet = ring.packet()
         envelope = None if flat or recipe.fog is None else waveform_envelope(packet, scroll[:3, 3], draw['age_fade'],
-                                                                              recipe.fog)
+                                                                              recipe.fog, recipe.grade)
         self.target.bind(clear=(0., 0., 0., 0.))
         fogged = not flat and recipe.fog is not None
         if fogged:
@@ -727,7 +751,7 @@ class Lab:
                     self.ribbons.draw(packet, ribbon_mvp, shading='light', **draw)
                     self.ribbons.draw(packet, ribbon_mvp, shading='sparks', sparks=recipe.sparks, now=now,
                                       mist=draw['mist'], mist_frame=draw['mist_frame'], material=recipe.material,
-                                      sweep_axis=draw['sweep_axis'])
+                                      sweep_axis=draw['sweep_axis'], grade=draw['grade'])
                     gl.glDepthMask(gl.GL_TRUE)
                     gl.glDisablei(gl.GL_BLEND, 0)
 
@@ -750,7 +774,7 @@ class Lab:
             self.ribbons.draw(packet, reflected_mvp, shading='light', **{**draw, 'view': tuple(reflected_view.flatten(order='F'))})
             self.ribbons.draw(packet, reflected_mvp, shading='sparks', sparks=self.recipe.sparks, now=draw['age_fade'][0],
                               mist=draw['mist'], mist_frame=draw['mist_frame'], material=self.recipe.material,
-                              sweep_axis=draw['sweep_axis'])
+                              sweep_axis=draw['sweep_axis'], grade=draw['grade'])
         finally:
             gl.glDisablei(gl.GL_BLEND, 0)
             self.reflection.end()
@@ -808,6 +832,7 @@ class Lab:
         """Flat ribbon silhouettes in one known colour: rewrite every ribbon's colours in a copy of the packet."""
         data = np.frombuffer(packet.payload, np.float32).copy().reshape(packet.instances, -1, 4)
         data[:, 2] = data[:, 3] = (*FLAT['ribbon'], 1.)
+        data[:, 4 + 4::KNOT_ROWS, 3] = 0.  # tint share off: one known colour
         flat = type(packet)(data.tobytes(), packet.instances, packet.vertices, packet.world_origin, packet.coordinate_origin)
         self.ribbons.draw(flat, mvp, material=self.recipe.material, sweep_axis=(1.,0.,0.))
 

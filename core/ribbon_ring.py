@@ -22,7 +22,7 @@ import numpy as np
 from core.ribbon_frames import CUSP_COSINE, MAX_SUBDIVISIONS
 from core.ribbon_geometry import (MAX_COORDINATE_MAGNITUDE, MAX_PATH_SAMPLES, MAX_TWIST_MAGNITUDE,
                                   MAX_WORLD_MAGNITUDE)
-from core.ribbon_packet import MAX_LOCAL_SPAN, MAX_RIBBONS, RibbonPacket
+from core.ribbon_packet import KNOT_ROWS, MAX_LOCAL_SPAN, MAX_RIBBONS, RibbonPacket
 
 HEADER_ROWS = 4  # meta, extra, colourA, colourB (vec4 each)
 MIN_HALF_WIDTH = 1e-4  # resolvable beside positions within the local domain (float32 ulp <= 1.5e-5)
@@ -59,7 +59,7 @@ class RibbonRing:
             raise ValueError('Finite non-zero seed side required')
         self.ribbons, self.capacity, self.subdivisions, self.period = ribbons, capacity, subdivisions, float(period)
         self._seed = seed/np.linalg.norm(seed)
-        self._gpu = np.zeros((ribbons, HEADER_ROWS + MAX_PATH_SAMPLES*4, 4), dtype=np.float32)
+        self._gpu = np.zeros((ribbons, HEADER_ROWS + MAX_PATH_SAMPLES*KNOT_ROWS, 4), dtype=np.float32)
         self._gpu[:, 0, 1], self._gpu[:, 0, 3] = subdivisions, period
         self._gpu[:, 1, 2] = capacity
         self._gpu[:, 2], self._gpu[:, 3] = colours, edge_colours  # across the width: left edge -> right edge
@@ -93,10 +93,12 @@ class RibbonRing:
         self._state[:] = _NO_KNOT
         self._packet = None
 
-    def append(self, coordinate: float, positions, half_widths, twists=0., emission=1., sparkle=0.):
+    def append(self, coordinate: float, positions, half_widths, twists=0., emission=1., sparkle=0., tint=0.):
         """Admit one knot per ribbon at one shared lattice coordinate; validated before any mutation.
 
         ``emission`` scales the material's light at this knot, so light travels with the history it was admitted with.
+        ``tint`` (RGBA per ribbon, normalized) is this knot's colour and how far it replaces the ribbon's header colours
+        (alpha 0: the header colours). Colour then flows and mutates along the history like shape does.
         """
         q = float(coordinate)
         p = np.asarray(positions, dtype=np.float64)
@@ -104,6 +106,10 @@ class RibbonRing:
         tw = np.broadcast_to(np.asarray(twists, dtype=np.float64), (self.ribbons,))
         light = np.broadcast_to(np.asarray(emission, dtype=np.float64), (self.ribbons,))
         sparks = np.broadcast_to(np.asarray(sparkle, dtype=np.float64), (self.ribbons,))
+        colour = np.broadcast_to(np.asarray(tint, dtype=np.float64), (self.ribbons, 4)) if np.ndim(tint) \
+            else np.zeros((self.ribbons, 4))
+        if not (np.isfinite(colour).all() and (colour >= 0).all() and (colour <= 1).all()):
+            raise ValueError('Ribbon tint must be finite normalized RGBA')
         if not (np.isfinite(sparks).all() and (sparks >= 0).all() and (sparks <= 1).all()):
             raise ValueError('Ribbon sparkle must be finite and within 0..1')
         if not (np.isfinite(light).all() and (light >= 0).all() and (light <= MAX_EMISSION).all()):
@@ -188,11 +194,11 @@ class RibbonRing:
             self._gpu[:, 0, 2] = (origin_q % self.period)/self.period
             self._gpu[:, 1, 0] = origin_tw % (2*math.pi)
             if count > 1:
-                rows = HEADER_ROWS + 4*retained
+                rows = HEADER_ROWS + KNOT_ROWS*retained
                 self._gpu[:, rows, 0:3] = self._position[:, retained] - origin_p
                 self._gpu[:, rows + 1, 0] = self._coordinate[retained] - origin_q
                 self._gpu[:, rows + 1, 1] = self._twist[:, retained] - origin_tw[:, None]
-        row = HEADER_ROWS + 4*slot
+        row = HEADER_ROWS + KNOT_ROWS*slot
         self._coordinate[slot] = q
         self._position[:, slot] = p
         self._twist[:, slot] = tw
@@ -206,8 +212,9 @@ class RibbonRing:
         self._gpu[:, row + 2, 3] = sparks  # share of this knot's spark slots alive
         self._gpu[:, row + 3, 0:3] = np.where(valid[:, None], base, 0.)
         self._gpu[:, row + 3, 3] = light
+        self._gpu[:, row + 4] = colour
         if resolve_previous.any() and count > 1:
-            previous_row = HEADER_ROWS + 4*((slot - 1) % self.capacity)
+            previous_row = HEADER_ROWS + KNOT_ROWS*((slot - 1) % self.capacity)
             self._gpu[resolve_previous, previous_row + 1, 2:4] = 1.  # valid, and starts a strip
             self._gpu[resolve_previous, previous_row + 2, 0:3] = tangent[resolve_previous]
             self._gpu[resolve_previous, previous_row + 3, 0:3] = base[resolve_previous]
@@ -226,7 +233,7 @@ class RibbonRing:
             drawable = False
             if self._count >= 2:
                 slots = (self._start + np.arange(self._count)) % self.capacity
-                flags = self._gpu[:, HEADER_ROWS + 4*slots + 1, 2:4] > .5
+                flags = self._gpu[:, HEADER_ROWS + KNOT_ROWS*slots + 1, 2:4] > .5
                 live, starts = flags[..., 0], flags[..., 1]
                 drawable = bool((live[:, :-1] & live[:, 1:] & ~starts[:, 1:]).any())
             if drawable:

@@ -226,7 +226,7 @@ def test_surface_glints_stay_round_when_sheet_coordinates_are_skewed(scene):
     vertex = '''#version 460 core
 out vec3 vWorld; out vec3 vNormal; out float vPhase; out float vAcross;
 out float vEmission; out float vLocal; out float vCoverage; out float vExpanded; out float vFaceScale;
-flat out vec4 vColour; flat out vec4 vColourB;
+flat out vec4 vColour; flat out vec4 vColourB; out vec4 vTint;
 void main() {
     vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2)*2.0-1.0;
     gl_Position=vec4(p,0,1);
@@ -235,7 +235,7 @@ void main() {
     vPhase=.5-h*7.0+pixel.x*.01+pixel.y*.035;
     vAcross=.5+pixel.y*.01;
     vWorld=vec3(0,0,-10); vNormal=vec3(0,0,1); vEmission=.2; vLocal=0;
-    vCoverage=1; vExpanded=0; vFaceScale=1; vColour=vec4(1); vColourB=vec4(1);
+    vCoverage=1; vExpanded=0; vFaceScale=1; vColour=vec4(1); vColourB=vec4(1); vTint=vec4(0);
 }
 '''
     material=RibbonMaterial(strands=1.,strand_warp=0.,strand_light=0.,rim_light=0.,rim_glow_light=0.,

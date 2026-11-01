@@ -7,6 +7,7 @@ camera never changes these lights; moving the actual packet does. Over-capacity 
 """
 import numpy as np
 
+from core.ribbon_packet import KNOT_ROWS
 from rendering.gl_programs.lighting import MAX_SOFT_LIGHTS
 
 
@@ -22,7 +23,7 @@ def ribbon_lights(packet, translation, age_fade, *, bin_seconds=2.):
     rows = np.frombuffer(packet.payload,np.float32).reshape(packet.instances,-1,4)
     for path in rows:
         count, start, capacity = int(path[0,0]), int(path[1,1]), int(path[1,2])
-        knots = path[4:].reshape(-1,4,4)[(start+np.arange(count))%capacity].astype(float)
+        knots = path[4:].reshape(-1,KNOT_ROWS,4)[(start+np.arange(count))%capacity].astype(float)
         left, right = knots[:-1], knots[1:]
         valid = (left[:,1,2]>.5)&(right[:,1,2]>.5)&(right[:,1,3]<.5)
         coordinate = .5*(left[:,1,0]+right[:,1,0])+packet.coordinate_origin

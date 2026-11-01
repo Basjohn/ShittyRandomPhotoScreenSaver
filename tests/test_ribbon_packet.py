@@ -1,3 +1,4 @@
+from core.ribbon_packet import KNOT_BYTES, KNOT_ROWS
 import math
 import numpy as np
 import pytest
@@ -14,7 +15,7 @@ def path(n=2, origin=0):
 def test_packet_caps_stride_and_rebased_phase_are_explicit():
     packet = pack_ribbons([path(256, 1e9)]*8, period=.7)
     assert packet.instances == 8 and packet.vertices == 12240
-    assert len(packet.payload) == MAX_PACKET_BYTES == 131584
+    assert len(packet.payload) == MAX_PACKET_BYTES == 8*(64 + 256*KNOT_BYTES)
     records = np.frombuffer(packet.payload, np.float32).reshape(8, -1, 4)
     assert records[0, 0, 0] == 256
     assert records[0, 5, 0] == 0  # oldest local coordinate
@@ -24,8 +25,8 @@ def test_packet_caps_stride_and_rebased_phase_are_explicit():
     samples, tangents, _ = path(5, 1e9)
     a = np.frombuffer(pack_ribbons([(samples, tangents, None)], period=.7).payload, np.float32).reshape(-1, 4)
     b = np.frombuffer(pack_ribbons([(samples[1:], tangents[1:], None)], period=.7).payload, np.float32).reshape(-1, 4)
-    phase_a = (a[0, 2]+a[5+3*4, 0]/a[0, 3]) % 1
-    phase_b = (b[0, 2]+b[5+2*4, 0]/b[0, 3]) % 1
+    phase_a = (a[0, 2]+a[5+3*KNOT_ROWS, 0]/a[0, 3]) % 1
+    phase_b = (b[0, 2]+b[5+2*KNOT_ROWS, 0]/b[0, 3]) % 1
     assert phase_a == pytest.approx(phase_b, abs=1e-6)
 
 
