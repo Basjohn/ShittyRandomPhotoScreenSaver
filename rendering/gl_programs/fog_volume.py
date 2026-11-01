@@ -178,7 +178,7 @@ void main() {
             float shade=exp(-uMarchShade.y*uMarch.y*eroded(fogCoverage(q,coarse(q).a/max(uMarch.y,1e-6)),q)*uMarchShade.x);
             float slice=exp(-density*step*stretch);
             // A floor on self-shadow keeps the cloud bodies' own structure visible behind their lit faces.
-            scatter+=transmittance*medium.rgb*mix(uMarchStep.z,1.0,shade)*(1.0-slice);
+            scatter+=transmittance*fogRadiance(p,medium.rgb)*mix(uMarchStep.z,1.0,shade)*(1.0-slice);
             transmittance*=slice;
             if(transmittance<0.003) break;
         }
@@ -214,6 +214,8 @@ def fog_march_source(coverage_glsl: str | None = None) -> str:
         raise ValueError('A coverage source must define float fogCoverage(vec3 world, float coarse)')
     if 'fogLightDirection' not in coverage:
         coverage += _FOG_GRADIENT_DIRECTION
+    if 'fogRadiance' not in coverage:  # a consumer may light thin features per sample instead of per coarse cell
+        coverage += '\nvec3 fogRadiance(vec3 world, vec3 coarse) { return coarse; }\n'
     return _FOG_MARCH_HEAD + coverage + _FOG_MARCH_MAIN
 
 
