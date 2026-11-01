@@ -81,7 +81,10 @@ worse. The operator named the floor of this baseline and of the `wr07_colour_gra
     puffs at the contact line, and the bank term floated noise puffs once the banks were off.
   - **The floor takes the cheap analytic mist instead:** slightly tinted, thickening toward the camera-side floor
     edges, the extreme sides and most of all into the distance, where it is thick dark grey and hides the horizon.
-  - **Open:** an optional thin, cheap floor-edge mist, kept only if it helps the blend.
+  - **Rejected (1 November): a thin floor-edge mist** made from the analytic mist's low-lying thickening and glow
+    (`floor_thickening` 3-4, `low_glow` 0.6-1.2). It only mixes the floor surface toward grey, which reads as a flat
+    grey band along the bottom edge and dims the columns. The horizon and far edges already dissolve into dark
+    grey in all five poses, so there was nothing for it to blend.
 - [~] **Floor column shaping:** a mild fade toward the camera (`column`) puts the high state's brightness at the
   contact line. Wet-film sparkle grain was tried and rejected: it brought back the mottled floor. The fade darkens
   the already too-dark low-state floor further, so it stays mild. Earlier state: the columns ran the full floor
