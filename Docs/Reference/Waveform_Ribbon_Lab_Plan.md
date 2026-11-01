@@ -43,7 +43,13 @@ implementer's call without further confirmation; the operator judges much later.
    SHA-256 `19161837…eadf`). It is the lab's `alternate` recipe; see "Second look" below.
 3. The preset-range board stays a range example. Its recipe (`range`) is parked after two passes: tight bundle,
    a bass arc 2.5x the other crests, and a gradient running on to orange. Evidence `wr08_alternate_look/preset_range_parked.png`.
-4. The remaining fidelity gaps below, then motion.
+4. Camera sweep done (`wr08_camera_sweep/`): twelve views per look, both projections. The near-clip band is fixed;
+   the end-on blowout and the turned-Perspective far floor are open (Migration Plan §6).
+5. **Migration plan written:** [`Waveform_Ribbon_Migration_Plan.md`](Waveform_Ribbon_Migration_Plan.md) owns WR-08's
+   full controls (Extruded Bubble's 3D Framed shape, Orthographic default), visual editors, reactivity and port
+   order. Reactivity: final calibration in the migration through production recorded-feature replay, with a
+   cheap lab smoke (WR-07) first.
+6. The remaining fidelity gaps below, then motion.
 §0B is the current visual audit, not an acceptance report.
 
 **Second look: the alternate board (`wr08_alternate_look/`, `--recipe alternate`):**
@@ -92,6 +98,9 @@ implementer's call without further confirmation; the operator judges much later.
   - **Body:** more fill and rim glow, so the sheets read as luminous silk under the strands.
   - **Defaults** reproduce every earlier look (the complete look is pixel-identical).
   - **Test:** `test_glow_sends_more_light_to_the_bloom_without_brightening_the_sheet`.
+- **More tint, any colour pair (operator: "a little more tint … warmth isn't the route"):** exposure 0.85, white-hot
+  0.3, body tint 0.85, spark whiteness 0.04. Lit-pixel saturation 0.50 / 0.48 -> 0.56 / 0.53 (board 0.64 / 0.56),
+  with the glow kept (`tint_before_after.png`). Strands already taper to 40% width and fade over their last quarter.
 - **Open:**
   - the board's loud panel still burns brighter, with blown warm highlights;
   - the mist's lit edge reads whitish lavender over blue sheets;

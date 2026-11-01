@@ -336,15 +336,16 @@ ALTERNATE = Recipe(
     # Loud ribbons stay narrower and further apart than quiet ones: broad overlapping sheets summed to pastel pink.
     # Luminous silk: a glowing body, local bloom on the sheets only (glow), white-hot cores on the brightest strands.
     material=replace(Recipe().material, strands=48., strand_half_width=.022, strand_light=2.4, strand_white=0.,
-                     rim_white=.02, fill_light=.1, rim_glow_light=.45, body_tint=.7, glint_density=3.,
-                     glint_chance=.3, glint_light=5., glow=2., hot=.5),
+                     rim_white=.02, fill_light=.1, rim_glow_light=.45, body_tint=.85, glint_density=3.,
+                     glint_chance=.3, glint_light=5., glow=2., hot=.3),
     # Sparks hug the ribbons (little drift or rise), mostly fine with a few large.
-    sparks=replace(Recipe().sparks, drift=1.1, rise=.15, light=40., smallest=1.2, largest=8., lifetime=6., white=.1),
+    sparks=replace(Recipe().sparks, drift=1.1, rise=.15, light=40., smallest=1.2, largest=8., lifetime=6., white=.04),
     palette=dict(low=((0., (.2, .6, 1.)), (1., (.55, .35, 1.))), high=((0., (1., .3, .85)), (1., (1., .22, .05)))),
     # Free strands splash off the sheets and curl away, droplets toward their tips (short, far-reaching).
     strays=RibbonStrays(per_knot=4, length=6., reach=1.6, chance=.6, width=1.6, light=3.2, beads=4., peel_time=1.5,
                         halo=.5, glow=2.2),
-    grade_share=(0., .35), bloom=.12)
+    # More tint for any colour pair: less highlight compression (exposure), less white-hot, more body tint.
+    grade_share=(0., .35), bloom=.12, exposure=.85)
 RECIPES = {'complete': Recipe(), 'alternate': ALTERNATE, 'range': PRESET_RANGE}
 
 
@@ -659,7 +660,9 @@ def camera(pose: Pose, aspect: float):
     if pose.projection == 'Orthographic':
         tan = fc.viewport_tangents(ORTHO_REFERENCE_FOV, aspect)
         distance = SPEC.orbit_distance/max(pose.scale, 1e-3)
-        projection = fc.orthographic_matrix((tan[0]*distance, tan[1]*distance), .1, 200.)
+        # Parallel rays: the near plane sits well behind the eye. At .1 a zoomed-out or low camera clipped the floor
+        # between the eye and the near plane, a black band along the bottom of the view.
+        projection = fc.orthographic_matrix((tan[0]*distance, tan[1]*distance), -60., 200.)
     else:
         projection = fc.perspective_matrix(fc.viewport_tangents(pose.fov, aspect), .3, 200.)
     return view, np.asarray(projection).reshape(4, 4, order='F'), np.asarray(eye)
