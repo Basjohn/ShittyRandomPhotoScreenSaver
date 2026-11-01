@@ -34,8 +34,9 @@ restored three distinct ribbon identities; it did not establish fidelity.
   readable quiet detail, coloured hot crossings. Every admitted shape must remain smooth like folding cloth, never
   sharp or spiky, including wide inner bends. Outer boundary lines must be brighter and glow more than the interior
   strands even at low react, to describe the translucent 3D sheet. Both rims now have independent boundary emission;
-  the native low/high candidate resolves the reported imbalance, but interior light still reads too much like wires
-  and the folds are too regularly sinusoidal. Improve the continuous translucent body and irregular broad folds. Inspect all boards
+  the native low/high candidate resolves the reported imbalance. Broader sheets, continuous body light and slow
+  phase/amplitude/depth variation improve the wire-like interior and repeated fold rhythm. Still open: glint streaking
+  where filaments compress, fine-detail stability, depth/light and reference shape fidelity. Inspect all boards
   at native resolution and explicit motion times; do not hide shape faults with bloom.
 - [~] **Floor fidelity, Awaiting Validation:** generated maps are placed; inspect fine wet detail and dark gaps at
   every pose against the main mock. Reflections are still broader and softer than the target. Tune optical sharpness
@@ -80,10 +81,12 @@ The initial receipt is `.artifacts/evidence/waveform_ribbon/wr00_reference_proje
 It records no GL scene capture or cost: this is a preflight, not an image of a proposed Ribbon implementation.
 Diagnostic half-height 4/reference depth 10 are arbitrary calibration units, not an approved artistic camera fit.
 
-Current geometry evidence: `wr04_parity_pass7/` (under `.artifacts/evidence/waveform_ribbon/`) includes low/high
-native captures, five wide poses, explicit-time sequences, main fog-board pairs and measured surface draw cost.
-These prove the bounded 3D surface/capture paths, not resemblance or operator acceptance. The scene remains far
-from the target and the waveform/rim-light work above remains live.
+Current visual candidate: `wr04_sheets/` (under `.artifacts/evidence/waveform_ribbon/`) includes main-board native pairs,
+five wide poses, recipe/source receipt and four seconds of explicit-time low/high samples. `wr04_both_rims/` records
+the boundary-light correction; `wr04_parity_pass7/surface_cost.json` owns the earlier measured surface draw cost.
+The lab authors broad phase/amplitude modulation and depth sway before immutable knots enter the shared ring;
+there is no renderer-side simulation or new clock. These captures do not establish resemblance or operator acceptance.
+The scene remains far from the target and the waveform/floor/volume work above remains live.
 
 Generated material custody and prompts: `assets/textures/waveform_floor/Source.md`. The albedo is sampled in sRGB;
 the roughness map is linear data. Two differently oriented/scaled world-space samples suppress the old tile pattern,
@@ -152,7 +155,7 @@ easier one. The operator has now explicitly admitted both boards as eventual pre
 | High react | Larger vertical sweeps and broader/brighter sheets; more crossings, fine points and floor light; ribbon is still the main subject | Increase body/deformation/detail within the same camera and world; retain dark negative space | Exact widths, ratios and peak timing require measurement and authoring; not specified by the mock |
 | Ribbon surface | Translucent sheet/filament bundles with fine longitudinal luminous lines, bright edges, local bright dots and visible darkness between lines | Model a body, defined antialiased edges and coherent internal strands; a blurred tube or plain sine line cannot match | Some fine lines may be separate filaments rather than a surface pattern; start with one strip plus material structure |
 | Colour | Cyan through electric blue and violet into magenta, associated with different visible bands | Keep colour identity stable through low/high and use authored band colouring | The label permits colour shift, but not unconstrained rainbow cycling; precise mapping remains authored |
-| Environment | Dark blue/black interior, repeated vertical bars/columns, localized cyan/violet/white light, little upper-field clutter | Retained world-space simple geometry and emissive light strips; no need to invent a volume simulation | Dimensions, depth and material roughness cannot be recovered uniquely from one board |
+| Environment | Original board: dark interior and columns. Current complete-scene target: shaped thick mist surrounding a clear ribbon corridor | Columns are rejected. S3D-7 must supply world-space fog clearance and illumination from the actual ribbons | Density, depth and lighting are authored from visible cues; the image does not specify an optical model |
 | Floor | Large textured reflective foreground; coloured reflections stretch toward the camera and are broken/softened by surface detail | A real plane, view-correct reflection and bounded roughness/normal detail are essential to the final target | Surface appears wet/rough; no visible evidence requires animated fluid, puddle simulation or rain |
 | Transparency | Crossings remain luminous with strands readable through each other; high regions approach white locally but do not erase the whole scene | OIT body and separate emission accounting; compare crossings with bloom disabled first | The mock is an artistic target, not proof of physically correct transmission or exact OIT weights |
 | Depth / focus | Foreground reflection detail softens; background lights are soft; ribbons hold clear internal detail | Use focus deliberately and only after geometry/material match | Still images do not distinguish lens blur, rough reflection and bloom; do not blur all three indiscriminately |
@@ -197,13 +200,14 @@ ROI statistics with the masks applied, and draws annotated cards. Receipt and sh
 | Floor median luminance / clipped | 0.14 / 2% | 0.38 / 39% | Floor reflection tracks ribbon emission strongly |
 | Body / crest ROI clipped | 4% | 20-36% | White-hot cores only where high sheets cross |
 
-Proposed Orthographic fit (analytic, unverified until the WR-03 blockout render): half-height 4.98 world units
+Historical primary-board calibration (superseded environment; not current scene instructions): half-height 4.98 world units
 at a 4-unit wavelength, pitch 15 degrees down, pivot at ribbon centre 2 units above the floor, back wall 2.3 units
 behind, floor visible to 11.8 units in front, ribbon reflection centred at 0.89 of the height. Light columns stand
 at about 0.04, 0.14, 0.30, 0.50, 0.74 and 0.95 of the width. Tolerances are still set from candidate comparisons
 with operator review, never invented ahead of them.
 
-Record measurements in coordinates normalized within each scene crop, with native-pixel values alongside them:
+The following original-board ROIs remain historical comparison guides. Current composition must hide horizon/floor
+boundaries and uses the complete-scene fog cards in §0A. Record native pixels alongside normalized coordinates:
 
 | ROI/card | Initial source-pixel guide | Required comparison |
 | --- | --- | --- |
@@ -236,9 +240,9 @@ Read [Visualizer Labs](../Guides/Visualizer_Labs.md),
 | Offscreen context, final diagnostic framebuffer, readback | `tools/labs/render_target.py:OffscreenRenderTarget`; bootstrap in `rendering/quick/bootstrap.py` | Available: validated GL 4.6, explicit current-context scope, raw RGBA readback, resize/retirement. Does not own scene HDR/OIT/MSAA targets, camera, simulation or renderer scheduling |
 | Static meshes/programs and gradual warm-up | `rendering/quick/scene3d/resources.py:MeshResources`, `warm_programs`; `frame.py:SceneFrame` | Available. Use retained plane/column meshes and shared frame contract. The authored hall arrangement/material is mode-specific; do not build a scene editor for it |
 | Streaming control history | `rendering/quick/scene3d/stream.py:StreamRing`; `rendering/gl_programs/scene3d.py:Scene3DStorageLayout` | Available transport/layout with explicit capacity and fences. Must size payload/hold capacity for ribbon records; defaults are not a promise that the history fits |
-| Ribbon precedent | `widgets/spotify_visualizer/extruded_bubble_wake.py:WakeField`; `_WAKE_PATH_GLSL`, `TRAIL_VERTEX`, `TRAIL_FRAGMENT` in `rendering/gl_programs/extruded_bubble_program.py`; `rendering/quick/visualizer/implementations/extruded_bubble.py` | S3D-1 promotion is required. Existing records, radius/root fade, water entrainment, near-shell handling and shaders are EB-specific; no ready generic oriented ribbon exists |
+| Ribbon | `core/ribbon_ring.py:RibbonRing`; `core/ribbon_packet.py`; `rendering/gl_programs/ribbon.py`; `rendering/quick/scene3d/ribbon.py:RibbonPrimitive` | Shared bounded history, oriented/swept surfaces and OIT/HDR material exist; `Ribbon_Path.md` owns remaining admission gates. EB wakes remain a separate precedent, not the new consumer's implementation |
 | Transparent/emissive scene, resolve, bloom and HDR | `rendering/quick/scene3d/target.py:SceneTarget`; `rendering/gl_programs/scene3d.py:SCENE_OIT_GLSL`; shared post resources in `scene3d/post.py` | Available opt-in substrate. Consumer must prove material/emission/depth ordering, bright overlap, AA, card alpha and no double tone mapping |
-| Reflection | `rendering/quick/scene3d/probe.py:SceneProbe`; `environment.py:PhotoEnvironment`; shared reflection helpers in `rendering/gl_programs/scene3d.py` | Cubemap capture/filtering and photo-derived environment are available. Neither establishes a camera-correct reflected ribbon on a nearby floor. S3D-5 needs an independent plane/reflection proof |
+| Reflection | `rendering/quick/scene3d/reflection.py:PlanarReflection`; `rendering/gl_programs/reflection.py` | Bounded mirrored-camera reflection is implemented and used by the lab. WR-05 retains scene inclusion, lifecycle, full cost and visual fidelity gates; cubemap/photo environments are not a substitute |
 | Defocus | `rendering/quick/scene3d/defocus.py:DefocusLayer`; shared `SCENE_DEFOCUS_GLSL` | Available near-light layer. It is not a general floor roughness filter or proof that a long strip crossing focus depths is correct. Optional consumer integration only after targeted cards |
 | Particles | `rendering/quick/scene3d/particles.py`, `population.py:CompactedPopulation`; `rendering/gl_programs/particle_program.py`; `scene3d/compute.py` | Sprite/streak draw helpers and stable compacted population exist. S3D-2 owns missing bounded emitters/lifetimes/transient bursts. Small accents do not automatically justify compaction or compute |
 | Physical framed camera | `core/settings/framed_camera.py:FramedCameraSpec`; `core/settings/visualizer_view_orbit.py`; projection helpers in `rendering/gl_programs/scene3d.py` | Available shared physical eye/admission. Declare pivot, eye bounds/floor, projection, Orthographic half-extents, optional Perspective FOV and reset pose when admitted. No copied camera controller or music-driven framing |
@@ -266,6 +270,7 @@ Current_Plan admission + reference custody / approved primary target
 
 S3D-5 independent reflection harness -> floor in lab -> floor in production
 S3D-1 bounded multi-strip proof      -> multi-strip lab -> multi-strip production
+S3D-7 independent volume proof      -> ribbon-shaped fog in lab -> fog in production
 S3D-2 independent emitter proof      -> accents in lab -> accents in production
     -> restrained Settings / presets -> mock | lab | production -> native/operator A–H
 ```
@@ -273,13 +278,13 @@ S3D-2 independent emitter proof      -> accents in lab -> accents in production
 This is a dependency graph, not permission to skip Current_Plan's S3D order. §6 owns when S3D-2 through S3D-5 are
 admitted; if S3D-3/4 precede S3D-5 there, this mode does not reorder them. Each shared primitive earns its own offscreen
 proof before consumer integration. An unfinished S3D-5 blocks the floor slice, not independent ribbon geometry work.
-S3D-3 may supply useful retained material helpers, but the simple hall does not justify an authoring system. S3D-4
-fluid, S3D-6 shadow maps and S3D-7 lightning/volumes are not visual prerequisites established by these images.
+S3D-3 may supply useful retained material helpers. The operator admitted S3D-7's bounded static volume slice for the
+complete-scene target: this is a visual prerequisite. S3D-4 fluid, S3D-6 shadow maps and lightning remain outside this slice.
 
 The final target visibly needs reflection, layered bands and points. A successful one-ribbon/no-floor study is only an
 intermediate gate, not a claim to match the full board. Before each production feature is added, bring that feature's
-lab recipe to the mock; then port in §7.1's order: single ribbon/material/bloom → floor → multi-ribbon → accents →
-restrained Settings. Do not wait until the final Settings stage to discover that the camera or materials differ.
+lab recipe to the mock. Section 0 owns the current waveform → floor optics → volume → accents sequence; production
+and Settings follow visual acceptance. Do not wait until Settings to discover that camera or materials differ.
 
 ## 4. Work packages and required artifacts
 
@@ -372,42 +377,24 @@ and measure that path before production use; neither this prototype nor the rema
 limits. Passing a shader readback does not close G, H or musical acceptance. Defocus unresolved means the focus feature
 is held, not substituted with unbounded bloom.
 
-### WR-03 — Camera and scene blockout with one ribbon
+### WR-03 — Camera and fixed-world composition
 
 **Entry:** S3D-1 proof admitted; WR-00 primary-target measurements exist.
 
-**Status (31 October): blockout exists, far from the mock.** `tools/labs/waveform_ribbon_lab.py` composes a static
-hall under the WR-00 camera: floor, back wall, and light columns at the measured fractions, repeated along the hall
-so wide cards reveal more hall. Three flowing-history ribbons from one `RibbonRing` use a labelled synthetic head
-(no music). Two renders per state:
-- **Flat:** solid colours. The floor line (0.6347 against 0.6347) and ribbon envelopes (low 0.389-0.604 against
-  0.388-0.592; high 0.251-0.674 against 0.240-0.663) are measured from its pixels, not assumed.
-- **Lit:** material, emissive columns and bloom through the Visualizer-shaped scope.
-
-Evidence: `.artifacts/evidence/waveform_ribbon/wr03_blockout/` (`mock_flat_lit.png`: mock with target overlay | flat |
-lit; wide 16:9 cards). Test: `tests/test_waveform_ribbon_lab.py` pins the floor line and low envelope.
-High needs an energy lift of about 0.5 world units to match; that is now a declared synthetic control.
-
-The blockout's remaining appearance work is superseded by the live floor/waveform/volume checklist in section 0.
-Pillars and their visible contact landmark are removed; earlier blockout measurements are historical evidence.
+`tools/labs/waveform_ribbon_lab.py` owns explicit synthetic low/high input, flat/lit captures and five navigation
+poses over the shared framed camera. Three real 3D sheets, generated-map floor and temporary analytic mist are
+implemented. Tests verify flat-capture repeatability and render ownership, not mutable artistic envelope values.
+The rejected hall/column study is historical evidence at `wr03_blockout/`; it is not a current scene target.
 
 A readback upside-down bug hid behind near-symmetric ribbons until the flat hall showed the floor on top:
 `OffscreenRenderTarget.read_rgba()` is already top-left; never flip it again.
 
-- [x] Create `tools/labs/waveform_ribbon_lab.py` as a scene-input authoring tool over shared primitives, with explicit CLI
-  paths/seed/time/size/recipe and no Settings or preset writes. Do not invent a universal lab recipe schema.
-- [x] Use first-allocation `try/finally`/`ExitStack`; retire scene resources inside `with target.current():` before closing
-  the diagnostic context. Capture errors invalidate the preview; no stale image displayed as a successful new render.
-- [x] Place a finite floor, simple world-space vertical structures/light strips, and one continuous ribbon. Start with
-  neutral opaque/flat diagnostic shading; no particles, bloom, lens blur or reflection to conceal shape differences.
-- [x] Solve Orthographic eye/pivot/half-extents and scale against floor boundaries, ribbon extrema and light positions;
-  validate optional Perspective separately. Record the
-  effective physical camera values. Use the shared framed-camera math; outer card resizing is not world scaling.
 - [ ] Match both ends extending beyond the image with sufficient offscreen continuation. Do not hide end caps at one
   pose only; test a small camera move. Keep the world fixed under navigation.
-- [ ] Freeze camera, environment, floor geometry, static lights, palette, seed, base path and topology for the low/high
+- [ ] Validate fixed camera, environment, floor geometry, palette, seed, base path and topology for the low/high
   pair. Permit only declared reactive body/deformation/emission/detail inputs to differ.
-- [x] Capture native-resolution target/flat-lab sheets plus projected landmark table. Evaluate wide/narrow cards
+- [ ] Evaluate current native-resolution target/flat/lit pairs across all navigation poses in both projections;
+  preserve world scale and absence of visible floor/scene edges. Evaluate wide/narrow cards
   separately for cropping, minimum readable strand sizes and background/floor balance.
 
 **Exit/artifacts:** same-scene flat low/high cards, world/camera recipe and scale/proportion deltas. Advance only when
@@ -440,16 +427,17 @@ to hide segmented geometry. This stage may match one band's character; it is not
 
 **Entry:** S3D-5 admitted in Current_Plan; independent reflection harness before the consumer.
 
-- [ ] Define plane, reflector bounds, reflected eye/projection, clip convention, culling handedness, colour space and
-  inclusion list. Use the same scene geometry/time/material functions; exclude the receiver/self-recursive reflection.
-- [ ] Prefer a bounded planar reflected scene for a nearby flat floor. Compare a local probe only with explicit parallax
-  limits; a cube at one origin is not automatically accurate across a wide near floor. Make the choice from moving-camera cards.
+**Implemented:** shared `PlanarReflection`, mirrored physical camera and lab light/spark inclusion; generated albedo
+and linear roughness maps with allocation-failure cleanup. Asset custody/prompts: `assets/textures/waveform_floor/Source.md`.
+Remaining proof and fidelity work:
+
+- [ ] Complete the reflection inclusion/clip contract, including OIT body and eventual volume. Use the same scene
+  geometry/time/material functions; exclude the receiver/self-recursive reflection.
 - [ ] Prove floor-to-object registration with an asymmetric coloured object/light fixture at known positions; translate
   and orbit the physical eye. Check reflected high/low changes use the exact same logical snapshot, without one-frame lag.
-- [ ] Add bounded roughness/filtering, world-space material scale, normal detail and distance-dependent appearance,
-  from the operator's matched PBR pack (`assets/textures/Dark_Concrete_PBR_Matched_Set_DarkGrey.zip`: albedo,
-  OpenGL normal, roughness). Production needs a shipped copy at an owned resource path before WR-08.
-  First match the reflection footprint, then floor texture. Do not use screen Y or a painted glow patch as reflected geometry.
+- [ ] Refine bounded roughness/filtering, world-space material scale, normal detail and distance-dependent appearance
+  using the placed generated maps. Match wet reflection detail and dark gaps; current reflections remain too broad.
+  Production packaging must include these owned assets at WR-08. Do not substitute painted glow for reflected geometry.
 - [ ] State pass count, target resolution/sample count, memory, scene inclusion, update invalidation and Off behavior.
   Static environment reuse must be dependency-correct; reacting ribbons cannot use a stale reflection on a separate clock.
 - [ ] Prove target resize, partial failure, interleaved contexts, state restoration and full retirement independently.
@@ -715,8 +703,8 @@ camera and resource contracts rather than rebuilding them or reopening already-l
 
 ## 10. Concrete next start and unresolved decisions
 
-**Next: S3D-5 floor reflection** (section 0 has the full order). Build the planar reflection in its own harness, prove
-registration under a moving eye and its cost, then add the floor to the lab with the operator's PBR pack.
+**Section 0 is the sole live sequence.** The ribbon material and generated-map floor exist; their fidelity is open.
+The bounded shared volume remains unimplemented. No audio mapping or production integration precedes visual acceptance.
 
 - [ ] **Awaiting Validation — reference completeness:** no clean annotation-free scene or reference animation was
   present in the inspected package. Exact hidden pixels, topology count and optical model are unspecified; the motion
@@ -724,8 +712,8 @@ registration under a moving eye and its cost, then add the floor to the lab with
   if an actual comparison is blocked. Do not make a generated reference the new goal.
 - [ ] **Awaiting execution evidence — musical fixture selection:** select available recorded clips and verify the
   waveform/analysis payload and valid pre-roll at WR-00. This planning pass did not replay or evaluate a clip.
-- [ ] **Awaiting architecture proof — S3D-2/S3D-5 and the rest of S3D-1:** emitter extensions and view-correct floor
-  reflection are not built; S3D-1's camera-facing width and defocus remain open (section 0).
+- [ ] **Awaiting architecture proof:** complete S3D-1 camera-facing width/defocus, S3D-2 emitter extensions,
+  S3D-5 reflection inclusion/lifecycle/cost and S3D-7 bounded volume gates at their owners above.
 - [ ] **Awaiting Validation — tolerances and delivery framing:** confirm target landmark/ROI tolerances, wide-view
   framing and acceptable small-card detail using actual candidate images, before calling resemblance achieved.
 - [ ] **Awaiting Logs/Validation — cost and native acceptance:** hardware budgets, warm/native measurements, live musical
