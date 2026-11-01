@@ -260,7 +260,7 @@ class FogMarch:
             self._vao = int(name[0])
 
     def march(self, volume: FogVolume, *, size, steps=96, max_extinction=1., erosion=.6, detail_frequency=1.,
-              shadow=(.5, 1.), ground=None, step=(.2, 1.), medium=None, shadow_floor=0.) -> None:
+              shadow=(.5, 1.), ground=None, step=(.2, 1.), medium=None, shadow_floor=0., edge_glow=0., base=(0., 0., 0.)) -> None:
         """Integrate the eroded medium per pixel of ``size`` along ``volume``'s camera rays (its last update).
         ``medium(program)`` sets a consumer coverage's own uniforms."""
         self._check_context()
@@ -292,6 +292,7 @@ class FogMarch:
             gl.glUniform4f(location('uFogRange'), *fog['uFogRange'])
             gl.glUniform4f(location('uMarch'), float(steps), max_extinction, erosion, detail_frequency)
             gl.glUniform3f(location('uMarchStep'), *step, shadow_floor)
+            gl.glUniform4f(location('uMarchEdge'), edge_glow, *base)
             gl.glUniform4f(location('uMarchShade'), *shadow, 0. if ground is None else float(ground),
                            0. if ground is None else 1.)
             if medium is not None:

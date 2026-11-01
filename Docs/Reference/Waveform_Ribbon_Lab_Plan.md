@@ -105,7 +105,16 @@ from parity. §0B is the current visual audit, not an acceptance report.
       not black.
     - Floor mist: low billowed banks that reach forward at the sides, lit from above by the sheets' lower colour.
     - End mist comes forward where the sheets fade (head and tail), so they blend into it in wide 3D views.
-  - **Self-review of this pass:**
+  - **Corner banks and wisp light (`wr07_mist_banks`):**
+    - Floor banks rise beside the sheet ends up to 2 units.
+    - The march brightens thin eroded wisps above the medium's unlit base only (`edge_glow`), so curl rims show while
+      bodies stay dark. Boosting the base greyed the whole cloud.
+    - The march runs at 0.75 scale, which raises its cost about 2.25x (to re-measure).
+    - Native left-half crop against the mock: the mock's cyan bank, edge and floor are ours in magenta/violet. That
+      is a colour-along-x gap in the waveform itself, which the mist only inherits: next slice.
+    - The mist is still softer than the mock's crackling edge, and the floor reflection is horizontal shimmer where
+      the mock has vertical streaks.
+  - **Self-review of the previous pass:**
     - The corner banks are small and dim in the mock framing, and read as puffs in wide views; the mock's fill the
       lower corners up to the sheets.
     - A lavender floor-mist band runs across the middle at the contact line, which the mock keeps darker.

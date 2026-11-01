@@ -101,6 +101,7 @@ uniform vec4 uFogRange;
 uniform vec4 uMarch;             // maximum steps, maximum extinction, erosion, detail frequency (per world unit)
 uniform vec4 uMarchShade;        // shadow reach (world), shadow strength, ground height, ground enabled
 uniform vec3 uMarchStep;         // view-depth step inside the medium, through clear air; least self-shadow
+uniform vec4 uMarchEdge;         // extra light on thin eroded wisps (curl rims), 0 off; unboosted base radiance
 uniform vec2 uViewportSize;
 layout(location=0) out vec4 FragColor;
 vec3 coarseUvw(vec3 world) {
@@ -178,7 +179,11 @@ void main() {
             float shade=exp(-uMarchShade.y*uMarch.y*eroded(fogCoverage(q,coarse(q).a/max(uMarch.y,1e-6)),q)*uMarchShade.x);
             float slice=exp(-density*step*stretch);
             // A floor on self-shadow keeps the cloud bodies' own structure visible behind their lit faces.
-            scatter+=transmittance*medium.rgb*mix(uMarchStep.z,1.0,shade)*(1.0-slice);
+            // Thin, eroded wisps let light through and read as bright curl rims around denser cores.
+            // Only light above the medium's base (its unlit ambient) is boosted: boosting the base greyed the bodies.
+            float wisp=uMarchEdge.x*(1.0-clamp(density/max(uMarch.y,1e-6),0.0,1.0));
+            vec3 lit=medium.rgb+max(medium.rgb-uMarchEdge.yzw,vec3(0.0))*wisp;
+            scatter+=transmittance*lit*mix(uMarchStep.z,1.0,shade)*(1.0-slice);
             transmittance*=slice;
             if(transmittance<0.003) break;
         }
