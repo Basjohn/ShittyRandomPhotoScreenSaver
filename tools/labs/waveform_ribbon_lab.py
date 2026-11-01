@@ -132,6 +132,8 @@ class Fog:
     detail_frequency: float = .8
     shadow: tuple = (.6, 4.)
     shadow_floor: float = .3
+    crackle: tuple = (2.4, .08, 4., 4.)  # silhouette line: brightness, filament frequency (per px), sharpness, width
+    crackle_glow: float = 3.      # the line's bloom share
     edge_glow: float = 3.          # extra light on thin eroded wisps (curl rims)
     glow: float = .3
 
@@ -578,6 +580,26 @@ def colour_grade(recipe, react: float) -> tuple:
     return (left, mid, right, recipe.grade_range, *recipe.grade_share)
 
 
+def crackle_limit(envelope, fog: Fog, mvp, width: int, samples: int = 256) -> np.ndarray:
+    """Per screen column, the screen v (0..1, up) of the waveform's projected top outline: the mist's edge line
+    belongs to the bank above the waveform, never to boundaries below it (floor mist, the contact line)."""
+    x0, x1, n = fog.envelope_range
+    xs = np.linspace(x0, x1, int(n))
+    upper = envelope[0, :, 1]
+    limit = np.full(samples, -1.)
+    for z in np.linspace(fog.sheets_z[0], fog.sheets_z[1], 5):
+        world = np.stack((xs, upper + VIEW_SLOPE*z, np.full_like(xs, z), np.ones_like(xs)))
+        clip = mvp @ world
+        sx, sy = (clip[0]/clip[3]*.5 + .5), (clip[1]/clip[3]*.5 + .5)
+        column = np.clip((sx*samples).astype(int), 0, samples - 1)
+        np.maximum.at(limit, column, sy)
+    # Fill columns without a sample from neighbours, then open slightly downward.
+    known = limit > -1.
+    if known.any():
+        limit = np.interp(np.arange(samples), np.where(known)[0], limit[known])
+    return (limit - .02).astype(np.float32)
+
+
 def lens(pose: Pose, aspect: float) -> tuple[float, float, bool]:
     """The fog volume's lens for a pose: Orthographic half-extents, or Perspective tangents."""
     if pose.projection == 'Orthographic':
@@ -689,6 +711,7 @@ class Lab:
         self.reflection = PlanarReflection('waveform lab floor')
         self.fog, self.reflected_fog = FogVolume('waveform lab mist'), FogVolume('waveform lab reflected mist')
         self.march = FogMarch('waveform lab mist', FOG_COVERAGE_GLSL)
+        self._crackle_limit = None
         self.reflected_march = FogMarch('waveform lab reflected mist', FOG_COVERAGE_GLSL)
         self.textures = {}
 
@@ -739,6 +762,7 @@ class Lab:
         if fogged:
             camera_lens = lens(POSES[pose], width/height)
             self._update_fog(self.fog, view, camera_lens, (width, height), recipe.fog.cell, recipe.fog.slices, envelope)
+            self._crackle_limit = crackle_limit(envelope, recipe.fog, projection @ view, width)
             self._update_fog(self.reflected_fog, mirror_view(view, 0.), camera_lens, (width, height),
                              recipe.fog.reflection_cell, recipe.fog.reflection_slices, envelope)
             fog = recipe.fog
@@ -823,7 +847,8 @@ class Lab:
                 if flat:
                     self._flat_ribbons(packet, ribbon_mvp)
                 if fogged:
-                    self.march.composite(glow=recipe.fog.glow)
+                    self.march.composite(glow=recipe.fog.glow, crackle=recipe.fog.crackle,
+                                         crackle_glow=recipe.fog.crackle_glow, crackle_limit=self._crackle_limit)
             if not flat:
                 with self.scene.transparent_writes(card, self.resources):
                     self.ribbons.draw(packet, ribbon_mvp, shading='body', **draw)
