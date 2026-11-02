@@ -47,7 +47,7 @@
           1.0
         ],
         "waveform_ribbon_dynamic_floor": false,
-        "waveform_ribbon_elastic_frequency": 0.65,
+        "waveform_ribbon_elastic_frequency": 1.3,
         "waveform_ribbon_exposure": 0.85,
         "waveform_ribbon_floor_brightness": [
           1.0,
@@ -78,8 +78,8 @@
           1.6
         ],
         "waveform_ribbon_fog_edge": [
-          2.4,
-          2.4
+          0.0,
+          0.0
         ],
         "waveform_ribbon_fog_fringe": [
           120.0,
@@ -99,7 +99,7 @@
           0.1,
           1.0
         ],
-        "waveform_ribbon_impulse": 1.0,
+        "waveform_ribbon_impulse": 2.0,
         "waveform_ribbon_input_gain": 1.0,
         "waveform_ribbon_lift": [
           0.3,
@@ -155,20 +155,20 @@
           0.3
         ],
         "waveform_ribbon_material_rim_glow_light": [
-          0.45,
-          0.45
+          0.4,
+          1.0
         ],
         "waveform_ribbon_material_rim_glow_width": [
-          0.04,
-          0.04
+          0.06,
+          0.12
         ],
         "waveform_ribbon_material_rim_half_width": [
           0.009,
           0.009
         ],
         "waveform_ribbon_material_rim_light": [
-          2.9,
-          2.9
+          1.8,
+          3.5
         ],
         "waveform_ribbon_material_rim_white": [
           0.02,
@@ -206,7 +206,7 @@
           0.2,
           0.2
         ],
-        "waveform_ribbon_mist_enabled": true,
+        "waveform_ribbon_mist_enabled": false,
         "waveform_ribbon_mist_gradient_share": 0.35,
         "waveform_ribbon_palette": {
           "low": [
@@ -740,6 +740,8 @@
           8.0,
           8.0
         ],
+        "waveform_ribbon_spark_glow": [0.3, 1.2],
+        "waveform_ribbon_spark_span": [24.0, 48.0],
         "waveform_ribbon_spark_white": [
           0.04,
           0.04
@@ -853,7 +855,12 @@
         "waveform_ribbon_tilt": 0.0,
         "waveform_ribbon_scene_scale": 1.0,
         "waveform_ribbon_scene_pan_x": 0.0,
-        "waveform_ribbon_scene_pan_y": 0.0
+        "waveform_ribbon_scene_pan_y": 0.0,
+        "waveform_ribbon_idle_motion": 0.35,
+        "waveform_ribbon_material_glint_reactivity": [
+          0.4,
+          1.5
+        ]
       }
     }
   }

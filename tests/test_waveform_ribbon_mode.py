@@ -32,6 +32,7 @@ def test_nested_configuration_edits_invalidate_the_compiled_consumer():
 
 def test_floor_and_mist_ranges_follow_passage_independently_of_light_routing():
     values=parameters()
+    values['waveform_ribbon_mist_enabled']=True  # Explicitly exercise the optional retained volume.
     values['waveform_ribbon_routing']['light']=[[0.,1.] for _ in range(6)]
     values['waveform_ribbon_floor_brightness']=[.2,2.]
     values['waveform_ribbon_fog_density']=[.5,2.5]
@@ -46,7 +47,8 @@ def test_floor_and_mist_ranges_follow_passage_independently_of_light_routing():
 
 
 def frame_for(target, *, ready=True):
-    values=parameters();configuration=CompiledWaveformSettings(values)
+    values=parameters();values['waveform_ribbon_mist_enabled']=True
+    configuration=CompiledWaveformSettings(values)
     model=WaveformDynamics(configuration.controls)
     for _ in range(64):snapshot=model.advance(1/90,bands=(0.,0.,0.),intensity=0.,presence=0.)
     camera={key:value for key,value in values.items() if key.startswith('waveform_ribbon_camera_')
@@ -150,8 +152,123 @@ def test_settings_preview_uses_current_controls_and_retires_its_context(qt_app):
     disable_per_call_gl_error_checking()
     from PySide6.QtGui import QOpenGLContext
     from ui.widgets.waveform_ribbon_preview import render_samples
-    before=QOpenGLContext.currentContext()
-    images=render_samples(parameters(),size=(160,120))
-    assert len(images)==3 and all((image.width(),image.height())==(160,120) for image in images)
-    assert images[0]!=images[2]
-    assert QOpenGLContext.currentContext() is before
+    from rendering.quick.offscreen_target import OffscreenRenderTarget
+    caller=OffscreenRenderTarget(16,16)
+    try:
+        images=render_samples(parameters(),size=(160,120))
+        assert len(images)==3 and all((image.width(),image.height())==(160,120) for image in images)
+        assert images[0]!=images[2]
+        assert QOpenGLContext.currentContext() is caller.context
+    finally:caller.close()
+
+
+@pytest.mark.qt
+def test_scene_uploads_one_packet_for_all_passes_and_keeps_pixels(qt_app,monkeypatch):
+    from rendering.gl_error_policy import disable_per_call_gl_error_checking
+    disable_per_call_gl_error_checking()
+    from rendering.quick.offscreen_target import OffscreenRenderTarget
+    from rendering.quick.visualizer.implementations.waveform_ribbon import QuickWaveformRibbonRenderer
+    from rendering.quick.scene3d.stream import StreamRing
+    target=OffscreenRenderTarget(160,120);renderer=QuickWaveformRibbonRenderer()
+    copies=[];original=StreamRing.rebind
+    def recorded(self,target_,binding,data):
+        if self.label=='ribbon knots':copies.append(len(data))
+        return original(self,target_,binding,data)
+    monkeypatch.setattr(StreamRing,'rebind',recorded)
+    try:
+        frame=frame_for(target)
+        for _ in range(80):
+            if renderer.prepare_step(frame):break
+        copies.clear();target.bind();renderer.render(frame)
+        assert copies==[len(frame.snapshot.logical.mode_state.packet.payload)]
+        assert target.read_rgba()[:,:,:3].max()>100
+    finally:renderer.release_resources();target.close()
+
+
+@pytest.mark.qt
+def test_gpu_envelope_preserves_native_pixels_against_explicit_cpu_oracle(qt_app,monkeypatch):
+    from rendering.gl_error_policy import disable_per_call_gl_error_checking
+    disable_per_call_gl_error_checking()
+    from OpenGL import GL as gl
+    from rendering.quick.offscreen_target import OffscreenRenderTarget
+    from rendering.quick.visualizer.implementations.waveform_ribbon import QuickWaveformRibbonRenderer
+    from rendering.quick.scene3d.waveform import waveform_envelope,crackle_limit
+    target=OffscreenRenderTarget(320,240);renderer=QuickWaveformRibbonRenderer()
+    try:
+        frame=frame_for(target)
+        target.bind();renderer.render(frame);gpu_pixels=target.read_rgba()
+        owner=renderer._scene.envelope;update=owner.update
+        def oracle(packet,**kw):
+            update(packet,**kw)
+            table=waveform_envelope(packet,kw['translation'],kw['age_fade'],kw['fog'],kw['grade'],
+                                    kw['slopes'],kw['camber'])
+            limit=crackle_limit(table,kw['fog'],kw['mvp'],target.width,slopes=kw['slopes'])
+            gl.glTextureSubImage2D(owner.texture,0,0,0,table.shape[1],6,gl.GL_RGBA,gl.GL_FLOAT,table)
+            gl.glTextureSubImage2D(owner.limit,0,0,0,256,1,gl.GL_RED,gl.GL_FLOAT,limit)
+        monkeypatch.setattr(owner,'update',oracle)
+        target.bind();renderer.render(frame);cpu_pixels=target.read_rgba()
+        delta=np.abs(cpu_pixels.astype(float)-gpu_pixels.astype(float))
+        assert delta.mean()<.1 and delta.max()<8,(delta.mean(),delta.max())
+    finally:renderer.release_resources();target.close()
+
+
+@pytest.mark.qt
+def test_non_origin_host_scissor_clips_only_final_composition(qt_app):
+    from rendering.gl_error_policy import disable_per_call_gl_error_checking
+    disable_per_call_gl_error_checking()
+    from OpenGL import GL as gl
+    from rendering.quick.offscreen_target import OffscreenRenderTarget
+    from rendering.quick.visualizer.implementations.waveform_ribbon import QuickWaveformRibbonRenderer
+    target=OffscreenRenderTarget(320,240);renderer=QuickWaveformRibbonRenderer()
+    try:
+        frame=frame_for(target);frame.logical_size=(160.,120.)
+        frame.matrix_values=(2/320,0,0,0,0,-2/240,0,0,0,0,1,0,-1,1,0,1)
+        target.bind();renderer.render(frame);baseline=target.read_rgba()[:120,:160]
+        frame.matrix_values=(*frame.matrix_values[:12],-.5,.5,0,1)
+        target.bind();gl.glScissor(80,60,160,120);gl.glEnable(gl.GL_SCISSOR_TEST)
+        renderer.render(frame);positioned=target.read_rgba()[60:180,80:240]
+        assert bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
+        np.testing.assert_allclose(positioned,baseline,atol=1)
+    finally:
+        gl.glDisable(gl.GL_SCISSOR_TEST);renderer.release_resources();target.close()
+
+
+@pytest.mark.qt
+def test_floor_draw_count_is_its_mesh_not_the_envelope_sample_count(qt_app,monkeypatch):
+    from rendering.gl_error_policy import disable_per_call_gl_error_checking
+    disable_per_call_gl_error_checking()
+    from OpenGL import GL as gl
+    from rendering.quick.offscreen_target import OffscreenRenderTarget
+    from rendering.quick.visualizer.implementations.waveform_ribbon import QuickWaveformRibbonRenderer
+    target=OffscreenRenderTarget(160,120);renderer=QuickWaveformRibbonRenderer();counts=[]
+    draw=gl.glDrawArrays
+    def checked(mode,first,count):
+        if int(gl.glGetIntegerv(gl.GL_CURRENT_PROGRAM))==renderer._scene.resources._programs.get('floor'):
+            counts.append(count)
+        return draw(mode,first,count)
+    monkeypatch.setattr(gl,'glDrawArrays',checked)
+    try:
+        target.bind();renderer.render(frame_for(target))
+        assert counts and all(count==6 for count in counts),counts
+    finally:renderer.release_resources();target.close()
+
+
+@pytest.mark.qt
+def test_floor_specular_cap_preserves_reflection_at_identical_view_and_snapshot(qt_app):
+    from rendering.gl_error_policy import disable_per_call_gl_error_checking
+    disable_per_call_gl_error_checking()
+    from rendering.quick.offscreen_target import OffscreenRenderTarget
+    from rendering.quick.visualizer.implementations.waveform_ribbon import QuickWaveformRibbonRenderer
+    target=OffscreenRenderTarget(320,240);renderer=QuickWaveformRibbonRenderer()
+    try:
+        frame=frame_for(target);state=frame.snapshot.logical.mode_state
+        def pixels(cap,reflection):
+            floor=replace(state.scene.floor,specular_max_height=cap,reflection=reflection)
+            frame.snapshot.logical.mode_state=replace(state,scene=replace(state.scene,floor=floor))
+            target.bind();renderer.render(frame)
+            return target.read_rgba()[160:225,35:285,:3].astype(float)
+        inline=pixels(10000,4.5)-pixels(10000,0.)
+        capped=pixels(120,4.5)-pixels(120,0.)
+        a,b=inline.clip(0).mean(),capped.clip(0).mean()
+        assert a>1. and .8<b/a<1.2,(a,b,b/a)
+    finally:renderer.release_resources();target.close()

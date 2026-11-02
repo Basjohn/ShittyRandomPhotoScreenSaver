@@ -7,16 +7,17 @@ which is rebased with the packet origin exactly as the MVP is, so no shader mixe
 """
 import math
 import weakref
+from contextlib import contextmanager
 
 import numpy as np
 from OpenGL import GL as gl
 
 from core.ribbon_style import RibbonMaterial, RibbonSparks, RibbonStrays
-from core.ribbon_packet import MAX_PACKET_BYTES, MAX_RIBBONS, RIBBON_BYTES, RibbonPacket
+from core.ribbon_packet import MAX_PACKET_BYTES, MAX_RIBBONS, RIBBON_BYTES, KNOT_ROWS, RibbonPacket
 from core.ribbon_frames import MAX_STRIP_STATIONS
 from rendering.gl_programs.ribbon import (RIBBON_BODY_FRAGMENT, RIBBON_FRAGMENT, RIBBON_LIGHT_FRAGMENT,
                                           RIBBON_SPARK_FRAGMENT, RIBBON_SPARK_VERTEX, RIBBON_STRAY_FRAGMENT,
-                                          RIBBON_STRAY_VERTEX, RIBBON_VERTEX)
+                                          RIBBON_STRAY_VERTEX, RIBBON_VERTEX, RIBBON_CONTINUOUS_VERTEX)
 from core.ribbon_geometry import MAX_PATH_SAMPLES
 from rendering.gl_programs.mist import FOG_OFF
 from rendering.quick import gl_query
@@ -81,6 +82,66 @@ def _sweep_axis(value):
     return tuple(v/length for v in scaled)
 
 
+def _continuation_draw_ranges(packet, continuation, frame_x, cross_divisions):
+    """Cull draw intervals only; retain original gl_VertexIDs and tessellation.
+
+    The monotone B-spline's exact axial station boundaries can be searched from
+    a few ring controls. Neither the packet nor any world-space field changes.
+    Endpoint strips keep their original endpoint-anchored quadratic lattice;
+    inverse lattice coordinates skip only intervals wholly outside the view.
+    """
+    x0,x1,budget=continuation
+    if (not all(math.isfinite(v) for v in (x0,x1,frame_x)) or x1<x0
+            or not isinstance(budget,int) or not 1<=budget<=2048):
+        raise ValueError('Continuation needs an ordered finite span and bounded subdivisions')
+    x0,x1=x0-frame_x,x1-frame_x
+    rows=np.frombuffer(packet.payload,np.float32).reshape(packet.instances,-1,4)
+    first_interval,last_interval=math.inf,0
+    edges=[]
+    for path in rows:
+        count,start,capacity,subdivisions=int(path[0,0]),int(path[1,1]),int(path[1,2]),int(path[0,1])
+        if not 3<=count<=capacity or not 1<=subdivisions<=8:
+            raise ValueError('Continuation needs at least three monotone cloth controls')
+        def axial(index):
+            return float(path[4+((start+index)%capacity)*KNOT_ROWS,0])
+        first,last=axial(0),axial(count-1)
+        edges.append((first,last))
+        if x0>last or x1<first:continue
+        def boundary(index):
+            if index==0:return first
+            if index==count-1:return last
+            return (axial(index-1)+4.*axial(index)+axial(index+1))/6.
+        def lower_bound(value):
+            low,high=0,count
+            while low<high:
+                middle=(low+high)//2
+                if boundary(middle)<value:low=middle+1
+                else:high=middle
+            return low
+        # A one-station halo covers clip-plane rounding and closed-interval boundaries.
+        begin=max(0,lower_bound(x0)-2)
+        end=min(count-1,lower_bound(x1)+1)
+        first_interval=min(first_interval,begin*subdivisions)
+        last_interval=max(last_interval,end*subdivisions)
+    stride=6*cross_divisions
+    body=((int(first_interval)*stride,(last_interval-int(first_interval))*stride)
+          if first_interval<last_interval else (0,0))
+    extensions=[]
+    for side in (-1.,1.):
+        extents=[(first-x0 if side<0 else x1-last) for first,last in edges]
+        if max(extents)<=0.:continue
+        divisions=min(budget,max(16,math.ceil(2.*max(extents)/.15)))
+        starts=[]
+        for (first,last),extent in zip(edges,extents):
+            if extent<=0.:continue
+            invisible=(first-x1 if side<0 else x0-last)
+            t=math.sqrt(max(0.,invisible)/extent)
+            starts.append(max(0,min(divisions-1,math.floor(t*divisions)-1)))
+        begin=min(starts)
+        extensions.append((side,divisions,begin*stride,(divisions-begin)*stride))
+    return body,(x0,x1),extensions
+
+
 
 
 
@@ -92,6 +153,7 @@ class RibbonPrimitive:
         self.resources = MeshResources('ribbon primitive')
         self.stream = None
         self._context_ref = None
+        self._held_packet = self._lease = None
 
     @property
     def has_resources(self):
@@ -101,19 +163,50 @@ class RibbonPrimitive:
     def stream_bytes(self):
         return self.stream.capacity if self.stream is not None and self.stream.has_resources else 0
 
-    def prepare_programs(self, *, sparks=False, strays=False):
+    def prepare_programs(self, *, sparks=False, strays=False, continuation=False):
         """One hidden-frame compile, admitted under this primitive's owning context before allocation."""
         self._check_context(admit=True)
-        programs=[(self.resources,'body',RIBBON_VERTEX,RIBBON_BODY_FRAGMENT),
-                  (self.resources,'light',RIBBON_VERTEX,RIBBON_LIGHT_FRAGMENT)]
+        vertex=RIBBON_CONTINUOUS_VERTEX if continuation else RIBBON_VERTEX
+        suffix='_continuous' if continuation else ''
+        programs=[(self.resources,'body'+suffix,vertex,RIBBON_BODY_FRAGMENT),
+                  (self.resources,'light'+suffix,vertex,RIBBON_LIGHT_FRAGMENT)]
         if sparks:programs.append((self.resources,'sparks',RIBBON_SPARK_VERTEX,RIBBON_SPARK_FRAGMENT))
         if strays:programs.append((self.resources,'strays',RIBBON_STRAY_VERTEX,RIBBON_STRAY_FRAGMENT))
         return warm_programs(programs)
 
+    def _stream(self):
+        if self.stream is None:
+            alignment=gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT)
+            hold=MAX_PACKET_BYTES+alignment
+            self.stream=StreamRing('ribbon knots',slots=3,slot_bytes=hold,hold_bytes=hold)
+        return self.stream
+
+    @contextmanager
+    def packet_scope(self,packet):
+        """Upload once for a whole scene; every pass rebinds this fenced range after intervening consumers."""
+        if self._held_packet is not None:raise RuntimeError('Ribbon packet scope cannot nest')
+        self._check_context(admit=True)
+        if not packet.payload:
+            yield
+            return
+        with self._stream().bound(gl.GL_SHADER_STORAGE_BUFFER,0,packet.payload,reuse=True) as lease:
+            self._held_packet,self._lease=packet,lease
+            try:yield
+            finally:self._held_packet=self._lease=None
+
+    @contextmanager
+    def _packet_bound(self,packet):
+        if self._held_packet is not None:
+            if packet is not self._held_packet:raise RuntimeError('Different packet inside the active ribbon scene scope')
+            self._lease.rebind()
+            yield
+        else:
+            with self._stream().bound(gl.GL_SHADER_STORAGE_BUFFER,0,packet.payload):yield
+
     def draw(self, packet: RibbonPacket, mvp, *, diagnostic=0, timing_query=None, shading='diagnostic',
              view=None, orthographic=True, material: RibbonMaterial | None = None, age_fade=None,
              mist=None, mist_frame=(0., 0., 0.), sparks: RibbonSparks | None = None, now=None, sweep_axis=None,
-             grade=None, floor=None, strays: RibbonStrays | None = None):
+             grade=None, floor=None, strays: RibbonStrays | None = None, continuation=None):
         """``age_fade`` = (absolute now, fade-in s, maximum age s, fade-out s) fades the head and tail by age.
 
         ``mist`` (``rendering.gl_programs.mist.mist_uniforms``) dims light and coverage by the scene's world mist;
@@ -151,6 +244,12 @@ class RibbonPrimitive:
         material = material or RibbonMaterial()
         cross_divisions = 8 if material.cross_curve > 0 else 1
         axis = _sweep_axis(sweep_axis)
+        if continuation is not None and axis!=(1.,0.,0.):
+            raise ValueError('Continuation requires the monotone world-x cloth sweep')
+        ranges=None
+        if continuation is not None:
+            frame=origin+np.asarray(mist_frame,float)
+            ranges=_continuation_draw_ranges(packet,continuation,float(frame[0]),cross_divisions)
         if shading != 'diagnostic':
             shaded = self._material_uniforms(view, translate, bool(orthographic), material)
             shaded['uAge'] = (0., 0., 0., 0.)
@@ -174,22 +273,24 @@ class RibbonPrimitive:
         program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
         vao_before = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING)
         try:
-            program = self.resources.program(shading, RIBBON_VERTEX, _FRAGMENTS[shading])
+            key=shading+('_continuous' if continuation is not None else '')
+            vertex=RIBBON_CONTINUOUS_VERTEX if continuation is not None else RIBBON_VERTEX
+            program = self.resources.program(key, vertex, _FRAGMENTS[shading])
             vao, _ = self.resources.mesh('empty', (0., 0.), (2,))
-            names = ('uMvp', 'uDiagnostic', 'uSurface', 'uSweepAxis') if shaded is None else ('uMvp', 'uSurface', 'uSweepAxis', *_MATERIAL_UNIFORMS)
+            names = ('uMvp', 'uDiagnostic', 'uSurface', 'uSweepAxis', 'uFloorContact') if shaded is None else ('uMvp', 'uSurface', 'uSweepAxis', *_MATERIAL_UNIFORMS)
+            if continuation is not None:names+=('uContinuation',)
             # Each pass reads only part of the material, so its unused uniforms are compiled out (location -1).
-            uniforms = self.resources.uniforms(shading, names, required=shaded is None)
-            if self.stream is None:
-                alignment = gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT)
-                hold = MAX_PACKET_BYTES+alignment
-                self.stream = StreamRing('ribbon knots', slots=3, slot_bytes=hold, hold_bytes=hold)
+            uniforms = self.resources.uniforms(key, names, required=shaded is None)
+            self._stream()
             gl.glUseProgram(program)
             gl.glBindVertexArray(vao)
             gl.glUniformMatrix4fv(uniforms['uMvp'], 1, gl.GL_FALSE, matrix.flatten(order='F'))
             gl.glUniform2f(uniforms['uSurface'], material.cross_curve, float(cross_divisions))
             gl.glUniform3f(uniforms['uSweepAxis'], *axis)
+            if continuation is not None:gl.glUniform4f(uniforms['uContinuation'],0.,0.,0.,0.)
             if shaded is None:
                 gl.glUniform1i(uniforms['uDiagnostic'], diagnostic)
+                gl.glUniform3f(uniforms['uFloorContact'],*_floor_contact(floor,origin+np.asarray(mist_frame,float)))
             else:
                 for name, value in shaded.items():
                     if name in ('uOrthographic', 'uFogVolume'):
@@ -202,11 +303,17 @@ class RibbonPrimitive:
                         gl.glUniform3f(uniforms[name], *value)
                     else:
                         _upload(uniforms[name], value)
-            with self.stream.bound(gl.GL_SHADER_STORAGE_BUFFER, 0, packet.payload):
+            with self._packet_bound(packet):
                 if timing_query is not None:
                     gl.glBeginQuery(gl.GL_TIME_ELAPSED, timing_query)
                 try:
-                    gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, packet.vertices*cross_divisions, packet.instances)
+                    body,span,extensions=(ranges if ranges is not None else
+                        ((0,packet.vertices*cross_divisions),None,()))
+                    if body[1]:gl.glDrawArraysInstanced(gl.GL_TRIANGLES,body[0],body[1],packet.instances)
+                    if ranges is not None:
+                        for side,divisions,first,count in extensions:
+                            gl.glUniform4f(uniforms['uContinuation'],*span,float(divisions),side)
+                            gl.glDrawArraysInstanced(gl.GL_TRIANGLES,first,count,packet.instances)
                 finally:
                     if timing_query is not None:
                         gl.glEndQuery(gl.GL_TIME_ELAPSED)
@@ -239,10 +346,7 @@ class RibbonPrimitive:
                      'uSurface','uSweepAxis', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange', 'uGradeStops',
                      'uGrade', 'uFloorContact', 'uStray', 'uStrayLook', 'uStrayClock', 'uViewport', 'uStrayGlow', 'uStrayAdmission')
             u = self.resources.uniforms(kind, names, required=False)
-            if self.stream is None:
-                alignment = gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT)
-                hold = MAX_PACKET_BYTES+alignment
-                self.stream = StreamRing('ribbon knots', slots=3, slot_bytes=hold, hold_bytes=hold)
+            self._stream()
             gl.glUseProgram(program)
             gl.glBindVertexArray(vao)
             gl.glEnable(gl.GL_PROGRAM_POINT_SIZE)
@@ -275,7 +379,7 @@ class RibbonPrimitive:
             gl.glUniform3f(u['uFloorContact'], *_floor_contact(floor, frame))
             for name, value in {**GRADE_OFF, **(grade or {})}.items():
                 _upload(u[name], value)
-            with self.stream.bound(gl.GL_SHADER_STORAGE_BUFFER, 0, packet.payload):
+            with self._packet_bound(packet):
                 if strays is None:
                     gl.glDrawArraysInstanced(gl.GL_POINTS, 0, MAX_PATH_SAMPLES*sparks.per_knot, packet.instances)
                 else:

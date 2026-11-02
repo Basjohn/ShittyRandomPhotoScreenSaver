@@ -142,6 +142,7 @@ class FramedFlightMotion:
     pitch_limit_offset: tuple[float, float, float] | None = field(default=None, init=False, repr=False, compare=False)
 
     def __post_init__(self):
+        if _spec(self.mode_id).grounded_orbit is not None:return
         limit = _pitch_limit_time(self)
         if limit > 0.:
             # This endpoint depends only on the immutable gesture, not frame
@@ -299,6 +300,17 @@ def _changing_pitch_flight(motion, duration):
 def framed_flight_position(motion: FramedFlightMotion, now: float) -> tuple[float, float, float]:
     """Bounded flight on the existing capture clock, without per-frame state writes."""
     dt = max(0., float(now)-motion.since)
+    spec=_spec(motion.mode_id)
+    if spec.grounded_orbit is not None:
+        from core.settings.framed_camera import bound_eye,camera_baseline,grounded_orbit_eye
+        base=camera_baseline(spec,motion.turn,motion.tilt,motion.scale,motion.pan_x,motion.pan_y,motion.fov)
+        start=bound_eye(spec,tuple(base[i]+motion.offset[i]*spec.offset_scale[i] for i in range(3)))
+        radius=math.hypot(start[0]-spec.pivot[0],start[2]-spec.pivot[2])-motion.travel*spec.travel_speed*dt
+        turn=max(-1.,min(1.,motion.turn+motion.turn_rate*dt))
+        yaw=math.atan2(start[0]-spec.pivot[0],start[2]-spec.pivot[2])+spec.yaw_span*(turn-motion.turn)
+        eye=grounded_orbit_eye(spec,radius,yaw/spec.yaw_span)
+        final=camera_baseline(spec,turn,_tilt_at(motion,spec,dt),motion.scale,motion.pan_x,motion.pan_y,motion.fov)
+        return tuple((eye[i]-final[i])/spec.offset_scale[i] for i in range(3))
     limit = _pitch_limit_time(motion)
     if not dt:
         return _flight_offset(motion, motion.offset, 0.)
@@ -315,6 +327,10 @@ def set_framed_flight_rates(host: Any, mode_id: str, yaw: float, pitch: float,
     """One GUI-thread publication per key edge; all held motion is capture-clock owned."""
     if _spec(mode_id) is None:
         return {}
+    if _spec(mode_id).grounded_orbit is not None:
+        # Existing WASD/QE publication; A/D orbits instead of free strafing out of the scene.
+        yaw-=strafe
+        strafe=0.
     from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
     position_key = _position_key(mode_id)
     turn_key, tilt_key = view_orbit_settings(mode_id)

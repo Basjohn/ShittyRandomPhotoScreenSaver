@@ -196,11 +196,12 @@ def test_volume_mist_off_retires_its_resources_without_replacing_floor_mist(lab)
     from dataclasses import replace
     lab.render('low', flat=False)
     analytic = lab.recipe.environment.mist.copy()
-    assert lab.fog.has_resources and 'shape' in lab.textures
+    assert lab.fog.has_resources and 'shape' in lab.textures and lab.envelope.has_resources
     lab.recipe = replace(lab.recipe, fog=None)
     lab.render('low', flat=False)
     assert not any(owner.has_resources for owner in (lab.fog, lab.reflected_fog, lab.march, lab.reflected_march))
     assert not lab.fog_resources.has_resources
+    assert not lab.envelope.has_resources
     assert not {'shape','envelope'} & lab.textures.keys()
     assert lab.recipe.environment.mist == analytic
 

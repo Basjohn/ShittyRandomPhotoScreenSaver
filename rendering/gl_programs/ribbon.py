@@ -262,6 +262,54 @@ void main() {
 }
 """).replace('MAX_KNOTS', str(MAX_PATH_SAMPLES))
 
+# A separate opt-in vertex variant leaves every finite primitive consumer's
+# program, geometry, uniform traffic and draw count unchanged.
+from rendering.gl_programs.ribbon_continuation import CONTINUATION_GLSL
+
+_CONTINUATION_VERTEX = """
+uniform vec4 uContinuation; // packet-local min/max x, subdivisions, endpoint side (-1/0/+1)
+void continuationMain(int owner,int crossDiv);
+"""
+_CONTINUATION_MAIN = """
+vec3 continuedSurface(int owner,float x,float across) {
+    vec4 f=continuationField(owner,x);
+    vec3 centre=vec3(x,f.xy);
+    float angle=paths[owner].extra.x+f.w;
+    vec3 side=vec3(0,cos(angle),sin(angle));
+    return surfacePoint(centre-f.z*side,centre+f.z*side,cross(vec3(1,0,0),side),across);
+}
+void continuationMain(int owner,int crossDiv) {
+    int last=int(paths[owner].meta.x)-1;
+    bool before=uContinuation.w<0.0;
+    Knot edge=continuationControl(owner,before?0:last);
+    float limit=before?uContinuation.x:uContinuation.y;
+    if((before && limit>=edge.p.x) || (!before && limit<=edge.p.x))return;
+    int interval=gl_VertexID/(6*crossDiv),corner=gl_VertexID%6;
+    int strip=(gl_VertexID/6)%crossDiv;
+    bool next=corner==1 || corner>=4,highAcross=corner==2 || corner==3 || corner==5;
+    float across=float(strip+(highAcross?1:0))/float(crossDiv);
+    float t=float(interval+(next?1:0))/uContinuation.z;
+    // Cluster stations at the C2 join without moving any world-space point.
+    float x=mix(edge.p.x,limit,t*t);
+    vec4 f=continuationField(owner,x);
+    vWorld=continuedSurface(owner,x,across);
+    vec3 along=continuedSurface(owner,x+0.001,across)-continuedSurface(owner,x-0.001,across);
+    vec3 across_=continuedSurface(owner,x,min(1.0,across+0.001))-continuedSurface(owner,x,max(0.0,across-0.001));
+    vNormal=normalize(cross(along,across_));
+    vAcross=across;vEmission=edge.side.w;
+    Knot neighbour=continuationControl(owner,before?1:last-1);
+    vLocal=edge.q.x+(x-edge.p.x)*(edge.q.x-neighbour.q.x)/(edge.p.x-neighbour.p.x);
+    vPhase=paths[owner].meta.z+vLocal/paths[owner].meta.w;
+    vColour=paths[owner].colourA;vColourB=paths[owner].colourB;vTint=edge.tint;
+    vCoverage=1.0;vExpanded=0.0;vFaceScale=1.0;
+    gl_Position=uMvp*vec4(vWorld,1);
+}
+"""
+RIBBON_CONTINUOUS_VERTEX = (RIBBON_VERTEX.replace('void main() {', _CONTINUATION_VERTEX+'\nvoid main() {',1)
+    .replace('if(segment>=count-1) return;',
+             'if(uContinuation.w!=0.0) { continuationMain(owner,crossDiv); return; }\n    if(segment>=count-1) return;',1)
+    +CONTINUATION_GLSL+_CONTINUATION_MAIN)
+
 # Sparks attached to the ribbon's history (no state, no CPU per tick): every knot owns a few spark slots; tangent.w
 # is the share alive (the highs when the knot was admitted). A spark is born on the ribbon between its knot and the
 # next, then drifts off along a hashed direction as it ages on the ribbon's own clock, fading over its lifetime. Its
@@ -400,7 +448,7 @@ void main() {
     uint seed=mixBits(key*747796405U+uint(slot)*2891336453U+uint(owner)*104729U+17U);
     float r1=unit(seed), r2=unit(seed+1U), r3=unit(seed+2U), r4=unit(seed+3U), r5=unit(seed+4U);
     float gate=k.tangent.w*uStray.w;
-    float admission=uStrayAdmission>0.0?smoothstep(r1,r1+uStrayAdmission,gate):step(r1,gate);
+    float admission=uStrayAdmission>0.0?smoothstep(r1,r1+uStrayAdmission*max(gate,1e-4),gate):step(r1,gate);
     if(admission<=0.0) return;
     bool next=corner==1 || corner>=4;
     bool outer=corner==2 || corner==3 || corner==5;
@@ -533,7 +581,7 @@ uniform vec4 uGlint;        // glints per strand per phase unit, chance, light, 
 uniform vec4 uTone;         // strand whiteness, rim whiteness, strand spacing jitter, glint minimum radius (px)
 uniform vec4 uAge;          // local now, fade-in, maximum age, fade-out (seconds); fades off when both are zero
 uniform vec3 uMistOrigin;   // packet-local -> mist world translation (packet origin plus the caller's frame)
-uniform vec2 uGlow;         // share of the light sent to the bloom (local glow), white-hot share of the brightest strands
+uniform vec3 uGlow;         // local bloom share, white-hot share, local musical highlight admission
 """ + RIBBON_GRADE_GLSL + MIST_GLSL + RIBBON_STRAND_COORDINATE_GLSL + """
 
 // Integral of the periodic pulse, then exact box filtering over the pixel footprint. The old single-line
@@ -620,7 +668,8 @@ void main() {
         float k=floor(x);
         float along=vPhase*uGlint.x+strandHash(k)*7.0;
         float j=floor(along);
-        if(cellHash(k,j)<uGlint.y && abs(determinant)>1e-10) {
+        float chance=clamp(uGlint.y*(1.0+uGlow.z*max(vEmission-0.6,0.0)),0.0,1.0);
+        if(cellHash(k,j)<chance && abs(determinant)>1e-10) {
             // Invert the local surface-to-screen Jacobian. Dividing each coordinate by fwidth separately
             // assumes perpendicular projected axes and stretches points into dashes on skewed folds.
             vec2 delta=vec2(fract(along)-0.5,fract(x)-0.5);

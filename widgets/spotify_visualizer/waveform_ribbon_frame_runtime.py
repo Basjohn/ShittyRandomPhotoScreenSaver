@@ -4,7 +4,9 @@ import math
 from collections.abc import Mapping
 from core.waveform_ribbon_dynamics import WaveformDynamics, HybridControls
 from widgets.spotify_visualizer.frame_runtime_lifecycle import RetirableFrameRuntime, retirement_fenced
-from widgets.spotify_visualizer.transient_bus import musical_weight
+from widgets.spotify_visualizer.transient_bus import musical_weight,musical_emphasis,passage_ramp
+
+_IMPULSES={'kick':(1.,.2,.15),'snare':(.15,1.,.35),'vocal_swell':(.4,.45,.9),'onset':(.6,.6,.6)}
 
 
 def _configuration_token(value):
@@ -23,6 +25,8 @@ class WaveformRibbonFrameRuntime(RetirableFrameRuntime):
         self._model = None
         self._identity = self._last_ts = None
         self._onset_serial = 0
+        self._accent_mean = {}
+        self._accent_time = None
         self._settings_values = self._configuration = None
 
     @retirement_fenced
@@ -43,22 +47,41 @@ class WaveformRibbonFrameRuntime(RetirableFrameRuntime):
         now = float(now_ts)
         if not math.isfinite(now):
             raise ValueError('Waveform capture time must be finite')
-        token = (tuple(identity),tuple(source_identity))
-        if token != self._identity or (self._last_ts is not None and now < self._last_ts):
+        token = tuple(identity)
+        if self._model is None or token[0] != self._identity[0]:
             self._last_ts = None
-            self._onset_serial = 0
-            self._identity = token
             self._model = WaveformDynamics(controls)
+        if token!=self._identity:
+            self._onset_serial=0
+            self._accent_mean={}
+            self._accent_time=None
+        self._identity=token
         dt = 0. if self._last_ts is None else min(.1,max(0.,now-self._last_ts))
         self._last_ts = now
         live = bool(playing) and tuple(source_identity)==tuple(identity)[1:] and all(v>=0 for v in identity)
         weight = musical_weight(loudness,presence) if live else 0.
         hit = 0.
+        components=[0.,0.,0.]
         for onset in onsets:
             if onset.serial <= self._onset_serial:
                 continue
             self._onset_serial = onset.serial
             if live and self._model.ready:
-                hit = max(hit,float(onset.strength)*musical_weight(onset.loudness,onset.presence))
+                support=musical_weight(onset.loudness,onset.presence)
+                magnitude=max(0.,float(onset.magnitude))
+                if self._accent_time is not None and now-self._accent_time>1.5:
+                    self._accent_mean.clear()
+                mean=self._accent_mean.get(onset.kind,0.)
+                contrast=max(0.,magnitude-mean)
+                self._accent_mean[onset.kind]=mean+.18*(magnitude-mean)
+                self._accent_time=now
+                # Contrast survives the bus's clipped confidence. Reward follows the fixed real-music scale and
+                # shared passage ramp after admission; silence and serial identity remain separate permissions.
+                reward=min(1.,contrast/(1.+magnitude)*musical_emphasis(onset.loudness)
+                           *passage_ramp(intensity,.35)*support)
+                if onset.kind not in _IMPULSES:raise ValueError('Unknown waveform onset kind: '+str(onset.kind))
+                hit=max(hit,reward)
+                components=[max(value,reward*share) for value,share in zip(components,_IMPULSES[onset.kind])]
         return self._model.advance(dt,bands=body_bands if live else (0.,0.,0.),
-                                   intensity=intensity if live else 0.,presence=weight,hit=hit,controls=controls)
+                                   intensity=intensity if live else 0.,presence=weight,hit=hit,
+                                   hit_components=tuple(components),controls=controls)

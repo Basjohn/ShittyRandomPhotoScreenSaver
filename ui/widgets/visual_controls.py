@@ -1161,10 +1161,15 @@ class SceneVolumeMapper(_VisualControl):
     def _eye(self):
         return tuple(self._base_eye[i] + self._camera_offset[i] for i in range(3))
 
+    def _camera_basis(self):
+        from core.settings.framed_camera import camera_axes
+        spec=self._camera_spec
+        eye=tuple(c+v*h for c,v,h in zip(spec.eye_center,self._eye(),spec.eye_half))
+        return camera_axes(spec,*self._camera_angles,eye=eye)
+
     def _forward(self):
         # Exactly the production camera's yaw/pitch basis, independent of FOV.
-        from core.settings.framed_camera import camera_axes
-        back = camera_axes(self._camera_spec, *self._camera_angles)[6:9]
+        back = self._camera_basis()[6:9]
         return tuple(-v for v in back)
 
     def _aim_distance(self):
@@ -1281,9 +1286,8 @@ class SceneVolumeMapper(_VisualControl):
         # Two sight guides and the true forward point, all derived from the
         # renderer's current yaw/pitch. The editor never adjusts the FOV.
         direction = self._forward()
-        from core.settings.framed_camera import camera_axes
         half = self._camera_spec.eye_half
-        side = camera_axes(self._camera_spec, *self._camera_angles)[:3]
+        side = self._camera_basis()[:3]
         reach = self._aim_distance()
         for sign in (-1.,1.):
             guide = tuple(eye[i] + (reach*direction[i] + reach*2.0/13.0*sign*side[i])/half[i] for i in range(3))
@@ -1329,8 +1333,16 @@ class SceneVolumeMapper(_VisualControl):
             yaw = math.atan2(-difference[0],-difference[2])/spec.yaw_span
             pitch = math.degrees(math.atan2(difference[1], planar))
             low, high = spec.tilt_range
+            if spec.grounded_orbit is not None:
+                from core.settings.framed_camera import grounded_tilt_from_focus_height
+                world_eye=tuple(c+v*h for c,v,h in zip(spec.eye_center,eye,half))
+                radius=math.hypot(world_eye[0]-spec.pivot[0],world_eye[2]-spec.pivot[2])
+                focus_y=world_eye[1]+math.tan(math.radians(pitch))*radius
+                tilt=grounded_tilt_from_focus_height(spec,focus_y,world_eye)
+            else:
+                tilt=(pitch-spec.pitch_base_degrees)/spec.pitch_span_degrees
             angles = (max(-1.,min(1.,yaw)),
-                      max(low,min(high,(pitch-spec.pitch_base_degrees)/spec.pitch_span_degrees)))
+                      max(low,min(high,tilt)))
             self._camera_angles = angles
             self.cameraAimChanged.emit(angles)
             self.update()

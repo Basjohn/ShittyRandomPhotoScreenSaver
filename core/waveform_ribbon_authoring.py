@@ -30,10 +30,12 @@ def admit_routing(value):
     return output
 
 
-def route(row, sources):
+def route(row, sources, *, passage=1.):
     # Independent gains add; the target's normalized domain is the explicit upper bound.
-    return min(1., sum(gain * max(0., min(1., source)) ** power
-                       for (gain, power), source in zip(row, sources)))
+    # Fast bands articulate inside sustained passage weight. Loudness already IS that weight; admitted
+    # events have their own shared passage reward, and Head Wave is an explicitly authored idle source.
+    return min(1., sum(gain * max(0., min(1., source)) ** power * (passage if index<3 else 1.)
+                       for index,((gain, power), source) in enumerate(zip(row, sources))))
 
 
 def admit_ribbons(value):

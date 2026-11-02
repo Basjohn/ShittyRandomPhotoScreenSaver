@@ -427,7 +427,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         rainbow_controls=False,shared_bar_appearance=False,
         raw_musical_signals=True,
         view_orbit_settings=('waveform_ribbon_turn','waveform_ribbon_tilt'),
-        view_orbit_steps=(2./180.,2./90.),view_orbit_inertia=True,
+        view_orbit_steps=(2./180.,2./90.),view_orbit_inertia=True,view_orbit_turn_wraps=False,
         view_auto_rotate_settings=('waveform_ribbon_auto_rotate','waveform_ribbon_auto_rotate_after','waveform_ribbon_auto_rotate_speed'),
         framed_camera='core.waveform_ribbon_scene:SPEC',
         scene_pan_envelope=(.5,.5,.5,.15,.85),

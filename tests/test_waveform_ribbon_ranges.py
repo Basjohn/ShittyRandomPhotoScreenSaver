@@ -10,6 +10,8 @@ def settings():
     values={control.key:require_canonical_default('widgets.spotify_visualizer.'+control.key)
             for control in require_mode_settings('waveform_ribbon').controls}
     values['waveform_ribbon_strands_enabled']=True
+    values['waveform_ribbon_mist_enabled']=True
+    values['waveform_ribbon_sparkle']=[1.,1.]  # Admit events while isolating the other particle ranges.
     values['waveform_ribbon_colour_threshold']=.1
     return values
 

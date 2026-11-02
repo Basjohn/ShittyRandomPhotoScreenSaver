@@ -23,7 +23,7 @@ def controls():
                        quiet=((.05,.2,.8),(.1,.4,1.)),peak=((1.,.1,.4),(.8,.05,.2))) for i in range(3))
     scene = Recipe(flow=replace(Recipe().flow,head_x=6.4,fade_in=.1,fade_out=.5))
     return HybridControls(scene,ranges,admit_routing(routing),tuple(admit_ribbons(cards)),3,.65,.65,1.,
-                          .045,.65,True,.045,1.2,(.02,1.5),.5)
+                          .045,.65,True,.045,1.2,(.02,1.5),.5,idle_motion=0.)
 
 
 def primed(c=None):
@@ -107,16 +107,106 @@ def test_runtime_consumes_onsets_once_fences_sources_and_is_terminal_after_retir
     args = dict(onsets=(),playing=True,identity=(1,2,3),source_identity=(2,3),controls=c,
                 body_bands=(.5,.4,.3),intensity=.6,loudness=.8,presence=1.)
     for i in range(65):runtime.advance(now_ts=i/90,**args)
-    onset = SimpleNamespace(serial=10,strength=1.,loudness=.8,presence=1.)
+    onset = SimpleNamespace(serial=10,strength=1.,magnitude=2.,kind='kick',loudness=.8,presence=1.)
     args['onsets'] = (onset,)
     first = runtime.advance(now_ts=65/90,**args)
     again = runtime.advance(now_ts=65/90,**args)
     assert again.packet.payload==first.packet.payload and runtime.onset_serial==10
     args['source_identity']=(9,9)
     silent = runtime.advance(now_ts=66/90,**args)
-    assert all(value==0. for _key,value in silent.drives)
+    assert silent.ready and silent.time>first.time
+    assert dict(silent.drives)['height']<=dict(first.drives)['height']
     runtime.retire()
     assert runtime.advance(now_ts=67/90,**args) is None
+
+
+def test_first_idle_to_play_and_engine_epoch_preserve_the_ready_world():
+    runtime=WaveformRibbonFrameRuntime()
+    args=dict(onsets=(),playing=False,identity=(1,2,3),source_identity=(-1,-1),controls=controls(),
+              body_bands=(0.,0.,0.),intensity=0.,loudness=0.,presence=0.)
+    for i in range(100):idle=runtime.advance(now_ts=i/90,**args)
+    model=runtime._model
+    args.update(playing=True,source_identity=(2,3),body_bands=(.8,.6,.4),intensity=.6,loudness=8.,presence=1.)
+    playing=runtime.advance(now_ts=100/90,**args)
+    assert runtime._model is model and playing.ready and playing.time>idle.time
+    assert playing.travel>idle.travel and playing.packet.instances==3
+    args.update(identity=(1,4,5),source_identity=(-1,-1))
+    waiting=runtime.advance(now_ts=101/90,**args)
+    assert runtime._model is model and waiting.ready and waiting.time>playing.time
+
+
+def test_subtle_idle_has_motion_without_events_and_a_fresh_kick_reaches_visible_emission():
+    still=primed(controls());idle=primed(replace(controls(),idle_motion=.6))
+    for _ in range(90):
+        a=still.advance(1/90,bands=(0.,0.,0.),intensity=0.,presence=0.)
+        b=idle.advance(1/90,bands=(0.,0.,0.),intensity=0.,presence=0.)
+    delta=np.max(np.abs(data(a)[:,4::5,1:3]-data(b)[:,4::5,1:3]))
+    assert .001<delta<.1 and idle._hit==0.
+    plain=primed();punched=primed()
+    for index in range(18):
+        a=plain.advance(1/90,bands=(.4,.4,.4),intensity=.2,presence=1.)
+        b=punched.advance(1/90,bands=(.4,.4,.4),intensity=.2,presence=1.,hit=.8 if index==5 else 0.)
+    # No new head has reached the visible centre: the already-visible body's emission and deformation change.
+    assert np.max(data(b)[:,7::5,3]-data(a)[:,7::5,3])>.2
+    assert np.max(np.abs(data(b)[:,4::5,1:3]-data(a)[:,4::5,1:3]))>.01
+
+
+def test_typed_events_have_distinct_impulses_and_unclipped_magnitude_preserves_headroom():
+    def event(kind,magnitude,level=8.5):
+        runtime=WaveformRibbonFrameRuntime()
+        args=dict(onsets=(),playing=True,identity=(1,2,3),source_identity=(2,3),controls=controls(),
+                  body_bands=(.5,.5,.5),intensity=.65,loudness=level,presence=1.)
+        for index in range(80):runtime.advance(now_ts=index/90,**args)
+        before=np.asarray(runtime._model.velocity).copy()
+        args['onsets']=(SimpleNamespace(serial=1,kind=kind,strength=1.,magnitude=magnitude,loudness=level,presence=1.),)
+        state=runtime.advance(now_ts=80/90,**args)
+        return np.asarray(runtime._model.velocity)-before,runtime._model._hit,state
+    kick,_,_=event('kick',2.);snare,_,_=event('snare',2.);vocal,_,_=event('vocal_swell',2.)
+    assert kick[0,0]>snare[0,0] and snare[0,1]>kick[0,1] and vocal[0,2]>kick[0,2]
+    hits=[event('kick',magnitude)[1] for magnitude in (.2,1.,3.)]
+    assert 0.<hits[0]<hits[1]<hits[2]<1.
+    _,silent,state=event('kick',3.,level=0.)
+    assert silent==0. and not state.particles
+
+
+def test_fast_band_articulation_does_not_hold_quiet_passages_at_the_peak_handle():
+    values=[]
+    for intensity in (.05,.4,.9):
+        model=primed()
+        for _ in range(180):snapshot=model.advance(1/90,bands=(.8,.8,.8),intensity=intensity,presence=1.)
+        values.append(dict(snapshot.drives)['bend'])
+    assert 0.<values[0]<.1 and values[0]<values[1]<values[2]<.85
+
+
+def test_repeated_routine_onsets_leave_room_for_a_distinct_accent():
+    runtime=WaveformRibbonFrameRuntime()
+    args=dict(onsets=(),playing=True,identity=(1,2,3),source_identity=(2,3),controls=controls(),
+              body_bands=(.5,.5,.5),intensity=.65,loudness=8.5,presence=1.)
+    for index in range(80):runtime.advance(now_ts=index/90,**args)
+    def onset(serial,magnitude):
+        args['onsets']=(SimpleNamespace(serial=serial,kind='kick',strength=1.,magnitude=magnitude,loudness=8.5,presence=1.),)
+        runtime.advance(now_ts=1.+serial*.1,**args)
+        return runtime._model._hit
+    first=onset(1,.4)
+    for serial in range(2,40):routine=onset(serial,.4)
+    assert routine < first*.01
+    assert onset(40,1.5)>first
+
+
+@pytest.mark.parametrize('frequency',(.3,1.3,3.))
+@pytest.mark.parametrize('damping',(.2,.8))
+def test_authored_impulse_excursion_survives_spring_timing_changes(frequency,damping):
+    c=controls()
+    c=replace(c,frequency=frequency,damping=damping,impulse=.75,
+              routing=admit_routing({key:[[0.,1.] for _ in range(6)] for key in TARGETS}))
+    model=primed(c);peaks=[]
+    for index in range(math.ceil(.5/frequency*360)):
+        model.advance(1/360,bands=(1.,1.,1.),intensity=.65,presence=1.,
+                      hit_components=(.4,0.,0.) if index==0 else (0.,0.,0.))
+        peaks.append(model.spring[0][0])
+    # A .4 admitted impulse at authored strength .75 requests .3 normalized
+    # spring excursion. Timing changes must not erase it at high frequency.
+    assert max(peaks)==pytest.approx(.3,rel=.01)
 
 
 def test_authoring_contracts_reject_ambiguous_or_nonfinite_data():
@@ -136,7 +226,7 @@ def test_noninteger_twist_gain_uses_signed_origin_before_and_after_rebasing():
     model._primed = model.ring.capacity
     for index in range(330):
         model.ring.append(index/6,[(index/6,2.,0.)]*3,[.5]*3,[-.4]*3)
-        if index in (2,329):
+        if index in (3,329):  # the cloth reducer admits four controls before a complete interval
             model._snapshot = None
             snapshot = data(model.snapshot())
             flags = snapshot[:,5::5,2]>.5
@@ -152,6 +242,26 @@ def test_live_flow_speed_change_integrates_travel_without_moving_existing_histor
     after = model.advance(0.,bands=(0.,0.,0.),intensity=0.,presence=0.,controls=c)
     assert after.travel==before.travel
     np.testing.assert_array_equal(data(after)[:,4::5,0],data(before)[:,4::5,0])
+
+
+@pytest.mark.parametrize('column,value',((2,0.),(3,1.)))
+def test_interior_history_break_is_rejected_before_gpu_publication(column,value):
+    from core.ribbon_packet import RibbonPacket
+    model=primed();raw=model.ring.packet();array=np.frombuffer(raw.payload,np.float32).reshape(3,-1,4).copy()
+    array[0,5+5*120,column]=value
+    model.ring.packet=lambda:RibbonPacket(array.tobytes(),raw.instances,raw.vertices,raw.world_origin,raw.coordinate_origin)
+    model._snapshot=None
+    with pytest.raises(ValueError,match='valid monotone'):model.snapshot()
+
+
+def test_extreme_admitted_carrier_stays_one_valid_run_during_edits():
+    c=controls();cards=tuple({**card,'height':2.,'rate':2.,'width':2.} for card in c.cards)
+    scene=replace(c.scene,flow=replace(c.scene.flow,speed=.8,head_hz=.6,phase_swell=1.,amplitude_swell=1.))
+    model=primed(replace(c,scene=scene,cards=cards))
+    for index in range(180):
+        edited=tuple({**card,'phase':card['phase']+(math.pi if index%2 else 0.)} for card in cards)
+        snapshot=model.advance(.1,bands=(1.,1.,1.),intensity=1.,presence=1.,hit=1.,controls=replace(model.controls,cards=edited))
+        assert snapshot.ready
 
 
 def test_gain_above_one_and_independent_matrix_cells_have_real_effects():

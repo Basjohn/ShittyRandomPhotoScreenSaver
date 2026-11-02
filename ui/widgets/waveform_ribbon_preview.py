@@ -13,10 +13,13 @@ def render_samples(parameters, *, turned=False, size=(480,300)):
     from rendering.quick.visualizer.implementations.waveform_ribbon import physical_view
     from rendering.quick.scene3d.waveform import WaveformScene
     from rendering.quick.offscreen_target import OffscreenRenderTarget
+    from PySide6.QtGui import QOpenGLContext
     config=CompiledWaveformSettings(parameters)
     camera=dict(parameters)
     if turned:camera['waveform_ribbon_turn']=.22
     width,height=size
+    caller=QOpenGLContext.currentContext()
+    caller_surface=caller.surface() if caller is not None else None
     target=OffscreenRenderTarget(width,height,label='waveform Settings preview');scene=WaveformScene()
     samples=[]
     try:
@@ -42,8 +45,12 @@ def render_samples(parameters, *, turned=False, size=(480,300)):
             samples.append(QImage(pixels.data,width,height,width*4,QImage.Format.Format_RGBA8888).copy())
         return samples
     finally:
-        with target.current():scene.release()
-        target.close()
+        try:
+            with target.current():scene.release()
+        finally:
+            target.close()
+            if caller is not None and caller_surface is not None and not caller.makeCurrent(caller_surface):
+                raise RuntimeError('Could not restore caller context after waveform preview')
 
 
 class WaveformPreview(QWidget):

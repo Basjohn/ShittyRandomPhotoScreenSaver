@@ -327,7 +327,8 @@ class FogMarch:
             (gl.glEnablei if blend else gl.glDisablei)(gl.GL_BLEND, 0)
 
     def composite(self, *, glow: float = 0., additive: bool = False, scale: float = 1., crackle=(0., 0., 1., 1.),
-                  crackle_glow: float = 0., crackle_limit=None, fringe_smoothing: float = 0.) -> None:
+                  crackle_glow: float = 0., crackle_limit=None, crackle_limit_texture: int | None = None,
+                  fringe_smoothing: float = 0.) -> None:
         """Draw the last march over the bound framebuffer: dst x transmittance + in-scatter (``additive``: + in-scatter
         only, for a target that holds light alone, such as a reflection)."""
         self._check_context()
@@ -335,6 +336,8 @@ class FogMarch:
             raise RuntimeError(f"{self.label}: fog composite before a march")
         if not math.isfinite(fringe_smoothing) or not 0. <= fringe_smoothing <= 4.:
             raise ValueError('Fog fringe smoothing must be finite in 0..4 march texels')
+        if crackle_limit is not None and crackle_limit_texture is not None:
+            raise ValueError('Fog edge limit has exactly one owner')
         program = self._program('composite', FOG_COMPOSITE_FRAGMENT)
         program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
         vao_before = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING)
@@ -352,10 +355,11 @@ class FogMarch:
             gl.glUniform4f(gl.glGetUniformLocation(program, 'uFogCrackle'), *crackle)
             gl.glUniform2f(gl.glGetUniformLocation(program, 'uFogCrackleSeed'), crackle_glow, 0.)
             # Optional per-column limit (float32 array over screen x, values in screen v): the consumer's own geometry.
-            gl.glUniform1i(gl.glGetUniformLocation(program, 'uFogCrackleLimited'), int(crackle_limit is not None))
-            if crackle_limit is not None:
-                self._upload_limit(np.ascontiguousarray(crackle_limit, np.float32))
-                gl.glBindTextureUnit(self.LIMIT_UNIT, self._limit)
+            limited=crackle_limit is not None or crackle_limit_texture is not None
+            gl.glUniform1i(gl.glGetUniformLocation(program, 'uFogCrackleLimited'), int(limited))
+            if limited:
+                if crackle_limit is not None:self._upload_limit(np.ascontiguousarray(crackle_limit, np.float32))
+                gl.glBindTextureUnit(self.LIMIT_UNIT,self._limit if crackle_limit_texture is None else crackle_limit_texture)
                 gl.glUniform1i(gl.glGetUniformLocation(program, 'uFogCrackleLimit'), self.LIMIT_UNIT)
             gl.glDisable(gl.GL_DEPTH_TEST)
             gl.glDepthMask(gl.GL_FALSE)

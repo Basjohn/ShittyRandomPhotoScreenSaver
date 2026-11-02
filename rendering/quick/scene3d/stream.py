@@ -43,6 +43,21 @@ _BINDINGS = {
 }
 
 
+class _StreamLease:
+    """Already uploaded range, valid only within its enclosing bound scope."""
+    def __init__(self,owner,target,binding,offset,size):
+        self.owner,self.target,self.binding=owner,target,binding
+        self.offset,self.size=offset,size
+        self.active=True
+
+    def rebind(self):
+        if not self.active or self.owner._depth<=0:
+            raise RuntimeError('Stream lease outlived its bound scope')
+        owner=self.owner
+        owner._names[0],owner._offsets[0],owner._sizes[0]=owner._buffer,self.offset,self.size
+        _gl44.glBindBuffersRange(self.target,self.binding,1,owner._names,owner._offsets,owner._sizes)
+
+
 class StreamRing:
     def __init__(self, label: str, *, slots: int = 4, slot_bytes: int = 16384, hold_bytes: int = 4096) -> None:
         if slots < 2 or hold_bytes <= 0 or hold_bytes > slot_bytes:
@@ -78,7 +93,7 @@ class StreamRing:
         return False
 
     @contextmanager
-    def bound(self, target: int, binding: int, data: bytes) -> Iterator[None]:
+    def bound(self, target: int, binding: int, data: bytes, *, reuse: bool = False) -> Iterator[_StreamLease | None]:
         """Write ``data`` and bind it to ``binding`` of ``target`` for the scope; restore after."""
         names = _BINDINGS[int(target)]
         previous = (
@@ -89,10 +104,13 @@ class StreamRing:
         if self._depth == 0:
             self._begin_hold()
         self._depth += 1
+        lease=None
         try:
             self.rebind(target, binding, data)
-            yield
+            if reuse:lease=_StreamLease(self,target,binding,int(self._offsets[0]),len(data))
+            yield lease
         finally:
+            if lease is not None:lease.active=False
             self._depth -= 1
             self._restore(target, binding, *previous)
 
@@ -113,6 +131,7 @@ class StreamRing:
 
     def release(self) -> None:
         """Delete fences and the buffer. A failed deletion keeps its handle for a later retry."""
+        if self._depth:raise RuntimeError(f'{self.label}: cannot release an active stream hold')
         for index, fence in enumerate(self._fences):
             if fence is not None:
                 gl.glDeleteSync(fence)

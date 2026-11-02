@@ -45,9 +45,9 @@ void reflectionGaussian(float sigma, out float offsets[5], out float weights[5])
     weights=float[5](farWeight/total,nearWeight/total,1.0/total,nearWeight/total,farWeight/total);
     if(sigma<=0.0) weights=float[5](0.0,0.0,1.0,0.0,0.0);
 }
-vec3 planarReflection(vec2 screenUv, vec2 offset, float roughness) {
+vec3 planarReflection(vec2 screenUv, vec2 offset, float roughness, float streakHalfLength) {
     float lod=mix(uReflectionLook.y,uReflectionLook.z,roughness);
-    float streak=uReflectionLook.x*roughness;
+    float streak=streakHalfLength*roughness;
     vec2 size=vec2(textureSize(uReflection,0));
     vec2 uv=screenUv+offset;
     // Respect the receiver's pixel footprint: supersampled reflections must downsample. Differentiate only
@@ -98,5 +98,8 @@ vec3 planarReflection(vec2 screenUv, vec2 offset, float roughness) {
         colour+=acrossWeights[x]*alongWeights[y]*textureGrad(uReflection,tap,dx,dy).rgb;
     }
     return colour;
+}
+vec3 planarReflection(vec2 screenUv, vec2 offset, float roughness) {
+    return planarReflection(screenUv,offset,roughness,uReflectionLook.x);
 }
 """

@@ -1,12 +1,16 @@
 """Waveform wet-floor and shaped-mist programs; no scene lifetime or simulation."""
 from rendering.gl_programs.mist import MIST_GLSL
 from rendering.gl_programs.reflection import PLANAR_REFLECTION_GLSL
+from rendering.gl_programs.ribbon_continuation import CONTINUATION_GLSL
+from core.ribbon_geometry import MAX_PATH_SAMPLES
 
 FLOOR_VERTEX = """#version 460 core
 layout(location=0) in vec3 aPosition;
 uniform mat4 uMvp;
+uniform vec4 uFloorBounds; // world XZ coverage, no texture or floor movement
 out vec3 vWorldPos;
-void main() { vWorldPos=aPosition; gl_Position=uMvp*vec4(aPosition,1.0); }
+void main() { vWorldPos=vec3(mix(uFloorBounds.x,uFloorBounds.z,aPosition.x),0.0,
+    mix(uFloorBounds.y,uFloorBounds.w,aPosition.z)); gl_Position=uMvp*vec4(vWorldPos,1.0); }
 """
 ENVELOPE_RIBBONS = 3   # sheets with their own 3D rows in the envelope table (true 3D clearance)
 ENVELOPE_ROWS_GLSL = (f"const float ENV_ROWS={3 + ENVELOPE_RIBBONS}.0;\n"
@@ -14,6 +18,7 @@ ENVELOPE_ROWS_GLSL = (f"const float ENV_ROWS={3 + ENVELOPE_RIBBONS}.0;\n"
 
 FLOOR_FRAGMENT = """#version 460 core
 in vec3 vWorldPos;
+uniform mat4 uMvp;
 uniform sampler2D uAlbedo;
 uniform sampler2D uSlope;      // height slope per uv unit (rg), from the smooth wet-surface height map
 uniform sampler3D uFogLight;   // the mist's coarse medium: its radiance is the ribbon light field
@@ -69,7 +74,13 @@ void main() {
     vec2 fine=vec2(dot(vec3(micro.x,0,micro.y),groundRight),dot(vec3(micro.x,0,micro.y),groundForward));
     vec2 offset=axes*uRipple.x+fine*vec2(uRipple.y,uRipple.z);
     float roughness=mix(uStreak.y,uStreak.z,clamp(length(broad)*uStreak.w,0.0,1.0));
-    vec3 reflected=planarReflection(gl_FragCoord.xy/uViewport,offset,roughness);
+    // Optical streak length is fixed in world units. A fixed UV length grew with
+    // the edge-resize aperture and washed the same physical reflection away.
+    vec4 clip=uMvp*vec4(vWorldPos,1.0);
+    vec4 direction=uMvp*vec4(groundForward,0.0);
+    float projected=abs(0.5*(direction.y*clip.w-clip.y*direction.w)/(clip.w*clip.w));
+    float streak=38.4*uReflectionLook.x*projected;
+    vec3 reflected=planarReflection(gl_FragCoord.xy/uViewport,offset,roughness,streak);
     vec3 view=uOrthographic==1?normalize(uForward):normalize(vWorldPos-uEye);
     float cosine=clamp(abs(view.y),0.0,1.0);
     float fresnel=uFloor.w+(1.0-uFloor.w)*pow(1.0-cosine,5.0);
@@ -121,7 +132,13 @@ FLAT = {'ribbon': (1., 0., 1.)}
 # sheet bounds along world x, with the colours of the sheets that define them), reduced per frame from the same
 # admitted history the ribbons draw. Static billows anchored in the world; nothing below the floor. No clock and
 # no second ribbon path.
-FOG_SHAPE_GLSL = ENVELOPE_ROWS_GLSL + """
+FOG_SHAPE_GLSL = ENVELOPE_ROWS_GLSL + ("""
+struct Knot { vec4 p;vec4 q;vec4 tangent;vec4 side;vec4 tint; };
+struct ContinuationPath { vec4 meta;vec4 extra;vec4 colourA;vec4 colourB;Knot knots[MAX_KNOTS]; };
+layout(std430,binding=0) readonly buffer ContinuationPaths { ContinuationPath paths[]; };
+uniform vec4 uContinuationOrigin; // packet world origin + scroll, sheet count (zero disables)
+uniform vec3 uContinuationShape; // floor+gap, softness, camber
+"""+CONTINUATION_GLSL).replace('MAX_KNOTS',str(MAX_PATH_SAMPLES))+"""
 uniform sampler2D uEnvelope;  // rows: (lower, upper, presence), upper edge colour, lower edge colour
 uniform vec2 uEnvelopeSpan;   // world x at u=0, 1/(world span)
 uniform vec4 uFogForm;      // density, margin, edge softness, billow frequency
@@ -155,6 +172,22 @@ float fogSheetDistance(vec3 world) {
         for(int k=-2;k<=2;k++) {
             float xo=float(k)*0.35;
             vec4 s=texture(uEnvelope,vec2((world.x+xo-uEnvelopeSpan.x)*uEnvelopeSpan.y,v));
+            float u=(world.x+xo-uEnvelopeSpan.x)*uEnvelopeSpan.y;
+            // Keep the fixed near-field table's world grid unchanged by viewport/orbit. Beyond its domain,
+            // evaluate the very same swept continuation, rather than clamping a moving infinite sheet to an edge.
+            if(uContinuationOrigin.w>0.5 && (u<0.0 || u>1.0)) {
+                if(r>=int(uContinuationOrigin.w))continue;
+                if(min(paths[r].colourA.a,paths[r].colourB.a)<=0.0)continue;
+                float x=world.x+xo-uContinuationOrigin.x;
+                int last=int(paths[r].meta.x)-1;
+                if(last<2)continue;
+                bool outside=x<continuationControl(r,0).p.x || x>continuationControl(r,last).p.x;
+                vec4 f=outside?continuationField(r,x):clothField(r,x);
+                float cy=f.x+uContinuationOrigin.y;
+                float y=(cy-uContinuationShape.x)/uContinuationShape.y;
+                cy=uContinuationShape.x+uContinuationShape.y*(max(y,0.0)+log(1.0+exp(-abs(y))));
+                s=vec4(cy,f.y+uContinuationOrigin.z,f.z*sqrt(1.0+uContinuationShape.z*uContinuationShape.z)+0.08,1.0);
+            }
             if(s.w<0.02) continue;
             d=min(d,length(vec3(xo,world.y-s.x,world.z-s.y))-s.z);
         }
@@ -164,8 +197,8 @@ float fogSheetDistance(vec3 world) {
 // Depth into the mist (world units): behind the start plane, and outside the clear band around the waveform's
 // envelope unless beyond the band's depth. Billows displace the band's edge.
 float fogInside(vec3 world, out vec4 band, out float above, out float below) {
-    // Projected along the camera's view direction onto z = 0 (see waveform_envelope): the band follows the
-    // waveform's outline as this camera sees it, at any yaw or pitch.
+    // The bank's authored extrusion is fixed in world space. Physical clearance is separately measured from
+    // the real 3D sheets, so moving the eye never rebuilds the medium in camera coordinates.
     float px=world.x-uFogSlope.x*world.z;
     band=texture(uEnvelope,vec2((px-uEnvelopeSpan.x)*uEnvelopeSpan.y,0.5/ENV_ROWS));
     // The waveform repels the mist: the whole field (shape and light) is pushed out from the envelope by the
@@ -286,10 +319,11 @@ void fogMedium(vec3 world, out vec3 radiance, out float extinction, out float st
     vec3 edge=above>0.0?upperColour:below>0.0?lowerColour
              :mix(lowerColour,upperColour,clamp(-below/max(band.y-band.x,1e-3),0.0,1.0));
     float dy=max(max(above,below),0.0);
-    float dz=max(max(uFogRim.y-world.z,world.z-uFogRim.z),0.0);
     // The face glows wherever the billows pushed it (a gentle fall with the push, uFogInterior.z), and fades into
     // the mist from that face. Falling off by distance from the envelope left pushed stretches dark: a broken edge.
-    float rim=exp(-dz/uFogRim.x)*exp(-max(dy-uFogForm.y,0.0)*uFogInterior.z)*exp(-max(inside,0.0)*uFogShape.w);
+    float sheetDistance=max(fogSheetDistance(world)-uFogTube,0.0);
+    float rim=exp(-sheetDistance/max(uFogRim.x,0.1))*exp(-max(dy-uFogForm.y,0.0)*uFogInterior.z)
+              *exp(-max(inside,0.0)*uFogShape.w);
     // The wall directly behind the sheets (inside their outline) and the far wall under them (the only volume mist
     // below the band) are distant haze: dark grey, barely lit. Lit, the far wall showed as puffs at the contact line.
     if(above<=0.0) rim*=uFogFloorLight.z;
