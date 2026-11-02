@@ -48,7 +48,7 @@ def audit(args):
                         if args.mode_output:
                             logical=logical_tick(controller.logical_tick_state);state=logical.mode_state
                             if state.ready:
-                                digest.update(state.packet.payload);digest.update(state.particles)
+                                digest.update(state.packet.payload);digest.update(state.particles);digest.update(state.strands)
                                 drivers.append(dict(state.drives))
                         worker=engine._audio_worker;bus=worker._transient_bus
                         raw=(worker._last_raw_bass,worker._last_raw_mid,worker._last_raw_treble)

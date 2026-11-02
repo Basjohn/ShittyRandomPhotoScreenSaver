@@ -8,6 +8,7 @@ from core.waveform_ribbon_scene import Recipe, Flow
 from core.waveform_ribbon_dynamics import HybridControls
 from core.waveform_ribbon_authoring import TARGETS, admit_routing, admit_ribbons, admit_palette
 from core.ribbon_bursts import RibbonAccentControls
+from core.ribbon_strand_cohorts import RibbonStrandControls
 
 PREFIX='waveform_ribbon_'
 
@@ -42,7 +43,10 @@ class CompiledWaveformSettings:
             float(read('rotation_attack')),float(read('rotation_release')),tuple(read('twist_speed')),
             float(read('colour_threshold')),RibbonAccentControls(MappingProxyType({key:tuple(read(key))
                 for key in ('spark_count','spark_lifetime','spark_drift','spark_rise','spark_size','spark_light','spark_white','spark_glow','spark_span')}))
-                if read('sparks_enabled') else None,idle_motion=float(read('idle_motion')))
+                if read('sparks_enabled') else None,idle_motion=float(read('idle_motion')),
+            strands=RibbonStrandControls(MappingProxyType({key:tuple(read(key)) for key in
+                ('strand_count','strand_chance','strand_span','strand_length','strand_reach',
+                 'strand_width','strand_light','strand_beads','strand_peel','strand_halo','strand_glow')})) if read('strands_enabled') else None)
 
     def scene(self,snapshot):
         p=self.values
@@ -95,7 +99,8 @@ class CompiledWaveformSettings:
                 chance=pair('strand_chance',sparkle)*pair('strand_count',sparkle)/8.,
                 width=pair('strand_width',sparkle),light=pair('strand_light',sparkle),
                 beads=pair('strand_beads',sparkle),peel_time=pair('strand_peel',sparkle),
-                halo=pair('strand_halo',sparkle),glow=pair('strand_glow',sparkle),admission_softness=.15)
+                halo=pair('strand_halo',sparkle),glow=pair('strand_glow',sparkle),admission_softness=.15,
+                pulse_growth=pair('strand_pulse_growth',sparkle),pulse_glow=pair('strand_pulse_glow',sparkle))
         return replace(self.base,material=RibbonMaterial(**material),fog=fog,floor=floor,
             environment=replace(self.base.environment,mist=detached(mist)),sparks=sparks,strays=strays,
             bloom=pair('bloom',passage),exposure=float(read('exposure')))

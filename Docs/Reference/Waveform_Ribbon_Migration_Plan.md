@@ -56,7 +56,7 @@ scaled by the inverse analytic unit-velocity peak for the current frequency/damp
 without accidentally removing the hit's displacement. Authorable geometry remains smoothly bounded. Particle Admission
 selects eligible cohorts with deterministic continuous-rate admission; admitted count and light each follow their own
 range once, instead of multiplying count by the same musical strength repeatedly. Birth positions and halo strength
-are held world-space records with bounded lifetime/capacity. Strand flicker remains an explicit open operator rejection.
+are held world-space records with bounded lifetime/capacity. Strand look/flicker is now operator-approved; persistent travel and repeat pulses remain under validation.
  Event reward uses unclipped magnitude above its recent per-kind onset mean and shared acoustic/passage weighting; typed kick/snare/vocal
 impulses have different elastic axes. Raw band routing follows the one eased passage; authorable idle motion is
 independent of acoustic rewards. A ready scene survives source-epoch and idle/play changes within its runtime.
@@ -198,7 +198,13 @@ rotation. Source routing/curves and quiet→peak ranges must reach these realize
 ### Free Strands
 - **Free Strands** toggle, then: Count (R), Length, Reach (R, how far they curl away), Halo (fuzzy splash), Glow
   (R), Droplets, Peel Time. Previewed on a sheet during a synthetic loud passage (Glow Preview).
-- Strands always grow out of a rim line and fade in. Their gating follows sparkle (loud passages throw off more).
+- Strands grow from a rim, with root identity and all base geometry/light/finish held at birth. They remain part
+  of that musical response until travel removes them from view; there is no lifetime timeout. Birth admission follows
+  real accents and the authored world span, with no camera-following population. A repeat at an occupied root preserves
+  its birth/look and adds an approximately 20% temporary length extension plus glow, then returns smoothly. Retriggers
+  retain the current envelope value instead of snapping it to zero. The finite history retirement bound must be proved
+  outside direct/reflected admitted visibility, including wide views. Operator approved the look; persistence/pulse and
+  wider scene acceptance remain explicit in the live checklist.
 
 ### Sparks
 - **Sparks** toggle, then: Count (R), Size (a smallest/largest pair, not a quiet → peak range), Drift (R), Rise,
@@ -284,7 +290,7 @@ separate attack and release. Sources:
 
 | Musical moment | Waveform Ribbon response | Signal (existing authority) |
 |---|---|---|
-| Idle / silence | Subtle body/flow drift; no new musical sparks, strands or pulses; living accents retire smoothly | presence from `musical_weight`; an explicit idle lane, never fake energy |
+| Idle / silence | Subtle body/flow drift; no new musical sparks, strands or pulses; sparks expire smoothly; strands keep travelling with their roots | presence from `musical_weight`; an explicit idle lane, never fake energy |
 | Sustained quiet passage | Ranges near their quiet handles: low waves, narrow sheets, quiet colours | one fixed-scale eased passage through authored attack/release; do not import another mode's constants |
 | Sustained loud passage | Ranges near their loud handles: tall sweeps, wide sheets, loud colours, more sparkle; beat contrast kept inside the chorus | same passage drive; beats multiply inside it, never add a floor (§13C) |
 | Kick / bass hit | Immediate C elastic bending/width with distinct kick impulse; A twist and history colour/light continue to flow | bounded passage-gated reward and consume-once typed onset; visible timing/attack must be judged in the recorded bake-off |

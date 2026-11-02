@@ -6,6 +6,7 @@ from typing import Any, Dict, Mapping
 
 RETIRED_VISUALIZER_MODE_IDS = frozenset({"blob"})
 _RETIRED_VISUALIZER_KEYS = frozenset({
+    "waveform_ribbon_strand_lifetime",  # Rejected timer expiry: strands persist with their travelling roots.
     "shockwave_grid_allow_overflow",  # Neon Lake Basin is always inside its bordered card.
     "shockwave_grid_terrain_reactivity",  # Growth; superseded by the Terrain Reaction bucket (2026-10-16).
     "preset_blob",

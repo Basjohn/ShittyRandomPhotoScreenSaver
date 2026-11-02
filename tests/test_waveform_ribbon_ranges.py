@@ -24,7 +24,7 @@ def observed(values,snapshot=None):
             snapshot=model.advance(1/90,bands=(.45,.5,.55),intensity=.5,presence=1.,hit=.8 if index in (20,50) else 0.)
     scene=config.scene(snapshot)
     # Read the retained scene inputs and actual body/birth bytes, never the original settings or realized dictionary.
-    return (snapshot.packet.payload,snapshot.particles,snapshot.rotation_angle,repr(scene)),snapshot
+    return (snapshot.packet.payload,snapshot.particles,snapshot.strands,snapshot.rotation_angle,repr(scene)),snapshot
 
 
 def test_both_range_handles_reach_the_body_birth_records_or_retained_scene():

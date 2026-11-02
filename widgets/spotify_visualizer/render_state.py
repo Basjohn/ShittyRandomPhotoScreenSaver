@@ -745,6 +745,8 @@ class WaveformRibbonFrame:
     particle_serial: int = 0
     passage: float = 0.
     parameters: FrozenFields = FrozenFields()
+    strands: bytes = b''
+    strand_origin: float = 0.
 
     def __post_init__(self):
         from core.ribbon_packet import RibbonPacket, RIBBON_BYTES
@@ -766,6 +768,10 @@ class WaveformRibbonFrame:
         if not 0.<=passage<=1.:raise ValueError('Waveform passage must be in 0..1')
         object.__setattr__(self,'passage',passage)
         object.__setattr__(self,'parameters',_coerce_frozen_fields(self.parameters,name='waveform parameters'))
+        from core.ribbon_strand_cohorts import COHORT_BYTES
+        if not isinstance(self.strands,bytes) or len(self.strands) not in (0,self.packet.instances*COHORT_BYTES):
+            raise ValueError('Waveform strand cohorts must be immutable and match physical knot slots')
+        object.__setattr__(self,'strand_origin',_finite(self.strand_origin,name='strand birth origin'))
 
     @property
     def mode_id(self):

@@ -40,7 +40,8 @@ def render_samples(parameters, *, turned=False, size=(480,300)):
             target.bind()
             scene.render(snapshot.packet,capacity=256,now=snapshot.time,travel=snapshot.travel,recipe=recipe,
                 size=size,view=view,projection=projection,eye=eye,camera_lens=lens,card=card,
-                react=snapshot.passage,burst_payload=snapshot.particles,burst_origin=snapshot.particle_origin)
+                react=snapshot.passage,burst_payload=snapshot.particles,burst_origin=snapshot.particle_origin,
+                strand_payload=snapshot.strands,strand_origin=snapshot.strand_origin)
             pixels=target.read_rgba()
             samples.append(QImage(pixels.data,width,height,width*4,QImage.Format.Format_RGBA8888).copy())
         return samples

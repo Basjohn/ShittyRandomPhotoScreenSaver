@@ -90,7 +90,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Waveform Ribbon rejected mist image, failure analysis and full-scene night-fog replacement proposals | `Docs/Reference/Waveform_Ribbon_Mist_Failure_and_Replacement.md` |
 | Waveform Ribbon recorded-audio motion bake-off and full Visualizer controls/migration | `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` §5.1; `tools/labs/waveform_ribbon_music_bakeoff.py`; `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` |
 | Shared retained Waveform scene, neutral appearance inputs and shaders | `rendering/quick/scene3d/waveform.py`; `core/waveform_ribbon_scene.py`; `core/ribbon_style.py`; `rendering/gl_programs/waveform_ribbon.py` |
-| Waveform production mode, canonical controls/editors, event sparks and recorded PCM capture | `core/waveform_ribbon_dynamics.py`; `core/ribbon_bursts.py`; `widgets/spotify_visualizer/waveform_ribbon_parameters.py`; `ui/widgets/waveform_ribbon_editors.py`; `tools/waveform_ribbon_capture.py` |
+| Waveform production mode, canonical controls/editors, event sparks and recorded PCM capture | `core/waveform_ribbon_dynamics.py`; `core/ribbon_bursts.py`; `core/ribbon_strand_cohorts.py`; `widgets/spotify_visualizer/waveform_ribbon_parameters.py`; `ui/widgets/waveform_ribbon_editors.py`; `tools/waveform_ribbon_capture.py` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
 | Visualizer Previous/Next preset glyphs and default selection | `Docs/Reference/Visualizer_Reference.md` → Preset navigation glyphs |
 | Visualizer hover display transfer, native glyph admission and existing CUSTOM transaction | `Docs/Reference/Visualizer_Reference.md` → Preset navigation glyphs; `Current_Plan.md` → R38 |

@@ -835,6 +835,9 @@
           8.0,
           36.0
         ],
+        "waveform_ribbon_strand_pulse_growth": [0.2, 0.2],
+        "waveform_ribbon_strand_pulse_glow": [1.0, 2.0],
+        "waveform_ribbon_strand_span": [24.0, 48.0],
         "waveform_ribbon_strand_count": [
           4.0,
           4.0
