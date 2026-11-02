@@ -410,6 +410,27 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         geometry_kind="planar",
         layout_profile="planar",
     ),
+    VisualizerModeDescriptor(
+        'waveform_ribbon','Waveform Ribbon','_waveform_ribbon_preset_slider',('waveform_ribbon_',),
+        VisualizerModePresentationPolicy(shell_policy=VisualizerShellPolicy.CARD,
+            clip_policy=VisualizerClipPolicy.CARD_INTERIOR,viewport_resize_capable=True),
+        frame_runtime_module='widgets.spotify_visualizer.waveform_ribbon_frame_runtime',
+        frame_runtime_class='WaveformRibbonFrameRuntime',
+        renderer_module='rendering.quick.visualizer.implementations.waveform_ribbon',
+        settings_builder_module='ui.tabs.media.waveform_ribbon_builder',
+        settings_builder_factory='build_waveform_ribbon_ui',
+        capture_module='widgets.spotify_visualizer.waveform_ribbon_capture',capture_factory='capture_waveform_ribbon',
+        technical_setting_suffixes=('bar_count','audio_block_size','adaptive_sensitivity','sensitivity',
+                                    'dynamic_floor','manual_floor','input_gain'),
+        rainbow_controls=False,shared_bar_appearance=False,
+        view_orbit_settings=('waveform_ribbon_turn','waveform_ribbon_tilt'),
+        view_orbit_steps=(2./180.,2./90.),view_orbit_inertia=True,
+        view_auto_rotate_settings=('waveform_ribbon_auto_rotate','waveform_ribbon_auto_rotate_after','waveform_ribbon_auto_rotate_speed'),
+        framed_camera='core.waveform_ribbon_scene:SPEC',
+        scene_pan_envelope=(.5,.5,.5,.15,.85),
+        scene_transform_settings=('waveform_ribbon_scene_scale','waveform_ribbon_scene_pan_x','waveform_ribbon_scene_pan_y'),
+        prepared_reveal=True,geometry_kind='planar',layout_profile='planar',
+    ),
 )
 
 # Registered modes not yet offered: never selectable, cycled, shown in Guided Setup or the 3D tab, and given no

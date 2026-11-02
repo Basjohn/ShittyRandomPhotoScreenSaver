@@ -728,8 +728,52 @@ class ExtrudedBubbleFrame:
         return tuple(array("f", self.wakes))
 
 
+@dataclass(frozen=True, slots=True)
+class WaveformRibbonFrame:
+    """Detached selected-hybrid geometry and resolved scene; rendering owns no musical evolution."""
+    packet: object
+    scene: object
+    time: float
+    travel: float
+    rotation_angle: float
+    rotation_speed: float
+    drives: tuple
+    realized: tuple
+    ready: bool = True
+    particles: bytes = b''
+    particle_origin: float = 0.
+    particle_serial: int = 0
+    passage: float = 0.
+    parameters: FrozenFields = FrozenFields()
+
+    def __post_init__(self):
+        from core.ribbon_packet import RibbonPacket, RIBBON_BYTES
+        from core.waveform_ribbon_scene import Recipe
+        from types import MappingProxyType
+        if not isinstance(self.packet,RibbonPacket) or not isinstance(self.packet.payload,bytes):
+            raise TypeError('Waveform geometry must be an immutable ribbon packet')
+        if len(self.packet.payload)!=self.packet.instances*RIBBON_BYTES:
+            raise ValueError('Waveform packet size mismatch')
+        if not isinstance(self.scene,Recipe) or not isinstance(self.scene.palette,MappingProxyType):
+            raise TypeError('Waveform scene must be detached immutable configuration')
+        for key in ('time','travel','rotation_angle','rotation_speed'):
+            object.__setattr__(self,key,_finite(getattr(self,key),name='waveform '+key))
+        from core.ribbon_bursts import CAPACITY, STRIDE
+        if not isinstance(self.particles,bytes) or len(self.particles) not in (0,CAPACITY*STRIDE*4):
+            raise ValueError('Waveform particle records must be immutable and bounded')
+        object.__setattr__(self,'particle_origin',_finite(self.particle_origin,name='waveform particle origin'))
+        passage=_finite(self.passage,name='waveform passage')
+        if not 0.<=passage<=1.:raise ValueError('Waveform passage must be in 0..1')
+        object.__setattr__(self,'passage',passage)
+        object.__setattr__(self,'parameters',_coerce_frozen_fields(self.parameters,name='waveform parameters'))
+
+    @property
+    def mode_id(self):
+        return 'waveform_ribbon'
+
+
 ModeFrame: TypeAlias = (
-    SpectrumFrame | SphereFrame | OscilloscopeFrame | SineFrame | BubbleFrame | DevCurveFrame | ExtrudedBubbleFrame
+    SpectrumFrame | SphereFrame | OscilloscopeFrame | SineFrame | BubbleFrame | DevCurveFrame | ExtrudedBubbleFrame | WaveformRibbonFrame
 )
 
 
@@ -806,7 +850,7 @@ class VisualizerLogicalFrame:
             raise TypeError("common state must be VisualizerCommonState")
         if not isinstance(
             self.mode_state,
-            (SpectrumFrame, SphereFrame, OscilloscopeFrame, SineFrame, BubbleFrame, DevCurveFrame, ExtrudedBubbleFrame),
+            (SpectrumFrame, SphereFrame, OscilloscopeFrame, SineFrame, BubbleFrame, DevCurveFrame, ExtrudedBubbleFrame, WaveformRibbonFrame),
         ):
             raise TypeError("mode state must be one of the canonical immutable frames")
         edges = tuple(self.protected_edges)

@@ -203,3 +203,15 @@ def test_volume_mist_off_retires_its_resources_without_replacing_floor_mist(lab)
     assert not lab.fog_resources.has_resources
     assert not {'shape','envelope'} & lab.textures.keys()
     assert lab.recipe.environment.mist == analytic
+
+
+def test_removed_ribbons_do_not_hold_open_the_mist_clearance():
+    from core.ribbon_ring import RibbonRing
+    ring = RibbonRing(3,colours=[(.1,.5,1.,1.),(.1,.5,1.,0.),(.1,.5,1.,0.)])
+    for index in range(8):
+        ring.append(index/6,[(index-4,2.,0.),(index-4,8.,0.),(index-4,10.,0.)],[.4]*3)
+    fog = lab_module.Fog()
+    envelope = lab_module.waveform_envelope(ring.packet(),(0.,0.,0.),(2.,0.,20.,0.),fog)
+    xs = np.linspace(*fog.envelope_range)
+    assert np.max(envelope[0,np.abs(xs)<.5,1])<3.
+    assert not envelope[4:,:,3].any()

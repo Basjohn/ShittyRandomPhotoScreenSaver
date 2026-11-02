@@ -77,6 +77,7 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
         return None
 
     def accept_feature_frame(self, frame: FeatureFrame) -> bool:
+        self._pcm_reanalysis_ready = False
         history = frame.capture_history
         if history is not None:
             # The recording keeps the device's true rate and the Oscilloscope converts its time
@@ -233,6 +234,11 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
 
     def get_transient_energy_bands(self) -> TransientEnergyBands:
         return self._replay_transient
+
+    def get_waveform_ribbon_body_bands(self) -> EnergyBands:
+        if not getattr(self,'_pcm_reanalysis_ready',False):
+            raise RuntimeError('Waveform replay requires native PCM reanalysis; recorded clipped lanes are insufficient')
+        return super().get_waveform_ribbon_body_bands()
 
     def get_live_pre_agc_energy_bands(self) -> EnergyBands:
         real = self._replay_real

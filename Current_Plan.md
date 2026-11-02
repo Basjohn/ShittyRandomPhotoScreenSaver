@@ -30,6 +30,11 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
+- [ ] **Authored preset completeness debt (2 Nov focused gate):** 18 existing Bubble presets omit
+  `bubble_gradient_endpoints`; EB presets 2–8 omit camera projection and eight drift/ray fields.
+  Their parsed payloads and pre-existing spec keys match HEAD. Preserve operator-authored values; reconcile this
+  separately before treating the cross-mode completeness check as green. Waveform's two new presets are complete.
+
 - [ ] **Display Settings capacity (physical hotplug):** on a real monitor disconnect/return or explicit reauthoring,
   Settings' current-screen rows and selections/bindings stay coherent (focused checks pass; hidden form evidence
   `tmp/pytest_ux30_display/test_display_ui_rows_follow_to0/six_display_rows.png`).
@@ -134,12 +139,13 @@ The scene is world-first through the shared framed camera (Orthographic default)
 waveform and strong thick shaped mist, with no visible horizon/sky/floor edge. The waveform clears and softly lights
 the mist. Preset/control migration and recorded-audio calibration come only after the lab look is credible.
 
-- [ ] **WR-07/08 selected hybrid and production owners:** C elastic bending/torsion is primary; combine A's accumulated
+- [~] **WR-07/08 production candidate — finish admission:** C elastic bending/torsion is primary; combine A's accumulated
   twisting, localized highest-power colour shifts and independently controllable reactive whole-waveform rotation
   (axial roll like a skewer; fast strong attack, slow decay; integrate speed into continuous angle). Preserve constant history flow, smooth
   curves, particles/free strands and fog repelled by the actual deformed/rotated waveform. Use the shared scene,
   sole logical clock, immutable publication and lazy retained renderer; Terra audits each slice.
-- [ ] **Full controls/editors and two initial presets:** migrate primary/alternate examples into Preset 1/2 with the
+- [~] **Full controls/editors and two initial presets — finish native/range audits:** primary/alternate examples now have
+  candidate Preset 1/2 with the
   selected hybrid, shared framed 3D camera/navigation, technical profile, preset/Custom and Edit/Arrange feature set.
   Expose bend/torsion/stretch/twist/rotation and accent ranges, source/curve visual tuning, ribbon/gradient editors,
   and floor reflectivity/tint/brightness. Every reactive range needs actual quiet/peak consumer proof for both handles;
@@ -150,6 +156,10 @@ the mist. Preset/control migration and recorded-audio calibration come only afte
   `tools/visualizer_live_check.py --mode waveform_ribbon --load game60` before WR-09 acceptance. Operator visual/native
   judgement remains explicit where automation cannot close it. Ground volume banks stay zero; floor distance mist
   remains separate. Floor-column polish is not a migration blocker.
+- [ ] **Loaded render budget:** the native Quick path now presents after fixing Qt-owned context-wrapper lifetime,
+  but the first loaded smoke measurement exceeded the 8 ms render budget (~14 ms). Profile the real scene stages,
+  remove repeated preparation/upload/state work at its owner, then rerun both presets in isolation under game60;
+  do not lower artistic reaction strength or treat offline GPU medians as live acceptance.
 
 ### 7.2 Reactive Liquid / Audio Melt Pool
 

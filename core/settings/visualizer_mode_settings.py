@@ -529,10 +529,40 @@ class Custom:
     keys: tuple[str, ...] = ()
 
 
-Control = Union[Slider, Toggle, Choice, Colour, Range, Triangle, Gradient, Direction, SceneVolumePath, SceneCameraPosition]
-Entry = Union[Slider, Toggle, Choice, Colour, Range, Triangle, Gradient, Direction, SceneVolumePath, SceneCameraPosition, Custom]
+@dataclass(frozen=True)
+class VisualEditor:
+    """A typed structured value with a lazy editor and strict neutral admission owner."""
+    key: str
+    label: str
+    editor: str
+    validator: str
+    tooltip: str = ""
+    bucket: str = ""
+    logical: bool = False
+    when: When = ()
+    enabled_when: EnabledWhen = ()
+    source: bool = False
+    availability: tuple[str, str] = ()
+    ingress_strict: bool = True
+
+    def admit(self, value, default):
+        module, _, name = self.validator.partition(':')
+        return getattr(import_module(module),name)(value)
+
+    def coerce(self, value):
+        return self.admit(value,value)
+
+    def admit_runtime(self, value, default):
+        return self.admit(value,default)
+
+    def text(self, value):
+        return ''
+
+
+Control = Union[Slider, Toggle, Choice, Colour, Range, Triangle, Gradient, Direction, SceneVolumePath, SceneCameraPosition, VisualEditor]
+Entry = Union[Slider, Toggle, Choice, Colour, Range, Triangle, Gradient, Direction, SceneVolumePath, SceneCameraPosition, VisualEditor, Custom]
 # Controls shown by a shared visual control (``ui/widgets/visual_controls.py``) rather than a stock widget.
-VISUAL_CONTROLS = (Range, Triangle, Gradient, Direction, ScenePath, SceneVolumePath, SceneCameraPosition)
+VISUAL_CONTROLS = (Range, Triangle, Gradient, Direction, ScenePath, SceneVolumePath, SceneCameraPosition, VisualEditor)
 
 
 @dataclass(frozen=True)
@@ -1736,8 +1766,114 @@ _EXTRUDED_BUBBLE = ModeSettings(
     ),
 )
 
+def _waveform_ribbon() -> ModeSettings:
+    prefix = 'waveform_ribbon_'
+    buckets = tuple(Bucket(key,title,helper,advanced=advanced) for key,title,helper,advanced in (
+        ('ribbons','Ribbons','Three retained ribbon identities, colours and character.',False),
+        ('shape','Shape & Reactivity','Elastic body, local twisting and quiet to peak targets.',False),
+        ('flow','Flow & Axial Roll','History travels steadily; axial roll turns the waveform like a skewer.',False),
+        ('colour','Colour','Colour nodes and shifts in the most powerful musical regions.',False),
+        ('surface','Sheet & Highlights','Silk, fine strands, glowing rims and localized dense highlights.',False),
+        ('sparks','Sparks','Bounded particles born from musical history.',False),
+        ('strands','Free Strands','Smooth filaments peel from the ribbon rims.',False),
+        ('mist','Mist','Billowed mist clears away from the actual waveform; floor haze is separate.',False),
+        ('floor','Floor','Wet concrete tint, brightness and reflection.',False),
+        ('reaction','Response','Elastic timing, attack and decay on the logical clock.',True),
+        ('camera','Camera','Navigate the physical eye; waveform roll is independent.',True),
+        ('lens','Lens & Quality','Exposure, bloom and bounded rendering quality.',True)))
+    entries = [
+        Slider(prefix+'count','Ribbon Count:',1,3,bucket='ribbons',integer=True,scale=1,logical=True),
+        VisualEditor(prefix+'ribbons','Ribbon Cards:','ui.widgets.waveform_ribbon_editors:RibbonCardsEditor',
+                     'core.waveform_ribbon_authoring:admit_ribbons',bucket='ribbons',logical=True),
+        VisualEditor(prefix+'routing','Source Matrix:','ui.widgets.waveform_ribbon_editors:RoutingEditor',
+                     'core.waveform_ribbon_authoring:admit_routing',bucket='shape',logical=True),
+        VisualEditor(prefix+'palette','Gradient Nodes:','ui.widgets.waveform_ribbon_editors:GradientNodesEditor',
+                     'core.waveform_ribbon_authoring:admit_palette',bucket='colour'),
+    ]
+    targets = (
+        ('height','Carrier Height',0.,3.,'shape'),('width','Sheet Width',.05,2.,'shape'),
+        ('bend','Elastic Bending',0.,3.,'shape'),('torsion','Elastic Torsion',0.,4.,'shape'),
+        ('twist','Local Twisting',0.,4.,'shape'),('stretch','Elastic Stretch',0.,2.,'shape'),
+        ('lift','Vertical Lift',-.8,2.,'shape'),('spread','Ribbon Separation',0.,3.,'shape'),
+        ('depth','Depth Bending',0.,3.,'shape'),('rotation','Axial Speed',0.,360.,'flow'),
+        ('light','Musical Light',0.,3.,'surface'),('sparkle','Particle Admission',0.,1.,'sparks'),
+        ('colour','Colour Shift',0.,1.,'colour'),('highlights','Highlight Packing',0.,1.,'surface'))
+    for key,label,low,high,bucket in targets:
+        entries.append(Range(prefix+key,label+':',low,high,bucket=bucket,logical=True,
+            tooltip='Quiet → peak '+label.lower()+'. Source routing is set in the matrix.',
+            suffix='°/s' if key=='rotation' else ''))
+    for key,label,low,high,bucket in (
+        ('flow_speed','History Speed',.8,2.4,'flow'),('wave_rate','Wave Rate',.08,.6,'flow'),
+        ('wave_swell','Wave Swell',0.,1.,'flow'),('height_swell','Height Swell',0.,1.,'flow'),
+        ('elastic_frequency','Elastic Frequency',.05,4.,'reaction'),('damping','Elastic Damping',.1,.95,'reaction'),
+        ('impulse','Hit Impulse',0.,3.,'reaction'),('attack','Attack',.01,.5,'reaction'),
+        ('release','Decay',.1,4.,'reaction'),('rotation_attack','Roll Attack',.01,.5,'flow'),
+        ('rotation_release','Roll Decay',.1,6.,'flow'),('colour_threshold','Power Threshold',0.,.95,'colour')):
+        entries.append(Slider(prefix+key,label+':',low,high,bucket=bucket,logical=True))
+    entries.extend((Toggle(prefix+'rotation_enabled','','Axial Roll',bucket='flow',logical=True),
+                    Range(prefix+'twist_speed','Twist Rate:',0.,5.,bucket='flow',logical=True,
+                          tooltip='Quiet → peak local rolling twist rate in radians per second.')))
+    for name,label,low,high,integer in (
+        ('strands','Filament Count',1.,256.,True),('strand_half_width','Filament Fineness',.001,.5,False),
+        ('strand_light','Filament Light',0.,8.,False),('strand_warp','Filament Weave',0.,1.,False),
+        ('warp_frequency','Weave Rate',.01,2.,False),('rim_half_width','Rim Width',.001,.5,False),
+        ('rim_light','Rim Light',0.,10.,False),('body_alpha','Body Coverage',0.,.95,False),
+        ('body_tint','Body Tint',0.,1.,False),('fill_light','Fill Light',0.,3.,False),
+        ('fill_centre','Centre Fill',0.,1.,False),('rim_glow_width','Rim Glow Width',.001,.5,False),
+        ('rim_glow_light','Rim Glow Light',0.,5.,False),('glint_density','Highlight Density',0.,10.,False),
+        ('glint_chance','Highlight Chance',0.,1.,False),('glint_light','Highlight Light',0.,15.,False),
+        ('glint_radius','Highlight Size',.01,1.,False),('strand_white','Filament Whiteness',0.,1.,False),
+        ('rim_white','Rim Whiteness',0.,1.,False),('strand_jitter','Filament Variety',0.,.9,False),
+        ('strand_variation','Filament Contrast',0.,1.,False),('cross_curve','Sheet Camber',0.,1.,False),
+        ('glow','Sheet Glow',0.,4.,False),('hot','White-Hot Cores',0.,1.,False)):
+        entries.append(Range(prefix+'material_'+name,label+':',low,high,bucket='surface',integer=integer,
+                             scale=1 if integer else 1000,decimals=0 if integer else 3,
+                             tooltip='Quiet → peak '+label.lower()+'.'))
+    entries.extend((Toggle(prefix+'sparks_enabled','','Sparks',bucket='sparks'),
+                    Toggle(prefix+'strands_enabled','','Free Strands',bucket='strands'),
+                    Toggle(prefix+'mist_enabled','','Volume Mist',bucket='mist'),
+                    Toggle(prefix+'floor_mist_enabled','','Floor Distance Mist',bucket='mist')))
+    for key,label,low,high,bucket in (
+        ('spark_count','Count',0.,36.,'sparks'),('strand_count','Count',0.,8.,'strands'),
+        ('spark_lifetime','Lifetime',.2,8.,'sparks'),('spark_drift','Drift',0.,3.,'sparks'),
+        ('spark_rise','Rise',0.,2.,'sparks'),('spark_size','Size',.5,12.,'sparks'),
+        ('spark_light','Light',0.,60.,'sparks'),('spark_white','Whiteness',0.,1.,'sparks'),
+        ('strand_length','Length',1.,16.,'strands'),('strand_reach','Reach',0.,4.,'strands'),
+        ('strand_chance','Admission',0.,1.,'strands'),('strand_width','Width',.1,4.,'strands'),
+        ('strand_light','Light',0.,10.,'strands'),('strand_beads','Droplets',0.,8.,'strands'),
+        ('strand_peel','Peel Time',.1,4.,'strands'),('strand_halo','Halo',0.,2.,'strands'),
+        ('strand_glow','Glow',0.,4.,'strands'),('fog_density','Density',0.,3.,'mist'),
+        ('fog_clearance','Clearance',.25,2.,'mist'),('fog_billows','Billows',0.,3.,'mist'),
+        ('fog_fringe','Fringe Light',0.,200.,'mist'),('fog_edge','Edge Line',0.,5.,'mist'),
+        ('fog_smoothing','Fringe Smoothing',0.,4.,'mist'),('floor_reflection','Reflectivity',0.,8.,'floor'),
+        ('floor_brightness','Surface Brightness',0.,3.,'floor'),('floor_wetness','Wetness',0.,1.,'floor'),
+        ('floor_streak','Streak Length',0.,1.,'floor'),('floor_column','Column Fade',.1,20.,'floor'),
+        ('floor_mist_reflection','Mist Reflection',0.,1.,'floor'),('fog_haze','Distance Haze',0.,1.,'mist'),
+        ('fog_sides','Side Wall Start',5.,20.,'mist'),('floor_mist_thickness','Floor Mist Thickness',0.,3.,'mist'),
+        ('bloom','Bloom',0.,1.,'lens')):
+        entries.append(Range(prefix+key,label+':',low,high,bucket=bucket,tooltip='Quiet → peak '+label.lower()+'.'))
+    entries.extend((Colour(prefix+'floor_tint','Surface Tint:','Floor Surface Tint',bucket='floor',alpha=False),
+                    Slider(prefix+'exposure','Exposure:',.2,2.,bucket='lens'),
+                    Slider(prefix+'gradient_share','Sheet Gradient:',0.,1.,bucket='colour'),
+                    Slider(prefix+'mist_gradient_share','Mist Gradient:',0.,1.,bucket='colour'),
+                    Choice(prefix+'quality','Quality:',('Low','Medium','High'),bucket='lens'),
+                    SceneCameraPosition(prefix+'camera_position','Camera Position:',bucket='camera'),
+                    Choice(prefix+'camera_projection','Projection:',('Orthographic','Perspective'),bucket='camera'),
+                    Slider(prefix+'camera_fov','Field of View:',35.,62.,bucket='camera',scale=1,integer=True,
+                           suffix='°',when=(prefix+'camera_projection','Perspective')),
+                    Toggle(prefix+'auto_rotate','','Auto Orbit',bucket='camera'),
+                    Slider(prefix+'auto_rotate_after','Orbit After:',0.,120.,bucket='camera',suffix=' s'),
+                    Slider(prefix+'auto_rotate_speed','Orbit Speed:',0.,30.,bucket='camera',suffix='°/s'),
+                    Slider(prefix+'turn','',-1.,1.),Slider(prefix+'tilt','',-.5,.5),
+                    Slider(prefix+'scene_scale','',.25,4.),Slider(prefix+'scene_pan_x','',-.5,.5),
+                    Slider(prefix+'scene_pan_y','',-.5,.5)))
+    return ModeSettings('waveform_ribbon',buckets,tuple(entries))
+
+
+_WAVEFORM_RIBBON = _waveform_ribbon()
+
 _SPECS: tuple[ModeSettings, ...] = (_SINE_WAVE, _oscilloscope(), _SHOCKWAVE_GRID, _DEVCURVE, _EXTRUDED_SPECTRUM, _SPECTRUM, _SPHERE, _BUBBLE,
-                                    _EXTRUDED_BUBBLE)
+                                    _EXTRUDED_BUBBLE, _WAVEFORM_RIBBON)
 _BY_MODE: Mapping[str, ModeSettings] = MappingProxyType({spec.mode_id: spec for spec in _SPECS})
 _CONTROLS = tuple(control for spec in _SPECS for control in spec.controls)
 
@@ -1799,6 +1935,7 @@ __all__ = [
     "ScenePath",
     "SceneVolumePath",
     "SceneCameraPosition",
+    "VisualEditor",
     "ModeSettings",
     "Range",
     "Slider",

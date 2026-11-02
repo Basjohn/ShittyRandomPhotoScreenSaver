@@ -40,14 +40,15 @@ class RibbonStrays:
     peel_time: float = 2.           # seconds of knot age to peel most of the way
     halo: float = 0.                # soft glow around each filament (a fuzzy splash), relative to its core
     glow: float = 1.                # share of its light sent to the bloom
+    admission_softness: float = 0.  # smooth slot growth at the musical threshold; zero preserves authored lab fixtures
 
     def __post_init__(self):
         if isinstance(self.per_knot, bool) or not isinstance(self.per_knot, int) or not 1 <= self.per_knot <= 8:
             raise ValueError('Strays per knot must be an integer in 1..8')
         values = (self.length, self.reach, self.chance, self.width, self.light, self.beads, self.peel_time, self.halo,
-                  self.glow)
+                  self.glow, self.admission_softness)
         if (not all(math.isfinite(v) and v >= 0 for v in values) or not 1 <= self.length <= 32
-                or self.chance > 1 or not 0 < self.width <= 16 or self.peel_time <= 0):
+                or self.chance > 1 or self.admission_softness > 1 or not 0 < self.width <= 16 or self.peel_time <= 0):
             raise ValueError('Ribbon strays need finite non-negative values, a length in 1..32 knots, a 0..1 chance, '
                              'a width in (0, 16] pixels and a positive peel time')
 

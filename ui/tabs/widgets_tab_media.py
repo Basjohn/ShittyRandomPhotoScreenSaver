@@ -776,17 +776,9 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 # retireable bodies between selections. No mode has an eager-construction
 # exception.
 
-_VIS_MODE_CONTAINER_ATTR = {
-    "spectrum": "_spectrum_settings_container",
-    "oscilloscope": "_osc_settings_container",
-    "sine_wave": "_sine_wave_settings_container",
-    "bubble": "_bubble_settings_container",
-    "devcurve": "_devcurve_settings_container",
-    "sphere": "_sphere_settings_container",
-    "extruded_spectrum": "_extruded_spectrum_settings_container",
-    "shockwave_grid": "_shockwave_grid_settings_container",
-    "extruded_bubble": "_extruded_bubble_settings_container",
-}
+from core.settings.visualizer_mode_settings import iter_mode_settings
+_VIS_MODE_CONTAINER_ATTR = {spec.mode_id: f'_{spec.prefix}_settings_container' for spec in iter_mode_settings()}
+
 
 
 def _apply_vis_color_to_button(tab, btn_attr: str, color_attr: str) -> None:
@@ -837,7 +829,8 @@ def _hydrate_visualizer_mode_body(tab, mode_id: str, config) -> None:
     elif mode_id == "extruded_bubble":
         load_extruded_bubble_mode_settings(tab, cfg)
     else:
-        return
+        from ui.tabs.media.spec_mode_builder import load_spec_mode_settings
+        load_spec_mode_settings(tab, mode_id, cfg)
 
     # The section-level technical-controls loader runs before this body existed,
     # so hydrate this freshly-built mode's technical controls now. Scoped to this
@@ -1429,6 +1422,9 @@ def save_visualizer_settings(tab: "VisualizerSettingsContextMixin") -> dict:
             spotify_vis_config.update(collect_shockwave_grid_mode_settings(tab))
         elif _cur_mode == 'extruded_bubble':
             spotify_vis_config.update(collect_extruded_bubble_mode_settings(tab))
+        else:
+            from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings
+            spotify_vis_config.update(collect_spec_mode_settings(tab, _cur_mode))
     collect_per_mode_technical_controls(tab, spotify_vis_config, current_mode=_cur_mode)
 
     collect_visualizer_preset_indices(tab, spotify_vis_config)

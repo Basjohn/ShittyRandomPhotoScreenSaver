@@ -31,6 +31,7 @@ from core.settings.visualizer_mode_settings import (
     Slider,
     Toggle,
     Triangle,
+    VisualEditor,
     require_mode_settings,
     read_control_value,
 )
@@ -84,6 +85,13 @@ def build_spec_mode_ui(tab, parent_layout, mode_id: str) -> None:
         advanced_attr=f"_{prefix}_advanced",
     )
     layouts = {}
+    if mode_id=='waveform_ribbon':
+        from ui.widgets.waveform_ribbon_preview import WaveformPreview
+        def preview_parameters():
+            values={entry.key:tab._widget_default('spotify_visualizer',entry.key) for entry in spec.controls}
+            values.update(collect_spec_mode_settings(tab,mode_id))
+            return values
+        scaffold.normal_layout.addWidget(WaveformPreview(preview_parameters,scaffold.normal_layout.parentWidget()))
     for bucket in spec.buckets:
         _host, layouts[bucket.key] = build_collapsible_bucket(
             tab, scaffold.advanced_layout if bucket.advanced else scaffold.normal_layout,
@@ -255,7 +263,7 @@ def _current_value(tab, control):
     if isinstance(control, Range):
         low, high = widget.value()
         return control.admit((low / control.scale, high / control.scale), (control.low, control.high))
-    if isinstance(control, (Triangle, Direction, Gradient)):
+    if isinstance(control, (Triangle, Direction, Gradient, VisualEditor)):
         return control.admit(widget.value(), widget.value())
     if control.indexed:
         return widget.currentIndex()
@@ -399,6 +407,9 @@ def _build_visual_control(tab, layout, control, default, *, auto_switch=True):
     if isinstance(control, Range):
         widget = RangeSlider(round(control.low * control.scale), round(control.high * control.scale))
         widget.setValue(control.positions(value))
+    elif isinstance(control, VisualEditor):
+        widget = _resolve(control.editor)()
+        widget.setValue(value)
     elif isinstance(control, Triangle):
         widget = TriangleMapper(control.corners)
         widget.setValue(value)
@@ -417,7 +428,7 @@ def _build_visual_control(tab, layout, control, default, *, auto_switch=True):
         widget.setValue(value)
     widget.setAccessibleName(control.label.rstrip(":"))
     label = QLabel(describe(widget.value()))
-    if isinstance(widget, SceneVolumeMapper):
+    if isinstance(widget, SceneVolumeMapper) or isinstance(control, VisualEditor):
         label.hide()  # Coordinates remain in the accessible description, not duplicated next to the editor.
     setattr(tab, f"{control.key}_label", label)
     widget.valueChanged.connect(lambda current, d=describe, l=label: l.setText(d(current)))
@@ -507,7 +518,7 @@ def load_spec_mode_settings(tab, mode_id: str, config, *, only_buckets: frozense
         try:
             if isinstance(entry, Range):
                 widget.setValue(entry.positions(value))
-            elif isinstance(entry, (Triangle, Direction, Gradient)):
+            elif isinstance(entry, (Triangle, Direction, Gradient, VisualEditor)):
                 widget.setValue(value)
             elif isinstance(entry, Slider):
                 widget.setValue(entry.position(value))

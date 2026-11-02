@@ -70,6 +70,10 @@ def mode_output(frame):
         # Its own simulation's bubble records (positions, radii, fades) and the scene scalars the GPU layers read.
         return (*state.bubbles, state.level, state.flash, state.drift, state.emission, state.stream_speed,
                 state.rays)
+    if frame.mode_id == 'waveform_ribbon':
+        # Actual resolved range values and rate, excluding the independently flowing idle carrier.
+        # Native packet/pixel comparisons remain the geometry proof.
+        return (*(value for _key,value in state.realized),state.rotation_speed)
     if frame.mode_id == "sine_wave":
         # What the lines' amplitude reads: each band's reactive energy scaled by the resolved
         # sensitivity, and the heartbeat pulse.

@@ -1591,10 +1591,22 @@ class _SpotifyBeatEngine(QObject):
         first brought to the reference block size. Accepted 2D Bubble keeps its own
         feed unchanged.
         """
+        return self._fixed_reference_body_bands(self.EXTRUDED_BUBBLE_BODY_RAW_REFERENCE,
+            self.EXTRUDED_BUBBLE_BODY_REFERENCE_FFT,self.EXTRUDED_BUBBLE_BODY_BLOCK_EXPONENT)
+
+    def get_waveform_ribbon_body_bands(self) -> EnergyBands:
+        """Waveform's fixed raw scale, independent of learned floors and other mode presets.
+
+        Initial anchors reuse the pooled four-recording reference, with FFT-length correction. This is
+        shared analysis math, not EB simulation, presentation or a live dependency on EB configuration.
+        """
+        return self._fixed_reference_body_bands((5.0,3.0,1.2),256,(1.0,.9,.6))
+
+    def _fixed_reference_body_bands(self, references, reference_fft, block_exponents) -> EnergyBands:
         w = self._audio_worker
         ramp = self._get_play_ramp_factor()
         bins = int(getattr(w, "_last_raw_fft_bins", 0) or 0)
-        block_scale = self.EXTRUDED_BUBBLE_BODY_REFERENCE_FFT / (2.0 * bins) if bins > 0 else 1.0
+        block_scale = reference_fft / (2.0 * bins) if bins > 0 else 1.0
 
         def _raw(name: str, fallback_name: str) -> float:
             return max(0.0, float(getattr(w, name, getattr(w, fallback_name, 0.0)) or 0.0))
@@ -1616,8 +1628,8 @@ class _SpotifyBeatEngine(QObject):
                 value = 0.8 + 0.2 * (1.0 - math.exp(-(value - 0.8) / 0.2))
             return max(0.0, min(1.0, value * ramp))
 
-        bass_ref, mid_ref, high_ref = self.EXTRUDED_BUBBLE_BODY_RAW_REFERENCE
-        bass_exp, mid_exp, high_exp = self.EXTRUDED_BUBBLE_BODY_BLOCK_EXPONENT
+        bass_ref, mid_ref, high_ref = references
+        bass_exp, mid_exp, high_exp = block_exponents
         bass = _lane(_at_reference_block(_raw("_last_raw_bass", "_pre_agc_live_bass"), bass_exp), bass_ref)
         mid = _lane(_at_reference_block(_raw("_last_raw_mid", "_pre_agc_live_mid"), mid_exp), mid_ref)
         high = _lane(_at_reference_block(_raw("_last_raw_treble", "_pre_agc_live_treble"), high_exp), high_ref)

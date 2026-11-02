@@ -20,7 +20,7 @@ from rendering.gl_programs.ribbon import (RIBBON_BODY_FRAGMENT, RIBBON_FRAGMENT,
 from core.ribbon_geometry import MAX_PATH_SAMPLES
 from rendering.gl_programs.mist import FOG_OFF
 from rendering.quick import gl_query
-from rendering.quick.scene3d.resources import MeshResources
+from rendering.quick.scene3d.resources import MeshResources, warm_programs
 from rendering.quick.scene3d.stream import StreamRing
 
 _FRAGMENTS = {'diagnostic': RIBBON_FRAGMENT, 'body': RIBBON_BODY_FRAGMENT, 'light': RIBBON_LIGHT_FRAGMENT}
@@ -100,6 +100,15 @@ class RibbonPrimitive:
     @property
     def stream_bytes(self):
         return self.stream.capacity if self.stream is not None and self.stream.has_resources else 0
+
+    def prepare_programs(self, *, sparks=False, strays=False):
+        """One hidden-frame compile, admitted under this primitive's owning context before allocation."""
+        self._check_context(admit=True)
+        programs=[(self.resources,'body',RIBBON_VERTEX,RIBBON_BODY_FRAGMENT),
+                  (self.resources,'light',RIBBON_VERTEX,RIBBON_LIGHT_FRAGMENT)]
+        if sparks:programs.append((self.resources,'sparks',RIBBON_SPARK_VERTEX,RIBBON_SPARK_FRAGMENT))
+        if strays:programs.append((self.resources,'strays',RIBBON_STRAY_VERTEX,RIBBON_STRAY_FRAGMENT))
+        return warm_programs(programs)
 
     def draw(self, packet: RibbonPacket, mvp, *, diagnostic=0, timing_query=None, shading='diagnostic',
              view=None, orthographic=True, material: RibbonMaterial | None = None, age_fade=None,
@@ -228,7 +237,7 @@ class RibbonPrimitive:
             vao, _ = self.resources.mesh('empty', (0., 0.), (2,))
             names = ('uMvp', 'uSpark', 'uSparkLook', 'uSparkClock', 'uSparkWhite', 'uMist', 'uMistShape', 'uMistOrigin',
                      'uSurface','uSweepAxis', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange', 'uGradeStops',
-                     'uGrade', 'uFloorContact', 'uStray', 'uStrayLook', 'uStrayClock', 'uViewport', 'uStrayGlow')
+                     'uGrade', 'uFloorContact', 'uStray', 'uStrayLook', 'uStrayClock', 'uViewport', 'uStrayGlow', 'uStrayAdmission')
             u = self.resources.uniforms(kind, names, required=False)
             if self.stream is None:
                 alignment = gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT)
@@ -251,6 +260,7 @@ class RibbonPrimitive:
                 gl.glUniform4f(u['uStrayLook'], strays.width, strays.light, strays.beads, strays.peel_time)
                 gl.glUniform2f(u['uStrayClock'], *clock)
                 gl.glUniform2f(u['uStrayGlow'], strays.halo, strays.glow)
+                gl.glUniform1f(u['uStrayAdmission'], strays.admission_softness)
                 gl.glUniform2f(u['uViewport'], *(float(v) for v in
                                                  np.asarray(gl.glGetIntegerv(gl.GL_VIEWPORT)).reshape(-1)[2:4]))
             mist_values = {'uMist': (0., 0., 1., 1.), 'uMistShape': (0., 0., 0., 0.), **FOG_OFF, **(mist or {})}

@@ -74,17 +74,8 @@ from ui.widget_display_routes import DisplayRouteLeaveGuard
 
 logger = get_logger(__name__)
 
-_MODE_NORMAL_ATTR = {
-    "spectrum": "_spectrum_normal",
-    "oscilloscope": "_osc_normal",
-    "sine_wave": "_sine_wave_normal",
-    "bubble": "_bubble_normal",
-    "devcurve": "_devcurve_normal",
-    "sphere": "_sphere_normal",
-    "extruded_spectrum": "_extruded_spectrum_normal",
-    "shockwave_grid": "_shockwave_grid_normal",
-    "extruded_bubble": "_extruded_bubble_normal",
-}
+from core.settings.visualizer_mode_settings import iter_mode_settings
+_MODE_NORMAL_ATTR = {spec.mode_id: f'_{spec.prefix}_normal' for spec in iter_mode_settings()}
 
 
 class VisualizersTab(VisualizerSettingsContextMixin, QWidget):

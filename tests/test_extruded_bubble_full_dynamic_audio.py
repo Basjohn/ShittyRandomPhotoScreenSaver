@@ -132,6 +132,7 @@ class FullDynamicAudioOwnership(unittest.TestCase):
                 **{name: getattr(_SpotifyBeatEngine, name) for name in (
                     'EXTRUDED_BUBBLE_BODY_RAW_REFERENCE', 'EXTRUDED_BUBBLE_BODY_REFERENCE_FFT',
                     'EXTRUDED_BUBBLE_BODY_BLOCK_EXPONENT')})
+            engine._fixed_reference_body_bands = lambda *args: _SpotifyBeatEngine._fixed_reference_body_bands(engine,*args)
             result = _SpotifyBeatEngine.get_extruded_bubble_body_bands(engine)
             return (result.bass, result.mid, result.high)
 
@@ -167,6 +168,7 @@ class FullDynamicAudioOwnership(unittest.TestCase):
                     'EXTRUDED_BUBBLE_BODY_RAW_REFERENCE', 'EXTRUDED_BUBBLE_BODY_REFERENCE_FFT',
                     'EXTRUDED_BUBBLE_BODY_BLOCK_EXPONENT')})
             rows = []
+            engine._fixed_reference_body_bands = lambda *args: _SpotifyBeatEngine._fixed_reference_body_bands(engine,*args)
             for start in range(0, signal.size - block, 2048):
                 fft_to_bars(worker, np.abs(np.fft.rfft(signal[start:start + block])))
                 if not normalise:

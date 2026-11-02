@@ -342,6 +342,7 @@ uniform vec2 uViewport;
 uniform vec4 uStray;       // strays per knot, length (knots), reach (world units), chance
 uniform vec4 uStrayLook;   // width (px), light, beads per stray, peel time (s)
 uniform vec2 uStrayClock;  // local now (s), absolute coordinate origin mod 1000 (stable identity)
+uniform float uStrayAdmission;
 out vec3 vWorld;
 out float vAlong;
 out float vAcross;
@@ -398,7 +399,9 @@ void main() {
     uint key=uint(floor(mod(k.q.x+uStrayClock.y,1000.0)*256.0+0.5));
     uint seed=mixBits(key*747796405U+uint(slot)*2891336453U+uint(owner)*104729U+17U);
     float r1=unit(seed), r2=unit(seed+1U), r3=unit(seed+2U), r4=unit(seed+3U), r5=unit(seed+4U);
-    if(r1>k.tangent.w*uStray.w) return;
+    float gate=k.tangent.w*uStray.w;
+    float admission=uStrayAdmission>0.0?smoothstep(r1,r1+uStrayAdmission,gate):step(r1,gate);
+    if(admission<=0.0) return;
     bool next=corner==1 || corner>=4;
     bool outer=corner==2 || corner==3 || corner==5;
     float s=float(segment+(next?1:0))/float(STRAY_SEGMENTS);
@@ -408,7 +411,7 @@ void main() {
     float across=r2<0.5?0.0:1.0;
     float theta=(r4-0.5)*2.4+(r2<0.5?-0.6:0.6);
     float age=max(uStrayClock.x-k.q.x,0.0);
-    float peel=(0.35+0.65*r5)*(1.0-exp(-age/max(uStrayLook.w,1e-3)));
+    float peel=admission*(0.35+0.65*r5)*(1.0-exp(-age/max(uStrayLook.w,1e-3)));
     float kp=float(index)+s*length_;
     float kq=float(index)+min(s+ds,1.0)*length_;
     float kr=float(index)+max(s-ds,0.0)*length_;
@@ -424,7 +427,7 @@ void main() {
     if(dot(along,along)<1e-10) return;
     vec2 perp=normalize(vec2(-along.y,along.x));
     // Quad twice the line's width: the droplet beads fill it, the line's core stays narrow.
-    float width=uStrayLook.x*(1.0-0.6*s);
+    float width=admission*uStrayLook.x*(1.0-0.6*s);
     vec2 offset=perp*(outer?1.0:-1.0)*width;
     gl_Position=vec4((c.xy/c.w*half_+offset)/half_*c.w,c.z,c.w);
     vWorld=here;
@@ -434,7 +437,7 @@ void main() {
     float tip=1.0-smoothstep(0.75,1.0,s);
     // From nothing on the rim to full as it peels away: no visible start.
     float attach=smoothstep(0.0,0.25,s);
-    vBright=uStrayLook.y*k.side.w*tip*attach*(0.5+0.5*r5);
+    vBright=admission*uStrayLook.y*k.side.w*tip*attach*(0.5+0.5*r5);
     vec3 own=mix(paths[owner].colourA.rgb,paths[owner].colourB.rgb,across);
     vColour=mix(own,k.tint.rgb,clamp(k.tint.a,0.0,1.0));
 }
@@ -579,7 +582,7 @@ RIBBON_BODY_FRAGMENT = ("#version 460 core\n" + SCENE_OIT_GLSL + "layout(locatio
                         + _RIBBON_MATERIAL_GLSL + """
 void main() {
     float alpha=clamp((1.0-pow(1.0-uBody.x,pathLength()))*clamp(vCoverage,0.0,1.0)*ageFade()
-                      *mistTransmittance(vWorld+uMistOrigin),0.0,0.95);
+                      *mistTransmittance(vWorld+uMistOrigin)*clamp(vColour.a,0.0,1.0),0.0,0.95);
     sceneTransparent(ribbonColour()*uBody.y*alpha,alpha,viewDepth());
     Emission=vec4(0.0);
 }
