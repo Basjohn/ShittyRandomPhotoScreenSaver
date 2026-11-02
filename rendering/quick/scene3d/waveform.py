@@ -8,7 +8,6 @@ import numpy as np
 from PIL import Image
 from OpenGL import GL as gl
 from core.ribbon_packet import KNOT_ROWS
-from core.settings.waveform_ribbon_camera import floor_coverage_bounds
 from core.ribbon_continuation import cloth_values, continuation_bounds, frustum_axial_span
 from core.waveform_ribbon_scene import Fog, Floor, Recipe, SPEC, VIEW_SLOPE, FLOOR_CONTACT
 from rendering.gl_programs.waveform_ribbon import (FLOOR_VERTEX, FLOOR_FRAGMENT, FLAT, ENVELOPE_RIBBONS,
@@ -232,7 +231,7 @@ def capped(size, scale: float, max_height: int) -> tuple[float, float]:
 
 
 def floor_vertices() -> bytes:
-    """One retained unit rectangle; physical-frustum bounds supply world coverage."""
+    """Retained coverage footprint; the fragment evaluates the actual infinite world plane."""
     corners = ((0.,0.,0.),(1.,0.,0.),(1.,0.,1.),(0.,0.,0.),(1.,0.,1.),(0.,0.,1.))
     return b''.join(struct.pack('3f', *c) for c in corners)
 
@@ -603,15 +602,15 @@ class WaveformScene:
             self.textures.update(load_floor_textures(floor))
         vao, count = self.resources.mesh('floor', floor_vertices(), (3,))
         program = self.resources.program('floor', FLOOR_VERTEX, FLOOR_FRAGMENT)
-        names = ('uMvp', 'uFloorBounds', 'uFlat', 'uAlbedo', 'uSlope', 'uFogLight', 'uFogLit', 'uReflection', 'uReflectionLook',
+        names = ('uMvp', 'uFloorInverseMvp', 'uFlat', 'uAlbedo', 'uSlope', 'uFogLight', 'uFogLit', 'uReflection', 'uReflectionLook',
                  'uReflectionContact', 'uViewport', 'uBackdrop', 'uAmbient', 'uFloor', 'uFloorTone', 'uRipple', 'uEye',
                  'uForward', 'uOrthographic', 'uMist', 'uMistShape', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange',
                  'uStreak', 'uHot', 'uEnvelope', 'uEnvelopeSpan', 'uPool', 'uPoolZ', 'uColumn', 'uSpecMode',
                  'uSpecular', 'uFloorTint')
         u = self.resources.uniforms('floor', names, required=False)
         gl.glUseProgram(program)
-        bounds=floor_coverage_bounds(np.identity(4),np.asarray(mvp).reshape(4,4,order='F'))
-        gl.glUniform4f(u['uFloorBounds'],*bounds)
+        inverse=np.linalg.inv(np.asarray(mvp,float).reshape(4,4,order='F'))
+        gl.glUniformMatrix4fv(u['uFloorInverseMvp'],1,gl.GL_FALSE,np.asarray(inverse.flatten(order='F'),np.float32))
         gl.glUniform1i(u['uFlat'], int(flat))
         gl.glUniformMatrix4fv(u['uMvp'], 1, gl.GL_FALSE, np.asarray(mvp, np.float32))
         lit = not flat and self.fog.has_resources and self.recipe.fog is not None

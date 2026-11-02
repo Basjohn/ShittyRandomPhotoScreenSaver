@@ -135,21 +135,23 @@ def test_near_level_tilt_is_half_a_degree_down_at_every_admitted_radius_with_sha
 
 @pytest.mark.qt
 @pytest.mark.parametrize('kind',('Orthographic','Perspective'))
-def test_near_level_native_floor_is_visible_in_lower_half_and_approach_grows_real_geometry(qt_app,kind):
+def test_near_level_native_ground_coverage_and_approach_grows_real_geometry(qt_app,kind):
     """Use production floor vertices/camera with a solid test material, independent of fog/material tuning."""
     from rendering.gl_error_policy import disable_per_call_gl_error_checking
     disable_per_call_gl_error_checking()
     from OpenGL import GL as gl
     from core.ribbon_geometry import PathSample
     from core.ribbon_packet import pack_ribbons
-    from rendering.gl_programs.waveform_ribbon import FLOOR_VERTEX
+    from rendering.gl_programs.waveform_ribbon import FLOOR_VERTEX,FLOOR_WORLD_GLSL
     from rendering.quick.offscreen_target import OffscreenRenderTarget
     from rendering.quick.scene3d.waveform import floor_vertices
     from rendering.quick.scene3d.resources import MeshResources
     from rendering.quick.scene3d.ribbon import RibbonPrimitive
-    from core.settings.waveform_ribbon_camera import floor_coverage_bounds
     target=OffscreenRenderTarget(240,160);floor=MeshResources('near-level floor test');body=RibbonPrimitive()
-    fragment='#version 460 core\nout vec4 FragColor;void main(){FragColor=vec4(1,0,0,1);}'
+    fragment='#version 460 core\n'+FLOOR_WORLD_GLSL+'''
+out vec4 FragColor;void main(){vec3 world;float depth;if(!floorWorldHit(world,depth))discard;
+gl_FragDepth=depth;FragColor=vec4(1,0,0,1);}
+'''
     packet=pack_ribbons([([PathSample(0.,(-2.,2.,0.),.4),PathSample(1.,(2.,2.,0.),.4)],[(1.,0.,0.)]*2,None)])
     try:
         program=floor.program('floor',FLOOR_VERTEX,fragment)
@@ -160,14 +162,20 @@ def test_near_level_native_floor_is_visible_in_lower_half_and_approach_grows_rea
             gl.glUseProgram(program);gl.glBindVertexArray(vao)
             gl.glUniformMatrix4fv(gl.glGetUniformLocation(program,'uMvp'),1,gl.GL_FALSE,
                                   np.asarray((projection@view).flatten(order='F'),np.float32))
-            gl.glUniform4f(gl.glGetUniformLocation(program,'uFloorBounds'),*floor_coverage_bounds(view,projection))
+            gl.glUniformMatrix4fv(gl.glGetUniformLocation(program,'uFloorInverseMvp'),1,gl.GL_FALSE,
+                                  np.asarray(np.linalg.inv(projection@view).flatten(order='F'),np.float32))
+            gl.glUniform3f(gl.glGetUniformLocation(program,'uEye'),*eye)
+            gl.glUniform1i(gl.glGetUniformLocation(program,'uOrthographic'),int(kind=='Orthographic'))
             gl.glDrawArrays(gl.GL_TRIANGLES,0,count)
             return view,projection
         for turn,scale in itertools.product((-1.,0.,1.),(.25,1.,4.)):
             values=camera(camera_projection=kind,tilt=.5,turn=turn,scene_scale=scale)
-            draw_floor(values);pixels=target.read_rgba();yy,xx=np.where(pixels[:,:,0]>200)
+            v,p=draw_floor(values);pixels=target.read_rgba();yy,xx=np.where(pixels[:,:,0]>200)
             assert len(xx)>240*160*.03
-            assert yy.min()>=80 and yy.max()<160
+            if kind=='Orthographic':assert len(xx)==240*160
+            else:
+                horizon=160*.5*(1.-v[2,1]/(v[1,1]*(1./p[1,1])))
+                assert yy.min()==math.ceil(horizon-.5) and yy.max()==159
         values=camera(camera_projection=kind,tilt=.5);host=SimpleNamespace()
         apply_presentation_vis_mode_kwargs(host,values)
         set_framed_flight_rates(host,'waveform_ribbon',0.,0.,0.,1.,0.)

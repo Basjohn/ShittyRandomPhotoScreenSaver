@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from core.settings import framed_camera as fc
-from core.settings.waveform_ribbon_camera import FAR, FLOOR_Y, NEAR, floor_coverage_bounds
+from core.settings.waveform_ribbon_camera import FAR, FLOOR_Y, NEAR
 from core.waveform_ribbon_scene import SPEC
 from rendering.quick.visualizer.implementations.waveform_ribbon import physical_view
 from widgets.spotify_visualizer.view_orbit import FramedFlightMotion, framed_flight_position
@@ -85,46 +85,3 @@ def test_orbit_basis_remains_orthonormal_at_every_admitted_pitch_and_end_on_angl
         axes = np.asarray(fc.camera_axes(SPEC, turn, tilt)).reshape(3, 3)
         assert axes @ axes.T == pytest.approx(np.identity(3), abs=1e-12)
         assert np.linalg.det(axes) == pytest.approx(1.)
-
-
-@pytest.mark.parametrize('kind', ('Orthographic','Perspective'))
-@pytest.mark.parametrize('aspect', (.1,1.5,16.))
-@pytest.mark.parametrize('aperture', (.25,1.,3.))
-def test_floor_coverage_contains_frustum_and_visible_floor_at_extreme_admitted_views(kind,aspect,aperture):
-    corners=np.array([(*corner,1.) for corner in itertools.product((-1.,1.),repeat=3)])
-    # Actual floor intersections are independently resolved along clipped pixel rays.
-    ndc=np.array([(x,y) for x in np.linspace(-1,1,7) for y in np.linspace(-1,1,7)])
-    clip_near=np.column_stack((ndc,-np.ones(len(ndc)),np.ones(len(ndc))))
-    clip_far=np.column_stack((ndc,np.ones(len(ndc)),np.ones(len(ndc))))
-    for turn,tilt,position in itertools.product((-.95,-.5,0.,.5,.95),(-.5,0.,.5),((-1.,-1.,-1.),(1.,1.,1.))):
-        values=camera(turn=turn,tilt=tilt,scene_scale=.25,camera_projection=kind,camera_fov=62.,
-                      scene_pan_x=.5,scene_pan_y=-.5,camera_position=position)
-        view,projection,_,_=physical_view(values,aspect,aperture)
-        x0,z0,x1,z1=floor_coverage_bounds(view,projection)
-        inverse=np.linalg.inv(projection@view)
-        world=corners@inverse.T;world=world[:,:3]/world[:,3,None]
-        assert (world[:,0]>=x0).all() and (world[:,0]<=x1).all()
-        assert (world[:,2]>=z0).all() and (world[:,2]<=z1).all()
-        near,far=clip_near@inverse.T,clip_far@inverse.T
-        near,far=near[:,:3]/near[:,3,None],far[:,:3]/far[:,3,None]
-        delta=far-near
-        valid=np.abs(delta[:,1])>1e-12
-        t=np.zeros(len(delta));t[valid]=(FLOOR_Y-near[valid,1])/delta[valid,1]
-        visible=valid&(t>=0)&(t<=1)
-        hit=near[visible]+t[visible,None]*delta[visible]
-        assert ((hit[:,0]>=x0)&(hit[:,0]<=x1)&(hit[:,2]>=z0)&(hit[:,2]<=z1)).all()
-
-
-def test_floor_coverage_grows_beyond_the_old_finite_ground_and_preserves_world_origin():
-    view,projection,_,_=physical_view(camera(scene_scale=.25),16.)
-    bounds=floor_coverage_bounds(view,projection)
-    assert bounds[0]<-100. and bounds[2]>100.
-    assert bounds[1]<-80. or bounds[3]>60.
-    assert FLOOR_Y==0.
-
-
-@pytest.mark.parametrize('view,projection', ((np.zeros((4,4)),np.identity(4)),
-                                          (np.identity(3),np.identity(4)),
-                                          (np.identity(4)*np.nan,np.identity(4))))
-def test_floor_coverage_rejects_nonphysical_matrices(view,projection):
-    with pytest.raises(ValueError):floor_coverage_bounds(view,projection)
