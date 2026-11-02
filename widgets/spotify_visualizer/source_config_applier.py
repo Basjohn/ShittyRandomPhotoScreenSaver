@@ -99,6 +99,7 @@ def resolve_mode_source_config(mode_id: str, kwargs: Mapping[str, Any]) -> dict[
     from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
 
     descriptor = get_visualizer_mode_descriptor(str(mode_id).strip().lower())
+    kwargs={**kwargs,'_source_raw_musical_signals':descriptor.raw_musical_signals}
     owns_spectrum_shaper = (
         descriptor.mode_id == "spectrum"
         or bool(descriptor.spectrum_shape_controls)
@@ -173,6 +174,8 @@ def apply_engine_vis_mode_kwargs(engine: Any, kwargs: Mapping[str, Any]) -> bool
 
     if not isinstance(kwargs, Mapping):
         raise TypeError("visualizer source config must be a mapping")
+    if '_source_raw_musical_signals' in kwargs:
+        _require_engine_method(engine,'set_raw_musical_signals')(kwargs['_source_raw_musical_signals'] is True)
     if "_source_spectrum_shaping_enabled" in kwargs:
         # Mode-owned, explicit policy on the ONE shared BeatEngine. The engine
         # fences detached compute snapshots when this policy changes.

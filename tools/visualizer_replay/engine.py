@@ -48,6 +48,8 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
 
     def __init__(self, bar_count: int) -> None:
         super().__init__(bar_count)
+        self._pcm_reanalysis_ready = False
+        self._pcm_reanalysis_epoch = None
         self._replay_pre_agc = EnergyBands()
         self._replay_bubble = EnergyBands()
         self._replay_transient = TransientEnergyBands()
@@ -235,8 +237,11 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
     def get_transient_energy_bands(self) -> TransientEnergyBands:
         return self._replay_transient
 
+    def _has_current_pcm(self) -> bool:
+        return self._pcm_reanalysis_ready and self._pcm_reanalysis_epoch == self._analysis_compute_state_epoch
+
     def get_waveform_ribbon_body_bands(self) -> EnergyBands:
-        if not getattr(self,'_pcm_reanalysis_ready',False):
+        if not self._has_current_pcm():
             raise RuntimeError('Waveform replay requires native PCM reanalysis; recorded clipped lanes are insufficient')
         return super().get_waveform_ribbon_body_bands()
 
@@ -245,17 +250,26 @@ class ReplayBeatEngine(_SpotifyBeatEngine):
         return super().get_live_pre_agc_energy_bands() if real is None else EnergyBands(*real.live)
 
     def get_musical_level(self) -> tuple[float, float]:
+        if self._audio_worker._raw_musical_signals:
+            if not self._has_current_pcm():raise RuntimeError('Raw musical replay requires current PCM reanalysis')
+            return super().get_musical_level()
         real = self._replay_real
         if real is None:
             return SCHEMA_1_MUSIC if self._replay_audible else (0.0, 0.0)
         return tuple(real.musical_level)
 
     def get_onset_events(self, after_serial: int = 0) -> tuple:
+        if self._audio_worker._raw_musical_signals:
+            if not self._has_current_pcm():raise RuntimeError('Raw musical replay requires current PCM reanalysis')
+            return super().get_onset_events(after_serial)
         if self._replay_real is None:
             return super().get_onset_events(after_serial)
         return tuple(onset for onset in self._replay_onsets if onset.serial > after_serial)
 
     def get_musical_intensity(self) -> float:
+        if self._audio_worker._raw_musical_signals:
+            if not self._has_current_pcm():raise RuntimeError('Raw musical replay requires current PCM reanalysis')
+            return super().get_musical_intensity()
         if self._replay_real is None:
             return 1.0 if self._replay_audible else 0.0
         return self._replay_intensity.value

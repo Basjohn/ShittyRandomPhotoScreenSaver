@@ -286,6 +286,20 @@ class TestOneInFlightOneLatestPending:
 
 
 class TestFailureAndFencing:
+    @pytest.mark.parametrize('raw_policy', [True, False])
+    def test_musical_policy_switch_fences_in_flight_old_domain(self, engine, manager, np_module, raw_policy):
+        engine.set_raw_musical_signals(not raw_policy)
+        _publish(engine, np_module, .4)
+        engine.tick()
+        assert manager.in_flight == 1
+        engine.set_raw_musical_signals(raw_policy)
+        bus = engine._audio_worker._transient_bus
+        manager.complete_next()
+        assert engine._audio_worker._transient_bus is bus
+        assert bus.musical_level == (0., 0.)
+        assert not bus.recent_onsets
+        assert not engine._compute_task_active
+
     def test_a_failed_task_releases_the_slot_and_continues(
         self, engine, manager, np_module
     ):

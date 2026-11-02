@@ -36,6 +36,9 @@ class _Engine:
         self.release_count = 0
         self.spectrum_shaping_calls: list[bool] = []
 
+    def set_raw_musical_signals(self, enabled: bool) -> None:
+        self.raw_musical_signals = bool(enabled)
+
     def set_spectrum_shaping_enabled(self, enabled: bool) -> None:
         self.spectrum_shaping_calls.append(bool(enabled))
 
@@ -239,6 +242,23 @@ def test_cold_source_paused_start_and_failed_admission_release_correctly(qt_app,
     finally:
         owner.retire();runtime.close_runtime();factory.deleteLater();qt_app.processEvents()
     assert engine.release_count==1
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize('mode,visible',(('waveform_ribbon',True),('spectrum',False)))
+def test_persistent_waveform_world_publishes_while_current_audio_is_pending(qt_app,monkeypatch,mode,visible):
+    _quiet_tick(monkeypatch);runtime,factory=_make_runtime(qt_app,56)
+    owner=_make_owner(runtime,bar_count=32,initial_mode=mode,engine_factory=lambda _:_Engine())
+    try:
+        owner.configure(logical_kwargs={'mode':mode},playing=True)
+        state=owner.controller.logical_tick_state
+        state._waiting_for_fresh_engine_frame=True
+        monkeypatch.setattr(tick_pipeline,'consume_engine_bars',lambda *_:(False,False))
+        seen=[]
+        monkeypatch.setattr(tick_pipeline,'_publish_logical_state',lambda *_,**kw:seen.append(kw.get('present_frame',True)))
+        tick_pipeline.logical_tick(state)
+        assert seen==[visible]
+    finally:owner.retire();runtime.close_runtime();factory.deleteLater();qt_app.processEvents()
 
 
 

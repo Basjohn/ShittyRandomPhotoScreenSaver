@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, List, Optional, Sequence
 import time
 import math
+from widgets.spotify_visualizer.raw_audio_scale import raw_at_reference_fft
 
 from PySide6.QtCore import QObject
 
@@ -568,6 +569,13 @@ class _SpotifyBeatEngine(QObject):
         self.cancel_pending_compute_tasks()
         self._audio_worker.set_spectrum_shaping_enabled(enabled)
         self._invalidate_analysis_compute_state()
+
+    def set_raw_musical_signals(self,enabled: bool) -> None:
+        """Fence the sole worker/bus when an active mode selects floor-independent musical input."""
+        enabled=bool(enabled)
+        if self._audio_worker._raw_musical_signals==enabled:return
+        self.cancel_pending_compute_tasks()
+        self._audio_worker.set_raw_musical_signals(enabled)
 
     def set_spectrum_shape_config(self, config) -> None:
         self._audio_worker.set_spectrum_shape_config(config)
@@ -1597,10 +1605,12 @@ class _SpotifyBeatEngine(QObject):
     def get_waveform_ribbon_body_bands(self) -> EnergyBands:
         """Waveform's fixed raw scale, independent of learned floors and other mode presets.
 
-        Initial anchors reuse the pooled four-recording reference, with FFT-length correction. This is
+        Own anchors come from pooled four-recording PCM, with FFT-length correction. This is
         shared analysis math, not EB simulation, presentation or a live dependency on EB configuration.
         """
-        return self._fixed_reference_body_bands((5.0,3.0,1.2),256,(1.0,.9,.6))
+        from widgets.spotify_visualizer.raw_audio_scale import (WAVEFORM_RAW_REFERENCES,
+            WAVEFORM_REFERENCE_FFT,WAVEFORM_BLOCK_EXPONENTS)
+        return self._fixed_reference_body_bands(WAVEFORM_RAW_REFERENCES,WAVEFORM_REFERENCE_FFT,WAVEFORM_BLOCK_EXPONENTS)
 
     def _fixed_reference_body_bands(self, references, reference_fft, block_exponents) -> EnergyBands:
         w = self._audio_worker
@@ -1616,9 +1626,7 @@ class _SpotifyBeatEngine(QObject):
             # longer block adds an offset rather than a factor: at 512 the same music
             # sat ~30% higher with less contrast and pinned the lanes again. Undo the
             # compression, rescale the magnitude to the reference block, re-compress.
-            if block_scale == 1.0 or raw_value <= 0.0:
-                return raw_value
-            return math.log1p(math.expm1(raw_value ** (1.0 / 1.2)) * block_scale ** exponent) ** 1.2
+            return raw_at_reference_fft(raw_value,block_scale,exponent)
 
         def _lane(raw_value: float, reference: float) -> float:
             # Linear below 0.8, then an exponential approach to 1 that never

@@ -117,6 +117,9 @@ class _Engine:
     def reconfigure_bar_count(self, *args, **kwargs):
         pass
 
+    def set_raw_musical_signals(self, enabled: bool) -> None:
+        self.raw_musical_signals = bool(enabled)
+
     def set_spectrum_shaping_enabled(self, *args, **kwargs):
         pass
 

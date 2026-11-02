@@ -37,6 +37,7 @@ _COMPUTE_SNAPSHOT_ATTRS = (
     "_np",
     "_bar_count",
     "_spectrum_shaping_enabled",
+    "_raw_musical_signals",
     "_band_cache_key",
     "_band_log_idx",
     "_band_bins",
@@ -185,6 +186,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         # Spectrum-shaper owners enter the authored bar interpolation tail.
         # Non-shaper modes still share one FFT/energy/transient analysis lane.
         self._spectrum_shaping_enabled = False
+        self._raw_musical_signals = False
         self._buffer = buffer if buffer is not None else TripleBuffer[_AudioFrame]()
         self._running: bool = False
         self._backend = None  # AudioCaptureBackend instance
@@ -457,6 +459,21 @@ class SpotifyVisualizerAudioWorker(QObject):
     def set_spectrum_shaping_enabled(self, enabled: bool) -> None:
         """Enable the Spectrum-family bar shaper for a shape-owning visualizer."""
         self._spectrum_shaping_enabled = bool(enabled)
+
+    def set_raw_musical_signals(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if self._raw_musical_signals == enabled:
+            return
+        # The two policies use distinct numerical domains. Replace the bus;
+        # adopting its musical context would import the previous mode's scale.
+        from widgets.spotify_visualizer.transient_bus import TransientBus
+        self._raw_musical_signals = enabled
+        self._transient_bus = TransientBus()
+        self._transient_bass = self._transient_mid = self._transient_high = 0.0
+        self._onset_detected = False
+        self._onset_type = ""
+        self._onset_strength = 0.0
+        self._onset_events = ()
 
     def set_spectrum_shape_config(self, config) -> None:
         """Push one fully-resolved SpectrumShapeConfig to the DSP pipeline."""

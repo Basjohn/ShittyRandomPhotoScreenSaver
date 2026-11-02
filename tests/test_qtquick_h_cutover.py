@@ -105,6 +105,9 @@ class _ManagerVisualizerEngine:
             float(transient_clamp),
         )
 
+    def set_raw_musical_signals(self, enabled: bool) -> None:
+        self.raw_musical_signals = bool(enabled)
+
     def set_spectrum_shaping_enabled(self, enabled: bool) -> None:
         self.spectrum_shaping_enabled = bool(enabled)
 

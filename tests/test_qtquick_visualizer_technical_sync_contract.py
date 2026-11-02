@@ -59,6 +59,9 @@ class _TechnicalEngine:
         self.input_gains: list[float] = []
         self.spectrum_shaping_calls: list[bool] = []
 
+    def set_raw_musical_signals(self, enabled: bool) -> None:
+        self.raw_musical_signals = bool(enabled)
+
     def set_spectrum_shaping_enabled(self, enabled: bool) -> None:
         self.spectrum_shaping_calls.append(bool(enabled))
 
@@ -265,6 +268,9 @@ _ACT_ID = 7
 class _CaptureEngine:
     def __init__(self) -> None:
         self.spectrum_shaping_calls: list[bool] = []
+
+    def set_raw_musical_signals(self, enabled: bool) -> None:
+        self.raw_musical_signals = bool(enabled)
 
     def set_spectrum_shaping_enabled(self, enabled: bool) -> None:
         self.spectrum_shaping_calls.append(bool(enabled))
