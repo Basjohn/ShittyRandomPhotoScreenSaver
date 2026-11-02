@@ -140,6 +140,12 @@ Work first on body/audio/accents, then grounded camera/viewport and replacement 
 `Docs/Reference/Waveform_Ribbon_Migration_Plan.md`; motion targets and recorded bake-off in
 `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` section 5.1. Keep C-primary elastic response and A's accumulated twisting.
 
+**Operator-selected recovery baseline (3 Nov):**
+`Docs/Reference/Images/Waveform_Ribbon_Material_Baseline_20261103.png` and its `.capture.json` preserve the exact
+chosen image/settings/source. Use this material direction; do not darken the background or lower the floor's colour
+level. Floor brightness is provisionally approved, not the entire floor/atmosphere. Remaining lumps and reactive
+detail still need improvement. Baseline settings are applied to Preset 3; retain this reference before further work.
+
 - [~] **Four-ribbon maximum and Preset 3 — Awaiting Validation:** the candidate now admits FOUR cards across
   authoring/runtime/clearance/accent/range paths, preserving Presets 1/2's three active identities. Validate Preset 3 against
   `references/Preset3Goal1.png` and `references/Preset3ReactivityGoalExample.png`: teal/orange contrast, readable

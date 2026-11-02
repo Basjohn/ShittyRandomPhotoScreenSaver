@@ -54,8 +54,8 @@
           2.0
         ],
         "waveform_ribbon_floor_reflection": [
-          0.85,
-          0.85
+          0.65,
+          0.65
         ],
         "waveform_ribbon_floor_tint": [
           255,
@@ -94,12 +94,12 @@
         ],
         "waveform_ribbon_manual_floor": 0.12,
         "waveform_ribbon_material_body_alpha": [
-          0.08,
-          0.24
+          0.025,
+          0.06
         ],
         "waveform_ribbon_material_body_tint": [
-          0.85,
-          0.85
+          0.4,
+          0.4
         ],
         "waveform_ribbon_material_cross_curve": [
           0.2,
@@ -768,12 +768,12 @@
           0.15
         ],
         "waveform_ribbon_spark_size": [
-          2.0,
-          4.5
+          1.2,
+          2.2
         ],
         "waveform_ribbon_spark_glow": [
-          1.0,
-          1.8
+          0.5,
+          1.1
         ],
         "waveform_ribbon_spark_span": [
           28.0,
@@ -903,8 +903,8 @@
           1.25
         ],
         "waveform_ribbon_fog_light": [
-          2.0,
-          8.0
+          0.35,
+          1.2
         ],
         "waveform_ribbon_fog_variation": [
           0.15,
