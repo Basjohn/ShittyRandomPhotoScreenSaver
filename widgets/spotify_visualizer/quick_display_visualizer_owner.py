@@ -472,7 +472,7 @@ class QuickDisplayVisualizerOwner:
 
         controller.playing = active
         engine = controller.ensure_engine()
-        if active and not previous:
+        if active and not previous and self._started:
             wake = getattr(engine, "wake", None)
             if callable(wake):
                 # Historical pause->play contract: wake the sole shared capture
@@ -1446,6 +1446,11 @@ class QuickDisplayVisualizerOwner:
                 acquire()
                 self._engine_acquired = True
             self.set_playing(controller.playing)
+            if controller.playing:
+                # Media may have committed True before start acquired the source and bound ThreadManager.
+                # Same-state playback does not create a BeatEngine edge, so cold admission is explicit here.
+                ensure_started=getattr(engine,'ensure_started',None)
+                if callable(ensure_started):ensure_started()
             # Arm the authored scene fade before the logical producer can publish
             # the first frame. Mailbox empty->populated publication wakes Qt's GUI
             # thread directly; there is no display-refresh polling pacer here.

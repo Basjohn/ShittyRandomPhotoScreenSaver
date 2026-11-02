@@ -185,6 +185,62 @@ def test_edge_constructs_configures_binds_starts_and_retires(qt_app, monkeypatch
         qt_app.processEvents()
 
 
+@pytest.mark.qt
+def test_prestart_playback_observation_defers_capture_until_acquired_and_bound(qt_app,monkeypatch):
+    _quiet_tick(monkeypatch)
+    runtime,factory=_make_runtime(qt_app,54)
+    class Engine(_Engine):
+        manager=None;admissions=0;wake_count=0
+        def set_thread_manager(self,manager):self.manager=manager
+        def ensure_started(self):
+            assert self.manager is manager and self.acquire_count>0
+            self.admissions+=1
+        def wake(self):self.wake_count+=1;self.ensure_started()
+    manager=object();engine=Engine()
+    owner=_make_owner(runtime,bar_count=32,initial_mode='bubble',engine_factory=lambda _:engine)
+    try:
+        owner.configure(logical_kwargs=_BUBBLE_CONFIG,playing=False,thread_manager=manager)
+        owner.bind(engine_generation=0,activation_id=0)
+        owner.set_playing(True)
+        assert engine.wake_count==0 and engine.admissions==0
+        owner.start()
+        assert engine.admissions==1 and engine.acquire_count==1
+        owner.set_playing(True)
+        assert engine.admissions==1
+        owner.set_playing(False);owner.set_playing(True)
+        assert engine.wake_count==1 and engine.admissions==2
+    finally:
+        owner.retire();runtime.close_runtime();factory.deleteLater();qt_app.processEvents()
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize('fail',(False,True))
+def test_cold_source_paused_start_and_failed_admission_release_correctly(qt_app,monkeypatch,fail):
+    _quiet_tick(monkeypatch);runtime,factory=_make_runtime(qt_app,55)
+    class Engine(_Engine):
+        admissions=0
+        def set_thread_manager(self,manager):self.manager=manager
+        def ensure_started(self):
+            self.admissions+=1
+            raise RuntimeError('capture admission failed')
+    engine=Engine();owner=_make_owner(runtime,bar_count=32,initial_mode='bubble',engine_factory=lambda _:engine)
+    try:
+        owner.configure(logical_kwargs=_BUBBLE_CONFIG,playing=False,thread_manager=object())
+        owner.bind(engine_generation=0,activation_id=0)
+        owner.set_playing(True)
+        if not fail:owner.set_playing(False)
+        if fail:
+            with pytest.raises(RuntimeError,match='capture admission failed'):owner.start()
+            assert not owner._started and not owner._engine_acquired
+            assert owner.controller.logical_runtime is None and engine.release_count==1
+        else:
+            owner.start()
+            assert engine.admissions==0 and engine.acquire_count==1
+    finally:
+        owner.retire();runtime.close_runtime();factory.deleteLater();qt_app.processEvents()
+    assert engine.release_count==1
+
+
 
 
 @pytest.mark.qt

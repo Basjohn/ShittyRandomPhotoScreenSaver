@@ -2,6 +2,13 @@
 
 Current visualizer behavior and accepted presentation architecture.
 
+Cold Quick-owner source admission follows **bind ThreadManager/generation → acquire → commit playback → explicitly
+ensure capture when playing → start the logical producer**. Media may report playing before `start()`; that cold
+observation records playback truth without calling `wake()` against an unbound source. Repeating the same True
+playback state after acquisition is not an audio edge, so it cannot substitute for explicit startup admission.
+Post-start pause→play preserves the normal wake/freshness contract. Failed admission releases the acquired source
+and leaves no logical producer; a paused start acquires ownership without starting capture.
+
 ## 1. Modes
 
 Visualizer uses its own logical production and viewport/scale geometry; ordinary-widget retained-child Edit normalization does
