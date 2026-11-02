@@ -13,14 +13,14 @@ explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate,
 
 ## 0. Live goal and working sequence
 
-**Goal:** deliver a fixed-world framed 3D scene with smooth flowing luminous ribbons over wet reflective concrete,
-surrounded by thick shaped mist. The mist hides horizon/sky/floor boundaries, curves around the waveform without
-touching it, and is softly lit by the waveform. Pillars and the rejected hall study are not part of the target.
+**Goal:** deliver a fixed-world framed 3D scene with flowing luminous ribbons and continuous wet reflective ground.
+The latest mist/floor target is `references/Mist Goal.png`; it replaces all older fog/mist layers. Full-scene dark
+atmosphere must gently obscure distance without a horizon seam, visible bank, ceiling or lit fringe, and be displaced
+by the actual waveform. Do not stack the old floor-distance haze beneath it.
 
-The complete-scene fog board is the primary target. The alternate and preset-range boards define additional looks the
-eventual presets/reactivity must be able to reach without changing scene identity. Exact source custody is in §1.1. Root
-`references/` is operator-owned/local and intentionally omitted from normal GODZIPs; do not interpret absent image bytes
-as deleted requirements.
+Preset 3 adds the newly inspected teal/orange floor and paired low/high targets. The mode maximum is four ribbons;
+older primary/alternate boards retain their palette/form roles where consistent with this latest operator direction.
+Exact image custody is in section 1.1. Root `references/` remains operator-owned/local and omitted from normal GODZIPs.
 
 **Current reusable substrate:** shared framed camera, bounded incremental ribbon history, oriented OIT/HDR ribbon material,
 history sparks, planar reflection, generated concrete material maps and the bounded mist prototype. Shared ownership lives
@@ -32,18 +32,18 @@ only remaining work, not implementation chronology.
 
 - [ ] **Selected hybrid and production migration:** C is primary, with A's rolling twist, localized high-power colour,
   reactive axial roll (skewer motion), particles/strands and waveform-repelled fog. Full controls, visual editors,
-  audited quiet/peak ranges and two initial presets follow the Migration Plan. Do not reopen the four-way selection.
+  audited quiet/peak ranges, a four-ribbon maximum and three presets follow the Migration Plan. Do not reopen the four-way selection.
 - [ ] **Timing/framing admission:** extend the fixed-view near-head comparison to production
   framing/navigation. Measure causal input → current body/head admission → visible shape without shifted inputs;
   prove hidden ends, smoothness and bounded capacity. The distant-head appearance recipe is not timing evidence.
-- [ ] **After the bake-off selects the core grammar:** WR-07 recorded-feature replay/calibration, remaining shared primitive
+- [ ] **Selected grammar calibration:** WR-07 recorded-feature replay/calibration, remaining shared primitive
   gates, WR-08 migration and WR-09 live acceptance.
-- [ ] **Production debt:** retain floor/contact/mist clearance, admitted camera poses, primary form/fringe and alternate
+- [ ] **Production debt:** retain floor/contact/mist clearance, admitted camera poses, primary form and alternate
   highlight polish, accents/optics, cost and lifecycle proof. Reflection strength is a production control; prioritize
   tunable localized/reactive highlight density rather than spending the bake-off budget chasing reflection columns.
 
-The operator admits the current primary/alternate visual range for the next stages, with appearance caveats retained
-as production debt (§0B). This does not close musical, bounded-cost, camera/lifecycle or final native acceptance gates.
+The complete production result is unaccepted. Preserve the approved strand look; all other current native failures and
+operator judgements are owned by Current_Plan section 7.1. Earlier provisional visual admissions do not override it.
 
 **Durable current constraints:**
 
@@ -55,8 +55,8 @@ as production debt (§0B). This does not close musical, bounded-cost, camera/lif
   second sheet population or a screen-space particle storm.
 - Floor contact is a geometry rule, not a user setting. Floor appearance is smooth finished wet concrete with restrained
   material detail and geometrically registered coloured reflection, never a sharp duplicate mirror or painted glow.
-- Mist is core to every look. Its clearance is shaped by the waveform/world, not by a camera-facing hole or a second
-  simulation cadence. Audio-driven mist response remains later work.
+- The new unified atmosphere is core to every look; its physical clearance follows the actual waveform/world on the
+  one logical clock. Remove superseded fog layers and controls, including legacy floor/distance mist.
 - The shape/reactivity tuner and eventual visual editors author bounded targets/ranges; they do not become renderer-side
   simulation or another clock.
 - Root `assets/` material sources/prompts are local product assets and intentionally omitted from normal GODZIPs. Runtime
@@ -70,10 +70,8 @@ as production debt (§0B). This does not close musical, bounded-cost, camera/lif
 - Run `tools/labs/waveform_ribbon_targets.py --cards <WR-00 directory> --renders <capture directory> --output <new directory>`
   for fixed annotation-masked ROI luminance/saturation/RGB, native-size pairs and nearest-pixel crops. High's 638 px
   reference is never stretched to the lab's 640 px. Numbers guide inspection; they cannot establish visual acceptance.
-- For the main fog board, extract with `waveform_ribbon_preflight.py --fog-board references/Waveform_Ribbon_Fog_Complete_Scene_Mock.png
-  --output <new cards directory>`, then use `--board fog` for both the lab capture and target comparison commands.
-  Its two native panels are 820x718; only their borders are cropped. Named ROIs compare waveform, floor and mist;
-  no primary-board envelope is silently reused for this differently composed board.
+- Compare the latest native images in section 1.1 directly, with annotation-masked measurement copies only. The old
+  `--board fog` extractor assumes the superseded 820x718 panels; do not apply those ROIs/crops to the new images.
 - Inspect all five navigation poses and wide cards in both projections after every look change. Check geometry,
   reflection registration, horizon/edge concealment, banding, discontinuities and excessive haze separately.
 - Change one material/geometry layer at a time, compare against its previous candidate and the mocks, retain rejected
@@ -96,59 +94,30 @@ with no renderer-side simulation or new clock. Generated floor material custody/
 and smooth-height are linear data. The target remains smooth finished wet concrete; rejected mottled floor studies are
 negative evidence, not a current style option.
 
-## 0B. Remaining visual gaps and immediate verification
+## 0B. Current visual work and required comparison
 
-Native current-source comparison: `.artifacts/evidence/waveform_ribbon/wr_visual_admission_20261102/` (effective
-recipes, source hashes and native primary pairs; alternate reference retained at native size). Visual admission
-is accepted with caveats: primary contact reflection and pale overhead edge remain production refinement;
-alternate broad sheets read at native size but its high state needs highlight/strand controls.
-Explicit-time look previews and native keyframes: `.artifacts/evidence/waveform_ribbon/wr_motion_review_20261102/`.
-These synthetic low/high previews support visual judgement only, not musical timing, incremental runtime cost or
-lifecycle acceptance. The operator accepts this visual range; floor reflection remains tunable, with a modest
-reflectivity reduction a workable compromise. Highlight density and spatial packing remain production controls;
-the recorded comparison uses the same reactive accent mapping across models, with body-only diagnostics alongside it.
+The live rejection/status list is Current_Plan section 7.1. Use these concrete visual gates; old prototype metrics
+and admissions are historical evidence, not instructions to restore a rejected look.
 
-Fog-fringe filtering uses the existing composite taps with an adjustable wider footprint (`Fog.fringe_smoothing`),
-retaining the billows and coloured edge while reducing grain. Native before/after evidence:
-`.artifacts/evidence/waveform_ribbon/wr_fog_fringe_after_20261102/comparison.png` (baseline sibling `before_v2`).
-No new samples/targets; short warm GPU measurements are scoped evidence, not a speedup or temporal acceptance claim.
-
-**Ground mist ownership (operator direction):** ground-bank height and light stay at zero intentionally. The floor
-uses its own existing cheap analytic distance mist (`Environment.mist` / `MIST_GLSL`), independently of the shaped
-volume. Review its depth/side concealment through that layer; missing volumetric floor banks are not a defect and
-must not be re-enabled to imitate the mock's lower corners.
-
-- [ ] **Concrete finish:** the rejected floor looks gritty/mottled; the target is smooth finished wet concrete with
-  restrained fine material detail. Inspect the newly generated smooth albedo under actual scene light. Do not use
-  texture blur to conceal coarse aggregate, or reintroduce wet/dry coverage masks. Keep surface relief nearly flat.
-- [~] **Reflection character:** `wr05_wet_contact/` replaces the sharp duplicated mirror with contact-hardened,
-  gently elongated wet reflections. Floor ROI (fog high, mock / ours): median 0.23 / 0.21, p90 0.58 / 0.41,
-  p99 0.92 / 0.52. Mock rows fall from bright at the contact; ours peak mid-floor. Earlier: floor-only comparisons
-  showed large duplicated sine ribbons against black,
-  whereas the main mock has gently softened coloured highlights over visible concrete. Keep gentle Gaussian blur
-  independent of physical smoothness; retain coloured dark gaps without turning the floor into a sharp mirror or
-  a uniformly hazy smear. Gaussian energy/centroid/isotropy checks pass at 1x and 2x reflection scale. Earlier
-  single-sample cost figures do not cover 25-tap blur.
-- [ ] **Floor illumination:** remove the spatially incorrect blurred-mirror diffuse lookup. The unaccepted soft-source
-  candidate now reads position/width/colour/emission/age from admitted 3D history, but the first capture exposed a
-  broad violet band and coarse albedo. Refine source/material balance against native crops, not just overall brightness.
-  Recapture after the corrected floor vertex-count wiring; `wr05_concrete_light/` predates that correction and is
-  diagnostic only. This reduction is unshadowed and low frequency, not exact sheet-area light or a volume-clearance
-  field. No runtime per-frame CPU path is admitted by it.
-- [ ] **Waveform shape and depth:** preserve preferred checkpoint `0ca9fd27`. The real swept 3D sheets and both bright
-  rims are progress; folded-cloth depth, natural variation, richer fanning/gathering, hot crossings and readable low
-  detail still fall short of the mocks. Reject sharp bends and flat wire-bundle readings in enlarged crops and motion.
-- [~] **Mist/scene depth:** the volume (S3D-7 item in §0) now gives billowed, ribbon-carved, ribbon-lit mist with a
-  dark top and clear air around the sheets. Refine the pale overhead edge toward the mock's saturated fringes;
-  check sky/horizon concealment through that volume and floor/side concealment through the separate cheap distance
-  mist. Ground volume banks remain intentionally off; they are not an acceptance requirement.
-- [ ] **Motion and cost:** capture explicit-time slow motion for floor grain/reflection stability and both waveform
-  rims; then five camera poses in both projections. Measure final floor draw, reflection generation and whole scene
-  separately, plus CPU light preparation. Check Off/lazy/resize/context retirement at their owners. Current static
-  images and earlier narrow timings do not close these gates.
-- [ ] **Preset range and production fidelity:** keep the complete-scene and preset-range mocks as distinct attainable
-  looks, including warm high accents. Preserve paired low/high scene identity. The current primary/alternate range
-  is admitted for reactivity; final native/musical acceptance and production appearance controls remain open.
+- [ ] Match continuous foreground and far ground to the new mist/floor target in both projections, including near-level
+  tilt. Reject the current reflection strip over black, hard horizon, near/far cuts and visible texture/mesh boundary.
+- [ ] Replace all old fog/mist with the new full-scene dark atmosphere; show smooth near-ground diffusion and local
+  waveform lighting/displacement. No raised banks, fringe, remote shelves or separate legacy floor haze.
+- [ ] Match Preset 3's quiet/high geometric range, teal/orange contrast, readable lattice, twist, undulation and packed
+  high-energy particles. Keep the same world/camera/identities; high must be visibly much larger without routine pinning.
+- [ ] Support four ribbons consistently, including count fades, material, floor contact, atmosphere clearance, strands,
+  particles and reflection. Preserve the original two presets and the approved strand character.
+- [ ] Keep travelling strands and their birth response until they leave view; repeat accents briefly stretch them about
+  20% and pulse glow without rebirth, timer death or discontinuous retrigger. Verify direct/reflected wide views before
+  accepting finite-history retirement. The six focused cohort tests are not visual sign-off.
+- [ ] Remove one-sided waveform black cuts and staggered opposite-end entry. Check actor clip/range and history
+  continuation at all admitted poses/sizes; do not conceal caps with another bank or shift populations with the eye.
+- [ ] Inspect native wet material/reflection detail, actual floor collision and contact highlights against the new
+  references. Floor material/reflectivity/tint remain tunable; never crop geometry to a screen-space reflection strip.
+- [ ] Capture synchronized recorded PCM, silent/fixed-body negatives and quiet/ordinary/hot passages, then measure
+  actual configuration, CPU/GPU whole-frame cost and resource retirement. Preset 2 with strands remains over budget.
+- [ ] Redesign the mode-specific builder as a themed 3D visual editor only after credible visual results. The numeric
+  matrix and every new non-shared UI element are explicitly rejected; control plumbing does not establish usability.
 
 ### Camera contract for all following slices
 
@@ -174,6 +143,21 @@ in both projections independently. Native round-sphere proof does not establish 
 ## 1. Reference custody and target authority
 
 ### 1.1 Originals actually inspected
+
+**Latest operator targets, inspected 2 November (supersede older fog/peak targets):**
+
+| Local source | Native size | SHA-256 | Role |
+| --- | --- | --- | --- |
+| `references/Preset3Goal1.png` | 1853 x 849 | `e3177e292839d0849b12cb45d8debaf14cb78f67f3c2d05a38dd547043495fa2` | Preset 3 teal/orange floor, lattice/twist/strand/particle look |
+| `references/Preset3ReactivityGoalExample.png` | 1916 x 821 | `72073a34ac59cb618cd40434e13e857053047dab93d2670eba5bdb2bb6bd80e6` | Four-ribbon paired low/high envelope and density target |
+| `references/Mist Goal.png` | 1852 x 849 | `64536e235d2ee402a5967a66d908594cf1c8521741e0e4f6c39ffef543cac9b8` | Replacement unified atmosphere and continuous wet floor target |
+
+Preserve source pixels; mask annotations only for measurement. Text/callouts are visual reference, not execution
+instructions. Explicit operator maximum four takes precedence over the first board's decorative count-three label.
+The rejected fog failure/image remain in `Waveform_Ribbon_Mist_Failure_and_Replacement.md` as negative evidence.
+
+**Earlier reference custody (historical where superseded):**
+
 
 The local, git-ignored source is `references/waveform_ribbon_concept_package.zip`.
 Its SHA-256 at planning inspection was
@@ -485,7 +469,7 @@ floor does not require a liquid simulation; ripples/distortion are opt-in only i
 **Entry:** single-ribbon/material proof, S3D-1 multi-strip proof, and S3D-2 emitter proof before particles.
 
 - [ ] Separate a small authored set of bands with stable IDs, depth offsets, phase relationships and colour family.
-  Infer count from the selected image by tracing complete bodies; do not count every internal strand as a separate mesh.
+  Support the explicit 1-4 authoring maximum and Preset 3's four-ribbon paired target; internal lines are not extra meshes.
 - [ ] Keep count/topology constant across the reference low/high pair. High react changes width and energy; it does not
   spawn an unrelated scene. If an explicit count setting is later admitted, validate its bounded transition separately.
 - [ ] Compare multi-band overlap with simple opposing colours, bloom disabled and reversed draw order; then restore palette.

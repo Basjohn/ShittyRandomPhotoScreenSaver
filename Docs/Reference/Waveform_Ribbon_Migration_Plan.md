@@ -3,7 +3,7 @@
 Planning owner for **WR-08**, subordinate to [`Current_Plan.md`](../../Current_Plan.md) §7.1 and the lab plan's
 WR-08 gates ([`Waveform_Ribbon_Lab_Plan.md`](Waveform_Ribbon_Lab_Plan.md)). The lab owns the look; this document
 owns the full production control design, production calibration and the order of the port. A registered production
-candidate now connects canonical Settings, two authored presets, visual editors, the sole logical runtime and the
+candidate now connects canonical Settings, the original two authored presets, candidate visual editors, the sole logical runtime and the
 retained scene. A finite user-triggered quiet/middle/peak preview renders that same production body/scene without
 a second clock or audio engine. Complete endpoint/framing audits and loaded live admission remain open in
 `Current_Plan.md`; existence of the candidate is not acceptance. Core geometry/motion evidence and timing belong to
@@ -31,12 +31,25 @@ this scene), not rotation around another point. Its centre stays in place.
 All floor/reflection/accent/mist-clearance consumers use the same transformed geometry. Bend, torsion, stretch, twist,
 rotation magnitude/speed and visual accents remain customizable. Visual editors and quiet→peak range sliders expose
 their actual consumers, with audits of both handles. Smooth fog-fringe grain before the port; floor reflectivity,
-colour tint and brightness become settings rather than blocking visual polish. Start with exactly two authored
-presets from the primary and alternate examples; preserve all shared framed-3D features and technical/preset systems.
+colour tint and brightness become settings rather than blocking visual polish. Retain the original primary/alternate presets and add Preset 3 from the new November 2 references; preserve all shared framed-3D features and technical/preset systems.
 
 The single live operator-rejection checklist is `Current_Plan.md` section 7.1. It covers missing punch/shape response,
 weak particles, strand flicker, highlights/colour, idle/first-play blackout, floor/viewport, grounded near-flat navigation,
 rejected mist and deferred rejected UX. Working inputs or range tests do not constitute visual acceptance.
+
+## Latest target authority (2 November)
+
+The operator's maximum is **four ribbons**, including complete runtime/clearance/accent support. Add **Preset 3**
+using `references/Preset3Goal1.png` and `references/Preset3ReactivityGoalExample.png`; section 1.1 of the Lab Plan
+owns native dimensions and hashes. Its teal/orange lattice, flowing twists, strands/particles, continuous wet ground
+and clearly separated quiet/high geometric range are visual targets, not permission to optimize one still. The second
+board's four-ribbon low/high comparison and explicit user maximum override the first image's count label.
+
+`references/Mist Goal.png` is the new atmosphere/floor target: dark full-scene night fog, gentle near-ground diffusion,
+local waveform light, wet foreground extending into softly obscured distance, no horizon seam, raised banks or fringe.
+It replaces ALL older mist/fog mechanisms, including the separate legacy floor/distance mist. Migrate to one coherent
+world atmosphere; do not retain the rejected layers underneath or as fallbacks. The earlier ground-bank-zero instruction
+must not be read as permission to re-enable those banks; the new atmosphere alone supplies the target's soft ground haze.
 
 ## Production signal ownership and calibration
 
@@ -98,12 +111,13 @@ The lab's named recipes become the first presets, each one scene across quiet an
 
 | Preset | Lab recipe | Look |
 |---|---|---|
-| 1 — Complete Scene | `complete` | Main fog board: three sheets, cyan → blue-violet → magenta world grade, mist shaped and lit by the waveform, wet columns |
-| 2 — Silk Bands | `alternate` | Alternate board: three per-band ribbons coloured by ribbon (quiet blue/teal/lavender, loud magenta/orange/blue-violet), luminous silk, free strands |
+| 1 — Complete Scene | `complete` | Preserve cyan → blue-violet → magenta world grade and primary sheet identity; replace the rejected fog with the new unified atmosphere |
+| 2 — Silk Bands | `alternate` | Preserve per-band ribbon colours (quiet blue/teal/lavender, loud magenta/orange/blue-violet), luminous silk and approved free strands |
+| 3 — new operator target | new November 2 boards | Four ribbons; teal/orange lattice and twisting sweeps; high crests roughly twice quiet height, strongly richer geometric/particle response, continuous textured wet floor |
 
 Names are suggestions for the operator to rename.
 
-The shared preset store uses zero-based indices: displayed Preset 1/2 resolve stored 0/1. The native capture route is
+The shared preset store uses zero-based indices: displayed Preset 1/2/3 resolve stored 0/1/2. The native capture route is
 `tools/waveform_ribbon_capture.py --clip <recording.jsonl> --preset 1 --start 20 --duration 4 --fps 24
 --output <new-directory> [--ffmpeg <explicit-executable>]`. It reanalyses original recorded PCM through the production
 worker and captures the real logical/frame/retained-render path; audio is not shifted to conceal response latency.
@@ -144,8 +158,9 @@ as `[low, high]`. The meaning is strict:
 The Shape Tuner's per-target quiet/loud values are these same ranges, edited on the tuner and shown in the bucket.
 
 ### Ribbons
-- **Ribbon Count:** 1-3. The cap follows the mist's per-sheet clearance rows (`ENVELOPE_RIBBONS`, 3 in the lab)
-  and the packet's `MAX_RIBBONS` (8); raising it past 3 needs more envelope rows and a cost check first.
+- **Ribbon Count:** 1-4 (operator maximum). Migrate the current three-card/runtime/clearance assumption consistently;
+  prove all four reach geometry, light, collisions, accents and reflection within the loaded cost budget. The generic
+  ribbon packet allows eight; that is not this mode's authoring maximum.
 - **Per ribbon (Ribbon Cards, New):** one card per ribbon with a live thumbnail of that ribbon.
   - band it follows (Bass, Mids, Highs, All);
   - character: height share, width share, wave rate share, phase offset, light share;
@@ -215,9 +230,9 @@ rotation. Source routing/curves and quiet→peak ranges must reach these realize
   accepted baseline. The desired replacement is full-scene night fog displaced by the actual moving waveform, with
   reactive wake and light. Failure evidence, options and open validation are in
   [Waveform Ribbon: mist failure and replacement](Waveform_Ribbon_Mist_Failure_and_Replacement.md).
-- Mist Off must retire its passes and resources. The existing cheap floor distance mist (`Environment.mist` /
-  `MIST_GLSL`) is separate; ground-volume bank height/light remain intentionally zero. Replacement controls and
-  previews follow the selected design and native visual judgment; the old fringe controls do not define it.
+- Latest authority is `references/Mist Goal.png`; all previous fog/mist layers are superseded, including the old
+  separate analytic floor/distance mist. Replacement controls and previews follow one unified atmosphere. Mist Off
+  retires that atmosphere's passes/resources; old fringe/side-wall controls must be migrated away, not retained as debris.
 
 ### Floor
 - **Reflection Intensity (R)** (operator, 1 November): how strongly the floor mirrors the scene, quiet → peak.
@@ -357,65 +372,40 @@ Taken from the guide (§3, §5, §7, §8, §12, §13A-C) and the lab plan's WR-0
 - **Acceptance:** `tools/visualizer_live_check.py` with recorded music and `--load game60` (invisible saver), plus
   installed eyes-on review; automated correlation alone never closes it.
 
-## 5. Port order
+## 5. Current implementation and admission work
 
-The retained scene is `rendering/quick/scene3d/waveform.py:WaveformScene`; the lab supplies its diagnostic target,
-fixtures and explicit camera, while production supplies the existing Quick frame/context. Plain scene inputs live in
-`core/waveform_ribbon_scene.py`, primitive appearance values in `core/ribbon_style.py`, programs in
-`rendering/gl_programs/waveform_ribbon.py`. No production owner imports the lab. Extraction parity evidence:
-`.artifacts/evidence/waveform_ribbon/wr_scene_promotion_parity_v2_20261102/` (three native captures exactly match the
-post-fringe baseline). Logical hybrid, incremental/GPU deformation, settings and mode registration remain work below.
-Scene retirement validates its owning context before deletion, attempts independent owners after a failure and keeps
-failed handles for retry. Volume Mist Off retires its volumes/marches/programs and shape/envelope textures; analytic
-floor mist remains a separate scene input. Full production camera/quality/effect-toggle admission remains below.
+The retained scene is `rendering/quick/scene3d/waveform.py:WaveformScene`; production supplies the existing Quick
+frame/context, while the lab supplies explicit diagnostic time/camera. Plain scene inputs live in
+`core/waveform_ribbon_scene.py`, appearance values in `core/ribbon_style.py`. No production owner imports the lab.
+Retirement stays context-owned, attempts independent cleanup and retains failed handles for retry.
 
-1. Descriptor, logical runtime, ring/packet ownership, empty scene with the framed camera (Orthographic default) and
-   dormancy/Off paths.
-2. Ribbons with material and glow (complete-scene preset), then floor with reflection and contact.
-3. Mist (volume, march, shape bake, edge line, floor mist) with its Off path and quality tier.
-4. Sparks and free strands.
-5. Settings buckets and the existing editors; then the New editors (Gradient Node Editor, Ribbon Cards, Shape Tuner,
-   Glow Preview), each previewing the real renderer.
-6. Starting presets authored from the lab recipes; preset repair fill and completeness guard.
-7. Reactivity: verify WR-07 response parity and source reachability through production Settings/presets/audio,
-   then the live check with recorded music and game load. Reopen WR-07 if the port exposes a grammar defect.
-8. WR-09 acceptance: mock | lab | production sheets, all camera views, cost at 1080p/1440p/4K, operator review.
+- [ ] Complete foreground/far ground coverage and the new unified atmosphere against the latest mist/floor image.
+  Remove old fog banks, fringe, shape-wall rules, separate floor haze and their dead controls/resources on migration.
+- [ ] Migrate all three-ribbon assumptions to maximum four; author Preset 3 and compare both of its low/high states.
+- [ ] Increase actual peak excursion while preserving quiet contraction, smooth floor collision and unclipped musical
+  contrast. Verify actual body, local colour/glow, particles and persistent strand repeat pulses in recorded audio.
+- [ ] Verify hidden/infinite ends, true grounded navigation, near-flat floor visibility and reflection in both
+  projections across admitted sizes. Retire strand roots only outside visible direct/reflected coverage.
+- [ ] Meet loaded whole-frame cost and dormant/Off/resize/context bounds without weakening approved strand appearance.
+- [ ] After credible visuals, replace all rejected mode-specific builder elements with a themed direct 3D visual editor.
+- [ ] Complete final preset/settings Save/Cancel/Restore, both-handle reachability and operator native validation.
 
-## 6. Camera sweep findings (1 November)
+## 6. Historical camera work: evidence only
 
-Twelve views per look, both projections (`wr08_camera_sweep/`):
-- **Fixed: near clip.** Zoomed-out and low Orthographic views clipped the floor near the camera into a black band.
-  The near plane now sits behind the eye; the mock pose is unchanged.
-- **Fixed: clear corridor along the ribbons.** The clear room in front of the sheets ran unbounded along x, so end-on
-  and turned Perspective views saw the far floor, the horizon and black sky. The clear band and the sheets' 3D
-  clearance now close beyond |x| 8-13, and a billowed side wall of dark haze stands there at every depth, so the
-  ribbons run into the off-screen edge mist (`*_walls.png`). Mock pose: only a 4-pixel sliver at the right edge of
-  the quiet state moved.
-- **Accepted (operator rules):** the side wall's face is near-black distant haze. End-on views keep bright coloured
-  reflection columns: real light stacked along the line of sight, no longer clipped white.
-- **Rejected:** a soft luminance roll-off on the floor reflection barely changed end-on views and moved the mock pose
-  (mean 2.5/255 over 77k pixels). A clear room around the eye did nothing: the dark shape was the wall's face, not a
-  wall in front of the lens.
+The 1 November sweep (`wr08_camera_sweep/`) used a behind-eye Orthographic near plane and shaped side walls. Those
+wall/fog treatments are now rejected. A later positive actor clip interval exposed the foreground/far-floor gap at
+near-level tilt; the current fix must address the opaque world plane without reviving walls or concealing end caps.
+Earlier promotion/parity captures do not establish the latest atmosphere, floor or musical target.
 
-## 7. Gaps to design before or during the port
+## 7. Remaining technical gates
 
-- **Aspect and the side walls:** the walls sit at fixed world |x| 8-13, outside today's widest framing. Widening
-  reveals more fixed world (camera contract), so at ultra-wide aspects or zoomed-out Scene Scale the walls must
-  stay outside the view. Derive their position from the widest admitted framing, never per frame from the camera.
-- **History capacity at the widest aspect:** knots = (visible span + both margins) / flow speed × knot rate must fit
-  the 256-knot cap at the widest admitted aspect and lowest flow speed; Flow Speed's range follows from it.
-- **Ribbon count above 3:** needs more envelope rows (mist clearance per sheet) and a cost check.
-- **Warm-up:** many programs (ribbon passes, strays, sparks, floor and its pre-pass, mist volume, march, bake,
-  composite). Prewarm one per already-rendered frame, next-likely first; never in a burst (warm-up rule).
-- **Off paths:** Mist, Free Strands, Sparks, reflections and the mirrored passes each cost nothing when off (no
-  programs, targets or per-frame work).
-- **Cost by quality tier:** per-tier budgets at 1080p/1440p/4K for the whole frame; the mirrored strays and mirrored
-  march are the first cuts.
-- **Multiple displays:** one scene per display, each with its own volume and targets; check that memory and cost
-  scale acceptably with two 4K displays.
-- **Preset repair:** every control above is authored into every preset (repair fill and completeness guard); ranges
-  are filled as `[low, high]`, never as a single value.
-- **Editors share the real renderer:** the Shape Tuner, Gradient Node Editor, Ribbon Cards and Glow Preview preview
-  through the production renderer, not a second drawing path.
-- **Motion check:** explicit-time slow motion for mist anchoring, the screen-space edge line's fibres, floor streak
-  stability and strands, in both projections, before WR-09.
+- [ ] Prove history/continuation and persistent strand retirement across the widest admitted view and lowest flow speed.
+- [ ] Cover four physical ribbons in geometry, transformed clearance, accents, light, collision and reflection.
+- [ ] Prewarm one program per existing preparation opportunity; no shader burst on first playback or an enabled feature.
+- [ ] Prove replacement atmosphere, strands, sparks and reflection Off paths retire their own work/resources.
+- [ ] Measure whole-frame median/tails by quality tier at 1080p/1440p/4K and multiple displays, including actual
+  applied settings, recorded source, CPU preparation, GPU work and uploads. The current strand preset is over budget.
+- [ ] Keep all authored preset fields complete and mutable. Quiet/peak ranges remain pairs, never repurposed as random
+  spreads, and all new visual editing must drive the same production renderer.
+- [ ] Inspect slow motion for world anchoring, smooth density, floor detail/reflections and persistent strands. No
+  screen-space fringe fibre test survives as a requirement to retain the rejected effect.

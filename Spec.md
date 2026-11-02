@@ -786,13 +786,14 @@ history, with head-written moving colour, dense highlights and particles. A shar
 substitute for the planned flow, rolling twist, traveling packets, elastic torsion and waveform-envelope detail.
 The selected production grammar combines C's primary elastic body with A's twisting, localized high-power colour,
 particles/strands and independently reactive axial roll about the waveform's length (separate from camera orbit).
-The Migration Plan owns full visual editors/ranges, endpoint audits and the two initial primary/alternate presets.
+The Migration Plan owns full visual editors/ranges, endpoint audits, the original two presets and the new Preset 3/four-ribbon migration.
 Free strand admission/base look belongs to immutable logical root cohorts, not live renderer thresholds. Strands persist
 with their travelling roots; repeat accents briefly extend/glow existing strands without rebirth or timer expiry.
 The live checklist owns proof that history retirement stays outside visible direct/reflected coverage.
 `Docs/Reference/Waveform_Ribbon_Mist_Failure_and_Replacement.md` preserves the rejected mist image and owns its
 failure analysis and replacement proposals. The operator's current direction is full-scene night fog displaced by
-the actual waveform; smoothing the rejected banks/fringe does not satisfy that direction.
+the actual waveform. `references/Mist Goal.png` now supersedes all older fog/mist mechanisms, including separate
+floor/distance haze; smoothing or retaining the rejected layers does not satisfy that direction.
 The registered production candidate uses descriptor-owned capture/runtime/renderer and canonical spec-driven Settings.
 Configuration and published packets are detached immutable values. C springs respond per ribbon's selected band;
 A twist and axial speed integrate on the sole logical clock. Existing body geometry responds before new head history
