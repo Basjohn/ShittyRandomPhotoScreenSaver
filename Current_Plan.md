@@ -134,23 +134,33 @@ then closed the gap by measuring against both. Do the same for every new mode:
 ### 7.1 Waveform Ribbon (next)
 
 **Live rejection checklist - Awaiting native validation/operator judgement (2 Nov).** This is the single live
-list of reported failures, proposed corrections and required evidence. Tests establish mechanisms, not visual acceptance.
+list of reported failures, proposed corrections and required evidence (updated 3 Nov). Tests establish mechanisms, not visual acceptance.
 Work first on body/audio/accents, then grounded camera/viewport and replacement atmosphere. Binding references:
 `Docs/Guides/Visualizer_Reactivity_Authoring.md` sections 13A-13C; control/design ownership in
 `Docs/Reference/Waveform_Ribbon_Migration_Plan.md`; motion targets and recorded bake-off in
 `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` section 5.1. Keep C-primary elastic response and A's accumulated twisting.
 
-- [ ] **Four-ribbon maximum and Preset 3:** migrate the mode's authoring/runtime/clearance/accent/range paths from
-  the current three-card ceiling to a maximum of FOUR. Preserve Presets 1/2's identities. Build Preset 3 from
+- [~] **Four-ribbon maximum and Preset 3 — Awaiting Validation:** the candidate now admits FOUR cards across
+  authoring/runtime/clearance/accent/range paths, preserving Presets 1/2's three active identities. Validate Preset 3 against
   `references/Preset3Goal1.png` and `references/Preset3ReactivityGoalExample.png`: teal/orange contrast, readable
   lattice/twist/strands/particles, continuous wet textured floor, and the large quiet-to-peak geometric change shown.
   The explicit operator maximum overrides the first board's decorative count label; use four for Preset 3's paired
   target. Native low/high/recorded captures must reach that range without pinning or swapping scene/camera identity.
+  Four-card forward migration and a first Teal/Ember Preset 3 are implemented; preserve original three-card values
+  and count in old state. The recorded draft still needs visual correction: white/rope-like overlaps, repeated
+  continuation, weak/dark atmosphere and a poor floor/contact strip remain rejected. Do not equate source tests,
+  particle/root counts or larger amplitude with reference fidelity.
 - [ ] **Visible punch and musical shape response:** the operator still sees no convincing kick, force or musical
   shape change. Compare real quiet/ordinary/hot passages with synchronized audio and silent/fixed-body controls.
   Preserve raw fixed-scale passage headroom, immediate whole-body response and distinct typed elastic impulses;
-  accents must stand above routine onsets instead of becoming a constant offset (guide 13C). If still weak, measure
-  elastic excursion/latency and correct the actual response/envelope before tuning presets. Smooth motion and
+  accents must stand above routine onsets instead of becoming a constant offset (guide 13C). Measure elastic
+  excursion/latency and correct the response/envelope before tuning presets. Simplify before adding motion:
+  the latest waveform is explicitly rejected as too lumpy/bumpy, and excessive
+  twisting still does not read as musical. Prefer longer smooth sweeps and actual axial stretch, preserving punch.
+  The latest cropped example exposes small travelling dents: the hybrid producer wrote unsmoothed audio directly
+  into six-Hz carrier amplitude/twist despite the authored two-stage history-smoothing contract. Smooth only that
+  stored shape input; preserve immediate elastic impulses, moving colour/light and event-owned accents.
+  Smooth motion and
   nonzero inputs are insufficient. Operator requests roughly TWICE the actual peak height and deformation, including
   stretch/twist/undulation, while peaks remain harder to pin. Increase real excursion/headroom, not audio gain or
   constant baseline movement. Preserve flow and independently reactive axial roll; floor contact must collide smoothly,
@@ -160,12 +170,15 @@ Work first on body/audio/accents, then grounded camera/viewport and replacement 
   Candidate improvements are fixed-world emitter span and authored halos, with count/lifetime bounded at birth.
   Inspect native motion and fog-off subtraction; a cohort serial, byte count, halo test or isolated still cannot close
   this. Audit both handles of every particle range in actual quiet/peak consumers.
-- [~] **Strands: look approved; persistence/repeat behavior Awaiting Validation.** Operator finds them beautiful
-  and no longer flickering. Preserve that look. Strands keep their birth response and travel with the waveform;
-  reject timer death and pulse-driven replacement. A repeat would-be birth at an occupied root adds about 20%
-  temporary length and a glow pulse, fading back without resetting birth or snapping an in-flight pulse to zero.
-  Verify retained admission/look, rebases, held-source silence and natural travel out of view in direct/reflected
-  wide/expanded views. Finite history eviction must never remove a still-visible root; keep that bound explicit.
+- [~] **Strands: rare, 3-5 seconds TOTAL life.** Latest operator correction supersedes the proposed 30-second fade.
+  Preserve the approved non-flickering look, make appearances much rarer, and use most of a configurable 3-5 second
+  lifetime for a gentle tip-first fade. Reactivation restores them smoothly,
+  with glow and movement/growth (retain the approximate 20% repeat extension), without abrupt respawn or pulse reset.
+  Prove quiet/peak lifetime handles, tip/root fade ordering, slow decay, partial-fade reactivation and direct/reflected
+  appearance. Retain birth look during travel; finite history eviction must not cut off a visible unfinished fade.
+- [ ] **Latest explicit visual rejections:** colours remain off across the scene; particles remain lacking; mist is
+  nowhere near the target. The floor's dark-blue patch pattern is rejected. Remove artificial patch modulation,
+  retain a readable restrained neutral wet surface, and validate colour/atmosphere against the supplied references.
 - [ ] **Dense highlights, moving colour and rim glow:** playback still lacks rewarded high-energy density and glow.
   Verify local crest/high-power colour, bright tunable rim/glow and denser highlights against actual music, including
   quiet/loud differences. Consumer reachability does not establish visible strength. Keep both range handles effective.
@@ -184,6 +197,10 @@ Work first on body/audio/accents, then grounded camera/viewport and replacement 
   the new cut-to-black at one end and staggered entry at the opposite end; validate the camera-owned signed
   Orthographic raster fit against recorded wide/angled playback. The old positive reference-plane slab cut visible
   continuation before the card edge; Perspective and other modes retain their positive clip contract.
+  **Current visual route:** operator delegates the choice; use a restrained long-lens Perspective primary view,
+  calibrated with a farther physical eye and narrow lens together. Keep Orthographic optional. Preserve stable height,
+  bounded orbit and actual camera movement; no camera-dependent actor density or audio compensation. Judge colours,
+  restrained reactive twisting, floor material and full-scene mist together against the references before acceptance.
 - [ ] **Floor coverage, collision, reflection and viewport changes:** after the strand slice, draw ground all the
   way through the foreground and beyond the waveform into heavy dark mist that GENTLY thickens until no horizon
   line is visible. A strip of reflections over black is rejected. **Awaiting native visual validation:** the floor now
@@ -205,7 +222,7 @@ Work first on body/audio/accents, then grounded camera/viewport and replacement 
   distance/floor fog when migrating. One coherent atmosphere must serve scene/floor/actors/reflection; no stacked
   legacy layer or hidden fallback. Old Waveform banks/fringe, shape bake/detail march and analytic floor haze are
   removed from the candidate source and settings. Validate the new integrated world medium's look, signed/mirrored
-  optical paths and cost before enabling it in curated Presets 1/2. Keep true 3D clearance around steep bends and a
+  optical paths and cost across all three curated candidates, which now enable the replacement medium. Keep true 3D clearance around steep bends and a
   retained motion wake open: current cross-section clearance/local light and background drift do not prove those.
   Latest loaded candidate remains over budget (P2/game60: render median 22.59 ms, CPU others 93%); obtain a matched
   quiet-system fog OFF/ON comparison and reduce cost. Scoped source/optical/raster tests do not close that gate.
@@ -214,7 +231,7 @@ Work first on body/audio/accents, then grounded camera/viewport and replacement 
 - [ ] **Awaiting later UX redesign:** lower priority than a working visual. Deliver a themed 3D visual editor with
   direct visual controls; the numeric 0-1 matrix is not the requested experience. Keep shared accepted scaffolding.
   No plumbing test or working control schema establishes usability or visual-design acceptance.
-- [ ] **Live performance and truthful evidence:** run both presets under matched recorded PCM/game60 and admitted
+- [ ] **Live performance and truthful evidence:** run all three presets under matched recorded PCM/game60 and admitted
   camera extremes. Verify ACTUAL applied configuration, audible input and rendered features before interpreting
   timings. Profile logical preparation, birth admission, render stages and whole-frame tails; do not reduce artistic
   reaction strength to conceal cost. Preset 2 with persistent strands currently exceeds the render budget (~14 ms

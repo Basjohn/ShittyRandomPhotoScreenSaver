@@ -51,7 +51,7 @@ def test_forward_approaches_visibly_in_both_projections_and_reverse_has_no_bound
     set_framed_flight_rates(host,'waveform_ribbon',0.,0.,0.,1.,0.)
     approached={**values,**apply_view_orbit_motion(host,'waveform_ribbon',values,.5)}
     after,new_radius,new_lens=focused(approached)
-    assert new_radius==pytest.approx(radius-2.)
+    assert new_radius==pytest.approx(radius-8.)
     # A fixed world landmark grows through the admitted physical dolly/orthographic fit.
     def projected_x(pose):
         view,projection,_,_=physical_view(pose,1.5)
@@ -61,10 +61,10 @@ def test_forward_approaches_visibly_in_both_projections_and_reverse_has_no_bound
     assert approached[SPEC.key('camera_fov')]==values[SPEC.key('camera_fov')]
     if kind=='Orthographic':assert new_lens[0]<lens[0]
     at_boundary={**values,**apply_view_orbit_motion(host,'waveform_ribbon',values,10000.)}
-    assert focused(at_boundary)[1]==pytest.approx(8.5)
+    assert focused(at_boundary)[1]==pytest.approx(64.)
     set_framed_flight_rates(host,'waveform_ribbon',0.,0.,0.,-1.,10000.)
     reversed_={**values,**apply_view_orbit_motion(host,'waveform_ribbon',values,10000.1)}
-    assert focused(reversed_)[1]==pytest.approx(8.9)
+    assert focused(reversed_)[1]==pytest.approx(65.6)
 
 
 @pytest.mark.parametrize('yaw,pitch,strafe,travel',((0.,0.,1.,0.),(1.,1.,0.,1.),(-1.,-1.,0.,-1.)))
@@ -80,8 +80,8 @@ def test_held_orbit_pitch_and_approach_stay_grounded_and_persist_the_same_admitt
     offset=settle_framed_flight(host,10000.)
     stop_view_orbit_motion(host,10000.)
     persisted={key:getattr(host,'_'+key) for key in values}
-    # Existing Camera Position settings persist six decimals (60-unit X/Z normalization).
-    np.testing.assert_allclose(focused(persisted)[0],focused(frozen)[0],atol=4e-5)
+    # Existing Camera Position settings persist six decimals (120-unit X/Z normalization).
+    np.testing.assert_allclose(focused(persisted)[0],focused(frozen)[0],atol=8e-5)
     assert tuple(offset)==pytest.approx(persisted[SPEC.key('camera_position')])
     if strafe:assert abs(persisted[SPEC.key('turn')])==pytest.approx(1.)
 
@@ -119,18 +119,18 @@ def test_camera_editor_marker_aim_and_saved_pose_match_the_rendered_grounded_eye
 
 
 def test_near_level_tilt_is_half_a_degree_down_at_every_admitted_radius_with_shared_inverse():
-    assert SPEC.grounded_orbit.eye_height==2.6
-    assert SPEC.grounded_orbit.radius_range==(8.5,16.)
+    assert SPEC.grounded_orbit.eye_height==4.5
+    assert SPEC.grounded_orbit.radius_range==(64.,104.)
     for turn,scale,tilt in itertools.product((-1.,0.,1.),(.25,1.,4.),(-.5,0.,.5)):
         values=camera(turn=turn,scene_scale=scale,tilt=tilt)
         axes,eye,_=fc.resolve_camera_frame(SPEC,values)
         radius=math.hypot(eye[0]-SPEC.pivot[0],eye[2]-SPEC.pivot[2])
-        bottom,top=1.5,2.6-radius*math.tan(math.radians(.5))
+        bottom,top=1.5,4.5-radius*math.tan(math.radians(.5))
         focus=bottom+(top-bottom)*(tilt+.5)
         assert fc.grounded_focus_height(SPEC,tilt,eye)==pytest.approx(focus,abs=1e-12)
         assert fc.grounded_tilt_from_focus_height(SPEC,focus,eye)==pytest.approx(tilt,abs=1e-12)
         if tilt==.5:assert math.degrees(math.asin(axes[7]))==pytest.approx(.5,abs=1e-12)
-        assert eye[1]==2.6 and 1.5<=focus<2.6
+        assert eye[1]==4.5 and 1.5<=focus<4.5
 
 
 @pytest.mark.qt

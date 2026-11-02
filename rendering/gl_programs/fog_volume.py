@@ -10,16 +10,28 @@ there (lighting and albedo folded in). It is evaluated once per cell per update;
 exactly per slice (radiance x (1 - exp(-extinction x length))), into the texture ``MIST_GLSL`` samples.
 """
 
-FOG_SLICE_GLSL = """
-uniform vec4 uFogLens;     // half-extent x, y (Orthographic) or tangent x, y (Perspective); orthographic flag; unused
-uniform vec4 uFogRange;    // near, far view depth, slices, enabled
+FOG_DEPTH_MAPPING_GLSL = """
+float fogDepthFraction(float depth) {
+    if(uFogLens.w>0.0) {
+        float focus=max(uFogRange.w-1.0,0.0);
+        return (asinh((depth-focus)/uFogLens.w)-asinh((uFogRange.x-focus)/uFogLens.w)) /
+            (asinh((uFogRange.y-focus)/uFogLens.w)-asinh((uFogRange.x-focus)/uFogLens.w));
+    }
+    return log(max(depth,uFogRange.x)/uFogRange.x)/log(uFogRange.y/uFogRange.x);
+}
 float fogSliceDepth(float f) {
-    // Opt-in signed Orthographic lines. Positive-depth consumers retain their exact logarithmic mapping.
-    if(uFogLens.w>0.0) return uFogLens.w*sinh(mix(asinh(uFogRange.x/uFogLens.w),
-        asinh(uFogRange.y/uFogLens.w),f/uFogRange.z));
+    if(uFogLens.w>0.0) {
+        float focus=max(uFogRange.w-1.0,0.0);
+        return focus+uFogLens.w*sinh(mix(asinh((uFogRange.x-focus)/uFogLens.w),
+            asinh((uFogRange.y-focus)/uFogLens.w),f/uFogRange.z));
+    }
     return uFogRange.x*pow(uFogRange.y/uFogRange.x,f/uFogRange.z);
 }
 """
+FOG_SLICE_GLSL = """
+uniform vec4 uFogLens;     // lens extents, orthographic flag, asinh scale (0: legacy positive log mapping)
+uniform vec4 uFogRange;    // near, far, slices, 1 + optional focus depth (0: disabled sampling)
+""" + FOG_DEPTH_MAPPING_GLSL
 
 _INJECT_HEAD = """#version 460 core
 layout(local_size_x=4,local_size_y=4,local_size_z=4) in;
@@ -109,11 +121,12 @@ uniform vec3 uMarchStep;         // view-depth step inside the medium, through c
 uniform vec4 uMarchEdge;         // extra light on thin eroded wisps (curl rims), 0 off; unboosted base radiance
 uniform vec2 uViewportSize;
 layout(location=0) out vec4 FragColor;
+""" + FOG_DEPTH_MAPPING_GLSL + """
 vec3 coarseUvw(vec3 world) {
     vec3 v=(uFogView*vec4(world,1.0)).xyz;
-    float depth=max(-v.z,1e-4);
+    float depth=uFogLens.w>0.0?-v.z:max(-v.z,1e-4);
     vec2 ndc=uFogLens.z>0.5?v.xy/uFogLens.xy:v.xy/(uFogLens.xy*depth);
-    float f=log(max(depth,uFogRange.x)/uFogRange.x)/log(uFogRange.y/uFogRange.x)*uFogRange.z;
+    float f=fogDepthFraction(depth)*uFogRange.z;
     return clamp(vec3(ndc*0.5+0.5,f/uFogRange.z),vec3(0.0),vec3(1.0));
 }
 // The erodible part of the coarse medium: radiance and the extinction beyond its steady share.

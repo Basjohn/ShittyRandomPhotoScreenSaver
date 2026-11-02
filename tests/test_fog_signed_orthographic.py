@@ -13,7 +13,11 @@ from tools.labs.render_target import OffscreenRenderTarget
 pytestmark=pytest.mark.qt
 
 
-def test_signed_integral_and_surface_sampler_share_negative_zero_positive_depths(qt_app):
+@pytest.mark.parametrize('orthographic,depth_range,focus,depths',(
+    (True,(-20.,30.),0.,(-20.,-12.,0.,12.,29.)),
+    (False,(.3,30.),12.,(.3,4.,12.,18.,29.)),
+))
+def test_signed_and_focused_integrals_share_the_surface_sampling_map(qt_app,orthographic,depth_range,focus,depths):
     target=OffscreenRenderTarget(8,8);volume=FogVolume('signed test');resources=MeshResources('signed sample')
     inject=0
     try:
@@ -22,7 +26,8 @@ def test_signed_integral_and_surface_sampler_share_negative_zero_positive_depths
 void fogMedium(vec3 p,out vec3 light,out float extinction,out float steady) {
 light=vec3(0.2,0.4,0.8);extinction=0.03;steady=extinction;}
 '''),label='signed constant')
-            volume.update(inject,view=np.identity(4),lens=(1.,1.,True),depth_range=(-20.,30.),grid=(8,8,128))
+            volume.update(inject,view=np.identity(4),lens=(1.,1.,orthographic),depth_range=depth_range,
+                          grid=(8,8,128),focus_depth=focus)
             fragment='#version 460 core\n'+MIST_GLSL+'''
 uniform float uDepth;out vec4 FragColor;
 void main(){FragColor=fogVolumeAt(vec3(0,0,-uDepth));}
@@ -37,11 +42,12 @@ void main(){FragColor=fogVolumeAt(vec3(0,0,-uDepth));}
                     if name=='uFogView':gl.glUniformMatrix4fv(loc,1,gl.GL_FALSE,np.array(value,np.float32))
                     elif isinstance(value,int):gl.glUniform1i(loc,value)
                     else:gl.glUniform4f(loc,*value)
-                for depth in (-20.,-12.,0.,12.,29.):
+                for depth in depths:
                     gl.glUniform1f(gl.glGetUniformLocation(program,'uDepth'),depth)
                     gl.glDrawArrays(gl.GL_TRIANGLES,0,3)
                     pixel=target.read_rgba()[4,4]/255.
-                    transmittance=math.exp(-.03*(depth+20.))
+                    stretch=1. if orthographic else math.sqrt(1.+2.*(.125**2))
+                    transmittance=math.exp(-.03*(depth-depth_range[0])*stretch)
                     np.testing.assert_allclose(pixel,(*((1.-transmittance)*np.array((.2,.4,.8))),transmittance),atol=.012)
             with pytest.raises(ValueError,match='signed depths require Orthographic'):
                 volume.update(inject,view=np.identity(4),lens=(1.,1.,False),depth_range=(-20.,30.),grid=(8,8,128))

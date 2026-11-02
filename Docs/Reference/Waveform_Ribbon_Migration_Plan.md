@@ -15,7 +15,7 @@ recipes' current values, recorded for orientation: presets are operator-authored
 - The migration is a **full Visualizer migration**: full controls, Settings and the preset/control systems, designed
   as a whole. Nothing is half-built ahead of it in the lab.
 - **Everything a 3D Framed mode like Extruded Bubble has** (scaffolding, camera, presets, technical profile), with
-  the projection **defaulting to Orthographic**. Its reactivity and most of its controls are its own: a waveform
+  the projection **defaulting to restrained long-lens Perspective**. Its reactivity and most of its controls are its own: a waveform
   ribbon reacts very differently from EB's bubbles, and its visual editors are unique to it.
 - **Every look value is adjustable** in the builder through **user-friendly visual editors**, not raw numbers alone.
 - The **shape and reactivity tuner** is the most important new control. It is a tuner, not a free shape builder:
@@ -99,8 +99,9 @@ not full-song loud-section evidence. Remaining native acceptance and rejected UX
 - Settings through the shared spec builder (`core/settings/visualizer_mode_settings.py`,
   `ui/tabs/media/spec_mode_builder.py`): the shared preset/advanced/technical scaffold, then closed-by-default
   buckets, one open per level, one-sentence intros, details in tooltips (Settings UX rules).
-- Shared framed camera (`core/settings/framed_camera.py`) with a Waveform spec. **Orthographic is the default
-  projection**; Perspective is a choice with its own FOV. Turn, tilt, Scene Scale and pan come from in-scene
+- Shared framed camera (`core/settings/framed_camera.py`) with a Waveform spec. **Long-lens Perspective is the default
+  projection**; Orthographic remains optional. The candidate uses an 80-unit home radius, 64-104 physical dolly,
+  stable 4.5-unit eye height and a 3-degree lens; both projections share reference framing. Turn, tilt, Scene Scale and pan come from in-scene
   navigation as in EB (hidden sliders), with Camera Position as the scene editor.
 - Every new control is authored into every preset (preset repair fill plus the completeness guard). Presets stay
   freely operator-authored.
@@ -128,11 +129,13 @@ worker and captures the real logical/frame/retained-render path; audio is not sh
 once into detached immutable inputs (`waveform_ribbon_parameters.py`); camera-only edits do not recompile body inputs.
 `WaveformRibbonFrameRuntime` fences activation/source identity and consumes each typed onset serial once. Its neutral
 `WaveformDynamics` integrates C elastic response per ribbon, A twist and axial speed/angle; history stays fixed at 6 Hz.
-Every logical publication projects the existing body immediately and supplies immutable bytes to the renderer. A
+The travelling carrier's audio amplitude/twist uses the existing two-stage `Flow.shape_tau` contract; raw six-Hz
+audio writes produced the rejected small dents. Whole-body elastic impulses and light/colour/accents retain their
+immediate inputs. Every logical publication projects the existing body and supplies immutable bytes to the renderer. A
 separate eased canonical passage moves appearance ranges independently of the editable Light routing row.
 
-Event-owned sparks have at most 36 births per admitted event and a 160 ms minimum gap, with lifetime at most 8 s;
-2048 slots cover all simultaneous cohorts without deleting live particles. Count and appearance are authored at
+Event-owned sparks have at most 64 births per admitted event and a 160 ms minimum gap, with lifetime at most 8 s;
+4096 slots cover the maximum 3200 simultaneous particles without deleting live particles. Count and appearance are authored at
 birth on the actual swept rim. GPU flight uses the published scene time; render delivery cannot re-admit a birth.
 Strands use bounded history slots, eased musical threshold growth and the same current body packet. Turning Sparks
 or volume Mist off retires their own resources.
@@ -158,9 +161,29 @@ as `[low, high]`. The meaning is strict:
 The Shape Tuner's per-target quiet/loud values are these same ranges, edited on the tuner and shown in the bucket.
 
 ### Ribbons
-- **Ribbon Count:** 1-4 (operator maximum). Migrate the current three-card/runtime/clearance assumption consistently;
+- **Ribbon Count:** 1-4 (operator maximum). Four retained cards share the logical/body/clearance/accent paths;
   prove all four reach geometry, light, collisions, accents and reflection within the loaded cost budget. The generic
   ribbon packet allows eight; that is not this mode's authoring maximum.
+- Former three-card state migrates forward by appending the canonical fourth card, preserving all original values
+  and the visible count. Four-card output is canonical; no parallel legacy runtime. Presets 1/2 retain three visible
+  identities; Preset 3 authors four. The extra retained path has an open incremental cost gate.
+- The body needs a spatial carrier before axial roll: turning a planar Y wave into depth collapsed its visible height.
+  Current candidate adds a quadrature depth carrier and stores local recorded amplitude/twist variation at admission,
+  while C springs still punch the existing body immediately. Spring/body bounds leave more peak headroom; roll remains
+  physical, with no angle-dependent or viewport-dependent audio gain. Recheck actual preset quiet/peak envelopes at all angles.
+- Vertical Lift positions the world-space skewer axis after axial rotation, so rotation cannot move that axis around
+  the floor. The candidate raises the resting axis to avoid a continuous flattened contact strip; troughs still deform
+  smoothly onto the floor. The night medium uses broader height diffusion and thinner camera-side foreground air
+  within its SAME world-density function, keeping the long viewing path readable while distant fog thickens gently.
+- The operator delegates the visual route: use restrained long-lens Perspective as the primary candidate, with a farther
+  physical eye and narrow field of view calibrated together. Orthographic remains optional, using the same reference
+  framing. The shared edge-resize aperture contract is unchanged; changing projection cannot excuse colour, material,
+  fog or reaction defects. Defaults and native camera receipts own the concrete calibration.
+  Production uses the scene's canonical fixed history head, not a second narrower head that exposes regular endpoint
+  continuation inside the baseline view. Full-scene reference likeness and small/extreme aperture behavior remain open.
+- Grounded camera calibration must show floor material and depth: use a stable above-floor eye, allow a near-flat
+  endpoint, and tune the default downward view against the new reference. A visually rejected low, near-level default
+  is not accepted merely because floor intersections and eye admission are mathematically valid.
 - **Per ribbon (Ribbon Cards, New):** one card per ribbon with a live thumbnail of that ribbon.
   - band it follows (Bass, Mids, Highs, All);
   - character: height share, width share, wave rate share, phase offset, light share;
@@ -212,13 +235,17 @@ rotation. Source routing/curves and quiet→peak ranges must reach these realize
 
 ### Free Strands
 - **Free Strands** toggle, then: Count (R), Length, Reach (R, how far they curl away), Halo (fuzzy splash), Glow
-  (R), Droplets, Peel Time. Previewed on a sheet during a synthetic loud passage (Glow Preview).
-- Strands grow from a rim, with root identity and all base geometry/light/finish held at birth. They remain part
-  of that musical response until travel removes them from view; there is no lifetime timeout. Birth admission follows
-  real accents and the authored world span, with no camera-following population. A repeat at an occupied root preserves
-  its birth/look and adds an approximately 20% temporary length extension plus glow, then returns smoothly. Retriggers
-  retain the current envelope value instead of snapping it to zero. The finite history retirement bound must be proved
-  outside direct/reflected admitted visibility, including wide views. Operator approved the look; persistence/pulse and
+  (R), Droplets, Peel Time, total Lifetime (R) and Tip Fade Share (R). Latest target: rare strands, 3-5 seconds total,
+  with most of their life spent gently fading from tip toward root; the earlier 30-second fade proposal is superseded.
+- Strands grow from a rim, with root identity and all base geometry/light/finish held at birth. Latest operator policy
+  supersedes endless life: configurable total EoL with a VERY gentle tip-first fade inside that lifetime. Birth admission follows
+  real accents and the authored world span, selecting at most eight roots per accent with no camera-following population.
+  Admission/renewal requires enough retained root history to finish the full lifetime. Expired cohorts submit no strand
+  payload while retaining held metadata for smooth reactivation. A repeat at an occupied root preserves
+  its birth/look and adds an approximately 20% temporary length extension plus glow/movement, then returns smoothly.
+  Reactivation renews EoL and restores a partly faded strand gradually. Retriggers retain current fade/pulse envelope
+  values instead of snapping them to zero. Validate gentle visible retirement and reactivation
+  in direct/reflected admitted views, including wide views. Operator approved the look; persistence/pulse and
   wider scene acceptance remain explicit in the live checklist.
 
 ### Sparks
@@ -242,6 +269,10 @@ rotation. Source routing/curves and quiet→peak ranges must reach these realize
   exact signed floor intersections. Perspective and existing positive-depth consumers retain their original mapping.
   Floor samples integrated light/transmittance once to its hit; sky samples to far depth; additive actors sample
   transmittance; reflected rays use the same above-floor world medium. Off leaves no independent floor haze.
+- The long lens puts the subject far from the eye: ordinary logarithmic froxels were several world units thick
+  at the waveform and could miss its clearance/light. A focus-centred asinh mapping concentrates the SAME fixed
+  grid around the actual body's camera depth, while integrating the complete near/far interval. Injection, surface
+  sampling and detail helpers share one inverse mapping; legacy positive-depth consumers retain their old mapping.
 - `waveform_atmosphere.py` and `waveform_field.py` own the packet-derived GPU field. Beyond its fixed table, evaluate
   the same retained interior spline or endpoint continuation as the drawn cloth. No camera-dependent field resampling,
   CPU readback, side closure or hidden alternate fog. Same-x cross-section distance remains an approximation around
@@ -256,7 +287,8 @@ rotation. Source routing/curves and quiet→peak ranges must reach these realize
 - **Floor Colour/Tint and Brightness:** independently editable surface tint and brightness alongside reflection strength.
 - Floor contact (sheets deform onto the floor) is a rule, not a control.
 - Floor material must stay readable away from core reflections. The candidate uses the existing concrete albedo and
-  roughness maps with filtered wet/dry variation and dim blue ambient light; reflection OFF and atmosphere OFF must
+  roughness maps with restrained neutral ambient light, without the rejected artificial dark-blue patch modulation;
+  reflection OFF and atmosphere OFF must
   still reveal the foreground material. Full foreground/far coverage alone does not establish this visual requirement.
 
 ### Reaction
@@ -272,7 +304,7 @@ the shared audio controls (sensitivity, input gain, block size) stay at their sh
 These sit beside the Shape Tuner, which says *what* each source moves; these say *how* the music arrives.
 
 ### Camera (advanced, shared framed camera)
-- Camera Position (Existing: `SceneCameraPosition`), Projection (Orthographic default, Perspective), FOV (Perspective
+- Camera Position (Existing: `SceneCameraPosition`), Projection (Perspective default, Orthographic), FOV (Perspective
   only), Auto Rotate with After and Speed.
 
 #### Orthographic raster depth and continuous world coverage
@@ -450,16 +482,9 @@ frame/context, while the lab supplies explicit diagnostic time/camera. Plain sce
 `core/waveform_ribbon_scene.py`, appearance values in `core/ribbon_style.py`. No production owner imports the lab.
 Retirement stays context-owned, attempts independent cleanup and retains failed handles for retry.
 
-- [ ] Complete foreground/far ground coverage and the new unified atmosphere against the latest mist/floor image.
-  Remove old fog banks, fringe, shape-wall rules, separate floor haze and their dead controls/resources on migration.
-- [ ] Migrate all three-ribbon assumptions to maximum four; author Preset 3 and compare both of its low/high states.
-- [ ] Increase actual peak excursion while preserving quiet contraction, smooth floor collision and unclipped musical
-  contrast. Verify actual body, local colour/glow, particles and persistent strand repeat pulses in recorded audio.
-- [ ] Verify hidden/infinite ends, true grounded navigation, near-flat floor visibility and reflection in both
-  projections across admitted sizes. Retire strand roots only outside visible direct/reflected coverage.
-- [ ] Meet loaded whole-frame cost and dormant/Off/resize/context bounds without weakening approved strand appearance.
-- [ ] After credible visuals, replace all rejected mode-specific builder elements with a themed direct 3D visual editor.
-- [ ] Complete final preset/settings Save/Cancel/Restore, both-handle reachability and operator native validation.
+The single live visual rejection/acceptance checklist is `Current_Plan.md` §7.1. Four-card migration, Preset 3,
+the unified replacement atmosphere and grounded long-lens camera are candidates under validation. Legacy fog layers
+are removed. Their existence or focused checks do not close the operator's visual, motion, UX or loaded-cost gates.
 
 ## 6. Historical camera work: evidence only
 
@@ -468,6 +493,11 @@ wall/fog treatments are now rejected. A later positive actor clip interval expos
 near-level tilt; the opaque infinite world-plane path addresses that gap without reviving walls. The remaining
 Orthographic actor-slab diagnosis, fitted raster contract and remaining validation are owned by the Camera section above.
 Earlier promotion/parity captures do not establish the latest atmosphere, floor or musical target.
+
+The 3 November `wr_smooth_sparse_shortlife_v8_20261103` capture replays recorded PCM at 20–26 seconds with stable
+source hashes. The smoother broad carrier, sparse 3–5-second strands and larger particle population are visible, but
+the operator explicitly rejects small travelling dents. Floor texture/reflection, fog and colour remain below the
+references. Its GPU-only median 8.15 ms/p90 10.14 ms is scoped capture evidence, not a game60 whole-frame pass.
 
 ## 7. Remaining technical gates
 

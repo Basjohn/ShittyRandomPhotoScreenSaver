@@ -491,18 +491,34 @@ void main() {
 }
 """).replace('MAX_KNOTS', str(MAX_PATH_SAMPLES))
 
-# Opt-in logical cohorts freeze admission and all shape/finish values at birth.
+# Opt-in logical cohorts hold admission/look and gently retire from tip to root.
+STRAND_LIFE_GLSL = """
+float strandRemaining(float age,vec4 life) {
+    age=max(age,0.0);
+    if(life.x<=0.0)return 0.0;
+    float expiry=1.0-smoothstep(max(life.x-life.y,0.0),life.x,age);
+    float restoration=mix(life.z,1.0,1.0-exp(-age/max(0.1,min(0.4,life.x*0.1))));
+    return min(expiry,restoration);
+}
+float strandLifeCoverage(float remaining,float along) {
+    // No moving cutoff: the tip loses light sooner while the root decays slowly through the whole fade.
+    return pow(clamp(remaining,0.0,1.0),1.0+2.0*clamp(along,0.0,1.0));
+}
+"""
 RIBBON_COHORT_STRAY_VERTEX = RIBBON_STRAY_VERTEX.replace(
     'uniform float uStrayAdmission;',
     'uniform float uStrayAdmission;\nuniform float uStrayBirthNow;\nuniform vec2 uStrayPulse;\n'
-    'struct StrandBirth { vec4 timing; vec4 shape; vec4 finish; };\n'
+    'struct StrandBirth { vec4 timing; vec4 shape; vec4 finish; vec4 life; };\n'
     'layout(std430,binding=1) readonly buffer StrandBirths { StrandBirth strandBirths[]; };\n'
-    'vec4 cohortStray,cohortLook;\nflat out vec4 vCohortLook;\nflat out vec2 vCohortGlow;'
+    'vec4 cohortStray,cohortLook;\nflat out vec4 vCohortLook;\nflat out vec2 vCohortGlow;\n'
+    'flat out float vCohortRemaining;\n'+STRAND_LIFE_GLSL
 ).replace('float length_=max(uStray.y,1.0);',
     f'StrandBirth record_=strandBirths[owner*{MAX_PATH_SAMPLES}+(ringStart+index)%ringCapacity];\n'
     '    vec4 birth=record_.timing;\n'
     '    float cohortAge=uStrayBirthNow-birth.y;\n'
     '    if(birth.x<=0.0 || cohortAge<0.0) return;\n'
+    '    vCohortRemaining=strandRemaining(uStrayBirthNow-record_.life.w,record_.life);\n'
+    '    if(vCohortRemaining<=0.0) return;\n'
     '    float sincePulse=max(uStrayBirthNow-birth.z,0.0);\n'
     '    float pulse=clamp((birth.w+(1.0-birth.w)*1.3*(1.0-exp(-sincePulse/0.025)))\n'
     '        *exp(-sincePulse/0.35),0.0,1.0);\n'
@@ -544,9 +560,11 @@ void main() {
 
 
 RIBBON_COHORT_STRAY_FRAGMENT = RIBBON_STRAY_FRAGMENT.replace(
-    'uniform vec4 uStrayLook;', 'flat in vec4 vCohortLook;'
+    'uniform vec4 uStrayLook;', 'flat in vec4 vCohortLook;\nflat in float vCohortRemaining;\n'+STRAND_LIFE_GLSL
 ).replace('uniform vec2 uStrayGlow;', 'flat in vec2 vCohortGlow;'
-).replace('uStrayLook','vCohortLook').replace('uStrayGlow','vCohortGlow')
+).replace('uStrayLook','vCohortLook').replace('uStrayGlow','vCohortGlow'
+).replace('float light=(line+halo+1.6*bead)*vBright;',
+          'float light=(line+halo+1.6*bead)*vBright*strandLifeCoverage(vCohortRemaining,vAlong);')
 
 RIBBON_SPARK_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\nlayout(location=1) out vec4 Emission;\n"
                          "in vec3 vWorld;\nin float vBright;\nflat in vec3 vColour;\nuniform vec3 uMistOrigin;\n"

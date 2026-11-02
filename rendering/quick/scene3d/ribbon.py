@@ -19,7 +19,7 @@ from rendering.gl_programs.ribbon import (RIBBON_BODY_FRAGMENT, RIBBON_FRAGMENT,
                                           RIBBON_SPARK_FRAGMENT, RIBBON_SPARK_VERTEX, RIBBON_STRAY_FRAGMENT,
                                           RIBBON_STRAY_VERTEX, RIBBON_VERTEX, RIBBON_CONTINUOUS_VERTEX)
 from rendering.gl_programs.ribbon import RIBBON_COHORT_STRAY_VERTEX,RIBBON_COHORT_STRAY_FRAGMENT
-from core.ribbon_strand_cohorts import COHORT_BYTES
+from core.ribbon_strand_cohorts import COHORT_BYTES,COHORT_ROWS
 from core.ribbon_geometry import MAX_PATH_SAMPLES
 from rendering.gl_programs.mist import FOG_OFF
 from rendering.quick import gl_query
@@ -349,7 +349,7 @@ class RibbonPrimitive:
                 raise ValueError('Strand cohorts must match the packet physical knot slots')
             if not strand_births:return
             if strand_births is not self._strand_bounds_payload:
-                held=np.frombuffer(strand_births,np.float32).reshape(-1,3,4)
+                held=np.frombuffer(strand_births,np.float32).reshape(-1,COHORT_ROWS,4)
                 self._strand_bounds=(float(held[:,1,0].max()),float(held[:,1,1].max()))
                 self._strand_bounds_payload=strand_births
         if now is None or not math.isfinite(float(now)):

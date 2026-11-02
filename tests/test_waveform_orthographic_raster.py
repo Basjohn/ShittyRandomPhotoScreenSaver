@@ -6,10 +6,20 @@ import pytest
 from core.settings import framed_camera as fc
 from core.settings.waveform_ribbon_camera import RasterSupport,scene_raster_support
 from core.ribbon_continuation import frustum_axial_span
+from core.ribbon_strand_cohorts import COHORT_ROWS
 from core.waveform_ribbon_scene import Recipe,FLOOR_CONTACT,SPEC
 from rendering.quick.visualizer.implementations.waveform_ribbon import physical_view
 from tests.test_waveform_ribbon_camera import camera
 from tests.test_ribbon_continuation_culling import full_packet
+
+
+def historical_close_reference(monkeypatch):
+    # Preserve the original clipping regression fixture after the product moved to a distant long lens.
+    from rendering.quick.visualizer.implementations import waveform_ribbon as camera_owner
+    historical=replace(SPEC,orbit_distance=12.,fov_range=(35.,62.),
+        grounded_orbit=replace(SPEC.grounded_orbit,radius_range=(8.5,16.),eye_height=2.6))
+    monkeypatch.setattr(camera_owner,'SPEC',historical)
+    monkeypatch.setattr(camera_owner,'ORTHO_REFERENCE_FOV',45.)
 
 
 @pytest.mark.parametrize('aspect',(.2,1.5,4.,16.))
@@ -37,7 +47,8 @@ def test_fit_covers_xy_support_in_main_and_mirror_without_changing_eye_basis_or_
             assert (np.abs(clip[:,2]/clip[:,3])<1.).all()
 
 
-def test_wide_fitted_slab_admits_real_field_behind_reference_while_perspective_is_unchanged():
+def test_wide_fitted_slab_admits_real_field_behind_historical_reference_while_perspective_stays_forward(monkeypatch):
+    historical_close_reference(monkeypatch)
     values=camera(turn=1.,tilt=.5)
     view,projection,eye,lens=physical_view(values,4.)
     point=np.array((22.,2.,0.,1.))
@@ -58,13 +69,15 @@ def test_support_keeps_living_particle_excursions_held_strands_and_reflected_pix
     packet=full_packet();recipe=replace(Recipe(),strays=RibbonStrays(reach=.01,width=.1))
     bursts=np.zeros((CAPACITY,16),np.float32)
     bursts[0,:]=(0.,30.,-20.,2.,3.,6.,-4.,8.,1.,1.,1.,12.,2.,0.,0.,3.)
-    strands=np.zeros((packet.instances*256,3,4),np.float32)
+    strands=np.zeros((packet.instances*256,COHORT_ROWS,4),np.float32)
     strands[0,0,0]=1.;strands[0,1]=(16.,4.,16.,10.)
     support=scene_raster_support(packet,recipe,0.,now=100.,viewport=(240,60),burst_payload=bursts.tobytes(),
                                  burst_origin=96.,strand_payload=strands.tobytes())
     assert support.transverse[0][1]>=39.6
     assert support.transverse[1][0]<=-26.4
-    assert support.transverse[1][1]>=11.
+    baseline=scene_raster_support(packet,replace(recipe,strays=None,sparks=None),0.,now=100.,viewport=(240,60),
+                                  burst_payload=b'',strand_payload=b'')
+    assert support.transverse[1][1]>=baseline.transverse[1][1]+4.
     assert support.padding_ndc[1]>=2.*78./30.
     expired=scene_raster_support(packet,recipe,0.,now=110.,viewport=(240,60),burst_payload=bursts.tobytes(),
                                  burst_origin=96.,strand_payload=strands.tobytes())
@@ -72,7 +85,9 @@ def test_support_keeps_living_particle_excursions_held_strands_and_reflected_pix
 
 
 @pytest.mark.qt
-def test_native_wide_field_has_no_in_aperture_depth_cuts_and_retains_exact_world_vertices(qt_app):
+@pytest.mark.parametrize('large_interior',(False,True))
+def test_native_wide_field_has_no_in_aperture_depth_cuts_and_retains_exact_world_vertices(qt_app,large_interior,monkeypatch):
+    historical_close_reference(monkeypatch)
     from rendering.gl_error_policy import disable_per_call_gl_error_checking
     disable_per_call_gl_error_checking()
     from OpenGL import GL as gl
@@ -82,6 +97,16 @@ def test_native_wide_field_has_no_in_aperture_depth_cuts_and_retains_exact_world
     from core.ribbon_style import RibbonMaterial
     from rendering.gl_programs.reflection import mirror_view
     packet=full_packet();recipe=replace(Recipe(),material=RibbonMaterial(cross_curve=.7),sparks=None,strays=None)
+    if large_interior:
+        paths=np.frombuffer(packet.payload,np.float32).reshape(packet.instances,-1,4).copy()
+        for path in paths:
+            n,start,cap=int(path[0,0]),int(path[1,1]),int(path[1,2])
+            knots=path[4:].reshape(-1,5,4)
+            slots=(start+np.arange(n//3,2*n//3))%cap
+            knots[slots,0,1]=9.-packet.world_origin[1]
+            knots[slots,0,2]=7.-packet.world_origin[2]
+            knots[slots,0,3]=3.5
+        packet=replace(packet,payload=paths.tobytes())
     target=OffscreenRenderTarget(240,60);primitive=RibbonPrimitive();buffer=0
     source=RIBBON_CONTINUOUS_VERTEX.replace('void main() {','void ribbonMain() {',1)+'''
 layout(std430,binding=5) buffer Statistics { uint stats[4]; };
@@ -93,6 +118,8 @@ atomicAdd(stats[0],1u);if(c.z< -c.w)atomicAdd(stats[1],1u);if(c.z>c.w)atomicAdd(
         primitive.resources.program('diagnostic_continuous',source,RIBBON_FRAGMENT)
         buffer=int(np.asarray(gl.glGenBuffers(1)).reshape(-1)[0]);gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,5,buffer)
         support=scene_raster_support(packet,recipe,0.,now=1.,viewport=(240,60),burst_payload=b'',strand_payload=b'')
+        if large_interior:
+            assert support.transverse[0][1]>13. and support.transverse[1][1]>11.
         view,projection,eye,lens=physical_view(camera(turn=1.,tilt=.5),4.,geometry_bounds=support)
         mirror=mirror_view(view,0.)
         spans=[frustum_axial_span(projection@v,support.transverse) for v in (view,mirror)]

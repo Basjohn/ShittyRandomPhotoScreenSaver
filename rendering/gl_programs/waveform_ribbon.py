@@ -77,8 +77,7 @@ void main() {
     // Mip-biased and toned down: at this grazing angle the colour scan aliases into horizontal bands once lit.
     vec3 albedo=mix(texture(uAlbedo,uv,uHot.w).rgb,texture(uAlbedo,turn*uv*1.37+vec2(.31,.47),uHot.w).rgb,.4);
     float surfaceRoughness=texture(uRoughness,uv,uHot.w).r;
-    // Wet patches darken the diffuse surface while the rougher concrete stays legible outside hot reflections.
-    albedo*=mix(0.45,1.65,smoothstep(0.08,0.55,surfaceRoughness))*uFloorTone.x;
+    albedo*=uFloorTone.x;
     vec3 specular;
     if(uSpecMode==2) {
         specular=texture(uSpecular,gl_FragCoord.xy/uViewport).rgb;

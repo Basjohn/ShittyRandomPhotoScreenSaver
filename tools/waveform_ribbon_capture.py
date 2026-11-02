@@ -15,7 +15,18 @@ def dimensions(value):
     return pair
 
 
+def source_identity():
+    """Fence offline evidence against concurrent edits or commits during a native capture."""
+    paths=subprocess.check_output(['git','diff','--name-only','HEAD'],cwd=ROOT,text=True).splitlines()
+    paths+=subprocess.check_output(['git','ls-files','--others','--exclude-standard'],cwd=ROOT,text=True).splitlines()
+    return dict(revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
+        sha256={path:hashlib.sha256((ROOT/path).read_bytes()).hexdigest() for path in paths
+                if (ROOT/path).is_file() and not path.startswith('references/')})
+
+
 def capture(args):
+    source_started=source_identity()
+    from core.ribbon_strand_cohorts import COHORT_ROWS,remaining_strand
     from rendering.gl_error_policy import disable_per_call_gl_error_checking
     disable_per_call_gl_error_checking()
     from PySide6.QtGui import QGuiApplication
@@ -94,9 +105,11 @@ def capture(args):
                 births=np.frombuffer(state.particles,np.float32).reshape(-1,16) if state.particles else np.empty((0,16))
                 active=(births[:,7]>0)&(state.time-state.particle_origin-births[:,3]>=0)&(state.time-state.particle_origin-births[:,3]<births[:,7])
                 living=births[active]
-                strand_rows=np.frombuffer(state.strands,np.float32).reshape(-1,3,4)[:,0] if state.strands else np.empty((0,4))
+                cohorts=np.frombuffer(state.strands,np.float32).reshape(-1,COHORT_ROWS,4) if state.strands else np.empty((0,COHORT_ROWS,4))
+                strand_rows=cohorts[:,0];life=cohorts[:,3]
                 strand_age=state.time-state.strand_origin-strand_rows[:,1]
-                live_roots=(strand_rows[:,0]>0)&(strand_age>=0)
+                remaining=remaining_strand(state.time-state.strand_origin-life[:,3],life[:,0],life[:,1],life[:,2])
+                live_roots=(strand_rows[:,0]>0)&(strand_age>=0)&(remaining>0.)
                 records.append(dict(source_time=times[index],gpu_ms=elapsed.value/1e6,ready=state.ready,size=(width,height),
                     packet_sha256=hashlib.sha256(state.packet.payload).hexdigest(),camera=dict(state.parameters),
                     viewport_extent=snapshot.presentation.viewport_extent,
@@ -119,15 +132,16 @@ def capture(args):
         for index,(image,label) in enumerate(contacts):
             sheet.paste(image,(410*index,22));draw.text((410*index+5,365),label,fill='white')
         draw.text((5,5),activation.preset_name,fill='white');sheet.save(output/'contact.png')
-        paths=subprocess.check_output(['git','diff','--name-only','HEAD'],cwd=ROOT,text=True).splitlines()
-        paths+=subprocess.check_output(['git','ls-files','--others','--exclude-standard'],cwd=ROOT,text=True).splitlines()
+        source_finished=source_identity()
         receipt=dict(recording=str(args.clip.resolve()),recording_sha256=hashlib.sha256(args.clip.read_bytes()).hexdigest(),
-            source_revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
-            source_sha256={path:hashlib.sha256((ROOT/path).read_bytes()).hexdigest() for path in paths if (ROOT/path).is_file()},
+            source_revision=source_started['revision'],source_sha256=source_started['sha256'],
+            source_identity_stable=source_started==source_finished,source_finished=source_finished,
             preset_path=activation.preset_path,settings=settings,frames=records,audio_alignment=audio_alignment,
             size=(width,height),fps=args.fps,scope='production logical/capture/renderer; offline native PCM reanalysis for body, passage and typed onsets; original cadence; not live/physical acceptance')
         receipt['artifacts_sha256']={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in output.iterdir() if p.is_file()}
         (output/'capture.json').write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
+        if not receipt['source_identity_stable']:
+            raise RuntimeError('Source changed during capture; artifacts retained with an unstable-source receipt')
         print('Captured',len(records),'frames;',output,flush=True)
     finally:
         if encoder is not None and encoder.poll() is None:encoder.kill();encoder.wait(timeout=10)
@@ -138,7 +152,7 @@ def capture(args):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--clip',type=Path,required=True);parser.add_argument('--output',type=Path,required=True)
-    parser.add_argument('--preset',type=int,choices=(1,2),default=1);parser.add_argument('--start',type=float,default=20.)
+    parser.add_argument('--preset',type=int,choices=(1,2,3),default=1);parser.add_argument('--start',type=float,default=20.)
     parser.add_argument('--duration',type=float,default=4.);parser.add_argument('--fps',type=int,default=12)
     parser.add_argument('--size',default='820x718');parser.add_argument('--ffmpeg',type=Path)
     parser.add_argument('--edge-viewport',action='store_true',help='Use actual CUSTOM edge-resize world aperture at --size')

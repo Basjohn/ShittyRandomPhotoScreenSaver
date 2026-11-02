@@ -34,7 +34,7 @@ def primed(c=None):
 
 
 def data(snapshot):
-    return np.frombuffer(snapshot.packet.payload,np.float32).reshape(3,-1,4)
+    return np.frombuffer(snapshot.packet.payload,np.float32).reshape(4,-1,4)
 
 
 def test_visible_body_changes_before_another_head_knot_and_snapshots_do_not_reintegrate():
@@ -48,6 +48,25 @@ def test_visible_body_changes_before_another_head_knot_and_snapshots_do_not_rein
     assert model.snapshot().packet.payload==active.packet.payload
 
 
+def test_short_audio_pulses_do_not_write_small_amplitude_dents_into_travelling_history():
+    c=controls()
+    # A fixed crest exposes only the recorded amplitude envelope, independently of the immediate body projection.
+    c=replace(c,cards=tuple({**card,'rate':0.,'phase':math.pi/1.4} for card in c.cards),
+              scene=replace(c.scene,flow=replace(c.scene.flow,phase_swell=0.,amplitude_swell=0.)))
+    smooth=primed(c)
+    negative=primed(replace(c,scene=replace(c.scene,flow=replace(c.scene.flow,shape_tau=.0001))))
+    for tick in range(60):
+        level=float(tick%4<2)
+        for model in (smooth,negative):model.advance(.1,bands=(level,)*3,intensity=level,presence=1.,hit=level)
+    def recorded_steps(model):
+        p=model.ring.packet();path=np.frombuffer(p.payload,np.float32).reshape(4,-1,4)[0]
+        start,count,capacity=int(path[1,1]),int(path[0,0]),int(path[1,2])
+        y=path[4::5,1][(start+np.arange(count))%capacity][-30:]
+        return np.abs(np.diff(y)).max()
+    assert recorded_steps(smooth)<.1
+    assert recorded_steps(negative)>.7
+
+
 def test_axial_roll_keeps_the_axis_and_history_motion_and_rotates_the_width_basis():
     c = controls()
     a = primed(c)
@@ -57,9 +76,38 @@ def test_axial_roll_keeps_the_axis_and_history_motion_and_rotates_the_width_basi
         sb = b.advance(1/90,bands=(.6,.5,.3),intensity=.8,presence=1.,hit=1.)
     aa,bb = data(sa),data(sb)
     np.testing.assert_array_equal(aa[:,4::5,0],bb[:,4::5,0])
-    np.testing.assert_allclose(np.sum(aa[:,4::5,1:3]**2,axis=2),np.sum(bb[:,4::5,1:3]**2,axis=2),atol=2e-6)
+    ar,br=aa[:,4::5,1:3].copy(),bb[:,4::5,1:3].copy()
+    ar[:,:,0]-=dict(sa.realized)['lift']*np.array(a.count_share)[:,None]
+    br[:,:,0]-=dict(sb.realized)['lift']*np.array(b.count_share)[:,None]
+    np.testing.assert_allclose(np.sum(ar**2,axis=2),np.sum(br**2,axis=2),atol=2e-6)
     np.testing.assert_allclose(aa[:,5::5,1]-bb[:,5::5,1],sa.rotation_angle,atol=1e-6)
     assert sa.travel==sb.travel and abs(sa.rotation_angle)>.5
+
+
+def test_vertical_lift_keeps_the_skewer_axis_at_the_same_world_height_at_every_roll_angle():
+    c=controls();model=primed(c)
+    for angle in (0.,math.pi/2,math.pi,3*math.pi/2):
+        model.angle=angle;model.controls=replace(c,ranges={**c.ranges,'lift':(0.,0.)});model._snapshot=None
+        low=data(model.snapshot()).copy()
+        model.controls=replace(c,ranges={**c.ranges,'lift':(1.,1.)});model._snapshot=None
+        high=data(model.snapshot())
+        np.testing.assert_allclose(high[:3,4::5,1]-low[:3,4::5,1],1.,atol=1e-6)
+        np.testing.assert_array_equal(high[:,4::5,2],low[:,4::5,2])
+
+
+def test_elastic_stretch_extends_the_actual_axis_without_amplifying_transverse_bumps():
+    model=primed()
+    for _ in range(60):model.advance(1/90,bands=(.8,.5,.3),intensity=.8,presence=1.)
+    c=model.controls;model.controls=replace(c,ranges={**c.ranges,'stretch':(0.,0.)});model._snapshot=None
+    straight=data(model.snapshot()).copy()
+    model.controls=replace(c,ranges={**c.ranges,'stretch':(1.,1.)});model._snapshot=None
+    stretched=data(model.snapshot())
+    np.testing.assert_array_equal(stretched[:,4::5,1:3],straight[:,4::5,1:3])
+    for path in stretched:
+        count,start,capacity=int(path[0,0]),int(path[1,1]),int(path[1,2])
+        x=path[4::5,0][(start+np.arange(count))%capacity]
+        assert (np.diff(x)>0.).all()
+    assert np.ptp(stretched[0,4::5,0])>np.ptp(straight[0,4::5,0])*1.1
 
 
 def test_ribbon_card_band_selects_its_own_elastic_body_response():
@@ -129,7 +177,7 @@ def test_first_idle_to_play_and_engine_epoch_preserve_the_ready_world():
     args.update(playing=True,source_identity=(2,3),body_bands=(.8,.6,.4),intensity=.6,loudness=8.,presence=1.)
     playing=runtime.advance(now_ts=100/90,**args)
     assert runtime._model is model and playing.ready and playing.time>idle.time
-    assert playing.travel>idle.travel and playing.packet.instances==3
+    assert playing.travel>idle.travel and playing.packet.instances==4
     args.update(identity=(1,4,5),source_identity=(-1,-1))
     waiting=runtime.advance(now_ts=101/90,**args)
     assert runtime._model is model and waiting.ready and waiting.time>playing.time
@@ -222,10 +270,10 @@ def test_noninteger_twist_gain_uses_signed_origin_before_and_after_rebasing():
     c = controls()
     ranges = dict(c.ranges);ranges['twist']=(.5,.5)
     model = WaveformDynamics(replace(c,ranges=ranges,rotation_enabled=False,twist_speed=(0.,0.)))
-    model.ring = RibbonRing(3)
+    model.ring = RibbonRing(4)
     model._primed = model.ring.capacity
     for index in range(330):
-        model.ring.append(index/6,[(index/6,2.,0.)]*3,[.5]*3,[-.4]*3)
+        model.ring.append(index/6,[(index/6,2.,0.)]*4,[.5]*4,[-.4]*4)
         if index in (3,329):  # the cloth reducer admits four controls before a complete interval
             model._snapshot = None
             snapshot = data(model.snapshot())
@@ -247,7 +295,7 @@ def test_live_flow_speed_change_integrates_travel_without_moving_existing_histor
 @pytest.mark.parametrize('column,value',((2,0.),(3,1.)))
 def test_interior_history_break_is_rejected_before_gpu_publication(column,value):
     from core.ribbon_packet import RibbonPacket
-    model=primed();raw=model.ring.packet();array=np.frombuffer(raw.payload,np.float32).reshape(3,-1,4).copy()
+    model=primed();raw=model.ring.packet();array=np.frombuffer(raw.payload,np.float32).reshape(4,-1,4).copy()
     array[0,5+5*120,column]=value
     model.ring.packet=lambda:RibbonPacket(array.tobytes(),raw.instances,raw.vertices,raw.world_origin,raw.coordinate_origin)
     model._snapshot=None

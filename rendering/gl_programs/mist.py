@@ -13,6 +13,8 @@ draws with (a reflection pass binds its mirrored volume). Programs including thi
 ``FOG_TEXTURE_UNIT`` so it never shares a unit with a 2D sampler.
 """
 
+from rendering.gl_programs.fog_volume import FOG_DEPTH_MAPPING_GLSL
+
 FOG_TEXTURE_UNIT = 8
 
 MIST_GLSL = """
@@ -20,17 +22,15 @@ uniform vec4 uMist;        // clear-air centre x, centre z, radius x, radius z (
 uniform vec4 uMistShape;   // falloff (radii beyond the edge per e-fold), floor thickening, thickening height, low glow
 uniform sampler3D uFogVolume; // integrated in-scatter (rgb) and transmittance (a), exponential view-depth slices
 uniform mat4 uFogView;     // world -> the volume camera's view
-uniform vec4 uFogLens;     // half-extent x, y (Orthographic) or tangent x, y (Perspective); orthographic flag; unused
-uniform vec4 uFogRange;    // near, far view depth, slices, enabled
+uniform vec4 uFogLens;     // lens extents, orthographic flag, asinh scale (0: positive logarithmic depth)
+uniform vec4 uFogRange;    // near, far, slices, 1 + optional focus depth (0: disabled)
+""" + FOG_DEPTH_MAPPING_GLSL + """
 // Volume coordinates of a world point: xy over the view, z the continuous slice (0 at near, slices at far).
 vec3 fogCoordinate(vec3 world) {
     vec3 v=(uFogView*vec4(world,1.0)).xyz;
     float depth=uFogLens.w>0.0?-v.z:max(-v.z,1e-4);
     vec2 ndc=uFogLens.z>0.5?v.xy/uFogLens.xy:v.xy/(uFogLens.xy*depth);
-    float slice=uFogLens.w>0.0?
-        (asinh(depth/uFogLens.w)-asinh(uFogRange.x/uFogLens.w)) /
-        (asinh(uFogRange.y/uFogLens.w)-asinh(uFogRange.x/uFogLens.w)):
-        log(max(depth,uFogRange.x)/uFogRange.x)/log(uFogRange.y/uFogRange.x);
+    float slice=fogDepthFraction(depth);
     return vec3(ndc*0.5+0.5,slice*uFogRange.z);
 }
 vec4 fogVolumeAt(vec3 world) {

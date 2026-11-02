@@ -27,12 +27,12 @@ def physical_view(parameters,aspect,aperture_scale=1.,*,geometry_bounds=None):
     view[:3,3]=-view[:3,:3]@np.asarray(eye)
     orthographic=str(value('camera_projection'))=='Orthographic'
     if orthographic:
-        tangents=fc.viewport_tangents(ORTHO_REFERENCE_FOV,aspect,aperture_scale)
+        tangents=fc.viewport_tangents(ORTHO_REFERENCE_FOV,aspect,aperture_scale,SPEC.fov_range)
         distance=fc.projection_reference_distance(SPEC,scale,eye)
         lens=(tangents[0]*distance,tangents[1]*distance,True)
         projection=orthographic_raster_projection(view,lens[:2],geometry_bounds,guard=SPEC.clearance)
     else:
-        tangents=fc.viewport_tangents(fov,aspect,aperture_scale)
+        tangents=fc.viewport_tangents(fov,aspect,aperture_scale,SPEC.fov_range)
         lens=(*tangents,False);projection=fc.perspective_matrix(tangents,NEAR,FAR)
     return view,np.asarray(projection).reshape(4,4,order='F'),np.asarray(eye),lens
 

@@ -3,7 +3,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 import math
 import numpy as np
-from core.ribbon_bursts import CAPACITY, RibbonAccentControls, RibbonBursts
+from core.ribbon_bursts import CAPACITY, MAX_BURST, RibbonAccentControls, RibbonBursts
 from core.ribbon_ring import RibbonRing
 
 
@@ -38,11 +38,12 @@ def test_sparks_are_born_on_the_actual_rolled_rim_and_silence_cannot_respawn_the
 
 def test_capacity_admission_and_epoch_rebase_preserve_living_births_without_truncation():
     field=RibbonBursts();base=1_000_000_000.
-    for index in range(100):assert field.admit(snapshot(base+index*.161),controls(),1.)
+    c=controls();c=replace(c,ranges={**c.ranges,'spark_count':(MAX_BURST,MAX_BURST)})
+    for index in range(100):assert field.admit(snapshot(base+index*.161),c,1.)
     records=np.frombuffer(field.payload,np.float32).reshape(CAPACITY,16)
     age=base+99*.161-field.origin-records[:,3]
     active=(records[:,7]>0)&(age>=0)&(age<records[:,7])
-    assert active.sum()==50*36 and field.serial==100
+    assert active.sum()==50*MAX_BURST and field.serial==100
     assert age[active].max()<8. and np.isfinite(records).all()
 
 

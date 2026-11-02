@@ -1,11 +1,12 @@
 """Continuous night atmosphere and its fixed-world reduction of the published swept cloth."""
 from core.ribbon_geometry import MAX_PATH_SAMPLES
+from core.waveform_ribbon_authoring import RIBBON_CAPACITY
 from rendering.gl_programs.ribbon_continuation import CONTINUATION_GLSL
 from rendering.gl_programs.ribbon import RIBBON_GRADE_GLSL
 from rendering.gl_programs.mist import MIST_GLSL
 from rendering.gl_programs.fog_volume import FOG_FULLSCREEN_VERTEX
 
-FIELD_RIBBONS=4
+FIELD_RIBBONS=RIBBON_CAPACITY
 FIELD_ROWS=FIELD_RIBBONS*2
 PACKET_GLSL=('''
 struct Knot {vec4 p;vec4 q;vec4 tangent;vec4 side;vec4 tint;};
@@ -129,7 +130,9 @@ void fogMedium(vec3 world,out vec3 radiance,out float extinction,out float stead
     // Without it parallel rays through the same ground-height profile expose textured far ground across the sky.
     float behind=max(-world.z-6.0,0.0);
     float distanceWeight=1.0+min(pow(behind/12.0,2.0),64.0);
-    extinction=uAtmosphere.x*(0.0004+exp(-world.y/max(uAtmosphere.y,0.05))*distanceWeight)*variation*clearance;
+    float foreground=mix(1.0,0.15,smoothstep(4.0,35.0,world.z));
+    extinction=uAtmosphere.x*(0.0004+exp(-world.y/max(uAtmosphere.y,0.05))*distanceWeight)
+        *foreground*variation*clearance;
     steady=extinction;
     radiance=uAtmosphereAmbient*(0.4+0.6*exp(-behind/30.0))+body.rgb*uAtmosphere.w;
 }

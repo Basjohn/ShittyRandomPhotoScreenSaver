@@ -33,7 +33,7 @@ class CompiledWaveformSettings:
         # Unexposed values are primitive/world policy, not guessed missing product settings.
         flow=Flow(speed=float(read('flow_speed')),head_hz=float(read('wave_rate')),
                   phase_swell=float(read('wave_swell')),amplitude_swell=float(read('height_swell')),
-                  head_x=16.,fade_in=.1,fade_out=.5)
+                  fade_in=.1,fade_out=.5)
         self.base=detached(Recipe(flow=flow,palette=palette,
             ribbon_colours={'low':tuple(card['quiet'] for card in cards),'high':tuple(card['peak'] for card in cards)},
             grade_share=(float(read('gradient_share')),float(read('mist_gradient_share')))))
@@ -46,7 +46,7 @@ class CompiledWaveformSettings:
                 if read('sparks_enabled') else None,idle_motion=float(read('idle_motion')),
             strands=RibbonStrandControls(MappingProxyType({key:tuple(read(key)) for key in
                 ('strand_count','strand_chance','strand_span','strand_length','strand_reach',
-                 'strand_width','strand_light','strand_beads','strand_peel','strand_halo','strand_glow')})) if read('strands_enabled') else None)
+                 'strand_width','strand_light','strand_beads','strand_peel','strand_halo','strand_glow','strand_eol','strand_fade')})) if read('strands_enabled') else None)
 
     def scene(self,snapshot):
         p=self.values
