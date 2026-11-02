@@ -781,6 +781,9 @@ The lab plan §5.1 owns the core-reactivity comparison and input-to-visible timi
 `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` owns full production controls and port design. Geometry/motion
 selection precedes final tuner semantics; WR-07 validates the response on recorded features before WR-08 verifies
 calibration and source reachability through production Settings, presets and audio lanes.
+The current lab comparison uses recorded audio and distinct model-specific body projections over normalized immutable
+history, with head-written moving colour, dense highlights and particles. A shared global scale/pulse is not a valid
+substitute for the planned flow, rolling twist, traveling packets, elastic torsion and waveform-envelope detail.
 New 3D labs/modes start Orthographic with optional Perspective, using the shared admitted eye/world and actual
 projection matrices/ray origins; camera math alone does not establish scene likeness or reflection parity.
 The shared bounded CPU path/history and transported width-frame references are documented in

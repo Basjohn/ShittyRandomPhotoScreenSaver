@@ -30,28 +30,20 @@ only remaining work, not implementation chronology.
 
 **Working sequence:**
 
-- [ ] **Finish the primary look:** close §0B concrete finish, floor illumination/reflection contact, waveform depth/shape,
-  mist continuity/edge light and scene-boundary concealment at native target scale.
-- [ ] **Finish the alternate look:** preserve three distinct broad ribbon identities, smooth flowing per-ribbon colour,
-  rim-attached free strands, restrained hot cores and the same mist/floor world. Close remaining blown-highlight and
-  whitish-mist-edge mismatch without weakening the primary look.
-- [ ] **Prove floor contact and mist clearance:** any ribbon approach to the floor deforms smoothly onto/away from it rather
-  than clipping; mist remains displaced around the waveform and present through the full depth/side field.
-- [ ] **Prove camera robustness:** inspect both projections across the admitted navigation poses and wide/narrow cards. The
-  world stays fixed; no visible scene edge, end cap, reflection drift or camera-dependent repair is allowed.
-- [ ] **Finish motion and bounded cost:** capture slow explicit-time motion, then measure ribbon, reflection, floor-light and
-  mist costs separately and together; prove lazy Off/resize/context retirement at each owner.
-- [ ] **Awaiting Validation — visual admission:** operator/capable visual-agent sign-off on the attainable
-  primary/alternate range before reactivity implementation/calibration, production registration, Settings or preset
-  migration. Record decisions against current native low/high captures and keep rejected gaps actionable.
-- [ ] **Reactivity timing fixture:** derive and test the fixed near-view head and boundary/fade margins under §5.1.1.
-  Measure causal input → head admission → visible shape, without shifted inputs; keep hidden ends, smoothness and
-  capacity intact. The distant-head appearance recipe does not establish live musical timing.
-- [ ] **Core-reactivity bake-off:** before WR-07 commits to one motion language, compare the four §5.1 candidates with the
-  same deterministic synthetic program and fixed scene constants. Candidate A is the existing concept mapping and must
-  remain in the comparison; colour shifts, particles and glow do not decide this gate.
+- [~] **Awaiting Validation — recorded motion bake-off:** review the current §5.1 audible four-way packages and select
+  a credible motion grammar, request a specific correction, or reject all. Judge distinct flowing/twisting body motion,
+  moving colour, dense/local highlights and particles together. Keep geometry-only controls for diagnosis.
+- [ ] **After motion selection, timing/framing admission:** extend the fixed-view near-head comparison to production
+  framing/navigation. Measure causal input → current body/head admission → visible shape without shifted inputs;
+  prove hidden ends, smoothness and bounded capacity. The distant-head appearance recipe is not timing evidence.
 - [ ] **After the bake-off selects the core grammar:** WR-07 recorded-feature replay/calibration, remaining shared primitive
   gates, WR-08 migration and WR-09 live acceptance.
+- [ ] **Production debt:** retain floor/contact/mist clearance, admitted camera poses, primary form/fringe and alternate
+  highlight polish, accents/optics, cost and lifecycle proof. Reflection strength is a production control; prioritize
+  tunable localized/reactive highlight density rather than spending the bake-off budget chasing reflection columns.
+
+The operator admits the current primary/alternate visual range for the next stages, with appearance caveats retained
+as production debt (§0B). This does not close musical, bounded-cost, camera/lifecycle or final native acceptance gates.
 
 **Durable current constraints:**
 
@@ -108,11 +100,13 @@ negative evidence, not a current style option.
 
 Native current-source comparison: `.artifacts/evidence/waveform_ribbon/wr_visual_admission_20261102/` (effective
 recipes, source hashes and native primary pairs; alternate reference retained at native size). Visual admission
-remains **Awaiting Validation**: primary contact reflection and pale overhead edge remain short of target;
-alternate broad sheets read at native size but its high state needs highlight/strand restraint.
+is accepted with caveats: primary contact reflection and pale overhead edge remain production refinement;
+alternate broad sheets read at native size but its high state needs highlight/strand controls.
 Explicit-time look previews and native keyframes: `.artifacts/evidence/waveform_ribbon/wr_motion_review_20261102/`.
 These synthetic low/high previews support visual judgement only, not musical timing, incremental runtime cost or
-lifecycle acceptance. Operator judgement on admission or a provisional bake-off sequencing exception remains open.
+lifecycle acceptance. The operator accepts this visual range; floor reflection remains tunable, with a modest
+reflectivity reduction a workable compromise. Highlight density and spatial packing remain production controls;
+the recorded comparison uses the same reactive accent mapping across models, with body-only diagnostics alongside it.
 
 **Ground mist ownership (operator direction):** ground-bank height and light stay at zero intentionally. The floor
 uses its own existing cheap analytic distance mist (`Environment.mist` / `MIST_GLSL`), independently of the shaped
@@ -147,9 +141,9 @@ must not be re-enabled to imitate the mock's lower corners.
   rims; then five camera poses in both projections. Measure final floor draw, reflection generation and whole scene
   separately, plus CPU light preparation. Check Off/lazy/resize/context retirement at their owners. Current static
   images and earlier narrow timings do not close these gates.
-- [ ] **Preset range and acceptance:** keep the complete-scene and preset-range mocks as distinct attainable looks,
-  including the latter's warm high accents. Prove paired low/high in the same world. Operator visual acceptance stays
-  open; audio response, live presets/Settings and production registration follow fidelity, never precede it.
+- [ ] **Preset range and production fidelity:** keep the complete-scene and preset-range mocks as distinct attainable
+  looks, including warm high accents. Preserve paired low/high scene identity. The current primary/alternate range
+  is admitted for reactivity; final native/musical acceptance and production appearance controls remain open.
 
 ### Camera contract for all following slices
 
@@ -505,8 +499,8 @@ cost ablations and same-scene comparison. A particle storm is a target failure e
 
 ### WR-07 — Real musical evolution in the lab
 
-**Entry:** readable single-ribbon lab; later repeat after floor/bands/accents. Use §5 signal contract. Before recorded
-music is allowed to tune the chosen behavior, close the §5.1 synthetic core-reactivity bake-off.
+**Entry:** admitted lab visual range with appearance caveats. Use §5 signal contract and the §5.1 recorded full-stack
+comparison to choose a credible motion grammar before calibrating it for production.
 
 - [ ] Run the §5.1 four-candidate bake-off first and record the chosen core grammar plus rejection reasons. Do not silently
   delete Candidate A, and do not let colour, glow or particle polish rescue weak geometry/motion.
@@ -574,21 +568,31 @@ the mock-directed visual result, not merely matching a lab that missed the targe
 
 ## 4A. Motion model: flowing history
 
-The ribbons are **music history flowing across the hall**, not shapes animated in place:
+The ribbons combine **music history flowing across the hall** with model-specific current logical deformation:
 
-- At a head beyond one edge of the view, each logical knot records the music-driven controls at that moment:
-  centre-line offset, half-width, twist, and later emission/hue. An admitted knot never changes
+**Visible-body correction:** a head-only change is insufficient for the operator's authored low/high forms. Retain
+normalized carrier/fine history at the head, and let the sole logical state drive the selected model's visible body
+(flowing bends/rolling twist, traveling packets, elastic modes or macro-flow/detail). Its bounded pure snapshot projection is shared by body, accents, reflection
+and mist-clearance consumers. It never mutates admitted history or integrates in the renderer. The lab may measure a
+bounded CPU packet projection; production admission must move/measure that projection at the existing shared boundary.
+Prove same-time low/high geometry and music-versus-constant-drive body output; a light/mist-only change cannot pass.
+
+- At a head beyond one edge of the view, each logical knot records normalized musical shape detail at that moment:
+  centre-line offset, relative width/twist, emission/hue. The model-specific current projection maps these into the
+  authored quiet/peak forms without changing their musical history. An admitted knot never changes
   (`core/ribbon_ring.py`). Music therefore travels along the ribbon: a bass hit becomes a wide stretch that
   drifts across the hall.
 - The whole history moves by one uniform translation derived from logical time, composed into the MVP.
   No knot is rewritten to move. Flow direction and speed are fixed authored scene constants. Music never changes
   them, because a speed change would read as a different scene (gate A).
-- The large smooth waves come from an authored head oscillator whose phase advances with logical time; music
-  modulates its amplitude and rate. Raw band envelopes plotted as height make jagged plateaus, not the mock's waves.
+- The authored carrier advances with logical time; each candidate adds its own bounded musical motion. Raw band
+  envelopes plotted as height make jagged plateaus, not the mock's waves. A shared carrier with different gains is
+  insufficient to establish four distinct reactions.
 - Every history-carried shape control (width, twist, offsets) is band-limited to features of about half a
   wavelength or longer. A control changing over d seconds draws a feature flow speed x d long, so fast changes
-  draw lumps. Immediate musical punch comes from whole-ribbon light, which needs no history.
-- Any per-frame animation must be a pure shader function of (knot coordinate, logical time). Nothing may
+  draw lumps. Immediate musical punch may come from current logical body deformation and light, without rewriting history.
+- Any per-frame projection must be a pure function of immutable history and current logical state (lab snapshot or
+  production shader). Nothing may
   rewrite history, because that would bring back the per-tick cost the ring removed.
 - The head and tail stay off-view by at least two knot spacings plus the visible end margin, so the provisional
   boundary segments and evictions are never seen.
@@ -628,6 +632,20 @@ composed ribbon, but must not counterfeit transient bursts. Whole-scene exposure
 
 ### 5.1 Core-reactivity candidate bake-off
 
+**Operator decision requirement:** the winner comparison must use the existing recorded real-music samples and
+include the complete reactive stack: visible ribbon width/bend/twist, particles, localized highlight density/light
+and colour shifts. A mist-only response does not count. Synthetic/geometry-only captures remain isolation diagnostics,
+not a substitute for this decision. The initial broad-navigation synthetic head configuration has excessive transport
+delay; recorded demonstrations use an explicitly scoped fixed-view near-head/fade admission, with production navigation
+still open. Do not time-shift audio or conceal delay with cropped video. Verify body response separately, then full stack.
+
+The four candidates must be different motion models, not a shared oscillator/global pulse with different gains.
+Current-body projection is specific to each model: A has band-driven flowing bends and accumulated rolling twist;
+B has bounded traveling bend/width/torsion packets; C has independently integrated damped bending/lateral/torsional
+modes; D has long authored macro-flow with captured PCM RMS-envelope detail. D is waveform-envelope-derived, not
+literal audio-frequency PCM plotted at knot rate. Head-written saturated colour changes advect with history; do not
+replace them with a whole-scene palette fade. Shared particle/highlight inputs do not establish distinct body motion.
+
 Do not choose the ribbon's core geometry/motion grammar from prose alone. The current concept mapping remains a real
 candidate and is **not** replaced by this comparison. Before recorded-music tuning, implement four deliberately distinct
 bounded candidates behind the lab fixture only:
@@ -635,141 +653,101 @@ bounded candidates behind the lab fixture only:
 | Candidate | Core geometry/motion response | Main question / failure mode |
 | --- | --- | --- |
 | **A - Current concept mapping (retain)** | Bass drives body width and slow large bend; mids drive twist plus lateral/vertical centerline deformation; highs may add restrained fine edge/body motion; typed transients add short local curvature/tension. | Does the straightforward band-to-body mapping already read clearly and musically without becoming globally rubbery or having every band fight for the silhouette? |
-| **B - Traveling deformation packets** | A typed transient/attack launches a bounded bulge/bend/twist envelope at the live head, sampled into successive new knots. It travels as immutable history; decay is authored into that head envelope, not integrated over old knots. Sustained low/mid energy controls packet scale, breadth and bias. | Do visible traveling reactions make hits and phrases easier to read, or do repeated events turn the strip into beads/lumps? |
-| **C - Elastic tension dynamics** | Audio moves bounded targets for ribbon tension/stiffness/damping: bass can broaden/loosen large arcs, mids bias torsion/side pull, and transients inject a damped impulse/overshoot into a bounded logical head state. Sample that state into new knots; neither old knots nor render FPS integrate it. | Does a spring-like body feel organic and powerful while preserving attack, or does smoothing/overshoot make it late, seasick or too similar across bands? |
+| **B - Traveling deformation packets** | A typed transient/attack launches a bounded bend/width/torsion field at the live head. Its centre travels with flow; age determines decay and smooth retirement. A pure snapshot evaluates these fields over immutable history. | Do visible traveling reactions make hits and phrases easier to read, or do repeated events turn the strip into beads/lumps? |
+| **C - Elastic tension dynamics** | Audio targets and typed velocity impulses excite separate bounded low-bending, lateral and torsional modes. The logical clock integrates once; a pure snapshot projects them over the visible body. | Does a spring-like body feel organic and powerful while preserving attack, or does smoothing/overshoot make it late, seasick or too similar across bands? |
 | **D - Authored macro-flow + waveform fine structure** | Keep the slow authored head oscillator as the large silhouette. Sample a small, band-limited amount of current waveform/band detail into newly admitted knots so fine musical structure rides on the body and then advects with history. Clamp wavelength/amplitude so dense audio cannot become jagged full-body PCM. | Can literal sound detail add recognisable texture without destroying the smooth mock silhouette, aliasing at native pixels or duplicating the high-frequency accent layer? |
 
-#### 5.1.1 Timing decision and fixed-world admission
+#### 5.1.1 Current owners and execution
 
-**Current source is an appearance fixture, not a response implementation.** `Flow` in
-`tools/labs/waveform_ribbon_lab.py` defaults to head x=34, speed=1.6, knot rate=6 Hz, fade-in=2.5 s and two shape
-smoothing stages of 0.45 s each. `fill_ring` reconstructs warm synthetic history for a still; `Lab.render` calls it
-again on each capture. These values and that reconstruction do not establish incremental runtime cost or musical timing.
-At the default mock pose, a new knot reaches x=0 after 34/1.6 = **21.25 s**, before considering source smoothing.
-Warming history does not remove that causal transport delay.
+`tools/labs/waveform_ribbon_reactivity.py:HeadHistory` owns explicit 120 Hz logical stepping, typed-event identity,
+normalized immutable `RibbonRing` history and model-specific snapshot geometry. `Lab.render_history` consumes a
+published snapshot without rebuilding/appending history or integrating motion. All body/particle/reflection/mist
+consumers receive the same packet. The bounded CPU projection is lab evidence; runtime admission must measure and
+place it efficiently at the shared production boundary rather than inherit an unmeasured per-frame CPU builder.
 
-**Decision:** retain head-authored immutable history and constant authored flow. For the production-shaped bake-off,
-derive a **fixed near-view head** just beyond the widest admitted scene framing, rather than inherit x=34. Keep the
-distant-head recipe unchanged as an appearance reference. Resolve head/tail positions once from the declared camera,
-aspect, navigation and waveform-envelope bounds; no per-frame camera-following head, hidden flow acceleration, history
-rewrite, future inputs or second clock. A candidate must use the same admitted head as its peers.
+`tools/labs/waveform_ribbon_recorded_input.py` reuses `load_jsonl`, `ReplayBeatEngine`, canonical source/technical
+configuration without preset reads, `PcmReanalysis` and the production floor-independent raw-band reference mapping.
+Clipped recorded live lanes are not the body feed. The same precomputed source drives all four models. Native PCM
+RMS is a visual-detail input for D, not another FFT/analyzer or literal audio-frequency geometry.
 
-- Measure the visible world-x entry/exit bounds from actual projected sheets over the admitted pose/aspect/envelope
-  set, including reflected geometry where it can reveal an end. Record that set and the resulting bounds.
-- Let knot spacing be `speed / knot_hz`. Keep provisional head/tail segments beyond the visible bounds by at least
-  two spacings plus the visible-end margin. Account separately for `speed * fade_in` and `speed * fade_out` so end
-  fades do not enter view. Record the selected margins and verify them in native captures; do not assume a camera
-  centre or portrait reference crop bounds the widest view.
-- Prove `(capacity - 1) * speed / knot_hz` covers the visible span plus both admitted margins within the existing
-  256-knot cap. If an admitted pose/range cannot fit, resolve that admission boundary before comparing candidates;
-  never truncate the visible tail or silently raise capacity.
-- Measure event input time, first affected head knot, first visible geometric difference and the geometry response
-  peak/settle in a fixed ROI against an identical no-event control. Include source smoothing, knot quantization,
-  spatial band-limiting, transport and visibility/fades. Record the pixel threshold/ROI used to detect onset and
-  inspect native crops to distinguish geometry from a lighting change.
-- About 45 ms rise / 0.65 s settle in the migration vocabulary is a **proposed source envelope**, not a demonstrated
-  visible-geometry target. Fast light is a separate response job; it cannot rescue the geometry-only comparison.
-  No numeric live-latency acceptance budget is claimed without evidence and visual/listening judgement. If required
-  hidden fades or smoothness still leave an unmusical delay, reject that timing configuration and leave the gate open;
-  do not declare it responsive because a delayed shape eventually looks good.
+`tools/labs/waveform_ribbon_music_bakeoff.py` is the maintained capture entry point. It runs under an external whole-
+process-tree Windows Job deadline, uses project Python and an explicit FFmpeg executable, and refuses overwrites:
 
-#### 5.1.2 Exact synthetic input and fair comparison
+```powershell
+& '.\.venv\Scripts\python.exe' tools/labs/waveform_ribbon_music_bakeoff.py --recording logs/visualizer_recordings/ragdoll_quiet_intro_loud_end1.jsonl --start 20 --seconds 10 --output .artifacts/evidence/waveform_ribbon/<new-run> --ffmpeg .artifacts/scratch/wr_audio_video_tools/ffmpeg.exe
+```
 
-Use local program time `t` in seconds, one fixed seed (0), camera/world and identical base ribbon. All lanes start
-at zero. Define `E(a,b,t) = sin(pi * (t-a)/(b-a))^2` for `a < t < b`, otherwise zero. Values below are normalized
-fixture inputs, not claims about real BeatEngine scales. Intervals are half-open; events at an exact timestamp are
-consumed once. The synthetic detail lane is known analytic input, not PCM or another analyzer.
+The scratch FFmpeg binary is an isolated tool dependency, not installed into the product environment. Another
+machine must supply its explicit executable path. Ground volume banks stay zero and the separate cheap floor mist
+is preserved. Reflection-column polishing stays production debt.
 
-| Program interval | Identical input delivered to every candidate |
-| --- | --- |
-| 0–1 s: idle | All lanes zero; retain honest authored idle flow |
-| 1–2.5 s: bass | `bass = 0.9 * E(1,2.5,t)`, `loudness = bass`; bass attack events at 1.25 and 1.9 s, strengths 0.5 and 0.9 |
-| 2.5–4 s: mids | `mids = 0.8 * E(2.5,4,t) * (0.75 + 0.25*sin(2*pi*(t-2.5)))`, `loudness = mids` |
-| 4–5 s: highs/detail | `highs = 0.8 * E(4,5,t)`, `loudness = highs`; signed detail `highs * sin(2*pi*1.5*t)` |
-| 5–6.5 s: discrete transients | Other lanes zero; onset events at 5.1, 5.7 and 6.3 s with strengths 0.35, 0.65 and 1.0 |
-| 6.5–8 s: combined passage | `bass=0.8`, `mids=0.65`, `highs=0.5`, `loudness=1`; detail `highs * sin(2*pi*1.5*t)`; onset at 7.2 s, strength 0.8 |
-| 8–10 s: release | All inputs zero; retain each candidate's causal response state and decay |
+#### 5.1.2 Distinct motion and causal timing
 
-Every unspecified lane is zero; detail is signed and all other continuous lanes are in 0..1. Give every event a stable
-kind/sequence identity in one fixture epoch. Continue zero input after 10 s for the full timing capture. This short
-program discriminates motion; longer sustained-hot, silence and strength-step fixtures remain WR-07 checks.
+- **A: flow / rolling twist.** An advected carrier, current bass-driven width and broad bend, accumulated mid-driven
+  rolling torsion/lateral weave, plus retained musical fine structure. Its direct body envelope is not imposed on B/C/D.
+- **B: traveling packets.** Typed accents launch local bend/width/torsion/colour/light fields at the admitted head;
+  their centre moves with constant flow. A bounded eight-packet population has a model-specific 0.8 s admission gap;
+  packets fade smoothly in their final two seconds before six-second retirement. No visible expiry pop is allowed.
+- **C: elastic torsion.** Separate damped low-bending, lateral and torsional modal state integrates once at logical dt.
+  Audio targets and typed velocity impulses excite the fields; rendering only evaluates them. No common affine pulse.
+- **D: macro / PCM envelope.** Long authored flow and slow passage scale carry bounded, head-written PCM RMS-envelope
+  detail. Review enlarged moving rims for unwanted short ripples. It is not raw waveform PCM plotted at six knots/s.
 
-**Band-separation falsifiers:** the main program's loudness covaries with each isolated band, so it cannot by itself
-exclude a loudness-only response. Add three 6-second companion fixtures, one per band: hold loudness at 0.6 through
-pre-roll and capture, vary only the selected band as `0.8 * E(1,5,t)`, and keep all other bands, detail and events zero.
-Compare each against the same fixed-loudness/no-band baseline with identical phase, warm-up and scene. Add a fourth
-companion with only `loudness = 0.8 * E(1,5,t)` against a zero-input baseline. Trace target/head/visible differentials
-and cross-talk, with native geometry crops at input peak t=3 plus the shared nominal transport delay. Retain onset
-and settle measurements through the same full travel/settle allowance; additional WebPs are unnecessary for these
-controls. Require each intended band-specific target to respond beyond its matched baseline, while a diagnostic
-loudness-only mapping fails the separation audit. Log intended and unintended target deltas; attractive main-program
-motion alone cannot pass separation.
+The body may change across already-visible history through these current logical projections; stored musical records
+remain unchanged. Do not describe this as the earlier head-only geometry travelling unchanged. The fixed sweep path
+uses convex B-spline controls; body projections share bounded y/z/width domains, smooth curve/floor contact and caps.
 
-Hold palette/colour shifts, camera, floor, mist recipe, topology, base oscillator, seed and exposure fixed. Disable
-particles, free strands, bloom and reactive light; use one fixed readable material/light level. Use identical
-test-owned quiet/peak bounds for height, width, twist, depth/lift and the same smoothness/continuity limits. Record
-per-candidate coefficients and actual excursion/curvature: elastic overshoot counts inside those bounds. Do not
-normalize each output after rendering or give one candidate a larger silhouette budget to make it win.
+Head-written colour uses a saturated hue interpolation between authored quiet/hot colours; it advects with history.
+A global palette fade cannot demonstrate moving colour. Particles and dense highlights must accompany the recorded
+judgement, with their shared input mapping held equal across candidates so they do not mask identical body motion.
+The current sparks are the existing bounded history-spark primitive, not proof of production event-owned cohorts.
 
-For D, respect knot sampling and native-pixel resolution. The 1.5 Hz analytic detail is below the default knot
-Nyquist limit, but still must meet geometric smoothness and pixel-readability gates. Do not sample raw audio at knot
-rate and alias it into the body. Any later PCM-derived detail must use valid history/sample rate/generation from the
-existing audio authority, with its required feature/demand recorded; synthetic detail is not musical waveform proof.
+Musical review currently admits only the fixed mock Orthographic view at the native panel aspect. The head lies beyond
+its actual right edge with two knot spacings and hidden fade margins; short off-view fades keep the live head nearby.
+This is not full navigation admission. The original distant-head/broad-navigation synthetic capture is rejected as a
+musical demonstration. Its exact standalone producer is retained only under the corresponding local evidence's
+`producer/` directory; CPU synthetic fixtures remain diagnostic tests, not the winner comparison.
 
-#### 5.1.3 Captures, traces and focused falsifiers
+Recorded audio and feature windows are aligned to the same existing `_new_samples` PCM reconstruction. Retain original
+feature timestamps, sample-aligned anchors and drift. No audio/video shift may hide body latency. Colour/fine history
+still has physical transport; current body response must also be checked before a fresh knot can enter view.
 
-Advance one retained lab state/ring per candidate from explicit logical time; append only newly due knots. Use a
-declared fixed integration lattice for candidate dynamics/events, separate from render delivery. This is explicit
-fixture stepping, not a scheduler or production clock. A batch reconstruction may be an independent correctness
-control, never the measured incremental path. Render 30/60/144 fps and irregular presentation against the same
-logical history; changing how logical dt is partitioned is a separate numerical-integration claim requiring proof.
+#### 5.1.3 Required review package and falsifiers
 
-Warm a full idle history on the selected lattice before program t=0, using a recorded carrier phase at zero. Idle
-pre-roll contains no future events; reset fixture epoch and candidate state consistently. Retain:
+- The same audible real-music windows through A/B/C/D, including quieter and intense material, with valid real pre-roll.
+  Export a simultaneous labelled MP4 with audio, one short WebP per candidate and five synchronized native checkpoints.
+  Preserve original source hashes, effective recipes, source/event IDs, alignment, camera, logical/knot/render rates.
+- Same-time quiet/peak body captures must visibly change actual ribbon geometry. Light/mist changes alone fail.
+  Compare recorded body against a matching-time idle control and inspect continuous motion; constant energy bias or
+  automatic carrier drift alone is not musical reactivity. Keep body-only/native crops as diagnostics beside full stack.
+- Tests must cross the actual snapshot/render seam: visible old body can respond before the next head knot, rings
+  remain unchanged, render delivery does not integrate state, four profiles are not scaled copies of one oscillator,
+  packet geometry advects and fades before expiry, and D's PCM detail changes its history without a shared body pulse.
+  Head-target traces alone do not establish the final geometry mapping.
+- Report the current CPU projection/append and GPU scope honestly. Old head-only diagnostic primitive timing does not
+  establish current projection/whole-scene/native cost. Full production pose/size/cost/lifecycle gates remain open.
+- Reject broken smoothness/frames, visible ends, population overflow, new events in silence, repeated/stale events,
+  hidden latency, indistinguishable motion or an unchanged visible ribbon rescued by fog/light/particles.
 
-- **One unshifted timing capture per candidate**, at real speed from t=0 through at least
-  `10 + maximum travel-to-visible-exit delay + declared settle allowance` seconds. Choose one common end time from
-  the admitted bounds and all candidate response limits before capture. Trace to that end; if response has not
-  settled, record failure and extend every candidate equally. Input time labels never shift to match the picture.
-- **One small 10-second WebP per candidate**, at real speed, plus five synchronized native stills at common clip
-  times **0.5, 2.0, 3.5, 5.5 and 8.5 s**. Set the common crop start to the nominal head-to-centre-ROI transport
-  delay derived from the admitted head/speed before rendering. Label both clip and program times, the corresponding
-  nominal head-input checkpoints, and preserve the uncropped capture;
-  a delayed crop is shape-comparison evidence only. Never shift individual candidates independently. The highs,
-  transient and release phases remain inspectable in the full sequence even when absent from the five stills.
-- Native target-size full frames and geometry-only/no-bloom crops at each detected onset, peak and settle; use the
-  primary board's native panel size for visual judgement, with small WebPs only as delivery previews.
-- Source revision/dirty diff, fixture and effective-recipe hashes, camera/world/pose signatures, carrier phase,
-  integration/knot/render rates, pre-roll/crop/end times, event IDs, coefficients and all admitted bounds. Log raw
-  inputs → mapped targets → head state/admitted knot identity → visible shape measurements, plus range occupancy
-  and attack/settle timing. Measure CPU mapping/integration/append/packing/upload/submit separately from warm GPU
-  median/p90; shared scene constants stay identical. Follow §7 for bounded cost and legal context retirement.
+#### 5.1.4 Decision
 
-Use the smallest focused tests that can falsify: stable admitted world-space values through later appends/rebases
-(respecting the primitive's provisional-end rules), bounded finite positive widths, deterministic events consumed
-once, zero new musical activity in silence, fixed flow, capacity, and identical logical knots under varied render
-delivery. Test smoothness/frame continuity and a visible traveling packet against no-event controls. These tests do
-not certify native-pixel beauty, variable-dt integration equivalence or real music. Candidate C's logical dynamics
-must advance once per lattice step; B's head envelope must not mutate an old knot to implement decay.
+**Current local review packages (Awaiting Validation):**
 
-#### 5.1.4 Selection and remaining admission
+- `.artifacts/evidence/waveform_ribbon/wr_planned_motion_review_ragdoll_20261102/`: source 20–30 s.
+- `.artifacts/evidence/waveform_ribbon/wr_planned_motion_review_human_20261102/`: source 15–25 s.
 
-Hard reject broken continuity/frames, visible ends, out-of-bounds/aliased geometry, rewritten musical history,
-render-dependent evolution, repeated events, unbounded work or concealed input-to-visible delay. Record a pass/fail
-and evidence pointer for each constraint. An unaccepted timing configuration cannot win on appearance alone.
+Each directory contains `comparison_with_audio.mp4`, `A`–`D/motion.webp`, `synchronized_native_sheet.png`,
+same-time body-range proofs, input metadata and `receipt.json` with source/artifact hashes and scoped CPU costs.
+Earlier head-only and common-pulse drafts are rejected; these paths identify the distinct-model review.
 
-For each eligible candidate, annotate **0 (fails), 1 (weak), 2 (credible), 3 (preferred)** for low-react beauty, band
-separation, transient legibility, attack/settle, silhouette readability and hot-passage headroom. Cite frames/time
-windows and measured CPU/GPU delta beside each judgement. No weighted total overrides a hard failure, and this short
-fixture alone cannot pass sustained-hot headroom. Record the reviewer/operator decision, rejection reasons and
-unresolved timing/cost evidence. If none is credible, select none and revise the identified failure rather than force
-a winner. Prefer one coherent grammar; admit a hybrid only after a same-fixture ablation shows complementary jobs
-without new noise, latency or capacity cost. Do not stack all four.
+Record the operator's choice and rejection reasons against the audible clips: flow, twist, local packet travel,
+elastic attack/settle, low-react beauty, moving colour, dense/local highlights, particles, continuity and bounded cost.
+If none is credible, select none. A hybrid requires a same-source ablation showing complementary jobs; do not stack
+all four. A still or pixel count cannot establish the reaction's musical feel.
 
-After selection, WR-07 uses existing recorded windows to calibrate the selected response and verify musical
-legibility, sustained-hot headroom, silence/hot-start behavior and acceptable causal timing. WR-08 then verifies
-parity and source reachability through production Settings/presets/audio; it does not postpone all response
-calibration until after migration. Synthetic victory and visual-agent review alone cannot close musical Gate F/H.
+After a credible motion choice, WR-07 calibrates its source scales, hot-passage headroom, silence/hot-start behaviour
+and timing on recordings; WR-08 verifies production parity and source reachability through actual Settings/presets/audio.
+Final native/operator acceptance remains separate from this lab comparison.
 
 ## 6. A–H hard gate matrix and negative controls
 
@@ -886,15 +864,15 @@ camera and resource contracts rather than rebuilding them or reopening already-l
 ## 10. Concrete next start and unresolved decisions
 
 **Section 0 is the sole live sequence.** The ribbon material and generated-map floor exist; their fidelity is open.
-The bounded mist prototype exists; its remaining reusable admission/lifecycle/cost gates are still open. No reactivity
-implementation, audio calibration or production integration precedes visual acceptance.
+The bounded mist prototype exists; its remaining reusable admission/lifecycle/cost gates are still open. The operator
+admits the current visual range with production caveats; motion selection remains Awaiting Validation under §5.1.
 
 - [ ] **Awaiting Validation — reference completeness:** no clean annotation-free scene or reference animation was
   present in the inspected package. Exact hidden pixels, topology count and optical model are unspecified; the motion
   model is the operator's flowing history (section 4A), with direction and speed authored in the lab. Proceed from visible pixels and document authored choices; request additional originals only
   if an actual comparison is blocked. Do not make a generated reference the new goal.
-- [ ] **Awaiting execution evidence — musical fixture selection:** select available recorded clips and verify the
-  waveform/analysis payload and valid pre-roll at WR-00. This planning pass did not replay or evaluate a clip.
+- [ ] **After motion selection — recorded calibration coverage:** audit quiet/middle/hot and silence/hot-start windows,
+  presence gating (including PCM detail), headroom and attack/settle under WR-07. Two comparison windows do not close it.
 - [ ] **Awaiting architecture proof:** complete S3D-1 camera-facing width/defocus, S3D-2 emitter extensions,
   S3D-5 reflection inclusion/lifecycle/cost and S3D-7 bounded volume gates at their owners above.
 - [ ] **Awaiting Validation — tolerances and delivery framing:** confirm target landmark/ROI tolerances, wide-view

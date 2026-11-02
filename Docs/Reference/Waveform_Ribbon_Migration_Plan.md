@@ -3,7 +3,7 @@
 Planning owner for **WR-08**, subordinate to [`Current_Plan.md`](../../Current_Plan.md) §7.1 and the lab plan's
 WR-08 gates ([`Waveform_Ribbon_Lab_Plan.md`](Waveform_Ribbon_Lab_Plan.md)). The lab owns the look; this document
 owns the full production control design, production calibration and the order of the port. Production migration is
-not implemented. The lab look remains Awaiting Validation; its current tuner is a synthetic prototype, not the full
+not implemented. The operator admits the current lab visual range with production appearance caveats; its tuner is a synthetic prototype, not the full
 matrix editor below. Core geometry/motion selection and timing belong to the lab plan §5.1. Candidate-dependent source,
 target and response choices below are provisional until that comparison selects a grammar. Values quoted are the lab
 recipes' current values, recorded for orientation: presets are operator-authored and never test oracles.
@@ -136,6 +136,9 @@ The Shape Tuner's per-target quiet/loud values are these same ranges, edited on 
 
 ### Floor
 - **Reflection Intensity (R)** (operator, 1 November): how strongly the floor mirrors the scene, quiet → peak.
+- Reflection columns are workable production refinement, not a bake-off blocker. A modest reduction in reflectivity
+  is an admitted compromise. Expose highlight density and localized packing, including reactive density, after the
+  core geometry decision; comparisons use the same reactive accent mapping across candidates and retain body-only diagnostics.
 - Wetness, Streak Length, Column Fade, Mist Reflection.
 - Floor contact (sheets deform onto the floor) is a rule, not a control.
 
@@ -202,24 +205,27 @@ separate attack and release. Sources:
 | Idle / silence | Head wave keeps a slow honest drift; no sparks, strands or pulses; fade, never vanish | presence from `musical_weight`; an explicit idle lane, never fake energy |
 | Sustained quiet passage | Ranges near their quiet handles: low waves, narrow sheets, quiet colours | eased passage intensity on the fixed real-music scale (guide §2A, §5 "slow passage drive": two even ~1.2 s stages) |
 | Sustained loud passage | Ranges near their loud handles: tall sweeps, wide sheets, loud colours, more sparkle; beat contrast kept inside the chorus | same passage drive; beats multiply inside it, never add a floor (§13C) |
-| Kick / bass hit | Height pulse at the head (written into history, so it travels), bass ribbon wider; a bass passage can raise one taller arc | bass transient through `passage_ramp`; ~45 ms rise / ~0.65 s settle is a proposed source envelope, with actual visible timing subject to lab plan §5.1 |
+| Kick / bass hit | Model-specific body response: direct band bend/width, traveling curvature packet or elastic impulse; history colour/light travels with flow | bounded passage-gated reward and consume-once typed onset; visible timing/attack must be judged in the recorded bake-off |
 | Snare / generic onset | Light flash along the ribbons, sparks; free strands peel off on accents | typed event bus, consume once; accents = onsets above the recent mean (§13C) |
 | Vocal rise / swell | Twist and depth sway grow; colour moves toward loud | mid/vocal lane, medium continuous envelope |
 | Highs | Fine shimmer: glints, sparkle density | high band, control-normalised, ramped by the passage |
 | Release to calm | Ranges ease back over the passage stages; flow speed never changes | passage drive |
 
 **History rules specific to this mode:**
-- **Written at the head, never rewritten.** History-carried controls (height, width, twist, lift, tint) are sampled
-  when a knot is admitted. A control changing over d seconds draws a feature flow speed × d long, so every one passes
-  the two-stage band-limit (lab plan §4A).
+- **Written at the head, never rewritten.** Normalized musical detail, tint and light are sampled when a knot is
+  admitted. Current body geometry is a model-specific logical projection over that immutable history, shared by
+  ribbons/accents/reflection/mist. Do not constrain all four models to head-only shape changes or a common global pulse.
+  A history-carried control changing over d seconds draws a feature flow speed × d long; band-limit it appropriately
+  (lab plan §4A). Projection remains pure; rendering never integrates elastic state or advances history.
 - **Immediate channels** (whole-ribbon light, sparks, strands, glow) may follow the beat directly; they need no
   history.
 - **Flow speed never follows the music** (gate A). DevCurve's lesson: a ±10% beat nudge on travel read as
   fast/slow/fast/slow.
 
 ### 4.3 Calibration boundaries
-- **Visual admission and grammar selection: the lab.** The existing low/high recipes do not close look acceptance
-  or establish a multi-band response. Follow the lab plan's live sequence, then §5.1 for the four-way comparison and
+- **Visual admission and grammar selection: the lab.** The operator admits the current visual range with appearance
+  caveats; synthetic low/high recipes alone do not establish a multi-band response. Follow the lab plan's live
+  sequence, then §5.1 for the four-way comparison and
   causal timing decision. Keep all candidates' control/editor semantics provisional until selection.
 - **WR-07 recorded-feature response calibration: the lab.** Replay existing recorded audio/analysis through its
   canonical authority into explicit logical time with valid pre-roll. Calibrate the selected grammar's ranges,

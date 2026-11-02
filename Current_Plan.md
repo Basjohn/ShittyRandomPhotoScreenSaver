@@ -134,34 +134,24 @@ The scene is world-first through the shared framed camera (Orthographic default)
 waveform and strong thick shaped mist, with no visible horizon/sky/floor edge. The waveform clears and softly lights
 the mist. Preset/control migration and recorded-audio calibration come only after the lab look is credible.
 
-- [~] **Primary lab look:** close the remaining mist continuity/interior-volume, floor-contact/reflection, edge crackle,
-  sheet saturation and fog-cost gaps against the complete-scene target. Ground banks stay at zero intentionally;
-  the floor uses its own cheap distance-mist layer, separately from the shaped volume.
-- [~] **Alternate lab look:** retain distinct broad ribbon identities, free rim-attached strands, glow and floor contact;
-  close its remaining highlight/mist-edge fidelity gaps without regressing the primary look.
-- [ ] **Accents and optics:** finish sparks/glow/defocus only after waveform, floor and mist remain credible without them.
-- [ ] **Awaiting Validation — visual admission:** compare current primary/alternate low/high captures against their
-  targets (native comparison at Lab Plan §0B) and record operator/capable visual-agent judgement on floor/waveform/volume. Review the
-  primary reflection/form/pale upper fringe and alternate high-state highlights; ground volume banks stay off.
-  Keep rejected gaps actionable;
-  no sign-off is implied by the existence of captures. This gates reactivity implementation and production migration.
-- [ ] **Reactivity timing fixture:** after visual admission, derive one fixed near-view admission head from the widest
-  admitted framing plus boundary/fade margins, prove hidden ends and bounded history, and measure input → head → visible
-  geometry delay. The current distant-head recipe is an appearance reference, not live-response evidence. Use the exact
-  timeline, timing capture and decision rules in the Lab Plan §5.1; do not conceal delay with pre-roll or shifted inputs.
-- [ ] **Core-reactivity bake-off:** before committing WR-07 to one geometry/motion language, retain the concept brief's
-  current bass-width/slow-bend + mids-twist/centerline + highs-fine-detail + transient-curvature mapping as Candidate A
-  and compare it with three bounded alternatives in the lab: traveling deformation packets, elastic/tension dynamics,
-  and authored macro-flow with subordinate waveform-derived fine structure. Hold colour shifts, particles and glow
-  constant/off for this decision. Drive every candidate with the same deterministic 10-second synthetic program; export
-  one short WebP plus five synchronized stills per candidate at identical camera/world/time checkpoints, together with
-  an unshifted full timing capture and input/realization traces. Judge musical separation, low-react beauty,
-  attack/settle, continuity, silhouette readability and cost. Choose one core grammar, or
-  combine candidates only when the evidence shows complementary behavior rather than extra noise. Detailed contract:
-  `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` §5.1.
+- [~] **Awaiting Validation — recorded motion bake-off:** judge the four distinct models against the same audible
+  recordings: A flowing bends/rolling twist, B traveling deformation packets, C elastic bending/torsion, D broad
+  macro-flow with PCM-envelope detail. Review body movement, moving colour, particles and dense/local highlights
+  together; reject identical pulses, mist-only response or poor low-react form. Current synchronized clips, individual
+  motion previews, five native checkpoints and traces are indexed in the Lab Plan §5.1. Select one, request a specific
+  correction, or reject all; no production grammar is chosen yet.
+- [ ] **After motion selection, finish timing/framing admission:** the comparison admits only the fixed mock view with
+  a near-view head. Prove hidden ends, bounded history and input → body/head → visible delay across the production
+  framing/navigation range. Preserve unshifted audio and measure current-body response separately from transported
+  history; the former distant-head and common-pulse drafts are rejected diagnostics.
 - [ ] **Only after the bake-off selects the core grammar:** recorded-feature WR-07 response calibration, remaining S3D-1/2/5
   lifecycle/cost gates, WR-08 production migration/tunable presets, then WR-09 acceptance with
   `tools/visualizer_live_check.py --load game60`.
+- [ ] **WR-08 appearance controls and accents:** keep floor reflection tunable; a modest reduction in reflectivity is
+  a workable production compromise, not a reason to chase columns before reactivity. Expose highlight density and
+  localized packing as useful reaction aspects; the bake-off uses the same reactive accent mapping for every model.
+  Retain primary form/fringe and alternate highlight polish, sparks/glow/defocus and measured fog cost as production
+  debt. Ground banks stay zero; the floor keeps its separate cheap distance-mist layer.
 
 ### 7.2 Reactive Liquid / Audio Melt Pool
 

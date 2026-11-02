@@ -282,7 +282,7 @@ class Recipe:
         fill_light=.12, fill_centre=.3, rim_glow_light=.35,
         rim_glow_width=.04, body_alpha=.025, body_tint=.4, glint_density=1.4, glint_chance=.12, glint_light=3.,
         glint_radius=.25, glint_min_pixels=.8))
-    sparks: RibbonSparks = field(default_factory=lambda: RibbonSparks(per_knot=16, lifetime=4.5, drift=1.2, rise=.4,
+    sparks: RibbonSparks | None = field(default_factory=lambda: RibbonSparks(per_knot=16, lifetime=4.5, drift=1.2, rise=.4,
                                                                        smallest=1.6, largest=5., light=16., white=.25))
     strays: RibbonStrays | None = None  # free liquid strands peeling off the sheets (the alternate board)
     # World colour grade (preset look): the mock's cyan left, blue-violet middle, magenta right across the view,
@@ -1000,10 +1000,18 @@ class Lab:
         with self.target.current():
             return self._render(state, flat=flat, pose=pose, at=at)
 
-    def _render(self, state: str, *, flat: bool, pose: str, at: float | None) -> np.ndarray:
+    def render_history(self, ring: RibbonRing, now: float, *, flat: bool = False, pose: str = 'mock') -> np.ndarray:
+        """Read explicitly advanced lab history; rendering never appends or integrates it."""
+        if not math.isfinite(now):
+            raise ValueError('History render time must be finite')
+        with self.target.current():
+            return self._render('low', flat=flat, pose=pose, at=None, history=(ring, float(now)))
+
+    def _render(self, state: str, *, flat: bool, pose: str, at: float | None,
+                history: tuple[RibbonRing, float] | None = None) -> np.ndarray:
         recipe, (width, height) = self.recipe, self.size
         environment, flow = recipe.environment, recipe.flow
-        ring, now = fill_ring(recipe, state, at=at)
+        ring, now = fill_ring(recipe, state, at=at) if history is None else history
         view, projection, eye = camera(POSES[pose], width/height)
         scroll = np.identity(4)
         scroll[0, 3] = flow.head_x - flow.speed*now
@@ -1171,9 +1179,10 @@ class Lab:
                     gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ZERO, gl.GL_ONE)
                     gl.glDepthMask(gl.GL_FALSE)
                     self.ribbons.draw(packet, ribbon_mvp, shading='light', **draw)
-                    self.ribbons.draw(packet, ribbon_mvp, shading='sparks', sparks=recipe.sparks, now=now,
-                                      mist=draw['mist'], mist_frame=draw['mist_frame'], material=recipe.material,
-                                      sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'])
+                    if recipe.sparks is not None:
+                        self.ribbons.draw(packet, ribbon_mvp, shading='sparks', sparks=recipe.sparks, now=now,
+                                          mist=draw['mist'], mist_frame=draw['mist_frame'], material=recipe.material,
+                                          sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'])
                     if recipe.strays is not None:
                         self.ribbons.draw(packet, ribbon_mvp, shading='strays', strays=recipe.strays, now=now,
                                           mist=draw['mist'], mist_frame=draw['mist_frame'], material=recipe.material,
@@ -1198,9 +1207,10 @@ class Lab:
             reflected_view = mirrored @ scroll
             reflected_mvp = tuple((projection @ reflected_view).flatten(order='F'))
             self.ribbons.draw(packet, reflected_mvp, shading='light', **{**draw, 'view': tuple(reflected_view.flatten(order='F'))})
-            self.ribbons.draw(packet, reflected_mvp, shading='sparks', sparks=self.recipe.sparks, now=draw['age_fade'][0],
-                              mist=draw['mist'], mist_frame=draw['mist_frame'], material=self.recipe.material,
-                              sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'])
+            if self.recipe.sparks is not None:
+                self.ribbons.draw(packet, reflected_mvp, shading='sparks', sparks=self.recipe.sparks, now=draw['age_fade'][0],
+                                  mist=draw['mist'], mist_frame=draw['mist_frame'], material=self.recipe.material,
+                                  sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'])
             if self.recipe.strays is not None:
                 self.ribbons.draw(packet, reflected_mvp, shading='strays', strays=self.recipe.strays,
                                   now=draw['age_fade'][0], mist=draw['mist'], mist_frame=draw['mist_frame'],

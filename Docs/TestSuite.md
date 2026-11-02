@@ -60,6 +60,13 @@ geometry only, not Qt/OpenGL pixels, visual acceptance or full suite status.
 Focused GL tests that own their storage and lifetimes may explicitly load
 `-p tools.pytest_qt_noenv --noconftest`. This supplies only `qt_app` via public Qt APIs;
 it does not supply the ordinary suite's storage, QML or runtime cleanup fixtures.
+`tests/test_waveform_ribbon_reactivity.py` exercises the lab's deterministic four-candidate logical producer: varied
+render-delivery partitions produce identical logical knots, events consume once, silence cannot replay events,
+fixed-loudness head differentials remain distinct and geometry stays bounded. Snapshot tests reject scaled copies of
+one motion profile, verify packet travel/smooth retirement and distinguish PCM-envelope detail from a constant source.
+`tests/test_waveform_ribbon_lab.py` crosses the GL seam: retained-history captures neither rebuild nor append knots,
+disabled accents do not draw, and already-visible body geometry can react before a new head knot is admitted.
+These checks do not certify real music, production source reachability or native visual acceptance.
 `tests/test_neon_presentation.py` checks item-matrix physical pixel mapping across
 window sizes/DPR and executes the production shoreline and normal helpers on real GL:
 continued land cannot emit a false lake contour, authored shoreline admission remains,
