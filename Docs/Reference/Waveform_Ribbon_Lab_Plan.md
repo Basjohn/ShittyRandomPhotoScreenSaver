@@ -106,6 +106,19 @@ negative evidence, not a current style option.
 
 ## 0B. Remaining visual gaps and immediate verification
 
+Native current-source comparison: `.artifacts/evidence/waveform_ribbon/wr_visual_admission_20261102/` (effective
+recipes, source hashes and native primary pairs; alternate reference retained at native size). Visual admission
+remains **Awaiting Validation**: primary contact reflection and pale overhead edge remain short of target;
+alternate broad sheets read at native size but its high state needs highlight/strand restraint.
+Explicit-time look previews and native keyframes: `.artifacts/evidence/waveform_ribbon/wr_motion_review_20261102/`.
+These synthetic low/high previews support visual judgement only, not musical timing, incremental runtime cost or
+lifecycle acceptance. Operator judgement on admission or a provisional bake-off sequencing exception remains open.
+
+**Ground mist ownership (operator direction):** ground-bank height and light stay at zero intentionally. The floor
+uses its own existing cheap analytic distance mist (`Environment.mist` / `MIST_GLSL`), independently of the shaped
+volume. Review its depth/side concealment through that layer; missing volumetric floor banks are not a defect and
+must not be re-enabled to imitate the mock's lower corners.
+
 - [ ] **Concrete finish:** the rejected floor looks gritty/mottled; the target is smooth finished wet concrete with
   restrained fine material detail. Inspect the newly generated smooth albedo under actual scene light. Do not use
   texture blur to conceal coarse aggregate, or reintroduce wet/dry coverage masks. Keep surface relief nearly flat.
@@ -127,8 +140,9 @@ negative evidence, not a current style option.
   rims are progress; folded-cloth depth, natural variation, richer fanning/gathering, hot crossings and readable low
   detail still fall short of the mocks. Reject sharp bends and flat wire-bundle readings in enlarged crops and motion.
 - [~] **Mist/scene depth:** the volume (S3D-7 item in §0) now gives billowed, ribbon-carved, ribbon-lit mist with a
-  dark top and clear air around the sheets. It is still far from the mock's bright saturated fringes and corner
-  banks, and it must hide sky, horizon and floor boundaries from every admitted pose (haze lines remain).
+  dark top and clear air around the sheets. Refine the pale overhead edge toward the mock's saturated fringes;
+  check sky/horizon concealment through that volume and floor/side concealment through the separate cheap distance
+  mist. Ground volume banks remain intentionally off; they are not an acceptance requirement.
 - [ ] **Motion and cost:** capture explicit-time slow motion for floor grain/reflection stability and both waveform
   rims; then five camera poses in both projections. Measure final floor draw, reflection generation and whole scene
   separately, plus CPU light preparation. Check Off/lazy/resize/context retirement at their owners. Current static

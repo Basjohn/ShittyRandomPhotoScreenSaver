@@ -135,12 +135,15 @@ waveform and strong thick shaped mist, with no visible horizon/sky/floor edge. T
 the mist. Preset/control migration and recorded-audio calibration come only after the lab look is credible.
 
 - [~] **Primary lab look:** close the remaining mist continuity/interior-volume, floor-contact/reflection, edge crackle,
-  sheet saturation and fog-cost gaps against the complete-scene target.
+  sheet saturation and fog-cost gaps against the complete-scene target. Ground banks stay at zero intentionally;
+  the floor uses its own cheap distance-mist layer, separately from the shaped volume.
 - [~] **Alternate lab look:** retain distinct broad ribbon identities, free rim-attached strands, glow and floor contact;
   close its remaining highlight/mist-edge fidelity gaps without regressing the primary look.
 - [ ] **Accents and optics:** finish sparks/glow/defocus only after waveform, floor and mist remain credible without them.
 - [ ] **Awaiting Validation — visual admission:** compare current primary/alternate low/high captures against their
-  targets and record operator/capable visual-agent decisions on floor/waveform/volume. Keep rejected gaps actionable;
+  targets (native comparison at Lab Plan §0B) and record operator/capable visual-agent judgement on floor/waveform/volume. Review the
+  primary reflection/form/pale upper fringe and alternate high-state highlights; ground volume banks stay off.
+  Keep rejected gaps actionable;
   no sign-off is implied by the existence of captures. This gates reactivity implementation and production migration.
 - [ ] **Reactivity timing fixture:** after visual admission, derive one fixed near-view admission head from the widest
   admitted framing plus boundary/fade margins, prove hidden ends and bounded history, and measure input → head → visible
