@@ -9,21 +9,15 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 
 **Work strictly in this order:**
 
-The operator admitted the Waveform Ribbon WR-00 reference/projection preflight on 28 October alongside the
-then-remaining §2/§3 gates. This preparation introduces no production registration and does not bypass shared primitives.
-
-§2 (fixes, Settings/UX) and §3 (guided-setup stills, bounded cleanup) closed 2026-10-31. §5 is a watchlist
-observed during normal use, not a task queue.
-
-1. **§6 Shared 3D architecture**: one step that builds the reusable 3D primitives, each proven on its own harness.
-2. **§7 Visualizer modes**, one at a time, in order: **Waveform Ribbon → Reactive Liquid / Melt Pool → Concrete Rain →
+1. **§6 Shared 3D architecture**: build reusable 3D primitives, each proven on its own harness.
+2. **§7 Visualizer modes**, one at a time: **Waveform Ribbon → Reactive Liquid / Melt Pool → Concrete Rain →
    Usu Moonscape**. Each is built lab-first (§7.0).
 
-**Accepted baseline (do not reopen as general work):** original Bubble, **Extruded Bubble (closed 2026-10-25)**, Neon
-Lake, Oscilloscope, Spectrum/Rainbow Ghost, Sphere, source routing, landed transitions and Foundry launch buttons.
-Reopen any of them only on a concrete new defect. Extruded Bubble's 28 October follow-up and its performance
-investigation closed on 31 October (status in `Docs/Reference/Extruded_Bubble/` and
-`Docs/Audits/EB_Performance_Investigation_2026-10-29.md`; the deferred vectorised rewrite is in `Future_Work.md`).
+**Accepted baseline (not live work):** original Bubble, Extruded Bubble, Neon Lake, Oscilloscope,
+Spectrum/Rainbow Ghost, Sphere, source routing, transitions and Foundry launch buttons. Reopen an accepted
+area only for a concrete new defect; deferred or unadmitted work belongs in `Future_Work.md`. Historical recovery
+IDs, completed gates and rejected mechanisms belong in source control or their focused historical/investigation docs,
+not in this working plan.
 
 **Rules:** one Settings/capability/CUSTOM/render/lifecycle owner and the sole Visualizer logical clock. No new
 floor, capture/DSP, renderer-side simulation, timers/polling or camera-following replacement populations. Preserve
@@ -31,13 +25,6 @@ authored presets (mutable, never test-pinned), BTF, accepted timings, parallel w
 CLI/sidecars, never environment-variable configuration. Smallest meaningful focused test per change; the isolated
 chunked suite only at milestones; no build/installer unless requested. Visual work is judged on rendered pixels against
 its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed" needs the failure reproduced first.
-
-**Retired section IDs.** §4/§4A/§4B, G00–G33, EB-A…EB-S and EB-R25…EB-R43 (Extruded Bubble recovery) were retired
-when Extruded Bubble closed; documents citing them refer to that history: `git show 3c6cf7d8:Current_Plan.md` and
-`Docs/Reference/Extruded_Bubble/Investigation.md`. Stable IDs kept below: §5 (including R38). §2 and §3 retired 2026-10-31 (§2A with the EB follow-up; §2B's
-last physical-validation items moved to §5; SC1 and the guided-setup stills audit landed); RM, SC4, §4C and R41
-closed earlier (source control). Guided-setup still authoring lives in `Docs/Reference/Guided_Setup.md`; animated
-publication in `Docs/Reference/Release_Media.md` (explicit requests only).
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
@@ -84,10 +71,10 @@ bounded, measured cost (TIME_ELAPSED, median/p90), lazy creation, zero dormant w
 consumer, and none becomes a second renderer, clock or camera. Read the 3D foundation lessons in
 `Docs/Reference/Transitions.md` before each slice. Order follows which mode needs them first.
 
-- [ ] **S3D-1 Ribbon / strip primitive — CPU history/frames, oriented GPU strip, incremental ring producer and OIT/HDR filament material landed; defocus/camera-facing GPU open:** generalize what Extruded Bubble's wakes proved (`extruded_bubble_wake.py`, the
-  `TRAIL_*` programs): a bounded history SSBO, centripetal Catmull-Rom strips placed by a continuous index (never by a
-  share of segments), camera-facing or oriented width, OIT translucency with defined edges and inner structure,
-  shared defocus. Multi-ribbon, fixed maximum history. *Consumers: Waveform Ribbon; trails anywhere.*
+- [ ] **S3D-1 Ribbon / strip primitive:** finish the reusable camera-facing width variant, shared defocus integration,
+  lifecycle/admission proof and bounded cost around the existing history/ring/oriented-strip substrate. Preserve a bounded
+  history SSBO, centripetal Catmull-Rom placement by continuous index, OIT translucency, multi-ribbon support and fixed
+  maximum history. *Consumers: Waveform Ribbon; trails anywhere.*
 - [ ] **S3D-2 Particle population extensions (G4):** inventory the existing compacted-population/sprite/streak
   helpers first; add bounded lifetimes, emitters, transient bursts, indirect draws and compute-driven arrangement
   (morphing a fixed population between shapes, from the voxel morph concept). Deterministic admission/retirement.
@@ -106,10 +93,9 @@ consumer, and none becomes a second renderer, clock or camera. Read the 3D found
 - [ ] **S3D-6 Shared shadows (G2 / S25):** one fitted directional depth map, bounded soft PCF/bias, caster/receiver
   admission, resize/teardown/dormancy and tier cost on a real test scene (also Usu's S25; not a revival of the rejected
   Extruded cast shadows).
-- [ ] **S3D-7 Reduced-resolution volumes, then lightning (G5):** the operator admitted a bounded static fog slice for
-  Waveform Ribbon on 1 November (§7.1); no audio reactivity yet. Then bounded procedural bolt geometry/light and fog/smoke
-  volumes with advection/reprojection and no permanent extra targets or separate cadence (from the volumetric chamber and
-  storm concepts). *Consumers: chamber/street atmosphere.*
+- [ ] **S3D-7 Reduced-resolution volumes, then lightning (G5):** prove the bounded static fog slice required by Waveform
+  Ribbon first, with no audio reactivity. Then add bounded procedural bolt geometry/light and fog/smoke volumes with
+  advection/reprojection and no permanent extra targets or separate cadence. *Consumers: chamber/street atmosphere.*
 
 ## 7. Visualizer modes (one at a time, in this order)
 
@@ -134,39 +120,23 @@ then closed the gap by measuring against both. Do the same for every new mode:
 
 ### 7.1 Waveform Ribbon (next)
 
-Chosen first: the smallest contained scene, it directly reuses Extruded Bubble's wake work (S3D-1) plus S3D-2/S3D-5,
-and it proves the lab-first pipeline before the bigger scenes. Brief and gates: `Docs/Future_Work/Waveform_Ribbon.md`
-(mocks in `references/waveform_ribbon_concept_package.zip`).
+Chosen first: the smallest contained scene and the first consumer of S3D-1/S3D-2/S3D-5. Brief and hard gates:
+`Docs/Future_Work/Waveform_Ribbon.md`. The detailed working checklist and visual target custody live in
+`Docs/Reference/Waveform_Ribbon_Lab_Plan.md`; reference packages under `references/` are local/operator-owned and are
+intentionally absent from normal GODZIPs.
 
-Execution must use `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`: WR-00 reference/crop/recording custody, then
-WR-01/02 independent S3D-1 proof before composition. Both mock boards are now admitted look targets (operator,
-1 November). Existing EB wakes/probes do not establish a generic ribbon or floor reflection.
+The scene is world-first through the shared framed camera (Orthographic default): wet reflective concrete floor,
+waveform and strong thick shaped mist, with no visible horizon/sky/floor edge. The waveform clears and softly lights
+the mist. Preset/control migration and recorded-audio calibration come only after the lab look is credible.
 
-The scene is world-first through the shared framed camera (Orthographic default). **Operator, 1 November: floor,
-waveform and strong thick mist only; pillars removed.** No horizon, sky or floor edges should be visible. The waveform
-carves clear space in the fog and softly lights it; audio-driven fog changes are for much later. Both supplied mock
-boards describe looks the eventual live presets should support. The new complete-scene fog board is the main target
-(`references/Waveform_Ribbon_Fog_Complete_Scene_Mock.png`, source custody in Lab Plan §1.1). Detailed live checklist
-and remaining visual gaps: Lab Plan §0–0B. **No full-scene or floor parity is established.**
-
-- [~] **Baseline `waveform-baseline-2026-11-01` (operator: "getting close"):** waveform-shaped mist, colour grade,
-  vertical wet floor columns. Open gaps, in order:
-  - mist continuity (holes) and interior volume;
-  - achievable looks proven as named lab recipes (sheet colours following the recipe pair). Presets, controls and
-    Settings stay with the full WR-08 migration; the operator's low/high colour-pair gradient-node editor is
-    recorded for that design;
-  - floor column shaping toward the contact line, and a brighter low-react floor;
-  - mist edge crackle;
-  - sheet saturation;
-  - fog march cost.
-  Live checklist: Lab Plan §0.
-- [ ] **Accents and optics:** sparks, glow and defocus after the underlying waveform/floor/mist match.
-- [ ] **Awaiting Validation:** operator sign-off on the floor/waveform/volume look before reactivity.
-- [~] **Second look (operator's alternate board) and migration plan:** `alternate` recipe with free strands, glow and
-  floor contact (tag `waveform-alternate-baseline-2026-11-01`). WR-08 plan, full controls with visual editors and
-  reactivity: `Docs/Reference/Waveform_Ribbon_Migration_Plan.md`.
-- [ ] **Only after visuals:** recorded audio windows and WR-07 mappings; remaining S3D-1/2/5 lifecycle/cost gates;
-  WR-08 production and tunable presets, then WR-09 acceptance with `tools/visualizer_live_check.py --load game60`.
+- [~] **Primary lab look:** close the remaining mist continuity/interior-volume, floor-contact/reflection, edge crackle,
+  sheet saturation and fog-cost gaps against the complete-scene target.
+- [~] **Alternate lab look:** retain distinct broad ribbon identities, free rim-attached strands, glow and floor contact;
+  close its remaining highlight/mist-edge fidelity gaps without regressing the primary look.
+- [ ] **Accents and optics:** finish sparks/glow/defocus only after waveform, floor and mist remain credible without them.
+- [ ] **Visual admission:** operator/capable visual-agent sign-off on the floor/waveform/volume range before live reactivity.
+- [ ] **Only after visual admission:** recorded-audio WR-07 mappings, remaining S3D-1/2/5 lifecycle/cost gates, WR-08
+  production migration/tunable presets, then WR-09 acceptance with `tools/visualizer_live_check.py --load game60`.
 
 ### 7.2 Reactive Liquid / Audio Melt Pool
 

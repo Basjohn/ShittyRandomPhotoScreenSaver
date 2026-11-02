@@ -14,14 +14,13 @@ def test_registered_modes_separate_geometry_kind_from_layout_profile():
 
     assert set(kinds.values()) <= {"planar", "freeform_3d"}
     assert {mode for mode, kind in kinds.items() if kind == "freeform_3d"} == {
-        "sphere", "extruded_spectrum", "shockwave_grid", "extruded_bubble",
+        "sphere", "extruded_spectrum",
     }
     assert {profile for mode, profile in profiles.items() if kinds[mode] == "planar"} == {"planar"}
     assert profiles["extruded_spectrum"] == "3d:extruded_spectrum"
-    assert profiles["shockwave_grid"] == "3d:shockwave_grid"
     assert profiles["sphere"] == "3d:sphere"
-    assert profiles["extruded_bubble"] == "3d:extruded_bubble"
-    assert len({profiles[mode] for mode in ("extruded_spectrum", "shockwave_grid", "sphere", "extruded_bubble")}) == 4
+    assert profiles["shockwave_grid"] == "planar"
+    assert profiles["extruded_bubble"] == "planar"
 
 
 def test_layout_profile_is_compatibility_metadata_not_camera_state():
@@ -30,6 +29,7 @@ def test_layout_profile_is_compatibility_metadata_not_camera_state():
     extruded = get_visualizer_mode_descriptor("extruded_spectrum")
     shockwave = get_visualizer_mode_descriptor("shockwave_grid")
     sphere = get_visualizer_mode_descriptor("sphere")
+    extruded_bubble = get_visualizer_mode_descriptor("extruded_bubble")
 
     assert extruded.view_orbit_settings == (
         "extruded_spectrum_turn", "extruded_spectrum_tilt",
@@ -41,8 +41,11 @@ def test_layout_profile_is_compatibility_metadata_not_camera_state():
     # modes; none of these view keys is a CUSTOM stage or a preset field.
     assert sphere.view_orbit_settings == ("sphere_turn", "sphere_tilt")
     assert extruded.layout_profile != shockwave.layout_profile
+    assert shockwave.layout_profile == extruded_bubble.layout_profile == "planar"
+    assert shockwave.geometry_kind == extruded_bubble.geometry_kind == "planar"
+    assert shockwave.framed_camera and extruded_bubble.framed_camera
     assert all("turn" not in d.layout_profile and "tilt" not in d.layout_profile
-               for d in (extruded, shockwave, sphere))
+               for d in (extruded, shockwave, sphere, extruded_bubble))
 
 
 def test_view_pose_keys_are_explicitly_inert_when_curated_presets_are_applied():
@@ -50,7 +53,7 @@ def test_view_pose_keys_are_explicitly_inert_when_curated_presets_are_applied():
     from core.settings.visualizer_mode_registry import get_visualizer_view_pose_keys, get_visualizer_mode_descriptor
     from core.settings.default_contract import require_canonical_default
 
-    for mode in ("extruded_spectrum", "shockwave_grid", "sphere"):
+    for mode in ("extruded_spectrum", "shockwave_grid", "sphere", "extruded_bubble"):
         turn, tilt = get_visualizer_mode_descriptor(mode).view_orbit_settings
         # 0.275 is valid for every registered 3D tilt range, including
         # Sphere's non-negative authored camera tilt.

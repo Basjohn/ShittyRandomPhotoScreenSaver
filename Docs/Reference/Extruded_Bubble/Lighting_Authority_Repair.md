@@ -1,14 +1,13 @@
 # Extruded Bubble | Physical lighting authority and BEAM/SCENE coverage repair
 
-**Current repair contract | partial candidates, lighting acceptance remains open.** This is the detailed
-architecture/evidence companion for the **single live** `Current_Plan.md` §4B
-G05/G06/G27/G30/G32/G33 sequence, not a second checklist. Surface analytic
-direction now shares refracted sunlight; the larger physical-field repair remains open. The operator explicitly requires BEAM restoration to the pre-regression artistic fan/axial footprint; the working-tree candidate is not yet checkpointed or visually accepted. The rejected cone/world replacement remains historical evidence (Investigation §58/§60). Physical-field experiments belong to SCENE (Investigation §63); shared positional intensity/falloff and moving art/cost acceptance stay open. Preserve the full
-pre-existing EB-L/F/S/B/C/D/A/P failure inventories and the earlier R-series
-investigation. An implementation, compilation, plausible still, or GPU benchmark
+**Historical repair contract and regression evidence.** Extruded Bubble is accepted; this document retains the detailed
+lighting mechanisms, rejected alternatives and reproduction evidence. It is not a live checklist and does not recreate
+the retired recovery queue. Any "open", "current candidate" or unaccepted wording below describes the historical repair
+checkpoint, not present EB task status. Preserve the full EB-L/F/S/B/C/D/A/P failure inventories and the earlier R-series
+investigation as regression evidence. An implementation, compilation, plausible still, or GPU benchmark
 cannot become `[x]` without operator or capable local visual-agent acceptance.
 
-## Current scope and protected BEAM behavior
+## Preserved BEAM/SCENE repair contract
 
 Lighting Coverage is already an independent BEAM/SCENE choice. Restore BEAM's accepted broad artistic
 fan and axial envelope from the pre-acceptance checkpoint; width1x must preserve that baseline, including
@@ -142,7 +141,8 @@ failure open if not specifically signed off.
 
 ## Separate and higher-confidence SCENE-cluster evidence (G07/G08/G09/G32)
 
-**22 October user screenshot, newer than the R45 source candidate:** ([original submitted image](Evidence/2026-10-22_SCENE_operator_rejected_clustering.png), preserved in this godzip). While
+**22 October user screenshot, newer than the R45 source candidate:** local historical evidence at
+`Evidence/2026-10-22_SCENE_operator_rejected_clustering.png` (intentionally omitted from normal GODZIPs). While
 emission is reported as SCENE, bright specks remain in concentrated islands
 across the lower water volume, with wide gaps and sparse visible larger shells.
 This is an **operator-rejected visible result [~]**, not an unperformed visual

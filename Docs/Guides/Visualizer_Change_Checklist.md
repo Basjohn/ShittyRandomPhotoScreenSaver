@@ -21,10 +21,8 @@ Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavio
 
 ## New bordered 3D Visualizers | shared-camera / graphics preflight
 
-- [ ] Original Bubble has completed V5 typed-spec migration and frozen-musical/visual parity **before**
-  starting the Extruded Bubble implementation; do not treat it as an upgrade to the original Bubble mode.
-- [ ] §4A G0/G1/FC/G3A and required G2/G3B proof are complete **before EB2/EB3**, including real GL pixels,
-  opacity/depth, state restoration, measured cost, resize, retirement and dormant-zero-allocation evidence.
+- [ ] Bordered/`CARD_INTERIOR` 3D modes declare `geometry_kind="planar"` and `layout_profile="planar"`; they
+  reuse the exact framed-Visualizer CUSTOM rectangle/viewport and never gain special per-mode layout positions.
 - [ ] Bordered/`CARD_INTERIOR` 3D modes use the **shared opt-in Neon Lake-derived bounded internal camera**,
   with per-mode turn/tilt/pivot and bounded scene pan/zoom, not copied camera input/controllers/pose stores.
   Validate homogeneous near-plane clipping and scene visibility at all admitted extremes.
@@ -221,7 +219,9 @@ When a mode change may select a different CUSTOM layout profile:
       compatibility-group ID for persisted stage geometry. Never infer one from the other or from renderer class names.
 - [ ] A future mode may share a `layout_profile` only by explicit descriptor choice because its authored stage pose is actually
       compatible. Merely being `freeform_3d` never grants geometry sharing.
-- [ ] Cross-profile changes apply the target rect/viewport only while the target is hidden during the existing activation
+- [ ] If source and target share a `layout_profile`, keep the committed rectangle/viewport exactly as-is: no sibling-profile
+      lookup, copy or default reset. This is the normal framed 2D ↔ framed 3D `planar` hot-swap path.
+- [ ] True cross-profile changes apply the target rect/viewport only while the target is hidden during the existing activation
       transaction. Missing targets start from authored baseline; they never clone the outgoing profile.
 - [ ] Edit, Arrange and direct Alt move/resize write only the active profile and preserve dormant siblings. A cross-profile
       activation does not retarget an in-flight `CustomLayoutSessionItem` halfway through a gesture.
@@ -234,8 +234,9 @@ When a mode change may select a different CUSTOM layout profile:
 - [ ] Hidden profile switching may discard one unread outgoing snapshot only after logical production is stopped. Edit Save may
       rebase one unread newest logical snapshot onto the exact committed presentation being promoted. Everywhere else the render
       bridge must continue rejecting mismatched presentation geometry and counting it.
-- [ ] Repeated planar↔3D and 3D↔3D switching proves exact profile restoration with no viewport/scale drift, no owner rebuild
-      solely for geometry, no visible outgoing-pose frame and no new `viz_geometry_mismatches` at transaction edges.
+- [ ] Repeated same-profile framed switches and true planar↔freeform / freeform↔freeform switches prove exact geometry
+      preservation/restoration with no viewport/scale drift, no owner rebuild solely for geometry, no visible outgoing-pose
+      frame and no new `viz_geometry_mismatches` at transaction edges.
 - [ ] For `freeform_3d`, Edit distinguishes persisted stage/viewport from derivative projected scene data. Reuse production
       projection/reach authorities; do not duplicate projection math in QML or persist the derived envelope/cage.
 - [ ] A projected 3D cage, if shown, is eight read-only projected vertices + twelve edges + orientation marker only. It must not

@@ -147,7 +147,7 @@ kept here as a museum list.
 
 ### Shared widget glyph reveal / developer captures: R38 follow-up (not closed)
 
-The open action-handoff requirement lives in `Current_Plan.md` §2B (R38). The global Edit-only glyph handoff (existing session first, then existing command) remains required across all families; no new edit model or repaint/polling service. Diagnostic `\` capture is source/diagnostic only and requires native evidence of custom GL pixels before treating it as an accepted substitute for Snipping Tool. The UI presentation transition is not acceptance.
+The physical action-handoff watch item lives in `Current_Plan.md` §5 (R38). The global Edit-only glyph handoff (existing session first, then existing command) remains required across all families; no new edit model or repaint/polling service. Diagnostic `\` capture is source/diagnostic only and requires native evidence of custom GL pixels before treating it as an accepted substitute for Snipping Tool. The UI presentation transition is not acceptance.
 
 ### Release catalogue/showcase work — explicit request only
 

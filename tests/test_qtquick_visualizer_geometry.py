@@ -372,6 +372,30 @@ def test_visualizer_card_shadow_extensions_scale_with_committed_presentation() -
     assert state.shell_style["shadow_extensions"] == pytest.approx((0.0, 0.0, 9.0, 9.0))
 
 
+def test_live_visualizer_card_shadow_is_externalized_below_ordinary_widgets() -> None:
+    root = Path(__file__).resolve().parents[1]
+    scene = (root / "rendering" / "quick" / "qml" / "DisplayScene.qml").read_text(encoding="utf-8")
+    presentation = (root / "rendering" / "quick" / "qml" / "VisualizerPresentation.qml").read_text(encoding="utf-8")
+
+    shadow_host = scene.index("id: ordinaryWidgetShadowHost")
+    visualizer_shadow = scene.index("id: visualizerCardShadowUnderlay")
+    ordinary_host = scene.index("id: ordinaryWidgetHost")
+    assert shadow_host < visualizer_shadow < ordinary_host
+    assert "readonly property var sourceRoot: visualizerPresentationLoader.item" in scene
+    assert "&& sourceRoot.cardShellEnabled" in scene
+    assert "item.externalCardShadow = true" in scene
+    assert "property bool externalCardShadow: false" in presentation
+    assert "visible: visualizerPresentationRoot.cardShellEnabled" in presentation
+    assert "&& !visualizerPresentationRoot.externalCardShadow" in presentation
+
+    # Externalization is frame/card chrome only. Freeform 3D scene/object shadows
+    # remain renderer-owned and must not be redirected through the card underlay.
+    sphere = (root / "rendering" / "quick" / "visualizer" / "implementations" / "sphere_voxel.py").read_text(encoding="utf-8")
+    extruded = (root / "rendering" / "quick" / "visualizer" / "implementations" / "extruded_spectrum.py").read_text(encoding="utf-8")
+    assert "sphere_shadow_enabled" in sphere and "def _draw_scene_shadow(" in sphere
+    assert "directional_shadow_pass" in extruded
+
+
 def test_visualizer_shadow_projection_is_owner_time_and_cached() -> None:
     root = Path(__file__).resolve().parents[1]
     display_manager = (root / "engine" / "display_manager.py").read_text(encoding="utf-8")

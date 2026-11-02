@@ -12,7 +12,7 @@ Early E8 receiver attempts produced triangular near-footprint casts or a corner-
 
 The opt-in **framed 3D camera capability** is implemented in `core/settings/framed_camera.py` with the existing
 view-orbit/scene-transform declarations and shared physical projection/admission helpers. Neon Lake and Extruded Bubble
-are current consumers; future modes reuse this owner rather than repeating the retired §4A/FC promotion.
+are current consumers; future modes reuse this owner rather than repeating per-mode camera plumbing.
 The outer retained card and CUSTOM stage remain fixed, while its content orbits/pans/zooms inside
 CARD_INTERIOR. Mode declarations supply bounds, pivot, pan/zoom safety, fit and near-plane behavior; do **not**
 globalize landscape angles, wrap bounded modes, give future modes copied camera controllers or change unframed 3D
@@ -175,8 +175,8 @@ and binds; depth renderbuffers also use named storage. Rendering and resolve pas
 | Owner | Storage and allocation contract |
 | --- | --- |
 | `SceneTarget` | RGBA8 colour, optional RG16F velocity and depth24; existing multisample count and 64-pixel size buckets ; an **overlay** scope (a Visualizer drawn over its card) clears to transparent and composites the resolved scene back as straight alpha times an opacity, discarding where nothing was drawn, with no motion blur. An overlay **with bloom** adds an RGBA16F emission attachment (location 1, written only inside `emission_writes()` as `sceneEmission(light)`), blurs it through the shared bloom chain and composites premultiplied with the glow added, under a blend it sets and then hands back as the caller had it (captured at `begin`), so glow is exactly additive over what Quick drew and no emission writes means no glow. The non-bloom overlay path is unchanged |
-| `SceneTarget` depth texture and background (§4A G1, 2026-10-17) | `depth_texture=True` makes the depth attachment a DEPTH_COMPONENT32F texture (multisampled with the colour) instead of the depth24 renderbuffer; drawing is pixel-identical. `background()` captures, mid-scope, what has been drawn so far into a plain RGBA8 colour (averaged over samples) and an R32F nearest window depth (the far plane without a depth texture), then hands drawing back where it was (draw framebuffer, viewport, colour masks 0-1, blend, depth test, program, units 0-1). Allocated on first use or by `warm(..., background=True)` as one unit; released with the target |
-| `SceneTarget` order-independent transparency (§4A G3A, 2026-10-17) | `oit=True` adds an RGBA16F accumulation and an R16F revealage (multisampled with the colour) in their own framebuffer, sharing the scene depth (tested, never written) and, with bloom, the emission attachment at location 2 (added). Passes inside `transparent_writes(frame, resources)` write `sceneTransparent(premultiplied, alpha, view_depth)` (`SCENE_OIT_GLSL`: weighted blended OIT, McGuire-Bavoil equation 10 on view depth); leaving resolves per sample (`gl_SampleID`) over attachment 0, premultiplied, alpha added on overlays (coverage) and only dimmed otherwise (emitted brightness), then restores blend (indices 0-2), colour masks, depth test and depth mask |
+| `SceneTarget` depth texture and background | `depth_texture=True` makes the depth attachment a DEPTH_COMPONENT32F texture (multisampled with the colour) instead of the depth24 renderbuffer; drawing is pixel-identical. `background()` captures, mid-scope, what has been drawn so far into a plain RGBA8 colour (averaged over samples) and an R32F nearest window depth (the far plane without a depth texture), then hands drawing back where it was (draw framebuffer, viewport, colour masks 0-1, blend, depth test, program, units 0-1). Allocated on first use or by `warm(..., background=True)` as one unit; released with the target |
+| `SceneTarget` order-independent transparency | `oit=True` adds an RGBA16F accumulation and an R16F revealage (multisampled with the colour) in their own framebuffer, sharing the scene depth (tested, never written) and, with bloom, the emission attachment at location 2 (added). Passes inside `transparent_writes(frame, resources)` write `sceneTransparent(premultiplied, alpha, view_depth)` (`SCENE_OIT_GLSL`: weighted blended OIT, McGuire-Bavoil equation 10 on view depth); leaving resolves per sample (`gl_SampleID`) over attachment 0, premultiplied, alpha added on overlays (coverage) and only dimmed otherwise (emitted brightness), then restores blend (indices 0-2), colour masks, depth test and depth mask |
 | `SceneTarget` light shafts (2026-10-17) | `shafts=True` (overlays only) adds an R16F shaft-source attachment at location 2, written only inside `shaft_writes()` (colour and emission masked there); a `ShaftLight` set during the scope makes `end` run `LightShafts` (half-size resolve plus two 16-tap radial gathers into two R16F levels) and composite through `_with_shafts`, the one transform of the overlay composite that adds the rays where the scene drew. Without a light that frame, the overlay composites as before |
 | Bloom | Four progressively halved RGBA16F levels, allocated with the requesting target |
 | Motion | One RG16F compute-written tile-max image (no framebuffer) and one RGBA8 output, using existing tile and target sizes |
@@ -335,7 +335,7 @@ one-workgroup reduction to the largest arrival in a 1x1 texture consumers read w
 (48 passes per step) because the cost depends only on the run's seed and the render's aspect, and dropped at its
 `park()`; nothing exists otherwise. `propagation_reference` is the CPU mirror. First consumer: Capillary Bloom.
 
-## Sphere impostors (§4A, 2026-10-17)
+## Sphere impostors
 
 `rendering/gl_programs/scene3d_spheres.py` (import-safe GLSL + CPU mirrors) draws exact spheres from one view-space
 quad per instance: `sceneSphereCorner` sizes the quad to the silhouette cone through the centre
@@ -353,7 +353,7 @@ width across the line of sight, and `sceneSphereFacingRay` (fragment) gives the 
 straight along the line to its centre, so every sphere is a circle wherever it sits (deformation is reserved for
 collisions). The mirror test proves every unit-circle corner grazes the silhouette.
 
-## Scene probe (§4A, 2026-10-17)
+## Scene probe
 
 `rendering/quick/scene3d/probe.py`: `SceneProbe(label, size)` owns one RGBA16F cube with a full mip chain, a depth
 renderbuffer and a framebuffer. `capture(draw)` renders the six faces (GL's cube convention; each face's 3x3
@@ -368,7 +368,7 @@ water and bubbles show the scene they sit in (the light, beams, lit particulate)
 there (with a mirrored-face negative control), blur is the same filter across faces and full blur is the hemisphere,
 state and allocation.
 
-## Defocus layer and HDR scenes (§4A, 2026-10-17)
+## Defocus layer and HDR scenes
 
 `rendering/quick/scene3d/defocus.py`: `DefocusLayer` is depth of field for objects near the lens. `begin(w, h)`
 binds an RGBA16F premultiplied colour and an RG16F alpha-weighted circle of confusion (both mipmapped); the caller
@@ -401,7 +401,7 @@ bloom), and the overlay composite tone maps it once (ACES fit) at that exposure 
 rendering, not an HDR display. Without `hdr` everything is as before. `test_scene3d_target.py` proves light past
 white in the background capture and a smooth monotonic tone curve, single- and multisampled.
 
-## Shared optics and underwater light (§4A G3B, 2026-10-17)
+## Shared optics and underwater light
 
 Import-safe GLSL + CPU mirrors, no resources. `scene3d_optics.py`: `sceneFresnelDielectric` (exact unpolarised, total
 internal reflection past the critical angle), `sceneThinFilm` (two-beam interference with the inner reflection's half
@@ -427,11 +427,10 @@ the physical Deep Source direction; directional/probe consumers retain their ray
 GPU, conservation, the air bubble's mirror band, straight passage with matched indices and a solid sphere's
 reflection when the core is empty.
 
-## §4A gate status (G0 inventory, 2026-10-18)
+## Shared Scene3D capability inventory
 
-What each pre-Extruded-Bubble gate has, what proves it and what is missing. Extruded Bubble's demands come from
-`Extruded_Bubble/Target.md` (§1 target, §7 recovery, §9 preset surface); its lab
-(`tools/labs/extruded_bubble_lab.py`) is the consumer that exercised these primitives.
+Current owners, proof and known limits for the reusable Scene3D substrate. Extruded Bubble's target and lab are one
+important consumer/proof source; this table is a durable capability inventory, not a retired-plan status board.
 
 | Gate | Owner | Proof | Gap |
 | --- | --- | --- | --- |

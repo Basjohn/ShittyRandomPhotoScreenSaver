@@ -136,11 +136,11 @@ def resolve_visualizer_presentation(
     if committed_outer_size is not None:
         # Freeform-3D CUSTOM has two independent authored extents: the outer
         # stage rect and the renderer's logical viewport. A width-derived
-        # height silently discards the saved stage's aspect, particularly after
-        # switching between Shockwave and Sphere. The stage is one persisted
-        # authority; do not reverse-infer its height from the render world.
-        # Shell policy determines chrome and clipping, not stage ownership.
-        # A bordered 3D scene retains this same independent authored card rect.
+        # height silently discards the saved stage's authored aspect when
+        # switching between independent freeform profiles. The stage is one
+        # persisted authority; do not reverse-infer its height from the render
+        # world. Framed 3D modes do not enter this branch: they intentionally
+        # share the planar/card geometry contract with framed 2D modes.
         outer_width, outer_height = _positive_size(
             committed_outer_size, name="committed outer size"
         )

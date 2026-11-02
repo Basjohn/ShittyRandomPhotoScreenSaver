@@ -28,9 +28,10 @@ from core.settings.visualizer_mode_registry import (
 PLANAR = "planar"
 EXTRUDED = get_visualizer_layout_profile("extruded_spectrum")
 SHOCKWAVE = get_visualizer_layout_profile("shockwave_grid")
+EXTRUDED_BUBBLE = get_visualizer_layout_profile("extruded_bubble")
 SPHERE = get_visualizer_layout_profile("sphere")
-THREE_D_PROFILES = (EXTRUDED, SHOCKWAVE, SPHERE)
-ALL_PROFILES = (PLANAR, *THREE_D_PROFILES)
+FREEFORM_PROFILES = (EXTRUDED, SPHERE)
+ALL_PROFILES = (PLANAR, *FREEFORM_PROFILES)
 MODE_PROFILE = {
     descriptor.mode_id: get_visualizer_layout_profile(descriptor.mode_id)
     for descriptor in iter_all_visualizer_mode_descriptors()
@@ -83,7 +84,6 @@ def _canonical_variants() -> dict[str, object]:
     return {
         PLANAR: _entry(.10, .10, .30, .20, extent=(960., 320.)),
         EXTRUDED: _entry(.20, .18, .34, .42, extent=(235., 205.)),
-        SHOCKWAVE: _entry(.47, .28, .46, .25, extent=(390., 150.)),
         SPHERE: _entry(.62, .09, .24, .55, extent=(180., 420.)),
     }
 
@@ -129,9 +129,12 @@ def test_profile_identity_is_descriptor_owned_and_independent_from_geometry_kind
         assert get_visualizer_layout_profile(mode) == profile
     assert get_visualizer_layout_profile("spectrum") == PLANAR
     assert get_visualizer_layout_profile("bubble") == PLANAR
-    assert {get_visualizer_geometry_kind(mode) for mode in ("extruded_spectrum", "shockwave_grid", "sphere")} == {"freeform_3d"}
-    assert len({MODE_PROFILE[mode] for mode in ("extruded_spectrum", "shockwave_grid", "sphere")}) == 3
-    assert all(profile.startswith("3d:") for profile in THREE_D_PROFILES)
+    assert {get_visualizer_geometry_kind(mode) for mode in ("extruded_spectrum", "sphere")} == {"freeform_3d"}
+    assert {get_visualizer_geometry_kind(mode) for mode in ("spectrum", "bubble", "shockwave_grid", "extruded_bubble")} == {"planar"}
+    assert SHOCKWAVE == PLANAR
+    assert EXTRUDED_BUBBLE == PLANAR
+    assert len({MODE_PROFILE[mode] for mode in ("extruded_spectrum", "sphere")}) == 2
+    assert all(profile.startswith("3d:") for profile in FREEFORM_PROFILES)
 
 
 def test_freeform_3d_uniform_wheel_uses_stable_unscaled_stage_and_side_shape_resets_it():
@@ -271,16 +274,16 @@ def test_ordinary_route_does_not_hydrate_stale_saved_profile():
     assert resolve_visualizer_custom_entry(widgets, _Screen(), "sphere") is None
 
 
-def test_mode_completion_promotes_only_the_authored_legacy_claim_and_preserves_3d_siblings():
+def test_mode_completion_promotes_only_the_authored_legacy_claim_and_preserves_sibling_profiles():
     from engine.display_manager import DisplayManager
     from tests.test_qtquick_custom_layout_owner import _Settings
 
     screen = _Screen()
     signature = get_screen_signature(screen)
-    sibling = deepcopy(_canonical_variants()[SHOCKWAVE])
+    sibling = deepcopy(_canonical_variants()[SPHERE])
     widgets = _widgets("extruded_spectrum", {
         "freeform_3d": _entry(.11, .22, .33, .44),
-        SHOCKWAVE: sibling,
+        SPHERE: sibling,
     })
     settings = _Settings(widgets)
 
@@ -302,13 +305,13 @@ def test_mode_completion_promotes_only_the_authored_legacy_claim_and_preserves_3
         _refresh_quick_visualizer_edit_content_envelope=lambda: None,
     )
 
-    DisplayManager._complete_quick_visualizer_mode_change(manager, "sphere")
+    DisplayManager._complete_quick_visualizer_mode_change(manager, "shockwave_grid")
     variants = load_custom_layout_map(settings.widgets)["displays"][signature]["spotify_visualizer"]
-    assert set(variants) == {EXTRUDED, SHOCKWAVE}
+    assert set(variants) == {EXTRUDED, SPHERE}
     assert variants[EXTRUDED]["rect"]["x"] == .11
-    assert variants[SHOCKWAVE] == sibling
-    assert SPHERE not in variants
-    assert settings.widgets["spotify_visualizer"]["mode"] == "sphere"
+    assert variants[SPHERE] == sibling
+    assert PLANAR not in variants
+    assert settings.widgets["spotify_visualizer"]["mode"] == "shockwave_grid"
     assert owner._legacy_layout_profile is None
     assert owner._legacy_layout_source_variant is None
     assert settings.save_calls == 1
@@ -323,7 +326,7 @@ def test_canonical_save_retires_default_without_erasing_any_sibling_profile():
     _commit(widgets, item, {signature: ((signature,), screen.geometry(), "1")})
     variants = load_custom_layout_map(widgets)["displays"][signature]["spotify_visualizer"]
     assert set(variants) == set(ALL_PROFILES)
-    for profile in THREE_D_PROFILES:
+    for profile in FREEFORM_PROFILES:
         assert variants[profile] == siblings[profile]
 
 
@@ -403,7 +406,7 @@ def test_alias_save_merges_all_profiles_once_under_canonical_monitor():
     variants = _canonical_variants()
     widgets = _widgets("spectrum", {PLANAR: deepcopy(variants[PLANAR])})
     widgets["custom_layout"]["displays"][old] = {
-        "spotify_visualizer": {profile: deepcopy(variants[profile]) for profile in THREE_D_PROFILES}
+        "spotify_visualizer": {profile: deepcopy(variants[profile]) for profile in FREEFORM_PROFILES}
     }
     _commit(widgets, _session_item(screen, PLANAR), {signature: ((signature, *aliases), screen.geometry(), "1")})
     displays = load_custom_layout_map(widgets)["displays"]
@@ -491,11 +494,10 @@ def test_production_manager_startup_hydrates_exact_named_profile_before_first_re
         mode_activation=build_visualizer_mode_activation((mode,)))
     rects = {
         PLANAR: (70., 90., 480., 160.), EXTRUDED: (180., 140., 420., 380.),
-        SHOCKWAVE: (330., 90., 560., 190.), SPHERE: (770., 120., 260., 460.),
+        SPHERE: (770., 120., 260., 460.),
     }
     extents = {
-        PLANAR: (960., 320.), EXTRUDED: (210., 190.),
-        SHOCKWAVE: (420., 140.), SPHERE: (180., 400.),
+        PLANAR: (960., 320.), EXTRUDED: (210., 190.), SPHERE: (180., 400.),
     }
     variants = {}
     for profile, rect in rects.items():
@@ -595,7 +597,7 @@ def test_runtime_edit_save_touches_only_active_profile_and_preserves_all_sibling
         layout.session.notify_item_changed(item)
         # An Edit-mode hot-swap retains this unsaved draft and its siblings in
         # the SAME session. Return to the outgoing profile and Cancel once.
-        other = "shockwave_grid" if mode != "shockwave_grid" else "extruded_spectrum"
+        other = "extruded_spectrum" if profile == PLANAR else "spectrum"
         assert layout.activate_edit_visualizer_profile(other)
         assert layout.session is not None
         parked = next(x for x in layout.session.items() if x is item)
@@ -640,7 +642,6 @@ def test_hidden_mode_cycles_restore_each_independent_profile_on_one_retained_own
     poses = {
         PLANAR: ((70., 90., 480., 160.), (960., 320.)),
         EXTRUDED: ((180., 140., 420., 380.), (210., 190.)),
-        SHOCKWAVE: ((420., 80., 610., 180.), (480., 145.)),
         SPHERE: ((820., 170., 250., 470.), (175., 410.)),
     }
     variants = {}
@@ -708,7 +709,7 @@ def test_parked_custom_profile_is_not_duplicate_but_remains_saved_sibling():
     )
     from PySide6.QtCore import QRect
     session = CustomLayoutSession()
-    for profile, parked in ((EXTRUDED, True), (SHOCKWAVE, False), (SPHERE, True)):
+    for profile, parked in ((EXTRUDED, True), (PLANAR, False), (SPHERE, True)):
         item = CustomLayoutSessionItem(
             source_key=CustomLayoutKey("spotify_visualizer", "screen:test", profile),
             model_identity="spotify_visualizer",
@@ -716,7 +717,7 @@ def test_parked_custom_profile_is_not_duplicate_but_remains_saved_sibling():
             current_global_rect=QRect(10, 20, 250, 170),
             baseline_size_payload={}, current_size_payload={},
             baseline_enabled=True, current_enabled=True,
-            geometry_kind="freeform_3d", profile_parked=parked,
+            geometry_kind="planar" if profile == PLANAR else "freeform_3d", profile_parked=parked,
         )
         session.add_item(item)
     session.refresh_duplicate_state()
@@ -938,7 +939,7 @@ def test_failed_edit_projection_preserves_existing_parked_authored_sibling():
     screen = _Screen()
     signature = get_screen_signature(screen)
     outgoing = _session_item(screen, EXTRUDED, geometry_kind="freeform_3d")
-    sibling = _session_item(screen, SHOCKWAVE, geometry_kind="freeform_3d")
+    sibling = _session_item(screen, SHOCKWAVE, geometry_kind="planar")
     sibling.profile_parked = True
     sibling.current_global_rect.translate(19, 31)
     stage = QRect(sibling.current_global_rect)

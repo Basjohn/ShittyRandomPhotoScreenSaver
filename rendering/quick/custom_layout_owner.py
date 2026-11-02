@@ -2287,6 +2287,13 @@ class QuickCustomLayoutOwner:
         if visible is None:
             return False
         if visible.source_key.geometry_variant == profile:
+            # Framed 3D modes deliberately share the exact planar CUSTOM slot
+            # with framed 2D modes. A same-profile hot-swap therefore keeps the
+            # current rectangle/viewport untouched, but the edit affordances are
+            # still mode-owned (for example, a 3D card has no 2D quarter-turn).
+            policy = get_visualizer_presentation_policy(target_mode)
+            visible.geometry_kind = get_visualizer_geometry_kind(target_mode)
+            visible.content_rotation_capable = bool(policy.content_rotation_capable)
             return True
         self._finish_undo_gesture()
         binding = self._bindings.get(visible.current_display_identity)

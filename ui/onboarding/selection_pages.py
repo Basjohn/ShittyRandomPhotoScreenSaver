@@ -181,6 +181,12 @@ class VisualizerPage(Page):
         preview_column = QVBoxLayout(); preview_column.setContentsMargins(0, 0, 0, 0)
         self.preview_title = text_label("", heading=True)
         preview_column.addWidget(self.preview_title)
+        self.preview_note = text_label("Resource intensive, but high fidelity.")
+        note_font = self.preview_note.font()
+        note_font.setBold(True)
+        self.preview_note.setFont(note_font)
+        self.preview_note.setVisible(False)
+        preview_column.addWidget(self.preview_note)
         self.preview = None
         self._preview_holder = preview_column
         preview_column.addStretch()
@@ -196,8 +202,12 @@ class VisualizerPage(Page):
         active = set(resolve_admissible_enabled_modes(section["mode_activation"]))
         if self._offered_modes is None:
             # Experimental modes can be retained/disabled here only if already admitted.
-            self._offered_modes = [d for d in iter_visualizer_mode_descriptors()
-                                   if d.guided_setup_offered or d.mode_id in active]
+            offered = [d for d in iter_visualizer_mode_descriptors()
+                       if d.guided_setup_offered or d.mode_id in active]
+            priority = {"bubble": 0, "extruded_bubble": 1}
+            self._offered_modes = sorted(
+                offered, key=lambda descriptor: priority.get(descriptor.mode_id, 2)
+            )
         with QSignalBlocker(self.enabled): self.enabled.setChecked(bool(section["enabled"]))
         effective = is_widget_family_effective(widgets, "visualizers")
         self.enabled.setEnabled(effective)
@@ -223,11 +233,12 @@ class VisualizerPage(Page):
             return
         mode_id = item.data(Qt.ItemDataRole.UserRole)
         self.preview_title.setText(item.text())
+        self.preview_note.setVisible(mode_id == "extruded_bubble")
         path = asset_path(f"onboarding/visualizer_{mode_id}.png")
         if self.preview is None:
             self.preview = ImagePanel(path, upscale=False)
             self.preview.setMinimumHeight(220); self.preview.setMaximumHeight(300)
-            self._preview_holder.insertWidget(1, self.preview)
+            self._preview_holder.insertWidget(2, self.preview)
         else:
             self.preview.set_source(path)
 

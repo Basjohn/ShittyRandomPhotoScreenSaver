@@ -156,18 +156,25 @@ def test_internal_git_subprocesses_are_hidden_on_windows(monkeypatch) -> None:
 
 
 
-def test_created_godzip_embeds_workflow_and_hard_excludes_ui_assets(tmp_path: Path) -> None:
+def test_created_godzip_embeds_workflow_and_hard_excludes_asset_and_reference_trees(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
-    assets = repo / "ui" / "assets"
-    assets.mkdir(parents=True)
-    (assets / "huge.bin").write_bytes(b"x" * 32)
+    ui_assets = repo / "ui" / "assets"
+    ui_assets.mkdir(parents=True)
+    (ui_assets / "huge.bin").write_bytes(b"x" * 32)
+    root_assets = repo / "assets" / "textures"
+    root_assets.mkdir(parents=True)
+    (root_assets / "local.png").write_bytes(b"asset")
+    references = repo / "references"
+    references.mkdir(parents=True)
+    (references / "mock.png").write_bytes(b"reference")
     (repo / "ordinary.py").write_text("print('ok')\n", encoding="utf-8")
 
     listed = {entry.path for entry in core.collect_repo_files(repo)}
     assert "ordinary.py" in listed
-    assert "ui/assets/huge.bin" not in listed
-    assert core.workflow_default_selected("ui/assets/huge.bin", "MODIFIED") is False
-    assert core.is_never_transfer_payload("ui/assets/huge.bin") is True
+    for excluded in ("assets/textures/local.png", "ui/assets/huge.bin", "references/mock.png"):
+        assert excluded not in listed
+        assert core.workflow_default_selected(excluded, "MODIFIED") is False
+        assert core.is_never_transfer_payload(excluded) is True
 
     archive = tmp_path / "GODZIP_workflow.zip"
     core.create_godzip(repo, ["ordinary.py"], archive)
@@ -177,7 +184,9 @@ def test_created_godzip_embeds_workflow_and_hard_excludes_ui_assets(tmp_path: Pa
         workflow = handle.read(core.WORKFLOW_MEMBER).decode("utf-8")
         assert "superseding full GODZIP" in workflow
         assert "working-tree authority" in workflow
-        assert "ui/assets/" in workflow
+        assert "root `assets/`" in workflow
+        assert "`ui/assets/`" in workflow
+        assert "`references/`" in workflow
         assert "repository-only operation" in workflow
         assert "do **not** govern Codex, Claude" in workflow
         assert "local repo agents" in workflow
@@ -186,8 +195,22 @@ def test_created_godzip_embeds_workflow_and_hard_excludes_ui_assets(tmp_path: Pa
     inspection = core.inspect_godzip(repo, archive)
     assert [entry.target_path for entry in inspection.files] == ["ordinary.py"]
 
-    with pytest.raises(core.GodzipError, match="excluded from normal GODZIP payloads"):
-        core.create_godzip(repo, ["ui/assets/huge.bin"], tmp_path / "forbidden.zip")
+    for excluded in ("assets/textures/local.png", "ui/assets/huge.bin", "references/mock.png"):
+        with pytest.raises(core.GodzipError, match="excluded from normal GODZIP payloads"):
+            core.create_godzip(repo, [excluded], tmp_path / f"forbidden-{Path(excluded).name}.zip")
+
+
+def test_manifested_godzip_rejects_repository_payload_missing_from_manifest(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    (repo / "ordinary.py").write_text("print('ok')\n", encoding="utf-8")
+    archive = tmp_path / "GODZIP_closed_inventory.zip"
+    core.create_godzip(repo, ["ordinary.py"], archive)
+
+    with zipfile.ZipFile(archive, "a", compression=zipfile.ZIP_DEFLATED) as handle:
+        handle.writestr("undeclared.txt", b"must be rejected\n")
+
+    with pytest.raises(core.GodzipError, match="not declared in the manifest"):
+        core.inspect_godzip(repo, archive)
 
 
 def test_operator_themes_are_hard_excluded_even_when_explicitly_selected(tmp_path: Path) -> None:
@@ -275,6 +298,8 @@ def test_workflow_defaults_keep_docs_and_direct_tests_but_not_payload_trees() ->
     assert core.workflow_default_selected("tests/fixtures/huge.bin") is False
     assert core.workflow_default_selected("tests/goldens/frame.png") is False
     assert core.workflow_default_selected("themes/settings/Dark.json") is False
+    assert core.workflow_default_selected("references/visualizer/mock.png") is False
+    assert core.workflow_default_selected("assets/textures/concrete.png") is False
     assert core.workflow_default_selected("images/wallpaper.jpg") is False
     assert core.workflow_default_selected("ui/assets/onboarding/hero.webp") is False
     assert core.workflow_default_selected("ui/resources/assets_rc.py") is False

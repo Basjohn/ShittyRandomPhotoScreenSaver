@@ -62,7 +62,7 @@ When a slice closes:
 - preserve a useful regression/failed-method mechanism in Historical Bugs;
 - delete redundant historical prose.
 
-Exact commit hashes belong primarily in `Current_Plan.md`, `.godzip` handoff metadata and historical evidence where the exact tree matters. Broad living guides should avoid hashes that will turn into stale authority.
+Exact commit hashes belong primarily in source-control references, `.godzip` handoff metadata and historical evidence where the exact tree matters. Put a hash in `Current_Plan.md` only when an active task literally depends on that exact baseline, then remove it when the task closes. Broad living guides should avoid hashes that will turn into stale authority.
 
 ## Contract/source disagreement
 

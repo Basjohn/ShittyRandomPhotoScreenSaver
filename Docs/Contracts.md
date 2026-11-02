@@ -608,16 +608,17 @@ preserves logical runtime/model identity.
 
 Visualizer geometry separation reuses this same variant-key architecture, but **mechanics and persisted pose identity are
 separate descriptor facts**. `geometry_kind` selects interaction/renderer mechanics (`planar` or `freeform_3d`);
-`layout_profile` selects the canonical CUSTOM variant slot. Current planar modes deliberately share `planar`, while Extruded,
-Shockwave and Sphere use `3d:extruded_spectrum`, `3d:shockwave_grid` and `3d:sphere`. Those strings are compatibility-group
-IDs, not camera state and not a requirement that every mode have a unique slot: future modes may deliberately share a profile
-only when their authored stage geometry is genuinely compatible. The system still has one Visualizer widget, one
+`layout_profile` selects the canonical CUSTOM variant slot. Current framed modes deliberately share `planar`, including framed 3D modes whose internal camera remains mode-owned.
+Only frameless/freeform 3D stages use distinct profiles today: Extruded Spectrum uses `3d:extruded_spectrum` and Sphere uses
+`3d:sphere`. Those strings are compatibility-group IDs, not camera state and not a requirement that every freeform mode have
+a unique slot: future freeform modes may deliberately share a profile only when their authored stage geometry is genuinely compatible. The system still has one Visualizer widget, one
 `custom_layout` root and one CUSTOM transaction owner. No per-mode X/Y settings, parallel 3D map or second geometry service
 is admitted.
 
 Legacy Visualizer `default` and `freeform_3d` variants are interpretation-only input. Only the explicitly authored/current
-claimant may promote one ambiguous legacy record into its canonical profile; sibling 3D modes never clone it. A missing target
-profile starts from its authored baseline rather than borrowing the outgoing pose. Cross-profile hot-swap resolves the target
+claimant may promote one ambiguous legacy record into its canonical profile; sibling 3D modes never clone it. A same-profile mode switch leaves the committed rectangle/viewport untouched and performs no sibling-profile lookup or copy;
+framed 2D and framed 3D modes therefore remain on the exact same `planar` geometry during hot-swap. A missing target profile
+starts from its authored baseline rather than borrowing the outgoing pose. A true cross-profile hot-swap resolves the target
 profile only at the event-bound hidden activation seam after logical production is stopped. One unread outgoing render snapshot
 is discarded there; CUSTOM Save may rebase only the one unread newest logical snapshot onto the exact presentation being
 promoted. These two explicit transaction operations prevent false one-publication `viz_geometry_mismatches` without weakening
@@ -640,8 +641,8 @@ cage from the same production projection/fit used by its renderer; Shockwave mir
 uses its renderer's stage/perspective convention. Conservative renderer reach remains allocation/visibility evidence only.
 Descriptor-owned orbit admission is separate from footprint visibility, so empty scenes may expose Orbit without fabricated
 content geometry. CUSTOM's native pointer block remains binding. Orbit/Alt-left uses the existing view resolver. For unframed 3D modes,
-Alt-right move and Alt-wheel resize use the current `CustomLayoutSession`. Framed Neon Lake Basin instead routes
-Alt-right to internal pan and Alt-wheel to internal scale, including during Edit: its card rectangle, viewport and CUSTOM
+Alt-right move and Alt-wheel resize use the current `CustomLayoutSession`. Framed 3D modes instead route admitted
+Alt-right/Alt-wheel gestures to their shared internal-camera pan/scale capability: their card rectangle, viewport and CUSTOM
 geometry never change from those inputs. Plain CUSTOM geometry controls retain their ordinary behavior. Its fixed card
 rectangle owns selection; the projected internal guide is clipped derivative paint. See
 [Neon Lake Basin](Reference/Neon_Lake_Basin.md). Wheel input preserves signed movement on either Qt axis; zero

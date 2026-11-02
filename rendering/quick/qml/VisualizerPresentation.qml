@@ -24,6 +24,11 @@ Item {
     property real cardBorderWidth: 4.0
     property real cardCornerRadius: 8.0
     property bool cardShadowEnabled: true
+    // DisplayScene externalizes the live Visualizer card shadow into the shared
+    // widget-shadow underlay so its blur can never paint over another widget.
+    // This externalizes only card-shell chrome; freeform 3D scene/object shadows
+    // are renderer-owned. Standalone/preview uses keep the local card shadow unless hosted.
+    property bool externalCardShadow: false
     property bool widgetGlowAdmitted: false
     property bool alwaysShowGlyphs: true
     property bool show3DControlHints: true
@@ -167,6 +172,7 @@ Item {
             + visualizerPresentationRoot.cardShadowExtendBottom
         visible: visualizerPresentationRoot.cardShellEnabled
             && visualizerPresentationRoot.cardShadowEnabled
+            && !visualizerPresentationRoot.externalCardShadow
         color: visualizerPresentationRoot.cardShadowColor
         blur: visualizerPresentationRoot.cardShadowBlur
         radius: visualizerPresentationRoot.cardCornerRadius

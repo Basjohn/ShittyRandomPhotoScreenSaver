@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 
 Item {
     id: displayScene
@@ -186,6 +187,52 @@ Item {
             clip: false
             enabled: false
             z: 0
+
+            // The Visualizer card is painted later in the foreground lane, but
+            // its shadow belongs with every other card shadow beneath all widget
+            // surfaces. Keeping the blur here prevents it from landing over Media
+            // (or any other ordinary widget) when their rectangles overlap. This
+            // is card-shell chrome only: frameless/freeform 3D renderer/object
+            // shadows remain inside their renderer and never enter this lane.
+            RectangularShadow {
+                id: visualizerCardShadowUnderlay
+                objectName: "visualizerCardShadowUnderlay"
+                readonly property var sourceRoot: visualizerPresentationLoader.item
+                readonly property real baseLeft: sourceRoot
+                    ? Math.max(0.0, -Number(sourceRoot.cardShadowOffsetX)) : 0.0
+                readonly property real baseTop: sourceRoot
+                    ? Math.max(0.0, -Number(sourceRoot.cardShadowOffsetY)) : 0.0
+                readonly property real baseRight: sourceRoot
+                    ? Math.max(0.0, Number(sourceRoot.cardShadowOffsetX)) : 0.0
+                readonly property real baseBottom: sourceRoot
+                    ? Math.max(0.0, Number(sourceRoot.cardShadowOffsetY)) : 0.0
+                readonly property real extendLeft: sourceRoot
+                    ? Math.max(0.0, Number(sourceRoot.cardShadowExtendLeft)) : 0.0
+                readonly property real extendTop: sourceRoot
+                    ? Math.max(0.0, Number(sourceRoot.cardShadowExtendTop)) : 0.0
+                readonly property real extendRight: sourceRoot
+                    ? Math.max(0.0, Number(sourceRoot.cardShadowExtendRight)) : 0.0
+                readonly property real extendBottom: sourceRoot
+                    ? Math.max(0.0, Number(sourceRoot.cardShadowExtendBottom)) : 0.0
+                x: visualizerPresentationLoader.x - baseLeft - extendLeft
+                y: visualizerPresentationLoader.y - baseTop - extendTop
+                width: visualizerPresentationLoader.width
+                    + baseLeft + baseRight + extendLeft + extendRight
+                height: visualizerPresentationLoader.height
+                    + baseTop + baseBottom + extendTop + extendBottom
+                visible: !!sourceRoot
+                    && sourceRoot.visible
+                    && sourceRoot.cardShellEnabled
+                    && sourceRoot.cardShadowEnabled
+                    && width > 0.0 && height > 0.0
+                opacity: sourceRoot ? Number(sourceRoot.opacity) : 0.0
+                color: sourceRoot ? sourceRoot.cardShadowColor : "transparent"
+                blur: sourceRoot ? Number(sourceRoot.cardShadowBlur) : 0.0
+                radius: sourceRoot ? Number(sourceRoot.cardCornerRadius) : 0.0
+                spread: sourceRoot ? Number(sourceRoot.cardShadowSpread) : 0.0
+                offset: Qt.vector2d(0.0, 0.0)
+                cached: true
+            }
         }
 
         Item {
@@ -203,6 +250,10 @@ Item {
             asynchronous: false
             source: "VisualizerPresentation.qml"
             z: 20
+            onLoaded: {
+                if (item)
+                    item.externalCardShadow = true
+            }
         }
 
         // One existing-host foreground admission lane for the optional OSD.
