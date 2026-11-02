@@ -30,10 +30,10 @@ only remaining work, not implementation chronology.
 
 **Working sequence:**
 
-- [~] **Awaiting Validation — recorded motion bake-off:** review the current §5.1 audible four-way packages and select
-  a credible motion grammar, request a specific correction, or reject all. Judge distinct flowing/twisting body motion,
-  moving colour, dense/local highlights and particles together. Keep geometry-only controls for diagnosis.
-- [ ] **After motion selection, timing/framing admission:** extend the fixed-view near-head comparison to production
+- [ ] **Selected hybrid and production migration:** C is primary, with A's rolling twist, localized high-power colour,
+  reactive axial roll (skewer motion), particles/strands and waveform-repelled fog. Full controls, visual editors,
+  audited quiet/peak ranges and two initial presets follow the Migration Plan. Do not reopen the four-way selection.
+- [ ] **Timing/framing admission:** extend the fixed-view near-head comparison to production
   framing/navigation. Measure causal input → current body/head admission → visible shape without shifted inputs;
   prove hidden ends, smoothness and bounded capacity. The distant-head appearance recipe is not timing evidence.
 - [ ] **After the bake-off selects the core grammar:** WR-07 recorded-feature replay/calibration, remaining shared primitive
@@ -107,6 +107,11 @@ These synthetic low/high previews support visual judgement only, not musical tim
 lifecycle acceptance. The operator accepts this visual range; floor reflection remains tunable, with a modest
 reflectivity reduction a workable compromise. Highlight density and spatial packing remain production controls;
 the recorded comparison uses the same reactive accent mapping across models, with body-only diagnostics alongside it.
+
+Fog-fringe filtering uses the existing composite taps with an adjustable wider footprint (`Fog.fringe_smoothing`),
+retaining the billows and coloured edge while reducing grain. Native before/after evidence:
+`.artifacts/evidence/waveform_ribbon/wr_fog_fringe_after_20261102/comparison.png` (baseline sibling `before_v2`).
+No new samples/targets; short warm GPU measurements are scoped evidence, not a speedup or temporal acceptance claim.
 
 **Ground mist ownership (operator direction):** ground-bank height and light stay at zero intentionally. The floor
 uses its own existing cheap analytic distance mist (`Environment.mist` / `MIST_GLSL`), independently of the shaped
@@ -731,7 +736,11 @@ still has physical transport; current body response must also be checked before 
 
 #### 5.1.4 Decision
 
-**Current local review packages (Awaiting Validation):**
+**Selection:** the operator chose C as primary with A's twisting (2 November); the Migration Plan owns the selected
+hybrid's full production controls, including separately reactive axial roll. The following local packages preserve
+the comparison evidence; they do not establish final production acceptance.
+
+**Local review packages:**
 
 - `.artifacts/evidence/waveform_ribbon/wr_planned_motion_review_ragdoll_20261102/`: source 20–30 s.
 - `.artifacts/evidence/waveform_ribbon/wr_planned_motion_review_human_20261102/`: source 15–25 s.
@@ -740,7 +749,7 @@ Each directory contains `comparison_with_audio.mp4`, `A`–`D/motion.webp`, `syn
 same-time body-range proofs, input metadata and `receipt.json` with source/artifact hashes and scoped CPU costs.
 Earlier head-only and common-pulse drafts are rejected; these paths identify the distinct-model review.
 
-Record the operator's choice and rejection reasons against the audible clips: flow, twist, local packet travel,
+For subsequent hybrid validation, judge against the audible clips: flow, twist, local packet travel,
 elastic attack/settle, low-react beauty, moving colour, dense/local highlights, particles, continuity and bounded cost.
 If none is credible, select none. A hybrid requires a same-source ablation showing complementary jobs; do not stack
 all four. A still or pixel count cannot establish the reaction's musical feel.

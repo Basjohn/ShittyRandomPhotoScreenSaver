@@ -139,3 +139,24 @@ def test_volume_allocates_lazily_admits_bounds_and_retires_in_its_context(gl_con
     gl_context['target'].make_current()
     volume.release()
     assert not volume.has_resources
+
+
+def test_composite_fringe_smoothing_is_opt_in_and_reaches_pixels(gl_context):
+    target, volume, march = gl_context['target'], gl_context['volume'], gl_context['march']
+    update(gl_context)
+    march.march(volume, size=(8, 8), steps=32)
+    # A high-frequency, coloured fringe isolates composite filtering from ray-march variation.
+    yy, xx = np.indices((8, 8))
+    fixture = np.zeros((8, 8, 4), np.float32)
+    fixture[:, :, :3] = ((xx + yy) % 2)[:, :, None] * np.array((.1, .3, .9))
+    fixture[:, :, 3] = .5
+    gl.glTextureSubImage2D(march.texture, 0, 0, 0, 8, 8, gl.GL_RGBA, gl.GL_FLOAT, fixture)
+    def pixels(**options):
+        target.bind(clear=(0., 0., 0., 0.))
+        march.composite(**options)
+        return target.read_rgba()
+    default = pixels()
+    np.testing.assert_array_equal(default, pixels(fringe_smoothing=0.))
+    assert np.abs(default.astype(int) - pixels(fringe_smoothing=1.).astype(int)).max() > 5
+    with pytest.raises(ValueError, match='smoothing'):
+        march.composite(fringe_smoothing=float('nan'))

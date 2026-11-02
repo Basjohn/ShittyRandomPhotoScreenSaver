@@ -134,24 +134,22 @@ The scene is world-first through the shared framed camera (Orthographic default)
 waveform and strong thick shaped mist, with no visible horizon/sky/floor edge. The waveform clears and softly lights
 the mist. Preset/control migration and recorded-audio calibration come only after the lab look is credible.
 
-- [~] **Awaiting Validation — recorded motion bake-off:** judge the four distinct models against the same audible
-  recordings: A flowing bends/rolling twist, B traveling deformation packets, C elastic bending/torsion, D broad
-  macro-flow with PCM-envelope detail. Review body movement, moving colour, particles and dense/local highlights
-  together; reject identical pulses, mist-only response or poor low-react form. Current synchronized clips, individual
-  motion previews, five native checkpoints and traces are indexed in the Lab Plan §5.1. Select one, request a specific
-  correction, or reject all; no production grammar is chosen yet.
-- [ ] **After motion selection, finish timing/framing admission:** the comparison admits only the fixed mock view with
-  a near-view head. Prove hidden ends, bounded history and input → body/head → visible delay across the production
-  framing/navigation range. Preserve unshifted audio and measure current-body response separately from transported
-  history; the former distant-head and common-pulse drafts are rejected diagnostics.
-- [ ] **Only after the bake-off selects the core grammar:** recorded-feature WR-07 response calibration, remaining S3D-1/2/5
-  lifecycle/cost gates, WR-08 production migration/tunable presets, then WR-09 acceptance with
-  `tools/visualizer_live_check.py --load game60`.
-- [ ] **WR-08 appearance controls and accents:** keep floor reflection tunable; a modest reduction in reflectivity is
-  a workable production compromise, not a reason to chase columns before reactivity. Expose highlight density and
-  localized packing as useful reaction aspects; the bake-off uses the same reactive accent mapping for every model.
-  Retain primary form/fringe and alternate highlight polish, sparks/glow/defocus and measured fog cost as production
-  debt. Ground banks stay zero; the floor keeps its separate cheap distance-mist layer.
+- [ ] **WR-07/08 selected hybrid and production owners:** C elastic bending/torsion is primary; combine A's accumulated
+  twisting, localized highest-power colour shifts and independently controllable reactive whole-waveform rotation
+  (axial roll like a skewer; fast strong attack, slow decay; integrate speed into continuous angle). Preserve constant history flow, smooth
+  curves, particles/free strands and fog repelled by the actual deformed/rotated waveform. Promote shared scene code
+  out of the lab, use the sole logical clock, immutable publication and lazy retained renderer; Terra audits each slice.
+- [ ] **Full controls/editors and two initial presets:** migrate primary/alternate examples into Preset 1/2 with the
+  selected hybrid, shared framed 3D camera/navigation, technical profile, preset/Custom and Edit/Arrange feature set.
+  Expose bend/torsion/stretch/twist/rotation and accent ranges, source/curve visual tuning, ribbon/gradient editors,
+  and floor reflectivity/tint/brightness. Every reactive range needs actual quiet/peak consumer proof for both handles;
+  retain mutable authored presets and prove Save/Cancel/Restore and runtime source reachability.
+- [ ] **Framing, timing and acceptance:** prove hidden ends/history bounds and body/head-to-visible delay across admitted
+  sizes/camera poses; replay real quiet/middle/hot/silence/hot-start windows with unshifted audio, inspect lab/production
+  parity and audit range headroom. Close shared lifecycle/cost/dormancy gates and run
+  `tools/visualizer_live_check.py --mode waveform_ribbon --load game60` before WR-09 acceptance. Operator visual/native
+  judgement remains explicit where automation cannot close it. Ground volume banks stay zero; floor distance mist
+  remains separate. Floor-column polish is not a migration blocker.
 
 ### 7.2 Reactive Liquid / Audio Melt Pool
 

@@ -310,12 +310,14 @@ class FogMarch:
             (gl.glEnablei if blend else gl.glDisablei)(gl.GL_BLEND, 0)
 
     def composite(self, *, glow: float = 0., additive: bool = False, scale: float = 1., crackle=(0., 0., 1., 1.),
-                  crackle_glow: float = 0., crackle_limit=None) -> None:
+                  crackle_glow: float = 0., crackle_limit=None, fringe_smoothing: float = 0.) -> None:
         """Draw the last march over the bound framebuffer: dst x transmittance + in-scatter (``additive``: + in-scatter
         only, for a target that holds light alone, such as a reflection)."""
         self._check_context()
         if not self._colour:
             raise RuntimeError(f"{self.label}: fog composite before a march")
+        if not math.isfinite(fringe_smoothing) or not 0. <= fringe_smoothing <= 4.:
+            raise ValueError('Fog fringe smoothing must be finite in 0..4 march texels')
         program = self._program('composite', FOG_COMPOSITE_FRAGMENT)
         program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
         vao_before = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING)
@@ -329,6 +331,7 @@ class FogMarch:
             gl.glUniform1i(gl.glGetUniformLocation(program, 'uFogMarch'), self.MARCH_UNIT)
             gl.glUniform1f(gl.glGetUniformLocation(program, 'uFogGlow'), glow)
             gl.glUniform1f(gl.glGetUniformLocation(program, 'uFogScale'), scale)
+            gl.glUniform1f(gl.glGetUniformLocation(program, 'uFogFringeSmoothing'), fringe_smoothing)
             gl.glUniform4f(gl.glGetUniformLocation(program, 'uFogCrackle'), *crackle)
             gl.glUniform2f(gl.glGetUniformLocation(program, 'uFogCrackleSeed'), crackle_glow, 0.)
             # Optional per-column limit (float32 array over screen x, values in screen v): the consumer's own geometry.

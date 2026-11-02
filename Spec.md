@@ -784,6 +784,9 @@ calibration and source reachability through production Settings, presets and aud
 The current lab comparison uses recorded audio and distinct model-specific body projections over normalized immutable
 history, with head-written moving colour, dense highlights and particles. A shared global scale/pulse is not a valid
 substitute for the planned flow, rolling twist, traveling packets, elastic torsion and waveform-envelope detail.
+The selected production grammar combines C's primary elastic body with A's twisting, localized high-power colour,
+particles/strands and independently reactive axial roll about the waveform's length (separate from camera orbit).
+The Migration Plan owns full visual editors/ranges, endpoint audits and the two initial primary/alternate presets.
 New 3D labs/modes start Orthographic with optional Perspective, using the shared admitted eye/world and actual
 projection matrices/ray origins; camera math alone does not establish scene likeness or reflection parity.
 The shared bounded CPU path/history and transported width-frame references are documented in
