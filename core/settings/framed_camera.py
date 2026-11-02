@@ -282,6 +282,19 @@ def orthographic_matrix(half_extent: tuple[float, float], near: float, far: floa
             -2. / (far - near), 0., 0., 0., -(far + near) / (far - near), 1.)
 
 
+def orthographic_depth_interval(projection) -> tuple[float, float]:
+    """Recover the admitted raster interval from a row-major Orthographic matrix.
+
+    This reads projection metadata, never a second camera or physical eye.
+    """
+    scale,offset=float(projection[2][2]),float(projection[2][3])
+    if not math.isfinite(scale) or not math.isfinite(offset) or scale>=0. or float(projection[3][3])!=1.:
+        raise ValueError('Expected a finite Orthographic projection')
+    span=-2./scale
+    centre=-offset*span*.5
+    return centre-span*.5,centre+span*.5
+
+
 def view_matrices(spec: FramedCameraSpec, turn: float, tilt: float, aspect: float, fov_y_degrees: float,
                   near: float, far: float, *, aperture_scale: float = 1.):
     """(view_to_world, world_to_view) column-major mat3s, (tan x, tan y), and the GL mat4 projection."""

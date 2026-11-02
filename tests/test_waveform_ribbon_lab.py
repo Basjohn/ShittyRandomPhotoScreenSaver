@@ -87,36 +87,6 @@ def test_missing_floor_map_retires_preceding_textures(lab, monkeypatch, tmp_path
         assert len(created)==allocated and all(not gl.glIsTexture(name) for name in created)
 
 
-@pytest.mark.parametrize('state', ('low', 'high'))
-def test_mist_band_contains_every_visible_sheet_and_closes_where_none_is(state):
-    # The mist is shaped by the waveform: each admitted knot's counted vertical extent lies inside the clear band
-    # at its x (the sheets never sit in mist); beyond the flowing head, where no sheet exists, the band closes.
-    recipe = lab_module.Recipe()
-    ring, now = lab_module.fill_ring(recipe, state)
-    packet, flow, fog = ring.packet(), recipe.flow, recipe.fog
-    translation = (flow.head_x - flow.speed*now, 0., 0.)
-    age_fade = (now, flow.fade_in, (ring.capacity - 1)/flow.knot_hz, flow.fade_out)
-    table = lab_module.waveform_envelope(packet, translation, age_fade, fog)
-    x0, x1, samples = fog.envelope_range
-    xs = np.linspace(x0, x1, int(samples))
-    lower, upper, presence = table[0, :, 0], table[0, :, 1], table[0, :, 2]
-    rows = np.frombuffer(packet.payload, np.float32).reshape(packet.instances, -1, 4)
-    checked = 0
-    for path in rows:
-        count, start, capacity = int(path[0, 0]), int(path[1, 1]), int(path[1, 2])
-        knots = path[4:].reshape(-1, KNOT_ROWS, 4)[(start + np.arange(count)) % capacity]
-        x = knots[:, 0, 0] + packet.world_origin[0] + translation[0]
-        y = knots[:, 0, 1] + packet.world_origin[1] - lab_module.VIEW_SLOPE*(knots[:, 0, 2] + packet.world_origin[2])
-        half = fog.envelope_width*knots[:, 0, 3]
-        visible = (np.abs(x) < 6.) & (knots[:, 1, 2] > .5)
-        band_low, band_high = np.interp(x[visible], xs, lower), np.interp(x[visible], xs, upper)
-        # The band is smoothed along x; a smoothing width's worth of slack, never more.
-        assert (y[visible] - half[visible] >= band_low - .15).all() and (y[visible] + half[visible] <= band_high + .15).all()
-        checked += visible.sum()
-    assert checked > 50
-    beyond = xs > flow.head_x + 2.
-    assert (presence[beyond] == 0.).all() and np.allclose(upper[beyond], lower[beyond])
-    assert (upper[np.abs(xs) < 6.] - lower[np.abs(xs) < 6.] > .5).all()
 
 
 def test_retained_history_capture_never_rebuilds_or_appends_and_accents_can_be_off(lab, monkeypatch):
@@ -192,27 +162,15 @@ def test_shared_scene_attempts_independent_cleanup_and_retains_failed_owner_for_
         assert not lab.has_resources
 
 
-def test_volume_mist_off_retires_its_resources_without_replacing_floor_mist(lab):
+def test_atmosphere_off_retires_all_resources_and_has_no_independent_floor_haze(lab):
     from dataclasses import replace
     lab.render('low', flat=False)
     analytic = lab.recipe.environment.mist.copy()
-    assert lab.fog.has_resources and 'shape' in lab.textures and lab.envelope.has_resources
+    assert lab.fog.has_resources and lab.field.has_resources
     lab.recipe = replace(lab.recipe, fog=None)
     lab.render('low', flat=False)
-    assert not any(owner.has_resources for owner in (lab.fog, lab.reflected_fog, lab.march, lab.reflected_march))
+    assert not any(owner.has_resources for owner in (lab.fog, lab.reflected_fog))
     assert not lab.fog_resources.has_resources
-    assert not lab.envelope.has_resources
+    assert not lab.field.has_resources
     assert not {'shape','envelope'} & lab.textures.keys()
-    assert lab.recipe.environment.mist == analytic
-
-
-def test_removed_ribbons_do_not_hold_open_the_mist_clearance():
-    from core.ribbon_ring import RibbonRing
-    ring = RibbonRing(3,colours=[(.1,.5,1.,1.),(.1,.5,1.,0.),(.1,.5,1.,0.)])
-    for index in range(8):
-        ring.append(index/6,[(index-4,2.,0.),(index-4,8.,0.),(index-4,10.,0.)],[.4]*3)
-    fog = lab_module.Fog()
-    envelope = lab_module.waveform_envelope(ring.packet(),(0.,0.,0.),(2.,0.,20.,0.),fog)
-    xs = np.linspace(*fog.envelope_range)
-    assert np.max(envelope[0,np.abs(xs)<.5,1])<3.
-    assert not envelope[4:,:,3].any()
+    assert lab.recipe.environment.mist == analytic and analytic['uMistShape'][0]==0.

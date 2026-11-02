@@ -2,7 +2,7 @@
 from __future__ import annotations
 import numpy as np
 from core.settings import framed_camera as fc
-from core.settings.waveform_ribbon_camera import NEAR, FAR
+from core.settings.waveform_ribbon_camera import NEAR, FAR, orthographic_raster_projection, scene_raster_support
 from core.waveform_ribbon_scene import SPEC, ORTHO_REFERENCE_FOV
 from widgets.spotify_visualizer.render_state import WaveformRibbonFrame
 from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
@@ -10,13 +10,14 @@ from rendering.quick.scene3d.frame import item_pixel_rect
 from rendering.quick.scene3d.waveform import WaveformScene
 from rendering.quick.scene3d.resources import warm_programs
 from rendering.quick.scene3d.target import scene_target_programs
-from rendering.gl_programs.waveform_ribbon import FLOOR_VERTEX,FLOOR_FRAGMENT,FOG_MEDIUM_GLSL,SHAPE_BAKE_COMPUTE
+from rendering.gl_programs.waveform_ribbon import FLOOR_VERTEX,FLOOR_FRAGMENT
+from rendering.gl_programs.waveform_atmosphere import MEDIUM_GLSL,SKY_VERTEX,SKY_FRAGMENT
 from rendering.gl_programs.fog_volume import fog_inject_source
 from rendering.gl_programs.ribbon import (RIBBON_VERTEX,RIBBON_BODY_FRAGMENT,RIBBON_LIGHT_FRAGMENT,
     RIBBON_SPARK_VERTEX,RIBBON_SPARK_FRAGMENT,RIBBON_STRAY_VERTEX,RIBBON_STRAY_FRAGMENT)
 
 
-def physical_view(parameters,aspect,aperture_scale=1.):
+def physical_view(parameters,aspect,aperture_scale=1.,*,geometry_bounds=None):
     def value(key):return parameters['waveform_ribbon_'+key]
     turn,tilt,scale=(float(value(key)) for key in ('turn','tilt','scene_scale'))
     fov=float(value('camera_fov'))
@@ -29,7 +30,7 @@ def physical_view(parameters,aspect,aperture_scale=1.):
         tangents=fc.viewport_tangents(ORTHO_REFERENCE_FOV,aspect,aperture_scale)
         distance=fc.projection_reference_distance(SPEC,scale,eye)
         lens=(tangents[0]*distance,tangents[1]*distance,True)
-        projection=fc.orthographic_matrix(lens[:2],NEAR,FAR)
+        projection=orthographic_raster_projection(view,lens[:2],geometry_bounds,guard=SPEC.clearance)
     else:
         tangents=fc.viewport_tangents(fov,aspect,aperture_scale)
         lens=(*tangents,False);projection=fc.perspective_matrix(tangents,NEAR,FAR)
@@ -56,17 +57,15 @@ class QuickWaveformRibbonRenderer:
         if recipe.sparks is not None and not scene.bursts.prepare_step():return False
         programs=[(scene.resources,'floor',FLOOR_VERTEX,FLOOR_FRAGMENT)]
         if recipe.fog is not None:
-            programs.extend(((scene.fog_resources,'fog medium',fog_inject_source(FOG_MEDIUM_GLSL)),
-                             (scene.fog_resources,'shape bake',SHAPE_BAKE_COMPUTE)))
+            programs.extend(((scene.fog_resources,'fog medium',fog_inject_source(MEDIUM_GLSL)),
+                             (scene.fog_resources,'sky',SKY_VERTEX,SKY_FRAGMENT)))
         programs.extend((scene.resources,*entry) for entry in scene_target_programs(4,recipe.bloom>0.,False,
             overlay=True,oit=True,hdr=recipe.bloom>0.))
         if not warm_programs(programs):return False
         if recipe.fog is not None:
-            if not scene.envelope.prepare_step():return False
+            if not scene.field.prepare_step():return False
             for volume in (scene.fog,scene.reflected_fog):
                 if not volume.prepare_program():return False
-            for march in (scene.march,scene.reflected_march):
-                if not march.prepare_programs():return False
         if not state.ready:return False
         signature=(*item_pixel_rect(frame)[2:],recipe.fog is not None,recipe.sparks is not None,
                    recipe.strays is not None,recipe.bloom>0.)
@@ -82,8 +81,11 @@ class QuickWaveformRibbonRenderer:
         if not state.ready:return
         _x,_y,width,height=item_pixel_rect(frame)
         if min(width,height)<=0:return
+        support=(scene_raster_support(state.packet,state.scene,state.travel,now=state.time,viewport=(width,height),
+            burst_payload=state.particles,burst_origin=state.particle_origin,strand_payload=state.strands)
+            if state.parameters['waveform_ribbon_camera_projection']=='Orthographic' else None)
         view,projection,eye,lens=physical_view(state.parameters,width/height,
-            framed_aperture_scale(frame.snapshot.presentation,content=True))
+            framed_aperture_scale(frame.snapshot.presentation,content=True),geometry_bounds=support)
         self._scene.render(state.packet,capacity=256,now=state.time,travel=state.travel,recipe=state.scene,
             size=(width,height),view=view,projection=projection,eye=eye,camera_lens=lens,card=frame,overlay=opacity,
             burst_payload=state.particles,burst_origin=state.particle_origin,react=state.passage,

@@ -123,8 +123,9 @@ class FogVolume:
         grid = self._admit_grid(grid)
         view = np.asarray(view, float)
         near, far = (float(v) for v in depth_range)
-        if view.shape != (4, 4) or not np.isfinite(view).all() or not 0 < near < far or not math.isfinite(far):
-            raise ValueError('Fog update needs a finite view and 0 < near < far')
+        if (view.shape != (4, 4) or not np.isfinite(view).all() or not near < far
+                or not all(math.isfinite(v) for v in (near,far)) or (near<=0 and not bool(lens[2]))):
+            raise ValueError('Fog update needs a finite ordered range; signed depths require Orthographic')
         ext_x, ext_y, orthographic = float(lens[0]), float(lens[1]), bool(lens[2])
         if not (ext_x > 0 and ext_y > 0 and math.isfinite(ext_x) and math.isfinite(ext_y)):
             raise ValueError('Fog lens extents must be finite and positive')
@@ -132,7 +133,7 @@ class FogVolume:
             self._allocate(grid)
         if not self._integrate_program:
             self._integrate_program = compile_compute_program(FOG_INTEGRATE_COMPUTE, label=f'{self.label} integrate')
-        lens4 = (ext_x, ext_y, 1. if orthographic else 0., 0.)
+        lens4 = (ext_x, ext_y, 1. if orthographic else 0., 4. if near<=0 else 0.)
         range4 = (near, far, float(grid[2]), 1.)
         program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
         try:

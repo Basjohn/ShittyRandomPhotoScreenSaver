@@ -25,9 +25,13 @@ uniform vec4 uFogRange;    // near, far view depth, slices, enabled
 // Volume coordinates of a world point: xy over the view, z the continuous slice (0 at near, slices at far).
 vec3 fogCoordinate(vec3 world) {
     vec3 v=(uFogView*vec4(world,1.0)).xyz;
-    float depth=max(-v.z,1e-4);
+    float depth=uFogLens.w>0.0?-v.z:max(-v.z,1e-4);
     vec2 ndc=uFogLens.z>0.5?v.xy/uFogLens.xy:v.xy/(uFogLens.xy*depth);
-    return vec3(ndc*0.5+0.5,log(max(depth,uFogRange.x)/uFogRange.x)/log(uFogRange.y/uFogRange.x)*uFogRange.z);
+    float slice=uFogLens.w>0.0?
+        (asinh(depth/uFogLens.w)-asinh(uFogRange.x/uFogLens.w)) /
+        (asinh(uFogRange.y/uFogLens.w)-asinh(uFogRange.x/uFogLens.w)):
+        log(max(depth,uFogRange.x)/uFogRange.x)/log(uFogRange.y/uFogRange.x);
+    return vec3(ndc*0.5+0.5,slice*uFogRange.z);
 }
 vec4 fogVolumeAt(vec3 world) {
     vec3 c=fogCoordinate(world);

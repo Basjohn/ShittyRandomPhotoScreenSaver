@@ -55,17 +55,17 @@ def test_frustum_culling_contains_every_visible_fixed_world_point(projection,asp
 
 
 @pytest.mark.qt
-def test_native_continuation_vertices_and_gpu_envelope_share_one_world_field(qt_app):
+def test_native_continuation_vertices_and_atmosphere_share_one_world_field(qt_app):
     from OpenGL import GL as gl
     from rendering.gl_error_policy import disable_per_call_gl_error_checking
     disable_per_call_gl_error_checking()
     from rendering.quick.offscreen_target import OffscreenRenderTarget
     from rendering.quick.scene3d.ribbon import RibbonPrimitive
-    from rendering.quick.scene3d.waveform_envelope import WaveformEnvelope
-    from rendering.quick.scene3d.waveform import waveform_envelope,colour_grade
+    from rendering.quick.scene3d.waveform_field import WaveformField
+    from rendering.quick.scene3d.waveform import colour_grade
     from rendering.gl_programs.ribbon import RIBBON_CONTINUOUS_VERTEX,RIBBON_FRAGMENT
     from core.ribbon_style import RibbonMaterial
-    packet,knots=packet_and_knots();target=OffscreenRenderTarget(80,60);primitive=RibbonPrimitive();gpu=WaveformEnvelope()
+    packet,knots=packet_and_knots();target=OffscreenRenderTarget(80,60);primitive=RibbonPrimitive();gpu=WaveformField()
     # Capture the real extension draw's world positions without replacing surface calculations.
     source=RIBBON_CONTINUOUS_VERTEX.replace('void main() {','void ribbonMain() {',1)+'''
 layout(std430,binding=1) buffer Captured { vec4 captured[]; };
@@ -87,47 +87,41 @@ void main(){ribbonMain();if(uContinuation.w!=0.0)captured[gl_VertexID]=vec4(vWor
             gl.glBindBuffer(gl.GL_SHADER_STORAGE_BUFFER,buffer)
             points=np.frombuffer(gl.glGetBufferSubData(gl.GL_SHADER_STORAGE_BUFFER,0,vertices*16),np.float32).reshape(-1,4)[:,:3]
             points+=np.asarray(packet.world_origin)
-            gpu.update(packet,translation=(0.,0.,0.),age_fade=age,fog=fog,grade=colour_grade(recipe,.4),
-                       camber=1.,mvp=np.identity(4),slopes=(0.,VIEW_SLOPE),floor=FLOOR_CONTACT,continuation=True)
+            gpu.update(packet,translation=(0.,0.,0.),span=fog.field_span,grade=colour_grade(recipe,.4))
         gl.glDisable(gl.GL_RASTERIZER_DISCARD);gl.glMemoryBarrier(gl.GL_TEXTURE_UPDATE_BARRIER_BIT)
-        table=np.empty((6,640,4),np.float32);gl.glGetTextureImage(gpu.texture,0,gl.GL_RGBA,gl.GL_FLOAT,table.nbytes,table)
-        expected=waveform_envelope(packet,(0.,0.,0.),age,fog,colour_grade(recipe,.4),camber=1.,continuation=True)
-        np.testing.assert_allclose(table,expected,atol=4e-4,rtol=4e-4)
-        # The table's geometry/clearance is fixed-world even at extreme aperture/cap/end-on poses.
+        table=np.empty((8,1024,4),np.float32);gl.glGetTextureImage(gpu.texture,0,gl.GL_RGBA,gl.GL_FLOAT,table.nbytes,table)
+        xs=np.linspace(*fog.field_span)
+        expected=cloth_values(knots,xs-packet.world_origin[0])
+        expected[:,:2]+=np.asarray(packet.world_origin)[None,1:]
+        expected[:,3]+=np.frombuffer(packet.payload,np.float32).reshape(packet.instances,-1,4)[0,1,0]
+        np.testing.assert_allclose(table[0],expected,atol=4e-4,rtol=4e-4)
+        assert not table[2:].any()  # absent ribbons neither clear nor illuminate the atmosphere
         with primitive.packet_scope(packet):
-            for projection,turn,aspect in (('Orthographic',.5,12.),('Perspective',-.5,.2),('Orthographic',0.,1.5)):
-                view,projection_matrix,_,_=physical_view(camera(turn=turn,camera_projection=projection),aspect)
-                gpu.update(packet,translation=(0.,0.,0.),age_fade=age,fog=fog,grade=colour_grade(recipe,.4),
-                    camber=1.,mvp=projection_matrix@view,slopes=(0.,VIEW_SLOPE),floor=FLOOR_CONTACT,continuation=True)
-                gl.glMemoryBarrier(gl.GL_TEXTURE_UPDATE_BARRIER_BIT)
-                after=np.empty_like(table);gl.glGetTextureImage(gpu.texture,0,gl.GL_RGBA,gl.GL_FLOAT,after.nbytes,after)
-                np.testing.assert_array_equal(after,table)
-        xs=np.linspace(*fog.envelope_range)
-        near=points[points[:,0]<39.9]
-        cy,cz,radius,live=(np.interp(near[:,0],xs,table[3,:,i]) for i in range(4))
+            gpu.update(packet,translation=(0.,0.,0.),span=fog.field_span,grade=colour_grade(recipe,.4))
+            gl.glMemoryBarrier(gl.GL_TEXTURE_UPDATE_BARRIER_BIT)
+            after=np.empty_like(table);gl.glGetTextureImage(gpu.texture,0,gl.GL_RGBA,gl.GL_FLOAT,after.nbytes,after)
+            np.testing.assert_array_equal(after,table)  # API has no camera input to distort the field
         assert np.min(points[:,1])>=FLOOR_CONTACT[0]+FLOOR_CONTACT[1]-1e-5
-        assert np.min(live)>.99
-        assert np.max(np.hypot(near[:,1]-cy,near[:,2]-cz)-radius)<1e-4
         assert points[:,0].max()==pytest.approx(200.,abs=1e-5)
         # Last extension draw is the +x side; it joins at the actual finite endpoint without a cap.
         assert points[:,0].min()==pytest.approx(knots[-1,0,0]+packet.world_origin[0],abs=1e-5)
         # Run the actual mist's far-table clearance function over the real raster vertex-stage output.
-        from rendering.gl_programs.waveform_ribbon import FOG_SHAPE_GLSL
-        shader='#version 460 core\n'+FOG_SHAPE_GLSL+'''
+        from rendering.gl_programs.waveform_atmosphere import WORLD_FIELD_GLSL
+        shader='#version 460 core\n'+WORLD_FIELD_GLSL+'''
 layout(local_size_x=64) in;
 layout(std430,binding=1) readonly buffer Samples { vec4 samples[]; };
 layout(std430,binding=2) writeonly buffer Distances { float distances[]; };
 uniform float uCount;
-void main(){int i=int(gl_GlobalInvocationID.x);if(i<int(uCount))distances[i]=fogSheetDistance(samples[i].xyz+uContinuationOrigin.xyz);}
+void main(){int i=int(gl_GlobalInvocationID.x);if(i<int(uCount))distances[i]=bodyField(samples[i].xyz+uFieldOrigin.xyz).a;}
 '''
         program=gpu.resources.compute_program('far physical clearance test',shader);gl.glUseProgram(program)
         gl.glBindTextureUnit(14,gpu.texture)
-        gl.glUniform1i(gl.glGetUniformLocation(program,'uEnvelope'),14)
-        step=(fog.envelope_range[1]-fog.envelope_range[0])/(fog.envelope_range[2]-1)
-        gl.glUniform2f(gl.glGetUniformLocation(program,'uEnvelopeSpan'),fog.envelope_range[0]-.5*step,
-                       1/(fog.envelope_range[1]-fog.envelope_range[0]+step))
-        gl.glUniform4f(gl.glGetUniformLocation(program,'uContinuationOrigin'),*packet.world_origin,1.)
-        gl.glUniform3f(gl.glGetUniformLocation(program,'uContinuationShape'),FLOOR_CONTACT[0]+FLOOR_CONTACT[1],FLOOR_CONTACT[2],1.)
+        gl.glUniform1i(gl.glGetUniformLocation(program,'uBodyField'),14)
+        step=(fog.field_span[1]-fog.field_span[0])/(fog.field_span[2]-1)
+        gl.glUniform2f(gl.glGetUniformLocation(program,'uBodySpan'),fog.field_span[0]-.5*step,
+                       1/(fog.field_span[1]-fog.field_span[0]+step))
+        gl.glUniform4f(gl.glGetUniformLocation(program,'uFieldOrigin'),*packet.world_origin,1.)
+        gl.glUniform4f(gl.glGetUniformLocation(program,'uBodyShape'),FLOOR_CONTACT[0]+FLOOR_CONTACT[1],FLOOR_CONTACT[2],1.,.3)
         gl.glUniform1f(gl.glGetUniformLocation(program,'uCount'),vertices)
         distance_buffer=int(np.asarray(gl.glGenBuffers(1)).reshape(-1)[0])
         gl.glBindBuffer(gl.GL_SHADER_STORAGE_BUFFER,distance_buffer)
@@ -136,7 +130,8 @@ void main(){int i=int(gl_GlobalInvocationID.x);if(i<int(uCount))distances[i]=fog
         with primitive.packet_scope(packet):gl.glDispatchCompute(-(-vertices//64),1,1)
         gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT)
         distances=np.frombuffer(gl.glGetBufferSubData(gl.GL_SHADER_STORAGE_BUFFER,0,vertices*4),np.float32)
-        assert distances[points[:,0]>41.].max()<=1e-4
+        assert distances.max()<.04  # interpolation/polyline error stays inside the .3-unit physical clearance
+        assert distances[points[:,0]>81.].max()<1e-4  # exact continuation beyond the fixed texture, no side-wall fade
         gl.glUseProgram(0)
     finally:
         gl.glDisable(gl.GL_RASTERIZER_DISCARD);gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,1,0)

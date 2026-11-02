@@ -181,7 +181,9 @@ Work first on body/audio/accents, then grounded camera/viewport and replacement 
   with visible floor in BOTH projections. Keep eye/basis, navigation, editor markers and saved pose under the shared
   owner; preserve continuous/infinite body with no exposed ends and complete Edit scaffolding. Native geometry and
   persistence tests alone cannot establish feel or beauty across moving audio, view and viewport extremes. Reproduce
-  the new cut-to-black at one end and staggered entry at the opposite end; remove visible clip/history seams.
+  the new cut-to-black at one end and staggered entry at the opposite end; validate the camera-owned signed
+  Orthographic raster fit against recorded wide/angled playback. The old positive reference-plane slab cut visible
+  continuation before the card edge; Perspective and other modes retain their positive clip contract.
 - [ ] **Floor coverage, collision, reflection and viewport changes:** after the strand slice, draw ground all the
   way through the foreground and beyond the waveform into heavy dark mist that GENTLY thickens until no horizon
   line is visible. A strip of reflections over black is rejected. **Awaiting native visual validation:** the floor now
@@ -191,6 +193,9 @@ Work first on body/audio/accents, then grounded camera/viewport and replacement 
   physical floor contact correct, with smooth waveform collision rather than clipping. Compare identical snapshots at
   canonical/wide/tall/large sizes and both projections; inspect reflection normalization/filtering separately. Preserve
   live reflectivity/tint/brightness and the shared resize contract; no audio-gain compensation. Columns remain secondary.
+  **Additional explicit rejection:** material outside the core reflection is practically invisible. Validate readable
+  dim texture across the foreground with reflection and atmosphere both OFF, then under the unified night medium;
+  increasing reflection alone cannot satisfy this. Current candidate restores filtered concrete/roughness and ambient light.
 - [ ] **Current mist/fringe entirely rejected - implement replacement after strands/floor:** stop polishing the shaped banks,
   noisy fringe, side-sheet conflicts, remote shelves and skyward mass. Preserved image, failure analysis, cost caveats
   and three proposals: `Docs/Reference/Waveform_Ribbon_Mist_Failure_and_Replacement.md`. Replace with full-scene
@@ -198,7 +203,12 @@ Work first on body/audio/accents, then grounded camera/viewport and replacement 
   reactive light/wake; no visible ceiling/stripe/box. `references/Mist Goal.png` is now the primary mist/floor target.
   The operator explicitly supersedes ALL older mist/fog mechanisms: remove the old banks/fringe AND old separate
   distance/floor fog when migrating. One coherent atmosphere must serve scene/floor/actors/reflection; no stacked
-  legacy layer or hidden fallback. The rejected volume remains disabled while its replacement is built.
+  legacy layer or hidden fallback. Old Waveform banks/fringe, shape bake/detail march and analytic floor haze are
+  removed from the candidate source and settings. Validate the new integrated world medium's look, signed/mirrored
+  optical paths and cost before enabling it in curated Presets 1/2. Keep true 3D clearance around steep bends and a
+  retained motion wake open: current cross-section clearance/local light and background drift do not prove those.
+  Latest loaded candidate remains over budget (P2/game60: render median 22.59 ms, CPU others 93%); obtain a matched
+  quiet-system fog OFF/ON comparison and reduce cost. Scoped source/optical/raster tests do not close that gate.
 - [X] **COMPLETELY FUCKED UX/DESIGN** - operator rejection recorded for the ENTIRE mode-specific builder UI:
   every element not already shared with other modes is rejected. This marks rejection, not completed redesign.
 - [ ] **Awaiting later UX redesign:** lower priority than a working visual. Deliver a themed 3D visual editor with

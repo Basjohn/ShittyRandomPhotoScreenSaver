@@ -66,27 +66,19 @@ class CompiledWaveformSettings:
             material[key]*=realized['light']
         material['glint_density']*=.5+realized['highlights']
         material['glint_chance']*=min(1.,realized['highlights'])
-        mist=dict(self.base.environment.mist)
-        shape=mist['uMistShape']
-        thickness=pair('floor_mist_thickness',passage) if read('floor_mist_enabled') else 0.
-        mist['uMistShape']=(shape[0]/max(thickness,1e-5) if thickness else 0.,*shape[1:])
         fog=None
         if read('mist_enabled'):
-            tier=str(read('quality'));scale={'Low':.33,'Medium':.5,'High':.7}[tier]
-            original=self.base.fog
-            fog=replace(original,density=pair('fog_density',passage),tube=pair('fog_clearance',passage),
-                noise=pair('fog_billows',passage),rim=pair('fog_fringe',passage),
-                crackle=(pair('fog_edge',passage),*original.crackle[1:]),
-                fringe_smoothing=pair('fog_smoothing',passage),haze=pair('fog_haze',passage),
-                sides=(pair('fog_sides',passage),pair('fog_sides',passage)+5.),march_scale=scale,
-                steps={'Low':64,'Medium':96,'High':128}[tier])
+            tier=str(read('quality'))
+            fog=replace(self.base.fog,density=pair('fog_density',passage),clearance=pair('fog_clearance',passage),
+                height=pair('fog_height',passage),softness=pair('fog_softness',passage),light=pair('fog_light',passage),
+                noise=pair('fog_variation',passage),drift=pair('fog_drift',passage),
+                slices={'Low':96,'Medium':128,'High':160}[tier],cell={'Low':32,'Medium':24,'High':16}[tier])
         colour=tuple(float(v)/255. for v in read('floor_tint')[:3])
         tint=tuple(v/12.92 if v<=.04045 else ((v+.055)/1.055)**2.4 for v in colour)
         floor=replace(self.base.floor,reflection=pair('floor_reflection',passage),
             albedo_gain=pair('floor_brightness',passage),tint=tint,f0=pair('floor_wetness',passage),
             streak=(pair('floor_streak',passage),*self.base.floor.streak[1:]),
-            column=(pair('floor_column',passage),*self.base.floor.column[1:]),
-            mist_reflection=pair('floor_mist_reflection',passage))
+            column=(pair('floor_column',passage),*self.base.floor.column[1:]))
         sparks=None
         if read('sparks_enabled'):
             size=pair('spark_size',sparkle)
@@ -102,5 +94,5 @@ class CompiledWaveformSettings:
                 halo=pair('strand_halo',sparkle),glow=pair('strand_glow',sparkle),admission_softness=.15,
                 pulse_growth=pair('strand_pulse_growth',sparkle),pulse_glow=pair('strand_pulse_glow',sparkle))
         return replace(self.base,material=RibbonMaterial(**material),fog=fog,floor=floor,
-            environment=replace(self.base.environment,mist=detached(mist)),sparks=sparks,strays=strays,
+            sparks=sparks,strays=strays,
             bloom=pair('bloom',passage),exposure=float(read('exposure')))
