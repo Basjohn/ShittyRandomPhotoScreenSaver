@@ -159,6 +159,35 @@ def test_every_offered_mode_is_listed_and_can_be_enabled(qapp, settings) -> None
         page.deleteLater()
 
 
+def test_visualizer_guided_setup_prioritizes_bubble_and_marks_extruded_bubble_cost(qapp, settings) -> None:
+    from core.settings.default_contract import require_canonical_default
+    from core.settings.visualizer_presets import get_presets
+
+    assert require_canonical_default("widgets.spotify_visualizer.mode") == "bubble"
+    assert require_canonical_default("widgets.spotify_visualizer.preset_bubble") == 0
+    assert get_presets("bubble")[0].name.startswith("Preset 1")
+
+    page = VisualizerPage(settings)
+    try:
+        page.refresh()
+        ordered = [
+            page.rows.item(index).data(Qt.ItemDataRole.UserRole)
+            for index in range(page.rows.count())
+        ]
+        assert ordered[:2] == ["bubble", "extruded_bubble"]
+
+        page.rows.setCurrentRow(1)
+        assert page.preview_note.isVisible()
+        assert page.preview_note.font().bold()
+        assert "Resource Intensive" in page.preview_note.text()
+        assert "High Fidelity" in page.preview_note.text()
+
+        page.rows.setCurrentRow(0)
+        assert not page.preview_note.isVisible()
+    finally:
+        page.deleteLater()
+
+
 def test_transition_toggle_updates_activation_pool_and_random_semantics(qapp, settings) -> None:
     transitions = settings.values["transitions"]
     transitions["type"] = "Random"

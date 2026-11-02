@@ -1,17 +1,14 @@
-# Extruded Bubble: target contract and shared-primitive inventory (§4A G0)
+# Extruded Bubble: target contract and shared-primitive inventory
 
-**23 October operator correction:** [reconciliation](../2026-10-23_Operator_EB_Neon_Settings_Reconciliation.md) separates accepted P1 idle appearance from partly good but still unaccepted big/small musical breathing; existing alive-bubble stream/drift response from new-birth behavior; weak repetitive Bounce; restored BEAM lighting from still inadequate SCENE control. Preserve true 3D architecture, original mock parity, useful controls and all mutable presets. Dynamic Floor OFF for EB should ideally visually match/exceed 2D Bubble Dynamic Floor ON. No source-side note is native visual acceptance.
+**Status: accepted baseline.** This document preserves the target contract plus the detailed failure/recovery gates that
+were used to reach acceptance. Dated `[ ]`, `[~]`, "open" and operator-rejection statements below describe their historical
+checkpoint unless a new concrete regression explicitly reopens that item; they are not a second live backlog.
+`Scene3D_Resources.md` owns shared resource contracts, `Current_Plan.md` owns only newly admitted work, and
+`Docs/Guardrails/Bubble_Temporal_Fidelity.md` (BTF) remains binding. Original Bubble stays accepted and separate.
 
-Status: **implemented but operator-rejected on physical fidelity** (2026-10-18); §10 records the first live review
-(D → B → C → A), and §11 records additional operator failures and their source audit. The G0 requirements and historical
-primitive inventory below are preserved as the design provenance, **not** as a claim that no renderer exists.
-`Current_Plan.md` §4A/§4B own sequencing; `Scene3D_Resources.md` owns the shared resource contracts;
-`Docs/Guardrails/Bubble_Temporal_Fidelity.md` (BTF) binds the reactivity. Original Bubble remains accepted and separate.
-Visual acceptance cannot be inferred from the lab, green unit tests or authored preset parity.
-
-**Canonical images and investigation:** [README.md](README.md). All targets, the full lab material, failure ledger
-and workstation-native evidence now live in this folder. Operator now considers P1 generally good and accepts its latest shown idle capture (23 October;
-Investigation §57). Remaining P1 defects/lifecycle and substantial changes for P7/other presets stay open. Renamed `*Goal.png` images in
+**Canonical images and investigation:** [README.md](README.md). Targets, lab provenance, failure ledger and workstation-native
+evidence are routed from that index. The 23 October reconciliation and later recovery records remain useful as regression
+falsifiers, but current acceptance is not downgraded by their historical wording. Renamed `*Goal.png` images in
 `Targets/Originals` are the current parity references, not a request to overwrite authored presets.
 Large bubbles must breathe significantly downward in softer music and carry sustained body in sustained/loud
 passages; small bubbles and emission/drift/speed/rays must keep expressing changes within those loud passages.
@@ -19,7 +16,7 @@ Do not interpret this as generic large-body hold at all energies. Preset/control
 needed; the current pending response attempt is not accepted. Detailed latest findings: [Investigation §17](Investigation.md#17-latest-operator-rejection-passage-roles-and-central-organization).
 
 
-**Current unaccepted source/end candidate (2026-10-20; plan EB-R27, investigation §27):**
+**Historical source/end candidate checkpoint (2026-10-20; investigation §27):**
 - [~] Physical two-node S/E Settings for Stream, Light and Rays, with independent depth editing and legacy preset conversion. Do not call the source positions/gesture UI accepted until native Qt and rendering checks.
 - [~] Stream ordinary-bubble source patch and first-fill boundary admission are implemented but still need complete procedural chain/wake/particle parity, natural distribution and operator acceptance.
 - [~] Ray finite 3D path and limited bubble/dust light-loss proxy are source candidates, not demonstrated optically or performance-safe. Ray *musical* volume remains visually pegged by the operator's report; evaluate phrase-to-phrase luminance rather than treating idle→playback gain as a success.
@@ -113,7 +110,7 @@ not a simulation freeze or a global population fade. Free bead chains instead fa
 and fade back in when musical activity returns; visible stalled chains fail this requirement. Preserve zero
 authored amounts, physical identities and ordinary lifetime/near-lens visibility rules.
 Native measurements, reproduced control failures and candidate transfers are in the dedicated Extruded Bubble failure ledger §6–18;
-`Current_Plan.md` §4B owns the current actionable recovery order. Candidate source and tooling do not constitute physical acceptance.
+Extruded Bubble is an accepted baseline. Candidate source/tooling alone never constitutes physical acceptance of a newly reopened regression.
 
 **22 October breathing-fidelity refinement (operator, unaccepted):** use *visually confirmed* 2D Bubble
 with **Dynamic Floor ON** as the minimum music-correlated breathing benchmark. The ideal EB result
@@ -210,7 +207,7 @@ defocus and HDR now exist). Kept as the 2026-10-17 starting point.*
 | Materials | GGX/Smith/Schlick, environment BRDF (`scene3d.py`); thin-layer refraction/dispersion (`refraction.py`, `spectral.py`) | No sphere-shell thin-film interference; refraction samples a photograph, not the rendered scene behind |
 | Environment light | `BackdropEnvironment` (photo copy) | No procedural underwater environment (surface, window, caustics, depth falloff) |
 | Noise | `scene3d_sky.py` lattice noise/fbm on the integer hash | Reusable for ripples/caustics |
-| Framed camera | Neon Lake view orbit/fit/pose (mode-local) | §4A FC: promote to one shared opt-in capability |
+| Framed camera | shared `core/settings/framed_camera.py` capability consumed by Neon Lake and EB | Reuse it; no copied camera owner or layout profile |
 | Shadows | Planar/directional silhouette primitives | Not demanded by the target (see §1) |
 
 ## 4. Primitive order (each proved on its own harness, dormant when unused)
@@ -304,7 +301,7 @@ review in §11 rejects bead-chain fade/curvature/width and idle surface/chain sp
   separate lens displacement from defocus; test the clamp.
 - C10 bubble proxy glints in the probe may outshine real lights. Remedy: rank real sources first.
 - C11 the lab is a static frame (`uTime=4`); dynamic fidelity is proved only at integration (original Bubble snapshots,
-  real-music recordings in `logs/visualizer_recordings`), behind the §4A/V5 gates.
+  real-music recordings in `logs/visualizer_recordings`), behind the shared Scene3D/visual-validation gates.
 
 **Stages:** P0 baseline captures and timings → P1 correctness (C03, C01, C05, C06) with diagnostic views → P2 specular
 → P3 double rim and curvature → P4 shafts alone → P5 all-scene validation and performance. One variable family per
@@ -454,7 +451,8 @@ Values still kept per scene until their control exists: mock 1's `ray_cut`, came
 ## 10. Architecture (EB2/EB3, 2026-10-18)
 
 **Mode.** Descriptor `extruded_bubble` ("Extruded Bubble"): card shell with card-interior clipping, viewport-resizable,
-`freeform_3d` with its own `layout_profile` ("3d:extruded_bubble"); framed camera declared on the descriptor (turn/tilt
+`planar` CUSTOM geometry sharing the exact framed Visualizer `layout_profile` ("planar"); its 3D camera remains independently
+declared on the descriptor (turn/tilt
 orbit wrapping a full circle, `view_auto_rotate_settings`, scene scale/pan with a `scene_pan_envelope`), prepared
 reveal. Offered since 2026-10-18 (operator): selectable, cycled, in Guided Setup (its preview rendered by the
 onboarding foundry from preset 1) and the 3D tab, so its physical acceptance (EB5) runs on real displays. It sat
@@ -746,7 +744,7 @@ No physical render or live Settings lifecycle was tested as part of this documen
    the resource/owner: `ui/tabs/media/extruded_bubble_builder.py` only forwards to
    `build_spec_mode_ui()` and creates no distinct timer, and the renderer's multiple GL allocations/near layer
    have their own context `release()` path. The earlier Neon Settings audit
-   (`Docs/Audits/Neon_Lake_Settings_And_Settings_Handoff_2026-10-13.md`) documented a *separate* strong-signal
+   (preserved in source-control history) documented a *separate* strong-signal
    reference path to `QuickDisplayUnit` and remaining `QuickDisplayVisualizerOwner` uncertainty; its existence
    is a useful investigation pattern **not evidence of the same current cause**. Collect the existing
    `[LIFECYCLE_BARRIER][PYTHON_OWNER_REFS]` diagnostic on a failing handoff and identify the surviving Python
@@ -872,7 +870,7 @@ near-camera population/DoF, and unported mock details.
 
 ## 12. Additional operator failures: physical camera, bubble entry fades and coherent flow (2026-10-19; all open)
 
-**This is an additive live checklist**, not acceptance of §10, §11 or §11A. Operator evidence: in a captured frame many free bead chains seem to travel along two different directions; large and mid bubbles do not visibly grow or shrink to the music at all; when rotating to odd angles some bubbles suddenly enter the view instead of gently fading; the operator rejects any scheme that moves existing objects to follow the camera. Their physical-display testimony overrides misleading source-only green tests.
+**Historical recovery checklist:** this records the physical failures and falsifiers at that checkpoint; current EB acceptance is owned by the status at the top of this document. Operator evidence: in a captured frame many free bead chains seem to travel along two different directions; large and mid bubbles do not visibly grow or shrink to the music at all; when rotating to odd angles some bubbles suddenly enter the view instead of gently fading; the operator rejects any scheme that moves existing objects to follow the camera. Their physical-display testimony overrides misleading source-only green tests.
 
 - [~] **COMPLETELY FUCKED | A genuine orbit camera must observe a stable world, not reassemble it.** `rendering/gl_programs/extruded_bubble_scene.py::_wrapped_turn()` calculates a per-point azimuthal periodic turn **from the current camera heading**. It is called in `bubble_instances`, `wake_instances` and `cluster_instances`. `rendering/gl_programs/extruded_bubble_program.py::_BEAD_GLSL::wrapTurn()` repeats that behavior in the GPU for free bead chains and marine snow. A CPU source probe of 361 camera yaw positions reports a *single already-live bubble* changing world position by up to **29.49 scene units**, including a **28.95-unit one-pose-step jump** at a wrapping seam. These diagnostic numbers are not measured pixels, but prove camera-dependent relocation. The earlier §10 S3b assertion of "world-fixed"/"offscreen-only" and `tests/test_extruded_bubble_renderer.py::test_turning_a_full_circle_never_wraps_a_bubble_on_screen` are **insufficient and superseded as acceptance claims**. No future camera-relative spatial replication, rehoming, synthetic giant overlay or visual cover-up. **Required:** define a stable, genuinely world-space scene population and orientation-independent lifetime, with finite/continuous meaningful coverage for the full 360° orbit, tilt, zoom and pan. Camera rotates *only* view/projection; stream/wake positions do not teleport. Record stable identities and actual world positions over stationary scene/full camera orbit. Never simply delete wrapping without first proving there is adequate field coverage across the full orbit; a now-empty view is not acceptance.
 - [~] **COMPLETELY FUCKED | Bead chains must follow the same actual stream direction.** The screenshot shows simultaneous discordant headings. Each chain's path is generated along `uStreamView` in turn-zero camera space, then its *entire line* is turned about world vertical according to the chain's **own** camera-dependent wrap; ordinary bubbles/wakes use separately wrapped centres. Even if a free chain is not parented to a bubble, its current heading can disagree with the world stream after the wrap. Preserve gentle curved drift and +15% width, but only **transverse variation** around the same coherent world stream. Test zero/mid/steep direction control, full camera orbit and automatic turn; compare world-space displacement of bubble identities, free chains, fizz/wakes and particle clouds. Curvature cannot disguise contradictory axes.
@@ -914,7 +912,7 @@ near-camera population/DoF, and unported mock details.
 
 ## 14. Live diagnostic gate: `logs3a0d4fa1177.zip` frame trace, Settings stress, missing value evidence (2026-10-19; EVERYTHING OPEN)
 
-**This is a live checklist and source-to-evidence gate, NOT a progress/change log.** Keep §§10–13 and the dedicated historical ledger verbatim in meaning and detail; `[~]` always means failed or at most partial and does not constitute acceptance. **Operator verdict remains `[~] COMPLETELY FUCKED` for ALL Extruded Bubble reactivity**: big/small bubbles visually do not grow/shrink with the music; high/max Sensitivity or Dynamic Floor causes only slight *rapid, repetitive, non-musical* motion; idle water and chains can seem faster than playback; rays, particle emission, stream speed and drift show no accepted musical changes. No test or source wiring supersedes the observed screen. This log archive adds evidence and narrows the next investigation; it is NOT a passing retest.
+**Historical source-to-evidence gate, not current task status.** Keep §§10–13 and the dedicated investigation ledger available for regression diagnosis. In this checkpoint `[~]` meant failed or partial; the then-current operator verdict was `[~] COMPLETELY FUCKED` for Extruded Bubble reactivity: big/small bubbles visually do not grow/shrink with the music; high/max Sensitivity or Dynamic Floor causes only slight *rapid, repetitive, non-musical* motion; idle water and chains can seem faster than playback; rays, particle emission, stream speed and drift show no accepted musical changes. No test or source wiring supersedes the observed screen. This log archive adds evidence and narrows the next investigation; it is NOT a passing retest.
 
 - [~] **COMPLETELY FUCKED | New operator-controlled settings sweep still produces no useful response.** `logs3a0d4fa1177.zip` → `screensaver_spotify_vis.log` has 55 `[VIS_TECH_CONFIG] mode=extruded_bubble` records across retained historical logs; their configured Sensitivity values include `0.400, 0.530, 0.770, 0.910, 0.990, 1.800, 2.070, 2.160`, with Dynamic Floor `True` and `False`, block sizes `256` and `512`, and adaptive `True`/`False`. Within the **02:25–02:30** test window specifically, `quick_owner_configure` includes Sensitivity `2.160` at `02:25:05`, `0.910` at `02:25:45`, `0.770` at `02:26:36`, `2.070` at `02:29:09`, and `2.070` with `dynamic_floor=True` at `02:30:40`. This proves varied technical configurations were logged by the active visualizer owner, **not** that any particular authored Extruded Bubble Range, band tuple or GPU uniform changed. Preserve these concrete times and differentiate global technical Sensitivity from mode-owned Breathing/Small Pulse/Emission/Rays Ranges. The operator independently confirms many `--set` changes without any useful perceived effect. Do not blame insufficient Sensitivity or mandate Dynamic Floor.
 - [~] **PARTIAL (BARELY) | Binary frame trace rules out a globally stopped pipeline, NOT static visual inputs.** The archive contains `screensaver_frame_trace.bin` (22,117,120 bytes). The repository's `tools/frame_trace_report.py` decodes **614,364 records**, spanning **348.70 s** of trace timestamps: **15,012 logical publications**, **13,807 GUI snapshot publications**, **12,693 Quick sync consumes**, **12,245 renderer draws** and **12,245 frame swaps**, with **11,572 audio-analysis begin/ready pairs**. For screen 1, the built-in lifecycle-aware *steady* swap report gives median **11.503 ms**, p99 **19.202 ms**, **23 gaps >25 ms** (5 >50 ms, 1 >100 ms, max **124.832 ms**) after excluding lifecycle windows and >=1 s not-rendering intervals; there are **11 lifecycle starts and 10 ends**, totaling 227 s classified as lifecycle windows. Do not equate the full 348.70-s timestamp span, the report's filtered steady span or minute-bucket event totals with continuous gameplay time or average FPS; trace windows can straddle Settings/restarts and the monotonic timestamps are not independently tied to wall-clock Settings changes. Presentation is alive repeatedly; **this record format contains neither actual bass/mid/high tuples nor same-ID bubble radii, actual projected pixels, opacity, bead travel speed, or rendered ray intensity**. Occasional stalls are a separate performance/lifecycle question, not evidence that the entire reactivity mode was frozen.

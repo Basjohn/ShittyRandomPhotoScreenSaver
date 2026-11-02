@@ -11,526 +11,57 @@ durable shared contracts at their existing owners (`Ribbon_Path.md` for the S3D-
 history under the existing Historical Bugs policy. An absent reference or missing native/operator evidence remains an
 explicit **Awaiting Assets**, **Awaiting Logs** or **Awaiting Validation** gate, never a green checkbox.
 
-## 0. Live goal and sequence (1 November)
+## 0. Live goal and working sequence
 
-**Operator direction supersedes the earlier column studies:** floor, waveform and strong, thick distance mist only.
-Pillars are removed, not an active tuning target. The mist hides all horizon/sky/floor boundaries. Only a small region
-around the waveform and camera is clear; the waveform's shape pushes back the volume and softly lights it. Establish
-this with explicit static/synthetic lab inputs first. Audio-driven deformation and fog reactivity are much later.
+**Goal:** deliver a fixed-world framed 3D scene with smooth flowing luminous ribbons over wet reflective concrete,
+surrounded by thick shaped mist. The mist hides horizon/sky/floor boundaries, curves around the waveform without
+touching it, and is softly lit by the waveform. Pillars and the rejected hall study are not part of the target.
 
-The **complete-scene fog board supplied on 1 November is the main visual target**, showing waveform, wet floor and
-shaped illuminated mist together. The two original boards remain examples of the range eventual live presets must
-support. Preserve native low/high crops separately for each board; never average their looks. A preset must remain
-one scene across its low/high states. Exact source custody is in §1.1.
+The complete-scene fog board is the primary target. The alternate and preset-range boards define additional looks the
+eventual presets/reactivity must be able to reach without changing scene identity. Exact source custody is in §1.1. Root
+`references/` is operator-owned/local and intentionally omitted from normal GODZIPs; do not interpret absent image bytes
+as deleted requirements.
 
-**Existing substrate:** shared framed camera, bounded incremental ribbon history, oriented OIT/HDR filament material,
-history sparks, planar reflection, and saved generated concrete albedo/roughness/smooth-height maps. Contracts live
-in `Ribbon_Path.md`, `Visualizer_Labs.md` and `Scene3D_Resources.md`. Earlier captures remain under
-`.artifacts/evidence/waveform_ribbon/`; the rejected column appearance is not authority. Pass 4 (`66ab3918`)
-restored three distinct ribbon identities; it did not establish fidelity.
+**Current reusable substrate:** shared framed camera, bounded incremental ribbon history, oriented OIT/HDR ribbon material,
+history sparks, planar reflection, generated concrete material maps and the bounded mist prototype. Shared ownership lives
+in `Docs/Reference/Ribbon_Path.md`, `Docs/Guides/Visualizer_Labs.md` and `Docs/Reference/Scene3D_Resources.md`; the WR-08
+production/control design lives in [Waveform Ribbon Migration Plan](Waveform_Ribbon_Migration_Plan.md). This section tracks
+only remaining work, not implementation chronology.
 
-**Operator direction, 1 November (later):** all three boards (complete-scene fog, preset range, original) describe
-colours and shapes that presets and reactivity must be able to reach. Colour, shape, light, particles and fog are
-all later reactivity areas, so build *achievable ranges that can flow and mutate*, not today's fixed colours. Colour
-is both: each ribbon has its own base, and reactivity changes it along the flowing history (the boards' left-to-right
-cyan → blue → violet → magenta/orange drift inside one sheet). Floor first, then the remaining order is the
-implementer's call without further confirmation; the operator judges much later.
+**Working sequence:**
 
-**Open sequence (1 November, after baseline `c` and the cost passes):**
-1. Done: one whole-frame 4K measurement pass, recorded under Cost below.
-2. In progress: **the second goal is the package's alternate board** (operator, 1 November: "the better second
-   goal/preset"; `references/Waveform_Ribbon_Alternate_Annotated_Mock.png`, extracted unmodified from the package,
-   SHA-256 `19161837…eadf`). It is the lab's `alternate` recipe; see "Second look" below.
-3. The preset-range board stays a range example. Its recipe (`range`) is parked after two passes: tight bundle,
-   a bass arc 2.5x the other crests, and a gradient running on to orange. Evidence `wr08_alternate_look/preset_range_parked.png`.
-4. Camera sweep done (`wr08_camera_sweep/`): twelve views per look, both projections. The near-clip band is fixed;
-   side walls of edge mist now close the clear corridor along the ribbons (end-on and turned-Perspective views),
-   see Migration Plan §6.
-5. **Migration plan written:** [`Waveform_Ribbon_Migration_Plan.md`](Waveform_Ribbon_Migration_Plan.md) owns WR-08's
-   full controls (Extruded Bubble's 3D Framed shape, Orthographic default), visual editors, reactivity and port
-   order. Reactivity: final calibration in the migration through production recorded-feature replay, with a
-   cheap lab smoke (WR-07) first.
-6. The remaining fidelity gaps below, then motion.
-§0B is the current visual audit, not an acceptance report.
+- [ ] **Finish the primary look:** close §0B concrete finish, floor illumination/reflection contact, waveform depth/shape,
+  mist continuity/edge light and scene-boundary concealment at native target scale.
+- [ ] **Finish the alternate look:** preserve three distinct broad ribbon identities, smooth flowing per-ribbon colour,
+  rim-attached free strands, restrained hot cores and the same mist/floor world. Close remaining blown-highlight and
+  whitish-mist-edge mismatch without weakening the primary look.
+- [ ] **Prove floor contact and mist clearance:** any ribbon approach to the floor deforms smoothly onto/away from it rather
+  than clipping; mist remains displaced around the waveform and present through the full depth/side field.
+- [ ] **Prove camera robustness:** inspect both projections across the admitted navigation poses and wide/narrow cards. The
+  world stays fixed; no visible scene edge, end cap, reflection drift or camera-dependent repair is allowed.
+- [ ] **Finish motion and bounded cost:** capture slow explicit-time motion, then measure ribbon, reflection, floor-light and
+  mist costs separately and together; prove lazy Off/resize/context retirement at each owner.
+- [ ] **Visual admission:** operator/capable visual-agent sign-off on the attainable primary/alternate range before audio
+  calibration, production registration, Settings or preset migration.
+- [ ] **After visual admission only:** WR-07 recorded-feature replay, remaining shared primitive gates, WR-08 migration and
+  WR-09 live acceptance.
 
-**Second look: the alternate board (`wr08_alternate_look/`, `--recipe alternate`):**
-- **What it is:** three broad ribbons, one per band (bass, mid, high), coloured by ribbon, not by the world grade.
-  - quiet: blue, teal, lavender;
-  - loud: magenta, orange, blue-violet, taken knot by knot (the tuner's `tint` target), so colour flows with the
-    history.
-  Also: long sweeping waves (head 0.2 Hz) with large depth sway, dense bright filaments, and sparks that hug the
-  ribbons. Loud ribbons are narrower and further apart than quiet ones: broad overlapping sheets summed to pastel
-  pink.
-- **Mechanisms it needed (shared, no copied code):**
-  - **Shape and reactivity tuner model (`Shaping`):** targets with quiet/loud ranges, each following a source
-    (loudness, bass), a bass arc, and per-ribbon characters. Every target passes the history's two smoothing
-    stages, so no value can make a sharp ribbon. Default values reproduce the complete look pixel-identically.
-  - **Gradient nodes:** the shared ribbon grade takes 1-6 nodes at ascending positions (`ribbon_grade(stops,
-    x_range, share)`), the lab form of the WR-08 gradient editor. The duplicated grade block in the material shader
-    is folded into `RIBBON_GRADE_GLSL`.
-  - **Per-ribbon quiet/loud colours** (`Recipe.ribbon_colours`).
-- **Colour lesson:** recipe colours are linear light. (1, .4, .05) displays as gold; orange is about (1, .2, .03)
-  (operator: "you pushed out yellow instead of orange").
-- **Self-review at the board's scale (`mock_vs_lab_native_scale.png`):**
-  - quiet is close: saturated blue/teal/violet sheets with distinct filaments;
-  - loud has the board's magenta, orange and blue ribbons, separated, with sparks along them.
-- **Free strands (operator: "we need free liquid/particle like strands as well"; `wr08_alternate_strays/`):**
-  - **What:** a new ribbon primitive pass (`shading='strays'`, `RibbonStrays`). Liquid filaments leave near a
-    sheet's edge and splash away from it along a smooth curl, taper to a free tip and carry droplets gathering
-    toward the tip. They flow with the history, and more peel off in loud passages (gated by the knot's sparkle).
-    Every term is a smooth function of the stray coordinate and the knot's age, so none can kink.
-  - **Rejected first pass:** long strands with a small reach ran parallel to the sheets and read as more sheet
-    strands (`strays_rejected_parallel.png`).
-  - **Cost:** 0.3-0.4 ms a frame, main plus mirrored (vertex-bound, flat with resolution). Drawing no mirrored
-    strays is the first cut if needed.
-  - **Glow pass (`wr08_alternate_glow/`):** each tendril has a soft halo (`halo`) and its own bloom share (`glow`),
-    so it reads as a brighter, fuzzier splash.
-  - **Attached to a rim (operator: "they should attach to the rim or a waveform line on one side"):** each strand
-    starts exactly on a sheet's rim line and fades in from nothing as it peels away. Starting just inside the
-    edge at 60% light showed every start as a break in mid-air (`strays_on_rims_dolly.png`).
-  - **Operator preference:** longer, more numerous strands that curl far (reach 1.6, 6 knots). Rejected: gating
-    them by loudness squared and toward crests with a shorter reach ("these strands aren't as good as a moment
-    ago"; `rejected_gated_strays.png`).
-- **Glow (operator: "good baseline", tag `waveform-alternate-baseline-2026-11-01` = `d04d542f`; then
-  "enhanced glow next"):**
-  - **Material `glow`:** the share of a sheet's light sent to the bloom, so the sheets glow locally while the
-    mist does not.
-  - **Material `hot`:** white-hot cores on the brightest strands only; the rest keep their colour.
-  - **Body:** more fill and rim glow, so the sheets read as luminous silk under the strands.
-  - **Defaults** reproduce every earlier look (the complete look is pixel-identical).
-  - **Test:** `test_glow_sends_more_light_to_the_bloom_without_brightening_the_sheet`.
-- **More tint, any colour pair (operator: "a little more tint … warmth isn't the route"):** exposure 0.85, white-hot
-  0.3, body tint 0.85, spark whiteness 0.04. Lit-pixel saturation 0.50 / 0.48 -> 0.56 / 0.53 (board 0.64 / 0.56),
-  with the glow kept (`tint_before_after.png`). Strands already taper to 40% width and fade over their last quarter.
-- **Open:**
-  - the board's loud panel still burns brighter, with blown warm highlights;
-  - the mist's lit edge reads whitish lavender over blue sheets;
-  - the floor keeps our vertical wet columns where the board has a soft blurred mirror (accepted floor style).
-- **Accepted differences for this look:** mist kept (core); smooth ribbons where the board's loud orange ribbon
-  breaks into jagged spikes (smooth-curve rule); vertical wet floor columns.
+**Durable current constraints:**
 
-**Floor contact (operator, 1 November: "if the waveform hits the floor it should deform there, not clip"):**
-- **Rule, not a setting:** the ribbon primitive eases every surface point's height onto the floor (softplus to a
-  0.03 gap, softness 0.15; `draw(..., floor=)`). It is a smooth, strictly increasing map of height alone, so the
-  sheet flattens like cloth settling and can never fold or crease. Clear of the floor the shape is unchanged (lift
-  below 0.02 at 0.3 units). The normal uses the eased height's slope. Sparks are eased the same way.
-- **Rejected:**
-  - lifting each knot's centre by its half-width ("do not force a shape, deform");
-  - spreading the pressed part sideways along the floor: it folded the sheet at its centre into sharp corners
-    (`floor_contact_spread_rejected_vs_eased.png`);
-  - softness 0.45: it lifted sheets a unit above the floor and moved the complete look.
-- **Test:** `test_floor_contact_deforms_a_sheet_onto_the_floor_instead_of_through_it` (with the uncontacted
-  strip as negative control).
-
-**Far wall under high sheets:** the reactive mist under the waveform was removed along the whole view prism, so
-sheets riding high (the alternate look) left the sky down to the horizon black under them. The cut now applies
-only within the band's depth; beyond it the far wall returns. All mist below the band is lit only at the
-wall-behind-the-sheets share (0.08), so it is near-black haze (operator: "close to black, just not quite"). Lit,
-it came back as magenta puffs at the contact line. Complete look: mean drift 1.2-1.3/255, the change confined to
-the far wall behind the sheets (`complete_look_far_wall_haze_diff.png`).
-
-**Mist is core to every look (operator, 1 November).** Each recipe, including alternate looks, keeps the volume
-mist: it is the design direction. Production may later make it optional in Settings (WR-08). No recipe drops it to
-hit a look or a cost target.
-
-**Accepted differences from the mocks (operator decisions; permanent unless the operator reopens them):**
-- **No pillars or hall structure.** Floor, waveform and mist only (original board's columns are not a target).
-- **Horizon invisible.** Distance mist hides every floor, sky and horizon boundary from every admitted pose.
-- **Distant haze is dark grey, never black.** The notch wall behind the sheets is barely lit haze, not a void.
-- **Mist is repelled by the waveform with a small margin, in true 3D.** The mocks let fringes touch or cross the
-  sheets; ours keep 0.3 units clear of every sheet's tube from any angle. The clear band follows the camera's own
-  direction, so a camera move reshapes the clear space.
-- **Coloured reactive mist only above the waveform and at off-screen edges.** The mocks' coloured floor-level corner
-  banks are replaced by cheap, slightly tinted analytic floor mist that thickens toward the camera-side edges, the
-  extreme sides and the distance. Volume mist under the waveform is off (it read as stray puffs at the contact line).
-- **Fragmenting extras on the mist edge are kept** ("they give character"); only a break in the lit edge is a fault.
-- **Edge line is smoother than the mocks' crackle** but still focused on the edge: fibrous and lightly blurred, never
-  the over-smoothed band.
-- **Floor: smoothness, reflection and wetness before streakiness.** The mocks' visible cracks, aggregate and wet/dry
-  patches are not targets; nothing blotchy or patterned. Vertical columns stay.
-- **Large-display caps (engineering, my decision):** the mist and floor reduced-resolution targets stop growing
-  above fixed heights (march 540, mirrored march 270, reflection 360, floor reflection term 1080 rows). At 4K the
-  floor's columns are very slightly softer at 1:1 than uncapped; the 718-pixel lab is pixel-identical.
-
-**Control ideas recorded for the WR-08 migration (not built in the lab as controls):**
-- **Waveform shape and reactivity tuner (operator, 1 November), the most important new control.** A tuner, not a
-  free shape builder: the user chooses which energy shapes which ribbon property and how strongly, and it can never
-  break the motion rules (smooth folding-cloth curves, band-limited history, no jagged plateaus, fixed flow speed).
-  - **Rows (energy sources):** bass, mids, highs, overall loudness, transients/onsets, and the head oscillator
-    (musical history stays the dominant force).
-  - **Columns (ribbon targets):** amplitude (wave height), swell (local compression of neighbouring folds), width,
-    twist, lift, spread between sheets, depth sway, deformation (secondary harmonic), emission, sparkle.
-  - **Per cell:** gain plus a response curve; per target, a smoothing time with an enforced minimum so history stays
-    band-limited (about half a wavelength).
-  - **Per ribbon:** a character row (its own share of each target), so sheets keep distinct identities.
-  - **Shape character presets** inside the tuner: e.g. "even swell" (the complete-scene board) and "dominant peak"
-    (the preset-range board's single tall arc).
-  - **Preview:** a live 3D or angled-2D ribbon driven by a synthetic sweep (bass, mid, high, loud) so the user sees
-    the result without music.
-- **Gradient colour editor:** circular nodes, clickable and draggable, each opening a colour picker; a low-reactivity
-  and a high-reactivity pair, blended by reactivity (and more than two nodes for looks like the preset-range board's
-  cyan → violet → magenta → orange).
-- **Mist:** density, clearance margin, edge-line strength and fibre, fringe colour share, distance haze darkness,
-  billow scale; an on/off for users who want it off.
-- **Floor:** wetness/reflection strength, streak length, column fade, mist reflection share.
-- **Sparks:** count and size range, light, lifetime.
-- **Sheets:** count (1-3), strand density, rim glow versus body, bloom.
-- **Quality tier:** the large-display caps above as one Low/Medium/High setting, not separate sliders.
-- **Every look value is a builder control (operator, 1 November).** All of them must be adjustable in the eventual
-  builder through user-friendly visual editors, not raw numbers. The lab's named recipes are the first presets
-  built from them:
-  - **Ribbon colours:** per-ribbon quiet/loud pairs as swatches on each ribbon in the preview; the world gradient
-    as the node editor.
-  - **Shape tuner:** the source-to-target matrix with curve handles and the live sweep preview (above).
-  - **Glow:** sheet glow, white-hot cores, body fill and rim glow, as sliders over a live close-up of one sheet.
-  - **Free strands:** count, length, reach (curl), halo, glow, droplets and peel time, previewed on a sheet
-    while a synthetic loud passage plays.
-  - **Sparks:** count, size range, drift, rise and light, previewed on the same sheet.
-  - **Rules stay out of the editors:** floor contact and the smoothing minimums, so no setting can break the
-    smooth-curve rule.
-
-**Baseline (operator, 1 November: "looks good"):** git tag `waveform-baseline-2026-11-01c` (`abd7db76`, evidence
-`wr07_mist_view_band/`). Earlier: `waveform-baseline-2026-11-01b` (`ed6003c4`). Earlier baseline: `waveform-baseline-2026-11-01` (`f4825432`),
-evidence `wr07_floor_columns/`. Compare every later candidate against it and revert to it if a pass makes things
-worse. The operator named the floor of this baseline and of the `wr07_colour_grade` capture the best floors so far.
-
-**Live work (open gaps, largest first):**
-- [~] **Mist continuity and volume (`wr07_mist_lumps`):** the breaks were in the lit fringe, not the mass. The rim
-  light fell off with distance from the envelope, so stretches the billows pushed further away went dark. It now
-  glows wherever the push left the face (gentle fall per unit of push), so the fringe is continuous across the
-  width. The unlit body has large dim lumps instead of one flat grey. Still to check: motion, and whether the lumps
-  read as volume at wide poses.
-- [ ] **Achievable looks (lab capability, not presets):** every board's colours and shapes must be reachable.
-  - **Boundary (operator, 1 November):** presets, controls, Settings and the preset/control systems arrive only with
-    the full Visualizer migration (WR-08), designed there as a whole. The lab records the values each look needs
-    and proves the mechanisms; it builds no preset data model, preset plumbing or Settings.
-  - **Recorded for WR-08 design:** the control ideas list above (shape and reactivity tuner, gradient colour editor,
-    mist, floor, sparks, sheets, quality tier).
-  - **Lab mechanisms in place:**
-    - the per-knot tint row for colour that flows along the history;
-    - the world grade (three stops over x, the middle derived by hue);
-    - mist and banks coloured from the envelope;
-    - the recipe's low/high colour pair, blended by the synthetic reactivity.
-  - **Other looks:** alternate looks (the preset-range board, warm accents) are named recipes run by the same lab
-    (`--recipe`), sharing every program and function (Extruded Bubble's lab pattern). Never a copied lab.
-  - **Open:**
-    - warm colours turn brown in dim mist;
-    - the alternate look's free strands (see "Second look" above).
-  - **Landed:** sheets follow the recipe through per-ribbon quiet/loud colours and gradient nodes; named recipes
-    `complete`, `alternate`, `range` (`--recipe`).
-- [~] **Low-state floor brightness:** the hot-light threshold is now relative to the scene's own mean reflected light
-  (the reflection's coarsest mip, at 3x). A fixed threshold blacked out the quiet floor and washed the loud one.
-  Floor luminance median / p90, mock vs ours (`wr07_sheet_tone`):
-  - low: 0.114 / 0.269 vs 0.079 / 0.22 (baseline 0.033);
-  - high: 0.208 / 0.569 vs 0.307 / 0.538.
-  The loud floor's median is high; the quiet floor is still somewhat dark.
-- [~] **Band along the camera's own direction (`wr07_mist_view_band`; operator: "good at normal, bad at turned";
-  "this goes deep into the waveform"):**
-  - **Cause:** the clear band was extruded along the default view's pitch only. Under yaw it no longer matched the
-    outline the camera sees, so the mist's lit face sat inside the waveform.
-  - **Fix:** the band (and the edge-line limit) is now projected along the actual camera direction (x and y per unit
-    z). The 3D tube clearance stays in true world space; the mirrored camera shares the main camera's medium.
-  - **Consequence:** the band follows the camera. A camera move reshapes the mist's clear space accordingly, since
-    the mist is repelled by the waveform as seen.
-  - **Checked:**
-    - default view pixel-identical (forward has no x component);
-    - the turned view hugs the outline with no mist inside the sheets;
-    - all five poses checked.
-- [~] **Continuous lit edge (`wr07_mist_continuous`, after baseline `waveform-baseline-2026-11-01b`):**
-  - **Cause of the break:** the operator saw the lit fringe break between the blue and purple stretches. It was a
-    large billow that lifted the mist face far above the waveform there, out of the rim light's reach. With billows
-    off, the edge was unbroken.
-  - **Fix:**
-    - billow lift 2.6 -> 1.8 and rim fall per unit of lift 2.2 -> 1.5, so the edge runs blue -> purple -> pink
-      without a gap and keeps its fragmenting character;
-    - fringe brightness evened along x (`edge_evening`), so a dimmer topmost sheet does not dim a stretch.
-  - **Rejected:** a slow fall-off alone (0.6-1.1). It lit every lifted lobe into a wash.
-  - **Checked:** avoidance in the turned view still holds.
-- [~] **True 3D clearance (`wr07_mist_3d_tube`; operator: "is it truly 3D? It needs to truly avoid the waveform"):**
-  - **Before:** the envelope was a 2D band projected along the default view. From turned angles the mist passed
-    behind and through sheets that the projection missed.
-  - **Now:** the envelope table carries every sheet's own 3D centreline (y, z), faded half-width and presence
-    per x. The shape takes the true 3D distance to each sheet's tube, sampled at five x offsets, and keeps the
-    mist 0.3 units clear of every sheet from any angle.
-  - **Rejected:** a 0.6 clearance carved gaps in the bank at the mock pose.
-  - **Also:** the cheap floor mist is darkened (backdrop 0.05/0.055/0.07). Operator: "way too bright".
-- [~] **Floor mist split (operator, 1 November):**
-  - **Reactive coloured volume mist only above the waveform and at the edges** the camera does not see. The coloured
-    floor banks, the floor light and any volume mist under the waveform are off: eroded lumps there read as stray
-    puffs at the contact line, and the bank term floated noise puffs once the banks were off.
-  - **The floor takes the cheap analytic mist instead:** slightly tinted, thickening toward the camera-side floor
-    edges, the extreme sides and most of all into the distance, where it is thick dark grey and hides the horizon.
-  - **Rejected (1 November): a thin floor-edge mist** made from the analytic mist's low-lying thickening and glow
-    (`floor_thickening` 3-4, `low_glow` 0.6-1.2). It only mixes the floor surface toward grey, which reads as a flat
-    grey band along the bottom edge and dims the columns. The horizon and far edges already dissolve into dark
-    grey in all five poses, so there was nothing for it to blend.
-- [~] **Floor column shaping:** a mild fade toward the camera (`column`) puts the high state's brightness at the
-  contact line. Wet-film sparkle grain was tried and rejected: it brought back the mottled floor. The fade darkens
-  the already too-dark low-state floor further, so it stays mild. Earlier state: the columns ran the full floor
-  height at even brightness. The mock's are brightest
-  at the contact line and break into sparkle toward the camera. In low react the floor is much darker than the
-  mock's; its cyan and magenta columns are distinct even then. No concrete structure is visible. Keep the
-  baseline's smooth wet character.
-- [~] **Mist edge character (`wr07_mist_edge_line`; operator: "definitely the right direction. Closest. Keep note"):**
-  - **Mechanism:** a screen-space edge line in the mist composite, at full resolution.
-    - The edge is where the march's lit in-scatter falls into the dark body (blurred log-luminance gradient).
-      Transmittance has no edge there: the bank is opaque, and behind it is more mist.
-    - Only faces lit from below count (the bank's underside), only saturated fringes, and only above the waveform's
-      projected top outline (a per-column limit from the lab envelope).
-    - The fringe's own hue at full saturation; mostly a smooth line, gently fibrous; its own bloom share.
-  - **Rejected:**
-    - volumetric crackle: mottled the whole bank;
-    - fine per-pixel filaments: sand;
-    - the unlimited line: lit the floor-mist boundary as a white bar along the contact line, and crackled the floor
-      banks' edges (operator: regressed).
-  - **Operator follow-up:** the fibrous, lightly blurred line (`wr07_mist_floor_split`) is the target; the heavily
-    smoothed band read worse.
-  - **Open:**
-    - filaments are screen-anchored: check them in motion and camera moves;
-    - the mock's line is brighter at its core with fibrous tendrils into the bank.
-- [~] **Waveform:** the sheets were too bright and washed toward white. Mock / ours, crest strands: luminance
-  0.195 / 0.32, saturation 0.84 / 0.67. Less strand, fill and bloom light, with rims kept brighter than strands,
-  brings this to 0.225 / 0.72; the quiet sheets go from 0.28 to 0.205 against the mock's 0.19 (`wr07_sheet_tone`).
-  Still paler than the mock's deep blue-violet body; the mock's brightness gathers at rims and crossings. Remaining
-  structure work: fine-detail stability, depth and light, and reference shape fidelity. Every admitted shape stays
-  smooth like folding cloth.
-- [~] **Cost (baseline `waveform-baseline-2026-11-01c`, RTX 4090, 820x718; control-relative = stage / floor):**
-  - **Profile by switching parts off (loud react):**
-    - the self-shadow probe was about half the march (relative 5.0 -> 2.25 without it);
-    - step count is next (1.55 with longer steps);
-    - billows are 3.7;
-    - the 3D tube is negligible.
-  - **Landed:** the self-shadow reads the coarse coverage at its probe (one fetch) instead of evaluating the fine
-    shape again. Main march relative 4.7 / 5.0 -> 3.5 / 1.5 (low / high), mirrored 2.3 -> 1.6 / 0.7. Drift from
-    the baseline: mean 3.4/255, no visible change in native crops.
-  - **Rejected:**
-    - longer steps (0.25, 1.2): another 23% but at 2x the edge line loses fibre and the mass gets grainy;
-    - longer steps (0.3, 1.5): mean drift 8-10.
-  - **Absolute timings swing about 3x with GPU clock state.** Quiet-state ratios are noisy because the floor is only
-    about 0.2 ms.
-  - **Rejected:** coarser steps for the mirrored march (0.5, 2.0). There was no measurable saving (it runs at quarter
-    resolution and is not step-bound) and the floor drifted 9-12/255.
-  - **Landed: shape bake (`wr07_cost_bake`).**
-    - **What it does:** once per frame a compute pass evaluates the lab shape into a world-space RG16F 3D grid.
-      Channels: inside-distance including billows, band and 3D tube, plus above/below side. Box
-      x -30..30, y 0..12, z -12..4 at 0.2 units, 300x60x80 cells.
-    - **March:** samples the grid trilinearly inside the box and evaluates the exact shape outside it. The coarse
-      medium keeps the exact shape.
-    - **Drift:** mean 1.8/255, both projections' default and turned views; the edge line is unchanged in 2x crops.
-    - **Cost:** total mist (main + mirrored march + bake) relative to the floor, 5.1 / 2.2 -> 3.9 / 1.36
-      (low / high). The bake itself is 0.1-0.3 ms.
-  - **Display-size check (`wr07_cost_4k`; medians, absolute ms, RTX 4090; clock swings apply):**
-    - **Before caps, fixed-fraction targets grew with the screen:**
-      - 4K mist (marches, bake, updates, composite): 8-10.5 ms;
-      - 4K floor: 4-7 ms;
-      - against a whole-frame budget of 8 ms (Visualizer_Change_Checklist 1C).
-    - **Landed, height caps:** main march at most 540 rows, mirrored march at most 270, floor reflection target at
-      most 360. The 718-pixel lab is pixel-identical (its targets are under the caps), and 4K keeps the approved
-      look's detail per screen fraction.
-    - **After caps:**
-
-      | Size | Mist (low/high) | Floor (low/high) |
-      |---|---|---|
-      | 1080p | 2.5 / 3.9 ms | 0.9 / 1.6 ms |
-      | 1440p | 2.5 / 3.9 ms | 1.8 / 3.7 ms |
-      | 4K | 3.1 / 4.2 ms | 2.8 / 5.0 ms |
-
-      The 4K floor's 360-row cap brings its streak back to the lab's 11 samples (16 at a 720 cap: 4.9 / 7.2 ms).
-    - **Rejected:** anisotropy 16 -> 8. It halved the 4K floor (1.8 / 2.7 ms) but blurred the vertical columns the
-      operator chose.
-    - **Landed: floor reflection pre-pass (`wr07_cost_floor_prepass`).** The floor's reflection term (streak taps,
-      contact probe, hot-light shaping) is evaluated in a pre-pass at most 1080 rows tall, then read back by the
-      full-resolution floor pass.
-      - At 718 rows the lab is pixel-identical (the term stays inline).
-      - Interleaved 4K A/B (alternating frames, so clock state hits all configs equally):
-        - floor 10.4 / 9.6 ms without the pre-pass (high / low);
-        - 3.2 / 4.9 ms at a 1080 cap;
-        - 2.0 / 3.6 ms at a 720 cap.
-      - A 720 cap visibly softened the grain inside the columns at 1:1 4K; 1080 keeps it nearly intact.
-    - **Measurement lesson:** sequential stage timings at 4K are dominated by GPU clock and power state. The
-      first-measured state ran about 6x faster whichever it was. Only interleaved A/B within one process is
-      trustworthy.
-    - **Whole-frame pass (`wr07_cost_frame/frame_cost.json`, one pass, 1 November):**
-      - **Method:** GPU timestamps around every stage, low/high alternating frame by frame in one process.
-      - **Conditions:** RTX 4090 at 225-765 MHz graphics clock, 36% utilisation. The Python harness keeps the GPU
-        in a low power state, so absolute figures are inflated, perhaps 2-3x.
-      - **Caveat:** spans that contain Python draw submission include GPU idle gaps. The "whole frame" span also
-        holds the CPU history build and a full-frame readback (lab-only), so it is not a GPU figure. The stage rows
-        are single passes and close to true GPU time.
-
-      | Stage, median ms (low / high) | 1080p | 4K |
-      |---|---|---|
-      | mist volumes (both) | 0.20 / 0.23 | 0.57 / 0.57 |
-      | shape bake | 0.24 / 0.24 | 0.29 / 0.29 |
-      | mist marches (both) | 4.26 / 4.43 | 5.18 / 5.38 |
-      | mist composite | 0.31 / 0.48 | 1.79 / 1.84 |
-      | mirrored scene | 0.22 / 0.24 | 0.29 / 0.30 |
-      | floor | 2.21 / 2.21 | 4.96 / 5.09 |
-      | ribbons, sparks, bloom, tone (main scene minus floor and composite) | 1.4 / 1.4 | 9.5 / 11.2 |
-      | sum of GPU stages (upper bound) | 8.9 / 9.2 | 22.6 / 24.6 |
-
-      - **Reading:**
-        - Caps hold the marches nearly flat from 1080p to 4K.
-        - The largest 4K item is now the ribbon/bloom/composition remainder. It grows about 7-8x for 4x the pixels,
-          so a full-resolution target in it (bloom chain or OIT accumulation) is the next cap candidate. The mist
-          composite (full resolution, edge-line blur) is next after it.
-        - Nothing here is an acceptance figure. The live check under `--load game60` remains the gate.
-    - **Open:**
-      - cap or reduce the 4K ribbon/bloom/composition remainder (above);
-      - 4K high still sums to about 9 ms for mist and floor before ribbons, bloom and composition;
-      - candidates: the floor's per-pixel reflection at reduced resolution with a depth-aware upsample, or
-        fewer streak segments with per-pixel offsets judged in crops;
-      - a whole-frame measurement in the live check (`--load game60`) is the acceptance gate, not these isolated
-        stage timings.
-  - **Scale note:** the main march is about 1 ms at 820x718 at half resolution. It scales with pixels, so 4K needs
-    the bake or a lower march scale before production.
-- [ ] **Motion:** explicit-time slow-motion captures of mist anchoring, streak stability and sheet rims; five poses
-  in both projections.
-- [ ] **Accents:** cyan/magenta sparks with a real size range; tight filament glow plus broad hot spots.
-- [ ] **Awaiting Validation:** operator review. No candidate is accepted.
-- [ ] **After visual fidelity:** WR-00 recorded windows, WR-07 audio mappings (colour pairs, shape, light, particles
-  and fog are all reactivity areas), the remaining shared lifecycle gates, WR-08 production with presets and Settings,
-  WR-09 performance and operator acceptance.
-
-Pass history and the reasons behind current settings (newest first) follow in the S3D-7, floor and waveform notes
-below; they are records, not open items.
-
-**Pass history:**
-- [ ] **Waveform structure and light:** richer smooth folds, depth separation, fine fanning/gathering filaments,
-  readable quiet detail, coloured hot crossings. Every admitted shape must remain smooth like folding cloth, never
-  sharp or spiky, including wide inner bends. Outer boundary lines must be brighter and glow more than the interior
-  strands even at low react, to describe the translucent 3D sheet. Both rims now have independent boundary emission;
-  the native low/high candidate resolves the reported imbalance. Broader sheets, continuous body light and slow
-  phase/amplitude/depth variation improve the wire-like interior and repeated fold rhythm. Skew-stretched glints
-  are corrected. Still open: fine-detail stability, depth/light and reference shape fidelity. Inspect all boards
-  at native resolution and explicit motion times; do not hide shape faults with bloom.
-- [~] **Floor fidelity, Awaiting Validation:** smooth wet candidate `wr05_wet_contact/`. The receiver keeps long
-  streaks narrow (segmented footprints), and reflections are contact-hardened: crisp near the floor, spreading
-  mostly vertically with the reflected light's height. Smooth relief normals come from texture-space differences
-  and give a gentle wet wobble with no grain or patches. The blue ambient wash is reduced. Operator priority:
-  smoothness, reflection and wetness before streakiness; never blotchy or patterned. Still open: the floor reads
-  lower-contrast than the mock. The mock's bright pools at the contact line come from its lit mist base and
-  concentrated hot crossings; ours from evenly lit sheets. That moves to the mist and waveform slices, not to more
-  floor blur. Low react keeps a dark hover gap under the sheets until lit mist is reflected. Generated maps are
-  placed; inspect fine wet detail and dark gaps at every pose against the main mock. **Operator rejected the mottled wet/dry candidate:** the target is smooth wet
-  concrete, not a high-contrast patch mask. Retain the preferred waveform and the independently proven continuous
-  reflection filter; rebuild the floor around a continuous wet film, subtle grain and restrained roughness variation.
-  **Smoothness takes priority over wet patches (operator clarification):** establish a nearly flat surface with
-  restrained grain. The mock also needs gentle Gaussian reflection blur: keep physical surface smoothness and
-  optical blur as independent controls, hold the former fixed and compare native floor-only crops for the latter.
-  Do not alternate between mottled roughness, broad blur and a sharp mirror as substitutes for the combined target.
-  Replace the blurred-mirror diffuse-light shortcut: it illuminates the reflected image instead of the concrete
-  under the sources. First prove bounded soft emitters derived from the admitted history (position, width, colour,
-  emission and age fade), held in absolute history bins. This is a lab optical approximation, without shadows;
-  it must not become a second waveform or clock. Keep physical relief and Gaussian blur fixed during that comparison.
-  Bound/count and translation/fade checks, native floor crops, navigation and GPU cost precede a checkpoint. CPU
-  packet reduction in this synthetic lab is not admitted as a production per-frame preparation path.
-  Reflection OIT-body inclusion, resize and full cost proof remain open.
-- [~] **S3D-7 volume mist (operator: "your mist sucks"; substrate landed, look far from the mock):**
-  - **Shared primitive:** coarse froxel `FogVolume` (medium, steady share, front-to-back integral) plus a
-    half-resolution `FogMarch` that erodes coverage with tiling noise, self-shadows toward clear air and stops at the
-    ground plane. All passes sample it through `MIST_GLSL`.
-  - **Lab medium:** a clear room around the camera; a cloud base on the admitted ribbons' crest envelope that rises
-    toward the camera; carving and light from the ribbon history; light attenuated by depth into the mist; a thin
-    ground fog that thickens with distance. The mirrored camera gets its own volume and march.
-  - **Waveform-shaped mist (`wr07_mist_envelope`):** the clear band now follows the admitted sheets' exact
-    lower/upper envelope along x. That envelope is reduced per frame from the same packet, with edge colours blended
-    from nearby sheets.
-    - The march evaluates the same shape per sample (consumer `fogCoverage`), so edges no longer stair-step at the
-      coarse cells.
-    - Lobes are self-shadowed toward the waveform (consumer `fogLightDirection`), and a shadow floor keeps cloud
-      bodies visible.
-    - Faces are rim-lit in the nearest sheet colour.
-    - The floor's diffuse light reads the mist's light field.
-  - **Repelled mist (`wr07_mist_repelled_v2`):**
-    - `935bb00c` (shallow notch, per-sample light) lost density and volume; the operator rejected it, so it is
-      reverted.
-    - The `12d5d2f3` field is kept whole. Above the sheets it is pushed up from the envelope by 0.6, with its light,
-      so the lobes keep their volume.
-    - Billow tips that still come within 0.45 are cut.
-    - Below the sheets nothing is pushed: pushing squashed the lower mist into a flat lit slab on the floor. Only
-      intruding tips are cut there.
-    - Remaining: the light is slightly dimmer than at `12d5d2f3`, and the coarse light cells faintly stair-step the
-      cloud bodies.
-  - **Projected clearance, floor and end mist (`wr07_mist_projected`):**
-    - The envelope is projected along the admitted base view (world-fixed, `VIEW_SLOPE`). The mist edge now follows
-      the waveform's visible outline whichever sheet's depth defines it; the dark strip from front-sheet/back-mist
-      parallax is gone.
-    - The clearance is 0.3/0.25. The notch wall directly behind the sheets is dark grey haze (ambient, barely lit),
-      not black.
-    - Floor mist: low billowed banks that reach forward at the sides, lit from above by the sheets' lower colour.
-    - End mist comes forward where the sheets fade (head and tail), so they blend into it in wide 3D views.
-  - **Corner banks and wisp light (`wr07_mist_banks`):**
-    - Floor banks rise beside the sheet ends up to 2 units.
-    - The march brightens thin eroded wisps above the medium's unlit base only (`edge_glow`), so curl rims show while
-      bodies stay dark. Boosting the base greyed the whole cloud.
-    - The march runs at 0.75 scale, which raises its cost about 2.25x (to re-measure).
-    - Native left-half crop against the mock: the mock's cyan bank, edge and floor are ours in magenta/violet. That
-      is a colour-along-x gap in the waveform itself, which the mist only inherits: next slice.
-    - The mist is still softer than the mock's crackling edge, and the floor reflection is horizontal shimmer where
-      the mock has vertical streaks.
-  - **Floor: vertical wet columns (`wr07_floor_columns`):**
-    - **Horizontal shimmer:** per-pixel micro-facet reflection offsets aliased at this grazing view. They are
-      replaced by a roughness footprint, a long vertical streak.
-    - **Streak segments:** the receiver now allows up to 16 segments, offset per pixel against copy banding.
-    - **Hot light:** reflected light below a luminance threshold falls away (power 1.5), so columns stand over dark
-      concrete. A wet-film mask breaks them gently.
-    - **Mist reflection:** the mirror takes a reduced share of the mist (0.35).
-    - **Concrete light:** waveform-coloured pools come from the envelope's lower edge, falling off toward the camera.
-    - **Bands traced and removed:** regularly spaced horizontal bands came from the floor's diffuse term sampling
-      the mist's coarse light field, whose 64 exponential depth slices land on the floor as rows. That term is off,
-      and the pools replace it.
-    - **Cost, RTX 4090, 820x718 (medians):**
-      - floor: 0.21 / 1.18 ms (low/high), from 1.7 / 2.8 ms once the 5-tap cross blur was dropped;
-      - main mist march: 1.07 / 3.07 ms at half resolution;
-      - mirrored march: about 0.9-1.6 ms.
-      Still too costly for production. The march needs fewer or adaptive steps.
-    - **Self-review:**
-      - The columns run the full floor height at even brightness. The mock's are brightest near the contact and
-        break into sparkle toward the camera.
-      - The low state's floor is much darker than the mock's, whose cyan and magenta columns are distinct even in
-        low.
-      - No concrete structure is visible.
-  - **Colour flow and world grade (`wr07_colour_grade`):**
-    - Per-knot tint row added to the ring ABI, for reactive colour that flows with the history.
-    - The world grade gives the mock's cyan left, blue-violet middle and magenta right. Shares: ribbons 0.3, so a
-      magenta sheet is not dragged through grey and identities hold; mist 0.75, luminance-preserving.
-    - Floor banks are rounded mounds: the box faces in the turned view are gone.
-    - **Self-review:**
-      - The sheets are still paler and whiter than the mock's saturated ribbons (material whiteness: waveform pass).
-      - The mist edge is softer and dimmer than the mock's crackle.
-      - The banks read as discrete cotton mounds in wide views.
-      - The floor reflection is still horizontal shimmer.
-      - The history tint is not authored yet: share 0 in the lab until the WR-07 colour reactivity mapping.
-  - **Self-review of the previous pass:**
-    - The corner banks are small and dim in the mock framing, and read as puffs in wide views; the mock's fill the
-      lower corners up to the sheets.
-    - A lavender floor-mist band runs across the middle at the contact line, which the mock keeps darker.
-    - The edge colour is still blue-violet; the floor reflection is busy.
-  - **Still far from the mock:**
-    - The lit edge is soft and dim, not the mock's bright fibrous crackle.
-    - The colour is a blue-violet blend rather than cyan left and magenta right.
-    - There are no lower corner banks.
-    - The fringes are softer and less saturated, not the mock's electric cyan/magenta crackle.
-    - There are no bright corner banks at floor level.
-    - The lower lobe between sheets and floor reads as a pink smear.
-    - The floor's micro-ripple reflection is too busy and noisy, and too bright on high react.
-  - **Earlier gaps (`r1` scratch / `wr07_mist_substrate`):**
-    - The fringe is blue-violet and dim, where the mock's is saturated cyan/magenta, bright and close to the crests.
-      Mist colour follows the ribbon colours, so this waits on waveform colour.
-    - No bottom-corner cloud banks: the first attempt glowed white.
-    - Horizontal haze lines in the turned and raised views.
-    - The wide views carry too much low-contrast fog.
-    - Detail march cost (see `Scene3D_Resources.md`) needs a precomputed clear-air direction and fewer steps before
-      production.
-  - Audio-driven fog changes remain deferred.
-- [ ] **Accents and optics:** bounded cyan/magenta sparks with a meaningful size range; tight filament glow and broad
-  local hot spots. Shared defocus/slow-motion AA only after the underlying geometry/material match.
-- [ ] **Reference looks through lab recipe controls:** show the cool whole-scene low/high and alternate-inspired range
-  without changing world identities between quiet/loud. Production presets and Settings remain WR-08.
-- [ ] **Awaiting Validation:** operator review of floor/waveform/volumetric-mist appearance. No candidate is accepted.
-- [ ] **After visual fidelity:** WR-00 recorded windows → WR-07 audio mappings → remaining shared primitive/lifecycle
-  gates → WR-08 production → WR-09 performance and operator acceptance. No reactivity work is admitted ahead of visuals.
+- Low/high states are the same world, camera, topology and bounded populations. Reactivity may change shape, colour, light,
+  particles and later fog response, but it must not swap scenes or camera pose.
+- Each ribbon has an authored base identity; colour may flow along history through bounded gradient nodes. Preserve smooth
+  curves and continuous frames. Do not introduce jagged spikes merely to mimic a still.
+- Free strands leave an actual rim/line, curl away smoothly, taper to a free tip and remain bounded; they are accents, not a
+  second sheet population or a screen-space particle storm.
+- Floor contact is a geometry rule, not a user setting. Floor appearance is smooth finished wet concrete with restrained
+  material detail and geometrically registered coloured reflection, never a sharp duplicate mirror or painted glow.
+- Mist is core to every look. Its clearance is shaped by the waveform/world, not by a camera-facing hole or a second
+  simulation cadence. Audio-driven mist response remains later work.
+- The shape/reactivity tuner and eventual visual editors author bounded targets/ranges; they do not become renderer-side
+  simulation or another clock.
+- Root `assets/` material sources/prompts are local product assets and intentionally omitted from normal GODZIPs. Runtime
+  packaging remains WR-08 work; source-handoff omission is never deletion.
 
 ## 0A. Evidence and decision rules
 
@@ -559,32 +90,12 @@ The initial receipt is `.artifacts/evidence/waveform_ribbon/wr00_reference_proje
 It records no GL scene capture or cost: this is a preflight, not an image of a proposed Ribbon implementation.
 Diagnostic half-height 4/reference depth 10 are arbitrary calibration units, not an approved artistic camera fit.
 
-Current visual candidate: `wr04_sheets/` (under `.artifacts/evidence/waveform_ribbon/`) includes main-board native pairs,
-five wide poses, recipe/source receipt and four seconds of explicit-time low/high samples. `wr04_both_rims/` records
-the boundary-light correction; `wr04_parity_pass7/surface_cost.json` owns the earlier measured surface draw cost.
-The lab authors broad phase/amplitude modulation and depth sway before immutable knots enter the shared ring;
-there is no renderer-side simulation or new clock. These captures do not establish resemblance or operator acceptance.
-The scene remains far from the target and the waveform/floor/volume work above remains live.
-
-`wr04_round_glints/` is the latest still candidate: it retains the sheet recipe and corrects the stretched glint
-footprints exposed by the visual audit. The production-fragment regression and before/after GPU draw measurement
-are scoped to that correction; they do not close motion or whole-scene performance acceptance.
-
-**Operator checkpoint, 1 November — `0ca9fd27`:** "the best the waveforms have looked so far" and "definitely the
-correct direction", with more work explicitly required. Preserve this exact recipe/source and the
-`wr04_round_glints/` captures as the preferred comparison baseline for further passes. This endorses the direction
-of the waveform, not full mock parity, the floor, fog, motion or production readiness.
-
-Generated material custody and prompts: `assets/textures/waveform_floor/Source.md`. The albedo is sampled in sRGB;
-roughness and the separate smooth-height map are linear data. Colour pores no longer supply surface normals.
-Two differently oriented/scaled world-space samples reduce visible tiling. The first aggregate albedo still read
-as grit under direct illumination and is being replaced with smooth finished concrete. Missing maps raise an error,
-and partial texture allocation is retired. Asset generation/placement is established; appearance remains unaccepted.
-
-Rejected floor study: `wr05_floor_candidate/`, preserving waveform checkpoint `0ca9fd27`. The operator rejected
-its mottled appearance in favour of the mocks' smooth wet concrete. Do not retain its wet/dry contrast or patch scale
-as a target. The shared receiver filter separately resolves the reproduced repeated-highlight defect, with a native
-regression and same-recipe GPU cost comparison. Small normal perturbations follow the viewed ground axes under yaw.
+Current comparison evidence remains under `.artifacts/evidence/waveform_ribbon/`; receipts/captures are evidence, not
+task status. The lab authors phase/amplitude modulation and depth sway before immutable knots enter the shared ring,
+with no renderer-side simulation or new clock. Generated floor material custody/prompts are local at
+`assets/textures/waveform_floor/Source.md` (root `assets/` is excluded from normal GODZIPs). Albedo is sRGB; roughness
+and smooth-height are linear data. The target remains smooth finished wet concrete; rejected mottled floor studies are
+negative evidence, not a current style option.
 
 ## 0B. Remaining visual gaps and immediate verification
 
@@ -657,7 +168,7 @@ Archive member paths are exact:
 | `references/Waveform_Ribbon_Rejected_Curve_Detail.png` | Operator crop, preserved byte-for-byte; SHA-256 `5c2ccbbe98cd2474d8de3a2d0f2c5ae2165d935f5f9922f71caa1e63e158de7c` | Rejection evidence: uneven strand slopes and bends; never an artistic target |
 | `references/Waveform_Ribbon_Fog_Preset_Range_Mock.png` | Additional supplied board, preserved byte-for-byte; SHA-256 `6bd7cc073f4192a6acecfa4e000fbb8c185f867f7e1089a3a5c028321b0a1dde` | Additional whole-scene/preset target: cool quiet sheets and warm high arcs, shaped fog, wet reflection detail |
 | `references/Waveform_Ribbon_Rejected_Upper_Rim.png` | Operator crop, preserved byte-for-byte; SHA-256 `05020984b0475d80fb9c1373859c0a4b9ac3b965890b64300fab86efdd6392c1` | Rejection evidence: upper/far rim remains too dim; both boundary lines must glow more than the interior |
-| `waveform_ribbon_package/Waveform_Ribbon_Architecture.md` | Package prose inspected; existing brief reproduces it | Intent, suggested mappings, gates A–H; feasibility prose is not implementation proof |
+| `waveform_ribbon_package/Waveform_Ribbon_Architecture.md` (inside local reference package) | Package prose inspected; existing brief reproduces it | Intent, suggested mappings, gates A–H; feasibility prose is not implementation proof |
 
 Original image bytes were extracted without editing to
 `tmp/waveform_ribbon_plan_reference/waveform_ribbon_package/` and viewed at their native source dimensions.
@@ -821,8 +332,6 @@ identify every artifact. Never overwrite old evidence to make the latest attempt
 
 **Entry:** mode planning or implementation is admitted; original package is available.
 
-- [x] Recheck archive members/hash and the approved primary board. Preserve its authority unless a later operator
-  instruction changes it; keep independent target tables for any explicitly admitted future alternate.
 - [ ] Confirm scene crop boxes, annotation masks and source aspect. Extract measurement cards without modifying originals.
 - [ ] Measure the target table from §1.3; mark ambiguous body counts and occluded features rather than inventing geometry.
 - [ ] Define a stable camera/world/palette fixture and a separate delivery-aspect fixture (normal runtime card/wide view).
@@ -839,29 +348,14 @@ work; final likeness still needs the actual candidate's visual evidence.
 
 **Entry:** S3D-1 admitted; exact EB wake source and regression bars reread.
 
-**WR-01a landed:** `core/ribbon_geometry.py` plus `tools/labs/ribbon_path_probe.py` implement the bounded CPU
-reference documented in `Docs/Reference/Ribbon_Path.md`. Four-knot-supported interior positions preserve absolute
-coordinates through insertion/eviction; batch partition invariance applies to identical admitted knots only.
-CPU cards/trace: `.artifacts/evidence/waveform_ribbon/wr01a_history_checked/receipt.json`. No EB code changed.
-WR-01b adds `core/ribbon_frames.py` and the CPU frame probe. Its singularity policies, station/UV contract and
-proposed GPU budget are in `Docs/Reference/Ribbon_Path.md`. CPU receipt: `.artifacts/evidence/waveform_ribbon/wr01b_frames_checked/receipt.json`.
-The broader checkboxes below stay open where actual derivatives, GPU topology/packing or native temporal proof is incomplete.
+**Current substrate:** bounded CPU path/history and transported-frame reference owners are documented in
+`Docs/Reference/Ribbon_Path.md`. This checklist contains only the remaining admission work.
 
 
 - [ ] Specify fixed maximum ribbons, history samples, active counts, sample spacing/time interpretation, record bytes,
   topology and reset/retirement semantics. Calculate memory and worst-case vertices from these caps before allocation.
-- [x] Define one caller-owned absolute longitudinal coordinate that survives insertion and history eviction.
-  Identical admitted knots must be invariant under submission batch partitions; arbitrary dt resampling stays open. Use it
-  for geometry, internal strands and attached accents; never derive placement from the changing share of segment count.
-- [x] Promote the minimal centripetal Catmull-Rom evaluation with repeated-point/short-history handling. Preserve EB's
-  existing arithmetic/call path unless an explicitly scoped migration proves unchanged output and temporal behavior.
-- [x] Design camera-facing and oriented width modes. For a twisting sheet use a transported frame (or an equally
-  continuous proven basis), then apply authored twist. A Frenet frame at zero curvature or a cross product parallel to
-  the viewing ray needs deterministic continuous degeneracy handling; silent flips are unacceptable.
 - [ ] Define normals/tangents, two-sided material behavior, UV/path coordinates, edge coverage and end treatment.
   Width changes must remain positive and continuous; initial empty/one-point history must not produce NaNs or full-length pops.
-- [x] Decide whether the history represents waveform/control age or spatial path distance. EB's water physics is not
-  the model for music flowing across a hall; reuse its coordinate lesson, not its entrainment/drag constants.
 - [ ] Exercise stationary, straight, unequal-spacing, cusp-like, repeated-point, reversing, growing and saturated-history
   fixtures. Track marked sample/strand positions before/after insert/evict. Compare submission partitions for identical admitted knots. Independently resolve any future variable-dt resampler
   before claiming equivalent nonlinear trajectories.
@@ -874,16 +368,9 @@ placement, frame flips and capacity overflow; visual review still owns what a de
 
 **Entry:** WR-01 contracts defined; no Waveform mode registration required.
 
-**WR-02a implemented:** `core/ribbon_packet.py`, shared shader/primitive modules named `ribbon.py`, and
-`tools/labs/ribbon_strip_probe.py`; detailed ABI/proof/cost limits live in `Docs/Reference/Ribbon_Path.md`.
-Native receipt `.artifacts/evidence/waveform_ribbon/wr02a_native_final/receipt.json` measures cheap geometry draws
-but approximately 90 ms for fixture creation plus full CPU-oracle frame reconstruction and packet preparation.
-That is not software rendering or current runtime cost. Separate the oracle from the actual per-tick input path
-and measure that path before production use; neither this prototype nor the remaining checkboxes imply a whole-mode performance/fidelity pass.
+**Current substrate:** the reusable GPU owner, shader helpers, packet ABI and primitive harness exist; detailed
+contracts and existing evidence live in `Docs/Reference/Ribbon_Path.md`. The remaining checklist is the admission gap.
 
-
-- [x] Place reusable GPU resource/geometry owner in `rendering/quick/scene3d/` and import-safe shader helpers in
-  `rendering/gl_programs/`; use an independently named primitive harness under `tools/labs/` with `OffscreenRenderTarget`.
 - [ ] Start with bounded history SSBO + vertex-stage strip expansion through shared storage/ring facilities. Keep CPU
   state evolution batched. Benchmark a compute alternative only if it removes demonstrated work; no compute-first assumption.
 - [ ] Declare storage binding ownership, alignment, stride, hold size, fence use and draw count. Exercise the maximum
@@ -929,14 +416,11 @@ the simple body and composition are credible; a visually wrong silhouette must n
 
 **Entry:** WR-03 geometry/composition accepted as an intermediate.
 
-- [x] Add faint translucent body, defined rims and longitudinal fine structure in distinct diagnostic contributions.
-  Keep all patterns on the shared path coordinate. Verify seam-free interpolation through joins and changing history.
-- [x] Choose oriented thin sheets first for visible twist; compare camera-facing strips as a diagnostic control. Add
-  real thickness only if a reviewed side view requires it; apparent brightness is not evidence of volumetric thickness.
+**Current substrate:** translucent body, rims and longitudinal structure share the path coordinate on oriented thin
+sheets, and overlaps use shared OIT. The open items below own remaining material/optics acceptance.
+
 - [ ] Author cyan/blue/violet/magenta bands from one scene palette and consistent light sources. Keep material emission,
   illumination, alpha coverage and bloom weight separately inspectable; do not use alpha as an arbitrary brightness knob.
-- [x] Resolve overlap using `SceneTarget.transparent_writes` and shared OIT. OIT is approximate; preserve front/back
-  legibility with correct geometry/material and report remaining dense-layer errors rather than promising exact sorting.
 - [ ] Establish HDR exposure once for the scene, then add emission-only bloom. No automatic exposure change between low/high.
   Show bloom-off and emission-only cards; measure clipping and dark gaps at crossings before calling glow successful.
 - [ ] Evaluate line/point coverage at native pixel sizes, multiple subpixel offsets and small runtime cards. Avoid patterns
@@ -952,10 +436,10 @@ to hide segmented geometry. This stage may match one band's character; it is not
 
 **Entry:** S3D-5 admitted in Current_Plan; independent reflection harness before the consumer.
 
-**Implemented:** shared `PlanarReflection`, mirrored physical camera and lab light/spark inclusion; generated albedo,
-linear roughness and independent smooth-height maps with allocation-failure cleanup. Asset custody/prompts:
-`assets/textures/waveform_floor/Source.md`. Current fidelity gaps and pending filter/illumination proof live in §0B.
-Remaining proof and fidelity work:
+**Current substrate:** shared `PlanarReflection`, mirrored physical camera, lab light/spark inclusion and generated
+albedo/roughness/smooth-height maps with allocation-failure cleanup. Local asset custody/prompts live at
+`assets/textures/waveform_floor/Source.md`; root `assets/` is intentionally excluded from normal GODZIPs. Current
+fidelity gaps and pending filter/illumination proof live in §0B. Remaining proof and fidelity work:
 
 - [ ] Complete the reflection inclusion/clip contract, including OIT body and eventual volume. Use the same scene
   geometry/time/material functions; exclude the receiver/self-recursive reflection.
@@ -1062,7 +546,7 @@ regression control captures and documented remaining native gates. Presets remai
 **Exit/artifacts:** native run receipt, gate matrix, operator decision and scoped remaining defects. Completion needs
 the mock-directed visual result, not merely matching a lab that missed the target.
 
-## 4A. Motion model: flowing history (operator decision, 31 October)
+## 4A. Motion model: flowing history
 
 The ribbons are **music history flowing across the hall**, not shapes animated in place:
 

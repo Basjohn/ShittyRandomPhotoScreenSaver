@@ -2,8 +2,9 @@
 
 **23 October addendum (not yet visually accepted):** the [operator reconciliation](2026-10-23_Operator_EB_Neon_Settings_Reconciliation.md) requires camera/control-hint parity with Extruded Bubble (while preventing entry into terrain and allowing almost flat horizon views), a square editor preserving existing heightmap/brush results with desirable angled pseudo-3D preview, layered water/water glow, and improved relevant shared 3D controls. Only presets 1–4 are currently useful artistic study cases; all presets remain mutable. Existing baseline acceptance is not a claim these additions have been implemented or visually accepted. [Current Plan](../../Current_Plan.md) owns status.
 
-Neon Lake Basin replaces the flat Shockwave Grid picture. The stable mode ID, settings prefix and layout profile remain
-`shockwave_grid`, `shockwave_grid_*` and `3d:shockwave_grid`. The operator accepted the existing mode and its existing graphics/behavior baseline;
+Neon Lake Basin replaces the flat Shockwave Grid picture. The stable mode ID and settings prefix remain
+`shockwave_grid` and `shockwave_grid_*`; as a framed 3D Visualizer its CUSTOM layout profile is the same shared `planar`
+profile used by framed 2D modes. The operator accepted the existing mode and its existing graphics/behavior baseline;
 it is an accepted baseline in `Current_Plan.md` §0 with no live tasks. Its future water/brush/glow extensions below are **not**
 retroactive acceptance failures. The supplied low/high mock in
 `Docs/Future_Work/Additional_Future_Transitions_Package.zip` is concept provenance, **not** the
@@ -11,10 +12,9 @@ accepted artistic reference. The **operator's current** Preset 1 is the working 
 not a frozen baseline; the operator may change it whenever desired.
 
 Neon Lake is the **reference implementation** for a reusable **framed 3D internal-camera** contract,
-not a permit to copy its special-case view code into each future mode. The shared opt-in capability is a
-§4A prerequisite for Extruded Bubble and other framed 3D visualizers. Preserve this mode's authored
-landscape angles, existing Settings/presentation pose and card/CUSTOM behavior when promoting the common
-input/bounds/projection ownership; other modes supply their own bounds and visual target. Current acceptance
+not a permit to copy its special-case view code into each future mode. The shared opt-in capability is the current camera owner for framed 3D visualizers. Preserve this mode's authored
+landscape angles, existing Settings/presentation pose and card/CUSTOM behavior while other modes supply their own
+bounds and visual target. Current acceptance
 is the accepted baseline (`Current_Plan.md` §0); the existing Preset 1 remains the
 working visual reference while six new experimental presets are temporary and may all be rejected.
 Every preset remains operator-editable, including Preset 1 and all six experiments. The historical
@@ -23,8 +23,9 @@ retain those evidence requirements but do not reopen the accepted baseline.
 
 ## Card, scene pose and input
 
-The descriptor declares CARD / CARD_INTERIOR with independent freeform-3D CUSTOM stage geometry. The saved outer card
-rectangle and logical viewport remain their existing authorities; shell policy supplies ordinary card chrome and the
+The descriptor declares CARD / CARD_INTERIOR with the same shared `planar` CUSTOM stage geometry as framed 2D
+Visualizers. The saved outer card rectangle and logical viewport remain the sole geometry authorities across framed-mode swaps;
+internal camera pose never creates a mode-specific layout profile. Shell policy supplies ordinary card chrome and the
 rounded interior stencil. Every rendered pose remains clipped, including Edit and extreme zoom/pan. The old overflow
 key is forward-retired by the canonical settings and preset filters.
 
@@ -425,9 +426,8 @@ must thaw an active frozen generation at the stop boundary and only permit a GC 
 Qt, GL and thread roots have drained, while keeping the strict Python-owner destruction
 barrier. A Settings -> Neon Lake activation -> Settings sequence must retire cleanly,
 including after the generation would have been frozen; do not introduce a mode-specific
-Settings-timer or a bypass for the display owner. See `Docs/TestSuite.md` for the maintained
-proof inventory and `Docs/Audits/Neon_Lake_Settings_And_Settings_Handoff_2026-10-13.md`
-for diagnostic history.
+Settings-timer or a bypass for the display owner. See `Docs/TestSuite.md` for the maintained proof inventory; older
+settings-handoff forensics are source-control history rather than a live documentation dependency.
 
 The original Neon Lake acceptance required image/physical review of actual distant horizon, size/DPR,
 large-card glow/beat response and meaningful terrain reactivity; deterministic replay and
@@ -437,11 +437,9 @@ regression/extension proof standards, not an unclosed launch gate. The operator'
 `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`.
 A local agent may run real-music replays and compare before/after clips. Six new experimental
 editable presets must be delivered without silently replacing the operator's current Preset 1 edits; their eventual aesthetic
-rejection does not invalidate verified implementation contracts. The live checklists and
-closure criteria live **only** in `Current_Plan.md` (none are open), not a second checklist here.
-Rejected attempts and old checkpoint evidence belong in
-`Docs/Audits/Neon_Lake_V4A_Historical_Checkpoints_2026-10-14.md` and Historical Bugs,
-not in this live behavior reference.
+rejection does not invalidate verified implementation contracts. Any concrete Neon regression or admitted extension gets
+a working checklist **only** in `Current_Plan.md`; this reference does not maintain a second queue. Rejected attempts and
+old checkpoint evidence belong in source control / Historical Bugs, not in this live behavior reference.
 
 
 ## Terrain editor views (2026-10-24)

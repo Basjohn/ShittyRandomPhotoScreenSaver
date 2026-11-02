@@ -1276,7 +1276,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'extruded_spectrum_visual_smoothing': 0.5,
                                     'extruded_spectrum_visual_smoothing_enabled': True,
                                     'extruded_spectrum_wave_amplitude': 0.15,
-                                    'mode': 'extruded_bubble',
+                                    'mode': 'bubble',
                                     'mode_activation': {'bubble': True,
                                                         'devcurve': False,
                                                         'extruded_bubble': True,

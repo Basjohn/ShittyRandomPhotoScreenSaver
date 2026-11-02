@@ -1,8 +1,11 @@
 # Extruded Bubble | Execution & visual acceptance runbook
 
-**23 October additional live falsifiers:** [operator reconciliation](../2026-10-23_Operator_EB_Neon_Settings_Reconciliation.md) and [Current Plan](../../../Current_Plan.md). Track existing bubbles versus newly admitted bubbles across tempo changes for Stream/Drift (G19/G20), pair separation and repeated collisions for Bounce (G10); do not disturb restored BEAM while experimenting in Lighting SCENE (G05/G06). P1 idle appearance is accepted, musical breathing parity and other preset fidelity remain open. Original 2D Bubble with Dynamic Floor ON is a visual response benchmark for EB with Dynamic Floor OFF; compare changing-song sections. Visual-native operator/agent acceptance required.
+**Historical 23 October falsifiers:** [operator reconciliation](../2026-10-23_Operator_EB_Neon_Settings_Reconciliation.md) records the then-open Stream/Drift, Bounce, Lighting and breathing comparisons. Preserve those reproductions when a related regression is reopened; they do not describe current task status.
 
-**Read alongside `Current_Plan.md` §4B, `Target.md`, and `Investigation.md`.** This is the test-and-evidence protocol for the **single live queue** in §4B, not a second backlog or a declaration that any candidate is accepted. Original D/B/C/A/S/F/L/P and other issue records remain authoritative for symptoms, specific constraints, failed approaches and source details. Every `[ ]` / `[~]` remains open until the operator or a capable local visual agent examines the required evidence and explicitly accepts the result. Keep all existing rejection details visible; don't replace them with a shorter success story.
+**Read alongside `Target.md` and `Investigation.md`.** Extruded Bubble is an accepted baseline; this runbook is retained
+as a regression/reproduction protocol for any concrete defect that is reopened, not as a live backlog. Historical issue
+records remain useful for symptoms, constraints, failed approaches and source details, but their old checkbox state does
+not override current acceptance.
 
 ## A. Evidence protocol: must pass before a visual claim
 
@@ -17,7 +20,9 @@
 
 ## B. Ordered gates: what the agent must *actually see*
 
-The gate IDs below are stable for evidence reports. The ordering represents dependencies; it is **not** permission to omit lower gates or to remove the linked detailed tasks. Status for every gate is **OPEN / unaccepted**.
+The gate IDs below are stable for evidence reports. The ordering represents dependencies. When a concrete regression is
+reopened, the relevant gate starts OPEN until native/visual evidence resolves it; historical OPEN/[~] labels elsewhere in
+this runbook do not override the accepted EB baseline.
 
 ### Stage 0 | Reliable Settings and valid evidence before touching visual response
 
@@ -61,7 +66,7 @@ alpha while moving toward/away and across screen edges, including low aperture a
 Reject a sharply viewport-filling shell, instant disappearance at a threshold, or deletion/reseeding of its
 physical identity. This is an explicit correction to the reported current failure, not accepted existing DoF.
 
-**G07/G08/G09 SCENE clustering and mode-switch A/B extension (new visually rejected screenshot):** [22 October operator screenshot](Evidence/2026-10-22_SCENE_operator_rejected_clustering.png) shows ongoing bright clumping while emission is SCENE. The R45 shader-coordinate/rejection changes have **not** passed the visual gate. In a true cold SCENE start, BEAM→SCENE after a long live BEAM interval, and SCENE→BEAM→SCENE, keep source/camera/light/counts identical. Log each ordinary bubble's stable ID, birth mode/time, XYZ/radius/lifetime/exit, compare separate world vs shader speck/free-chain/snow/fizz seed/visibility masks, then pre/post-bloom pixel coverage. Verify running native binary contains R45 before inferring candidate failure mechanism. Older BEAM cohorts are not redistributed by choosing SCENE; this is a **testable conditional cause**, not proof or a reason to teleport/delete them. Population size may explain emptiness, **not concentration conditional on distributed positions**. Reject a fix that covers over clumps by lifting caps or reseeding when camera changes. Keep apparently early Sunlit bubble disappearance separately at G04 with per-ID cause/projection/fade evidence.
+**G07/G08/G09 SCENE clustering and mode-switch A/B extension (new visually rejected screenshot):** 22 October operator screenshot (`Evidence/2026-10-22_SCENE_operator_rejected_clustering.png`, local historical evidence omitted from normal GODZIPs) shows ongoing bright clumping while emission is SCENE. The R45 shader-coordinate/rejection changes have **not** passed the visual gate. In a true cold SCENE start, BEAM→SCENE after a long live BEAM interval, and SCENE→BEAM→SCENE, keep source/camera/light/counts identical. Log each ordinary bubble's stable ID, birth mode/time, XYZ/radius/lifetime/exit, compare separate world vs shader speck/free-chain/snow/fizz seed/visibility masks, then pre/post-bloom pixel coverage. Verify running native binary contains R45 before inferring candidate failure mechanism. Older BEAM cohorts are not redistributed by choosing SCENE; this is a **testable conditional cause**, not proof or a reason to teleport/delete them. Population size may explain emptiness, **not concentration conditional on distributed positions**. Reject a fix that covers over clumps by lifting caps or reseeding when camera changes. Keep apparently early Sunlit bubble disappearance separately at G04 with per-ID cause/projection/fade evidence.
 
 ### Stage 3 | Recorded-audio response and every Range's real semantics
 
@@ -173,7 +178,7 @@ Use existing bounded diagnostic tools. A gate's evidence folder should contain: 
 
 **Suggested next-agent first move:** run **G00** when a failing Settings transition is reproducible; otherwise do **G02 and G03/G04/G06** as a bounded paired evidence pass before changing more size, ray or count curves. Then address G07/G08 and G13/G14 using matching events. Record the first stage where a hypothesis disagrees with evidence, repair only that owner and retest connected gates. Geometry and lighting can be audited in parallel with the strict lifecycle attribution, but source/clock correctness precedes claims about physical response.
 
-**22 October additional source-audit falsifiers (not another checklist):** For G22/G23 independently sweep quiet and high Breathing endpoints and record *silent* per-ID radius; for G04/G09 contrast Deep/Surface `_outside` vs world/plane EOL reasons; for G07/G09 include SCENE→BEAM first-fade reason for inherited identities; for G07/G21 separate SCENE world XYZ coverage from camera/light-relative speck brightness and HDR/bloom; for G19–G21 record pre/post-activity Range signals; for G24/G27 log `_rays` cap vs authored high; for G27/G32 measure disabled-ray draw/blur GPU cost before optimizing. Synthetic source receipts are in [`Additional_Source_Audit_2026-10-22.md`](Additional_Source_Audit_2026-10-22.md). **No native visual sign-off is implied; every existing gate remains open.**
+**Historical 22 October source-audit falsifiers (not another live checklist):** For G22/G23 independently sweep quiet and high Breathing endpoints and record *silent* per-ID radius; for G04/G09 contrast Deep/Surface `_outside` vs world/plane EOL reasons; for G07/G09 include SCENE→BEAM first-fade reason for inherited identities; for G07/G21 separate SCENE world XYZ coverage from camera/light-relative speck brightness and HDR/bloom; for G19–G21 record pre/post-activity Range signals; for G24/G27 log `_rays` cap vs authored high; for G27/G32 measure disabled-ray draw/blur GPU cost before optimizing. Synthetic source receipts are in [`Additional_Source_Audit_2026-10-22.md`](Additional_Source_Audit_2026-10-22.md). **No native visual sign-off was implied at that checkpoint; preserve the falsifiers for any future reproduction.**
 
 
 ## 2026-10-23 targeted native agent comparisons (OPEN)

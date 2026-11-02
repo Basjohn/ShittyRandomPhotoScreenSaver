@@ -71,10 +71,10 @@ def is_generated_qrc_python(path: str) -> bool:
 
 
 NEVER_TRANSFER_PREFIXES = (
-    "ui/assets/",
+    "assets/",     # product/heavy assets stay local; never transfer or overwrite
+    "ui/assets/",  # canonical Qt asset tree stays local; never transfer or overwrite
     "themes/",     # operator-authored and locally curated; never transfer or overwrite
     "references/", # operator-owned visual references; never transfer or overwrite
-    "assets/webp/",   # release showcase WebPs (tools/release_media.py)
 )
 
 HEAVY_DEFAULT_PREFIXES = (
@@ -434,9 +434,9 @@ def is_never_transfer_payload(path: str) -> bool:
     """Return True for payloads that normal GODZIP handoffs must never carry.
 
     These paths are intentionally omitted even when dirty and even when callers
-    try to select them explicitly. They include operator-owned theme files whose
-    local edits and deletions must never be overwritten by a handoff, and bulky
-    transfer-only baggage otherwise outside the normal source handoff contract.
+    try to select them explicitly. They include root ``assets/``, the canonical
+    ``ui/assets/`` tree, operator-owned themes and local visual references whose
+    edits/deletions must never be overwritten by a source handoff.
     """
 
     lower = path.replace("\\", "/").lower().lstrip("./")
@@ -452,7 +452,8 @@ def workflow_default_selected(path: str, status: str = "") -> bool:
     The transfer profile intentionally keeps all documentation and direct
     ``tests/*`` files because those are valuable handoff context, while
     excluding test fixture/subfolder payloads, images and goldens. The authored
-    ``themes/`` and ``references/`` trees are hard non-transfer paths handled separately.
+    root ``assets/``, ``ui/assets/``, ``themes/`` and ``references/`` trees are
+    hard non-transfer paths handled separately.
     Gitignored files never reach this decision point.
     """
     lower = path.replace("\\", "/").lower().lstrip("./")
@@ -702,7 +703,7 @@ This archive is a **full working-tree handoff**. These rules apply when an agent
 - Preserve unrelated dirty state and existing authored behavior. A later/superseding full GODZIP replaces an earlier handoff as working-tree authority; smaller context/handoff archives do not override the newer full tree unless explicitly stated.
 - Archive omission never means delete. Only explicit debris instructions in `.godzip/manifest.json` authorize moving a path to `/deleteme`.
 - `.godzip/manifest.json` and `.godzip/workflow.md` are archive metadata, not repository replacement targets.
-- Normal GODZIPs intentionally omit heavyweight/generated payloads. In particular, `ui/assets/`, the operator-owned `themes/` directory, and the operator-owned `references/` directory are never part of a normal GODZIP handoff, even by manual selection. Do not re-add excluded assets, locally curated themes, or local visual references.
+- Normal GODZIPs intentionally omit heavyweight/operator-owned payloads. In particular, root `assets/`, `ui/assets/`, the operator-owned `themes/` directory, and the operator-owned `references/` directory are never part of a normal GODZIP handoff, even by manual selection. Do not re-add excluded assets, locally curated themes, or local visual references.
 - Before returning a GODZIP, run the relevant focused tests/audits and keep any operator-required physical acceptance steps explicit.
 
 Archive baseline: `{short}`  \nDirty worktree at creation: `{dirty}`
@@ -958,6 +959,35 @@ def inspect_godzip(
             return inspection
 
         _validate_manifest_shape(manifest)
+
+        # A manifested GODZIP is a closed inventory of repository payload.
+        # Extra .godzip/* files are archive metadata and remain allowed, but an
+        # ordinary repository member must never exist outside manifest["files"].
+        # Otherwise apply/review can silently ignore shipped bytes, defeating the
+        # manifest's role as the byte-accurate transfer authority.
+        declared_payload: set[str] = set()
+        for record in manifest.get("files", []):
+            if not isinstance(record, dict):
+                raise GodzipError("Manifest file entry must be an object")
+            declared_payload.add(validate_repo_relpath(str(record.get("path", ""))))
+        unexpected_payload = sorted(
+            (
+                name
+                for name in members
+                if not name.startswith(".godzip/")
+                and name not in MANIFEST_CANDIDATES
+                and name not in declared_payload
+            ),
+            key=str.casefold,
+        )
+        if unexpected_payload:
+            preview = ", ".join(unexpected_payload[:5])
+            suffix = "" if len(unexpected_payload) <= 5 else f" (+{len(unexpected_payload) - 5} more)"
+            raise GodzipError(
+                "Archive contains repository payload not declared in the manifest: "
+                f"{preview}{suffix}"
+            )
+
         inspection.source_head = str(manifest.get("source_head", "") or "")
         inspection.source_branch = str(manifest.get("source_branch", "") or "")
         inspection.dirty_worktree = bool(manifest.get("dirty_worktree", False))

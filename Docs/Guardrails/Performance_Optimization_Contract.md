@@ -163,7 +163,7 @@ or retain effect-specific runtime resources.
 **Additions must not tax what does not use them.** Extending a shared primitive (material lobe, attachment, pass) is opt-in:
 a separate function, shader variant or demand-created resource only its consumer pays for. Before and after any
 shared-primitive or render-host change, record `tools/overhead_baseline.py` and `--compare` the two; per-frame GL/Python call
-counts are deterministic, so any rise on an unrelated transition or mode is real added work (procedure: `Current_Plan.md` §4).
+counts are deterministic, so any rise on an unrelated transition or mode is real added work; attribute it with the focused owner/harness before changing behavior.
 Judge timing deltas by the relative-to-control figures and only between runs whose recorded conditions agree; a
 baseline taken while the machine was busy says so in its own `load` block. Procedure, output and expected results:
 `Docs/Reference/Benchmarks.md`.

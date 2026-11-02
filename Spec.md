@@ -211,8 +211,9 @@ standalone product workers own content-based regeneration and provenance. Runtim
 with `QResource` at the resource/UI boundary and registers the onboarding pack lazily. Existing `:/srpss/...` and
 `qrc:/srpss/...` identities are invariant. Frozen products package the `.rcc` files as data and must not rely on
 generated Python resource modules or loose-image fallbacks. Generated `.rcc` packs/provenance are reproducible build
-products and stay opt-in for GODZIP transfer; the `.qrc` manifests plus canonical `ui/assets/` sources are handoff
-authority. Legacy generated Python QRC modules are retired rather than retained as fallback. Themes, presets, user content,
+products and stay opt-in for GODZIP transfer. The `.qrc` manifests are the GODZIP handoff authority for resource
+membership and aliases; canonical `ui/assets/` sources remain local and are intentionally hard-excluded from normal
+GODZIP transfer. Legacy generated Python QRC modules are retired rather than retained as fallback. Themes, presets, user content,
 caches, credentials and replaceable notification/Jedi sounds retain filesystem ownership. Installer artwork is a
 compile-time Inno Setup input, not loose runtime imagery.
 
@@ -318,7 +319,8 @@ not blanket prerequisites. `Current_Plan.md` owns active sequencing/acceptance, 
 consumers, and `Docs/Reference/Scene3D_Resources.md` / `Docs/Reference/Visualizer_Reference.md` own shared contracts.
 
 The operator's authorized 28 October drift, stream, framing, visibility and ray-control follow-up lives in
-`Docs/Reference/Extruded_Bubble/Motion_Reactivity_Viewport_Plan.md`, with live work/acceptance in `Current_Plan.md` §2A.
+`Docs/Reference/Extruded_Bubble/Motion_Reactivity_Viewport_Plan.md`; that scoped follow-up is accepted reference material and
+reopens only for a concrete new defect.
 Framed edge resize changes the observed aperture of a fixed world, preserving authored lens/eye and the basic rectangle;
 stream transport is independent of bubble size/fusion. Rays have honest strength endpoints, independent modulation
 and shimmer. Drift uses signed per-consumer gains on the sole logical clock; free populations default0 while wakes
@@ -628,12 +630,14 @@ separate viewport and visual-scale intents. New-widget implementation starts wit
 Outer geometry is Python/session-owned. Variant key supports `(widget_id, display_identity, geometry_variant)`.
 Clock digital/analogue are the first required example. **That existing variant axis is also the only admitted persistence seam
 for Visualizer pose compatibility.** Visualizer descriptor `geometry_kind` selects mechanics (`planar` / `freeform_3d`) while
-`layout_profile` selects the existing CUSTOM variant slot. Current profiles are `planar`, `3d:extruded_spectrum`,
-`3d:shockwave_grid` and `3d:sphere`; future modes may share a profile only by explicit descriptor choice when their stage geometry
-is compatible. The split remains inside the same `custom_layout` map, `CustomLayoutSession` and commit/hydration owner; it may
-not introduce parallel 2D/3D roots, per-mode X/Y settings or a second geometry service. Hidden activation restores the target
-layout profile without borrowing outgoing geometry. Turn/tilt/camera/material/preset values remain mode-presentation state and
-are never serialized into layout profiles. Legacy `default` / `freeform_3d` variants are one-way interpretation input only.
+`layout_profile` selects the existing CUSTOM variant slot. Current profiles are `planar`, `3d:extruded_spectrum` and `3d:sphere`. All framed Visualizers, including framed 3D
+modes such as Neon Lake Basin and Extruded Bubble, share the exact `planar` rectangle/viewport and resize rules; only
+frameless/freeform 3D modes own separate `3d:*` stage profiles. Future freeform modes may share a profile only by explicit
+descriptor choice when their stage geometry is compatible. The split remains inside the same `custom_layout` map, `CustomLayoutSession` and commit/hydration owner; it may
+not introduce parallel 2D/3D roots, per-mode X/Y settings or a second geometry service. When source and target share the same layout profile, activation leaves the committed rectangle/viewport untouched and does
+not perform a sibling-profile lookup or copy; this is the framed-2D ↔ framed-3D `planar` path. Only a true cross-profile
+activation restores the target profile, and it never borrows outgoing geometry. Turn/tilt/camera/material/preset values remain
+mode-presentation state and are never serialized into layout profiles. Legacy `default` / `freeform_3d` variants are one-way interpretation input only.
 Read-only projected 3D Edit envelope/cage paint and migration/transaction semantics are defined in `Docs/Contracts.md`'s CUSTOM
 contract; The operator accepts implemented geometry/profile authoring; reopen from the specific R-111–R-113 incident only if new symptoms are reported.
 

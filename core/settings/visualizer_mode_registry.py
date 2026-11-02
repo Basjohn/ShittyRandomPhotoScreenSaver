@@ -127,8 +127,8 @@ class VisualizerModeDescriptor:
     # Whether Guided Setup offers the mode in the standard first-run mode chooser.
     # Keep False only for a registered mode whose product admission is not yet ready.
     guided_setup_offered: bool = True
-    # 3D freeform modes name their (turn, tilt) presentation settings here, and W/A/S/D then
-    # orbit the view live (widgets/spotify_visualizer/view_orbit.py). Turn spans -1..1 as a full
+    # 3D modes that expose an orbitable internal/free view name their (turn, tilt) presentation
+    # settings here; W/A/S/D then orbit through widgets/spotify_visualizer/view_orbit.py. Turn spans -1..1 as a full
     # circle and wraps; ``view_orbit_steps`` is one key event's (turn, tilt) step in setting
     # units. Empty: the keys keep their ordinary meaning (any key exits).
     view_orbit_settings: tuple[str, ...] = ()
@@ -333,8 +333,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         geometry_kind="freeform_3d",
         layout_profile="3d:extruded_spectrum",
     ),
-    # A framed neon basin with an internal 3D view. Its stable geometry profile
-    # remains independent from the shell, renderer-only pose and art presets.
+    # A framed neon basin with an internal 3D view. Framed 3D uses the exact
+    # shared planar/card CUSTOM geometry as framed 2D modes; only frameless 3D
+    # owns a separate freeform stage profile. Camera pose remains mode-local.
     VisualizerModeDescriptor(
         "shockwave_grid",
         "Neon Lake Basin",
@@ -367,8 +368,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
                                    "shockwave_grid_auto_rotate_speed"),
         scene_transform_settings=("shockwave_grid_scene_scale", "shockwave_grid_scene_pan_x", "shockwave_grid_scene_pan_y"),
         prepared_reveal=True,
-        geometry_kind="freeform_3d",
-        layout_profile="3d:shockwave_grid",
+        geometry_kind="planar",
+        layout_profile="planar",
     ),
     # Its own mode (not original Bubble): a framed underwater volume of traced glass bubbles with its own simulation
     # (``extruded_bubble_simulation``), Settings and presets. Offered since 2026-10-18 (operator) for its physical
@@ -406,8 +407,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         scene_transform_settings=("extruded_bubble_scene_scale", "extruded_bubble_scene_pan_x",
                                   "extruded_bubble_scene_pan_y"),
         prepared_reveal=True,
-        geometry_kind="freeform_3d",
-        layout_profile="3d:extruded_bubble",
+        geometry_kind="planar",
+        layout_profile="planar",
     ),
 )
 
@@ -492,9 +493,10 @@ def get_visualizer_layout_profile(mode_id: str) -> str:
             f"visualizer mode {descriptor.mode_id!r} has invalid layout profile {profile!r}"
         )
     if get_visualizer_geometry_kind(mode_id) == "planar" and profile != "planar":
-        # Today's carded 2D modes deliberately share one planar compatibility
-        # profile. If that product decision changes, relax this assertion with
-        # an explicit migration rather than accidentally fragmenting 2D state.
+        # Every framed/card Visualizer deliberately shares one planar
+        # compatibility profile, including framed 3D modes. If that product
+        # decision changes, relax this assertion with an explicit migration
+        # rather than accidentally fragmenting framed geometry state.
         raise ValueError(
             f"planar visualizer mode {descriptor.mode_id!r} must use layout profile 'planar'"
         )
@@ -548,9 +550,19 @@ def load_mode_logical_tick_hook(mode_id: str):
 
 
 def is_framed_visualizer_layout_profile(profile: str) -> bool:
-    """Derived CUSTOM interaction capability; the descriptor's camera remains the authority."""
-    return any(descriptor.layout_profile==profile and bool(descriptor.framed_camera)
-               for descriptor in _ALL_DESCRIPTORS)
+    """Return whether a *distinct* layout profile implies legacy framed-3D mechanics.
+
+    Canonical framed 3D modes now share ``planar`` with framed 2D, so the shared
+    profile must never manufacture special resize rules. The camera descriptor
+    remains independent from CUSTOM geometry.
+    """
+    normalized = str(profile or "").strip().lower()
+    if normalized == "planar":
+        return False
+    return any(
+        descriptor.layout_profile == normalized and bool(descriptor.framed_camera)
+        for descriptor in _ALL_DESCRIPTORS
+    )
 
 
 def get_technical_profile_mode(mode_id: str) -> str:

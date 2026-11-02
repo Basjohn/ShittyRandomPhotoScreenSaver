@@ -161,9 +161,7 @@ lost eligibility retires their tooltip, and fading chrome cannot accept late cli
 
 ### Direct 3D interaction geometry
 
-For unframed 3D modes, Alt+right starts a native press-scoped origin in the current display's direct CUSTOM transaction. An Alt+wheel resize may keep that transaction open; a later Alt+right press must rebase the move origin to the **current** rectangle before applying the new pointer delta, otherwise stale unscaled positions teleport the stage. Freeform 3D whole-stage wheel scaling preserves the stage **centre** (subject to display-edge clamp), while planar/ordinary widgets retain their own established anchor rule. These whole-stage paths may not create a timer or borrow geometry from a sibling layout profile. Framed Neon Lake
-Basin routes the same Alt inputs to internal scene pan/scale instead, with no CUSTOM geometry transaction; see
-[Neon Lake Basin](Neon_Lake_Basin.md).
+For unframed 3D modes, Alt+right starts a native press-scoped origin in the current display's direct CUSTOM transaction. An Alt+wheel resize may keep that transaction open; a later Alt+right press must rebase the move origin to the **current** rectangle before applying the new pointer delta, otherwise stale unscaled positions teleport the stage. Freeform 3D whole-stage wheel scaling preserves the stage **centre** (subject to display-edge clamp), while planar/ordinary widgets retain their own established anchor rule. These whole-stage paths may not create a timer or borrow geometry from a sibling layout profile. Framed 3D modes route admitted Alt pan/scale inputs to the shared internal camera instead, with no CUSTOM geometry transaction; see [Neon Lake Basin](Neon_Lake_Basin.md) and [Extruded Bubble](Extruded_Bubble/Target.md).
 
 Framed 3D modes also admit ordinary held-left orbit after Qt's drag threshold in interaction/Ctrl mode.
 The actual retained card/stacking determines admission. Glyphs, visualizer descendants and higher controls
@@ -539,19 +537,22 @@ second accelerated presentation surface.
 **CUSTOM geometry identity is mode-compatible, not merely 2D versus 3D.** The generic CUSTOM schema already supports
 arbitrary `geometry_variant` values under one widget/display key. Visualizer descriptors therefore expose two separate facts:
 `geometry_kind` selects interaction mechanics (`planar` or `freeform_3d`) while `layout_profile` selects the persisted CUSTOM
-variant. Current planar modes share `planar`; Extruded, Shockwave and Sphere use `3d:extruded_spectrum`,
-`3d:shockwave_grid` and `3d:sphere`. A future pair of modes may deliberately share a profile only when their stage geometry is
-actually compatible. This remains one CUSTOM session/commit/hydration owner, not per-mode X/Y settings and not a second 3D
-store. A hidden hot-swap restores the target profile before reveal and never lends the outgoing profile to a missing target;
-missing profiles begin from authored baseline. Legacy `default` / `freeform_3d` are one-way migration input claimed by at most
+variant. All framed modes share `planar`, including framed 3D modes such as Neon Lake Basin and Extruded Bubble. Their internal
+camera/view state remains mode-owned and does not create a geometry profile. Only frameless/freeform 3D stages use distinct
+profiles today: Extruded Spectrum uses `3d:extruded_spectrum` and Sphere uses `3d:sphere`. A future pair of freeform modes may
+deliberately share a profile only when their stage geometry is actually compatible. This remains one CUSTOM session/commit/hydration owner, not per-mode X/Y settings and not a second 3D
+store. A same-profile hot-swap leaves the committed rectangle/viewport untouched; framed 2D ↔ framed 3D therefore stays
+on the exact `planar` geometry with no sibling-profile lookup. Only a true cross-profile swap restores a target profile before
+reveal, and it never lends outgoing geometry to a missing target; missing profiles begin from authored baseline. Legacy `default` / `freeform_3d` are one-way migration input claimed by at most
 one canonical profile, never permanent competing authorities.
 
 For `freeform_3d`, the saved rectangle is a **stage/viewport**, not a promise that the currently projected scene fills it.
 Edit keeps that rectangle as the only persisted geometry while also showing a derived projected content envelope and a
 perspective-correct read-only wireframe cage. The cage consists of eight renderer-consistent projected vertices, twelve edges
 and an `N` at the canonical north/far face centre. It is paint/orientation chrome only: never a snap/collision/persistence,
-Fit Scene, movement or resize authority. Extruded derives it from its production projection/fit, Shockwave from its production
-camera projection, and Sphere from its stage/perspective convention. These records update only on relevant Edit/view/geometry
+Fit Scene, movement or resize authority. Extruded Spectrum derives it from its production projection/fit and Sphere from its
+stage/perspective convention. Framed 3D modes do not use this freeform cage; they retain the shared planar card rectangle while
+their camera operates inside it. These records update only on relevant Edit/view/geometry
 edges, not per-audio-frame. Turn/tilt and optional internal scene pan/scale remain mode-owned view settings, excluded
 from artistic presets and never copied into layout profiles. For framed Neon Lake Basin, the fixed card owns selection
 and its internal guide stays clipped derivative paint; see [Neon Lake Basin](Neon_Lake_Basin.md).
@@ -659,8 +660,8 @@ framed mode; a spec may add scene guides through `editor_references_hook`.
 
 [Neon Lake Basin](Neon_Lake_Basin.md) owns the terrain/water authoring, curved wire rendering, growth, sky/sun,
 framed-card clipping, internal scene pose and resource contracts. The mode ID and settings prefix remain
-`shockwave_grid`; its independent CUSTOM profile remains `3d:shockwave_grid`. It is a normal bordered card whose
-3D scene always stays inside the rounded interior. The old overflow setting and flat-grid fit/reach path are retired.
+`shockwave_grid`; as a framed mode its CUSTOM geometry is the shared `planar` profile used by 2D framed Visualizers. Its
+internal 3D camera remains mode-owned and the scene always stays inside the rounded interior. The old overflow setting and flat-grid fit/reach path are retired.
 
 The existing musical source remains authoritative: the mode projects its owned technical and Spectrum frequency
 profile onto the shared source implementation. Its bounded onset ring consumes each serial once, spaces admission
@@ -760,8 +761,8 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   timestamp, independent of OS key repeat. Alt+left-drag uses the same orbit owner. The GUI owner settles the reached
   view once through canonical Settings when the gesture finishes or the owner retires; ordinary frames write nothing.
   These are mode-specific live view settings, excluded from curated artwork and Custom art snapshots. Ordinary art
-  hydration cannot reset the view or switch an orbit edit to Custom. The mode's independent CUSTOM `layout_profile` remains
-  stage geometry, with no camera authority.
+  hydration cannot reset the view or switch an orbit edit to Custom. The active CUSTOM `layout_profile` remains stage geometry,
+  with no camera authority; framed modes share `planar` rather than owning mode-specific layout positions.
 - **Framed camera policy is declared, never keyed on a mode id (FC, 2026-10-18):** descriptor fields
   `view_orbit_turn_wraps` (False clamps turn: Neon Lake's landscape), `view_orbit_inertia` (a released drag coasts:
   Sphere), `scene_pan_envelope` (anchor x/y, upper reference y, left/right margins bounding pan at each zoom: Neon Lake;
@@ -773,18 +774,14 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   orbiting stops, dropped by any camera input, which first settles the swivelled turn so the view never snaps); the
   logical capture evaluates it at its frame time. No timer, polling or per-frame write; the swivel is never
   persisted. Tests: `test_visualizer_view_orbit.py` (swivel, wait, input takeover, off/clamped/undeclared).
-- **Reusable framed 3D camera contract (planned consolidation):** Neon Lake's working internal-camera
-  input and canonical presentation pose are the reference for **all future bordered 3D Visualizers**, including
-  Extruded Bubble, Cubes, Aurora, Ember Swarm and Waveform Ribbon. Promote its capability into the existing
-  descriptor/view-orbit/scene-transform owners under §4A FC *before* building another mode; do not duplicate
-  the renderer's bounds/pan logic or add a second camera store. A framed mode supplies a declared pivot, fit,
-  safe turn/tilt limits, bounded internal pan/zoom and valid near-plane/content coverage for its own material.
-  Persisted live view state remains presentation-only and mode-specific, excluded from artwork/CUSTOM layout geometry.
-  Use card-interior clipping and the existing gesture/input ownership. Explicit capability gating protects
-  unframed Sphere and Extruded Spectrum's original free-orbit policy. Prove Neon Lake parity, both displays,
-  minimum/maximum card size, aspect/DPR, dormant-zero-cost and resize legibility before reusing the capability.
-  `Docs/Reference/Scene3D_Resources.md` defines the required depth/transparency/shadow prerequisites for
-  a framed transparent 3D consumer; `Current_Plan.md` owns their implementation order.
+- **Reusable framed 3D camera contract:** Neon Lake and Extruded Bubble consume the shared bounded internal-camera
+  capability through the existing descriptor/view-orbit/scene-transform owners; future bordered 3D modes reuse it rather
+  than copying renderer bounds/pan logic or adding another camera store. A framed mode supplies its declared pivot, fit,
+  safe turn/tilt limits, bounded internal pan/zoom and valid near-plane/content coverage. Persisted live view state is
+  presentation-only and mode-specific, while the outer framed CUSTOM geometry remains the shared `planar` profile.
+  Explicit capability gating preserves unframed Sphere and Extruded Spectrum's free-orbit policy.
+  `Docs/Reference/Scene3D_Resources.md` owns shared depth/transparency/shadow primitives; `Current_Plan.md` owns only
+  currently admitted implementation work.
 - **Framed scene exception:** Neon Lake Basin additionally declares `scene_transform_settings` for scene scale and
   pan X/Y. Its complete five-key view pose persists independently of art and layout Save/Cancel. WASD and Alt+left
   orbit inside the card; Alt+right pans inside it; Alt+wheel scales about the interior centre, using either Qt wheel

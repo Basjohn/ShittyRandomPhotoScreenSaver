@@ -66,5 +66,5 @@ old bubbles. Check procedural population seed masks, alpha, illumination and
 HDR bloom separately. Preserve G04 bubble-surface exit as independently open.
 
 See `Lighting_Authority_Repair.md` for the audited ray/light defects and
-ordered native acceptance experiment; all work gates remain under
-`Current_Plan.md` §4B.
+ordered native acceptance experiment. This is historical candidate evidence; EB is accepted and only a concrete
+regression should reopen the relevant gate.
