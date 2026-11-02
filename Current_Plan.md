@@ -55,6 +55,9 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
   decide whether the sampler must exclude/outsource them. Not the Extruded Bubble chain fix (no processes, tick unchanged).
 - [ ] **Cross-display Media shortcuts** delivered once on the other display, when exercised.
 - [ ] **Music recorder** 60-second clip, signal/history, cancel and mixed-DPR UI, when recording is needed.
+- [ ] **Project Python startup warning:** `.venv\Scripts\python.exe -c "pass"` reports `Failed to find real location`
+  for its configured base Python 3.14 executable, although that path exists and Python runs. Inspect installation/path
+  resolution and access before repairing the venv; preserve dependency isolation and avoid environment-variable fixes.
 - [ ] **Frozen release gate (operator scheduled):** Standard/Diagnostic from one compile, MC and Reddit Helper installed
   startup/exit, Settings/widgets/cache/audio and installer behaviour.
   Check installer logs and obsolete-file removal in both curated theme/preset trees. Both sources declare whole-tree
@@ -136,17 +139,24 @@ the mist. Preset/control migration and recorded-audio calibration come only afte
 - [~] **Alternate lab look:** retain distinct broad ribbon identities, free rim-attached strands, glow and floor contact;
   close its remaining highlight/mist-edge fidelity gaps without regressing the primary look.
 - [ ] **Accents and optics:** finish sparks/glow/defocus only after waveform, floor and mist remain credible without them.
-- [ ] **Visual admission:** operator/capable visual-agent sign-off on the floor/waveform/volume range before live reactivity.
+- [ ] **Awaiting Validation — visual admission:** compare current primary/alternate low/high captures against their
+  targets and record operator/capable visual-agent decisions on floor/waveform/volume. Keep rejected gaps actionable;
+  no sign-off is implied by the existence of captures. This gates reactivity implementation and production migration.
+- [ ] **Reactivity timing fixture:** after visual admission, derive one fixed near-view admission head from the widest
+  admitted framing plus boundary/fade margins, prove hidden ends and bounded history, and measure input → head → visible
+  geometry delay. The current distant-head recipe is an appearance reference, not live-response evidence. Use the exact
+  timeline, timing capture and decision rules in the Lab Plan §5.1; do not conceal delay with pre-roll or shifted inputs.
 - [ ] **Core-reactivity bake-off:** before committing WR-07 to one geometry/motion language, retain the concept brief's
   current bass-width/slow-bend + mids-twist/centerline + highs-fine-detail + transient-curvature mapping as Candidate A
   and compare it with three bounded alternatives in the lab: traveling deformation packets, elastic/tension dynamics,
   and authored macro-flow with subordinate waveform-derived fine structure. Hold colour shifts, particles and glow
   constant/off for this decision. Drive every candidate with the same deterministic 10-second synthetic program; export
-  one short WebP plus five synchronized stills per candidate at identical camera/world/time checkpoints. Judge musical
-  separation, low-react beauty, attack/settle, continuity, silhouette readability and cost. Choose one core grammar, or
+  one short WebP plus five synchronized stills per candidate at identical camera/world/time checkpoints, together with
+  an unshifted full timing capture and input/realization traces. Judge musical separation, low-react beauty,
+  attack/settle, continuity, silhouette readability and cost. Choose one core grammar, or
   combine candidates only when the evidence shows complementary behavior rather than extra noise. Detailed contract:
   `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` §5.1.
-- [ ] **Only after the bake-off selects the core grammar:** recorded-audio WR-07 calibration, remaining S3D-1/2/5
+- [ ] **Only after the bake-off selects the core grammar:** recorded-feature WR-07 response calibration, remaining S3D-1/2/5
   lifecycle/cost gates, WR-08 production migration/tunable presets, then WR-09 acceptance with
   `tools/visualizer_live_check.py --load game60`.
 

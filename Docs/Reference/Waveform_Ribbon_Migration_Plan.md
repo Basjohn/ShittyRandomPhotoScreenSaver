@@ -2,9 +2,11 @@
 
 Planning owner for **WR-08**, subordinate to [`Current_Plan.md`](../../Current_Plan.md) §7.1 and the lab plan's
 WR-08 gates ([`Waveform_Ribbon_Lab_Plan.md`](Waveform_Ribbon_Lab_Plan.md)). The lab owns the look; this document
-owns what the production mode exposes, how reactivity is mapped and calibrated, and the order of the port. Nothing
-here is built yet. Values quoted are the lab recipes' current values, recorded for orientation: presets are
-operator-authored and never test oracles.
+owns the full production control design, production calibration and the order of the port. Production migration is
+not implemented. The lab look remains Awaiting Validation; its current tuner is a synthetic prototype, not the full
+matrix editor below. Core geometry/motion selection and timing belong to the lab plan §5.1. Candidate-dependent source,
+target and response choices below are provisional until that comparison selects a grammar. Values quoted are the lab
+recipes' current values, recorded for orientation: presets are operator-authored and never test oracles.
 
 **Operator direction (1 November):**
 - The migration is a **full Visualizer migration**: full controls, Settings and the preset/control systems, designed
@@ -75,6 +77,8 @@ The Shape Tuner's per-target quiet/loud values are these same ranges, edited on 
   a live close-up of one sheet (Glow Preview, New).
 
 ### Shape and Reactivity (Shape Tuner, New)
+- The editor/control scope is required; the exact geometry targets and response model follow the lab plan §5.1
+  winner. Do not hard-code an oscillator-only, packet or spring model into persistence before that decision.
 - **Matrix editor:** rows are energy sources, columns are ribbon properties; each cell has a gain and a response
   curve with draggable handles.
   - **Sources:** Bass, Mids, Highs, Loudness, Onsets, and the Head Wave (the authored oscillator that draws the waves,
@@ -85,7 +89,8 @@ The Shape Tuner's per-target quiet/loud values are these same ranges, edited on 
 - **Character presets inside the tuner:** e.g. Even Swell (complete scene), Dominant Peak (preset range), Silk Sweep
   (alternate).
 - **Live preview:** a 3D or angled-2D ribbon driven by a synthetic sweep (bass, mids, highs, loud passage) so the user
-  sees the result without music. The lab's `Shaping` dataclass is the model this editor edits.
+  sees the result without music. The lab's `Shaping` dataclass prototypes ranges and source routing; it is not yet
+  the complete multi-source/curve model this editor needs. Finalize that model after the bake-off.
 
 ### Flow
 - **Flow Speed:** the history's drift across the hall. A fixed scene constant while running: music never changes it
@@ -136,8 +141,9 @@ Waveform Ribbon's own controls, following the reactivity guide (`Docs/Guides/Vis
 the shared audio controls (sensitivity, input gain, block size) stay at their shared technical owners.
 - **Passage Response:** how far quiet → loud passages move every (R) control across its range (the eased passage
   drive, §4.2).
-- **Beat Pulse:** how much a hit lifts height and light, and how gently it settles (rise about 45 ms, settle about
-  0.65 s as DevCurve).
+- **Beat Pulse:** how much a hit lifts height and light, and how gently it settles. About 45 ms rise / 0.65 s settle
+  is an envelope starting point, not a visible-geometry timing claim; sampling, smoothness and travel are measured
+  separately under the lab plan §5.1.
 - **Accent Threshold:** how far an onset must stand out from the recent ones to throw sparks and strands.
 - **Idle Motion:** the head wave's own drift in silence (honest idle, no fake music).
 These sit beside the Shape Tuner, which says *what* each source moves; these say *how* the music arrives.
@@ -177,7 +183,7 @@ separate attack and release. Sources:
 - [Envelope detector (musicdsp)](https://www.musicdsp.org/en/latest/Analysis/97-envelope-detector.html),
   [Faust analyzers](https://faustlibraries.grame.fr/libs/analyzers)
 
-**Chosen concept (the pleasant common ground, in our terms):**
+**Provisional response vocabulary, subject to the lab plan §5.1 comparison:**
 - **The head wave carries the shape.** Music modulates its height, swell and rate. Raw bands plotted as height make
   jagged plateaus (lab plan §4A).
 - **One ribbon per band** (alternate board: bass, mid, high), each through the tuner; the complete scene's sheets
@@ -193,7 +199,7 @@ separate attack and release. Sources:
 | Idle / silence | Head wave keeps a slow honest drift; no sparks, strands or pulses; fade, never vanish | presence from `musical_weight`; an explicit idle lane, never fake energy |
 | Sustained quiet passage | Ranges near their quiet handles: low waves, narrow sheets, quiet colours | eased passage intensity on the fixed real-music scale (guide §2A, §5 "slow passage drive": two even ~1.2 s stages) |
 | Sustained loud passage | Ranges near their loud handles: tall sweeps, wide sheets, loud colours, more sparkle; beat contrast kept inside the chorus | same passage drive; beats multiply inside it, never add a floor (§13C) |
-| Kick / bass hit | Height pulse at the head (written into history, so it travels), bass ribbon wider; a bass passage can raise one taller arc | bass transient through `passage_ramp`, asymmetric envelope (rise ~45 ms, settle ~0.65 s) |
+| Kick / bass hit | Height pulse at the head (written into history, so it travels), bass ribbon wider; a bass passage can raise one taller arc | bass transient through `passage_ramp`; ~45 ms rise / ~0.65 s settle is a proposed source envelope, with actual visible timing subject to lab plan §5.1 |
 | Snare / generic onset | Light flash along the ribbons, sparks; free strands peel off on accents | typed event bus, consume once; accents = onsets above the recent mean (§13C) |
 | Vocal rise / swell | Twist and depth sway grow; colour moves toward loud | mid/vocal lane, medium continuous envelope |
 | Highs | Fine shimmer: glints, sparkle density | high band, control-normalised, ramped by the passage |
@@ -208,13 +214,17 @@ separate attack and release. Sources:
 - **Flow speed never follows the music** (gate A). DevCurve's lesson: a ±10% beat nudge on travel read as
   fast/slow/fast/slow.
 
-### 4.3 Where to calibrate (recommendation)
-- **Look and the tuner model: the lab** (done for both boards, synthetic sources).
-- **A cheap lab smoke (WR-07):** replay one quiet and one loud recorded feature window
-  (`logs/visualizer_recordings/*.jsonl`) into the lab's tuner sources. It checks that the model reaches the boards'
-  quiet and loud shapes from real signal shapes before production code depends on it. It does not calibrate.
-- **Calibration: the migration**, because it needs the real BeatEngine lanes on their real scales, the shared
-  sensitivity and technical profile, and the preset system, which exist only in production. Follow guide §12:
+### 4.3 Calibration boundaries
+- **Visual admission and grammar selection: the lab.** The existing low/high recipes do not close look acceptance
+  or establish a multi-band response. Follow the lab plan's live sequence, then §5.1 for the four-way comparison and
+  causal timing decision. Keep all candidates' control/editor semantics provisional until selection.
+- **WR-07 recorded-feature response calibration: the lab.** Replay existing recorded audio/analysis through its
+  canonical authority into explicit logical time with valid pre-roll. Calibrate the selected grammar's ranges,
+  smoothness and attack/settle against quiet, ordinary, hot and isolated-hit windows, including beat contrast over
+  a loud bed. Trace actual signal scales and visible realization; a single quiet/loud smoke is insufficient.
+- **WR-08 production calibration and reachability:** verify the same response through actual BeatEngine lanes,
+  shared sensitivity, technical profile, Settings and presets. Port the accepted lab response rather than replace
+  it with a second independently tuned mapping. Follow guide §12:
   - neutral to maximum synthetic cases with monotonic ordering;
   - silence, quiet song, ordinary, hot chorus and isolated hits over a loud bed;
   - the share of frames at each driver's ceiling (pinned drivers, §13B);
@@ -260,7 +270,8 @@ Taken from the guide (§3, §5, §7, §8, §12, §13A-C) and the lab plan's WR-0
 5. Settings buckets and the existing editors; then the New editors (Gradient Node Editor, Ribbon Cards, Shape Tuner,
    Glow Preview), each previewing the real renderer.
 6. Starting presets authored from the lab recipes; preset repair fill and completeness guard.
-7. Reactivity: recorded-feature replay calibration, then the live check with recorded music and game load.
+7. Reactivity: verify WR-07 response parity and source reachability through production Settings/presets/audio,
+   then the live check with recorded music and game load. Reopen WR-07 if the port exposes a grammar defect.
 8. WR-09 acceptance: mock | lab | production sheets, all camera views, cost at 1080p/1440p/4K, operator review.
 
 ## 6. Camera sweep findings (1 November)

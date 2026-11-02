@@ -777,6 +777,10 @@ staged work packages, current operator mock authority and A–H visual evidence.
 intent; newer operator direction and the current visual gap checklist (§0B) are recorded in that lab plan, and
 Current_Plan owns order. Surface smoothness, optical reflection blur and source illumination are separate controls;
 visual mock parity must precede audio-response and production admission.
+The lab plan §5.1 owns the core-reactivity comparison and input-to-visible timing gates;
+`Docs/Reference/Waveform_Ribbon_Migration_Plan.md` owns full production controls and port design. Geometry/motion
+selection precedes final tuner semantics; WR-07 validates the response on recorded features before WR-08 verifies
+calibration and source reachability through production Settings, presets and audio lanes.
 New 3D labs/modes start Orthographic with optional Perspective, using the shared admitted eye/world and actual
 projection matrices/ray origins; camera math alone does not establish scene likeness or reflection parity.
 The shared bounded CPU path/history and transported width-frame references are documented in
