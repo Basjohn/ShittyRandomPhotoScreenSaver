@@ -34,6 +34,10 @@ their actual consumers, with audits of both handles. Smooth fog-fringe grain bef
 colour tint and brightness become settings rather than blocking visual polish. Start with exactly two authored
 presets from the primary and alternate examples; preserve all shared framed-3D features and technical/preset systems.
 
+The single live operator-rejection checklist is `Current_Plan.md` section 7.1. It covers missing punch/shape response,
+weak particles, strand flicker, highlights/colour, idle/first-play blackout, floor/viewport, grounded near-flat navigation,
+rejected mist and deferred rejected UX. Working inputs or range tests do not constitute visual acceptance.
+
 ## Production signal ownership and calibration
 
 Waveform selects `raw_musical_signals` through its mode descriptor. The sole existing FFT and transient bus
@@ -47,7 +51,7 @@ replay retains its documented recorded-event hybrid.
 Own fixed band anchors are `(5.4, 3.1, 1.1)` at reference FFT 256, with the existing measured block-length
 correction math. The passage scale maps raw held level `3.4` to the shared usual musical loudness, rounded from
 pooled median `3.359` over four 60-second native PCM captures with three-second pre-roll. No song-relative level
-is learned. Event reward uses unclipped magnitude and shared acoustic/passage weighting; typed kick/snare/vocal
+is learned. Event reward uses unclipped magnitude above its recent per-kind onset mean and shared acoustic/passage weighting; typed kick/snare/vocal
 impulses have different elastic axes. Raw band routing follows the one eased passage; authorable idle motion is
 independent of acoustic rewards. A ready scene survives source-epoch and idle/play changes within its runtime.
 
@@ -247,8 +251,9 @@ These sit beside the Shape Tuner, which says *what* each source moves; these say
 
 Binding guide: `Docs/Guides/Visualizer_Reactivity_Authoring.md` (signal jobs §1-2, real-music scales §2A, loud
 passages §3, timescales §5, anti-patterns §11, new-mode workflow §12, passage ranges §13C). Waveform Ribbon is a
-flowing history, so it reacts unlike Extruded Bubble: music is *written into the ribbon at its head* and then
-travels across the hall, plus immediate light and accents that need no history.
+flowing history plus the selected immediate elastic projection: new detail is written at the head and travels,
+while current bands, passage and typed accents deform the body already in view. Head travel must never delay
+visible musical force. Light, sparks and strands also need immediate responses.
 
 ### 4.1 Waveform ribbon practice (research, 1 November)
 Waveform ribbon visualisers commonly render the signal or its band energies as a flowing 3D ribbon. Bass, mids and
@@ -259,9 +264,10 @@ separate attack and release. Sources:
 - [Envelope detector (musicdsp)](https://www.musicdsp.org/en/latest/Analysis/97-envelope-detector.html),
   [Faust analyzers](https://faustlibraries.grame.fr/libs/analyzers)
 
-**Provisional response vocabulary, subject to the lab plan §5.1 comparison:**
-- **The head wave carries the shape.** Music modulates its height, swell and rate. Raw bands plotted as height make
-  jagged plateaus (lab plan §4A).
+**Selected response vocabulary; native strength and controls remain unaccepted:**
+- **C elastic body with A rolling twist.** Keep the smooth flowing carrier; apply band-specific bend/torsion/depth
+  and accented elastic impulses to visible geometry, plus accumulated twist and independent reactive axial roll.
+  Raw bands plotted directly as head height make jagged plateaus (lab plan §4A).
 - **One ribbon per band** (alternate board: bass, mid, high), each through the tuner; the complete scene's sheets
   share all bands with different characters.
 - **Hits light things up immediately:** whole-ribbon light, sparks, free strands. Light needs no history, so it can
@@ -272,19 +278,19 @@ separate attack and release. Sources:
 
 | Musical moment | Waveform Ribbon response | Signal (existing authority) |
 |---|---|---|
-| Idle / silence | Head wave keeps a slow honest drift; no sparks, strands or pulses; fade, never vanish | presence from `musical_weight`; an explicit idle lane, never fake energy |
-| Sustained quiet passage | Ranges near their quiet handles: low waves, narrow sheets, quiet colours | eased passage intensity on the fixed real-music scale (guide §2A, §5 "slow passage drive": two even ~1.2 s stages) |
+| Idle / silence | Subtle body/flow drift; no new musical sparks, strands or pulses; living accents retire smoothly | presence from `musical_weight`; an explicit idle lane, never fake energy |
+| Sustained quiet passage | Ranges near their quiet handles: low waves, narrow sheets, quiet colours | one fixed-scale eased passage through authored attack/release; do not import another mode's constants |
 | Sustained loud passage | Ranges near their loud handles: tall sweeps, wide sheets, loud colours, more sparkle; beat contrast kept inside the chorus | same passage drive; beats multiply inside it, never add a floor (§13C) |
-| Kick / bass hit | Model-specific body response: direct band bend/width, traveling curvature packet or elastic impulse; history colour/light travels with flow | bounded passage-gated reward and consume-once typed onset; visible timing/attack must be judged in the recorded bake-off |
+| Kick / bass hit | Immediate C elastic bending/width with distinct kick impulse; A twist and history colour/light continue to flow | bounded passage-gated reward and consume-once typed onset; visible timing/attack must be judged in the recorded bake-off |
 | Snare / generic onset | Light flash along the ribbons, sparks; free strands peel off on accents | typed event bus, consume once; accents = onsets above the recent mean (§13C) |
 | Vocal rise / swell | Twist and depth sway grow; colour moves toward loud | mid/vocal lane, medium continuous envelope |
-| Highs | Fine shimmer: glints, sparkle density | high band, control-normalised, ramped by the passage |
+| Highs | Fine shimmer: glints, sparkle density | fixed-reference raw high band and local crest/light, ramped by the one passage |
 | Release to calm | Ranges ease back over the passage stages; flow speed never changes | passage drive |
 
 **History rules specific to this mode:**
 - **Written at the head, never rewritten.** Normalized musical detail, tint and light are sampled when a knot is
   admitted. Current body geometry is a model-specific logical projection over that immutable history, shared by
-  ribbons/accents/reflection/mist. Do not constrain all four models to head-only shape changes or a common global pulse.
+  ribbons/accents/reflection/mist. Do not constrain the selected hybrid to head-only shape changes or a common global pulse.
   A history-carried control changing over d seconds draws a feature flow speed × d long; band-limit it appropriately
   (lab plan §4A). Projection remains pure; rendering never integrates elastic state or advances history.
 - **Immediate channels** (whole-ribbon light, sparks, strands, glow) may follow the beat directly; they need no
@@ -296,7 +302,7 @@ separate attack and release. Sources:
 - **Visual admission and grammar selection: the lab.** The operator admits the current visual range with appearance
   caveats; synthetic low/high recipes alone do not establish a multi-band response. Follow the lab plan's live
   sequence, then §5.1 for the four-way comparison and
-  causal timing decision. Keep all candidates' control/editor semantics provisional until selection.
+  causal timing decision. C-primary/A-twist is selected; native response strength and editor usability remain open.
 - **WR-07 recorded-feature response calibration: the lab.** Replay existing recorded audio/analysis through its
   canonical authority into explicit logical time with valid pre-roll. Calibrate the selected grammar's ranges,
   smoothness and attack/settle against quiet, ordinary, hot and isolated-hit windows, including beat contrast over

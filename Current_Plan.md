@@ -130,43 +130,61 @@ then closed the gap by measuring against both. Do the same for every new mode:
 
 ### 7.1 Waveform Ribbon (next)
 
-**Operator native rejection (2 Nov): production candidate is unaccepted.** Close these in order with recorded/live
-audio and actual native motion, retaining the C-primary/A-twist grammar:
+**Live rejection checklist - Awaiting native validation/operator judgement (2 Nov).** This is the single live
+list of reported failures, proposed corrections and required evidence. Tests establish mechanisms, not visual acceptance.
+Work first on body/audio/accents, then grounded camera/viewport and replacement atmosphere. Binding references:
+`Docs/Guides/Visualizer_Reactivity_Authoring.md` sections 13A-13C; control/design ownership in
+`Docs/Reference/Waveform_Ribbon_Migration_Plan.md`; motion targets and recorded bake-off in
+`Docs/Reference/Waveform_Ribbon_Lab_Plan.md` section 5.1. Keep C-primary elastic response and A's accumulated twisting.
 
-- [ ] Repair live audio admission; prove nonzero per-band/passage/onset inputs and consumed accents in playback.
-  Restore immediate musical kick/punch, changing body flow/torsion, localized dense highlights/colour, sparks and strands.
-- [ ] Preserve subtle low-energy idle motion and the same scene across first idle→play; no priming blackout or scene reset.
-- [ ] Complete actual in-scene 3D navigation/Edit scaffolding to the EB feature contract, including both projections.
-  A renderer capable of a camera matrix is insufficient if the production interaction cannot reach it.
-  The user-authorized 6.1 Sol High camera slice must enforce an above-floor eye, keep floor below eye and waveform,
-  and make the visible waveform continuous/infinite with no exposed head/tail at admitted angles. Preserve shared
-  camera/input ownership; do not shift actors/populations with the eye or hide failures by removing projections.
-  **Grounded camera direction (operator):** stable eye height above the floor; approach the waveform and orbit left/right,
-  always retaining it in view. Constrain navigation to a visually credible region; no free-flight escape into ugly areas.
-- [ ] **Current mist/fringe entirely rejected (operator):** stop polishing the shaped banks/illuminated fringe.
-  The preserved sky-extending image and failure analysis are in `Docs/Reference/Waveform_Ribbon_Mist_Failure_and_Replacement.md`.
-  Review reactive replacement proposals around full-scene night fog ("Silent Hill At Night") displaced by the actual
-  3D waveform. Primary body/audio/camera work continues; replacement selection requires operator judgement.
-  Keep physical world anchoring, smooth density, body displacement and cheap separate floor mist as replacement
-  requirements; remove the rejected mechanism on migration rather than keeping it as a hidden fallback.
-- [ ] Prove floor reflection remains live and authorable; brighten/tune rim light and glow through their actual controls.
-  Reflection-column aesthetics remain secondary. Compare both presets in person after automated gates, not before.
-- [ ] **Viewport regression (operator):** shrunken wide viewport restores reflection and changes apparent reaction.
-  Reproduce the identical immutable audio/body/camera snapshot at canonical, wide, tall and large sizes; separate
-  aperture/projection effects from floor reflection/specular resolution-cap branches. Correct the owning pass or
-  geometry boundary; never compensate with audio gain. All prior native-rejection items remain equally open.
-- [ ] **Dynamic Floor A/B:** operator observes better response with it on. Trace the full configured PCM/DSP→raw
-  body bands and musical passage/onset chain against guide §13A/13C, not a getter stub. Establish lively floor-OFF
-  output with pooled real scales and unclipped contrast; preserve accepted Bubble/EB DSP/behaviour.
-  Recorded PCM now proves identical full body/birth packets and typed events with floor off/on on four clips.
-  The descriptor-owned raw-reference policy uses the existing bus/FFT, clears old numerical-domain context on policy
-  changes and fences compute/replay state. Preserve accepted modes and validate audible punch/phrase response natively;
-  source parity and unclipped range distributions alone do not establish the operator's musical standard.
-- [ ] **Accent placement/reward:** with fog off the operator sees only a few specks in one spot. Verify actual
-  distributed rim births, independent particle glow and rim-rooted strands over real quiet/ordinary/hot passages.
-  A nonzero cohort serial or isolated screenshot is insufficient visible-accent acceptance.
-- [ ] **Awaiting later UX pass — UI fully rejected:** defer the complete usability/UX redesign until credible visual
-  results exist. Current editor/control plumbing and tests do not establish an accepted Settings experience.
+- [ ] **Visible punch and musical shape response:** the operator still sees no convincing kick, force or musical
+  shape change. Compare real quiet/ordinary/hot passages with synchronized audio and silent/fixed-body controls.
+  Preserve raw fixed-scale passage headroom, immediate whole-body response and distinct typed elastic impulses;
+  accents must stand above routine onsets instead of becoming a constant offset (guide 13C). If still weak, measure
+  elastic excursion/latency and correct the actual response/envelope before tuning presets. Smooth motion and
+  nonzero inputs are insufficient. Preserve flowing history, torsion, bending and independently reactive axial roll.
+- [ ] **Particles weak, sparse and localized:** the operator sees pathetic specks in one spot even with fog off.
+  Verify distributed actual-rim births, clearly visible independent glow/size/light and musical density changes.
+  Candidate improvements are fixed-world emitter span and authored halos, with count/lifetime bounded at birth.
+  Inspect native motion and fog-off subtraction; a cohort serial, byte count, halo test or isolated still cannot close
+  this. Audit both handles of every particle range in actual quiet/peak consumers.
+- [ ] **Strands flicker in/out (new operator finding):** reproduce continuous held-source motion with stable camera
+  and fog off, including knot admission/rebase and sustained playback. Trace slot identity, age/support limits and
+  live chance/sparkle thresholds. Proposed correction: birth-held admission, smooth growth/retirement and independent
+  reactive lighting; avoid continuously changing eligibility or concealing popping with lower density. Preserve rim
+  attachment and authored range reachability, then prove temporal continuity in native motion.
+- [ ] **Dense highlights, moving colour and rim glow:** playback still lacks rewarded high-energy density and glow.
+  Verify local crest/high-power colour, bright tunable rim/glow and denser highlights against actual music, including
+  quiet/loud differences. Consumer reachability does not establish visible strength. Keep both range handles effective.
+- [ ] **Idle and first-play blackout:** keep subtle low-energy body motion and the same ready scene on first play;
+  no blackout, re-priming or scene reset. Test cold playing-before-start, silence, pause/resume and source changes.
+  Idle must not emit fake musical hits or particles.
+- [ ] **Dynamic Floor independence:** the operator found floor ON more responsive. Controlled full PCM now proves
+  identical body/birth packets and typed events OFF/ON on four clips. Preserve the existing FFT/bus raw-reference
+  policy, mode-switch/reset and stale-compute fences, plus accepted Bubble/EB behavior. Prove lively OFF response by
+  ear/eye against the guide's standard; raw parity alone does not establish musical response.
+- [ ] **Grounded camera, near-flat tilt and infinite view:** stable eye height above the floor, approach/retreat and
+  bounded left/right orbit, waveform always in view and no escape into ugly areas. Admit a genuinely near-flat tilt
+  with visible floor in BOTH projections. Keep eye/basis, navigation, editor markers and saved pose under the shared
+  owner; preserve continuous/infinite body with no exposed ends and complete Edit scaffolding. Native geometry and
+  persistence tests alone cannot establish feel or beauty across moving audio, view and viewport extremes.
+- [ ] **Floor reflection and viewport changes:** the floor dies in some views; shrinking to wide makes it stronger
+  and changes apparent reaction. Compare identical immutable body/audio/camera snapshots at canonical/wide/tall/large
+  sizes. Correct mesh draw bounds/count and world optical footprint; inspect remaining view-dependent normalization
+  and filtering. Retain live reflectivity/tint/brightness controls. Never compensate with audio gain or alter the
+  shared resize contract. Reflection-column aesthetics remain secondary.
+- [ ] **Current mist/fringe entirely rejected - Awaiting replacement selection:** stop polishing the shaped banks,
+  noisy fringe, side-sheet conflicts, remote shelves and skyward mass. Preserved image, failure analysis, cost caveats
+  and three proposals: `Docs/Reference/Waveform_Ribbon_Mist_Failure_and_Replacement.md`. Replace with full-scene
+  night fog ("Silent Hill At Night") displaced by the actual 3D waveform, with smooth world-anchored density and local
+  reactive light/wake; no visible ceiling/stripe/box. Remove the rejected mechanism on migration. Keep ground-volume
+  banks zero and cheap floor distance mist separate. The rejected volume is disabled in the candidate presets meanwhile.
+- [ ] **UI completely rejected - Awaiting later UX pass:** redesign usability/UX after credible visual results exist.
+  Current editor/control plumbing and automated tests do not establish an accepted Settings experience.
+- [ ] **Live performance and truthful evidence:** run both presets under matched recorded PCM/game60 and admitted
+  camera extremes. Verify ACTUAL applied configuration, audible input and rendered features before interpreting
+  timings. Profile logical preparation, birth admission, render stages and whole-frame tails; do not reduce artistic
+  reaction strength to conceal cost. Requested CLI settings can be overwritten by curated activation.
 
 Chosen first: the smallest contained scene and the first consumer of S3D-1/S3D-2/S3D-5. Brief and hard gates:
 `Docs/Future_Work/Waveform_Ribbon.md`. The detailed working checklist and visual target custody live in
@@ -194,14 +212,11 @@ the mist. Preset/control migration and recorded-audio calibration come only afte
   `tools/visualizer_live_check.py --mode waveform_ribbon --load game60` before WR-09 acceptance. Operator visual/native
   judgement remains explicit where automation cannot close it. Ground volume banks stay zero; floor distance mist
   remains separate. Floor-column polish is not a migration blocker.
-- [ ] **Loaded render budget:** the native Quick path now presents after fixing Qt-owned context-wrapper lifetime,
-  but the first loaded smoke measurement exceeded the 8 ms render budget (~14 ms). Profile the real scene stages,
-  remove repeated preparation/upload/state work at its owner, then rerun both presets in isolation under game60;
-  do not lower artistic reaction strength or treat offline GPU medians as live acceptance.
-  First measured owners: render-side envelope ~3.9 ms and repeated ribbon passes ~3.5 ms. Share one fenced packet
-  lease across the scene's passes (rebind after intervening consumers), then migrate envelope/blur/edge-limit
-  reduction to bounded GPU work over that same packet if needed. Keep the CPU reduction as a test oracle, prohibit
-  readback/duplicate live CPU preparation, preserve floor/grade/clearance consumers and prove per-row/pixel parity.
+- [ ] **Loaded render budget:** repeat the corrected actual-config live check after current source/geometry
+  changes. The prior run labelled fog-OFF rendered fog because preset activation overwrote its CLI values; it is a
+  failed fog-ON run, not an A/B. Verify packet lease/GPU envelope/culling retirement and finite-consumer parity, then
+  measure current body/birth/floor cost with the rejected volume disabled. Keep CPU reduction as a test oracle; no
+  readback or duplicate live preparation. Replacement atmosphere must earn its own measured budget.
 
 ### 7.2 Reactive Liquid / Audio Melt Pool
 
