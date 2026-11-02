@@ -150,6 +150,7 @@ class Fog:
     shadow_floor: float = .3
     crackle: tuple = (2.4, .08, 4., 4.)  # silhouette line: brightness, filament frequency (per px), sharpness, width
     crackle_glow: float = 3.      # the line's bloom share
+    fringe_smoothing: float = 1.  # wider existing filter taps; preserve billows without march-jitter sand
     edge_glow: float = 3.          # extra light on thin eroded wisps (curl rims)
     glow: float = .3
 
@@ -1169,7 +1170,8 @@ class Lab:
                     self._flat_ribbons(packet, ribbon_mvp)
                 if fogged:
                     self.march.composite(glow=recipe.fog.glow, crackle=recipe.fog.crackle,
-                                         crackle_glow=recipe.fog.crackle_glow, crackle_limit=self._crackle_limit)
+                                         crackle_glow=recipe.fog.crackle_glow, crackle_limit=self._crackle_limit,
+                                         fringe_smoothing=recipe.fog.fringe_smoothing)
             if not flat:
                 with self.scene.transparent_writes(card, self.resources):
                     self.ribbons.draw(packet, ribbon_mvp, shading='body', **draw)

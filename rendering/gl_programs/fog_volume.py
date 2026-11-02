@@ -235,6 +235,7 @@ uniform vec4 uFogCrackle;        // gain, filament frequency (per pixel), sharpn
 uniform vec2 uFogCrackleSeed;    // the line's bloom share; unused
 uniform sampler2D uFogCrackleLimit; // per screen column: the lowest screen v (0..1, up) the line may reach
 uniform int uFogCrackleLimited;
+uniform float uFogFringeSmoothing; // extra march-texel footprint; 0 preserves the original composite
 float crackleHash(vec2 p) { p=fract(p*vec2(0.1031,0.1030)); p+=dot(p,p.yx+33.33); return fract((p.x+p.y)*p.x); }
 float crackleNoise(vec2 x) {
     vec2 i=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
@@ -245,7 +246,7 @@ float crackleNoise(vec2 x) {
 // Full resolution and screen space: a volume cannot confine a line to a silhouette.
 float crackleLum(vec2 uv, vec2 t) {
     vec3 w=vec3(0.2126,0.7152,0.0722);
-    vec2 h=t*0.25;   // a light blur only: grain off, fibre kept
+    vec2 h=t*0.25+uFogFringeSmoothing/vec2(textureSize(uFogMarch,0));
     return 0.25*(dot(texture(uFogMarch,uv+vec2(h.x,h.y)).rgb,w)+dot(texture(uFogMarch,uv+vec2(-h.x,h.y)).rgb,w)
                 +dot(texture(uFogMarch,uv+vec2(h.x,-h.y)).rgb,w)+dot(texture(uFogMarch,uv+vec2(-h.x,-h.y)).rgb,w));
 }
@@ -291,7 +292,7 @@ vec3 crackle(vec2 uv, vec4 fog) {
 }
 void main() {
     // A tent over the march's texels: its per-pixel step jitter is grain, not detail.
-    vec2 uv=vNdc*0.5+0.5, texel=0.75/vec2(textureSize(uFogMarch,0));
+    vec2 uv=vNdc*0.5+0.5, texel=(0.75+0.25*uFogFringeSmoothing)/vec2(textureSize(uFogMarch,0));
     vec4 fog=0.25*(texture(uFogMarch,uv+vec2(-texel.x,-texel.y))+texture(uFogMarch,uv+vec2(texel.x,-texel.y))
                   +texture(uFogMarch,uv+vec2(-texel.x,texel.y))+texture(uFogMarch,uv+vec2(texel.x,texel.y)));
     vec3 line=crackle(uv,fog)*uFogScale;

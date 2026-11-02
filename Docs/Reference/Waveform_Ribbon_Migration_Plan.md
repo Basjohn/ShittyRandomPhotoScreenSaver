@@ -4,8 +4,8 @@ Planning owner for **WR-08**, subordinate to [`Current_Plan.md`](../../Current_P
 WR-08 gates ([`Waveform_Ribbon_Lab_Plan.md`](Waveform_Ribbon_Lab_Plan.md)). The lab owns the look; this document
 owns the full production control design, production calibration and the order of the port. Production migration is
 not implemented. The operator admits the current lab visual range with production appearance caveats; its tuner is a synthetic prototype, not the full
-matrix editor below. Core geometry/motion selection and timing belong to the lab plan §5.1. Candidate-dependent source,
-target and response choices below are provisional until that comparison selects a grammar. Values quoted are the lab
+matrix editor below. Core geometry/motion evidence and timing belong to the lab plan §5.1. The selected grammar is
+**C elastic dynamics as primary, with A's accumulated twisting**. Values quoted are the lab
 recipes' current values, recorded for orientation: presets are operator-authored and never test oracles.
 
 **Operator direction (1 November):**
@@ -18,6 +18,18 @@ recipes' current values, recorded for orientation: presets are operator-authored
 - The **shape and reactivity tuner** is the most important new control. It is a tuner, not a free shape builder:
   it can never break the smooth-curve rules. Musical history stays the dominant force.
 - **Mist is core** to every preset (the design direction) and becomes optional in Settings.
+
+**Selected implementation (2 November):** C drives elastic bending/lateral/torsional response; A supplies independently
+adjustable rolling twist. Add localized colour shifts in highest-power regions, controllable whole-waveform rotation
+whose angular speed attacks quickly and decays slowly, particles and rim-rooted strands. Rotation is a waveform
+deformation, separate from camera orbit and fixed history travel. Integrate angle from speed on the sole logical clock;
+the operator's clarified motion is axial roll, like a skewer turning on its stick (the longitudinal world-x axis in
+this scene), not rotation around another point. Its centre stays in place.
+all floor/reflection/accent/mist-clearance consumers use the same transformed geometry. Bend, torsion, stretch, twist,
+rotation magnitude/speed and visual accents remain customizable. Visual editors and quiet→peak range sliders expose
+their actual consumers, with audits of both handles. Smooth fog-fringe grain before the port; floor reflectivity,
+colour tint and brightness become settings rather than blocking visual polish. Start with exactly two authored
+presets from the primary and alternate examples; preserve all shared framed-3D features and technical/preset systems.
 
 ## 1. Mode shape (shared 3D Framed scaffolding)
 
@@ -41,9 +53,8 @@ The lab's named recipes become the first presets, each one scene across quiet an
 
 | Preset | Lab recipe | Look |
 |---|---|---|
-| Complete Scene | `complete` | Main fog board: three sheets, cyan → blue-violet → magenta world grade, mist shaped and lit by the waveform, wet columns |
-| Silk Bands | `alternate` | Alternate board: three per-band ribbons coloured by ribbon (quiet blue/teal/lavender, loud magenta/orange/blue-violet), luminous silk, free strands |
-| Preset Range | `range` (parked) | Preset-range board: tight braid, a towering bass arc, gradient running on to orange |
+| 1 — Complete Scene | `complete` | Main fog board: three sheets, cyan → blue-violet → magenta world grade, mist shaped and lit by the waveform, wet columns |
+| 2 — Silk Bands | `alternate` | Alternate board: three per-band ribbons coloured by ribbon (quiet blue/teal/lavender, loud magenta/orange/blue-violet), luminous silk, free strands |
 
 Names are suggestions for the operator to rename.
 
@@ -77,8 +88,8 @@ The Shape Tuner's per-target quiet/loud values are these same ranges, edited on 
   a live close-up of one sheet (Glow Preview, New).
 
 ### Shape and Reactivity (Shape Tuner, New)
-- The editor/control scope is required; the exact geometry targets and response model follow the lab plan §5.1
-  winner. Do not hard-code an oscillator-only, packet or spring model into persistence before that decision.
+- The editor/control scope is required: elastic C is primary, with separately tunable A rolling twist and whole-body
+rotation. Source routing/curves and quiet→peak ranges must reach these realized targets rather than dead head controls.
 - **Matrix editor:** rows are energy sources, columns are ribbon properties; each cell has a gain and a response
   curve with draggable handles.
   - **Sources:** Bass, Mids, Highs, Loudness, Onsets, and the Head Wave (the authored oscillator that draws the waves,
@@ -97,6 +108,8 @@ The Shape Tuner's per-target quiet/loud values are these same ranges, edited on 
   (gate A), but the user authors it.
 - **Wave Rate:** the head wave's frequency (long sweeps to tight ripples).
 - **Wave Swell, Height Swell, Depth Sway:** the head wave's slow variation.
+- **Waveform Rotation:** enabled, quiet→peak axial angular speed, reaction strength, attack and decay.
+  Speed changes integrate into continuous angle; this does not move the camera or modulate history flow speed.
 
 ### Colour
 - **World Gradient (Gradient Node Editor, New):** circular nodes, clickable and draggable, each click opening the
@@ -140,6 +153,7 @@ The Shape Tuner's per-target quiet/loud values are these same ranges, edited on 
   is an admitted compromise. Expose highlight density and localized packing, including reactive density, after the
   core geometry decision; comparisons use the same reactive accent mapping across candidates and retain body-only diagnostics.
 - Wetness, Streak Length, Column Fade, Mist Reflection.
+- **Floor Colour/Tint and Brightness:** independently editable surface tint and brightness alongside reflection strength.
 - Floor contact (sheets deform onto the floor) is a rule, not a control.
 
 ### Reaction
