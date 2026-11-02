@@ -4,15 +4,14 @@ from dataclasses import dataclass, field
 import math
 from core.ribbon_style import RibbonMaterial, RibbonSparks, RibbonStrays
 from core.settings import framed_camera as fc
-from core.settings.waveform_ribbon_camera import GROUNDED_ORBIT, YAW_SPAN
+from core.settings.waveform_ribbon_camera import GROUNDED_ORBIT, YAW_SPAN, FOV_RANGE, ORTHO_REFERENCE_FOV
 from rendering.gl_programs.mist import mist_uniforms
 
 SPEC = fc.FramedCameraSpec(
-    prefix='waveform_ribbon_', pivot=(0., 2., 0.), orbit_distance=12., pitch_base_degrees=-15.,
-    pitch_span_degrees=60., yaw_span=YAW_SPAN, tilt_range=(-.5, .5), eye_center=(0., 8., 0.), eye_half=(60., 8., 60.),
-    clearance=.4, offset_scale=(60., 8., 60.), travel_speed=4.,
-    floor_hook='core.settings.waveform_ribbon_camera:floor',grounded_orbit=GROUNDED_ORBIT)
-ORTHO_REFERENCE_FOV = 45.
+    prefix='waveform_ribbon_', pivot=(0., 2., 0.), orbit_distance=80., pitch_base_degrees=-15.,
+    pitch_span_degrees=60., yaw_span=YAW_SPAN, tilt_range=(-.5, .5), eye_center=(0., 8., 0.), eye_half=(120., 8., 120.),
+    clearance=.4, offset_scale=(120., 8., 120.), travel_speed=16.,
+    floor_hook='core.settings.waveform_ribbon_camera:floor',grounded_orbit=GROUNDED_ORBIT,fov_range=FOV_RANGE)
 
 PALETTE = (((0., .52, 1.), (0., .22, 1.)),    # cyan -> electric blue
            ((.03, .08, 1.), (.24, .025, 1.)),  # blue -> violet
@@ -62,7 +61,7 @@ class Floor:
     albedo_gain: float = 1.        # wet concrete is dark
     tint: tuple = (1.,1.,1.)       # linear surface tint, independently of reflection strength
     albedo_bias: float = .5        # preserve filtered material variation at grazing angles
-    ambient: tuple = (.45, .5, .7)
+    ambient: tuple = (.4, .4, .45)
     reflection: float = 6.         # reflection strength before Fresnel (look gain)
     f0: float = .02                 # water film
     relief: tuple = (.03, .4)       # height amplitude of the broad and micro relief (world units)
@@ -81,7 +80,7 @@ class Floor:
     # Column fade toward the camera and its far level; a sparkle threshold above 0 adds wet-film grain (rejected:
     # it read as the mottled wet/dry floor).
     column: tuple = (6., .6, 0.)
-    pool: float = 14.              # gain of the physical source light on the concrete
+    pool: float = 2.5              # restrained source light, so the ground is not a continuous blown-white strip
     hot: tuple = (3., .7, 1.5)       # full strength at this multiple of the mean reflected light; wet-film breakup; power
 
 

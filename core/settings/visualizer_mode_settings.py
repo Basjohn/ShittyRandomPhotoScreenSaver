@@ -1767,9 +1767,12 @@ _EXTRUDED_BUBBLE = ModeSettings(
 )
 
 def _waveform_ribbon() -> ModeSettings:
+    from core.waveform_ribbon_authoring import RIBBON_CAPACITY
+    from core.ribbon_bursts import MAX_BURST
+    from core.settings.waveform_ribbon_camera import FOV_RANGE
     prefix = 'waveform_ribbon_'
     buckets = tuple(Bucket(key,title,helper,advanced=advanced) for key,title,helper,advanced in (
-        ('ribbons','Ribbons','Three retained ribbon identities, colours and character.',False),
+        ('ribbons','Ribbons','Four retained ribbon identities, colours and character.',False),
         ('shape','Shape & Reactivity','Elastic body, local twisting and quiet to peak targets.',False),
         ('flow','Flow & Axial Roll','History travels steadily; axial roll turns the waveform like a skewer.',False),
         ('colour','Colour','Colour nodes and shifts in the most powerful musical regions.',False),
@@ -1782,7 +1785,7 @@ def _waveform_ribbon() -> ModeSettings:
         ('camera','Camera','Navigate the physical eye; waveform roll is independent.',True),
         ('lens','Lens & Quality','Exposure, bloom and bounded rendering quality.',True)))
     entries = [
-        Slider(prefix+'count','Ribbon Count:',1,3,bucket='ribbons',integer=True,scale=1,logical=True),
+        Slider(prefix+'count','Ribbon Count:',1,RIBBON_CAPACITY,bucket='ribbons',integer=True,scale=1,logical=True),
         VisualEditor(prefix+'ribbons','Ribbon Cards:','ui.widgets.waveform_ribbon_editors:RibbonCardsEditor',
                      'core.waveform_ribbon_authoring:admit_ribbons',bucket='ribbons',logical=True),
         VisualEditor(prefix+'routing','Source Matrix:','ui.widgets.waveform_ribbon_editors:RoutingEditor',
@@ -1835,11 +1838,12 @@ def _waveform_ribbon() -> ModeSettings:
                     Toggle(prefix+'strands_enabled','','Free Strands',bucket='strands'),
                     Toggle(prefix+'mist_enabled','','Night Atmosphere',bucket='mist')))
     for key,label,low,high,bucket in (
-        ('spark_count','Count',0.,36.,'sparks'),('strand_count','Count',0.,8.,'strands'),
+        ('spark_count','Count',0.,float(MAX_BURST),'sparks'),('strand_count','Count',0.,8.,'strands'),
         ('spark_lifetime','Lifetime',.2,8.,'sparks'),('spark_drift','Drift',0.,3.,'sparks'),
         ('spark_rise','Rise',0.,2.,'sparks'),('spark_size','Size',.5,12.,'sparks'),
         ('spark_light','Light',0.,60.,'sparks'),('spark_white','Whiteness',0.,1.,'sparks'),
         ('spark_glow','Glow',0.,3.,'sparks'),('spark_span','Emitter Span',8.,128.,'sparks'),
+        ('strand_eol','Lifetime',.5,30.,'strands'),('strand_fade','Tip Fade Share',.1,1.,'strands'),
         ('strand_pulse_growth','Repeat Stretch',0.,1.,'strands'),
         ('strand_pulse_glow','Repeat Glow',0.,4.,'strands'),('strand_span','Emitter Span',8.,128.,'strands'),
         ('strand_length','Length',1.,16.,'strands'),('strand_reach','Reach',0.,4.,'strands'),
@@ -1849,13 +1853,13 @@ def _waveform_ribbon() -> ModeSettings:
         ('strand_glow','Glow',0.,4.,'strands'),('fog_density','Density',0.,.15,'mist'),
         ('fog_clearance','Displacement',0.,2.,'mist'),
         ('fog_height','Ground Diffusion',.1,4.,'mist'),('fog_softness','Displacement Softness',.1,3.,'mist'),
-        ('fog_light','Local Light',0.,3.,'mist'),('fog_variation','Soft Variation',0.,1.,'mist'),
+        ('fog_light','Local Light',0.,20.,'mist'),('fog_variation','Soft Variation',0.,1.,'mist'),
         ('fog_drift','Atmosphere Drift',0.,2.,'mist'),('floor_reflection','Reflectivity',0.,8.,'floor'),
         ('floor_brightness','Surface Brightness',0.,3.,'floor'),('floor_wetness','Wetness',0.,1.,'floor'),
         ('floor_streak','Streak Length',0.,1.,'floor'),('floor_column','Column Fade',.1,20.,'floor'),
         ('bloom','Bloom',0.,1.,'lens')):
         entries.append(Range(prefix+key,label+':',low,high,bucket=bucket,
-                             logical=key.startswith('strand_'),scale=10000 if key=='fog_density' else 100,
+                             logical=key.startswith('strand_'),percent=key=='strand_fade',scale=10000 if key=='fog_density' else 100,
                              decimals=4 if key=='fog_density' else 2,
                              tooltip='Quiet → peak '+label.lower()+'.'))
     entries.extend((Colour(prefix+'floor_tint','Surface Tint:','Floor Surface Tint',bucket='floor',alpha=False),
@@ -1865,7 +1869,7 @@ def _waveform_ribbon() -> ModeSettings:
                     Choice(prefix+'quality','Quality:',('Low','Medium','High'),bucket='lens'),
                     SceneCameraPosition(prefix+'camera_position','Camera Position:',bucket='camera'),
                     Choice(prefix+'camera_projection','Projection:',('Orthographic','Perspective'),bucket='camera'),
-                    Slider(prefix+'camera_fov','Field of View:',35.,62.,bucket='camera',scale=1,integer=True,
+                    Slider(prefix+'camera_fov','Field of View:',*FOV_RANGE,bucket='camera',scale=1,integer=True,
                            suffix='°',when=(prefix+'camera_projection','Perspective')),
                     Toggle(prefix+'auto_rotate','','Auto Orbit',bucket='camera'),
                     Slider(prefix+'auto_rotate_after','Orbit After:',0.,120.,bucket='camera',suffix=' s'),

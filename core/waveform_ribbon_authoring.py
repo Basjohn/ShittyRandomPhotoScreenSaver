@@ -1,11 +1,13 @@
 """Plain authoring contracts for ribbon routing, ribbon cards and colour nodes."""
 from __future__ import annotations
 import math
+import copy
 from collections.abc import Mapping, Sequence
 
 SOURCES = ('Bass', 'Mids', 'Highs', 'Loudness', 'Onsets', 'Head Wave')
 TARGETS = ('height', 'width', 'bend', 'torsion', 'twist', 'stretch', 'lift', 'spread', 'depth',
            'rotation', 'light', 'sparkle', 'colour', 'highlights')
+RIBBON_CAPACITY = 4
 
 
 def number(value, low, high):
@@ -39,9 +41,13 @@ def route(row, sources, *, passage=1.):
 
 
 def admit_ribbons(value):
-    """Exactly three retained identities; count is a separate faded admission control."""
-    if not isinstance(value, Sequence) or len(value) != 3:
-        raise ValueError('Three ribbon cards are required')
+    """Four retained identities; forward-migrate former three-card state without changing its visible count."""
+    if isinstance(value,Sequence) and len(value)==RIBBON_CAPACITY-1:
+        from core.settings.default_contract import require_canonical_default
+        fourth=require_canonical_default('widgets.spotify_visualizer.waveform_ribbon_ribbons')[-1]
+        value=[*value,copy.deepcopy(fourth)]
+    if not isinstance(value, Sequence) or len(value) != RIBBON_CAPACITY:
+        raise ValueError('Four ribbon cards are required')
     result = []
     for card in value:
         if not isinstance(card, Mapping) or set(card) != {'band','height','width','rate','phase','light','quiet','peak'}:

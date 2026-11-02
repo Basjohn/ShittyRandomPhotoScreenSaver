@@ -11,14 +11,17 @@ from dataclasses import dataclass
 import itertools
 import numpy as np
 from core.settings.framed_camera import GroundedOrbitSpec
+from core.ribbon_strand_cohorts import COHORT_ROWS
 
 FLOOR_Y = 0.0
 NEAR = 0.3
 FAR = 200.0
+FOV_RANGE = (2.,35.)
+ORTHO_REFERENCE_FOV = 3.
 YAW_SPAN = math.radians(35.)
 # Low grounded eye with a physical near-level tilt endpoint; keep the floor in view.
 # The closer radius also stays outside the maximum deformed sheet's transverse domain at either yaw limit.
-GROUNDED_ORBIT = GroundedOrbitSpec(radius_range=(8.5,16.),eye_height=2.6,minimum_downward_pitch_degrees=.5)
+GROUNDED_ORBIT = GroundedOrbitSpec(radius_range=(64.,104.),eye_height=4.5,minimum_downward_pitch_degrees=.5)
 
 
 def floor_height(x: float, z: float) -> float:
@@ -33,7 +36,7 @@ def floor(values):
 @dataclass(frozen=True, slots=True)
 class RasterSupport:
     """World Y/Z support and image-plane padding, never a population or camera pose."""
-    transverse: tuple = ((0.,8.5),(-6.5,6.5))
+    transverse: tuple = ((0.,17.),(-12.5,12.5))
     padding_ndc: tuple = (0.,0.)
 
 
@@ -53,7 +56,7 @@ def scene_raster_support(packet,recipe,travel,*,now,viewport,burst_payload=None,
         if strand_payload is None:
             reach=recipe.strays.reach;pixel_radius=max(pixel_radius,recipe.strays.width)
         elif strand_payload:
-            records=np.frombuffer(strand_payload,np.float32).reshape(-1,3,4)
+            records=np.frombuffer(strand_payload,np.float32).reshape(-1,COHORT_ROWS,4)
             held=records[records[:,0,0]>0.]
             if len(held):
                 reach=float(held[:,1,1].max());pixel_radius=max(pixel_radius,float(held[:,1,2].max()))

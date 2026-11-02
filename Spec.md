@@ -787,9 +787,10 @@ substitute for the planned flow, rolling twist, traveling packets, elastic torsi
 The selected production grammar combines C's primary elastic body with A's twisting, localized high-power colour,
 particles/strands and independently reactive axial roll about the waveform's length (separate from camera orbit).
 The Migration Plan owns full visual editors/ranges, endpoint audits, the original two presets and the new Preset 3/four-ribbon migration.
-Free strand admission/base look belongs to immutable logical root cohorts, not live renderer thresholds. Strands persist
-with their travelling roots; repeat accents briefly extend/glow existing strands without rebirth or timer expiry.
-The live checklist owns proof that history retirement stays outside visible direct/reflected coverage.
+Free strand admission/base look belongs to immutable logical root cohorts, not live renderer thresholds. The latest
+operator policy supersedes endless life: configurable end of life with a very gentle tip-to-root fade. Reactivation
+smoothly restores visibility and adds glow/movement/growth without abrupt rebirth. History retirement must respect
+visible direct/reflected coverage until that fade finishes; native lifetime/retrigger judgment remains open.
 `Docs/Reference/Waveform_Ribbon_Mist_Failure_and_Replacement.md` preserves the rejected mist image and owns its
 failure analysis and replacement proposals. The operator's current direction is full-scene night fog displaced by
 the actual waveform. `references/Mist Goal.png` now supersedes all older fog/mist mechanisms, including separate
@@ -805,7 +806,8 @@ A twist and axial speed integrate on the sole logical clock. Existing body geome
 travels into view. Event-owned sparks are admitted once, bounded by lifetime/refractory/capacity, and fly analytically
 on published time. Camera navigation does not move populations or reauthor the world fog. Complete native endpoint,
 framing, editor and loaded-live gates remain in Current_Plan; candidate registration does not imply acceptance.
-New 3D labs/modes start Orthographic with optional Perspective, using the shared admitted eye/world and actual
+New 3D labs/modes generally start Orthographic with optional Perspective; Waveform's latest operator-delegated
+visual route instead uses restrained long-lens Perspective as primary, retaining optional Orthographic. Both use the shared admitted eye/world and actual
 projection matrices/ray origins; camera math alone does not establish scene likeness or reflection parity.
 The shared bounded CPU path/history and transported width-frame references are documented in
 `Docs/Reference/Ribbon_Path.md`; the incremental ring producer and oriented OIT/HDR strip are consumed by the Waveform

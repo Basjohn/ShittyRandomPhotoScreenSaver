@@ -116,7 +116,7 @@ class FogVolume:
         self._integrate_program=compile_compute_program(FOG_INTEGRATE_COMPUTE,label=f'{self.label} integrate')
         return False
 
-    def update(self, inject_program: int, *, view, lens, depth_range, grid, medium=None) -> None:
+    def update(self, inject_program: int, *, view, lens, depth_range, grid, medium=None, focus_depth=0.) -> None:
         """Evaluate and integrate the medium for one camera. ``view``: world->view (4x4, numpy row-major);
         ``lens``: (half-extent or tangent x, y, orthographic); ``depth_range``: (near, far) view depth."""
         self._check_context(admit=True)
@@ -133,8 +133,11 @@ class FogVolume:
             self._allocate(grid)
         if not self._integrate_program:
             self._integrate_program = compile_compute_program(FOG_INTEGRATE_COMPUTE, label=f'{self.label} integrate')
-        lens4 = (ext_x, ext_y, 1. if orthographic else 0., 4. if near<=0 else 0.)
-        range4 = (near, far, float(grid[2]), 1.)
+        focus=float(focus_depth)
+        if not math.isfinite(focus) or (focus!=0. and not near<focus<far):
+            raise ValueError('Fog focus must lie inside the admitted depth interval')
+        lens4 = (ext_x, ext_y, 1. if orthographic else 0., 4. if near<=0 or focus else 0.)
+        range4 = (near, far, float(grid[2]), 1.+focus)
         program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
         try:
             gl.glUseProgram(inject_program)

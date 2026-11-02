@@ -81,7 +81,7 @@ def audit(args):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--clips',nargs='+',type=Path,required=True);parser.add_argument('--output',type=Path,required=True)
-    parser.add_argument('--seconds',type=float,default=60.);parser.add_argument('--preset',type=int,choices=(1,2),default=1)
+    parser.add_argument('--seconds',type=float,default=60.);parser.add_argument('--preset',type=int,choices=(1,2,3),default=1)
     parser.add_argument('--block',type=int,choices=(128,256,441,512,1024),default=256)
     parser.add_argument('--mode-output',action='store_true',help='Also execute the real logical mode and hash every body/birth publication')
     parser.add_argument('--worker',action='store_true',help=argparse.SUPPRESS)

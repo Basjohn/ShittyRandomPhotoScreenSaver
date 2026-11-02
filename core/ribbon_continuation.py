@@ -62,16 +62,21 @@ def cloth_values(knots, xs):
 
 
 def continuation_bounds(packet, translation, camber):
-    """Conservative transverse world bounds from only six endpoint controls per sheet.
+    """Conservative current-cloth and C2-extension bounds, independent of a mode's amplitude policy.
 
-    The interior production cloth already stays inside its authored +/-2.5 centre
-    domain with half-width <=2. No per-frame reduction of the body is performed.
+    Interior cubic controls form a convex hull. Reduce their current published extrema; a hardcoded old
+    amplitude domain cannot admit larger rolled crests. Endpoint jets bound the unbounded continuation.
     """
     rows = np.frombuffer(packet.payload, np.float32).reshape(packet.instances,-1,4)
     origin = np.asarray(packet.world_origin)+translation
-    low, high = np.array((0.,-6.)), np.array((8.,6.))
+    low, high = np.array((0.,0.)), np.array((0.,0.))
     for path in rows:
         count,start,capacity = int(path[0,0]),int(path[1,1]),int(path[1,2])
+        if count<3 or min(path[2,3],path[3,3])<=0.0:continue
+        history=path[4:].reshape(-1,5,4)[(start+np.arange(count))%capacity]
+        radius=float(history[:,0,3].max())*np.sqrt(1.+camber*camber)
+        centre=history[:,0,1:3]+origin[1:]
+        low=np.minimum(low,centre.min(axis=0)-radius);high=np.maximum(high,centre.max(axis=0)+radius)
         indices=(start+np.array((0,1,2,count-3,count-2,count-1)))%capacity
         controls=path[4:].reshape(-1,5,4)[indices]
         for before,knots in ((True,controls[:3]),(False,controls[3:])):

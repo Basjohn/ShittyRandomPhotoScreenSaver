@@ -22,19 +22,19 @@
         "waveform_ribbon_bar_count": 32,
         "waveform_ribbon_bend": [
           0.4,
-          1.2
+          2.4
         ],
         "waveform_ribbon_bloom": [
           0.12,
           0.12
         ],
-        "waveform_ribbon_camera_fov": 45,
+        "waveform_ribbon_camera_fov": 3,
         "waveform_ribbon_camera_position": [
           0.0,
           0.0,
           0.0
         ],
-        "waveform_ribbon_camera_projection": "Orthographic",
+        "waveform_ribbon_camera_projection": "Perspective",
         "waveform_ribbon_colour": [
           0.0,
           1.0
@@ -44,18 +44,18 @@
         "waveform_ribbon_damping": 0.65,
         "waveform_ribbon_depth": [
           0.2,
-          1.0
+          2.0
         ],
         "waveform_ribbon_dynamic_floor": false,
         "waveform_ribbon_elastic_frequency": 1.3,
         "waveform_ribbon_exposure": 0.85,
         "waveform_ribbon_floor_brightness": [
-          1.0,
-          1.0
+          2.0,
+          2.0
         ],
         "waveform_ribbon_floor_reflection": [
-          4.5,
-          4.5
+          1.2,
+          1.2
         ],
         "waveform_ribbon_floor_tint": [
           255,
@@ -69,15 +69,15 @@
           0.3
         ],
         "waveform_ribbon_fog_density": [
-          0.018,
-          0.026
+          0.022,
+          0.035
         ],
         "waveform_ribbon_gradient_share": 0.0,
         "waveform_ribbon_height": [
           1.2,
-          1.5
+          3.0
         ],
-        "waveform_ribbon_height_swell": 0.3,
+        "waveform_ribbon_height_swell": 0.12,
         "waveform_ribbon_highlights": [
           0.1,
           1.0
@@ -85,12 +85,12 @@
         "waveform_ribbon_impulse": 2.0,
         "waveform_ribbon_input_gain": 1.0,
         "waveform_ribbon_lift": [
-          0.3,
-          0.6
+          0.5,
+          1.0
         ],
         "waveform_ribbon_light": [
-          0.8,
-          1.5
+          0.55,
+          1.3
         ],
         "waveform_ribbon_manual_floor": 0.12,
         "waveform_ribbon_material_body_alpha": [
@@ -110,8 +110,8 @@
           0.3
         ],
         "waveform_ribbon_material_fill_light": [
-          0.1,
-          0.1
+          0.015,
+          0.04
         ],
         "waveform_ribbon_material_glint_chance": [
           0.3,
@@ -134,12 +134,12 @@
           2.0
         ],
         "waveform_ribbon_material_hot": [
-          0.3,
-          0.3
+          0.0,
+          0.03
         ],
         "waveform_ribbon_material_rim_glow_light": [
-          0.4,
-          1.0
+          0.2,
+          0.6
         ],
         "waveform_ribbon_material_rim_glow_width": [
           0.06,
@@ -151,11 +151,11 @@
         ],
         "waveform_ribbon_material_rim_light": [
           1.8,
-          3.5
+          4.5
         ],
         "waveform_ribbon_material_rim_white": [
-          0.02,
-          0.02
+          0.0,
+          0.01
         ],
         "waveform_ribbon_material_strand_half_width": [
           0.022,
@@ -179,7 +179,7 @@
         ],
         "waveform_ribbon_material_strand_white": [
           0.0,
-          0.0
+          0.015
         ],
         "waveform_ribbon_material_strands": [
           48,
@@ -189,7 +189,7 @@
           0.2,
           0.2
         ],
-        "waveform_ribbon_mist_enabled": false,
+        "waveform_ribbon_mist_enabled": true,
         "waveform_ribbon_mist_gradient_share": 0.35,
         "waveform_ribbon_palette": {
           "low": [
@@ -327,11 +327,43 @@
                 1.0
               ]
             ]
+          },
+          {
+            "band": "All",
+            "height": 0.9,
+            "width": 0.9,
+            "rate": 1.12,
+            "phase": 2.6,
+            "light": 1.0,
+            "quiet": [
+              [
+                0.015,
+                0.75,
+                0.8
+              ],
+              [
+                0.05,
+                0.9,
+                1.0
+              ]
+            ],
+            "peak": [
+              [
+                1.0,
+                0.3,
+                0.02
+              ],
+              [
+                1.0,
+                0.65,
+                0.08
+              ]
+            ]
           }
         ],
         "waveform_ribbon_rotation": [
           0.0,
-          90.0
+          35.0
         ],
         "waveform_ribbon_rotation_attack": 0.045,
         "waveform_ribbon_rotation_enabled": true,
@@ -352,7 +384,7 @@
             ],
             [
               1.0,
-              1.0
+              1.6
             ],
             [
               0.0,
@@ -366,7 +398,7 @@
           "width": [
             [
               1.0,
-              1.0
+              1.3
             ],
             [
               0.0,
@@ -392,7 +424,7 @@
           "bend": [
             [
               1.0,
-              1.0
+              1.3
             ],
             [
               0.0,
@@ -422,7 +454,7 @@
             ],
             [
               1.0,
-              1.0
+              1.3
             ],
             [
               0.0,
@@ -448,7 +480,7 @@
             ],
             [
               1.0,
-              1.0
+              1.3
             ],
             [
               0.0,
@@ -470,7 +502,7 @@
           "stretch": [
             [
               1.0,
-              1.0
+              1.3
             ],
             [
               0.0,
@@ -526,7 +558,7 @@
             ],
             [
               1.0,
-              1.0
+              1.3
             ],
             [
               0.0,
@@ -556,7 +588,7 @@
             ],
             [
               1.0,
-              1.0
+              1.3
             ],
             [
               0.0,
@@ -712,20 +744,20 @@
           6.0
         ],
         "waveform_ribbon_spark_light": [
-          40.0,
-          40.0
+          20.0,
+          60.0
         ],
         "waveform_ribbon_spark_rise": [
           0.15,
           0.15
         ],
         "waveform_ribbon_spark_size": [
-          8.0,
-          8.0
+          2.0,
+          4.5
         ],
         "waveform_ribbon_spark_glow": [
-          0.3,
-          1.2
+          1.0,
+          1.8
         ],
         "waveform_ribbon_spark_span": [
           24.0,
@@ -736,13 +768,13 @@
           0.04
         ],
         "waveform_ribbon_sparkle": [
-          0.0,
-          0.85
+          0.25,
+          1.0
         ],
         "waveform_ribbon_sparks_enabled": true,
         "waveform_ribbon_spread": [
           1.6,
-          2.4
+          4.8
         ],
         "waveform_ribbon_strand_beads": [
           4.0,
@@ -783,30 +815,30 @@
         "waveform_ribbon_strands_enabled": true,
         "waveform_ribbon_stretch": [
           0.0,
-          0.5
+          1.0
         ],
         "waveform_ribbon_torsion": [
-          0.6,
-          1.6
+          0.2,
+          1.5
         ],
         "waveform_ribbon_twist": [
-          0.9,
-          1.7
+          0.3,
+          1.8
         ],
         "waveform_ribbon_twist_speed": [
-          0.05,
-          2.0
+          0.005,
+          0.65
         ],
         "waveform_ribbon_wave_rate": 0.2,
-        "waveform_ribbon_wave_swell": 0.35,
+        "waveform_ribbon_wave_swell": 0.12,
         "waveform_ribbon_width": [
           0.9,
-          0.95
+          1.9
         ],
         "preset_waveform_ribbon": 1,
         "waveform_ribbon_spark_count": [
-          8.0,
-          36.0
+          40.0,
+          64.0
         ],
         "waveform_ribbon_strand_pulse_growth": [
           0.2,
@@ -847,16 +879,16 @@
           1.5
         ],
         "waveform_ribbon_fog_height": [
-          1.0,
-          1.2
+          3.0,
+          3.5
         ],
         "waveform_ribbon_fog_softness": [
           0.7,
           1.0
         ],
         "waveform_ribbon_fog_light": [
-          0.3,
-          0.8
+          1.0,
+          5.0
         ],
         "waveform_ribbon_fog_variation": [
           0.15,
@@ -865,6 +897,14 @@
         "waveform_ribbon_fog_drift": [
           0.1,
           0.25
+        ],
+        "waveform_ribbon_strand_eol": [
+          3.0,
+          5.0
+        ],
+        "waveform_ribbon_strand_fade": [
+          0.85,
+          0.9
         ]
       }
     }

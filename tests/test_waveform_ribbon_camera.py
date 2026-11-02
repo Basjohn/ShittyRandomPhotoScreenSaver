@@ -18,7 +18,7 @@ from widgets.spotify_visualizer.view_orbit import FramedFlightMotion, framed_fli
 
 
 def camera(**changes):
-    values = dict(turn=0., tilt=0., scene_scale=1., scene_pan_x=0., scene_pan_y=0., camera_fov=45.,
+    values = dict(turn=0., tilt=0., scene_scale=1., scene_pan_x=0., scene_pan_y=0., camera_fov=3.,
                   camera_position=(0., 0., 0.), camera_projection='Orthographic')
     values.update(changes)
     return {SPEC.key(key): value for key, value in values.items()}

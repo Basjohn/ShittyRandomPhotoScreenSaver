@@ -6,10 +6,10 @@ import numpy as np
 from core.ribbon_packet import KNOT_ROWS
 from core.ribbon_continuation import cloth_values
 
-CAPACITY=2048
+CAPACITY=4096
 STRIDE=16
 MIN_GAP=.16
-MAX_BURST=36  # 8s / .16s * 36 < CAPACITY; active cohorts never need truncation
+MAX_BURST=64  # 8s / .16s * 64 < CAPACITY; active cohorts never need truncation
 
 
 @dataclass(frozen=True)

@@ -268,7 +268,8 @@ class WaveformScene:
         program=self.fog_resources.compute_program('fog medium',fog_inject_source(MEDIUM_GLSL))
         volume.update(program,view=view,lens=camera_lens,
                       depth_range=self._fog_depth_range if camera_lens[2] else fog.depth_range,
-                      grid=grid,medium=self._fog_uniforms)
+                      grid=grid,medium=self._fog_uniforms,
+                      focus_depth=0. if camera_lens[2] else -float((view@np.array((*SPEC.pivot,1.)))[2]))
 
     def _field_uniforms(self,program):
         fog=self.recipe.fog;first,last,samples=fog.field_span;step=(last-first)/(samples-1)

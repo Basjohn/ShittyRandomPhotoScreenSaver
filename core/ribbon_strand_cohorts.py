@@ -5,8 +5,19 @@ import numpy as np
 from core.ribbon_geometry import MAX_PATH_SAMPLES
 from core.ribbon_packet import KNOT_ROWS
 
-COHORT_ROWS=3  # timing/admission, held geometry/light, held finish
+COHORT_ROWS=4  # timing/admission, held geometry/light, held finish, EoL/fade/restore/activation
 COHORT_BYTES=MAX_PATH_SAMPLES*COHORT_ROWS*16
+ROOTS_PER_ACCENT=8
+
+
+def remaining_strand(age,lifetime,fade,seed):
+    """Fade amount within total lifetime; the shader dims tips earlier and recovers continuously on reactivation."""
+    age=np.maximum(age,0.)
+    span=np.maximum(np.minimum(fade,lifetime),1e-5)
+    progress=np.clip((age-(lifetime-span))/span,0.,1.)
+    expiry=1.-progress*progress*(3.-2.*progress)
+    restoration=seed+(1.-seed)*(1.-np.exp(-age/np.maximum(.1,np.minimum(.4,lifetime*.1))))
+    return np.minimum(expiry,restoration)
 
 
 @dataclass(frozen=True)
@@ -19,15 +30,16 @@ class RibbonStrandCohorts:
         self.records=np.zeros((instances,MAX_PATH_SAMPLES,COHORT_ROWS,4),np.float32)
         self.identities=np.full((instances,MAX_PATH_SAMPLES),np.iinfo(np.int64).min,np.int64)
         self.origin=0.
-        self._has_live=False
+        self._visible_until=-math.inf
         self.payload=b''
         self._history=None
+        self._accent_serial=0
 
     def update(self,snapshot,controls,hit,*,history,knot_hz):
         now=snapshot.time
         changed_history=history is not self._history
         if hit<.08 and not changed_history:
-            return self.payload if self._has_live else b''
+            return self.payload if now<self._visible_until else b''
         self._history=history
         packet=snapshot.packet
         paths=np.frombuffer(packet.payload,np.float32).reshape(packet.instances,-1,4)
@@ -39,6 +51,7 @@ class RibbonStrandCohorts:
         self.records[replaced]=0.
         self.identities[:]=identities
         if hit>=.08:
+            self._accent_serial+=1
             drive=dict(snapshot.drives)['sparkle'];values=dict(snapshot.realized)
             def pair(key):
                 low,high=controls.ranges[key]
@@ -47,13 +60,26 @@ class RibbonStrandCohorts:
             x=knots[:,:,0,0]+packet.world_origin[0]+snapshot.head_x-snapshot.travel
             active=timing[:,:,0]>0.
             candidate=(np.abs(x)<=pair('strand_span')*.5)&(paths[:,2,3,None]>.02)
-            eligible=(~active)&candidate
+            age=now-(knots[:,:,1,0]+packet.coordinate_origin)
+            candidate &= age+pair('strand_eol')<=(MAX_PATH_SAMPLES-1)/knot_hz
             if admission>0. and candidate.any():
+                # A musical accent selects a few fixed-world roots; it must not renew every visible strand.
+                roots=np.flatnonzero(candidate);count=min(len(roots),ROOTS_PER_ACCENT)
+                phase=(self._accent_serial*.6180339887498949)%1.
+                chosen=roots[(((phase+np.arange(count)/count)%1.)*len(roots)).astype(int)]
+                selected=np.zeros_like(candidate);selected.flat[chosen]=True
+                eligible=(~active)&selected
                 origin=math.floor(now/16.)*16.
-                timing[:,:,1:3]-=origin-self.origin;self.origin=origin
+                shift=origin-self.origin
+                timing[:,:,1:3]-=shift;self.records[:,:,3,3]-=shift;self.origin=origin
                 # Living roots keep their admission/look. A repeat event adds a
                 # temporary length/glow pulse instead of killing and respawning them.
-                repeat=active&candidate
+                repeat=active&selected
+                life=self.records[:,:,3]
+                held=life[repeat]
+                remaining=remaining_strand(now-self.origin-held[:,3],held[:,0],held[:,1],held[:,2])
+                life[repeat]=np.column_stack((np.full(len(held),pair('strand_eol')),
+                    np.full(len(held),pair('strand_eol')*pair('strand_fade')),remaining,np.full(len(held),now-self.origin)))
                 elapsed=np.maximum(now-self.origin-timing[:,:,2][repeat],0.)
                 previous=np.clip((timing[:,:,3][repeat]+(1.-timing[:,:,3][repeat])*1.3
                     *(1.-np.exp(-elapsed/.025)))*np.exp(-elapsed/.35),0.,1.)
@@ -65,8 +91,12 @@ class RibbonStrandCohorts:
                 timing[:,:,3][eligible]=0.
                 self.records[:,:,1][eligible]=[pair(key) for key in ('strand_length','strand_reach','strand_width','strand_light')]
                 self.records[:,:,2][eligible]=[pair(key) for key in ('strand_beads','strand_peel','strand_halo','strand_glow')]
+                life[eligible]=[pair('strand_eol'),pair('strand_eol')*pair('strand_fade'),1.,now-self.origin]
                 changed=True
         if changed:
             self.payload=self.records.tobytes()
-            self._has_live=bool((timing[:,:,0]>0.).any())
-        return self.payload if self._has_live else b''
+            active=timing[:,:,0]>0.
+            life=self.records[:,:,3]
+            self._visible_until=(self.origin+float(np.max((life[:,:,3]+life[:,:,0])[active]))
+                                 if active.any() else -math.inf)
+        return self.payload if now<self._visible_until else b''

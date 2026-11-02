@@ -5,7 +5,7 @@ import math
 from PySide6.QtCore import Qt, Signal, QPointF, QRectF
 from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QLinearGradient
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QDoubleSpinBox, QTabWidget
-from core.waveform_ribbon_authoring import SOURCES, TARGETS, admit_routing, admit_ribbons, admit_palette
+from core.waveform_ribbon_authoring import RIBBON_CAPACITY, SOURCES, TARGETS, admit_routing, admit_ribbons, admit_palette
 from ui.widgets import StyledComboBox
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import NoWheelSlider
@@ -156,7 +156,7 @@ class RibbonCardsEditor(_ValueEditor):
     def __init__(self,parent=None):
         super().__init__(parent);layout=QVBoxLayout(self);self.tabs=QTabWidget();layout.addWidget(self.tabs)
         self.fields=[];self.swatches=[]
-        for index in range(3):
+        for index in range(RIBBON_CAPACITY):
             panel=QWidget();body=QVBoxLayout(panel);fields={};swatches={}
             band=StyledComboBox();band.addItems(['All','Bass','Mids','Highs']);body.addWidget(band);fields['band']=band
             band.currentTextChanged.connect(lambda value,i=index:self._field(i,'band',value))
