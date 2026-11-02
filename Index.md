@@ -87,6 +87,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Shared ribbon history/width frames, oriented GPU prototype and open admission gates | `Docs/Reference/Ribbon_Path.md`; `core/ribbon_geometry.py` |
 | Shared planar reflection ownership, mirrored camera and rough receiver filtering | `Docs/Reference/Scene3D_Resources.md` → Planar reflections; `rendering/quick/scene3d/reflection.py` |
 | Waveform Ribbon lab, current visual gaps (§0B), preferred checkpoint, mock custody and generated floor maps | `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`; `tools/labs/waveform_ribbon_targets.py`; `Docs/Future_Work/Waveform_Ribbon.md` |
+| Waveform Ribbon reactivity comparison/timing and full Visualizer controls/migration | `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` §5.1; `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
 | Visualizer Previous/Next preset glyphs and default selection | `Docs/Reference/Visualizer_Reference.md` → Preset navigation glyphs |
 | Visualizer hover display transfer, native glyph admission and existing CUSTOM transaction | `Docs/Reference/Visualizer_Reference.md` → Preset navigation glyphs; `Current_Plan.md` → R38 |
