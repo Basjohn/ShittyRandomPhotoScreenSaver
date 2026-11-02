@@ -6,19 +6,41 @@ from core.ribbon_geometry import MAX_PATH_SAMPLES
 
 FLOOR_VERTEX = """#version 460 core
 layout(location=0) in vec3 aPosition;
+out vec2 vFloorNdc;
+void main() { vFloorNdc=aPosition.xz*2.0-1.0; gl_Position=vec4(vFloorNdc,0.0,1.0); }
+"""
+# The ground is an opaque infinite world plane, not a finite actor. Orthographic
+# pixel lines can meet it before the arbitrary eye-reference plane or beyond the
+# actor far clip. Only this primitive clamps its projected depth; actors retain
+# the physical camera's positive near/far interval.
+FLOOR_WORLD_GLSL = """
+in vec2 vFloorNdc;
 uniform mat4 uMvp;
-uniform vec4 uFloorBounds; // world XZ coverage, no texture or floor movement
-out vec3 vWorldPos;
-void main() { vWorldPos=vec3(mix(uFloorBounds.x,uFloorBounds.z,aPosition.x),0.0,
-    mix(uFloorBounds.y,uFloorBounds.w,aPosition.z)); gl_Position=uMvp*vec4(vWorldPos,1.0); }
+uniform mat4 uFloorInverseMvp;
+uniform vec3 uEye;
+uniform int uOrthographic;
+bool floorWorldHit(out vec3 world, out float depth) {
+    vec4 a=uFloorInverseMvp*vec4(vFloorNdc,-1.0,1.0);
+    vec4 b=uFloorInverseMvp*vec4(vFloorNdc,1.0,1.0);
+    vec3 nearPoint=a.xyz/a.w,farPoint=b.xyz/b.w;
+    vec3 origin=uOrthographic==1?nearPoint:uEye;
+    vec3 direction=normalize(farPoint-origin);
+    if(direction.y>=0.0)return false;
+    float distance_=-origin.y/direction.y;
+    if(uOrthographic!=1 && distance_<=0.0)return false;
+    world=origin+direction*distance_;
+    world.y=0.0;
+    vec4 clip=uMvp*vec4(world,1.0);
+    // Strictly below the clear depth, so the far ground survives GL_LESS.
+    depth=clamp(0.5*(clip.z/clip.w+1.0),0.0,uintBitsToFloat(0x3f7fffffu));
+    return true;
+}
 """
 ENVELOPE_RIBBONS = 3   # sheets with their own 3D rows in the envelope table (true 3D clearance)
 ENVELOPE_ROWS_GLSL = (f"const float ENV_ROWS={3 + ENVELOPE_RIBBONS}.0;\n"
                       f"const int ENV_RIBBONS={ENVELOPE_RIBBONS};\n")
 
-FLOOR_FRAGMENT = """#version 460 core
-in vec3 vWorldPos;
-uniform mat4 uMvp;
+FLOOR_FRAGMENT = "#version 460 core\n" + FLOOR_WORLD_GLSL + """
 uniform sampler2D uAlbedo;
 uniform sampler2D uSlope;      // height slope per uv unit (rg), from the smooth wet-surface height map
 uniform sampler3D uFogLight;   // the mist's coarse medium: its radiance is the ribbon light field
@@ -40,9 +62,7 @@ uniform float uPoolZ;       // the sheets' depth (world z)
 uniform vec3 uColumn;       // fade length toward the camera, far sparkle strength, sparkle threshold
 uniform int uSpecMode;      // reflection term: 0 inline, 1 write it alone (pre-pass), 2 read it from uSpecular
 uniform sampler2D uSpecular;
-uniform vec3 uEye;
 uniform vec3 uForward;
-uniform int uOrthographic;
 layout(location=0) out vec4 FragColor;
 layout(location=1) out vec4 Emission;
 """ + ENVELOPE_ROWS_GLSL + MIST_GLSL + PLANAR_REFLECTION_GLSL + """
@@ -55,6 +75,9 @@ vec2 slopeAt(vec2 xz, float tile) {
     return (0.6*near+0.4*far)/tile;
 }
 void main() {
+    vec3 vWorldPos;float groundDepth;
+    if(!floorWorldHit(vWorldPos,groundDepth))discard;
+    gl_FragDepth=groundDepth;
     if(uFlat==1) { FragColor=vec4(vec3(0.25),1.0); Emission=vec4(0.0); return; }
     mat2 turn=mat2(0.6,-0.8,0.8,0.6);
     vec2 uv=vWorldPos.xz/uFloor.x;

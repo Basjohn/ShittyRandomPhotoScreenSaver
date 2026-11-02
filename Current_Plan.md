@@ -184,8 +184,10 @@ Work first on body/audio/accents, then grounded camera/viewport and replacement 
   the new cut-to-black at one end and staggered entry at the opposite end; remove visible clip/history seams.
 - [ ] **Floor coverage, collision, reflection and viewport changes:** after the strand slice, draw ground all the
   way through the foreground and beyond the waveform into heavy dark mist that GENTLY thickens until no horizon
-  line is visible. A strip of reflections over black is rejected. Fix the owning floor/projection boundary: positive
-  Orthographic near/far clipping currently excludes foreground and far ground, despite a large mesh. Keep actors and
+  line is visible. A strip of reflections over black is rejected. **Awaiting native visual validation:** the floor now
+  intersects the same physical camera's pixel lines with the infinite world plane; signed Orthographic intersections
+  cover foreground/far ground while actor clipping remains unchanged. Focused native tests cover complete coverage,
+  world coordinates, floor occlusion and capped reflection. Finish the unified atmosphere before visual judgment. Keep actors and
   physical floor contact correct, with smooth waveform collision rather than clipping. Compare identical snapshots at
   canonical/wide/tall/large sizes and both projections; inspect reflection normalization/filtering separately. Preserve
   live reflectivity/tint/brightness and the shared resize contract; no audio-gain compensation. Columns remain secondary.
