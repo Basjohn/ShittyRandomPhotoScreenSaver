@@ -140,6 +140,12 @@ Work first on body/audio/accents, then grounded camera/viewport and replacement 
 `Docs/Reference/Waveform_Ribbon_Migration_Plan.md`; motion targets and recorded bake-off in
 `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` section 5.1. Keep C-primary elastic response and A's accumulated twisting.
 
+- [ ] **Four-ribbon maximum and Preset 3:** migrate the mode's authoring/runtime/clearance/accent/range paths from
+  the current three-card ceiling to a maximum of FOUR. Preserve Presets 1/2's identities. Build Preset 3 from
+  `references/Preset3Goal1.png` and `references/Preset3ReactivityGoalExample.png`: teal/orange contrast, readable
+  lattice/twist/strands/particles, continuous wet textured floor, and the large quiet-to-peak geometric change shown.
+  The explicit operator maximum overrides the first board's decorative count label; use four for Preset 3's paired
+  target. Native low/high/recorded captures must reach that range without pinning or swapping scene/camera identity.
 - [ ] **Visible punch and musical shape response:** the operator still sees no convincing kick, force or musical
   shape change. Compare real quiet/ordinary/hot passages with synchronized audio and silent/fixed-body controls.
   Preserve raw fixed-scale passage headroom, immediate whole-body response and distinct typed elastic impulses;
@@ -187,8 +193,10 @@ Work first on body/audio/accents, then grounded camera/viewport and replacement 
   noisy fringe, side-sheet conflicts, remote shelves and skyward mass. Preserved image, failure analysis, cost caveats
   and three proposals: `Docs/Reference/Waveform_Ribbon_Mist_Failure_and_Replacement.md`. Replace with full-scene
   night fog ("Silent Hill At Night") displaced by the actual 3D waveform, with smooth world-anchored density and local
-  reactive light/wake; no visible ceiling/stripe/box. Remove the rejected mechanism on migration. Keep ground-volume
-  banks zero and cheap floor distance mist separate. The rejected volume is disabled in the candidate presets meanwhile.
+  reactive light/wake; no visible ceiling/stripe/box. `references/Mist Goal.png` is now the primary mist/floor target.
+  The operator explicitly supersedes ALL older mist/fog mechanisms: remove the old banks/fringe AND old separate
+  distance/floor fog when migrating. One coherent atmosphere must serve scene/floor/actors/reflection; no stacked
+  legacy layer or hidden fallback. The rejected volume remains disabled while its replacement is built.
 - [X] **COMPLETELY FUCKED UX/DESIGN** - operator rejection recorded for the ENTIRE mode-specific builder UI:
   every element not already shared with other modes is rejected. This marks rejection, not completed redesign.
 - [ ] **Awaiting later UX redesign:** lower priority than a working visual. Deliver a themed 3D visual editor with
@@ -215,7 +223,7 @@ the mist. Preset/control migration and recorded-audio calibration come only afte
   (axial roll like a skewer; fast strong attack, slow decay; integrate speed into continuous angle). Preserve constant history flow, smooth
   curves, particles/free strands and fog repelled by the actual deformed/rotated waveform. Use the shared scene,
   sole logical clock, immutable publication and lazy retained renderer; Terra audits each slice.
-- [~] **Full controls/editors and two initial presets — finish native/range audits:** primary/alternate examples now have
+- [~] **Full controls/editors, four-ribbon capacity and three presets — finish admission:** primary/alternate examples now have
   candidate Preset 1/2 with the
   selected hybrid, shared framed 3D camera/navigation, technical profile, preset/Custom and Edit/Arrange feature set.
   Expose bend/torsion/stretch/twist/rotation and accent ranges, source/curve visual tuning, ribbon/gradient editors,
@@ -225,8 +233,8 @@ the mist. Preset/control migration and recorded-audio calibration come only afte
   sizes/camera poses; replay real quiet/middle/hot/silence/hot-start windows with unshifted audio, inspect lab/production
   parity and audit range headroom. Close shared lifecycle/cost/dormancy gates and run
   `tools/visualizer_live_check.py --mode waveform_ribbon --load game60` before WR-09 acceptance. Operator visual/native
-  judgement remains explicit where automation cannot close it. Ground volume banks stay zero; floor distance mist
-  remains separate. Floor-column polish is not a migration blocker.
+  judgement remains explicit where automation cannot close it. The new unified atmosphere supersedes all old fog
+  layers. Floor-column polish is secondary to continuous ground and response.
 - [ ] **Loaded render budget:** repeat the corrected actual-config live check after current source/geometry
   changes. The prior run labelled fog-OFF rendered fog because preset activation overwrote its CLI values; it is a
   failed fog-ON run, not an A/B. Verify packet lease/GPU envelope/culling retirement and finite-consumer parity, then
