@@ -1841,6 +1841,8 @@ def _waveform_ribbon() -> ModeSettings:
         ('spark_rise','Rise',0.,2.,'sparks'),('spark_size','Size',.5,12.,'sparks'),
         ('spark_light','Light',0.,60.,'sparks'),('spark_white','Whiteness',0.,1.,'sparks'),
         ('spark_glow','Glow',0.,3.,'sparks'),('spark_span','Emitter Span',8.,128.,'sparks'),
+        ('strand_pulse_growth','Repeat Stretch',0.,1.,'strands'),
+        ('strand_pulse_glow','Repeat Glow',0.,4.,'strands'),('strand_span','Emitter Span',8.,128.,'strands'),
         ('strand_length','Length',1.,16.,'strands'),('strand_reach','Reach',0.,4.,'strands'),
         ('strand_chance','Admission',0.,1.,'strands'),('strand_width','Width',.1,4.,'strands'),
         ('strand_light','Light',0.,10.,'strands'),('strand_beads','Droplets',0.,8.,'strands'),
@@ -1854,7 +1856,9 @@ def _waveform_ribbon() -> ModeSettings:
         ('floor_mist_reflection','Mist Reflection',0.,1.,'floor'),('fog_haze','Distance Haze',0.,1.,'mist'),
         ('fog_sides','Side Wall Start',5.,20.,'mist'),('floor_mist_thickness','Floor Mist Thickness',0.,3.,'mist'),
         ('bloom','Bloom',0.,1.,'lens')):
-        entries.append(Range(prefix+key,label+':',low,high,bucket=bucket,tooltip='Quiet → peak '+label.lower()+'.'))
+        entries.append(Range(prefix+key,label+':',low,high,bucket=bucket,
+                             logical=key.startswith('strand_'),
+                             tooltip='Quiet → peak '+label.lower()+'.'))
     entries.extend((Colour(prefix+'floor_tint','Surface Tint:','Floor Surface Tint',bucket='floor',alpha=False),
                     Slider(prefix+'exposure','Exposure:',.2,2.,bucket='lens'),
                     Slider(prefix+'gradient_share','Sheet Gradient:',0.,1.,bucket='colour'),

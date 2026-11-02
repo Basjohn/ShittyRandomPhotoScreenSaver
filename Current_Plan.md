@@ -60,6 +60,9 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
   decide whether the sampler must exclude/outsource them. Not the Extruded Bubble chain fix (no processes, tick unchanged).
 - [ ] **Cross-display Media shortcuts** delivered once on the other display, when exercised.
 - [ ] **Music recorder** 60-second clip, signal/history, cancel and mixed-DPR UI, when recording is needed.
+- [ ] **Helper breadcrumb diagnostics unavailable:** current native MC evidence logs no access to
+  `C:\ProgramData\SRPSS\logs\scr_helper.log`. Inspect the helper/log-path authority before relying on that
+  diagnostic route; do not hide it behind a silent local fallback. Separate from Waveform rendering.
 - [ ] **Project Python startup warning:** `.venv\Scripts\python.exe -c "pass"` reports `Failed to find real location`
   for its configured base Python 3.14 executable, although that path exists and Python runs. Inspect installation/path
   resolution and access before repairing the venv; preserve dependency isolation and avoid environment-variable fixes.
@@ -142,17 +145,21 @@ Work first on body/audio/accents, then grounded camera/viewport and replacement 
   Preserve raw fixed-scale passage headroom, immediate whole-body response and distinct typed elastic impulses;
   accents must stand above routine onsets instead of becoming a constant offset (guide 13C). If still weak, measure
   elastic excursion/latency and correct the actual response/envelope before tuning presets. Smooth motion and
-  nonzero inputs are insufficient. Preserve flowing history, torsion, bending and independently reactive axial roll.
+  nonzero inputs are insufficient. Operator requests roughly TWICE the actual peak height and deformation, including
+  stretch/twist/undulation, while peaks remain harder to pin. Increase real excursion/headroom, not audio gain or
+  constant baseline movement. Preserve flow and independently reactive axial roll; floor contact must collide smoothly,
+  never crop the waveform at a drawn line.
 - [ ] **Particles weak, sparse and localized:** the operator sees pathetic specks in one spot even with fog off.
   Verify distributed actual-rim births, clearly visible independent glow/size/light and musical density changes.
   Candidate improvements are fixed-world emitter span and authored halos, with count/lifetime bounded at birth.
   Inspect native motion and fog-off subtraction; a cohort serial, byte count, halo test or isolated still cannot close
   this. Audit both handles of every particle range in actual quiet/peak consumers.
-- [ ] **Strands flicker in/out (new operator finding):** reproduce continuous held-source motion with stable camera
-  and fog off, including knot admission/rebase and sustained playback. Trace slot identity, age/support limits and
-  live chance/sparkle thresholds. Proposed correction: birth-held admission, smooth growth/retirement and independent
-  reactive lighting; avoid continuously changing eligibility or concealing popping with lower density. Preserve rim
-  attachment and authored range reachability, then prove temporal continuity in native motion.
+- [~] **Strands: look approved; persistence/repeat behavior Awaiting Validation.** Operator finds them beautiful
+  and no longer flickering. Preserve that look. Strands keep their birth response and travel with the waveform;
+  reject timer death and pulse-driven replacement. A repeat would-be birth at an occupied root adds about 20%
+  temporary length and a glow pulse, fading back without resetting birth or snapping an in-flight pulse to zero.
+  Verify retained admission/look, rebases, held-source silence and natural travel out of view in direct/reflected
+  wide/expanded views. Finite history eviction must never remove a still-visible root; keep that bound explicit.
 - [ ] **Dense highlights, moving colour and rim glow:** playback still lacks rewarded high-energy density and glow.
   Verify local crest/high-power colour, bright tunable rim/glow and denser highlights against actual music, including
   quiet/loud differences. Consumer reachability does not establish visible strength. Keep both range handles effective.
@@ -167,24 +174,32 @@ Work first on body/audio/accents, then grounded camera/viewport and replacement 
   bounded left/right orbit, waveform always in view and no escape into ugly areas. Admit a genuinely near-flat tilt
   with visible floor in BOTH projections. Keep eye/basis, navigation, editor markers and saved pose under the shared
   owner; preserve continuous/infinite body with no exposed ends and complete Edit scaffolding. Native geometry and
-  persistence tests alone cannot establish feel or beauty across moving audio, view and viewport extremes.
-- [ ] **Floor reflection and viewport changes:** the floor dies in some views; shrinking to wide makes it stronger
-  and changes apparent reaction. Compare identical immutable body/audio/camera snapshots at canonical/wide/tall/large
-  sizes. Correct mesh draw bounds/count and world optical footprint; inspect remaining view-dependent normalization
-  and filtering. Retain live reflectivity/tint/brightness controls. Never compensate with audio gain or alter the
-  shared resize contract. Reflection-column aesthetics remain secondary.
-- [ ] **Current mist/fringe entirely rejected - Awaiting replacement selection:** stop polishing the shaped banks,
+  persistence tests alone cannot establish feel or beauty across moving audio, view and viewport extremes. Reproduce
+  the new cut-to-black at one end and staggered entry at the opposite end; remove visible clip/history seams.
+- [ ] **Floor coverage, collision, reflection and viewport changes:** after the strand slice, draw ground all the
+  way through the foreground and beyond the waveform into heavy dark mist that GENTLY thickens until no horizon
+  line is visible. A strip of reflections over black is rejected. Fix the owning floor/projection boundary: positive
+  Orthographic near/far clipping currently excludes foreground and far ground, despite a large mesh. Keep actors and
+  physical floor contact correct, with smooth waveform collision rather than clipping. Compare identical snapshots at
+  canonical/wide/tall/large sizes and both projections; inspect reflection normalization/filtering separately. Preserve
+  live reflectivity/tint/brightness and the shared resize contract; no audio-gain compensation. Columns remain secondary.
+- [ ] **Current mist/fringe entirely rejected - implement replacement after strands/floor:** stop polishing the shaped banks,
   noisy fringe, side-sheet conflicts, remote shelves and skyward mass. Preserved image, failure analysis, cost caveats
   and three proposals: `Docs/Reference/Waveform_Ribbon_Mist_Failure_and_Replacement.md`. Replace with full-scene
   night fog ("Silent Hill At Night") displaced by the actual 3D waveform, with smooth world-anchored density and local
   reactive light/wake; no visible ceiling/stripe/box. Remove the rejected mechanism on migration. Keep ground-volume
   banks zero and cheap floor distance mist separate. The rejected volume is disabled in the candidate presets meanwhile.
-- [ ] **UI completely rejected - Awaiting later UX pass:** redesign usability/UX after credible visual results exist.
-  Current editor/control plumbing and automated tests do not establish an accepted Settings experience.
+- [X] **COMPLETELY FUCKED UX/DESIGN** - operator rejection recorded for the ENTIRE mode-specific builder UI:
+  every element not already shared with other modes is rejected. This marks rejection, not completed redesign.
+- [ ] **Awaiting later UX redesign:** lower priority than a working visual. Deliver a themed 3D visual editor with
+  direct visual controls; the numeric 0-1 matrix is not the requested experience. Keep shared accepted scaffolding.
+  No plumbing test or working control schema establishes usability or visual-design acceptance.
 - [ ] **Live performance and truthful evidence:** run both presets under matched recorded PCM/game60 and admitted
   camera extremes. Verify ACTUAL applied configuration, audible input and rendered features before interpreting
   timings. Profile logical preparation, birth admission, render stages and whole-frame tails; do not reduce artistic
-  reaction strength to conceal cost. Requested CLI settings can be overwritten by curated activation.
+  reaction strength to conceal cost. Preset 2 with persistent strands currently exceeds the render budget (~14 ms
+  median under game60); reduce repeated submission/preparation and prove tails without weakening the approved strands.
+  Requested CLI settings can be overwritten by curated activation.
 
 Chosen first: the smallest contained scene and the first consumer of S3D-1/S3D-2/S3D-5. Brief and hard gates:
 `Docs/Future_Work/Waveform_Ribbon.md`. The detailed working checklist and visual target custody live in

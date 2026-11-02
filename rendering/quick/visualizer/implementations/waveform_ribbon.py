@@ -51,7 +51,7 @@ class QuickWaveformRibbonRenderer:
         if not isinstance(state,WaveformRibbonFrame):raise TypeError('Waveform renderer requires its own mode frame')
         scene=self._scene;recipe=state.scene
         scene.admit_preparation()
-        if not scene.ribbons.prepare_programs(sparks=False,strays=recipe.strays is not None,continuation=True):
+        if not scene.ribbons.prepare_programs(sparks=False,strays=recipe.strays is not None,continuation=True,strand_cohorts=True):
             return False
         if recipe.sparks is not None and not scene.bursts.prepare_step():return False
         programs=[(scene.resources,'floor',FLOOR_VERTEX,FLOOR_FRAGMENT)]
@@ -86,7 +86,8 @@ class QuickWaveformRibbonRenderer:
             framed_aperture_scale(frame.snapshot.presentation,content=True))
         self._scene.render(state.packet,capacity=256,now=state.time,travel=state.travel,recipe=state.scene,
             size=(width,height),view=view,projection=projection,eye=eye,camera_lens=lens,card=frame,overlay=opacity,
-            burst_payload=state.particles,burst_origin=state.particle_origin,react=state.passage)
+            burst_payload=state.particles,burst_origin=state.particle_origin,react=state.passage,
+            strand_payload=state.strands,strand_origin=state.strand_origin)
 
     def render(self,frame):
         opacity=frame.snapshot.presentation.content_fade

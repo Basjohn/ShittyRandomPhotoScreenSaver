@@ -94,12 +94,16 @@ def capture(args):
                 births=np.frombuffer(state.particles,np.float32).reshape(-1,16) if state.particles else np.empty((0,16))
                 active=(births[:,7]>0)&(state.time-state.particle_origin-births[:,3]>=0)&(state.time-state.particle_origin-births[:,3]<births[:,7])
                 living=births[active]
+                strand_rows=np.frombuffer(state.strands,np.float32).reshape(-1,3,4)[:,0] if state.strands else np.empty((0,4))
+                strand_age=state.time-state.strand_origin-strand_rows[:,1]
+                live_roots=(strand_rows[:,0]>0)&(strand_age>=0)
                 records.append(dict(source_time=times[index],gpu_ms=elapsed.value/1e6,ready=state.ready,size=(width,height),
                     packet_sha256=hashlib.sha256(state.packet.payload).hexdigest(),camera=dict(state.parameters),
                     viewport_extent=snapshot.presentation.viewport_extent,
                     aperture_scale=framed_aperture_scale(snapshot.presentation,content=True),reflection_size=scene.reflection.size,
                     specular_size=scene._specular_size if height>state.scene.floor.specular_max_height else None,rotation_angle=state.rotation_angle,rotation_speed=state.rotation_speed,
                     particle_serial=state.particle_serial,active_particles=len(living),
+                    active_strand_root_cohorts=int(live_roots.sum()),strand_sha256=hashlib.sha256(state.strands).hexdigest(),
                     particle_x_span=(float(living[:,0].min()),float(living[:,0].max())) if len(living) else None,
                     particle_glow=(float(living[:,15].min()),float(living[:,15].max())) if len(living) else None,drives=dict(state.drives),realized=dict(state.realized)))
                 image=Image.fromarray(pixels).convert('RGB')
@@ -121,7 +125,7 @@ def capture(args):
             source_revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
             source_sha256={path:hashlib.sha256((ROOT/path).read_bytes()).hexdigest() for path in paths if (ROOT/path).is_file()},
             preset_path=activation.preset_path,settings=settings,frames=records,audio_alignment=audio_alignment,
-            size=(width,height),fps=args.fps,scope='production logical/capture/renderer; offline PCM reanalysis, recorded onsets/loudness; not live/physical acceptance')
+            size=(width,height),fps=args.fps,scope='production logical/capture/renderer; offline native PCM reanalysis for body, passage and typed onsets; original cadence; not live/physical acceptance')
         receipt['artifacts_sha256']={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in output.iterdir() if p.is_file()}
         (output/'capture.json').write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
         print('Captured',len(records),'frames;',output,flush=True)

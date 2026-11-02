@@ -14,6 +14,7 @@ from core.ribbon_ring import RibbonRing
 from core.waveform_ribbon_authoring import TARGETS, route
 from core.waveform_ribbon_scene import Recipe
 from core.ribbon_bursts import RibbonAccentControls, RibbonBursts
+from core.ribbon_strand_cohorts import RibbonStrandControls,RibbonStrandCohorts
 
 
 def unit(value):
@@ -73,6 +74,7 @@ class HybridControls:
     colour_threshold: float
     accents: RibbonAccentControls | None = None
     idle_motion: float = .35
+    strands: RibbonStrandControls | None = None
 
 
 @dataclass(frozen=True)
@@ -91,6 +93,8 @@ class HybridSnapshot:
     particles: bytes = b''
     particle_origin: float = 0.
     particle_serial: int = 0
+    strands: bytes = b''
+    strand_origin: float = 0.
 
 
 class WaveformDynamics:
@@ -111,6 +115,7 @@ class WaveformDynamics:
         self._snapshot = None
         self._base_packet = self._base_array = None
         self._bursts = None
+        self._strand_cohorts = None
         self._elastic_config = None
         self._elastic_frequencies = self._impulse_scales = ()
 
@@ -213,6 +218,12 @@ class WaveformDynamics:
             self._bursts.admit(snapshot,c.accents,hit)
             self._snapshot=replace(snapshot,particles=self._bursts.visible_payload(snapshot.time),particle_origin=self._bursts.origin,
                                    particle_serial=self._bursts.serial)
+        if c.strands is None:
+            self._strand_cohorts=None
+        else:
+            if self._strand_cohorts is None:self._strand_cohorts=RibbonStrandCohorts(snapshot.packet.instances)
+            payload=self._strand_cohorts.update(snapshot,c.strands,hit,history=self._base_packet,knot_hz=c.scene.flow.knot_hz)
+            self._snapshot=replace(self._snapshot,strands=payload,strand_origin=self._strand_cohorts.origin)
         return self._snapshot
 
     def _value(self,key):

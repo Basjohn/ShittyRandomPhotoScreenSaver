@@ -18,6 +18,8 @@ from core.ribbon_frames import MAX_STRIP_STATIONS
 from rendering.gl_programs.ribbon import (RIBBON_BODY_FRAGMENT, RIBBON_FRAGMENT, RIBBON_LIGHT_FRAGMENT,
                                           RIBBON_SPARK_FRAGMENT, RIBBON_SPARK_VERTEX, RIBBON_STRAY_FRAGMENT,
                                           RIBBON_STRAY_VERTEX, RIBBON_VERTEX, RIBBON_CONTINUOUS_VERTEX)
+from rendering.gl_programs.ribbon import RIBBON_COHORT_STRAY_VERTEX,RIBBON_COHORT_STRAY_FRAGMENT
+from core.ribbon_strand_cohorts import COHORT_BYTES
 from core.ribbon_geometry import MAX_PATH_SAMPLES
 from rendering.gl_programs.mist import FOG_OFF
 from rendering.quick import gl_query
@@ -154,16 +156,21 @@ class RibbonPrimitive:
         self.stream = None
         self._context_ref = None
         self._held_packet = self._lease = None
+        self.strand_resources = self.strand_stream = None
+        self._strand_bounds_payload=None
+        self._strand_bounds=(0.,0.)
 
     @property
     def has_resources(self):
-        return self.resources.has_resources or (self.stream is not None and self.stream.has_resources)
+        return (self.resources.has_resources or (self.stream is not None and self.stream.has_resources)
+                or (self.strand_resources is not None and self.strand_resources.has_resources)
+                or (self.strand_stream is not None and self.strand_stream.has_resources))
 
     @property
     def stream_bytes(self):
         return self.stream.capacity if self.stream is not None and self.stream.has_resources else 0
 
-    def prepare_programs(self, *, sparks=False, strays=False, continuation=False):
+    def prepare_programs(self, *, sparks=False, strays=False, continuation=False, strand_cohorts=False):
         """One hidden-frame compile, admitted under this primitive's owning context before allocation."""
         self._check_context(admit=True)
         vertex=RIBBON_CONTINUOUS_VERTEX if continuation else RIBBON_VERTEX
@@ -171,8 +178,15 @@ class RibbonPrimitive:
         programs=[(self.resources,'body'+suffix,vertex,RIBBON_BODY_FRAGMENT),
                   (self.resources,'light'+suffix,vertex,RIBBON_LIGHT_FRAGMENT)]
         if sparks:programs.append((self.resources,'sparks',RIBBON_SPARK_VERTEX,RIBBON_SPARK_FRAGMENT))
-        if strays:programs.append((self.resources,'strays',RIBBON_STRAY_VERTEX,RIBBON_STRAY_FRAGMENT))
+        if strays:
+            resources=self._strand_resources() if strand_cohorts else self.resources
+            vertex=RIBBON_COHORT_STRAY_VERTEX if strand_cohorts else RIBBON_STRAY_VERTEX
+            programs.append((resources,'strays',vertex,RIBBON_COHORT_STRAY_FRAGMENT if strand_cohorts else RIBBON_STRAY_FRAGMENT))
         return warm_programs(programs)
+
+    def _strand_resources(self):
+        if self.strand_resources is None:self.strand_resources=MeshResources('ribbon strand cohorts')
+        return self.strand_resources
 
     def _stream(self):
         if self.stream is None:
@@ -206,7 +220,8 @@ class RibbonPrimitive:
     def draw(self, packet: RibbonPacket, mvp, *, diagnostic=0, timing_query=None, shading='diagnostic',
              view=None, orthographic=True, material: RibbonMaterial | None = None, age_fade=None,
              mist=None, mist_frame=(0., 0., 0.), sparks: RibbonSparks | None = None, now=None, sweep_axis=None,
-             grade=None, floor=None, strays: RibbonStrays | None = None, continuation=None):
+             grade=None, floor=None, strays: RibbonStrays | None = None, continuation=None,
+             strand_births=None,strand_origin=0.):
         """``age_fade`` = (absolute now, fade-in s, maximum age s, fade-out s) fades the head and tail by age.
 
         ``mist`` (``rendering.gl_programs.mist.mist_uniforms``) dims light and coverage by the scene's world mist;
@@ -220,7 +235,8 @@ class RibbonPrimitive:
         if shading in ('sparks', 'strays'):
             return self._draw_sparks(packet, mvp, sparks or RibbonSparks(), now, mist, mist_frame, grade,
                                      material or RibbonMaterial(), _sweep_axis(sweep_axis), floor,
-                                     (strays or RibbonStrays()) if shading == 'strays' else None)
+                                     (strays or RibbonStrays()) if shading == 'strays' else None,
+                                     strand_births,strand_origin,continuation)
         if shading not in _FRAGMENTS:
             raise ValueError(f'Unknown ribbon shading: {shading}')
         if packet.instances == 0:
@@ -322,11 +338,20 @@ class RibbonPrimitive:
             gl.glUseProgram(program_before)
 
     def _draw_sparks(self, packet, mvp, sparks, now, mist, mist_frame, grade, material, sweep_axis, floor=None,
-                     strays=None):
+                     strays=None,strand_births=None,strand_origin=0.,continuation=None):
         """Additive point sprites, or with ``strays`` free strands, on the bound target (the caller sets blending,
         as for the light pass)."""
         if packet.instances == 0:
             return
+        cohorts=strays is not None and strand_births is not None
+        if cohorts:
+            if not isinstance(strand_births,bytes) or len(strand_births) not in (0,packet.instances*COHORT_BYTES):
+                raise ValueError('Strand cohorts must match the packet physical knot slots')
+            if not strand_births:return
+            if strand_births is not self._strand_bounds_payload:
+                held=np.frombuffer(strand_births,np.float32).reshape(-1,3,4)
+                self._strand_bounds=(float(held[:,1,0].max()),float(held[:,1,1].max()))
+                self._strand_bounds_payload=strand_births
         if now is None or not math.isfinite(float(now)):
             raise ValueError('Sparks need the absolute now of the ribbon clock')
         origin = np.asarray(packet.world_origin, dtype=float)
@@ -339,13 +364,14 @@ class RibbonPrimitive:
         point_size_before = gl_query.is_enabled(gl.GL_PROGRAM_POINT_SIZE)
         try:
             kind = 'sparks' if strays is None else 'strays'
-            program = (self.resources.program('sparks', RIBBON_SPARK_VERTEX, RIBBON_SPARK_FRAGMENT) if strays is None
-                       else self.resources.program('strays', RIBBON_STRAY_VERTEX, RIBBON_STRAY_FRAGMENT))
+            resources=self._strand_resources() if cohorts else self.resources
+            program = (resources.program('sparks', RIBBON_SPARK_VERTEX, RIBBON_SPARK_FRAGMENT) if strays is None
+                       else resources.program('strays',RIBBON_COHORT_STRAY_VERTEX if cohorts else RIBBON_STRAY_VERTEX,RIBBON_COHORT_STRAY_FRAGMENT if cohorts else RIBBON_STRAY_FRAGMENT))
             vao, _ = self.resources.mesh('empty', (0., 0.), (2,))
             names = ('uMvp', 'uSpark', 'uSparkLook', 'uSparkClock', 'uSparkWhite', 'uMist', 'uMistShape', 'uMistOrigin',
                      'uSurface','uSweepAxis', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange', 'uGradeStops',
-                     'uGrade', 'uFloorContact', 'uStray', 'uStrayLook', 'uStrayClock', 'uViewport', 'uStrayGlow', 'uStrayAdmission')
-            u = self.resources.uniforms(kind, names, required=False)
+                     'uGrade', 'uFloorContact', 'uStray', 'uStrayLook', 'uStrayClock', 'uViewport', 'uStrayGlow', 'uStrayAdmission','uStrayBirthNow','uStrayPulse')
+            u = resources.uniforms(kind, names, required=False)
             self._stream()
             gl.glUseProgram(program)
             gl.glBindVertexArray(vao)
@@ -365,6 +391,9 @@ class RibbonPrimitive:
                 gl.glUniform2f(u['uStrayClock'], *clock)
                 gl.glUniform2f(u['uStrayGlow'], strays.halo, strays.glow)
                 gl.glUniform1f(u['uStrayAdmission'], strays.admission_softness)
+                if cohorts:
+                    gl.glUniform1f(u['uStrayBirthNow'],float(now)-float(strand_origin))
+                    gl.glUniform2f(u['uStrayPulse'],strays.pulse_growth,strays.pulse_glow)
                 gl.glUniform2f(u['uViewport'], *(float(v) for v in
                                                  np.asarray(gl.glGetIntegerv(gl.GL_VIEWPORT)).reshape(-1)[2:4]))
             mist_values = {'uMist': (0., 0., 1., 1.), 'uMistShape': (0., 0., 0., 0.), **FOG_OFF, **(mist or {})}
@@ -383,8 +412,31 @@ class RibbonPrimitive:
                 if strays is None:
                     gl.glDrawArraysInstanced(gl.GL_POINTS, 0, MAX_PATH_SAMPLES*sparks.per_knot, packet.instances)
                 else:
-                    gl.glDrawArraysInstanced(gl.GL_TRIANGLES, 0, MAX_PATH_SAMPLES*strays.per_knot*STRAY_SEGMENTS*6,
-                                             packet.instances)
+                    first,count=0,MAX_PATH_SAMPLES
+                    if cohorts and continuation is not None:
+                        rows=np.frombuffer(packet.payload,np.float32).reshape(packet.instances,-1,4)
+                        step=0.
+                        for path in rows:
+                            n,start,cap=int(path[0,0]),int(path[1,1]),int(path[1,2])
+                            a=path[4+start*KNOT_ROWS,0];b=path[4+((start+n-1)%cap)*KNOT_ROWS,0]
+                            step=max(step,float(b-a)/max(n-1,1))
+                        length,reach=self._strand_bounds
+                        length*=1.+strays.pulse_growth
+                        span=(continuation[0]-length*step-1.25*reach,
+                              continuation[1]+1.25*reach,continuation[2])
+                        body,_,_=_continuation_draw_ranges(packet,span,float(frame[0]),1)
+                        subdivisions=int(rows[0,0,1])
+                        first=body[0]//(6*subdivisions)
+                        count=min(MAX_PATH_SAMPLES-first,body[1]//(6*subdivisions)+1) if body[1] else 0
+                    stride=strays.per_knot*STRAY_SEGMENTS*6
+                    if cohorts:
+                        if self.strand_stream is None:
+                            alignment=gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT)
+                            size=MAX_RIBBONS*COHORT_BYTES+alignment
+                            self.strand_stream=StreamRing('ribbon strand cohorts',slots=3,slot_bytes=size,hold_bytes=size)
+                        with self.strand_stream.bound(gl.GL_SHADER_STORAGE_BUFFER,1,strand_births):
+                            gl.glDrawArraysInstanced(gl.GL_TRIANGLES,first*stride,count*stride,packet.instances)
+                    else:gl.glDrawArraysInstanced(gl.GL_TRIANGLES,first*stride,count*stride,packet.instances)
         finally:
             (gl.glEnable if point_size_before else gl.glDisable)(gl.GL_PROGRAM_POINT_SIZE)
             gl.glBindVertexArray(vao_before)
@@ -420,8 +472,23 @@ class RibbonPrimitive:
     def release(self):
         if self.has_resources:
             self._check_context()
-        if self.stream is not None:
-            self.stream.release()
-        self.resources.release_resources()
-        self.stream = None
-        self._context_ref = None
+        errors=[]
+        for release in (self.release_strands,self.resources.release_resources,
+                        *((self.stream.release,) if self.stream is not None else ())):
+            try:release()
+            except Exception as error:errors.append(error)
+        if errors:raise ExceptionGroup('Ribbon resources remain for retry',errors)
+        self.stream=None;self._context_ref=None
+
+    def release_strands(self):
+        if self.strand_resources is None and self.strand_stream is None:return
+        self._check_context()
+        errors=[]
+        for release in ((*((self.strand_stream.release,) if self.strand_stream is not None else ()),
+                         *((self.strand_resources.release_resources,) if self.strand_resources is not None else ()))):
+            try:release()
+            except Exception as error:errors.append(error)
+        if errors:raise ExceptionGroup('Strand resources remain for retry',errors)
+        self.strand_resources=self.strand_stream=None
+        self._strand_bounds_payload=None
+        self._strand_bounds=(0.,0.)

@@ -787,6 +787,9 @@ substitute for the planned flow, rolling twist, traveling packets, elastic torsi
 The selected production grammar combines C's primary elastic body with A's twisting, localized high-power colour,
 particles/strands and independently reactive axial roll about the waveform's length (separate from camera orbit).
 The Migration Plan owns full visual editors/ranges, endpoint audits and the two initial primary/alternate presets.
+Free strand admission/base look belongs to immutable logical root cohorts, not live renderer thresholds. Strands persist
+with their travelling roots; repeat accents briefly extend/glow existing strands without rebirth or timer expiry.
+The live checklist owns proof that history retirement stays outside visible direct/reflected coverage.
 `Docs/Reference/Waveform_Ribbon_Mist_Failure_and_Replacement.md` preserves the rejected mist image and owns its
 failure analysis and replacement proposals. The operator's current direction is full-scene night fog displaced by
 the actual waveform; smoothing the rejected banks/fringe does not satisfy that direction.

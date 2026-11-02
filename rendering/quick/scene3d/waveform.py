@@ -367,11 +367,13 @@ class WaveformScene:
             return self._render_packet(packet,**parameters)
 
     def _render_packet(self, packet, *, capacity, now, travel, recipe, size, view, projection, eye, camera_lens, card,
-               flat=False, react=0., overlay=1., burst_payload=None, burst_origin=0.):
+               flat=False, react=0., overlay=1., burst_payload=None, burst_origin=0.,strand_payload=None,strand_origin=0.):
         self._check_context(admit=True)
         self.recipe, self.size, self._overlay = recipe, size, overlay
         # None is the lab's historical procedural-spark fixture; production explicitly supplies birth bytes.
         self._burst_payload, self._burst_origin = burst_payload, burst_origin
+        self._strand_payload,self._strand_origin=strand_payload,strand_origin
+        if recipe.strays is None:self.ribbons.release_strands()
         if recipe.sparks is None and self.bursts.has_resources:
             self.bursts.release()
         if recipe.fog is None and (self.fog.has_resources or self.reflected_fog.has_resources
@@ -548,7 +550,9 @@ class WaveformScene:
                     if recipe.strays is not None:
                         self.ribbons.draw(packet, ribbon_mvp, shading='strays', strays=recipe.strays, now=now,
                                           mist=draw['mist'], mist_frame=draw['mist_frame'], material=recipe.material,
-                                          sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'])
+                                          sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'],
+                                          strand_births=self._strand_payload,strand_origin=self._strand_origin,
+                                          continuation=draw['continuation'])
                     if recipe.sparks is not None and self._burst_payload:
                         self.bursts.draw(self._burst_payload,mvp=mvp,now=now-self._burst_origin,
                                          viewport=(width,height),mist=draw['mist'],grade=draw['grade'])
@@ -581,7 +585,8 @@ class WaveformScene:
                 self.ribbons.draw(packet, reflected_mvp, shading='strays', strays=self.recipe.strays,
                                   now=draw['age_fade'][0], mist=draw['mist'], mist_frame=draw['mist_frame'],
                                   material=self.recipe.material, sweep_axis=draw['sweep_axis'], grade=draw['grade'],
-                                  floor=draw['floor'])
+                                  floor=draw['floor'],strand_births=self._strand_payload,strand_origin=self._strand_origin,
+                                  continuation=draw['continuation'])
             if self.recipe.sparks is not None and self._burst_payload:
                 self.bursts.draw(self._burst_payload,mvp=tuple((projection @ mirrored).flatten(order='F')),
                     now=draw['age_fade'][0]-self._burst_origin,
