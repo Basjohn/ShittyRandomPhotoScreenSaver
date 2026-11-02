@@ -34,6 +34,38 @@ their actual consumers, with audits of both handles. Smooth fog-fringe grain bef
 colour tint and brightness become settings rather than blocking visual polish. Start with exactly two authored
 presets from the primary and alternate examples; preserve all shared framed-3D features and technical/preset systems.
 
+## Production signal ownership and calibration
+
+Waveform selects `raw_musical_signals` through its mode descriptor. The sole existing FFT and transient bus
+read fixed-reference raw levels for its musical level, passage and typed onsets, independently of Dynamic Floor.
+Every other mode retains its established post-floor bus input. Changing numerical policy replaces musical bus
+context and fences detached compute; same-policy settings application preserves it. Digital silence updates the
+Waveform raw lanes and bus instead of retaining the previous music. PCM replay requires the current accepted
+source and compute-configuration epoch, and reanalyses Waveform's musical bus as well as body bands. Bubble/EB
+replay retains its documented recorded-event hybrid.
+
+Own fixed band anchors are `(5.4, 3.1, 1.1)` at reference FFT 256, with the existing measured block-length
+correction math. The passage scale maps raw held level `3.4` to the shared usual musical loudness, rounded from
+pooled median `3.359` over four 60-second native PCM captures with three-second pre-roll. No song-relative level
+is learned. Event reward uses unclipped magnitude and shared acoustic/passage weighting; typed kick/snare/vocal
+impulses have different elastic axes. Raw band routing follows the one eased passage; authorable idle motion is
+independent of acoustic rewards. A ready scene survives source-epoch and idle/play changes within its runtime.
+
+The controlled PCM audit (`tools/visualizer_replay/waveform_ribbon_signal_audit.py --mode-output`) produced
+identical floor-OFF/ON raw bands, passage statistics, exact typed events and complete body/birth publication hashes
+for all four captures. Passage medians at authored gain/block 256:
+
+| Captured window | Median passage |
+| --- | ---: |
+| ragdoll_quiet_intro_loud_end1 | 0.617 |
+| nightsolong_acousticsoft1 | 0.744 |
+| human_heavy1 | 0.456 |
+| anything_mixed2 | 0.677 |
+
+All fourteen routed drivers retain headroom (no ceiling occupancy in this audit); do not classify these captures
+by filename or substitute this source evidence for native musical response. The captures are only 60 seconds,
+not full-song loud-section evidence. Remaining native acceptance and rejected UX are owned by Current_Plan.
+
 ## 1. Mode shape (shared 3D Framed scaffolding)
 
 - Canonical descriptor and implementation wiring with the framed scene capability; lazy imports; only the active

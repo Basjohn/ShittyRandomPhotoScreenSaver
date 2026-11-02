@@ -39,6 +39,9 @@ class _SpectrumConfigEngine:
         self.shape_config = None
         self.drop_speed = None
 
+    def set_raw_musical_signals(self, enabled: bool) -> None:
+        self.raw_musical_signals = bool(enabled)
+
     def set_spectrum_shaping_enabled(self, enabled: bool) -> None:
         self.spectrum_shaping_enabled = bool(enabled)
 
@@ -406,6 +409,7 @@ class _PlaybackEngine(_SpectrumConfigEngine):
 def test_quick_play_edge_restores_historical_wake_before_playback_commit() -> None:
     engine = _PlaybackEngine()
     owner = _owner(engine, mode="bubble")
+    owner._started = True  # This bar covers resume after owner admission, not pre-start truth.
 
     owner.set_playing(True)
     assert engine.events[:2] == ["wake", ("playing", True)]

@@ -111,6 +111,8 @@ class VisualizerModeDescriptor:
     # implementation or a live dependency on Spectrum's active preset.
     spectrum_shape_controls: bool = False
     spectrum_ghost_controls: bool = False
+    # One transient bus, with a mode-owned input policy. Existing modes keep their accepted post-floor path.
+    raw_musical_signals: bool = False
     # One-time persisted-input bridge for a mode that formerly borrowed its
     # source profile. The source preset is read only while missing owned keys
     # are promoted; runtime resolution remains wholly mode-local afterwards.
@@ -423,6 +425,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         technical_setting_suffixes=('bar_count','audio_block_size','adaptive_sensitivity','sensitivity',
                                     'dynamic_floor','manual_floor','input_gain'),
         rainbow_controls=False,shared_bar_appearance=False,
+        raw_musical_signals=True,
         view_orbit_settings=('waveform_ribbon_turn','waveform_ribbon_tilt'),
         view_orbit_steps=(2./180.,2./90.),view_orbit_inertia=True,
         view_auto_rotate_settings=('waveform_ribbon_auto_rotate','waveform_ribbon_auto_rotate_after','waveform_ribbon_auto_rotate_speed'),

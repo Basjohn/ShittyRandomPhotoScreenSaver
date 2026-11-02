@@ -1521,9 +1521,10 @@ def logical_tick(widget: Any) -> Optional[VisualizerLogicalFrame]:
     # The wait itself is deliberately preserved: it still gates reactive source
     # authority when playback resumes.
     if widget._waiting_for_fresh_engine_frame and not changed and not _any_nonzero:
-        if widget._spotify_playing or not mode_capabilities.has_presentation_owned_idle_scene(
+        if not mode_capabilities.has_source_independent_scene(getattr(widget,'_vis_mode_str','')) and (
+            widget._spotify_playing or not mode_capabilities.has_presentation_owned_idle_scene(
             getattr(widget, "_vis_mode_str", "")
-        ):
+        )):
             # Nothing new to draw, but a decided reveal must still reach the GUI
             # half. Before the split this path ran the reveal inline, so losing
             # it here would strand a completed mode transition.

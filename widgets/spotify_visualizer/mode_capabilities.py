@@ -46,6 +46,7 @@ _IDLE_SELF_ANIMATING = frozenset(
 # Modes whose idle scene is produced entirely by presentation and needs no
 # source frame at all.
 _PRESENTATION_OWNED_IDLE = frozenset({"spectrum", "extruded_spectrum", "shockwave_grid"})
+_SOURCE_INDEPENDENT_SCENE = frozenset({'waveform_ribbon'})
 
 # Modes whose renderer draws the waveform *samples*. Every other mode carries an
 # empty sample payload (no per-tick copy/validation) and no paused idle
@@ -80,6 +81,11 @@ def has_presentation_owned_idle_scene(mode: Any) -> bool:
     """
 
     return mode_key(mode) in _PRESENTATION_OWNED_IDLE
+
+
+def has_source_independent_scene(mode: Any) -> bool:
+    """A persistent logical world may keep presenting while reactive input waits for its current source."""
+    return mode_key(mode) in _SOURCE_INDEPENDENT_SCENE
 
 
 def consumes_waveform_samples(mode: Any) -> bool:

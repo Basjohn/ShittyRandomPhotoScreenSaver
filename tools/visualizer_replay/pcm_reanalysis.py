@@ -4,11 +4,12 @@ Ordinary replay serves each frame's recorded post-DSP bands, so a mode's technic
 settings (Dynamic Floor, manual floor, Sensitivity) cannot change them. Inside
 ``reanalyzed_bubble_bands()`` every accepted frame instead feeds its native PCM
 tail through ``compute_bars_from_samples`` with the replay worker's *configured*
-compute state, and Bubble/EB read bands through the production getter. Recorded
+compute state, and Bubble/EB read bands through the production getter. For Bubble/EB recorded
 onsets, loudness and sampled cadence remain unchanged: a controlled hybrid, not a
 live run. EB derives its passage inside its runtime from that recomputed body tuple;
 its passage never reads the retained historical loudness scalar. Other modes keep
-their existing recorded lane ownership. Auto's negotiated block and skipped native
+their existing recorded lane ownership. Waveform also reads musical level, passage and typed
+onsets from the same reanalysed production bus, with current-source/config fencing. Auto's negotiated block and skipped native
 callbacks are not recoverable.
 """
 from __future__ import annotations
@@ -27,6 +28,7 @@ class PcmReanalysis:
 
     def __init__(self) -> None:
         self.state = None
+        self.identity = None
         self.serial = None
         self.frames = 0
 
@@ -36,7 +38,15 @@ class PcmReanalysis:
         history = feature.capture_history
         if history is None:
             raise ValueError("PCM reanalysis requires native capture history on every frame")
+        if engine._replay_capture_history is not history:
+            raise ValueError("PCM reanalysis must follow acceptance of this exact source frame")
+        identity = (engine, engine._analysis_compute_state_epoch)
+        if self.identity != identity:
+            self.state = None
+            self.serial = None
+            self.identity = identity
         if self.serial == history.capture_serial:
+            engine._pcm_reanalysis_epoch = engine._analysis_compute_state_epoch
             engine._pcm_reanalysis_ready = True
             return
         worker = engine._audio_worker
@@ -50,6 +60,7 @@ class PcmReanalysis:
         if compute_bars_from_samples(self.state, samples) is None:
             raise RuntimeError("production PCM analysis failed")
         worker.commit_compute_snapshot(self.state)
+        engine._pcm_reanalysis_epoch = engine._analysis_compute_state_epoch
         engine._pcm_reanalysis_ready = True
         self.serial = history.capture_serial
         self.frames += 1

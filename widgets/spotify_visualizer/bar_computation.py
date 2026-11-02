@@ -270,12 +270,23 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
             # Keep transients responsive under hot sections by normalising
             # against the control lane instead of hard-clamping to 1.0.
             _tb_norm = max(0.2, control_norm * 0.85)
-            _t_snap = _tb.update(
-                min(2.5, max(0.0, bass_energy / _tb_norm)),
-                min(2.5, max(0.0, mid_energy / _tb_norm)),
-                min(2.5, max(0.0, treble_energy / _tb_norm)),
-                loudness=max(bass_energy, mid_energy, treble_energy),
-            )
+            if worker._raw_musical_signals:
+                from widgets.spotify_visualizer.raw_audio_scale import (raw_at_reference_fft,
+                    WAVEFORM_RAW_REFERENCES,WAVEFORM_REFERENCE_FFT,WAVEFORM_BLOCK_EXPONENTS,WAVEFORM_USUAL_RAW_LEVEL)
+                from widgets.spotify_visualizer.transient_bus import MUSICAL_USUAL_LOUDNESS
+                reference=tuple(raw_at_reference_fft(value,WAVEFORM_REFERENCE_FFT/(2.*n),exponent)
+                    for value,exponent in zip((raw_bass,raw_mid,raw_treble),WAVEFORM_BLOCK_EXPONENTS))
+                # The one existing bus receives un-clipped raw contrast on a fixed analysis scale. Its
+                # acoustic support and passage no longer inherit Dynamic Floor or its learned control norm.
+                _t_snap=_tb.update(*(2.*value/anchor for value,anchor in zip(reference,WAVEFORM_RAW_REFERENCES)),
+                    loudness=max(reference)*MUSICAL_USUAL_LOUDNESS/WAVEFORM_USUAL_RAW_LEVEL)
+            else:
+                _t_snap = _tb.update(
+                    min(2.5, max(0.0, bass_energy / _tb_norm)),
+                    min(2.5, max(0.0, mid_energy / _tb_norm)),
+                    min(2.5, max(0.0, treble_energy / _tb_norm)),
+                    loudness=max(bass_energy, mid_energy, treble_energy),
+                )
             _g_clamp = float(worker._transient_clamp)
             worker._transient_bass = min(_g_clamp, _t_snap.bass_transient)
             worker._transient_mid = min(_g_clamp, _t_snap.mid_transient)
@@ -1069,8 +1080,10 @@ def compute_bars_from_samples(
             return None
         if size > 2048:
             mono = mono[-2048:]
-        if peak_raw < 1e-3:
+        if peak_raw < 1e-3 and not worker._raw_musical_signals:
             return get_zero_bars(worker)
+        # Waveform must publish true silence to its raw lanes and existing bus.
+        # Retain the accepted modes' early-return behavior exactly.
 
         # Inline FFT processing (single code path — no IPC fallback)
         fft = np_mod.fft.rfft(mono)

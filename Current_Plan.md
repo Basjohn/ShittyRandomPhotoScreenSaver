@@ -130,6 +130,42 @@ then closed the gap by measuring against both. Do the same for every new mode:
 
 ### 7.1 Waveform Ribbon (next)
 
+**Operator native rejection (2 Nov): production candidate is unaccepted.** Close these in order with recorded/live
+audio and actual native motion, retaining the C-primary/A-twist grammar:
+
+- [ ] Repair live audio admission; prove nonzero per-band/passage/onset inputs and consumed accents in playback.
+  Restore immediate musical kick/punch, changing body flow/torsion, localized dense highlights/colour, sparks and strands.
+- [ ] Preserve subtle low-energy idle motion and the same scene across first idle→play; no priming blackout or scene reset.
+- [ ] Complete actual in-scene 3D navigation/Edit scaffolding to the EB feature contract, including both projections.
+  A renderer capable of a camera matrix is insufficient if the production interaction cannot reach it.
+  The user-authorized 6.1 Sol High camera slice must enforce an above-floor eye, keep floor below eye and waveform,
+  and make the visible waveform continuous/infinite with no exposed head/tail at admitted angles. Preserve shared
+  camera/input ownership; do not shift actors/populations with the eye or hide failures by removing projections.
+  **Grounded camera direction (operator):** stable eye height above the floor; approach the waveform and orbit left/right,
+  always retaining it in view. Constrain navigation to a visually credible region; no free-flight escape into ugly areas.
+- [ ] Resolve side sheets fighting the fog, and smooth the fog body/fringe grain into a smoothly lit rim in motion.
+  Operator orbit screenshots show an extended bright horizontal shelf and detached noisy patches; reject camera-
+  dependent clearance distortion and remote luminous boundaries. Preserve fixed-world atmosphere and light it by
+  distance to the actual ribbons, including turned views. Navigation repair remains below musical response in priority.
+- [ ] Prove floor reflection remains live and authorable; brighten/tune rim light and glow through their actual controls.
+  Reflection-column aesthetics remain secondary. Compare both presets in person after automated gates, not before.
+- [ ] **Viewport regression (operator):** shrunken wide viewport restores reflection and changes apparent reaction.
+  Reproduce the identical immutable audio/body/camera snapshot at canonical, wide, tall and large sizes; separate
+  aperture/projection effects from floor reflection/specular resolution-cap branches. Correct the owning pass or
+  geometry boundary; never compensate with audio gain. All prior native-rejection items remain equally open.
+- [ ] **Dynamic Floor A/B:** operator observes better response with it on. Trace the full configured PCM/DSP→raw
+  body bands and musical passage/onset chain against guide §13A/13C, not a getter stub. Establish lively floor-OFF
+  output with pooled real scales and unclipped contrast; preserve accepted Bubble/EB DSP/behaviour.
+  Recorded PCM now proves identical full body/birth packets and typed events with floor off/on on four clips.
+  The descriptor-owned raw-reference policy uses the existing bus/FFT, clears old numerical-domain context on policy
+  changes and fences compute/replay state. Preserve accepted modes and validate audible punch/phrase response natively;
+  source parity and unclipped range distributions alone do not establish the operator's musical standard.
+- [ ] **Accent placement/reward:** with fog off the operator sees only a few specks in one spot. Verify actual
+  distributed rim births, independent particle glow and rim-rooted strands over real quiet/ordinary/hot passages.
+  A nonzero cohort serial or isolated screenshot is insufficient visible-accent acceptance.
+- [ ] **Awaiting later UX pass — UI fully rejected:** defer the complete usability/UX redesign until credible visual
+  results exist. Current editor/control plumbing and tests do not establish an accepted Settings experience.
+
 Chosen first: the smallest contained scene and the first consumer of S3D-1/S3D-2/S3D-5. Brief and hard gates:
 `Docs/Future_Work/Waveform_Ribbon.md`. The detailed working checklist and visual target custody live in
 `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`; reference packages under `references/` are local/operator-owned and are
@@ -160,6 +196,10 @@ the mist. Preset/control migration and recorded-audio calibration come only afte
   but the first loaded smoke measurement exceeded the 8 ms render budget (~14 ms). Profile the real scene stages,
   remove repeated preparation/upload/state work at its owner, then rerun both presets in isolation under game60;
   do not lower artistic reaction strength or treat offline GPU medians as live acceptance.
+  First measured owners: render-side envelope ~3.9 ms and repeated ribbon passes ~3.5 ms. Share one fenced packet
+  lease across the scene's passes (rebind after intervening consumers), then migrate envelope/blur/edge-limit
+  reduction to bounded GPU work over that same packet if needed. Keep the CPU reduction as a test oracle, prohibit
+  readback/duplicate live CPU preparation, preserve floor/grade/clearance consumers and prove per-row/pixel parity.
 
 ### 7.2 Reactive Liquid / Audio Melt Pool
 
