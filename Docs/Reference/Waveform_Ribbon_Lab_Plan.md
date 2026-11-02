@@ -874,7 +874,8 @@ camera and resource contracts rather than rebuilding them or reopening already-l
 
 **Section 0 is the sole live sequence.** The ribbon material and generated-map floor exist; their fidelity is open.
 The bounded mist prototype exists; its remaining reusable admission/lifecycle/cost gates are still open. The operator
-admits the current visual range with production caveats; motion selection remains Awaiting Validation under §5.1.
+admits the current visual range with production caveats; the selected C-primary/A-twist hybrid and production
+ownership are in the Migration Plan. Current_Plan owns remaining calibration, framing, range and loaded-live gates.
 
 - [ ] **Awaiting Validation — reference completeness:** no clean annotation-free scene or reference animation was
   present in the inspected package. Exact hidden pixels, topology count and optical model are unspecified; the motion

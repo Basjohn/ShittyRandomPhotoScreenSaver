@@ -108,6 +108,14 @@ class FogVolume:
         self._allocate(grid)
         return False
 
+    def prepare_program(self) -> bool:
+        """Compile one hidden-frame unit with legal ownership even if reveal is cancelled before update."""
+        self._check_context(admit=True)
+        if self._integrate_program:
+            return True
+        self._integrate_program=compile_compute_program(FOG_INTEGRATE_COMPUTE,label=f'{self.label} integrate')
+        return False
+
     def update(self, inject_program: int, *, view, lens, depth_range, grid, medium=None) -> None:
         """Evaluate and integrate the medium for one camera. ``view``: world->view (4x4, numpy row-major);
         ``lens``: (half-extent or tangent x, y, orthographic); ``depth_range``: (near, far) view depth."""
@@ -227,6 +235,15 @@ class FogMarch:
             from rendering.quick.render.gl_resources import compile_program
             self._programs[key] = compile_program(FOG_FULLSCREEN_VERTEX, fragment, label=f'{self.label} {key}')
         return self._programs[key]
+
+    def prepare_programs(self) -> bool:
+        """At most one compile per caller-owned hidden preparation step."""
+        self._check_context()
+        for key,source in (('march',self._source),('composite',FOG_COMPOSITE_FRAGMENT)):
+            if key not in self._programs:
+                self._program(key,source)
+                return False
+        return True
 
     def _allocate(self, width, height) -> None:
         name = (ctypes.c_uint*1)()

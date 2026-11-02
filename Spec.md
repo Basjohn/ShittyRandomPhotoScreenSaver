@@ -787,12 +787,18 @@ substitute for the planned flow, rolling twist, traveling packets, elastic torsi
 The selected production grammar combines C's primary elastic body with A's twisting, localized high-power colour,
 particles/strands and independently reactive axial roll about the waveform's length (separate from camera orbit).
 The Migration Plan owns full visual editors/ranges, endpoint audits and the two initial primary/alternate presets.
+The registered production candidate uses descriptor-owned capture/runtime/renderer and canonical spec-driven Settings.
+Configuration and published packets are detached immutable values. C springs respond per ribbon's selected band;
+A twist and axial speed integrate on the sole logical clock. Existing body geometry responds before new head history
+travels into view. Event-owned sparks are admitted once, bounded by lifetime/refractory/capacity, and fly analytically
+on published time. Camera navigation does not move populations or reauthor the world fog. Complete native endpoint,
+framing, editor and loaded-live gates remain in Current_Plan; candidate registration does not imply acceptance.
 New 3D labs/modes start Orthographic with optional Perspective, using the shared admitted eye/world and actual
 projection matrices/ray origins; camera math alone does not establish scene likeness or reflection parity.
 The shared bounded CPU path/history and transported width-frame references are documented in
 `Docs/Reference/Ribbon_Path.md`; the incremental ring producer and oriented OIT/HDR strip are consumed by the Waveform
-lab. Remaining native surface/defocus and cost gates live there and in the Lab Plan. No runtime mode consumes it;
-it introduces no runtime simulation or clock.
+lab and production Waveform mode. Remaining native surface/defocus and cost gates live there and in the Lab Plan.
+The shared primitive introduces no simulation or clock.
 Shared planar reflection ownership, mirrored-camera requirements and anisotropic receiver sampling are documented
 in `Docs/Reference/Scene3D_Resources.md`; consumer inclusion and visual acceptance remain in the Waveform Lab Plan.
 CPU geometry/frame references are test oracles, not a software rendering backend. Production input preparation

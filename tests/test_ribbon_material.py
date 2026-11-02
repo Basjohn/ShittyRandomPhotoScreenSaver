@@ -67,6 +67,17 @@ def render(parts, packets, *, opaque=None, material=None):
     return parts.target.read_rgba().astype(int)
 
 
+def test_header_alpha_fades_body_coverage_and_zero_removes_it(scene):
+    material = RibbonMaterial(body_alpha=.4, strand_light=0., rim_light=0., fill_light=0.,
+                              rim_glow_light=0., glint_light=0.)
+    background = render(scene, [], material=material)
+    full = render(scene, [strip(0.,-5.,(.1,.7,.9,1.),emission=0.)], material=material)
+    half = render(scene, [strip(0.,-5.,(.1,.7,.9,.5),emission=0.)], material=material)
+    zero = render(scene, [strip(0.,-5.,(.1,.7,.9,0.),emission=0.)], material=material)
+    np.testing.assert_array_equal(zero, background)
+    assert np.abs(full-background).sum() > np.abs(half-background).sum() > 0
+
+
 def test_crossing_ribbons_give_the_same_picture_in_either_order_and_brighten(scene):
     cyan = strip(0., -10., (.1, .7, 1., 1.))
     magenta = strip(.15, -12., (.9, .2, .9, 1.))

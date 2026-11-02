@@ -836,6 +836,13 @@ class SpotifyVisualizerSettings:
     extruded_bubble_adaptive_sensitivity: bool = field(default_factory=lambda: _visualizer_default('extruded_bubble_adaptive_sensitivity'))
     extruded_bubble_sensitivity: float = field(default_factory=lambda: _visualizer_default('extruded_bubble_sensitivity'))
     extruded_bubble_bar_count: int = field(default_factory=lambda: _visualizer_default('extruded_bubble_bar_count'))
+    waveform_ribbon_dynamic_floor: bool = field(default_factory=lambda: _visualizer_default('waveform_ribbon_dynamic_floor'))
+    waveform_ribbon_manual_floor: float = field(default_factory=lambda: _visualizer_default('waveform_ribbon_manual_floor'))
+    waveform_ribbon_input_gain: float = field(default_factory=lambda: _visualizer_default('waveform_ribbon_input_gain'))
+    waveform_ribbon_audio_block_size: int = field(default_factory=lambda: _visualizer_default('waveform_ribbon_audio_block_size'))
+    waveform_ribbon_adaptive_sensitivity: bool = field(default_factory=lambda: _visualizer_default('waveform_ribbon_adaptive_sensitivity'))
+    waveform_ribbon_sensitivity: float = field(default_factory=lambda: _visualizer_default('waveform_ribbon_sensitivity'))
+    waveform_ribbon_bar_count: int = field(default_factory=lambda: _visualizer_default('waveform_ribbon_bar_count'))
     devcurve_dynamic_floor: bool = field(default_factory=lambda: _visualizer_default('devcurve_dynamic_floor'))
     devcurve_manual_floor: float = field(default_factory=lambda: _visualizer_default('devcurve_manual_floor'))
     devcurve_dynamic_range_enabled: bool = field(default_factory=lambda: _visualizer_default('devcurve_dynamic_range_enabled'))
@@ -998,6 +1005,7 @@ class SpotifyVisualizerSettings:
     preset_extruded_spectrum: int = field(default_factory=lambda: _visualizer_default('preset_extruded_spectrum'))
     preset_extruded_bubble: int = field(default_factory=lambda: _visualizer_default('preset_extruded_bubble'))
     preset_shockwave_grid: int = field(default_factory=lambda: _visualizer_default('preset_shockwave_grid'))
+    preset_waveform_ribbon: int = field(default_factory=lambda: _visualizer_default('preset_waveform_ribbon'))
 
     def __post_init__(self):
         self._apply_core_visual_defaults()

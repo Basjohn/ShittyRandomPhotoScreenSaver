@@ -69,6 +69,7 @@ _VISUALIZER_ADVANCED_ROOT_ATTRS = {
     "extruded_spectrum": ("_extruded_spectrum_advanced", "_extruded_spectrum_advanced_host"),
     "shockwave_grid": ("_shockwave_grid_advanced", "_shockwave_grid_advanced_host"),
     "extruded_bubble": ("_extruded_bubble_advanced", "_extruded_bubble_advanced_host"),
+    "waveform_ribbon": ("_waveform_ribbon_advanced", "_waveform_ribbon_advanced_host"),
 }
 
 

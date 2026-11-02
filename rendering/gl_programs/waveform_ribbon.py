@@ -22,6 +22,7 @@ uniform int uFogLit;
 uniform vec2 uViewport;
 uniform vec3 uBackdrop;
 uniform vec3 uAmbient;
+uniform vec3 uFloorTint;
 uniform vec4 uFloor;        // tile, micro tile, reflection gain, f0
 uniform vec4 uFloorTone;    // albedo gain, diffuse gain, broad relief amplitude, micro relief amplitude
 uniform vec3 uRipple;       // reflection offset per unit slope: broad, micro across, micro along
@@ -107,7 +108,7 @@ void main() {
         float dz=vWorldPos.z-uPoolZ;
         pool*=uPool.x*0.25*exp(-max(dz,0.0)/uPool.w)*exp(-max(-dz,0.0)/uPool.z);
     }
-    vec3 colour=albedo*(uAmbient+field*uFloorTone.y+pool)+specular;
+    vec3 colour=albedo*uFloorTint*(uAmbient+field*uFloorTone.y+pool)+specular;
     float clear=mistTransmittance(vWorldPos);
     colour=mix(mistColour(uBackdrop,vWorldPos),colour,clear);
     FragColor=vec4(colour,1.0);

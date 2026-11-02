@@ -12,6 +12,18 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 LAYOUT_SCRIPT = REPO_ROOT / "tools" / "build_layout.ps1"
 
 
+def test_waveform_floor_maps_are_required_and_packaged_by_both_product_workers():
+    for script in ('build_nuitka.ps1','build_nuitka_mc_onedir.ps1'):
+        source=(REPO_ROOT/'scripts'/'venv'/script).read_text(encoding='utf-8')
+        assert '--include-data-dir=assets/textures/waveform_floor=assets/textures/waveform_floor' in source
+    layout=LAYOUT_SCRIPT.read_text(encoding='utf-8')
+    preflight=(REPO_ROOT/'tools'/'build_runner.py').read_text(encoding='utf-8')
+    for name in ('concrete_albedo.png','concrete_roughness.png','wet_surface_height.png'):
+        assert (REPO_ROOT/'assets'/'textures'/'waveform_floor'/name).is_file()
+        assert layout.count('assets\\textures\\waveform_floor\\'+name)==2
+        assert name in preflight
+
+
 def _run_layout_command(command: str, **paths: Path) -> subprocess.CompletedProcess[str]:
     pwsh = shutil.which("pwsh")
     if not pwsh:

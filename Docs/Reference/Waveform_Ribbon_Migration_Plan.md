@@ -2,9 +2,12 @@
 
 Planning owner for **WR-08**, subordinate to [`Current_Plan.md`](../../Current_Plan.md) §7.1 and the lab plan's
 WR-08 gates ([`Waveform_Ribbon_Lab_Plan.md`](Waveform_Ribbon_Lab_Plan.md)). The lab owns the look; this document
-owns the full production control design, production calibration and the order of the port. Production migration is
-not implemented. The operator admits the current lab visual range with production appearance caveats; its tuner is a synthetic prototype, not the full
-matrix editor below. Core geometry/motion evidence and timing belong to the lab plan §5.1. The selected grammar is
+owns the full production control design, production calibration and the order of the port. A registered production
+candidate now connects canonical Settings, two authored presets, visual editors, the sole logical runtime and the
+retained scene. A finite user-triggered quiet/middle/peak preview renders that same production body/scene without
+a second clock or audio engine. Complete endpoint/framing audits and loaded live admission remain open in
+`Current_Plan.md`; existence of the candidate is not acceptance. Core geometry/motion evidence and timing belong to
+the lab plan §5.1. The selected grammar is
 **C elastic dynamics as primary, with A's accumulated twisting**. Values quoted are the lab
 recipes' current values, recorded for orientation: presets are operator-authored and never test oracles.
 
@@ -57,6 +60,30 @@ The lab's named recipes become the first presets, each one scene across quiet an
 | 2 — Silk Bands | `alternate` | Alternate board: three per-band ribbons coloured by ribbon (quiet blue/teal/lavender, loud magenta/orange/blue-violet), luminous silk, free strands |
 
 Names are suggestions for the operator to rename.
+
+The shared preset store uses zero-based indices: displayed Preset 1/2 resolve stored 0/1. The native capture route is
+`tools/waveform_ribbon_capture.py --clip <recording.jsonl> --preset 1 --start 20 --duration 4 --fps 24
+--output <new-directory> [--ffmpeg <explicit-executable>]`. It reanalyses original recorded PCM through the production
+worker and captures the real logical/frame/retained-render path; audio is not shifted to conceal response latency.
+
+### Production ownership
+
+`core/waveform_ribbon_authoring.py` strictly admits matrix, ribbon cards and gradient nodes. Configuration is compiled
+once into detached immutable inputs (`waveform_ribbon_parameters.py`); camera-only edits do not recompile body inputs.
+`WaveformRibbonFrameRuntime` fences activation/source identity and consumes each typed onset serial once. Its neutral
+`WaveformDynamics` integrates C elastic response per ribbon, A twist and axial speed/angle; history stays fixed at 6 Hz.
+Every logical publication projects the existing body immediately and supplies immutable bytes to the renderer. A
+separate eased canonical passage moves appearance ranges independently of the editable Light routing row.
+
+Event-owned sparks have at most 36 births per admitted event and a 160 ms minimum gap, with lifetime at most 8 s;
+2048 slots cover all simultaneous cohorts without deleting live particles. Count and appearance are authored at
+birth on the actual swept rim. GPU flight uses the published scene time; render delivery cannot re-admit a birth.
+Strands use bounded history slots, eased musical threshold growth and the same current body packet. Turning Sparks
+or volume Mist off retires their own resources.
+
+Matrix cells add independent bounded gains and power curves. Material, fog, floor and accent controls resolve their
+quiet/peak endpoints at their actual consumer. The matrix targets name C+A deformations (bend, torsion, stretch,
+axial roll, highlight packing) rather than retaining the discarded generic lab deformation grammar.
 
 ## 3. Controls by bucket
 

@@ -850,6 +850,9 @@ function Assert-SRPSSSourceProductAssets {
         'ui\resources\onboarding_assets.rcc',
         'resources\tutuogg.ogg',
         'resources\jedimodeyall.mp3',
+        'assets\textures\waveform_floor\concrete_albedo.png',
+        'assets\textures\waveform_floor\concrete_roughness.png',
+        'assets\textures\waveform_floor\wet_surface_height.png',
         'rendering\quick\qml\DisplayScene.qml',
         'rendering\quick\qml\FriendPulsePresentation.qml',
         'rendering\quick\qml\SystemStatsPresentation.qml',
@@ -916,6 +919,7 @@ function Assert-SRPSSOnefileQuickPayloadContract {
         '--include-data-dir=rendering/quick/qml=rendering/quick/qml',
         '--include-data-files=resources/tutuogg.ogg=resources/tutuogg.ogg',
         '--include-data-files=resources/jedimodeyall.mp3=resources/jedimodeyall.mp3',
+        '--include-data-dir=assets/textures/waveform_floor=assets/textures/waveform_floor',
         '--include-package=rendering.quick',
         '--include-package=widgets.spotify_visualizer',
         '--include-package=rendering.gl_programs',
@@ -964,6 +968,9 @@ function Assert-SRPSSOnedirQuickPayload {
     }
 
     $requiredProductFiles = @(
+        'assets\textures\waveform_floor\concrete_albedo.png',
+        'assets\textures\waveform_floor\concrete_roughness.png',
+        'assets\textures\waveform_floor\wet_surface_height.png',
         'resources\tutuogg.ogg',
         'resources\jedimodeyall.mp3',
         'ui\resources\assets.rcc',

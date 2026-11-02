@@ -37,6 +37,7 @@ class PcmReanalysis:
         if history is None:
             raise ValueError("PCM reanalysis requires native capture history on every frame")
         if self.serial == history.capture_serial:
+            engine._pcm_reanalysis_ready = True
             return
         worker = engine._audio_worker
         if self.state is None:
@@ -49,6 +50,7 @@ class PcmReanalysis:
         if compute_bars_from_samples(self.state, samples) is None:
             raise RuntimeError("production PCM analysis failed")
         worker.commit_compute_snapshot(self.state)
+        engine._pcm_reanalysis_ready = True
         self.serial = history.capture_serial
         self.frames += 1
 

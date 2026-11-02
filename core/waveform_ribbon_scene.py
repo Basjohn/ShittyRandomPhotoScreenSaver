@@ -101,6 +101,7 @@ class Floor:
     tile: float = 12.               # concrete colour and broad relief patch (world units)
     micro_tile: float = 1.6         # micro relief patch (world units); the same smooth height data, finer
     albedo_gain: float = 1.        # wet concrete is dark
+    tint: tuple = (1.,1.,1.)       # linear surface tint, independently of reflection strength
     albedo_bias: float = 2.5        # mip bias of the colour scan (grazing aliasing)
     ambient: tuple = (.03, .035, .05)
     diffuse: float = 0.             # gain on the mist's coarse light field (off: its depth slices band the floor)

@@ -248,6 +248,7 @@ class Lab(WaveformScene):
             matrix_values=(2/width,0,0,0,0,-2/height,0,0,0,0,1,0,-1,1,0,1),quad_vao=self.target.vao)
         self.target.bind(clear=(0.,0.,0.,0.))
         super().render(ring.packet(),capacity=ring.capacity,now=now,recipe=self.recipe,size=self.size,
+            travel=self.recipe.flow.speed*now,
             view=view,projection=projection,eye=eye,camera_lens=lens(POSES[pose],width/height),card=card,
             flat=flat,react=react)
         return self.target.read_rgba()

@@ -96,7 +96,7 @@ def _source_identity(
     engine: Any,
     mode_id: str,
 ) -> tuple[int, int, float | None]:
-    if mode_id in {"bubble", "sphere"}:
+    if mode_id in {"bubble", "sphere", "waveform_ribbon"}:
         getter = getattr(engine, "get_latest_authoritative_frame", None)
         if callable(getter):
             try:
@@ -1100,7 +1100,7 @@ def capture_visualizer_logical_frame(
             or extra.get("_quick_mode_changed", False)
         ),
         present_frame=bool(present_frame),
-        mode_reveal_ready=bool(mode_reveal_ready),
+        mode_reveal_ready=bool(mode_reveal_ready and extra.get('_quick_mode_reveal_ready',True)),
         common=common,
         mode_state=mode_state,
         protected_edges=(

@@ -23,6 +23,7 @@ from core.settings.visualizer_mode_settings import (
     Slider,
     Toggle,
     Triangle,
+    VisualEditor,
     iter_mode_settings,
     control_runtime_attr,
     control_runtime_value,
@@ -61,6 +62,17 @@ def open_gate(monkeypatch):
 
 
 def _different(control, value):
+    if isinstance(control,VisualEditor):
+        from copy import deepcopy
+        changed=deepcopy(value)
+        if control.validator.endswith(':admit_routing'):
+            row=next(iter(changed.values()));row[0][0]=.25 if row[0][0]!=.25 else .75
+        elif control.validator.endswith(':admit_ribbons'):
+            changed[0]['height']=.35 if changed[0]['height']!=.35 else .7
+        elif control.validator.endswith(':admit_palette'):
+            changed['low'][0][1]=[.25,.1,.5]
+        else:raise AssertionError('A structured editor needs a meaningful edit fixture')
+        return changed
     if isinstance(control, Gradient):
         return [.1, .8, .7, .15] if list(value) != [.1, .8, .7, .15] else [.2, .6, .85, .3]
     if isinstance(control, Range):
@@ -146,6 +158,8 @@ def test_the_model_clamps_repairs_and_round_trips_every_control(spec):
             wild[control.key] = "not a colour"
         elif isinstance(control, Choice):
             wild[control.key] = DEFAULTS[control.key] if control.ingress_strict else "not a choice"
+        elif isinstance(control, VisualEditor):
+            wild[control.key] = DEFAULTS[control.key]  # strict structured ingress is tested separately below
         elif isinstance(control, VISUAL_CONTROLS):
             wild[control.key] = "not a value"
         else:

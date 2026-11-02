@@ -1,9 +1,9 @@
 """Retained waveform scene composed over shared Scene3D owners; no window, context or clock."""
 from __future__ import annotations
 import math, struct
-import weakref
 from pathlib import Path
 from dataclasses import replace
+from contextlib import contextmanager
 import numpy as np
 from PIL import Image
 from OpenGL import GL as gl
@@ -18,10 +18,22 @@ from rendering.quick.scene3d.fog_volume import FogVolume, FogMarch
 from rendering.quick.scene3d.reflection import PlanarReflection
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.ribbon import GRADE_STOPS, RibbonPrimitive, ribbon_grade
+from rendering.quick.scene3d.ribbon_bursts import RibbonBurstRenderer
 from rendering.quick.scene3d.target import SceneTarget
 ROOT=Path(__file__).resolve().parents[3]
 
-def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None, slopes=(0., VIEW_SLOPE)) -> np.ndarray:
+
+@contextmanager
+def unclipped_prepasses():
+    """World targets have local viewports; the host's item scissor applies only to the final composition."""
+    clipped=bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
+    if clipped:gl.glDisable(gl.GL_SCISSOR_TEST)
+    try:yield
+    finally:
+        if clipped:gl.glEnable(gl.GL_SCISSOR_TEST)
+
+def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None, slopes=(0., VIEW_SLOPE),
+                      camber=0.) -> np.ndarray:
     """Lower/upper sheet bounds and their colours along world x from the admitted ring packet (3 x samples x RGBA).
 
     Each ribbon's knots are monotone in x (the history flows along +x), so its centre height and half-width
@@ -44,6 +56,9 @@ def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None, slope
         x = np.clip(x, 0., 1.)
         return x*x*(3. - 2.*x)
     for path in rows:
+        ribbon_share = float(np.clip(min(path[2,3],path[3,3]),0.,1.))
+        if ribbon_share == 0.:
+            continue
         count, start, capacity = int(path[0, 0]), int(path[1, 1]), int(path[1, 2])
         knots = path[4:].reshape(-1, KNOT_ROWS, 4)[(start + np.arange(count)) % capacity].astype(float)
         valid = knots[:, 1, 2] > .5
@@ -75,11 +90,26 @@ def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None, slope
         if len(sheets) <= ENVELOPE_RIBBONS:  # the sheet itself in 3D (unprojected), for true 3D clearance
             tube = tubes[len(sheets) - 1]
             t_order = np.argsort(true_x)
-            tx, tk, tf = true_x[t_order], knots[t_order], fade[t_order]
-            tube[:, 0] = np.interp(xs, tx, tk[:, 0, 1] + origin[1])
-            tube[:, 1] = np.interp(xs, tx, tk[:, 0, 2] + origin[2])
-            tube[:, 2] = np.interp(xs, tx, tk[:, 0, 3])*np.interp(xs, tx, tf, left=0., right=0.)
-            tube[:, 3] = np.interp(xs, tx, tf, left=0., right=0.)
+            tk = knots[t_order]
+            # Match the swept body B-spline, not straight interpolation through its control points. Its full
+            # cross-section lies inside this disk: width + transverse camber, then the same 1-Lipschitz floor map.
+            # Four samples per interval are finer than the envelope texture at the admitted history speeds.
+            if len(tk)>=4:
+                u=np.arange(4)/4.;v=1.-u
+                weights=np.stack((v**3,3*u**3-6*u*u+4.,-3*u**3+3*u*u+3*u+1.,u**3),axis=1)/6.
+                windows=np.stack([tk[i:len(tk)-3+i] for i in range(4)],axis=1)
+                dense=np.einsum('uk,ikrc->iurc',weights,windows).reshape(-1,KNOT_ROWS,4)
+                tx=dense[:,0,0]+origin[0]
+                cy=dense[:,0,1]+origin[1]
+                low=FLOOR_CONTACT[0]+FLOOR_CONTACT[1]
+                softness=FLOOR_CONTACT[2]
+                cy=low+softness*np.logaddexp(0.,(cy-low)/softness)
+                tube[:,0]=np.interp(xs,tx,cy)
+                tube[:,1]=np.interp(xs,tx,dense[:,0,2]+origin[2])
+                # Positive disk margin covers envelope texel interpolation and the finer spline chord error.
+                radius=dense[:,0,3]*math.sqrt(1.+camber*camber)+.08
+                tube[:,2]=np.interp(xs,tx,radius)
+                tube[:,3]=np.interp(xs,true_x[t_order],fade[t_order],left=0.,right=0.)
         upper, lower = np.maximum(upper, top), np.minimum(lower, bottom)
         presence = np.maximum(presence, np.where(here, np.interp(xs, x, fade), 0.))
     # Each edge glows in a blend of the sheets near it (by proximity), never a hard switch to whichever is outermost.
@@ -125,7 +155,7 @@ def waveform_envelope(packet, translation, age_fade, fog: Fog, grade=None, slope
     side = 1. - smooth((np.abs(xs) - fog.sides[0])/max(fog.sides[1] - fog.sides[0], 1e-6))
     upper, lower = closed + (upper - closed)*side, closed + (lower - closed)*side
     presence = presence*side
-    tubes[:, :, 2:] *= side[None, :, None]
+    # Artistic side walls close the projected hall; physical clearance follows visible geometry independently.
     table = np.zeros((3 + ENVELOPE_RIBBONS, xs.size, 4), np.float32)
     table[0, :, 0], table[0, :, 1], table[0, :, 2] = lower, upper, presence
     table[1, :, :3], table[2, :, :3] = upper_colour, lower_colour
@@ -243,9 +273,10 @@ def load_floor_textures(floor: Floor) -> dict:
 class WaveformScene:
     """Caller owns the current GL context, camera, output frame and explicit snapshot time."""
     def __init__(self):
-        self._context_ref = None
+        self._context = None
         self.resources, self.scene, self.ribbons = MeshResources('waveform scene'), SceneTarget('waveform scene'), RibbonPrimitive()
         self.fog_resources = MeshResources('waveform scene mist programs')
+        self.bursts = RibbonBurstRenderer()
         self.reflection = PlanarReflection('waveform scene floor')
         self.fog, self.reflected_fog = FogVolume('waveform scene mist'), FogVolume('waveform scene reflected mist')
         self.march = FogMarch('waveform scene mist', FOG_COVERAGE_GLSL)
@@ -261,7 +292,7 @@ class WaveformScene:
         return bool(self.textures or self._specular or self.resources.has_resources or self.scene.has_resources
                     or self.ribbons.has_resources or self.reflection.has_resources or self.fog.has_resources
                     or self.reflected_fog.has_resources or self.march.has_resources or self.reflected_march.has_resources
-                    or self.fog_resources.has_resources)
+                    or self.fog_resources.has_resources or self.bursts.has_resources)
 
 
     def _check_context(self, *, admit=False):
@@ -269,10 +300,16 @@ class WaveformScene:
         current = QOpenGLContext.currentContext()
         if current is None:
             raise RuntimeError('Waveform scene requires its owning current GL context')
-        if self._context_ref is None and admit:
-            self._context_ref = weakref.ref(current)
-        if self._context_ref is None or self._context_ref() != current:
+        # Keep the Python wrapper alive. Qt owns the native context; a weak-only wrapper can disappear between
+        # currentContext() calls on Qt Quick's render thread, falsely rejecting the same native context as foreign.
+        if self._context is None and admit:
+            self._context = current
+        if self._context is None or self._context != current:
             raise RuntimeError('Waveform scene used in a foreign GL context')
+
+    def admit_preparation(self):
+        """Preparation owns resources before any render has occurred; cancellation must remain legally retireable."""
+        self._check_context(admit=True)
 
     @staticmethod
     def _retire(actions):
@@ -302,14 +339,18 @@ class WaveformScene:
         self._retire((*(lambda key=key: self._release_texture(key) for key in tuple(self.textures)),
                       self.reflection.release, self._release_specular, self.fog.release, self.reflected_fog.release,
                       self.march.release, self.reflected_march.release, self.ribbons.release, self.scene.release,
-                      self.resources.release_resources, self.fog_resources.release_resources))
-        self._context_ref = None
+                      self.resources.release_resources, self.fog_resources.release_resources, self.bursts.release))
+        self._context = None
 
 
-    def render(self, packet, *, capacity, now, recipe, size, view, projection, eye, camera_lens, card,
-               flat=False, react=0., overlay=1.):
+    def render(self, packet, *, capacity, now, travel, recipe, size, view, projection, eye, camera_lens, card,
+               flat=False, react=0., overlay=1., burst_payload=None, burst_origin=0.):
         self._check_context(admit=True)
         self.recipe, self.size, self._overlay = recipe, size, overlay
+        # None is the lab's historical procedural-spark fixture; production explicitly supplies birth bytes.
+        self._burst_payload, self._burst_origin = burst_payload, burst_origin
+        if recipe.sparks is None and self.bursts.has_resources:
+            self.bursts.release()
         if recipe.fog is None and (self.fog.has_resources or self.reflected_fog.has_resources
                 or self.march.has_resources or self.reflected_march.has_resources or self.fog_resources.has_resources
                 or 'envelope' in self.textures or 'shape' in self.textures):
@@ -317,7 +358,7 @@ class WaveformScene:
         width, height = size
         environment, flow = recipe.environment, recipe.flow
         scroll = np.identity(4)
-        scroll[0, 3] = flow.head_x - flow.speed*now
+        scroll[0, 3] = flow.head_x - travel
         mvp = (projection @ view).flatten(order='F')
         ribbon_view = view @ scroll
         ribbon_mvp = tuple((projection @ ribbon_view).flatten(order='F'))
@@ -327,33 +368,35 @@ class WaveformScene:
                     age_fade=(now, flow.fade_in, (capacity - 1)/flow.knot_hz, flow.fade_out),
                     mist=environment.mist, mist_frame=(scroll[0, 3], 0., 0.),
                     grade=ribbon_grade(*colour_grade(recipe, react)[:3]))
-        forward = -view[2, :3]
-        self._slopes = (float(forward[0]/forward[2]), float(forward[1]/forward[2]))
-        envelope = None if flat or recipe.fog is None else waveform_envelope(packet, scroll[:3, 3], draw['age_fade'],
-                                                                              recipe.fog,
-                                                                              colour_grade(recipe, react),
-                                                                              self._slopes)
-        fogged = not flat and recipe.fog is not None
-        if fogged:
-            self._update_fog(self.fog, view, camera_lens, (width, height), recipe.fog.cell, recipe.fog.slices, envelope)
-            self._bake_shape()
-            self._crackle_limit = crackle_limit(envelope, recipe.fog, projection @ view, width, slopes=self._slopes)
-            self._update_fog(self.reflected_fog, mirror_view(view, 0.), camera_lens, (width, height),
-                             recipe.fog.reflection_cell, recipe.fog.reflection_slices, envelope)
-            fog = recipe.fog
-            march = dict(steps=fog.steps, max_extinction=fog.density, erosion=fog.erosion,
-                         detail_frequency=fog.detail_frequency, shadow=fog.shadow, step=fog.step,
-                         medium=self._fog_uniforms, shadow_floor=fog.shadow_floor, edge_glow=fog.edge_glow,
-                         base=fog.ambient)
-            self.march.march(self.fog, size=capped((width, height), fog.march_scale, fog.march_max_height), ground=0.,
-                             **march)
-            # The mirrored camera starts below the floor (no medium there) and sees the mist above it.
-            self.reflected_march.march(self.reflected_fog,
-                                       size=capped((width, height), fog.reflection_march_scale,
-                                                   fog.reflection_march_max_height), **march)
-        if not flat:
-            with self._fog_bound(self.reflected_fog if fogged else None) as fog:
-                self._reflect(packet, projection, view, scroll, {**draw, 'mist': {**draw['mist'], **fog}})
+        # The mist is a world field. Its authored extrusion stays fixed while the physical eye navigates;
+        # deriving slopes from forward.z made end-on views singular and changed the medium with the camera.
+        self._slopes = (0., VIEW_SLOPE)
+        with unclipped_prepasses():
+            envelope = None if flat or recipe.fog is None else waveform_envelope(packet, scroll[:3, 3], draw['age_fade'],
+                                                                                  recipe.fog,
+                                                                                  colour_grade(recipe, react),
+                                                                                  self._slopes,recipe.material.cross_curve)
+            fogged = not flat and recipe.fog is not None
+            if fogged:
+                self._update_fog(self.fog, view, camera_lens, (width, height), recipe.fog.cell, recipe.fog.slices, envelope)
+                self._bake_shape()
+                self._crackle_limit = crackle_limit(envelope, recipe.fog, projection @ view, width, slopes=self._slopes)
+                self._update_fog(self.reflected_fog, mirror_view(view, 0.), camera_lens, (width, height),
+                                 recipe.fog.reflection_cell, recipe.fog.reflection_slices, envelope)
+                fog = recipe.fog
+                march = dict(steps=fog.steps, max_extinction=fog.density, erosion=fog.erosion,
+                             detail_frequency=fog.detail_frequency, shadow=fog.shadow, step=fog.step,
+                             medium=self._fog_uniforms, shadow_floor=fog.shadow_floor, edge_glow=fog.edge_glow,
+                             base=fog.ambient)
+                self.march.march(self.fog, size=capped((width, height), fog.march_scale, fog.march_max_height), ground=0.,
+                                 **march)
+                # The mirrored camera starts below the floor (no medium there) and sees the mist above it.
+                self.reflected_march.march(self.reflected_fog,
+                                           size=capped((width, height), fog.reflection_march_scale,
+                                                       fog.reflection_march_max_height), **march)
+            if not flat:
+                with self._fog_bound(self.reflected_fog if fogged else None) as fog:
+                    self._reflect(packet, projection, view, scroll, {**draw, 'mist': {**draw['mist'], **fog}})
         with self._fog_bound(self.fog if fogged else None) as fog:
             draw = {**draw, 'mist': {**draw['mist'], **fog}}
             self._draw_scene(flat, packet, draw, mvp, eye, view, orthographic, ribbon_mvp, card, now, fogged)
@@ -409,11 +452,12 @@ class WaveformScene:
     def _fog_uniforms(self, program):
         """The shape's (and the medium's light) uniforms, for the inject and march programs alike."""
         fog = self.recipe.fog
-        x0, x1, _ = fog.envelope_range
+        x0, x1, count = fog.envelope_range
         location = lambda name: gl.glGetUniformLocation(program, name)
         gl.glBindTextureUnit(14, self.textures['envelope'])
         gl.glUniform1i(location('uEnvelope'), 14)
-        gl.glUniform2f(location('uEnvelopeSpan'), x0, 1./(x1 - x0))
+        step=(x1-x0)/(count-1)
+        gl.glUniform2f(location('uEnvelopeSpan'), x0-step*.5, 1./(x1-x0+step))
         gl.glUniform4f(location('uFogForm'), fog.density, fog.margin, fog.softness, fog.noise_scale)
         gl.glUniform4f(location('uFogShape'), fog.start_z, fog.band_depth, fog.noise, fog.light_decay)
         gl.glUniform2f(location('uFogClearance'), *fog.clearance)
@@ -483,7 +527,7 @@ class WaveformScene:
                     gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ZERO, gl.GL_ONE)
                     gl.glDepthMask(gl.GL_FALSE)
                     self.ribbons.draw(packet, ribbon_mvp, shading='light', **draw)
-                    if recipe.sparks is not None:
+                    if recipe.sparks is not None and self._burst_payload is None:
                         self.ribbons.draw(packet, ribbon_mvp, shading='sparks', sparks=recipe.sparks, now=now,
                                           mist=draw['mist'], mist_frame=draw['mist_frame'], material=recipe.material,
                                           sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'])
@@ -491,6 +535,9 @@ class WaveformScene:
                         self.ribbons.draw(packet, ribbon_mvp, shading='strays', strays=recipe.strays, now=now,
                                           mist=draw['mist'], mist_frame=draw['mist_frame'], material=recipe.material,
                                           sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'])
+                    if recipe.sparks is not None and self._burst_payload:
+                        self.bursts.draw(self._burst_payload,mvp=mvp,now=now-self._burst_origin,
+                                         viewport=(width,height),mist=draw['mist'],grade=draw['grade'])
                     gl.glDepthMask(gl.GL_TRUE)
                     gl.glDisablei(gl.GL_BLEND, 0)
 
@@ -512,7 +559,7 @@ class WaveformScene:
             reflected_view = mirrored @ scroll
             reflected_mvp = tuple((projection @ reflected_view).flatten(order='F'))
             self.ribbons.draw(packet, reflected_mvp, shading='light', **{**draw, 'view': tuple(reflected_view.flatten(order='F'))})
-            if self.recipe.sparks is not None:
+            if self.recipe.sparks is not None and self._burst_payload is None:
                 self.ribbons.draw(packet, reflected_mvp, shading='sparks', sparks=self.recipe.sparks, now=draw['age_fade'][0],
                                   mist=draw['mist'], mist_frame=draw['mist_frame'], material=self.recipe.material,
                                   sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'])
@@ -521,6 +568,10 @@ class WaveformScene:
                                   now=draw['age_fade'][0], mist=draw['mist'], mist_frame=draw['mist_frame'],
                                   material=self.recipe.material, sweep_axis=draw['sweep_axis'], grade=draw['grade'],
                                   floor=draw['floor'])
+            if self.recipe.sparks is not None and self._burst_payload:
+                self.bursts.draw(self._burst_payload,mvp=tuple((projection @ mirrored).flatten(order='F')),
+                    now=draw['age_fade'][0]-self._burst_origin,
+                    viewport=self.reflection.size,mist=draw['mist'],grade=draw['grade'])
         finally:
             gl.glDisablei(gl.GL_BLEND, 0)
             self.reflection.end()
@@ -537,7 +588,7 @@ class WaveformScene:
                  'uReflectionContact', 'uViewport', 'uBackdrop', 'uAmbient', 'uFloor', 'uFloorTone', 'uRipple', 'uEye',
                  'uForward', 'uOrthographic', 'uMist', 'uMistShape', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange',
                  'uStreak', 'uHot', 'uEnvelope', 'uEnvelopeSpan', 'uPool', 'uPoolZ', 'uColumn', 'uSpecMode',
-                 'uSpecular')
+                 'uSpecular', 'uFloorTint')
         u = self.resources.uniforms('floor', names, required=False)
         gl.glUseProgram(program)
         gl.glUniform1i(u['uFlat'], int(flat))
@@ -558,15 +609,17 @@ class WaveformScene:
         gl.glUniform1f(u['uPoolZ'], 0.)
         gl.glUniform3f(u['uColumn'], *floor.column)
         if envelope:
-            x0, x1, _ = self.recipe.fog.envelope_range
+            x0, x1, count = self.recipe.fog.envelope_range
             gl.glBindTextureUnit(14, envelope)
             gl.glUniform1i(u['uEnvelope'], 14)
-            gl.glUniform2f(u['uEnvelopeSpan'], x0, 1./(x1 - x0))
+            step=(x1-x0)/(count-1)
+            gl.glUniform2f(u['uEnvelopeSpan'], x0-step*.5, 1./(x1-x0+step))
         gl.glUniform4f(u['uStreak'], 0., floor.streak[1], floor.streak[2], 8.)
         gl.glUniform4f(u['uReflectionContact'], 0., *floor.contact)
         gl.glUniform2f(u['uViewport'], *size)
         gl.glUniform3f(u['uBackdrop'], *environment.backdrop)
         gl.glUniform3f(u['uAmbient'], *floor.ambient)
+        gl.glUniform3f(u['uFloorTint'], *floor.tint)
         gl.glUniform4f(u['uFloor'], floor.tile, floor.micro_tile, floor.reflection, floor.f0)
         gl.glUniform4f(u['uFloorTone'], floor.albedo_gain, floor.diffuse, *floor.relief)
         gl.glUniform3f(u['uRipple'], *floor.ripple)
