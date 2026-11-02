@@ -499,6 +499,14 @@ source hashes. The smoother broad carrier, sparse 3–5-second strands and large
 the operator explicitly rejects small travelling dents. Floor texture/reflection, fog and colour remain below the
 references. Its GPU-only median 8.15 ms/p90 10.14 ms is scoped capture evidence, not a game60 whole-frame pass.
 
+**Operator-selected material baseline (3 November):**
+[preserved exact image](Images/Waveform_Ribbon_Material_Baseline_20261103.png),
+[full source/settings/capture receipt](Images/Waveform_Ribbon_Material_Baseline_20261103.capture.json).
+The supplied clipboard image is pixel-identical to `wr_preset3_material_balance_20261103/frame_0003.png`, at source
+time 23 s. Source revision `2e201069` plus the receipt's six explicit overrides reconstructs this baseline; Preset 3
+now incorporates them. Keep background at least this bright and preserve the floor colour level. The operator calls
+this a good direction, with remaining lumps; it does not approve full shape, musical motion, mist, floor texture or UX.
+
 ## 7. Remaining technical gates
 
 - [ ] Prove history/continuation and persistent strand retirement across the widest admitted view and lowest flow speed.
