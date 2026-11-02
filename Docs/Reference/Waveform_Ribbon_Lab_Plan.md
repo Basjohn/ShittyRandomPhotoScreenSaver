@@ -43,8 +43,11 @@ only remaining work, not implementation chronology.
   mist costs separately and together; prove lazy Off/resize/context retirement at each owner.
 - [ ] **Visual admission:** operator/capable visual-agent sign-off on the attainable primary/alternate range before audio
   calibration, production registration, Settings or preset migration.
-- [ ] **After visual admission only:** WR-07 recorded-feature replay, remaining shared primitive gates, WR-08 migration and
-  WR-09 live acceptance.
+- [ ] **Core-reactivity bake-off:** before WR-07 commits to one motion language, compare the four §5.1 candidates with the
+  same deterministic synthetic program and fixed scene constants. Candidate A is the existing concept mapping and must
+  remain in the comparison; colour shifts, particles and glow do not decide this gate.
+- [ ] **After the bake-off selects the core grammar:** WR-07 recorded-feature replay/calibration, remaining shared primitive
+  gates, WR-08 migration and WR-09 live acceptance.
 
 **Durable current constraints:**
 
@@ -484,8 +487,11 @@ cost ablations and same-scene comparison. A particle storm is a target failure e
 
 ### WR-07 — Real musical evolution in the lab
 
-**Entry:** readable single-ribbon lab; later repeat after floor/bands/accents. Use §5 signal contract.
+**Entry:** readable single-ribbon lab; later repeat after floor/bands/accents. Use §5 signal contract. Before recorded
+music is allowed to tune the chosen behavior, close the §5.1 synthetic core-reactivity bake-off.
 
+- [ ] Run the §5.1 four-candidate bake-off first and record the chosen core grammar plus rejection reasons. Do not silently
+  delete Candidate A, and do not let colour, glow or particle polish rescue weak geometry/motion.
 - [ ] Replay the existing recorded audio/analysis path into explicit logical times; use shared analysis, not hand-authored
   oscillators as musical proof. Synthetic inputs remain useful labelled isolation fixtures.
 - [ ] Audit quiet/middle/loud windows by sustained intensity and listen to them; record exact clip/time/generation.
@@ -599,6 +605,37 @@ The picture's smooth large waves do not establish that raw sample frequency shou
 geometry. Compare a bounded band-shaped centerline with waveform-derived fine structure. Preserve causal attacks and
 local contrast; document the chosen response curve and limits with recordings. Idle may maintain a gently flowing
 composed ribbon, but must not counterfeit transient bursts. Whole-scene exposure and camera stay fixed throughout.
+
+### 5.1 Core-reactivity candidate bake-off
+
+Do not choose the ribbon's core geometry/motion grammar from prose alone. The current concept mapping remains a real
+candidate and is **not** replaced by this comparison. Before recorded-music tuning, implement four deliberately distinct
+bounded candidates behind the lab fixture only:
+
+| Candidate | Core geometry/motion response | Main question / failure mode |
+| --- | --- | --- |
+| **A - Current concept mapping (retain)** | Bass drives body width and slow large bend; mids drive twist plus lateral/vertical centerline deformation; highs may add restrained fine edge/body motion; typed transients add short local curvature/tension. | Does the straightforward band-to-body mapping already read clearly and musically without becoming globally rubbery or having every band fight for the silhouette? |
+| **B - Traveling deformation packets** | A typed transient/attack launches a bounded bulge/bend/twist packet at the live head; the packet travels with ribbon flow/history and decays. Sustained low/mid energy controls packet scale, breadth and bias rather than teleporting the whole body. No per-frame history rewrite. | Do visible traveling reactions make hits and phrases easier to read, or do repeated events turn the strip into beads/lumps? |
+| **C - Elastic tension dynamics** | Audio moves bounded targets for ribbon tension/stiffness/damping: bass can broaden/loosen large arcs, mids bias torsion/side pull, and transients inject a damped impulse/overshoot through the logical-time state. Render FPS never integrates it. | Does a spring-like body feel organic and powerful while preserving attack, or does smoothing/overshoot make it late, seasick or too similar across bands? |
+| **D - Authored macro-flow + waveform fine structure** | Keep the slow authored head oscillator as the large silhouette. Sample a small, band-limited amount of current waveform/band detail into newly admitted knots so fine musical structure rides on the body and then advects with history. Clamp wavelength/amplitude so dense audio cannot become jagged full-body PCM. | Can literal sound detail add recognisable texture without destroying the smooth mock silhouette, aliasing at native pixels or duplicating the high-frequency accent layer? |
+
+**Synthetic comparison program (10 s, deterministic):** one fixed seed/camera/world and identical base ribbon. Include a
+quiet/idle opening, bass-only ramp/pulses, mids-only sustained/structured motion, high/fine-detail isolation, discrete
+transient hits, then a combined energetic passage and release. The fixture may use hand-authored signals because this is
+an isolation bake-off, not musical proof. Do not add a second production analyzer merely to make one candidate win; if a
+candidate needs an unavailable feature, record that dependency before admission.
+
+**Evidence per candidate:** export one small **10-second WebP** at real playback speed plus **five synchronized native
+still frames** sampled at the same named checkpoints from the fixture. Also retain geometry-only/no-bloom captures for
+critical frames. Hold palette/colour shifts, particles, bloom/glow, camera, floor, mist recipe, topology, base oscillator,
+seed and exposure fixed so the comparison is about motion and shape. The five-frame sheet makes candidates directly
+comparable; the WebP is mandatory because attack, travel, overshoot and settle cannot be judged from stills alone.
+
+Score/annotate: low-react attractiveness, band separability, transient legibility, attack and settle, continuity/frame
+stability, silhouette readability, no permanent high pinning, history behavior, and measured CPU/GPU delta. Prefer one
+coherent grammar. A hybrid is allowed only when two mechanisms solve different jobs demonstrably better and remain
+bounded; do not stack all four into an un-auditable reaction soup. After selection, replay the chosen grammar on the
+WR-00 recorded windows and allow real music to tune response curves. Synthetic victory alone cannot close Gate F/H.
 
 ## 6. A–H hard gate matrix and negative controls
 
