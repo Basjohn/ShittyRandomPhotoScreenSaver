@@ -1776,7 +1776,7 @@ def _waveform_ribbon() -> ModeSettings:
         ('surface','Sheet & Highlights','Silk, fine strands, glowing rims and localized dense highlights.',False),
         ('sparks','Sparks','Bounded particles born from musical history.',False),
         ('strands','Free Strands','Smooth filaments peel from the ribbon rims.',False),
-        ('mist','Mist','Billowed mist clears away from the actual waveform; floor haze is separate.',False),
+        ('mist','Mist','One continuous night atmosphere displaced by the actual waveform.',False),
         ('floor','Floor','Wet concrete tint, brightness and reflection.',False),
         ('reaction','Response','Elastic timing, attack and decay on the logical clock.',True),
         ('camera','Camera','Navigate the physical eye; waveform roll is independent.',True),
@@ -1833,8 +1833,7 @@ def _waveform_ribbon() -> ModeSettings:
                              tooltip='Quiet → peak '+label.lower()+'.'))
     entries.extend((Toggle(prefix+'sparks_enabled','','Sparks',bucket='sparks'),
                     Toggle(prefix+'strands_enabled','','Free Strands',bucket='strands'),
-                    Toggle(prefix+'mist_enabled','','Volume Mist',bucket='mist'),
-                    Toggle(prefix+'floor_mist_enabled','','Floor Distance Mist',bucket='mist')))
+                    Toggle(prefix+'mist_enabled','','Night Atmosphere',bucket='mist')))
     for key,label,low,high,bucket in (
         ('spark_count','Count',0.,36.,'sparks'),('strand_count','Count',0.,8.,'strands'),
         ('spark_lifetime','Lifetime',.2,8.,'sparks'),('spark_drift','Drift',0.,3.,'sparks'),
@@ -1847,17 +1846,17 @@ def _waveform_ribbon() -> ModeSettings:
         ('strand_chance','Admission',0.,1.,'strands'),('strand_width','Width',.1,4.,'strands'),
         ('strand_light','Light',0.,10.,'strands'),('strand_beads','Droplets',0.,8.,'strands'),
         ('strand_peel','Peel Time',.1,4.,'strands'),('strand_halo','Halo',0.,2.,'strands'),
-        ('strand_glow','Glow',0.,4.,'strands'),('fog_density','Density',0.,3.,'mist'),
-        ('fog_clearance','Clearance',.25,2.,'mist'),('fog_billows','Billows',0.,3.,'mist'),
-        ('fog_fringe','Fringe Light',0.,200.,'mist'),('fog_edge','Edge Line',0.,5.,'mist'),
-        ('fog_smoothing','Fringe Smoothing',0.,4.,'mist'),('floor_reflection','Reflectivity',0.,8.,'floor'),
+        ('strand_glow','Glow',0.,4.,'strands'),('fog_density','Density',0.,.15,'mist'),
+        ('fog_clearance','Displacement',0.,2.,'mist'),
+        ('fog_height','Ground Diffusion',.1,4.,'mist'),('fog_softness','Displacement Softness',.1,3.,'mist'),
+        ('fog_light','Local Light',0.,3.,'mist'),('fog_variation','Soft Variation',0.,1.,'mist'),
+        ('fog_drift','Atmosphere Drift',0.,2.,'mist'),('floor_reflection','Reflectivity',0.,8.,'floor'),
         ('floor_brightness','Surface Brightness',0.,3.,'floor'),('floor_wetness','Wetness',0.,1.,'floor'),
         ('floor_streak','Streak Length',0.,1.,'floor'),('floor_column','Column Fade',.1,20.,'floor'),
-        ('floor_mist_reflection','Mist Reflection',0.,1.,'floor'),('fog_haze','Distance Haze',0.,1.,'mist'),
-        ('fog_sides','Side Wall Start',5.,20.,'mist'),('floor_mist_thickness','Floor Mist Thickness',0.,3.,'mist'),
         ('bloom','Bloom',0.,1.,'lens')):
         entries.append(Range(prefix+key,label+':',low,high,bucket=bucket,
-                             logical=key.startswith('strand_'),
+                             logical=key.startswith('strand_'),scale=10000 if key=='fog_density' else 100,
+                             decimals=4 if key=='fog_density' else 2,
                              tooltip='Quiet → peak '+label.lower()+'.'))
     entries.extend((Colour(prefix+'floor_tint','Surface Tint:','Floor Surface Tint',bucket='floor',alpha=False),
                     Slider(prefix+'exposure','Exposure:',.2,2.,bucket='lens'),

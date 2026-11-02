@@ -6,6 +6,16 @@ from typing import Any, Dict, Mapping
 
 RETIRED_VISUALIZER_MODE_IDS = frozenset({"blob"})
 _RETIRED_VISUALIZER_KEYS = frozenset({
+    # Rejected Waveform bank/fringe and independent floor haze; one new atmosphere replaces them.
+    'waveform_ribbon_fog_billows',
+    'waveform_ribbon_fog_fringe',
+    'waveform_ribbon_fog_edge',
+    'waveform_ribbon_fog_smoothing',
+    'waveform_ribbon_fog_haze',
+    'waveform_ribbon_fog_sides',
+    'waveform_ribbon_floor_mist_enabled',
+    'waveform_ribbon_floor_mist_thickness',
+    'waveform_ribbon_floor_mist_reflection',
     "waveform_ribbon_strand_lifetime",  # Rejected timer expiry: strands persist with their travelling roots.
     "shockwave_grid_allow_overflow",  # Neon Lake Basin is always inside its bordered card.
     "shockwave_grid_terrain_reactivity",  # Growth; superseded by the Terrain Reaction bucket (2026-10-16).

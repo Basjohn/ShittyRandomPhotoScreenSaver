@@ -13,7 +13,12 @@ exactly per slice (radiance x (1 - exp(-extinction x length))), into the texture
 FOG_SLICE_GLSL = """
 uniform vec4 uFogLens;     // half-extent x, y (Orthographic) or tangent x, y (Perspective); orthographic flag; unused
 uniform vec4 uFogRange;    // near, far view depth, slices, enabled
-float fogSliceDepth(float f) { return uFogRange.x*pow(uFogRange.y/uFogRange.x,f/uFogRange.z); }
+float fogSliceDepth(float f) {
+    // Opt-in signed Orthographic lines. Positive-depth consumers retain their exact logarithmic mapping.
+    if(uFogLens.w>0.0) return uFogLens.w*sinh(mix(asinh(uFogRange.x/uFogLens.w),
+        asinh(uFogRange.y/uFogLens.w),f/uFogRange.z));
+    return uFogRange.x*pow(uFogRange.y/uFogRange.x,f/uFogRange.z);
+}
 """
 
 _INJECT_HEAD = """#version 460 core

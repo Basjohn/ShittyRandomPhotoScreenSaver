@@ -136,7 +136,7 @@ def _summary() -> dict:
 def _install_waveform() -> None:
     """The same passive timers around Waveform's actual scene owners; no alternate render path."""
     from rendering.quick.visualizer.implementations.waveform_ribbon import QuickWaveformRibbonRenderer
-    from rendering.quick.scene3d import waveform, ribbon, ribbon_bursts, fog_volume,waveform_envelope
+    from rendering.quick.scene3d import waveform, ribbon, ribbon_bursts, fog_volume,waveform_field
     from widgets.spotify_visualizer.waveform_ribbon_frame_runtime import WaveformRibbonFrameRuntime
     from widgets.spotify_visualizer import waveform_ribbon_capture
     capture=waveform_ribbon_capture.capture_waveform_ribbon
@@ -181,13 +181,11 @@ def _install_waveform() -> None:
             _local.frame['waveform_render']=(time.perf_counter()-start)*1000.
             _frames.append(_local.frame);_local.frame=None
     QuickWaveformRibbonRenderer.render=framed
-    for owner,attr,label in ((waveform,'waveform_envelope','waveform_envelope'),
-        (waveform_envelope.WaveformEnvelope,'update','gpu_envelope_submit'),
-        (waveform.WaveformScene,'_update_fog','fog_update'),(waveform.WaveformScene,'_bake_shape','fog_bake'),
+    for owner,attr,label in ((waveform_field.WaveformField,'update','world_field_submit'),
+        (waveform.WaveformScene,'_update_fog','fog_update'),
         (waveform.WaveformScene,'_fog_uniforms','fog_uniforms'),(waveform.WaveformScene,'_reflect','reflection'),
         (waveform.WaveformScene,'_floor','floor'),(ribbon.RibbonPrimitive,'draw','ribbons'),
-        (ribbon_bursts.RibbonBurstRenderer,'draw','bursts'),(fog_volume.FogMarch,'march','fog_march'),
-        (fog_volume.FogMarch,'composite','fog_composite')):
+        (ribbon_bursts.RibbonBurstRenderer,'draw','bursts'),(waveform.WaveformScene,'_sky','atmosphere_sky')):
         _wrap(owner,attr,label)
 
 

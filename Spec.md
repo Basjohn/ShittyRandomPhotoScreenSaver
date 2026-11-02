@@ -794,6 +794,11 @@ The live checklist owns proof that history retirement stays outside visible dire
 failure analysis and replacement proposals. The operator's current direction is full-scene night fog displaced by
 the actual waveform. `references/Mist Goal.png` now supersedes all older fog/mist mechanisms, including separate
 floor/distance haze; smoothing or retaining the rejected layers does not satisfy that direction.
+The replacement candidate uses a single integrated world medium across ground, actors, sky and mirror. Its
+packet-derived physical field covers retained interior history and analytic continuation; Off leaves no separate
+floor haze. Orthographic raster depth fits the admitted direct/reflected world support while preserving the
+physical eye and XY projection; Perspective retains positive depth. Source proof and artistic/cost acceptance
+remain separate gates in Current_Plan.
 The registered production candidate uses descriptor-owned capture/runtime/renderer and canonical spec-driven Settings.
 Configuration and published packets are detached immutable values. C springs respond per ribbon's selected band;
 A twist and axial speed integrate on the sole logical clock. Existing body geometry responds before new head history

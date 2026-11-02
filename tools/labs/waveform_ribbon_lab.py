@@ -44,17 +44,15 @@ import numpy as np
 from PIL import Image, ImageDraw
 from core.ribbon_ring import RibbonRing
 from core.ribbon_style import RibbonStrays
-from core.settings import framed_camera as fc
 from core.waveform_ribbon_scene import (Environment, Fog, Floor, Flow, Shaping, Recipe, SPEC,
-    ORTHO_REFERENCE_FOV, VIEW_SLOPE, FLOOR_CONTACT, PALETTE, hue_between)
-from rendering.quick.scene3d.waveform import (WaveformScene, waveform_envelope, gradient_at, colour_grade,
-    crackle_limit, capped, floor_vertices, load_floor_textures)
+    VIEW_SLOPE, FLOOR_CONTACT, PALETTE, hue_between)
+from rendering.quick.scene3d.waveform import (WaveformScene, gradient_at, colour_grade,
+    capped, floor_vertices, load_floor_textures)
 from tools.labs.render_target import OffscreenRenderTarget
 from tools.labs.waveform_ribbon_targets import ENVELOPE
 
-# Shared framed-camera spec. Lab poses author inputs only; production registration is separate. Orthographic half-extents follow the
-# shared rule: the reference lens's tangents at the orbit distance, divided by Scene Scale. At the mock pose that is
-# the WR-00 fit: pivot 2 above the floor, 15 degrees down, half-height 12*tan(22.5 deg) = 4.97.
+# Lab poses author inputs only. The production grounded camera and geometry-fitted
+# Orthographic raster slab are shared; the older WR-00 camera is historical evidence.
 
 
 @dataclass(frozen=True)
@@ -133,34 +131,23 @@ ALTERNATE = Recipe(
 RECIPES = {'complete': Recipe(), 'alternate': ALTERNATE, 'range': PRESET_RANGE}
 
 
-def camera(pose: Pose, aspect: float):
+def camera(pose: Pose, aspect: float, *, geometry_bounds=None):
     """(world->view 4x4, projection 4x4, eye) from the shared framed camera; the world never moves."""
-    axes = fc.camera_axes(SPEC, pose.turn, pose.tilt)
-    eye, _ = fc.resolve_camera_position(SPEC, pose.turn, pose.tilt, pose.scale, pose.pan_x, pose.pan_y, pose.fov,
-                                        (0., 0., 0.), None, lambda x, z: 0., axes=axes)
-    right, up, back = (np.asarray(axes[i:i + 3]) for i in (0, 3, 6))
-    view = np.identity(4)
-    view[0, :3], view[1, :3], view[2, :3] = right, up, back
-    view[:3, 3] = -view[:3, :3] @ np.asarray(eye)
-    if pose.projection == 'Orthographic':
-        tan = fc.viewport_tangents(ORTHO_REFERENCE_FOV, aspect)
-        distance = SPEC.orbit_distance/max(pose.scale, 1e-3)
-        # Parallel rays: the near plane sits well behind the eye. At .1 a zoomed-out or low camera clipped the floor
-        # between the eye and the near plane, a black band along the bottom of the view.
-        projection = fc.orthographic_matrix((tan[0]*distance, tan[1]*distance), -60., 200.)
-    else:
-        projection = fc.perspective_matrix(fc.viewport_tangents(pose.fov, aspect), .3, 200.)
-    return view, np.asarray(projection).reshape(4, 4, order='F'), np.asarray(eye)
+    from rendering.quick.visualizer.implementations.waveform_ribbon import physical_view
+    view,projection,eye,_=physical_view(_pose_parameters(pose),aspect,geometry_bounds=geometry_bounds)
+    return view,projection,eye
+
+
+def _pose_parameters(pose):
+    return {'waveform_ribbon_'+key:value for key,value in dict(turn=pose.turn,tilt=pose.tilt,scene_scale=pose.scale,
+        scene_pan_x=pose.pan_x,scene_pan_y=pose.pan_y,camera_fov=pose.fov,camera_position=(0.,0.,0.),
+        camera_projection=pose.projection).items()}
 
 
 def lens(pose: Pose, aspect: float) -> tuple[float, float, bool]:
     """The fog volume's lens for a pose: Orthographic half-extents, or Perspective tangents."""
-    if pose.projection == 'Orthographic':
-        tan = fc.viewport_tangents(ORTHO_REFERENCE_FOV, aspect)
-        distance = SPEC.orbit_distance/max(pose.scale, 1e-3)
-        return tan[0]*distance, tan[1]*distance, True
-    tan = fc.viewport_tangents(pose.fov, aspect)
-    return tan[0], tan[1], False
+    from rendering.quick.visualizer.implementations.waveform_ribbon import physical_view
+    return physical_view(_pose_parameters(pose),aspect)[3]
 
 
 def fill_ring(recipe: Recipe, state: str, knots: int = 256, *, at: float | None = None) -> tuple[RibbonRing, float]:
@@ -243,11 +230,15 @@ class Lab(WaveformScene):
 
     def _capture(self, ring, now, *, flat=False, pose='mock', react=0.):
         width, height = self.size
-        view, projection, eye = camera(POSES[pose], width/height)
+        from core.settings.waveform_ribbon_camera import scene_raster_support
+        packet=ring.packet()
+        support=(scene_raster_support(packet,self.recipe,self.recipe.flow.speed*now,now=now,viewport=self.size)
+                 if POSES[pose].projection=='Orthographic' else None)
+        view, projection, eye = camera(POSES[pose], width/height,geometry_bounds=support)
         card = SimpleNamespace(viewport=(0,0,width,height),logical_size=(float(width),float(height)),
             matrix_values=(2/width,0,0,0,0,-2/height,0,0,0,0,1,0,-1,1,0,1),quad_vao=self.target.vao)
         self.target.bind(clear=(0.,0.,0.,0.))
-        super().render(ring.packet(),capacity=ring.capacity,now=now,recipe=self.recipe,size=self.size,
+        super().render(packet,capacity=ring.capacity,now=now,recipe=self.recipe,size=self.size,
             travel=self.recipe.flow.speed*now,
             view=view,projection=projection,eye=eye,camera_lens=lens(POSES[pose],width/height),card=card,
             flat=flat,react=react)

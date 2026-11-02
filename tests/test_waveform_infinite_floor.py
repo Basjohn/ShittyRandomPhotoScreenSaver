@@ -105,7 +105,7 @@ def test_actual_plane_covers_complete_ground_and_reports_true_world_xz(qt_app,ki
 
 
 @pytest.mark.parametrize('kind',('Orthographic','Perspective'))
-def test_ground_depth_occludes_underfloor_but_preserves_abovefloor_and_actor_positive_clip(qt_app,kind):
+def test_ground_occlusion_and_perspective_positive_actor_clip(qt_app,kind):
     probe=GroundProbe(144,96);values=camera(camera_projection=kind,tilt=.5)
     try:
         view,projection,eye,lens,baseline,hits=probe.draw(values)
@@ -113,10 +113,11 @@ def test_ground_depth_occludes_underfloor_but_preserves_abovefloor_and_actor_pos
         np.testing.assert_array_equal(pixels,baseline)
         pixels=probe.actor(np.array((0.,1.,0.)),name='abovefloor')
         assert (pixels[:,:,1]>200).any()
-        view,projection,eye,lens,baseline,hits=probe.draw(values)
-        behind=eye+view[2,:3]*3.
-        pixels=probe.actor(behind,name='behindeye',basis=(view[0,:3],view[1,:3]))
-        np.testing.assert_array_equal(pixels,baseline)
+        if kind=='Perspective':
+            view,projection,eye,lens,baseline,hits=probe.draw(values)
+            behind=eye+view[2,:3]*3.
+            pixels=probe.actor(behind,name='behindeye',basis=(view[0,:3],view[1,:3]))
+            np.testing.assert_array_equal(pixels,baseline)
     finally:probe.close()
 
 
@@ -132,7 +133,9 @@ def test_negative_control_larger_plane_and_disabled_depth_test_cannot_remove_act
         corners=((-10000.,0.,-10000.),(10000.,0.,-10000.),(10000.,0.,10000.),(-10000.,0.,-10000.),(10000.,0.,10000.),(-10000.,0.,10000.))
         vao,count=probe.resources.mesh('huge finite plane',np.asarray(corners,np.float32).tobytes(),(3,))
         gl.glUseProgram(program);gl.glBindVertexArray(vao)
-        gl.glUniformMatrix4fv(gl.glGetUniformLocation(program,'uMvp'),1,gl.GL_FALSE,np.asarray(probe.mvp.flatten(order='F'),np.float32))
+        from core.settings.framed_camera import orthographic_matrix
+        old=np.asarray(orthographic_matrix(lens[:2],.3,200.)).reshape(4,4,order='F')@view
+        gl.glUniformMatrix4fv(gl.glGetUniformLocation(program,'uMvp'),1,gl.GL_FALSE,np.asarray(old.flatten(order='F'),np.float32))
         gl.glDrawArrays(gl.GL_TRIANGLES,0,count);pixels=probe.target.read_rgba()
         assert not pixels[0,:,0].any() and not pixels[-1,:,0].any()
         assert pixels[60:72,:,0].max()>200  # Same bounded band despite ample world coverage.
@@ -160,8 +163,10 @@ def test_production_floor_material_and_specular_cap_share_coverage_and_reflectio
             frame.snapshot.logical.mode_state=replace(state,scene=replace(state.scene,floor=floor))
             target.bind();renderer.render(frame)
             return target.read_rgba()[:,:,:3].astype(float)
-        inline=draw(10000,4.5)-draw(10000,0.)
-        capped=draw(80,4.5)-draw(80,0.)
+        plain=draw(10000,0.);capped_plain=draw(80,0.)
+        np.testing.assert_allclose(capped_plain,plain,atol=1.)  # capped specular cannot replace the roughness map
+        inline=draw(10000,4.5)-plain
+        capped=draw(80,4.5)-capped_plain
         a,b=inline.clip(0).mean(),capped.clip(0).mean()
         assert a>.2 and .8<b/a<1.2,(a,b,b/a)
     finally:renderer.release_resources();target.close()

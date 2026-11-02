@@ -53,7 +53,6 @@
           1.0,
           1.0
         ],
-        "waveform_ribbon_floor_mist_enabled": true,
         "waveform_ribbon_floor_reflection": [
           4.5,
           4.5
@@ -65,29 +64,13 @@
           255
         ],
         "waveform_ribbon_flow_speed": 1.6,
-        "waveform_ribbon_fog_billows": [
-          1.8,
-          1.8
-        ],
         "waveform_ribbon_fog_clearance": [
           0.3,
           0.3
         ],
         "waveform_ribbon_fog_density": [
-          1.6,
-          1.6
-        ],
-        "waveform_ribbon_fog_edge": [
-          0.0,
-          0.0
-        ],
-        "waveform_ribbon_fog_fringe": [
-          120.0,
-          120.0
-        ],
-        "waveform_ribbon_fog_smoothing": [
-          1.0,
-          1.0
+          0.018,
+          0.026
         ],
         "waveform_ribbon_gradient_share": 0.3,
         "waveform_ribbon_height": [
@@ -756,8 +739,14 @@
           5.0,
           5.0
         ],
-        "waveform_ribbon_spark_glow": [0.3, 1.2],
-        "waveform_ribbon_spark_span": [24.0, 48.0],
+        "waveform_ribbon_spark_glow": [
+          0.3,
+          1.2
+        ],
+        "waveform_ribbon_spark_span": [
+          24.0,
+          48.0
+        ],
         "waveform_ribbon_spark_white": [
           0.25,
           0.25
@@ -835,9 +824,18 @@
           8.0,
           36.0
         ],
-        "waveform_ribbon_strand_pulse_growth": [0.2, 0.2],
-        "waveform_ribbon_strand_pulse_glow": [1.0, 2.0],
-        "waveform_ribbon_strand_span": [24.0, 48.0],
+        "waveform_ribbon_strand_pulse_growth": [
+          0.2,
+          0.2
+        ],
+        "waveform_ribbon_strand_pulse_glow": [
+          1.0,
+          2.0
+        ],
+        "waveform_ribbon_strand_span": [
+          24.0,
+          48.0
+        ],
         "waveform_ribbon_strand_count": [
           4.0,
           4.0
@@ -854,22 +852,6 @@
           6.0,
           6.0
         ],
-        "waveform_ribbon_floor_mist_reflection": [
-          0.35,
-          0.35
-        ],
-        "waveform_ribbon_fog_haze": [
-          0.0,
-          0.0
-        ],
-        "waveform_ribbon_fog_sides": [
-          8.0,
-          8.0
-        ],
-        "waveform_ribbon_floor_mist_thickness": [
-          1.0,
-          1.0
-        ],
         "waveform_ribbon_turn": 0.0,
         "waveform_ribbon_tilt": 0.0,
         "waveform_ribbon_scene_scale": 1.0,
@@ -879,6 +861,26 @@
         "waveform_ribbon_material_glint_reactivity": [
           0.4,
           1.5
+        ],
+        "waveform_ribbon_fog_height": [
+          1.0,
+          1.2
+        ],
+        "waveform_ribbon_fog_softness": [
+          0.7,
+          1.0
+        ],
+        "waveform_ribbon_fog_light": [
+          0.3,
+          0.8
+        ],
+        "waveform_ribbon_fog_variation": [
+          0.15,
+          0.3
+        ],
+        "waveform_ribbon_fog_drift": [
+          0.1,
+          0.25
         ]
       }
     }

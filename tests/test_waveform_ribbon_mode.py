@@ -35,7 +35,7 @@ def test_floor_and_mist_ranges_follow_passage_independently_of_light_routing():
     values['waveform_ribbon_mist_enabled']=True  # Explicitly exercise the optional retained volume.
     values['waveform_ribbon_routing']['light']=[[0.,1.] for _ in range(6)]
     values['waveform_ribbon_floor_brightness']=[.2,2.]
-    values['waveform_ribbon_fog_density']=[.5,2.5]
+    values['waveform_ribbon_fog_density']=[.01,.1]
     config=CompiledWaveformSettings(values);model=WaveformDynamics(config.controls)
     for _ in range(64):model.advance(1/90,bands=(0.,0.,0.),intensity=0.,presence=0.)
     quiet=config.scene(model.snapshot())
@@ -43,7 +43,28 @@ def test_floor_and_mist_ranges_follow_passage_independently_of_light_routing():
     hot=config.scene(snapshot)
     assert dict(snapshot.drives)['light']==0.
     assert hot.floor.albedo_gain>quiet.floor.albedo_gain+1.
-    assert hot.fog.density>quiet.fog.density+1.
+    assert hot.fog.density>quiet.fog.density+.04
+
+
+@pytest.mark.qt
+def test_floor_material_remains_visible_without_any_reflection_or_atmosphere(qt_app):
+    from rendering.quick.offscreen_target import OffscreenRenderTarget
+    from rendering.quick.visualizer.implementations.waveform_ribbon import QuickWaveformRibbonRenderer
+    target=OffscreenRenderTarget(640,300);renderer=QuickWaveformRibbonRenderer()
+    try:
+        frame=frame_for(target);state=frame.snapshot.logical.mode_state
+        floor=replace(state.scene.floor,reflection=0.,albedo_gain=2.)
+        scene=replace(state.scene,fog=None,floor=floor)
+        frame.snapshot.logical.mode_state=replace(state,scene=scene)
+        target.bind();renderer.render(frame)
+        material=target.read_rgba()[230:290,20:620,:3].astype(float)
+        assert np.median(material)>8.,'Foreground material is still black outside core reflections'
+        assert np.std(material.mean(2))>1.,'Filtered concrete lost all readable surface variation'
+        frame.snapshot.logical.mode_state=replace(state,scene=replace(scene,floor=replace(floor,albedo_gain=0.)))
+        target.bind();renderer.render(frame)
+        dark=target.read_rgba()[230:290,20:620,:3].astype(float)
+        assert material.mean()>dark.mean()+8.
+    finally:renderer.release_resources();target.close()
 
 
 def frame_for(target, *, ready=True):
@@ -185,31 +206,6 @@ def test_scene_uploads_one_packet_for_all_passes_and_keeps_pixels(qt_app,monkeyp
     finally:renderer.release_resources();target.close()
 
 
-@pytest.mark.qt
-def test_gpu_envelope_preserves_native_pixels_against_explicit_cpu_oracle(qt_app,monkeypatch):
-    from rendering.gl_error_policy import disable_per_call_gl_error_checking
-    disable_per_call_gl_error_checking()
-    from OpenGL import GL as gl
-    from rendering.quick.offscreen_target import OffscreenRenderTarget
-    from rendering.quick.visualizer.implementations.waveform_ribbon import QuickWaveformRibbonRenderer
-    from rendering.quick.scene3d.waveform import waveform_envelope,crackle_limit
-    target=OffscreenRenderTarget(320,240);renderer=QuickWaveformRibbonRenderer()
-    try:
-        frame=frame_for(target)
-        target.bind();renderer.render(frame);gpu_pixels=target.read_rgba()
-        owner=renderer._scene.envelope;update=owner.update
-        def oracle(packet,**kw):
-            update(packet,**kw)
-            table=waveform_envelope(packet,kw['translation'],kw['age_fade'],kw['fog'],kw['grade'],
-                                    kw['slopes'],kw['camber'])
-            limit=crackle_limit(table,kw['fog'],kw['mvp'],target.width,slopes=kw['slopes'])
-            gl.glTextureSubImage2D(owner.texture,0,0,0,table.shape[1],6,gl.GL_RGBA,gl.GL_FLOAT,table)
-            gl.glTextureSubImage2D(owner.limit,0,0,0,256,1,gl.GL_RED,gl.GL_FLOAT,limit)
-        monkeypatch.setattr(owner,'update',oracle)
-        target.bind();renderer.render(frame);cpu_pixels=target.read_rgba()
-        delta=np.abs(cpu_pixels.astype(float)-gpu_pixels.astype(float))
-        assert delta.mean()<.1 and delta.max()<8,(delta.mean(),delta.max())
-    finally:renderer.release_resources();target.close()
 
 
 @pytest.mark.qt

@@ -24,16 +24,15 @@ def camera(**changes):
     return {SPEC.key(key): value for key, value in values.items()}
 
 
-@pytest.mark.parametrize('projection', ('Orthographic', 'Perspective'))
-def test_production_projection_clips_behind_eye_in_both_projections(projection):
-    values = camera(camera_projection=projection)
+def test_perspective_projection_retains_positive_near_and_behind_eye_rejection():
+    values = camera(camera_projection='Perspective')
     view, projection, eye, lens = physical_view(values, 1.5)
     inverse = np.linalg.inv(view)
     for depth, expected in ((NEAR, -1.), (FAR, 1.)):
         world = inverse @ np.array((0., 0., -depth, 1.))
         clip = projection @ view @ world
         assert clip[2] / clip[3] == pytest.approx(expected)
-    # The old Orthographic near=-60 admitted this entire behind-eye floor region.
+    # The physical Perspective eye remains a pinhole with a positive clip interval.
     for depth in (-40., -.1, NEAR / 2):
         world = inverse @ np.array((0., 0., -depth, 1.))
         clip = projection @ view @ world
