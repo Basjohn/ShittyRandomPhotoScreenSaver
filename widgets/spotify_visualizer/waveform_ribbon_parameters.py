@@ -41,8 +41,8 @@ class CompiledWaveformSettings:
             float(read('impulse')),float(read('attack')),float(read('release')),bool(read('rotation_enabled')),
             float(read('rotation_attack')),float(read('rotation_release')),tuple(read('twist_speed')),
             float(read('colour_threshold')),RibbonAccentControls(MappingProxyType({key:tuple(read(key))
-                for key in ('spark_count','spark_lifetime','spark_drift','spark_rise','spark_size','spark_light','spark_white')}))
-                if read('sparks_enabled') else None)
+                for key in ('spark_count','spark_lifetime','spark_drift','spark_rise','spark_size','spark_light','spark_white','spark_glow','spark_span')}))
+                if read('sparks_enabled') else None,idle_motion=float(read('idle_motion')))
 
     def scene(self,snapshot):
         p=self.values

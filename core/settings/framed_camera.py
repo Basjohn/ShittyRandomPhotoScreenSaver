@@ -27,6 +27,19 @@ FOV_RANGE = (35.0, 62.0)
 
 
 @dataclass(frozen=True, slots=True)
+class GroundedOrbitSpec:
+    """Focus-preserving front orbit at one authored fixed world height.
+
+    Radius bounds apply on the ground plane; yaw stays within +/-yaw_span.
+    Tilt moves the focus vertically through the body, never the physical eye.
+    """
+    radius_range: tuple[float, float]
+    eye_height: float
+    focus_height_span: float = 1.0
+    minimum_downward_pitch_degrees: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class FramedCameraSpec:
     prefix: str                     # the mode's settings prefix, e.g. 'extruded_bubble_'
     pivot: Vec3                     # orbit pivot in world units
@@ -49,6 +62,7 @@ class FramedCameraSpec:
     context_suffixes: tuple[str, ...] = ()
     # Optional "module:function"(get) -> {role: six normalized coords}: faint scene guides for the Settings editor.
     editor_references_hook: str = ''
+    grounded_orbit: GroundedOrbitSpec | None = None
 
     def key(self, suffix: str) -> str:
         return self.prefix + suffix
@@ -92,8 +106,16 @@ def pitch_radians(spec: FramedCameraSpec, tilt: float) -> float:
     return math.radians(spec.pitch_base_degrees + spec.pitch_span_degrees * max(low, min(high, float(tilt))))
 
 
-def camera_axes(spec: FramedCameraSpec, turn: float, tilt: float) -> tuple[float, ...]:
+def camera_axes(spec: FramedCameraSpec, turn: float, tilt: float, *, eye=None) -> tuple[float, ...]:
     """(right, up, back) world axes, column order; the eye looks along -back."""
+    if spec.grounded_orbit is not None:
+        if eye is None:eye=grounded_orbit_eye(spec,spec.orbit_distance,turn)
+        target=(spec.pivot[0],grounded_focus_height(spec,tilt,eye),spec.pivot[2])
+        back=tuple(float(a-b) for a,b in zip(eye,target))
+        length=math.hypot(*back);back=tuple(v/length for v in back)
+        radial=math.hypot(back[0],back[2]);right=(back[2]/radial,0.,-back[0]/radial)
+        up=(back[1]*right[2],back[2]*right[0]-back[0]*right[2],-back[1]*right[0])
+        return (*right,*up,*back)
     pitch = pitch_radians(spec, tilt)
     yaw = spec.yaw_span * float(turn)
     cp, sp, cy, sy = math.cos(pitch), math.sin(pitch), math.cos(yaw), math.sin(yaw)
@@ -104,6 +126,40 @@ def camera_axes(spec: FramedCameraSpec, turn: float, tilt: float) -> tuple[float
     return (*right, *up, *back)
 
 
+def grounded_orbit_eye(spec: FramedCameraSpec, radius: float, turn: float) -> Vec3:
+    """Admitted eye of an optional grounded policy, retaining the authored fixed height."""
+    low,high=spec.grounded_orbit.radius_range
+    radius=max(low,min(high,float(radius)))
+    yaw=spec.yaw_span*max(-1.,min(1.,float(turn)))
+    return (spec.pivot[0]+radius*math.sin(yaw),spec.grounded_orbit.eye_height,spec.pivot[2]+radius*math.cos(yaw))
+
+
+def _grounded_focus_bounds(spec: FramedCameraSpec, eye):
+    policy=spec.grounded_orbit
+    low,high=spec.tilt_range
+    bottom=spec.pivot[1]+policy.focus_height_span*low
+    top=spec.pivot[1]+policy.focus_height_span*high
+    if policy.minimum_downward_pitch_degrees is not None:
+        radius=math.hypot(eye[0]-spec.pivot[0],eye[2]-spec.pivot[2])
+        top=eye[1]-radius*math.tan(math.radians(policy.minimum_downward_pitch_degrees))
+    return bottom,top
+
+
+def grounded_focus_height(spec: FramedCameraSpec, tilt: float, eye) -> float:
+    """Physical body-focus height; an optional near-level endpoint follows the actual admitted radius."""
+    low,high=spec.tilt_range
+    bottom,top=_grounded_focus_bounds(spec,eye)
+    fraction=(max(low,min(high,float(tilt)))-low)/(high-low)
+    return bottom+(top-bottom)*fraction
+
+
+def grounded_tilt_from_focus_height(spec: FramedCameraSpec, focus_height: float, eye) -> float:
+    """Inverse of the very same body-focus mapping for the existing Settings aim editor."""
+    low,high=spec.tilt_range
+    bottom,top=_grounded_focus_bounds(spec,eye)
+    return max(low,min(high,low+(float(focus_height)-bottom)/(top-bottom)*(high-low)))
+
+
 def tan_half_fov(fov_y_degrees: float, fov_range: tuple[float, float] = FOV_RANGE) -> float:
     return math.tan(math.radians(max(fov_range[0], min(fov_range[1], float(fov_y_degrees)))) / 2.0)
 
@@ -111,6 +167,13 @@ def tan_half_fov(fov_y_degrees: float, fov_range: tuple[float, float] = FOV_RANG
 def camera_baseline(spec: FramedCameraSpec, turn: float, tilt: float, scale: float = 1., pan_x: float = 0.,
                     pan_y: float = 0., fov_y_degrees: float = 45., ceiling: float | None = None, *, axes=None):
     """Orbit/pan reference before the independent position offset; never a second eye."""
+    if spec.grounded_orbit is not None:
+        base=grounded_orbit_eye(spec,spec.orbit_distance/max(float(scale),1e-3),turn)
+        basis=camera_axes(spec,turn,tilt,eye=base)
+        distance=math.hypot(base[0]-spec.pivot[0],base[2]-spec.pivot[2])
+        tangent=tan_half_fov(fov_y_degrees,spec.fov_range)
+        dx,dy=-2.*distance*tangent*float(pan_x),2.*distance*tangent*float(pan_y)
+        return tuple(base[i]+dx*basis[i]+dy*basis[i+3] for i in range(3))
     axes = camera_axes(spec, turn, tilt) if axes is None else axes
     right, up, back = axes[:3], axes[3:6], axes[6:9]
     pivot = spec.pivot
@@ -131,6 +194,10 @@ def bound_eye(spec: FramedCameraSpec, eye, floor: Floor | None = None) -> Vec3:
                for p, c, h in zip(eye, spec.eye_center, spec.eye_half))
     if floor is not None:
         y = min(spec.eye_center[1] + spec.eye_half[1] - spec.clearance, max(y, floor(x, z) + spec.clearance))
+    if spec.grounded_orbit is not None:
+        dx,dz=x-spec.pivot[0],z-spec.pivot[2]
+        yaw=math.atan2(dx,dz)
+        return grounded_orbit_eye(spec,math.hypot(dx,dz),yaw/spec.yaw_span)
     return x, y, z
 
 
@@ -165,6 +232,25 @@ def resolve_from_values(spec: FramedCameraSpec, values: Mapping[str, object], *,
 def admit_camera_parameters(spec: FramedCameraSpec, values: Mapping[str, object]) -> Vec3:
     """Joint admission of the Camera Position offset; the caller supplies the complete camera settings."""
     return resolve_from_values(spec, values)[1]
+
+
+def resolve_camera_frame(spec: FramedCameraSpec, values: Mapping[str, object]):
+    """One admitted physical eye/basis for renderers and other camera consumers."""
+    turn,tilt=values[spec.key('turn')],values[spec.key('tilt')]
+    if spec.grounded_orbit is None:
+        axes=camera_axes(spec,turn,tilt)
+        eye,offset=resolve_from_values(spec,values,axes=axes)
+    else:
+        eye,offset=resolve_from_values(spec,values)
+        axes=camera_axes(spec,turn,tilt,eye=eye)
+    return axes,eye,offset
+
+
+def projection_reference_distance(spec: FramedCameraSpec, scale: float, eye) -> float:
+    """Orthographic fit follows the admitted grounded dolly; ordinary modes retain their authored mapping."""
+    if spec.grounded_orbit is not None:
+        return math.hypot(eye[0]-spec.pivot[0],eye[2]-spec.pivot[2])
+    return spec.orbit_distance/float(scale)
 
 
 def viewport_tangents(fov_y_degrees: float, aspect: float, aperture_scale: float = 1.,
@@ -209,7 +295,7 @@ def view_matrices(spec: FramedCameraSpec, turn: float, tilt: float, aspect: floa
 def project_point(spec: FramedCameraSpec, point, eye, turn: float, tilt: float, aspect: float,
                   fov_y_degrees: float, *, axes=None) -> tuple[float, float, float] | None:
     """Normalized device x, y (y up) and view depth of a world point; None behind the eye."""
-    axes = camera_axes(spec, turn, tilt) if axes is None else axes
+    axes = camera_axes(spec, turn, tilt,eye=eye) if axes is None else axes
     right, up, back = axes[:3], axes[3:6], axes[6:9]
     rel = tuple(p - e for p, e in zip(point, eye))
     depth = -sum(a * b for a, b in zip(rel, back))

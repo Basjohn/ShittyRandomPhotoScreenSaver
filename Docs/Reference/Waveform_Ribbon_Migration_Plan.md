@@ -51,7 +51,13 @@ replay retains its documented recorded-event hybrid.
 Own fixed band anchors are `(5.4, 3.1, 1.1)` at reference FFT 256, with the existing measured block-length
 correction math. The passage scale maps raw held level `3.4` to the shared usual musical loudness, rounded from
 pooled median `3.359` over four 60-second native PCM captures with three-second pre-roll. No song-relative level
-is learned. Event reward uses unclipped magnitude above its recent per-kind onset mean and shared acoustic/passage weighting; typed kick/snare/vocal
+is learned. Elastic impulses are expressed as requested normalized spring excursion: the velocity kick is
+scaled by the inverse analytic unit-velocity peak for the current frequency/damping. Those controls change timing
+without accidentally removing the hit's displacement. Authorable geometry remains smoothly bounded. Particle Admission
+selects eligible cohorts with deterministic continuous-rate admission; admitted count and light each follow their own
+range once, instead of multiplying count by the same musical strength repeatedly. Birth positions and halo strength
+are held world-space records with bounded lifetime/capacity. Strand flicker remains an explicit open operator rejection.
+ Event reward uses unclipped magnitude above its recent per-kind onset mean and shared acoustic/passage weighting; typed kick/snare/vocal
 impulses have different elastic axes. Raw band routing follows the one eased passage; authorable idle motion is
 independent of acoustic rewards. A ready scene survives source-epoch and idle/play changes within its runtime.
 

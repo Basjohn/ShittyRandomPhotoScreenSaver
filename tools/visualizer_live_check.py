@@ -146,10 +146,19 @@ def hud_ages(perf_log: Path, mode: str) -> dict | None:
 
 # -- the invisible runner (child process) -------------------------------------------------------------------------
 
-def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_start: float) -> None:
+def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_start: float, mode: str) -> None:
     sys.path.insert(0, str(ROOT))
     os.chdir(ROOT)
     from tools import eb_live_phases as phases
+
+    # Isolate the copied profile through explicit runner-side path injection, without process environment edits.
+    # Both resolvers are installed before application imports can retain their path functions.
+    from core.settings import storage_paths, json_store
+    profile_root=(out/'profile').resolve()
+    storage_paths._appdata_root=lambda:profile_root
+    json_store._default_appdata_dir=lambda:profile_root
+    from core.logging import logger
+    logger._FORCED_LOG_DIR=(out/'logs').resolve()
 
     # --usage as the operator always runs: its sampler is part of the live shape (a 15 s GIL-held hitch, 2026-10-31).
     sys.argv = [str(ROOT / "main_mc.py"), "--perf", "--usage", "--frame-trace", "--exit-after", str(int(seconds)), "/s"]
@@ -192,6 +201,7 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
         QuickDisplayVisualizerOwner.set_playing = (
             lambda self, _playing, *, observed_ts=None: set_playing(self, True, observed_ts=observed_ts))
     phases._install()
+    if mode=='waveform_ribbon':phases._install_waveform()
     atexit.register(lambda: (out / "phases.json").write_text(json.dumps(phases._summary(), indent=1), encoding="utf-8"))
     import runpy
     runpy.run_path(str(ROOT / "main_mc.py"), run_name="__main__")
@@ -275,9 +285,9 @@ def _kill_tree(pid: int) -> None:
     subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
 
 
-def _prepare_profile(out: Path, mode: str, preset: int | None, overrides: dict) -> Path:
+def _prepare_profile(out: Path, mode: str, preset: int | None, overrides: dict, *, appdata_root=None) -> Path:
     """Copy MC's settings profile (``SRPSS_MC``) and the shared data root (``SRPSS``); edit only the copy."""
-    appdata = Path(os.environ["APPDATA"])
+    appdata = Path(os.environ["APPDATA"]) if appdata_root is None else Path(appdata_root)
     for name in ("SRPSS", "SRPSS_MC"):
         shutil.copytree(appdata / name, out / "profile" / name)
     path = out / "profile" / "SRPSS_MC" / "settings_v2.json"
@@ -286,7 +296,20 @@ def _prepare_profile(out: Path, mode: str, preset: int | None, overrides: dict) 
     visualizer["mode"] = mode
     if preset is not None:
         visualizer[f"preset_{mode}"] = preset - 1
-    visualizer.update(overrides)
+    if overrides:
+        from core.settings.visualizer_presets import (
+            resolve_visualizer_activation_payload, get_custom_preset_index,
+            build_normalized_custom_snapshot, VISUALIZER_CUSTOM_STORAGE_KEY,
+        )
+        # Curated artwork owns its settings and would overwrite raw --set values
+        # at activation. Resolve it first, then use the real Custom authority in
+        # this disposable profile. Never edit a user's authored preset file.
+        visualizer.update(resolve_visualizer_activation_payload(visualizer,mode=mode).resolved_config)
+        visualizer.update(overrides)
+        visualizer[f"preset_{mode}"] = get_custom_preset_index(mode)
+        cache = dict(visualizer.get(VISUALIZER_CUSTOM_STORAGE_KEY,{}))
+        cache[mode] = build_normalized_custom_snapshot(mode,visualizer)
+        visualizer[VISUALIZER_CUSTOM_STORAGE_KEY] = cache
     path.write_text(json.dumps(data, indent=1), encoding="utf-8")
     return out / "profile"
 
@@ -329,7 +352,7 @@ def main() -> int:
     out = args.out or ROOT / "logs" / "live_check" / f"{args.mode}_{time.strftime('%Y%m%d_%H%M%S')}"
     clip = None if args.clip == "none" else Path(args.clip).resolve()
     if args.runner:
-        _runner(out, args.seconds, args.visible, clip, args.clip_start)
+        _runner(out, args.seconds, args.visible, clip, args.clip_start,args.mode)
         return 0
     if clip is not None and not clip.exists():
         raise SystemExit(f"recording not found: {clip}")
@@ -340,12 +363,11 @@ def main() -> int:
     overrides = {key: json.loads(value) for key, value in (item.split("=", 1) for item in args.set)}
     profile_dir = _prepare_profile(out, args.mode, args.preset, overrides)
     load = None if args.load == "none" else _start_load(args.load, args.seconds + 60, out)
-    env = {**os.environ, "APPDATA": str(profile_dir), "SRPSS_FORCE_LOG_DIR": str(out / "logs")}
     command = [sys.executable, str(Path(__file__).resolve()), "--runner", "--mode", args.mode, "--seconds",
                str(args.seconds), "--out", str(out), "--clip", str(clip or "none"), "--clip-start",
                str(args.clip_start)] + (["--visible"] if args.visible else [])
     sampler, conditions = SystemSampler(), []
-    runner = subprocess.Popen(command, env=env, cwd=ROOT, stdout=(out / "runner.txt").open("w"),
+    runner = subprocess.Popen(command, cwd=ROOT, stdout=(out / "runner.txt").open("w"),
                               stderr=subprocess.STDOUT)
     violation, tree, started = None, None, time.monotonic()
     try:
@@ -368,6 +390,8 @@ def main() -> int:
     if violation:
         print("STOPPED: a saver window was visible:", *violation, sep="\n  ")
         return 2
+    if runner.returncode != 0:
+        raise RuntimeError(f'Live runner exited {runner.returncode}; see {out / "runner.txt"}')
     trace = out / "logs" / "screensaver_frame_trace.bin"
     if not trace.exists():
         print(f"no frame trace; see {out / 'runner.txt'}")
@@ -381,8 +405,24 @@ def main() -> int:
     summary["usage_collect_ms"] = usage["collect_ms"] if usage else None
     summary["process_tree"] = tree
     phases_path = out / "phases.json"
+    if args.mode=='waveform_ribbon' and not phases_path.exists():
+        raise RuntimeError('Waveform run has no phase/admission receipt')
     if phases_path.exists():
         phases = json.loads(phases_path.read_text(encoding="utf-8"))
+        actual=phases.get('waveform_configuration')
+        if args.mode=='waveform_ribbon':
+            if not phases.get('waveform_render'):raise RuntimeError('Waveform run has no steady renderer measurements')
+            if not actual:raise RuntimeError('Waveform run did not admit a configured logical scene')
+            mismatch={key:(value,actual.get(key)) for key,value in overrides.items()
+                      if key not in actual or actual[key]!=value}
+            if mismatch:raise RuntimeError(f'Runtime overrides did not reach Waveform: {mismatch}')
+            summary['actual_waveform_configuration']=actual
+            signals=phases.get('waveform_signals',[])
+            if clip is not None and not any(max(row['bands'])>0. and row['playing']
+                    and row['source_identity']==row['identity'][1:] for row in signals):
+                raise RuntimeError('Recorded PCM never reached the live Waveform body')
+            summary['waveform_signal_samples']=len(signals)
+            summary['waveform_burst_serial']=max((row['bursts'] for row in signals),default=0)
         tick = phases.get("logical_publish")
         summary["logical_tick_ms"] = tick
         if tick:
@@ -391,7 +431,7 @@ def main() -> int:
                                        if isinstance(v, dict) and k != "logical_publish"}
     (out / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
     for key, value in summary.items():
-        if key not in ("render_stages_ms", "process_tree"):
+        if key not in ("render_stages_ms", "process_tree", "actual_waveform_configuration"):
             print(f"{key:28s} {value}")
     for key, limit, message in _FLAGS:
         value = summary.get(key)

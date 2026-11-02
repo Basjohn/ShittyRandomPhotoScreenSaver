@@ -1807,6 +1807,7 @@ def _waveform_ribbon() -> ModeSettings:
         ('wave_swell','Wave Swell',0.,1.,'flow'),('height_swell','Height Swell',0.,1.,'flow'),
         ('elastic_frequency','Elastic Frequency',.05,4.,'reaction'),('damping','Elastic Damping',.1,.95,'reaction'),
         ('impulse','Hit Impulse',0.,3.,'reaction'),('attack','Attack',.01,.5,'reaction'),
+        ('idle_motion','Idle Motion',0.,1.,'reaction'),
         ('release','Decay',.1,4.,'reaction'),('rotation_attack','Roll Attack',.01,.5,'flow'),
         ('rotation_release','Roll Decay',.1,6.,'flow'),('colour_threshold','Power Threshold',0.,.95,'colour')):
         entries.append(Slider(prefix+key,label+':',low,high,bucket=bucket,logical=True))
@@ -1822,6 +1823,7 @@ def _waveform_ribbon() -> ModeSettings:
         ('fill_centre','Centre Fill',0.,1.,False),('rim_glow_width','Rim Glow Width',.001,.5,False),
         ('rim_glow_light','Rim Glow Light',0.,5.,False),('glint_density','Highlight Density',0.,10.,False),
         ('glint_chance','Highlight Chance',0.,1.,False),('glint_light','Highlight Light',0.,15.,False),
+        ('glint_reactivity','Highlight Response',0.,3.,False),
         ('glint_radius','Highlight Size',.01,1.,False),('strand_white','Filament Whiteness',0.,1.,False),
         ('rim_white','Rim Whiteness',0.,1.,False),('strand_jitter','Filament Variety',0.,.9,False),
         ('strand_variation','Filament Contrast',0.,1.,False),('cross_curve','Sheet Camber',0.,1.,False),
@@ -1838,6 +1840,7 @@ def _waveform_ribbon() -> ModeSettings:
         ('spark_lifetime','Lifetime',.2,8.,'sparks'),('spark_drift','Drift',0.,3.,'sparks'),
         ('spark_rise','Rise',0.,2.,'sparks'),('spark_size','Size',.5,12.,'sparks'),
         ('spark_light','Light',0.,60.,'sparks'),('spark_white','Whiteness',0.,1.,'sparks'),
+        ('spark_glow','Glow',0.,3.,'sparks'),('spark_span','Emitter Span',8.,128.,'sparks'),
         ('strand_length','Length',1.,16.,'strands'),('strand_reach','Reach',0.,4.,'strands'),
         ('strand_chance','Admission',0.,1.,'strands'),('strand_width','Width',.1,4.,'strands'),
         ('strand_light','Light',0.,10.,'strands'),('strand_beads','Droplets',0.,8.,'strands'),

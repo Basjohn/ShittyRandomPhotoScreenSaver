@@ -29,6 +29,8 @@ _local = threading.local()
 _frames: list[dict] = []
 _ticks: list[float] = []
 _restarts: list = []
+_waveform_signals: list = []
+_waveform_configuration: dict = {}
 
 
 def _wrap(owner, attr, label):
@@ -126,7 +128,76 @@ def _summary() -> dict:
     if ticks:
         summary["logical_publish"] = {"median": round(statistics.median(ticks), 3),
                                       "p90": round(ticks[int(0.9 * (len(ticks) - 1))], 3)}
+    if _waveform_signals:summary['waveform_signals']=_waveform_signals
+    if _waveform_configuration:summary['waveform_configuration']=_waveform_configuration
     return summary
+
+
+def _install_waveform() -> None:
+    """The same passive timers around Waveform's actual scene owners; no alternate render path."""
+    from rendering.quick.visualizer.implementations.waveform_ribbon import QuickWaveformRibbonRenderer
+    from rendering.quick.scene3d import waveform, ribbon, ribbon_bursts, fog_volume,waveform_envelope
+    from widgets.spotify_visualizer.waveform_ribbon_frame_runtime import WaveformRibbonFrameRuntime
+    from widgets.spotify_visualizer import waveform_ribbon_capture
+    capture=waveform_ribbon_capture.capture_waveform_ribbon
+    def captured(widget,engine,context):
+        result=capture(widget,engine,context)
+        if engine is not None:
+            _waveform_configuration.update(waveform_worker_configuration(engine))
+        return result
+    waveform_ribbon_capture.capture_waveform_ribbon=captured
+    configure=WaveformRibbonFrameRuntime.configure
+    last_configuration=None
+    def configured(self,values):
+        global _waveform_configuration
+        nonlocal last_configuration
+        result=configure(self,values)
+        if result is not None and result is not last_configuration:
+            _waveform_configuration=dict(values)
+            last_configuration=result
+        return result
+    WaveformRibbonFrameRuntime.configure=configured
+    advance=WaveformRibbonFrameRuntime.advance
+    count=0;serial=-1
+    def observed(self,**kwargs):
+        nonlocal count,serial
+        state=advance(self,**kwargs);count+=1
+        if state is not None and state.ready and (count%30==0 or state.particle_serial!=serial):
+            _waveform_signals.append(dict(time=state.time,identity=kwargs['identity'],
+                source_identity=kwargs['source_identity'],playing=kwargs['playing'],bands=kwargs['body_bands'],intensity=kwargs['intensity'],
+                loudness=kwargs['loudness'],presence=kwargs['presence'],drives=dict(state.drives),
+                bursts=state.particle_serial,particle_bytes=len(state.particles),
+                onsets=[dict(serial=event.serial,kind=event.kind,confidence=event.strength,magnitude=event.magnitude,
+                             loudness=event.loudness,presence=event.presence) for event in kwargs['onsets']]))
+            serial=state.particle_serial
+        return state
+    WaveformRibbonFrameRuntime.advance=observed
+    render=QuickWaveformRibbonRenderer.render
+    def framed(self,frame):
+        _local.frame={};start=time.perf_counter()
+        try:return render(self,frame)
+        finally:
+            _waveform_configuration.update(dict(frame.snapshot.logical.mode_state.parameters))
+            _local.frame['waveform_render']=(time.perf_counter()-start)*1000.
+            _frames.append(_local.frame);_local.frame=None
+    QuickWaveformRibbonRenderer.render=framed
+    for owner,attr,label in ((waveform,'waveform_envelope','waveform_envelope'),
+        (waveform_envelope.WaveformEnvelope,'update','gpu_envelope_submit'),
+        (waveform.WaveformScene,'_update_fog','fog_update'),(waveform.WaveformScene,'_bake_shape','fog_bake'),
+        (waveform.WaveformScene,'_fog_uniforms','fog_uniforms'),(waveform.WaveformScene,'_reflect','reflection'),
+        (waveform.WaveformScene,'_floor','floor'),(ribbon.RibbonPrimitive,'draw','ribbons'),
+        (ribbon_bursts.RibbonBurstRenderer,'draw','bursts'),(fog_volume.FogMarch,'march','fog_march'),
+        (fog_volume.FogMarch,'composite','fog_composite')):
+        _wrap(owner,attr,label)
+
+
+def waveform_worker_configuration(engine):
+    """Observe applied worker values, rather than assuming a requested technical cache reached it."""
+    worker=engine._audio_worker
+    attrs={'bar_count':'_bar_count','audio_block_size':'_preferred_block_size',
+           'adaptive_sensitivity':'_use_recommended','sensitivity':'_user_sensitivity',
+           'dynamic_floor':'_use_dynamic_floor','manual_floor':'_manual_floor','input_gain':'_input_gain'}
+    return {'waveform_ribbon_'+key:getattr(worker,attribute) for key,attribute in attrs.items()}
 
 
 def main() -> int:

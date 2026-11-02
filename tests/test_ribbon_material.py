@@ -256,7 +256,7 @@ void main() {
     program=scene.resources.program('skewed glint',vertex,RIBBON_LIGHT_FRAGMENT)
     gl.glUseProgram(program)
     for name,value in material.uniforms().items():
-        (gl.glUniform2f if len(value)==2 else gl.glUniform4f)(gl.glGetUniformLocation(program,name),*value)
+        {2:gl.glUniform2f,3:gl.glUniform3f,4:gl.glUniform4f}[len(value)](gl.glGetUniformLocation(program,name),*value)
     gl.glUniform1i(gl.glGetUniformLocation(program,'uOrthographic'),1)
     gl.glUniform3f(gl.glGetUniformLocation(program,'uForward'),0.,0.,-1.)
     gl.glDisable(gl.GL_DEPTH_TEST)

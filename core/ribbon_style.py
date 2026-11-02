@@ -84,6 +84,7 @@ class RibbonMaterial:
     cross_curve: float = 0.         # smooth transverse bow in half-widths; 0 retains the flat strip
     glow: float = 1.                # share of the sheet's light sent to the bloom (local glow, not the mist's)
     hot: float = 0.                 # white-hot cores on the brightest strands (0..1), the rest keep their colour
+    glint_reactivity: float = 0.    # additional local highlight admission from the packet's current musical emission
 
     def __post_init__(self):
         values = astuple(self)
@@ -104,5 +105,5 @@ class RibbonMaterial:
                     uFill=(self.fill_light, self.fill_centre, self.rim_glow_width, self.rim_glow_light),
                     uGlint=(self.glint_density, self.glint_chance, self.glint_light, self.glint_radius),
                     uTone=(self.strand_white, self.rim_white, self.strand_jitter, self.glint_min_pixels),
-                    uGlow=(self.glow, self.hot))
+                    uGlow=(self.glow, self.hot,self.glint_reactivity))
 

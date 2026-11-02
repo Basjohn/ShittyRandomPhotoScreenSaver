@@ -37,6 +37,16 @@ def elastic(position, velocity, target, dt, frequency, damping):
     return x,v
 
 
+def impulse_velocity(frequency, damping):
+    """Velocity whose free underdamped response has unit peak displacement.
+
+    The analytic unit-velocity peak is exp(-zeta*acos(zeta)/sqrt(1-zeta²))/omega.
+    Frequency/damping therefore control timing without silently shrinking authored hit excursion.
+    """
+    root=math.sqrt(1.-damping*damping)
+    return 2.*math.pi*frequency*math.exp(damping*math.acos(damping)/root)
+
+
 def hue_mix(a,b,share):
     left,right = colorsys.rgb_to_hsv(*a),colorsys.rgb_to_hsv(*b)
     delta = (right[0]-left[0]+.5)%1.-.5
@@ -62,6 +72,7 @@ class HybridControls:
     twist_speed: tuple
     colour_threshold: float
     accents: RibbonAccentControls | None = None
+    idle_motion: float = .35
 
 
 @dataclass(frozen=True)
@@ -100,6 +111,8 @@ class WaveformDynamics:
         self._snapshot = None
         self._base_packet = self._base_array = None
         self._bursts = None
+        self._elastic_config = None
+        self._elastic_frequencies = self._impulse_scales = ()
 
     @property
     def ready(self):
@@ -127,7 +140,7 @@ class WaveformDynamics:
             sparkle.append(unit(self._value('sparkle')*max(hit,.4*bands[2])))
         self.ring.append(when,positions,widths,twists,lights,sparkle=sparkle,tint=tints)
 
-    def advance(self, dt, *, bands, intensity, presence, hit=0., controls=None):
+    def advance(self, dt, *, bands, intensity, presence, hit=0., hit_components=None, controls=None):
         if not math.isfinite(dt) or not 0. <= dt <= .1:
             raise ValueError('Ribbon logical dt must be finite in 0..0.1 seconds')
         if controls is not None:
@@ -135,6 +148,10 @@ class WaveformDynamics:
         c = self.controls
         if not 0.05 <= c.frequency <= 4. or not .1 <= c.damping <= .95:
             raise ValueError('Ribbon elastic frequency/damping is outside the stable authoring domain')
+        if self._elastic_config != (c.frequency,c.damping):
+            self._elastic_config=(c.frequency,c.damping)
+            self._elastic_frequencies=tuple(c.frequency*share for share in (1.,1.75,2.75))
+            self._impulse_scales=tuple(impulse_velocity(frequency,c.damping) for frequency in self._elastic_frequencies)
         if not self.ready:
             # A bounded activation preparation step, not replayed/catch-up audio. Remain at the initial state until
             # the idle history is complete; prepared reveal cannot expose provisional head/tail segments.
@@ -150,22 +167,26 @@ class WaveformDynamics:
         power = unit(intensity)*unit(presence)
         self.bands, self.power = bands,power
         self.passage = follower(self.passage,power,dt,c.attack,c.release)
-        hit = unit(hit)*unit(presence)*power
+        # Event strength already has its own acoustic support at admission. Passage weight must not attenuate
+        # an admitted kick a second time; near-silence still forbids new input.
+        hit = unit(hit)*unit(presence)
+        impulses=(hit,hit,hit) if hit_components is None else tuple(unit(value)*unit(presence) for value in hit_components)
+        if len(impulses)!=3:raise ValueError('Waveform impulse needs bend, torsion and depth components')
         self._hit = max(hit,self._hit*math.exp(-dt/.12))
         self.time += dt
         self.travel += c.scene.flow.speed*dt
         self.phase += 2*math.pi*c.scene.flow.head_hz*dt
         sources = (*bands,power,self._hit,.5+.5*math.sin(self.phase))
         for key in TARGETS:
-            target = route(c.routing[key],sources)
+            target = route(c.routing[key],sources,passage=self.passage)
             self.drive[key] = follower(self.drive[key],target,dt,c.attack,c.release)
         for owner,card in enumerate(c.cards):
             support = 1. if card['band']=='All' else bands[('Bass','Mids','Highs').index(card['band'])]
             for index,target in enumerate((self.drive['bend'],self.drive['torsion'],self.drive['depth'])):
-                self.velocity[owner][index] += support*hit*c.impulse*(2.2,4.,1.)[index]
+                self.velocity[owner][index] += support*impulses[index]*c.impulse*self._impulse_scales[index]
                 self.spring[owner][index],self.velocity[owner][index] = elastic(
                     self.spring[owner][index],self.velocity[owner][index],target*support,dt,
-                    c.frequency*(1.,1.75,2.75)[index],c.damping)
+                    self._elastic_frequencies[index],c.damping)
         target_speed = self._value('rotation') if c.rotation_enabled else 0.
         self.angular_speed = follower(self.angular_speed,target_speed,dt,c.rotation_attack,c.rotation_release)
         self.angle = math.remainder(self.angle+math.radians(self.angular_speed)*dt,2*math.pi)
@@ -206,8 +227,15 @@ class WaveformDynamics:
             return self._snapshot
         raw = self.ring.packet()
         if raw is not self._base_packet:
-            self._base_packet = raw
-            self._base_array = np.frombuffer(raw.payload,np.float32).reshape(3,-1,4)
+            base=np.frombuffer(raw.payload,np.float32).reshape(3,-1,4)
+            # Fixed-x cloth has no transported-frame breaks. Check once per changed history packet (6 Hz),
+            # before publication to the GPU reducer, rather than silently clearing a corridor across a gap.
+            for path in base:
+                count,start,capacity=int(path[0,0]),int(path[1,1]),int(path[1,2])
+                knots=path[4:].reshape(-1,KNOT_ROWS,4)[(start+np.arange(count))%capacity]
+                if count<4 or not (knots[:,1,2]>.5).all() or (knots[1:,1,3]>.5).any() or not (np.diff(knots[:,0,0])>0).all():
+                    raise ValueError('Waveform cloth history must be one valid monotone axial run')
+            self._base_packet,self._base_array=raw,base
         data = self._base_array.copy()
         rows = data[:,4::KNOT_ROWS]
         x = rows[:,:,0]+raw.world_origin[0]+self.controls.scene.flow.head_x-self.travel
@@ -219,6 +247,9 @@ class WaveformDynamics:
         y = carrier*values['height']+values['lift']+scale*values['bend']*(.8*b*np.sin(.7*x+owner*.7)
             +.3*m*np.sin(1.5*x+owner)+.08*h*np.sin(2.6*x-owner))
         z = (rows[:,:,2]+raw.world_origin[2])*values['spread']+.4*values['depth']*m*np.cos(.65*x+owner)
+        idle=self.controls.idle_motion*(1.-self.passage)
+        y+=idle*.08*np.sin(.45*self.time+.6*x+owner)
+        z+=idle*.05*np.cos(.33*self.time+.4*x-owner)
         # One common smooth bounding domain prevents floor-crossing/clamp kinks at extreme editor values.
         y = 2.5*np.tanh(y/2.5)
         z = 2.5*np.tanh(z/2.5)
@@ -228,16 +259,17 @@ class WaveformDynamics:
         origin_twist = (data[:,1,0,None]+math.pi)%(2*math.pi)-math.pi
         twist = data[:,5::KNOT_ROWS,1]+origin_twist
         twist = twist*values['twist']+values['torsion']*(1.6*m*np.sin(.9*x+owner)+.4*h*np.sin(1.6*x-owner))
-        data[:,5::KNOT_ROWS,1] = twist+self.twist_phase+self.angle
+        data[:,5::KNOT_ROWS,1] = twist+self.twist_phase+self.angle+idle*.18*np.sin(.28*self.time+.3*x+owner)
         data[:,1,0] = 0.
         # Strong local musical regions change colour immediately, even before new head history enters view.
         # The crest mask is carried by immutable carrier geometry, so coloured regions travel with the waveform.
         for index,card in enumerate(self.controls.cards):
-            local = self.power if card['band']=='All' else self.bands[('Bass','Mids','Highs').index(card['band'])]
+            local = max(self.power,*self.bands) if card['band']=='All' else self.bands[('Bass','Mids','Highs').index(card['band'])]
             crest = np.clip(np.abs(carrier[index])/max(card['height'],1e-5),0.,1.)
             # Existing visible rim slots respond immediately; this eased source creates no simulation in the draw.
             data[index,6::KNOT_ROWS,3] = np.maximum(data[index,6::KNOT_ROWS,3],
                 values['sparkle']*max(self._hit,.4*self.bands[2])*crest)
+            data[index,7::KNOT_ROWS,3] *= 1.+2.2*self._hit*(.25+.75*crest)
             power = local*(.25+.75*crest)
             threshold = self.controls.colour_threshold
             share = np.clip((power-threshold)/max(1e-5,1.-threshold),0.,1.)

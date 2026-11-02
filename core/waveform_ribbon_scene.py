@@ -4,12 +4,14 @@ from dataclasses import dataclass, field
 import math
 from core.ribbon_style import RibbonMaterial, RibbonSparks, RibbonStrays
 from core.settings import framed_camera as fc
+from core.settings.waveform_ribbon_camera import GROUNDED_ORBIT, YAW_SPAN
 from rendering.gl_programs.mist import mist_uniforms
 
 SPEC = fc.FramedCameraSpec(
     prefix='waveform_ribbon_', pivot=(0., 2., 0.), orbit_distance=12., pitch_base_degrees=-15.,
-    pitch_span_degrees=60., yaw_span=math.pi, tilt_range=(-.5, .5), eye_center=(0., 8., 0.), eye_half=(60., 8., 60.),
-    clearance=.4, offset_scale=(60., 8., 60.), travel_speed=4.)
+    pitch_span_degrees=60., yaw_span=YAW_SPAN, tilt_range=(-.5, .5), eye_center=(0., 8., 0.), eye_half=(60., 8., 60.),
+    clearance=.4, offset_scale=(60., 8., 60.), travel_speed=4.,
+    floor_hook='core.settings.waveform_ribbon_camera:floor',grounded_orbit=GROUNDED_ORBIT)
 ORTHO_REFERENCE_FOV = 45.
 
 PALETTE = (((0., .52, 1.), (0., .22, 1.)),    # cyan -> electric blue
@@ -56,7 +58,7 @@ class Fog:
     envelope_smoothing: float = .25 # Gaussian along x (world units)
     edge_evening: float = 4.        # world-x width over which the fringe's brightness is evened
     envelope_width: float = .5      # share of a sheet's half-width counted as its vertical extent (twisted sheets)
-    depth_range: tuple = (3., 90.)
+    depth_range: tuple = (.3, 90.)
     cell: int = 16                  # viewport pixels per coarse cell (light and coverage only)
     slices: int = 64
     reflection_cell: int = 24
@@ -93,8 +95,6 @@ class Floor:
     At grazing angles a micro-surface tilt toward or away from the viewer moves the reflection a long way vertically
     and a sideways tilt hardly at all: the wet-floor columns come from that offset, not from blurring a mirror.
     Reflections stay crisp at the contact and soften with the height of what they reflect (contact hardening)."""
-    half_span: float = 100.
-    depth_bounds: tuple = (-80., 60.)
     albedo: str = 'assets/textures/waveform_floor/concrete_albedo.png'
     roughness: str = 'assets/textures/waveform_floor/concrete_roughness.png'
     height: str = 'assets/textures/waveform_floor/wet_surface_height.png'
@@ -112,7 +112,7 @@ class Floor:
     ripple: tuple = (.25, 0., 0.)
     # Micro facets are many per pixel at this grazing view: their average is a vertical streak (the receiver's
     # roughness footprint), never per-pixel offsets, which aliased into horizontal scanlines. Streak half-length
-    # (uv) and the roughness range across the surface (from the broad relief's slope).
+    # (canonical aperture share; projected from a fixed world length) and the roughness range across the surface (from the broad relief's slope).
     streak: tuple = (.5, .8, 1.)
     lod: tuple = (1., 1.)           # reflection mip (half-resolution target: already soft)
     contact: tuple = (.002, 6., 6.)  # spread (uv) per unit of reflected height; along/across; probe mip

@@ -2,6 +2,7 @@
 from __future__ import annotations
 import numpy as np
 from core.settings import framed_camera as fc
+from core.settings.waveform_ribbon_camera import NEAR, FAR
 from core.waveform_ribbon_scene import SPEC, ORTHO_REFERENCE_FOV
 from widgets.spotify_visualizer.render_state import WaveformRibbonFrame
 from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
@@ -19,21 +20,19 @@ def physical_view(parameters,aspect,aperture_scale=1.):
     def value(key):return parameters['waveform_ribbon_'+key]
     turn,tilt,scale=(float(value(key)) for key in ('turn','tilt','scene_scale'))
     fov=float(value('camera_fov'))
-    axes=fc.camera_axes(SPEC,turn,tilt)
-    eye,_=fc.resolve_camera_position(SPEC,turn,tilt,scale,float(value('scene_pan_x')),float(value('scene_pan_y')),
-        fov,tuple(value('camera_position')),None,lambda x,z:0.,axes=axes)
+    axes,eye,_=fc.resolve_camera_frame(SPEC,parameters)
     right,up,back=(np.asarray(axes[i:i+3]) for i in (0,3,6))
     view=np.identity(4);view[0,:3],view[1,:3],view[2,:3]=right,up,back
     view[:3,3]=-view[:3,:3]@np.asarray(eye)
     orthographic=str(value('camera_projection'))=='Orthographic'
     if orthographic:
         tangents=fc.viewport_tangents(ORTHO_REFERENCE_FOV,aspect,aperture_scale)
-        distance=SPEC.orbit_distance/scale
+        distance=fc.projection_reference_distance(SPEC,scale,eye)
         lens=(tangents[0]*distance,tangents[1]*distance,True)
-        projection=fc.orthographic_matrix(lens[:2],-60.,200.)
+        projection=fc.orthographic_matrix(lens[:2],NEAR,FAR)
     else:
         tangents=fc.viewport_tangents(fov,aspect,aperture_scale)
-        lens=(*tangents,False);projection=fc.perspective_matrix(tangents,.3,200.)
+        lens=(*tangents,False);projection=fc.perspective_matrix(tangents,NEAR,FAR)
     return view,np.asarray(projection).reshape(4,4,order='F'),np.asarray(eye),lens
 
 
@@ -52,7 +51,7 @@ class QuickWaveformRibbonRenderer:
         if not isinstance(state,WaveformRibbonFrame):raise TypeError('Waveform renderer requires its own mode frame')
         scene=self._scene;recipe=state.scene
         scene.admit_preparation()
-        if not scene.ribbons.prepare_programs(sparks=False,strays=recipe.strays is not None):
+        if not scene.ribbons.prepare_programs(sparks=False,strays=recipe.strays is not None,continuation=True):
             return False
         if recipe.sparks is not None and not scene.bursts.prepare_step():return False
         programs=[(scene.resources,'floor',FLOOR_VERTEX,FLOOR_FRAGMENT)]
@@ -63,6 +62,7 @@ class QuickWaveformRibbonRenderer:
             overlay=True,oit=True,hdr=recipe.bloom>0.))
         if not warm_programs(programs):return False
         if recipe.fog is not None:
+            if not scene.envelope.prepare_step():return False
             for volume in (scene.fog,scene.reflected_fog):
                 if not volume.prepare_program():return False
             for march in (scene.march,scene.reflected_march):

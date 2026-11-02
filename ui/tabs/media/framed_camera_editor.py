@@ -7,6 +7,7 @@ everything. Values come from a section-lazy cache when the mode keeps one (EB), 
 saved settings.
 """
 from __future__ import annotations
+import math
 
 from core.settings.framed_camera import (
     FramedCameraSpec, admit_camera_parameters, camera_baseline, ceiling_for, spec_for_mode,
@@ -191,6 +192,10 @@ def set_aim(tab, mode_id: str, angles, *, commit: bool) -> None:
         key = spec.key(suffix)
         pose[key] = settings.control(key).admit(angle, tab._widget_default('spotify_visualizer', key))
     base_after = base_eye(tab, mode_id)
+    if spec.grounded_orbit is not None:
+        from core.settings.framed_camera import grounded_orbit_eye
+        radius=math.hypot(physical_eye[0]-spec.pivot[0],physical_eye[2]-spec.pivot[2])
+        physical_eye=grounded_orbit_eye(spec,radius,pose[spec.key('turn')])
     set_offset(tab, mode_id, tuple((physical_eye[i] - base_after[i]) / half[i] for i in range(3)), commit=False)
     if commit:
         setattr(tab, aim_dirty_attr(mode_id), True)

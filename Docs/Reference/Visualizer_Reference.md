@@ -639,6 +639,11 @@ projects with that eye; Neon Lake's `BasinView` is the raster example, EB's ray-
 Specs: `core/settings/extruded_bubble_camera.py`, `core/settings/neon_lake_camera.py`. Settings: one Camera
 Position editor (`ui/tabs/media/framed_camera_editor.py` over `SceneVolumeMapper.setCameraModel(spec)`) for every
 framed mode; a spec may add scene guides through `editor_references_hook`.
+Waveform opts into the optional `GroundedOrbitSpec`: one fixed-height admitted eye, a bounded front annulus and
+focus-preserving left/right orbit. W/S changes physical radius; A/D orbits rather than strafing out of the scene.
+Tilt changes the physical focus within the body; its near-level endpoint uses the admitted radius and retains visible
+floor. Both projections, editor marker/aim inverse and persisted offsets consume `resolve_camera_frame` and the same
+policy in `core/settings/waveform_ribbon_camera.py`. Other modes retain their ordinary physical-flight policy.
 
 - **GLSL:** include `SCENE3D_GLSL` from `rendering/gl_programs/scene3d.py` (camera with a real near plane, lighting,
   planar shadows, streaks, integer hash, impulse and departure helpers). Every function has a CPU mirror in the same

@@ -50,6 +50,28 @@ def test_std430_offsets_and_strides_follow_the_rules():
     assert packed.dtype().itemsize == packed.stride
 
 
+def test_scoped_lease_rebinds_without_upload_and_expires_on_exception(context,monkeypatch):
+    ring=StreamRing('scoped lease',slots=3,slot_bytes=4096,hold_bytes=1024)
+    copies=[];original=ctypes.memmove
+    def copied(*args):copies.append(args[2]);return original(*args)
+    monkeypatch.setattr(stream_module.ctypes,'memmove',copied)
+    previous=gl_query.get_indexed_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING,0)
+    try:
+        with pytest.raises(ValueError,match='cancel'):
+            with ring.bound(gl.GL_SHADER_STORAGE_BUFFER,0,b'\0'*64,reuse=True) as lease:
+                name=gl_query.get_indexed_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING,0)
+                for _ in range(4):
+                    gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,0,0)
+                    lease.rebind()
+                    assert gl_query.get_indexed_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING,0)==name
+                with pytest.raises(RuntimeError,match='active'):ring.release()
+                raise ValueError('cancel')
+        assert copies==[64]
+        assert gl_query.get_indexed_int(gl.GL_SHADER_STORAGE_BUFFER_BINDING,0)==previous
+        with pytest.raises(RuntimeError,match='outlived'):lease.rebind()
+    finally:ring.release()
+
+
 def _values(layout: Scene3DStorageLayout, record: int) -> dict[str, object]:
     values = {}
     for position, (field, glsl_type) in enumerate(layout.fields, start=1):
