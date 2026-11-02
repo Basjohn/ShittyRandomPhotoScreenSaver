@@ -25,7 +25,7 @@ whose angular speed attacks quickly and decays slowly, particles and rim-rooted 
 deformation, separate from camera orbit and fixed history travel. Integrate angle from speed on the sole logical clock;
 the operator's clarified motion is axial roll, like a skewer turning on its stick (the longitudinal world-x axis in
 this scene), not rotation around another point. Its centre stays in place.
-all floor/reflection/accent/mist-clearance consumers use the same transformed geometry. Bend, torsion, stretch, twist,
+All floor/reflection/accent/mist-clearance consumers use the same transformed geometry. Bend, torsion, stretch, twist,
 rotation magnitude/speed and visual accents remain customizable. Visual editors and quiet→peak range sliders expose
 their actual consumers, with audits of both handles. Smooth fog-fringe grain before the port; floor reflectivity,
 colour tint and brightness become settings rather than blocking visual polish. Start with exactly two authored
@@ -284,6 +284,16 @@ Taken from the guide (§3, §5, §7, §8, §12, §13A-C) and the lab plan's WR-0
   installed eyes-on review; automated correlation alone never closes it.
 
 ## 5. Port order
+
+The retained scene is `rendering/quick/scene3d/waveform.py:WaveformScene`; the lab supplies its diagnostic target,
+fixtures and explicit camera, while production supplies the existing Quick frame/context. Plain scene inputs live in
+`core/waveform_ribbon_scene.py`, primitive appearance values in `core/ribbon_style.py`, programs in
+`rendering/gl_programs/waveform_ribbon.py`. No production owner imports the lab. Extraction parity evidence:
+`.artifacts/evidence/waveform_ribbon/wr_scene_promotion_parity_v2_20261102/` (three native captures exactly match the
+post-fringe baseline). Logical hybrid, incremental/GPU deformation, settings and mode registration remain work below.
+Scene retirement validates its owning context before deletion, attempts independent owners after a failure and keeps
+failed handles for retry. Volume Mist Off retires its volumes/marches/programs and shape/envelope textures; analytic
+floor mist remains a separate scene input. Full production camera/quality/effect-toggle admission remains below.
 
 1. Descriptor, logical runtime, ring/packet ownership, empty scene with the framed camera (Orthographic default) and
    dormancy/Off paths.

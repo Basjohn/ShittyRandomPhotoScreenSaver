@@ -137,8 +137,8 @@ the mist. Preset/control migration and recorded-audio calibration come only afte
 - [ ] **WR-07/08 selected hybrid and production owners:** C elastic bending/torsion is primary; combine A's accumulated
   twisting, localized highest-power colour shifts and independently controllable reactive whole-waveform rotation
   (axial roll like a skewer; fast strong attack, slow decay; integrate speed into continuous angle). Preserve constant history flow, smooth
-  curves, particles/free strands and fog repelled by the actual deformed/rotated waveform. Promote shared scene code
-  out of the lab, use the sole logical clock, immutable publication and lazy retained renderer; Terra audits each slice.
+  curves, particles/free strands and fog repelled by the actual deformed/rotated waveform. Use the shared scene,
+  sole logical clock, immutable publication and lazy retained renderer; Terra audits each slice.
 - [ ] **Full controls/editors and two initial presets:** migrate primary/alternate examples into Preset 1/2 with the
   selected hybrid, shared framed 3D camera/navigation, technical profile, preset/Custom and Edit/Arrange feature set.
   Expose bend/torsion/stretch/twist/rotation and accent ranges, source/curve visual tuning, ribbon/gradient editors,
