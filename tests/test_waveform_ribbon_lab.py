@@ -116,3 +116,44 @@ def test_mist_band_contains_every_visible_sheet_and_closes_where_none_is(state):
     beyond = xs > flow.head_x + 2.
     assert (presence[beyond] == 0.).all() and np.allclose(upper[beyond], lower[beyond])
     assert (upper[np.abs(xs) < 6.] - lower[np.abs(xs) < 6.] > .5).all()
+
+
+def test_retained_history_capture_never_rebuilds_or_appends_and_accents_can_be_off(lab, monkeypatch):
+    from dataclasses import replace
+    from tools.labs.waveform_ribbon_reactivity import HeadHistory, PRE_ROLL
+    lab.recipe = replace(lab.recipe, sparks=None, strays=None, bloom=0.)
+    model = HeadHistory('A', lab.recipe)
+    model.advance(PRE_ROLL+3)
+    before = model.ring.packet().payload
+    tick = model.tick
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Rendering mutated/reconstructed logical history')
+    monkeypatch.setattr(lab_module, 'fill_ring', forbidden)
+    monkeypatch.setattr(model.ring, 'append', forbidden)
+    observed = []
+    draw = lab.ribbons.draw
+    def checked(*args, **kwargs):
+        observed.append(kwargs.get('shading'))
+        return draw(*args, **kwargs)
+    monkeypatch.setattr(lab.ribbons, 'draw', checked)
+    pixels = lab.render_history(model.ring, PRE_ROLL+3)
+    assert pixels[:, :, :3].max() > 100
+    assert 'sparks' not in observed and 'strays' not in observed
+    assert model.tick == tick and model.ring.packet().payload == before
+
+
+def test_existing_visible_body_responds_before_new_head_history_is_admitted(lab):
+    from tools.labs.waveform_ribbon_reactivity import HeadHistory,PRE_ROLL,Signal
+    class Step:
+        events=()
+        def sample(self,t):return Signal(bass=.8,loudness=1.) if t>0 else Signal()
+    active=HeadHistory('A',lab.recipe,input_source=Step(),body_envelope=True)
+    idle=HeadHistory('A',lab.recipe,fixture='idle',body_envelope=True)
+    active.advance(PRE_ROLL+.1);idle.advance(PRE_ROLL+.1)
+    assert active.ring.packet().payload==idle.ring.packet().payload
+    a=lab.render_history(active.snapshot(),PRE_ROLL+.1,flat=True)
+    b=lab.render_history(idle.snapshot(),PRE_ROLL+.1,flat=True)
+    def mask(p):
+        rgb=p[:,:,:3].astype(int)
+        return (rgb[:,:,0]>120)&(rgb[:,:,2]>120)&(rgb[:,:,1]<60)
+    assert np.count_nonzero(mask(a)^mask(b))>1000
