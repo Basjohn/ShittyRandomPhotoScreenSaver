@@ -12,6 +12,8 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 1. **§6 Shared 3D architecture**: build reusable 3D primitives, each proven on its own harness.
 2. **§7 Visualizer modes**, one at a time: **Waveform Ribbon → Reactive Liquid / Melt Pool → Concrete Rain →
    Usu Moonscape**. Each is built lab-first (§7.0).
+3. **§8 Later accepted-mode reactivity polish**, only after the §7 sequence unless the operator explicitly pulls one
+   item forward for a concrete regression.
 
 **Accepted baseline (not live work):** original Bubble, Extruded Bubble, Neon Lake, Oscilloscope,
 Spectrum/Rainbow Ghost, Sphere, source routing, transitions and Foundry launch buttons. Reopen an accepted
@@ -135,8 +137,18 @@ the mist. Preset/control migration and recorded-audio calibration come only afte
   close its remaining highlight/mist-edge fidelity gaps without regressing the primary look.
 - [ ] **Accents and optics:** finish sparks/glow/defocus only after waveform, floor and mist remain credible without them.
 - [ ] **Visual admission:** operator/capable visual-agent sign-off on the floor/waveform/volume range before live reactivity.
-- [ ] **Only after visual admission:** recorded-audio WR-07 mappings, remaining S3D-1/2/5 lifecycle/cost gates, WR-08
-  production migration/tunable presets, then WR-09 acceptance with `tools/visualizer_live_check.py --load game60`.
+- [ ] **Core-reactivity bake-off:** before committing WR-07 to one geometry/motion language, retain the concept brief's
+  current bass-width/slow-bend + mids-twist/centerline + highs-fine-detail + transient-curvature mapping as Candidate A
+  and compare it with three bounded alternatives in the lab: traveling deformation packets, elastic/tension dynamics,
+  and authored macro-flow with subordinate waveform-derived fine structure. Hold colour shifts, particles and glow
+  constant/off for this decision. Drive every candidate with the same deterministic 10-second synthetic program; export
+  one short WebP plus five synchronized stills per candidate at identical camera/world/time checkpoints. Judge musical
+  separation, low-react beauty, attack/settle, continuity, silhouette readability and cost. Choose one core grammar, or
+  combine candidates only when the evidence shows complementary behavior rather than extra noise. Detailed contract:
+  `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` §5.1.
+- [ ] **Only after the bake-off selects the core grammar:** recorded-audio WR-07 calibration, remaining S3D-1/2/5
+  lifecycle/cost gates, WR-08 production migration/tunable presets, then WR-09 acceptance with
+  `tools/visualizer_live_check.py --load game60`.
 
 ### 7.2 Reactive Liquid / Audio Melt Pool
 
@@ -162,6 +174,26 @@ Long-horizon character/world vertical: `Docs/Future_Work/Usu_Moonscape.md` (Blen
 `Docs/Future_Work/Usu_Blender_Work.md`). Needs the character/world foundations S19–S27 listed there (asset bake,
 skinning, animation graph, secondary motion, felt/fuzz, world-view projection, sphere world/starscape) plus S3D-6.
 Not admitted until those foundations are proven; the static silhouette approval stays a separate hard gate.
+
+## 8. Later accepted-mode reactivity polish
+
+Do not pull these ahead of the §7 mode sequence unless the operator explicitly reprioritizes them. They are admitted
+follow-up work on the accepted original Bubble, not a reason to reopen unrelated Bubble behavior.
+
+- [ ] **Original Bubble drift intensity range:** normal Bubble drift works, but its visible drift strength is too similar
+  at idle and under heavy/intense sound despite the authored settings. Trace signal → reactive target → smoothing → final
+  displacement/speed before tuning. Preserve the accepted idle drift and cadence, then make the configured high-react
+  end materially stronger under sustained loud passages and strong transients without introducing jumps, judder or a
+  separate clock. Prove quiet/mid/hot synthetic fixtures plus recorded real-music passages and compare the actual
+  low-to-high drift range, not only a single loud frame.
+- [ ] **Original Bubble scalar-to-range control audit:** inventory Bubble sliders whose authored value is really a
+  low-react/high-react envelope and convert only semantically appropriate controls to range sliders. Wire the low and
+  high handles to the canonical reactivity signal rather than treating the range as cosmetic UI. For authored presets
+  **1-8 only**, seed both ends of every migrated range from that preset's existing scalar value so the migration is
+  byte-identical to its current output before the operator widens a range; presets beyond 8 are experimental and do not
+  constrain migration. Capture the pre-change P1-P8 effective values and fixture frames as the regression oracle, then
+  prove Save/Cancel/Restore, preset switching, CUSTOM editing and low/high interpolation without changing unrelated
+  Bubble reactivity semantics.
 
 ## Operator execution and evidence rules
 
