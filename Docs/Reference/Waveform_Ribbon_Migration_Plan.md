@@ -127,6 +127,9 @@ The Shape Tuner's per-target quiet/loud values are these same ranges, edited on 
 - Density, Clearance (how far the waveform repels it, with a minimum), Billows, Edge Line (R, strength) and fibre,
   Fringe Light (R), Fringe Colour (gradient share), Distance Haze (darkness, never pure black), Floor Mist (thickness
   toward edges and distance), Side Walls (where the edge mist closes in beyond the framed view).
+- **Floor Mist owns the existing cheap analytic distance layer** (`Environment.mist` / shared `MIST_GLSL`), separate
+  from the shaped volume. Ground volume bank height/light remain zero intentionally; migration must not re-enable
+  banks or add a marched ground volume to imitate lower-corner detail in the reference.
 - Mist reactivity (fringe light, edge line) arrives later than the shape: operator direction keeps audio-driven fog
   for after the look is accepted; the ranges exist from the start with low = high in the starting presets.
 - Preview: the scene itself; a small turned-view inset helps judge 3D clearance.

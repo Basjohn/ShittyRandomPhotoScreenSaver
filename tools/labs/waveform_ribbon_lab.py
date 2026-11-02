@@ -1154,9 +1154,8 @@ class Lab:
             gl.glDepthFunc(gl.GL_LESS)
             gl.glDepthMask(gl.GL_TRUE)
             with self.scene.emission_writes():
-                # With the volume, the march composite owns the floor's mist (in front of it, to the plane).
                 # The floor takes the cheap analytic mist (slightly tinted, dark with distance); the reactive volume
-                # mist is for the space above and the edges.
+                # mist is for the space above and the edges, composited separately after the floor.
                 self._floor(mvp, eye, view, orthographic, (width, height), flat=flat)
                 if flat:
                     self._flat_ribbons(packet, ribbon_mvp)
