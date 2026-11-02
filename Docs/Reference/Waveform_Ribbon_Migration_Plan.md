@@ -195,16 +195,13 @@ rotation. Source routing/curves and quiet→peak ranges must reach these realize
   Light (R), Lifetime, Whiteness.
 
 ### Mist
-- **Mist** toggle (on in every starting preset; off removes all of its passes and resources).
-- Density, Clearance (how far the waveform repels it, with a minimum), Billows, Edge Line (R, strength) and fibre,
-  Fringe Light (R), Fringe Colour (gradient share), Distance Haze (darkness, never pure black), Floor Mist (thickness
-  toward edges and distance), Side Walls (where the edge mist closes in beyond the framed view).
-- **Floor Mist owns the existing cheap analytic distance layer** (`Environment.mist` / shared `MIST_GLSL`), separate
-  from the shaped volume. Ground volume bank height/light remain zero intentionally; migration must not re-enable
-  banks or add a marched ground volume to imitate lower-corner detail in the reference.
-- Mist reactivity (fringe light, edge line) arrives later than the shape: operator direction keeps audio-driven fog
-  for after the look is accepted; the ranges exist from the start with low = high in the starting presets.
-- Preview: the scene itself; a small turned-view inset helps judge 3D clearance.
+- **Rejected 2 November:** the entire current shaped mist, including its band, side walls and fringe, is not an
+  accepted baseline. The desired replacement is full-scene night fog displaced by the actual moving waveform, with
+  reactive wake and light. Failure evidence, options and open validation are in
+  [Waveform Ribbon: mist failure and replacement](Waveform_Ribbon_Mist_Failure_and_Replacement.md).
+- Mist Off must retire its passes and resources. The existing cheap floor distance mist (`Environment.mist` /
+  `MIST_GLSL`) is separate; ground-volume bank height/light remain intentionally zero. Replacement controls and
+  previews follow the selected design and native visual judgment; the old fringe controls do not define it.
 
 ### Floor
 - **Reflection Intensity (R)** (operator, 1 November): how strongly the floor mirrors the scene, quiet → peak.
