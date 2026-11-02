@@ -143,10 +143,12 @@ audio and actual native motion, retaining the C-primary/A-twist grammar:
   camera/input ownership; do not shift actors/populations with the eye or hide failures by removing projections.
   **Grounded camera direction (operator):** stable eye height above the floor; approach the waveform and orbit left/right,
   always retaining it in view. Constrain navigation to a visually credible region; no free-flight escape into ugly areas.
-- [ ] Resolve side sheets fighting the fog, and smooth the fog body/fringe grain into a smoothly lit rim in motion.
-  Operator orbit screenshots show an extended bright horizontal shelf and detached noisy patches; reject camera-
-  dependent clearance distortion and remote luminous boundaries. Preserve fixed-world atmosphere and light it by
-  distance to the actual ribbons, including turned views. Navigation repair remains below musical response in priority.
+- [ ] **Current mist/fringe entirely rejected (operator):** stop polishing the shaped banks/illuminated fringe.
+  The preserved sky-extending image and failure analysis are in `Docs/Reference/Waveform_Ribbon_Mist_Failure_and_Replacement.md`.
+  Review reactive replacement proposals around full-scene night fog ("Silent Hill At Night") displaced by the actual
+  3D waveform. Primary body/audio/camera work continues; replacement selection requires operator judgement.
+  Keep physical world anchoring, smooth density, body displacement and cheap separate floor mist as replacement
+  requirements; remove the rejected mechanism on migration rather than keeping it as a hidden fallback.
 - [ ] Prove floor reflection remains live and authorable; brighten/tune rim light and glow through their actual controls.
   Reflection-column aesthetics remain secondary. Compare both presets in person after automated gates, not before.
 - [ ] **Viewport regression (operator):** shrunken wide viewport restores reflection and changes apparent reaction.
@@ -172,7 +174,7 @@ Chosen first: the smallest contained scene and the first consumer of S3D-1/S3D-2
 intentionally absent from normal GODZIPs.
 
 The scene is world-first through the shared framed camera (Orthographic default): wet reflective concrete floor,
-waveform and strong thick shaped mist, with no visible horizon/sky/floor edge. The waveform clears and softly lights
+waveform and full-scene night fog, with no visible horizon/sky/floor edge. The waveform clears and softly lights
 the mist. Preset/control migration and recorded-audio calibration come only after the lab look is credible.
 
 - [~] **WR-07/08 production candidate — finish admission:** C elastic bending/torsion is primary; combine A's accumulated

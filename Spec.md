@@ -787,6 +787,9 @@ substitute for the planned flow, rolling twist, traveling packets, elastic torsi
 The selected production grammar combines C's primary elastic body with A's twisting, localized high-power colour,
 particles/strands and independently reactive axial roll about the waveform's length (separate from camera orbit).
 The Migration Plan owns full visual editors/ranges, endpoint audits and the two initial primary/alternate presets.
+`Docs/Reference/Waveform_Ribbon_Mist_Failure_and_Replacement.md` preserves the rejected mist image and owns its
+failure analysis and replacement proposals. The operator's current direction is full-scene night fog displaced by
+the actual waveform; smoothing the rejected banks/fringe does not satisfy that direction.
 The registered production candidate uses descriptor-owned capture/runtime/renderer and canonical spec-driven Settings.
 Configuration and published packets are detached immutable values. C springs respond per ribbon's selected band;
 A twist and axial speed integrate on the sole logical clock. Existing body geometry responds before new head history
