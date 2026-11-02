@@ -1,6 +1,7 @@
 """Waveform lab GL ownership and repeatable diagnostic captures; artistic recipes remain editable."""
 import numpy as np
 import pytest
+from core.ribbon_packet import KNOT_ROWS
 
 from rendering.gl_error_policy import disable_per_call_gl_error_checking
 disable_per_call_gl_error_checking()
@@ -103,7 +104,7 @@ def test_mist_band_contains_every_visible_sheet_and_closes_where_none_is(state):
     checked = 0
     for path in rows:
         count, start, capacity = int(path[0, 0]), int(path[1, 1]), int(path[1, 2])
-        knots = path[4:].reshape(-1, lab_module.KNOT_ROWS, 4)[(start + np.arange(count)) % capacity]
+        knots = path[4:].reshape(-1, KNOT_ROWS, 4)[(start + np.arange(count)) % capacity]
         x = knots[:, 0, 0] + packet.world_origin[0] + translation[0]
         y = knots[:, 0, 1] + packet.world_origin[1] - lab_module.VIEW_SLOPE*(knots[:, 0, 2] + packet.world_origin[2])
         half = fog.envelope_width*knots[:, 0, 3]
@@ -157,3 +158,48 @@ def test_existing_visible_body_responds_before_new_head_history_is_admitted(lab)
         rgb=p[:,:,:3].astype(int)
         return (rgb[:,:,0]>120)&(rgb[:,:,2]>120)&(rgb[:,:,1]<60)
     assert np.count_nonzero(mask(a)^mask(b))>1000
+
+
+def test_shared_scene_rejects_foreign_retirement_before_deleting_its_handles(lab):
+    from tools.labs.render_target import OffscreenRenderTarget
+    lab.render('low', flat=False)
+    before = lab.textures.copy()
+    foreign = OffscreenRenderTarget(16, 16)
+    try:
+        with pytest.raises(RuntimeError, match='foreign'):
+            lab.release()
+        assert lab.textures == before
+    finally:
+        foreign.close()
+    with lab.target.current():
+        lab.release()
+        assert not lab.has_resources
+
+
+def test_shared_scene_attempts_independent_cleanup_and_retains_failed_owner_for_retry(lab, monkeypatch):
+    lab.render('high', flat=False)
+    original = lab.fog.release
+    def fail():
+        raise RuntimeError('injected retirement failure')
+    monkeypatch.setattr(lab.fog, 'release', fail)
+    with lab.target.current():
+        with pytest.raises(ExceptionGroup, match='retry'):
+            lab.release()
+        assert lab.fog.has_resources and not lab.reflected_fog.has_resources
+        assert not lab.textures and not lab.ribbons.has_resources and not lab.scene.has_resources
+        monkeypatch.setattr(lab.fog, 'release', original)
+        lab.release()
+        assert not lab.has_resources
+
+
+def test_volume_mist_off_retires_its_resources_without_replacing_floor_mist(lab):
+    from dataclasses import replace
+    lab.render('low', flat=False)
+    analytic = lab.recipe.environment.mist.copy()
+    assert lab.fog.has_resources and 'shape' in lab.textures
+    lab.recipe = replace(lab.recipe, fog=None)
+    lab.render('low', flat=False)
+    assert not any(owner.has_resources for owner in (lab.fog, lab.reflected_fog, lab.march, lab.reflected_march))
+    assert not lab.fog_resources.has_resources
+    assert not {'shape','envelope'} & lab.textures.keys()
+    assert lab.recipe.environment.mist == analytic

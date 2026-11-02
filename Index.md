@@ -88,6 +88,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Shared planar reflection ownership, mirrored camera and rough receiver filtering | `Docs/Reference/Scene3D_Resources.md` → Planar reflections; `rendering/quick/scene3d/reflection.py` |
 | Waveform Ribbon lab, current visual gaps (§0B), preferred checkpoint, mock custody and generated floor maps | `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`; `tools/labs/waveform_ribbon_targets.py`; `Docs/Future_Work/Waveform_Ribbon.md` |
 | Waveform Ribbon recorded-audio motion bake-off and full Visualizer controls/migration | `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` §5.1; `tools/labs/waveform_ribbon_music_bakeoff.py`; `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` |
+| Shared retained Waveform scene, neutral appearance inputs and shaders | `rendering/quick/scene3d/waveform.py`; `core/waveform_ribbon_scene.py`; `core/ribbon_style.py`; `rendering/gl_programs/waveform_ribbon.py` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
 | Visualizer Previous/Next preset glyphs and default selection | `Docs/Reference/Visualizer_Reference.md` → Preset navigation glyphs |
 | Visualizer hover display transfer, native glyph admission and existing CUSTOM transaction | `Docs/Reference/Visualizer_Reference.md` → Preset navigation glyphs; `Current_Plan.md` → R38 |
