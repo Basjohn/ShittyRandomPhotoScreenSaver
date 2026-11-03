@@ -142,11 +142,12 @@ class PassageIntensity:
     USUAL = 0.65
     SPREAD = 1.5
 
-    __slots__ = ("_level", "_value")
+    __slots__ = ("_level", "_value", "_continuous")
 
-    def __init__(self) -> None:
+    def __init__(self, *, continuous: bool = False) -> None:
         self._level = 0.0
         self._value = 0.0
+        self._continuous = continuous
 
     @property
     def value(self) -> float:
@@ -163,7 +164,11 @@ class PassageIntensity:
         tau = self.LEVEL_RISE_S if loudness > self._level else self.LEVEL_FALL_S
         self._level += (loudness - self._level) * (1.0 - math.exp(-dt / tau))
         ratio = max(self._level, 1e-6) / self.USUAL_LOUDNESS
-        self._value = max(0.0, min(1.0, self.USUAL + self.SPREAD * math.log(ratio)))
+        # Waveform's fixed raw scale must articulate ordinary quieter playback. The log curve's hard zero
+        # below 65% of the usual level otherwise gates every routed fast band off. Preserve the shared follower
+        # and usual anchor, with a continuous foot and soft high headroom only for that opted-in domain.
+        self._value = (-math.expm1(math.log1p(-self.USUAL)*ratio**1.5) if self._continuous else
+                       max(0.0, min(1.0, self.USUAL + self.SPREAD * math.log(ratio))))
         return self._value
 
 
@@ -200,6 +205,7 @@ class TransientBus:
         var_alpha: float = 0.05,
         transient_decay: float = 0.55,
         min_onset_gap_s: float = 0.045,
+        continuous_passage: bool = False,
     ) -> None:
         # Adaptive threshold tuning
         self._threshold_k = max(0.5, min(4.0, threshold_k))
@@ -241,7 +247,7 @@ class TransientBus:
         # The latest frame's (loudness, presence), replaced whole (readers never see half), and
         # where the music sits in the track's own dynamic range (``PassageIntensity``).
         self._musical_level: tuple[float, float] = (0.0, 0.0)
-        self._intensity = PassageIntensity()
+        self._intensity = PassageIntensity(continuous=continuous_passage)
 
         # Timing
         self._last_onset_ts: float = 0.0

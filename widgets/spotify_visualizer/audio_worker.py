@@ -468,7 +468,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         # adopting its musical context would import the previous mode's scale.
         from widgets.spotify_visualizer.transient_bus import TransientBus
         self._raw_musical_signals = enabled
-        self._transient_bus = TransientBus()
+        self._transient_bus = TransientBus(continuous_passage=enabled)
         self._transient_bass = self._transient_mid = self._transient_high = 0.0
         self._onset_detected = False
         self._onset_type = ""
@@ -579,7 +579,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         # bus that packet can still reference.
         try:
             from widgets.spotify_visualizer.transient_bus import TransientBus
-            fresh = TransientBus()
+            fresh = TransientBus(continuous_passage=self._raw_musical_signals)
             fresh.adopt_musical_context(self._transient_bus)
             self._transient_bus = fresh
         except Exception:

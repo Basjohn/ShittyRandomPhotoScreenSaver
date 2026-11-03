@@ -642,11 +642,10 @@ framed mode; a spec may add scene guides through `editor_references_hook`.
 Waveform opts into the optional `GroundedOrbitSpec`: one fixed-height admitted eye, a bounded front annulus and
 focus-preserving left/right orbit. W/S changes physical radius; A/D orbits rather than strafing out of the scene.
 Tilt changes the physical focus within the body; its near-level endpoint uses the admitted radius and retains visible
-floor. Both projections, editor marker/aim inverse and persisted offsets consume `resolve_camera_frame` and the same
-policy in `core/settings/waveform_ribbon_camera.py`. Other modes retain their ordinary physical-flight policy.
-Waveform's Orthographic raster depth fits its XY-visible body/accent support while preserving that physical eye,
-basis and projection XY; Perspective and non-opted modes keep their existing clipping. The bounds, negative control
-and validation gates live in `Waveform_Ribbon_Migration_Plan.md` → Camera → Orthographic raster depth.
+floor. The **Perspective-only** scene camera, editor marker/aim inverse and persisted offsets consume `resolve_camera_frame`
+and the same policy in `core/settings/waveform_ribbon_camera.py`. Other modes retain their ordinary physical-flight policy.
+
+**Camera policy, 3 November:** Perspective is the sole authored/user-facing projection for Waveform, EB, Neon Lake and future framed 3D modes. Orthographic scene projection and artistic parity are retired; do not treat past Orthographic raster/depth findings as a new feature requirement. Preserve existing Perspective physical camera behavior and accept old serialized projection values safely without exposing or restoring a second user mode. Orthographic matrix math remains legal in technical passes where required. See `Docs/Reference/Scene3D_Resources.md` and Waveform Migration Plan §1.2.
 
 - **GLSL:** include `SCENE3D_GLSL` from `rendering/gl_programs/scene3d.py` (camera with a real near plane, lighting,
   planar shadows, streaks, integer hash, impulse and departure helpers). Every function has a CPU mirror in the same

@@ -1,5 +1,7 @@
 # Extruded Bubble: drift, flow, framing and reliable musical response
 
+> **Camera-policy supersession (operator 3 November 2026):** The Orthographic experiment and its optional appearance-parity backlog described below are **historical only**. Perspective is the sole supported artistic scene-camera projection for EB and future framed 3D modes. **No EB camera changes or visual retuning are requested or authorized.** Preserve existing accepted EB Perspective results. See `Docs/Reference/Scene3D_Resources.md` and `Current_Plan.md` CAM-1..3 for eventual safe removal of obsolete authoring UI/schema, not a new EB design programme.
+
 Assessment and execution contract, 2026-10-28. **The operator approved implementation after reviewing the assessment.**
 `Current_Plan.md` owns admission and sequencing; this document owns the detailed assessment and proposed gates.
 The operator requires checkpointed slices audited by one Sol 6.1 High agent. Resizing must retain the authored lens,
@@ -279,8 +281,7 @@ switching back; Orthographic hides that row and magnifies through existing Scene
 The later operator decision closes this implementation effort: **Orthographic is greyed out for EB**, and its
 appearance parity is optional work deferred beyond the entire current backlog (`Future_Work.md`, final section).
 Typed per-choice availability disables user selection and supplies the tooltip; it does not delete experimental
-values during preset repair/import. Geometry tests establish that parallel projection itself is sound. Future
-3D modes should default to it, offering Perspective optionally, and design their effects for it from the start.
+values during preset repair/import. Geometry tests establish that parallel projection itself is sound. This former future-mode default was superseded on 3 November: new framed 3D modes use Perspective only. The Orthographic experiment below is retained as evidence, not implementation direction.
 
 `orthographic_matrix` supplies the shared parallel projection. EB derives its reference half-span from the
 canonical FOV at `ORBIT_DISTANCE`, divided by Scene Scale, then applies the same fixed-world aperture. The

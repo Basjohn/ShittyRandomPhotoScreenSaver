@@ -77,7 +77,7 @@ can use its well-defined camera side if that seed is parallel. Tangent cosine <=
 refuses the arbitrary roll at a true/near reversal rather than quietly flipping UVs. Input errors never mutate
 an immutable caller anchor. Cusp segmentation and actual vertex admission remain GPU-harness gates.
 
-Orthographic camera-facing width uses one shared parallel view direction, independent of eye/depth/position.
+**Historical/technical probe only (3 November camera policy):** Orthographic camera-facing width uses one shared parallel view direction, independent of eye/depth/position. This calculation may remain in diagnostic frame probes but is **not** an authorable visualizer camera or acceptance requirement.
 Perspective uses the actual eye-to-position sight. At a camera pole, cross(tangent,sight) has no unique width.
 The declared pole treatment hemisphere-aligns that camera side to the transported base and smoothstep-blends
 from transported width to camera width over sine(angle) 0..0.05. `camera_parallel` explicitly reports this band;
@@ -90,7 +90,7 @@ It cannot make an end-on sheet broad without altering geometry; no width inflati
 applies after this operation. Native camera-motion/edge coverage proof remains open.
 
 The CPU frame probe uses the shared projection matrices and emits four diagnostic cards (oriented, twisted,
-Orthographic-facing and Perspective-facing), plus full frame/vertex/UV traces and source hashes:
+Orthographic-facing and Perspective-facing), plus full frame/vertex/UV traces and source hashes. The Orthographic probe is historical/technical; only Perspective scene appearance is a current product gate:
 `.venv\Scripts\python.exe tools/labs/ribbon_frame_probe.py --output .artifacts/evidence/ribbon_frames/<new-run>`.
 These are CPU-projected wire cards, not GL/native scene images or material/lighting acceptance.
 
