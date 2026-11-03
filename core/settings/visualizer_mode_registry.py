@@ -236,6 +236,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         settings_builder_factory="build_sine_wave_ui",
         logical_tick_hook_module="widgets.spotify_visualizer.tick_pipeline",
         logical_tick_hook_factory="process_heartbeat",
+        # SINE has been rejected for current product quality. Kept registered
+        # for saved presets/schema compatibility; not offered or runnable.
+        guided_setup_offered=False,
     ),
     VisualizerModeDescriptor(
         "bubble",
@@ -438,7 +441,10 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
 
 # Registered modes not yet offered: never selectable, cycled, shown in Guided Setup or the 3D tab, and given no
 # runtime work. A gate opens in code at its acceptance, never through an environment flag.
-_GATED_MODES: dict[str, callable] = {}
+# SINE is intentionally disabled pending eventual retirement (not deletion).
+# Keep its implementation, settings keys and presets available for migration;
+# never offer it for rendering, cycling, new selection or Guided Setup.
+_GATED_MODES: dict[str, callable] = {"sine_wave": lambda: False}
 
 def _active_descriptors() -> tuple[VisualizerModeDescriptor, ...]:
     return tuple(d for d in _ALL_DESCRIPTORS if d.mode_id not in _GATED_MODES or _GATED_MODES[d.mode_id]())
@@ -927,11 +933,20 @@ def resolve_admissible_enabled_modes(mode_activation: object) -> tuple[str, ...]
     admission view, not a mutation. With all gates open (today) it equals
     :func:`resolve_effective_enabled_modes`.
     """
-    return tuple(
+    admitted = tuple(
         mode_id
         for mode_id in resolve_effective_enabled_modes(mode_activation)
         if is_mode_active(mode_id)
     )
+    if admitted:
+        return admitted
+    # An old configuration can have only SINE enabled. Preserve that stored
+    # selection for migration, but never strand the live visualizer with a
+    # closed-gate mode. The default live Bubble mode is the safe substitute.
+    return tuple(
+        mode_id for mode_id in resolve_effective_enabled_modes(None)
+        if is_mode_active(mode_id)
+    )[:1]
 
 
 def _canonicalize_internal_enabled_mode_ids(requested: object) -> tuple[str, ...]:
@@ -1002,7 +1017,7 @@ def resolve_effective_mode(
     substitution; this function is pure.
     """
 
-    enabled = resolve_effective_enabled_modes(mode_activation)
+    enabled = resolve_admissible_enabled_modes(mode_activation)
     requested = str(requested_mode or "").strip().lower()
 
     if requested in enabled:

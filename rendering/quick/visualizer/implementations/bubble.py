@@ -85,6 +85,9 @@ class QuickBubblePayload:
     extras: tuple[float, ...]
     trails: tuple[float, ...]
     bubble_count: int
+    big_class_bits: tuple[int, int, int, int] = (0, 0, 0, 0)
+    ambient_points: tuple[float, ...] = ()
+    ambient_occluders: tuple[float, ...] = ()
     protected: bool = False
 
 
@@ -191,6 +194,9 @@ def resolve_quick_bubble_payload(
         extras=extras if len(extras) == required else extras[:required],
         trails=trails if len(trails) <= required_trails else trails[:required_trails],
         bubble_count=bubble_count,
+        big_class_bits=mode_state.big_class_bits,
+        ambient_points=mode_state.ambient_points,
+        ambient_occluders=mode_state.ambient_occluders,
     )
 
 
@@ -200,6 +206,7 @@ class QuickBubbleRenderer:
 
     def __init__(self) -> None:
         self._program = 0
+        self._ambient_renderer = None  # lazily allocated, never if both layers are disabled
         self._uniforms: dict[str, int] = {}
         self._last_content_rotation_quarters: int | None = None
         # Persistent render-thread transport. Immutable authored snapshots remain
@@ -254,7 +261,34 @@ class QuickBubbleRenderer:
 
         parameters = mode_state.parameters
         uniforms = self._uniforms
+        # Draw a small, content-local ambient texture BEFORE the Bubble draw.
+        # The canonical Bubble shader then inserts it between the background
+        # gradient and all existing wake, ghost and 110-body contributions.
+        # No texture, framebuffer or extra GL calls on the opt-out path.
+        ambient_texture = 0
+        if payload.ambient_points:
+            from .bubble_ambient_gl import QuickBubbleAmbientPoints
+            if self._ambient_renderer is None:
+                self._ambient_renderer = QuickBubbleAmbientPoints()
+            from widgets.spotify_visualizer.bubble_ambient_geometry import ambient_sprite_scale
+            ambient_texture = self._ambient_renderer.render_texture(
+                layout.content_rect, presentation.dpr, payload.ambient_points,
+                sprite_scale=ambient_sprite_scale(layout.effect_scale),
+                glow_spread=float(parameter(parameters, "bubble_particle_glow_spread")),
+                micro_color=rgba(parameter(parameters, "bubble_outline_color")),
+                particle_color=rgba(parameter(parameters, "bubble_particle_color")),
+                occluders=payload.ambient_occluders,
+                response_radius_scale=layout.response_radius_scale,
+            )
+        elif self._ambient_renderer is not None:
+            # Returning to an ordinary preset releases the opt-in GPU target
+            # exactly once; the original Bubble path then remains allocation-free.
+            self._ambient_renderer.release_resources()
+            self._ambient_renderer = None
         gl.glUseProgram(self._program)
+        gl.glUniform1i(uniforms["u_ambient_enabled"], int(bool(ambient_texture)))
+        if ambient_texture:
+            gl.glUniform1i(uniforms["u_ambient_texture"], 0)
         gl.glUniformMatrix4fv(
             uniforms["uMatrix"],
             1,
@@ -282,6 +316,9 @@ class QuickBubbleRenderer:
         gl.glUniform1f(uniforms["u_border_width"], presentation.border_width)
         gl.glUniform1f(uniforms["u_fade"], presentation.content_fade)
         gl.glUniform1i(uniforms["u_bubble_count"], payload.bubble_count)
+        # Four uint32 words (16 bytes), not a per-hero uniform array or
+        # additional pass. Uses true is_big classes from the same snapshot.
+        gl.glUniform4ui(uniforms["u_big_class_bits"], *payload.big_class_bits)
         if trace is not None:
             trace.mark(FrameTraceEvent.BUBBLE_COMMON_UNIFORMS_READY)
         if payload.bubble_count:
@@ -398,11 +435,25 @@ class QuickBubbleRenderer:
         gl.glBindVertexArray(frame.quad_vao)
         if trace is not None:
             trace.mark(FrameTraceEvent.BUBBLE_VAO_READY)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        if ambient_texture:
+            prior_active = int(gl.glGetIntegerv(gl.GL_ACTIVE_TEXTURE))
+            gl.glActiveTexture(gl.GL_TEXTURE0)
+            prior_bound = int(gl.glGetIntegerv(gl.GL_TEXTURE_BINDING_2D))
+            try:
+                gl.glBindTexture(gl.GL_TEXTURE_2D, ambient_texture)
+                gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+            finally:
+                gl.glBindTexture(gl.GL_TEXTURE_2D, prior_bound)
+                gl.glActiveTexture(prior_active)
+        else:
+            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
         if trace is not None:
             trace.mark(FrameTraceEvent.BUBBLE_DRAW_READY)
 
     def release_resources(self) -> None:
+        if self._ambient_renderer is not None:
+            self._ambient_renderer.release_resources()
+            self._ambient_renderer = None
         if not self._program:
             return
         gl.glDeleteProgram(self._program)
@@ -436,6 +487,7 @@ class QuickBubbleRenderer:
                 "u_border_width",
                 "u_fade",
                 "u_bubble_count",
+                "u_big_class_bits",
                 "u_bubbles_pos",
                 "u_bubbles_extra",
                 "u_bubbles_trail",
@@ -454,6 +506,8 @@ class QuickBubbleRenderer:
                 "u_rainbow_hue_offset",
                 "u_ghost_alpha",
                 "u_ghost_decay",
+                "u_ambient_enabled",
+                "u_ambient_texture",
             )
             uniforms = {
                 name: int(gl.glGetUniformLocation(program, name))

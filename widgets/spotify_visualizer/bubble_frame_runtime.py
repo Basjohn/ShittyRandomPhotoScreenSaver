@@ -64,6 +64,13 @@ class BubbleResolvedFrame:
     extras: tuple[float, ...] = ()
     trails: tuple[float, ...] = ()
     bubble_count: int = 0
+    # Four uint32 words identifying true big heroes for cheap in-shader
+    # foreground coverage. Independent of the opt-in decorative ambient layer.
+    big_class_bits: tuple[int, int, int, int] = (0, 0, 0, 0)
+    ambient_points: tuple[float, ...] = ()
+    # Only when ambience is enabled: rendered small + big hero circles.
+    # This is a visual mask, never an additional simulation population.
+    ambient_occluders: tuple[float, ...] = ()
     source_timestamp: float = 0.0
     simulation_timestamp: float = 0.0
     runtime_generation: int = -1
@@ -87,6 +94,7 @@ class BubbleFrameRuntime:
         self._simulation_factory = simulation_factory
         self._lock = threading.RLock()
         self._simulation: Any = None
+        self._ambient: Any = None
         self._activation_identity: tuple[int, int, int] | None = None
         self._latest = BubbleResolvedFrame()
         self._retired = False
@@ -121,6 +129,7 @@ class BubbleFrameRuntime:
             if callable(reset):
                 reset()
         self._activation_identity = None
+        self._ambient = None
         self._latest = BubbleResolvedFrame()
 
     def _ensure_simulation(self) -> Any:
@@ -237,6 +246,25 @@ class BubbleFrameRuntime:
         integration_started = time.perf_counter()
         simulation = self._ensure_simulation()
         simulation.tick(float(dt), energy_payload, settings_payload)
+        ambient_points: tuple[float, ...] = ()
+        from widgets.spotify_visualizer.bubble_ambient import BubbleAmbientSimulation
+        if BubbleAmbientSimulation.enabled(settings_payload):
+            if self._ambient is None:
+                self._ambient = BubbleAmbientSimulation()
+            # Same admitted small-bubble breathing target, before the hero's
+            # intentionally long size-release smoothing. This is not another
+            # FFT/audio admission path. Particle light alone gets fast decay.
+            breathing = float(getattr(simulation, "_ambient_small_breathing_target", 0.0))
+            ambient_points = self._ambient.advance(
+                float(dt), settings_payload,
+                resolved_stream_velocity=float(
+                    getattr(simulation, "_ambient_resolved_stream_velocity", 0.0)
+                ),
+                small_bubble_breathing=breathing,
+                resolved_group_motion=getattr(simulation, "_ambient_group_motion", (0.0, 0.0, 0.0)),
+            )
+        else:
+            self._ambient = None
         positions, extras, trails = simulation.snapshot(
             bass=float(pulse_payload.get("bass", 0.0)),
             mid_high=float(pulse_payload.get("mid_high", 0.0)),
@@ -251,6 +279,20 @@ class BubbleFrameRuntime:
         frozen_extras = tuple(float(value) for value in extras)
         frozen_trails = tuple(float(value) for value in trails)
         bubble_count = int(getattr(simulation, "count", 0) or 0)
+        from widgets.spotify_visualizer.bubble_hero_occlusion import pack_big_class_bits
+        big_class_bits = pack_big_class_bits(getattr(simulation, "_bubbles", ()))
+        ambient_occluders: tuple[float, ...] = ()
+        if ambient_points:
+            # Snapshot uses the same _bubbles order as the visible position
+            # payload. Use EXACT rendered radii, including sustained pulse and
+            # display smoothing, rather than independently predicting masks.
+            # Any visibly rendered bubble may hide the optional ambience layer
+            # beneath it. No work on the default-off path; no hero simulation
+            # mutations.
+            from widgets.spotify_visualizer.bubble_ambient_geometry import select_ambient_occluders
+            ambient_occluders = select_ambient_occluders(
+                getattr(simulation, "_bubbles", ()), frozen_positions,
+            )
         authored_ts = float(authored_timestamp)
         source_ts = float(source_timestamp or 0.0)
         lane_diag = _read_float_diagnostics(
@@ -405,6 +447,9 @@ class BubbleFrameRuntime:
             extras=frozen_extras,
             trails=frozen_trails,
             bubble_count=bubble_count,
+            big_class_bits=big_class_bits,
+            ambient_points=ambient_points,
+            ambient_occluders=ambient_occluders,
             source_timestamp=source_ts,
             simulation_timestamp=authored_ts,
             runtime_generation=int(runtime_generation),

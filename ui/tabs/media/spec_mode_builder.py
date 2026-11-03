@@ -67,6 +67,12 @@ def build_spec_mode_ui(tab, parent_layout, mode_id: str) -> None:
     """Build ``mode_id``'s body: the shared preset/advanced/technical scaffold, then each bucket
     with its controls in the spec's order."""
     spec = require_mode_settings(mode_id)
+    # Validate the entire disclosure schema before constructing any QWidget.
+    # Otherwise a missing new bucket key (e.g. Bubble's optional Particles)
+    # raises halfway through lazy construction and leaves a half-built mode
+    # page visible beneath the previously selected mode's accessories.
+    for bucket in spec.buckets:
+        tab.get_visualizer_bucket_state(mode_id, bucket.key)
     prefix = spec.prefix
     # Connections and the closure capturing rows belong to this widget generation,
     # including ordinary (non-sectional) bodies rebuilt after admission changes.

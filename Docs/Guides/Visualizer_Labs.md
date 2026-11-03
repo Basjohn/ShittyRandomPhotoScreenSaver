@@ -67,7 +67,7 @@ See `Docs/Reference/Bubble_Gradient.md` for the current contract.
 ## Waveform Ribbon entry point
 
 `tools/labs/waveform_ribbon_preflight.py` performs reference/projection preparation only. The detailed live boundaries
-and **Perspective-only** scene-camera requirements are in `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`. Orthographic-default instructions in older lab receipts are retired. The scene lab is
+and Orthographic-default requirements are in `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`. The scene lab is
 `tools/labs/waveform_ribbon_lab.py` (flat landmark renders and lit renders beside the mock; status in Lab Plan WR-03).
 Its `Lab` owns only the offscreen target, fixture and explicit camera around the shared retained
 `rendering/quick/scene3d/waveform.py:WaveformScene`; production callers supply their existing Quick frame/context.

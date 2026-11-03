@@ -32,6 +32,10 @@ uniform float u_high_energy;
 // --- Bubble data (max 110 bubbles) ---
 // xy = normalised position (0..1), z = radius (normalised), w = alpha
 uniform int u_bubble_count;
+// Four compact uint32 class words from the SAME authored snapshot. Unlike a
+// radius threshold, this respects original small/big identity during musical
+// pulses and temporary small-to-big promotion. No second hero draw is needed.
+uniform uvec4 u_big_class_bits;
 uniform vec4 u_bubbles_pos[110];
 // x = specular_size_factor, y = rotation (reserved), z = spec_ox, w = spec_oy
 uniform vec4 u_bubbles_extra[110];
@@ -53,6 +57,12 @@ uniform vec4 u_gradient_light;     // gradient light end
 uniform vec4 u_gradient_dark;      // gradient dark end
 uniform vec4 u_pop_color;          // pop flash colour
 uniform float u_rainbow_hue_offset;
+// Optional water-decoration underlay. The transparent texture is rendered in
+// Bubble's logical content coordinates, never over the hero bubbles. Retired
+// default-off presets avoid sampling or allocating this texture entirely.
+uniform bool u_ambient_enabled;
+uniform sampler2D u_ambient_texture;
+
 
 // Ghost: one history-backed afterimage ring per bubble. The existing smear
 // history owns temporal position/strength; this shader adds no second pass or clock.
@@ -190,6 +200,27 @@ void main() {
     
     // --- Accumulate bubble contributions ---
     vec4 result = bg;
+    if (u_ambient_enabled) {
+        // The separate point pass stores premultiplied RGBA. Convert the
+        // composited background back to straight RGB so the EXACT existing
+        // Bubble wake/ghost/hero mix operations continue unchanged.
+        vec4 decor = texture(u_ambient_texture, vec2(uv.x, 1.0 - uv.y));
+        float a = clamp(decor.a, 0.0, 1.0);
+        // Emissive RGB is not coverage. A halo can have essentially zero
+        // alpha while still lighting the water; discarding it here forced
+        // previous glow revisions to inflate opacity into solid spheres.
+        float light = max(max(decor.r, decor.g), decor.b);
+        if (a > 0.00001 || light > 0.00001) {
+            float coverage_a = a + bg.a * (1.0 - a);
+            // For translucent gradients, let visible emitted light contribute
+            // output coverage without turning the halo into a solid disk.
+            float emission_a = clamp(max(0.0, light - a), 0.0, 1.0) * (1.0 - bg.a);
+            float combined_a = clamp(coverage_a + emission_a, 0.0, 1.0);
+            result.rgb = (decor.rgb + bg.rgb * bg.a * (1.0 - a))
+                / max(combined_a, 0.00001);
+            result.a = combined_a;
+        }
+    }
     
     // Outline and specular colours (with rainbow)
     vec4 outline_col = u_outline_color;
@@ -363,6 +394,15 @@ void main() {
         }
     }
 
+    // One existing hero loop, two logical blend accumulators. A big bubble
+    // masks *only the small hero-body contribution* underneath its true
+    // rendered circular silhouette; existing gradient, ambient decorations,
+    // wakes and ghosts retain their original pass ownership. Big heroes shade
+    // exactly once and keep their original relative draw order.
+    vec4 hero_underlay = result;
+    vec4 small_heroes = hero_underlay;
+    vec4 big_heroes = hero_underlay;
+    float big_coverage = 0.0;
     for (int i = 0; i < count; i++) {
         vec4 bpos = u_bubbles_pos[i];
         vec2 bxy = bpos.xy;       // bubble center (normalised 0..1)
@@ -370,7 +410,9 @@ void main() {
         float balpha = bpos.w;    // bubble alpha (1.0 normal, <1.0 fading/popping)
         
         if (balpha < 0.01) continue;
-        
+        bool hero_big = (u_big_class_bits[i >> 5] & (1u << uint(i & 31))) != 0u;
+        result = hero_big ? big_heroes : small_heroes;
+
         float spec_size_factor = u_bubbles_extra[i].x;
         float spec_ox = u_bubbles_extra[i].z;
         float spec_oy = u_bubbles_extra[i].w;
@@ -382,7 +424,13 @@ void main() {
         
         // Radius in aspect-corrected space
         float r = brad;
-        
+        // Exact rendered radius, not a guessed class/radius threshold. Cheap
+        // square reject keeps the extra coverage smoothstep local to big heads.
+        if (hero_big && abs(delta.x) <= r + px && abs(delta.y) <= r + px) {
+            float body_cover = 1.0 - smoothstep(max(0.0, r - px), r + px, dist);
+            big_coverage = max(big_coverage, body_cover * clamp(balpha, 0.0, 1.0));
+        }
+
         // Physical Bubble outline gradient.  Canonical heads now start at
         // 0.80px per side (~1.6px total) instead of the historical ~0.6px
         // complete outline.  Geometry/profile changes add a cached physical
@@ -402,6 +450,8 @@ void main() {
             // Pop flash: tint with pop colour when fading
             vec4 dot_col = (balpha < 0.9) ? pop_col : outline_col;
             result = mix(result, dot_col, dot_alpha * u_fade);
+            if (hero_big) big_heroes = result;
+            else small_heroes = result;
             continue;
         }
         
@@ -450,8 +500,15 @@ void main() {
         spec_alpha *= balpha;
         
         result = mix(result, spec_col, spec_alpha * u_fade);
+        if (hero_big) big_heroes = result;
+        else small_heroes = result;
     }
-    
+
+    // Preserve the big layer exactly if no small body contributes; only the
+    // separate small hero contribution disappears beneath big silhouettes.
+    // Wake, ghost, gradient and ambient are never cleared into a flat disk.
+    result = big_heroes + (small_heroes - hero_underlay) * (1.0 - big_coverage);
+
     // Final alpha
     result.a *= u_fade;
     

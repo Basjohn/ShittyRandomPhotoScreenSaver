@@ -365,16 +365,19 @@ No separate rendered eye, camera-following actors, count multiplication or artif
 boundary. Legal canonical home remains unchanged. Domain containment does not establish visual density or idle readability.
 Preset starting-view metadata owns pose; independently admitted Camera Field of View remains an authorable mode
 control in the normal preset snapshot. A reset's canonical lens policy does not prohibit that authored value.
-**Scene-camera projection retirement (operator 3 November 2026): Perspective is the sole user-facing/artistic
-projection for all framed 3D visualizers.** EB's existing Perspective physical camera, authored FOV and saved
-camera pose remain as accepted; this decision authorizes **no** EB visual/camera retuning. Waveform and all new framed
-3D modes likewise use Perspective exclusively. Orthographic projection was experimentally implemented and then
-greyed out in EB, but is now **retired rather than deferred**. Remove the second choice from authoring UI/canonical
-future-scene controls when safely migrating the typed setting. Old external preset values must be handled safely,
-without silent rewriting or deleting operator presets. Technical orthographic matrix/ray utilities may remain for
-shadow maps, dedicated geometry diagnostics and legacy compatibility where required. The former two-projection
-shading/specialization experiment and EB appearance parity are historical, not release or visual-acceptance gates.
-Do not add image warps or sphere-specific distortion patches as part of this retirement.
+EB Camera lists **Perspective** (the existing/default projection) and **Orthographic** through the same typed
+mode settings and preset snapshot. Orthographic uses parallel rays with individual origins, retains fixed world
+identities and the admitted physical eye, and uses Scene Scale for magnification. Its reference span derives from
+the canonical lens at the camera's reference distance; the authored perspective FOV is retained while its row is
+hidden. Sphere size then stays constant with distance; lighting, fusion, depth, refraction and focus remain 3D.
+The main projection applies consistently to geometry, ray origins, footprints and optics; cubemap probes always
+remain perspective. Both choices use one shader source, with bounded lazy specialization of traced fragments to
+preserve existing Perspective arithmetic. No post-image warp, per-bubble roundness patch or separate camera cache.
+Orthographic is currently **disabled in EB's chooser**: its existing effects need a much later appearance-parity
+pass, deferred beyond the entire current backlog. Availability is typed authoring metadata; experimental stored
+values remain round-trippable through import/repair instead of being destroyed. The underlying projection is
+mathematically sound and should be the default for future 3D modes, with optional Perspective. Those modes must
+design ray origins, lighting and optics for parallel projection from the start; existing modes keep their defaults.
 
 EB lighting is subject to the physical-authority repair contract in `Docs/Reference/Extruded_Bubble/Lighting_Authority_Repair.md` (partially implemented, visually unaccepted): one directional Surface or positional Deep emitter governs medium light, core glow, bubble glints, world-space ray scattering and attenuation. Ray Source/End can author the illuminated region but not a contradictory second emitter. BEAM retains its accepted stylized footprint; SCENE scattering is bounded by the fixed physical tank. `Light Type` remains Surface/Deep. Independent `Lighting Coverage` BEAM/SCENE defaults to BEAM for existing presets; Beam Width defaults to1x and scales the BEAM light footprint. SCENE scattering uses the fixed tank, directional sunlight or actual Deep Light Source, ignoring the unused beam path/width. Motion `Emission Geometry` remains independent. No preset/Custom overwrite or automatic coverage migration is permitted. Physical lighting, broad-beam fidelity, native all-angle quality, SCENE grouping and surface retirement remain active visual acceptance work, not blanket spec compliance.
 
@@ -794,8 +797,8 @@ the actual waveform. `references/Mist Goal.png` now supersedes all older fog/mis
 floor/distance haze; smoothing or retaining the rejected layers does not satisfy that direction.
 The replacement candidate uses a single integrated world medium across ground, actors, sky and mirror. Its
 packet-derived physical field covers retained interior history and analytic continuation; Off leaves no separate
-floor haze. The active scene camera is **Perspective only**; legacy Orthographic raster-depth work is historical
-diagnostic evidence, not an alternative scene acceptance target. Source proof and artistic/cost acceptance
+floor haze. Orthographic raster depth fits the admitted direct/reflected world support while preserving the
+physical eye and XY projection; Perspective retains positive depth. Source proof and artistic/cost acceptance
 remain separate gates in Current_Plan.
 The registered production candidate uses descriptor-owned capture/runtime/renderer and canonical spec-driven Settings.
 Configuration and published packets are detached immutable values. C springs respond per ribbon's selected band;
@@ -803,10 +806,9 @@ A twist and axial speed integrate on the sole logical clock. Existing body geome
 travels into view. Event-owned sparks are admitted once, bounded by lifetime/refractory/capacity, and fly analytically
 on published time. Camera navigation does not move populations or reauthor the world fog. Complete native endpoint,
 framing, editor and loaded-live gates remain in Current_Plan; candidate registration does not imply acceptance.
-New framed 3D labs/modes use **Perspective exclusively**, using the shared admitted eye/world, true camera
-basis and correct projection, depth and reflection math. Waveform's long-lens Perspective is an authored scene
-baseline, not a requirement to support Orthographic now or later. Camera math alone does not establish scene
-likeness or reflection parity.
+New 3D labs/modes generally start Orthographic with optional Perspective; Waveform's latest operator-delegated
+visual route instead uses restrained long-lens Perspective as primary, retaining optional Orthographic. Both use the shared admitted eye/world and actual
+projection matrices/ray origins; camera math alone does not establish scene likeness or reflection parity.
 The shared bounded CPU path/history and transported width-frame references are documented in
 `Docs/Reference/Ribbon_Path.md`; the incremental ring producer and oriented OIT/HDR strip are consumed by the Waveform
 lab and production Waveform mode. Remaining native surface/defocus and cost gates live there and in the Lab Plan.

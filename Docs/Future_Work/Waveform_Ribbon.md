@@ -8,9 +8,6 @@ the archive's additional alternate; the copied brief below is unchanged.
 
 # Waveform Ribbon — SRPSS concept package
 
-> **Authority note (3 November 2026):** This is the original conceptual brief and A–H artistic hard-gate source, not the live implementation plan. The latest operator direction, source evidence and `Current_Plan.md` + `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` + `Docs/Reference/Waveform_Ribbon_Visual_Authority_20261103.md` supersede older assumptions about fixed flow, preferred motion grammar, floor polish priorities, mist acceptability, Orthographic parity and Builder UI. **Update 3 November later the same day:** Perspective is the *only* supported artistic camera projection; Orthographic is retired outright, not merely lower priority. In particular, **real musical travel-speed modulation is required**, the current unified mist direction is provisionally good, only floor reflection columns deserve near-term polish, and a reusable in-process Qt Quick Studio replaces the rejected Custom builder. The lead may redesign existing internals after recoverable checkpoint and evidence.
-
-
 ## Included image
 - `Waveform_Ribbon_Concept.png`
 

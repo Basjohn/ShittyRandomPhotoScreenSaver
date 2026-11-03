@@ -155,8 +155,8 @@ def test_bucket_order_empty_layout_and_external_owners_are_preserved(body):
     tab, _manager, _config = body
     spec = require_mode_settings("bubble")
     assert [bucket.title for bucket in spec.buckets] == [
-        "Appearance", "Motion", "Bounce", "Reactivity", "Population", "Layout", "Ghost"]
-    for owner, expected in ((tab._bubble_normal, ["appearance", "motion", "bounce"]),
+        "Appearance", "Motion", "Particles", "Bounce", "Reactivity", "Population", "Layout", "Ghost"]
+    for owner, expected in ((tab._bubble_normal, ["appearance", "motion", "particles", "bounce"]),
                             (tab._bubble_advanced, ["reactivity", "population", "layout", "ghost"])):
         authored = [owner.layout().itemAt(index).widget().objectName()
                     for index in range(owner.layout().count())
@@ -178,3 +178,94 @@ def test_bucket_order_empty_layout_and_external_owners_are_preserved(body):
     from ui.tabs.media.technical_controls import get_per_mode_controls_for_mode
     assert get_per_mode_controls_for_mode(tab, "bubble")
     assert all(control.bucket != "technical" for control in spec.controls)
+
+
+def test_ambient_builder_toggles_grouped_and_rows_follow_presets(body):
+    tab, _, config = body
+    spec = require_mode_settings("bubble")
+    assert spec.control("bubble_microbubble_stream").row_group == "ambient_micro"
+    assert spec.control("bubble_particle_stream").row_group == "ambient_particles"
+    assert tab.bubble_microbubble_stream.property("circleIndicator") is True
+    assert tab.bubble_particle_glow.property("circleIndicator") is True
+    micro_keys = ("bubble_microbubble_density", "bubble_microbubble_size")
+    particle_keys = ("bubble_particle_size", "bubble_particle_density", "bubble_particle_color")
+    load_bubble_mode_settings(tab, {**config,
+        "bubble_microbubble_stream": False, "bubble_microbubble_drift": False,
+        "bubble_particle_stream": False, "bubble_particle_drift": False,
+        "bubble_particle_glow": False})
+    assert all(tab._bubble_rows[key].isHidden() for key in micro_keys + particle_keys)
+    tab.bubble_microbubble_drift.setChecked(True)
+    assert all(not tab._bubble_rows[key].isHidden() for key in micro_keys)
+    tab.bubble_particle_glow.setChecked(True)
+    assert all(not tab._bubble_rows[key].isHidden() for key in particle_keys)
+    assert not tab._bubble_rows["bubble_particle_glow_intensity"].isHidden()
+    assert not tab._bubble_rows["bubble_particle_glow_reactivity"].isHidden()
+    tab.bubble_particle_glow.setChecked(False)
+    assert all(tab._bubble_rows[key].isHidden() for key in particle_keys)
+    assert tab._bubble_rows["bubble_particle_glow_intensity"].isHidden()
+    values = collect_bubble_mode_settings(tab)
+    assert values["bubble_microbubble_drift"] is True
+    assert values["bubble_particle_glow"] is False
+
+
+def test_ambient_builder_hydrates_glow_only_without_stream(body):
+    tab, _, config = body
+    load_bubble_mode_settings(tab, {**config,
+        "bubble_particle_glow": True,
+        "bubble_particle_stream": False,
+        "bubble_particle_drift": False,
+        "bubble_particle_glow_intensity": 0.75,
+        "bubble_particle_glow_reactivity": 1.4})
+    assert not tab._bubble_rows["bubble_particle_size"].isHidden()
+    assert not tab._bubble_rows["bubble_particle_glow_reactivity"].isHidden()
+    values = collect_bubble_mode_settings(tab)
+    assert values["bubble_particle_glow"] is True
+    assert values["bubble_particle_glow_intensity"] == pytest.approx(0.75)
+    assert values["bubble_particle_glow_reactivity"] == pytest.approx(1.4)
+
+
+def test_bubble_builder_failure_restores_previous_mode_without_orphan(body, monkeypatch):
+    """A failed lazy Bubble body must not overlay Spectrum's custom accessories.
+
+    Deliberately interrupt AFTER the QWidget factory returns, before the host
+    commits it. This reproduces the partial-mode presentation failure class.
+    """
+    tab, _manager, _config = body
+    from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
+
+    host = tab._vis_body_host
+    host.set_mode_activation(build_visualizer_mode_activation(("bubble", "spectrum")))
+    tab._select_mode_page("spectrum")
+    assert host.selected_mode == "spectrum"
+    host.set_mode_activation(build_visualizer_mode_activation(("spectrum",)))
+    host.set_mode_activation(build_visualizer_mode_activation(("spectrum", "bubble")))
+    original_factory = host._factory
+
+    def interrupted(mode):
+        created = original_factory(mode)
+        if mode == "bubble":
+            raise RuntimeError("Injected failure before lazy body commit")
+        return created
+
+    monkeypatch.setattr(host, "_factory", interrupted)
+    with pytest.raises(RuntimeError, match="Injected failure"):
+        tab._select_mode_page("bubble")
+
+    assert host.selected_mode == "spectrum"
+    assert tab._get_active_visualizer_mode() == "spectrum"
+    assert tab._mode_pills["spectrum"].isChecked()
+    assert tab._base_appearance_group.parentWidget() is tab._spectrum_normal
+    assert tab._rainbow_controls_container.parentWidget() is tab._spectrum_normal
+    assert not any(
+        item.widget() is not None and item.widget().objectName() == "visualizer_mode_body_bubble"
+        for item in (tab._mode_body_layout.itemAt(i)
+                     for i in range(tab._mode_body_layout.count()))
+    )
+
+    # A subsequent ordinary selection constructs exactly one clean Bubble body.
+    monkeypatch.setattr(host, "_factory", original_factory)
+    tab._select_mode_page("bubble")
+    assert host.selected_mode == "bubble"
+    assert tab._get_active_visualizer_mode() == "bubble"
+    assert tab._bubble_settings_container is host.body("bubble")
+    assert tab.get_visualizer_bucket_state("bubble", "particles") is False

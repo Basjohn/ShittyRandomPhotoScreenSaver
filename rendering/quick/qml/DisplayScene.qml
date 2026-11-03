@@ -322,13 +322,15 @@ Item {
         id: perfHud
         objectName: "perfHud"
         visible: displayScene.perfHudEnabled && displayScene.perfHudText.length > 0
-        anchors.left: parent.left
+        // Centre the read-only diagnostic HUD so it does not cover the upper
+        // left of screenshots; keep its original 8px top breathing space.
+        anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        anchors.margins: 8
+        anchors.topMargin: 8
         width: perfHudLabel.implicitWidth + 12
         height: perfHudLabel.implicitHeight + 8
         radius: 3
-        color: "#b8000000"
+        color: "#99000000"
         border.color: "#80ffffff"
         border.width: 1
         z: 1000

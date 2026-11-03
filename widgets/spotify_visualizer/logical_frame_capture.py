@@ -842,6 +842,9 @@ def _capture_bubble(
             extras=resolved.extras,
             trails=resolved.trails,
             bubble_count=resolved.bubble_count,
+            big_class_bits=resolved.big_class_bits,
+            ambient_points=resolved.ambient_points,
+            ambient_occluders=resolved.ambient_occluders,
             source_timestamp=resolved.source_timestamp,
             simulation_timestamp=resolved.simulation_timestamp,
             geometry_diagnostics=freeze_render_fields(
