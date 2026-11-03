@@ -29,7 +29,7 @@ from typing import Any, Callable, Optional
 
 from core.settings.visualizer_mode_registry import (
     get_visualizer_mode_descriptor,
-    resolve_effective_enabled_modes,
+    resolve_admissible_enabled_modes,
 )
 
 SETUP_PILL_ID = "SETUP"
@@ -43,7 +43,7 @@ def visualizer_pill_model(mode_activation: object) -> tuple[tuple[str, str], ...
     contributes no pill. Pure — no construction, no Qt.
     """
     pills: list[tuple[str, str]] = [(SETUP_PILL_ID, "Setup")]
-    for mode_id in resolve_effective_enabled_modes(mode_activation):
+    for mode_id in resolve_admissible_enabled_modes(mode_activation):
         pills.append((mode_id, get_visualizer_mode_descriptor(mode_id).display_name))
     return tuple(pills)
 
@@ -60,7 +60,7 @@ class VisualizerModeBodyHost:
     ) -> None:
         self._factory = body_factory
         self._retire = retire_body
-        self._enabled: tuple[str, ...] = resolve_effective_enabled_modes(mode_activation)
+        self._enabled: tuple[str, ...] = resolve_admissible_enabled_modes(mode_activation)
         self._bodies: dict[str, Any] = {}
         self._selected: Optional[str] = None
 
@@ -122,7 +122,7 @@ class VisualizerModeBodyHost:
         mode was disabled, selection is cleared and the caller reselects an
         enabled mode through the effective-mode resolver.
         """
-        new_enabled = resolve_effective_enabled_modes(mode_activation)
+        new_enabled = resolve_admissible_enabled_modes(mode_activation)
         retired = tuple(
             mode_id for mode_id in self._enabled
             if mode_id in self._bodies and mode_id not in new_enabled

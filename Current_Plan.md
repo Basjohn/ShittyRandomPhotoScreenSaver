@@ -1,35 +1,39 @@
 # SRPSS | Current Plan
 
-**Active execution routing; operator decisions as of 3 November 2026.**  `[ ]` open, `[~]` implemented candidate awaiting native/visual acceptance, `[x]` independently accepted. Do not treat a passed code test, a delegated report, a still, or a high FPS overlay as visual/musical acceptance. Remove accepted live tasks after their durable contracts/evidence are transferred; source control keeps history. Unadmitted ideas stay in `Future_Work.md`.
+Live, ordered work only. `[ ]` work remains; `[~]` a candidate exists but is unaccepted (awaiting validation, never an
+implicit pass). When an item lands, delete it: completed work lives in source control and its durable contract in
+`Spec.md` / `Docs/` (Reference, Architecture, Guardrails, Guides); rejected mechanisms in `Docs/Historical_Bugs/`. This
+is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 
-## 0. Current priority and responsibility
+## 0. Order, scope and rules
 
-**Projection authority (operator decision, 3 November 2026): Perspective is the ONLY user-facing/artistic camera projection for framed 3D visualizers, including Waveform and all future modes. Orthographic is retired, not secondary, optional, hidden-for-now, or a deferred visual parity task. Preserve the shared physical camera, per-mode perspective framing/FOV, live navigation and operator-authored views. Do not alter accepted Extruded Bubble visuals or initiate an EB camera project. Specialized orthographic math may remain for technical passes, not as a scene-camera option. Implement safe typed/UI/preset retirement during appropriate maintenance; no dual-projection acceptance work. See `Docs/Reference/Scene3D_Resources.md` and `Docs/Reference/Waveform_Ribbon_Migration_Plan.md`.**
+**Work strictly in this order:**
 
-**Primary active programme: Waveform Ribbon recovery, then reusable Waveform Studio.** The operator's 3 November live image is now a respectable *unfinished* material/composition baseline; it replaces the older assertion that the entire mode is visually worthless. Reactivity, colour evolution, idle behaviour and the custom builder remain unaccepted. The three mock directions remain aspirational. Do **not** freeze the current waveform shape or existing C+A motion grammar: the next high-reasoning orchestrator may replace them after a recoverable checkpoint.
+1. **§6 Shared 3D architecture**: build reusable 3D primitives, each proven on its own harness.
+2. **§7 Visualizer modes**, one at a time: **Waveform Ribbon → Reactive Liquid / Melt Pool → Concrete Rain →
+   Usu Moonscape**. Each is built lab-first (§7.0).
+3. **§8 Later accepted-mode reactivity polish**, only after the §7 sequence unless the operator explicitly pulls one
+   item forward for a concrete regression.
 
-**Execution order:**
+**Accepted baseline (not live work):** original Bubble, Extruded Bubble, Neon Lake, Oscilloscope,
+Spectrum/Rainbow Ghost, Sphere, source routing, transitions and Foundry launch buttons. Reopen an accepted
+area only for a concrete new defect; deferred or unadmitted work belongs in `Future_Work.md`. Historical recovery
+IDs, completed gates and rejected mechanisms belong in source control or their focused historical/investigation docs,
+not in this working plan.
 
-1. **WR-A Audit and reproducible current baseline:** production signal-to-pixel trace, review dormant/reactivity defects, align current live and operator mocks, material receipts and real music, plan checkpoints.
-2. **WR-B Sound-to-motion proof:** repair true signal admission and dynamic travel-speed range; establish quiet/mid/hot/typed-event visibility with no false energy/pinning.
-3. **WR-C Composition and fluid motion:** maintain lovely non-idle movement; smooth curves with dramatic vertical sweeps, flexible folds/rotations, actual musical timing, gentle idle movement and floor *collision*, not cutting.
-4. **WR-D Color/light/accents/atmosphere:** perceptible music-driven palette and moving rim light, distributed/non-pinned particles with fading lifetimes, approved strands, unified atmospheric direction and one surgical floor reflection-column fix. No floor retexturing marathon.
-5. **WR-E Presets and Studio:** improve three authored scenes, potentially radically; implement the reusable Qt Quick pop-out Studio after target/parameter semantics settle. Studio design is a UX ambition, not a second waveform renderer.
-6. **WR-F Measure and admit:** captured real-music plus game60, tier/viewport/lifecycle, native/physical acceptance. Optimize only without loss of look, responsiveness, smoothness or timing. Steps may be parallelized only with distinct ownership and safe integration boundaries.
-7. **Other modes next:** Reactive Liquid / Melt Pool → Concrete Rain → Usu Moonscape, with shared S3D primitives built when needed. Bubble's deferred refinements remain later.
-
-**Detailed live checklists and pass/fail evidence:** `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`. **Technical control/persistence design:** `Docs/Reference/Waveform_Ribbon_Migration_Plan.md`. **Visual target/priority custody:** `Docs/Reference/Waveform_Ribbon_Visual_Authority_20261103.md`. **Studio UI/UX design pack (already operator-installed):** `Docs/Audits/SRPSS_Waveform_Studio_Design_Pack_2026-11-03.zip` (absolute local path under `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Audits\`). Read its design MD and mock; it is not contained in a normal GODZIP.
-
-**Orchestration:** lead current high-reasoning agent plans, investigates, judges art/UX, integrates and audits. Delegate bounded non-overlapping implementation to actually available Opus 5.5 Medium or Sol 6.1 High subagents. No multiwriter files, invented tool availability or implicit passing of reviews. For Sol use infrequent long waits or independent work, not short repeated status checks. Subagents do not certify their own work. Before overturning an operator decision, make a clearly named recoverable checkpoint commit and push if remote access/authorization supports it; record the override. Follow the existing `Docs/Guides/Codex_Delegation.md` where applicable, while these mission-specific model choices supersede its older model list.
-
-**Global guardrails:** a single Settings/capability/CUSTOM/preset authority; one render owner per context and one Visualizer logical clock. Retain accepted Bubble temporal fidelity, EB, Neon Lake and all other established modes. Never treat omitted `references/`, `themes/`, `assets/` or `ui/assets/` as deletions; no cleanup/reset of dirty state. Presets are mutable user-authored data, never pinned test goldens. Source/fixtures can prove invariants but not visual likeness; record audio hash/time and actual applied settings. No second DSP, hidden timers, fake event energy, reactive camera, renderer-side musical simulation, blind default changes, blanket smoothing or performance gained by reducing the artistry. Only CLI/sidecars, no environment-variable configuration, isolated `.venv`, focused tests, no unauthorized builds/installer or GitHub Actions; give operator copyable single-line PowerShell only.
+**Rules:** one Settings/capability/CUSTOM/render/lifecycle owner and the sole Visualizer logical clock. No new
+floor, capture/DSP, renderer-side simulation, timers/polling or camera-following replacement populations. Preserve
+authored presets (mutable, never test-pinned), BTF, accepted timings, parallel work and strict retirement barriers.
+CLI/sidecars, never environment-variable configuration. Smallest meaningful focused test per change; the isolated
+chunked suite only at milestones; no build/installer unless requested. Visual work is judged on rendered pixels against
+its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed" needs the failure reproduced first.
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
 - [ ] **Authored preset completeness debt (2 Nov focused gate):** 18 existing Bubble presets omit
-  `bubble_gradient_endpoints`; EB presets 2–8 omit eight drift/ray fields.
-  The former EB camera-projection key is **retired** and must not be backfilled into operator presets or treated as a completeness failure. Preserve operator-authored values; reconcile live drift/ray fields separately
-  before treating the cross-mode completeness check as green. Waveform's two new presets are complete.
+  `bubble_gradient_endpoints`; EB presets 2–8 omit camera projection and eight drift/ray fields.
+  Their parsed payloads and pre-existing spec keys match HEAD. Preserve operator-authored values; reconcile this
+  separately before treating the cross-mode completeness check as green. Waveform's two new presets are complete.
 
 - [ ] **Display Settings capacity (physical hotplug):** on a real monitor disconnect/return or explicit reauthoring,
   Settings' current-screen rows and selections/bindings stay coherent (focused checks pass; hidden form evidence
@@ -69,13 +73,13 @@
 - [ ] **Conditional evidence only:** original Bubble tiny-radius judder (R-105) and dual-display reboot recovery
   (R-134–R-145) need new reproductions. The 90 Hz versus 60 Hz investigation stays off limits.
 
-## 6. Shared 3D architecture (reusable prerequisites, admitted only where needed)
+## 6. Shared 3D architecture (one step, before the next mode)
 
 The architecture planned for the dropped concepts (volumetric music chamber, audio aurora/ribbon volume, photo
 fracture portal, voxel morph field, holographic depth slices, procedural storm, reactive particle field,
 terrain/skyline/tunnel, deformable blob sphere) is worth having; the modes were not. Build it here as shared primitives
 on the existing Scene3D substrate (`Docs/Reference/Scene3D_Resources.md`): `MeshResources`, `SceneTarget`, depth-aware
-OIT, probe, defocus, HDR intermediate, framed camera. Promote reusable components when a real consumer proves the need; do **not** require all seven before Waveform acceptance. Each primitive is proven on **its own offscreen harness** with
+OIT, probe, defocus, HDR intermediate, framed camera. Each primitive is proven on **its own offscreen harness** with
 bounded, measured cost (TIME_ELAPSED, median/p90), lazy creation, zero dormant work and clean retirement; none waits for a
 consumer, and none becomes a second renderer, clock or camera. Read the 3D foundation lessons in
 `Docs/Reference/Transitions.md` before each slice. Order follows which mode needs them first.
@@ -106,34 +110,185 @@ consumer, and none becomes a second renderer, clock or camera. Read the 3D found
   Ribbon first, with no audio reactivity. Then add bounded procedural bolt geometry/light and fog/smoke volumes with
   advection/reprojection and no permanent extra targets or separate cadence. *Consumers: chamber/street atmosphere.*
 
-## 7. Visualizer programme
+## 7. Visualizer modes (one at a time, in this order)
 
-### 7.0 Shared workflow
+### 7.0 Method: lab first, then production
 
-Lab-first remains the default for new primitives and modes. Waveform already has lab and production implementations, so **audit and compare the real production renderer first**, not a gratuitous fresh prototype. Use the existing shared contexts, authoring guides and production host. Compare reproducible synthetic/recorded trajectories at real rendering sizes; identify deficits from the same scene and camera, then make the smallest justified structural or artistic change. Work may be radically redesigned, but require documented evidence and a recoverable checkpoint before overriding operator decisions.
+Extruded Bubble's lab (`tools/labs/extruded_bubble_lab.py`) reached the mocks long before production did; production
+then closed the gap by measuring against both. Do the same for every new mode:
 
-**Tools:** `tools/labs/waveform_ribbon_lab.py`, `tools/labs/waveform_ribbon_music_bakeoff.py`, `tools/labs/waveform_ribbon_recorded_input.py`, `tools/visualizer_replay/waveform_ribbon_signal_audit.py`, `tools/waveform_ribbon_capture.py`, `tools/visualizer_live_check.py`; choose correct actual-config settings and recorded source. See `Docs/Guides/Visualizer_Reactivity_Authoring.md`, `Visualizer_Visual_Tuning.md`, `Visualizer_Labs.md`, `Visualizer_Change_Checklist.md`, `Docs/Guardrails/Performance_Optimization_Contract.md`.
+1. **Target first:** the mock/concept package and its low/high pair; write the mode's contract and hard gates (from its
+   brief) into its focused doc before code.
+2. **Lab:** `tools/labs/<mode>_lab.py` composes the target scene by hand, offscreen, from the shared primitives, with
+   free knobs and no Settings/preset plumbing. Reuse the context/target and ownership contract in
+   `Docs/Guides/Visualizer_Labs.md`. Iterate on rendered stills (mock | lab sheets) until it is close.
+3. **Production through the shared substrate:** typed Settings, presets, the logical clock and lifecycle. Diff the lab's
+   effective knobs against production's key by key; judge with **mock | lab | ours** sheets per preset, the per-mode
+   capture tool (`tools/<mode>_capture.py` on recorded real music) and measurements (regional colour, on-screen size
+   bands, Range audits), as in `Docs/Guides/Visualizer_Visual_Tuning.md`.
+4. **The lab is a waypoint, not the goal:** keep going toward the mock; keep the lab (it costs the product nothing).
+5. **Same-scene low/high proof, measured cost, dormancy and retirement** before calling any stage done, including the
+   live-shape check under the calibrated game load (`tools/visualizer_live_check.py --load game60`, budgets in
+   `Docs/Guides/Visualizer_Change_Checklist.md` 1C); the operator gives final sign-off.
 
-### 7.0A User-facing 3D projection retirement (cross-mode policy, not a new EB art task)
+### 7.1 Waveform Ribbon (next)
 
-- [ ] **CAM-1 Canonical authored camera:** audit framed 3D camera declarations, UI selectors, built-in/custom preset schemas, import/repair, serialized values and reset paths. Expose **Perspective only** for Waveform and all 3D scene authoring; retire Orthographic selection rather than hiding it as deferred. Keep existing mode-specific perspective lenses, bounded camera motion and saved views. Do not silently rewrite or delete operator-authored preset files.
-- [ ] **CAM-2 Compatibility without a second renderer:** historic Orthographic settings or snapshots must load safely through one documented legacy normalization/read policy, with Perspective as the effective scene camera. Never reinstate Orthographic as an authored outcome, dual rendering path or appearance gate. Keep utility projection math only for technical tools/shadow passes that genuinely consume it.
-- [ ] **CAM-3 Focused regression and scope:** verify effective projection, import/repair, Custom/Save/Save As/reset, frame geometry and live camera navigation for Waveform; verify unchanged accepted Perspective behavior for EB and Neon Lake. **No EB visual retune, FOV redesign, distortion investigation or new EB art acceptance is authorized.** Defer nonblocking code deletion to safe ownership boundaries, but no dual-projection polish or tests should remain as Waveform acceptance work.
+**Live rejection checklist - Awaiting native validation/operator judgement (2 Nov).** This is the single live
+list of reported failures, proposed corrections and required evidence (updated 3 Nov). Tests establish mechanisms, not visual acceptance.
+Work first on body/audio/accents, then grounded camera/viewport and replacement atmosphere. Binding references:
+`Docs/Guides/Visualizer_Reactivity_Authoring.md` sections 13A-13C; control/design ownership in
+`Docs/Reference/Waveform_Ribbon_Migration_Plan.md`; motion targets and recorded bake-off in
+`Docs/Reference/Waveform_Ribbon_Lab_Plan.md` section 5.1. Keep C-primary elastic response and A's accumulated twisting.
 
-### 7.1 Waveform Ribbon (active; delegated execution, lead review)
+**Operator-selected recovery baseline (3 Nov):**
+`Docs/Reference/Images/Waveform_Ribbon_Material_Baseline_20261103.png` and its `.capture.json` preserve the exact
+chosen image/settings/source. Use this material direction; do not darken the background or lower the floor's colour
+level. Floor brightness is provisionally approved, not the entire floor/atmosphere. Remaining lumps and reactive
+detail still need improvement. Baseline settings are applied to Preset 3; retain this reference before further work.
 
-The **stage-by-stage source/evidence checklist is the Lab Plan**; do not duplicate each subtask here. Items below are parent gates and remain open until their exit criteria are met. Candidate status is based on the handed-off dirty GODZIP `cc4c390a9e`, not on later repository edits.
+- [ ] **PRIORITY: live/replay activation parity.** Operator reports literally NO visual change from paused to playing,
+  not merely weak motion. The app screenshot is dormant despite Preset 3. Logs from 00:41–00:42 on 3 Nov show
+  playback true, nonzero loopback PCM and raw FFT lanes; prove committed body bands, musical intensity/presence,
+  source identity admission and resulting drives at the actual capture boundary. Do not compensate with more gain
+  or tune appearance until the live handoff is proven. Separately reproduce the app's wide/short framing and idle
+  composition from its actual saved pose/aperture, and distinguish old in-memory material state from activation loss.
+  Identified a concrete dormant-input defect: the shared log passage curve returns exactly zero below ~2.20 eased
+  raw units on Waveform's scale, covering most logged live input. Routing multiplies all fast-band drives by that
+  zero. Correct Waveform's fixed passage curve inside the existing bus/follower, preserve other modes' numerical
+  behavior, and prove quieter PCM drives body/accents without learned normalization or more input gain.
+  Quieter full-app PCM exposes a second gate: event admission used the already passage/loudness-scaled deformation
+  force, suppressing all particles/strands. Keep supported accent salience separate from deformation force so a real
+  quiet accent can create authored accents while routine repeats and silence remain rejected.
 
-- [ ] **WR-A — full audit and baseline/decision ledger.** Preserve already working static appearance and current live screenshot; compare baseline to named mocks without treating mock lighting as guaranteed feasible. Identify which old requirements have been superseded. Check actual source/data flow, provenance, working-tree changes and live failures before implementation. Publish an ordered, justified plan and evidence of the comparison.
-- [~] **WR-B — input admission and actual musical reachability.** Existing candidate contains fixes for passage-curve dead zones and accent admission; these are **not** native-accepted. Reproduce real signal input → routed drive → spring/rotation/colour/particle → image. Prove true weak-to-hot differentiation with Dynamic Floor independently of the mode, quiet input admitted, transient attack and decay without pinning. **New requirement:** idle/min ribbon travel speed roughly one-third of current, then perceptibly and gracefully accelerates with music (fast attack, slower decay); supersedes the old fixed-speed rule.
-- [ ] **WR-C — living shape and clean elastic reactivity.** Non-idle base shape is a good starting point. Idle requires tiny continuous energy, very slow *rotation* and perhaps one/two tiny authored ambient particles; no fake musical hit. Strong vertical sweeps, graceful fold/twist, depth and **optional whole-family axial rotation with music-reactive angular speed** must dominate over horizontal stretch/twitch. No lumps, dents, spikes or sharp discontinuities. All ribbons retain identity; floor uses smooth collision, with only cautious height adjustment.
-- [ ] **WR-D — visual energy and accents.** Music-driven colour/gradient interpolation must be plainly visible; local peak highlights, permanently subtle slow travelling rim glow at idle and coherent pulse growth during music (no flicker or washout). Improve particle density ceiling, world-space spread, no pinned emitters, ~3 s adjustable particle EoL with gentle fade/respawn elsewhere. Preserve the approved pretty free-strand look, rare births, roughly 3–5 s *strand* lifetime and gentle reactivation/retirement. Audio events and diffuse ambience must not be conflated.
-- [~] **WR-E — atmosphere and floor minimally corrected.** Current mist direction is **good**; preserve unified full-scene night atmosphere, soft waveform tint and exclusion, rather than resurrecting old shaped-bank mocks or starting another fog rewrite. Floor level/texture are **provisionally accepted**; only address obvious vertical streak/column reflection artifacts with a restrained blurred/gaussian colour-mass alternative, without creating patterns, blotches or losing wetness. **Defer all other floor work until the end** unless a concrete collision/viewport correctness blocker arises.
-- [~] **WR-F — scenes, camera and references.** Perspective is the **only** supported scene-camera projection; there is no Orthographic parity track, fallback or future option. Keep real camera and framed-3D geometry/navigation authority. Four-ribbon maximum and three candidate presets exist but are not visually complete. Match target character, wider vertical dynamics and peak-vs-quiet contrast without swapping camera/world/identities; strong individual colours, readable lattice, twists and accent distribution. Creative new attractive presets are encouraged once core behaviour is sound.
-- [ ] **WR-G — reusable Qt Quick Studio replaces rejected Custom UX.** Settings Custom reduces to **Open Waveform Studio** plus retained camera-save checkbox (and only genuinely shared controls). Open Studio, hide Settings after successful show, no teardown; close Studio, restore and focus Settings; preserve state and on-failure recovery. Studio uses the same canonical preset save/edit/reset semantics, production Quick renderer and logical/audio path, persistent interactive viewport and the right graphic editors. Reusable controls must be parameter-semantic, **not blanket range sliders**. Do not build a parallel preset/renderer/clock. Specific design and acceptance in the external Studio ZIP and Migration Plan. Defer expensive Studio binding until motion/parameter authority is stable; independent shell R&D may proceed earlier without touching production settings owners.
-- [ ] **WR-H — cost, lifecycle, proof and acceptance.** Measure valid current settings with matched fog/feature Off/On under recorded PCM and game60, including GPU and CPU tails, two displays, multiple sizes/DPIs, startup, pause, resize, retirement, cold-hot playback and mode swaps. First earn pristine visuals/behaviour, then optimize with identical deterministic outputs where realistic and measured visual + temporal fidelity. No fake wins from weakening motion/brightness/density or dropping expensive effects. Operator native review remains required; save receipts and explicitly list unresolved defects.
+- [~] **Four-ribbon maximum and Preset 3 — Awaiting Validation:** the candidate now admits FOUR cards across
+  authoring/runtime/clearance/accent/range paths, preserving Presets 1/2's three active identities. Validate Preset 3 against
+  `references/Preset3Goal1.png` and `references/Preset3ReactivityGoalExample.png`: teal/orange contrast, readable
+  lattice/twist/strands/particles, continuous wet textured floor, and the large quiet-to-peak geometric change shown.
+  The explicit operator maximum overrides the first board's decorative count label; use four for Preset 3's paired
+  target. Native low/high/recorded captures must reach that range without pinning or swapping scene/camera identity.
+  Four-card forward migration and a first Teal/Ember Preset 3 are implemented; preserve original three-card values
+  and count in old state. The recorded draft still needs visual correction: white/rope-like overlaps, repeated
+  continuation, weak/dark atmosphere and a poor floor/contact strip remain rejected. Do not equate source tests,
+  particle/root counts or larger amplitude with reference fidelity.
+- [ ] **Visible punch and musical shape response:** the operator still sees no convincing kick, force or musical
+  shape change. Compare real quiet/ordinary/hot passages with synchronized audio and silent/fixed-body controls.
+  Preserve raw fixed-scale passage headroom, immediate whole-body response and distinct typed elastic impulses;
+  accents must stand above routine onsets instead of becoming a constant offset (guide 13C). Measure elastic
+  excursion/latency and correct the response/envelope before tuning presets. Simplify before adding motion:
+  the latest waveform is explicitly rejected as too lumpy/bumpy, and excessive
+  twisting still does not read as musical. Prefer longer smooth sweeps and actual axial stretch, preserving punch.
+  The latest cropped example exposes small travelling dents: the hybrid producer wrote unsmoothed audio directly
+  into six-Hz carrier amplitude/twist despite the authored two-stage history-smoothing contract. Smooth only that
+  stored shape input; preserve immediate elastic impulses, moving colour/light and event-owned accents.
+  Smooth motion and
+  nonzero inputs are insufficient. Operator requests roughly TWICE the actual peak height and deformation, including
+  stretch/twist/undulation, while peaks remain harder to pin. Increase real excursion/headroom, not audio gain or
+  constant baseline movement. Preserve flow and independently reactive axial roll; floor contact must collide smoothly,
+  never crop the waveform at a drawn line.
+- [ ] **Particles weak, sparse and localized:** the operator sees pathetic specks in one spot even with fog off.
+  Verify distributed actual-rim births, clearly visible independent glow/size/light and musical density changes.
+  Candidate improvements are fixed-world emitter span and authored halos, with count/lifetime bounded at birth.
+  Inspect native motion and fog-off subtraction; a cohort serial, byte count, halo test or isolated still cannot close
+  this. Audit both handles of every particle range in actual quiet/peak consumers.
+- [~] **Strands: rare, 3-5 seconds TOTAL life.** Latest operator correction supersedes the proposed 30-second fade.
+  Preserve the approved non-flickering look, make appearances much rarer, and use most of a configurable 3-5 second
+  lifetime for a gentle tip-first fade. Reactivation restores them smoothly,
+  with glow and movement/growth (retain the approximate 20% repeat extension), without abrupt respawn or pulse reset.
+  Prove quiet/peak lifetime handles, tip/root fade ordering, slow decay, partial-fade reactivation and direct/reflected
+  appearance. Retain birth look during travel; finite history eviction must not cut off a visible unfinished fade.
+- [ ] **Latest explicit visual rejections:** colours remain off across the scene; particles remain lacking; mist is
+  nowhere near the target. The floor's dark-blue patch pattern is rejected. Remove artificial patch modulation,
+  retain a readable restrained neutral wet surface, and validate colour/atmosphere against the supplied references.
+- [ ] **Dense highlights, moving colour and rim glow:** playback still lacks rewarded high-energy density and glow.
+  Verify local crest/high-power colour, bright tunable rim/glow and denser highlights against actual music, including
+  quiet/loud differences. Consumer reachability does not establish visible strength. Keep both range handles effective.
+- [ ] **Idle and first-play blackout:** keep subtle low-energy body motion and the same ready scene on first play;
+  no blackout, re-priming or scene reset. Test cold playing-before-start, silence, pause/resume and source changes.
+  Idle must not emit fake musical hits or particles.
+- [ ] **Dynamic Floor independence:** the operator found floor ON more responsive. Controlled full PCM now proves
+  identical body/birth packets and typed events OFF/ON on four clips. Preserve the existing FFT/bus raw-reference
+  policy, mode-switch/reset and stale-compute fences, plus accepted Bubble/EB behavior. Prove lively OFF response by
+  ear/eye against the guide's standard; raw parity alone does not establish musical response.
+- [ ] **Grounded camera, near-flat tilt and infinite view:** stable eye height above the floor, approach/retreat and
+  bounded left/right orbit, waveform always in view and no escape into ugly areas. Admit a genuinely near-flat tilt
+  with visible floor in BOTH projections. Keep eye/basis, navigation, editor markers and saved pose under the shared
+  owner; preserve continuous/infinite body with no exposed ends and complete Edit scaffolding. Native geometry and
+  persistence tests alone cannot establish feel or beauty across moving audio, view and viewport extremes. Reproduce
+  the new cut-to-black at one end and staggered entry at the opposite end; validate the camera-owned signed
+  Orthographic raster fit against recorded wide/angled playback. The old positive reference-plane slab cut visible
+  continuation before the card edge; Perspective and other modes retain their positive clip contract.
+  **Current visual route:** operator delegates the choice; use a restrained long-lens Perspective primary view,
+  calibrated with a farther physical eye and narrow lens together. Keep Orthographic optional. Preserve stable height,
+  bounded orbit and actual camera movement; no camera-dependent actor density or audio compensation. Judge colours,
+  restrained reactive twisting, floor material and full-scene mist together against the references before acceptance.
+- [ ] **Floor coverage, collision, reflection and viewport changes:** after the strand slice, draw ground all the
+  way through the foreground and beyond the waveform into heavy dark mist that GENTLY thickens until no horizon
+  line is visible. A strip of reflections over black is rejected. **Awaiting native visual validation:** the floor now
+  intersects the same physical camera's pixel lines with the infinite world plane; signed Orthographic intersections
+  cover foreground/far ground while actor clipping remains unchanged. Focused native tests cover complete coverage,
+  world coordinates, floor occlusion and capped reflection. Finish the unified atmosphere before visual judgment. Keep actors and
+  physical floor contact correct, with smooth waveform collision rather than clipping. Compare identical snapshots at
+  canonical/wide/tall/large sizes and both projections; inspect reflection normalization/filtering separately. Preserve
+  live reflectivity/tint/brightness and the shared resize contract; no audio-gain compensation. Columns remain secondary.
+  **Additional explicit rejection:** material outside the core reflection is practically invisible. Validate readable
+  dim texture across the foreground with reflection and atmosphere both OFF, then under the unified night medium;
+  increasing reflection alone cannot satisfy this. Current candidate restores filtered concrete/roughness and ambient light.
+- [ ] **Current mist/fringe entirely rejected - implement replacement after strands/floor:** stop polishing the shaped banks,
+  noisy fringe, side-sheet conflicts, remote shelves and skyward mass. Preserved image, failure analysis, cost caveats
+  and three proposals: `Docs/Reference/Waveform_Ribbon_Mist_Failure_and_Replacement.md`. Replace with full-scene
+  night fog ("Silent Hill At Night") displaced by the actual 3D waveform, with smooth world-anchored density and local
+  reactive light/wake; no visible ceiling/stripe/box. `references/Mist Goal.png` is now the primary mist/floor target.
+  The operator explicitly supersedes ALL older mist/fog mechanisms: remove the old banks/fringe AND old separate
+  distance/floor fog when migrating. One coherent atmosphere must serve scene/floor/actors/reflection; no stacked
+  legacy layer or hidden fallback. Old Waveform banks/fringe, shape bake/detail march and analytic floor haze are
+  removed from the candidate source and settings. Validate the new integrated world medium's look, signed/mirrored
+  optical paths and cost across all three curated candidates, which now enable the replacement medium. Keep true 3D clearance around steep bends and a
+  retained motion wake open: current cross-section clearance/local light and background drift do not prove those.
+  Latest loaded candidate remains over budget (P2/game60: render median 22.59 ms, CPU others 93%); obtain a matched
+  quiet-system fog OFF/ON comparison and reduce cost. Scoped source/optical/raster tests do not close that gate.
+- [X] **COMPLETELY FUCKED UX/DESIGN** - operator rejection recorded for the ENTIRE mode-specific builder UI:
+  every element not already shared with other modes is rejected. This marks rejection, not completed redesign.
+- [ ] **Awaiting later UX redesign:** lower priority than a working visual. Deliver a themed 3D visual editor with
+  direct visual controls; the numeric 0-1 matrix is not the requested experience. Keep shared accepted scaffolding.
+  No plumbing test or working control schema establishes usability or visual-design acceptance.
+- [ ] **Live performance and truthful evidence:** run all three presets under matched recorded PCM/game60 and admitted
+  camera extremes. Verify ACTUAL applied configuration, audible input and rendered features before interpreting
+  timings. Profile logical preparation, birth admission, render stages and whole-frame tails; do not reduce artistic
+  reaction strength to conceal cost. Preset 2 with persistent strands currently exceeds the render budget (~14 ms
+  median under game60); reduce repeated submission/preparation and prove tails without weakening the approved strands.
+  Requested CLI settings can be overwritten by curated activation.
 
-**Known evidence caveats:** 3 November material baseline capture and receipt at `Docs/Reference/Images/Waveform_Ribbon_Material_Baseline_20261103.*`; new user-supplied live screenshot at `Docs/Reference/Images/Waveform_Ribbon_20261103_Operator_Live_Baseline.png` (no canonical source/capture receipt; it is visual evidence only). A former fog-Off run actually rendered fog because curated activation overwrote the CLI request: do not claim it was a valid comparison. Previous apparent dead audio under live play was partly tied to a too-sharp passage curve; no source-level fix is assumed accepted until measured in native real playback. The 85.9 fps overlay on the supplied screenshot is neither a loaded performance acceptance nor a reactivity test.
+Chosen first: the smallest contained scene and the first consumer of S3D-1/S3D-2/S3D-5. Brief and hard gates:
+`Docs/Future_Work/Waveform_Ribbon.md`. The detailed working checklist and visual target custody live in
+`Docs/Reference/Waveform_Ribbon_Lab_Plan.md`; reference packages under `references/` are local/operator-owned and are
+intentionally absent from normal GODZIPs.
+
+The scene is world-first through the shared framed camera (Orthographic default): wet reflective concrete floor,
+waveform and full-scene night fog, with no visible horizon/sky/floor edge. The waveform clears and softly lights
+the mist. Preset/control migration and recorded-audio calibration come only after the lab look is credible.
+
+- [~] **WR-07/08 production candidate — finish admission:** C elastic bending/torsion is primary; combine A's accumulated
+  twisting, localized highest-power colour shifts and independently controllable reactive whole-waveform rotation
+  (axial roll like a skewer; fast strong attack, slow decay; integrate speed into continuous angle). Preserve constant history flow, smooth
+  curves, particles/free strands and fog repelled by the actual deformed/rotated waveform. Use the shared scene,
+  sole logical clock, immutable publication and lazy retained renderer; Terra audits each slice.
+- [~] **Full controls/editors, four-ribbon capacity and three presets — finish admission:** primary/alternate examples now have
+  candidate Preset 1/2 with the
+  selected hybrid, shared framed 3D camera/navigation, technical profile, preset/Custom and Edit/Arrange feature set.
+  Expose bend/torsion/stretch/twist/rotation and accent ranges, source/curve visual tuning, ribbon/gradient editors,
+  and floor reflectivity/tint/brightness. Every reactive range needs actual quiet/peak consumer proof for both handles;
+  retain mutable authored presets and prove Save/Cancel/Restore and runtime source reachability.
+- [ ] **Framing, timing and acceptance:** prove hidden ends/history bounds and body/head-to-visible delay across admitted
+  sizes/camera poses; replay real quiet/middle/hot/silence/hot-start windows with unshifted audio, inspect lab/production
+  parity and audit range headroom. Close shared lifecycle/cost/dormancy gates and run
+  `tools/visualizer_live_check.py --mode waveform_ribbon --load game60` before WR-09 acceptance. Operator visual/native
+  judgement remains explicit where automation cannot close it. The new unified atmosphere supersedes all old fog
+  layers. Floor-column polish is secondary to continuous ground and response.
+- [ ] **Loaded render budget:** repeat the corrected actual-config live check after current source/geometry
+  changes. The prior run labelled fog-OFF rendered fog because preset activation overwrote its CLI values; it is a
+  failed fog-ON run, not an A/B. Verify packet lease/GPU envelope/culling retirement and finite-consumer parity, then
+  measure current body/birth/floor cost with the rejected volume disabled. Keep CPU reduction as a test oracle; no
+  readback or duplicate live preparation. Replacement atmosphere must earn its own measured budget.
 
 ### 7.2 Reactive Liquid / Audio Melt Pool
 
@@ -162,7 +317,7 @@ Not admitted until those foundations are proven; the static silhouette approval 
 
 ## 8. Later accepted-mode reactivity polish
 
-Do not pull these ahead of the active Waveform recovery and the §7 mode sequence unless the operator explicitly reprioritizes them. They are admitted
+Do not pull these ahead of the §7 mode sequence unless the operator explicitly reprioritizes them. They are admitted
 follow-up work on the accepted original Bubble, not a reason to reopen unrelated Bubble behavior.
 
 - [ ] **Original Bubble drift intensity range:** normal Bubble drift works, but its visible drift strength is too similar

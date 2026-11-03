@@ -38,6 +38,8 @@ from core.settings.visualizer_mode_registry import (
     build_visualizer_mode_activation,
     can_disable_visualizer_mode,
     iter_visualizer_mode_descriptors,
+    iter_all_visualizer_mode_descriptors,
+    is_mode_active,
     resolve_effective_enabled_modes,
     resolve_effective_mode,
     mode_has_rainbow_controls,
@@ -184,7 +186,14 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         self._setup_pill.clicked.connect(self._select_setup_page)
         self._nav_flow.addWidget(self._setup_pill)
 
-        for descriptor in iter_visualizer_mode_descriptors():
+        for descriptor in iter_all_visualizer_mode_descriptors():
+            if not is_mode_active(descriptor.mode_id):
+                if descriptor.mode_id == "sine_wave":
+                    pill = self._make_mode_pill("Sine Waves (Retiring)")
+                    pill.setToolTip("SINE is disabled and intended for retirement; existing presets are preserved.")
+                    pill.setEnabled(False)
+                    self._nav_flow.addWidget(pill)
+                continue
             pill = self._make_mode_pill(descriptor.display_name)
             self._mode_pills[descriptor.mode_id] = pill
             self._nav_group.addButton(pill)
@@ -266,7 +275,16 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         shared_styles.apply_shared_label_style(mode_intro, "INFO_LABEL_STYLE")
         behavior_layout.addWidget(mode_intro)
 
-        for descriptor in iter_visualizer_mode_descriptors():
+        for descriptor in iter_all_visualizer_mode_descriptors():
+            if not is_mode_active(descriptor.mode_id):
+                if descriptor.mode_id == "sine_wave":
+                    checkbox = QCheckBox("Sine Waves (Retiring)")
+                    checkbox.setProperty("circleIndicator", True)
+                    checkbox.setChecked(False)
+                    checkbox.setEnabled(False)
+                    checkbox.setToolTip("SINE is intentionally disabled. Its saved presets remain available for future migration.")
+                    behavior_layout.addWidget(checkbox)
+                continue
             checkbox = QCheckBox(descriptor.display_name)
             checkbox.setProperty("circleIndicator", True)
             checkbox.toggled.connect(
@@ -559,6 +577,12 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
             raise ValueError(f"Disabled visualizer mode has no selectable pill: {target!r}")
 
         previous = self._get_active_visualizer_mode()
+        # A lazy builder can raise before the body host commits its new mode.
+        # Retain the last *visible* selection to restore coherent Settings
+        # presentation (including its reparented accessory buckets) on failure.
+        previous_page_is_mode = self._page_stack.currentWidget() is self._mode_page
+        previous_host_mode = host.selected_mode
+        previous_config = self._vis_loaded_config
         if previous != target:
             self._flush_pending_visualizer_save()
             if not getattr(self, "_loading", False):
@@ -586,6 +610,35 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
             # before Custom-only accessory visibility is evaluated.
             load_visualizer_rainbow_state(self, resolved)
             self._update_vis_mode_sections()
+        except Exception:
+            # If construction failed mid-scaffold, remove its uncommitted
+            # QWidget now rather than leaving it to overlap the old page.
+            # The error still propagates; this only restores the last valid UI.
+            self._park_custom_accessories()
+            if not host.is_constructed(target):
+                for index in reversed(range(self._mode_body_layout.count())):
+                    item = self._mode_body_layout.itemAt(index)
+                    candidate = item.widget() if item is not None else None
+                    if (candidate is not None and candidate.objectName()
+                            == f"visualizer_mode_body_{target}"):
+                        self._retire_visualizer_mode_body(target, candidate)
+            self._active_visualizer_mode_id = previous
+            self._vis_loaded_config = previous_config
+            if (previous_page_is_mode and previous_host_mode
+                    and host.is_constructed(previous_host_mode)):
+                self._active_visualizer_mode_id = previous_host_mode
+                restored = self._prepare_mode_hydration_config(previous_host_mode)
+                self._vis_loaded_config = restored
+                load_shared_visualizer_appearance_settings(
+                    self, restored, previous_host_mode,
+                )
+                self._place_custom_accessories(previous_host_mode)
+                load_visualizer_rainbow_state(self, restored)
+                self._update_vis_mode_sections()
+                self._mode_pills[previous_host_mode].setChecked(True)
+            else:
+                self._select_setup_page()
+            raise
         finally:
             self._loading = previous_loading
 

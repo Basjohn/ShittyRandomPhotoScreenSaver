@@ -19,6 +19,8 @@ def load_bubble_mode_settings(tab, spotify_vis_config) -> None:
     )
     load_spec_mode_settings(tab, "bubble", config)
     tab._bubble_apply_swirl()
+    # Hydration blocks signals, so refresh optional controls explicitly.
+    tab._bubble_apply_ambient_visibility()
 
 
 def collect_bubble_mode_settings(tab) -> dict:

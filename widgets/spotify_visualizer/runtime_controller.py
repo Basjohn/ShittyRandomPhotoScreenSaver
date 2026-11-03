@@ -19,6 +19,8 @@ from typing import Any
 from core.settings.visualizer_mode_registry import (
     VisualizerModePresentationPolicy,
     coerce_visualizer_mode_id,
+    get_default_visualizer_mode_id,
+    is_mode_active,
     load_mode_logical_tick_hook,
     get_visualizer_presentation_policy,
 )
@@ -65,6 +67,10 @@ class VisualizerRuntimeController:
         self._runtime_generation = coerce_identity(runtime_generation)
         self._bar_count = max(1, int(bar_count))
         self._mode_id = coerce_visualizer_mode_id(initial_mode)
+        if not is_mode_active(self._mode_id):
+            # A stored pre-retirement SINE selection must never instantiate
+            # its logical runtime. Keep its saved presets, admit Bubble instead.
+            self._mode_id = get_default_visualizer_mode_id()
         self._presentation_policy = get_visualizer_presentation_policy(
             self._mode_id
         )
@@ -188,6 +194,8 @@ class VisualizerRuntimeController:
     def set_mode(self, mode: Any) -> str:
         raw = getattr(mode, "name", mode)
         mode_id = coerce_visualizer_mode_id(str(raw or "").lower())
+        if not is_mode_active(mode_id):
+            mode_id = get_default_visualizer_mode_id()
         retired_states: tuple[Any, ...] = ()
         active_hook = None
         if mode_id != self._mode_id:

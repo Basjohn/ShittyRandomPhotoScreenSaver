@@ -504,13 +504,16 @@ Item {
         objectName: "visualizerPerfHud"
         visible: visualizerPresentationRoot.perfHudEnabled
             && visualizerPresentationRoot.perfHudText.length > 0
-        anchors.left: parent.left
+        // Place the visualizer counter BELOW its original 6px top inset.
+        // Its independent 12px inset is not inherited from the screen HUD.
+        // Retain the added 1px of internal vertical padding per side.
+        anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        anchors.margins: 6
+        anchors.topMargin: 12
         width: visualizerPerfHudLabel.implicitWidth + 10
-        height: visualizerPerfHudLabel.implicitHeight + 6
+        height: visualizerPerfHudLabel.implicitHeight + 8
         radius: 3
-        color: "#b8000000"
+        color: "#80000000"
         border.color: "#80ffffff"
         border.width: 1
         z: 20

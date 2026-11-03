@@ -558,6 +558,9 @@ class BubbleFrame:
     extras: tuple[float, ...] = ()
     trails: tuple[float, ...] = ()
     bubble_count: int = 0
+    big_class_bits: tuple[int, int, int, int] = (0, 0, 0, 0)
+    ambient_points: tuple[float, ...] = ()
+    ambient_occluders: tuple[float, ...] = ()
     source_timestamp: float = 0.0
     simulation_timestamp: float = 0.0
     parameters: FrozenFields = FrozenFields()
@@ -568,9 +571,21 @@ class BubbleFrame:
         if count < 0:
             raise ValueError("bubble count must be non-negative")
         object.__setattr__(self, "bubble_count", count)
+        from widgets.spotify_visualizer.bubble_hero_occlusion import admit_big_class_bits
+        object.__setattr__(self, "big_class_bits", admit_big_class_bits(self.big_class_bits, count))
         object.__setattr__(self, "positions", _float_tuple(self.positions, name="bubble position"))
         object.__setattr__(self, "extras", _float_tuple(self.extras, name="bubble extra"))
         object.__setattr__(self, "trails", _float_tuple(self.trails, name="bubble trail"))
+        ambient = _float_tuple(self.ambient_points, name="bubble ambient point")
+        if len(ambient) % 6 or len(ambient) > 192 * 6:
+            raise ValueError("Bubble ambient records are not bounded complete points")
+        object.__setattr__(self, "ambient_points", ambient)
+        occluders = _float_tuple(self.ambient_occluders, name="Bubble ambient occluder")
+        if len(occluders) % 4 or len(occluders) > 110 * 4:
+            raise ValueError("Bubble ambient occluders must be bounded complete circles")
+        if not ambient and occluders:
+            raise ValueError("Bubble ambient occluders require an active ambient layer")
+        object.__setattr__(self, "ambient_occluders", occluders)
         object.__setattr__(
             self,
             "parameters",

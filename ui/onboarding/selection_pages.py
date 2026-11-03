@@ -15,7 +15,8 @@ from core.settings.capability_activation import (
     normalize_transition_capability_state, normalize_widget_capability_state,
     set_transition_activated, set_widget_family_activated,
 )
-from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors, resolve_admissible_enabled_modes
+from core.settings.visualizer_mode_registry import (iter_visualizer_mode_descriptors,
+    iter_all_visualizer_mode_descriptors, is_mode_active, resolve_admissible_enabled_modes)
 from core.settings.widget_family_catalog import get_widget_family_descriptors, get_widget_member_label
 from rendering.transition_registry import iter_transition_descriptors
 from ui.onboarding.common import Page, ImagePanel, action, asset_bytes, asset_path, checkbox, CheckList, text_label, font_with_point_delta
@@ -202,8 +203,9 @@ class VisualizerPage(Page):
         active = set(resolve_admissible_enabled_modes(section["mode_activation"]))
         if self._offered_modes is None:
             # Experimental modes can be retained/disabled here only if already admitted.
-            offered = [d for d in iter_visualizer_mode_descriptors()
-                       if d.guided_setup_offered or d.mode_id in active]
+            offered = [d for d in iter_all_visualizer_mode_descriptors()
+                       if (is_mode_active(d.mode_id) and (d.guided_setup_offered or d.mode_id in active))
+                       or d.mode_id == "sine_wave"]
             priority = {"bubble": 0, "extruded_bubble": 1}
             self._offered_modes = sorted(
                 offered, key=lambda descriptor: priority.get(descriptor.mode_id, 2)
@@ -216,12 +218,23 @@ class VisualizerPage(Page):
         with QSignalBlocker(self.rows):
             self.rows.clear()
             for mode in self._offered_modes:
-                item = QListWidgetItem(mode.display_name); item.setData(Qt.ItemDataRole.UserRole, mode.mode_id)
+                retired_sine = mode.mode_id == "sine_wave" and not is_mode_active(mode.mode_id)
+                item = QListWidgetItem(mode.display_name + (" (Retiring)" if retired_sine else ""))
+                item.setData(Qt.ItemDataRole.UserRole, mode.mode_id)
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                item.setCheckState(Qt.CheckState.Checked if mode.mode_id in active else Qt.CheckState.Unchecked)
+                item.setCheckState(Qt.CheckState.Checked if mode.mode_id in active and not retired_sine
+                                   else Qt.CheckState.Unchecked)
                 self.rows.addItem(item)
-                # Previews stay browsable even while the Visualizer family is off.
-                self.rows.itemWidget(item).setEnabled(effective)
+                if retired_sine:
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled & ~Qt.ItemFlag.ItemIsUserCheckable)
+                    item.setToolTip("SINE is intentionally disabled pending retirement. Saved presets are preserved.")
+                    row_checkbox = self.rows.itemWidget(item)
+                    row_checkbox.setChecked(False)
+                    row_checkbox.setEnabled(False)
+                    row_checkbox.setToolTip(item.toolTip())
+                else:
+                    # Previews stay browsable even while the Visualizer family is off.
+                    self.rows.itemWidget(item).setEnabled(effective)
             self.rows.setCurrentRow(max(0, min(selected, self.rows.count() - 1)))
         # Narrow, but never truncating a mode name: fit the longest row.
         widest = max((self.rows.itemWidget(self.rows.item(i)).sizeHint().width() for i in range(self.rows.count())), default=200)
@@ -246,6 +259,8 @@ class VisualizerPage(Page):
         self.settings.set("widgets.spotify_visualizer.enabled", enabled)
 
     def _toggle(self, item):
+        if item is None or not is_mode_active(item.data(Qt.ItemDataRole.UserRole)):
+            return
         section = self.settings.get("widgets.spotify_visualizer")
         activation = dict(section["mode_activation"])
         activation[item.data(Qt.ItemDataRole.UserRole)] = item.checkState() == Qt.CheckState.Checked

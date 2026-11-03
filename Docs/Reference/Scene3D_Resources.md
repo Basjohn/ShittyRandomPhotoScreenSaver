@@ -19,12 +19,12 @@ globalize landscape angles, wrap bounded modes, give future modes copied camera 
 behavior. Live gesture pose persistence stays with the existing view-pose/presentation owner; a mode's authored initial
 pose retains its declared Settings/preset keys.
 
-**Operator supersession, 3 November 2026: PERSPECTIVE ONLY for artistic/user-facing 3D scene cameras.**
-The 28 October Orthographic-default policy is **retired**, not downgraded to an optional mode or postponed parity effort. All new framed 3D modes and Waveform use the shared *Perspective* physical camera; authored camera controls, presets and preview must not offer an Orthographic projection choice. Existing accepted Perspective behavior in EB/Neon Lake remains untouched. There is **no** EB Orthographic appearance-parity backlog.
-
-`orthographic_matrix`, per-ray origins and other mathematical machinery may still serve shadow maps,
-projection tests or legacy compatibility where actually required. This is not a license for parallel user-facing
-scene renderers, duplicate camera ownership, a future Orthographic Studio control, or a requirement to tune any visualizer under two projections. Retire legacy projection-selection spec/UI/persistence pathways safely and preserve operator-authored preset bytes on read; see `Current_Plan.md` CAM-1..3 and Waveform Migration Plan §1.2.
+New 3D modes should start with Orthographic as their default and offer Perspective optionally (operator decision,
+28 October). Shared `orthographic_matrix` and `rendering/gl_programs/framed_camera.py` provide parallel projection
+and explicit per-pixel ray origins/directions. Design geometry, lighting, optical lookups and footprints for that
+contract from the start; copying a perspective-built effect and replacing only its matrix is insufficient.
+Existing modes retain their admitted defaults; EB's Orthographic authoring option is disabled and its appearance
+parity is deferred beyond the entire backlog (`Future_Work.md`, final section).
 
 Before a consumer with overlapping translucent geometry, prove these **separate, lazy shared primitives**:
 
@@ -107,7 +107,7 @@ captures matched the preceding implementation byte-for-byte.
 ## Fog volume and detail march (S3D-7)
 
 - **`scene3d/fog_volume.py:FogVolume`:** one camera's coarse froxel grid.
-  - x and y follow the viewport; z is exponential in view depth. The active artistic camera is Perspective; earlier dual-projection substrate coverage remains historical technical evidence.
+  - x and y follow the viewport; z is exponential in view depth. One view matrix and lens serve both projections.
   - A consumer's `fogMedium(world, radiance, extinction, steady)` compute source (`gl_programs/fog_volume.py`) is
     evaluated per cell.
   - The front-to-back integral is exact per slice and lands in an RGBA16F 3D texture that `MIST_GLSL` samples:
@@ -123,7 +123,7 @@ captures matched the preceding implementation byte-for-byte.
   - Three 3D textures per volume, plus one 2D target and the noise per march. All allocate at first use, are reused
     at a size, and are released in the owning context.
   - A mirrored reflection camera uses its own instances.
-- **Historical proof:** `tests/test_scene3d_fog_volume.py` proved exact slab transmittance and in-scatter in both projections (Orthographic only as technical regression evidence),
+- **Proof:** `tests/test_scene3d_fog_volume.py` proves exact slab transmittance and in-scatter in both projections,
   world anchoring (a moved clear sphere; a moved eye), the steady share surviving full erosion with erodible coverage
   as the control, and lazy allocation, bounds, foreign-context rejection and release.
 - **Cost:** `wr07_mist_substrate/fog_cost.json` on an RTX 4090 at 820x718 (warm-clock medians):
@@ -156,7 +156,7 @@ microfacet ray-traced reflection. In `wr05_floor_candidate/filter_cost.json`, 45
 RTX 4090 measured the same low/high medians before and after (0.039/0.040 ms); p90 rose by about 0.002 ms. This
 same-recipe comparison measures only the floor draw, excluding reflection generation and every other scene pass.
 
-`tests/test_scene3d_reflection.py` historically proved mirrored object registration in both projections (Orthographic is diagnostic-only); current scene acceptance uses Perspective camera translation,
+`tests/test_scene3d_reflection.py` proves mirrored object registration in both projections with camera translation,
 foreign-context rejection, lazy reuse/retirement, a continuous elongated highlight, a narrow segmented long streak
 (negative control: one footprint, more than twice as wide and displaced) and height-proportional contact spread
 (negative control: spread off ignores height); `test_ribbon_material.py` proves the light pass's height alpha.

@@ -124,6 +124,22 @@ def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
 
 
+# Local (non-group, non-spiral) Bubble drift was receiving musical energy but
+# its tiny perpendicular offsets barely moved beside the stronger group
+# carrier. Only boost its existing *musical* authority: zero admitted drift
+# drive is an exact 1x no-op, and group/spiral retain their current solvers.
+NORMAL_DRIFT_MUSIC_LIFT = 14.0
+
+
+def _normal_drift_music_gain(loud_drift_drive: float, speed_energy: float) -> float:
+    # The historical drift-drive gate opens late in sustained music. Reuse the
+    # already-admitted smooth travel energy so ordinary drift also responds to
+    # musical passages below the old loud gate. A small noise floor preserves
+    # the original nearly dormant quiet appearance.
+    moving_passage = _clamp01((speed_energy - 0.04) / 0.60)
+    return 1.0 + NORMAL_DRIFT_MUSIC_LIFT * max(_clamp01(loud_drift_drive), moving_passage)
+
+
 def _smoothstep01(value: float) -> float:
     """Return a continuous eased 0..1 blend without adding temporal state."""
 
@@ -296,6 +312,10 @@ class BubbleSimulation:
         self._render_body_energy: float = 0.0  # clean body proxy for visible hero sizing
         self._drawn_loud_energy: float = 0.0  # the two above as the drawn radius reads them (RENDER_SIZE_RELEASE_S)
         self._drawn_body_energy: float = 0.0
+        # Optional ambience reads these already admitted signals without altering
+        # the hero solver's own slow breathing or group movement.
+        self._ambient_small_breathing_target: float = 0.0
+        self._ambient_group_motion: tuple[float, float, float] = (0.0, 0.0, 0.0)
         self._hot_crest_energy: float = 0.0
         self._bass_running_avg: float = 0.0   # slow-tracking bass average for delta pulse
         self._midhi_running_avg: float = 0.0  # slow-tracking mid+high average for delta pulse
@@ -1020,6 +1040,7 @@ class BubbleSimulation:
                     self._log_overdrive_state("hold", reactivity_raw, overdrive_gate_signal)
                     self._overdrive_last_log_ts = now
         base_vel = effective_speed * 0.35  # renderer-normalised units/sec
+        self._ambient_resolved_stream_velocity = base_vel  # read-only opt-in secondary layer
 
         group_drift_dx, group_drift_dy = self._update_group_drift_carrier(
             drift_dir,
@@ -1028,6 +1049,35 @@ class BubbleSimulation:
             active=group_drift_active,
         )
 
+        # Decorative drift follows the exact current Group Drift carrier and
+        # its musical gain, never a guessed authored direction. The first two
+        # values are the already-mixed 49% shared motion; the final value is
+        # the 51% independently phased speed. Values are per second in the
+        # same normalized 2D space as the hero movement, before Y projection.
+        self._ambient_group_motion = (0.0, 0.0, 0.0)
+        if group_drift_active and (
+            settings.get("bubble_microbubble_drift", False)
+            or settings.get("bubble_particle_drift", False)
+        ):
+            representative_mag = (
+                (0.056 + drift_amount * 0.096)
+                * (0.84 + drift_speed * 1.46)
+                * drift_amplitude_boost
+                * (1.0 + loud_drift_drive * (0.92 + drift_amount * 0.42))
+            )
+            self._ambient_group_motion = (
+                0.49 * group_drift_dx * representative_mag,
+                0.49 * group_drift_dy * representative_mag,
+                0.51 * representative_mag,
+            )
+
+        # Read only the small-bubble body's admitted reaction before its
+        # intentionally slow size-release smoothing. Particle light can then
+        # recover in milliseconds without changing the original breathing.
+        ambient_glow_active = bool(settings.get("bubble_particle_glow", False))
+        ambient_gate_sum = 0.0
+        ambient_gate_max = 0.0
+        ambient_gate_count = 0
         # --- Update existing bubbles ---
         to_remove: List[int] = []
         motion_sample_count = 0
@@ -1098,10 +1148,22 @@ class BubbleSimulation:
             drift_offset = (
                 local_drift_noise * drift_amount * 0.03 * drift_amplitude_boost + drift_bias_val
             ) * drift_follow
+            # Retain the original quiet/local motion. During music, the
+            # per-bubble path needs enough displacement to compete with Group
+            # Drift's much stronger carrier; do not change that carrier or the
+            # separately controlled spiral solver.
+            if not group_drift_active and not is_swirl:
+                drift_offset *= _normal_drift_music_gain(loud_drift_drive, speed_energy)
 
             # Apply drift; Swish modes force an axis, swirl modes orbit around centre,
-            # otherwise stay perpendicular to stream
+            # otherwise stay perpendicular to stream.
+            # When Group Drift is active, retain 49% of its shared carrier and
+            # mix in 51% independently phased bubble-local travel. This is an
+            # additional 30% reduction of Slice 9's 70% shared component
+            # (0.70 * 0.70 = 0.49), not a weakening of musical drive or a
+            # second drift system. No extra RNG, clock or per-bubble state.
             if group_drift_active:
+                group_start_x, group_start_y = move_x, move_y
                 drift_gain = 0.82 + 0.42 * abs(b.drift_bias)
                 group_loud_lift = 1.0 + loud_drift_drive * (0.92 + drift_amount * 0.42)
                 lag_spread = max(0.72, min(1.28, 1.0 + b.drift_bias * 0.24))
@@ -1151,6 +1213,14 @@ class BubbleSimulation:
                     local_jitter = local_drift_noise * group_mag * 0.010
                     move_x += (group_drift_dx * group_mag + local_jitter) * dt
                     move_y += (group_drift_dy * group_mag + local_jitter * 0.45) * dt
+                # Mix directions, not the audio-reactive gain. An independently
+                # phased heading preserves local motion and breaks full-field
+                # lockstep without weakening Group Drift's gain controls.
+                local_heading = drift_phase * (1.0 + drift_freq * 0.5) + b.drift_bias
+                local_step_x = math.cos(local_heading) * group_mag * dt
+                local_step_y = math.sin(local_heading) * group_mag * dt
+                move_x = group_start_x + 0.49 * (move_x - group_start_x) + 0.51 * local_step_x
+                move_y = group_start_y + 0.49 * (move_y - group_start_y) + 0.51 * local_step_y
             elif drift_dir == "swish_horizontal":
                 move_x += drift_offset * dt
             elif drift_dir == "swish_vertical":
@@ -1365,6 +1435,10 @@ class BubbleSimulation:
                 )
 
             gated_energy = min(1.0, max(delta_component, sustained_component))
+            if ambient_glow_active and not use_bass:
+                ambient_gate_sum += gated_energy
+                ambient_gate_max = max(ambient_gate_max, gated_energy)
+                ambient_gate_count += 1
 
             if gated_energy > b.pulse_energy:
                 b.pulse_energy += (gated_energy - b.pulse_energy) * min(1.0, dt * attack_rate)
@@ -1554,6 +1628,10 @@ class BubbleSimulation:
                 small_count += 1
                 small_spawn_budget -= 1
 
+        self._ambient_small_breathing_target = (
+            max(ambient_gate_sum / ambient_gate_count, ambient_gate_max * 0.65)
+            if ambient_gate_count else 0.0
+        )
         tick_ms = (time.perf_counter() - tick_start) * 1000.0
         perf_diag = dict(self._last_perf_diag)
         perf_diag.update(

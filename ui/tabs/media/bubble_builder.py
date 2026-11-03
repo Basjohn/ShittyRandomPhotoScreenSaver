@@ -22,6 +22,7 @@ def build_bubble_ui(tab, parent_layout) -> None:
     tab.bubble_ghost_decay_slider = tab.bubble_ghost_decay
     tab._bubble_stream_direction_row_widget = tab._bubble_rows["bubble_stream_direction"]
     tab._bubble_apply_swirl()
+    install_bubble_ambient_visibility(tab)
 
 
 def build_bubble_swirl(tab, layout) -> None:
@@ -114,3 +115,33 @@ def collect_bubble_swirl(tab) -> dict:
         raise ValueError(f"Bubble drift UI has no authored direction: {value!r}")
     return {control.key: value}
 
+
+
+def install_bubble_ambient_visibility(tab) -> None:
+    """Contextual Bubble-only Particles UI; no global builder/schema changes.
+
+    The two toggle rows always remain visible. Unused populations hide their
+    size/density/colour, without erasing those stored controls on load or save.
+    """
+    micro_toggles = (tab.bubble_microbubble_stream, tab.bubble_microbubble_drift)
+    particle_toggles = (tab.bubble_particle_stream, tab.bubble_particle_drift,
+                        tab.bubble_particle_glow)
+    micro_keys = ("bubble_microbubble_density", "bubble_microbubble_size",
+                  "bubble_microbubble_direction_mode", "bubble_microbubble_columnarity")
+    particle_keys = ("bubble_particle_size", "bubble_particle_density",
+                     "bubble_particle_direction_mode", "bubble_particle_color")
+    rows = tab._bubble_rows
+
+    def refresh(*_args):
+        micro = any(control.isChecked() for control in micro_toggles)
+        particles = any(control.isChecked() for control in particle_toggles)
+        for key in micro_keys:
+            rows[key].setVisible(micro)
+        for key in particle_keys:
+            rows[key].setVisible(particles)
+        # Glow-only conditions already belong to the typed spec builder.
+
+    tab._bubble_apply_ambient_visibility = refresh
+    for control in (*micro_toggles, *particle_toggles):
+        control.toggled.connect(refresh)
+    refresh()
