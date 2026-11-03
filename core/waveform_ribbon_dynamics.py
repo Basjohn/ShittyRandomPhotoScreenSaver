@@ -151,7 +151,7 @@ class WaveformDynamics:
             sparkle.append(unit(self._value('sparkle')*max(hit,.4*bands[2])))
         self.ring.append(when,positions,widths,twists,lights,sparkle=sparkle,tint=tints)
 
-    def advance(self, dt, *, bands, intensity, presence, hit=0., hit_components=None, controls=None):
+    def advance(self, dt, *, bands, intensity, presence, hit=0., hit_components=None, accent=None, controls=None):
         if not math.isfinite(dt) or not 0. <= dt <= .1:
             raise ValueError('Ribbon logical dt must be finite in 0..0.1 seconds')
         if controls is not None:
@@ -181,6 +181,7 @@ class WaveformDynamics:
         # Event strength already has its own acoustic support at admission. Passage weight must not attenuate
         # an admitted kick a second time; near-silence still forbids new input.
         hit = unit(hit)*unit(presence)
+        accent = hit if accent is None else unit(accent)*unit(presence)
         impulses=(hit,hit,hit) if hit_components is None else tuple(unit(value)*unit(presence) for value in hit_components)
         if len(impulses)!=3:raise ValueError('Waveform impulse needs bend, torsion and depth components')
         self._hit = max(hit,self._hit*math.exp(-dt/.12))
@@ -227,16 +228,16 @@ class WaveformDynamics:
         snapshot=self.snapshot()
         if c.accents is None:
             self._bursts=None
-        elif hit>=.08 or self._bursts is not None:
+        elif accent>=.08 or self._bursts is not None:
             if self._bursts is None:self._bursts=RibbonBursts()
-            self._bursts.admit(snapshot,c.accents,hit)
+            self._bursts.admit(snapshot,c.accents,accent)
             self._snapshot=replace(snapshot,particles=self._bursts.visible_payload(snapshot.time),particle_origin=self._bursts.origin,
                                    particle_serial=self._bursts.serial)
         if c.strands is None:
             self._strand_cohorts=None
         else:
             if self._strand_cohorts is None:self._strand_cohorts=RibbonStrandCohorts(snapshot.packet.instances)
-            payload=self._strand_cohorts.update(snapshot,c.strands,hit,history=self._base_packet,knot_hz=c.scene.flow.knot_hz)
+            payload=self._strand_cohorts.update(snapshot,c.strands,accent,history=self._base_packet,knot_hz=c.scene.flow.knot_hz)
             self._snapshot=replace(self._snapshot,strands=payload,strand_origin=self._strand_cohorts.origin)
         return self._snapshot
 

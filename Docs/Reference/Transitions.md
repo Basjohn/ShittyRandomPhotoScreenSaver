@@ -264,7 +264,8 @@ Each foundation slice adds what it learned here.
   of a projected length that is near zero: that sign is noise and draws bow-tie gaps (ribbon folds, 2026-10-31).
 - Hash per-object constants only through `flat` varyings. Perspective-correct interpolation reproduces a constant
   attribute only to ~1e-7 relative; a large-argument sine hash turned that into row-by-row banding in Perspective
-  while Orthographic looked perfect (Waveform pillars, 2026-10-31). Check new looks in both projections.
+  while Orthographic looked perfect (Waveform pillars, 2026-10-31). **Historical failure lesson:** debug this in the
+  now-exclusive artistic Perspective path; do **not** require or reinstate artistic Orthographic acceptance.
 - Wet reflective floors (Waveform floor, 2026-11-01):
   - **Long streaks:** hardware anisotropy integrates at most 16:1. One footprint as long as a wet streak forces a
     coarse mip on the short axis too, and every highlight washes into one smear. Split long footprints into abutting
@@ -284,7 +285,7 @@ Each foundation slice adds what it learned here.
     clear air. Inverse-square sums from many sources lit every bank evenly.
   - **Adaptive steps:** use them inside the medium. Exponential steps were about 2 units long at the mist and aliased
     billows into speckle; interleaved gradient noise jitter drew hatching.
-  - **Ceilings in Orthographic:** a clear-air ceiling must rise toward the camera faster than the view rays
+  - **Historical Orthographic-only diagnostic (retired for user-facing cameras):** a clear-air ceiling must rise toward the camera faster than the view rays
     descend, or the upper field is mist starting at the eye.
   - **Never erode haze:** keep smooth haze in a steady share; erosion removes thin fog entirely.
   - **GLSL `smoothstep`:** it is undefined with edge0 >= edge1; a reversed ramp turned the scene white.

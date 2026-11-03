@@ -75,6 +75,9 @@ def test_policy_changes_clear_musical_domain_but_same_policy_preserves_it(qt_app
                 assert worker._transient_bus.musical_intensity == 0.
                 assert not worker._transient_bus.recent_onsets
                 assert engine._analysis_compute_state_epoch > epoch
+                # Raw Waveform's quieter fixed-scale input must not reuse the default curve's hard zero.
+                value=worker._transient_bus._intensity.update(4.,1/90)
+                assert (value>0.) is policy
                 assert worker.make_compute_snapshot()._raw_musical_signals == policy
     finally:
         engine.force_stop()

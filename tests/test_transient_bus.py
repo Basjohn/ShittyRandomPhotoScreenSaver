@@ -11,6 +11,9 @@ Verifies:
 """
 from __future__ import annotations
 
+import math
+import pytest
+
 from widgets.spotify_visualizer.transient_bus import (
     TransientBus,
     TransientEnergyBands,
@@ -366,3 +369,17 @@ def test_a_reactivity_reset_keeps_the_musical_context():
     worker.reset_reactivity_state()
     assert worker._transient_bus is not bus
     assert worker._transient_bus.musical_intensity == before
+
+
+def test_continuous_passage_has_quiet_response_and_hot_headroom_without_changing_default_curve():
+    from widgets.spotify_visualizer.transient_bus import PassageIntensity
+    levels=(0.,.01,1.5,4.,8.5,12.,20.)
+    response=[PassageIntensity(continuous=True).update(level,1/90) for level in levels]
+    assert response[:2]==[0.,0.]
+    assert 0.<response[2]<response[3]<response[4]<response[5]<response[6]<1.
+    assert response[4]==pytest.approx(PassageIntensity.USUAL)
+    # Accepted modes retain the exact prior arithmetic; the quieter level is the negative control.
+    for level in levels[2:]:
+        expected=max(0.,min(1.,.65+1.5*math.log(level/8.5)))
+        assert PassageIntensity().update(level,1/90)==expected
+    assert PassageIntensity().update(4.,1/90)==0.

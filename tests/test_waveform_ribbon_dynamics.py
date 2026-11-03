@@ -241,6 +241,25 @@ def test_repeated_routine_onsets_leave_room_for_a_distinct_accent():
     assert onset(40,1.5)>first
 
 
+def test_supported_quiet_accent_is_admitted_independently_of_its_small_deformation_force():
+    from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+    from widgets.spotify_visualizer.waveform_ribbon_parameters import CompiledWaveformSettings
+    config=resolve_visualizer_activation_payload({'mode':'waveform_ribbon','preset_waveform_ribbon':2},mode='waveform_ribbon')
+    c=CompiledWaveformSettings(config.resolved_config).controls
+    runtime=WaveformRibbonFrameRuntime()
+    args=dict(onsets=(),playing=True,identity=(1,2,3),source_identity=(2,3),controls=c,
+              body_bands=(.15,.1,.05),intensity=.1,loudness=1.,presence=1.)
+    for index in range(90):runtime.advance(now_ts=index/90,**args)
+    args['onsets']=(SimpleNamespace(serial=1,kind='kick',strength=1.,magnitude=1.,loudness=1.,presence=1.),)
+    state=runtime.advance(now_ts=1.,**args)
+    assert 0.<runtime._model._hit<.08  # former admission rejected this real quiet accent
+    assert state.particle_serial==1 and state.particles and state.strands
+    # Same supported history cannot emit again when the current source is silent or stale.
+    args.update(loudness=0.,intensity=0.,source_identity=(-1,-1))
+    args['onsets']=(SimpleNamespace(serial=2,kind='kick',strength=1.,magnitude=3.,loudness=0.,presence=1.),)
+    assert runtime.advance(now_ts=1.1,**args).particle_serial==1
+
+
 @pytest.mark.parametrize('frequency',(.3,1.3,3.))
 @pytest.mark.parametrize('damping',(.2,.8))
 def test_authored_impulse_excursion_survives_spring_timing_changes(frequency,damping):
