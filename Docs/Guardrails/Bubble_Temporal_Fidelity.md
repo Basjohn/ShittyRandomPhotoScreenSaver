@@ -15,6 +15,7 @@ Short reference name: **BTF**
 Treat the following user phrases as explicit routing aliases to this document:
 
 - `BTF`;
+- `BFT` when the operator means the Bubble fidelity/temporal contract;
 - `Bubble Temporal Fidelity`;
 - `Bubble feel`;
 - `Bubble feels worse`;
@@ -481,6 +482,10 @@ fails BTF.
 
 Quiet or paused Bubble should retain its authored personality.
 
+**Current approved idle-drift policy is explicit in §23.** Pause/idle drift is deliberately softer than the
+playing path; low audio energy *during an actively playing track* must not be treated as idle.
+Do not restore older frantic idle movement while attempting to "preserve" historical behaviour.
+
 Do not create apparent smoothness by forcing Bubble static unless the approved mode behaviour is
 actually static.
 
@@ -731,6 +736,10 @@ Infrastructure work must verify existing behavioural goldens.
 Do not regenerate Bubble goldens merely because a scheduler/presentation architecture changed.
 
 Changing the timing owner is not permission to redefine Bubble feel.
+The operator-approved original Bubble drift, Group Drift, decorative ambience and hero-occlusion changes described
+in §23 are **part of the current protected baseline**. Older goldens from before those explicitly approved
+changes are negative/historical controls, not an instruction to revert approved behaviour. Any optimization
+must take a fresh deterministic baseline from the accepted implementation before changing it.
 
 If an intentional product decision changes Bubble behaviour:
 
@@ -853,3 +862,93 @@ Golden negative controls:
 - no radius, pulse, movement, stream/drift, Ghost/history, trail or R-69 scaling rewrite;
 - cold-start field bootstrap keeps its distinct slower authored fade;
 - physical acceptance must compare canonical, very wide and very tall CUSTOM geometry.
+
+---
+
+## 23. Current Bubble 2D motion, ambience and layering acceptance (4 Nov 2026)
+
+**This is the present approved contract**, not a slice chronology or a request to perform more Bubble work.
+Older experiment audits explain decisions but must not override the accepted behaviour. The operator explicitly
+confirmed the normal-drift musical-authority task **complete**, and specifically values the independent
+**Same / Reversed** decor directions, including a sinking preset that the earlier one-way transport could not make.
+Do not "fix" reversed motion away, roll back musical drift authority, or retune mutable presets to historical
+values during unrelated work.
+
+### 23.1 Hero Bubble movement and control
+
+- Normal, non-group drift retains its deliberately stronger active-musical response during moderate, loud and
+  sustained passages. The authorized idle reduction is **77.5% of the pre-Slice-13 drift displacement**.
+- Group Drift retains the approved **49% common carrier / 51% independently phased movement** mix. It is
+  intentionally not fully synchronized; restoring a stronger common carrier recreates large vacated gaps.
+  Its idle *drift* displacement is **55% of its pre-Slice-13 value**, including both common and local components.
+- Idle means the **authoritative `playing` flag is false**, not merely a quiet point within a playing track.
+  During playback, both normal and Group Drift use **100%** of their accepted musical movement, including
+  low-level passages. These reductions do not attenuate the original hero stream, collision, radius, pulse,
+  ghost/wake, event or logical-clock paths.
+- Implementation authority: `widgets/spotify_visualizer/bubble_idle_motion.py`,
+  `bubble_simulation.py`, and `bubble_frame_runtime.py`. The policy factors are distinct from user controls;
+  do not invent a competing timer, envelope, random seed or independent audio feed.
+
+### 23.2 Opt-in underwater décor and authoring
+
+- The `Particles` Builder bucket owns two **optional, separately seeded**, bounded populations:
+  **microbubble stream/drift** and **particles stream/drift/glow**. Defaults are OFF; enabling them never
+  enlarges the original 110-bubble collision/reactivity population or changes its RNG sequence.
+  Maximums are 96 microbubbles and 96 particles, independent of original Bubble counts.
+- Each population has its own **Same / Reversed** transport choice. `Same` follows the effective original
+  Bubble motion; `Reversed` is a first-class artistic choice, NOT a sign bug. Preserve both stream and spiral
+  winding semantics, and do not share or reset the two settings during preset load/save.
+- The **Microbubble Columns** slider transitions from the accepted soft clumps at 0 toward loose columns at 1.
+  Existing clumps reshape live **without re-seeding, popping, teleporting or shuffling the parent Bubble RNG**.
+  Preserve randomized, nonmechanical placement.
+- Decor stream transport inherits exactly **75% of the already resolved hero Bubble stream velocity** in both
+  idle and playback; it never edits hero stream speed. Decor drift subscribes to the existing resolved Group
+  Drift carrier when that mode is enabled. Outside Group Drift, decor idle drift uses **65%** of its previous
+  displacement; with Group Drift it uses **30%**. Both recover to **100%** drift during playback, independent
+  of the always-on 75% stream inheritance. `Same / Reversed` remains valid in each case.
+- Particle **core size is fixed against audio**. The small-bubble admitted reaction signal drives *only the
+  light emission*, with a distinct fast response/release (default `Glow Release` 160 ms) and authorable
+  **Glow Intensity, Reactivity, Spread and Release**. The particle core must never breathe, and an emissive
+  halo is not permission to inflate the solid opaque disc. Do not substitute a second audio analysis path,
+  hide meaningful parameters, or mark visual quality accepted merely because glow mathematics/tests pass.
+- Keep conditional Builder controls and canonical preset save/load/restore round trips; do not scatter
+  unrelated sliders or redesign the Builder without a demonstrated defect.
+
+### 23.3 Render order, masks, viewport and dormant cost
+
+- Compositing is conceptually **background gradient → optional décor → original Bubble wakes/ghosts and hero
+  bodies**, with **big hero bodies visually in front of small hero bodies** at overlaps. It is a visual
+  ordering rule only; no physics changes. Existing big/small identity follows same-snapshot class bits,
+  not a radius guess or an extra physics population.
+- Both big and small **visible** original bubbles occlude the decorative underlay using their actual
+  same-snapshot rendered radii. Invisible/zero-alpha heroes do not need a mask. Preserve rounded/stencilled
+  content clipping, quarter-turn rotation, and canonical/extreme-wide/extreme-tall/expanded viewports.
+- The optional ambient renderer is a **bounded, content-local transparent GPU target**, with at most 2048
+  pixels on its longest edge; aspect remains uniform. No decor renderer resources or extra ambient texture,
+  sprite/mask draw work should persist for a never-enabled or subsequently disabled scene.
+- **Performance caveat:** big-over-small hero foreground composition changes the *shared* Bubble shader,
+  so it can have cost even when decorations are OFF. At maximum ambient density and Glow Spread, sprite
+  fill, the offscreen texture and all-hero mask may be significant. Never claim "free" based solely on
+  one draw call or CPU tests. Native GPU costs, visual parity and frame timing require evidence.
+
+### 23.4 Optimization, exactness and remaining acceptance
+
+- `Current_Plan.md` §8 owns **one short, symptom-and-measurement-driven performance check** of the optional
+  target, glow fill, all-bubble occlusion and shared foreground loop. It is *not* permission to remove
+  accepted features, reduce visual response, flatten glow, change authored presets or start a large refactor.
+- **Byte-for-byte is an output/regression condition, not a speed metric.** For a later performance-only
+  optimization, establish the accepted Bubble candidate as the oracle and compare identical logical
+  frame payload bytes (where deterministic) and, if a fixed same-GPU readback is reproducible,
+  renderer-output RGBA bytes. Also separately measure GPU and CPU timings, p95 tails, cadence/latency,
+  resource lifetime and rendering under other-display load. Baseline-versus-current images are *not*
+  byte-identical because the operator explicitly changed motion, occlusion and art direction.
+- Any separately deferred **scalar-to-range** Builder migration remains unfinished and must preserve
+  authored preset values. It is not part of the completed normal-drift improvement or the bounded perf check.
+  Bubble's existing visuals should not be reopened without an explicit operator request or reproduced defect.
+- Relevant sources: `widgets/spotify_visualizer/bubble_ambient.py`,
+  `widgets/spotify_visualizer/bubble_ambient_geometry.py`,
+  `rendering/quick/visualizer/implementations/bubble_ambient_gl.py`,
+  `widgets/spotify_visualizer/bubble_hero_occlusion.py`,
+  `widgets/spotify_visualizer/shaders/bubble.frag`, `core/settings/visualizer_mode_settings.py`,
+  and `ui/tabs/media/bubble_builder.py`. The dated `Docs/Audits/Bubble_*` slice records are forensic
+  context rather than active task or stronger product authority.

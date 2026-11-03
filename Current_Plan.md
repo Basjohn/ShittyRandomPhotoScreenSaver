@@ -12,8 +12,8 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 1. **§6 Shared 3D architecture**: build reusable 3D primitives, each proven on its own harness.
 2. **§7 Visualizer modes**, one at a time: **Waveform Ribbon → Reactive Liquid / Melt Pool → Concrete Rain →
    Usu Moonscape**. Each is built lab-first (§7.0).
-3. **§8 Later accepted-mode reactivity polish**, only after the §7 sequence unless the operator explicitly pulls one
-   item forward for a concrete regression.
+3. **§8 Accepted-mode follow-ups**: the brief Bubble performance-parity check is operator-admitted now; the
+   scalar-to-range Builder audit remains deferred until explicitly prioritized.
 
 **Accepted baseline (not live work):** original Bubble, Extruded Bubble, Neon Lake, Oscilloscope,
 Spectrum/Rainbow Ghost, Sphere, source routing, transitions and Foundry launch buttons. Reopen an accepted
@@ -315,17 +315,33 @@ Long-horizon character/world vertical: `Docs/Future_Work/Usu_Moonscape.md` (Blen
 skinning, animation graph, secondary motion, felt/fuzz, world-view projection, sphere world/starscape) plus S3D-6.
 Not admitted until those foundations are proven; the static silhouette approval stays a separate hard gate.
 
-## 8. Later accepted-mode reactivity polish
+## 8. Accepted Bubble: bounded performance gate and deferred control audit
 
-Do not pull these ahead of the §7 mode sequence unless the operator explicitly reprioritizes them. They are admitted
-follow-up work on the accepted original Bubble, not a reason to reopen unrelated Bubble behavior.
+The operator has **accepted the improved original Bubble normal-drift musical authority**. That task is closed;
+do not reopen it as unfinished work or restore the pre-experiment drift response. The durable approved motion,
+ambient, direction and occlusion rules are in `Docs/Guardrails/Bubble_Temporal_Fidelity.md` §23. The following
+performance gate is **explicitly admitted now** as a short exception to the §7 mode sequence. The separate
+scalar-to-range audit remains deferred until explicitly reprioritized.
 
-- [ ] **Original Bubble drift intensity range:** normal Bubble drift works, but its visible drift strength is too similar
-  at idle and under heavy/intense sound despite the authored settings. Trace signal → reactive target → smoothing → final
-  displacement/speed before tuning. Preserve the accepted idle drift and cadence, then make the configured high-react
-  end materially stronger under sustained loud passages and strong transients without introducing jumps, judder or a
-  separate clock. Prove quiet/mid/hot synthetic fixtures plus recorded real-music passages and compare the actual
-  low-to-high drift range, not only a single loud frame.
+- [ ] **Bubble post-ambient performance / exact-output check (short and bounded):** inspect hidden costs from the
+  shared hero big-over-small shader loop (including decoration OFF), opt-in 2048-capped ambient FBO, large glow
+  sprite fill, and up-to-110-circle masking. Compare the **original handoff** to the **accepted Slice 13** under
+  matched configuration for resource/performance attribution, then freeze **Slice 13 itself** as the behavioral and
+  rendered-output oracle for any proposed optimization: original-vs-Slice-13 pixel bytes are *not* expected to match
+  where the operator intentionally changed layering, motion or glow.
+  - [ ] Measure decoration OFF, representative decoration ON, and high-density/high-glow decoration ON, using matched
+    real-music replay and canonical plus extreme-wide/tall/expanded sizes, with multiple repetitions on the operator's
+    native Qt Quick/OpenGL runtime. Report Bubble GPU/render p50/p95, CPU logical work, FPS/frame-pacing gaps,
+    resource allocation/release and other-display contention. Check that OFF really avoids the extra FBO, sprite
+    and mask draws; the modified shared hero shader still warrants timing even with decorations OFF.
+  - [ ] For any **actual optimization**, compare deterministic logical packets/bit patterns exactly, and compare
+    final captured RGBA bytes frame-by-frame on the **same GPU, driver, dimensions and fixed replay** when that
+    capture path is deterministic. Where bit identity is unavailable, disclose why and use exact geometry/response
+    checks plus recorded pixel-diff and temporal parity evidence. Do not claim byte-identical *performance*:
+    throughput, GPU timing and latency require measurements.
+  - [ ] If cost is material, optimize only the measured offender and repeat the parity + native performance gate;
+    preserve visual quality, all approved sinking/reversed-flow presets, reactivity/latency, BTF and mutable presets.
+    If no material cost is measured, **close the item without redesigning Bubble**. No generic "lean out" campaign.
 - [ ] **Original Bubble scalar-to-range control audit:** inventory Bubble sliders whose authored value is really a
   low-react/high-react envelope and convert only semantically appropriate controls to range sliders. Wire the low and
   high handles to the canonical reactivity signal rather than treating the range as cosmetic UI. For authored presets
