@@ -950,6 +950,9 @@ class WaveformDynamics:
         twist = twist*values['twist']+values['torsion']*(1.6*m*np.sin(.45*u+owner)+.12*h*np.sin(.7*u-owner))
         data[:,5::KNOT_ROWS,1] = twist+self.twist_phase+self.angle+idle*.18*np.sin(.28*self.time+.3*u+owner)
         data[:,1,0] = 0.
+        # Admission phase of the history ring in [0, 1) (header extra.w): the renderer anchors the visible ends inside
+        # the history and continues from there, so admitting/evicting a knot never steps the ends (core.ribbon_continuation).
+        data[:,1,3] = unit((self.time-(self._next_knot-1./self.controls.scene.flow.knot_hz))*self.controls.scene.flow.knot_hz)
         # The floor is never hit and the shape never changes (operator, 5 Nov: "we collide with the floor a lot";
         # then: per-knot trough limits made boxy flat-bottomed troughs "instead of FLOWING"). When a ribbon's lower
         # edge (the cloth sweep's side is cos(twist)*Y + sin(twist)*Z, so the sheet hangs width*|cos(twist)| below its

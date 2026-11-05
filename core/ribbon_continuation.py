@@ -37,9 +37,77 @@ def continued_values(knots, xs, before):
     return result
 
 
-def cloth_values(knots, xs):
-    """Invert the monotone axial B-spline; evaluate its exact transverse fields."""
+# Anchored ends (5 Nov: seen from the framed camera's extreme turn, the far end of the history "staggers"). Continuing
+# from the oldest/newest KNOT moved the whole continuation, and the last spline segments, at every knot admission (the
+# endpoint jet jumps to the next knot). With an admission ``phase`` in [0, 1) the visible history instead ends at anchors
+# ANCHOR_INSET knots inside each end that advance with the phase, so they are fixed in the scene and reach the next knot
+# exactly when the ring admits/evicts: the anchors' segments never involve an admitted or evicted knot, and the jets
+# are evaluated on the C2 spline itself, so the continuation is continuous in time. Beyond them the same C2 extension.
+ANCHOR_INSET = 2
+
+
+def anchors(knots, phase):
+    """Tail and head anchor x of the visible history for admission ``phase`` (needs 2*ANCHOR_INSET+2 knots)."""
+    x=np.asarray(knots,float)[:,0,0];phase=min(max(float(phase),0.),1.)
+    i,j=ANCHOR_INSET,len(x)-1-ANCHOR_INSET
+    return x[i]+phase*(x[i+1]-x[i]),x[j-1]+phase*(x[j]-x[j-1])
+
+
+def _spline_jet(knots, xs):
+    """Value, d/dx and d2/dx2 of the exact cloth fields at axial x (inside the history)."""
+    knots=np.asarray(knots,float);xs=np.atleast_1d(np.asarray(xs,float))
+    lo=np.clip(np.searchsorted(knots[:,0,0],xs,side='right')-1,0,len(knots)-2)
+    controls=knots[np.clip(lo[:,None]+np.arange(-1,3),0,len(knots)-1)].copy()
+    values=np.concatenate((controls[:,:,0,1:4],controls[:,:,1,1,None]),axis=2)
+    first,last=lo==0,lo==len(knots)-2
+    controls[first,0,0,:3]=2*controls[first,1,0,:3]-controls[first,2,0,:3]
+    values[first,0,:2]=controls[first,0,0,1:3]
+    controls[last,3,0,:3]=2*controls[last,2,0,:3]-controls[last,1,0,:3]
+    values[last,3,:2]=controls[last,3,0,1:3]
+    axial=controls[:,:,0,0]
+    u=np.clip((xs-axial[:,1])/(axial[:,2]-axial[:,1]),0,1)
+    def weights(u):return np.stack(((1-u)**3,3*u**3-6*u*u+4,-3*u**3+3*u*u+3*u+1,u**3),1)/6
+    def slope(u):return np.stack((-3*(1-u)**2,9*u*u-12*u,-9*u*u+6*u+3,3*u*u),1)/6
+    def bend(u):return np.stack((6*(1-u),18*u-12,-18*u+6,6*u),1)/6
+    for _ in range(5):
+        u=np.clip(u-((weights(u)*axial).sum(1)-xs)/(slope(u)*axial).sum(1),0,1)
+    w,dw,ddw=weights(u),slope(u),bend(u)
+    dx,ddx=(dw*axial).sum(1),(ddw*axial).sum(1)
+    du,ddu=(dw[:,:,None]*values).sum(1),(ddw[:,:,None]*values).sum(1)
+    return (w[:,:,None]*values).sum(1),du/dx[:,None],(ddu*dx[:,None]-du*ddx[:,None])/dx[:,None]**3
+
+
+def anchored_values(knots, xs, phase, before):
+    """C2 continuation beyond the tail (``before``) or head anchor; the same form as ``continued_values``."""
+    knots=np.asarray(knots,float);tail,head=anchors(knots,phase)
+    origin=tail if before else head
+    value,first,second=(v[0] for v in _spline_jet(knots,[origin]))
+    i=ANCHOR_INSET if before else len(knots)-2-ANCHOR_INSET
+    reach=abs(knots[i+1,0,0]-knots[i,0,0])
+    delta=np.asarray(xs,float)-origin
+    result=np.broadcast_to(value,delta.shape+(4,)).copy()
+    result[...,:2]+=np.sin(delta)[...,None]*first[:2]+(1-np.cos(delta))[...,None]*second[:2]
+    g1,g2=first[2:].copy()*(-1 if before else 1),second[2:].copy()
+    g2[0]=g2[0]/value[2]-(g1[0]/value[2])**2
+    g1[0]/=value[2]
+    scaled=np.minimum(np.abs(delta)/reach,80.)
+    correction=(scaled[...,None]*g1*reach+scaled[...,None]**2*(.5*g2*reach**2+g1*reach))*np.exp(-scaled)[...,None]
+    result[...,2]*=np.exp(correction[...,0]);result[...,3]+=correction[...,1]
+    return result
+
+
+def cloth_values(knots, xs, phase=None):
+    """Invert the monotone axial B-spline; evaluate its exact transverse fields. With an admission ``phase`` (the
+    packet header's extra.w) the history is drawn between its anchors and continued beyond them (see ``anchors``)."""
     knots=np.asarray(knots,float);xs=np.asarray(xs,float)
+    if phase is not None and len(knots)>=2*ANCHOR_INSET+2:
+        tail,head=anchors(knots,phase)
+        result=np.empty(xs.shape+(4,))
+        inside=(xs>=tail)&(xs<=head)
+        if inside.any():result[inside]=cloth_values(knots,xs[inside])
+        for before,mask in ((True,xs<tail),(False,xs>head)):
+            if mask.any():result[mask]=anchored_values(knots,xs[mask],phase,before)
+        return result
     lo=np.clip(np.searchsorted(knots[:,0,0],xs,side='right')-1,0,len(knots)-2)
     controls=knots[np.clip(lo[:,None]+np.arange(-1,3),0,len(knots)-1)].copy()
     values=np.concatenate((controls[:,:,0,1:4],controls[:,:,1,1,None]),axis=2)
@@ -79,8 +147,15 @@ def continuation_bounds(packet, translation, camber):
         low=np.minimum(low,centre.min(axis=0)-radius);high=np.maximum(high,centre.max(axis=0)+radius)
         indices=(start+np.array((0,1,2,count-3,count-2,count-1)))%capacity
         controls=path[4:].reshape(-1,5,4)[indices]
+        anchored=count>=2*ANCHOR_INSET+2
         for before,knots in ((True,controls[:3]),(False,controls[3:])):
-            _,v,d,dd,reach=endpoint_jet(knots,before)
+            if anchored:
+                # The continuation starts at the anchors (see ``anchors``); bound their jets instead.
+                v,d,dd=(value[0] for value in _spline_jet(history,[anchors(history,path[1,3])[0 if before else 1]]))
+                i=ANCHOR_INSET if before else count-2-ANCHOR_INSET
+                reach=abs(float(history[i+1,0,0]-history[i,0,0]))
+            else:
+                _,v,d,dd,reach=endpoint_jet(knots,before)
             # s*exp(-s/L)<=L/e; s²*exp(-s/L)<=4L²/e².
             g1=d[2]/v[2];g2=dd[2]/v[2]-g1*g1
             log_bound=abs(g1)*reach/np.e+abs(.5*g2+(-1 if before else 1)*g1/reach)*4*reach**2/np.e**2
