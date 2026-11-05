@@ -44,7 +44,7 @@ def test_skyline_renders_actual_terrain_triangles_without_projected_column_maxim
     renderer = (root / "rendering/quick/visualizer/implementations/shockwave_grid.py").read_text()
     assert "basinLandHeight(aUv,base,smoothed)" in shader
     assert "clip.y+=uOutlineLiftNdc*width*clip.w" in shader
-    assert "clip.z+=0.0012*clip.w" in shader
+    assert "clip.z=max(clip.z+0.0012*clip.w,farther)" in shader  # the copy always lies behind its real surface
     assert "vTerrainBase<0.035" in shader  # true continued land, no lake-edge duplication
     assert "bestScreen" not in shader
     assert "gl.GL_LINE_STRIP" not in renderer

@@ -28,16 +28,23 @@ def test_depth_scale_grows_near_marks_more_than_far_ones(target):
     capture, host = target
     base = dict(shockwave_grid_vertex_color=[255, 255, 255, 255], shockwave_grid_vertex_accent_color=[255, 255, 255, 255],
                 shockwave_grid_sky_enabled=False, shockwave_grid_sun_enabled=False, shockwave_grid_floor=0.0,
-                shockwave_grid_tilt=0.12, shockwave_grid_scene_scale=1.6)
+                shockwave_grid_crest_color=[0, 0, 0, 0], shockwave_grid_tilt=0.12, shockwave_grid_scene_scale=1.6)
     flat = _difference(capture, host, _scene(0.4, **base, shockwave_grid_depth_scale=0.0),
                        _scene(0.4, **base, shockwave_grid_depth_scale=0.0))
     assert not (flat > 24).any(), "the same settings draw the same picture"
-    grown = _difference(capture, host, _scene(0.4, **base, shockwave_grid_depth_scale=0.0),
-                        _scene(0.4, **base, shockwave_grid_depth_scale=1.0))
-    rows = grown.shape[0]
-    near, far = (grown[2 * rows // 3:] > 24).mean(), (grown[: rows // 3] > 24).mean()
-    assert near > 0.02, "marks near the camera grow"
-    assert near > 2.0 * far, "far marks keep (nearly) their on-screen size"
+    def light(depth_scale):
+        capture.render(host, _scene(0.4, **base, shockwave_grid_depth_scale=depth_scale))
+        return capture.render(host, _scene(0.4, **base, shockwave_grid_depth_scale=depth_scale))[..., :3].astype(float)
+
+    still, grown = light(0.0), light(1.0)
+    # Rows of marks: the far horizon band near the top of the land, the near ground at the bottom.
+    land = np.nonzero(still.sum(axis=(1, 2)) > 0)[0]
+    top, bottom = land.min(), still.shape[0]
+    far_band, near_band = slice(top, top + (bottom - top) // 8), slice(top + (bottom - top) // 3, bottom)
+    near_gain = grown[near_band].sum() / max(still[near_band].sum(), 1.0)
+    far_gain = grown[far_band].sum() / max(still[far_band].sum(), 1.0)
+    assert near_gain > 2.0, "marks near the camera grow"
+    assert near_gain > 1.5 * far_gain, "far marks keep (nearly) their on-screen size"
 
 
 def test_shore_glow_lights_the_shoreline_and_never_open_land(target):
@@ -82,3 +89,12 @@ def test_sun_moon_path_lies_on_water_only(target):
                                                shockwave_grid_water_glint=0.0),
                          _scene(0.0, **{**body, "shockwave_grid_sun_enabled": False}, shockwave_grid_water_glint=1.0))
     assert not (hidden > 24).any(), "no body, no path"
+
+
+def test_the_wet_fringe_below_the_shoreline_shines_as_water(target):
+    """Land authored below the visible shoreline contour is the water's shallow fringe: Water Shine covers it
+    and its marks, so a shining lake no longer stops in a staircase of square control cells."""
+    capture, host = target
+    fringe = _difference(capture, host, _scene(0.012, shockwave_grid_water_shine=0.0),
+                         _scene(0.012, shockwave_grid_water_shine=1.0))
+    assert (fringe > 24).mean() > 0.05

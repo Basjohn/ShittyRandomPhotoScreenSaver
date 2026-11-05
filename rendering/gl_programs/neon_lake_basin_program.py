@@ -449,7 +449,10 @@ vec4 sceneEmission(vec3 rgb) { return vec4(rgb, dot(rgb, vec3(0.2126,0.7152,0.07
 // up the dry bank): the bank distance across open water, the shoreline contour on land. Derivatives come from
 // the caller, taken in uniform control flow.
 float basinShorePixels(bool water,vec2 uv,float curved,vec2 uvPerPixel,float curvedPerPixel) {
-    if (water) return basinBankDistance(uv)/max(length(uvPerPixel),1e-6);
+    // Open water reads the bilinear cached bank distance alone: the exact near-bank refinement measures to
+    // square control cells and would print their staircase into a soft glow.
+    if (water) return sceneHeightfieldBankDistance(uTerrain,uTerrainSize,basinGrid(uv))/uTerrainGrid.z
+                      /max(length(uvPerPixel),1e-6);
     return (BASIN_SHORE_HEIGHT-curved)/max(curvedPerPixel,0.0001);
 }
 // The glitter path: broken bright streaks on the water in a column under the body on screen, widening and
@@ -520,7 +523,10 @@ void main() {
         vec3 palette=pointColour.rgb;
         float gain=water ? 0.65+0.4*vCrest : 0.65+vEnergy*clamp(base+0.15,0.0,1.0);
         // Marks belong to the land: a shining water surface replaces them (crests keep their curves).
-        if (water) coverage*=1.0-smoothstep(0.0,0.6,uWaterShine);
+        // The wet fringe below the visible shoreline is water too: without this its marks stood in a
+        // staircase of square control cells along every shining shore.
+        float wetMark=water ? 1.0 : (basinOutside(vUv)<1e-6 ? 1.0-smoothstep(0.0,BASIN_SHORE_HEIGHT,vCurvedBase) : 0.0);
+        coverage*=1.0-smoothstep(0.0,0.6,uWaterShine)*wetMark;
         if (uPass==0) coverage*=uReflection*0.55*exp(-abs(vWorld.y)*1.5)*(1.0-0.6*uWaterShine)
                            *smoothstep(-0.5,0.6,sin(reflectionPlane.z*95.0+uTime*0.4));
         float alpha=coverage*pointColour.a*distanceFade*detailFade;
@@ -615,7 +621,10 @@ void main() {
     // Water reads as water whatever the land's surface style: a tinted body under a rippled mirror of
     // the real sky (Fresnel: dark looking down, bright at grazing angles). The Sun/Moon at infinity
     // appear in it as a natural glint. Land keeps its own material.
-    if (water && uWaterShine>0.0) {
+    // The wet fringe below the visible shoreline shines as water too (a dark mirror stopping at the square
+    // control cells drew their staircase inside every gentle shore).
+    float wetness=water ? 1.0 : wetShore;
+    if (wetness>0.0 && uWaterShine>0.0) {
         vec2 rp=vWorld.xz*vec2(9.0,13.0)+vec2(uTime*0.35,-uTime*0.27);
         vec3 ripple=vec3(sin(rp.x)+0.5*sin(rp.y*1.7),0.0,cos(rp.y)+0.5*cos(rp.x*1.3));
         vec3 wn=normalize(n+0.1*uWaterDetail*ripple);      // Water Detail 0: a still mirror
@@ -627,9 +636,9 @@ void main() {
         vec3 surface=mix(depthTint,sky*1.25,clamp(fresnel*(0.35+0.65*uWaterShine),0.0,1.0));
         // A passing wave lifts the body itself, not only its crest lines, so music moves the water.
         surface+=palette*smoothstep(0.15,1.6,crest)*0.45;
-        fill=mix(fill,surface,uWaterShine);
-        fillAlpha=max(fillAlpha,uWaterShine*(0.6+0.4*fresnel));
-        shineEmission=sky*fresnel*uWaterShine*0.35;
+        fill=mix(fill,surface,uWaterShine*wetness);
+        fillAlpha=max(fillAlpha,uWaterShine*wetness*(0.6+0.4*fresnel));
+        shineEmission=sky*fresnel*uWaterShine*wetness*0.35;
     }
     // The same continuous surface settles into opaque atmospheric land at
     // its far horizon. Keep depth/coverage while fading detail and glow.
@@ -665,9 +674,9 @@ void main() {
     // Sun/Moon path: glittering streaks on the water under the body, brightening with the halo's music.
     float glintLight=0.0;
     vec3 glintColour=mix(bodyColour.rgb,vec3(1.0),0.35);
-    if (water && uWaterGlint>0.0 && uSunEnabled==1) {
+    if (wetness>0.0 && uWaterGlint>0.0 && uSunEnabled==1) {
         float gain=uGlintLight.x>0.0 ? basinCelestialHaloGain(uGlintLight.xy,uGlintLight.z,uGlintLight.w) : 1.0;
-        glintLight=uWaterGlint*basinWaterGlint(vWorld,depthPerPixel)*(0.55+0.45*gain)*bodyColour.a;
+        glintLight=uWaterGlint*wetness*basinWaterGlint(vWorld,depthPerPixel)*(0.55+0.45*gain)*bodyColour.a;
         float glintAlpha=clamp(glintLight,0.0,1.0);
         premult=premult*(1.0-glintAlpha)+glintColour*glintAlpha;
         alpha=alpha*(1.0-glintAlpha)+glintAlpha;
@@ -707,7 +716,12 @@ void main() {
     // Near ridges draw thicker with Depth Scale, like the marks on the same land.
     float width=mix(1.8,uHorizonThickness,smoothstep(0.0,0.25,basinOutside(aUv)))*basinDepthGrowth(clip.w);
     clip.y+=uOutlineLiftNdc*width*clip.w;
-    clip.z+=0.0012*clip.w; // farther than the same real surface, never internal paint
+    // Farther than the same real surface, never internal paint: a fixed NDC offset, or 2% of the view
+    // distance where that is more (near land, whose NDC depth changes fast, otherwise let the lifted copy
+    // paint over its own face).
+    float farPlane=basinFar();
+    float farther=clip.w*((farPlane+BASIN_NEAR)-2.0*farPlane*BASIN_NEAR/(1.02*max(clip.w,1e-4)))/(farPlane-BASIN_NEAR);
+    clip.z=max(clip.z+0.0012*clip.w,farther);
     gl_Position=clip;
     vUv=aUv;
     vTerrainBase=base;
@@ -715,6 +729,9 @@ void main() {
     // share its outer coverage: resurrecting faded mesh with a distant
     // radiance floor drew disconnected straight stripes above the horizon.
     vContourFade=basinDistanceFade(aUv);
+    // Land right at the eye has no skyline: a ridge crossing the near plane drew one smeared bar.
+    // Its fixed depth offset is too small for a slope that close, so the lifted copy also painted over it.
+    vContourFade*=smoothstep(0.4,1.0,clip.w);
 }
 """
 )
