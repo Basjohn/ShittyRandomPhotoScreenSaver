@@ -71,6 +71,7 @@ DEVCURVE_SWELL_ACCENT_FLOOR = 0.04
 DEVCURVE_SWELL_GAIN = 70.0            # injected energy per (lane excess x second): a strong hit ~1
 DEVCURVE_SWELL_DEPTH = 1.0            # envelope gain of a full swell at Swell Strength 1
 DEVCURVE_SWELL_SATURATION = 1.2
+_SWELL_BIRTH = np.exp(-0.5 * ((DEVCURVE_SWELL_GRID - DEVCURVE_SWELL_ORIGIN) / DEVCURVE_SWELL_SIGMA) ** 2)
 DEVCURVE_SWELL_SOURCES = {"bass": ("bass",), "vocals": ("mid", "high"), "mids": ("mid",), "transients": ("bass",)}
 # Flow rule: for y = c(x) g(x) the envelope may deepen the carrier's curvature but never reverse
 # it: |g'|/g <= SLOPE k and |g''|/g <= CURVE k^2, k the shortest reactive carrier's wavenumber
@@ -132,6 +133,13 @@ def _reaction_top(value: float) -> float:
     return DEVCURVE_REACTION_KNEE + DEVCURVE_REACTION_ROOM * (
         1.0 - math.exp(-(value - DEVCURVE_REACTION_KNEE) / DEVCURVE_REACTION_ROOM)
     )
+
+
+def _reaction_top_array(values: np.ndarray) -> np.ndarray:
+    """``_reaction_top`` element-wise (identical arithmetic)."""
+    over = np.maximum(values - DEVCURVE_REACTION_KNEE, 0.0)
+    eased = DEVCURVE_REACTION_KNEE + DEVCURVE_REACTION_ROOM * (1.0 - np.exp(-over / DEVCURVE_REACTION_ROOM))
+    return np.where(values <= DEVCURVE_REACTION_KNEE, values, eased)
 
 
 def _uniform_gradient(f: np.ndarray, spacing: float) -> np.ndarray:
@@ -409,9 +417,9 @@ def _layer_levels(eb, transient_bus, loudness: float) -> Dict[str, float]:
 
 
 def _advance_swell(state: "DevCurveRuntimeState", key: str, *, dt: float, accent: float,
-                   speed: float, strength: float) -> np.ndarray:
+                   speed: float, strength: float) -> np.ndarray | None:
     """Inject, carry and fade one layer's travelling energy; return its flow-bounded envelope
-    on DEVCURVE_SWELL_GRID (1 where no swell is)."""
+    on DEVCURVE_SWELL_GRID, or None while no swell exists (the envelope would be 1 everywhere)."""
     mean = state.accent_mean[key]
     excess = max(0.0, accent - mean - DEVCURVE_SWELL_ACCENT_FLOOR)
     state.accent_mean[key] = mean + (accent - mean) * (1.0 - math.exp(-dt / DEVCURVE_SWELL_ACCENT_S))
@@ -428,8 +436,11 @@ def _advance_swell(state: "DevCurveRuntimeState", key: str, *, dt: float, accent
             swell[:] = np.interp(DEVCURVE_SWELL_GRID + shift, DEVCURVE_SWELL_GRID, swell, left=0.0, right=0.0)
         swell *= math.exp(-dt / DEVCURVE_SWELL_FADE_S)
         if release > 0.0:
-            swell += release * np.exp(-0.5 * ((DEVCURVE_SWELL_GRID - DEVCURVE_SWELL_ORIGIN) / DEVCURVE_SWELL_SIGMA) ** 2)
+            swell += release * _SWELL_BIRTH
         swell[swell < 1e-7] = 0.0
+    if strength <= 0.0 or not swell.any():
+        state.flow_share[key] = min(1.0, state.flow_share[key] + DEVCURVE_FLOW_SHARE_RISE * dt)
+        return None
     envelope = strength * DEVCURVE_SWELL_DEPTH * DEVCURVE_SWELL_SATURATION * np.tanh(swell / DEVCURVE_SWELL_SATURATION)
     share = min(flow_share(envelope), state.flow_share[key] + DEVCURVE_FLOW_SHARE_RISE * dt)
     state.flow_share[key] = share
@@ -483,18 +494,21 @@ def _build_curve(
     center_shift = 0.0
     base_bias = 0.0
     top_soft = 0.95
+    # The per-layer phase offsets depend only on the seed: computed once per curve, not per sample
+    # (identical values; ~2300 fewer calls a tick).
+    r1, r2, r3, r4, r5 = (_phase_rand(seed, k) for k in range(1, 6))
     for i in range(sample_count):
         x = i / max(1, sample_count - 1)
         p = _clamp(profile[i], 0.0, 1.0)
         # Author nodes define the pre-energy resting contour; base_level acts
         # as a global vertical bias around that authored shape.
         base = _clamp(p + base_bias + offset + center_shift, 0.02, 0.98)
-        w1 = math.sin((x * 2.0 + phase * idle_speed * 0.28) * math.tau + _phase_rand(seed, 1))
-        w2 = math.sin((x * 3.4 + phase * idle_speed * 0.17) * math.tau + _phase_rand(seed, 2))
-        w3 = math.sin((x * 5.1 + phase * idle_speed * 0.11) * math.tau + _phase_rand(seed, 3))
+        w1 = math.sin((x * 2.0 + phase * idle_speed * 0.28) * math.tau + r1)
+        w2 = math.sin((x * 3.4 + phase * idle_speed * 0.17) * math.tau + r2)
+        w3 = math.sin((x * 5.1 + phase * idle_speed * 0.11) * math.tau + r3)
         idle_wave = (w1 * 0.52 + w2 * 0.31 + w3 * 0.17)
-        ar1 = math.sin((x * 1.35 + reactive_phase * 0.23) * math.tau + _phase_rand(seed, 4))
-        ar2 = math.sin((x * 2.75 + reactive_phase * 0.18) * math.tau + _phase_rand(seed, 5))
+        ar1 = math.sin((x * 1.35 + reactive_phase * 0.23) * math.tau + r4)
+        ar2 = math.sin((x * 2.75 + reactive_phase * 0.18) * math.tau + r5)
         reactive_wave = ar1 * 0.64 + ar2 * 0.36
         y = base + idle_wave * amp_idle + reactive_wave * amp_reactive * reactive[i] * (0.55 + p * 0.45)
         if y > top_soft:
@@ -593,10 +607,14 @@ def solve_devcurve_frame(
         sources = DEVCURVE_SWELL_SOURCES[key]
         accent = sum(_lane(transient_bus, lane) for lane in sources) / len(sources) if playing and enabled else 0.0
         envelope = _advance_swell(state, key, dt=dt, accent=accent, speed=swell_speed, strength=swell_strength)
-        gain = np.interp(_SAMPLE_XS, DEVCURVE_SWELL_GRID, envelope)
-        swell_peaks[key] = float(gain.max() - 1.0)
         drive = state.drive[key] if enabled else 0.0
-        reactive = [_reaction_top(drive * g) for g in gain.tolist()]
+        if envelope is None:
+            swell_peaks[key] = 0.0
+            reactive = [_reaction_top(drive)] * DEVCURVE_SAMPLE_COUNT
+        else:
+            gain = np.interp(_SAMPLE_XS, DEVCURVE_SWELL_GRID, envelope)
+            swell_peaks[key] = float(gain.max() - 1.0)
+            reactive = _reaction_top_array(drive * gain).tolist()
         nodes = layer_shape_nodes[key]
         if len(nodes) < 2:
             raise ValueError(f"DevCurve layer {key!r} requires resolved shape nodes")
