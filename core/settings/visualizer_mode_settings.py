@@ -1930,6 +1930,18 @@ def _waveform_ribbon() -> ModeSettings:
                              decimals=4 if key=='fog_density' else 2,
                              tooltip='Quiet → peak '+label.lower()+'.'))
     entries.extend((Colour(prefix+'floor_tint','Surface Tint:','Floor Surface Tint',bucket='floor',alpha=False),
+                    Slider(prefix+'floor_glow_limit','Reflection Ceiling:',.02,2.,bucket='floor',decimals=2,
+                           tooltip='Strong reflected light eases toward this level, so bright scenes keep coloured '
+                                   'reflections under the ribbons instead of flooding the floor.'),
+                    Slider(prefix+'floor_contrast','Reflection Contrast:',.5,8.,bucket='floor',
+                           tooltip='Reflected light below this multiple of the scene\'s average fades away, leaving '
+                                   'dark wet ground between the brightest reflections.'),
+                    Slider(prefix+'floor_colour','Reflection Colour:',0.,4.,bucket='floor',
+                           tooltip='How strongly reflections keep the ribbons\' own hue (1 as reflected).'),
+                    Slider(prefix+'floor_light_reach','Light Reach:',2.,200.,bucket='floor',scale=1,decimals=0,
+                           tooltip='How far the ribbons light the concrete before it falls into darkness.'),
+                    Slider(prefix+'floor_light_far','Far Surface Level:',0.,1.,bucket='floor',
+                           tooltip='Concrete brightness far from the ribbons, as a share of its lit level.'),
                     Slider(prefix+'exposure','Exposure:',.2,2.,bucket='lens'),
                     Slider(prefix+'gradient_share','Sheet Gradient:',0.,1.,bucket='colour'),
                     Slider(prefix+'mist_gradient_share','Mist Gradient:',0.,1.,bucket='colour'),

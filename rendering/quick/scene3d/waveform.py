@@ -399,7 +399,7 @@ class WaveformScene:
                  'uViewport', 'uBackdrop', 'uAmbient', 'uFloor', 'uFloorTone', 'uRipple', 'uEye',
                  'uForward', 'uOrthographic', 'uMist', 'uMistShape', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange',
                  'uStreak', 'uHot', 'uBodyField', 'uBodySpan', 'uBodyShape', 'uPool', 'uColumn', 'uSpecMode',
-                 'uSpecular', 'uFloorTint', 'uMaterial', 'uMaterialShape', 'uReflectionHue')
+                 'uSpecular', 'uFloorTint', 'uMaterial', 'uMaterialShape', 'uReflectionHue', 'uBound')
         u = self.resources.uniforms('floor', names, required=False)
         gl.glUseProgram(program)
         inverse=np.linalg.inv(np.asarray(mvp,float).reshape(4,4,order='F'))
@@ -416,6 +416,7 @@ class WaveformScene:
         gl.glUniform1f(u['uPool'],floor.pool if lit else 0.)
         gl.glUniform3f(u['uColumn'],*floor.column)
         gl.glUniform1f(u['uReflectionHue'], floor.hue)
+        gl.glUniform3f(u['uBound'], floor.glow_limit, floor.light_reach, floor.light_far)
         if lit:self._field_uniforms(program)
         gl.glUniform4f(u['uStreak'], floor.streak_length, floor.streak[1], floor.streak[2], 8.)
         gl.glUniform4f(u['uMaterial'], floor.contrast, floor.shading, floor.breakup, floor.pool_spread)

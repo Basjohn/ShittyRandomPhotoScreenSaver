@@ -161,6 +161,11 @@ class OffscreenRenderTarget:
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self.fbo)
         gl.glViewport(0, 0, self.width, self.height)
         gl.glDisable(gl.GL_SCISSOR_TEST)
+        # glClear honours the write masks. A caller's render may end with depth or colour writes off, and on this
+        # driver a newly created context can start with the previous context's masks, so a clear under them left
+        # stale depth that rejected every later fragment. Clearing the target means establishing its masks first.
+        gl.glDepthMask(gl.GL_TRUE)
+        gl.glColorMask(gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)
         gl.glClearColor(*clear)
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
 
