@@ -28,8 +28,45 @@ ROOT = Path(__file__).resolve().parents[2]
 CLIP_SECONDS = 30.0
 
 
+# The shipped clips (``tools/build_studio_clips.py``): short compact windows of three recordings, read only
+# when a Studio lists or loads its recorded music, never by Settings.
+SHIPPED_CLIPS = ROOT / "assets" / "production" / "studio_clips"
+_shipped_cache: dict = {}
+
+
+def shipped_clips(directory: Path | None = None) -> tuple:
+    """The shipped recorded-music fixtures (manifest order), as ``StudioFixture``s whose description is the path."""
+    from ui.studio.adapter import RECORDED, StudioFixture
+    folder = Path(directory) if directory is not None else SHIPPED_CLIPS
+    key = str(folder)
+    if key not in _shipped_cache:
+        try:
+            manifest = json.loads((folder / "clips.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            manifest = {"clips": []}
+        _shipped_cache[key] = tuple(
+            StudioFixture("clip:" + entry["id"], entry["label"], RECORDED, 0.0, str(folder / entry["file"]))
+            for entry in manifest.get("clips", ()) if (folder / entry["file"]).is_file())
+    return _shipped_cache[key]
+
+
+def studio_clips(recordings: Path | None = None) -> tuple:
+    """Every Studio's recorded-music list: the shipped clips first (the default source, identical in a frozen
+    build and a checkout), then a source checkout's own native-PCM recordings, if it has any."""
+    from ui.studio.adapter import RECORDED, StudioFixture
+    clips = shipped_clips()
+    if recordings is None or frozen_build() or not Path(recordings).is_dir():
+        return clips
+    return clips + tuple(StudioFixture("clip:" + path.stem, path.stem.replace("_", " ").title(), RECORDED, 0.0,
+                                       str(path)) for path in sorted(Path(recordings).glob("*.jsonl"))
+                         if has_native_history(path))
+
+
 def has_native_history(path: str | Path) -> bool:
-    """Waveform replay needs native PCM history on every frame; older recordings carry none."""
+    """Waveform replay needs native PCM history on every frame; older recordings carry none (compact clips
+    always do)."""
+    if Path(path).suffix.lower() == ".srclip":
+        return Path(path).is_file()
     try:
         with open(path, "rb") as stream:
             return b'"capture_history":{' in stream.read(4096)
@@ -39,7 +76,7 @@ def has_native_history(path: str | Path) -> bool:
 
 def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: float | None = None) -> dict:
     from PySide6.QtGui import QGuiApplication
-    from widgets.spotify_visualizer.feature_frame import load_jsonl
+    from widgets.spotify_visualizer.compact_clip import load_feature_clip
     from widgets.spotify_visualizer.feature_replay import (
         PcmReanalysis, ReplayBeatEngine, configure_offline_controller, deterministic_clock,
     )
@@ -51,7 +88,7 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
         # Never create the process's application as a side effect: a QGuiApplication made here would
         # become the only application, and a later QWidget (Settings) then aborts the process.
         raise RuntimeError("extract() needs an existing QGuiApplication (main() creates one)")
-    clip = load_jsonl(clip_path)
+    clip = load_feature_clip(clip_path)
     origin_us = clip.frames[0].timestamp_us
     frames = [f for f in clip.frames if seconds is None or (f.timestamp_us - origin_us) / 1e6 <= seconds]
     records: list[dict] = []
@@ -117,6 +154,31 @@ def frozen_build() -> bool:
     return bool(getattr(sys, "frozen", False)) or "__compiled__" in globals()
 
 
+# A frozen build has no ``python -m``: the app executable runs the worker when its first argument is this flag
+# (``main.main`` -> ``run_frozen_worker``). Only the Studios' recorded-input workers can be named.
+WORKER_FLAG = "--studio-clip-worker"
+
+
+def worker_command(module: str, arguments: list[str]) -> tuple[str, list[str]]:
+    if frozen_build():
+        return sys.executable, [WORKER_FLAG, module, *arguments]
+    return sys.executable, ["-m", module, *arguments]
+
+
+def run_frozen_worker(argv: list[str]) -> int | None:
+    """``argv`` = ``[exe, WORKER_FLAG, module, clip, settings, output, seconds, ...]`` -> the worker's exit code,
+    or None when this process is not a Studio clip worker. Trailing arguments (an entry point's injected mode
+    switch) are ignored."""
+    if len(argv) < 7 or argv[1] != WORKER_FLAG:
+        return None
+    module = str(argv[2])
+    if not (module.startswith("ui.studio.") and module.endswith("_recorded_inputs")
+            and module.replace(".", "").replace("_", "").isalnum()):
+        return 2
+    import importlib
+    return int(importlib.import_module(module).main(list(argv[3:7])))
+
+
 _CANCELLED: set = set()
 
 
@@ -146,8 +208,8 @@ class ClipLoadJob:
         process.errorOccurred.connect(self._on_error)
         self._process = process
         self._convert = convert or to_inputs
-        process.start(sys.executable, ["-m", module, clip.description,
-                                       str(self._settings_path), str(self._output_path), str(CLIP_SECONDS)])
+        process.start(*worker_command(module, [clip.description, str(self._settings_path),
+                                               str(self._output_path), str(CLIP_SECONDS)]))
         self._replace = replace
 
     def _complete(self, result=None, error: str = "") -> None:

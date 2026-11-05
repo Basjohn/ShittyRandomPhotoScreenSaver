@@ -612,6 +612,8 @@ Permanent shared-mode work must preserve source freshness, authored logical cade
 
 **Preserve the operator's real-music reactivity corpus and its test route.** The canonical operator-authored schema-2 recordings live **only on the local Windows checkout** at `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings` (repository-relative `logs/visualizer_recordings/`): `balanced.jsonl`, `heavy1.jsonl`, `quiet_intro.jsonl`, and `quiet_intro2.jsonl`. This local path and these recordings are a standing part of reactivity evaluation; do **not** delete their mention when updating this guide, silently replace them with synthetic clips, or expect normal Godzips to contain them. `tools.visualizer_replay.record.recorded_clips()` selects the active takes and deliberately ignores archived/derived `*_vN` and `*_noevents` takes. Do not alter, re-record, delete or reseed operator recordings as a byproduct of tests.
 
+**The Visualizer Studios ship three short clips of that corpus.** `assets/production/studio_clips` (Rag Doll, Human, Growing Pains: 12 s windows of three native-PCM recordings, compact `.srclip` form owned by `widgets/spotify_visualizer/compact_clip.py`) are what every Studio lists first and defaults to, in a checkout and a frozen build alike; a checkout's own recordings follow them. Rebuild or verify them with `.venv\Scripts\python.exe tools\build_studio_clips.py [--check]` (provenance in `clips.json`). `tests/test_studio_shipped_clips.py` proves the size budget, that each clip replays through the production Waveform analysis to its source window's drive sequence (skipped where the recording is absent), the lookup with no recordings folder, the frozen clip worker (`main.py --studio-clip-worker`) and that Settings never reads the clips.
+
 **Local-agent replay route (run from the operator's Windows checkout, not this archive):**
 
 ```powershell
@@ -709,6 +711,37 @@ User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runti
   `tests/test_sphere_render_authoring.py` — consumed technical ownership, RAW startup/Custom/SST promotion, real PCM analysis
   and GL proof for direct alpha plus Rainbow speed/extent;
 - `tests/test_gl_error_policy.py` — per-call PyOpenGL error checking off at every entry, one check per node frame.
+
+**Waveform reaction gates** (`core/waveform_ribbon_dynamics.py`; contract in
+`Docs/Reference/Waveform_Ribbon_Migration_Plan.md` → Current reaction model). All use test-owned controls and assert
+structure, never authored values:
+
+- `tests/test_waveform_energy_pulse.py`, `tests/test_waveform_reaction_modes.py` — the travelling pulse, every Reaction
+  Mode and the flow rule (no curvature reversal, no inward bend, along-curve surge only);
+- `tests/test_waveform_pulse_coupling.py` — saturation, swell-carried particles within Spark Count headroom, restrained
+  strands;
+- `tests/test_waveform_no_twitch.py` — velocity-continuous body motion on strong beats with the production constants;
+- `tests/test_waveform_trough_clearance.py` — the floor is never hit and the floor rule only lifts a ribbon as a whole;
+- `tests/test_waveform_dynamic_zoom.py`, `tests/test_waveform_ribbon_dynamics.py`, `tests/test_waveform_ribbon_ranges.py`.
+
+These establish mechanisms only; musical feel and visual acceptance stay in `Current_Plan.md` §7.1.
+
+**Visualizer Studio** (`ui/studio/`; contract in `Docs/Reference/Visualizer_Studio.md`). Nothing shows a window: the
+shell renders through `OffscreenStudioSurface` and Settings dialogs are never shown.
+
+- `tests/test_waveform_studio_session.py` — hydrate/preview/commit/undo/redo/dirty against test-owned stores;
+- `tests/test_waveform_studio_evaluator.py` — same inputs and times give byte-identical packets to the production path;
+- `tests/test_waveform_studio_lifecycle.py` — Studio ↔ Settings on a real VisualizersTab: conceal after first frame,
+  canonical save, reveal of the same window on every exit path;
+- `tests/test_waveform_studio_parity.py` — the Studio covers everything the retired Waveform builder built, derived
+  from the canonical registries;
+- `tests/test_waveform_studio_framing.py` — the Studio opens on the live card's world (Fill), measured as production
+  measures it;
+- `tests/test_waveform_studio_editors.py`, `tests/test_waveform_studio_theme.py` — direct editors, handles, tiles,
+  cards; theme-derived chrome contrast in every shipped theme;
+- `tests/test_waveform_studio_second_mode.py` — the framework driven by a tiny test-only mode (reuse contract);
+- one adapter test per registered Studio mode (for example `tests/test_extruded_bubble_studio.py`): registry
+  coverage, production-parity preview, handles and Settings round trip.
 
 Cost: `tools/visualizer_cost_probe.py` (one mode) and `tools/overhead_baseline.py` (everything): offscreen, production host, control-relative GPU/CPU, GL and Python call counts and recorded system conditions; how to run and read them and the expected results are in `Docs/Reference/Benchmarks.md`.
 

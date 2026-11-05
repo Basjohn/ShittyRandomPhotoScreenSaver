@@ -663,14 +663,11 @@ class BubbleStudioAdapter(StudioModeAdapter):
         return "mid"
 
     def recorded_clips(self) -> tuple[StudioFixture, ...]:
-        """The Studios' shared recordings (Bubble replays their recorded post-DSP Bubble lane and typed events)."""
+        """The Studios' shared recorded music: the shipped clips (Rag Doll, Human, Growing Pains), then a checkout's
+        native-PCM recordings (Bubble replays the production Bubble lane and typed events from their PCM)."""
         from ui.studio.waveform_adapter import recordings_directory
-        from ui.studio.waveform_recorded_inputs import frozen_build
-        directory = recordings_directory()
-        if frozen_build() or not directory.is_dir():
-            return ()
-        return tuple(StudioFixture("clip:" + path.stem, path.stem.replace("_", " ").title(), RECORDED, 0.0,
-                                   str(path)) for path in sorted(directory.glob("*.jsonl")))
+        from ui.studio.waveform_recorded_inputs import studio_clips
+        return studio_clips(recordings_directory())
 
     # Analysed clips for this process, keyed by clip: the recorded ticks do not depend on Bubble's controls.
     _clip_cache: dict = {}
