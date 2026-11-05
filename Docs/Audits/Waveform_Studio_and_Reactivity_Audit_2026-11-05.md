@@ -92,6 +92,35 @@ Against `references/Preset3Goal1.png`, `Preset3ReactivityGoalExample.png`, `Mist
 - **Reuse for 3D modes:** shell, viewport host, gesture binding, transport, response curve, gradient strip and
   lifetime timeline are mode-neutral; a mode contributes an adapter (schema, evaluator, fixtures, scene selection).
 
+### Studio viewport decision
+
+Chosen: **(a) a Studio-owned inline `QSGRenderNode`** (`ui/studio/viewport.py`) whose render-thread renderer is
+the mode adapter's; for Waveform that renderer wraps the production `QuickWaveformRibbonRenderer` (its own
+`WaveformScene`) and is fed a `WaveformRibbonFrame` built exactly as `capture_waveform_ribbon` builds it, from the
+Studio's own `WaveformRibbonFrameRuntime`/`WaveformDynamics`. This supersedes the "offscreen target + present as
+texture / readback" first slice above.
+
+- **Why not (b) the production `VisualizerRenderItem`:** it is bound to a `VisualizerSnapshotBridge`, runtime
+  identities, `ResolvedVisualizerPresentation` card shell/clip SDF and mode registry resolution. A Studio bridge
+  would have to forge runtime identities and presentation for a non-runtime surface; the render node, mode
+  renderer and `WaveformScene` are the parts that carry visual truth, and (a) reuses exactly those.
+- **Why not `QQuickFramebufferObject`:** an extra FBO + texture node and a copy per frame; the production scene
+  already renders into its own scene target and composites through the item quad, so it can draw inline.
+- **No readback, no rebuild per edit:** pixels go straight to the window framebuffer. The GUI thread evaluates at
+  most once per Quick frame (`afterAnimating`), only when an edit, scrub or playback moved; a live drag
+  re-publishes the current instant (dt = 0) and the gesture end replays exactly. Renderer resources live across
+  edits; GL is released on `sceneGraphInvalidated` / node release with the scene-graph context current.
+- **Measured** (`tools/waveform_studio_capture.py`, hidden `QQuickRenderControl`, 1600×900, Preset 3, Peak fixture,
+  this workstation, system load not controlled, glFinish per frame, playing): whole Studio frame p50 17.0 ms /
+  p90 19.9 ms (QML shell + production scene + one logical step); one logical evaluation step p50 2.9 ms /
+  p90 6.5 ms. Relative only: GPU timer queries and a no-scene control are still open. A backward scrub replays from
+  the fixture start (≈1.3 ms per logical step; a full 10 s synthetic fixture ≈0.9 s); forward scrubs are
+  incremental. The threaded visible window was not measured (no visible windows in probes).
+- **Settings concealment:** Settings lives inside `QDialog.exec()` in the runtime; `QDialog.hide()` would end that
+  loop and close Settings. The Studio conceals the same window natively (`ShowWindow(SW_HIDE)`) after the Studio's
+  first swapped frame and shows it again on every exit path; the Studio window is application-modal so the modal
+  Settings loop does not block it.
+
 ## 5. Decisions (what is superseded, and why)
 
 Checkpoint before these changes: commit `checkpoint: Waveform pre-Studio baseline` (pushed).
@@ -112,6 +141,18 @@ Checkpoint before these changes: commit `checkpoint: Waveform pre-Studio baselin
    only: `WaveformDynamics` holds a sustained-level follower (2.5 s up / 4 s down) and a zoom state (1.2 s out /
    7 s in, ±20%), frozen while `view_camera_operated`; `physical_view(zoom=)` scales the lens extents only. Off by
    default in every preset; tests in `tests/test_waveform_dynamic_zoom.py`.
+7. **Travelling energy pulse replaces the standing elastic bend (operator, 5 Nov).** The operator judged R1/R2 motion
+   "fundamentally wrong": reactions must feel like water waves, gentle but strong, always WITH the waveform's shape.
+   Root cause in source: Bend inflated a fixed spatial sine the travelling ribbon slid through. Alternatives weighed
+   (research: damped wave-equation height fields; Gaussian wavelet packets carrying `sin(kx-wt)`): both add their own
+   crest/trough oscillation on top of the ribbon, i.e. motion against its shape. Chosen: a travelling *envelope*
+   that multiplies the waveform's own displacement about its axis (sign never flips), plus width/light/colour.
+   Beats inject (typed hits + body-energy rises above 0.08), no steady baseline (it merged swells into a bulge);
+   dense rhythms form a moving swell train. Controls: direction, width, speed, colour shift, fade; Bend range =
+   Pulse Strength. Evidence: `pulse2_p3_ragdoll_20s/` and `strip_pulse2_t5.png` (125 ms steps).
+   Open operator options, not yet built: **Frozen past** (a passing swell leaves the parts it shaped holding their
+   colour/size/shape until the next swell arrives) and a **selectable reaction mode** if a second model reaches
+   comparable fidelity (Studio + presets). Neither is a reason to keep the rejected standing bend.
 5. **The Settings Custom body for Waveform** becomes the sparse Studio launcher (button + camera-save checkbox), per
    the pack. The rejected builder stays reachable only until the Studio covers every field (Advanced coverage gate).
 
