@@ -22,6 +22,11 @@ From Windows (no WSL, Hyper-V or Docker; needs only the GitHub CLI): `scripts\li
 runs `.github/workflows/linux-build.yml` on a GitHub Ubuntu runner and downloads the tarball. Until the workflow
 is on the default branch use `-Mode Tag` (temporary `linux-build/<timestamp>` tag, removed afterwards).
 
+Using it as a screensaver: Linux has no common screensaver API, so an idle daemon launches the saver and
+SRPSS exits on input as on Windows (verified headless). X11: `xset s 600` plus `xss-lock -- srpss /s &` in the
+session autostart. Wayland (sway, Hyprland, niri): `swayidle -w timeout 600 'srpss /s'` (or `hypridle`).
+GNOME and KDE lock screens are separate and unaffected.
+
 Linux data roots: settings/data/cache `~/.config/SRPSS`, curated presets/themes/sounds `~/.local/share/SRPSS`
 (installed by the product's `install.sh`), diagnostic logs `~/.local/state/SRPSS` (`core/platform_paths.py`).
 
@@ -80,7 +85,7 @@ Linux data roots: settings/data/cache `~/.config/SRPSS`, curated presets/themes/
 - [x] `tools/linux_build.py` / `scripts/linux/build.sh` product + `install.sh`; local build and `tools/linux_smoke_dist.py` pass.
 - [~] `.github/workflows/linux-build.yml`: awaiting its first GitHub run (operator: `-Mode Tag` or after merge).
 - [~] `scripts/linux/build_from_windows.ps1` (parses; guards verified). Awaiting a first operator run.
-- [ ] Optional idle activation (xscreensaver/`xss-lock` hook) so `/s` starts as a real screensaver.
+- [x] Idle activation documented (§0: `xss-lock` / `swayidle`); exit-on-input verified on Linux.
 
 ### Phase 6: keep up with the default branch
 

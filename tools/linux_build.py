@@ -154,6 +154,7 @@ Terminal=false
 EOF
 done
 echo "[INSTALL] Installed to $PREFIX; run 'srpss /c' for Settings or 'srpss /s' for the saver."
+echo "[INSTALL] As a screensaver: X11 'xss-lock -- srpss /s', Wayland 'swayidle -w timeout 600 \"srpss /s\"'."
 """
 
 
