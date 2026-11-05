@@ -1821,7 +1821,7 @@ def _waveform_ribbon() -> ModeSettings:
     buckets = tuple(Bucket(key,title,helper,advanced=advanced) for key,title,helper,advanced in (
         ('ribbons','Ribbons','Four retained ribbon identities, colours and character.',False),
         ('shape','Shape & Reactivity','Elastic body, local twisting and quiet to peak targets.',False),
-        ('pulse','Energy Pulse','Music sends swells travelling along the waveform, like waves on water.',False),
+        ('pulse','Reaction','How music swells the waveform, like waves on water: always with its own shape.',False),
         ('flow','Flow & Axial Roll','History travels steadily; axial roll turns the waveform like a skewer.',False),
         ('colour','Colour','Colour nodes and shifts in the most powerful musical regions.',False),
         ('surface','Sheet & Highlights','Silk, fine strands, glowing rims and localized dense highlights.',False),
@@ -1862,6 +1862,10 @@ def _waveform_ribbon() -> ModeSettings:
         ('release','Decay',.1,4.,'reaction'),('rotation_attack','Roll Attack',.01,.5,'flow'),
         ('rotation_release','Roll Decay',.1,6.,'flow'),('colour_threshold','Power Threshold',0.,.95,'colour')):
         entries.append(Slider(prefix+key,label+':',low,high,bucket=bucket,logical=True))
+    entries.append(Choice(prefix+'reaction_mode','Reaction Mode:',('Travelling Pulse','Frozen Past','Whole Swell','Group Wave'),
+        bucket='pulse',logical=True,tooltip='Travelling Pulse: swells travel along the waveform. Frozen Past: the parts a '
+        'swell shaped keep that look until the next swell reaches them. Whole Swell: the whole waveform swells at once '
+        '(ignores direction, width and speed). Group Wave: swells travel as groups that rise toward their leading edge.'))
     entries.append(Choice(prefix+'pulse_direction','Pulse Direction:',('Head To Tail','Tail To Head','Centre Out'),
         bucket='pulse',logical=True,tooltip='Where musical swells start and which way they travel.'))
     for key,label,low,high,tip in (

@@ -45,6 +45,7 @@
         "waveform_ribbon_dynamic_zoom": false,
         "waveform_ribbon_pulse_colour": 0.6,
         "waveform_ribbon_pulse_direction": "Head To Tail",
+        "waveform_ribbon_reaction_mode": "Travelling Pulse",
         "waveform_ribbon_pulse_fade": 4.0,
         "waveform_ribbon_pulse_particles": 0.6,
         "waveform_ribbon_pulse_saturation": 0.4,
