@@ -63,7 +63,9 @@ def main() -> int:
     parser.add_argument("--mode", default="/s", help="main.py mode argument: /s or /c")
     parser.add_argument("--seconds", type=int, default=20, help="run length; passed as --exit-after")
     parser.add_argument("--shots", default="", help="comma-separated seconds at which to grab the screen")
-    parser.add_argument("--images", type=int, default=8)
+    parser.add_argument("--images", type=int, default=8, help="synthetic image count (with --synthetic-images)")
+    parser.add_argument("--synthetic-images", action="store_true",
+                        help="generated gradients instead of the real repository artwork")
     parser.add_argument("--interval", type=int, default=5, help="rotation interval in seconds")
     parser.add_argument("--keep-widgets", action="store_true", help="do not disable network/credential widgets")
     parser.add_argument("--no-seed", action="store_true", help="reuse the work dir's existing profile untouched")
@@ -83,7 +85,10 @@ def main() -> int:
     app = None
     try:
         if not args.no_seed:
-            lh.generate_images(images, args.images)
+            if args.synthetic_images:
+                lh.generate_images(images, args.images)
+            else:
+                lh.copy_repo_images(images)
             lh.seed_profile(env, images, args.interval, () if args.keep_widgets else lh.DEFAULT_DISABLED_WIDGETS)
         command = [sys.executable, "main.py", args.mode, "--exit-after", str(args.seconds), *args.main_args]
         with (logs / "stdout.txt").open("w") as stdout:
