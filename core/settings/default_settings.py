@@ -972,6 +972,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'waveform_ribbon_auto_rotate': False,
                                     'waveform_ribbon_auto_rotate_after': 20.0,
                                     'waveform_ribbon_auto_rotate_speed': 6.0,
+                                    'waveform_ribbon_dynamic_zoom': False,
                                     'waveform_ribbon_bar_count': 32,
                                     'waveform_ribbon_bend': [0.4, 2.4],
                                     'waveform_ribbon_bloom': [0.14, 0.14],

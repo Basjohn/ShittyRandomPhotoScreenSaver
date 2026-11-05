@@ -442,6 +442,12 @@ def _motion(host: Any, mode_id: str) -> ViewOrbitMotion | None:
     return motion if motion is not None and motion.mode_id == mode_id else None
 
 
+def view_camera_operated(host: Any, mode_id: str) -> bool:
+    """Whether the user is moving ``mode_id``'s camera right now (held-key orbit or framed flight); read only."""
+    flight = getattr(host, _FLIGHT, None)
+    return _motion(host, mode_id) is not None or (isinstance(flight, FramedFlightMotion) and flight.mode_id == mode_id)
+
+
 def view_orbit_values(host: Any, mode_id: str, now: float | None = None) -> Dict[str, float]:
     """The live turn and tilt of ``mode_id``: the held-key motion's view at ``now`` if one is on,
     else the presentation state's settings."""

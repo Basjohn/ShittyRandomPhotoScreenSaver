@@ -108,6 +108,10 @@ Checkpoint before these changes: commit `checkpoint: Waveform pre-Studio baselin
    sweep carried by the ribbon rather than a stationary lump field.
 4. **Range-slider policy:** the design pack's control policy (§9) supersedes the 1 November "every pair is a range
    slider" rule for the authoring UI. Serialized `[low, high]` data is unchanged.
+6. **Opt-in Dynamic Zoom (operator request, 5 Nov)** supersedes "music never changes the lens" for that option
+   only: `WaveformDynamics` holds a sustained-level follower (2.5 s up / 4 s down) and a zoom state (1.2 s out /
+   7 s in, ±20%), frozen while `view_camera_operated`; `physical_view(zoom=)` scales the lens extents only. Off by
+   default in every preset; tests in `tests/test_waveform_dynamic_zoom.py`.
 5. **The Settings Custom body for Waveform** becomes the sparse Studio launcher (button + camera-save checkbox), per
    the pack. The rejected builder stays reachable only until the Studio covers every field (Advanced coverage gate).
 
