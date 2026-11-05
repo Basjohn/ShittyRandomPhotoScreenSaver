@@ -396,3 +396,50 @@ def test_a_half_faded_option_lies_between_off_and_on(render):
     assert ((half >= low - 1) & (half <= high + 1)).all()
     share = np.abs(half - off).sum() / np.abs(on - off).sum()
     assert 0.3 < share < 0.7
+
+
+# ------------------------------------------------------------------------------------------- cost at rest
+def test_the_renderer_fetches_every_decoration_input_it_resolves():
+    """At rest the renderer compares the raw decoration inputs fetched in one call (``_DECOR_SOURCES``): every
+    parameter the resolver reads must be in that fetch, or a change to it would go unseen."""
+    from rendering.quick.visualizer.implementations import spectrum as owner
+
+    class Recording(dict):
+        def __init__(self):
+            super().__init__()
+            self.read = set()
+
+        def __getitem__(self, key):
+            self.read.add(key)
+            if key.endswith("_color"):
+                return (10, 20, 30, 255)
+            if key == "spectrum_pattern_shown":
+                return SPECTRUM_PATTERNS[-1]                # a real pattern, so its mix and strength are read
+            if key == "spectrum_pattern_anchor_shown":
+                return SPECTRUM_PATTERN_ANCHORS[-1]
+            return 0.5
+
+    parameters = Recording()
+    owner.resolve_spectrum_decor_uniforms(parameters, 1.0)
+    assert parameters.read and parameters.read <= set(owner._DECOR_SOURCES)
+
+
+@pytest.mark.qt
+def test_unchanged_decoration_is_neither_resolved_nor_uploaded_again(render, monkeypatch):
+    """The options are default-off: a frame whose decoration inputs did not change costs one fetch and one
+    comparison, not a resolve; a changed input is resolved (negative control)."""
+    from rendering.quick.visualizer.implementations import spectrum as owner
+    calls = []
+    real = owner.resolve_spectrum_decor_uniforms
+
+    def counted(parameters, visual_scale):
+        calls.append(visual_scale)
+        return real(parameters, visual_scale)
+    monkeypatch.setattr(owner, "resolve_spectrum_decor_uniforms", counted)
+    render()
+    first = len(calls)
+    render()
+    render()
+    assert len(calls) == first                              # at rest: no resolve
+    render({"spectrum_gloss": 1.0})
+    assert len(calls) == first + 1                          # a change is seen

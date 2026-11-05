@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import operator
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -62,6 +63,18 @@ def resolve_spectrum_decor_uniforms(
         ("u_pattern_scale", "1f", (
             max(0.25, min(4.0, float(parameter(parameters, "spectrum_pattern_scale")))),)),
     )
+
+
+# Every frame parameter ``resolve_spectrum_decor_uniforms`` reads, fetched in ONE C call so a frame whose decoration
+# did not change costs no per-option Python work (the options are default-off; at rest they must cost nothing).
+_DECOR_SOURCES = (
+    "spectrum_ghost_custom_mix", "spectrum_ghost_color", "spectrum_ghost_gradient_mix", "spectrum_ghost_tip_color",
+    "spectrum_gloss", "spectrum_fill_gradient_mix", "spectrum_fill_tip_color", "spectrum_peak_caps_mix",
+    "spectrum_peak_cap_color", "spectrum_peak_cap_thickness", "spectrum_pattern_shown",
+    "spectrum_pattern_anchor_shown", "spectrum_pattern_mix", "spectrum_pattern_strength", "spectrum_pattern_color",
+    "spectrum_pattern_scale",
+)
+_decor_sources = operator.itemgetter(*_DECOR_SOURCES)
 
 
 _DECOR_UNIFORMS = (
@@ -167,6 +180,7 @@ class QuickSpectrumRenderer:
         self._uniforms: dict[str, int] = {}
         self._last_content_rotation_quarters: int | None = None
         self._last_decor: tuple | None = None
+        self._last_decor_inputs: tuple | None = None
 
     @property
     def has_resources(self) -> bool:
@@ -333,20 +347,27 @@ class QuickSpectrumRenderer:
         gl.glUniform1f(uniforms["u_bar_width_px"], layout.bar_width)
         gl.glUniform1f(uniforms["u_bar_gap_px"], layout.bar_gap)
         gl.glUniform1f(uniforms["u_bar_span_px"], layout.bar_span)
-        # Optional decoration: program state persists, so upload only when it changes (at rest: never).
-        decor = resolve_spectrum_decor_uniforms(
-            parameters, presentation.uniform_visual_scale,
-        )
-        if decor != self._last_decor:
-            for name, kind, values in decor:
-                location = uniforms[name]
-                if kind == "1f":
-                    gl.glUniform1f(location, *values)
-                elif kind == "1i":
-                    gl.glUniform1i(location, *values)
-                else:
-                    gl.glUniform4f(location, *values)
-            self._last_decor = decor
+        # Optional decoration: program state persists, so resolve and upload only when its inputs change (at rest:
+        # one C-level fetch and one tuple comparison). A missing key falls through to the resolver, which names it.
+        try:
+            inputs = (_decor_sources(parameters), presentation.uniform_visual_scale)
+        except KeyError:
+            inputs = None
+        if inputs is None or inputs != self._last_decor_inputs:
+            decor = resolve_spectrum_decor_uniforms(
+                parameters, presentation.uniform_visual_scale,
+            )
+            if decor != self._last_decor:
+                for name, kind, values in decor:
+                    location = uniforms[name]
+                    if kind == "1f":
+                        gl.glUniform1f(location, *values)
+                    elif kind == "1i":
+                        gl.glUniform1i(location, *values)
+                    else:
+                        gl.glUniform4f(location, *values)
+                self._last_decor = decor
+            self._last_decor_inputs = inputs
         playing_location = uniforms.get("u_playing", -1)
         if playing_location >= 0:
             gl.glUniform1i(playing_location, 1 if logical.playing else 0)
@@ -360,6 +381,7 @@ class QuickSpectrumRenderer:
         self._program = 0
         self._last_content_rotation_quarters = None
         self._last_decor = None
+        self._last_decor_inputs = None
         self._uniforms.clear()
 
     def _initialize(self) -> None:
