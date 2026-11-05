@@ -211,7 +211,7 @@ transition strip and `widget_clocks.png` byte-for-byte in effect (mean differenc
 still shows the menu's current Settings / Edit Widget Layout rows. The four rendered mode previews were stale against
 their modes' current look and were regenerated: Extruded Bubble (Ember Drift after the recovery), Extruded Spectrum
 (current first preset), Oscilloscope (trace under the card border) and Shockwave Grid (current terrain). Sheet-cut
-previews (other widgets; Spectrum, Sine Wave, Bubble, Dev Curve, Sphere) follow the operator's unchanged sheets and
+previews (other widgets; Spectrum, Bubble, Dev Curve, Sphere) follow the operator's unchanged sheets and
 were left as they are; refreshing them needs new operator screenshots.
 
 The build resource prerequisite checks the preview sources and operator-provided `ui/assets/onboarding/source/SRPSSWitch.png`,

@@ -26,6 +26,8 @@ No new bloom pass or texture format; no changed particle core size or per-sprite
 
 ### 3. SINE disabled, visibly and reversibly
 
+> **Superseded 2026-11-05:** the operator retired Sine outright. Code, presets, assets and tests were deleted; saved Sine state migrates through `core/settings/visualizer_retired_modes.py` (see Docs/Architecture/Persisted_Input_Compatibility.md, "Retired visualizer keys").
+
 SINE is **not deleted**. All renderer/runtime source, preset definitions, stored setting keys and older authored snapshots remain. The central mode gate denies product admission, cycling, selection and runtime logical activation; an old SINE-only saved configuration falls back to an available live mode. Settings mode navigation and its enable list show grey disabled `Sine Waves (Retiring)` controls. Guided Setup shows the same disabled unchecked option, not a silently missing entry. There is no checkbox path to enable it.
 
 This is a soft retirement and a future removal candidate. Do not refactor/delete dormant SINE components without a separate explicit task.

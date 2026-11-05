@@ -41,10 +41,9 @@ Transition and Visualizer availability is COMPLETELY configurable so you can dis
 ### Audio, media and visualizers
 
 - **Now-playing media widget:** Spotify/MusicBee/AppleMusic/Browser integration with artwork, playback information and optional media controls; MusicBee plugin information is available in Settings.
-- **Audio-reactive Beat Visualizer:** **8 registered modes** with mode-specific tuning, editable curated presets and a separate user-owned **Custom** state. Overly robust and feature filled af. Available modes include:
+- **Audio-reactive Beat Visualizer:** **registered modes** with mode-specific tuning, editable curated presets and a separate user-owned **Custom** state. Overly robust and feature filled af. Available modes include:
   - **Spectrum**
   - **Oscilloscope**
-  - **Sine Waves**
   - **Bubble**
   - **Spline Curve** (Dev Curve)
   - **Voxel Sphere** (3D)
