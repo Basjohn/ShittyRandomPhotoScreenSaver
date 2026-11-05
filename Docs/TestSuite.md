@@ -431,6 +431,13 @@ pytest path\to\test_file.py -q --tb=short
 
 Then widen to the maintained profile and installed/physical gates only when the change actually requires them.
 
+### 3.5.1 Linux
+
+The same tests run on Linux through `tools/linux_pytest.py` (private Xvfb display and the OpenGL 4.6 floor
+confined to the child; `--chunked …` drives `tests/run_chunked.py`). A test that pins a Windows contract opts
+into it with the `windows_platform` fixture or skips off Windows with a stated reason; rules in
+`Docs/Guardrails/Linux_Compatibility.md` §7, current triage in `Linux_Plan.md` §2 Phase 3.
+
 ### 3.6 Test-authority hygiene
 
 ```powershell
