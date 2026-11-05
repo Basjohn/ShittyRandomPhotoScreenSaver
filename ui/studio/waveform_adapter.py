@@ -79,14 +79,16 @@ _PRIORITY = {PREFIX + key: rank for rank, key in enumerate((
 # (both quiet and peak endpoints), clamped by the canonical ranges. Applying one replaces the previous
 # one (always from the opening values) and is a single undoable edit; "Original" restores them.
 _MATERIAL_SCALES = {
-    "sheen": {"material_body_alpha": .8, "material_fill_light": 1.4, "material_cross_curve": 1.2,
-              "material_glow": 1.0, "material_rim_light": 1.05},
-    "glass": {"material_body_alpha": .45, "material_rim_light": 1.35, "material_rim_glow_light": 1.3,
-              "material_fill_centre": .6, "material_glow": 1.2, "material_fill_light": .8},
-    "satin": {"material_body_alpha": 1.35, "material_fill_light": 1.2, "material_rim_light": .75,
-              "material_glint_light": .6, "material_glow": .8, "material_cross_curve": .8},
-    "crystal": {"material_glint_density": 1.6, "material_glint_light": 1.4, "material_rim_white": 1.5,
-                "material_strand_white": 1.4, "material_glow": 1.1, "material_body_alpha": .7},
+    # Wide enough to read as different materials at tile size (5 Nov: the first scales differed from Original by
+    # 1-9 grey levels on a 192x128 tile, Crystal/Sheen barely at all).
+    "sheen": {"material_body_alpha": .85, "material_fill_light": 1.9, "material_cross_curve": 1.6,
+              "material_glow": 1.1, "material_rim_light": .85, "material_glint_light": .6},
+    "glass": {"material_body_alpha": .25, "material_rim_light": 1.8, "material_rim_glow_light": 1.7,
+              "material_fill_centre": .35, "material_glow": 1.4, "material_fill_light": .55},
+    "satin": {"material_body_alpha": 1.8, "material_fill_light": 1.45, "material_rim_light": .5,
+              "material_glint_light": .25, "material_glow": .6, "material_cross_curve": .6},
+    "crystal": {"material_glint_density": 2.6, "material_glint_light": 2.3, "material_rim_white": 2.5,
+                "material_strand_white": 2.0, "material_glow": 1.25, "material_body_alpha": .5},
 }
 MATERIAL_PRESETS = (
     StudioPreset("original", "Original", "The material the Studio opened with.", ("#5b5f7a", "#9aa0c8")),
@@ -101,7 +103,7 @@ _CHOICE_NOTES = {PREFIX + "reaction_mode": {
     "Travelling Pulse": "Music launches swells that travel along the waveform like waves on water.",
     "Frozen Past": "Each passage leaves its peak swell held on the cloth, carried along with the history.",
     "Whole Swell": "The whole waveform rises and settles together; direction, width and speed do not apply.",
-    "Group Wave": "Crests rise toward a travelling group's leading edge and the cloth surges along its curve.",
+    "Group Wave": "Each swell arrives as a set: several crests lift together, leaning toward the front.",
 }}
 # Targets kept in data but no longer moving geometry (operator, 5 Nov): Advanced only, never in the tuner.
 _RETIRED_TARGETS = frozenset({"stretch"})
