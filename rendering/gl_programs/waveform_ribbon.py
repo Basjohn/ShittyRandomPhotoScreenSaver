@@ -1,6 +1,7 @@
 """Waveform infinite wet-floor material; no scene lifetime or simulation."""
 from rendering.gl_programs.mist import MIST_GLSL
 from rendering.gl_programs.reflection import PLANAR_REFLECTION_GLSL
+from rendering.gl_programs.ribbon import FLOOR_GIVE_GLSL
 from rendering.gl_programs.waveform_atmosphere import WORLD_FIELD_GLSL
 
 FLOOR_VERTEX = """#version 460 core
@@ -12,7 +13,11 @@ void main() { vFloorNdc=aPosition.xz*2.0-1.0; gl_Position=vec4(vFloorNdc,0.0,1.0
 # pixel lines can meet it before the arbitrary eye-reference plane or beyond the
 # actor far clip. Only this primitive clamps its projected depth; actors retain
 # their camera-owned raster interval; Perspective remains positive.
-FLOOR_WORLD_GLSL = """
+# With the floor's give on (opt-in) the ray continues past the plane to the yielding surface: it meets the plane first
+# and can reach the deepest possible dent (uFloorGive.z) no farther than that depth below it, so its first crossing
+# of the surface lies on that interval. A fixed march finds the first step below the surface and bisection refines it.
+# Coverage is unchanged (the same rays hit), and the depth is that of the dented point. Perspective only.
+FLOOR_WORLD_GLSL = FLOOR_GIVE_GLSL + """
 in vec2 vFloorNdc;
 uniform mat4 uMvp;
 uniform mat4 uFloorInverseMvp;
@@ -29,6 +34,24 @@ bool floorWorldHit(out vec3 world, out float depth) {
     if(uOrthographic!=1 && distance_<=0.0)return false;
     world=origin+direction*distance_;
     world.y=0.0;
+    if(uFloorGive.y>0.0) {
+        const int STEPS=24;
+        float near_=distance_,far_=distance_+uFloorGive.z/max(-direction.y,1e-4);
+        float above=near_,below=far_;
+        for(int i=1;i<STEPS;i++) {
+            float t=mix(near_,far_,float(i)/float(STEPS));
+            vec3 p=origin+direction*t;
+            if(p.y<=-floorGiveDepth(p.xz)) { below=t; break; }
+            above=t;
+        }
+        for(int i=0;i<8;i++) {
+            float t=0.5*(above+below);
+            vec3 p=origin+direction*t;
+            if(p.y<=-floorGiveDepth(p.xz)) below=t; else above=t;
+        }
+        world=origin+direction*below;
+        world.y=-floorGiveDepth(world.xz);
+    }
     vec4 clip=uMvp*vec4(world,1.0);
     // Strictly below the clear depth, so the far ground survives GL_LESS.
     depth=clamp(0.5*(clip.z/clip.w+1.0),0.0,uintBitsToFloat(0x3f7fffffu));
@@ -63,6 +86,7 @@ uniform vec3 uBound;        // reflected-light ceiling (linear luminance), surfa
 uniform int uSpecMode;      // reflection term: 0 inline, 1 write it alone (pre-pass), 2 read it from uSpecular
 uniform sampler2D uSpecular;
 uniform vec3 uForward;
+uniform vec2 uFloorGiveLook; // yielding floor: reflection reach (world), relief shading per unit tilt
 layout(location=0) out vec4 FragColor;
 layout(location=1) out vec4 Emission;
 """ + WORLD_FIELD_GLSL + MIST_GLSL + PLANAR_REFLECTION_GLSL + """
@@ -125,11 +149,25 @@ vec3 columnReflection(vec2 screenUv, vec2 offset, float halfLength, float across
     float strength=pow(moment/total,1.0/(COLUMN_POWER+1.0));
     return colour*strength/max(dot(colour,vec3(0.2126,0.7152,0.0722)),1e-6);
 }
+// The wet film follows the yielding floor: the reflected ray leaves the dented surface about its own normal, and the
+// planar reflection is read where the image of what that ray reaches (uFloorGiveLook.x along it) lies on screen. On
+// the undented plane this is exactly the pixel itself, so the dent bends the reflected column; it never shifts it.
+// Perspective only (the sole projection): the view ray runs from the eye.
+vec2 floorGiveReflection(vec3 world, vec3 normal) {
+    vec3 view=normalize(world-uEye);
+    vec3 target=world+reflect(view,normal)*uFloorGiveLook.x;
+    target.y=-target.y;
+    vec4 clip=uMvp*vec4(target,1.0);
+    if(clip.w<=1e-4) return vec2(0.0);
+    return clamp(clip.xy/clip.w*0.5+0.5-gl_FragCoord.xy/uViewport,vec2(-0.25),vec2(0.25));
+}
 void main() {
     vec3 vWorldPos;float groundDepth;
     if(!floorWorldHit(vWorldPos,groundDepth))discard;
     gl_FragDepth=groundDepth;
     if(uFlat==1) { FragColor=vec4(vec3(0.25),1.0); Emission=vec4(0.0); return; }
+    vec3 giveNormal=vec3(0.0,1.0,0.0);
+    if(uFloorGive.y>0.0) { vec2 g=floorGiveGradient(vWorldPos.xz); giveNormal=normalize(vec3(g.x,1.0,g.y)); }
     mat2 turn=mat2(0.6,-0.8,0.8,0.6);
     // The material is laid out elongated along world z: this camera looks along the ground at a few degrees, which
     // flattens isotropic concrete into hairline scanlines; elongated, its blotches and relief read at the
@@ -158,6 +196,7 @@ void main() {
     vec2 axes=vec2(dot(vec3(broad.x,0,broad.y),groundRight),dot(vec3(broad.x,0,broad.y),groundForward));
     vec2 fine=vec2(dot(vec3(micro.x,0,micro.y),groundRight),dot(vec3(micro.x,0,micro.y),groundForward));
     vec2 offset=axes*uRipple.x+fine*vec2(uRipple.y,uRipple.z);
+    if(uFloorGive.y>0.0) offset+=floorGiveReflection(vWorldPos,giveNormal);
     float roughness=mix(uStreak.y,uStreak.z,clamp(surfaceRoughness+length(broad)*uStreak.w,0.0,1.0));
     // Optical streak length is fixed in world units. A fixed UV length grew with
     // the edge-resize aperture and washed the same physical reflection away.
@@ -168,7 +207,7 @@ void main() {
     vec3 reflected=columnReflection(gl_FragCoord.xy/uViewport,offset,streak*roughness,
                                     exp2(mix(uReflectionLook.y,uReflectionLook.z,roughness)));
     vec3 view=uOrthographic==1?normalize(uForward):normalize(vWorldPos-uEye);
-    float cosine=clamp(abs(view.y),0.0,1.0);
+    float cosine=clamp(abs(uFloorGive.y>0.0?dot(view,giveNormal):view.y),0.0,1.0);
     float fresnel=uFloor.w+(1.0-uFloor.w)*pow(1.0-cosine,5.0);
     // A rough wet floor shows its hot light, not a dim copy of everything: reflected light below uHot.x falls
     // away quadratically, so columns stand over dark concrete. The wet film breaks them up gently (uHot.y).
@@ -216,6 +255,8 @@ void main() {
     // Relief shading: light arrives from beyond the sheets, so faces falling away from the eye catch it. Zero-mean
     // over the relief: the concrete reads at every reflection strength without changing its level.
     float shade=clamp(1.0-uMaterial.y*rise,0.25,2.0);
+    // The dent's slopes by the same rule: its far side, turned toward the eye, is a little darker.
+    if(uFloorGive.y>0.0) shade*=clamp(1.0+uFloorGiveLook.y*dot(giveNormal.xz,groundForward.xz),0.25,2.0);
     // The night's light is the sheets': concrete is lit near them and falls off toward the camera to a dark far
     // level, so a wide view shows dark wet ground in front rather than an evenly lit grey plane (beyond the sheets
     // the mist already takes the ground into the dark). Smooth and world-fixed: no seam, no motion.

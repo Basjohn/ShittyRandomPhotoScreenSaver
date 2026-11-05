@@ -1304,6 +1304,11 @@ class StudioController(QObject):
                 # A live gesture re-publishes the current instant; anything else is the exact replay.
                 live = self.session.gesture_active or bool(self._pose)
                 revision = (self.session.revision, tuple(sorted(self._pose.items())))
+                spatial = getattr(self.evaluator, "set_viewport_extent", None)
+                if callable(spatial):
+                    # A mode whose logical step reads the card's world extent (Bubble's domain) is evaluated at
+                    # the extent actually presented.
+                    spatial(self.presented_extent())
                 frame = self.evaluator.evaluate(self.transport.time, self.evaluation_values(), exact=not live,
                                                 revision=revision)
             except Exception as exc:
@@ -1363,6 +1368,8 @@ class StudioController(QObject):
     def _on_viewport_resized(self, *_args) -> None:
         if self.viewport is not None and self.state == "presented":
             self.refresh_handles()
+            if callable(getattr(self.evaluator, "set_viewport_extent", None)):
+                self._invalidate()          # a filling framing's extent followed the new size
 
     def copy_frame(self) -> None:
         """Render the current frame once more, off screen at the presented size, and put it on the clipboard."""

@@ -1643,14 +1643,17 @@ Rectangle {
             width: parent.width
             height: parent.height - header.height - 52
             // Dashboard (mock): ribbon list | wide viewport across the top, the workspace's panels underneath.
-            readonly property int leftW: shell.viewportExpanded ? 0 : Math.max(160, Math.min(240, width * 0.15))
+            // A mode without scene objects has no list: the viewport takes its width.
+            readonly property bool objectsShown: !shell.viewportExpanded && shell.caps.objects !== false
+            readonly property int leftW: objectsShown ? Math.max(160, Math.min(240, width * 0.15)) : 0
             readonly property int topH: shell.viewportExpanded ? height - 10 : Math.max(200, Math.round(height * 0.56))
 
             // Scene objects -------------------------------------------------------------------
             Rectangle {
                 id: objectsPanel
+                objectName: "objectsPanel"
                 x: 10; y: 0
-                visible: !shell.viewportExpanded
+                visible: mainRow.objectsShown
                 width: mainRow.leftW; height: mainRow.topH
                 radius: 10; color: shell.cPanel
                 clip: true
@@ -1725,8 +1728,8 @@ Rectangle {
             // Viewport column ----------------------------------------------------------------
             Item {
                 id: viewportColumn
-                x: shell.viewportExpanded ? 10 : objectsPanel.x + objectsPanel.width + 10
-                width: shell.viewportExpanded ? parent.width - 20 : parent.width - mainRow.leftW - 30
+                x: mainRow.objectsShown ? objectsPanel.x + objectsPanel.width + 10 : 10
+                width: mainRow.objectsShown ? parent.width - mainRow.leftW - 30 : parent.width - 20
                 height: mainRow.topH
 
                 Rectangle {

@@ -29,6 +29,12 @@ metadata. Spectrum-family 3D modes reuse the shared DSP implementation but own t
 the membership authority. Canonical defaults and editable presets own values. The model, appliers and lazy body use
 the same declared type/range/owner, while bespoke editors retain named Custom build/load/collect entries.
 
+A mode with a registered Studio adapter (`ui/studio/registry.py`) gets an "Open <title> Studio" launcher in its
+Custom body. A mode whose controls are all Studio-edited (currently Waveform Ribbon) builds its body with
+`build_studio_owned_mode_ui` (`ui/tabs/media/spec_mode_builder.py`): preset row, one sentence and the launcher, with
+values kept in the unchanged lazy-value/technical owners. The spec stays the declaration authority either way;
+`Docs/Reference/Visualizer_Studio.md` owns the Studio contract.
+
 Control types: `Slider`, `Toggle`, `Choice`, `Colour` and the **visual controls** (2026-10-18) `Range` (two
 values on one bar, low <= high, persisted `[low, high]`: the reactive quiet..loud span), `Gradient` (independent
 Dark/Light XY endpoints controlling direction, span and placement), `Triangle` (three shares
@@ -798,8 +804,9 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   orbit inside the card; Alt+right pans inside it; Alt+wheel scales about the interior centre, using either Qt wheel
   axis. They never move/resize the card or alter its viewport, in ordinary interaction or Edit. See
   [Neon Lake Basin](Neon_Lake_Basin.md) for admission, persistence and clipping.
-- **Gated modes:** `_GATED_MODES` in `visualizer_mode_registry.py` holds registered modes that are not yet offered
-  (empty since Extruded Bubble opened, 2026-10-18): they own defaults, a spec, presets, a runtime and a renderer, but are never
+- **Gated modes:** `_GATED_MODES` in `visualizer_mode_registry.py` holds registered modes that are not offered
+  (currently Sine, disabled pending eventual retirement, not deletion: its implementation, keys and presets stay for
+  migration, and an old configuration with only Sine enabled resolves to an enabled substitute): they own defaults, a spec, presets, a runtime and a renderer, but are never
   selectable, cycled, offered in Guided Setup or listed in the 3D Quality tab, and get no runtime work. The gate opens in code,
   never through an environment flag; tests open it for themselves with `monkeypatch` when they exercise the body.
 - **Framed preset starting views:** optional top-level `starting_view` JSON metadata contains exactly the mode's

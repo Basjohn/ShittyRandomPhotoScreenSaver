@@ -30,7 +30,8 @@ only remaining work, not implementation chronology.
 
 **Working sequence:**
 
-- [ ] **Selected hybrid and production migration:** C is primary, with A's rolling twist, localized high-power colour,
+- [ ] **Selected hybrid and production migration:** the travelling energy pulse is primary (5 November; supersedes C's
+  elastic body, see the Migration Plan's Current reaction model), with A's rolling twist, localized high-power colour,
   reactive axial roll (skewer motion), particles/strands and waveform-repelled fog. Full controls, visual editors,
   audited quiet/peak ranges, a four-ribbon maximum and three presets follow the Migration Plan. Do not reopen the four-way selection.
 - [ ] **Timing/framing admission:** extend the fixed-view near-head comparison to production
@@ -116,8 +117,8 @@ and admissions are historical evidence, not instructions to restore a rejected l
   references. Floor material/reflectivity/tint remain tunable; never crop geometry to a screen-space reflection strip.
 - [ ] Capture synchronized recorded PCM, silent/fixed-body negatives and quiet/ordinary/hot passages, then measure
   actual configuration, CPU/GPU whole-frame cost and resource retirement. Preset 2 with strands remains over budget.
-- [ ] Redesign the mode-specific builder as a themed 3D visual editor only after credible visual results. The numeric
-  matrix and every new non-shared UI element are explicitly rejected; control plumbing does not establish usability.
+- The rejected builder is replaced by the Waveform Studio (`Docs/Reference/Visualizer_Studio.md`); its acceptance
+  is tracked only in `Current_Plan.md` §7.1. Control plumbing does not establish usability.
 
 ### Camera contract for all following slices
 
@@ -723,8 +724,9 @@ still has physical transport; current body response must also be checked before 
 
 #### 5.1.4 Decision
 
-**Selection:** the operator chose C as primary with A's twisting (2 November); the Migration Plan owns the selected
-hybrid's full production controls, including separately reactive axial roll. The following local packages preserve
+**Selection:** the operator chose C as primary with A's twisting (2 November). **Superseded 5 November:** the
+travelling energy pulse replaced C's standing elastic bend as the primary reaction (Migration Plan → Current reaction
+model); A's twisting and the separately reactive axial roll remain, and the Migration Plan owns production controls. The following local packages preserve
 the comparison evidence; they do not establish final production acceptance.
 
 **Local review packages:**
@@ -861,7 +863,7 @@ camera and resource contracts rather than rebuilding them or reopening already-l
 
 **Section 0 is the sole live sequence.** The ribbon material and generated-map floor exist; their fidelity is open.
 The bounded mist prototype exists; its remaining reusable admission/lifecycle/cost gates are still open. The operator
-admits the current visual range with production caveats; the selected C-primary/A-twist hybrid and production
+admits the current visual range with production caveats; the current pulse-primary/A-twist reaction and production
 ownership are in the Migration Plan. Current_Plan owns remaining calibration, framing, range and loaded-live gates.
 
 - [ ] **Awaiting Validation — reference completeness:** no clean annotation-free scene or reference animation was
