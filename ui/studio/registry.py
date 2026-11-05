@@ -49,6 +49,7 @@ def create_adapter(mode_id: str):
 register_studio_adapter("waveform_ribbon", "Waveform", "ui.studio.waveform_adapter:WaveformStudioAdapter")
 register_studio_adapter("extruded_bubble", "Extruded Bubble", "ui.studio.extruded_bubble_adapter:ExtrudedBubbleStudioAdapter")
 register_studio_adapter("bubble", "Bubble", "ui.studio.bubble_adapter:BubbleStudioAdapter")
+register_studio_adapter("sphere", "Sphere", "ui.studio.sphere_adapter:SphereStudioAdapter")
 
 
 __all__ = ["StudioEntry", "create_adapter", "has_studio", "register_studio_adapter", "studio_modes",

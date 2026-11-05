@@ -116,4 +116,31 @@ class QuickModeRenderer:
         self._impl.release_resources()
 
 
-__all__ = ["QuickModeRenderer", "camera_navigation", "card_framings", "presentation"]
+class ContractModeRenderer(QuickModeRenderer):
+    """A mode's production Quick renderer handed the production render-frame contract
+    (``QuickVisualizerRenderFrame``): the logical frame (a mode frame alone, or a full ``VisualizerLogicalFrame``
+    when the evaluator produces one), the live card's resolved presentation at the target's pixel ratio, and the
+    item mapping. A renderer with a prepared reveal compiles through its own ``prepare_step``."""
+
+    def _resolved(self, card: RenderCard):
+        dpr = card.viewport[2] / max(1e-6, card.logical_size[0])
+        key = (card.logical_size, card.extent, card.style, round(dpr, 4))
+        if key != self._key:
+            self._presentation = presentation(self._mode_id, card.logical_size, card.extent, card.style, dpr=dpr)
+            self._key = key
+        return self._presentation
+
+    def _frame(self, card: RenderCard, state):
+        from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
+        logical = state if hasattr(state, "mode_state") else SimpleNamespace(mode_state=state)
+        snapshot = SimpleNamespace(logical=logical, presentation=self._resolved(card))
+        return QuickVisualizerRenderFrame(snapshot=snapshot, viewport=tuple(int(v) for v in card.viewport),
+                                          logical_size=tuple(float(v) for v in card.logical_size),
+                                          matrix_values=tuple(card.matrix_values), quad_vao=int(card.quad_vao))
+
+    def prepare(self, card: RenderCard, frame) -> bool:
+        step = getattr(self._impl, "prepare_step", None)
+        return bool(step(self._frame(card, frame))) if callable(step) else True
+
+
+__all__ = ["ContractModeRenderer", "QuickModeRenderer", "camera_navigation", "card_framings", "presentation"]
