@@ -436,6 +436,34 @@ def test_a_mode_owned_edit_replays_exactly_without_reanalysis(qt_app):
     evaluator.release()
 
 
+def test_mode_owned_edits_rewind_under_the_frame_budget_and_equal_production(qt_app):
+    """The shared evaluator's exact replay without a stall, on this mode's state (the reflected photograph included):
+    a mode-owned edit under the Studio's frame budget converges over several evaluations to the production replay's
+    frame, rewinding the step state instead of configuring a new controller."""
+    clip = shipped_clip()
+    values = variant_section("mirror")
+    data = recorded(clip.description, values, 1.5, mirror=True)
+    evaluator = _clip_evaluator(clip, values=values, data=data, mirror=True)
+    at = data["duration"] * 0.9
+    evaluator.evaluate(at, values)
+    replays = evaluator.replays
+    evaluator.set_frame_budget(0.0)
+    edited = {**values, PREFIX + "depth": spec().control(PREFIX + "depth").high,
+              PREFIX + "colouring": "Spectral Edges", PREFIX + "turn": spec().control(PREFIX + "turn").high * 0.3}
+    frame = evaluator.evaluate(at, edited)
+    for _ in range(400):
+        if not evaluator.converging:
+            break
+        frame = evaluator.evaluate(at, edited)
+    assert not evaluator.converging and evaluator.replays == replays and evaluator.rewinds >= 1
+    production = recorded(clip.description, edited, 1.5, mirror=True)
+    expected = min((s for s in production["steps"] if s["now_ts"] - production["origin"] <= at + 1e-9),
+                   key=lambda s: at - (s["now_ts"] - production["origin"]))
+    assert frame_digest(frame) == expected["frame_sha256"]
+    assert dict(frame.mode_state.parameters)["backdrop"] is not None
+    evaluator.release()
+
+
 def test_an_engine_owned_edit_reruns_the_worker_and_lands_exactly(qt_app):
     clip = shipped_clip()
     values = canonical_section()

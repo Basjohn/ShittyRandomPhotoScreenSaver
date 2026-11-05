@@ -538,6 +538,10 @@ class EngineAnswerEvaluator:
         self._last_wanted = None
         self.steps_run = 0
         self.replays = 0
+        self.rewinds = 0
+        self._budget: float | None = None
+        self._kwargs_cache: dict = {}
+        self._shown = None                 # the frame the last evaluation returned (shown while converging)
         self._reset_history()
 
     # fixtures ---------------------------------------------------------------
@@ -559,6 +563,7 @@ class EngineAnswerEvaluator:
             raise KeyError(fixture_id)
         self._fixture = fixture
         self._retire()
+        self._shown = None
         return fixture
 
     def set_viewport_extent(self, extent) -> None:
@@ -646,14 +651,29 @@ class EngineAnswerEvaluator:
         return inputs
 
     # lifecycle --------------------------------------------------------------
+    def set_frame_budget(self, seconds: float | None) -> None:
+        """The GUI-thread time one evaluation may spend replaying (the Studio sets it; None: replay at once).
+        With a budget an exact replay that does not fit continues on the next frames (``converging``) while the
+        live-applied frame stays on screen; the replay it converges to is the same exact replay."""
+        self._budget = None if seconds is None else max(0.0, float(seconds))
+
+    @property
+    def converging(self) -> bool:
+        """An exact replay is still catching up with the requested instant (the Studio asks for another frame)."""
+        return self._converging
+
     def _reset_history(self) -> None:
-        self._iterator = None
-        self._pending: ServedTick | None = None
-        self._time = -math.inf
+        self._ticks: tuple = ()
+        self._index = 0                    # the next tick to step
+        self._time = -math.inf             # the fixture time the history has been stepped to
         self._last = None
         self._last_tick: ServedTick | None = None
         self._signature = None
         self._approximate = False
+        self._pristine = None              # the step state right after configuration (``StepState``)
+        self._pristine_signature = None
+        self._checkpoints: dict = {}       # mode-owned signature -> {tick index: checkpoint}
+        self._converging = False
 
     def _retire(self) -> None:
         controller, self._controller = self._controller, None
@@ -672,8 +692,10 @@ class EngineAnswerEvaluator:
         return out
 
     def _start(self, values: Mapping[str, Any], inputs) -> None:
+        """A production controller configured for ``inputs`` (lifecycle: a new fixture, answers, extent or
+        photograph)."""
         from widgets.spotify_visualizer.feature_replay import ReplayBeatEngine
-        from ui.studio.replay_engine import RecordedEngineAnswers
+        from ui.studio.replay_engine import RecordedEngineAnswers, StepState
         self._retire()
         if self._engine is None:
             self._engine = ReplayBeatEngine(32)
@@ -686,8 +708,9 @@ class EngineAnswerEvaluator:
         controller.engine = self._view
         self._controller = controller
         self._inputs = inputs
-        self._iterator = iter(inputs.steps(self.fixture.duration))
-        self._signature = self.mode.own_signature(values)
+        self._ticks = tuple(inputs.steps(self.fixture.duration))
+        self._signature = self._pristine_signature = self.mode.own_signature(values)
+        self._pristine = StepState(controller, keep=(self._engine, self._view))
         self.replays += 1
 
     def _step(self, tick: ServedTick) -> None:
@@ -711,50 +734,134 @@ class EngineAnswerEvaluator:
         if frame is not None:
             self._last = frame
 
-    def _restyle(self, values: Mapping[str, Any]) -> None:
+    def _mode_kwargs_for(self, values: Mapping[str, Any], signature) -> dict:
+        """The production mode kwargs for ``values`` under the current answers, computed once per signature
+        (``EngineAnswerMode.mode_kwargs`` builds the settings model, about 10 ms)."""
+        key = (self._inputs.key, signature)
+        cache = self._kwargs_cache
+        if key not in cache:
+            cache[key] = self.mode.mode_kwargs(self._effective(values, self._inputs))
+            while len(cache) > 6:
+                cache.pop(next(iter(cache)))
+        return cache[key]
+
+    def _restyle(self, values: Mapping[str, Any], signature=None) -> None:
         from widgets.spotify_visualizer.config_applier import (
             apply_logical_vis_mode_kwargs, apply_presentation_vis_mode_kwargs,
         )
-        kwargs = self.mode.mode_kwargs(self._effective(values, self._inputs))
+        signature = self.mode.own_signature(values) if signature is None else signature
+        kwargs = self._mode_kwargs_for(values, signature)
         apply_logical_vis_mode_kwargs(self._controller.logical_tick_state, kwargs)
         apply_presentation_vis_mode_kwargs(self._controller.presentation_state, kwargs)
         self.mode.reflect(self._controller, self._environment)
-        self._signature = self.mode.own_signature(values)
+        self._signature = signature
+
+    # exact history: rewinds and checkpoints ------------------------------------
+    CHECKPOINT_TICKS = 90                  # one checkpoint per second of fixture time (production cadence 90 Hz)
+
+    def _rewind(self, values: Mapping[str, Any], signature, time: float) -> None:
+        """Put the exact history of ``signature`` at the latest checkpoint at or before ``time`` (else at the
+        pristine configuration, restyled to ``values``): the replay from there is the replay from the start."""
+        best = None
+        for checkpoint in self._checkpoints.get(signature, {}).values():
+            if checkpoint[1] <= time + 1e-9 and (best is None or checkpoint[0] > best[0]):
+                best = checkpoint
+        if best is not None:
+            index, at, state, last, last_tick = best
+            state.restore()
+            self._index, self._time, self._last, self._last_tick = index, at, last, last_tick
+            self._signature = signature
+        else:
+            self._pristine.restore()
+            self._index, self._time, self._last, self._last_tick = 0, -math.inf, None, None
+            self._signature = self._pristine_signature
+            if signature != self._pristine_signature:
+                self._restyle(values, signature)
+        self._approximate = False
+        self.rewinds += 1
+
+    def _checkpoint(self) -> None:
+        from ui.studio.replay_engine import StepState
+        checkpoints = self._checkpoints
+        if self._signature not in checkpoints:
+            checkpoints[self._signature] = {}
+            while len(checkpoints) > 3:    # the current values and the last two (undo / redo stay instant)
+                checkpoints.pop(next(iter(checkpoints)))
+        at = self._ticks[self._index - 1].now - self._inputs._origin
+        checkpoints[self._signature][self._index] = (
+            self._index, at, StepState(self._controller, keep=(self._engine, self._view)), self._last,
+            self._last_tick)
+
+    def _advance(self, time: float, deadline: float | None) -> tuple[bool, int]:
+        """Step the production ticks up to ``time`` (the first tick always), or until ``deadline``.
+        Returns (reached, ticks stepped)."""
+        import time as clock
+        origin = self._inputs._origin
+        ticks = self._ticks
+        stepped = 0
+        while self._index < len(ticks):
+            tick = ticks[self._index]
+            if tick.now - origin > time + 1e-9 and self._last is not None:
+                break
+            if deadline is not None and stepped and clock.perf_counter() > deadline:
+                self._time = ticks[self._index - 1].now - origin
+                return False, stepped
+            self._step(tick)
+            self._index += 1
+            stepped += 1
+            if not self._approximate and self._index % self.CHECKPOINT_TICKS == 0:
+                self._checkpoint()
+        self._time = time
+        return True, stepped
 
     def evaluate(self, time: float, values: Mapping[str, Any], *, exact: bool = True, revision: Any = None):
         """The logical frame ``time`` seconds into the fixture under ``values``: the mode's production step replayed
         from the fixture start over the engine answers for these engine-owned values (equal fixture, values, extent
-        and time give equal frames). A mode-owned change replays at once; an engine-owned change starts its
-        analysis and shows the previous answers until it lands. ``exact=False`` (a live gesture) applies a
-        mode-owned change to the running history from the current tick; the gesture end replays exactly."""
+        and time give equal frames). A mode-owned change replays exactly from the pristine configuration (or a
+        checkpoint of the same values); an engine-owned change starts its analysis and shows the previous answers
+        until it lands. ``exact=False`` (a live gesture) applies a mode-owned change to the running history from
+        the current tick; the gesture end replays exactly. With a frame budget the exact replay may take several
+        evaluations (``converging``), showing the live-applied frame meanwhile."""
         del revision
+        import time as clock
+        deadline = None if self._budget is None else clock.perf_counter() + self._budget
         time = max(0.0, min(float(time), self.fixture.duration))
         inputs = self._choose_inputs(values, exact)
         signature = self.mode.own_signature(values)
-        restart = (self._controller is None or inputs is not self._inputs or time < self._time
-                   or (exact and (signature != self._signature or self._approximate)))
-        restyled = False
-        if restart:
+        if self._controller is None or inputs is not self._inputs:
             self._start(values, inputs)
-        elif signature != self._signature:
-            self._restyle(values)
-            self._approximate = restyled = True
-        origin = inputs._origin
-        stepped = 0
-        while True:
-            tick = self._pending if self._pending is not None else next(self._iterator, None)
-            self._pending = None
-            if tick is None or (tick.now - origin > time + 1e-9 and self._last is not None):
-                self._pending = tick
-                break
-            self._step(tick)
-            stepped += 1
-        if restyled and not stepped and self._last_tick is not None:
-            self._step(self._last_tick)            # show the change on this instant (approximate)
-        self._time = time
-        if self._last is None:
+        if not exact:
+            if time < self._time:
+                self._rewind(values, signature, time)
+            restyled = signature != self._signature
+            if restyled:
+                self._restyle(values, signature)
+                self._approximate = True
+            _reached, stepped = self._advance(time, None)
+            if restyled and not stepped and self._last_tick is not None:
+                self._step(self._last_tick)            # show the change on this instant (approximate)
+            self._converging = False
+            self._shown = self._last
+            return self._last
+        if signature != self._signature or self._approximate or time < self._time:
+            if deadline is not None and signature != self._signature:
+                # A change nothing has shown yet (a click, a typed value): this frame shows it live-applied on
+                # the running history; the exact replay starts on the next frame.
+                self._restyle(values, signature)
+                self._approximate = True
+                if self._last_tick is not None:
+                    self._step(self._last_tick)
+                self._converging = True
+                self._shown = self._last
+                return self._shown
+            self._rewind(values, signature, time)
+        reached, _stepped = self._advance(time, deadline)
+        self._converging = not reached
+        if reached or self._shown is None:
+            self._shown = self._last
+        if self._shown is None:
             raise RuntimeError("Fixture produced no logical frame")
-        return self._last
+        return self._shown
 
     @property
     def unrecorded_reads(self) -> int:
