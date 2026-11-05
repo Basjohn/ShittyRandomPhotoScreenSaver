@@ -41,9 +41,9 @@ class RibbonBurstRenderer:
         if self.stream is None:
             alignment=gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT)
             size=CAPACITY*STRIDE*4+alignment
-            # Two binds a frame (direct and reflected), one slot each: six slots keep the GPU three frames clear of
-            # a reused slot, so no fence wait ties this frame's submission to the previous frame's completion.
-            self.stream=StreamRing('ribbon event sparks',slots=6,slot_bytes=size,hold_bytes=size)
+            # Two binds a frame (direct and reflected), four per slot: a fence every second frame, and a reused slot
+            # was last read four frames ago, so no fence wait ties this frame's submission to the previous frame's.
+            self.stream=StreamRing('ribbon event sparks',slots=3,slot_bytes=4*size,hold_bytes=size)
         return self.stream
 
     def draw(self,payload,*,mvp,now,viewport,mist,grade,restore=True):

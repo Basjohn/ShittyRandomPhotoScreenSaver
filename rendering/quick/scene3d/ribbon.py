@@ -240,7 +240,8 @@ class RibbonPrimitive:
         if self.stream is None:
             alignment=gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT)
             hold=MAX_PACKET_BYTES+alignment
-            self.stream=StreamRing('ribbon knots',slots=3,slot_bytes=hold,hold_bytes=hold)
+            # Four frames' packets per slot: a fence (and its later wait) every fourth frame, not every frame.
+            self.stream=StreamRing('ribbon knots',slots=3,slot_bytes=4*hold,hold_bytes=hold)
         return self.stream
 
     @contextmanager
@@ -509,9 +510,9 @@ class RibbonPrimitive:
                         if self.strand_stream is None:
                             alignment=gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT)
                             size=MAX_RIBBONS*COHORT_BYTES+alignment
-                            # Two binds a frame (direct and reflected), one slot each: six slots keep the GPU three
-                            # frames clear of a reused slot, so no fence wait ties this frame to the previous one.
-                            self.strand_stream=StreamRing('ribbon strand cohorts',slots=6,slot_bytes=size,hold_bytes=size)
+                            # Two binds a frame (direct and reflected), four per slot: a fence every second frame,
+                            # and a reused slot was last read four frames ago, so no wait ties a frame to the last.
+                            self.strand_stream=StreamRing('ribbon strand cohorts',slots=3,slot_bytes=4*size,hold_bytes=size)
                         with self.strand_stream.bound(gl.GL_SHADER_STORAGE_BUFFER,1,strand_births,restore=restore):
                             gl.glDrawArraysInstanced(gl.GL_TRIANGLES,first*stride,count*stride,packet.instances)
                     else:gl.glDrawArraysInstanced(gl.GL_TRIANGLES,first*stride,count*stride,packet.instances)
