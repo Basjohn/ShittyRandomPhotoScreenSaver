@@ -53,7 +53,8 @@ _UNIFORMS = _VIEW_UNIFORMS + (
     "uTerrain", "uTerrainSize", "uLand", "uTime", "uWaterDetail", "uWaterBankBand", "uReflection", "uPass", "uCurveCells",
     "uWireDisplay", "uMarks", "uPointPx","uTerrainFillColor","uVertexColor","uVertexAccentColor",
     "uVertexOutlineColor","uGlassTint","uGlass","uLightStrength","uSmoothGlass","uDepthOnly",
-    "uWaterLineGlowColor","uWaterLineGlow","uWaterShine",
+    "uWaterLineGlowColor","uWaterLineGlow","uWaterShine","uDepthScale","uShoreGlow","uShoreGlowColor",
+    "uWaterGlint","uGlintLight",
 ) + _CELESTIAL_UNIFORMS + _REACTION_UNIFORMS
 _SKY_UNIFORMS = _VIEW_UNIFORMS + _CELESTIAL_UNIFORMS + (
     "uSkyPass","uShaftSpread","uMidband", "uBeatPulse", "uCelestialGlow", "uCelestialRimVertices", "uBeatStarCount", "uBeatStarCells", "uStarGlow")
@@ -62,7 +63,7 @@ _SPLASH_UNIFORMS = _VIEW_UNIFORMS + (
     "uSplashColor", "uGlow")
 _SKYLINE_UNIFORMS = _VIEW_UNIFORMS + (
     "uTerrainGrid", "uHalfWidth", "uTerrain", "uTerrainSize", "uLand", "uEventCount",
-    "uCrestColor", "uGlow", "uMidband", "uOutlineLiftNdc", "uHorizonThickness") + _REACTION_UNIFORMS
+    "uCrestColor", "uGlow", "uMidband", "uOutlineLiftNdc", "uHorizonThickness", "uDepthScale") + _REACTION_UNIFORMS
 
 
 
@@ -353,6 +354,13 @@ class QuickShockwaveGridRenderer:
             gl.glUniform4f(uniforms["uWaterLineGlowColor"], *rgba(parameter(parameters, "shockwave_grid_water_line_glow_color")))
             gl.glUniform1f(uniforms["uWaterLineGlow"], float(parameter(parameters, "shockwave_grid_water_line_glow")))
             gl.glUniform1f(uniforms["uWaterShine"], float(parameter(parameters, "shockwave_grid_water_shine")))
+            depth_scale = float(parameter(parameters, "shockwave_grid_depth_scale"))
+            gl.glUniform1f(uniforms["uDepthScale"], depth_scale)
+            gl.glUniform1f(uniforms["uShoreGlow"], float(parameter(parameters, "shockwave_grid_shore_glow")))
+            gl.glUniform4f(uniforms["uShoreGlowColor"], *rgba(parameter(parameters, "shockwave_grid_shore_glow_color")))
+            gl.glUniform1f(uniforms["uWaterGlint"], float(parameter(parameters, "shockwave_grid_water_glint")))
+            # The glint brightens with the halo's own musical drive (existing midband and onset envelope).
+            gl.glUniform4f(uniforms["uGlintLight"], *_halo_light(parameters), midband, beat_pulse)
             # fwidth already measures physical fragments, including DPR/MSAA.
             gl.glUniform1f(uniforms["uEdgePx"], 0.75)
             gl.glUniform1f(uniforms["uCurveCells"], 12.0+40.0*float(parameter(parameters,"shockwave_grid_density")))
@@ -430,6 +438,7 @@ class QuickShockwaveGridRenderer:
                     gl.glUniform1f(skyline_uniforms["uOutlineLiftNdc"], 2.0 / max(frame.viewport[3],1))
                     gl.glUniform1f(skyline_uniforms["uHorizonThickness"],
                                    float(parameter(parameters,"shockwave_grid_horizon_thickness")))
+                    gl.glUniform1f(skyline_uniforms["uDepthScale"],depth_scale)
                     gl.glEnable(gl.GL_DEPTH_TEST)
                     gl.glDepthFunc(gl.GL_LEQUAL)
                     gl.glDepthMask(gl.GL_FALSE)
@@ -608,6 +617,14 @@ def _shaft_light(parameters, view, body_position):
     gain = RAY_GAIN * float(parameter(parameters, "shockwave_grid_sun_rays_strength")) * colour[3]
     return ShaftLight(item_point=point, reach=0.15 + 0.85 * float(parameter(parameters, "shockwave_grid_sun_rays_length")),
                       colour=(colour[0] * gain, colour[1] * gain, colour[2] * gain))
+
+
+def _halo_light(parameters) -> tuple[float, float]:
+    """(Halo Intensity, Halo Reactivity) while the celestial halo is on, else (0, 0)."""
+    if not bool(parameter(parameters, "shockwave_grid_celestial_glow_enabled")):
+        return 0.0, 0.0
+    return (float(parameter(parameters, "shockwave_grid_celestial_glow_strength")),
+            float(parameter(parameters, "shockwave_grid_celestial_glow_reactivity")))
 
 
 def _rays_admitted(parameters):
