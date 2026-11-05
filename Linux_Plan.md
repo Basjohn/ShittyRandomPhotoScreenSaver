@@ -6,7 +6,8 @@ Durable rules: [`Docs/Guardrails/Linux_Compatibility.md`](Docs/Guardrails/Linux_
 [`Docs/Guides/Linux_Guide.md`](Docs/Guides/Linux_Guide.md). Not a changelog.
 
 **Goal:** the same codebase runs on Linux wherever the feature can exist there, while Windows stays the
-unchanged reference product. Branch: `claude/eager-carson-5da6ge` (see §6 Merge / rebase).
+unchanged reference product. Branch: `claude/eager-carson-5da6ge` (merged into `main` at `0013013`; later Linux
+slices continue on it, see §6 Merge / rebase).
 
 ## 0. How to run, use and build
 
@@ -26,7 +27,7 @@ data locations, product builds (including from Windows) and the Linux test route
 | System volume / mute / OSD, app volume slider | `pactl` probe, sink-input controller and live listener |
 | Links, Gmail setup, Open App Data | direct `QDesktopServices`; Gmail desktop check passes |
 | Held-left orbit | Qt mouse grab (no cursor confinement) |
-| Credentials | IMAP password `plain::` 0600; OAuth tokens and Steam not persisted (see §2) |
+| Credentials (Gmail OAuth/IMAP, Steam) | AES-GCM with a per-user key in the Secret Service keyring; no keyring, nothing saved |
 | `/p` preview, `.scr`, Reddit secure-desktop helper, Inno installer | Windows-only by nature |
 | Product build | Nuitka standalone (≈480 MB folder, ≈190 MB tarball) + `install.sh`; local build + smoke pass; GitHub Actions runner |
 | Background texture adoption (PR-04), Qt image-pool retention (R-97) | bound on Linux (Itanium exports) |
@@ -142,16 +143,9 @@ unchanged; media widget, app volume slider, mute/OSD and visualizer audio unchan
 
 ## 7. Unrelated findings (not Linux work)
 
-- `tests/test_visualizer_presets.py`: 3 failures on HEAD (Waveform preset JSON lacks `mode`; Sine pill disabled).
-- Stale tests failing on every OS (seen in the Linux suite, not Linux work): authored preset/content drift
-  (`test_visualizer_preset_completeness` 13, `test_defaults_schema_authority`, `test_onboarding_selection` missing
-  `visualizer_waveform_ribbon.png`, Sine-disabled dormancy/enable/technical-sync tests, Waveform/Shockwave pose and
-  range tests, missing frozen-settings fixture for newer modes in `test_qt611_shader_admission`); stale stubs
-  (`test_input_gain`, `test_monitor_replay_admission`, `test_transition_distribution` 3,
-  `test_startup_source_onboarding_resume`, `test_settings_theme_lifetime_contract`,
-  `test_qtquick_custom_layout_owner` 8 raw musical replay); source-text assertions (`test_feed_f2_contract`,
-  `test_frame_trace`, `test_bubble_ambient_glow_contract`, `test_test_suite_durability`, `test_release_media`).
-- `tests/test_build_runner.py::test_preflight_passes_a_complete_release_tree`: missing Waveform floor textures.
+- Cloud-container-only reds (not code): `test_release_media::test_source_change_during_capture_discards_media`
+  needs the operator's gitignored Usu scene originals; `test_bubble_reactivity` 510520e-shape test needs full git
+  history (shallow clone). The swish group-drift red is tracked in `Current_Plan.md`.
 - `SRPSS_FORCE_LOG_DIR` (logger) is an environment-variable hook used by harnesses; a CLI/sidecar equivalent
   would match the no-env-var preference.
 - Reddit cards display raw `requests` exception text (proxy/connection errors) to the user.
