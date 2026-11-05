@@ -455,6 +455,11 @@ class SceneTarget:
                 or self._shafts.has_resources)
 
     @property
+    def framebuffer(self) -> int:
+        """The scene's own framebuffer: the one bound for drawing inside an open scope."""
+        return self._names["fbo"]
+
+    @property
     def allocation(self) -> tuple[int, int, int] | None:
         """(width, height, samples) currently allocated, if any."""
         return None if self._key is None else (self._key[0], self._key[1], self._samples)
@@ -614,21 +619,26 @@ class SceneTarget:
             raise RuntimeError(f"{self.label} background incomplete at {width}x{height}")
 
     @contextmanager
-    def transparent_writes(self, frame: SceneFrame, resources) -> Iterator[None]:
+    def transparent_writes(self, frame: SceneFrame, resources, *, restore: bool = True) -> Iterator[None]:
         """Draw the enclosed passes as order-independent transparent surfaces (``SCENE_OIT_GLSL``): depth-tested
         against what has been drawn, never writing depth; leaving composites them over the scene. Blend, depth and
-        colour-mask state come back as they were. Needs ``oit``."""
+        colour-mask state come back as they were. Needs ``oit``.
+
+        ``restore=False`` is for a caller that sets the state of its next pass itself: nothing is read back (each
+        read is a driver round trip) and leaving sets a fixed state instead: blending off on these draw buffers,
+        depth test on, depth writes off, draw buffer 0 written and the others masked as ``begin`` masks them."""
         if not self._names["oit_fbo"]:
             raise RuntimeError(f"{self.label}: transparent_writes() needs a scope opened with oit=True")
         indices = range(3 if self._names["emission"] else 2)
-        saved_blend = [(gl_query.get_indexed_int(gl.GL_BLEND_SRC_RGB, i), gl_query.get_indexed_int(gl.GL_BLEND_DST_RGB, i),
-                        gl_query.get_indexed_int(gl.GL_BLEND_SRC_ALPHA, i),
-                        gl_query.get_indexed_int(gl.GL_BLEND_DST_ALPHA, i),
-                        gl_query.get_indexed_int(gl.GL_BLEND_EQUATION_RGB, i),
-                        gl_query.get_indexed_int(gl.GL_BLEND_EQUATION_ALPHA, i),
-                        bool(gl.glIsEnabledi(gl.GL_BLEND, i))) for i in indices]
-        saved_masks = [gl_query.get_indexed_bools(gl.GL_COLOR_WRITEMASK, i) for i in indices]
-        depth_test, depth_mask = gl_query.is_enabled(gl.GL_DEPTH_TEST), gl_query.get_bool(gl.GL_DEPTH_WRITEMASK)
+        if restore:
+            saved_blend = [(gl_query.get_indexed_int(gl.GL_BLEND_SRC_RGB, i), gl_query.get_indexed_int(gl.GL_BLEND_DST_RGB, i),
+                            gl_query.get_indexed_int(gl.GL_BLEND_SRC_ALPHA, i),
+                            gl_query.get_indexed_int(gl.GL_BLEND_DST_ALPHA, i),
+                            gl_query.get_indexed_int(gl.GL_BLEND_EQUATION_RGB, i),
+                            gl_query.get_indexed_int(gl.GL_BLEND_EQUATION_ALPHA, i),
+                            bool(gl.glIsEnabledi(gl.GL_BLEND, i))) for i in indices]
+            saved_masks = [gl_query.get_indexed_bools(gl.GL_COLOR_WRITEMASK, i) for i in indices]
+            depth_test, depth_mask = gl_query.is_enabled(gl.GL_DEPTH_TEST), gl_query.get_bool(gl.GL_DEPTH_WRITEMASK)
         gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._names["oit_fbo"])
         for i in indices:
             gl.glColorMaski(i, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)
@@ -647,32 +657,63 @@ class SceneTarget:
             yield
         finally:
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, self._names["fbo"])
-            try:
-                self._resolve_transparent(frame, resources)
-            finally:
-                for i, (src_rgb, dst_rgb, src_alpha, dst_alpha, eq_rgb, eq_alpha, enabled) in zip(indices, saved_blend):
-                    gl.glBlendFuncSeparatei(i, src_rgb, dst_rgb, src_alpha, dst_alpha)
-                    gl.glBlendEquationSeparatei(i, eq_rgb, eq_alpha)
-                    (gl.glEnablei if enabled else gl.glDisablei)(gl.GL_BLEND, i)
-                for i, mask in zip(indices, saved_masks):
-                    gl.glColorMaski(i, *mask)
-                (gl.glEnable if depth_test else gl.glDisable)(gl.GL_DEPTH_TEST)
-                gl.glDepthMask(gl.GL_TRUE if depth_mask else gl.GL_FALSE)
+            if not restore:
+                try:
+                    self._resolve_transparent(frame, resources, restore=False)
+                finally:
+                    for i in indices:
+                        gl.glDisablei(gl.GL_BLEND, i)
+                    self._mask_as_begun(indices)
+                    gl.glEnable(gl.GL_DEPTH_TEST)
+                    gl.glDepthMask(gl.GL_FALSE)
+            else:
+                self._leave_transparent(frame, resources, indices, saved_blend, saved_masks, depth_test, depth_mask)
 
-    def _resolve_transparent(self, frame: SceneFrame, resources) -> None:
-        """Composite the accumulated transparent layer over colour (attachment 0 only), premultiplied, per sample."""
+    def _leave_transparent(self, frame, resources, indices, saved_blend, saved_masks, depth_test, depth_mask) -> None:
+        """Resolve, then hand back the blend, mask and depth state read at entry."""
+        try:
+            self._resolve_transparent(frame, resources)
+        finally:
+            for i, (src_rgb, dst_rgb, src_alpha, dst_alpha, eq_rgb, eq_alpha, enabled) in zip(indices, saved_blend):
+                gl.glBlendFuncSeparatei(i, src_rgb, dst_rgb, src_alpha, dst_alpha)
+                gl.glBlendEquationSeparatei(i, eq_rgb, eq_alpha)
+                (gl.glEnablei if enabled else gl.glDisablei)(gl.GL_BLEND, i)
+            for i, mask in zip(indices, saved_masks):
+                gl.glColorMaski(i, *mask)
+            (gl.glEnable if depth_test else gl.glDisable)(gl.GL_DEPTH_TEST)
+            gl.glDepthMask(gl.GL_TRUE if depth_mask else gl.GL_FALSE)
+
+    def _mask_as_begun(self, indices) -> None:
+        """Colour masks as ``begin`` leaves them: draw buffer 0 written, the emission/velocity (1) and shaft (2)
+        buffers masked when allocated (written only inside their scopes), any other written."""
+        gl.glColorMaski(0, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE, gl.GL_TRUE)
+        for i in indices:
+            if i == 0:
+                continue
+            masked = (i == 1 and bool(self._names["velocity"] or self._names["emission"])) or (
+                i == 2 and bool(self._names["shafts"]))
+            value = gl.GL_FALSE if masked else gl.GL_TRUE
+            gl.glColorMaski(i, value, value, value, value)
+
+    def _resolve_transparent(self, frame: SceneFrame, resources, *, restore: bool = True) -> None:
+        """Composite the accumulated transparent layer over colour (attachment 0 only), premultiplied, per sample.
+        ``restore=False`` (``transparent_writes``'s): nothing read back; the program is left in use, units 0-1 are
+        left without this target's textures and unit 0 active, and the caller sets the masks."""
         multisampled = self._samples > 1
         key, vertex, fragment = (OIT_SAMPLES_PROGRAMS if multisampled else OIT_PROGRAMS)[0]
         program = resources.program(key, vertex, fragment)
         uniforms = resources.uniforms(key, ("uAccum", "uReveal"))
         target = gl.GL_TEXTURE_2D_MULTISAMPLE if multisampled else gl.GL_TEXTURE_2D
         binding = gl.GL_TEXTURE_BINDING_2D_MULTISAMPLE if multisampled else gl.GL_TEXTURE_BINDING_2D
-        prior_program, prior_active = gl_query.get_int(gl.GL_CURRENT_PROGRAM), gl_query.get_int(gl.GL_ACTIVE_TEXTURE)
-        units = []
-        for unit in range(2):
-            gl.glActiveTexture(gl.GL_TEXTURE0 + unit)
-            units.append(gl_query.get_int(binding))
-        masks = [gl_query.get_indexed_bools(gl.GL_COLOR_WRITEMASK, i) for i in range(1, 3)]
+        if restore:
+            prior_program, prior_active = gl_query.get_int(gl.GL_CURRENT_PROGRAM), gl_query.get_int(gl.GL_ACTIVE_TEXTURE)
+            units = []
+            for unit in range(2):
+                gl.glActiveTexture(gl.GL_TEXTURE0 + unit)
+                units.append(gl_query.get_int(binding))
+            masks = [gl_query.get_indexed_bools(gl.GL_COLOR_WRITEMASK, i) for i in range(1, 3)]
+        else:
+            prior_program, prior_active, units, masks = None, gl.GL_TEXTURE0, [0, 0], None
         try:
             for i in (1, 2):
                 gl.glColorMaski(i, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE, gl.GL_FALSE)
@@ -698,9 +739,10 @@ class SceneTarget:
                 gl.glActiveTexture(gl.GL_TEXTURE0 + unit)
                 gl.glBindTexture(target, units[unit])
             gl.glActiveTexture(prior_active)
-            gl.glUseProgram(prior_program)
-            for i, mask in zip((1, 2), masks):
-                gl.glColorMaski(i, *mask)
+            if restore:
+                gl.glUseProgram(prior_program)
+                for i, mask in zip((1, 2), masks):
+                    gl.glColorMaski(i, *mask)
 
     def set_shaft_light(self, light: ShaftLight | None) -> None:
         """This frame's light for the shafts (``None``: no rays this frame); kept until ``end``."""

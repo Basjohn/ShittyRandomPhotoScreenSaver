@@ -49,6 +49,9 @@ to all registered clock widgets, ensuring synchronized updates across displays.
         self._timer_handle: Optional[object] = None
         self._thread_manager: Optional["ThreadManager"] = None
         self._is_running = False
+        # Console displays off (core.display_power): no tick, so no 1 Hz frame of
+        # the whole scene (heavy Visualizer included) on a dark panel.
+        self._display_power_suspended = False
         
         logger.debug("[CLOCK_TICKER] Global clock ticker initialized")
     
@@ -90,9 +93,30 @@ to all registered clock widgets, ensuring synchronized updates across displays.
         if not self._subscribers:
             self._stop()
     
+    @property
+    def display_power_suspended(self) -> bool:
+        return self._display_power_suspended
+
+    def set_display_power_suspended(self, suspended: bool) -> bool:
+        """Stop ticking while the displays are off; on resume tick once at once, then every second."""
+        suspended = bool(suspended)
+        if suspended == self._display_power_suspended:
+            return False
+        self._display_power_suspended = suspended
+        if suspended:
+            self._stop()
+        elif self._subscribers:
+            self._start()
+            # The clocks show the current time from the first resumed frame,
+            # not up to a second (or a whole night) late.
+            self._on_tick()
+        return True
+
     def _start(self) -> None:
         """Start the global ticker."""
         if self._is_running or self._timer_handle is not None:
+            return
+        if self._display_power_suspended:
             return
         
         if self._thread_manager is None:

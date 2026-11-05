@@ -34,6 +34,12 @@ class WaveformRibbonFrameRuntime(RetirableFrameRuntime):
         self._diagnostic_ts = -math.inf
 
     @retirement_fenced
+    def rebase_clock(self):
+        """Display power resumed after a park: the next step integrates no parked gap (state stays warm)."""
+        self._last_ts = None
+        self._accent_time = None
+
+    @retirement_fenced
     def configure(self,values):
         if self._settings_values != values:
             from widgets.spotify_visualizer.waveform_ribbon_parameters import CompiledWaveformSettings
