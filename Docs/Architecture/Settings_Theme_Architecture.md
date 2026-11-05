@@ -220,6 +220,21 @@ The native mode is stateful but simple. Avoid compositor churn.
 
 No post-show retries, zero-delay timers, stylesheet replay, event-loop pumping or repeated native calls are part of this contract.
 
+## Non-Windows material underlay
+
+Native Glass/Acrylic exist only on Windows. On every other platform the dialog's backdrop owner
+(`SettingsDialog._apply_native_backdrop_theme`) never calls `core/windows/dwm_blur.py`; it paints one opaque
+underlay beneath the dialog content instead (`ui/settings_material_underlay.py`), announced once per process with
+`[PLATFORM]`. The underlay stands in for "the blurred desktop under the material": a neutral matched to the
+palette polarity (`settings_theme_is_light`), with Acrylic's authored tint applied at its authored strength and
+Glass left untinted, exactly mirroring the native split above. Semantic surfaces paint over it unchanged and theme
+files carry no per-platform data. Mode `off` paints no underlay. Windows never paints it.
+
+Why opaque: Linux compositors (where present) show the raw, unblurred desktop through translucent layers, and
+without a compositor those layers fall onto black, so the authored look and readability would depend on the
+wallpaper. Compositor-specific blur (e.g. KWin's blur-behind hint) is a possible later refinement tracked in
+`Linux_Plan.md`, not part of this contract.
+
 ## Rejected backdrop architectures for the current Settings HWND
 
 The following were investigated and are **not** current implementation options:
