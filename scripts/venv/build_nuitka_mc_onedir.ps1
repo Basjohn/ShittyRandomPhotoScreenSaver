@@ -354,6 +354,8 @@ $argsList = @(
     "--include-data-files=resources/tutuogg.ogg=resources/tutuogg.ogg",
     "--include-data-files=resources/jedimodeyall.mp3=resources/jedimodeyall.mp3",
     "--include-data-dir=assets/textures/waveform_floor=assets/textures/waveform_floor",
+    "--include-data-dir=assets/production/studio_clips=assets/production/studio_clips",
+    "--include-data-dir=ui/studio/qml=ui/studio/qml",
     "--include-data-files=SRPSS.ico=SRPSS.ico",
     "--include-data-dir=widgets/spotify_visualizer/shaders=widgets/spotify_visualizer/shaders",
     "--include-data-dir=rendering/quick/qml=rendering/quick/qml",
