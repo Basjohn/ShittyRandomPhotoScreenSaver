@@ -17,6 +17,7 @@ from rendering.gl_programs.mist import FOG_OFF
 from rendering.gl_programs.reflection import mirror_view
 from rendering.quick.scene3d.fog_volume import FogVolume
 from rendering.quick.scene3d.floor_give import FloorGiveField, FLOOR_GIVE_UNIT
+from rendering.quick.scene3d.pulse_rim import PulseRimField
 from rendering.quick.scene3d.reflection import PlanarReflection
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.ribbon import GRADE_STOPS, RibbonPrimitive, ribbon_grade
@@ -132,6 +133,7 @@ class WaveformScene:
         self.field = WaveformField()
         self.floor_give = FloorGiveField()  # the yielding floor's field: only while the recipe's floor gives
         self._floor_give = None
+        self.pulse_rim = PulseRimField()  # the published pulse field for the rims: only while Pulse Rim is on
         self._history_mirror = None  # Travel Direction: None, or the x mirror from the history axis into the world
         self.reflection = PlanarReflection('waveform scene floor')
         self.fog, self.reflected_fog = FogVolume('waveform scene mist'), FogVolume('waveform scene reflected mist')
@@ -147,7 +149,8 @@ class WaveformScene:
         return bool(self.textures or self._specular or self.resources.has_resources or self.scene.has_resources
                     or self.ribbons.has_resources or self.reflection.has_resources or self.fog.has_resources
                     or self.reflected_fog.has_resources or self.fog_resources.has_resources
-                    or self.bursts.has_resources or self.field.has_resources or self.floor_give.has_resources)
+                    or self.bursts.has_resources or self.field.has_resources or self.floor_give.has_resources
+                    or self.pulse_rim.has_resources)
 
 
     def _check_context(self, *, admit=False):
@@ -193,7 +196,7 @@ class WaveformScene:
                       self.reflection.release, self._release_specular, self.fog.release, self.reflected_fog.release,
                       self.ribbons.release, self.scene.release,
                       self.resources.release_resources, self.fog_resources.release_resources, self.bursts.release,
-                      self.field.release, self.floor_give.release))
+                      self.field.release, self.floor_give.release, self.pulse_rim.release))
         self._context = None
 
 
@@ -204,7 +207,8 @@ class WaveformScene:
             return self._render_packet(packet,**parameters)
 
     def _render_packet(self, packet, *, capacity, now, travel, recipe, size, view, projection, eye, camera_lens, card,
-               flat=False, react=0., overlay=1., burst_payload=None, burst_origin=0.,strand_payload=None,strand_origin=0.):
+               flat=False, react=0., overlay=1., burst_payload=None, burst_origin=0.,strand_payload=None,strand_origin=0.,
+               pulse=b''):
         self._check_context(admit=True)
         self.recipe, self.size, self._overlay = recipe, size, overlay
         # None is the lab's historical procedural-spark fixture; production explicitly supplies birth bytes.
@@ -219,6 +223,10 @@ class WaveformScene:
         giving = not flat and recipe.floor.give > 0.
         if not giving and self.floor_give.has_resources:
             self.floor_give.release()
+        # Pulse Rim: the logical owner's published pulse field, sampled by the light passes (direct and reflected).
+        rim = not flat and recipe.pulse_rim > 0. and bool(pulse)
+        if not rim and self.pulse_rim.has_resources:
+            self.pulse_rim.release()
         self._now=now
         width, height = size
         environment, flow = recipe.environment, recipe.flow
@@ -245,7 +253,8 @@ class WaveformScene:
                     sweep_axis=(1.,0.,0.), floor=FLOOR_CONTACT,
                     age_fade=(now, 0., (capacity - 1)/flow.knot_hz, 0.),continuation=(*span,2048),
                     mist=environment.mist, mist_frame=(scroll[0, 3], 0., 0.),
-                    grade=ribbon_grade(*self._history_grade(colour_grade(recipe, react)[:3])))
+                    grade=ribbon_grade(*self._history_grade(colour_grade(recipe, react)[:3])),
+                    pulse_rim=self.pulse_rim.update(pulse, recipe.pulse_rim) if rim else None)
         with unclipped_prepasses():
             # First inside the packet scope: the reduction reads the packet bound by it (the same knots every pass
             # draws), and the floor, the reflection and the ribbons then read one yielding surface.
