@@ -74,7 +74,7 @@ def test_posix_folder_spelling_ignores_trailing_separators_but_keeps_case() -> N
     assert without_folder(["/home/me/Wallpapers/", "/srv/Other"], "/home/me/Wallpapers") == ["/srv/Other"]
 
 
-def test_plain_credential_file_is_owner_only(tmp_path):
+def test_credential_file_is_owner_only(tmp_path, protected_storage):
     import stat
 
     from core.windows.dpapi import load_encrypted, save_encrypted

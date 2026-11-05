@@ -23,7 +23,7 @@ from PySide6.QtCore import QObject, Signal, QCoreApplication
 from core.logging.logger import get_logger
 from core.resources.manager import ResourceManager
 from core.threading.manager import ThreadManager
-from core.windows.dpapi import encrypt_user_data
+from core.windows.dpapi import encrypt_user_data, is_protected
 
 logger = get_logger(__name__)
 
@@ -228,11 +228,10 @@ class GmailOAuthManager(QObject):
         try:
             ciphertext = encrypt_user_data(pickle.dumps(target.to_dict()))
             # Mirror the strict Steam credential contract: never persist an OAuth
-            # token unless DPAPI produced a real encrypted blob. A `plain::`
-            # fallback (non-Windows) is treated as failure and never written.
-            if not ciphertext.startswith(b"dpapi::"):
+            # token unless it is protected (DPAPI on Windows, keyring key on Linux).
+            if not is_protected(ciphertext):
                 logger.error(
-                    "[GMAIL_OAUTH] Token encryption did not produce DPAPI output; "
+                    "[GMAIL_OAUTH] Token encryption did not produce protected output; "
                     "refusing plaintext token write"
                 )
                 return

@@ -75,11 +75,14 @@ without the safe path below.
   *Blocked:* removing read/convert/delete while any supported release could have
   written the plaintext token — it would sit in cleartext forever. Never add a
   plaintext *read* fallback; encrypted-credential failure stays explicit. Token
-  writes refuse any non-`dpapi::` output (mirrors Steam).
-- **Non-Windows DPAPI `plain::` fallback** (`core/windows/dpapi.py`; Steam
-  refuses it in `core/steam/credentials.py`). Production is Windows.
-  *Blocked:* altering it without Gmail + Steam fixtures in the same slice; never
-  weaken Windows encrypted storage or the Steam refusal to simplify dev/test.
+  writes refuse any unprotected output (`dpapi::` on Windows, `sskey::` keyring on
+  Linux; mirrors Steam).
+- **Credential protection owner** (`core/windows/dpapi.py`): DPAPI on Windows,
+  a per-user Secret Service keyring key + AES-GCM on Linux (`core/secret_service_key.py`).
+  The non-Windows `plain::` fallback is retired (no release ever wrote one, so no read
+  bridge). *Blocked:* changing either format without Gmail + Steam fixtures in the same
+  slice; never weaken Windows encrypted storage or the Steam refusal; never add a
+  plaintext write or read on any OS.
 - **Old Visualizer persisted schema / preset inputs** (`enabled_modes` →
   `mode_activation`, v9 schema versioning, retired global/technical keys, Bubble
   gradient direction, Spectrum notch layout, Sphere finish/material keys, old

@@ -38,6 +38,9 @@ winrt-Windows.Storage.Streams==3.2.1; sys_platform == "win32"
 
 # Linux media control (MPRIS over D-Bus; QtDBus cannot demarshal MPRIS maps)
 jeepney==0.9.0; sys_platform == "linux"
+# Linux credential protection: per-user key in the Secret Service keyring + AES-GCM (the DPAPI counterpart)
+secretstorage==3.4.1; sys_platform == "linux"
+cryptography==46.0.3; sys_platform == "linux"
 
 # Audio capture / volume control
 PyAudioWPatch==0.2.12.9; sys_platform == "win32"

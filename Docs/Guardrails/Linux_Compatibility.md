@@ -31,6 +31,9 @@ that stay true.
   configuration. A sidecar's blocking stdout reader runs on a named ThreadManager worker
   (`core/media/sidecar_reader.py`); no raw threads, no polling cadence, and stop ends the process first.
 
+- Credentials are protected only through `core/windows/dpapi.py` (DPAPI on Windows, the Secret Service
+  keyring key on Linux). No plaintext credential write or read on any OS; without protection, nothing is saved.
+
 ## 3. Unavailable is loud, never a silent fallback
 
 - When a feature has no Linux implementation, its owner reports it once at INFO or

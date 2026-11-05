@@ -1682,7 +1682,7 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
 
     connection_actions = QHBoxLayout()
     tab.steam_check_connection_btn = OutlinedButton("Check Saved Connection", role="standard")
-    tab.steam_check_connection_btn.setToolTip("Check DPAPI storage state without decrypting credentials or contacting Steam.")
+    tab.steam_check_connection_btn.setToolTip("Check encrypted credential storage without decrypting credentials or contacting Steam.")
     tab.steam_check_connection_btn.clicked.connect(lambda: _on_steam_check_saved_connection(tab))
     tab.steam_disconnect_btn = OutlinedButton("Disconnect", role="standard")
     tab.steam_disconnect_btn.clicked.connect(lambda: _on_steam_disconnect(tab))

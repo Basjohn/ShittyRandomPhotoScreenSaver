@@ -39,14 +39,7 @@ def _write_fake_client_config(path: Path) -> None:
     )
 
 
-_PLAINTEXT_OFF_WINDOWS = pytest.mark.xfail(
-    sys.platform != "win32",
-    strict=True,
-    reason="Linux has no credential encryption backend yet (plain:: fallback); Linux_Plan.md credentials item",
-)
-
-
-@_PLAINTEXT_OFF_WINDOWS
+@pytest.mark.usefixtures("protected_storage")
 def test_dpapi_roundtrip_no_leak() -> None:
     """Verify DPAPI encrypt/decrypt roundtrip with fake credentials (no leak)."""
     from core.windows.dpapi import encrypt_user_data, decrypt_user_data
@@ -57,7 +50,7 @@ def test_dpapi_roundtrip_no_leak() -> None:
     # Encrypt
     encrypted = encrypt_user_data(fake_password)
     assert encrypted != fake_password
-    assert encrypted.startswith(b"dpapi::") or encrypted.startswith(b"plain::")
+    assert encrypted.startswith((b"dpapi::", b"sskey::"))
     
     # Decrypt
     decrypted = decrypt_user_data(encrypted)
@@ -132,7 +125,7 @@ def test_no_real_credentials_in_code() -> None:
     assert "fake_password" in source
 
 
-@_PLAINTEXT_OFF_WINDOWS
+@pytest.mark.usefixtures("protected_storage")
 def test_imap_password_storage_mocked() -> None:
     """Verify IMAP password storage with DPAPI (no real credentials)."""
     from core.windows.dpapi import encrypt_user_data, decrypt_user_data

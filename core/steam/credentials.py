@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shutil
 import time
 from collections.abc import Mapping
@@ -24,7 +23,7 @@ from core.settings.storage_paths import (
     get_steam_credential_meta_file,
     get_steam_credentials_file,
 )
-from core.windows.dpapi import decrypt_user_data, encrypt_user_data
+from core.windows.dpapi import decrypt_user_data, encrypt_user_data, is_protected, protected_storage_available
 
 logger = get_logger(__name__)
 
@@ -241,14 +240,14 @@ def save_credentials(
 ) -> Path:
     """Strictly encrypt and atomically persist Steam credentials.
 
-    The encrypted blob must start with ``dpapi::``. A ``plain::`` result is
-    treated as failure and is never written.
+    The encrypted blob must be protected (``dpapi::`` on Windows, ``sskey::`` keyring
+    on Linux); anything else is treated as failure and is never written.
     """
     payload = credential.to_json_bytes()
     encrypted = encrypt_func(payload)
-    if not encrypted.startswith(b"dpapi::"):
-        logger.error("[STEAM] Credential encryption did not produce DPAPI output; refusing write")
-        raise SteamCredentialError("Steam credentials require DPAPI-protected storage")
+    if not is_protected(encrypted):
+        logger.error("[STEAM] Credential encryption did not produce protected output; refusing write")
+        raise SteamCredentialError("Steam credentials require protected storage")
 
     path = credentials_path or get_steam_credentials_file(profile)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -284,9 +283,9 @@ def load_credentials(
     if not path.exists():
         return None
     encrypted = path.read_bytes()
-    if not encrypted.startswith(b"dpapi::"):
-        logger.error("[STEAM] Refusing non-DPAPI Steam credential payload at %s", path)
-        raise SteamCredentialError("Steam credential file is not DPAPI protected")
+    if not is_protected(encrypted):
+        logger.error("[STEAM] Refusing unprotected Steam credential payload at %s", path)
+        raise SteamCredentialError("Steam credential file is not protected")
     decrypted = decrypt_func(encrypted)
     return SteamCredentialPayload.from_json_bytes(decrypted)
 
@@ -330,7 +329,7 @@ def get_storage_status(*, profile: ProfileRef = None) -> SteamCredentialStorageS
         return SteamCredentialStorageStatus(
             storage_available=False,
             has_credentials=has_credentials,
-            message="Strict Steam credential storage is unavailable on this platform.",
+            message="Protected Steam credential storage is unavailable: on Linux start a keyring (GNOME Keyring or KDE Wallet).",
         )
     if has_credentials:
         return SteamCredentialStorageStatus(
@@ -374,7 +373,7 @@ def validate_credential_input(api_key: str | None, profile_identifier: str | Non
         return SteamCredentialInputStatus(
             can_test=False,
             can_save_after_test=False,
-            message="Strict Steam credential storage is unavailable on this platform.",
+            message="Protected Steam credential storage is unavailable: on Linux start a keyring (GNOME Keyring or KDE Wallet).",
         )
     normalized_api_key = normalize_api_key(api_key)
     if len(normalized_api_key) < 16:
@@ -439,4 +438,4 @@ def get_profile_cache_dir_for_credentials(
 
 def steam_storage_available() -> bool:
     """Return whether strict Steam credential persistence is available here."""
-    return os.name == "nt"
+    return protected_storage_available()

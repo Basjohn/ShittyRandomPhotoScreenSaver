@@ -42,10 +42,10 @@ data locations, product builds (including from Windows) and the Linux test route
 
 - [x] Links open directly; Windows helper never scheduled/written; Gmail desktop check; Qt folder opening.
 - [x] Theme material underlay for Glass/Acrylic; orbit Qt grab; folder spelling follows OS rules.
-- [x] Owner-only `plain::` credential files; no-plaintext tests are strict xfail off Windows.
-- [ ] **Operator decision: Linux credential encryption.** Secret Service via `secretstorage` (needs a keyring
-  daemon; GNOME/KDE have one) would let Gmail OAuth tokens and Steam persist like DPAPI. Until decided,
-  Gmail OAuth re-authorises each session and Steam stays unavailable on Linux.
+- [x] Credentials on Linux: per-user key in the Secret Service keyring (GNOME Keyring / KDE Wallet) +
+  AES-GCM, same files and callers as DPAPI; no plaintext fallback anywhere. Gmail OAuth, IMAP and Steam persist.
+- [ ] Awaiting validation on a real desktop: first save creates "SRPSS credential key" in the login keyring
+  without a prompt (unlocked session), later runs read it silently.
 - [x] Texture adoption and image-pool retention bound on Linux; app-volume live listener.
 - [ ] Optional: KWin/picom blur-behind for Glass on desktops that offer it (refines the opaque underlay).
 

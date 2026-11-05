@@ -65,7 +65,7 @@ contract; SRPSS itself is never configured through environment variables). One o
 | Volume slider, mute, volume OSD | PulseAudio/PipeWire through `pactl` |
 | Held-left orbit | works; the cursor is not confined to the card (Wayland forbids it) |
 | Links from widgets | open directly in the default browser |
-| Gmail OAuth / Steam credentials | not persisted yet (no Linux keyring decision); IMAP password stored owner-only |
+| Gmail and Steam credentials | encrypted with a per-user key kept in your desktop keyring (GNOME Keyring / KDE Wallet), like DPAPI on Windows |
 | Reddit secure-desktop helper, `.scr`, installer, `/p` | Windows-only |
 
 Anything unavailable says so once in the log with a `[PLATFORM]` line.
@@ -133,3 +133,4 @@ Windows contract on any OS uses the `windows_platform` fixture or a stated skip
 | `[PLATFORM] Visualizer audio capture needs parec` | install `pulseaudio-utils` |
 | Qt `xcb` plugin errors | `scripts/linux/setup.sh --system-deps` installs the xcb libraries |
 | Settings looks flat/opaque | expected: Linux has no Glass/Acrylic compositor primitive (§5) |
+| Gmail/Steam say protected storage is unavailable | no keyring in the session: install/start GNOME Keyring or KDE Wallet (minimal window managers often lack one); credentials are never stored unencrypted |

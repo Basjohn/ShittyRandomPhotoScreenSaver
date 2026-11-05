@@ -18,7 +18,7 @@ from typing import Any, Mapping, Optional
 
 from core.logging.logger import get_logger
 from core.settings.storage_paths import get_app_data_dir
-from core.windows.dpapi import encrypt_user_data, load_encrypted
+from core.windows.dpapi import encrypt_user_data, is_protected, load_encrypted
 
 
 logger = get_logger(__name__)
@@ -187,13 +187,11 @@ def _load_oauth_credentials(path: Path) -> Optional[PreparedOAuthCredentials]:
 def _write_encrypted_atomic(path: Path, payload: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     ciphertext = encrypt_user_data(payload)
-    # Never persist a legacy-token migration as plaintext: a `plain::` fallback
-    # (non-Windows) is a failure, so the migration raises and the caller keeps the
-    # original file rather than writing an unencrypted token. Matches Steam's
-    # strict DPAPI-only credential contract.
-    if not ciphertext.startswith(b"dpapi::"):
+    # Never persist a token unless it is protected (DPAPI on Windows, the keyring key on
+    # Linux); encrypt_user_data raises when neither exists. Matches Steam's strict contract.
+    if not is_protected(ciphertext):
         raise RuntimeError(
-            "Gmail token storage requires DPAPI protection; refusing plaintext write"
+            "Gmail token storage requires protected storage; refusing plaintext write"
         )
     fd, tmp_name = tempfile.mkstemp(
         prefix=f".{path.name}.",

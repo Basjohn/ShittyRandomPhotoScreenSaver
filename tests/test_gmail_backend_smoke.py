@@ -28,11 +28,11 @@ def test_email_metadata_frozen_hashable() -> None:
     assert em.labels == ("INBOX", "UNREAD")
 
 
-def test_dpapi_roundtrip() -> None:
-    from core.windows.dpapi import encrypt_user_data, decrypt_user_data
+def test_dpapi_roundtrip(protected_storage) -> None:
+    from core.windows.dpapi import encrypt_user_data, decrypt_user_data, is_protected
     plaintext = b"test_secret_123"
     ciphertext = encrypt_user_data(plaintext)
     assert ciphertext != plaintext
-    assert ciphertext.startswith(b"dpapi::") or ciphertext.startswith(b"plain::")
+    assert is_protected(ciphertext) and plaintext not in ciphertext
     recovered = decrypt_user_data(ciphertext)
     assert recovered == plaintext

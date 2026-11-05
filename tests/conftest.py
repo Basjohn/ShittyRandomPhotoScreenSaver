@@ -287,6 +287,22 @@ def thread_manager():
 
 
 @pytest.fixture
+def protected_storage(monkeypatch):
+    """Credential protection usable in tests on every OS (DPAPI on Windows as is).
+
+    Off Windows the Secret Service keyring is replaced by a fixed in-memory key, so
+    tests exercise the real encryption without a desktop keyring daemon.
+    """
+    if sys.platform.startswith("win"):
+        return
+    from core import secret_service_key
+
+    key = bytes(range(32))
+    monkeypatch.setattr(secret_service_key, "user_key", lambda *, create: key)
+    monkeypatch.setattr(secret_service_key, "available", lambda: True)
+
+
+@pytest.fixture
 def app_shared_thread_manager():
     """A ThreadManager registered as app-shared (e.g. for sidecar readers), restored afterwards."""
     from core.threading.manager import ThreadManager
