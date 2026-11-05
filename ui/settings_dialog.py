@@ -358,6 +358,17 @@ class _SettingsTabVectorIcon(QWidget):
                 1.0,
             )
 
+    def _draw_layout(self, painter: QPainter, rect: QRectF) -> None:
+        # A screen split into panes: a header strip over one tall pane and two stacked ones.
+        frame = rect.adjusted(1.0, 1.5, -1.0, -1.5)
+        painter.drawRoundedRect(frame, 2.2, 2.2)
+        header_y = frame.top() + frame.height() * 0.30
+        split_x = frame.left() + frame.width() * 0.42
+        middle_y = header_y + (frame.bottom() - header_y) * 0.5
+        painter.drawLine(QPointF(frame.left(), header_y), QPointF(frame.right(), header_y))
+        painter.drawLine(QPointF(split_x, header_y), QPointF(split_x, frame.bottom()))
+        painter.drawLine(QPointF(split_x, middle_y), QPointF(frame.right(), middle_y))
+
     def _draw_quick_start(self, painter: QPainter, rect: QRectF) -> None:
         painter.drawEllipse(rect.adjusted(1, 1, -1, -1))
         center = rect.center()
@@ -393,6 +404,8 @@ class _SettingsTabVectorIcon(QWidget):
             self._draw_transitions(painter, rect)
         elif icon_name == "widgets":
             self._draw_widgets(painter, rect)
+        elif icon_name == "layout":
+            self._draw_layout(painter, rect)
         elif icon_name == "visualizers":
             self._draw_visualizers(painter, rect)
         elif icon_name == "scene3d":
@@ -683,7 +696,7 @@ class SettingsDialog(QDialog):
         # runtime -> Settings -> runtime round-trip is deterministic even after
         # lazy hydration changes content height. ``ui.last_tab_scroll`` remains
         # a tolerated legacy schema member but is intentionally ignored.
-        self._tab_keys = ["sources", "display", "transitions", "widgets", "visualizers", "scene3d", "accessibility", "themes", "about", "quick_start"]
+        self._tab_keys = ["sources", "display", "transitions", "widgets", "layout", "visualizers", "scene3d", "accessibility", "themes", "about", "quick_start"]
         self._force_initial_sources_tab = os.getenv(
             "SRPSS_SETTINGS_FORCE_INITIAL_TAB_SOURCES", "0"
         ).strip().lower() in {"1", "true", "yes", "on"}
@@ -1023,8 +1036,9 @@ class SettingsDialog(QDialog):
         self.display_tab_btn = TabButton("Display", "display")
         self.transitions_tab_btn = TabButton("Transitions", "transitions")
         self.widgets_tab_btn = TabButton("Widgets", "widgets")
+        self.layout_tab_btn = TabButton("Layout", "layout")
         self.visualizers_tab_btn = TabButton("Visualizers", "visualizers")
-        self.scene3d_tab_btn = TabButton("3D", "scene3d")
+        self.scene3d_tab_btn = TabButton("3D Quality", "scene3d")
         self.accessibility_tab_btn = TabButton("Accessibility", "accessibility")
         self.themes_tab_btn = TabButton("Themes", "themes")
         self.about_tab_btn = TabButton("About", "about")
@@ -1036,6 +1050,7 @@ class SettingsDialog(QDialog):
             "display": self.display_tab_btn,
             "transitions": self.transitions_tab_btn,
             "widgets": self.widgets_tab_btn,
+            "layout": self.layout_tab_btn,
             "visualizers": self.visualizers_tab_btn,
             "scene3d": self.scene3d_tab_btn,
             "accessibility": self.accessibility_tab_btn,
@@ -1069,6 +1084,7 @@ class SettingsDialog(QDialog):
                 lazy_sections=True,
                 initial_view_state=self._initial_view_state_for_tab("widgets"),
             ),
+            "layout": self._create_layout_tab,
             "visualizers": lambda: VisualizersTab(
                 self._settings,
                 parent=self.content_stack,
@@ -1132,6 +1148,10 @@ class SettingsDialog(QDialog):
         from ui.onboarding.quick_start import QuickStartPage
         return QuickStartPage(self._settings, self.run_guided_setup, parent=self.content_stack)
 
+    def _create_layout_tab(self) -> QWidget:
+        from ui.onboarding.layout_page import LayoutPage
+        return LayoutPage(self._settings, parent=self.content_stack)
+
     def run_guided_setup(self) -> None:
         """Show Guided Setup in place of the sidebar and tabs (never a second window)."""
         if self._guided_setup_panel is not None or self._closing:
@@ -1166,10 +1186,10 @@ class SettingsDialog(QDialog):
             self.run_requested = False
 
     def _resolve_pending_arrange(self) -> bool:
-        """Apply/Discard/Stay for an unapplied Quick Start Arrange draft; False = stay."""
+        """Apply/Discard/Stay for an unapplied Layout Arrange draft; False = stay."""
         # The built tab, never its construction placeholder in _tab_widgets.
-        quick_start = self.__dict__.get("quick_start_tab")
-        resolve = getattr(quick_start, "resolve_pending_arrange", None)
+        layout = self.__dict__.get("layout_tab")
+        resolve = getattr(layout, "resolve_pending_arrange", None)
         return resolve() if callable(resolve) else True
 
     def _resolve_leaving_widget_page(self) -> bool:
@@ -1192,10 +1212,10 @@ class SettingsDialog(QDialog):
         self._shell_stack.removeWidget(host)
         host.deleteLater()
         self._reload_all_tab_settings()
-        quick_start = self.__dict__.get("quick_start_tab")
-        refresh = getattr(quick_start, "refresh", None)
-        if callable(refresh):
-            refresh()
+        for key in ("quick_start", "layout"):
+            refresh = getattr(self.__dict__.get(f"{key}_tab"), "refresh", None)
+            if callable(refresh):
+                refresh()
 
     def _decide_no_sources_after_show(self) -> None:
         if self._closing or not self.isVisible() or self._has_image_sources():
@@ -1406,16 +1426,16 @@ class SettingsDialog(QDialog):
             return
         if self._admit_top_level_tab_index(index) != index:
             return
-        quick_start_index = self._tab_index_for_key("quick_start")
+        layout_index = self._tab_index_for_key("layout")
         if (
-            self.content_stack.currentIndex() == quick_start_index
-            and index != quick_start_index
+            self.content_stack.currentIndex() == layout_index
+            and index != layout_index
             and self.isVisible()
             and not self._resolve_pending_arrange()
         ):
-            # Stay in Arrange: keep Quick Start's button the checked one.
+            # Stay in Arrange: keep Layout's button the checked one.
             for position, button in enumerate(self.tab_buttons):
-                button.setChecked(position == quick_start_index)
+                button.setChecked(position == layout_index)
             return
         current_index = self.content_stack.currentIndex()
         if index != current_index and self.isVisible() and not self._resolve_leaving_widget_page():

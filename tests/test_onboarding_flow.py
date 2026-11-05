@@ -280,11 +280,18 @@ def test_wizard_lazy_rerun_and_manual_launch_ignores_silence(qapp, settings):
     wizard.close_setup(False); wizard.deleteLater()
 
 
-def test_quick_start_arrange_is_lazy(qapp, settings, monkeypatch):
+def test_layout_arrange_is_lazy(qapp, settings):
+    from ui.onboarding.layout_page import LayoutPage
+    page = LayoutPage(settings)
+    assert page.arrange is None
+    assert not settings.writes
+    page.deleteLater()
+
+
+def test_quick_start_writes_nothing_on_construction(qapp, settings, monkeypatch):
     import ui.onboarding.quick_start as module
     monkeypatch.setattr(module, "current_setup_summary", lambda _settings: {"sources":False,"families":0,"transitions":0})
     page = module.QuickStartPage(settings, lambda: None)
-    assert page.arrange is None
     assert not settings.writes
     page.deleteLater()
 

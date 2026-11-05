@@ -1,6 +1,6 @@
 """The 3D Detail tier that applies to one 3D transition or Visualizer: the one resolver.
 
-Settings (the ``scene3d`` section, edited on the 3D Settings tab) hold one value per level and
+Settings (the ``scene3d`` section, edited on the 3D Quality tab) hold one value per level and
 nothing derived:
 
 - ``detail``: the General tier for everything 3D. ``Auto`` picks by the GPU in use

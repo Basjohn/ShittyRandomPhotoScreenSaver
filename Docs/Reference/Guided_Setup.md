@@ -74,8 +74,10 @@ any locally owned helper manager.
 `ui/onboarding/arrange_model.py` stages a `CustomLayoutSession`; `rendering/custom_layout_commit.py` is the shared
 commit owner for Settings Arrange and Runtime Edit. The canvas is a projection of selected screens in Qt logical
 coordinates. Merely opening, selecting or dragging does not persist. In Guided Setup, Apply/Next applies the
-arrangement to the wizard draft, which Finish saves; Discard drops it. Quick Start reuses the same editor (created only
-when its bucket opens), where Apply saves directly.
+arrangement to the wizard draft, which Finish saves; Discard drops it. The Settings **Layout** tab
+(`ui/onboarding/layout_page.py`, after Widgets) reuses the same editor (created only when its Arrange Widgets bucket
+opens), where Apply saves directly; Layout Slots and Reset Widget Layouts sit beside it there. Quick Start keeps only
+the setup summary, Run Guided Setup Again and Hide Guided Setup From Now On.
 
 The canvas uses the saver's own geometry, so boxes land where they are drawn:
 
@@ -117,7 +119,7 @@ sizing. Both editors save a never-placed card as content-sized (a card still loa
 data, is never frozen at its loading size), preserve content sizing for moves and convert to explicit geometry on any
 resize (uniform scale, width/height) and, in Runtime Edit, on child edits.
 
-**Unapplied Arrange changes.** Arrange under Settings → Quick Start applies nothing until Apply. Closing Settings (close
+**Unapplied Arrange changes.** Arrange under Settings → Layout applies nothing until Apply. Closing Settings (close
 button, Enter or Escape), switching to another Settings tab, or starting Guided Setup with a pending draft asks once,
 in the shared styled popup: Apply Changes, Discard Changes or Stay In Arrange (closing the popup stays). Guided
 Setup's Arrange step asks the same on Back and Next (Apply there applies to the wizard's draft, saved at Finish); Skip
@@ -167,7 +169,7 @@ to save. Slots include layout fields such as fonts, monitors and Clock face choi
 
 ## Dormancy and preview maintenance
 
-Quick Start is excluded from background Settings hydration. Closed onboarding has no timer, worker, provider, QML
+Quick Start and Layout are excluded from background Settings hydration. Closed onboarding has no timer, worker, provider, QML
 root, audio consumer or preview cache; Arrange's size meter and its private QML engine exist only while an Arrange page
 does. Static PNGs decode only on the visited page; artwork rescales only on geometry
 or DPR changes using the same helper as About. Arrange never starts a screensaver runtime or data provider.
@@ -184,7 +186,12 @@ run by onboarding.
 - Every widget preview is transparent around its card with a free-hanging SE shadow, so it sits on any theme.
 - Visualizer mode previews (`visualizer_<mode>.png`) are cut from the operator's unshipped
   `tools/onboarding_sources/Visualizers.png`; Voxel Sphere has no card there, so it keeps its background inside a
-  drawn frame. Without the sheet, a rebuild keeps the committed previews. The page shows a narrow mode list (sized
+  drawn frame. Without the sheet, a rebuild keeps the committed previews. Modes the sheet does not show render
+  through the production GL host (`_RENDERED_VISUALIZER_PREVIEWS`); Waveform Ribbon first primes its path history
+  through the same capture on a fixture passage (`_PREVIEW_PRIMING_SECONDS`). Rendering only the Visualizer previews:
+  `--widgets-only --family visualizers`, then `tools/onboarding_sheet_previews.py` (restores the sheet's
+  `widget_visualizers.png` and assembles the manifest), then `tools/regen_qrc.py` after adding any new file to
+  `ui/resources/onboarding_assets.qrc`. The page shows a narrow mode list (sized
   to its longest name, never truncated) with the selected mode's preview beside it.
 - Widget previews render at 2x device pixels (the sheet is a 2x screenshot and is cut at native size). Settings
   shows them at no more than one source pixel per physical pixel (`ImagePanel(..., upscale=False)`), so small cards
@@ -241,7 +248,7 @@ The implemented feature is operator-accepted. Use the following checklist only i
   reassign the display of an already-customised widget; tick and untick Free placement; load a layout slot (Apply and
   Cancel); save to a slot, then load it on the saver with its number key;
 - [ ] Arrange: move a widget and, without Apply, close Settings (and separately: switch tab, press Escape, start Guided
-  Setup) — the Apply/Discard/Stay popup appears each time; Stay keeps the draft and Quick Start in view; Apply shows the
+  Setup) — the Apply/Discard/Stay popup appears each time; Stay keeps the draft and Layout in view; Apply shows the
   move on the saver; Discard drops it. In Guided Setup's Arrange step the same popup appears on Back and on Next;
 - [ ] Finish & Run from standalone Settings (Windows Screen Saver Settings → Settings, or the MC Settings launch), from
   Settings opened on the running saver, and from a saver launch that opened Settings for missing sources: each saves
@@ -258,8 +265,8 @@ The implemented feature is operator-accepted. Use the following checklist only i
   down in Arrange returns it to the same place (top edge and centre fixed); a corner drag scales about the same point;
   the Visualizer's corner changes width and height together; width/height on Reddit, Gmail or Friend Pulse stops where
   the card still fills its box;
-- [ ] Runtime Edit sees Quick Start changes, and Quick Start sees a later Runtime Edit change;
+- [ ] Runtime Edit sees Layout (Arrange) changes, and Layout sees a later Runtime Edit change;
 - [ ] child edits survive parent manipulation;
 - [ ] final runtime start;
 - [ ] Settings → QUICK START lazy reopen;
-- [ ] no network or provider work while Quick Start and Arrange are closed.
+- [ ] no network or provider work while Quick Start, Layout and Arrange are closed.

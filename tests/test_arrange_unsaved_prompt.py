@@ -1,6 +1,6 @@
 """Leaving Arrange with an unapplied draft asks Apply / Discard / Stay.
 
-Quick Start (a real SettingsDialog: tab switch and close) and Guided Setup
+The Layout tab (a real SettingsDialog: tab switch and close) and Guided Setup
 (Back/Next from its Arrange step) ask the same question. No window is shown:
 the popup's exec is replaced by the operator's choice and the dialog reports
 itself visible so its close checks run.
@@ -104,26 +104,27 @@ def dialog(tmp_path):
     animations.cleanup()
 
 
-def _quick_start_with_draft(dialog):
-    index = dialog._tab_index_for_key("quick_start")
+def _layout_with_draft(dialog):
+    index = dialog._tab_index_for_key("layout")
     dialog._switch_tab(index, animate=False)
-    quick_start = dialog.quick_start_tab
-    quick_start.arrange_toggle.setChecked(True)
-    arrange = quick_start.arrange
+    layout = dialog.layout_tab
+    layout.arrange_toggle.setChecked(True)
+    arrange = layout.arrange
     if not arrange.model.session.items():
         pytest.skip("default settings enable no arrangeable widget")
     _drag_first_box(arrange)
     return index, arrange
 
 
-def test_quick_start_draft_asks_before_another_tab_and_before_closing(dialog, monkeypatch) -> None:
-    index, arrange = _quick_start_with_draft(dialog)
+def test_layout_draft_asks_before_another_tab_and_before_closing(dialog, monkeypatch) -> None:
+    index, arrange = _layout_with_draft(dialog)
     asked = []
 
     _answer(monkeypatch, ["stay"], asked)
     dialog._switch_tab(0, animate=False)
     assert len(asked) == 1
-    assert dialog.content_stack.currentIndex() == index  # stayed on Quick Start
+    assert dialog.content_stack.currentIndex() == index  # stayed on Layout
+    assert dialog.tab_buttons[index].isChecked()
     assert arrange.model.pending
 
     _answer(monkeypatch, ["stay"], asked)
@@ -164,3 +165,26 @@ def test_guided_setup_arrange_step_asks_on_back_and_next(monkeypatch) -> None:
     finally:
         panel.close_setup(False)
         panel.deleteLater()
+
+
+def test_layout_is_the_only_arrange_owner_and_quick_start_never_asks(dialog, monkeypatch) -> None:
+    """Arrange lives on Layout alone: Quick Start builds no editor, and leaving Quick Start or
+    Layout without a draft asks nothing (the negative controls for the prompt above)."""
+    asked = []
+    _answer(monkeypatch, ["stay"], asked)
+    quick_index = dialog._tab_index_for_key("quick_start")
+    dialog._switch_tab(quick_index, animate=False)
+    quick_start = dialog.quick_start_tab
+    assert not hasattr(quick_start, "arrange") and not hasattr(quick_start, "resolve_pending_arrange")
+    from ui.onboarding.arrange import ArrangePage
+    assert not quick_start.findChildren(ArrangePage)
+    dialog._switch_tab(0, animate=False)
+    assert asked == [] and dialog.content_stack.currentIndex() == 0
+
+    layout_index = dialog._tab_index_for_key("layout")
+    dialog._switch_tab(layout_index, animate=False)
+    assert dialog.layout_tab.arrange is None  # lazy until its bucket opens
+    dialog.layout_tab.arrange_toggle.setChecked(True)
+    assert len(dialog.layout_tab.findChildren(ArrangePage)) == 1
+    dialog._switch_tab(0, animate=False)  # no draft: nothing to ask
+    assert asked == [] and dialog.content_stack.currentIndex() == 0

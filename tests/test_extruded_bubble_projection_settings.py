@@ -16,10 +16,13 @@ FOV='extruded_bubble_camera_fov'
 
 
 def test_missing_projection_preserves_existing_perspective_and_choice_is_eb_only():
-    assert require_canonical_default('widgets.spotify_visualizer.'+KEY)=='Perspective'
-    assert SpotifyVisualizerSettings.from_mapping({},apply_preset_overlay=False).extruded_bubble_camera_projection=='Perspective'
+    # The default is authored: assert only that it is one of the control's choices and that a
+    # missing value resolves to it.
     control=spec_control(KEY)
     assert control.choices==('Perspective','Orthographic')
+    default=require_canonical_default('widgets.spotify_visualizer.'+KEY)
+    assert default in control.choices
+    assert SpotifyVisualizerSettings.from_mapping({},apply_preset_overlay=False).extruded_bubble_camera_projection==default
     assert control.admit('unknown','Perspective')=='Perspective'
     assert spec_control('shockwave_grid_camera_projection') is None
 

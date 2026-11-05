@@ -1,7 +1,7 @@
 """Input-only compatibility for the 3D Detail tier.
 
 ``transitions.detail_3d`` (High / Balanced / Performance, on the Transitions Setup page) was the
-only 3D tier before the 3D Settings tab. It now lives as the 3D Transitions family tier,
+only 3D tier before the 3D Quality tab. It now lives as the 3D Transitions family tier,
 ``scene3d.transitions_detail``. While loading persisted data or an SST payload a stored
 Balanced or Performance (a choice someone made) becomes that family tier; High, the old default,
 becomes "General" (the new default: Auto, High on a discrete GPU). The retired leaf is then

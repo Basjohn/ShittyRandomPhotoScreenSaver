@@ -299,7 +299,7 @@ def _choice_of(codes: Mapping[str, str]) -> Directions:
     return Directions(dict(codes))
 
 
-_AUTO_TIP = " Auto follows 3D Transitions on the 3D tab."
+_AUTO_TIP = " Auto follows 3D Transitions on the 3D Quality tab."
 _ANTIALIASING = Choice("antialiasing", "Anti-aliasing:", SCENE3D_ANTIALIASING_CHOICES,
                        "Multisampling that smooths the 3D edges; 4x and 8x cost the most GPU time." + _AUTO_TIP)
 _MOTION_BLUR = Choice("motion_blur", "Motion Blur:", SCENE3D_EFFECT_CHOICES,

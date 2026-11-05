@@ -394,6 +394,7 @@ def test_custom_layout_reload_arms_pointer_guard(monkeypatch, qt_app):
 
     guard_calls: list[tuple[int, str]] = []
     load_calls: list[str] = []
+    replacement: list[str] = []
     monkeypatch.setattr(
         engine_handlers,
         "suppress_runtime_pointer_input",
@@ -412,9 +413,12 @@ def test_custom_layout_reload_arms_pointer_guard(monkeypatch, qt_app):
         _settings_dialog_active=False,
         _terminal_shutdown_requested=False,
         stop=lambda exit_app=False, reason=None: None,
+        # The one replacement-construction path arms its hang watchdog first; a stub
+        # without it raised inside the reload, which then reached QCoreApplication.exit(1).
+        _arm_replacement_watchdog=lambda label: replacement.append("watchdog"),
         _initialize_display=lambda: True,
         _setup_rotation_timer=lambda: None,
-        start=lambda show_first_image=True: True,
+        start=lambda show_first_image=True: replacement.append("start") or True,
     )
     monkeypatch.setattr(
         engine_handlers.ThreadManager,
@@ -426,6 +430,8 @@ def test_custom_layout_reload_arms_pointer_guard(monkeypatch, qt_app):
 
     assert guard_calls == [(700, "custom_layout_runtime_reload")]
     assert load_calls == ["load"]
+    # The replacement runtime was constructed and started, not aborted.
+    assert replacement == ["watchdog", "start"]
 
 
 def test_engine_start_schedules_bounded_first_image_retry(monkeypatch, qt_app):

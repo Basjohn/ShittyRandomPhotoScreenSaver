@@ -692,7 +692,7 @@ User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runti
   projected eight-vertex 3D cage + north marker, stable gesture targets, bounded existing-wake framing with closed/deselected
   dormancy, and explicit profile-switch/Edit-Save snapshot discard/rebase without false geometry mismatch counts. Test stages lie
   inside their bound native window; hidden window pixels or supplied event coordinates alone cannot certify physical feel;
-- `tests/test_scene3d_quality_settings.py` — the 3D Settings tab, the tier resolver (General / family / entry, Auto by
+- `tests/test_scene3d_quality_settings.py` — the 3D Quality tab, the tier resolver (General / family / entry, Auto by
   GPU), the `transitions.detail_3d` bridge, each tier's levers in the renderers;
 - `tests/test_visualizer_profile_lender_presets.py`, `tests/test_3d_curated_preset_ownership.py` — descriptor-declared
   borrowing, one-time ownership promotion and complete preset isolation through persisted startup and production callers;

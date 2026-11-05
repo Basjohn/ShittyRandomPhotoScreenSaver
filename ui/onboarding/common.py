@@ -112,10 +112,12 @@ class CopyLabel(QLabel):
         super().setText(title_case(text))
 
 
-def text_label(text: str, *, heading=False) -> QLabel:
+def text_label(text: str, *, heading=False, emphasis=False) -> QLabel:
+    """A wrapped page label: a page heading, ordinary info copy, or emphasised (bold) info copy."""
     label = CopyLabel(text)
     label.setWordWrap(True)
-    shared_styles.apply_shared_label_style(label, "PAGE_TITLE_STYLE" if heading else "INFO_LABEL_STYLE")
+    role = "PAGE_TITLE_STYLE" if heading else "INFO_LABEL_EMPHASIS_STYLE" if emphasis else "INFO_LABEL_STYLE"
+    shared_styles.apply_shared_label_style(label, role)
     return label
 
 

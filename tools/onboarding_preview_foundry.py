@@ -1029,7 +1029,8 @@ _WIDGET_PREVIEWS: Final = {
 # rendered through their production capture and renderer. They sit on a dark backdrop inside a
 # drawn frame like the sheet's Sphere; a mode whose glow is added light renders straight onto it
 # (``_GLOW_ON_BACKDROP``), since added light shows only over something.
-_RENDERED_VISUALIZER_PREVIEWS: Final = ("extruded_spectrum", "shockwave_grid", "oscilloscope", "extruded_bubble")
+_RENDERED_VISUALIZER_PREVIEWS: Final = ("extruded_spectrum", "shockwave_grid", "oscilloscope", "extruded_bubble",
+                                        "waveform_ribbon")
 # Modes whose picture comes from musical onsets get a few fixture onsets (time, type, magnitude,
 # presence: a big hit, then two ordinary ones) through a minimal transient-bus stand-in before the
 # settled captures at 1.0 and 1.12 s.
@@ -1037,6 +1038,9 @@ _PREVIEW_ONSETS: Final = {"shockwave_grid": ((0.2, "kick", 3.0, 1.5), (0.55, "sn
                                              (0.8, "kick", 2.4, 1.0)),
                            # Oscilloscope: a hit just before the settled capture, so its flare shows.
                            "oscilloscope": ((0.95, "kick", 2.4, 1.1),)}
+# Modes that prepare a retained history before their first ready frame (Waveform Ribbon fills its
+# path ring, then travels): seconds of fixture passage captured at 30 Hz before the settled captures.
+_PREVIEW_PRIMING_SECONDS: Final = {"waveform_ribbon": 6.0}
 
 
 def preview_audio(count: int = 4096) -> "numpy.ndarray":
@@ -1076,6 +1080,21 @@ class _PreviewOnsets:
     def get_musical_intensity(self) -> float:
         """The preview shows the mode in a full, loud passage."""
         return 1.0
+
+    # Waveform Ribbon reads three fixed-scale body bands; ``now`` is the capture clock the
+    # priming loop advances, so the ribbon's history carries a moving (fixture) passage.
+    now: float = 0.0
+
+    def get_waveform_ribbon_body_bands(self):
+        import math
+
+        from widgets.spotify_visualizer.energy_bands import EnergyBands
+
+        t = self.now
+        bass = 0.62 + 0.28 * math.sin(2.1 * t)
+        mid = 0.52 + 0.26 * math.sin(3.3 * t + 1.0)
+        high = 0.42 + 0.24 * math.sin(5.2 * t + 2.0)
+        return EnergyBands(bass=bass, mid=mid, high=high, overall=(bass + mid + high) / 3.0)
 
     # A drawn-audio capture (Oscilloscope) also reads the audio, the level and the spectrum,
     # and takes the stand-in's frame as current live source.
@@ -1307,13 +1326,23 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
             capture_visualizer_logical_frame(state, now_ts=time + 0.01, changed=True, mode_reveal_ready=True)
     # Dev Curve's frame comes from its frame runtime, which production advances on each logical
     # tick: step it the same way before each capture.
+    # A history-preparing mode is primed through the same production capture, then its settled
+    # captures follow on the same clock.
+    base = _PREVIEW_PRIMING_SECONDS.get(mode, 0.0)
+    if base:
+        engine = state._engine if isinstance(getattr(state, "_engine", None), _PreviewOnsets) else _PreviewOnsets()
+        state._engine = engine
+        for step in range(round(base * 30)):
+            engine.now = step / 30.0
+            capture_visualizer_logical_frame(state, now_ts=engine.now, changed=True, mode_reveal_ready=True)
+        engine.now = base + 1.0
     advance = None
     if mode == "devcurve":
         from widgets.spotify_visualizer.tick_pipeline import dispatch_devcurve_field as advance
         advance(state, 1.0)
     first = capture_visualizer_logical_frame(
         state,
-        now_ts=1.0,
+        now_ts=base + 1.0,
         changed=True,
         mode_reveal_ready=True,
     )
@@ -1323,9 +1352,11 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
     state._display_bars = list(current_bars)
     if advance is not None:
         advance(state, 1.12)
+    if base:
+        state._engine.now = base + 1.12
     logical = capture_visualizer_logical_frame(
         state,
-        now_ts=1.12,
+        now_ts=base + 1.12,
         changed=True,
         mode_reveal_ready=True,
     )

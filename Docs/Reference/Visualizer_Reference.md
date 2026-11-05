@@ -60,7 +60,7 @@ and the ancestors it requires. Legacy Technical-only opens acquire the Advanced 
 both hidden disclosures. This remains Custom-only UI and does not change authored values or runtime configuration.
 
 Each tier-aware 3D mode page exposes only its own Detail through `Scene3DQualityControls`, the same editor used
-by the 3D Settings tab. General and family controls stay on the 3D tab. Both surfaces read/write the existing `scene3d` leaves and refresh from Settings change edges;
+by the 3D Quality tab. General and family controls stay on the 3D Quality tab. Both surfaces read/write the existing `scene3d` leaves and refresh from Settings change edges;
 their resolved labels use `resolve_scene3d_tier`. Quality edits never select Custom or overwrite artistic presets.
 These tier views do not introduce per-mode AA/Bloom overrides. Existing transition AA/Bloom choices already pass
 through `resolve_scene_quality`; visualizer glow and Extruded Spectrum's Smooth Edges retain their mode-owned
@@ -662,7 +662,7 @@ and validation gates live in `Waveform_Ribbon_Migration_Plan.md` → Camera → 
   drag does not reallocate per frame), released in the renderer's `release_resources` when the mode retires or is
   disabled. Nothing is allocated per frame.
 - **Cost / quality:** continuous Visualizers and one-shot transitions retain separate internal budget tables because
-  their sustainable cost differs, while the current shared 3D Settings surface uses one vocabulary: **Auto / High /
+  their sustainable cost differs, while the current shared 3D Quality surface uses one vocabulary: **Auto / High /
   Balanced / Performance / KAK** plus explicit per-feature disable/override controls. `Auto` resolves before admission,
   never per frame; `KAK` is the minimum-viable base effect with optional expensive facilities off. Each mode may still
   own artistic parameters and explicit overrides. Per-frame Python GL calls remain the primary CPU hazard.
@@ -719,7 +719,7 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   instead of one foreshortened below a pixel; head-on (Glass Floor) the lines
   are unchanged. Off, lines are sized as if seen head-on. Smooth Edges also doubles the tier's multisampling
   (High 8x instead of 4x: +0.035 ms GPU at a full 2560x1440 card).
-- **3D Detail** (3D Settings tab, its own row under 3D Visualizers; `extruded_quality`): High 4x multisampling,
+- **3D Detail** (3D Quality tab, its own row under 3D Visualizers; `extruded_quality`): High 4x multisampling,
   Balanced 2x, Performance single-sampled; Mirror Faces on those, off at KAK (the tier's `reflections`).
 - **Translucent order** (body, ghost columns, floor reflection): exact for any view without OIT. The bar records reach the
   shader in a painter's order (`extruded_draw_order`: farthest from the orbit's eye along the row first, the eye from
@@ -804,7 +804,7 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   [Neon Lake Basin](Neon_Lake_Basin.md) for admission, persistence and clipping.
 - **Gated modes:** `_GATED_MODES` in `visualizer_mode_registry.py` holds registered modes that are not yet offered
   (empty since Extruded Bubble opened, 2026-10-18): they own defaults, a spec, presets, a runtime and a renderer, but are never
-  selectable, cycled, offered in Guided Setup or listed in the 3D tab, and get no runtime work. The gate opens in code,
+  selectable, cycled, offered in Guided Setup or listed in the 3D Quality tab, and get no runtime work. The gate opens in code,
   never through an environment flag; tests open it for themselves with `monkeypatch` when they exercise the body.
 - **Framed preset starting views:** optional top-level `starting_view` JSON metadata contains exactly the mode's
   descriptor-declared pose keys. `core/settings/visualizer_view_orbit.py` validates complete finite numeric values

@@ -182,10 +182,7 @@ class VisualizerPage(Page):
         preview_column = QVBoxLayout(); preview_column.setContentsMargins(0, 0, 0, 0)
         self.preview_title = text_label("", heading=True)
         preview_column.addWidget(self.preview_title)
-        self.preview_note = text_label("Resource intensive, but high fidelity.")
-        note_font = self.preview_note.font()
-        note_font.setBold(True)
-        self.preview_note.setFont(note_font)
+        self.preview_note = text_label("Resource intensive, but high fidelity.", emphasis=True)
         self.preview_note.setVisible(False)
         preview_column.addWidget(self.preview_note)
         self.preview = None

@@ -251,6 +251,7 @@ _SHARED_LABEL_STYLE_ROLES = (
     "SECTION_HEADING_STYLE_DISABLED",
     "SWATCH_LABEL_STYLE",
     "INFO_LABEL_STYLE",
+    "INFO_LABEL_EMPHASIS_STYLE",
     "ADV_HELPER_LABEL_STYLE",
     "INFO_LABEL_STYLE_DISABLED",
     "ACCESSIBILITY_TITLE_STYLE",
@@ -260,7 +261,7 @@ _SHARED_LABEL_STYLE_ROLES = (
 
 
 _ANNOTATION_LABEL_STYLE_ROLES = frozenset((
-    "INFO_LABEL_STYLE", "INFO_LABEL_STYLE_DISABLED", "ADV_HELPER_LABEL_STYLE",
+    "INFO_LABEL_STYLE", "INFO_LABEL_EMPHASIS_STYLE", "INFO_LABEL_STYLE_DISABLED", "ADV_HELPER_LABEL_STYLE",
     "ACCESSIBILITY_DESC_STYLE", "ACCESSIBILITY_SECTION_DESC_STYLE",
 ))
 
@@ -1471,6 +1472,24 @@ def _build_info_label_style() -> str:
 
 INFO_LABEL_STYLE = _build_info_label_style()
 
+
+def _build_info_label_emphasis_style() -> str:
+    """Explanatory copy that must stand out (a cost or caution note): the info role, bold.
+
+    The weight lives in the role itself; a ``QFont.setBold`` on a styled label is
+    overridden by the role's own ``font-weight`` when the style sheet polishes it.
+    """
+    return (
+        f"color: {_theme_qss_color('text.secondary')};"
+        "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+        "font-weight: 700;"
+        "font-size: 11px;"
+        "letter-spacing: 0.3px;"
+    )
+
+
+INFO_LABEL_EMPHASIS_STYLE = _build_info_label_emphasis_style()
+
 def _build_adv_helper_label_style() -> str:
     return (
         f"color: {_theme_rgba('text.helper')};"
@@ -1654,6 +1673,7 @@ _THEME_STYLE_BUILDERS = {
     "SWATCH_LABEL_STYLE": _build_swatch_label_style,
     "SUBSECTION_DIVIDER_STYLE": _build_subsection_divider_style,
     "INFO_LABEL_STYLE": _build_info_label_style,
+    "INFO_LABEL_EMPHASIS_STYLE": _build_info_label_emphasis_style,
     "ADV_HELPER_LABEL_STYLE": _build_adv_helper_label_style,
     "INFO_LABEL_STYLE_DISABLED": _build_info_label_style_disabled,
     "NAV_PILL_STYLE": _build_nav_pill_style,
