@@ -37,18 +37,19 @@ def test_actual_shoreline_glsl_rejects_off_editor_land_but_preserves_authored_sh
     from tests.test_scene3d_glsl_mirrors import _GlslProbe
 
     probe = _GlslProbe()
-    # Every sample lies exactly on the old iso-height band. Only authored land
-    # may light it; continuation, exact-zero water and all four outer sides may not.
-    samples = [[(u, v, base, .018)] for u, v, base in (
-        (.5, .5, .04), (0., .5, .04), (1., .5, .04),
-        (1.7, 1.75, .04), (-.01, .5, .04), (.5, -.01, .04),
-        (.5, 1.01, .04), (.5, .5, 0.),
+    # Every sample but the last lies exactly on the old iso-height band. Authored land lights it, and so does
+    # exact-zero water the cubic contour runs through (stopping at the square water cells broke the line into
+    # dashes); continuation, all four outer sides and deep water (no cubic within reach) may not.
+    samples = [[(u, v, base, curved)] for u, v, base, curved in (
+        (.5, .5, .04, .018), (0., .5, .04, .018), (1., .5, .04, .018), (.5, .5, 0., .018),
+        (1.7, 1.75, .04, .018), (-.01, .5, .04, .018), (.5, -.01, .04, .018),
+        (.5, 1.01, .04, .018), (.5, .5, 0., 0.),
     )]
     try:
         values = probe.run("vec4 a=arg(0); FragColor=vec4(basinShoreLight(a.xy,a.z,a.w));",
                            samples, declarations=HEIGHTFIELD_GLSL + _GRID_GLSL + _SHORELINE_GLSL)[:, 0]
-        assert min(values[:3]) > 1.0
-        assert max(values[3:]) == 0.0
+        assert min(values[:4]) > 1.0
+        assert max(values[4:]) == 0.0
     finally:
         probe.close()
 

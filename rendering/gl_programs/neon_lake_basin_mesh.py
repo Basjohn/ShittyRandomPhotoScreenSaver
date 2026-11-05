@@ -10,8 +10,10 @@ from __future__ import annotations
 import math
 from functools import lru_cache
 
-# Outside the authored domain, visibility fades to sky before the final ring.
-BASIN_OVERSCAN = (2.3, 3.0, 1.4, 3.4)  # left, right, front, back in UV units
+from core.constants.neon_lake_world import FAR_OVERSCAN
+
+# Outside the authored domain the land reaches on toward the horizon (left, right, front, back in UV units).
+BASIN_OVERSCAN = FAR_OVERSCAN
 
 
 def _axis(cells: int, before: float, after: float, lead: float = 0.0, trail: float = 0.0) -> tuple[float, ...]:
@@ -29,7 +31,8 @@ def _axis(cells: int, before: float, after: float, lead: float = 0.0, trail: flo
         while distance < limit:
             distance = min(limit, distance + stride)
             positions.append(distance)
-            stride = min(0.28, stride * 1.20)
+            # Cells grow with distance (an even share of the view), so the far ring stays cheap.
+            stride = min(0.04 + 0.12 * distance, stride * 1.20)
         return positions
 
     low, high = first / cells, last / cells

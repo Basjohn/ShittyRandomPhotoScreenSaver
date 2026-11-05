@@ -21,6 +21,7 @@ _RETIRED_VISUALIZER_KEYS = frozenset({
     "waveform_ribbon_strand_lifetime",  # Rejected timer expiry: strands persist with their travelling roots.
     "shockwave_grid_allow_overflow",  # Neon Lake Basin is always inside its bordered card.
     "shockwave_grid_terrain_reactivity",  # Growth; superseded by the Terrain Reaction bucket (2026-10-16).
+    "shockwave_grid_splashes",  # Droplets on heavy hits: rejected by the operator (2026-11-05) as out of place.
     "preset_blob",
     "preset_sine_wave",
     # Rejected smooth-Sphere representation controls. The experimental mode
