@@ -267,11 +267,12 @@ class WaveformScene:
         reflected_span=frustum_axial_span(projection@(mirror_view(view,0.) if mirror is None
                                                       else mirror_view(view,0.)@mirror),transverse)
         span=(min(main_span[0],reflected_span[0]),max(main_span[1],reflected_span[1]))
+        grade = colour_grade(recipe, react)  # one evaluation per frame for the ribbons, the field and the medium
         draw = dict(view=tuple(ribbon_view.flatten(order='F')), material=recipe.material,
                     sweep_axis=(1.,0.,0.), floor=FLOOR_CONTACT,
                     age_fade=(now, 0., (capacity - 1)/flow.knot_hz, 0.),continuation=(*span,2048),
                     mist=environment.mist, mist_frame=(scroll[0, 3], 0., 0.),
-                    grade=ribbon_grade(*self._history_grade(colour_grade(recipe, react)[:3])),
+                    grade=ribbon_grade(*self._history_grade(grade[:3])),
                     pulse_rim=self.pulse_rim.update(pulse, recipe.pulse_rim) if rim else None,
                     viewport=(width, height), **OWNED)
         with unclipped_prepasses():
@@ -284,9 +285,9 @@ class WaveformScene:
             draw['floor_give'] = self._floor_give if not giving or mirror is None else (*self._floor_give, side)
             fogged = not flat and recipe.fog is not None
             if fogged:
-                self._field_grade=colour_grade(recipe,react)
+                self._field_grade=grade
                 self.field.update(packet,translation=scroll[:3,3],span=recipe.fog.field_span,
-                                  grade=colour_grade(recipe,react),side=side,**OWNED)
+                                  grade=grade,side=side,**OWNED)
                 self._update_fog(self.fog,view,camera_lens,size,recipe.fog.cell,recipe.fog.slices)
                 self._update_fog(self.reflected_fog,mirror_view(view,0.),camera_lens,size,
                                  recipe.fog.reflection_cell,recipe.fog.reflection_slices)
