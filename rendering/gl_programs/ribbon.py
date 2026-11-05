@@ -35,7 +35,33 @@ vec3 graded(vec3 colour, float worldX) {
 }
 """
 
-_RIBBON_SURFACE_GLSL = """
+# A yielding floor (opt-in; uFloorGive.y 0 is off and nothing samples it). A small field reduced once per frame from
+# the published cloth holds, per world x and per ribbon (one channel each), how deep the floor gives under that
+# ribbon, the depth (world z) of the dent's centre and its inverse squared z radius: three rows. Each dent is a Gaussian
+# across z; the dents add and the sum is soft-capped at uFloorGive.z, so the surface is smooth everywhere (no crease)
+# and bounded (no hole). The floor's ray hit, its shading and the ribbons' floor contact all read this one surface.
+FLOOR_GIVE_GLSL = """
+uniform sampler2D uFloorGiveField;
+uniform vec4 uFloorGive;  // field edge x (world), inverse covered length (0: off), maximum depth, x derivative step
+float floorGiveDepth(vec2 xz) {
+    float u=(xz.x-uFloorGive.x)*uFloorGive.y;
+    if(u<=0.0 || u>=1.0) return 0.0;
+    vec4 depth=textureLod(uFloorGiveField,vec2(u,0.5/3.0),0.0);
+    vec4 centre=textureLod(uFloorGiveField,vec2(u,1.5/3.0),0.0);
+    vec4 inverse=textureLod(uFloorGiveField,vec2(u,2.5/3.0),0.0);
+    vec4 d=xz.y-centre;
+    float total=dot(depth,exp(-d*d*inverse));
+    return uFloorGive.z*(1.0-exp(-total/uFloorGive.z));
+}
+// d depth / d (x, z): central differences, one field column along x.
+vec2 floorGiveGradient(vec2 xz) {
+    vec2 e=vec2(uFloorGive.w,0.05);
+    return vec2(floorGiveDepth(xz+vec2(e.x,0.0))-floorGiveDepth(xz-vec2(e.x,0.0)),
+                floorGiveDepth(xz+vec2(0.0,e.y))-floorGiveDepth(xz-vec2(0.0,e.y)))/(2.0*e);
+}
+"""
+
+_RIBBON_SURFACE_GLSL = FLOOR_GIVE_GLSL + """
 struct Knot { vec4 p; vec4 q; vec4 tangent; vec4 side; vec4 tint; };  // tint: colour and its share
 uniform vec2 uSurface;     // camber in half-widths; transverse subdivision count
 uniform vec3 uSweepAxis;   // zero: transported width; otherwise fixed cross-section plane
@@ -125,7 +151,16 @@ float floorEased(float y) {
 float floorSlope(float y) {  // d floorEased / dy
     return 1.0/(1.0+exp(-(y-uFloorContact.x-uFloorContact.y)/uFloorContact.z));
 }
+// With the floor's give the same map eases onto the yielding surface: the ribbon dips into the dent under it.
+uniform vec2 uFloorGiveFrame;  // packet-local -> world x, z
+float floorGiveSurface(vec3 p) {  // the yielding floor's height under a packet-local point, relative to the plane
+    return -floorGiveDepth(p.xz+uFloorGiveFrame);
+}
 vec3 floorContact(vec3 p) {
+    if(uFloorContact.z>0.0 && uFloorGive.y>0.0) {
+        float h=floorGiveSurface(p);
+        return vec3(p.x,h+floorEased(p.y-h),p.z);
+    }
     return uFloorContact.z>0.0?vec3(p.x,floorEased(p.y),p.z):p;
 }
 vec3 surfacePoint(vec3 low, vec3 high, vec3 normal, float across) {
@@ -214,7 +249,13 @@ void main() {
     vec3 acrossSlope=side-2.0*uSurface.x*signWidth*bow;
     // The floor contact squashes height: the across derivative's y scales with the eased height's slope.
     vec3 unsquashed=mix(low,high,acrossFraction)+bow*0.5*length(high-low)*uSurface.x*(1.0-signWidth*signWidth);
-    if(uFloorContact.z>0.0) acrossSlope.y*=floorSlope(unsquashed.y);
+    if(uFloorContact.z>0.0 && uFloorGive.y>0.0) {
+        // Eased onto the yielding surface h(x,z): y' = h + E(y-h), so dy'/da = E'(y-h)(dy/da-dh/da)+dh/da.
+        float h=floorGiveSurface(unsquashed);
+        float dh=-dot(floorGiveGradient(unsquashed.xz+uFloorGiveFrame),acrossSlope.xz);
+        float s=floorSlope(unsquashed.y-h);
+        acrossSlope.y=s*(acrossSlope.y-dh)+dh;
+    } else if(uFloorContact.z>0.0) acrossSlope.y*=floorSlope(unsquashed.y);
     vNormal=normalize(cross(along,acrossSlope));
     vAcross=acrossFraction;
     vEmission=monotone(guardBefore.side.w,left.side.w,right.side.w,guardAfter.side.w,u);
@@ -363,7 +404,8 @@ void main() {
     vec3 birth=surfacePoint(lo,hi,normal,r2);
     vec3 direction=normalize(vec3(r4-0.5,r5-0.5+uSpark.w,r6-0.5)+vec3(1e-4));
     vec3 position=birth+direction*uSpark.z*(0.25+r1)*age/(1.0+0.5*age);
-    if(uFloorContact.z>0.0) position.y=floorEased(position.y);
+    if(uFloorContact.z>0.0 && uFloorGive.y>0.0) position=floorContact(position);
+    else if(uFloorContact.z>0.0) position.y=floorEased(position.y);
     float life=age/uSpark.y;
     float fade=smoothstep(0.0,0.06,life)*(1.0-smoothstep(0.55,1.0,life));
     float twinkle=0.55+0.45*sin(6.2831853*(uSparkLook.w*age+r2));

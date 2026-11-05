@@ -109,6 +109,21 @@ class Floor:
     # away: dark wet ground in a wide view, legible concrete under the light.
     light_reach: float = 35.
     light_far: float = .5
+    # Floor give (0 off: the rigid plane, drawn exactly as before). Where a ribbon's lower edge comes down onto the
+    # floor, the wet floor yields in a soft dent instead of the floor-contact map flattening the sheet along a plane:
+    # this share of the edge's reach below the contact level is taken by the floor, never deeper than give_depth
+    # (soft-capped, all dents together). The dent is reduced once per frame from the published cloth: per world x
+    # (give_span) and per ribbon, a Gaussian across z centred under the contact (give_radius plus the contact's own
+    # spread), blurred along x (give_blur, Gaussian sigma), so it is as smooth in time as the ribbons themselves.
+    give: float = 0.
+    give_depth: float = .9
+    give_radius: float = .9
+    give_blur: float = .7
+    give_softness: float = .08      # the reach below the contact level eases in over this (softplus): no threshold
+    give_span: tuple = (-80., 80., 1024)
+    # Reflection through the dent: reflected light is sought this far (world) along the ray mirrored by the dented
+    # surface, so the wet film bends the reflected column into the dent instead of drawing a flat mirror over it.
+    give_reach: float = 3.
 
 
 @dataclass(frozen=True)

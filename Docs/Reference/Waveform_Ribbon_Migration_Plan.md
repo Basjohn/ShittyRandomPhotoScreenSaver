@@ -344,6 +344,17 @@ model), with separately tunable A rolling twist and whole-body rotation. Source 
 - Wetness, Streak Length and Column Fade. The unified atmosphere's reflected light follows the same floor reflectivity.
 - **Floor Colour/Tint and Brightness:** independently editable surface tint and brightness alongside reflection strength.
 - Floor contact (sheets deform onto the floor) is a rule, not a control.
+- **Floor Give** (opt-in, 0 = the rigid floor, drawn exactly as before): where a lower edge comes down onto the floor
+  the wet floor yields in a soft dent and the ribbon dips in instead of being flattened along the plane. Owner:
+  `rendering/quick/scene3d/floor_give.py` reduces the published packet once per frame on GPU (two small compute
+  passes, `rendering/gl_programs/waveform_floor_give.py`) to a bounded field: per world x and ribbon the dent depth (the
+  Give share of the edge's softplus reach below floor + gap), its z centre and z radius (reach-weighted over the exact
+  cambered section, so the dent follows a turning sheet continuously), blurred along x. `FLOOR_GIVE_GLSL` sums the
+  Gaussian dents and soft-caps them (`Floor.give_depth`): no crease, no hole. The floor's ray marches then bisects to
+  the first crossing (same coverage, the dented point's depth), its normal drives Fresnel, shading and a reflection
+  bent through the dent; ribbons, strands and sparks ease their contact onto the same surface. Stateless and a smooth
+  function of the cloth, so it moves as smoothly as the ribbons. Perspective only. Not consumed by the mist's cloth
+  field (its plane-contact approximation is well inside its displacement softness).
 - Floor material must stay readable away from core reflections. The candidate uses the existing concrete albedo and
   roughness maps with restrained neutral ambient light, without the rejected artificial dark-blue patch modulation;
   reflection OFF and atmosphere OFF must
@@ -434,7 +445,8 @@ occlusion and retained vertex IDs remain independent regression bars.
 ### Rules, never controls
 - **Smoothing:** every history-carried control passes two smoothing stages with an enforced minimum time (features
   at least about half a wavelength long); no sharp bends, spikes or jagged plateaus.
-- **Floor contact:** sheets ease onto the floor (smooth, monotone, no creases), never through it.
+- **Floor contact:** sheets ease onto the floor (smooth, monotone, no creases), never through it; with Floor Give
+  the floor they ease onto is the yielding surface.
 - **Mist clearance:** a minimum the slider cannot go below; distant haze never pure black.
 - **Fade, never vanish:** anything that appears or disappears fades (count changes included).
 - **Flow speed:** never driven by music.

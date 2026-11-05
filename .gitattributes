@@ -50,6 +50,7 @@
 *.db       -text
 *.sqlite   -text
 *.sqlite3  -text
+*.srclip   -text
 
 # Historical EB lab imports retain the original bytes recorded in asset_manifest.json.
 Docs/Reference/Extruded_Bubble/Lab/** -text whitespace=cr-at-eol

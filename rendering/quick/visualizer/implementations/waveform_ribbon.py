@@ -60,9 +60,10 @@ class QuickWaveformRibbonRenderer:
             if not scene.field.prepare_step():return False
             for volume in (scene.fog,scene.reflected_fog):
                 if not volume.prepare_program():return False
+        if recipe.floor.give>0. and not scene.floor_give.prepare_step():return False
         if not state.ready:return False
         signature=(*item_pixel_rect(frame)[2:],recipe.fog is not None,recipe.sparks is not None,
-                   recipe.strays is not None,recipe.bloom>0.)
+                   recipe.strays is not None,recipe.bloom>0.,recipe.floor.give>0.)
         if signature!=self._prepared_signature:
             self._draw(frame,opacity=0.)
             self._prepared_signature=signature

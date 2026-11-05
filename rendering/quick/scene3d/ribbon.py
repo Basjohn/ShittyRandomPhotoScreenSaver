@@ -64,6 +64,27 @@ def _floor_contact(floor, frame):
     return (height - float(frame[1]), gap, softness)
 
 
+# Texture unit of the yielding floor's field (``rendering.quick.scene3d.floor_give``); a plain constant here so the
+# primitive stays free of any scene owner.
+FLOOR_GIVE_UNIT = 13
+
+
+def _apply_floor_give(locations, floor_give, frame):
+    """``floor_give`` = (field texture, ``uFloorGive`` vec4) from the scene's yielding floor, or None (off: the
+    contact eases onto the rigid plane, exactly as without the option). Always written: program uniforms persist."""
+    if floor_give is None:
+        gl.glUniform4f(locations['uFloorGive'], 0., 0., 1., 1.)
+        return
+    texture, values = floor_give
+    gl.glBindTextureUnit(FLOOR_GIVE_UNIT, int(texture))
+    gl.glUniform1i(locations['uFloorGiveField'], FLOOR_GIVE_UNIT)
+    gl.glUniform4f(locations['uFloorGive'], *values)
+    gl.glUniform2f(locations['uFloorGiveFrame'], float(frame[0]), float(frame[2]))
+
+
+_FLOOR_GIVE_UNIFORMS = ('uFloorGive', 'uFloorGiveField', 'uFloorGiveFrame')
+
+
 def _upload(location, value):
     """A vec4 uniform, or the grade's vec4 array."""
     if len(value) == 4*GRADE_STOPS:
@@ -222,7 +243,7 @@ class RibbonPrimitive:
              view=None, material: RibbonMaterial | None = None, age_fade=None,
              mist=None, mist_frame=(0., 0., 0.), sparks: RibbonSparks | None = None, now=None, sweep_axis=None,
              grade=None, floor=None, strays: RibbonStrays | None = None, continuation=None,
-             strand_births=None,strand_origin=0.):
+             strand_births=None,strand_origin=0.,floor_give=None):
         """``age_fade`` = (absolute now, fade-in s, maximum age s, fade-out s) fades the head and tail by age.
 
         ``mist`` (``rendering.gl_programs.mist.mist_uniforms``) dims light and coverage by the scene's world mist;
@@ -237,7 +258,7 @@ class RibbonPrimitive:
             return self._draw_sparks(packet, mvp, sparks or RibbonSparks(), now, mist, mist_frame, grade,
                                      material or RibbonMaterial(), _sweep_axis(sweep_axis), floor,
                                      (strays or RibbonStrays()) if shading == 'strays' else None,
-                                     strand_births,strand_origin,continuation)
+                                     strand_births,strand_origin,continuation,floor_give)
         if shading not in _FRAGMENTS:
             raise ValueError(f'Unknown ribbon shading: {shading}')
         if packet.instances == 0:
@@ -297,13 +318,14 @@ class RibbonPrimitive:
             names = ('uMvp', 'uDiagnostic', 'uSurface', 'uSweepAxis', 'uFloorContact') if shaded is None else ('uMvp', 'uSurface', 'uSweepAxis', *_MATERIAL_UNIFORMS)
             if continuation is not None:names+=('uContinuation',)
             # Each pass reads only part of the material, so its unused uniforms are compiled out (location -1).
-            uniforms = self.resources.uniforms(key, names, required=shaded is None)
+            uniforms = self.resources.uniforms(key, names+_FLOOR_GIVE_UNIFORMS, required=shaded is None)
             self._stream()
             gl.glUseProgram(program)
             gl.glBindVertexArray(vao)
             gl.glUniformMatrix4fv(uniforms['uMvp'], 1, gl.GL_FALSE, matrix.flatten(order='F'))
             gl.glUniform2f(uniforms['uSurface'], material.cross_curve, float(cross_divisions))
             gl.glUniform3f(uniforms['uSweepAxis'], *axis)
+            _apply_floor_give(uniforms, floor_give, origin+np.asarray(mist_frame, float))
             if continuation is not None:gl.glUniform4f(uniforms['uContinuation'],0.,0.,0.,0.)
             if shaded is None:
                 gl.glUniform1i(uniforms['uDiagnostic'], diagnostic)
@@ -339,7 +361,7 @@ class RibbonPrimitive:
             gl.glUseProgram(program_before)
 
     def _draw_sparks(self, packet, mvp, sparks, now, mist, mist_frame, grade, material, sweep_axis, floor=None,
-                     strays=None,strand_births=None,strand_origin=0.,continuation=None):
+                     strays=None,strand_births=None,strand_origin=0.,continuation=None,floor_give=None):
         """Additive point sprites, or with ``strays`` free strands, on the bound target (the caller sets blending,
         as for the light pass)."""
         if packet.instances == 0:
@@ -372,7 +394,7 @@ class RibbonPrimitive:
             names = ('uMvp', 'uSpark', 'uSparkLook', 'uSparkClock', 'uSparkWhite', 'uMist', 'uMistShape', 'uMistOrigin',
                      'uSurface','uSweepAxis', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange', 'uGradeStops',
                      'uGrade', 'uFloorContact', 'uStray', 'uStrayLook', 'uStrayClock', 'uViewport', 'uStrayGlow', 'uStrayAdmission','uStrayBirthNow','uStrayPulse')
-            u = resources.uniforms(kind, names, required=False)
+            u = resources.uniforms(kind, names+_FLOOR_GIVE_UNIFORMS, required=False)
             self._stream()
             gl.glUseProgram(program)
             gl.glBindVertexArray(vao)
@@ -407,6 +429,7 @@ class RibbonPrimitive:
                 gl.glUniform4f(u['uFogLens'], *mist_values['uFogLens'])
             gl.glUniform3f(u['uMistOrigin'], *frame)
             gl.glUniform3f(u['uFloorContact'], *_floor_contact(floor, frame))
+            _apply_floor_give(u, floor_give, frame)
             for name, value in {**GRADE_OFF, **(grade or {})}.items():
                 _upload(u[name], value)
             with self._packet_bound(packet):
