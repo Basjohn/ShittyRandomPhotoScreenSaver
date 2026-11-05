@@ -146,6 +146,11 @@ class ClipLoadJob:
         self._replace = replace
 
     def _complete(self, result=None, error: str = "") -> None:
+        from PySide6.QtCore import QTimer
+        # Runs inside the QProcess's own finished/error signal. Hold this job (and so its
+        # QProcess) until the next event-loop turn: dropping the last reference here deletes
+        # the QProcess mid-emission, and on Linux its pipe notifiers then fire into freed memory.
+        _CANCELLED.add(self)
         callback, self._finished = self._finished, None
         if callback is not None and not self._cancelled:
             callback(result, error)
@@ -153,7 +158,7 @@ class ClipLoadJob:
             self._directory.cleanup()
         except OSError:
             pass
-        _CANCELLED.discard(self)
+        QTimer.singleShot(0, self._forget)
 
     def _on_error(self, _error) -> None:
         if self._process.state() == self._process.ProcessState.NotRunning:
