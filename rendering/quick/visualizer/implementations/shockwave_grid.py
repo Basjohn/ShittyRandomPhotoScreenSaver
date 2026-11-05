@@ -52,11 +52,12 @@ _UNIFORMS = _VIEW_UNIFORMS + (
     "uTerrain", "uTerrainSize", "uLand", "uTime", "uWaterDetail", "uWaterBankBand", "uReflection", "uPass", "uCurveCells",
     "uWireDisplay", "uMarks", "uPointPx","uTerrainFillColor","uVertexColor","uVertexAccentColor",
     "uVertexOutlineColor","uGlassTint","uGlass","uLightStrength","uSmoothGlass","uDepthOnly",
-    "uWaterLineGlowColor","uWaterLineGlow","uWaterShine","uDepthScale","uShoreGlow","uShoreGlowColor",
+    "uWaterLineGlowColor","uWaterLineGlow","uWaterShine","uDepthScale","uShoreGlow","uShoreGlowColor","uContourLines",
     "uWaterGlint","uGlintLight",
 ) + _CELESTIAL_UNIFORMS + _REACTION_UNIFORMS
 _SKY_UNIFORMS = _VIEW_UNIFORMS + _CELESTIAL_UNIFORMS + (
-    "uSkyPass","uShaftSpread","uMidband", "uBeatPulse", "uCelestialGlow", "uCelestialRimVertices", "uBeatStarCount", "uBeatStarCells", "uStarGlow")
+    "uSkyPass","uShaftSpread","uMidband", "uBeatPulse", "uCelestialGlow", "uCelestialRimVertices", "uBeatStarCount", "uBeatStarCells", "uStarGlow",
+    "uTerrainGrid", "uHalfWidth", "uLand")
 _SKYLINE_UNIFORMS = _VIEW_UNIFORMS + (
     "uTerrainGrid", "uHalfWidth", "uTerrain", "uTerrainSize", "uLand", "uEventCount",
     "uCrestColor", "uGlow", "uMidband", "uOutlineLiftNdc", "uHorizonThickness", "uDepthScale") + _REACTION_UNIFORMS
@@ -298,6 +299,10 @@ class QuickShockwaveGridRenderer:
                 body_position, body_size = self._bind_celestial(sky_uniforms,parameters,half_width,
                                                                 mode_state.animation_time,view)
                 gl.glUniform1f(sky_uniforms["uMidband"],midband)
+                # The horizon glow rises from the land's own horizon (basinHorizonElevation reads the distant land).
+                gl.glUniform1f(sky_uniforms["uHalfWidth"],half_width)
+                gl.glUniform2f(sky_uniforms["uLand"],float(parameter(parameters,"shockwave_grid_terrain_height")),
+                               float(parameter(parameters,"shockwave_grid_terrain_detail")))
                 gl.glUniform1i(sky_uniforms["uCelestialRimVertices"],
                                int(bool(parameter(parameters,"shockwave_grid_celestial_rim_vertices"))))
                 gl.glUniform1f(sky_uniforms["uBeatPulse"],beat_pulse)
@@ -350,6 +355,7 @@ class QuickShockwaveGridRenderer:
             gl.glUniform1f(uniforms["uShoreGlow"], float(parameter(parameters, "shockwave_grid_shore_glow")))
             gl.glUniform4f(uniforms["uShoreGlowColor"], *rgba(parameter(parameters, "shockwave_grid_shore_glow_color")))
             gl.glUniform1f(uniforms["uWaterGlint"], float(parameter(parameters, "shockwave_grid_water_glint")))
+            gl.glUniform1f(uniforms["uContourLines"], float(parameter(parameters, "shockwave_grid_contour_lines")))
             # The glint brightens with the halo's own musical drive (existing midband and onset envelope).
             gl.glUniform4f(uniforms["uGlintLight"], *_halo_light(parameters), midband, beat_pulse)
             # fwidth already measures physical fragments, including DPR/MSAA.

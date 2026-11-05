@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 from core.constants.neon_lake_world import (
-    DISTANT_CURVATURE, DISTANT_FLAT, FAR_HILLS, FAR_PLANE, WATER_PEAK,
+    CONTINUATION_DESCENT, DISTANT_CURVATURE, DISTANT_FLAT, FAR_HILLS, FAR_PLANE, WATER_PEAK,
 )
 from rendering.gl_programs.heightfield_glsl import HEIGHTFIELD_GLSL, HEIGHTFIELD_WIRE_GLSL
 from rendering.gl_programs.heightfield_volume_glsl import HEIGHTFIELD_VOLUME_GLSL
@@ -119,9 +119,11 @@ float basinOutside(vec2 uv) {
 _PROJECTION = _GRID_GLSL + f"""
 const float SHOCKWAVE_DEPTH = {SHOCKWAVE_DEPTH:.6f};
 const float WATER_PEAK = {WATER_PEAK:.6f};
+const float LAND_CONTOUR_SPACING = 0.035; // Contour Lines: world height between level lines
 const vec2 FAR_HILLS_LEVEL = vec2({FAR_HILLS[0]:.6f}, {FAR_HILLS[1]:.6f});
 const vec4 FAR_HILLS_WAVE = vec4({FAR_HILLS[2]:.6f}, {FAR_HILLS[3]:.6f}, {FAR_HILLS[4]:.6f}, {FAR_HILLS[5]:.6f});
 const float DISTANT_FLAT = {DISTANT_FLAT:.6f};
+const vec2 CONTINUATION_DESCENT = vec2({CONTINUATION_DESCENT[0]:.6f}, {CONTINUATION_DESCENT[1]:.6f});
 const float DISTANT_CURVATURE = {DISTANT_CURVATURE:.6f};
 const float FAR_PLANE_DISTANCE = {FAR_PLANE:.6f};
 // The broad hills the land settles into toward the horizon (mirrored in neon_terrain_extent and the editor).
@@ -224,7 +226,7 @@ float basinContinuation(vec2 uv) {
     // mountain-shaped extrusion running to the end of the world.
     float slope=clamp((boundary-interior)*float(uTerrainSize-1)*uTerrainGrid.z,-0.8,0.8);
     float nearSlope=0.20*slope*min(distance,0.16);
-    float descent=smoothstep(0.04,0.68,distance);
+    float descent=smoothstep(CONTINUATION_DESCENT.x,CONTINUATION_DESCENT.y,distance);
     // A broad, low rolling *landform*, not the infinitely extruded editor
     // border or a perfectly flat far plane. Gentle undulations give the
     // accepted depth-tested skyline a natural distant silhouette.
@@ -277,6 +279,8 @@ float basinDistantDrop(vec2 uv) {
     float distance=max(0.0,basinOutside(uv)-DISTANT_FLAT);
     return DISTANT_CURVATURE*distance*distance;
 }
+// Programs that read the distant land let the sky's horizon glow follow its real horizon (neon_celestial).
+#define BASIN_HAS_DISTANT_LAND 1
 float basinLandHeight(vec2 uv,float base,float curved) {
     vec2 p=vec2((uv.x*2.0-1.0)*uHalfWidth,-uv.y*SHOCKWAVE_DEPTH);
     float height=curved*smoothstep(0.0,0.015,base)*uLand.x*(1.0+0.16*uLand.y*basinDetail(p));
@@ -326,7 +330,7 @@ vec3 basinSurface(vec2 uv, out float crest, out float energy, out float curved) 
     curved=water && sceneHeightfieldBankDistance(uTerrain,uTerrainSize,basinGrid(uv))>=1.0/float(uTerrainSize-1)
            ? 0.0 : basinCurve(uv);
     float wet=outer<1e-6 ? 1.0-smoothstep(0.0,BASIN_SHORE_HEIGHT,curved) : 0.0;
-    float ripple=WATER_PEAK*tanh(wave.x/WATER_PEAK)+0.0025*uWaterDetail*sin(15.0*p.x+18.0*p.y+uTime);
+    float ripple=WATER_PEAK*tanh(wave.x/WATER_PEAK)+0.0025*uWaterDetail*sin(15.0*p.x+18.0*p.y+0.4*uTime);
     if (water) {
         float bank=smoothstep(0.0,uWaterBankBand,basinBankDistance(uv));
         height = max(bank,wet)*ripple-basinDistantDrop(uv);
@@ -371,11 +375,12 @@ out float vCurvedBase;
 out vec3 vSurfaceNormal;
 out float vPointPx;
 uniform int uSmoothGlass;
+uniform float uContourLines;
 void main() {
     vec3 world = basinSurface(aUv, vCrest, vEnergy, vCurvedBase);
     vSurfaceNormal=vec3(0.0,1.0,0.0);
     // Glass triangles and the direct land marks (whose brightness follows the relief) take the true normal.
-    if (uPass==1 && uDepthOnly==0 && (uMarks==1 || uSmoothGlass==1)) {
+    if (uPass==1 && uDepthOnly==0 && (uMarks==1 || uSmoothGlass==1 || uContourLines>0.0)) {
         // Central derivatives of the very same displaced surface, evaluated
         // only for glass. Interpolation removes per-triangle highlight steps;
         // water, shore taper, cubic land and growth retain one height owner.
@@ -390,7 +395,7 @@ void main() {
     if (uPass == 0) {
         world.y = -world.y;
         world.x += (0.015+0.035*min(abs(world.y),1.0))*uWaterDetail
-                   *sin(world.z*65.0+uTime*0.45);
+                   *sin(world.z*65.0+uTime*0.18);
     }
     vWorld = world;
     vUv = aUv;
@@ -459,6 +464,7 @@ uniform float uWaterShine;        // the water's own surface: tinted body with a
 uniform float uShoreGlow;         // the water's edge glow along the visible shoreline (0 = only the shoreline)
 uniform vec4 uShoreGlowColor;     // its colour; alpha mixes it in over the shoreline's own palette
 uniform float uWaterGlint;        // the Sun/Moon's glittering path on the water below it (0 = none)
+uniform float uContourLines;      // level lines over the land's slopes (0 = none)
 uniform vec4 uGlintLight;         // halo intensity, halo reactivity (0, 0 with the halo off), midband, beat pulse
 vec4 sceneEmission(vec3 rgb) { return vec4(rgb, dot(rgb, vec3(0.2126,0.7152,0.0722))); }
 // Screen distance in physical pixels from a water or wet-fringe fragment to the visible shoreline (negative
@@ -514,7 +520,7 @@ float basinRipple(vec2 xz,float perPixel,out vec2 slope) {
     vec2 g=vec2(0.0);
     for (int i=0;i<4;++i) {
         float fade=clamp(2.0-length(K[i].xy)*perPixel*2.2,0.0,1.0);   // gone below ~3 pixels a wave
-        float phase=dot(K[i].xy,w)+0.6*K[i].z*uTime+float(i)*1.7;
+        float phase=dot(K[i].xy,w)+0.15*K[i].z*uTime+float(i)*1.7;
         height+=K[i].w*fade*sin(phase);
         g+=K[i].w*fade*K[i].xy*cos(phase);
         total+=K[i].w;
@@ -532,7 +538,7 @@ float basinWaterGlint(vec3 world,float depthPerPixel,float ripple,float screenPe
     float radius=uBodySize/max(length(uBodyPosition-uEye),1e-3)/uTan.y;
     float below=b.y-h.y;
     if (below<=0.0) return 0.0;
-    float width=radius*(0.8+0.8*below);
+    float width=radius*(0.45+0.45*below);
     float column=exp(-pow((h.x-b.x)/max(width,1e-4),2.0));
     float reach=exp(-below/1.4);
     // The path is the ripples' crests catching the body: many short bright streaks, softening into an even
@@ -541,9 +547,9 @@ float basinWaterGlint(vec3 world,float depthPerPixel,float ripple,float screenPe
     float glitter=mix(0.3,pow(smoothstep(0.25,0.95,0.5+0.5*ripple),2.0),detail);
     // Each streak is a thin sharp line (a wavelet's crest a pixel or two tall, a few pixels apart on screen,
     // wavering with the ripples), not a soft lozenge.
-    float lines=0.5+0.5*sin(6.2832*h.y/max(4.5*screenPerPixel,1e-6)+1.2*ripple+1.3*sin(h.x*37.0));
+    float lines=0.5+0.5*sin(6.2832*h.y/max(4.5*screenPerPixel,1e-6)+0.6*ripple+1.3*sin(h.x*37.0));
     glitter*=0.35+2.4*pow(lines,4.0);
-    return min(1.3*column*reach*glitter,1.0);
+    return min(3.0*column*reach*glitter,1.0);
 }
 void main() {
     float detailFade=basinDetailFade(vUv);
@@ -605,7 +611,7 @@ void main() {
         float wetMark=water ? 1.0 : (basinOutside(vUv)<1e-6 ? 1.0-smoothstep(0.0,BASIN_SHORE_HEIGHT,vCurvedBase) : 0.0);
         coverage*=1.0-smoothstep(0.0,0.6,uWaterShine)*wetMark;
         if (uPass==0) coverage*=uReflection*0.55*exp(-abs(vWorld.y)*1.5)*(1.0-0.6*uWaterShine)
-                           *smoothstep(-0.5,0.6,sin(reflectionPlane.z*95.0+uTime*0.4));
+                           *smoothstep(-0.5,0.6,sin(reflectionPlane.z*95.0+uTime*0.16));
         float alpha=coverage*pointColour.a*distanceFade*detailFade;
         FragColor=vec4(min(palette*gain,vec3(1.0)),alpha);
         Emission=sceneEmission(palette*gain*alpha*uGlow);
@@ -623,6 +629,11 @@ void main() {
         curvedBase=0.25*(basinCurve(vUv+vec2(halfCell,halfCell))+basinCurve(vUv+vec2(-halfCell,halfCell))
                          +basinCurve(vUv+vec2(halfCell,-halfCell))+basinCurve(vUv-vec2(halfCell)));
     }
+    // The land lines' measures and their derivatives, in uniform control flow.
+    vec3 landNormal=normalize(vSurfaceNormal);
+    float landContour=vWorld.y/LAND_CONTOUR_SPACING;
+    float landContourPerPixel=fwidth(landContour);
+    vec3 landLineGlow=vec3(0.0);
     // Derivatives for the edge glow and glint, taken here in uniform control flow.
     vec2 uvPerPixel=fwidth(vUv);
     float curvedPerPixel=fwidth(curvedBase);
@@ -634,13 +645,14 @@ void main() {
     // Shining water's lines: a network of interfering ripples drawn as thin lines (the lake reads as water,
     // not a ruled grid), brightening with the music's crests and spectrum energy.
     // Broad enough to draw as lines across the lake rather than crowd into a fade.
-    vec2 wp=(vWorld.xz+vec2(0.0,uScroll))*0.4;
-    float rippleField=sin(wp.x*7.0+wp.y*11.0+uTime*0.6)+sin(-wp.x*9.0+wp.y*13.0-uTime*0.5)
-                      +0.7*sin(wp.x*3.0-wp.y*17.0+uTime*0.4+vWorld.y*20.0);
+    // Its own slow clock only: carried along by Scroll it marched across the lake (busy, not gentle).
+    vec2 wp=vWorld.xz*0.75;
+    float rippleField=sin(wp.x*7.0+wp.y*11.0+uTime*0.12)+sin(-wp.x*9.0+wp.y*13.0-uTime*0.1)
+                      +0.7*sin(wp.x*3.0-wp.y*17.0+uTime*0.08+vWorld.y*8.0);
     float rippleChange=fwidth(rippleField);
     float rippleDistance=abs(rippleField)/max(rippleChange,1e-5);
     // Where the lines would crowd closer than a few pixels they fade out instead of sparkling.
-    float rippleClarity=1.0-smoothstep(0.25,0.7,rippleChange);
+    float rippleClarity=1.0-smoothstep(0.9,1.8,rippleChange);
     float shore=smoothstep(0.0,0.055,base);
     float shoreLight=basinShoreLight(vUv,base,curvedBase);
     float line=sceneHeightfieldCurveWire(vUv,curvedBase,uCurveCells,uEdgePx)*shore;
@@ -660,13 +672,24 @@ void main() {
     if (waterCoverage>0.0) {
         vec2 curveUv=vUv+vec2(0.0,uScroll/SHOCKWAVE_DEPTH);
         float waveWire=sceneHeightfieldWaterCurves(curveUv,vWorld.y,uCurveCells,uEdgePx);
-        float ripple=(vWorld.z+uScroll)*26.0+0.35*sin(vWorld.x*5.0)+vWorld.y*9.0;
+        // The fine sheen lines drift with Scroll at a quarter of its pace: hairlines a few pixels apart moving a
+        // pixel a frame read as shimmer noise over the whole lake rather than flowing water.
+        float ripple=(vWorld.z+0.25*uScroll)*26.0+0.35*sin(vWorld.x*5.0)+vWorld.y*9.0;
         float distance=abs(fract(ripple-0.5)-0.5)/max(fwidth(ripple),1e-5);
         float sheen=1.0-smoothstep(0.0,0.65*uEdgePx,distance);
         // A shining surface shows its water, not a ruled grid: the resting curves fade, crests stay whole.
         float curveCoverage=waveWire*(0.11*(1.0-0.8*uWaterShine)+0.55*min(crest,1.5));
         float network=(1.0-smoothstep(0.0,0.9*uEdgePx,rippleDistance))*rippleClarity
-                      *(0.12+0.45*min(crest,1.5)+0.6*vEnergy)*min(3.0*uWaterDetail,1.4);   // Water Detail 0: none
+                      *(0.14+0.3*min(crest,1.5)+0.25*vEnergy)*min(3.0*uWaterDetail,1.4);   // Water Detail 0: none
+        // Rings lapping out from every shore (concentric round an island), drifting slowly outward and
+        // fading over open water; drawn as the network's lines, so they glow with it.
+        float bankUv=sceneHeightfieldBankDistance(uTerrain,uTerrainSize,basinGrid(vUv))/uTerrainGrid.z;
+        float ringPhase=bankUv*36.0-uTime*0.06;
+        float ringPx=abs(fract(ringPhase)-0.5)/max(fwidth(ringPhase),1e-5);
+        float rings=(1.0-smoothstep(0.0,1.1*uEdgePx,ringPx))*exp(-bankUv/0.06)
+                    *(1.0-smoothstep(0.12,0.22,fwidth(ringPhase)))*min(3.0*uWaterDetail,1.4)*0.8
+                    *(water ? smoothstep(0.004,0.02,bankUv) : 0.0);
+        network=max(network,rings);
         curveCoverage=mix(curveCoverage,clamp(network,0.0,1.0),uWaterShine);
         float sheenCoverage=sheen*(0.12+0.16*crest)*uWaterDetail;
         line=(1.0-(1.0-curveCoverage)*(1.0-sheenCoverage))*waterCoverage;
@@ -680,8 +703,8 @@ void main() {
         // Reflection has no land fill. Broken horizontal water bands split
         // the mirrored wires into trails instead of accumulated opaque slabs.
         vec2 p=reflectionPlane.xz;
-        float ripple=sin(p.y*65.0 + p.x*3.0 + uTime*0.45)
-                    + 0.45*sin(p.y*117.0-p.x*11.0-uTime*0.23);
+        float ripple=sin(p.y*65.0 + p.x*3.0 + uTime*0.18)
+                    + 0.45*sin(p.y*117.0-p.x*11.0-uTime*0.09);
         float breakup=mix(0.02,1.0,smoothstep(0.0,0.8,ripple));
         float decay=exp(-abs(vWorld.y)*1.5);
         float alpha=max(line*uLineColor.a,shoreLight*uCrestColor.a)*uReflection*0.85*breakup*decay*distanceFade;
@@ -720,7 +743,7 @@ void main() {
         SceneMaterial material=SceneMaterial(uGlassTint.rgb,roughness,0.0,0.5,vec3(0.0));
         vec3 reflected=reflect(-view,n);
         vec3 environment=basinVisibleSkyRadiance(vWorld,reflected);
-        if (basinOutside(vUv)<1e-6) {
+        if (basinOutside(vUv)<1e-6 && roughness>0.12) {
             vec3 tangent=normalize(cross(reflected,abs(reflected.y)<0.9 ? vec3(0.0,1.0,0.0) : vec3(1.0,0.0,0.0)));
             vec3 bitangent=cross(reflected,tangent);
             environment=(environment*2.0+basinVisibleSkyRadiance(vWorld,normalize(reflected+tangent*roughness))
@@ -742,10 +765,13 @@ void main() {
     // control cells drew their staircase inside every gentle shore).
     float wetness=water ? 1.0 : wetShore;
     if (wetness>0.0 && uWaterShine>0.0) {
-        vec2 rp=vWorld.xz*vec2(9.0,13.0)+vec2(uTime*0.35,-uTime*0.27);
+        vec2 rp=vWorld.xz*vec2(9.0,13.0)+vec2(uTime*0.06,-uTime*0.045);
         vec3 ripple=vec3(sin(rp.x)+0.5*sin(rp.y*1.7),0.0,cos(rp.y)+0.5*cos(rp.x*1.3));
         // Water Detail 0: a still mirror; otherwise the slow swell and the small ripples tilt it.
-        vec3 wn=normalize(n+0.1*uWaterDetail*ripple+vec3(-rippleSlope.x,0.0,-rippleSlope.y)*20.0*uWaterDetail);
+        // The mirror leans only partly with the mesh's facets: their flat triangles, tilting as waves pass,
+        // made the reflection jump in blotches from triangle to triangle (busy motion on a calm lake).
+        vec3 calm=normalize(mix(vec3(0.0,1.0,0.0),n,0.15));
+        vec3 wn=normalize(calm+0.1*uWaterDetail*ripple+vec3(-rippleSlope.x,0.0,-rippleSlope.y)*20.0*uWaterDetail);
         vec3 mirror=reflect(-view,wn);
         mirror.y=abs(mirror.y);                       // the mirror shows the sky above the water
         vec3 sky=basinVisibleSkyRadiance(vWorld,mirror);
@@ -769,9 +795,9 @@ void main() {
         // line/crest colours, so the lake shimmers in short horizontal strokes (brighter with the music).
         vec2 heading=normalize(vec2(-uBack.x,-uBack.z)+vec2(1e-5,0.0));
         vec3 glowDirection=normalize(vec3(heading.x,0.10,heading.y));
-        float highlight=pow(clamp(dot(mirror,glowDirection),0.0,1.0),28.0)*smoothstep(0.35,0.95,rippleHeight);
+        float highlight=pow(clamp(dot(mirror,glowDirection),0.0,1.0),28.0)*smoothstep(0.72,0.98,rippleHeight);
         vec3 shimmer=mix(uLineColor.rgb,uCrestColor.rgb,0.5+0.5*sin(vWorld.x*2.3+vWorld.z*1.7));
-        surface+=shimmer*highlight*(0.25+0.6*min(crest,1.5)+0.6*vEnergy)*uWaterDetail*0.9;
+        surface+=shimmer*highlight*(0.3+0.3*min(crest,1.5)+0.25*vEnergy)*uWaterDetail*0.9;
         fill=mix(fill,surface,uWaterShine*wetness);
         fillAlpha=max(fillAlpha,uWaterShine*wetness*(0.6+0.4*fresnel));
         shineEmission=sky*fresnel*uWaterShine*wetness*0.35;
@@ -795,6 +821,21 @@ void main() {
     vec3 shoreColour=mix(uLineColor.rgb,uCrestColor.rgb,clamp(0.5+0.45*sin(vWorld.x*3.0+vWorld.z*2.0),0.0,1.0));
     premult=premult*(1.0-shoreAlpha)+shoreColour*shoreAlpha;
     alpha=alpha*(1.0-shoreAlpha)+shoreAlpha;
+    // Contour Lines: level lines of the land's height over its real slopes (hillsides and ranges), a few pixels
+    // apart at least (they fade where they would crowd), in the palette leaning toward the ridge colour and
+    // brightening with the spectrum's energy. Crests themselves are the skyline pass's silhouettes.
+    if (uPass==1 && uContourLines>0.0) {
+        float dry=(water ? 0.0 : 1.0)*(1.0-wetShore)*detailFade*smoothstep(0.0,0.05,base);
+        float contourPx=abs(fract(landContour-0.5)-0.5)/max(landContourPerPixel,1e-5);
+        // Only on the high land's real slopes (hillsides and ranges): on dunes and gentle ground they ruled it like a map.
+        float contour=(1.0-smoothstep(0.35,1.1,contourPx))*(1.0-smoothstep(0.2,0.45,landContourPerPixel))
+                      *smoothstep(0.08,0.3,1.0-landNormal.y)*smoothstep(0.22,0.4,base);
+        float contourAlpha=clamp(contour*uContourLines*0.7*(0.75+1.1*vEnergy),0.0,1.0)*dry;
+        vec3 contourColour=mix(palette,uCrestColor.rgb,0.15*base);
+        premult=premult*(1.0-contourAlpha)+contourColour*contourAlpha;
+        alpha=alpha*(1.0-contourAlpha)+contourAlpha;
+        landLineGlow=contourColour*contourAlpha*0.9;
+    }
     // Shore Glow: light along the actual visible shoreline, spreading over the water (a short lip up the
     // dry bank), in screen pixels so near and distant shores glow alike. It only ever adds to the shoreline.
     float edgeGlow=0.0;
@@ -812,7 +853,7 @@ void main() {
     vec3 glintColour=mix(bodyColour.rgb,vec3(1.0),0.15);
     if (wetness>0.0 && uWaterGlint>0.0 && uSunEnabled==1) {
         float gain=uGlintLight.x>0.0 ? basinCelestialHaloGain(uGlintLight.xy,uGlintLight.z,uGlintLight.w) : 1.0;
-        glintLight=uWaterGlint*wetness*basinWaterGlint(vWorld,depthPerPixel,rippleHeight,screenPerPixel)*(0.55+0.45*gain)*bodyColour.a;
+        glintLight=uWaterGlint*wetness*basinWaterGlint(vWorld,depthPerPixel,rippleHeight,screenPerPixel)*(0.75+0.25*gain)*bodyColour.a;
         float glintAlpha=clamp(glintLight,0.0,1.0);
         premult=premult*(1.0-glintAlpha)+glintColour*glintAlpha;
         alpha=alpha*(1.0-glintAlpha)+glintAlpha;
@@ -822,7 +863,8 @@ void main() {
     vec3 lineGlow=mix(wire,uWaterLineGlowColor.rgb*(0.65+0.55*crest),uWaterLineGlowColor.a)*uWaterLineGlow;
     Emission=sceneEmission((lineGlow*lineAlpha + palette*ringAlpha*0.45+shoreColour*shoreAlpha
                            +fill*fillAlpha*glassWeight*0.12+shineEmission*fillAlpha
-                           +edgeColour*edgeGlow*1.2+glintColour*glintLight*1.4)*uGlow*distanceFade*detailFade);
+                           +edgeColour*edgeGlow*1.2+glintColour*glintLight*1.4+landLineGlow)
+                           *uGlow*distanceFade*detailFade);
 }
 """
 )
@@ -890,9 +932,11 @@ void main() {
     bool outside=any(lessThan(vUv,vec2(0.0))) || any(greaterThan(vUv,vec2(1.0)));
     if ((!outside && vTerrainBase<0.035) || vContourFade<0.005) discard;
     float alpha=uCrestColor.a*vContourFade;
-    vec3 colour=min(uCrestColor.rgb*(0.78+0.16*clamp(uMidband,0.0,1.0)),vec3(1.0));
+    float midband=clamp(uMidband,0.0,1.0);
+    vec3 colour=min(uCrestColor.rgb*(0.78+0.16*midband),vec3(1.0));
     FragColor=vec4(colour,alpha);
-    vec3 emission=colour*alpha*(0.45+0.4*uGlow);
+    // The ridges' glow swells with the music's midband (smoothed upstream, so it breathes rather than flickers).
+    vec3 emission=colour*alpha*(0.45+0.4*uGlow)*(1.0+0.9*midband);
     Emission=vec4(emission,dot(emission,vec3(0.2126,0.7152,0.0722)));
 }
 """
@@ -963,6 +1007,10 @@ void main() {
         // Moon's shaded side. Phase gates the surface and optional rim marks,
         // never the surrounding glow.
         float haloAlpha=(uBodyKind==1 ? 0.26 : 0.23)*bodyColour.a*haloGain*halo;
+        // A wide soft glow spreading far past the corona (the bright body lighting the night air round it),
+        // falling off over about its own diameter; land in front hides it (this pass is depth-tested).
+        float wide=smoothstep(0.97,1.03,normalizedAngle)*exp(-max(0.0,normalizedAngle-1.0)/0.7);
+        haloAlpha+=0.08*bodyColour.a*haloGain*wide*step(0.0,facing)*cameraCoverage;
         float rimMarks=0.0;
         if (uCelestialRimVertices!=0 && uCelestialGlow.x>0.0 && facing>0.0) {
             rimMarks=basinCelestialRimMarks(eye,ray,normalizedAngle)*cameraCoverage;
