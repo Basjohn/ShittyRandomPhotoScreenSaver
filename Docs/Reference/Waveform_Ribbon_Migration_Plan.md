@@ -83,7 +83,20 @@ constants); all state integrates on the sole logical clock and the projection on
   relaxation, a floor), so each song uses the whole authored Quiet→Peak ramp while a quiet passage after a loud one
   stays quiet; the remembered peak lands below Peak, keeping headroom for accents. Light, colour and sparkle keep the
   fixed calibrated anchors. The whole body's size (height, lift, width) follows the passage, not each beat; beats
-  belong to the pulse.
+  belong to the pulse. Measured in continuous play the gain is not what muted mid-song kicks (removing it lowers kick
+  response 40-50% at every point of a song); the frame runtime's per-kind running-mean contrast was (below).
+- **Kick force in continuous play** (5 Nov). A typed onset's force follows its own unclipped magnitude (already
+  relative to the bus's adaptive flux threshold), the fixed loudness scale and the passage ramp, never this kind's
+  running mean: that second adaptation zeroed 2/3 of kicks and faded a steady beat to <1% of its first kick, so songs
+  looked reactive at the start and muted in the middle. Accent admission (sparks, strands) keeps the contrast.
+- **Breathing** (5 Nov, Reaction bucket). Softness = Breathing x how far the published passage sits below
+  `BREATHING_LOUD`; a soft passage releases its geometry drives faster (up to `BREATHING_REACH` of Decay, on both
+  stages) and widens each drive's swings about its own phrase-scale mean (up to `1 + BREATHING_CONTRAST`), so it
+  swells and lets go within its phrases instead of holding. Loud passages keep Decay, targets and reach.
+- **Anchored history ends** (5 Nov, side-angle tail stagger). The packet header carries the history ring's admission
+  phase (`extra.w`); the drawn history ends `ANCHOR_INSET` knots inside each end at anchors fixed in the scene, and the
+  C2 continuation starts from the spline's own jet there (`core/ribbon_continuation.py` mirror, ribbon/atmosphere
+  shaders). Continuing from the end knot stepped the far end at every 6 Hz admission, visible at the extreme turn.
 - **No twitch.** Geometry drives pass through two cascaded followers with a minimum attack (velocity-continuous);
   hit kicks to the sway/torsion springs are spread over a short window; the rim's hit glow rises and settles like the
   pulse instead of flashing with the raw hit decay; swells land with a short rise, never a one-tick pop.
@@ -95,8 +108,11 @@ constants); all state integrates on the sole logical clock and the projection on
 
 Gates: `tests/test_waveform_energy_pulse.py`, `tests/test_waveform_reaction_modes.py`,
 `tests/test_waveform_pulse_coupling.py`, `tests/test_waveform_no_twitch.py`, `tests/test_waveform_trough_clearance.py`,
-`tests/test_waveform_dynamic_zoom.py` and `tests/test_waveform_ribbon_dynamics.py` (test-owned controls; structure,
-never authored values).
+`tests/test_waveform_dynamic_zoom.py`, `tests/test_waveform_ribbon_dynamics.py`, `tests/test_waveform_continuous_play.py`,
+`tests/test_waveform_breathing.py` and `tests/test_waveform_tail_continuity.py` (test-owned controls; structure, never
+authored values). Probes: `tools/visualizer_replay/waveform_ribbon_breathing_probe.py` (continuous play: songs back to
+back without a reset; kick response by time in song and passage, breathing contrast, reach) and
+`tools/visualizer_replay/waveform_ribbon_tail_probe.py`.
 
 ## Latest target authority (2 November)
 

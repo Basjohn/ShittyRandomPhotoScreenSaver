@@ -52,7 +52,7 @@ class CompiledWaveformSettings:
                                 float(read('pulse_colour')),float(read('pulse_fade')),float(read('pulse_saturation')),
                                 float(read('pulse_particles')),float(read('pulse_strands')),
                                 mode=str(read('reaction_mode'))),
-            height_mode=str(read('height_mode')),tilt_shift=bool(read('tilt_shift')))
+            height_mode=str(read('height_mode')),tilt_shift=bool(read('tilt_shift')),breathing=float(read('breathing')))
 
     def scene(self,snapshot):
         p=self.values
