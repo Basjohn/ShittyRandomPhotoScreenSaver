@@ -761,7 +761,12 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   cards; theme-derived chrome contrast in every shipped theme;
 - `tests/test_waveform_studio_second_mode.py` — the framework driven by a tiny test-only mode (reuse contract);
 - one adapter test per registered Studio mode (for example `tests/test_extruded_bubble_studio.py`): registry
-  coverage, production-parity preview, handles and Settings round trip.
+  coverage, production-parity preview, handles and Settings round trip;
+- `tests/test_spectrum_studio.py` — Spectrum and Rainbow Ghost on recorded engine answers: full logical frames
+  byte-identical to the production replay at every tick (synthetic audio and a shipped clip, both variants), the
+  engine-owned / Spectrum-owned split proven both ways on the production replay, engine edits re-running the worker
+  (in process, out of process and through `main.py --studio-clip-worker`), identical production-renderer pixels,
+  Rainbow Ghost recolouring only ghost pixels, families and Custom rows saved through Settings, every exit restoring it.
 
 Cost: `tools/visualizer_cost_probe.py` (one mode) and `tools/overhead_baseline.py` (everything): offscreen, production host, control-relative GPU/CPU, GL and Python call counts and recorded system conditions; how to run and read them and the expected results are in `Docs/Reference/Benchmarks.md`.
 
