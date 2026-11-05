@@ -48,14 +48,16 @@ def test_only_3d_freeform_modes_orbit_through_their_own_view_settings():
         if not keys:
             continue
         descriptor = get_visualizer_mode_descriptor(mode)
-        assert descriptor.geometry_kind == "freeform_3d", mode
+        # Framed-camera modes orbit their physical camera over a planar card layout.
+        assert descriptor.geometry_kind == "freeform_3d" or descriptor.framed_camera, mode
         assert descriptor.presentation_policy.shell_policy.value == (
             "card" if descriptor.scene_transform_settings else "frameless"), mode
         assert len(keys) == 2 and all(key.startswith(descriptor.setting_prefixes) for key in keys)
         assert all(key in _DEFAULTS for key in keys)
 
 
-@pytest.mark.parametrize("mode", [mode for mode in _ORBITING if mode != "shockwave_grid"])
+@pytest.mark.parametrize("mode", [mode for mode in _ORBITING if mode != "shockwave_grid"
+                                  and get_visualizer_mode_descriptor(mode).view_orbit_turn_wraps])
 def test_turn_goes_round_a_full_circle_and_tilt_stops_at_its_ends(mode):
     turn, tilt = view_orbit_settings(mode)
     turn_step, tilt_step = get_visualizer_mode_descriptor(mode).view_orbit_steps
@@ -649,3 +651,16 @@ def test_auto_rotate_sweeps_a_landscape_back_and_forth_inside_its_turn_range(mon
     for value, step in zip(turns, steps):
         if min(value - low, high - value) < 0.005:
             assert step < 0.03
+
+
+@pytest.mark.parametrize("mode", [mode for mode in _ORBITING
+                                  if not get_visualizer_mode_descriptor(mode).view_orbit_turn_wraps])
+def test_a_landscape_turn_stops_at_its_ends_instead_of_wrapping(mode):
+    turn, _tilt = view_orbit_settings(mode)
+    turn_step, _ = get_visualizer_mode_descriptor(mode).view_orbit_steps
+    host = _host()
+    seen = [orbit_visualizer_view(host, mode, 1, 0)[turn] for _ in range(round(4.0 / turn_step))]
+    assert all(b >= a for a, b in zip(seen, seen[1:]))  # never jumps back round
+    assert orbit_visualizer_view(host, mode, 1, 0)[turn] == seen[-1]
+    back = [orbit_visualizer_view(host, mode, -1, 0)[turn] for _ in range(round(4.0 / turn_step))]
+    assert all(b <= a for a, b in zip(back, back[1:])) and back[-1] < seen[-1]
