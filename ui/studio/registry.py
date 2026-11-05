@@ -45,8 +45,9 @@ def create_adapter(mode_id: str):
     return getattr(import_module(module), name)()
 
 
-# Built-in registrations (future 3D framed modes, e.g. Extruded Bubble, add one line each).
+# Built-in registrations (one line per mode).
 register_studio_adapter("waveform_ribbon", "Waveform", "ui.studio.waveform_adapter:WaveformStudioAdapter")
+register_studio_adapter("extruded_bubble", "Extruded Bubble", "ui.studio.extruded_bubble_adapter:ExtrudedBubbleStudioAdapter")
 
 
 __all__ = ["StudioEntry", "create_adapter", "has_studio", "register_studio_adapter", "studio_modes",
