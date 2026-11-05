@@ -494,6 +494,7 @@ shifted to hide latency. Pixels are evidence, not visual or listening acceptance
 # --clip a shipped clip (analysed by the mode's own worker), --set KEY=JSON overrides one value (nothing is saved)
 .\.venv\Scripts\python.exe tools\waveform_studio_capture.py --output <new dir> [--mode extruded_bubble] [--preset 1] [--framing fill]
 .\.venv\Scripts\python.exe tools\waveform_studio_capture.py --mode spectrum --preset 3 --clip rag_doll --time 7 --set spectrum_rainbow_ghost=true --output <new dir>
+.\.venv\Scripts\python.exe tools\waveform_studio_capture.py --mode extruded_spectrum --preset 0 --clip rag_doll --time 7 [--framing card --set extruded_spectrum_turn=0.6] --output <new dir>
 .\.venv\Scripts\python.exe tools\spectrum_studio_replay_budget.py --budget 0.008 --out <new dir>\after.json
 ```
 

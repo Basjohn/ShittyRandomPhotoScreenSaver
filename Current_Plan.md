@@ -392,8 +392,10 @@ design pack's control policy (quiet/peak A/B, real ranges only where a true inte
 serialized data unless a migration is justified. Accepted looks/behaviour (BTF, presets, timings) must not change.
 
 - [ ] Finish Waveform Studio acceptance first (§7.1), then extract any remaining Waveform-shaped assumptions.
-- [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble and Spectrum/Rainbow Ghost built; Sphere in
-  progress): Extruded Spectrum, Shockwave Grid, DevCurve, Oscilloscope. Spectrum awaits operator acceptance (evidence
+- [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost and Extruded Spectrum
+  built; Sphere in progress): Shockwave Grid, DevCurve, Oscilloscope. Extruded Spectrum awaits operator acceptance
+  (evidence `.artifacts/evidence/extruded_spectrum/studio/`); its cast-shadow rows stay out of the Studio while
+  Settings keeps them unavailable (`EXTRUDED_CAST_SHADOW_AVAILABLE`). Spectrum awaits operator acceptance (evidence
   `.artifacts/evidence/spectrum/studio_20261105/`); its Studio now reaches everything Settings' Spectrum builder saves
   (shape nodes added/removed, lanes reordered), so the builder body can be replaced on acceptance. Each: full registry coverage test, production-parity preview test, theme,
   Settings Custom launcher replacing that builder body once the operator accepts it.

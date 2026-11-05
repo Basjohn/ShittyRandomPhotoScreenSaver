@@ -90,4 +90,30 @@ def refresh_backdrop(state, mode_id: str, image) -> None:
     state._backdrop_blend_s = None
 
 
-__all__ = ["environment_image", "first_source_image", "neutral_image", "refresh_backdrop"]
+def settle_backdrop(renderer, frame, mirror, settled):
+    """Introduce a frame's backdrop to a production renderer as already settled, through the renderer's public
+    ``settle_backdrop(backdrop, now, blend_s)`` seam (never its private ``BackdropEnvironment``).
+
+    A reflecting renderer fades a newly displayed wallpaper in over its blend time from when it first sees it
+    (``BackdropEnvironment.textures``). In the saver the photograph has been on screen for a while; a Studio frame is
+    one instant of a fixture, so the renderer introduces the backdrop as already faded in at the frame's logical
+    time (a settled reflection), exactly as if the saver had already shown it. ``mirror(parameters)`` is the
+    renderer's own reflect amount; ``settled`` the identity already introduced. Returns the identity now settled."""
+    from rendering.quick.visualizer.implementation_values import parameter
+    logical = frame if hasattr(frame, "mode_state") else None
+    state = logical.mode_state if logical is not None else frame
+    parameters = state.parameters
+    if mirror(parameters) <= 0.0:
+        return settled
+    backdrop = parameter(parameters, "backdrop")
+    if backdrop is None:
+        return settled
+    identity = str(backdrop["identity"])
+    if identity == settled:
+        return settled
+    now = float(getattr(logical, "logical_timestamp", 0.0))
+    renderer.settle_backdrop(backdrop, now, parameter(parameters, "backdrop_blend_s"))
+    return identity
+
+
+__all__ = ["environment_image", "first_source_image", "neutral_image", "refresh_backdrop", "settle_backdrop"]
