@@ -44,14 +44,30 @@ def test_job_modes_share_canonical_installers_but_select_distinct_workers(tmp_pa
     assert not {"diagnostic", "diagnostic_installer"} & {job.key for job in normal}
     for jobs in (normal, venv):
         assert jobs[0].companion_artifacts == (tmp_path / "release" / "diagnostic" / "SRPSS_Diagnostic.scr",)
-        assert all(job.default_selected for job in jobs)
+        assert all(job.default_selected for job in jobs if job.key != "linux")
     assert [job.output_dir for job in normal] == [
         tmp_path / "release" / "screensaver",
         tmp_path / "release" / "media_center",
         tmp_path / "release" / "reddit_helper",
         tmp_path / "release" / "installers",
         tmp_path / "release" / "installers",
+        tmp_path / "release" / "linux",
     ]
+
+
+def test_linux_job_is_optional_runs_the_github_runner_script_and_needs_gh(tmp_path, monkeypatch):
+    for mode in ("normal", "venv"):
+        linux = next(job for job in build_runner.jobs_for_mode(mode, tmp_path) if job.key == "linux")
+        assert linux.default_selected is False and linux.kind == "powershell"
+        assert linux.script == tmp_path / "scripts" / "linux" / "build_from_windows.ps1"
+        assert linux.expected_artifact.name == f"SRPSS-{build_runner.APP_VERSION}-linux-x86_64.tar.gz"
+    real_which = build_runner.shutil.which
+    monkeypatch.setattr(build_runner.shutil, "which", lambda name: None if name == "gh" else real_which(name))
+    result = build_runner.run_preflight("normal")
+    assert "linux" in result.unavailable_jobs
+    assert any("GitHub CLI" in warning for warning in result.warnings)
+    # An optional job never makes the default selection fail preflight.
+    assert not any(error.startswith("Linux") for error in result.errors)
 
 
 def test_preferences_round_trip_and_corrupt_fallback(tmp_path):
@@ -222,8 +238,8 @@ def test_smoke_payload_uses_only_tools_runner_owner():
     payload = build_runner.smoke_payload("venv")
 
     assert payload["mode"] == "venv"
-    assert len(payload["jobs"]) == 5
-    assert all(job["default_selected"] for job in payload["jobs"])
+    assert len(payload["jobs"]) == 6
+    assert all(job["default_selected"] for job in payload["jobs"] if job["key"] != "linux")
     assert Path(payload["jobs"][3]["script"]) == build_runner.REPO_ROOT / "scripts" / "SRPSS_Installer.iss"
     assert not (build_runner.REPO_ROOT / "scripts" / "build_runner.py").exists()
     assert not (build_runner.REPO_ROOT / "scripts" / "venv" / "build_runner_venv.py").exists()

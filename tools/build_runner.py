@@ -750,6 +750,17 @@ def jobs_for_mode(mode: ModeName, repo_root: Path = REPO_ROOT) -> tuple[Job, ...
             installers_dir,
             installers_dir / "Setup_SRPSS_Media_Center.exe",
         ),
+        # Optional: builds on a GitHub Ubuntu runner through the GitHub CLI (no WSL,
+        # Hyper-V or Docker) and downloads the tarball (Docs/Guides/Linux_Guide.md §7).
+        Job(
+            "linux",
+            "Linux (GitHub runner)",
+            "powershell",
+            scripts_dir / "linux" / "build_from_windows.ps1",
+            release_dir / "linux",
+            release_dir / "linux" / f"SRPSS-{APP_VERSION}-linux-x86_64.tar.gz",
+            default_selected=False,
+        ),
     )
 
 
@@ -847,6 +858,10 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
             f"Inno Setup 6.7.2 or newer is required; found {found} at {result.iscc}"
         )
         result.unavailable_jobs.update(job.key for job in jobs if job.kind == "inno")
+
+    if any(job.key == "linux" for job in jobs) and shutil.which("gh") is None:
+        result.unavailable_jobs.add("linux")
+        result.warnings.append("Linux (GitHub runner): GitHub CLI (gh) not found; winget install GitHub.cli")
 
     if not (repo_root / ".venv").is_dir():
         result.warnings.append(
