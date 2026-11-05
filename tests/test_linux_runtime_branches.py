@@ -107,3 +107,30 @@ def test_orbit_capture_is_a_qt_grab_without_confinement(monkeypatch):
     assert capture.cleanup_pending and window.grab_calls == [True]
     capture.release()
     assert not capture.cleanup_pending and window.grab_calls == [True, False]
+
+
+def test_studio_conceals_settings_without_ending_its_modal_loop(qt_app):
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QDialog
+
+    from ui.studio.presence import WindowPresence
+
+    dialog = QDialog()
+    dialog.setGeometry(100, 100, 300, 200)
+    presence = WindowPresence(dialog)
+    seen = []
+
+    def conceal():
+        presence.conceal()
+        seen.append((dialog.isVisible(), dialog.windowOpacity(), dialog.geometry().x() < -10000))
+        QTimer.singleShot(50, reveal)
+
+    def reveal():
+        presence.reveal()
+        seen.append((dialog.isVisible(), dialog.windowOpacity(), dialog.geometry().topLeft().toTuple()))
+        dialog.accept()
+
+    QTimer.singleShot(50, conceal)
+    assert dialog.exec() == QDialog.DialogCode.Accepted  # the modal loop survived concealment
+    assert seen == [(True, 0.0, True), (True, 1.0, (100, 100))]
+    assert presence.reveal_count == 1
