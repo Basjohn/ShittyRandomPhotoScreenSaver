@@ -66,11 +66,11 @@ DEVCURVE_BODY_OVER = 0.08
 # body and most of its range reserved for them.
 DEVCURVE_BODY_TOP = {"bass": 0.5, "vocals": 0.5, "mids": 0.5, "transients": 0.3}
 DEVCURVE_ACCENT_ROOM = {"bass": 0.45, "vocals": 0.45, "mids": 0.45, "transients": 0.7}
-DEVCURVE_ACCENT_REF = {"bass": 4.0, "vocals": 4.0, "mids": 4.0, "transients": 0.35}
+DEVCURVE_ACCENT_REF = {"bass": 4.0, "vocals": 4.0, "mids": 4.0, "transients": 0.25}
 # Typed beats reach the body layers through their own flux lanes too (the swell's sources, already
 # passage-ramped): on dense real music a kick barely lifts the loudness above its body, so the level
 # excess alone left sustained-passage kicks at ~0.01 of drive. Fixed scale (lane units), no memory.
-DEVCURVE_ACCENT_FLUX_REF = 1.0
+DEVCURVE_ACCENT_FLUX_REF = {"bass": 0.45, "vocals": 0.6, "mids": 0.6, "transients": 1.0}
 # A kick reaches the bus's flux lane as a 1-3 frame spike; smoothed directly it barely moved the drive
 # within 150 ms (sustained-passage kicks ~0.01-0.02 on the recordings). The flux accent is captured at
 # once and held, decaying over DEVCURVE_ACCENT_HOLD_S, and only then eased by two stages
@@ -107,7 +107,8 @@ DEVCURVE_FLOW_SHARE_RISE = 1.5
 # powers (Deep Blue: bass 3.0 at motion 1.72) sat at it on 76-98% of ticks, so a kick had nowhere to
 # go. The same reserved-headroom rule as the drive, one stage later: per sample, the ceiling amplitude
 # is the smaller of the slope the limiter allows (for the reactive carrier's steepest slope, 11.65 per
-# unit amplitude per width, with a margin) and the room to the knee/clamp; the BODY's amplitude is
+# unit amplitude per width, with a margin) and the larger room to the knee or the clamp (a layer near the
+# bottom keeps its flat troughs, as it always had, while its crests rise); the BODY's amplitude is
 # compressed softly into (1 - DEVCURVE_GEOM_ACCENT_ROOM) of it, the accent's amplitude is added on top
 # uncompressed, and only the total eases softly toward DEVCURVE_GEOM_OVER x the ceiling. Below the
 # knees the mapping is the identity (authored looks unchanged where they had room).
@@ -162,9 +163,9 @@ def _body_response(ratio: float) -> float:
     return value
 
 
-def _accent_strength(excess: float, reference: float, flux: float = 0.0) -> float:
+def _accent_strength(excess: float, reference: float, flux: float = 0.0, flux_reference: float = 1.0) -> float:
     """Level above the body and the layer's flux above its recent mean, each on its fixed scale."""
-    return max(0.0, excess) / reference + max(0.0, flux) / DEVCURVE_ACCENT_FLUX_REF
+    return max(0.0, excess) / reference + max(0.0, flux) / flux_reference
 
 
 def _accent_response(strength: float, room: float) -> float:
@@ -186,7 +187,7 @@ def geometric_ceiling(profile: np.ndarray, offset: float, smoothness: float) -> 
     max_step = 0.040 - 0.020 * _clamp(float(smoothness), 0.0, 1.0)
     slope = DEVCURVE_GEOM_SLOPE_MARGIN * max_step * (DEVCURVE_SAMPLE_COUNT - 1) / DEVCURVE_GEOM_CARRIER_SLOPE
     base = np.clip(profile + offset, 0.02, 0.98)
-    return np.maximum(np.minimum(np.minimum(DEVCURVE_GEOM_TOP - base, base - DEVCURVE_GEOM_BOTTOM), slope), 0.005)
+    return np.maximum(np.minimum(np.maximum(DEVCURVE_GEOM_TOP - base, base - DEVCURVE_GEOM_BOTTOM), slope), 0.005)
 
 
 def reaction_amplitudes(body: np.ndarray, accent: np.ndarray, ceiling: np.ndarray) -> np.ndarray:
@@ -645,7 +646,7 @@ def solve_devcurve_frame(
                 lane_level = sum(_lane(transient_bus, lane) for lane in lanes) / len(lanes)
                 flux = lane_level - state.accent_mean[key] - DEVCURVE_SWELL_ACCENT_FLOOR
             if key in _BODY_LAYERS:
-                strength = _accent_strength(0.0, DEVCURVE_ACCENT_REF[key], flux)
+                strength = _accent_strength(0.0, DEVCURVE_ACCENT_REF[key], flux, DEVCURVE_ACCENT_FLUX_REF[key])
             else:
                 # The transients layer's level already is its flux lane: its spike above the body is the accent.
                 strength = _accent_strength(targets[key] - body, DEVCURVE_ACCENT_REF[key])
