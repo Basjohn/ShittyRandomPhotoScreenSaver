@@ -762,83 +762,6 @@ void main() {
 """
 )
 
-# Splashes: the heaviest onsets that land on water throw droplets up and out. Static droplet slots (onset, droplet)
-# read the same bounded onset ring the waves use; each droplet follows a ballistic arc from its onset's age, so no
-# CPU simulation, timer or extra buffer exists, and an idle or quiet lake draws nothing.
-SPLASH_DROPLETS = 64
-SPLASH_THRESHOLD = 1.3      # onset strength (0..2) where splashing begins: ~3-20 a minute on recorded songs
-NEON_SPLASH_VERTEX_SOURCE = (
-    "#version 460 core\nlayout(location=0) in vec2 aSlot;\n"
-    + SHOCKWAVE_EVENTS.glsl(3) + HEIGHTFIELD_GLSL + _PROJECTION + SHOCKWAVE_WAVE_GLSL + _POSE + _TERRAIN
-    + f"""
-const float SPLASH_THRESHOLD = {SPLASH_THRESHOLD:.6f};
-uniform float uSplash;       // amount 0..1 (0 draws nothing)
-out float vAlpha;
-out float vHeat;
-float splashHash(float a, float b) {{ return fract(sin(a * 127.1 + b * 311.7) * 43758.5453); }}
-void main() {{
-    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-    gl_PointSize = 0.0;
-    vAlpha = 0.0;
-    vHeat = 0.0;
-    int index = int(aSlot.x);
-    float drop = aSlot.y;
-    if (uSplash <= 0.0 || index >= uEventCount) return;
-    ShockwaveEvent e = events[index];
-    float heavy = clamp((e.strength - SPLASH_THRESHOLD) / (2.0 - SPLASH_THRESHOLD), 0.0, 1.0);
-    if (heavy <= 0.0) return;
-    vec2 uv = vec2(e.x / (2.0 * uHalfWidth) + 0.5, -e.z / SHOCKWAVE_DEPTH);
-    if (!sceneHeightfieldWater(basinBase(uv))) return;
-    float seed = e.x * 13.7 + e.z * 5.1 + float(index) * 0.37;
-    float angle = 6.2831853 * splashHash(seed, drop);
-    // A third rise as a narrow central column, the rest as a wide crown.
-    bool column = splashHash(seed + 9.4, drop) < 0.33;
-    float up = (column ? 1.15 + 0.6 * splashHash(seed + 3.1, drop) : 0.6 + 0.6 * splashHash(seed + 3.1, drop))
-             * (0.7 + 0.5 * heavy) * (0.55 + 0.6 * uSplash);
-    float outward = (column ? 0.03 + 0.07 * splashHash(seed + 1.7, drop) : 0.25 + 0.45 * splashHash(seed + 1.7, drop))
-                  * (0.6 + 0.6 * heavy);
-    float gravity = 3.2;
-    float t = e.age - 0.08 * splashHash(seed + 7.9, drop);   // a short stagger: a burst, not a shell
-    float flight = 2.0 * up / gravity;
-    if (t <= 0.0 || t >= flight) return;
-    vec2 ground = vec2(e.x + cos(angle) * outward * t, e.z + sin(angle) * outward * t);
-    float surface = WATER_PEAK * tanh(shockwaveHeight(ground).x / WATER_PEAK);   // the live water under the droplet
-    vec3 p = vec3(ground.x, surface + up * t - 0.5 * gravity * t * t, ground.y);
-    gl_Position = basinClip(p);
-    float depth = max(-basinViewPoint(p).z, 0.05);
-    gl_PointSize = clamp(uPointPx * (0.6 + 0.8 * splashHash(seed + 5.3, drop)) * 9.0 / depth, 1.5, uPointPx * 7.0);
-    vAlpha = heavy * (0.4 + 0.6 * uSplash) * (1.0 - smoothstep(0.55, 1.0, t / flight));
-    vHeat = heavy;
-}}
-"""
-)
-NEON_SPLASH_FRAGMENT_SOURCE = """#version 460 core
-layout(location=0) out vec4 FragColor;
-layout(location=1) out vec4 Emission;
-in float vAlpha;
-in float vHeat;
-uniform vec4 uSplashColor;   // the water lines' glow colour (its alpha is their palette mix, not opacity)
-uniform float uGlow;
-void main() {
-    float radius = length(gl_PointCoord - 0.5);
-    float alpha = (1.0 - smoothstep(0.18, 0.5, radius)) * vAlpha;
-    if (alpha < 0.004) discard;
-    vec3 colour = min(uSplashColor.rgb * (0.85 + 0.5 * vHeat), vec3(1.0));
-    FragColor = vec4(colour, alpha);
-    vec3 glow = colour * alpha * (0.5 + uGlow);
-    Emission = vec4(glow, dot(glow, vec3(0.2126, 0.7152, 0.0722)));
-}
-"""
-
-
-@lru_cache(maxsize=1)
-def splash_slots() -> tuple[float, ...]:
-    """(onset index, droplet index) for every droplet the bounded onset buffer can carry."""
-    from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_CAPACITY
-    return tuple(float(v) for index in range(SHOCKWAVE_CAPACITY) for drop in range(SPLASH_DROPLETS)
-                 for v in (index, drop))
-
-
 NEON_SKY_VERTEX_SOURCE = """#version 460 core
 layout(location=0) in vec2 aUv;
 out vec2 vUv;
@@ -963,5 +886,5 @@ void main() {
 """
 )
 
-__all__ = ["BasinView", "basin_view", "orbit_view", "NEON_SPLASH_VERTEX_SOURCE", "NEON_SPLASH_FRAGMENT_SOURCE", "splash_slots", "SPLASH_DROPLETS", "NEON_VERTEX_SOURCE", "NEON_FRAGMENT_SOURCE",
+__all__ = ["BasinView", "basin_view", "orbit_view", "NEON_VERTEX_SOURCE", "NEON_FRAGMENT_SOURCE",
            "NEON_SKY_VERTEX_SOURCE", "NEON_SKY_FRAGMENT_SOURCE", "NEON_SKYLINE_VERTEX_SOURCE", "NEON_SKYLINE_FRAGMENT_SOURCE"]

@@ -1,5 +1,5 @@
 """Neon Lake's layered water through the production renderer: Water Shine is the water's own surface (land is
-untouched) and Splashes rise only where heavy onsets land on water."""
+untouched); the rejected Splashes stay retired."""
 from dataclasses import replace
 
 import numpy as np
@@ -7,9 +7,6 @@ import pytest
 
 from rendering.gl_programs.heightfield import heightfield_surface_bytes
 from tests.test_neon_lake_renderer import _snapshot, target  # noqa: F401  (pytest fixture)
-
-_HEAVY = (0.3, 0.0, -1.2, 2.0)   # (age, x share, z, strength): mid-flight, mid-basin, at full strength
-
 
 def _scene(height, events=(), **parameters):
     """A flat basin that is all water (height 0) or all land, seen from above; no reflections or idle swell."""
@@ -45,23 +42,14 @@ def test_water_shine_changes_the_water_and_never_the_land(target):
     assert not (land > 24).any(), "land keeps its own material"
 
 
-def test_splashes_rise_only_from_heavy_onsets_on_water(target):
-    capture, host = target
-    splash = _difference(capture, host, _scene(0.0, (_HEAVY,), shockwave_grid_splashes=0.0),
-                         _scene(0.0, (_HEAVY,), shockwave_grid_splashes=1.0))
-    assert (splash > 24).sum() > 40, "a heavy hit on water throws droplets"
-    light = (_HEAVY[0], _HEAVY[1], _HEAVY[2], 0.8)
-    quiet = _difference(capture, host, _scene(0.0, (light,), shockwave_grid_splashes=0.0),
-                        _scene(0.0, (light,), shockwave_grid_splashes=1.0))
-    assert not (quiet > 24).any(), "ordinary onsets only ripple"
-    dry = _difference(capture, host, _scene(0.4, (_HEAVY,), shockwave_grid_splashes=0.0),
-                      _scene(0.4, (_HEAVY,), shockwave_grid_splashes=1.0))
-    assert not (dry > 24).any(), "land never splashes"
+def test_splashes_are_retired():
+    """Droplets on heavy hits were rejected (2026-11-05): no control, default, preset key or program remains."""
+    from core.settings.default_settings import DEFAULT_SETTINGS
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
+    import rendering.gl_programs.neon_lake_basin_program as program
 
-
-def test_splashes_off_builds_nothing(target):
-    capture, host = target
-    capture.render(host, _scene(0.0, (_HEAVY,), shockwave_grid_splashes=0.0))
-    resources = host._implementations["shockwave_grid"]._resources
-    assert not resources.has_program("splash")
-    assert not resources.has_mesh("splash slots")
+    assert "shockwave_grid_splashes" not in require_mode_settings("shockwave_grid").keys()
+    assert "shockwave_grid_splashes" not in str(DEFAULT_SETTINGS)
+    assert not any("SPLASH" in name for name in dir(program))
+    assert "shockwave_grid_splashes" not in strip_retired_visualizer_settings({"shockwave_grid_splashes": 0.6})

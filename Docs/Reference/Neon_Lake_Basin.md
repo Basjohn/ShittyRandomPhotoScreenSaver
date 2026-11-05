@@ -477,13 +477,11 @@ lifts the body itself in its palette. Waves keep travelling along
 water that leaves the grid as a stream (`basinSurface`), easing out toward the horizon, so a channel painted to the
 edge reads as flowing water rather than a flat dotted plain.
 
-**Splashes** (Waves bucket, 0 = off and nothing is built) throw droplets where onsets above strength 1.3
-(`SPLASH_THRESHOLD`, ~3-20 a minute on the recorded songs) land on water. Static slots (16 onsets x `SPLASH_DROPLETS`) read the same bounded onset ring as
-the waves; each droplet is a ballistic arc from its onset's age launched from the live water height (a narrow column
-plus a wide crown), so there is no CPU simulation, timer or extra stream. The program and slot buffer warm with the
-others while Splashes is on. Droplets use the Water Line Glow RGB (its alpha is a palette mix, not opacity).
-Contracts: `tests/test_neon_water_layers.py`. Stage onsets for stills with `tools/neon_lake_capture.py --event`.
-Item 1 below is partly delivered: splash, and the soft crest cap raised from 0.18 to `WATER_PEAK` 0.36
+**Splashes were retired (2026-11-05):** the operator rejected the droplet bursts as out of place and uniform; the
+lake's gentle movement is the wanted water motion. The key `shockwave_grid_splashes` is forward-retired
+(`core/settings/visualizer_retired_modes.py`); no program, slot buffer or control remains. Stage onsets for stills
+with `tools/neon_lake_capture.py --event`.
+Item 1 below is partly delivered: the soft crest cap raised from 0.18 to `WATER_PEAK` 0.36
 (`core/constants/neon_lake_world.py`; the camera floor's ripple allowance follows it), so full-height authored waves
 no longer flatten to one crest.
 

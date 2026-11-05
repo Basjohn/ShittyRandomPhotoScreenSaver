@@ -191,7 +191,6 @@
         "shockwave_grid_sky_enabled": true,
         "shockwave_grid_sky_strength": 0.8,
         "shockwave_grid_solid_bar_hysteresis_enabled": false,
-        "shockwave_grid_splashes": 0.6,
         "shockwave_grid_star_color": [
           255,
           200,

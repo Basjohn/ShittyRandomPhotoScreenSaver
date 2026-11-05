@@ -698,8 +698,6 @@ _SHOCKWAVE_GRID = ModeSettings(
         Slider("shockwave_grid_water_shine", "Water Shine:", 0.0, 1.0,
                "The water's own surface, whatever the land's style: a tinted body under a rippled mirror of the sky, "
                "dark looking down and bright at grazing angles, with the Sun or Moon glinting in it.", bucket="waves"),
-        Slider("shockwave_grid_splashes", "Splashes:", 0.0, 1.0,
-               "Droplets thrown up where the heaviest hits land on the water. 0 turns them off.", bucket="waves"),
         Slider("shockwave_grid_water_glint", "Sun / Moon Path:", 0.0, 1.0,
                "A glittering path of light on the water below the Sun or Moon, brightening with its halo's "
                "music. 0 turns it off.", bucket="waves", enabled_when=_BASIN_BODY),

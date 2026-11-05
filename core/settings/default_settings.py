@@ -1612,7 +1612,6 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'shockwave_grid_sky_enabled': True,
                                     'shockwave_grid_sky_strength': 0.8,
                                     'shockwave_grid_solid_bar_hysteresis_enabled': True,
-                                    'shockwave_grid_splashes': 0.6,
                                     'shockwave_grid_star_color': [166, 204, 255, 255],
                                     'shockwave_grid_star_glow_color': [255, 214, 140, 0],
                                     'shockwave_grid_star_glow_reactivity': 1.0,
