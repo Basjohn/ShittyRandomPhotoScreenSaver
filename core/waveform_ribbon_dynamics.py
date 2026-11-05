@@ -13,12 +13,90 @@ from core.ribbon_packet import KNOT_ROWS, RibbonPacket
 from core.ribbon_ring import RibbonRing
 from core.waveform_ribbon_authoring import TARGETS, route, RIBBON_CAPACITY
 from core.waveform_ribbon_scene import Recipe
-from core.ribbon_bursts import RibbonAccentControls, RibbonBursts
+from core.ribbon_bursts import MAX_BURST, RibbonAccentControls, RibbonBursts
 from core.ribbon_strand_cohorts import RibbonStrandControls,RibbonStrandCohorts
 
 
 def unit(value):
     return max(0., min(1., float(value)))
+
+
+# Fixed musical anchors (never learned from the current song). Pooled p05..p95 of the fixed-reference body lanes,
+# published passage and weighted body energy over four recorded 50 s windows (ragdoll, human_heavy, nightsolong,
+# anything_mixed; 5 Nov audit). Real music otherwise uses about a fifth of every authored quiet->peak range.
+BAND_SPAN = ((.25, .85), (.10, .82), (.02, .80))
+PASSAGE_SPAN = (.45, .80)
+ENERGY_SPAN = (.25, .75)
+ENERGY_WEIGHTS = (.5, .35, .15)
+# Phrase-scale body energy: rises within a bar, settles over a phrase. Beats articulate through the band sources.
+PHRASE_ATTACK, PHRASE_RELEASE = .35, 1.5
+# Optional Dynamic Zoom (operator, 5 Nov): the view extent widens up to 20% quickly in heavy sustained passages and
+# narrows up to 20% slowly in soft or idle ones. Sustain is the published level held over seconds, so single hits
+# never pump the camera; the zoom itself is a smooth logical state, frozen while the user operates the camera.
+ZOOM_SPAN = .2
+ZOOM_SUSTAIN_ATTACK, ZOOM_SUSTAIN_RELEASE = 2.5, 4.
+ZOOM_OUT_SECONDS, ZOOM_IN_SECONDS = 1.2, 7.
+
+# Travelling energy pulse (operator, 5 Nov: "reactions should feel like water waves, always WITH the waveform").
+# Music injects energy at an origin; the energy travels along the scene axis at its own speed, spreads gently and
+# fades, and wherever it is it swells the waveform's OWN crests and troughs (and widens/brightens/recolours them).
+# One bounded 1D field per travel direction on the sole logical clock; the projection only samples it.
+PULSE_GRID = np.linspace(-48., 48., 385)
+PULSE_DX = float(PULSE_GRID[1]-PULSE_GRID[0])
+PULSE_DIRECTIONS = ('Head To Tail', 'Tail To Head', 'Centre Out')
+PULSE_ORIGIN = 3.5          # world x of the edge origins, well inside the authored view so a hit is seen at once
+PULSE_RISE = .08             # seconds: a beat lands quickly (DevCurve: fast rise, gentle settle), never a one-tick pop
+PULSE_DIFFUSION = .35        # world units^2 per second: packets widen gently as they travel
+PULSE_SATURATION = 1.2       # soft bound of the sampled swell
+# Surge along the curve (operator, 5 Nov): where a swell passes, each point moves along its OWN local direction,
+# toward the swell's travel: up-left on a curve rising to the left, down-left on one falling, left on a crest.
+PULSE_SURGE = .6             # world units of along-curve travel per unit of Pulse Strength x swell
+PULSE_MAX_COMPRESSION = .7   # the surge may compress the axis by at most 70% locally: the ribbon never folds back
+# Injection calibrated on recorded PCM (5 Nov probe): typed hits reach ~0.2-0.4, body-energy rises ~0.15-0.25
+# for ~0.15 s on beats; these gains give a beat a swell near 1 at its origin and leave quiet passages nearly flat.
+PULSE_HIT_GAIN, PULSE_RISE_GAIN, PULSE_RISE_FLOOR = 2., 45., .08
+# Swell-carried particles (operator, 5 Nov: the pulse should increase saturation, particle density and strands).
+# Injected energy buys births once; they are released over the swell's first journey and placed on it.
+PULSE_BIRTHS = 20.          # births per unit of injected energy at Pulse Particles 1 (a full beat injects 2)
+PULSE_BIRTH_TAU = .8        # seconds over which a swell's births are released while it travels
+PULSE_GREY = .12            # colours below this saturation are treated as neutral: the swell never invents a hue
+
+
+def pulse_sources(direction):
+    if direction == 'Head To Tail':return ((PULSE_ORIGIN,-1.),)
+    if direction == 'Tail To Head':return ((-PULSE_ORIGIN,1.),)
+    if direction == 'Centre Out':return ((0.,-1.),(0.,1.))
+    raise ValueError('Unknown waveform pulse direction: '+str(direction))
+
+
+@dataclass(frozen=True)
+class PulseControls:
+    direction: str = 'Head To Tail'
+    width: float = 10.           # full width at half height, world units: a broad swell, not a sideways jab
+    speed: float = 3.            # world units per second along the scene axis (about twice the history flow)
+    colour: float = .6           # share of the peak colour the pulse carries
+    fade: float = 4.             # seconds for the travelling energy to fall to 1/e
+    saturation: float = 0.       # share of the remaining saturation a full swell adds (hue and value unchanged)
+    particles: float = 0.        # swell-carried births and the lean of accent births toward the swell
+    strands: float = 0.          # restrained lean/chance/glow of accent strands near the swell
+
+    def __post_init__(self):
+        pulse_sources(self.direction)
+        if not (math.isfinite(self.width) and .5<=self.width<=24. and math.isfinite(self.speed) and 0.<=self.speed<=30.
+                and math.isfinite(self.colour) and 0.<=self.colour<=1. and math.isfinite(self.fade) and .2<=self.fade<=20.):
+            raise ValueError('Waveform pulse needs width 0.5..24, speed 0..30, colour 0..1 and fade 0.2..20')
+        if not (math.isfinite(self.saturation) and 0.<=self.saturation<=1. and math.isfinite(self.particles)
+                and 0.<=self.particles<=2. and math.isfinite(self.strands) and 0.<=self.strands<=1.):
+            raise ValueError('Waveform pulse needs saturation 0..1, particles 0..2 and strands 0..1')
+
+
+def span(value, low, high):
+    """Place a lane on its real-music span. Above 0.8 the approach to 1 is exponential and never flattens, so a hot
+    passage keeps moving instead of pinning its drivers (the body lanes' own knee, beat_engine._lane)."""
+    position = max(0., (float(value)-low)/(high-low))
+    if position > .8:
+        position = .8+.2*(1.-math.exp(-(position-.8)/.2))
+    return position
 
 
 def follower(value, target, dt, attack, release):
@@ -75,6 +153,7 @@ class HybridControls:
     accents: RibbonAccentControls | None = None
     idle_motion: float = .35
     strands: RibbonStrandControls | None = None
+    pulse: PulseControls = PulseControls()
 
 
 @dataclass(frozen=True)
@@ -95,6 +174,7 @@ class HybridSnapshot:
     particle_serial: int = 0
     strands: bytes = b''
     strand_origin: float = 0.
+    zoom: float = 1.
 
 
 class WaveformDynamics:
@@ -105,7 +185,12 @@ class WaveformDynamics:
         self.time = self.travel = self.angle = self.angular_speed = self.twist_phase = self._hit = 0.
         self.phase = controls.scene.flow.phase
         self.bands, self.power = (0.,0.,0.),0.
-        self.passage = 0.
+        self.passage = self.phrase = 0.
+        self.zoom, self._sustain = 1., 0.
+        self._pulse = np.zeros((2,PULSE_GRID.size))  # travelling toward -x, toward +x
+        self._pulse_pending = 0.
+        self._pulse_credit = self._pulse_births = 0.  # births bought by injected energy / released and due
+        self._flux_fast = self._flux_slow = 0.
         self._shape_input = np.zeros((2,5),np.float64)  # two stages: bass/mid/high, power, hit
         self.spring = [[0.,0.,0.] for _ in range(RIBBON_CAPACITY)]
         self.velocity = [[0.,0.,0.] for _ in range(RIBBON_CAPACITY)]
@@ -151,7 +236,8 @@ class WaveformDynamics:
             sparkle.append(unit(self._value('sparkle')*max(hit,.4*bands[2])))
         self.ring.append(when,positions,widths,twists,lights,sparkle=sparkle,tint=tints)
 
-    def advance(self, dt, *, bands, intensity, presence, hit=0., hit_components=None, accent=None, controls=None):
+    def advance(self, dt, *, bands, intensity, presence, hit=0., hit_components=None, accent=None, controls=None,
+                dynamic_zoom=False, zoom_hold=False):
         if not math.isfinite(dt) or not 0. <= dt <= .1:
             raise ValueError('Ribbon logical dt must be finite in 0..0.1 seconds')
         if controls is not None:
@@ -174,8 +260,14 @@ class WaveformDynamics:
             self._primed = stop
             self._snapshot = None
             return self.snapshot()
-        bands = tuple(unit(v)*unit(presence) for v in bands)
-        power = unit(intensity)*unit(presence)
+        raw = tuple(unit(v)*unit(presence) for v in bands)
+        # Calibrated sources: each fixed-scale lane spread over its real-music span, so authored quiet->peak ranges
+        # are actually traversed. The published level places every range; it blends the slow fixed-scale passage
+        # with phrase-scale body energy so a lift within a song is visible, not only a change of playback volume.
+        bands = tuple(span(value,*limits) for value,limits in zip(raw,BAND_SPAN))
+        energy = sum(weight*value for weight,value in zip(ENERGY_WEIGHTS,raw))
+        self.phrase = follower(self.phrase,energy,dt,PHRASE_ATTACK,PHRASE_RELEASE)
+        power = unit(.5*span(unit(intensity)*unit(presence),*PASSAGE_SPAN)+.5*span(self.phrase,*ENERGY_SPAN))
         self.bands, self.power = bands,power
         self.passage = follower(self.passage,power,dt,c.attack,c.release)
         # Event strength already has its own acoustic support at admission. Passage weight must not attenuate
@@ -193,13 +285,19 @@ class WaveformDynamics:
         old_first=self._shape_input[0].copy()
         self._shape_input[1]=shape_target+shape_decay*(self._shape_input[1]-shape_target+(old_first-shape_target)*shape_step)
         self._shape_input[0]=shape_target+(old_first-shape_target)*shape_decay
+        self._advance_zoom(dt,bool(dynamic_zoom),bool(zoom_hold))
         self.time += dt
         self.travel += c.scene.flow.speed*dt
         self.phase += 2*math.pi*c.scene.flow.head_hz*dt
         sources = (*bands,power,self._hit,.5+.5*math.sin(self.phase))
+        # Fast bands articulate inside the level; a quiet passage still shows its beats, only smaller.
+        gate = .35+.65*self.passage
+        energy_shaped = sum(weight*value for weight,value in zip(ENERGY_WEIGHTS,bands))
         for key in TARGETS:
-            target = route(c.routing[key],sources,passage=self.passage)
+            target = route(c.routing[key],sources,passage=gate)
             self.drive[key] = follower(self.drive[key],target,dt,c.attack,c.release)
+        released = self._advance_pulse(dt,hit,energy_shaped)
+        self._advance_pulse_births(dt,released)
         for owner,card in enumerate(c.cards):
             support = 1. if card['band']=='All' else bands[('Bass','Mids','Highs').index(card['band'])]
             for index,target in enumerate((self.drive['bend'],self.drive['torsion'],self.drive['depth'])):
@@ -228,18 +326,109 @@ class WaveformDynamics:
         snapshot=self.snapshot()
         if c.accents is None:
             self._bursts=None
-        elif accent>=.08 or self._bursts is not None:
+        elif accent>=.08 or self._pulse_births>=1. or self._bursts is not None:
             if self._bursts is None:self._bursts=RibbonBursts()
-            self._bursts.admit(snapshot,c.accents,accent)
+            self._bursts.admit(snapshot,c.accents,accent,swell=self.pulse_at,density=c.pulse.particles,
+                               extra=int(self._pulse_births))
+            self._pulse_births -= self._bursts.consumed
             self._snapshot=replace(snapshot,particles=self._bursts.visible_payload(snapshot.time),particle_origin=self._bursts.origin,
                                    particle_serial=self._bursts.serial)
         if c.strands is None:
             self._strand_cohorts=None
         else:
             if self._strand_cohorts is None:self._strand_cohorts=RibbonStrandCohorts(snapshot.packet.instances)
-            payload=self._strand_cohorts.update(snapshot,c.strands,accent,history=self._base_packet,knot_hz=c.scene.flow.knot_hz)
+            payload=self._strand_cohorts.update(snapshot,c.strands,accent,history=self._base_packet,knot_hz=c.scene.flow.knot_hz,
+                                                swell=self.pulse_at,gather=c.pulse.strands)
             self._snapshot=replace(self._snapshot,strands=payload,strand_origin=self._strand_cohorts.origin)
         return self._snapshot
+
+    def _advance_pulse(self,dt,hit,energy):
+        """Inject, carry, spread and fade the travelling energy. Silence injects nothing; energy already
+        travelling finishes its journey and fades (never vanishes)."""
+        p = self.controls.pulse
+        # Energy enters only on beats: typed hits (consumed once upstream) and rises of body energy above its recent
+        # level (beats the onset bus may miss). A steady baseline would merge successive swells into one bulge;
+        # sustained loudness is already carried by the level and the Pulse Strength range.
+        self._flux_fast = follower(self._flux_fast,energy,dt,.03,.15)
+        self._flux_slow = follower(self._flux_slow,energy,dt,.35,.6)
+        rise = max(0.,self._flux_fast-self._flux_slow-PULSE_RISE_FLOOR)
+        self._pulse_pending += PULSE_HIT_GAIN*unit(hit)+PULSE_RISE_GAIN*rise*dt
+        release = self._pulse_pending*(1.-math.exp(-dt/PULSE_RISE))
+        self._pulse_pending -= release
+        sigma = p.width/2.3548
+        sources = pulse_sources(p.direction)
+        shift = p.speed*dt
+        blur = min(.24,PULSE_DIFFUSION*dt/(PULSE_DX*PULSE_DX))
+        decay = math.exp(-dt/p.fade)
+        for index,sign in enumerate((-1.,1.)):
+            field = self._pulse[index]
+            if shift:
+                field[:] = np.interp(PULSE_GRID-sign*shift,PULSE_GRID,field,left=0.,right=0.)
+            if blur:
+                field[1:-1] += blur*(field[:-2]-2.*field[1:-1]+field[2:])
+            field *= decay
+            for origin,direction in sources:
+                if direction==sign and release:
+                    field += release/len(sources)*np.exp(-.5*((PULSE_GRID-origin)/sigma)**2)
+        return release
+
+    def _advance_pulse_births(self,dt,released):
+        """Injected energy buys a bounded number of swell-carried births, released over the swell's journey and
+        consumed once by burst admission. Silence buys none; without sparks or the control nothing is banked."""
+        c = self.controls
+        if c.accents is None or c.pulse.particles<=0.:
+            self._pulse_credit = self._pulse_births = 0.
+            return
+        self._pulse_credit = min(4.*MAX_BURST,self._pulse_credit+PULSE_BIRTHS*c.pulse.particles*released)
+        moved = self._pulse_credit*(1.-math.exp(-dt/PULSE_BIRTH_TAU))
+        self._pulse_credit -= moved
+        self._pulse_births = min(float(MAX_BURST),self._pulse_births+moved)
+
+    def pulse_at(self,x):
+        """Soft-bounded travelling swell sampled at scene x (pure; no state change)."""
+        value = np.interp(x,PULSE_GRID,self._pulse[0],left=0.,right=0.)+np.interp(x,PULSE_GRID,self._pulse[1],left=0.,right=0.)
+        return PULSE_SATURATION*np.tanh(value/PULSE_SATURATION)
+
+    def pulse_drift(self,x):
+        """Signed swell: positive where energy travels toward +x, negative toward -x (pure)."""
+        def sample(field):
+            value = np.interp(x,PULSE_GRID,field,left=0.,right=0.)
+            return PULSE_SATURATION*np.tanh(value/PULSE_SATURATION)
+        return sample(self._pulse[1])-sample(self._pulse[0])
+
+    def _surge(self,data,x,y,amount):
+        """Move each knot along its own front-view tangent by the signed swell (with the shape, never across it)."""
+        drift = self.pulse_drift(x)*amount
+        if not np.any(drift):
+            return x,y
+        x,y = x.copy(),y.copy()
+        for index,path in enumerate(data):
+            count,start,capacity = int(path[0,0]),int(path[1,1]),int(path[1,2])
+            if count<3:
+                continue
+            order = (start+np.arange(count))%capacity
+            xs,ys,ds = x[index,order],y[index,order],drift[index,order]
+            if not np.any(ds):
+                continue
+            slope = np.gradient(ys,xs)
+            along = ds/np.sqrt(1.+slope*slope)
+            squeeze = np.diff(along)/np.diff(xs)
+            if squeeze.min() < -PULSE_MAX_COMPRESSION:
+                along *= PULSE_MAX_COMPRESSION/-squeeze.min()
+            x[index,order] = xs+along
+            y[index,order] = ys+along*slope
+        return x,y
+
+    def _advance_zoom(self,dt,enabled,hold):
+        self._sustain = follower(self._sustain,self.passage,dt,ZOOM_SUSTAIN_ATTACK,ZOOM_SUSTAIN_RELEASE)
+        if hold:
+            return
+        if enabled:
+            share = unit((self._sustain-.25)/.5)
+            target = 1.+ZOOM_SPAN*(2.*share*share*(3.-2.*share)-1.)
+        else:
+            target = 1.  # switching off eases back to the authored framing; it never jumps
+        self.zoom = follower(self.zoom,target,dt,ZOOM_OUT_SECONDS,ZOOM_IN_SECONDS)
 
     def _value(self,key):
         low,high = self.controls.ranges[key]
@@ -264,30 +453,45 @@ class WaveformDynamics:
             self._base_packet,self._base_array=raw,base
         data = self._base_array.copy()
         rows = data[:,4::KNOT_ROWS]
-        x = rows[:,:,0]+raw.world_origin[0]+self.controls.scene.flow.head_x-self.travel
+        # Cloth coordinate: fixed to the travelling history, so musical bends are sweeps carried by the ribbon
+        # rather than a stationary lump field the cloth slides through.
+        u = rows[:,:,0]+raw.world_origin[0]
+        x = u+self.controls.scene.flow.head_x-self.travel
         owner = np.arange(RIBBON_CAPACITY)[:,None]
         # Keep elastic excursions legible above ordinary sustained input; the old unit tanh compressed hits twice.
         b,m,h = (3.*np.tanh(np.asarray(self.spring)/3.)).T[:,:,None]
         values = {key:self._value(key) for key in TARGETS}
         carrier = rows[:,:,1]+raw.world_origin[1]-2.
-        axial_scale=np.exp(.6*values['stretch']*np.tanh(np.asarray(self.spring)[:,0,None]))
-        rows[:,:,0]=x*axial_scale-raw.world_origin[0]-self.controls.scene.flow.head_x+self.travel
-        y = carrier*values['height']+values['bend']*(1.1*b*np.sin(.45*x+owner*.7)
-            +.1*m*np.sin(.7*x+owner))
-        z = (rows[:,:,2]+raw.world_origin[2])*values['spread']+.4*values['depth']*m*np.cos(.65*x+owner)
-        idle=self.controls.idle_motion*(1.-self.passage)
-        y+=idle*.08*np.sin(.45*self.time+.6*x+owner)
-        z+=idle*.05*np.cos(.33*self.time+.4*x-owner)
-        # One common smooth bounding domain prevents floor-crossing/clamp kinks at extreme editor values.
-        y = 5.*np.tanh(y/5.)
-        z = 5.*np.tanh(z/5.)
+        # No time-varying axial scaling: horizontal motion is only the steady flow (DevCurve's rule). The former
+        # elastic stretch scaled x about the centre on every kick and read as sideways bursts (operator, 5 Nov).
+        # The axial roll turns the carrier (its helix and the bundle's separation) like a skewer. Height scales
+        # both transverse carrier components, so a turn changes the visible phase, never the visible amplitude.
+        separation = .65*(owner-1.)
+        depth_wave = rows[:,:,2]+raw.world_origin[2]-separation
+        # The travelling pulse swells the carrier's own crests and troughs where it is: always WITH the shape.
+        swell = self.pulse_at(x)
+        gain = 1.+.7*values['bend']*swell
+        cy = carrier*values['height']*gain
+        cz = depth_wave*values['height']*gain+separation*values['spread']
         cosine,sine = math.cos(self.angle),math.sin(self.angle)
-        rows[:,:,1],rows[:,:,2] = cosine*y-sine*z+values['lift'],sine*y+cosine*z
-        rows[:,:,3] = 3.5*np.tanh(rows[:,:,3]*values['width']/3.5)
+        y,z = cosine*cy-sine*cz,sine*cy+cosine*cz
+        # Depth sway acts in world space after the roll and travels with the cloth. The former standing bend
+        # (a fixed spatial sine the ribbon slid through) is replaced by the travelling pulse above.
+        z = z+.4*values['depth']*m*np.cos(.65*u+owner)
+        idle=self.controls.idle_motion*(1.-self.passage)
+        y+=idle*.08*np.sin(.45*self.time+.6*u+owner)
+        z+=idle*.05*np.cos(.33*self.time+.4*u-owner)
+        x,y = self._surge(data,x,y,PULSE_SURGE*values['bend'])
+        rows[:,:,0] = x-raw.world_origin[0]-self.controls.scene.flow.head_x+self.travel
+        # One common smooth bounding domain prevents floor-crossing/clamp kinks at extreme editor values. Peaks
+        # are meant to rise high: the framing makes room for them, the body is never capped to fit a frame.
+        rows[:,:,1] = 5.*np.tanh(y/5.)+values['lift']
+        rows[:,:,2] = 5.*np.tanh(z/5.)
+        rows[:,:,3] = 3.5*np.tanh(rows[:,:,3]*values['width']*(1.+.35*swell)/3.5)
         origin_twist = (data[:,1,0,None]+math.pi)%(2*math.pi)-math.pi
         twist = data[:,5::KNOT_ROWS,1]+origin_twist
-        twist = twist*values['twist']+values['torsion']*(1.6*m*np.sin(.45*x+owner)+.12*h*np.sin(.7*x-owner))
-        data[:,5::KNOT_ROWS,1] = twist+self.twist_phase+self.angle+idle*.18*np.sin(.28*self.time+.3*x+owner)
+        twist = twist*values['twist']+values['torsion']*(1.6*m*np.sin(.45*u+owner)+.12*h*np.sin(.7*u-owner))
+        data[:,5::KNOT_ROWS,1] = twist+self.twist_phase+self.angle+idle*.18*np.sin(.28*self.time+.3*u+owner)
         data[:,1,0] = 0.
         # Strong local musical regions change colour immediately, even before new head history enters view.
         # The crest mask is carried by immutable carrier geometry, so coloured regions travel with the waveform.
@@ -297,19 +501,24 @@ class WaveformDynamics:
             # Existing visible rim slots respond immediately; this eased source creates no simulation in the draw.
             data[index,6::KNOT_ROWS,3] = np.maximum(data[index,6::KNOT_ROWS,3],
                 values['sparkle']*max(self._hit,.4*self.bands[2])*crest)
-            data[index,7::KNOT_ROWS,3] *= 1.+2.2*self._hit*(.25+.75*crest)
+            data[index,7::KNOT_ROWS,3] *= (1.+2.2*self._hit*(.25+.75*crest))*(1.+.45*swell[index])
             power = local*(.25+.75*crest)
             threshold = self.controls.colour_threshold
             share = np.clip((power-threshold)/max(1e-5,1.-threshold),0.,1.)
             share = share*share*(3.-2.*share)*values['colour']
             tint = data[index,8::KNOT_ROWS]
-            share = np.maximum(share,tint[:,3])
+            share = np.maximum(np.maximum(share,tint[:,3]),self.controls.pulse.colour*np.clip(swell[index],0.,1.))
             quiet = tuple((a+b)*.5 for a,b in zip(*card['quiet']))
             peak = tuple((a+b)*.5 for a,b in zip(*card['peak']))
             a,b = colorsys.rgb_to_hsv(*quiet),colorsys.rgb_to_hsv(*peak)
             hue = (a[0]+((b[0]-a[0]+.5)%1.-.5)*share)%1.
             saturation = a[1]+(b[1]-a[1])*share
             value = a[2]+(b[2]-a[2])*share
+            # The swell deepens colour where it is: saturation rises toward 1 (never toward white), hue and value
+            # keep their own logic, and a neutral colour stays neutral rather than gaining an invented hue.
+            vivid = self.controls.pulse.saturation*np.clip(swell[index],0.,1.)*np.clip(saturation/PULSE_GREY,0.,1.)
+            saturation = saturation+(1.-saturation)*vivid
+            share = np.maximum(share,vivid)
             k = (np.array((5.,3.,1.))[None,:]+hue[:,None]*6.)%6.
             tint[:,:3] = value[:,None]*(1.-saturation[:,None]*np.clip(np.minimum(k,4.-k),0.,1.))
             alpha = np.clip(share/.1,0.,1.)
@@ -325,5 +534,5 @@ class WaveformDynamics:
         packet = RibbonPacket(data.tobytes(),raw.instances,raw.vertices,(raw.world_origin[0],2.,0.),raw.coordinate_origin)
         self._snapshot = HybridSnapshot(packet,self.time,self.travel,self.angle,self.angular_speed,self.twist_phase,
             tuple(self.drive.items()),tuple(values.items()),self.ready,passage=self.passage,
-            head_x=self.controls.scene.flow.head_x)
+            head_x=self.controls.scene.flow.head_x,zoom=self.zoom)
         return self._snapshot

@@ -28,7 +28,7 @@
           0.12,
           0.12
         ],
-        "waveform_ribbon_camera_fov": 3,
+        "waveform_ribbon_camera_fov": 5,
         "waveform_ribbon_camera_position": [
           0.0,
           0.0,
@@ -41,13 +41,22 @@
         ],
         "waveform_ribbon_colour_threshold": 0.55,
         "waveform_ribbon_count": 3,
-        "waveform_ribbon_damping": 0.65,
+        "waveform_ribbon_damping": 0.6,
+        "waveform_ribbon_dynamic_zoom": false,
+        "waveform_ribbon_pulse_colour": 0.6,
+        "waveform_ribbon_pulse_direction": "Head To Tail",
+        "waveform_ribbon_pulse_fade": 4.0,
+        "waveform_ribbon_pulse_particles": 0.6,
+        "waveform_ribbon_pulse_saturation": 0.4,
+        "waveform_ribbon_pulse_speed": 3.0,
+        "waveform_ribbon_pulse_strands": 0.3,
+        "waveform_ribbon_pulse_width": 10.0,
         "waveform_ribbon_depth": [
           0.2,
           2.0
         ],
         "waveform_ribbon_dynamic_floor": false,
-        "waveform_ribbon_elastic_frequency": 1.3,
+        "waveform_ribbon_elastic_frequency": 0.85,
         "waveform_ribbon_exposure": 0.85,
         "waveform_ribbon_floor_brightness": [
           2.0,
@@ -736,24 +745,24 @@
         },
         "waveform_ribbon_sensitivity": 0.4,
         "waveform_ribbon_spark_drift": [
-          1.1,
-          1.1
+          0.8,
+          1.6
         ],
         "waveform_ribbon_spark_lifetime": [
-          6.0,
-          6.0
+          2.0,
+          8.0
         ],
         "waveform_ribbon_spark_light": [
           20.0,
           60.0
         ],
         "waveform_ribbon_spark_rise": [
-          0.15,
-          0.15
+          0.1,
+          0.3
         ],
         "waveform_ribbon_spark_size": [
-          2.0,
-          4.5
+          1.0,
+          2.0
         ],
         "waveform_ribbon_spark_glow": [
           1.0,
@@ -837,8 +846,8 @@
         ],
         "preset_waveform_ribbon": 1,
         "waveform_ribbon_spark_count": [
-          40.0,
-          64.0
+          0.0,
+          56.0
         ],
         "waveform_ribbon_strand_pulse_growth": [
           0.2,

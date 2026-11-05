@@ -5,9 +5,9 @@ Three fragment programs share one vertex stage:
 - ``RIBBON_FRAGMENT``: diagnostics (flat colour, face normals, strand phase).
 - ``RIBBON_BODY_FRAGMENT``: the faint translucent sheet, written inside ``SceneTarget.transparent_writes``
   through the shared weighted-blended OIT (order-independent, depth-tested, no depth writes).
-- ``RIBBON_LIGHT_FRAGMENT``: sheet glow, rims, longitudinal filament strands and glints, added to colour (location 0)
-  and to the overlay's emission (location 1) after the OIT resolve. Addition is order-independent, and
-  crossings sum in HDR until the target's single tone map turns them white-hot.
+- ``RIBBON_LIGHT_FRAGMENT``: sheet glow, rims, longitudinal filament strands, the woven diagonal lattice and glints,
+  added to colour (location 0) and to the overlay's emission (location 1) after the OIT resolve. Addition is
+  order-independent, and crossings sum in HDR until the target's single tone map turns them white-hot.
 
 The material knows widths, strands and light, never music: callers feed per-knot emission (``side.w``) and
 per-ribbon colours, and choose the knobs. Strands and rims are box-filtered over the pixel footprint and fade
@@ -636,6 +636,8 @@ uniform vec4 uTone;         // strand whiteness, rim whiteness, strand spacing j
 uniform vec4 uAge;          // local now, fade-in, maximum age, fade-out (seconds); fades off when both are zero
 uniform vec3 uMistOrigin;   // packet-local -> mist world translation (packet origin plus the caller's frame)
 uniform vec3 uGlow;         // local bloom share, white-hot share, local musical highlight admission
+uniform vec4 uLattice;      // spacings across the width, spacings per phase unit (whole), half-width (spacings), light
+uniform vec2 uLatticeTone;  // musical gain above the quiet emission, share sent to the bloom
 """ + RIBBON_GRADE_GLSL + MIST_GLSL + RIBBON_STRAND_COORDINATE_GLSL + """
 
 // Integral of the periodic pulse, then exact box filtering over the pixel footprint. The old single-line
@@ -646,6 +648,17 @@ float strandIntegral(float x, float halfWidth) {
 float strandCoverage(float x, float halfWidth, float w) {
     float filtered=(strandIntegral(x+0.5*w,halfWidth)-strandIntegral(x-0.5*w,halfWidth))/max(w,1e-4);
     return mix(filtered,2.0*halfWidth,smoothstep(0.65,1.2,w));
+}
+// The woven lattice: two diagonal line families in the sheet's own (warped across, path phase) coordinates.
+// Each family is box-filtered like the strands and fades to its average once a spacing nears a pixel, so
+// distant or grazing cells settle into an even glow instead of moire. Families combine as a union: a node
+// where they cross is no brighter than a line, so the net never knots into white points.
+float ribbonLattice(float across, float phase) {
+    float u=across*uLattice.x, v=phase*uLattice.y;
+    float a=u+v, b=u-v;
+    float la=strandCoverage(a,uLattice.z,max(fwidth(a),1e-4));
+    float lb=strandCoverage(b,uLattice.z,max(fwidth(b),1e-4));
+    return la+lb-la*lb;
 }
 float strandHash(float k) { return fract(sin(k*12.9898+3.1)*43758.5453); }
 float cellHash(float k, float j) { return fract(sin(k*12.9898+j*78.233+1.7)*43758.5453); }
@@ -735,6 +748,10 @@ void main() {
             glints=exp(-3.0*r2)*min(1.0,radiusPx*radiusPx)*(1.0-smoothstep(0.35,0.9,w));
         }
     }
+    // The lattice glows in the sheet's own colour, quiet at rest and lit by the knot's music above its quiet level.
+    float lattice=0.0;
+    if(uLattice.w>0.0)
+        lattice=ribbonLattice(x/uStrands.x,vPhase)*uLattice.w*(1.0+uLatticeTone.x*max(vEmission-0.6,0.0));
     // The body glows in its saturated colour; strands and rims carry the near-white light (the mock's look).
     vec3 colour=ribbonColour();
     // The brightest strands burn white-hot at their cores; the rest keep their colour.
@@ -742,11 +759,15 @@ void main() {
     vec3 sheet=colour*fill+mix(colour,vec3(1.0),hot)*strands*uStrands.z
                +mix(colour,vec3(1.0),0.6)*glints*uGlint.z;
     vec3 boundary=colour*rimGlow+mix(colour,vec3(1.0),uTone.y)*rims*uRim.y;
-    vec3 light=(sheet*pathLength()*clamp(vCoverage,0.0,1.0)+boundary)*max(vEmission,0.0)*ageFade()
-                *mistTransmittance(vWorld+uMistOrigin);
+    float sheetScale=pathLength()*clamp(vCoverage,0.0,1.0);
+    float scale=max(vEmission,0.0)*ageFade()*mistTransmittance(vWorld+uMistOrigin);
+    vec3 net=colour*lattice*sheetScale*scale;
+    vec3 light=(sheet*sheetScale+boundary)*scale+net;
     // Alpha: luminance-weighted world height, for contact-hardened reflections. Scene targets keep their
     // alpha (blend ZERO, ONE); a reflection target accumulates it (ONE, ONE).
     FragColor=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722))*(vWorld.y+uMistOrigin.y));
-    Emission=vec4(light,dot(light,vec3(0.2126,0.7152,0.0722)))*uGlow.x;
+    // The lattice keeps its own (smaller) bloom share: a lit net must stay a net, not a white haze.
+    vec3 glowing=light-net*(1.0-uLatticeTone.y);
+    Emission=vec4(glowing,dot(glowing,vec3(0.2126,0.7152,0.0722)))*uGlow.x;
 }
 """)

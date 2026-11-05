@@ -60,6 +60,9 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
   The next MC run (19:47) and an invisible live check on current code were normal. On recurrence the sampler now
   logs `[USAGE] topology added ... name= parent= threads=` for every process entering the tree: identify them, then
   decide whether the sampler must exclude/outsource them. Not the Extruded Bubble chain fix (no processes, tick unchanged).
+- [ ] **Stale red: `tests/test_waveform_infinite_floor.py` (9 failures, present at a74dfaa0, before 5 Nov work):**
+  Orthographic bottom-row depth, actor-clip and production-floor reflection expectations no longer match the camera
+  helper. Decide per assertion whether the test or the camera/floor contract is stale; do not bless drift blindly.
 - [ ] **Cross-display Media shortcuts** delivered once on the other display, when exercised.
 - [ ] **Music recorder** 60-second clip, signal/history, cancel and mixed-DPR UI, when recording is needed.
 - [ ] **Helper breadcrumb diagnostics unavailable:** current native MC evidence logs no access to
@@ -148,19 +151,10 @@ chosen image/settings/source. Use this material direction; do not darken the bac
 level. Floor brightness is provisionally approved, not the entire floor/atmosphere. Remaining lumps and reactive
 detail still need improvement. Baseline settings are applied to Preset 3; retain this reference before further work.
 
-- [ ] **PRIORITY: live/replay activation parity.** Operator reports literally NO visual change from paused to playing,
-  not merely weak motion. The app screenshot is dormant despite Preset 3. Logs from 00:41–00:42 on 3 Nov show
-  playback true, nonzero loopback PCM and raw FFT lanes; prove committed body bands, musical intensity/presence,
-  source identity admission and resulting drives at the actual capture boundary. Do not compensate with more gain
-  or tune appearance until the live handoff is proven. Separately reproduce the app's wide/short framing and idle
-  composition from its actual saved pose/aperture, and distinguish old in-memory material state from activation loss.
-  Identified a concrete dormant-input defect: the shared log passage curve returns exactly zero below ~2.20 eased
-  raw units on Waveform's scale, covering most logged live input. Routing multiplies all fast-band drives by that
-  zero. Correct Waveform's fixed passage curve inside the existing bus/follower, preserve other modes' numerical
-  behavior, and prove quieter PCM drives body/accents without learned normalization or more input gain.
-  Quieter full-app PCM exposes a second gate: event admission used the already passage/loudness-scaled deformation
-  force, suppressing all particles/strands. Keep supported accent salience separate from deformation force so a real
-  quiet accent can create authored accents while routine repeats and silence remain rejected.
+- [ ] **Live activation parity (narrowed 5 Nov):** offline replay now proves the body is not dormant: recorded PCM
+  through the production worker/bus/runtime moves the published body ~8x its true paused control (motion audit,
+  `Docs/Audits/Waveform_Studio_and_Reactivity_Audit_2026-11-05.md` §2). Remaining: reproduce the operator's live "no
+  change from paused to playing" against the actual capture boundary and saved pose/aperture; do not add gain.
 
 - [~] **Four-ribbon maximum and Preset 3 — Awaiting Validation:** the candidate now admits FOUR cards across
   authoring/runtime/clearance/accent/range paths, preserving Presets 1/2's three active identities. Validate Preset 3 against
@@ -172,21 +166,20 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   and count in old state. The recorded draft still needs visual correction: white/rope-like overlaps, repeated
   continuation, weak/dark atmosphere and a poor floor/contact strip remain rejected. Do not equate source tests,
   particle/root counts or larger amplitude with reference fidelity.
-- [ ] **Visible punch and musical shape response:** the operator still sees no convincing kick, force or musical
-  shape change. Compare real quiet/ordinary/hot passages with synchronized audio and silent/fixed-body controls.
-  Preserve raw fixed-scale passage headroom, immediate whole-body response and distinct typed elastic impulses;
-  accents must stand above routine onsets instead of becoming a constant offset (guide 13C). Measure elastic
-  excursion/latency and correct the response/envelope before tuning presets. Simplify before adding motion:
-  the latest waveform is explicitly rejected as too lumpy/bumpy, and excessive
-  twisting still does not read as musical. Prefer longer smooth sweeps and actual axial stretch, preserving punch.
-  The latest cropped example exposes small travelling dents: the hybrid producer wrote unsmoothed audio directly
-  into six-Hz carrier amplitude/twist despite the authored two-stage history-smoothing contract. Smooth only that
-  stored shape input; preserve immediate elastic impulses, moving colour/light and event-owned accents.
-  Smooth motion and
-  nonzero inputs are insufficient. Operator requests roughly TWICE the actual peak height and deformation, including
-  stretch/twist/undulation, while peaks remain harder to pin. Increase real excursion/headroom, not audio gain or
-  constant baseline movement. Preserve flow and independently reactive axial roll; floor contact must collide smoothly,
-  never crop the waveform at a drawn line.
+- [~] **Travelling energy pulse (5 Nov), awaiting operator eyes/ears:** operator rejected the R1/R2 elastic motion
+  as fundamentally wrong; reactions must feel like water waves WITH the shape. Beats launch swells that travel along the
+  waveform and amplify its own crests/troughs, width, light and colour (Energy Pulse bucket: direction, width, speed,
+  colour shift, fade; Bend range = Pulse Strength). Audit doc decision 7. Optional next: Frozen past; selectable
+  reaction modes only if another model matches fidelity.
+- [~] **Musical shape response, punch and grace — candidate (R1/R2, 5 Nov), superseded in part by the pulse:** root
+  causes measured, not guessed: the axial roll rotated the louder passage's vertical excursion into invisible depth
+  (envelope uncorrelated with its own drive) and real music traversed ~1/5 of every quiet->peak range. Now: roll turns
+  only the carrier, Height/Bend/Depth act in world space after it, bends travel with the cloth, fixed real-music spans
+  plus phrase-scale body energy place the level (soft knee, no pin), springs 0.85 Hz/0.6 (attack 67 ms to 70%, settle
+  0.63 s), lens 3->5 degrees so peaks rise high without a ceiling. Evidence and per-clip table: audit doc §6 R1/R2;
+  native captures `.artifacts/evidence/waveform_ribbon/studio_20261105/r1a_*`, `r2_*`. Judge motion with audio; the
+  still-open operator asks: twisting must read as musical rather than
+  busy, sweeps long and smooth with actual axial stretch, and floor contact a smooth collision, never a crop.
 - [ ] **Particles weak, sparse and localized:** the operator sees pathetic specks in one spot even with fog off.
   Verify distributed actual-rim births, clearly visible independent glow/size/light and musical density changes.
   Candidate improvements are fixed-world emitter span and authored halos, with count/lifetime bounded at birth.
@@ -248,11 +241,11 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   retained motion wake open: current cross-section clearance/local light and background drift do not prove those.
   Latest loaded candidate remains over budget (P2/game60: render median 22.59 ms, CPU others 93%); obtain a matched
   quiet-system fog OFF/ON comparison and reduce cost. Scoped source/optical/raster tests do not close that gate.
-- [X] **COMPLETELY FUCKED UX/DESIGN** - operator rejection recorded for the ENTIRE mode-specific builder UI:
-  every element not already shared with other modes is rejected. This marks rejection, not completed redesign.
-- [ ] **Awaiting later UX redesign:** lower priority than a working visual. Deliver a themed 3D visual editor with
-  direct visual controls; the numeric 0-1 matrix is not the requested experience. Keep shared accepted scaffolding.
-  No plumbing test or working control schema establishes usability or visual-design acceptance.
+- [ ] **Waveform Studio (replaces the rejected builder UI):** in-process Qt Quick Studio per the operator's design pack
+  (`Docs/Audits/SRPSS_Waveform_Studio_Design_Pack_2026-11-03.zip`); architecture decisions and stage gates A-E in
+  `Docs/Audits/Waveform_Studio_and_Reactivity_Audit_2026-11-05.md` §4-6. Settings Custom becomes a launcher plus the
+  camera-save checkbox; the old builder stays only until the Studio's Advanced coverage gate passes. Plumbing tests
+  never establish usability; operator acceptance of the running Studio is required.
 - [ ] **Live performance and truthful evidence:** run all three presets under matched recorded PCM/game60 and admitted
   camera extremes. Verify ACTUAL applied configuration, audible input and rendered features before interpreting
   timings. Profile logical preparation, birth admission, render stages and whole-frame tails; do not reduce artistic

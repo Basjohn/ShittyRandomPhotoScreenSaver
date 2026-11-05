@@ -43,7 +43,10 @@ def test_capacity_admission_and_epoch_rebase_preserve_living_births_without_trun
     records=np.frombuffer(field.payload,np.float32).reshape(CAPACITY,16)
     age=base+99*.161-field.origin-records[:,3]
     active=(records[:,7]>0)&(age>=0)&(age<records[:,7])
-    assert active.sum()==50*MAX_BURST and field.serial==100
+    # Lifetimes vary per birth below the authored bound; every cohort younger than the shortest life survives intact.
+    assert records[records[:,7]>0,7].min()>=.7*8. and records[:,7].max()<=8.
+    young=int(.7*8./.161)
+    assert active.sum()>=young*MAX_BURST and field.serial==100
     assert age[active].max()<8. and np.isfinite(records).all()
 
 
@@ -91,6 +94,98 @@ def test_particle_admission_range_controls_cohort_frequency_continuously():
     assert all(a<b for a,b in zip(populations,populations[1:]))
 
 
+def waved(now=0.,drive=.4,colours=None,ribbons=1):
+    """A travelling sine body: crests and troughs across the whole emitter span."""
+    ring=RibbonRing(ribbons,colours=colours)
+    for index in range(40):
+        x=index-20.
+        ring.append(index/6,[(x,2.+1.5*math.sin(x*.6)+3.*owner,0.) for owner in range(ribbons)],[.3]*ribbons,twists=.4)
+    return SimpleNamespace(time=now,ready=True,packet=ring.packet(),head_x=0.,travel=0.,
+                           drives=(('sparkle',drive),),realized=(('sparkle',1.),))
+
+
+def admitted(drive,events=40,strength=.5):
+    field=RibbonBursts()
+    for index in range(events):field.admit(waved(index*.25,drive),controls_with(spark_count=(0.,64.),
+        spark_lifetime=(1.5,8.)),strength)
+    now=(events-1)*.25
+    age=now-field.origin-field.records[:,3]
+    alive=(field.records[:,7]>0)&(age>=0)&(age<field.records[:,7])
+    return field,alive
+
+
+def controls_with(**ranges):
+    base=controls();return replace(base,ranges={**base.ranges,**ranges})
+
+
+def test_quiet_passages_hold_few_sparks_and_hot_passages_a_dense_population():
+    quiet=admitted(.1)[1].sum();warm=admitted(.5)[1].sum();hot=admitted(1.)[1].sum()
+    assert 0<quiet<warm<hot and hot>=8*quiet
+
+
+def test_births_spread_across_the_whole_span_and_gather_around_crests():
+    field,alive=admitted(.8)
+    born=field.records[alive]
+    occupied=np.histogram(born[:,0],bins=8,range=(-12.,12.))[0]
+    assert (occupied>0).all() and occupied.max()<.35*len(born)
+    # Crest preference: most births leave the upper half of their ribbon's sine, but troughs are never excluded.
+    phase=np.sin(born[:,0]*.6)
+    assert (phase>0).mean()>.65 and (phase<-.5).any()
+
+
+def test_each_birth_takes_the_colour_of_the_ribbon_that_emitted_it():
+    colours=((1.,.5,.1,1.),(.1,.9,.8,1.))
+    field=RibbonBursts()
+    assert field.admit(waved(colours=colours,ribbons=2),controls_with(spark_count=(64.,64.)),.5)
+    born=field.records[field.records[:,7]>0]
+    owner=(born[:,1]-(2.+1.5*np.sin(born[:,0]*.6))>1.5).astype(int)
+    np.testing.assert_allclose(born[:,8:11],np.asarray(colours)[owner,:3],atol=1e-5)
+    assert len(set(owner))==2
+
+
+def test_births_leave_the_rim_outward_with_varied_speed_and_finite_life():
+    c=controls_with(spark_drift=(1.,2.),spark_rise=(0.,1.))
+    field=RibbonBursts();assert field.admit(waved(drive=.5),c,.5)
+    born=field.records[field.records[:,7]>0]
+    speed=np.linalg.norm(born[:,4:7],axis=1)
+    assert speed.max()<=1.5+1e-6 and speed.min()>=.35*1.5-1e-6 and speed.std()>.05
+    assert np.all(born[:,7]<=8.) and np.all(born[:,7]>0.)
+
+
+def test_every_spark_range_reaches_its_birth_consumer_through_both_handles():
+    # Each authored quiet -> peak pair; moving either handle alone must change the admitted births at a mid drive.
+    pairs={'spark_count':(16.,48.),'spark_lifetime':(2.,6.),'spark_drift':(.5,1.5),'spark_rise':(.2,.8),
+           'spark_size':(1.,3.),'spark_light':(10.,40.),'spark_white':(.1,.5),'spark_glow':(.5,1.5),'spark_span':(16.,30.)}
+    measures={'spark_count':len,'spark_lifetime':lambda r:r[:,7].mean(),
+              'spark_drift':lambda r:np.linalg.norm(r[:,4:7],axis=1).mean(),
+              'spark_rise':lambda r:(r[:,5]/np.linalg.norm(r[:,4:7],axis=1)).mean(),'spark_size':lambda r:r[:,11].mean(),
+              'spark_light':lambda r:r[:,12].mean(),'spark_white':lambda r:r[:,13].mean(),'spark_glow':lambda r:r[:,15].mean(),
+              'spark_span':lambda r:np.abs(r[:,0]).max()}
+    def measure(key,pair):
+        field=RibbonBursts();assert field.admit(waved(drive=.5),controls_with(**{key:pair}),.5)
+        return measures[key](field.records[field.records[:,7]>0])
+    for key,(low,high) in pairs.items():
+        reference=measure(key,(low,high))
+        assert measure(key,(.5*(low+high),high))>reference,key
+        assert measure(key,(low,1.2*high))>reference,key
+
+
+def test_sparks_off_builds_no_admission_owner_and_publishes_nothing():
+    from core.settings.default_contract import require_canonical_default
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    from core.waveform_ribbon_dynamics import WaveformDynamics
+    from widgets.spotify_visualizer.waveform_ribbon_parameters import CompiledWaveformSettings
+    values={control.key:require_canonical_default('widgets.spotify_visualizer.'+control.key)
+            for control in require_mode_settings('waveform_ribbon').controls}
+    values['waveform_ribbon_sparks_enabled']=False
+    config=CompiledWaveformSettings(values);model=WaveformDynamics(config.controls)
+    assert config.controls.accents is None
+    for index in range(240):
+        snapshot=model.advance(1/60,bands=(.8,.8,.8),intensity=.8,presence=1.,hit=float(index%15==0),accent=1.)
+    assert model._bursts is None and snapshot.particles==b'' and snapshot.particle_serial==0
+    assert config.scene(snapshot).sparks is None
+
+
 def test_authored_glow_draws_a_halo_outside_the_particle_core(qt_app):
     from rendering.gl_error_policy import disable_per_call_gl_error_checking
     disable_per_call_gl_error_checking()
@@ -100,7 +195,7 @@ def test_authored_glow_draws_a_halo_outside_the_particle_core(qt_app):
     from rendering.gl_programs.mist import FOG_OFF
     renderer=RibbonBurstRenderer();target=OffscreenRenderTarget(160,120)
     record=np.zeros((CAPACITY,16),np.float32)
-    record[0]=(0.,.03,0.,0.,0.,0.,0.,2.,1.,1.,1.,4.,1.,0.,0.,0.)
+    record[0]=(0.,.03,0.,0.,0.,0.,0.,2.,1.,1.,1.,4.,12.,0.,0.,0.)
     images=[]
     try:
         with target.current():

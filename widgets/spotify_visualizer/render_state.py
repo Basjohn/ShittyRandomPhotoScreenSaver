@@ -762,6 +762,7 @@ class WaveformRibbonFrame:
     parameters: FrozenFields = FrozenFields()
     strands: bytes = b''
     strand_origin: float = 0.
+    zoom: float = 1.
 
     def __post_init__(self):
         from core.ribbon_packet import RibbonPacket, RIBBON_BYTES
@@ -787,6 +788,9 @@ class WaveformRibbonFrame:
         if not isinstance(self.strands,bytes) or len(self.strands) not in (0,self.packet.instances*COHORT_BYTES):
             raise ValueError('Waveform strand cohorts must be immutable and match physical knot slots')
         object.__setattr__(self,'strand_origin',_finite(self.strand_origin,name='strand birth origin'))
+        zoom=_finite(self.zoom,name='waveform dynamic zoom')
+        if not .5<=zoom<=2.:raise ValueError('Waveform dynamic zoom must be in 0.5..2')
+        object.__setattr__(self,'zoom',zoom)
 
     @property
     def mode_id(self):
