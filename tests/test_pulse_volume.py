@@ -92,3 +92,48 @@ def test_platform_selects_pactl_owners_off_windows_and_core_audio_on_windows(mon
     assert isinstance(audio_event_session._platform_probe(**callbacks), CoreAudioCallbackProbe)
     from core.media.spotify_volume import SpotifyVolumeController
     assert isinstance(media_volume_runtime._create_volume_controller("spotify"), SpotifyVolumeController)
+
+
+def test_session_listener_follows_only_the_selected_stream_and_its_removal(monkeypatch) -> None:
+    import threading as _threading
+
+    pushed = []
+
+    class Mailbox:
+        endpoint_token = 3
+
+        def push_volume(self, token, volume, muted):
+            pushed.append(("volume", token, volume, muted))
+
+        def push_device_change(self):
+            pushed.append(("device",))
+
+    class Bridge:
+        def __init__(self, consume):
+            self.mailbox = Mailbox()
+
+        def close(self):
+            pushed.append(("closed",))
+
+    lines = ["Event 'change' on sink-input #9\n", "Event 'change' on sink-input #7\n",
+             "Event 'remove' on sink-input #7\n", "Event 'change' on sink-input #7\n"]
+
+    class Process(_Lines):
+        def terminate(self):
+            pass
+
+        def wait(self, timeout=None):
+            return 0
+
+    monkeypatch.setattr(pulse_volume, "pactl_available", lambda: True)
+    monkeypatch.setattr(pulse_volume, "_sink_input_details",
+                        lambda: [(7, "spotify", 0.5, False), (9, "chromium", 1.0, False)])
+    monkeypatch.setattr(pulse_volume.subprocess, "Popen", lambda *a, **k: Process(lines))
+    listener = pulse_volume.PulseSessionVolumeListener(on_volume=lambda v, m: None, on_disconnected=lambda: None,
+                                                       bridge_factory=Bridge)
+    assert listener.start(("spotify", "chromium")) is True
+    listener._reader.join(2.0)
+    # Stream 9 is not the selected one; stream 7 changes once, then its removal ends observation.
+    assert pushed == [("volume", 3, 0.5, False), ("device",)]
+    listener.close()
+    assert not listener.active

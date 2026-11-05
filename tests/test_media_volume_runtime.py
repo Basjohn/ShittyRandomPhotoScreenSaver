@@ -376,7 +376,7 @@ def test_shared_lease_requires_generation_or_thread_manager() -> None:
 # cells above and shared_media_volume_owner_count().
 
 
-def test_event_listener_is_shared_fenced_by_provider_and_never_echoes_a_write(monkeypatch):
+def test_event_listener_is_shared_fenced_by_provider_and_never_echoes_a_write(monkeypatch, windows_platform):
     """One local-session observer follows the same existing Media lease owner."""
     from core.media import session_volume_listener
 
