@@ -328,6 +328,7 @@ class HybridSnapshot:
     strand_origin: float = 0.
     zoom: float = 1.
     direction: float = 1.           # published Travel Direction (Flow.direction): history axis -> world x sign
+    pulse: bytes = b''              # published pulse appearance field (pulse_at) on PULSE_GRID, float32, history x
 
 
 class WaveformDynamics:
@@ -346,7 +347,10 @@ class WaveformDynamics:
         self._pulse_pending = 0.
         self._trough_stage,self._trough_lift,self._trough_time = np.zeros((RIBBON_CAPACITY,1)),np.zeros((RIBBON_CAPACITY,1)),None
         self._tilt_lead,self._tilt_time = np.zeros((RIBBON_CAPACITY,1)),None
-        self._held = np.zeros((4,PULSE_GRID.size))  # Frozen Past on the cloth: memory, peak, previous swell, rising
+        # Frozen Past on the cloth: memory, peak, previous swell, rising, and the Pulse Strength the passage was shaped with
+        # (passage) and that the memory carries (carried), so a held shape keeps its size when the music later softens.
+        self._held = np.zeros((6,PULSE_GRID.size))
+        self._frozen_swell = None   # Frozen Past: (live travelling envelope, held swell in strength units) for the gain
         self._whole = self._whole_fresh = 0.         # Whole Swell global raw level and its short-fade copy
         self._drift_stage = np.zeros(PULSE_GRID.size)  # first stage of the surge's easing
         self._drift = np.zeros(PULSE_GRID.size)      # rate-limited signed surge field (swell units)
@@ -603,20 +607,20 @@ class WaveformDynamics:
         settle = min(WHOLE_SETTLE[1],max(WHOLE_SETTLE[0],.25*p.fade))
         self._whole = self._whole*math.exp(-dt/settle)+(0. if travelling else release)
         self._whole_fresh = self._whole_fresh*math.exp(-dt/min(settle,FRESH_FADE))+(0. if travelling else release)
-        self._advance_frozen(dt,p.mode=='Frozen Past')
+        self._advance_frozen(dt,p.mode=='Frozen Past',self._value('bend'))
         self._publish_fields(dt)
         return release
 
-    def _advance_frozen(self,dt,active):
+    def _advance_frozen(self,dt,active,strength=0.):
         """Per-cell passage peak held on the cloth; bounded fixed grid advected with the history flow."""
-        held,peak,previous,rising = self._held
+        held,peak,previous,rising,passage,carried = self._held
         flow = self.controls.scene.flow.speed*dt
         if not active:
             if self._held.any():
                 # Leaving the mode fades the memory instead of dropping it.
                 held *= math.exp(-dt/FROZEN_REPLACE)
                 held[held<1e-6] = 0.
-                peak[:] = previous[:] = rising[:] = 0.
+                peak[:] = previous[:] = rising[:] = passage[:] = 0.
             return
         if flow:
             for row in self._held:
@@ -626,9 +630,15 @@ class WaveformDynamics:
         up_now = present & (now>previous*(1.+FROZEN_RISING)+1e-4)
         start = up_now & (rising<.5)
         peak[:] = np.where(start,now,np.where(up_now,np.maximum(peak,now),peak))
+        # The passage's Pulse Strength: the strongest reached while its swell rose here. The memory carries it with the
+        # same rules as the held level, so a held shape stays the size it was shaped at (operator, 5 Nov: re-scaling
+        # the memory by today's strength made the frozen trail vanish as soon as the music softened).
+        passage[:] = np.where(start,strength,np.where(up_now,np.maximum(passage,strength),passage))
         rise = 1.-math.exp(-dt/FROZEN_RISE)
         settle = 1.-math.exp(-dt/FROZEN_REPLACE)
-        held[:] = np.where(peak>held,held+(peak-held)*rise,np.where(up_now,held,held+(peak-held)*settle))
+        grow = peak>held
+        carried[:] = np.where(grow,carried+(passage-carried)*rise,np.where(up_now,carried,carried+(passage-carried)*settle))
+        held[:] = np.where(grow,held+(peak-held)*rise,np.where(up_now,held,held+(peak-held)*settle))
         fade = math.exp(-dt/FROZEN_DECAY)
         held[~present] *= fade
         peak[~present] *= fade
@@ -666,6 +676,7 @@ class WaveformDynamics:
         fresh = np.clip((self._fresh[0]+self._fresh[1])/(travelling+1e-9),0.,1.)
         look = body*(APP_BASE+(1.-APP_BASE)*fresh)
         drift_target = np.zeros(PULSE_GRID.size)
+        self._frozen_swell = None
         if p.mode=='Whole Swell':
             # The same fresh-led look as a travelling band, applied to the whole body at once: a hit glows, a
             # sustained level settles to the base look instead of washing the whole waveform out.
@@ -679,6 +690,11 @@ class WaveformDynamics:
             self._level = np.maximum(look,APP_BASE*(1.-np.exp(-self._held[0]/APP_SCALE)))
             self._focus = look
             self._geom = soft(broad(memory))
+            # The gain uses the live swell at today's strength and the held memory at the strength it was shaped with
+            # (strength-weighted local average, so a held shape's edges keep its own strength).
+            held = self._held[0]
+            shaped = broad(held*self._held[5])/np.maximum(broad(held),1e-9)
+            self._frozen_swell = (soft(broad(travelling)),.7*soft(broad(held))*shaped)
             drift_target = soft(broad(self._pulse[1]))-soft(broad(self._pulse[0]))
         elif p.mode=='Group Wave':
             # The light covers the set: the look spread over the group envelope (unit-sum, so it never brightens).
@@ -736,7 +752,11 @@ class WaveformDynamics:
 
     def geometric_gain(self,strength):
         """Gain envelope on the pulse grid, bounded at the owner by the flow rule (see GEOM_SLOPE/GEOM_CURVE)."""
-        swell = .7*strength*self._geom
+        if self._frozen_swell is None:
+            swell = .7*strength*self._geom
+        else:
+            live,held = self._frozen_swell
+            swell = np.maximum(.7*strength*live,held)
         if not np.any(swell):
             self._geom_share = (1.,self.time)
             return np.ones(PULSE_GRID.size)
@@ -1006,5 +1026,6 @@ class WaveformDynamics:
         packet = RibbonPacket(data.tobytes(),raw.instances,raw.vertices,(raw.world_origin[0],2.,0.),raw.coordinate_origin)
         self._snapshot = HybridSnapshot(packet,self.time,self.travel,self.angle,self.angular_speed,self.twist_phase,
             tuple(self.drive.items()),tuple(values.items()),self.ready,passage=self.passage,
-            head_x=self.controls.scene.flow.head_x,zoom=self.zoom,direction=self.direction)
+            head_x=self.controls.scene.flow.head_x,zoom=self.zoom,direction=self.direction,
+            pulse=self._level.astype(np.float32).tobytes())
         return self._snapshot

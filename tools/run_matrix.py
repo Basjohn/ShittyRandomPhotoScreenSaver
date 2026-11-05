@@ -27,7 +27,7 @@ DEFAULT_ENTRYPOINT = "main_mc.py"
 SAFE_FLAGS = {
     "--debug", "-d", "--verbose", "-v", "--perf", "--usage",
     "--handle-attribution", "--viz", "--geo", "--life", "--cache",
-    "--steam", "--feeds", "--noupdates", "--frame-trace",
+    "--steam", "--feeds", "--studio", "--noupdates", "--frame-trace",
     "--gui-stall-stacks", "--fresh", "--set",
 }
 LOG_NAMES = (
@@ -48,6 +48,7 @@ LOG_NAMES = (
     "screensaver_cache.log",
     "screensaver_steam.log",
     "screensaver_feeds.log",
+    "screensaver_studio.log",
     "screensaver_frame_trace.bin",
     "gui_stall_stacks.log",
 )

@@ -264,6 +264,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --cache - Enable image-cache/prefetch/cache-authority diagnostics
     - --steam - Enable Steam widget family diagnostics
     - --feeds - Enable FEEDS source/artwork/runtime sidecar diagnostics
+    - --studio - Enable the Visualizer Studio lifecycle sidecar (screensaver_studio.log)
     - --noupdates - Disable automatic Gmail/Reddit/Weather retrievals; manual refresh still works
     - --devsteam - Show the unfinished Steam Journey scaffold
     
@@ -272,7 +273,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     """
     # Filter out debug/viz/dev-gate flags
     _filtered = {
-        "--debug", "-d", "--verbose", "-v", "--perf", "--usage", "--handle-attribution", "--viz", "--geo", "--set", "--life", "--cache", "--steam", "--feeds",
+        "--debug", "-d", "--verbose", "-v", "--perf", "--usage", "--handle-attribution", "--viz", "--geo", "--set", "--life", "--cache", "--steam", "--feeds", "--studio",
         "--noupdates", "--frame-trace", "--gui-stall-stacks",
         "--fresh", "--devsteam",
     }
@@ -937,6 +938,7 @@ def main(*, entrypoint: str = "main"):
         cache_trace=logging_profile.cache_trace,
         steam_trace=logging_profile.steam_trace,
         feeds_trace=logging_profile.feeds_trace,
+        studio_trace=logging_profile.studio_trace,
         diagnostic_build=diagnostic_build,
     )
     # Deep publication->Quick->draw timing is intentionally separate from the

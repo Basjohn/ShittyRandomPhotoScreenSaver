@@ -9,6 +9,15 @@ This is the **short preflight**, not a second documentation authority. Use the f
 - Physical display owns one standalone `QQuickWindow` and retained Qt Quick scene; **Settings is Qt Widgets**. The only Qt Quick window opened from Settings is the Visualizer Studio, which saves through Settings' own Custom path and always restores the same Settings window ([Visualizer Studio](Reference/Visualizer_Studio.md)). No retired presenter fallback, duplicated scene authority or new presentation polling loop.
 - Qt Quick owns scheduling; preserve latest-wins state, transition admission, render-thread safety and bounded lifetime. No unnecessary dormant work or GUI blocking.
 - Keep visualizers musically faithful and geometrically correct. Performance changes cannot reduce authored fidelity.
+- **Graphics backend (decided 5 Nov 2026, [decision](Future_Work/Graphics_Backend_Decision_2026-11-05.md)):** when Vulkan
+  (or any non-GL API) is admitted, it is a **native (compiled) render core behind `QSGRenderNode`, hosted by Qt Quick on
+  its RHI backend**: that is better than today (no GIL on the render thread; DLSS/FSR via the RHI native handles). A
+  Python-driven Vulkan/D3D port is forbidden: far more API calls per frame, each fighting for the GIL, so it is worse
+  than today's GL. Whole-frame upscalers are rejected for our content (FSR 1/spatial: soft lines, ringing on dot grids
+  and 1-px cores; FSR 2-3/DLSS temporal: smear emissive lines, particles, OIT and fog unless each mode supplies masks):
+  reduce cost with mixed resolution (only soft layers such as mist, bloom, reflection/glass blur at reduced resolution
+  with depth-aware upsampling; lines, dots, particles and rims always native). New GPU code follows the port-readiness
+  rules in that decision.
 - Settings remembers only the active tab/pill editing path and necessary ancestors. Inactive buckets close; Settings values and presets remain freely editable.
 - Use the present virtual environment and bounded focused tests. **No test-command environment-variable writes, no local frozen builds.** Prefer agent-executable verification; subjective appearance requires operator acceptance.
 - Treat source-only validation as source evidence. Do not close an unverified functional or visual failure.

@@ -1803,7 +1803,9 @@ def _waveform_ribbon() -> ModeSettings:
         ('pulse_particles','Pulse Particles',0.,2.,'Extra sparks a swell carries, born on the swell as it travels; '
          'ordinary sparks also gather toward it. Needs Sparks on.'),
         ('pulse_strands','Pulse Strands',0.,1.,'Gently leans free strands toward a passing swell and lifts their '
-         'chance and glow there. Never adds strands of its own. Needs Free Strands on.')):
+         'chance and glow there. Never adds strands of its own. Needs Free Strands on.'),
+        ('pulse_rim','Pulse Rim',0.,4.,'Makes the ribbon edges brighter still where a swell is, fading softly along '
+         'the edge on either side, so the eye can follow the pulse. 0 leaves the edges as they are.')):
         entries.append(Slider(prefix+key,label+':',low,high,bucket='pulse',logical=True,tooltip=tip,
                               suffix=' s' if key=='pulse_fade' else ''))
     entries.append(Choice(prefix+'travel_direction','Travel Direction:',('Right To Left','Left To Right'),
