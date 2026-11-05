@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import struct
+from functools import lru_cache
 from collections.abc import Mapping
 
 from core.constants.neon_lake_world import DEPTH, NOMINAL_HALF_WIDTH, WATER_PEAK
@@ -38,7 +39,14 @@ def _heights(terrain: Mapping) -> tuple[int, tuple[float, ...]]:
     if 'heights' in terrain:
         return size, tuple(float(h) for h in terrain['heights'])
     # The presentation's frozen render record: interleaved (height, bank) float32 pairs.
-    return size, struct.unpack(f"<{size * size * 2}f", terrain['data'])[::2]
+    return size, _packed_heights(size, terrain['data'])
+
+
+@lru_cache(maxsize=4)
+def _packed_heights(size: int, data: bytes) -> tuple[float, ...]:
+    """The render record's heights, unpacked once per immutable payload: the renderer asks for the camera
+    floor every frame, and unpacking a 121-cell extended grid each time cost about a millisecond."""
+    return struct.unpack(f"<{size * size * 2}f", data)[::2]
 
 
 def _smoothstep(low: float, high: float, x: float) -> float:
