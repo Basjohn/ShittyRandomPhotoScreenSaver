@@ -13,6 +13,7 @@ def settings():
     values['waveform_ribbon_mist_enabled']=True
     values['waveform_ribbon_sparkle']=[1.,1.]  # Admit events while isolating the other particle ranges.
     values['waveform_ribbon_colour_threshold']=.1
+    values['waveform_ribbon_pulse_particles']=0.  # Swell-funded births would mask the count handles at the cap.
     return values
 
 
@@ -30,7 +31,8 @@ def observed(values,snapshot=None):
 def test_both_range_handles_reach_the_body_birth_records_or_retained_scene():
     defaults=settings();_,common=observed(defaults);dead=[]
     for control in require_mode_settings('waveform_ribbon').controls:
-        if not isinstance(control,Range):continue
+        # Stretch is retired from geometry (no time-varying axial scaling: sideways bursts, 5 Nov).
+        if not isinstance(control,Range) or control.key=='waveform_ribbon_stretch':continue
         span=control.high-control.low;base=copy.deepcopy(defaults)
         base[control.key]=control.admit((control.low+.2*span,control.low+.8*span),defaults[control.key])
         snapshot=None if control.logical or control.key.startswith('waveform_ribbon_spark') else common
