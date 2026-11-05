@@ -169,11 +169,6 @@ chosen image/settings/source. Use this material direction; do not darken the bac
 level. Floor brightness is provisionally approved, not the entire floor/atmosphere. Remaining lumps and reactive
 detail still need improvement. Baseline settings are applied to Preset 3; retain this reference before further work.
 
-- [ ] **Live activation parity (narrowed 5 Nov):** offline replay now proves the body is not dormant: recorded PCM
-  through the production worker/bus/runtime moves the published body ~8x its true paused control (motion audit,
-  `Docs/Audits/Waveform_Studio_and_Reactivity_Audit_2026-11-05.md` §2). Remaining: reproduce the operator's live "no
-  change from paused to playing" against the actual capture boundary and saved pose/aperture; do not add gain.
-
 - [~] **Four-ribbon maximum and Preset 3 — Awaiting Validation:** the candidate now admits FOUR cards across
   authoring/runtime/clearance/accent/range paths, preserving Presets 1/2's three active identities. Validate Preset 3 against
   `references/Preset3Goal1.png` and `references/Preset3ReactivityGoalExample.png`: teal/orange contrast, readable
