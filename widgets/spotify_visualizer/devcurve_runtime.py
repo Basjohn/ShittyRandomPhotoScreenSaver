@@ -241,6 +241,22 @@ def _smoothstep(x: float) -> float:
     return x * x * (3.0 - 2.0 * x)
 
 
+_PROFILE_CACHE: Dict[tuple, np.ndarray] = {}
+
+
+def _profile(nodes, count: int) -> np.ndarray:
+    """``_smooth_points`` as a read-only array, cached per node set (the nodes change only with Settings)."""
+    key = (count, tuple(tuple(float(v) for v in n[:2]) if isinstance(n, (list, tuple)) else (n,) for n in nodes))
+    cached = _PROFILE_CACHE.get(key)
+    if cached is None:
+        if len(_PROFILE_CACHE) > 64:
+            _PROFILE_CACHE.clear()
+        cached = np.asarray(_smooth_points(nodes, count), dtype=float)
+        cached.setflags(write=False)
+        _PROFILE_CACHE[key] = cached
+    return cached
+
+
 def _smooth_points(nodes: List[List[float]], count: int) -> List[float]:
     if not nodes:
         return [0.5] * count
@@ -275,18 +291,19 @@ def _smooth_points(nodes: List[List[float]], count: int) -> List[float]:
     return out
 
 
-def _moving_average(values: List[float], radius: int) -> List[float]:
-    if radius <= 0 or len(values) <= 2:
-        return list(values)
-    out = [0.0] * len(values)
-    for i in range(len(values)):
-        s = 0.0
-        w = 0
-        for j in range(max(0, i - radius), min(len(values), i + radius + 1)):
-            s += values[j]
-            w += 1
-        out[i] = s / max(1, w)
-    return out
+def _moving_average(values: np.ndarray, radius: int) -> np.ndarray:
+    """Box mean over the samples within ``radius`` (fewer at the ends). Each sample's terms are added in
+    ascending order from 0.0, exactly as the scalar loop did, so the result is byte-identical."""
+    n = len(values)
+    if radius <= 0 or n <= 2:
+        return np.array(values, dtype=float)
+    total = np.zeros(n)
+    count = np.zeros(n)
+    for k in range(-radius, radius + 1):
+        lo, hi = max(0, -k), min(n, n - k)
+        total[lo:hi] += values[lo + k:hi + k]
+        count[lo:hi] += 1.0
+    return total / count
 
 
 def _slope_limit(values: List[float], max_step: float) -> List[float]:
@@ -308,6 +325,19 @@ def _slope_limit(values: List[float], max_step: float) -> List[float]:
 
 def _phase_rand(seed: float, idx: int) -> float:
     return math.sin(seed * 0.017 + idx * 1.3127) * 43758.5453
+
+
+_SEED_PHASES: Dict[int, tuple] = {}
+
+
+def _seed_phases(seed: int) -> tuple:
+    phases = _SEED_PHASES.get(seed)
+    if phases is None:
+        phases = _SEED_PHASES[seed] = tuple(_phase_rand(seed, k) for k in range(1, 6))
+    return phases
+
+
+_SAMPLE_X = np.arange(DEVCURVE_SAMPLE_COUNT) / max(1, DEVCURVE_SAMPLE_COUNT - 1)
 
 
 def _sample_curve_y_shader(curve: List[float], x: float) -> float:
@@ -547,59 +577,50 @@ def _build_curve(
     *,
     sample_count: int,
     base_level: float,
-    profile: List[float],
+    profile: np.ndarray,
     seed: int,
     phase: float,
     reactive_phase: float,
     idle_motion: float,
     idle_speed: float,
     smoothness: float,
-    reactive: Sequence[float],
+    reactive: np.ndarray,
     power: float,
     offset: float,
-) -> List[float]:
-    """``reactive``: the layer's reaction at each sample (height drive x travelling swell)."""
-    out: List[float] = [0.0] * sample_count
+) -> np.ndarray:
+    """``reactive``: the layer's reaction at each sample (height drive x travelling swell). Vectorised over the
+    samples with each sample's arithmetic in the scalar order it always had."""
     amp_idle = 0.018 * idle_motion
     amp_reactive = 0.135 * power
-    # Authored spline Y maps directly to runtime Y at idle (0.0->bottom,
-    # 1.0->top in authored space). The old devcurve_growth card-height
-    # control is deliberately absent from this authored field solver.
+    # Authored spline Y maps directly to runtime Y at idle (0.0->bottom, 1.0->top in authored space). The old
+    # devcurve_growth card-height control is deliberately absent from this authored field solver.
     _ = base_level
-    center_shift = 0.0
-    base_bias = 0.0
     top_soft = 0.95
-    # The per-layer phase offsets depend only on the seed: computed once per curve, not per sample
-    # (identical values; ~2300 fewer calls a tick).
-    r1, r2, r3, r4, r5 = (_phase_rand(seed, k) for k in range(1, 6))
-    for i in range(sample_count):
-        x = i / max(1, sample_count - 1)
-        p = _clamp(profile[i], 0.0, 1.0)
-        # Author nodes define the pre-energy resting contour; base_level acts
-        # as a global vertical bias around that authored shape.
-        base = _clamp(p + base_bias + offset + center_shift, 0.02, 0.98)
-        w1 = math.sin((x * 2.0 + phase * idle_speed * 0.28) * math.tau + r1)
-        w2 = math.sin((x * 3.4 + phase * idle_speed * 0.17) * math.tau + r2)
-        w3 = math.sin((x * 5.1 + phase * idle_speed * 0.11) * math.tau + r3)
-        idle_wave = (w1 * 0.52 + w2 * 0.31 + w3 * 0.17)
-        ar1 = math.sin((x * 1.35 + reactive_phase * 0.23) * math.tau + r4)
-        ar2 = math.sin((x * 2.75 + reactive_phase * 0.18) * math.tau + r5)
-        reactive_wave = ar1 * 0.64 + ar2 * 0.36
-        y = base + idle_wave * amp_idle + reactive_wave * amp_reactive * reactive[i] * (0.55 + p * 0.45)
-        if y > top_soft:
-            y = top_soft + (y - top_soft) * 0.34
-        elif y < DEVCURVE_FLOOR_KNEE:
-            y = DEVCURVE_FLOOR + (DEVCURVE_FLOOR_KNEE - DEVCURVE_FLOOR) * math.exp(
-                (y - DEVCURVE_FLOOR_KNEE) / (DEVCURVE_FLOOR_KNEE - DEVCURVE_FLOOR))
-        out[i] = _clamp(y, 0.04, 0.96)
+    r1, r2, r3, r4, r5 = _seed_phases(seed)
+    x = _SAMPLE_X if sample_count == DEVCURVE_SAMPLE_COUNT else np.arange(sample_count) / max(1, sample_count - 1)
+    p = np.clip(profile, 0.0, 1.0)
+    # Author nodes define the pre-energy resting contour; base_level acts as a global vertical bias around it.
+    base = np.clip(p + 0.0 + offset + 0.0, 0.02, 0.98)
+    w1 = np.sin((x * 2.0 + phase * idle_speed * 0.28) * math.tau + r1)
+    w2 = np.sin((x * 3.4 + phase * idle_speed * 0.17) * math.tau + r2)
+    w3 = np.sin((x * 5.1 + phase * idle_speed * 0.11) * math.tau + r3)
+    idle_wave = (w1 * 0.52 + w2 * 0.31 + w3 * 0.17)
+    ar1 = np.sin((x * 1.35 + reactive_phase * 0.23) * math.tau + r4)
+    ar2 = np.sin((x * 2.75 + reactive_phase * 0.18) * math.tau + r5)
+    reactive_wave = ar1 * 0.64 + ar2 * 0.36
+    y = base + idle_wave * amp_idle + reactive_wave * amp_reactive * reactive * (0.55 + p * 0.45)
+    knee = DEVCURVE_FLOOR_KNEE - DEVCURVE_FLOOR
+    y = np.where(y > top_soft, top_soft + (y - top_soft) * 0.34,
+                 np.where(y < DEVCURVE_FLOOR_KNEE,
+                          DEVCURVE_FLOOR + knee * np.exp(np.minimum(y - DEVCURVE_FLOOR_KNEE, 0.0) / knee), y))
+    out = np.clip(y, 0.04, 0.96)
     smooth01 = _clamp(float(smoothness), 0.0, 1.0)
     pre_radius = 1 + int(round(2.0 * smooth01))
     post_radius = 1 + int(round(1.0 * smooth01))
     max_step = 0.040 - 0.020 * smooth01
     out = _moving_average(out, pre_radius)
-    out = _slope_limit(out, max_step)
-    out = _moving_average(out, post_radius)
-    return out
+    out = np.asarray(_slope_limit(out.tolist(), max_step))
+    return _moving_average(out, post_radius)
 
 
 def solve_devcurve_frame(
@@ -698,6 +719,7 @@ def solve_devcurve_frame(
     follow = 1.0 - math.exp(-dt / DEVCURVE_CURVE_FOLLOW_S[0 if playing else 1])
     swell_peaks: Dict[str, float] = {}
     reactions: Dict[str, float] = {}
+    steps: List[float] = []
 
     for idx, key in enumerate(_LAYER_ORDER):
         ls = layer_settings[key]
@@ -710,7 +732,7 @@ def solve_devcurve_frame(
         nodes = layer_shape_nodes[key]
         if len(nodes) < 2:
             raise ValueError(f"DevCurve layer {key!r} requires resolved shape nodes")
-        profile = _smooth_points(nodes, DEVCURVE_SAMPLE_COUNT)
+        profile = _profile(nodes, DEVCURVE_SAMPLE_COUNT)
         if envelope is None:
             swell_peaks[key] = 0.0
             gain = _ONES
@@ -719,13 +741,13 @@ def solve_devcurve_frame(
             swell_peaks[key] = float(gain.max() - 1.0)
         # Amplitude per sample as _build_curve draws it (0.135 x power x the profile weight), split into body
         # and accent so the geometric ceiling compresses the body and leaves the accent its room.
-        weight = np.clip(np.asarray(profile), 0.0, 1.0)
+        weight = np.clip(profile, 0.0, 1.0)
         unit = 0.135 * motion_power * power * swing * (0.55 + 0.45 * weight)
         body_drive = state.drive_body[key] if enabled else 0.0
         accent_drive = state.drive_accent[key] if enabled else 0.0
         ceiling = geometric_ceiling(weight, offset, smoothness)
         amplitude = reaction_amplitudes(unit, body_drive, accent_drive, gain, ceiling, key)
-        reactive = np.where(unit > 1e-9, amplitude / np.maximum(unit, 1e-9), 0.0).tolist()
+        reactive = np.where(unit > 1e-9, amplitude / np.maximum(unit, 1e-9), 0.0)
         # The visible reaction: the undulation's mean amplitude as a share of its geometric ceiling.
         reactions[key] = float(np.mean(amplitude / ceiling))
         c = _build_curve(
@@ -743,17 +765,14 @@ def solve_devcurve_frame(
             offset=offset,
         )
         prev = state.previous_layers.get(key)
-        if prev and len(prev) == len(c):
-            c = [prev[i] + (c[i] - prev[i]) * follow for i in range(len(c))]
+        if prev is not None and len(prev) == len(c):
+            prev = np.asarray(prev, dtype=float)
+            c = prev + (c - prev) * follow
         state.previous_layers[key] = c
-        layers_out[key] = c
+        steps.append(float(np.abs(np.diff(c)).max()) if len(c) > 1 else 0.0)
+        layers_out[key] = c.tolist()
 
-    all_curves = list(layers_out.values())
-    max_step = 0.0
-    for curve in all_curves:
-        for i in range(1, len(curve)):
-            max_step = max(max_step, abs(curve[i] - curve[i - 1]))
-    state.smoothness_max_step = max_step
+    state.smoothness_max_step = max(steps, default=0.0)
     state.idle_amplitude = idle_motion * 0.018
     state.active_amplitude = aggregate_energy * motion_power * 0.135 * swing
     draw_order = sorted(
