@@ -78,6 +78,10 @@ class QuickFramePacer(QObject):
         # Runtime windows are normally constructed hidden and bound before first
         # show. Do not start a native animation job until the window is visible.
         self._paused = not bool(window.isVisible())
+        # Console displays off (core.display_power). Independent of visibility:
+        # a visible window on a dark panel must not run frames, and a power edge
+        # must never make a hidden runtime eligible to start them.
+        self._power_suspended = False
         self._closed = False
         self._control_publications = 0
 
@@ -90,7 +94,24 @@ class QuickFramePacer(QObject):
         return self._demands
 
     def is_active(self) -> bool:
-        return bool(self._demands) and not self._paused and not self._closed
+        return (bool(self._demands) and not self._paused and not self._power_suspended
+                and not self._closed)
+
+    @property
+    def power_suspended(self) -> bool:
+        return self._power_suspended
+
+    def set_power_suspended(self, suspended: bool) -> bool:
+        """Suspend native frame demand while the console displays are off."""
+
+        if self._closed:
+            return False
+        suspended = bool(suspended)
+        if suspended == self._power_suspended:
+            return False
+        self._power_suspended = suspended
+        self._publish_driver_state()
+        return True
 
     def set_demand(self, reason: QuickFrameDemand, active: bool) -> None:
         """Add/remove one custom-frame reason and publish native driver state."""
@@ -193,6 +214,7 @@ class QuickFramePacer(QObject):
             "interval_ns": self._state.interval_ns,
             "active": self.is_active(),
             "paused": self._paused,
+            "power_suspended": self._power_suspended,
             "closed": self._closed,
             "demands": [
                 demand.name.lower()

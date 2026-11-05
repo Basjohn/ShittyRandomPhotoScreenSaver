@@ -917,6 +917,18 @@ Old generation loses admission before replacement gains authority; generation 0 
 created/used/destroyed by legal render/context owner. No `glFinish()`, `DwmFlush()`, GUI sleeps or nested event pumping
 as cadence repair. Shared `QQmlEngine` is component/cache owner, not hidden runtime-generation owner.
 
+**Displays off.** One process-scoped `core.display_power.DisplayPowerAuthority`, owned by the engine (created in
+`initialize`, retired in `cleanup`), is the only listener for console display power (Windows:
+`GUID_CONSOLE_DISPLAY_STATE`; dimmed counts as on). It is event-driven, coalesces each event-loop turn to its latest
+state and numbers edges by generation. While off: rotation stops, each display runtime snaps an in-flight transition to
+its destination and suspends transition frames, the Visualizer's logical runtime parks (no cadence, warm state) and
+releases capture, and the shared clock ticker stops. Windows stay visible and bound (wake input must reach them), and
+topology stays with the monitor reconciler; a generation built while off starts paused. Data providers (Media, Feeds,
+Steam, Weather, Gmail, Reddit) keep their own cadence; a content change still renders one frame. On: capture is
+re-acquired behind the fresh-frame fence, every logical last-step clock is rebased (no parked gap is integrated), the
+runtime resumes on a fresh deadline sequence and rotation restarts from a full interval. Detail:
+`Docs/Architecture/Compositor_Architecture.md` → Display power.
+
 ## Production authority
 
 The accepted Quick destination is the sole production owner:

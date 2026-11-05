@@ -366,6 +366,14 @@ Likewise, do not tune a GUI ``QTimer`` as a bandage. Qt Quick frame-pacing work 
 
 Qt Quick hot paths are scarce budget: never add dormant per-frame Python/logging/telemetry on ``frameSwapped``/sync/render edges, hidden ``Repeater`` delegate forests, or always-live effect/layer work without measured need. Keep deep render-loop timing behind an explicit diagnostic sidecar with zero normal-runtime cost. Judge smoothness by frame-spacing tails **and fresh-state age**, not average FPS alone; CUSTOM Edit FPS is a different demand regime, not a steady-runtime target. `ThreadManager` ``TaskPriority`` is currently metadata on a FIFO ``ThreadPoolExecutor``; never treat ``LOW`` as Qt/Windows scheduling priority. Best-effort CPU speculation must not use a heavyweight helper process or normal-priority shared COMPUTE lane by assumption: use the ThreadManager background lane only when semantics tolerate delay, keep it one-thread/bounded/QImage-only, and fail closed on Windows if native demotion is unavailable.
 
+**GL state reads are not free on the render thread.** Every `glGet*`, `glIsEnabled*` and `glGetUniformLocation` is a
+round trip to the driver thread: ~20-25 us quiet, up to milliseconds when the CPU is saturated (a game, parallel work),
+and the GPU idles until the frame's next commands arrive. Waveform made ~170 per frame (uniforms by name, per-pass
+save/restore fences); at the operator's TV card that alone held its render thread at 11-50 ms a frame (5 Nov 2026). Look
+uniform locations up once per program, and let a mode that owns its frame's state use the shared primitives'
+`restore=False` contracts (`Docs/Reference/Scene3D_Resources.md`, "Owned frames") instead of reading state back per
+pass. The visualizer host's own fence is the one place that reads Quick's state.
+
 Work prepared off the render thread for a renderer (for example `run_geometry` keys) must key on the renderer's own inputs: transition renderers draw at the background item's logical size, which is not `display_bounds`: it is the monitor's device-exact rectangle inside the R-63 window (1706.67 logical px where Qt's rounded screen geometry says 1707), or the whole overscanned window before the native rectangle is known. Prove a hit, not just a build — a key that never matches fails silently into a render-thread rebuild (R-95).
 
 

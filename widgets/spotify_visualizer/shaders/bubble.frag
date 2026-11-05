@@ -61,6 +61,10 @@ uniform float u_rainbow_hue_offset;
 // default-off presets avoid sampling or allocating this texture entirely.
 uniform bool u_ambient_enabled;
 uniform sampler2D u_ambient_texture;
+// Particle glow: linear-light radiance from the same content-local target,
+// present only while some particle glows.
+uniform bool u_ambient_light_enabled;
+uniform sampler2D u_ambient_light;
 
 
 // Ghost: one history-backed afterimage ring per bubble. The existing smear
@@ -92,6 +96,15 @@ vec3 apply_rainbow(vec3 rgb, float hue_offset) {
     vec3 hsv = rgb2hsv(rgb);
     hsv.x = fract(hsv.x + hue_offset);
     return hsv2rgb(hsv);
+}
+
+vec3 srgb_to_linear(vec3 c) {
+    return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
+}
+
+vec3 linear_to_srgb(vec3 c) {
+    c = clamp(c, 0.0, 1.0);
+    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
 }
 
 // =====================================================================
@@ -218,6 +231,28 @@ void main() {
             result.rgb = (decor.rgb + bg.rgb * bg.a * (1.0 - a))
                 / max(combined_a, 0.00001);
             result.a = combined_a;
+        }
+        if (u_ambient_light_enabled) {
+            // Emitted particle light is added in LINEAR light, as light adds,
+            // so a halo's faint tail stays visible instead of dying in gamma
+            // space. It fills only the headroom left above the water, in its
+            // own hue: overlapping halos and hot cores reach full brightness
+            // smoothly instead of clipping to a flat or washed-out plateau.
+            // At zero light this is exactly the previous result.
+            vec3 light = texture(u_ambient_light, vec2(uv.x, 1.0 - uv.y)).rgb;
+            float emitted = max(max(light.r, light.g), light.b);
+            if (emitted > 0.0) {
+                vec3 base = srgb_to_linear(clamp(result.rgb, 0.0, 1.0));
+                float headroom = max(1.0 - max(max(base.r, base.g), base.b), 0.0);
+                float fill = headroom > 0.0
+                    ? headroom * (1.0 - exp(-emitted / headroom)) / emitted
+                    : 0.0;
+                vec3 added = light * fill;
+                float lit_a = result.a
+                    + (1.0 - result.a) * clamp(max(max(added.r, added.g), added.b), 0.0, 1.0);
+                result.rgb = linear_to_srgb((base * result.a + added) / max(lit_a, 0.00001));
+                result.a = lit_a;
+            }
         }
     }
     
