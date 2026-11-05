@@ -272,6 +272,7 @@ def test_translucent_celestial_body_blends_over_unobstructed_sky(target, mode):
         shockwave_grid_star_color=[0,0,0,0], shockwave_grid_celestial_glow_enabled=False,
         shockwave_grid_line_color=[0, 0, 0, 0], shockwave_grid_crest_color=[0, 0, 0, 0],
         shockwave_grid_water_color=[0, 210, 20, 255], shockwave_grid_terrain_fill_color=[0, 210, 20, 255],
+        shockwave_grid_horizon_color=[0, 0, 0, 0],   # a single-colour sky: no horizon glow behind the body
         shockwave_grid_moon_phase=.5)
     size = 9
     terrain = {'size': size, 'maximum': .4,

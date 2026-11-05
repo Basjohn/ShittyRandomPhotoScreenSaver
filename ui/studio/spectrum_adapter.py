@@ -32,7 +32,7 @@ from ui.studio.adapter import (
     RECORDED, REFERENCE, SYNTHETIC, StudioCapabilities, StudioFixture, StudioModeAdapter, control_condition,
 )
 from ui.studio.schema import (
-    CHOICE, COLOUR, SCALAR, SWITCH, StudioProperty, StudioSchema, Workspace, WorkspaceColumn,
+    CHOICE, COLOUR, SCALAR, SWITCH, StudioAction, StudioProperty, StudioSchema, Workspace, WorkspaceColumn,
 )
 from ui.studio.technical import TECHNICAL_GROUP, admit_technical, technical_properties
 
@@ -150,8 +150,10 @@ def _admit_nodes(candidate: Any, previous: Any) -> list:
 
 
 def _admit_notches(candidate: Any, previous: Any) -> list:
-    """Frequency boundaries [[x, label], ...]: the count and labels never change (Settings keeps both); a moved
-    boundary stops at its neighbours, then the list stays in x order."""
+    """Frequency boundaries [[x, label], ...]: the count and the set of lanes never change (Settings keeps both).
+    The lanes' order may change, as Settings' boundary drag past a neighbour reorders them (the Studio reorders
+    with its lane swap actions); a candidate naming other lanes keeps the previous ones. A moved boundary stops
+    at its neighbours, then the list stays in x order."""
     try:
         old = [[float(x), str(label)] for x, label in previous]
         new = [[_unit(x, 0.0), str(label)] for x, label in candidate]
@@ -159,8 +161,10 @@ def _admit_notches(candidate: Any, previous: Any) -> list:
         return [list(n) for n in previous]
     if len(new) != len(old):
         return old
+    reordered = sorted(label for _x, label in new) == sorted(label for _x, label in old)
     for index, (node, before) in enumerate(zip(new, old)):
-        node[1] = before[1]
+        if not reordered:
+            node[1] = before[1]
         if abs(node[0] - before[0]) > 1e-12:
             low = new[index - 1][0] if index > 0 else 0.0
             high = new[index + 1][0] if index + 1 < len(new) else 1.0
@@ -185,6 +189,67 @@ def _admit_colour(candidate: Any, previous: Any) -> list:
     if len(values) != 4:
         return list(previous)
     return [max(0, min(255, v)) for v in values]
+
+
+# -------------------------------------------------------------------------- structural edits
+ADD_NODE = "shape.add_node"
+REMOVE_NODE = "shape.remove_node."          # + node index
+LANE_PREVIOUS = "shape.lane_previous."      # + "1." (mirrored) / "0." (linear) + boundary index
+LANE_NEXT = "shape.lane_next."
+
+
+def _node_limits() -> tuple[int, int]:
+    from ui.tabs.media.spectrum_shape_editor import _MAX_NODES, _MIN_NODES
+    return _MIN_NODES, _MAX_NODES
+
+
+def added_node(nodes) -> list:
+    """Settings adds a node where the user clicks; the Studio adds one at the middle of the widest gap along the
+    bars (the ends included), on the current silhouette (``interpolate_nodes``, the curve the engine samples), so
+    adding a node barely changes the shape until it is moved."""
+    from ui.tabs.media.spectrum_shape_editor import interpolate_nodes
+    current = [[float(x), float(y)] for x, y in nodes]
+    xs = [0.0] + [x for x, _y in current] + [1.0]
+    width, left = max((xs[i + 1] - xs[i], xs[i]) for i in range(len(xs) - 1))
+    x = left + width / 2.0
+    samples = 1001
+    y = interpolate_nodes(current, samples)[int(round(x * (samples - 1)))]
+    return sorted(current + [[x, max(0.0, min(1.0, float(y)))]], key=lambda n: n[0])
+
+
+def structure_edit(action_id: str, values: Mapping[str, Any]):
+    """(undo label, {path: value}) for one of Spectrum's shape-editor structural edits, or None while it is not
+    admissible: Add Node below the maximum, Remove Node above the minimum (Settings' click / right-click rules),
+    and swapping a frequency lane with its neighbour (what Settings' boundary drag past a neighbour does)."""
+    low, high = _node_limits()
+    nodes = [[float(x), float(y)] for x, y in values.get(SHAPE_NODES, ())]
+    if action_id == ADD_NODE:
+        return ("Add Shape Node", {(SHAPE_NODES,): added_node(nodes)}) if len(nodes) < high else None
+    if action_id.startswith(REMOVE_NODE):
+        index = int(action_id[len(REMOVE_NODE):])
+        if len(nodes) <= low or not 0 <= index < len(nodes):
+            return None
+        return f"Remove Shape Node {index + 1}", {(SHAPE_NODES,): nodes[:index] + nodes[index + 1:]}
+    for prefix, step in ((LANE_PREVIOUS, -1), (LANE_NEXT, 1)):
+        if action_id.startswith(prefix):
+            layout, _dot, index_text = action_id[len(prefix):].partition(".")
+            key, index = NOTCHES[layout == "1"], int(index_text)
+            notches = [list(n) for n in values.get(key, ())]
+            other = index + step
+            if not (0 <= index < len(notches) and 0 <= other < len(notches)):
+                return None
+            notches[index][1], notches[other][1] = notches[other][1], notches[index][1]
+            return f"Swap {notches[other][1]} And {notches[index][1]} Lanes", {(key,): notches}
+    return None
+
+
+def row_label(prop: StudioProperty, values: Mapping[str, Any]) -> str:
+    """A boundary row is titled by the lane it currently bounds (lanes can be reordered)."""
+    key = prop.path[0]
+    if key in NOTCHES.values() and len(prop.path) == 3:
+        layout = "Mirrored" if key == NOTCHES[True] else "Linear"
+        return f"{values[key][prop.path[1]][1]} Boundary ({layout})"
+    return prop.label
 
 
 def _percent(value: Any, previous: Any, low: float = 0.0) -> float:
@@ -277,16 +342,25 @@ def build_schema() -> StudioSchema:
         tooltip="On: the shape is mirrored around the centre (centre <-> edge). Off: a left-to-right profile.")
     for index in range(_MAX_NODES):
         for axis, word in ((0, "Position"), (1, "Height")):
+            remove = (StudioAction(f"{REMOVE_NODE}{index}", f"Remove Node {index + 1}", "minus",
+                                   "Remove this node (the shape keeps at least one)."),) if axis == 0 else ()
             add(f"{SHAPE_NODES}.{index}.{axis}", (SHAPE_NODES, index, axis), f"Node {index + 1} {word}", workspace,
                 shape, SCALAR, minimum=0.0, maximum=1.0, decimals=3, priority=200 + 2 * index + axis,
+                actions=remove,
                 tooltip="A control node of the authored silhouette (across the bars, then its height). A node "
-                        "stops at its neighbours; add or remove nodes in Settings' shape editor.")
+                        "stops at its neighbours; Add Node adds one in the widest gap.")
     for mirrored in (True, False):
         layout = "Mirrored" if mirrored else "Linear"
         notches, lanes = NOTCHES[mirrored], LANES[mirrored]
+        flag = "1" if mirrored else "0"
         for index, (_x, lane) in enumerate(_canonical(notches)):
+            swaps = (StudioAction(f"{LANE_PREVIOUS}{flag}.{index}", "Swap With Previous Lane", "chevron-left",
+                                  "Exchange this lane with the one before it (the boundaries stay)."),
+                     StudioAction(f"{LANE_NEXT}{flag}.{index}", "Swap With Next Lane", "chevron-right",
+                                  "Exchange this lane with the one after it (the boundaries stay)."))
             add(f"{notches}.{index}", (notches, index, 0), f"{lane} Boundary ({layout})", workspace, shape, SCALAR,
                 minimum=0.0, maximum=1.0, decimals=3, priority=300 + index, when=((MIRRORED, (mirrored,)),),
+                actions=swaps,
                 tooltip="Where this frequency lane sits across the bars. A boundary stops at its neighbours.")
         for index, lane in enumerate(_canonical(lanes)):
             add(f"{lanes}.{lane}", (lanes, lane), f"{lane} Strength ({layout})", workspace, shape, SCALAR,
@@ -344,10 +418,13 @@ def build_schema() -> StudioSchema:
 
     group_icons = {titles[key]: glyph for key, (glyph, _sub) in _GROUP_PANEL.items() if key in titles}
     group_icons.update({TECHNICAL_GROUP: "bars", BAR_COLOUR_GROUP: "colour", RAINBOW_GROUP: "gradient"})
+    add_node = StudioAction(ADD_NODE, "Add Node", "plus",
+                            f"Add a node to the silhouette in its widest gap (at most {_MAX_NODES}).")
     return StudioSchema(MODE, "Spectrum Studio", tuple(workspaces), tuple(props), admit,
                         group_traces=((titles["audio"], ("Level", "Peak")), (titles["ghost"], ("Ghost",)),
                                       (titles["render"], ("Level",))),
-                        group_icons=tuple(group_icons.items()), object_noun="Bar")
+                        group_icons=tuple(group_icons.items()), object_noun="Bar",
+                        group_actions=((shape, (add_node,)),), row_label=row_label)
 
 
 # -------------------------------------------------------------------------------- inputs
@@ -488,6 +565,10 @@ class SpectrumStudioEvaluator:
         self._last_wanted = None
         self.steps_run = 0
         self.replays = 0
+        self.rewinds = 0
+        self._budget: float | None = None
+        self._kwargs_cache: dict = {}
+        self._shown = None                 # the frame the last evaluation returned (shown while converging)
         self._reset_history()
 
     # fixtures ---------------------------------------------------------------
@@ -509,6 +590,7 @@ class SpectrumStudioEvaluator:
             raise KeyError(fixture_id)
         self._fixture = fixture
         self._retire()
+        self._shown = None
         return fixture
 
     def set_viewport_extent(self, extent) -> None:
@@ -526,6 +608,16 @@ class SpectrumStudioEvaluator:
     @property
     def analysing(self) -> bool:
         return self._job is not None
+
+    @property
+    def analysis_failure(self) -> str:
+        """Why the analysis the current values need failed ("" when it did not); the previous answers stay on
+        screen meanwhile (``_choose_inputs``) and nothing re-runs it until ``retry_analysis``."""
+        return str(self.errors.get(self._last_wanted, "")) if self._last_wanted is not None else ""
+
+    def retry_analysis(self) -> None:
+        """Forget the failure of the analysis the current values need: the next evaluation starts it again."""
+        self.errors.pop(self._last_wanted, None)
 
     # analysis ----------------------------------------------------------------
     def _wanted(self, values: Mapping[str, Any]):
@@ -576,14 +668,29 @@ class SpectrumStudioEvaluator:
         return inputs
 
     # lifecycle --------------------------------------------------------------
+    def set_frame_budget(self, seconds: float | None) -> None:
+        """The GUI-thread time one evaluation may spend replaying (the Studio sets it; None: replay at once).
+        With a budget an exact replay that does not fit continues on the next frames (``converging``) while the
+        live-applied frame stays on screen; the replay it converges to is the same exact replay."""
+        self._budget = None if seconds is None else max(0.0, float(seconds))
+
+    @property
+    def converging(self) -> bool:
+        """An exact replay is still catching up with the requested instant (the Studio asks for another frame)."""
+        return self._converging
+
     def _reset_history(self) -> None:
-        self._iterator = None
-        self._pending: ServedTick | None = None
-        self._time = -math.inf
+        self._ticks: tuple = ()
+        self._index = 0                    # the next tick to step
+        self._time = -math.inf             # the fixture time the history has been stepped to
         self._last = None
         self._last_tick: ServedTick | None = None
         self._signature = None
         self._approximate = False
+        self._pristine = None              # the step state right after configuration (``StepState``)
+        self._pristine_signature = None
+        self._checkpoints: dict = {}       # Spectrum-owned signature -> {tick index: checkpoint}
+        self._converging = False
 
     def _retire(self) -> None:
         controller, self._controller = self._controller, None
@@ -602,8 +709,9 @@ class SpectrumStudioEvaluator:
         return out
 
     def _start(self, values: Mapping[str, Any], inputs) -> None:
+        """A production controller configured for ``inputs`` (lifecycle: a new fixture, answers or extent)."""
         from widgets.spotify_visualizer.feature_replay import ReplayBeatEngine
-        from ui.studio.replay_engine import RecordedEngineAnswers, offline_controller
+        from ui.studio.replay_engine import RecordedEngineAnswers, StepState, offline_controller
         self._retire()
         if self._engine is None:
             self._engine = ReplayBeatEngine(32)
@@ -616,8 +724,9 @@ class SpectrumStudioEvaluator:
         controller.engine = self._view
         self._controller = controller
         self._inputs = inputs
-        self._iterator = iter(inputs.steps(self.fixture.duration))
-        self._signature = self._own_signature(values)
+        self._ticks = tuple(inputs.steps(self.fixture.duration))
+        self._signature = self._pristine_signature = self._own_signature(values)
+        self._pristine = StepState(controller, keep=(self._engine, self._view))
         self.replays += 1
 
     @staticmethod
@@ -645,49 +754,133 @@ class SpectrumStudioEvaluator:
         if frame is not None:
             self._last = frame
 
-    def _restyle(self, values: Mapping[str, Any]) -> None:
+    def _mode_kwargs_for(self, values: Mapping[str, Any], signature) -> dict:
+        """The production mode kwargs for ``values`` under the current answers, computed once per signature
+        (``_mode_kwargs`` builds the settings model, about 10 ms)."""
+        key = (self._inputs.key, signature)
+        cache = self._kwargs_cache
+        if key not in cache:
+            cache[key] = _mode_kwargs(self._effective(values, self._inputs))
+            while len(cache) > 6:
+                cache.pop(next(iter(cache)))
+        return cache[key]
+
+    def _restyle(self, values: Mapping[str, Any], signature=None) -> None:
         from widgets.spotify_visualizer.config_applier import (
             apply_logical_vis_mode_kwargs, apply_presentation_vis_mode_kwargs,
         )
-        kwargs = _mode_kwargs(self._effective(values, self._inputs))
+        signature = self._own_signature(values) if signature is None else signature
+        kwargs = self._mode_kwargs_for(values, signature)
         apply_logical_vis_mode_kwargs(self._controller.logical_tick_state, kwargs)
         apply_presentation_vis_mode_kwargs(self._controller.presentation_state, kwargs)
-        self._signature = self._own_signature(values)
+        self._signature = signature
+
+    # exact history: rewinds and checkpoints ------------------------------------
+    CHECKPOINT_TICKS = 90                  # one checkpoint per second of fixture time (production cadence 90 Hz)
+
+    def _rewind(self, values: Mapping[str, Any], signature, time: float) -> None:
+        """Put the exact history of ``signature`` at the latest checkpoint at or before ``time`` (else at the
+        pristine configuration, restyled to ``values``): the replay from there is the replay from the start."""
+        best = None
+        for checkpoint in self._checkpoints.get(signature, {}).values():
+            if checkpoint[1] <= time + 1e-9 and (best is None or checkpoint[0] > best[0]):
+                best = checkpoint
+        if best is not None:
+            index, at, state, last, last_tick = best
+            state.restore()
+            self._index, self._time, self._last, self._last_tick = index, at, last, last_tick
+            self._signature = signature
+        else:
+            self._pristine.restore()
+            self._index, self._time, self._last, self._last_tick = 0, -math.inf, None, None
+            self._signature = self._pristine_signature
+            if signature != self._pristine_signature:
+                self._restyle(values, signature)
+        self._approximate = False
+        self.rewinds += 1
+
+    def _checkpoint(self) -> None:
+        from ui.studio.replay_engine import StepState
+        checkpoints = self._checkpoints
+        if self._signature not in checkpoints:
+            checkpoints[self._signature] = {}
+            while len(checkpoints) > 3:    # the current values and the last two (undo / redo stay instant)
+                checkpoints.pop(next(iter(checkpoints)))
+        at = self._ticks[self._index - 1].now - self._inputs._origin
+        checkpoints[self._signature][self._index] = (
+            self._index, at, StepState(self._controller, keep=(self._engine, self._view)), self._last,
+            self._last_tick)
+
+    def _advance(self, time: float, deadline: float | None) -> tuple[bool, int]:
+        """Step the production ticks up to ``time`` (the first tick always), or until ``deadline``.
+        Returns (reached, ticks stepped)."""
+        import time as clock
+        origin = self._inputs._origin
+        ticks = self._ticks
+        stepped = 0
+        while self._index < len(ticks):
+            tick = ticks[self._index]
+            if tick.now - origin > time + 1e-9 and self._last is not None:
+                break
+            if deadline is not None and stepped and clock.perf_counter() > deadline:
+                self._time = ticks[self._index - 1].now - origin
+                return False, stepped
+            self._step(tick)
+            self._index += 1
+            stepped += 1
+            if not self._approximate and self._index % self.CHECKPOINT_TICKS == 0:
+                self._checkpoint()
+        self._time = time
+        return True, stepped
 
     def evaluate(self, time: float, values: Mapping[str, Any], *, exact: bool = True, revision: Any = None):
         """The logical frame ``time`` seconds into the fixture under ``values``: Spectrum's production step replayed
         from the fixture start over the engine answers for these engine-owned values (equal fixture, values, extent
-        and time give equal frames). A Spectrum-owned change replays at once; an engine-owned change starts its
-        analysis and shows the previous answers until it lands. ``exact=False`` (a live gesture) applies a
-        Spectrum-owned change to the running history from the current tick; the gesture end replays exactly."""
+        and time give equal frames). A Spectrum-owned change replays exactly from the pristine configuration (or a
+        checkpoint of the same values); an engine-owned change starts its analysis and shows the previous answers
+        until it lands. ``exact=False`` (a live gesture) applies a Spectrum-owned change to the running history
+        from the current tick; the gesture end replays exactly. With a frame budget the exact replay may take
+        several evaluations (``converging``), showing the live-applied frame meanwhile."""
         del revision
+        import time as clock
+        deadline = None if self._budget is None else clock.perf_counter() + self._budget
         time = max(0.0, min(float(time), self.fixture.duration))
         inputs = self._choose_inputs(values, exact)
         signature = self._own_signature(values)
-        restart = (self._controller is None or inputs is not self._inputs or time < self._time
-                   or (exact and (signature != self._signature or self._approximate)))
-        restyled = False
-        if restart:
+        if self._controller is None or inputs is not self._inputs:
             self._start(values, inputs)
-        elif signature != self._signature:
-            self._restyle(values)
-            self._approximate = restyled = True
-        origin = inputs._origin
-        stepped = 0
-        while True:
-            tick = self._pending if self._pending is not None else next(self._iterator, None)
-            self._pending = None
-            if tick is None or (tick.now - origin > time + 1e-9 and self._last is not None):
-                self._pending = tick
-                break
-            self._step(tick)
-            stepped += 1
-        if restyled and not stepped and self._last_tick is not None:
-            self._step(self._last_tick)            # show the change on this instant (approximate)
-        self._time = time
-        if self._last is None:
+        if not exact:
+            if time < self._time:
+                self._rewind(values, signature, time)
+            restyled = signature != self._signature
+            if restyled:
+                self._restyle(values, signature)
+                self._approximate = True
+            _reached, stepped = self._advance(time, None)
+            if restyled and not stepped and self._last_tick is not None:
+                self._step(self._last_tick)            # show the change on this instant (approximate)
+            self._converging = False
+            self._shown = self._last
+            return self._last
+        if signature != self._signature or self._approximate or time < self._time:
+            if deadline is not None and signature != self._signature:
+                # A change nothing has shown yet (a click, a typed value): this frame shows it live-applied on
+                # the running history; the exact replay starts on the next frame.
+                self._restyle(values, signature)
+                self._approximate = True
+                if self._last_tick is not None:
+                    self._step(self._last_tick)
+                self._converging = True
+                self._shown = self._last
+                return self._shown
+            self._rewind(values, signature, time)
+        reached, _stepped = self._advance(time, deadline)
+        self._converging = not reached
+        if reached or self._shown is None:
+            self._shown = self._last
+        if self._shown is None:
             raise RuntimeError("Fixture produced no logical frame")
-        return self._last
+        return self._shown
 
     @property
     def unrecorded_reads(self) -> int:
@@ -770,6 +963,9 @@ class SpectrumStudioAdapter(StudioModeAdapter):
 
     def scene_objects(self, values: Mapping[str, Any]):
         return ()
+
+    def structure_edit(self, action_id: str, values: Mapping[str, Any]):
+        return structure_edit(action_id, values)
 
     def create_evaluator(self) -> SpectrumStudioEvaluator:
         return SpectrumStudioEvaluator()

@@ -2,6 +2,7 @@
 from __future__ import annotations
 import math
 import struct
+from collections import OrderedDict
 from functools import lru_cache
 from rendering.gl_programs.shockwave_grid_program import SHOCKWAVE_DEPTH
 
@@ -107,11 +108,59 @@ def _visible_star_cell(x: float, y: float, view) -> tuple[int, int]:
     return round(longitude*420), round(latitude*420)
 
 
+# Each beat's stars are chosen once, in the view of the frame that first sees the beat, and are then fixed sky
+# directions for the rest of its life: re-choosing them from every frame's view kept them at the same place on
+# the card, so they travelled with the camera across the sky (operator, 2026-11-05). Bounded memo, keyed by the
+# beat (its position and strength) and the terrain it was chosen over.
+_BEAT_CELLS: OrderedDict = OrderedDict()
+_BEAT_CELLS_LIMIT = 4 * STARSCAPE_BEAT_EVENTS
+
+
+def _beat_cells(key, choose):
+    cells = _BEAT_CELLS.get(key)
+    if cells is None:
+        cells = choose()
+        _BEAT_CELLS[key] = cells
+        while len(_BEAT_CELLS) > _BEAT_CELLS_LIMIT:
+            _BEAT_CELLS.popitem(last=False)
+    else:
+        _BEAT_CELLS.move_to_end(key)
+    return cells
+
+
+def reset_beat_star_choices() -> None:
+    """Forget every beat's chosen stars (a new scene: mode activation, terrain change, tests)."""
+    _BEAT_CELLS.clear()
+
+
+def _choose_beat_cells(seed, view, eye, terrain, body):
+    cells = []
+    for i in range(3):
+        # Stratify across the full framed sky's height as well as width.
+        # The old y=.07..119 range could never choose middle/lower stars.
+        # Rotate the vertical strata per event so no column owns a band.
+        x = (0.17,0.5,0.83)[i] + (((seed >> (i*4)) & 15)-7.5)*0.005
+        band = (i + seed) % 3
+        y = (0.08,0.18,0.28)[band] + (((seed >> (i*3+1)) & 7)-3.5)*0.004
+        # Three bounded attempts; prefer clear sky but keep the event's
+        # three-star population when a view has no clear candidate here.
+        for attempt in range(3):
+            px = x + (0.,-.06,.06)[attempt]
+            py = max(.025,y-attempt*.07)
+            lon, lat = _visible_star_cell(px, py, view)
+            cell = _nearby_bright_star(lon,lat)
+            if ((body is None or _body_clear(cell,eye,body))
+                    and (terrain is None or _terrain_clear(cell,eye,terrain))):
+                break
+        cells.append(cell)
+    return tuple(cells)
+
+
 def starscape_beat_cells(events, view, *, terrain=None, body=None) -> tuple[tuple[float, ...], ...]:
     """Three spaced existing celestial star-cells per recent powerful onset.
 
-    Derived from the existing bounded onset ring/clock. Nothing is persisted or
-    recomputed by a background owner, and disabled mode does no work at all.
+    Derived from the existing bounded onset ring/clock; each beat's cells are chosen in the view that first sees
+    it and stay fixed sky directions while it lives (see ``_BEAT_CELLS``). Disabled mode does no work at all.
     """
     bursts = []
     eye = view.eye
@@ -127,24 +176,10 @@ def starscape_beat_cells(events, view, *, terrain=None, body=None) -> tuple[tupl
         if displaced <= 0.0 or rank >= STARSCAPE_BEAT_EVENTS:
             break
         seed = int(abs(x * 8219.0 + z * 3191.0) * 1871.0)
-        for i in range(3):
-            # Stratify across the full framed sky's height as well as width.
-            # The old y=.07..119 range could never choose middle/lower stars.
-            # Rotate the vertical strata per event so no column owns a band.
-            x = (0.17,0.5,0.83)[i] + (((seed >> (i*4)) & 15)-7.5)*0.005
-            band = (i + seed) % 3
-            y = (0.08,0.18,0.28)[band] + (((seed >> (i*3+1)) & 7)-3.5)*0.004
-            # Three bounded attempts; prefer clear sky but keep the event's
-            # three-star population when a view has no clear candidate here.
-            for attempt in range(3):
-                px = x + (0.,-.06,.06)[attempt]
-                py = max(.025,y-attempt*.07)
-                lon, lat = _visible_star_cell(px, py, view)
-                cx, cy = _nearby_bright_star(lon,lat)
-                cell = (cx,cy)
-                if ((body is None or _body_clear(cell,eye,body))
-                        and (terrain is None or _terrain_clear(cell,eye,terrain))):
-                    break
+        terrain_key = None if terrain is None else (terrain[0], hash(terrain[1]))
+        cells = _beat_cells((x, z, strength, terrain_key),
+                            lambda: _choose_beat_cells(seed, view, eye, terrain, body))
+        for cx, cy in cells:
             rise = min(1.0, age / STARSCAPE_BEAT_ATTACK)
             hit = min(1.0, max(0.0, (strength - STARSCAPE_BEAT_MIN_STRENGTH)
                                / (STARSCAPE_BEAT_FULL - STARSCAPE_BEAT_MIN_STRENGTH)))

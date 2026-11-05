@@ -1935,9 +1935,7 @@ class TestSpectrumSettingsBinding:
         assert calls == []
         payload = collect_spectrum_mode_settings(tab)
         for key, value in cfg.items():
-            if key == "spectrum_glow_intensity":
-                assert tab.spectrum_glow_intensity.value() == 114  # existing truncation admission
-            elif isinstance(value, float):
+            if isinstance(value, float):
                 assert payload[key] == pytest.approx(value), key
             else:
                 assert payload[key] == value, key

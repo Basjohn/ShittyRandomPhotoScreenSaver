@@ -731,6 +731,7 @@ class WaveformRibbonFrame:
     strands: bytes = b''
     strand_origin: float = 0.
     zoom: float = 1.
+    pulse: bytes = b''  # the logical owner's pulse appearance field on PULSE_GRID (float32, history x), or empty
 
     def __post_init__(self):
         from core.ribbon_packet import RibbonPacket, RIBBON_BYTES
@@ -759,6 +760,9 @@ class WaveformRibbonFrame:
         zoom=_finite(self.zoom,name='waveform dynamic zoom')
         if not .5<=zoom<=2.:raise ValueError('Waveform dynamic zoom must be in 0.5..2')
         object.__setattr__(self,'zoom',zoom)
+        from core.waveform_ribbon_dynamics import PULSE_GRID
+        if not isinstance(self.pulse,bytes) or len(self.pulse) not in (0,PULSE_GRID.size*4):
+            raise ValueError('Waveform pulse field must be immutable and match the pulse grid')
 
     @property
     def mode_id(self):

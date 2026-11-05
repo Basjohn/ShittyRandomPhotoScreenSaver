@@ -91,7 +91,7 @@ def build_shared_visualizer_appearance_controls(
     tab.vis_border_opacity.setMinimum(0)
     tab.vis_border_opacity.setMaximum(100)
     _pct = int(
-        tab._default_float("spotify_visualizer", "spectrum_bar_border_opacity") * 100
+        round(tab._default_float("spotify_visualizer", "spectrum_bar_border_opacity") * 100)
     )
     tab.vis_border_opacity.setValue(_pct)
     tab.vis_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)

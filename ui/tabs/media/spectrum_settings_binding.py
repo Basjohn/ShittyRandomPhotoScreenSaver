@@ -159,7 +159,7 @@ def load_spectrum_smoothing(tab, config) -> None:
     strength = tab.spectrum_visual_smoothing
     blockers = [QSignalBlocker(enabled), QSignalBlocker(strength)]
     enabled.setChecked(tab._config_bool("spotify_visualizer", config, "spectrum_visual_smoothing_enabled"))
-    strength.setValue(max(0, min(100, int(tab._config_float("spotify_visualizer", config, "spectrum_visual_smoothing") * 100))))
+    strength.setValue(max(0, min(100, int(round(tab._config_float("spotify_visualizer", config, "spectrum_visual_smoothing") * 100)))))
     tab.spectrum_visual_smoothing_label.setText(f"{strength.value()}%")
     strength.parentWidget().setVisible(enabled.isChecked())
     del blockers

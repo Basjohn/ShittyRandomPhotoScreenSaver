@@ -66,6 +66,8 @@ class StudioProperty:
     # Shown only while every term holds: ((property id, (accepted stored values...)), ...) - the canonical
     # Settings condition (e.g. a control shown only while its feature toggle is on).
     when: tuple = ()
+    # Structural edits offered on this row (e.g. remove this curve node): run by the adapter's ``structure_edit``.
+    actions: tuple["StudioAction", ...] = ()
 
     def __post_init__(self) -> None:
         if self.instrument not in INSTRUMENTS:
@@ -76,6 +78,17 @@ class StudioProperty:
             raise ValueError(f"Studio property {self.id} has inverted bounds")
         if self.instrument == CHOICE and not self.choices:
             raise ValueError(f"Studio choice {self.id} declares no choices")
+
+
+@dataclass(frozen=True)
+class StudioAction:
+    """A structural edit of canonical values (add / remove / reorder an element of a list value), offered as a
+    button on a row or a group. The adapter's ``structure_edit(id, values)`` answers the edit as one undoable
+    change set admitted by the schema, or None while it is not admissible (the button is then disabled)."""
+    id: str
+    label: str
+    icon: str = ""
+    tooltip: str = ""
 
 
 @dataclass(frozen=True)
@@ -216,6 +229,11 @@ class StudioSchema:
     # {other key: value}: e.g. a finish choice writes Gloss and Specular, a manual Gloss edit marks the finish
     # Custom. Applied in the same undoable edit and admitted like any other value.
     follow: Callable[[str, Any, Any], dict] | None = field(compare=False, repr=False, default=None)
+    # Structural edits offered under a group's rows: ((group, (StudioAction, ...)), ...).
+    group_actions: tuple[tuple[str, tuple[StudioAction, ...]], ...] = ()
+    # A row label that follows the current values (property, values) -> label, e.g. a list element whose meaning
+    # moves with it; None: the property's own label.
+    row_label: Callable[[StudioProperty, Any], str] | None = field(compare=False, repr=False, default=None)
 
     def __post_init__(self) -> None:
         ids = [prop.id for prop in self.properties]
@@ -242,5 +260,5 @@ __all__ = [
     "CardSpec", "GRADIENT", "LifecycleSpec", "StudioPreset",
     "ResponseCell", "ResponseSource", "ResponseTarget", "StudioResponse",
     "CHOICE", "COLOUR", "COUNT", "INSTRUMENTS", "QUIET_PEAK", "SCALAR", "SWITCH",
-    "SceneObject", "StudioProperty", "StudioSchema", "Workspace",
+    "SceneObject", "StudioAction", "StudioProperty", "StudioSchema", "Workspace",
 ]
