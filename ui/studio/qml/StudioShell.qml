@@ -313,7 +313,10 @@ Rectangle {
                 if (id !== nf.propId || endpoint !== nf.endpoint) return
                 input.forceActiveFocus(); input.selectAll()
                 Qt.callLater(function() {
-                    var flick = inspectorScroll.contentItem
+                    var scroll = nf.parent
+                    while (scroll && scroll.objectName !== "inspectorScroll") scroll = scroll.parent
+                    if (!scroll) return
+                    var flick = scroll.contentItem
                     var p = nf.mapToItem(flick.contentItem, 0, 0)
                     flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height, p.y - 80))
                 })
@@ -337,12 +340,17 @@ Rectangle {
     }
 
     component RowLabel: Text {
+        id: rowLabel
         property string tip: ""
+        property string icon: ""          // a canonical glyph before the label (mock), when the row has one
+        leftPadding: icon !== "" ? 22 : 0
         color: shell.cDim
         font.pixelSize: shell.fontBase - 1
         elide: Text.ElideRight
         width: 118
         verticalAlignment: Text.AlignVCenter
+        StudioIcon { visible: rowLabel.icon !== ""; name: rowLabel.icon; width: 15; height: 15; stroke: 1.6
+                     color: shell.cDim; anchors.verticalCenter: parent.verticalCenter }
         MouseArea { id: tipArea; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.RightButton
                     onClicked: studio.resetProperty(parent.propId) }
         property string propId: ""
@@ -522,7 +530,7 @@ Rectangle {
         spacing: 6
         Row {
             spacing: 8
-            RowLabel { text: row.label; tip: row.tooltip; propId: row.id; height: 22; width: 118 }
+            RowLabel { text: row.label; icon: row.icon || ""; tip: row.tooltip; propId: row.id; height: 22; width: 118 }
             Text { anchors.verticalCenter: parent.verticalCenter; text: gr.shown.length + " / " + Math.round(row.max) + " nodes"
                    color: shell.cDim; font.pixelSize: shell.fontBase - 2 }
         }
@@ -1036,12 +1044,113 @@ Rectangle {
         Accessible.name: (spec.title || "") + " schematic"
     }
 
+    // A dashboard panel's title bar (mock): accent icon, title, a dim subtitle after a dash.
+    component PanelHeader: Item {
+        property string icon: ""
+        property string title: ""
+        property string subtitle: ""
+        width: parent ? parent.width : 0
+        height: 40
+        Row {
+            x: 14; anchors.verticalCenter: parent.verticalCenter
+            spacing: 10
+            StudioIcon { name: parent.parent.icon; visible: parent.parent.icon !== ""; width: 20; height: 20
+                         color: shell.cAccent; anchors.verticalCenter: parent.verticalCenter }
+            Text { id: headerTitle; text: parent.parent.title; color: shell.cText; font.pixelSize: shell.fontBase + 2
+                   font.bold: true; anchors.verticalCenter: parent.verticalCenter
+                   width: Math.min(implicitWidth, parent.parent.width - 60); elide: Text.ElideRight }
+            Text { visible: parent.parent.subtitle !== ""; text: "–  " + parent.parent.subtitle; color: shell.cDim
+                   font.pixelSize: shell.fontBase + 1; anchors.verticalCenter: parent.verticalCenter
+                   width: Math.max(0, Math.min(implicitWidth, parent.parent.width - headerTitle.width - 70))
+                   elide: Text.ElideRight }
+        }
+        Rectangle { anchors.bottom: parent.bottom; x: 1; width: parent.width - 2; height: 1; color: shell.cOutlineSoft }
+    }
+
+    // One collapsible inspector group: header, live traces, card, starting-point tiles, lifetime and rows.
+    component InspectorGroup: Column {
+        id: group
+        objectName: "inspectorGroup"
+        property var groupData: ({})
+        property bool open: groupData.open === true
+        spacing: 6
+        Rectangle {
+            width: parent.width; height: 30; radius: 6
+            color: groupMouse.containsMouse ? shell.cRaised : shell.accentA(0.05)
+            border.width: 1; border.color: shell.cOutlineSoft
+            activeFocusOnTab: true
+            Accessible.role: Accessible.Button
+            Accessible.name: group.groupData.title || ""
+            Row {
+                x: 8; anchors.verticalCenter: parent.verticalCenter
+                spacing: 8
+                StudioIcon { name: group.open ? "chevron-down" : "chevron-right"; color: shell.cDim
+                             width: 14; height: 14; anchors.verticalCenter: parent.verticalCenter }
+                StudioIcon { name: group.groupData.icon || ""; visible: (group.groupData.icon || "") !== ""
+                             color: shell.cAccent; width: 16; height: 16; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: group.groupData.title || ""; color: shell.cText; font.pixelSize: shell.fontBase
+                       font.bold: true; anchors.verticalCenter: parent.verticalCenter }
+            }
+            MouseArea { id: groupMouse; anchors.fill: parent; hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor; onClicked: group.open = !group.open }
+            Keys.onSpacePressed: group.open = !group.open
+            FocusRing { visible: parent.activeFocus }
+        }
+        SignalTrace {
+            visible: group.open && (group.groupData.traces || []).length > 0
+            width: parent.width
+            channels: group.groupData.traces || []
+        }
+        SchematicCard {
+            visible: group.open && group.groupData.card !== undefined && group.groupData.card.kind !== undefined
+            width: parent.width
+            height: visible ? implicitHeight : 0
+            spec: group.groupData.card || ({})
+        }
+        PresetTiles {
+            visible: group.open && (group.groupData.presets || []).length > 0
+            width: parent.width
+            presets: group.groupData.presets || []
+            group: group.groupData.group || ""
+        }
+        LifecycleTimeline {
+            visible: group.open && group.groupData.lifecycle !== undefined && group.groupData.lifecycle.total !== undefined
+            width: parent.width
+            spec: group.groupData.lifecycle || ({})
+        }
+        Column {
+            visible: group.open
+            width: parent.width
+            spacing: 4
+            Repeater {
+                model: group.groupData.rows || []
+                delegate: Loader {
+                    objectName: "inspectorRow"
+                    width: parent.width
+                    height: item ? item.implicitHeight || item.height : 0
+                    property var rowData: modelData
+                    sourceComponent: {
+                        switch (modelData.instrument) {
+                        case "quiet_peak": return quietPeakDelegate
+                        case "switch": return switchDelegate
+                        case "choice": return choiceDelegate
+                        case "count": return countDelegate
+                        case "colour": return colourDelegate
+                        case "gradient": return gradientDelegate
+                        default: return scalarDelegate
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // ------------------------------------------------------------------- rows
     component ScalarRow: Row {
         property var row
         spacing: 8
         height: 28
-        RowLabel { text: row.label; tip: row.tooltip; propId: row.id; height: parent.height }
+        RowLabel { text: row.label; icon: row.icon || ""; tip: row.tooltip; propId: row.id; height: parent.height }
         ValueSlider {
             width: parent.width - 118 - 72 - 16; anchors.verticalCenter: parent.verticalCenter
             propId: row.id; label: row.label; from: row.min; to: row.max; integer: row.integer
@@ -1061,7 +1170,7 @@ Rectangle {
         Row {
             spacing: 8
             height: 28
-            RowLabel { text: row.label; tip: row.tooltip + (row.tooltip ? "\n" : "") + "Quiet: " + row.quietMeaning
+            RowLabel { text: row.label; icon: row.icon || ""; tip: row.tooltip + (row.tooltip ? "\n" : "") + "Quiet: " + row.quietMeaning
                        + " · Peak: " + row.peakMeaning; propId: row.id; height: parent.height }
             Row {
                 spacing: 0
@@ -1108,30 +1217,35 @@ Rectangle {
     }
 
     component SwitchRow: Row {
+        id: switchRow
         property var row
         readonly property bool on: studio.values[row.id] === true
-        spacing: 8
+        spacing: 10
         height: 28
-        RowLabel { text: row.label; tip: row.tooltip; propId: row.id; height: parent.height }
         Rectangle {
             id: track
+            objectName: "checkBox"
             anchors.verticalCenter: parent.verticalCenter
-            width: 40; height: 20; radius: 10
-            color: on ? shell.cAccent : shell.cTrack
-            border.width: 1; border.color: shell.cOutlineSoft
+            width: 20; height: 20; radius: 5
+            color: on ? shell.cAccent : "transparent"
+            border.width: on ? 0 : 1.5; border.color: shell.cOutline
             activeFocusOnTab: true
             Accessible.role: Accessible.CheckBox
             Accessible.name: row.label
             Accessible.checked: on
-            Rectangle { width: 16; height: 16; radius: 8; y: 2; x: on ? 22 : 2; color: shell.cText
-                        Behavior on x { NumberAnimation { duration: 120 } } }
-            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                        onClicked: studio.commitValue(row.id, 0, !on) }
+            StudioIcon { anchors.centerIn: parent; visible: switchRow.on; name: "check"; width: 14; height: 14
+                         stroke: 2.4; color: shell.cAccentText }
             Keys.onSpacePressed: studio.commitValue(row.id, 0, !on)
-            FocusRing { visible: track.activeFocus; radius: 12 }
+            FocusRing { visible: track.activeFocus; radius: 7 }
         }
-        Text { anchors.verticalCenter: parent.verticalCenter; text: on ? "ON" : "OFF"; color: shell.cDim
-               font.pixelSize: shell.fontBase - 2 }
+        Text { anchors.verticalCenter: parent.verticalCenter; text: row.label; color: shell.cText
+               font.pixelSize: shell.fontBase - 1; width: switchRow.width - 30; elide: Text.ElideRight }
+        MouseArea { x: 0; width: switchRow.width; height: switchRow.height; cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true
+                    onClicked: studio.commitValue(row.id, 0, !switchRow.on)
+                    C.ToolTip.visible: containsMouse && row.tooltip !== ""
+                    C.ToolTip.text: row.tooltip
+                    C.ToolTip.delay: 600 }
     }
 
     // Choices get their own full-width row under the label: chips wrap freely and never overlap.
@@ -1143,7 +1257,7 @@ Rectangle {
         spacing: 4
         topPadding: 2
         bottomPadding: 4
-        RowLabel { text: row.label; tip: row.tooltip; propId: row.id; height: 20; width: choiceRow.width }
+        RowLabel { text: row.label; icon: row.icon || ""; tip: row.tooltip; propId: row.id; height: 20; width: choiceRow.width }
         Flow {
             width: choiceRow.width
             spacing: 6
@@ -1173,7 +1287,7 @@ Rectangle {
         property var row
         spacing: 8
         height: 30
-        RowLabel { text: row.label; tip: row.tooltip; propId: row.id; height: parent.height }
+        RowLabel { text: row.label; icon: row.icon || ""; tip: row.tooltip; propId: row.id; height: parent.height }
         Row {
             spacing: 6
             anchors.verticalCenter: parent.verticalCenter
@@ -1194,7 +1308,7 @@ Rectangle {
         Row {
             spacing: 8
             height: 30
-            RowLabel { text: row.label; tip: row.tooltip; propId: row.id; height: parent.height }
+            RowLabel { text: row.label; icon: row.icon || ""; tip: row.tooltip; propId: row.id; height: parent.height }
             Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 40; height: 22; radius: 4
@@ -1372,16 +1486,17 @@ Rectangle {
             id: mainRow
             width: parent.width
             height: parent.height - header.height - 52
-            // The viewport keeps visual priority (~60-70% of the width at desktop sizes).
-            readonly property int leftW: Math.max(160, Math.min(220, width * 0.13))
-            readonly property int rightW: Math.max(320, Math.min(400, width * 0.22))
+            // Dashboard (mock): ribbon list | wide viewport across the top, the workspace's panels underneath.
+            readonly property int leftW: Math.max(160, Math.min(240, width * 0.15))
+            readonly property int topH: Math.max(200, Math.round(height * 0.56))
 
             // Scene objects -------------------------------------------------------------------
             Rectangle {
                 id: objectsPanel
                 x: 10; y: 0
-                width: mainRow.leftW; height: parent.height - 10
+                width: mainRow.leftW; height: mainRow.topH
                 radius: 10; color: shell.cPanel
+                clip: true
                 gradient: Gradient { GradientStop { position: 0.0; color: shell.cPanelTop }
                                      GradientStop { position: 0.35; color: shell.cPanel } }
                 border.width: 1; border.color: shell.cOutline
@@ -1454,13 +1569,13 @@ Rectangle {
             Item {
                 id: viewportColumn
                 x: objectsPanel.x + objectsPanel.width + 10
-                width: parent.width - mainRow.leftW - mainRow.rightW - 40
-                height: parent.height - 10
+                width: parent.width - mainRow.leftW - 30
+                height: mainRow.topH
 
                 Rectangle {
                     id: viewportFrame
                     width: parent.width
-                    height: parent.height - (responseDock.visible ? responseDock.height + 10 : 0)
+                    height: parent.height
                     radius: 10
                     color: shell.cViewport
                     border.width: 1; border.color: shell.cOutline
@@ -1551,10 +1666,10 @@ Rectangle {
                     Item {
                         id: viewportSlot
                         objectName: "viewportSlot"
-                        x: 1; y: 50
+                        x: 1; y: 1
                         width: parent.width - 2
-                        height: parent.height - 50 - scrubBar.height
-                        clip: false
+                        height: parent.height - 2
+                        clip: true
                         // Set by the shell host: where the letterboxed presented frame (the live card's
                         // world extent, production aperture) sits inside this slot.
                         property real frameX: 0
@@ -1821,8 +1936,10 @@ Rectangle {
                     Rectangle {
                         id: scrubBar
                         anchors.bottom: parent.bottom
-                        width: parent.width; height: 48
-                        color: "transparent"
+                        anchors.bottomMargin: 1; x: 1
+                        width: parent.width - 2; height: 48
+                        radius: 9
+                        color: Qt.rgba(shell.cViewport.r, shell.cViewport.g, shell.cViewport.b, 0.72)
                         Rectangle { width: parent.width; height: 1; color: shell.cOutlineSoft }
                         Row {
                             anchors.fill: parent; anchors.margins: 10
@@ -1901,46 +2018,24 @@ Rectangle {
             // Response editor (Reactivity): target -> source mix with live input -> transfer curve -> range.
             Rectangle {
                 id: responseDock
-                parent: viewportColumn
-                visible: studio.workspace === "reactivity" && studio.response.targets !== undefined
-                anchors.bottom: parent.bottom
-                width: parent.width
-                property bool expanded: false
+                parent: bottomArea
+                visible: bottomArea.responseIndex >= 0 && studio.response.targets !== undefined
+                x: bottomArea.columnX(Math.max(0, bottomArea.responseIndex))
+                width: bottomArea.columnWidth(Math.max(0, bottomArea.responseIndex))
+                height: bottomArea.height
+                readonly property bool expanded: true
                 objectName: "responseDock"
-                height: expanded ? 250 : 40
                 clip: true
-                radius: 8
+                radius: 10
                 color: shell.cPanel
+                gradient: Gradient { GradientStop { position: 0.0; color: shell.cPanelTop }
+                                     GradientStop { position: 0.35; color: shell.cPanel } }
                 border.width: 1; border.color: shell.cOutline
-                Rectangle {
-                    id: dockHeader
-                    z: 3
-                    width: parent.width; height: 40; color: shell.cPanel; radius: 8
-                    visible: !responseDock.expanded
-                    activeFocusOnTab: true
-                    Accessible.role: Accessible.Button
-                    Accessible.name: "Show response editor"
-                    Row {
-                        x: 12; anchors.verticalCenter: parent.verticalCenter; spacing: 10
-                        StudioIcon { name: "chevron-right"; width: 14; height: 14; color: shell.cDim; anchors.verticalCenter: parent.verticalCenter }
-                        StudioIcon { name: "bolt"; width: 16; height: 16; color: shell.cAccent; anchors.verticalCenter: parent.verticalCenter }
-                        Text { text: "Response Editor"; color: shell.cText; font.bold: true; font.pixelSize: shell.fontBase
-                               anchors.verticalCenter: parent.verticalCenter }
-                        HintText { text: responseDock.target ? "· " + responseDock.target.label + " — source mix, curve and range" : ""
-                                   font.pixelSize: shell.fontBase - 1; anchors.verticalCenter: parent.verticalCenter
-                                   width: Math.max(60, responseDock.width - x - 40) }
-                    }
-                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: responseDock.expanded = true }
-                    Keys.onSpacePressed: responseDock.expanded = true
-                    FocusRing { visible: dockHeader.activeFocus }
-                }
-                StudioButton {
-                    z: 3
-                    visible: responseDock.expanded
-                    anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 6
-                    icon: "chevron-down"; iconSize: 16; width: 30; height: 26
-                    tip: "Collapse the response editor"
-                    onClicked: responseDock.expanded = false
+                PanelHeader {
+                    id: dockTitle
+                    icon: bottomArea.responseIndex >= 0 ? bottomArea.columns[bottomArea.responseIndex].icon : ""
+                    title: bottomArea.responseIndex >= 0 ? bottomArea.columns[bottomArea.responseIndex].title : ""
+                    subtitle: bottomArea.responseIndex >= 0 ? bottomArea.columns[bottomArea.responseIndex].subtitle : ""
                 }
                 readonly property var targets: studio.response.targets || []
                 readonly property var sources: studio.response.sources || []
@@ -1958,8 +2053,21 @@ Rectangle {
                     return null
                 }
 
+                // Narrow windows: the editor keeps its working width and scrolls sideways (never squeezes/overlaps).
+                Flickable {
+                    id: dockFlick
+                    objectName: "responseScroll"
+                    anchors.fill: parent; anchors.margins: 12; anchors.topMargin: dockTitle.height + 8
+                    anchors.bottomMargin: contentWidth > width ? 18 : 12
+                    clip: true
+                    contentWidth: Math.max(width, 820); contentHeight: height
+                    flickableDirection: Flickable.HorizontalFlick
+                    boundsBehavior: Flickable.StopAtBounds
+                    interactive: contentWidth > width
+                    C.ScrollBar.horizontal: C.ScrollBar { policy: dockFlick.contentWidth > dockFlick.width
+                                                                  ? C.ScrollBar.AlwaysOn : C.ScrollBar.AlwaysOff }
                 Row {
-                    anchors.fill: parent; anchors.margins: 12
+                    width: dockFlick.contentWidth; height: dockFlick.height
                     spacing: 14
 
                     // Targets, with their live drive
@@ -2155,106 +2263,67 @@ Rectangle {
                             property var rowData: studio.targetRange
                             sourceComponent: quietPeakDelegate
                         }
-                        Text { text: studio.response.timingNote + " (Timing, in the inspector)"
+                        Text { text: studio.response.timingNote + " (Timing panel)"
                                color: shell.cDim; font.pixelSize: shell.fontBase - 3; width: parent.width; wrapMode: Text.Wrap }
                     }
                 }
+                }
             }
 
-            // Inspector ------------------------------------------------------------------------
-            Rectangle {
-                id: inspectorPanel
-                x: viewportColumn.x + viewportColumn.width + 10
-                width: mainRow.rightW; height: parent.height - 10
-                radius: 10; color: shell.cPanel
-                gradient: Gradient { GradientStop { position: 0.0; color: shell.cPanelTop }
-                                     GradientStop { position: 0.35; color: shell.cPanel } }
-                border.width: 1; border.color: shell.cOutline
-                PanelRim {}
-                C.ScrollView {
-                    id: inspectorScroll
-                    objectName: "inspectorScroll"
-                    anchors.fill: parent; anchors.margins: 12
-                    clip: true
-                    contentWidth: availableWidth
-                    Column {
-                        width: inspectorScroll.availableWidth
-                        spacing: 14
-                        Repeater {
-                            model: studio.inspector
-                            delegate: Column {
-                                id: group
-                                property bool open: modelData.open === true
-                                width: parent.width
-                                spacing: 6
-                                Rectangle {
-                                    width: parent.width; height: 30; radius: 5
-                                    color: groupMouse.containsMouse ? shell.cRaised : "transparent"
-                                    border.width: 1; border.color: shell.cOutlineSoft
-                                    activeFocusOnTab: true
-                                    Accessible.role: Accessible.Button
-                                    Accessible.name: modelData.title
-                                    Row {
-                                        x: 8; anchors.verticalCenter: parent.verticalCenter
-                                        spacing: 8
-                                        StudioIcon { name: group.open ? "chevron-down" : "chevron-right"; color: shell.cDim
-                                                     width: 14; height: 14; anchors.verticalCenter: parent.verticalCenter }
-                                        StudioIcon { name: modelData.icon || ""; visible: modelData.icon !== ""; color: shell.cAccent
-                                                     width: 16; height: 16; anchors.verticalCenter: parent.verticalCenter }
-                                        Text { text: modelData.title; color: shell.cText; font.pixelSize: shell.fontBase
-                                               font.bold: true; anchors.verticalCenter: parent.verticalCenter }
-                                    }
-                                    MouseArea { id: groupMouse; anchors.fill: parent; hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor; onClicked: group.open = !group.open }
-                                    Keys.onSpacePressed: group.open = !group.open
-                                    FocusRing { visible: parent.activeFocus }
-                                }
-                                SignalTrace {
-                                    visible: group.open && modelData.traces.length > 0
-                                    width: parent.width
-                                    channels: modelData.traces
-                                }
-                                SchematicCard {
-                                    visible: group.open && modelData.card.kind !== undefined
-                                    width: parent.width
-                                    height: visible ? implicitHeight : 0
-                                    spec: modelData.card
-                                }
-                                PresetTiles {
-                                    visible: group.open && modelData.presets.length > 0
-                                    width: parent.width
-                                    presets: modelData.presets
-                                    group: modelData.group
-                                }
-                                LifecycleTimeline {
-                                    visible: group.open && modelData.lifecycle.total !== undefined
-                                    width: parent.width
-                                    spec: modelData.lifecycle
-                                }
-                                Column {
-                                    visible: group.open
-                                    width: parent.width
-                                    spacing: 4
-                                    Repeater {
-                                        model: modelData.rows
-                                        delegate: Loader {
-                                            objectName: "inspectorRow"
-                                            width: parent.width
-                                            height: item ? item.implicitHeight || item.height : 0
-                                            property var rowData: modelData
-                                            sourceComponent: {
-                                                switch (modelData.instrument) {
-                                                case "quiet_peak": return quietPeakDelegate
-                                                case "switch": return switchDelegate
-                                                case "choice": return choiceDelegate
-                                                case "count": return countDelegate
-                                                case "colour": return colourDelegate
-                                                case "gradient": return gradientDelegate
-                                                default: return scalarDelegate
-                                                }
-                                            }
-                                        }
-                                    }
+            // Dashboard panels under the viewport (mock): the workspace's groups side by side, each panel scrolling
+            // on its own; the response editor fills its own panel. Geometry comes from the panels' weights.
+            Item {
+                id: bottomArea
+                objectName: "dashboardPanels"
+                x: 10; y: mainRow.topH + 10
+                width: parent.width - 20; height: parent.height - mainRow.topH - 20
+                readonly property var columns: studio.inspectorColumns
+                readonly property real gap: 10
+                readonly property real totalWeight: {
+                    var w = 0
+                    for (var i = 0; i < columns.length; ++i) w += columns[i].weight
+                    return Math.max(1e-6, w)
+                }
+                function columnX(index) {
+                    var x = 0, usable = width - gap * Math.max(0, columns.length - 1)
+                    for (var i = 0; i < index; ++i) x += usable * columns[i].weight / totalWeight + gap
+                    return x
+                }
+                function columnWidth(index) {
+                    var usable = width - gap * Math.max(0, columns.length - 1)
+                    return index < columns.length ? usable * columns[index].weight / totalWeight : 0
+                }
+                readonly property int responseIndex: {
+                    for (var i = 0; i < columns.length; ++i) if (columns[i].kind === "response") return i
+                    return -1
+                }
+                Repeater {
+                    model: bottomArea.columns
+                    delegate: Rectangle {
+                        id: panel
+                        objectName: "dashboardPanel"
+                        readonly property var column: modelData
+                        visible: column.kind === "groups"
+                        x: bottomArea.columnX(index); width: bottomArea.columnWidth(index); height: bottomArea.height
+                        radius: 10; color: shell.cPanel
+                        gradient: Gradient { GradientStop { position: 0.0; color: shell.cPanelTop }
+                                             GradientStop { position: 0.35; color: shell.cPanel } }
+                        border.width: 1; border.color: shell.cOutline
+                        PanelRim {}
+                        PanelHeader { id: panelHeader; icon: panel.column.icon; title: panel.column.title
+                                      subtitle: panel.column.subtitle }
+                        C.ScrollView {
+                            id: inspectorScroll
+                            objectName: "inspectorScroll"
+                            anchors.fill: parent; anchors.margins: 12; anchors.topMargin: panelHeader.height + 8
+                            clip: true
+                            contentWidth: availableWidth
+                            Column {
+                                width: inspectorScroll.availableWidth
+                                spacing: 12
+                                Repeater {
+                                    model: panel.column.groups
+                                    delegate: InspectorGroup { width: parent.width; groupData: modelData }
                                 }
                             }
                         }
