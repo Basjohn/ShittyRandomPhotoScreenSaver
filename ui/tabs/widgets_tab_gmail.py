@@ -1081,7 +1081,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.gmail_bg_opacity.setMinimum(0)
     tab.gmail_bg_opacity.setMaximum(100)
-    gmail_bg_opacity_pct = int(tab._default_float('gmail', 'bg_opacity') * 100)
+    gmail_bg_opacity_pct = int(round(tab._default_float('gmail', 'bg_opacity') * 100))
     tab.gmail_bg_opacity.setValue(gmail_bg_opacity_pct)
     tab.gmail_bg_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.gmail_bg_opacity.setTickInterval(10)
@@ -1133,7 +1133,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.gmail_border_opacity.setMinimum(0)
     tab.gmail_border_opacity.setMaximum(100)
-    gmail_border_opacity_pct = int(tab._default_float('gmail', 'border_opacity') * 100)
+    gmail_border_opacity_pct = int(round(tab._default_float('gmail', 'border_opacity') * 100))
     tab.gmail_border_opacity.setValue(gmail_border_opacity_pct)
     tab.gmail_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.gmail_border_opacity.setTickInterval(10)
@@ -1373,11 +1373,11 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab.gmail_desaturate.setChecked(tab._config_bool('gmail', gmail_config, 'desaturate_when_no_unread'))
 
         tab.gmail_show_background.setChecked(tab._config_bool('gmail', gmail_config, 'show_background'))
-        opacity_pct = int(tab._config_float('gmail', gmail_config, 'bg_opacity') * 100)
+        opacity_pct = int(round(tab._config_float('gmail', gmail_config, 'bg_opacity') * 100))
         tab.gmail_bg_opacity.setValue(opacity_pct)
         tab.gmail_bg_opacity_label.setText(f"{opacity_pct}%")
 
-        border_opacity_pct = int(tab._config_float('gmail', gmail_config, 'border_opacity') * 100)
+        border_opacity_pct = int(round(tab._config_float('gmail', gmail_config, 'border_opacity') * 100))
         tab.gmail_border_opacity.setValue(border_opacity_pct)
         tab.gmail_border_opacity_label.setText(f"{border_opacity_pct}%")
 

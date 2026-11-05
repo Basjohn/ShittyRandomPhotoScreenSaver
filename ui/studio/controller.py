@@ -346,7 +346,8 @@ class StudioBridge(QObject):
                                          "rendered": card.rendered, "group": card.group,
                                          "labels": {role: self._schema.find(pid).label for role, pid in card.roles}}
                                         if card is not None else {}),
-                               "group": group, "objectScoped": "{object}" in group})
+                               "group": group, "objectScoped": "{object}" in group,
+                               "actions": self._actions(dict(self._schema.group_actions).get(group, ()))})
         self._inspector = groups
         self._columns = self._dashboard_columns(workspace, groups)
         self.inspectorChanged.emit()
@@ -868,11 +869,34 @@ class StudioBridge(QObject):
 
     # ------------------------------------------------------------- response
     def _row(self, prop: StudioProperty) -> dict:
-        return {"id": prop.id, "label": prop.label, "instrument": prop.instrument,
+        label = prop.label
+        if self._schema.row_label is not None:
+            try:
+                label = self._schema.row_label(prop, self._c.session.values) or prop.label
+            except (KeyError, IndexError, TypeError, ValueError):
+                label = prop.label
+        return {"id": prop.id, "label": label, "instrument": prop.instrument,
                 "min": float(prop.minimum), "max": float(prop.maximum), "decimals": int(prop.decimals),
                 "units": prop.units, "choices": list(prop.choices), "tooltip": prop.tooltip,
                 "quietMeaning": prop.quiet_meaning, "peakMeaning": prop.peak_meaning, "integer": bool(prop.integer),
-                "notes": list(prop.choice_notes), "icon": prop.icon}
+                "notes": list(prop.choice_notes), "icon": prop.icon, "actions": self._actions(prop.actions)}
+
+    # ------------------------------------------------------------ structural actions
+    def _actions(self, actions) -> list:
+        """Action buttons, each enabled only while the adapter can admit it under the current values."""
+        values = self._c.session.values
+        return [{"id": a.id, "label": a.label, "icon": a.icon, "tooltip": a.tooltip,
+                 "enabled": self._c.adapter.structure_edit(a.id, values) is not None} for a in actions]
+
+    @Slot(str)
+    def runAction(self, action_id: str) -> None:
+        """Run a structural edit (add / remove / reorder) as ONE undoable edit through the session."""
+        edit = self._c.adapter.structure_edit(str(action_id), self._c.session.values)
+        if edit is None:
+            self.notify("Not available now")
+            return
+        label, changes = edit
+        self._guard(lambda: self._c.session.set_many(dict(changes), label))
 
     def _response_model(self) -> dict:
         response = self._schema.response
@@ -941,9 +965,23 @@ class StudioBridge(QObject):
 
     message = Property(str, _message_text, notify=messageChanged)
 
-    def notify(self, text: str) -> None:
+    def _message_action_label(self) -> str:
+        return getattr(self, "_message_action", ("", None))[0]
+
+    messageAction = Property(str, _message_action_label, notify=messageChanged)     # "" : the notice has no action
+
+    def notify(self, text: str, action: str = "", callback: Callable[[], Any] | None = None) -> None:
+        """Show a notice; with ``action`` the notice offers one button that runs ``callback`` (e.g. Retry)."""
         self._message = str(text)
+        self._message_action = (str(action), callback) if action and callback is not None else ("", None)
         self.messageChanged.emit()
+
+    @Slot()
+    def runMessageAction(self) -> None:
+        _label, callback = getattr(self, "_message_action", ("", None))
+        self.notify("")
+        if callback is not None:
+            callback()
 
     @Slot()
     def dismissMessage(self) -> None:
@@ -1007,6 +1045,8 @@ class StudioController(QObject):
         self._preview_done: dict = {}
         self._preview_crops: dict = {}
         self._auto_clip: str | None = None
+        self._wanted_source: str | None = None
+        self._failure_shown = ""
 
     # ---------------------------------------------------------------- open
     def open(self) -> bool:
@@ -1150,6 +1190,7 @@ class StudioController(QObject):
         self.transport = StudioTransport()
         self._pose = {}
         self._clip_errors.clear()
+        self._failure_shown = ""
         self.state = "idle"
         self.modeSwitched.emit(mode_id)
         self.open()
@@ -1342,6 +1383,7 @@ class StudioController(QObject):
             self.evaluations += 1
             self.last_frame = frame
             self.viewport.set_frame(frame)
+            self._check_analysis_failure()
             measure = getattr(self.evaluator, "measurements", None)
             if callable(measure) and self.bridge is not None:
                 self.bridge.push_measurements(measure())
@@ -1450,7 +1492,7 @@ class StudioController(QObject):
             self.transport.set_duration(self.evaluator.fixture.duration)
         clips = self.adapter.recorded_clips()
         if clips:
-            self._auto_clip = clips[0].id
+            self._auto_clip = self._wanted_source = clips[0].id
             self._load_clip(clips[0].id)
 
     # ------------------------------------------------------------ transport
@@ -1473,6 +1515,9 @@ class StudioController(QObject):
     def select_fixture(self, fixture_id: str, *, user: bool = True) -> None:
         if user:
             self._auto_clip = None          # the user's choice wins over the background default
+        # The selection the user (or, before any user choice, the default) asked for last: a background clip
+        # load landing later selects itself only while it is still this one.
+        self._wanted_source = fixture_id
         if fixture_id.startswith("clip:") and fixture_id not in {f.id for f in self.evaluator.fixtures()}:
             self._load_clip(fixture_id)
             return
@@ -1507,11 +1552,13 @@ class StudioController(QObject):
                 return
             if error:
                 self._clip_errors[clip_id] = error
-                self.bridge.notify(f"Clip analysis failed: {error}")
+                self.bridge.notify(f"Clip analysis failed: {error}", "Retry", lambda: self.retry_clip(clip_id))
             else:
                 self._clip_errors.pop(clip_id, None)
                 self.evaluator.add_recorded(result)
-                if self._auto_clip in (None, clip_id):
+                # Only the source last asked for (by the user, or the default while the user has asked for
+                # nothing) is selected when its analysis lands; any other landing load only becomes available.
+                if self._wanted_source == clip_id:
                     automatic = self._auto_clip == clip_id
                     self.select_fixture(clip_id, user=not automatic)
                     if automatic:
@@ -1524,8 +1571,34 @@ class StudioController(QObject):
                 self._clip_jobs[clip_id] = job
         except Exception as exc:
             self._clip_errors[clip_id] = str(exc)
-            self.bridge.notify(f"Clip analysis could not start: {exc}")
+            self.bridge.notify(f"Clip analysis could not start: {exc}", "Retry", lambda: self.retry_clip(clip_id))
         self.bridge.transportChanged.emit()
+
+    def retry_clip(self, clip_id: str) -> None:
+        """Analyse a clip whose analysis failed again; it is selected when it lands (the user asked for it)."""
+        if self.state not in ("opening", "presented"):
+            return
+        self._clip_errors.pop(clip_id, None)
+        self.select_fixture(clip_id)
+
+    # ---------------------------------------------------- background analysis failures
+    def _check_analysis_failure(self) -> None:
+        """An evaluator analysis that failed is reported once (with Retry); the previous answers stay on screen."""
+        failure = str(getattr(self.evaluator, "analysis_failure", "") or "")
+        if failure and failure != self._failure_shown and self.bridge is not None:
+            self.bridge.notify(f"Analysis failed: {failure}. The previous preview stays on screen.", "Retry",
+                               self.retry_analysis)
+        self._failure_shown = failure
+
+    def retry_analysis(self) -> None:
+        retry = getattr(self.evaluator, "retry_analysis", None)
+        if self.state not in ("opening", "presented") or not callable(retry):
+            return
+        self._failure_shown = ""
+        retry()
+        self._invalidate()
+        if self.bridge is not None:
+            self.bridge.transportChanged.emit()
 
     # --------------------------------------------------------------- camera
     def navigation(self):
