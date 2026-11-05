@@ -48,11 +48,12 @@ class Fog:
 
 @dataclass(frozen=True)
 class Floor:
-    """Smooth wet concrete: dark base lit by the mist's light field, and one crisp reflection broken by the surface.
+    """Wet concrete: a legible dark base lit by the mist's light field, and reflected light drawn out into columns.
 
     At grazing angles a micro-surface tilt toward or away from the viewer moves the reflection a long way vertically
-    and a sideways tilt hardly at all: the wet-floor columns come from that offset, not from blurring a mirror.
-    Reflections stay crisp at the contact and soften with the height of what they reflect (contact hardening)."""
+    and a sideways tilt hardly at all: a wet floor shows each light as a long column along the view, broken into
+    horizontal bands by the relief, never a blurred mirror. Light near the floor keeps a strong column; light high
+    above it spreads over far more floor and stays faint (``column_height``)."""
     albedo: str = 'assets/textures/waveform_floor/concrete_albedo.png'
     roughness: str = 'assets/textures/waveform_floor/concrete_roughness.png'
     height: str = 'assets/textures/waveform_floor/wet_surface_height.png'
@@ -71,17 +72,29 @@ class Floor:
     # roughness footprint), never per-pixel offsets, which aliased into horizontal scanlines. Streak half-length
     # (canonical aperture share; projected from a fixed world length) and the roughness range across the surface (from the broad relief's slope).
     streak: tuple = (.5, .8, 1.)
-    lod: tuple = (1., 1.)           # keep the admitted capped receiver filter until world-footprint refinement
-    contact: tuple = (.002, 6., 6.)  # spread (uv) per unit of reflected height; along/across; probe mip
+    lod: tuple = (2., 2.)           # column width: reflection mip across the column (min/max over roughness)
     resolution: float = .5          # reflection target scale
     resolution_max_height: int = 360  # reflection target height cap (pixels)
     specular_max_height: int = 1080  # the reflection term is evaluated at most this tall, then read back
-    blur: float = 0.               # horizontal Gaussian across each column (receiver pixels)
     # Column fade toward the camera and its far level; a sparkle threshold above 0 adds wet-film grain (rejected:
     # it read as the mottled wet/dry floor).
     column: tuple = (6., .6, 0.)
     pool: float = 2.5              # restrained source light, so the ground is not a continuous blown-white strip
-    hot: tuple = (3., .7, 1.5)       # full strength at this multiple of the mean reflected light; wet-film breakup; power
+    hot: tuple = (2., .7, 1.5)       # full strength at this multiple of the mean reflected light; wet-film breakup; power
+    # Material legibility at the grazing camera (reflection Off included): albedo variation around its exact mean,
+    # and zero-mean shading by the broad relief, so the concrete reads without changing the floor's level.
+    contrast: float = 3.
+    shading: float = .35
+    elongation: float = 3.          # material laid out this many times longer along world z (grazing camera)
+    relief_bias: float = .5        # mip bias of the relief read by shading and breakup: broad facets, no hairlines
+    # Reflection breakup by the same relief (0 off): facets tilted along the view send the column's light toward or
+    # away from the eye, the long horizontal breaks of a grazing wet floor; zero-mean, so the mass keeps its strength.
+    breakup: float = .6
+    streak_length: float = 150.     # optical streak half-length (world units) at Streak Length 1
+    column_height: float = 10.       # reflected light this high (world) keeps a quarter of its column's strength
+    # The sheets' local light on the ground, with its depth falloff spread this many times and its peak lowered by
+    # the square root: the grazing view otherwise compresses it into one bright seam across the image.
+    pool_spread: float = 4.
 
 
 @dataclass(frozen=True)
