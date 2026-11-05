@@ -79,7 +79,7 @@ def test_lazy_theme_pages_refresh_without_polling_or_cross_tab_theme_owner() -> 
 
 
 @pytest.mark.parametrize("diagnostic", [False, True])
-def test_frozen_theme_root_uses_same_programdata_srpss_asset_root_as_presets(monkeypatch, tmp_path, diagnostic) -> None:
+def test_frozen_theme_root_uses_same_programdata_srpss_asset_root_as_presets(monkeypatch, tmp_path, diagnostic, windows_platform) -> None:
     from core import build_profile
 
     monkeypatch.setattr(build_profile, "is_diagnostic_build", lambda: diagnostic)

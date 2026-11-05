@@ -3,6 +3,7 @@ from copy import deepcopy
 
 import pytest
 from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtGui import QKeySequence
 
 from core.settings.default_contract import require_canonical_default
 from core.settings.settings_manager import SettingsManager
@@ -109,7 +110,9 @@ def test_ctrl_z_steps_back_through_the_last_few_camera_gestures(neon_tab, qtbot)
     # Each gesture's aim is one action; the bounded history reaches back EDIT_HISTORY_DEPTH actions.
     assert undone[-1] == undone[EDIT_HISTORY_DEPTH - 1] != states[-1]
     assert tuple(editor.value()) == pytest.approx(undone[-1][0], abs=1e-6)
-    qtbot.keyClick(editor, Qt.Key.Key_Y, Qt.KeyboardModifier.ControlModifier)
+    # The platform's own Redo binding (Ctrl+Y on Windows, Ctrl+Shift+Z on X11), as the editor matches it.
+    redo = QKeySequence.keyBindings(QKeySequence.StandardKey.Redo)[0][0]
+    qtbot.keyClick(editor, redo.key(), redo.keyboardModifiers())
     assert fce.camera_state(tab, MODE) == undone[EDIT_HISTORY_DEPTH - 2]
     # A new gesture after undo starts a fresh branch: nothing left to redo.
     fce.set_aim(tab, MODE, (0.2, 0.1), commit=True)

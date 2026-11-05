@@ -13,13 +13,13 @@ from collections.abc import Iterable
 
 
 def display_folder_path(value: object) -> str:
-    """The folder as Windows spells it: native separators, no trailing separator."""
+    """The folder as the OS spells it: native separators, no trailing separator."""
     text = str(value or "").strip()
     return os.path.normpath(text) if text else ""
 
 
 def same_folder(first: object, second: object) -> bool:
-    """Whether two stored spellings name the same folder (case and separators ignored)."""
+    """Whether two stored spellings name the same folder (OS rules: case-insensitive on Windows)."""
     a, b = display_folder_path(first), display_folder_path(second)
     return bool(a) and os.path.normcase(a) == os.path.normcase(b)
 

@@ -215,6 +215,7 @@ def test_sst_export_and_import_strip_injected_steam_secret_fields(tmp_path: Path
 def test_disconnect_account_clears_credentials_and_account_private_cache(
     tmp_path: Path,
     monkeypatch,
+    windows_platform,
 ) -> None:
     monkeypatch.setenv("APPDATA", str(tmp_path))
     from core.settings import storage_paths

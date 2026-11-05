@@ -34,7 +34,7 @@ uniform vec4 uSpheres[8];   // view-space centre, radius
 uniform float uBlur[8];
 out vec3 vView;
 flat out int vId;
-""" + spheres.SCENE3D_SPHERES_GLSL + """
+""" + spheres.SCENE3D_SPHERES_VERTEX_GLSL + """
 void main() {
     vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
     vId = gl_InstanceID;
@@ -164,7 +164,7 @@ _CLUSTER_VERTEX = """#version 460 core
 uniform mat4 uProjection;
 uniform vec4 uBound;       // bounding sphere
 out vec3 vView;
-""" + spheres.SCENE3D_SPHERES_GLSL + """
+""" + spheres.SCENE3D_SPHERES_VERTEX_GLSL + """
 void main() {
     vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
     vView = sceneSphereCorner(uBound.xyz, uBound.w, 0.0, corner);

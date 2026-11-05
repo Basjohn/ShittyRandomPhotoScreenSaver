@@ -24,6 +24,17 @@ class AudioEventState:
     source: str
 
 
+def _platform_probe(**callbacks):
+    """The system endpoint probe for this OS: Core Audio on Windows, pactl elsewhere."""
+    from core import platform_paths
+
+    if platform_paths.IS_WINDOWS:
+        return CoreAudioCallbackProbe(**callbacks)
+    from core.media.pulse_volume import PulseSystemVolumeProbe
+
+    return PulseSystemVolumeProbe(**callbacks)
+
+
 def _create_qt_bridge(deliver):
     from core.media.audio_qt_wake import AudioEventQtBridge
     return AudioEventQtBridge(deliver)
@@ -37,7 +48,7 @@ class CoreAudioEventSession:
         *,
         publish: Callable[[AudioEventState], None],
         bridge_factory: Callable[[Callable[[AudioNotification], None]], Any] = _create_qt_bridge,
-        probe_factory: Callable[..., Any] = CoreAudioCallbackProbe,
+        probe_factory: Callable[..., Any] = _platform_probe,
     ) -> None:
         self._ui_thread = threading.get_ident()
         self._publish = publish

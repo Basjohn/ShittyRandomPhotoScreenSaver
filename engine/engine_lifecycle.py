@@ -547,11 +547,15 @@ def stop(
         # Stop any pending image loads
         engine._loading_in_progress = False
 
-        try:
-            from core.windows import reddit_helper_runtime
-            reddit_helper_runtime.clear_session_ticket(source="engine_stop")
-        except Exception as e:
-            logger.debug("Helper session ticket cleanup skipped: %s", e)
+        from core import platform_paths
+
+        # The session ticket belongs to the Windows-only secure-desktop helper.
+        if platform_paths.IS_WINDOWS:
+            try:
+                from core.windows import reddit_helper_runtime
+                reddit_helper_runtime.clear_session_ticket(source="engine_stop")
+            except Exception as e:
+                logger.debug("Helper session ticket cleanup skipped: %s", e)
 
         if exit_app:
             from engine.runtime_destruction import RuntimeDestructionBarrier

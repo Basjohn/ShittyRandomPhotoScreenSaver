@@ -10,7 +10,7 @@ from __future__ import annotations
 from core.constants.extruded_bubble_world import (WAKE_COUNT, WAKE_LEAD, WAKE_PATH, WAKE_POINTS, WAKE_RADIUS,
                                                   WAKE_SPACING, WAKE_STRIDE, WAKE_WATER)
 from rendering.gl_programs.scene3d_optics import SCENE3D_OPTICS_GLSL
-from rendering.gl_programs.scene3d_spheres import SCENE3D_SPHERES_GLSL
+from rendering.gl_programs.scene3d_spheres import SCENE3D_SPHERES_GLSL, SCENE3D_SPHERES_VERTEX_GLSL
 from rendering.gl_programs.scene3d_water import SCENE3D_WATER_GLSL
 from rendering.gl_programs.framed_camera import FRAMED_CAMERA_GLSL
 from rendering.quick.scene3d.defocus import SCENE_DEFOCUS_GLSL
@@ -612,7 +612,7 @@ flat out float vBlur;
 flat out vec3 vExtra;    // seed, kind, true radius / drawn radius
 flat out float vOpacity;   // procedural chain lifetime and population fades; 1 for all other shells
 flat out float vLensCircle;
-""" + SCENE3D_SPHERES_GLSL + EB_LENS_GLSL + """
+""" + SCENE3D_SPHERES_VERTEX_GLSL + EB_LENS_GLSL + """
 void main() {
     vOpacity = aOpacity;
     vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
@@ -995,7 +995,7 @@ flat out vec4 vBound;
 flat out vec4 vInfo;
 flat out vec3 vAlphas;
 flat out vec3 vLensCircles;
-""" + SCENE3D_SPHERES_GLSL + EB_LENS_GLSL + """
+""" + SCENE3D_SPHERES_VERTEX_GLSL + EB_LENS_GLSL + """
 void main() {
     vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
     vec4 world[3] = vec4[3](aS0, aS1, aS2);
@@ -1651,7 +1651,7 @@ uniform float uFocus;         // the bubbles' near defocus (shared): a blurred b
 uniform float uAperture;
 uniform float uNearCoc;
 uniform float uNearMax;
-""" + SCENE3D_SPHERES_GLSL + _WAKE_PATH_GLSL + """
+""" + SCENE3D_SPHERES_VERTEX_GLSL + _WAKE_PATH_GLSL + """
 const int SEGMENTS = """ + str(TRAIL_SEGMENTS) + """;
 out vec2 vAcross;             // across the veil (-1..1), along it (0 at the bubble .. 1)
 out float vDepth;

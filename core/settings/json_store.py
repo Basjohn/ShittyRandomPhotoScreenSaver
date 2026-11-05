@@ -435,14 +435,9 @@ def get_json_settings_store(
 
 
 def _default_appdata_dir() -> Path:
-    from os import environ
+    from core.platform_paths import user_roaming_root
 
-    appdata = environ.get("APPDATA")
-    if appdata:
-        return Path(appdata)
-    # Fallback to %USERPROFILE%\AppData\Roaming
-    home = Path.home()
-    return (home / "AppData" / "Roaming").resolve()
+    return user_roaming_root()
 
 
 def _promote_flattened_atomic_mappings(

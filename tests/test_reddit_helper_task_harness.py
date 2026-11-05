@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+import sys
+
+import pytest
+
+_WINDOWS_TASK_HARNESS = pytest.mark.skipif(
+    sys.platform != "win32", reason="the harness drives Windows Task Scheduler through pythoncom"
+)
+
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+@_WINDOWS_TASK_HARNESS
 def test_render_task_xml_includes_interactive_principal_and_exec_arguments():
     from tools import reddit_helper_task_harness as harness
 
@@ -22,6 +31,7 @@ def test_render_task_xml_includes_interactive_principal_and_exec_arguments():
     assert "&quot;C:\\ProgramData\\SRPSS\\url_queue&quot;" in rendered
 
 
+@_WINDOWS_TASK_HARNESS
 def test_build_helper_arguments_matches_expected_shape():
     from tools import reddit_helper_task_harness as harness
 
@@ -50,6 +60,7 @@ def test_installer_and_harness_have_no_retired_reddit_startup_artifacts():
     assert "SRPSS_RedditHelper" in installer
 
 
+@_WINDOWS_TASK_HARNESS
 def test_storage_recovery_harness_exercises_bounded_failure_path():
     from tools import reddit_helper_task_harness as harness
 

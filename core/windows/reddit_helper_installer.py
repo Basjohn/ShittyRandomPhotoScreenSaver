@@ -10,17 +10,15 @@ from __future__ import annotations
 import os
 import sys
 from datetime import datetime, timezone
-from pathlib import Path
 
 from core.logging.logger import get_logger
+from core.platform_paths import machine_shared_root
 from core.windows.reddit_helper_storage import append_bounded_log
 
 logger = get_logger(__name__)
 
 IS_WINDOWS = sys.platform == "win32"
-BASE_DIR = Path(
-    os.getenv("PROGRAMDATA", r"C:\ProgramData")
-) / "SRPSS"
+BASE_DIR = machine_shared_root() / "SRPSS"
 
 _BREADCRUMB_FAILURE_REPORTED = False
 

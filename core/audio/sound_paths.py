@@ -12,8 +12,9 @@ JEDI_MODE_SOUND_RELATIVE = f"resources/{JEDI_MODE_SOUND_NAME}"
 
 
 def programdata_sound_dir() -> Path:
-    base = os.environ.get("PROGRAMDATA") or r"C:\ProgramData"
-    return Path(base) / "SRPSS" / "sounds"
+    from core.platform_paths import machine_shared_root
+
+    return machine_shared_root() / "SRPSS" / "sounds"
 
 
 def bundled_resource_root() -> Path:

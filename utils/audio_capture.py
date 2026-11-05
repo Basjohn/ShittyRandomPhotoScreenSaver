@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Optional, Any
 import platform
+import sys
 import time
 
 from core.logging.logger import get_logger, is_verbose_logging
@@ -655,5 +656,11 @@ def create_audio_capture(config: AudioCaptureConfig = None) -> Optional[AudioCap
         backend = PyAudioWPatchBackend(config)
         # We don't start here - just return the backend
         return backend
-    
+
+    if sys.platform.startswith("linux"):
+        # The default sink's monitor (what is playing), never PortAudio's microphone.
+        from utils.audio_capture_pulse import create_pulse_monitor_backend
+
+        return create_pulse_monitor_backend(config)
+
     return SounddeviceBackend(config)

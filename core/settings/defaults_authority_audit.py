@@ -35,6 +35,7 @@ _SCAN_EXCLUDED_PARTS = frozenset({
     ".godzip",
     ".pytest_cache",
     ".venv",
+    ".venv-linux",
     "__pycache__",
     "deleteme",
     "tests",
@@ -49,6 +50,7 @@ _SCAN_EXCLUDED_ROOTS = frozenset({
     "temp",
     "tests_tmp_appdata",
     "tests_tmp_localappdata",
+    "tests_tmp_shareddata",
     "tmp",
 })
 

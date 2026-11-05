@@ -94,13 +94,10 @@ def detect_current_profile(default: str = "Screensaver") -> str:
 
 
 def _appdata_root() -> Path:
-    """Return ``%APPDATA%`` or a platform-appropriate fallback."""
-    from os import environ
+    """Return the per-user roaming root (``%APPDATA%`` on Windows; see core.platform_paths)."""
+    from core.platform_paths import user_roaming_root
 
-    appdata = environ.get("APPDATA")
-    if appdata:
-        return Path(appdata)
-    return (Path.home() / "AppData" / "Roaming").resolve()
+    return user_roaming_root()
 
 
 def resolve_app_data_dir(profile: ProfileRef = None) -> Path:

@@ -346,6 +346,9 @@ at the origin looking down -z; consumers supply their own placement and projecti
 instanced draw and program. Proven by `test_scene3d_spheres.py` (GPU id/depth picture equals a CPU ray cast apart
 from under 1% edge pixels, silhouettes within 1% of the analytic area from 1.5 to 0.02 radius, blur widens and softens
 the edge) and `test_scene3d_spheres_mirrors.py` (GLSL equals the mirrors).
+Vertex stages include `SCENE3D_SPHERES_VERTEX_GLSL`: it compiles out the fwidth-based `sceneSphereCoverage`
+overload, because derivatives are fragment-only and strict compilers (Mesa) reject them even unused in a vertex
+shader. Fragment stages keep `SCENE3D_SPHERES_GLSL`.
 
 Round on screen (2026-10-17): a rectilinear view draws an off-axis sphere as an oval stretched toward the frame's edges.
 `sceneSphereScreenCorner` (vertex) places a screen-aligned square round the projected centre, sized to the apparent

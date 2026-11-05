@@ -4,12 +4,20 @@ Widgets are rendered with ``grab()`` and never shown on screen.
 """
 from __future__ import annotations
 
+import sys
+
 import pytest
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from core.sources.folder_paths import contains_folder, display_folder_path, same_folder, without_folder
 
 
+_WINDOWS_SPELLING = pytest.mark.skipif(
+    sys.platform != "win32", reason="Windows path spelling: backslash separators, case-insensitive"
+)
+
+
+@_WINDOWS_SPELLING
 def test_one_folder_is_one_folder_whatever_its_separators() -> None:
     forward, native = "C:/Users/Me/Wallpapers/", r"c:\Users\Me\Wallpapers"
     assert same_folder(forward, native)
@@ -19,6 +27,9 @@ def test_one_folder_is_one_folder_whatever_its_separators() -> None:
     assert not same_folder("", "")
 
 
+
+
+@_WINDOWS_SPELLING
 def test_wizard_sources_never_add_a_second_spelling(qt_app, monkeypatch) -> None:
     from ui.onboarding import basic_pages
     from ui.onboarding.draft import SettingsDraft
@@ -93,6 +104,7 @@ def _ink_runs(image) -> list[tuple[int, int]]:
     return runs
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="oracle is the Windows platform style's native arrow metrics")
 @pytest.mark.parametrize("large", [False, True])
 def test_bucket_arrow_keeps_clear_of_its_title_and_the_title_never_clips(qt_app, large) -> None:
     from PySide6.QtCore import QSize, Qt

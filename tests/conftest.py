@@ -39,6 +39,14 @@ TEST_APPDATA.mkdir(parents=True, exist_ok=True)
 TEST_LOCALAPPDATA.mkdir(parents=True, exist_ok=True)
 os.environ["APPDATA"] = str(TEST_APPDATA)
 os.environ["LOCALAPPDATA"] = str(TEST_LOCALAPPDATA)
+# Linux resolves the same roots from XDG base directories (core/platform_paths.py);
+# isolate them identically so no test run touches the real ~/.config or ~/.local.
+if not sys.platform.startswith("win"):
+    TEST_SHARED_DATA = ROOT / "tests_tmp_shareddata"
+    TEST_SHARED_DATA.mkdir(parents=True, exist_ok=True)
+    os.environ["XDG_CONFIG_HOME"] = str(TEST_APPDATA)
+    os.environ["XDG_STATE_HOME"] = str(TEST_LOCALAPPDATA)
+    os.environ["XDG_DATA_HOME"] = str(TEST_SHARED_DATA)
 
 
 # ---------------------------------------------------------------------------
@@ -55,6 +63,12 @@ os.environ["LOCALAPPDATA"] = str(TEST_LOCALAPPDATA)
 # See the 2026-09-05 reconciliation section in Docs/TestSuite.md.
 collect_ignore: list[str] = []
 
+# Linux-only tests (tests/test_linux_*.py) are neither collected from a directory
+# nor run when named explicitly off Linux (Docs/Guardrails/Linux_Compatibility.md §7).
+from tools.impacted_tests import LINUX_ONLY_TEST_GLOB, runs_on_this_platform  # noqa: E402
+
+collect_ignore_glob: list[str] = [] if sys.platform.startswith("linux") else [LINUX_ONLY_TEST_GLOB]
+
 
 # ---------------------------------------------------------------------------
 # Chunked-suite support
@@ -66,7 +80,12 @@ def pytest_addoption(parser):
     parser.addoption("--total-chunks", type=int, default=None,
                      help="Total number of chunks the suite is split into")
 def pytest_collection_modifyitems(config, items):
-    """Select a deterministic requested chunk."""
+    """Skip Linux-only tests off Linux; select a deterministic requested chunk."""
+
+    linux_only = pytest.mark.skip(reason="Linux-only test (tests/test_linux_*.py)")
+    for item in items:
+        if not runs_on_this_platform(item.path):
+            item.add_marker(linux_only)
 
     chunk = config.getoption("--chunk")
     total = config.getoption("--total-chunks")
@@ -235,6 +254,17 @@ except Exception:  # pragma: no cover
 
 
 @pytest.fixture
+def windows_platform(monkeypatch):
+    """Select the Windows branch of every ``core.platform_paths.IS_WINDOWS`` decision on any OS.
+
+    For tests that pin a Windows contract: the ``%APPDATA%``/``%PROGRAMDATA%``/
+    ``%LOCALAPPDATA%`` roots (Linux ignores those variables by design) or the
+    Windows-only secure-desktop URL handoff.
+    """
+    monkeypatch.setattr("core.platform_paths.IS_WINDOWS", True)
+
+
+@pytest.fixture
 def settings_manager(tmp_path):
     """Create SettingsManager instance for testing."""
     from core.settings import SettingsManager
@@ -253,6 +283,18 @@ def thread_manager():
     from core.threading.manager import ThreadManager
     manager = ThreadManager()
     yield manager
+    manager.shutdown(wait=True)
+
+
+@pytest.fixture
+def app_shared_thread_manager():
+    """A ThreadManager registered as app-shared (e.g. for sidecar readers), restored afterwards."""
+    from core.threading.manager import ThreadManager
+    previous = ThreadManager.get_app_shared()
+    manager = ThreadManager()
+    ThreadManager.set_app_shared(manager)
+    yield manager
+    ThreadManager.set_app_shared(previous)
     manager.shutdown(wait=True)
 
 
