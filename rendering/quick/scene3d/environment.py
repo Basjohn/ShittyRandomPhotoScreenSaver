@@ -275,6 +275,13 @@ class BackdropEnvironment:
             self._has_previous = False
         return self._slots[self._current][0], previous, blend
 
+    def settle(self, backdrop, now: float, blend_s: float | None = None) -> None:
+        """Introduce ``backdrop`` as already fully faded in by logical time ``now``: for a host that draws one
+        instant of a scene whose wallpaper has been on screen for a while (the Studio). The saver never calls it;
+        a following ``textures`` at ``now`` or later returns it with no previous slot and blend 1."""
+        span = float(blend_s) if blend_s and blend_s > 0.0 else self.BLEND_S
+        self.textures(backdrop, float(now) - span - 1.0, blend_s)
+
     def _allocate(self, index: int, size: tuple[int, int]) -> None:
         self._delete(index)
         name = (ctypes.c_uint * 1)()

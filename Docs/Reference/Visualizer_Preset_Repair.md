@@ -17,6 +17,11 @@ as existing artwork. Experimental values belonging to disabled authoring choices
 - Explicit preset mode mismatches are rejected before mutation. Starting-view metadata must pass its shared
   validator. Names, descriptions, starting views, unrelated widgets and operator metadata remain authored data.
   Reindex and Swap change filename slots and index/name metadata only; they do not sanitize artwork.
+- Repair keeps each file's own shape: key order, top-level metadata, indentation, escaping and line endings.
+  A section key is removed only when it is a visualizer setting the shared migration retired, renamed or ruled
+  foreign; inert authored entries (the view pose inside the artwork, `preset_<mode>` slot metadata, notes) stay.
+  A missing control goes to its sorted place in a key-sorted section, otherwise right after its nearest registry
+  predecessor already in the file. A preset with nothing to repair is backed up but its bytes are not rewritten.
 
 ## Mutation and recovery
 

@@ -530,16 +530,82 @@ def _build_clean_payload(path: Path, payload: Mapping[str, Any], mode: str, clea
     return lean, updated_paths
 
 
+def _is_visualizer_setting_key(key: Any) -> bool:
+    """A key the repair owns: any mode's setting family, a shared/legacy visualizer key or a retired alias."""
+    if not isinstance(key, str):
+        return False
+    if key in vp.GLOBAL_ALLOWED_KEYS or key in LEGACY_GLOBAL_SHARED_VISUAL_KEYS:
+        return True
+    if key in _DEPRECATED_AUTHORED_GLOBAL_KEYS or key in _MANDATORY_TECH_SUFFIXES:
+        return True
+    if any(key in aliases for aliases in _DEPRECATED_MODE_ALIAS_KEYS.values()):
+        return True
+    return any(
+        prefix and key.startswith(prefix)
+        for prefixes in vp.MODE_KEY_PREFIXES.values()  # type: ignore[attr-defined]
+        for prefix in prefixes
+    )
+
+
+def _merge_cleaned_section(mode: str, original: Mapping[str, Any], cleaned: Mapping[str, Any]) -> Dict[str, Any]:
+    """Return ``original`` patched with ``cleaned``, keeping the authored file's own shape.
+
+    Existing keys keep their position (a value changes only where the shared migration changed it); a key is
+    removed only when it is a visualizer setting the sanitizer retired, renamed or ruled foreign, while inert
+    authored entries (the view pose inside the artwork, ``preset_<mode>`` slot metadata, notes) stay verbatim.
+    New controls go into a key-sorted section at their sorted place, otherwise right after their nearest
+    registry predecessor that the section already has (before the nearest successor, else at the end).
+    """
+    from core.settings.visualizer_view_orbit import get_visualizer_view_pose_keys
+
+    pose = set(get_visualizer_view_pose_keys(mode))
+    merged: Dict[str, Any] = {}
+    for key, value in original.items():
+        if key in cleaned:
+            merged[key] = deepcopy(cleaned[key])
+        elif key in pose or not _is_visualizer_setting_key(key):
+            merged[key] = deepcopy(value)
+    missing = [key for key in cleaned if key not in merged]
+    if not missing:
+        return merged
+    string_keys = [key for key in merged if isinstance(key, str)]
+    if len(string_keys) == len(merged) and string_keys == sorted(string_keys):
+        for key in missing:
+            merged[key] = deepcopy(cleaned[key])
+        return {key: merged[key] for key in sorted(merged)}
+    registry = list(dict.fromkeys([*vp.preset_artwork_keys(mode), *_canonical_mode_defaults(mode), *cleaned]))
+    rank = {key: index for index, key in enumerate(registry)}
+    order = list(merged)
+    for key in sorted(missing, key=lambda item: rank.get(item, len(rank))):
+        position = rank.get(key, len(rank))
+        before = [i for i, existing in enumerate(order) if existing in rank and rank[existing] < position]
+        after = [i for i, existing in enumerate(order) if existing in rank and rank[existing] > position]
+        if before:
+            order.insert(max(before, key=lambda i: rank[order[i]]) + 1, key)
+        elif after:
+            order.insert(min(after, key=lambda i: rank[order[i]]), key)
+        else:
+            order.append(key)
+        merged[key] = deepcopy(cleaned[key])
+    return {key: merged[key] for key in order}
+
+
 def _apply_cleaned_payload_in_place(payload: Dict[str, Any], cleaned: Mapping[str, Any]) -> list[str]:
-    """Patch visualizer payload blocks in place without rebuilding authored metadata."""
+    """Patch visualizer payload blocks in place without rebuilding authored metadata or reordering keys."""
     updated_paths: list[str] = []
     cleaned_block = deepcopy(dict(cleaned))
+    mode = str(cleaned_block.get("mode") or "")
+
+    def merged(original: Any) -> Dict[str, Any]:
+        if not mode or not isinstance(original, Mapping):
+            return deepcopy(cleaned_block)
+        return _merge_cleaned_section(mode, original, cleaned_block)
 
     snapshot = payload.get("snapshot")
     if isinstance(snapshot, dict):
         widgets_section = snapshot.get("widgets")
         if isinstance(widgets_section, dict) and isinstance(widgets_section.get("spotify_visualizer"), Mapping):
-            widgets_section["spotify_visualizer"] = deepcopy(cleaned_block)
+            widgets_section["spotify_visualizer"] = merged(widgets_section["spotify_visualizer"])
             updated_paths.append("snapshot.widgets.spotify_visualizer")
 
         backup_section = snapshot.get("custom_preset_backup")
@@ -548,7 +614,7 @@ def _apply_cleaned_payload_in_place(payload: Dict[str, Any], cleaned: Mapping[st
             updated_paths.append("snapshot.custom_preset_backup")
 
     if isinstance(payload.get("spotify_visualizer"), Mapping):
-        payload["spotify_visualizer"] = deepcopy(cleaned_block)
+        payload["spotify_visualizer"] = merged(payload["spotify_visualizer"])
         updated_paths.append("spotify_visualizer")
 
     settings_section = payload.get("settings")
@@ -559,13 +625,18 @@ def _apply_cleaned_payload_in_place(payload: Dict[str, Any], cleaned: Mapping[st
             if isinstance(key, str) and key.startswith(dotted_prefix)
         ]
         if dotted_keys:
-            for key in dotted_keys:
-                settings_section.pop(key, None)
-            for key, value in cleaned_block.items():
-                settings_section[f"{dotted_prefix}{key}"] = deepcopy(value)
+            block = merged({key[len(dotted_prefix):]: settings_section[key] for key in dotted_keys})
+            rebuilt: Dict[str, Any] = {}
+            for key, value in settings_section.items():
+                if key == dotted_keys[0]:
+                    rebuilt.update({f"{dotted_prefix}{name}": item for name, item in block.items()})
+                elif key not in dotted_keys:
+                    rebuilt[key] = value
+            settings_section.clear()
+            settings_section.update(rebuilt)
             updated_paths.append("settings")
         else:
-            payload["settings"] = deepcopy(cleaned_block)
+            payload["settings"] = merged(settings_section)
             updated_paths.append("settings")
 
     if any(path != "snapshot.custom_preset_backup" for path in updated_paths):
@@ -896,6 +967,33 @@ def restore_undo_entry(entry: UndoEntry) -> None:
         raise
 
 
+def _key_order(value: Any) -> Any:
+    """Nested key order of a JSON value (dict equality ignores order)."""
+    if isinstance(value, Mapping):
+        return [(key, _key_order(item)) for key, item in value.items()]
+    if isinstance(value, list):
+        return [_key_order(item) for item in value]
+    return None
+
+
+def _format_like_source(payload: Mapping[str, Any], source_text: str) -> str:
+    """Serialize ``payload`` with the source file's indentation, escaping, line endings and final newline."""
+    indent: int | str = 2
+    for line in source_text.splitlines()[1:]:
+        stripped = line.lstrip(" \t")
+        if stripped and len(stripped) < len(line):
+            leading = line[: len(line) - len(stripped)]
+            indent = leading if "\t" in leading else len(leading)
+            break
+    ensure_ascii = all(ord(ch) < 128 for ch in source_text)
+    text = json.dumps(payload, indent=indent, ensure_ascii=ensure_ascii)
+    if source_text.endswith("\n") or not source_text:
+        text += "\n"
+    if "\r\n" in source_text:
+        text = text.replace("\n", "\r\n")
+    return text
+
+
 def repair_file(
     path: Path,
     mode: str,
@@ -919,13 +1017,17 @@ def repair_file(
     patched_payload = deepcopy(payload)
     updated_paths = _apply_cleaned_payload_in_place(patched_payload, cleaned)
 
-    new_text = json.dumps(patched_payload, indent=2, sort_keys=True)
+    new_text = _format_like_source(patched_payload, raw_text)
+    unchanged = patched_payload == payload and _key_order(patched_payload) == _key_order(payload)
     if path.read_bytes() != original_bytes:
         raise RuntimeError(f"Preset changed during repair: {path}")
     backup_path = _ensure_backup(path)
     if path.read_bytes() != original_bytes:
         raise RuntimeError(f"Preset changed while backing up repair: {path}")
-    atomic_write_text(path, new_text + "\n")
+    if unchanged:
+        # Nothing to repair: leave the authored bytes (number spelling, spacing) exactly as written.
+        return backup_path, {"updated_paths": [], "added": [], "removed": [], "changed": []}
+    atomic_write_bytes(path, new_text.encode("utf-8"))
 
     stats = {
         "updated_paths": updated_paths,
