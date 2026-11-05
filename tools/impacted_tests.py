@@ -27,8 +27,17 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
-_SKIP_DIRS = {".venv", "venv", ".git", "__pycache__", "build", "dist", "logs", "tests_tmp_appdata",
-              "tests_tmp_localappdata", "node_modules", ".pytest_cache"}
+# Linux-only tests never run off Linux (Docs/Guardrails/Linux_Compatibility.md §7).
+LINUX_ONLY_TEST_GLOB = "test_linux_*.py"
+
+
+def runs_on_this_platform(path: Path) -> bool:
+    """False for a Linux-only test file when this process is not on Linux."""
+    from fnmatch import fnmatch
+
+    return sys.platform.startswith("linux") or not fnmatch(Path(path).name, LINUX_ONLY_TEST_GLOB)
+_SKIP_DIRS = {".venv", ".venv-linux", "venv", ".git", "__pycache__", "build", "dist", "logs", "tests_tmp_appdata",
+              "tests_tmp_localappdata", "tests_tmp_shareddata", "node_modules", ".pytest_cache"}
 
 
 def _python_files() -> list[Path]:
@@ -144,7 +153,8 @@ def _is_test_file(path: Path) -> bool:
 def all_test_files() -> list[Path]:
     """Every test file, including those in subfolders such as ``tests/unit``."""
     return sorted(path for path in TESTS.rglob("test_*.py")
-                  if not set(path.relative_to(TESTS).parts[:-1]) & (_SKIP_DIRS | {"fixtures", "goldens"}))
+                  if not set(path.relative_to(TESTS).parts[:-1]) & (_SKIP_DIRS | {"fixtures", "goldens"})
+                  and runs_on_this_platform(path))
 
 
 def changed_files(base: str = "HEAD") -> list[Path]:

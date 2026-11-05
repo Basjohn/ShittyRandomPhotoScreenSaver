@@ -404,6 +404,13 @@ def _schedule_runtime_reddit_helper_session(engine) -> bool:
     benign ProgramData ticket and asks Windows Task Scheduler to start the
     already-registered interactive helper task when needed.
     """
+    from core import platform_paths
+
+    if not platform_paths.IS_WINDOWS:
+        logger.info(
+            "[PLATFORM] Reddit secure-desktop helper is Windows-only; session helper not scheduled"
+        )
+        return False
     if is_diagnostic_build():
         logger.info(
             "[REDDIT-HELPER] Session helper skipped for isolated diagnostic runtime"
@@ -1120,7 +1127,7 @@ def main(*, entrypoint: str = "main"):
     from core.native_threads import retain_qt_gui_pool_threads
     if retain_qt_gui_pool_threads():
         logger.info("[THREADS] Qt image pool threads retained (no idle expiry)")
-    elif sys.platform == "win32":
+    else:
         logger.warning("[THREADS] Qt image pool not reachable; its threads keep the default 30 s expiry")
 
     logger.info("Qt Application created: %s", app.applicationName())

@@ -29,7 +29,7 @@ def test_non_default_unknown_and_failed_desktop_checks_are_denied() -> None:
     assert is_interactive_user_desktop(FakeWin32("Default", raises=True)) is False
 
 
-def test_native_adapter_uses_kernel_thread_id_and_user_desktop_api(monkeypatch):
+def test_native_adapter_uses_kernel_thread_id_and_user_desktop_api(monkeypatch, windows_platform):
     import ctypes
     from types import SimpleNamespace
     from core.windows import desktop_context as module
@@ -47,5 +47,5 @@ def test_native_adapter_uses_kernel_thread_id_and_user_desktop_api(monkeypatch):
     kernel = SimpleNamespace(GetCurrentThreadId=Function(lambda: 42))
     user = SimpleNamespace(GetThreadDesktop=Function(lambda tid: 77 if tid == 42 else 0),
                            GetUserObjectInformationW=Function(information))
-    monkeypatch.setattr(ctypes, "WinDLL", lambda name, **kwargs: {"kernel32":kernel,"user32":user}[name])
+    monkeypatch.setattr(ctypes, "WinDLL", lambda name, **kwargs: {"kernel32":kernel,"user32":user}[name], raising=False)
     assert is_interactive_user_desktop() is True

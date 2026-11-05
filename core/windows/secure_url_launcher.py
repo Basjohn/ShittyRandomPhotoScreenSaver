@@ -12,6 +12,7 @@ import webbrowser
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices
 
+from core import platform_paths
 from core.build_profile import is_diagnostic_build
 from core.logging.logger import get_logger
 from core.steam.links import SteamLinkTarget
@@ -20,6 +21,17 @@ from core.windows import reddit_helper_runtime
 from core.mc import is_mc_build
 
 logger = get_logger(__name__)
+
+
+def _runs_on_user_desktop() -> bool:
+    """Return True when this process already owns the user's interactive desktop.
+
+    MC and the diagnostic product always do. On Linux the saver is an ordinary
+    session application (there is no Winlogon secure desktop and no Windows
+    helper), so links open directly there too.
+    """
+
+    return bool(is_mc_build() or is_diagnostic_build() or not platform_paths.IS_WINDOWS)
 
 
 def open_steam_target(
@@ -37,7 +49,7 @@ def open_steam_target(
 
     if not isinstance(target, SteamLinkTarget):
         return False
-    interactive = bool(is_mc_build() or is_diagnostic_build())
+    interactive = _runs_on_user_desktop()
     if interactive:
         try:
             if QDesktopServices.openUrl(QUrl(target.steam_url)):
@@ -90,15 +102,14 @@ def open_url(
     if not url:
         return False
 
-    diagnostic_build = is_diagnostic_build()
-    mc_build = is_mc_build()
+    user_desktop = _runs_on_user_desktop()
     # Winlogon/Services are not the user's browser desktop. A caller's
     # prefer_direct or fallback flag must never override that boundary.
     secure_desktop = (
-        not (mc_build or diagnostic_build)
+        not user_desktop
         and os.getenv("SESSIONNAME", "").strip().casefold() in {"winlogon", "services"}
     )
-    direct_requested = bool(not secure_desktop and (prefer_direct or mc_build or diagnostic_build))
+    direct_requested = bool(not secure_desktop and (prefer_direct or user_desktop))
     if direct_requested:
         try:
             if QDesktopServices.openUrl(QUrl(url)):
@@ -112,10 +123,10 @@ def open_url(
                 type(exc).__name__,
             )
 
-    # MC and the separate diagnostic product are always interactive: a failed
-    # direct route must not enqueue work for the SCR helper, which neither
-    # product owns or provisions.
-    secure_handoff = not (mc_build or diagnostic_build)
+    # MC, the separate diagnostic product and Linux are always interactive: a
+    # failed direct route must not enqueue work for the Windows SCR helper,
+    # which none of them owns or provisions.
+    secure_handoff = not user_desktop
     if secure_handoff:
         if reddit_helper_bridge.is_bridge_available():
             # Explicitly mark saver-origin queue entries; SESSIONNAME can be

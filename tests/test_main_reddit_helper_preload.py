@@ -1,4 +1,11 @@
+from pathlib import Path
+
+import pytest
+
 import main
+
+# Session-helper scheduling is the Windows SCR contract; Linux has its own test below.
+pytestmark = pytest.mark.usefixtures("windows_platform")
 
 
 def test_schedule_runtime_reddit_helper_session_starts_keepalive(monkeypatch):
@@ -82,7 +89,8 @@ def test_schedule_runtime_reddit_helper_session_skips_script_mode(monkeypatch):
         lambda msg: breadcrumb_calls.append(msg),
     )
     monkeypatch.setattr(main.sys, "argv", ["main.py"])
-    monkeypatch.setattr(main.sys, "executable", r"C:\Python311\python.exe")
+    # Native separators so the basename assertion holds on Windows and Linux.
+    monkeypatch.setattr(main.sys, "executable", str(Path("Python311") / "python.exe"))
 
     class _FakeEngine:
         _reddit_helper_session_timer = None

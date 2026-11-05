@@ -8,9 +8,9 @@ PySide6 binds no native texture adoption API: ``QRhiTexture::createFrom`` and
 ``QNativeInterface::QSGOpenGLTexture::fromNative`` are absent from every
 release (neither ``QRhiTexture::NativeTexture`` nor the Quick native interfaces
 are in its typesystems). This module makes exactly that one call into the
-``Qt6Quick`` module the process has already loaded -- found by module handle,
-so a second copy of Qt can never be loaded -- and returns a non-owning Python
-wrapper. It owns no texture, cache, thread, timer or context.
+``Qt6Quick`` module the process has already loaded -- found by module handle on
+Windows and with ``RTLD_NOLOAD`` on Linux, so a second copy of Qt can never be
+loaded -- and returns a non-owning Python wrapper. It owns no texture, cache, thread, timer or context.
 
 Ownership contract (Qt 6): the returned ``QSGTexture`` wraps the GL name but
 never deletes it; the caller keeps the GL allocation alive while the wrapper
@@ -34,6 +34,14 @@ _FROM_NATIVE = (
 )
 
 
+# The same function as exported by libQt6Quick.so.6 (Itanium mangling). Its QFlags
+# argument is a trivially copyable int wrapper, passed in a register like the c_int.
+_FROM_NATIVE_LINUX = (
+    "_ZN16QNativeInterface16QSGOpenGLTexture10fromNativeEjP12QQuickWindowRK5QSize"
+    "6QFlagsINS1_19CreateTextureOptionEE"
+)
+
+
 class NativeTextureUnavailable(RuntimeError):
     """Adoption is not possible here; the caller uploads instead (attributed)."""
 
@@ -53,17 +61,27 @@ def _bind():
     if _unavailable is not None:
         raise NativeTextureUnavailable(_unavailable)
     try:
-        if sys.platform != "win32":
-            raise NativeTextureUnavailable("native texture adoption is bound for Windows only")
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        kernel32.GetModuleHandleW.restype = ctypes.c_void_p
-        kernel32.GetModuleHandleW.argtypes = [ctypes.c_wchar_p]
-        handle = kernel32.GetModuleHandleW("Qt6Quick.dll")
-        if not handle:
-            raise NativeTextureUnavailable("Qt6Quick.dll is not loaded in this process")
-        module = ctypes.WinDLL("Qt6Quick.dll", handle=handle)
+        if sys.platform == "win32":
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.GetModuleHandleW.restype = ctypes.c_void_p
+            kernel32.GetModuleHandleW.argtypes = [ctypes.c_wchar_p]
+            handle = kernel32.GetModuleHandleW("Qt6Quick.dll")
+            if not handle:
+                raise NativeTextureUnavailable("Qt6Quick.dll is not loaded in this process")
+            module = ctypes.WinDLL("Qt6Quick.dll", handle=handle)
+            symbol = _FROM_NATIVE
+        elif sys.platform.startswith("linux"):
+            import os
+
+            try:
+                module = ctypes.CDLL("libQt6Quick.so.6", mode=os.RTLD_NOLOAD | os.RTLD_LAZY)
+            except OSError as exc:
+                raise NativeTextureUnavailable("libQt6Quick.so.6 is not loaded in this process") from exc
+            symbol = _FROM_NATIVE_LINUX
+        else:
+            raise NativeTextureUnavailable(f"native texture adoption is not bound for {sys.platform}")
         try:
-            function = getattr(module, _FROM_NATIVE)
+            function = getattr(module, symbol)
         except AttributeError as exc:
             raise NativeTextureUnavailable("QSGOpenGLTexture::fromNative is not exported") from exc
         function.restype = ctypes.c_void_p

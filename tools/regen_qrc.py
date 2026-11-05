@@ -24,12 +24,15 @@ ROOT = Path(__file__).resolve().parents[1]
 QRC_PATH = ROOT / "ui" / "resources" / "assets.qrc"
 OUTPUT_PATH = ROOT / "ui" / "resources" / "assets.rcc"
 _PROVENANCE_SCHEMA = 2
+# The probe runs inside the selected interpreter, so it names that interpreter's wheel layout:
+# Windows wheels ship ``PySide6/rcc.exe``; Linux wheels ship ``PySide6/Qt/libexec/rcc``.
 _IDENTITY_PROBE = (
-    "from importlib.metadata import version; from pathlib import Path; import PySide6; "
+    "import sys; from importlib.metadata import version; from pathlib import Path; import PySide6; "
     "from PySide6.QtCore import qVersion; "
+    "rcc_rel = 'rcc.exe' if sys.platform == 'win32' else 'Qt/libexec/rcc'; "
     "print(';'.join(f'{name}={version(name)}' for name in "
     "('PySide6', 'PySide6_Addons', 'PySide6_Essentials', 'shiboken6')) + "
-    "f';Qt={qVersion()};rcc={Path(PySide6.__file__).parent / \"rcc.exe\"}')"
+    "f';Qt={qVersion()};rcc={Path(PySide6.__file__).parent / rcc_rel}')"
 )
 _QT_DISTRIBUTIONS = ("PySide6", "PySide6_Addons", "PySide6_Essentials", "shiboken6")
 

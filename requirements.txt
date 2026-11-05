@@ -1,4 +1,7 @@
 # SRPSS canonical pinned CPython 3.14 x64 (standard GIL) dependency set.
+# Single dependency authority for Windows and Linux: Windows-only distributions carry a
+# PEP 508 `sys_platform == "win32"` marker; Linux needs no separate list
+# (Docs/Guardrails/Linux_Compatibility.md).
 # The repo-root .venv is the sole development/test/frozen-build interpreter.
 # Windows acceptance is required before labeling this set known-good.
 
@@ -27,19 +30,22 @@ sgmllib3k==1.0.0
 # Timezone support is provided by PySide6.QtCore.QTimeZone; do not bundle pytz/tzdata.
 
 # Windows Media Session API
-winrt-runtime==3.2.1
-winrt-Windows.Foundation==3.2.1
-winrt-Windows.Foundation.Collections==3.2.1
-winrt-Windows.Media.Control==3.2.1
-winrt-Windows.Storage.Streams==3.2.1
+winrt-runtime==3.2.1; sys_platform == "win32"
+winrt-Windows.Foundation==3.2.1; sys_platform == "win32"
+winrt-Windows.Foundation.Collections==3.2.1; sys_platform == "win32"
+winrt-Windows.Media.Control==3.2.1; sys_platform == "win32"
+winrt-Windows.Storage.Streams==3.2.1; sys_platform == "win32"
+
+# Linux media control (MPRIS over D-Bus; QtDBus cannot demarshal MPRIS maps)
+jeepney==0.9.0; sys_platform == "linux"
 
 # Audio capture / volume control
-PyAudioWPatch==0.2.12.9
+PyAudioWPatch==0.2.12.9; sys_platform == "win32"
 sounddevice==0.5.3
 cffi==2.0.0
 pycparser==2.23
-pycaw==20240210
-comtypes==1.4.11
+pycaw==20240210; sys_platform == "win32"
+comtypes==1.4.11; sys_platform == "win32"
 
 # Build
 Nuitka==4.2
@@ -60,5 +66,5 @@ Pygments==2.19.2
 colorama==0.4.6
 
 # Windows helpers
-pywin32==311
+pywin32==311; sys_platform == "win32"
 psutil==7.2.2

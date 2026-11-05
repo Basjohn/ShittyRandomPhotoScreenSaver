@@ -70,7 +70,10 @@ def test_openblas_runs_single_threaded_in_the_app_and_its_spawned_workers(tmp_pa
 import pytest
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="Qt's private image pool is resolved through MSVC exports")
+@pytest.mark.skipif(
+    sys.platform != "win32" and not sys.platform.startswith("linux"),
+    reason="Qt's private image pool is resolved through MSVC (Windows) or Itanium (Linux) exports",
+)
 def test_qt_image_pool_keeps_its_threads_instead_of_recreating_them(qt_app):
     """R-97: Qt's private image pool must not recreate threads for every image.
 

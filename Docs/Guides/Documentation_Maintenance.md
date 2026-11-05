@@ -20,6 +20,7 @@ SRPSS documentation is organized by **current role**, not by the phase/checkpoin
 | `Docs/TestSuite.md` | live test inventory/status authority |
 | `Docs/Guides/Test_Durability.md` | test-authoring authority for mutable versus intentionally exact expectations |
 | `Docs/Architecture/Persisted_Input_Compatibility.md` | persisted-input compatibility-bridge guard (user-data protection, horizon-gated — not a backlog) |
+| `Linux_Plan.md` | live Linux compatibility work, kept separate from `Current_Plan.md` at the operator's request; durable rules in `Docs/Guardrails/Linux_Compatibility.md` |
 | `Future_Work.md` | deferred ideas, their admission rules and dormant ordering (the single future-work router) |
 
 Keep only the small routing authorities at `Docs/` root plus generated evidence with a stable path contract.

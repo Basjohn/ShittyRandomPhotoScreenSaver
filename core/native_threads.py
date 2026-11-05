@@ -35,6 +35,11 @@ _QT_GUI_POOL_ACCESSOR = "?qtGuiThreadPool@QGuiApplicationPrivate@@SAPEAVQThreadP
 _QT_POOL_SET_EXPIRY = "?setExpiryTimeout@QThreadPool@@QEAAXH@Z"
 # public: int __cdecl QThreadPool::expiryTimeout(void) const
 _QT_POOL_GET_EXPIRY = "?expiryTimeout@QThreadPool@@QEBAHXZ"
+# The same three symbols as exported by the Linux shared objects (Itanium mangling).
+_LINUX_QT_SYMBOLS = (
+    "libQt6Gui.so.6", "_ZN22QGuiApplicationPrivate15qtGuiThreadPoolEv",
+    "libQt6Core.so.6", "_ZN11QThreadPool16setExpiryTimeoutEi", "_ZNK11QThreadPool13expiryTimeoutEv",
+)
 
 
 def configure_native_thread_pools() -> None:
@@ -53,19 +58,37 @@ def _loaded_module(ctypes, name: str):
     return ctypes.WinDLL(name, handle=handle) if handle else None
 
 
+def _loaded_shared_object(ctypes, name: str):
+    """A Qt shared object this process has already loaded (RTLD_NOLOAD), or None."""
+
+    try:
+        return ctypes.CDLL(name, mode=os.RTLD_NOLOAD | os.RTLD_LAZY)
+    except OSError:
+        return None
+
+
 def _qt_gui_pool_expiry_functions():
     """(pool pointer, getter, setter) for Qt's private image pool, or None."""
 
     import ctypes
 
-    gui = _loaded_module(ctypes, "Qt6Gui.dll")
-    core = _loaded_module(ctypes, "Qt6Core.dll")
+    if sys.platform == "win32":
+        gui = _loaded_module(ctypes, "Qt6Gui.dll")
+        core = _loaded_module(ctypes, "Qt6Core.dll")
+        names = (_QT_GUI_POOL_ACCESSOR, _QT_POOL_SET_EXPIRY, _QT_POOL_GET_EXPIRY)
+    elif sys.platform.startswith("linux"):
+        gui_name, accessor_name, core_name, set_name, get_name = _LINUX_QT_SYMBOLS
+        gui = _loaded_shared_object(ctypes, gui_name)
+        core = _loaded_shared_object(ctypes, core_name)
+        names = (accessor_name, set_name, get_name)
+    else:
+        return None
     if gui is None or core is None:
         return None
     try:
-        accessor = getattr(gui, _QT_GUI_POOL_ACCESSOR)
-        set_expiry = getattr(core, _QT_POOL_SET_EXPIRY)
-        get_expiry = getattr(core, _QT_POOL_GET_EXPIRY)
+        accessor = getattr(gui, names[0])
+        set_expiry = getattr(core, names[1])
+        get_expiry = getattr(core, names[2])
     except AttributeError:
         return None
     accessor.restype = ctypes.c_void_p
@@ -88,8 +111,6 @@ def retain_qt_gui_pool_threads() -> bool:
     False, and changes nothing, when the Qt build does not export the pool.
     """
 
-    if sys.platform != "win32":
-        return False
     resolved = _qt_gui_pool_expiry_functions()
     if resolved is None:
         return False
@@ -101,8 +122,6 @@ def retain_qt_gui_pool_threads() -> bool:
 def qt_gui_pool_expiry_ms() -> int | None:
     """The private image pool's current idle expiry (diagnostics and tests)."""
 
-    if sys.platform != "win32":
-        return None
     resolved = _qt_gui_pool_expiry_functions()
     if resolved is None:
         return None

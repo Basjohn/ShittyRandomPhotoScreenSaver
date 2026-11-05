@@ -21,6 +21,8 @@ def test_steam_saved_connection_status_is_non_decrypting_and_reports_callback(mo
 
 
 def test_steam_controller_validates_before_dpapi_save(monkeypatch) -> None:
+    # Controller flow under available strict storage (DPAPI on Windows; Linux has none yet).
+    monkeypatch.setattr("core.steam.credentials.steam_storage_available", lambda: True)
     saved = []
     emitted = []
     monkeypatch.setattr(
@@ -42,6 +44,8 @@ def test_steam_controller_validates_before_dpapi_save(monkeypatch) -> None:
 
 
 def test_steam_controller_drops_verified_save_after_lifetime_closes(monkeypatch) -> None:
+    # Controller flow under available strict storage (DPAPI on Windows; Linux has none yet).
+    monkeypatch.setattr("core.steam.credentials.steam_storage_available", lambda: True)
     saved = []
     emitted = []
     monkeypatch.setattr(

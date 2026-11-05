@@ -56,6 +56,8 @@ from ui.settings_theme_spec import SettingsThemeSpec
 from ui.settings_launch_targets import resolve_settings_launch_target
 
 logger = get_logger(__name__)
+# One [PLATFORM] announcement per process for the non-Windows material underlay.
+_MATERIAL_UNDERLAY_ANNOUNCED = False
 
 
 def _record_diagnostic_stage(stage: str, **fields: object) -> None:
@@ -691,6 +693,9 @@ class SettingsDialog(QDialog):
         # AccentPolicy owner; the target state replaces the previous one directly,
         # while same-mode Glass changes stay native no-ops because Qt owns tint.
         self._native_backdrop_mode: str | None = None
+        # Platforms without native Glass/Acrylic paint an opaque theme-derived
+        # underlay instead (ui/settings_material_underlay.py); never on Windows.
+        self._material_underlay: QColor | None = None
         # Navigation persistence restores semantic location (tab / section), not
         # arbitrary pixel offsets. Every restored section opens at its top so a
         # runtime -> Settings -> runtime round-trip is deterministic even after
@@ -902,6 +907,11 @@ class SettingsDialog(QDialog):
         and opacity live entirely in Qt semantic surfaces.
         """
 
+        from core import platform_paths
+
+        if not platform_paths.IS_WINDOWS:
+            return self._apply_material_underlay(theme)
+
         try:
             hwnd = int(self.winId())
             backdrop = theme.backdrop
@@ -955,6 +965,34 @@ class SettingsDialog(QDialog):
             self._backdrop_applied = False
             logger.debug("Native Settings backdrop not available", exc_info=True)
             return False
+
+    def _apply_material_underlay(self, theme: SettingsThemeSpec) -> bool:
+        """Paint the opaque material substitute where no native backdrop exists.
+
+        Returns False: no native composition was enabled. The underlay is the
+        explicit platform substitute, announced once per process.
+        """
+
+        from ui.settings_material_underlay import material_underlay
+
+        mode = theme.backdrop.mode
+        if mode == "off":
+            self._material_underlay = None
+        else:
+            underlay = material_underlay(theme)
+            self._material_underlay = QColor(underlay.r, underlay.g, underlay.b, 255)
+            global _MATERIAL_UNDERLAY_ANNOUNCED
+            if not _MATERIAL_UNDERLAY_ANNOUNCED:
+                _MATERIAL_UNDERLAY_ANNOUNCED = True
+                logger.info(
+                    "[PLATFORM] Native Settings Glass/Acrylic backdrop is Windows-only; "
+                    "painting the opaque theme material underlay instead (mode=%s)",
+                    mode,
+                )
+        self._backdrop_applied = True
+        self._native_backdrop_mode = mode
+        self.update()
+        return False
 
     def _refresh_live_shell_theme(self, theme: SettingsThemeSpec) -> None:
         """Refresh shell-owned visuals on an already-built Settings dialog."""
@@ -2334,6 +2372,17 @@ class SettingsDialog(QDialog):
 
         outer_rect = QRectF(self.rect())
         border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        if self._material_underlay is not None:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(self._material_underlay)
+            if self._is_maximized:
+                painter.drawRect(outer_rect)
+            else:
+                painter.drawRoundedRect(
+                    border_rect,
+                    SETTINGS_OUTER_CORNER_RADIUS,
+                    SETTINGS_OUTER_CORNER_RADIUS,
+                )
         if not self._is_maximized:
             self._paint_outer_corner_caps(painter, outer_rect, border_rect)
             backing_pen = QPen(

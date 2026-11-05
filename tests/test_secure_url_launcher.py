@@ -3,7 +3,12 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 from core.steam.links import friend_message_target, store_target
+
+# These tests pin the Windows SCR secure-desktop contract; Linux has its own test below.
+pytestmark = pytest.mark.usefixtures("windows_platform")
 
 
 @patch("core.windows.secure_url_launcher.reddit_helper_runtime.ensure_helper_runtime", return_value=True)

@@ -42,6 +42,12 @@ VolumeControllerFactory = Callable[[str], Any]
 
 def _create_volume_controller(provider: str) -> Any:
     # Keep pycaw/controller implementation dormant until this service is built.
+    from core import platform_paths
+
+    if not platform_paths.IS_WINDOWS:
+        from core.media.pulse_volume import PulseAppVolumeController
+
+        return PulseAppVolumeController(provider=provider)
     from core.media.spotify_volume import SpotifyVolumeController
 
     return SpotifyVolumeController(provider=provider)
@@ -625,7 +631,12 @@ class _SharedMediaVolumeRuntimeOwner:
         if not targets:
             return
         try:
-            from core.media.session_volume_listener import SessionVolumeListener
+            from core import platform_paths
+
+            if platform_paths.IS_WINDOWS:
+                from core.media.session_volume_listener import SessionVolumeListener
+            else:
+                from core.media.pulse_volume import PulseSessionVolumeListener as SessionVolumeListener
             listener = SessionVolumeListener(
                 on_volume=self._on_session_volume,
                 on_disconnected=self._on_session_disconnected,

@@ -25,6 +25,7 @@ __pycache__/
 *.egg
 *.egg-info/
 .venv/
+.venv-linux/
 venv/
 env/
 ENV/
@@ -40,6 +41,7 @@ ENV/
 /tmp_dbg_appdata/
 /tests_tmp_appdata/
 /tests_tmp_localappdata/
+/tests_tmp_shareddata/
 /tmp
 
 # Coverage and test artifacts
