@@ -4,7 +4,8 @@ Reads the low/high cards a preflight run extracted (`waveform_ribbon_preflight.p
 replacements. Geometry is hand-traced on gridded 2x cards and labelled as an estimate: automatic
 segmentation cannot separate the ribbons from bloom haze and light-column halos (Lab Plan section 1.3).
 Colour, luminance and clipping are measured automatically inside fixed ROIs with annotations masked out.
-The Orthographic camera is an analytic fit to the traced landmarks, unverified until a WR-03 render.
+The camera is a historical WR-00 analytic Orthographic fit to the traced landmarks (Orthographic was retired
+5 Nov 2026; the product camera is Perspective only).
 
     .venv\\Scripts\\python.exe tools/labs/waveform_ribbon_targets.py
         --cards .artifacts/evidence/waveform_ribbon/wr00_reference_projection

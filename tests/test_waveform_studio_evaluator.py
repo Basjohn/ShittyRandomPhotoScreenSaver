@@ -233,7 +233,6 @@ def test_studio_view_and_projection_equal_production_for_the_same_card(extent):
     from widgets.spotify_visualizer.presentation_geometry import (framed_aperture_scale,
                                                                  resolve_visualizer_presentation)
     values = canonical_section()
-    values["waveform_ribbon_camera_projection"] = "Perspective"
     border = 4.0
     width = 900.0
     height = width * extent[1] / extent[0]

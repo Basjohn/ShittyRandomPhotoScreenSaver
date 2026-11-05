@@ -57,16 +57,15 @@ class WidthFrame:
 
 
 def width_frame(tangent, *, previous: WidthFrame | None = None, seed_side=(0., 1., 0.),
-                twist=0., mode='oriented', projection='orthographic',
-                view_direction=(0., 0., -1.), position=(0., 0., 0.), eye=(0., 0., 10.)):
+                twist=0., mode='oriented', position=(0., 0., 0.), eye=(0., 0., 10.)):
     """Transport an untwisted frame, then apply this station's twist exactly once.
 
     Zero tangents return None (do not draw); caller retains the last valid anchor.
     Near-antiparallel tangents raise rather than silently choosing a roll/UV flip.
     Camera poles explicitly report camera_parallel and use the transported side.
     """
-    if mode not in ('oriented', 'camera_facing') or projection not in ('orthographic', 'perspective'):
-        raise ValueError('Unknown ribbon width mode or projection')
+    if mode not in ('oriented', 'camera_facing'):
+        raise ValueError('Unknown ribbon width mode')
     if not math.isfinite(twist) or abs(twist) > MAX_TWIST_MAGNITUDE:
         raise ValueError('Finite bounded twist required')
     t = _unit(_vector(tangent), minimum=0.)
@@ -75,10 +74,8 @@ def width_frame(tangent, *, previous: WidthFrame | None = None, seed_side=(0., 1
     candidate = None
     sine = 1.
     if mode == 'camera_facing':
-        if projection == 'orthographic':
-            sight = _unit(_vector(view_direction), minimum=0.)
-        else:
-            sight = _unit(tuple(p-e for p, e in zip(_vector(position), _vector(eye))), minimum=0.)
+        # Perspective sight line from the eye (the only projection).
+        sight = _unit(tuple(p-e for p, e in zip(_vector(position), _vector(eye))), minimum=0.)
         if sight is None:
             raise ValueError('Camera sight direction is undefined')
         cross = _cross(t, sight)

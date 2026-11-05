@@ -8,7 +8,6 @@ import numpy as np
 from PIL import Image
 from OpenGL import GL as gl
 from core.ribbon_packet import KNOT_ROWS
-from core.settings.framed_camera import orthographic_depth_interval
 from core.ribbon_continuation import continuation_bounds, frustum_axial_span
 from core.waveform_ribbon_scene import Floor, Recipe, SPEC, FLOOR_CONTACT
 from rendering.gl_programs.waveform_ribbon import (FLOOR_VERTEX, FLOOR_FRAGMENT, FLAT)
@@ -221,15 +220,6 @@ class WaveformScene:
         mvp = (projection @ view).flatten(order='F')
         ribbon_view = view @ scroll
         ribbon_mvp = tuple((projection @ ribbon_view).flatten(order='F'))
-        orthographic = camera_lens[2]
-        if orthographic and recipe.fog is not None:
-            near,far=orthographic_depth_interval(projection)
-            # Ground intersections can lie beyond the actor slab. Cover the exact same signed pixel lines.
-            x,y=camera_lens[:2]
-            corners=[(eye[1]+sx*x*view[0,1]+sy*y*view[1,1])/view[2,1]
-                     for sx in (-1.,1.) for sy in (-1.,1.)]
-            fog_near,fog_far=recipe.fog.signed_depth_range
-            self._fog_depth_range=(min(fog_near,near,min(corners)-1.),max(fog_far,far,max(corners)+1.))
         self._continuation_origin=tuple(np.asarray(packet.world_origin)+scroll[:3,3])
         self._continuation_count=packet.instances
         self._continuation_camber=recipe.material.cross_curve
@@ -237,7 +227,7 @@ class WaveformScene:
         main_span=frustum_axial_span(projection@view,transverse)
         reflected_span=frustum_axial_span(projection@mirror_view(view,0.),transverse)
         span=(min(main_span[0],reflected_span[0]),max(main_span[1],reflected_span[1]))
-        draw = dict(view=tuple(ribbon_view.flatten(order='F')), material=recipe.material, orthographic=orthographic,
+        draw = dict(view=tuple(ribbon_view.flatten(order='F')), material=recipe.material,
                     sweep_axis=(1.,0.,0.), floor=FLOOR_CONTACT,
                     age_fade=(now, 0., (capacity - 1)/flow.knot_hz, 0.),continuation=(*span,2048),
                     mist=environment.mist, mist_frame=(scroll[0, 3], 0., 0.),
@@ -256,7 +246,7 @@ class WaveformScene:
                     self._reflect(packet, projection, view, scroll, {**draw, 'mist': {**draw['mist'], **fog}})
         with self._fog_bound(self.fog if fogged else None) as fog:
             draw = {**draw, 'mist': {**draw['mist'], **fog}}
-            self._draw_scene(flat, packet, draw, mvp, eye, view, orthographic, ribbon_mvp, card, now, fogged)
+            self._draw_scene(flat, packet, draw, mvp, eye, view, ribbon_mvp, card, now, fogged)
 
 
 
@@ -270,10 +260,9 @@ class WaveformScene:
         fog=self.recipe.fog
         grid=(min(128,-(-size[0]//cell)),min(72,-(-size[1]//cell)),slices)
         program=self.fog_resources.compute_program('fog medium',fog_inject_source(MEDIUM_GLSL))
-        volume.update(program,view=view,lens=camera_lens,
-                      depth_range=self._fog_depth_range if camera_lens[2] else fog.depth_range,
+        volume.update(program,view=view,lens=camera_lens,depth_range=fog.depth_range,
                       grid=grid,medium=self._fog_uniforms,
-                      focus_depth=0. if camera_lens[2] else -float((view@np.array((*SPEC.pivot,1.)))[2]))
+                      focus_depth=-float((view@np.array((*SPEC.pivot,1.)))[2]))
 
     def _field_uniforms(self,program):
         fog=self.recipe.fog;first,last,samples=fog.field_span;step=(last-first)/(samples-1)
@@ -310,7 +299,7 @@ class WaveformScene:
         gl.glUniform1i(location('uSkyReflection'),int(reflection))
         gl.glBindVertexArray(vao);gl.glDrawArrays(gl.GL_TRIANGLES,0,3)
 
-    def _draw_scene(self, flat, packet, draw, mvp, eye, view, orthographic, ribbon_mvp, card, now, fogged):
+    def _draw_scene(self, flat, packet, draw, mvp, eye, view, ribbon_mvp, card, now, fogged):
         recipe, (width, height) = self.recipe, self.size
         environment = recipe.environment
         with self.scene.scope(card, 4, self.resources, overlay=self._overlay, bloom=0. if flat else recipe.bloom,
@@ -327,7 +316,7 @@ class WaveformScene:
                     gl.glDisable(gl.GL_DEPTH_TEST);gl.glDepthMask(gl.GL_FALSE)
                     self._sky(self.fog)
                     gl.glEnable(gl.GL_DEPTH_TEST);gl.glDepthMask(gl.GL_TRUE)
-                self._floor(mvp, eye, view, orthographic, (width, height), flat=flat)
+                self._floor(mvp, eye, view, (width, height), flat=flat)
                 if flat:
                     self._flat_ribbons(packet, ribbon_mvp)
             if not flat and 'actors' not in self.preview_hidden:
@@ -394,7 +383,7 @@ class WaveformScene:
             self.reflection.end()
 
 
-    def _floor(self, mvp, eye, view, orthographic, size, *, flat=False, mist_off=False):
+    def _floor(self, mvp, eye, view, size, *, flat=False, mist_off=False):
         recipe = self.recipe
         floor, environment = recipe.floor, recipe.environment
         if 'albedo' not in self.textures:
@@ -403,7 +392,7 @@ class WaveformScene:
         program = self.resources.program('floor', FLOOR_VERTEX, FLOOR_FRAGMENT)
         names = ('uMvp', 'uFloorInverseMvp', 'uFlat', 'uAlbedo', 'uRoughness', 'uSlope', 'uFogLit', 'uReflection', 'uReflectionLook',
                  'uViewport', 'uBackdrop', 'uAmbient', 'uFloor', 'uFloorTone', 'uRipple', 'uEye',
-                 'uForward', 'uOrthographic', 'uMist', 'uMistShape', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange',
+                 'uForward', 'uMist', 'uMistShape', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange',
                  'uStreak', 'uHot', 'uBodyField', 'uBodySpan', 'uBodyShape', 'uPool', 'uColumn', 'uSpecMode',
                  'uSpecular', 'uFloorTint', 'uMaterial', 'uMaterialShape', 'uReflectionHue', 'uBound')
         u = self.resources.uniforms('floor', names, required=False)
@@ -436,7 +425,6 @@ class WaveformScene:
         gl.glUniform3f(u['uRipple'], *floor.ripple)
         gl.glUniform3f(u['uEye'], *eye)
         gl.glUniform3f(u['uForward'], *(-view[2, :3]))
-        gl.glUniform1i(u['uOrthographic'], int(orthographic))
         gl.glUniform4f(u['uMist'], *environment.mist['uMist'])
         gl.glUniform4f(u['uMistShape'], *((0., 0., 0., 0.) if mist_off else environment.mist['uMistShape']))
         gl.glUniform1i(u['uFogVolume'], FOG_OFF['uFogVolume'])

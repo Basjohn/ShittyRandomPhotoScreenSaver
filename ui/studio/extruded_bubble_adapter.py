@@ -577,7 +577,7 @@ def frame_camera(parameters, size, extent, style):
         pan_x=float(p("scene_pan_x")), pan_y=float(p("scene_pan_y")),
         position_offset=tuple(p("camera_position")), fov_y_degrees=float(p("camera_fov")),
         surface_bound=scene_knobs(parameters)["mode"] == "surface",
-        aperture_scale=framed_aperture_scale(presentation), projection_kind=str(p("camera_projection")))
+        aperture_scale=framed_aperture_scale(presentation))
     rotation = np.asarray(world_to_view, dtype=np.float64).reshape(3, 3).T     # GL column-major mat3
     clip = np.asarray(projection, dtype=np.float64).reshape(4, 4).T            # GL column-major mat4
     return rotation, np.asarray(eye, dtype=np.float64), clip
