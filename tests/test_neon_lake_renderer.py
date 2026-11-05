@@ -14,6 +14,7 @@ from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
 from rendering.gl_programs.heightfield import heightfield_surface_bytes
 from tests.test_qtquick_extruded_spectrum import H, W, _Target
 from tests._visualizer_frozen_settings import frozen_visualizer_settings
+from tests._msaa_render_noise import assert_same_msaa_render
 
 
 def _snapshot(**parameters):
@@ -494,8 +495,13 @@ def test_two_contexts_keep_neon_resources_independent(qt_app):
         assert not first_renderer.has_resources and second_renderer.has_resources
         assert second.capture.context.makeCurrent(second.capture.surface)
         after = second.render(second_host, snapshot)
-        # RGBA8 quantization permits one least-significant bit of driver rounding.
-        assert np.abs(after - second_pixels).max() <= 1
+        # The same frame is not bit-identical through 4x MSAA on this driver (tests/_msaa_render_noise.py: measured
+        # up to 3/255 per sample, so a one-level bound flaked under load); releasing the other context changes nothing
+        # beyond that noise.
+        assert_same_msaa_render(after, second_pixels)
+        posed = second.render(second_host, _pose(snapshot))
+        with pytest.raises(AssertionError):                 # negative control: a real change is caught
+            assert_same_msaa_render(posed, second_pixels)
         assert first_pixels[..., 3].max() > 0
     finally:
         if second is not None:
