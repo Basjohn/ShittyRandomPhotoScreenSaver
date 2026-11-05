@@ -212,7 +212,7 @@ def test_a_flat_2d_mode_gets_no_camera_navigation_or_handles(toy_studio):
     surface = surfaces[0]
     surface.pump(3)
     bridge = controller.bridge
-    assert bridge.capabilities == {"viewport": True, "camera": False, "handles": False}
+    assert bridge.capabilities == {"viewport": True, "camera": False, "handles": False, "objects": True}
     named = {i.objectName(): i for i in _walk(surface.host.root) if i.objectName()}
     for chrome in ("keepViewButton", "resetViewButton", "orbitArea", "handleLayer"):
         assert not named[chrome].isVisible(), chrome
@@ -260,7 +260,7 @@ def test_an_inspector_only_mode_creates_no_renderer(qt_app):
     assert controller.open()
     surfaces[0].pump(4)
     bridge = controller.bridge
-    assert bridge.capabilities == {"viewport": False, "camera": False, "handles": False}
+    assert bridge.capabilities == {"viewport": False, "camera": False, "handles": False, "objects": True}
     assert bridge.viewportStatus == "none" and not surfaces[0].viewport.isVisible()
     named = {i.objectName(): i for i in _walk(surfaces[0].host.root) if i.objectName()}
     assert named["noPreviewNote"].isVisible()

@@ -56,14 +56,17 @@ class StudioCapabilities:
 
     ``viewport``: the mode draws a live preview (False: inspector-only Studio; no renderer is created).
     ``camera``: the mode has a navigable camera; ``navigation()`` maps orbit / zoom / dolly / pan.
-    ``handles``: ``scene_handles()`` supplies direct-manipulation handles over the preview."""
+    ``handles``: ``scene_handles()`` supplies direct-manipulation handles over the preview.
+    ``objects``: the mode has scene objects (``scene_objects()``) listed beside the viewport (False: no list; the
+    viewport takes its width)."""
     viewport: bool = True
     camera: bool = False
     handles: bool = False
+    objects: bool = True
 
     def as_map(self) -> dict:
         return {"viewport": self.viewport, "camera": self.camera and self.viewport,
-                "handles": self.handles and self.viewport}
+                "handles": self.handles and self.viewport, "objects": self.objects}
 
 
 @dataclass(frozen=True)
@@ -248,6 +251,15 @@ class StudioFraming:
     fill: bool = False
 
 
+def control_condition(control) -> tuple:
+    """A registry control's ``when`` as Studio terms: ((key, (accepted values...)), ...)."""
+    when = getattr(control, "when", None)
+    if not when:
+        return ()
+    terms = (when,) if isinstance(when[0], str) else when
+    return tuple((key, tuple(value) if isinstance(value, tuple) else (value,)) for key, value in terms)
+
+
 def fill_extent(extent, aspect: float) -> tuple[float, float]:
     """``extent`` grown on one axis to ``aspect`` (width / height): never less world than ``extent``."""
     width, height = float(extent[0]), float(extent[1])
@@ -260,7 +272,7 @@ def fill_extent(extent, aspect: float) -> tuple[float, float]:
 
 __all__ = [
     "NavAxis", "RECORDED", "REFERENCE", "SYNTHETIC", "RenderCard", "StudioCapabilities", "StudioEvaluator",
-    "StudioFixture", "StudioPreview", "fill_extent",
+    "StudioFixture", "StudioPreview", "control_condition", "fill_extent",
     "StudioFraming", "StudioNavigation",
     "StudioModeAdapter", "StudioRenderer",
 ]

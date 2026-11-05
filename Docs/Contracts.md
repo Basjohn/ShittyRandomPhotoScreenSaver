@@ -24,7 +24,11 @@
 `QuickCursorController.close()` runs. Loss of admission and controller retirement must restore
 `ArrowCursor` on the still-live Quick window, stop the Halo fade timer, and fence late auxiliary
 publications. Repeated close is harmless. No global Windows cursor counter, extra timer, or
-retained-QML cursor may take ownership of this cleanup.
+retained-QML cursor may take ownership of this cleanup. `QuickDisplayWindow.queue_close()` then
+relinquishes the pointer synchronously (window mouse grab off, which also drops Qt's implicit
+press `SetCapture` from an exit click; arrow cursor) and, until the HWND is gone, consumes pointer
+motion and reverts any non-arrow `CursorChange`, so retained hover cannot re-install a link's
+pointing hand that would outlive the saver on screen (`tests/test_qtquick_exit_pointer_release.py`).
 
 `QQuickWidget`, selectable old-presenter fallback and a second accelerated runtime surface are prohibited.
 Ordinary-widget glyph capabilities are resolved by the scene factory and supplied as immutable presentation
@@ -553,6 +557,21 @@ defaults; later Spectrum preset or Custom changes cannot affect Sphere. **Sphere
 bars for ridge lighting and separate terrain-growth envelopes. Its primary Terrain editor authors land/water heights,
 not audio coordinates; the onset ring continues to drive water independently. See
 [Neon Lake Basin](Reference/Neon_Lake_Basin.md). Do not skip Shockwave shaping while fixing Sphere or allow the analysis-only policy to leak across activations. Unused worker knobs otherwise take canonical engine defaults without creating dead Sphere settings. Fill/edge/tracer alpha and Rainbow speed/extent retain direct renderer consumers; each mode's curated snapshots and Custom cache remain operator-authored, editable data, not frozen behavioural test oracles.
+
+### Visualizer Studio
+
+```text
+Settings Custom launcher (ui/tabs/media/spec_mode_builder.py)
+-> open_mode_studio + VisualizerSettingsStore (ui/studio/settings_link.py)
+-> single StudioController + StudioEditSession (ui/studio/controller.py, session.py)
+-> registered mode adapter (ui/studio/registry.py): schema, own production evaluator, fixtures, renderer
+-> inline QSGRenderNode viewport (ui/studio/viewport.py) on the Studio window's render thread
+-> commit: body load (signals blocked) -> _force_visualizer_preset_to_custom -> _save_settings_now
+```
+
+The Studio owns no settings, defaults, clock, audio engine or desktop-visualizer resources. Settings is concealed
+(never hidden through `QDialog.hide()`) only after the Studio's first frame, and every exit path reveals the same
+dialog in a `finally`. Details: `Docs/Reference/Visualizer_Studio.md`.
 
 ## Geometry / CUSTOM
 
