@@ -86,6 +86,8 @@ at New, thin crescents, quarters and Full, separately from illuminated-only rim 
 `tests/test_neon_fidelity_controls.py` checks Depth Scale (near marks grow, far keep size), Shore Glow (stays
 on the shoreline, colour by alpha), Sun / Moon Path (water only, none without a body) and the wet fringe
 shining as water, through the production renderer.
+`tests/test_neon_visible_stars_and_horizon.py` also proves a lit beat star keeps its world direction when the
+camera later turns or tilts (negative control: choosing again from the new view lands it on different sky).
 `tests/test_neon_lake_camera_limits.py` pushes the loosened Neon camera (27 extreme turn/tilt/scale poses, four
 Camera Positions each) down over a spiky test-owned terrain and requires the eye a near plane above every drawable
 surface within twice the near plane of it (a zero collision radius fails), and pins the slider ranges to the world
