@@ -22,14 +22,19 @@ docs should not encode a cardinality that becomes stale when another effect is r
 
 ## 2. Graphics API horizon.
 
-Audit, plan and advise when best to build a custom Vulkan backend with intentional support for FSR <=3 and DLSS <=4.5 where applicable.
+Decided 5 Nov 2026: `Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md`. SMP & Full Display go next; the
+eventual Vulkan backend is a native render core on Qt Quick's Vulkan RHI (DLSS/FSR via native handles), started on
+measured triggers (never a Python-driven Vulkan port); mixed resolution for soft layers meanwhile (whole-frame
+upscalers rejected); port-readiness rules bind new GPU code.
 
 ## 3. Visual concepts
 
 Accepted transition membership belongs to the canonical registry and `Docs/Reference/Transitions.md`.
 
 The remaining Visualizer modes are **queued in `Current_Plan.md` §7** (Waveform Ribbon → Reactive Liquid / Melt Pool →
-Concrete Rain → Usu Moonscape), built on the shared 3D primitives of `Current_Plan.md` §6. Their contracts:
+Concrete Rain → Usu Moonscape), built on the shared 3D primitives of `Current_Plan.md` §6, and only after the Vulkan-vs-SMP/Full Display backend decision
+(decided 5 Nov: after Expanded Visualizer, under the port-readiness rules of
+`Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md`). Their contracts:
 `Docs/Future_Work/Waveform_Ribbon.md`, `Docs/Future_Work/Melt_Pool.md`, `Docs/Future_Work/Concrete_Rain.md`,
 `Docs/Future_Work/Usu_Moonscape.md` (with `Usu_Blender_Work.md`). Other mode concepts were dropped on 2026-10-25; the
 architecture they called for is the shared step in `Current_Plan.md` §6.
