@@ -1123,13 +1123,9 @@ class WaveformStudioAdapter(StudioModeAdapter):
         return "mid"
 
     def recorded_clips(self) -> tuple[StudioFixture, ...]:
-        from ui.studio.waveform_recorded_inputs import frozen_build, has_native_history
-        directory = recordings_directory()
-        if frozen_build() or not directory.is_dir():
-            return ()     # the replay analysis tools ship only with the source tree
-        return tuple(StudioFixture("clip:" + path.stem, path.stem.replace("_", " ").title(), RECORDED, 0.0,
-                                   str(path)) for path in sorted(directory.glob("*.jsonl"))
-                     if has_native_history(path))
+        """The shipped clips (Rag Doll, Human, Growing Pains), then a checkout's native-PCM recordings."""
+        from ui.studio.waveform_recorded_inputs import studio_clips
+        return studio_clips(recordings_directory())
 
     # Analysed clips for this process, keyed by clip and the analysis (non-authored) settings: the inputs do
     # not depend on authored Waveform controls, so reopening the Studio does not re-run a 30 s analysis.

@@ -46,6 +46,8 @@
         "waveform_ribbon_pulse_colour": 0.75,
         "waveform_ribbon_pulse_direction": "Centre Out",
         "waveform_ribbon_reaction_mode": "Travelling Pulse",
+        "waveform_ribbon_height_mode": "Dynamic Height Shift",
+        "waveform_ribbon_tilt_shift": false,
         "waveform_ribbon_pulse_fade": 2.2,
         "waveform_ribbon_pulse_particles": 1.4,
         "waveform_ribbon_pulse_saturation": 0.45,
@@ -894,6 +896,7 @@
           6.0
         ],
         "waveform_ribbon_floor_contrast": 2.5,
+        "waveform_ribbon_floor_give": 0.0,
         "waveform_ribbon_floor_light_far": 0.2,
         "waveform_ribbon_floor_light_reach": 35.0,
         "waveform_ribbon_floor_colour": 1.7,

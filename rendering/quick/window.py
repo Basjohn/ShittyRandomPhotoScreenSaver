@@ -388,6 +388,8 @@ class QuickDisplayWindow(QQuickWindow):
         if watched is not self:
             return False
         kind = event.type()
+        if getattr(self, '_close_queued', False) and self._retiring_pointer_event(kind):
+            return True
         if kind == QEvent.Type.MouseMove:
             if (self._plain_orbit_pending is not None or self._plain_orbit_card is not None):
                 if not event.buttons() & Qt.MouseButton.LeftButton:
@@ -470,6 +472,7 @@ class QuickDisplayWindow(QQuickWindow):
             return
         self._close_queued = True
         self._desired_visible = False
+        self._relinquish_pointer()
         try:
             for method in ("hide", "releaseResources", "close"):
                 self._queue_meta_call(method)
@@ -477,6 +480,35 @@ class QuickDisplayWindow(QQuickWindow):
             self._close_queued = False
             raise
         self.close_queued.emit()
+
+    def _relinquish_pointer(self) -> None:
+        """Give up every pointer fact this retiring window still holds, synchronously.
+
+        A left press that requests exit arrives while Qt's Windows platform holds its
+        implicit press capture (``SetCapture``) on this HWND; while any window holds
+        capture Windows sends no ``WM_SETCURSOR`` to the window under the pointer.
+        Releasing the window grab drops that capture too. The window then ends on the
+        arrow, and ``_retiring_pointer_event`` keeps it there until the HWND is gone.
+        """
+        self.setMouseGrabEnabled(False)
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+
+    def _retiring_pointer_event(self, kind: QEvent.Type) -> bool:
+        """Fence a retiring window: no hover delivery, and the arrow is the only cursor.
+
+        Input admission is already closed, yet ``mouseMoveEvent`` still forwards motion
+        to Qt Quick, whose hover tracking re-installs a hovered link's pointing hand on
+        the window (natively applied while the pointer is over it). That shape then
+        outlived the saver on screen until the next click.
+        """
+        if kind == QEvent.Type.MouseMove:
+            return True
+        if (kind == QEvent.Type.CursorChange
+                and self.cursor().shape() != Qt.CursorShape.ArrowCursor):
+            # Any other path (item destruction, leave handling) is reverted in the
+            # same delivery; the re-entrant CursorChange already carries the arrow.
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+        return False
 
     def refresh_display_identity(self) -> QuickDisplayIdentity:
         """Refresh primitive display facts after a QScreen metric change."""

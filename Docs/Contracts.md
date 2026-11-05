@@ -24,7 +24,11 @@
 `QuickCursorController.close()` runs. Loss of admission and controller retirement must restore
 `ArrowCursor` on the still-live Quick window, stop the Halo fade timer, and fence late auxiliary
 publications. Repeated close is harmless. No global Windows cursor counter, extra timer, or
-retained-QML cursor may take ownership of this cleanup.
+retained-QML cursor may take ownership of this cleanup. `QuickDisplayWindow.queue_close()` then
+relinquishes the pointer synchronously (window mouse grab off, which also drops Qt's implicit
+press `SetCapture` from an exit click; arrow cursor) and, until the HWND is gone, consumes pointer
+motion and reverts any non-arrow `CursorChange`, so retained hover cannot re-install a link's
+pointing hand that would outlive the saver on screen (`tests/test_qtquick_exit_pointer_release.py`).
 
 `QQuickWidget`, selectable old-presenter fallback and a second accelerated runtime surface are prohibited.
 Ordinary-widget glyph capabilities are resolved by the scene factory and supplied as immutable presentation
