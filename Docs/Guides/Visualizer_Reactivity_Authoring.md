@@ -623,19 +623,34 @@ ticks (bass input p05 = p50 = p95 = 1.0 on two songs), beat modulation of the di
 windows differed by ≤ 1.4×, and the smoothness slope limiter held the bass curve on 72–98% of ticks. Fix, owner
 `widgets/spotify_visualizer/devcurve_runtime.py`: each layer's level = its share × the bus loudness (fixed real
 scale); the height is a slow **body** plus fast **accents**: only the body (two slow stages) is divided by the
-remembered peak (floor in loudness units, landing at 0.55), while accents — the fast level above the body and the
-layer's flux lane above its own recent mean, captured and held 0.12 s — are read on fixed scales into the
-reserved 0.42 above it, then eased by two stages (each second stage follows its first as it stood at the start of
-the tick, so a hit's first tick never jumps the velocity). A first cut normalised the whole height, beats included:
-a sustained-chorus kick then lifted the visible reaction by ~2% of its level (6.7% now); **normalise the passage,
-never the beats**, and measure kicks in continuous play (`devcurve_continuous_kicks.py`; same recording twice, so
-identical kicks compare early vs late). A per-layer
-travelling swell born just beyond the right edge, travelling left with the material and multiplying the layer's
-own undulation under the flow rule (closed-form share, rate-limited relaxation). Lesson: **a self-normalised lane
-(band over the loudest band) is a ratio, never a level**; and **check the geometric ceiling** (slope limiter,
-clamps) as you would a drive's Range — a reaction that lands where the geometry is already limited is invisible.
-Evidence: `.artifacts/evidence/devcurve/reactivity_20261105/`; gates `tests/test_devcurve_reactivity.py`,
-`tests/test_devcurve_continuous_play.py`.
+remembered peak (floor in loudness units, landing at 0.5), while accents — the body layers' flux lane above its
+own recent mean, the transients layer's flux spike above its body, captured and held 0.06 s — are read on fixed
+scales into the reserved room above it, then eased by two stages of (0.025, 0.15) s (each second stage follows its
+first as it stood at the start of the tick, so a hit's first tick never jumps the velocity). A first cut normalised
+the whole height, beats included: a sustained-chorus kick then lifted the visible reaction by ~2% of its level;
+**normalise the passage, never the beats**, and measure kicks in continuous play (`devcurve_continuous_kicks.py`;
+same recording twice, so identical kicks compare early vs late). A per-layer travelling swell born just beyond the
+right edge, travelling left with the material and multiplying the layer's own undulation under the flow rule
+(closed-form share, rate-limited relaxation). Lesson: **a self-normalised lane (band over the loudest band) is a
+ratio, never a level**; and **check the geometric ceiling** (slope limiter, clamps) as you would a drive's Range — a
+reaction that lands where the geometry is already limited is invisible.
+
+*Kick headroom (lead review, 6 Nov).* Three further lessons. (1) **Kick-lock the measurement:** average the traces
+around every kick first and take the peak of the mean; a per-kick "max after minus mean before" is positive on any
+noisy trace, kick or not (`locked_*` in the tool). (2) **Check that an accent source rises on the kick.** The body
+layers' "fast level above the body" looked like a natural accent but, kick-locked on real music, it *fell* (+0.38 →
+−0.32 loudness units within 150 ms: the bus loudness dips after onsets) and its noise held the accent half-saturated
+between kicks, so a kick added ~0.03 of drive; flux alone gives ~0.09–0.10 on bass. (3) **Keep the reserved
+headroom through the geometry, not just the drive.** Summing body and accent and then soft-capping the total near the
+drawn ceiling let the steady accent fill the cap: on Deep Blue the total sat at 1.13 of a 1.15 cap and bass kicks did
+not show. Now the body compresses softly into its share of the ceiling, the accent stays **linear** on a scale that
+fits its share (a soft minimum of the authored scale and share × ceiling / fill), only overflow eases past the
+ceiling, and troughs ease into a soft floor instead of a flat clamp. Sustained-loud bass now moves on kicks (kick-
+locked curve RMS +0.014 vs ~0 on pre-work main), the transients layer beats pre-work main (+0.018 vs +0.015) and the
+slope limiter no longer holds bass (P1 98–100% of loud ticks before, 0% now). The cost is a calmer loud body than
+the old limiter-shaped peaks (operator call). Evidence: `.artifacts/evidence/devcurve/reactivity_20261105/`
+(`continuous_v4/`, `strips_v2/`); gates `tests/test_devcurve_reactivity.py`, `tests/test_devcurve_continuous_play.py`,
+`tests/test_devcurve_kick_headroom.py`.
 
 **Collisions with the world**
 - **Preserve the shape: lift the whole object.** Per-point clamps against a floor produce boxy, flat-bottomed troughs;
