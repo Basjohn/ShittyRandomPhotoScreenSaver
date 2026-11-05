@@ -102,7 +102,13 @@ def test_spectrum_preview_uses_the_production_opengl_floor(tmp_path):
 import sys
 from pathlib import Path
 from PIL import Image
+from tools import onboarding_preview_foundry as foundry
 from tools.onboarding_preview_foundry import _render_spectrum_preview
+from tests._visualizer_frozen_settings import frozen_visualizer_settings
+# Test-owned frozen settings, never the mutable curated preset, decide the drawn bars' alpha.
+production_build = foundry._build_spectrum_preview_snapshot
+foundry._build_spectrum_preview_snapshot = lambda **kw: production_build(
+    **kw, settings=frozen_visualizer_settings(kw.get("mode", "spectrum")))
 path = Path(sys.argv[1])
 _render_spectrum_preview(path, width=192, height=80)
 image = Image.open(path)
