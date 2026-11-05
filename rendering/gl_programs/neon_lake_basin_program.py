@@ -162,6 +162,20 @@ vec4 basinClip(vec3 world) {
 }
 """
 
+# Depth Scale: vertex marks and ridge lines drawn as if on the land itself, growing toward the camera from
+# their ordinary on-screen size at BASIN_DEPTH_REFERENCE scene units to at most BASIN_DEPTH_GROWTH_MAX times
+# it. Farther marks keep their size, so no mark ever shrinks below the authored physical-pixel diameter.
+BASIN_DEPTH_REFERENCE = 2.4
+BASIN_DEPTH_GROWTH_MAX = 3.0
+_DEPTH_SCALE = f"""
+const float BASIN_DEPTH_REFERENCE = {BASIN_DEPTH_REFERENCE:.6f};
+const float BASIN_DEPTH_GROWTH_MAX = {BASIN_DEPTH_GROWTH_MAX:.6f};
+uniform float uDepthScale; // 0 keeps marks and ridge lines one size on screen
+float basinDepthGrowth(float depth) {{
+    return 1.0+uDepthScale*(clamp(BASIN_DEPTH_REFERENCE/max(depth,1e-3),1.0,BASIN_DEPTH_GROWTH_MAX)-1.0);
+}}
+"""
+
 _SHORE_HEIGHT_GLSL = """
 #ifndef BASIN_SHORE_HEIGHT
 #define BASIN_SHORE_HEIGHT 0.018
@@ -333,7 +347,8 @@ vec3 basinVisibleSkyRadiance(vec3 eye,vec3 ray) {{
 
 NEON_VERTEX_SOURCE = (
     "#version 460 core\nlayout(location=0) in vec2 aUv;\n"
-    + SHOCKWAVE_EVENTS.glsl(3) + SCENE3D_ORBIT_GLSL + HEIGHTFIELD_GLSL + _PROJECTION + SHOCKWAVE_WAVE_GLSL + _POSE + _TERRAIN
+    + SHOCKWAVE_EVENTS.glsl(3) + SCENE3D_ORBIT_GLSL + HEIGHTFIELD_GLSL + _PROJECTION + SHOCKWAVE_WAVE_GLSL + _POSE
+    + _DEPTH_SCALE + _TERRAIN
     + """
 out vec3 vWorld;
 out vec2 vUv;
@@ -341,6 +356,7 @@ out float vCrest;
 out float vEnergy;
 out float vCurvedBase;
 out vec3 vSurfaceNormal;
+out float vPointPx;
 uniform int uSmoothGlass;
 void main() {
     vec3 world = basinSurface(aUv, vCrest, vEnergy, vCurvedBase);
@@ -366,7 +382,8 @@ void main() {
     vUv = aUv;
     vec4 clip = basinClip(world);
     if (uMarks == 1) clip.z -= 0.0001*clip.w;
-    gl_PointSize=uPointPx;
+    vPointPx=uPointPx*basinDepthGrowth(clip.w);
+    gl_PointSize=vPointPx;
     gl_Position = clip;
 }
 """
@@ -402,6 +419,7 @@ in float vCrest;
 in float vEnergy;
 in float vCurvedBase;
 in vec3 vSurfaceNormal;
+in float vPointPx;
 uniform vec4 uLineColor;
 uniform vec4 uCrestColor;
 uniform vec4 uWaterColor;
@@ -422,7 +440,40 @@ uniform float uLightStrength;
 uniform vec4 uWaterLineGlowColor; // the water lines' glow colour; alpha mixes it in over their ripple palette
 uniform float uWaterLineGlow;     // their glow, relative to the shared surface glow
 uniform float uWaterShine;        // the water's own surface: tinted body with a rippled mirror of the sky
+uniform float uShoreGlow;         // the water's edge glow along the visible shoreline (0 = only the shoreline)
+uniform vec4 uShoreGlowColor;     // its colour; alpha mixes it in over the shoreline's own palette
+uniform float uWaterGlint;        // the Sun/Moon's glittering path on the water below it (0 = none)
+uniform vec4 uGlintLight;         // halo intensity, halo reactivity (0, 0 with the halo off), midband, beat pulse
 vec4 sceneEmission(vec3 rgb) { return vec4(rgb, dot(rgb, vec3(0.2126,0.7152,0.0722))); }
+// Screen distance in physical pixels from a water or wet-fringe fragment to the visible shoreline (negative
+// up the dry bank): the bank distance across open water, the shoreline contour on land. Derivatives come from
+// the caller, taken in uniform control flow.
+float basinShorePixels(bool water,vec2 uv,float curved,vec2 uvPerPixel,float curvedPerPixel) {
+    if (water) return basinBankDistance(uv)/max(length(uvPerPixel),1e-6);
+    return (BASIN_SHORE_HEIGHT-curved)/max(curvedPerPixel,0.0001);
+}
+// The glitter path: broken bright streaks on the water in a column under the body on screen, widening and
+// fading toward the viewer. Artistic, like a painted moon path: it does not need the mirror angle.
+// ``depthPerPixel`` is fwidth(world.z) from the caller, so the streaks fade to their mean before aliasing.
+float basinWaterGlint(vec3 world,float depthPerPixel) {
+    vec3 body=basinViewPoint(uBodyPosition);
+    vec3 here=basinViewPoint(world);
+    if (body.z>-0.05 || here.z>-0.01) return 0.0;
+    // Screen position in units of the vertical half-aperture on both axes, so the column is not stretched.
+    vec2 b=body.xy/(-body.z*uTan.y);
+    vec2 h=here.xy/(-here.z*uTan.y);
+    float radius=uBodySize/max(length(uBodyPosition-uEye),1e-3)/uTan.y;
+    float below=b.y-h.y;
+    if (below<=0.0) return 0.0;
+    float width=radius*(0.75+1.6*below);
+    float column=exp(-pow((h.x-b.x)/max(width,1e-4),2.0));
+    float reach=exp(-below/0.9);
+    float phase=world.z*70.0+2.6*sin(world.x*9.0+uTime*0.7)-uTime*1.1;
+    float second=world.z*29.0-world.x*6.0+uTime*0.8;
+    float detail=clamp(1.5-35.0*depthPerPixel,0.0,1.0);
+    float glitter=mix(0.45,smoothstep(0.15,0.9,0.62*sin(phase)+0.38*sin(second)),detail);
+    return column*reach*glitter;
+}
 void main() {
     float detailFade=basinDetailFade(vUv);
     float distanceFade=basinDistanceFade(vUv);
@@ -460,7 +511,7 @@ void main() {
             // A subpixel hole can remove the entire small marker. Fill its
             // core smoothly until the outlined shape has enough real pixels.
             float outline=smoothstep(0.18,0.28,radius);
-            coverage*=mix(1.0,outline,smoothstep(3.0,5.0,uPointPx));
+            coverage*=mix(1.0,outline,smoothstep(3.0,5.0,vPointPx));
         }
         if (coverage<0.01) discard;
         vec4 pointColour=mix(uVertexColor,uVertexAccentColor,clamp(water ? vCrest*0.6 :
@@ -477,6 +528,10 @@ void main() {
         Emission=sceneEmission(palette*gain*alpha*uGlow);
         return;
     }
+    // Derivatives for the edge glow and glint, taken here in uniform control flow.
+    vec2 uvPerPixel=fwidth(vUv);
+    float curvedPerPixel=fwidth(vCurvedBase);
+    float depthPerPixel=fwidth(vWorld.z);
     float shore=smoothstep(0.0,0.055,base);
     float shoreLight=basinShoreLight(vUv,base,vCurvedBase);
     float line=sceneHeightfieldCurveWire(vUv,vCurvedBase,uCurveCells,uEdgePx)*shore;
@@ -595,11 +650,34 @@ void main() {
     vec3 shoreColour=mix(uLineColor.rgb,uCrestColor.rgb,clamp(0.5+0.45*sin(vWorld.x*3.0+vWorld.z*2.0),0.0,1.0));
     premult=premult*(1.0-shoreAlpha)+shoreColour*shoreAlpha;
     alpha=alpha*(1.0-shoreAlpha)+shoreAlpha;
+    // Shore Glow: light along the actual visible shoreline, spreading over the water (a short lip up the
+    // dry bank), in screen pixels so near and distant shores glow alike. It only ever adds to the shoreline.
+    float edgeGlow=0.0;
+    vec3 edgeColour=mix(shoreColour,uShoreGlowColor.rgb,uShoreGlowColor.a);
+    if (uShoreGlow>0.0 && basinOutside(vUv)<1e-6) {
+        float px=basinShorePixels(water,vUv,vCurvedBase,uvPerPixel,curvedPerPixel);
+        float reach=1.2+2.8*min(uShoreGlow,2.0);
+        edgeGlow=(px>=0.0 ? exp(-px/reach) : exp(px/(0.35*reach)))*uShoreGlow*(0.75+0.5*vEnergy);
+        float edgeAlpha=clamp(0.45*edgeGlow,0.0,0.85);
+        premult=premult*(1.0-edgeAlpha)+edgeColour*edgeAlpha;
+        alpha=alpha*(1.0-edgeAlpha)+edgeAlpha;
+    }
+    // Sun/Moon path: glittering streaks on the water under the body, brightening with the halo's music.
+    float glintLight=0.0;
+    vec3 glintColour=mix(bodyColour.rgb,vec3(1.0),0.35);
+    if (water && uWaterGlint>0.0 && uSunEnabled==1) {
+        float gain=uGlintLight.x>0.0 ? basinCelestialHaloGain(uGlintLight.xy,uGlintLight.z,uGlintLight.w) : 1.0;
+        glintLight=uWaterGlint*basinWaterGlint(vWorld,depthPerPixel)*(0.55+0.45*gain)*bodyColour.a;
+        float glintAlpha=clamp(glintLight,0.0,1.0);
+        premult=premult*(1.0-glintAlpha)+glintColour*glintAlpha;
+        alpha=alpha*(1.0-glintAlpha)+glintAlpha;
+    }
     FragColor=vec4(min(premult/max(alpha,1e-4),vec3(1.0)),alpha*distanceFade);
     // Only water carries lines here; their glow takes its own colour and strength.
     vec3 lineGlow=mix(wire,uWaterLineGlowColor.rgb*(0.65+0.55*crest),uWaterLineGlowColor.a)*uWaterLineGlow;
     Emission=sceneEmission((lineGlow*lineAlpha + palette*ringAlpha*0.45+shoreColour*shoreAlpha
-                           +fill*fillAlpha*glassWeight*0.12+shineEmission*fillAlpha)*uGlow*distanceFade*detailFade);
+                           +fill*fillAlpha*glassWeight*0.12+shineEmission*fillAlpha
+                           +edgeColour*edgeGlow*1.2+glintColour*glintLight*0.8)*uGlow*distanceFade*detailFade);
 }
 """
 )
@@ -611,7 +689,7 @@ void main() {
 NEON_SKYLINE_VERTEX_SOURCE = (
     "#version 460 core\nlayout(location=0) in vec2 aUv;\n"
     + SHOCKWAVE_EVENTS.glsl(3) + SCENE3D_ORBIT_GLSL + HEIGHTFIELD_GLSL
-    + _PROJECTION + SHOCKWAVE_WAVE_GLSL + _POSE + _TERRAIN
+    + _PROJECTION + SHOCKWAVE_WAVE_GLSL + _POSE + _DEPTH_SCALE + _TERRAIN
     + """
 out vec2 vUv;
 out float vContourFade;
@@ -626,7 +704,8 @@ void main() {
                     sceneHeightfieldWater(base) ? -basinDistantDrop(aUv) : basinLandHeight(aUv,base,smoothed),
                     -aUv.y*SHOCKWAVE_DEPTH);
     vec4 clip=basinClip(world);
-    float width=mix(1.8,uHorizonThickness,smoothstep(0.0,0.25,basinOutside(aUv)));
+    // Near ridges draw thicker with Depth Scale, like the marks on the same land.
+    float width=mix(1.8,uHorizonThickness,smoothstep(0.0,0.25,basinOutside(aUv)))*basinDepthGrowth(clip.w);
     clip.y+=uOutlineLiftNdc*width*clip.w;
     clip.z+=0.0012*clip.w; // farther than the same real surface, never internal paint
     gl_Position=clip;

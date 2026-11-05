@@ -42,6 +42,7 @@
           255
         ],
         "shockwave_grid_density": 0.6,
+        "shockwave_grid_depth_scale": 0.0,
         "shockwave_grid_drop_speed": 1.3,
         "shockwave_grid_dynamic_floor": false,
         "shockwave_grid_dynamic_range_enabled": false,
@@ -173,6 +174,13 @@
             1.0,
             0.6257861635220129
           ]
+        ],
+        "shockwave_grid_shore_glow": 0.0,
+        "shockwave_grid_shore_glow_color": [
+          80,
+          200,
+          255,
+          0
         ],
         "shockwave_grid_sky_color": [
           40,
@@ -1406,6 +1414,7 @@
           255
         ],
         "shockwave_grid_water_detail": 0.22,
+        "shockwave_grid_water_glint": 0.0,
         "shockwave_grid_water_line_glow": 1.0,
         "shockwave_grid_water_line_glow_color": [
           255,
