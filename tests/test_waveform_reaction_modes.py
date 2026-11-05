@@ -221,6 +221,18 @@ def test_group_wave_surge_change_is_rate_limited_and_crests_lean_to_the_leading_
     assert leaning < centre  # Head To Tail travels toward -x: the leading edge is lower x
 
 
+def test_group_wave_lifts_a_whole_set_of_crests_where_travelling_pulse_lifts_one_swell():
+    """5 Nov 8 s strips: a group no wider than the pulse's own envelope read as Travelling Pulse."""
+    def spans(mode):
+        model = beats(model_for(mode, width=2.5, speed=6.), count=1, after=.5)
+        geom, light = model._geom, model._level
+        return [float((field > .5*field.max()).sum()*(PULSE_GRID[1]-PULSE_GRID[0])) for field in (geom, light)]
+    (pulse_geom, pulse_light), (group_geom, group_light) = spans('Travelling Pulse'), spans('Group Wave')
+    wavelength = carrier_wavelength(model_for('Group Wave').controls)
+    assert group_geom > 1.8*pulse_geom and group_geom > 2.5*wavelength  # several crests lift together
+    assert group_light > 1.8*pulse_light                                 # and the light covers the set
+
+
 @pytest.mark.parametrize('mode', REACTION_MODES)
 def test_silence_injects_nothing_in_any_mode(mode):
     model = model_for(mode)

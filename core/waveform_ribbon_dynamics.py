@@ -97,9 +97,12 @@ REACTION_MODES = ('Travelling Pulse', 'Frozen Past', 'Whole Swell', 'Group Wave'
 FROZEN_PRESENT, FROZEN_RISE, FROZEN_REPLACE, FROZEN_DECAY, FROZEN_RISING = .05, .06, .5, 45., .003
 # Whole Swell: one global level (DevCurve). Rise = PULSE_RISE (80 ms); settle = Pulse Fade/4 within these bounds.
 WHOLE_SETTLE = (.65, 1.5)
-# Group Wave: crests rise more toward the group's leading edge (smooth tanh lead weight on the broad envelope) and
-# the cloth under the group surges a little further along its own curve; the shared SURGE_RATE bounds its change.
-GROUP_LEAD, GROUP_SURGE = .5, 1.4
+# Group Wave: each swell arrives as a SET. Its envelope spans GROUP_WAVES carrier wavelengths, so several consecutive
+# crests lift together and the light covers the whole set; the crests rise more toward the set's leading edge (smooth
+# tanh lead weight) and the cloth under it surges a little further along its own curve. A wider envelope has a
+# gentler slope, so the flow rule holds with more margin; the shared SURGE_RATE bounds the surge's change. (5 Nov
+# 8 s strips: a 1.5-wavelength group with a .5 lean was indistinguishable from Travelling Pulse.)
+GROUP_WAVES, GROUP_LEAD, GROUP_SURGE = 3.5, .8, 1.4
 
 
 def pulse_sources(direction):
@@ -479,10 +482,10 @@ class WaveformDynamics:
         previous[:] = now
         rising[:] = up_now
 
-    def _blur_kernel(self):
-        """Gaussian that widens the authored-width field to the geometric envelope (>= GEOM_WAVES wavelengths)."""
+    def _blur_kernel(self,waves=GEOM_WAVES):
+        """Gaussian that widens the authored-width field to the geometric envelope (>= ``waves`` wavelengths)."""
         sigma_w = self.controls.pulse.width/2.3548
-        sigma_g = max(sigma_w,GEOM_WAVES*carrier_wavelength(self.controls)/2.3548)
+        sigma_g = max(sigma_w,waves*carrier_wavelength(self.controls)/2.3548)
         extra = math.sqrt(max(0.,sigma_g*sigma_g-sigma_w*sigma_w))
         key = (round(extra,9),round(sigma_g/sigma_w,9))
         if self._kernel[0]!=key:
@@ -499,7 +502,7 @@ class WaveformDynamics:
     def _publish_fields(self,dt):
         """Derive the published appearance level, particle focus, broad geometry and rate-limited surge fields."""
         p = self.controls.pulse
-        kernel,sigma_g = self._blur_kernel()
+        kernel,sigma_g = self._blur_kernel(GROUP_WAVES if p.mode=='Group Wave' else GEOM_WAVES)
         def broad(field):
             if kernel.size==1:
                 return field*kernel[0]
@@ -525,8 +528,9 @@ class WaveformDynamics:
             self._geom = soft(broad(memory))
             drift_target = soft(broad(self._pulse[1]))-soft(broad(self._pulse[0]))
         elif p.mode=='Group Wave':
-            self._level = look
-            self._focus = look
+            # The light covers the set: the look spread over the group envelope (unit-sum, so it never brightens).
+            self._level = np.minimum(1.,broad(look)*(p.width/2.3548)/sigma_g)
+            self._focus = self._level
             total = np.zeros(PULSE_GRID.size)
             for index,sign in enumerate((-1.,1.)):
                 wide = broad(self._pulse[index])
