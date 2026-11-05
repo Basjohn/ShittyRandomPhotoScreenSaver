@@ -94,6 +94,7 @@ class Workspace:
     # Groups open when the workspace is shown (default: the first two).
     open_groups: tuple[str, ...] = ()
     icon: str = ""             # a short glyph for the workspace tab
+    help: str = ""             # one sentence for the help overlay: what this workspace is for
 
 
 @dataclass(frozen=True)

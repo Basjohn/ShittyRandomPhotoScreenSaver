@@ -6,6 +6,11 @@ framebuffer (no readback, no extra texture copy). The renderer is created lazily
 the render thread and released there, on ``sceneGraphInvalidated`` or node release,
 while that context is current. Render failures are reported to the GUI thread and
 shown in the viewport; the node never substitutes placeholder pixels.
+
+Snapshots (e.g. starting-point tile previews) are rendered on request only: at most one per
+frame, by a second renderer instance (so the live scene's temporal state is never disturbed)
+into a small private framebuffer, read back once and handed to the GUI thread. With no
+request pending the node does no extra work.
 """
 from __future__ import annotations
 
@@ -70,6 +75,45 @@ class _UnitQuad:
         self.vao = self._vbo = 0
 
 
+class _SnapshotTarget:
+    """A small RGBA8 + depth/stencil framebuffer for snapshot renders (render thread only)."""
+
+    def __init__(self) -> None:
+        self.fbo = self._colour = self._depth = 0
+        self.size = (0, 0)
+
+    def ensure(self, width: int, height: int) -> int:
+        if self.fbo and self.size == (width, height):
+            return self.fbo
+        self.release()
+        self.fbo = int(gl.glGenFramebuffers(1))
+        self._colour = int(gl.glGenRenderbuffers(1))
+        self._depth = int(gl.glGenRenderbuffers(1))
+        gl.glBindRenderbuffer(gl.GL_RENDERBUFFER, self._colour)
+        gl.glRenderbufferStorage(gl.GL_RENDERBUFFER, gl.GL_RGBA8, width, height)
+        gl.glBindRenderbuffer(gl.GL_RENDERBUFFER, self._depth)
+        gl.glRenderbufferStorage(gl.GL_RENDERBUFFER, gl.GL_DEPTH24_STENCIL8, width, height)
+        gl.glBindRenderbuffer(gl.GL_RENDERBUFFER, 0)
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self.fbo)
+        gl.glFramebufferRenderbuffer(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_RENDERBUFFER, self._colour)
+        gl.glFramebufferRenderbuffer(gl.GL_FRAMEBUFFER, gl.GL_DEPTH_STENCIL_ATTACHMENT, gl.GL_RENDERBUFFER,
+                                     self._depth)
+        status = gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER)
+        if status != gl.GL_FRAMEBUFFER_COMPLETE:
+            raise RuntimeError(f"Snapshot framebuffer incomplete ({status})")
+        self.size = (width, height)
+        return self.fbo
+
+    def release(self) -> None:
+        if self.fbo:
+            gl.glDeleteFramebuffers(1, [self.fbo])
+        for buffer in (self._colour, self._depth):
+            if buffer:
+                gl.glDeleteRenderbuffers(1, [buffer])
+        self.fbo = self._colour = self._depth = 0
+        self.size = (0, 0)
+
+
 class StudioRenderNode(QSGRenderNode):
     """Render-thread owner of one Studio renderer and its GL resources."""
 
@@ -88,6 +132,10 @@ class StudioRenderNode(QSGRenderNode):
         self._last_error = ""
         self._released = False
         self._drawn_serial = -1
+        self._snapshot_job = None
+        self._snapshot_renderer: Any = None
+        self._snapshot_prepared = False
+        self._snapshot_target = _SnapshotTarget()
 
     # Sync phase (GUI blocked) -------------------------------------------------
     def synchronize(self, frame: Any, serial: int, logical_size: tuple[float, float],
@@ -97,6 +145,14 @@ class StudioRenderNode(QSGRenderNode):
         self._frame = frame
         self._frame_serial = serial
         self._logical_size = (max(0.0, float(logical_size[0])), max(0.0, float(logical_size[1])))
+
+    def take_snapshot_job(self, job) -> None:
+        if job is not None and self._snapshot_job is None:
+            self._snapshot_job = job
+
+    @property
+    def snapshot_busy(self) -> bool:
+        return self._snapshot_job is not None
 
     def rect(self) -> QRectF:
         return QRectF(0.0, 0.0, *self._logical_size)
@@ -160,6 +216,55 @@ class StudioRenderNode(QSGRenderNode):
                 self._last_error = signature
                 logger.exception("[STUDIO] Viewport render failed")
             self._reporter.noteError(signature)
+        if self._snapshot_job is not None:
+            self._render_snapshot()
+
+    def _render_snapshot(self) -> None:
+        """One requested snapshot: second renderer, private framebuffer, one small readback."""
+        key, frame, width, height, logical, extent, style = self._snapshot_job
+        from rendering.quick.visualizer.gl_state import InheritedGlState
+        inherited = InheritedGlState.capture_render_host()
+        prior_draw = _int_state(gl.GL_DRAW_FRAMEBUFFER_BINDING)
+        prior_read = _int_state(gl.GL_READ_FRAMEBUFFER_BINDING)
+        try:
+            if self._snapshot_renderer is None:
+                self._snapshot_renderer = self._factory()
+            lw, lh = float(logical[0]), float(logical[1])
+            # Item pixels (y down) -> clip space for a target exactly the item's size.
+            matrix = (2.0 / lw, 0.0, 0.0, 0.0, 0.0, -2.0 / lh, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0)
+            card = RenderCard(viewport=(0, 0, width, height), logical_size=(lw, lh), matrix_values=matrix,
+                              quad_vao=self._quad.ensure(), extent=extent, style=style)
+            fbo = self._snapshot_target.ensure(width, height)
+            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
+            gl.glViewport(0, 0, width, height)
+            gl.glDisable(gl.GL_SCISSOR_TEST)
+            gl.glClearColor(0.0, 0.0, 0.0, 1.0)
+            gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT | gl.GL_STENCIL_BUFFER_BIT)
+            gl.glEnable(gl.GL_BLEND)
+            gl.glBlendEquationSeparate(gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
+            gl.glBlendFuncSeparate(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA, gl.GL_ONE, gl.GL_ONE_MINUS_SRC_ALPHA)
+            gl.glDisable(gl.GL_CULL_FACE)
+            gl.glDisable(gl.GL_DEPTH_TEST)
+            gl.glDepthMask(gl.GL_FALSE)
+            if not self._snapshot_prepared:
+                self._snapshot_prepared = bool(self._snapshot_renderer.prepare(card, frame))
+                if not self._snapshot_prepared:
+                    self._reporter.noteSnapshotPending()       # keep the job; another frame continues
+                    return
+            self._snapshot_renderer.render(card, frame)
+            gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, fbo)
+            gl.glPixelStorei(gl.GL_PACK_ALIGNMENT, 1)
+            pixels = gl.glReadPixels(0, 0, width, height, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)
+            self._snapshot_job = None
+            self._reporter.noteSnapshot(str(key), int(width), int(height), bytes(pixels))
+        except Exception as exc:
+            self._snapshot_job = None
+            logger.exception("[STUDIO] Snapshot render failed")
+            self._reporter.noteSnapshotFailed(str(key), f"{type(exc).__name__}: {exc}")
+        finally:
+            gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, prior_draw)
+            gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, prior_read)
+            inherited.restore_render_host()
 
     def releaseResources(self) -> None:
         self.release_now()
@@ -171,10 +276,15 @@ class StudioRenderNode(QSGRenderNode):
         if QOpenGLContext.currentContext() is None:
             return  # a later legal invalidation retries
         renderer, self._renderer = self._renderer, None
+        snapshot, self._snapshot_renderer = self._snapshot_renderer, None
         try:
             if renderer is not None:
                 renderer.release()
+            if snapshot is not None:
+                snapshot.release()
         finally:
+            self._snapshot_target.release()
+            self._snapshot_job = None
             self._quad.release()
             self._released = True
             self._frame = None
@@ -186,6 +296,9 @@ class StudioViewportItem(QQuickItem):
     rendered = Signal(int)          # serial of a frame that reached the framebuffer
     renderError = Signal(str)
     preparing = Signal()
+    snapshotReady = Signal(str, int, int, bytes)     # key, width, height, RGBA rows bottom-up
+    snapshotFailed = Signal(str, str)
+    snapshotPending = Signal()
 
     def __init__(self, factory: Callable[[], Any], parent: QQuickItem | None = None) -> None:
         self._factory = factory
@@ -196,6 +309,7 @@ class StudioViewportItem(QQuickItem):
         self._extent: tuple[float, float] | None = None
         self._style: tuple = ()
         self._bound_window: QQuickWindow | None = None
+        self._snapshot_jobs: list = []
         super().__init__(parent)
         self.setFlag(QQuickItem.Flag.ItemHasContents, True)
         self.windowChanged.connect(self._bind_window)
@@ -207,6 +321,17 @@ class StudioViewportItem(QQuickItem):
         self._serial += 1
         self.update()
         return self._serial
+
+    def request_snapshot(self, key: str, frame: Any, size: tuple[int, int], logical: tuple[float, float],
+                         extent: tuple[float, float] | None, style: tuple = ()) -> None:
+        """Render ``frame`` once into a ``size`` pixel image (``logical`` item size) on the render thread;
+        the result arrives as ``snapshotReady``. Requests are served one per frame, in order."""
+        self._snapshot_jobs.append((key, frame, int(size[0]), int(size[1]), logical, extent, tuple(style)))
+        self.update()
+
+    @property
+    def snapshot_queue(self) -> int:
+        return len(self._snapshot_jobs)
 
     @property
     def frame_serial(self) -> int:
@@ -256,6 +381,8 @@ class StudioViewportItem(QQuickItem):
     def updatePaintNode(self, old_node: QSGNode | None, _data: QQuickItem.UpdatePaintNodeData) -> QSGNode:
         node = old_node if isinstance(old_node, StudioRenderNode) else StudioRenderNode(self._factory, self)
         node.synchronize(self._frame, self._serial, (self.width(), self.height()), self._extent, self._style)
+        if self._snapshot_jobs and not node.snapshot_busy:
+            node.take_snapshot_job(self._snapshot_jobs.pop(0))
         with self._lock:
             self._node = node
         return node
@@ -269,6 +396,15 @@ class StudioViewportItem(QQuickItem):
 
     def notePreparing(self) -> None:
         self.preparing.emit()
+
+    def noteSnapshot(self, key: str, width: int, height: int, pixels: bytes) -> None:
+        self.snapshotReady.emit(key, width, height, pixels)
+
+    def noteSnapshotFailed(self, key: str, signature: str) -> None:
+        self.snapshotFailed.emit(key, signature)
+
+    def noteSnapshotPending(self) -> None:
+        self.snapshotPending.emit()
 
 
 __all__ = ["StudioRenderNode", "StudioViewportItem"]

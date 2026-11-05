@@ -17,53 +17,8 @@ from __future__ import annotations
 from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
 
-import numpy as np
-
-from tools.visualizer_replay.engine import ReplayBeatEngine
 from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
-
-
-class PcmReanalysis:
-    """One replay's DSP state; feed every accepted frame once per capture serial."""
-
-    def __init__(self) -> None:
-        self.state = None
-        self.identity = None
-        self.serial = None
-        self.frames = 0
-
-    def accept(self, engine, feature) -> None:
-        from widgets.spotify_visualizer.bar_computation import compute_bars_from_samples
-
-        history = feature.capture_history
-        if history is None:
-            raise ValueError("PCM reanalysis requires native capture history on every frame")
-        if engine._replay_capture_history is not history:
-            raise ValueError("PCM reanalysis must follow acceptance of this exact source frame")
-        identity = (engine, engine._analysis_compute_state_epoch)
-        if self.identity != identity:
-            self.state = None
-            self.serial = None
-            self.identity = identity
-        if self.serial == history.capture_serial:
-            engine._pcm_reanalysis_epoch = engine._analysis_compute_state_epoch
-            engine._pcm_reanalysis_ready = True
-            return
-        worker = engine._audio_worker
-        if self.state is None:
-            # Taken after the replay applied the mode's technical config, so the
-            # configured floor/sensitivity drive the recomputed bands.
-            self.state = worker.make_compute_snapshot()
-            self.state._np = np
-        block = int(worker._preferred_block_size or 0) or history.sample_rate // 100
-        samples = np.frombuffer(history.pcm_f32le, dtype="<f4")[-block:]
-        if compute_bars_from_samples(self.state, samples) is None:
-            raise RuntimeError("production PCM analysis failed")
-        worker.commit_compute_snapshot(self.state)
-        engine._pcm_reanalysis_epoch = engine._analysis_compute_state_epoch
-        engine._pcm_reanalysis_ready = True
-        self.serial = history.capture_serial
-        self.frames += 1
+from widgets.spotify_visualizer.feature_replay import PcmReanalysis, ReplayBeatEngine  # noqa: F401  (tool names)
 
 
 @contextmanager

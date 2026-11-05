@@ -4,6 +4,14 @@ Everything mode-specific lives behind this interface: which values exist and how
 to author them (schema), how the mode's real logical model turns inputs and values
 into an immutable frame (evaluator), which preview inputs exist (fixtures) and how
 the mode's production renderer draws that frame on the Quick render thread.
+
+The Studio never assumes a framed 3D scene. What the viewport offers is declared by the
+adapter through ``capabilities()`` (see ``StudioCapabilities``): a flat 2D mode (Spectrum,
+Oscilloscope, Bubble, ...) declares no camera and no scene handles, and the shell then shows
+no navigation, view readout, Keep View / Reset or handle overlay and never calls
+``navigation()`` / ``scene_handles()``. Inspector extras (material/starting-point tiles,
+lifetime timelines, schematic cards, signal traces, the response editor) are optional parts of
+the schema: an empty tuple / ``None`` simply hides them.
 """
 from __future__ import annotations
 
@@ -39,6 +47,23 @@ class RenderCard:
     quad_vao: int                             # a unit quad for item-space composition
     extent: tuple[float, float] | None = None # the world extent presented (letterboxed), when framed
     style: tuple = ()                         # the framing's (key, value) presentation style (e.g. card chrome)
+
+
+@dataclass(frozen=True)
+class StudioCapabilities:
+    """What a mode's Studio viewport supports. The default is the most basic: a live 2D preview of
+    the production renderer and nothing else.
+
+    ``viewport``: the mode draws a live preview (False: inspector-only Studio; no renderer is created).
+    ``camera``: the mode has a navigable camera; ``navigation()`` maps orbit / zoom / dolly / pan.
+    ``handles``: ``scene_handles()`` supplies direct-manipulation handles over the preview."""
+    viewport: bool = True
+    camera: bool = False
+    handles: bool = False
+
+    def as_map(self) -> dict:
+        return {"viewport": self.viewport, "camera": self.camera and self.viewport,
+                "handles": self.handles and self.viewport}
 
 
 class StudioEvaluator(Protocol):
@@ -89,7 +114,12 @@ class StudioModeAdapter(ABC):
 
     @abstractmethod
     def create_renderer(self) -> StudioRenderer:
-        """Called on the render thread with the scene-graph context current."""
+        """Called on the render thread with the scene-graph context current (only when the
+        capabilities declare a viewport)."""
+
+    def capabilities(self) -> StudioCapabilities:
+        """What the viewport supports; override to declare a camera and/or scene handles."""
+        return StudioCapabilities()
 
     def orbit_paths(self) -> tuple[Path, Path, tuple[float, float], tuple[float, float]] | None:
         """(horizontal path, vertical path, horizontal bounds, vertical bounds) for viewport
@@ -100,7 +130,8 @@ class StudioModeAdapter(ABC):
         return (nav.orbit_h.key,), (nav.orbit_v.key,), nav.orbit_h.bounds, nav.orbit_v.bounds
 
     def navigation(self) -> "StudioNavigation | None":
-        """Viewport navigation axes (orbit, zoom, dolly, pan) bound to the mode's camera values."""
+        """Viewport navigation axes (orbit, zoom, dolly, pan) bound to the mode's camera values.
+        Consulted only when ``capabilities().camera`` is True."""
         return None
 
     def recorded_clips(self) -> tuple[StudioFixture, ...]:
@@ -126,14 +157,26 @@ class StudioModeAdapter(ABC):
         """{path: value} changes for a group preset (relative to ``baseline``: reversible)."""
         return {}
 
+    def preset_preview(self, group: str, preset_id: str, values: Mapping[str, Any]):
+        """``(frame, extent, style)`` showing ``values`` (a starting point already applied) for that
+        preset's tile, drawn once by the mode's renderer at thumbnail size; None keeps the swatch.
+        Consulted only with a viewport, after commits while the tiles are on screen (never per frame)."""
+        return None
+
     def scene_handles(self, frame: Any, values: Mapping[str, Any], object_id: str,
                       size: tuple[float, float], extent, style) -> dict:
-        """Direct-manipulation handles for the selected object, projected through the mode's real camera.
+        """Direct-manipulation handles for the selected object, projected through the mode's real camera
+        (2D modes: through their own item mapping). Consulted only when ``capabilities().handles``.
 
         Returns {"outline": [[x, y], ...], "handles": [{"id", "property", "endpoint", "axis" ("x"|"y"),
         "x", "y", "perPixel", "label"}]} in presented-frame pixels (origin top-left); ``perPixel`` is the value change per
-        screen pixel of drag along ``axis`` (y grows downwards)."""
+        screen pixel of drag along ``axis`` (y grows downwards). ``axis`` "xy" is a combined move gizmo:
+        ``property``/``perPixel`` follow x and ``propertyY``/``perPixelY`` follow y, in one undoable edit."""
         return {"outline": [], "handles": []}
+
+    def release(self) -> None:
+        """Drop anything the adapter itself holds (e.g. a private preview evaluator) when the Studio
+        closes or switches mode."""
 
     def default_fixture(self, evaluator) -> str | None:
         """The preview input the transport starts on (None: the evaluator's own default)."""
@@ -177,7 +220,8 @@ class StudioFraming:
 
 
 __all__ = [
-    "NavAxis", "RECORDED", "REFERENCE", "SYNTHETIC", "RenderCard", "StudioEvaluator", "StudioFixture",
+    "NavAxis", "RECORDED", "REFERENCE", "SYNTHETIC", "RenderCard", "StudioCapabilities", "StudioEvaluator",
+    "StudioFixture",
     "StudioFraming", "StudioNavigation",
     "StudioModeAdapter", "StudioRenderer",
 ]

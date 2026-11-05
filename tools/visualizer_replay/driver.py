@@ -33,6 +33,10 @@ from widgets.spotify_visualizer.source_config_applier import apply_engine_vis_mo
 from widgets.spotify_visualizer.technical_config import build_technical_cache, resolve_technical_config
 from widgets.spotify_visualizer.tick_pipeline import logical_tick
 
+from widgets.spotify_visualizer.feature_replay import (  # noqa: F401  (deterministic_clock: tool name)
+    configure_offline_controller, deterministic_clock,
+)
+
 from .engine import ReplayBeatEngine
 from .metrics import calculate_metrics
 
@@ -116,55 +120,8 @@ def load_clips(directory: Path = FIXTURES) -> dict[str, FeatureClip]:
     return clips
 
 
-@contextmanager
-def deterministic_clock():
-    now = [0.0]
-    saved_random = random.getstate()
-    random.seed(1729)
-    try:
-        with patch.object(time, "time", lambda: now[0]), patch.object(time, "monotonic", lambda: now[0]):
-            yield now
-    finally:
-        random.setstate(saved_random)
-
-
-def _configure(controller, mode, preset: int = 0, overrides=None, settings=None):
-    """``settings``: a complete resolved settings mapping (or ``mode -> mapping``) used instead of the curated
-    ``preset``; tests pass frozen copies so authored presets never decide them (Current_Plan N2)."""
-    activation = None
-    if settings is None:
-        activation = resolve_visualizer_activation_payload({"mode": mode, f"preset_{mode}": preset})
-        resolved = activation.resolved_config
-    else:
-        resolved = settings(mode) if callable(settings) else settings
-    model = SpotifyVisualizerSettings.from_mapping(
-        resolved, apply_preset_overlay=False, resolve_preset_indices=False,
-    )
-    if overrides:
-        model = replace(model, **dict(overrides))
-    controller.set_mode(mode)
-    controller.settings_model = model
-    if activation is not None:
-        controller.record_resolved_activation(activation)
-    state = controller.logical_tick_state
-    install_default_logical_tick_state(state, bar_count=controller.bar_count)
-    install_default_presentation_state(controller.presentation_state)
-    values = resolve_mode_source_config(mode, asdict(model))
-    apply_logical_vis_mode_kwargs(state, values)
-    apply_presentation_vis_mode_kwargs(controller.presentation_state, values)
-    apply_engine_vis_mode_kwargs(controller.engine, values)
-    controller.technical_config_cache = build_technical_cache(None, model)
-    apply_controller_technical_config(controller, resolve_technical_config(controller.technical_config_cache, mode),
-                                      reason="offline_replay")
-    controller.enabled = True
-    controller.playing = True
-    controller.begin_render_activation(
-        engine_generation=controller.engine.get_generation_id(),
-        activation_id=controller.engine.get_activation_id(),
-    )
-    state._mode_teardown_block_until_ready = False
-    state._mode_transition_ready = True
-    state._waiting_for_fresh_engine_frame = False
+# Offline controller configuration is production-owned (the Studio's recorded fixtures use it too).
+_configure = configure_offline_controller
 
 
 def _record_drift_step(logical, history: list[bytes]) -> None:

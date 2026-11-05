@@ -10,6 +10,7 @@ to ``WaveformRibbonFrameRuntime.advance``.
 """
 from __future__ import annotations
 
+import dataclasses
 import math
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -19,7 +20,7 @@ from core.settings.visualizer_mode_settings import (
     Choice, Colour, Range, Slider, Toggle, VisualEditor, require_mode_settings,
 )
 from ui.studio.adapter import (
-    RECORDED, REFERENCE, SYNTHETIC, RenderCard, StudioFixture, StudioModeAdapter,
+    RECORDED, REFERENCE, SYNTHETIC, RenderCard, StudioCapabilities, StudioFixture, StudioModeAdapter,
 )
 from ui.studio.schema import (
     CHOICE, COLOUR, COUNT, GRADIENT, QUIET_PEAK, SCALAR, SWITCH, CardSpec, LifecycleSpec, SceneObject,
@@ -51,15 +52,20 @@ _BUCKET_PLACEMENT = {
 _ROLL_KEYS = frozenset(PREFIX + k for k in ("rotation_enabled", "rotation", "twist_speed",
                                             "rotation_attack", "rotation_release"))
 _WORKSPACES = (
-    Workspace("composition", "Composition", ("Ribbons", "{object}", "Flow"), icon="wave"),
+    Workspace("composition", "Composition", ("Ribbons", "{object}", "Flow"), icon="wave",
+              help="Lay out the ribbons: how many, how tall and wide, their spacing and phase, and how the waves flow."),
     Workspace("reactivity", "Reactivity", ("Energy Pulse", "Shape Response", "Roll & Twist", "Timing",
                                            "Routing Details", "Advanced (Retired)"),
-              open_groups=("Energy Pulse", "Shape Response"), icon="bars"),
+              open_groups=("Energy Pulse", "Shape Response"), icon="bars",
+              help="Decide how the music moves the scene: the travelling pulse, what each target listens to "
+                   "(Response Editor below the preview) and how quickly it reacts."),
     Workspace("appearance", "Appearance", ("Gradient Nodes", "Sheet & Highlights", "{object} Colours", "Colour",
                                            "Particles", "Free Strands"),
-              open_groups=("Gradient Nodes", "Sheet & Highlights"), icon="palette"),
+              open_groups=("Gradient Nodes", "Sheet & Highlights"), icon="palette",
+              help="Colour and material: the quiet and peak palettes, sheet and highlight looks, particles and strands."),
     Workspace("world", "World", ("Mist", "Floor", "Lens & Quality", "Camera", "View"),
-              open_groups=("Mist", "Floor"), icon="cube"),
+              open_groups=("Mist", "Floor"), icon="cube",
+              help="The world around the ribbons: mist, the reflective floor, lens and lighting, and the camera."),
 )
 _CAMERA_FIELDS = ("turn", "tilt", "scene_scale", "scene_pan_x", "scene_pan_y")
 # Headline controls lead their group (operator, 5 Nov): mist density and floor look are tuned constantly;
@@ -232,7 +238,7 @@ def build_schema() -> StudioSchema:
         return controls[key].admit(candidate, previous)
 
     response = _response_model(spec, props)
-    workspaces = tuple(Workspace(w.id, w.title, w.groups + tuple(extra_groups), w.open_groups, w.icon) if w.id == "world" else w
+    workspaces = tuple(dataclasses.replace(w, groups=w.groups + tuple(extra_groups)) if w.id == "world" else w
                        for w in _WORKSPACES)
     return StudioSchema(MODE, "Waveform Studio", workspaces, tuple(props), admit, response=response,
                         group_traces=(("Energy Pulse", ("Input Energy", "Travelling Pulse")),
@@ -264,7 +270,27 @@ def build_schema() -> StudioSchema:
                                         "Floor & reflections"),
                                CardSpec("Lens & Quality", "exposure", (("exposure", PREFIX + "exposure"),
                                                                        ("bloom", PREFIX + "bloom")),
-                                        "Lighting")))
+                                        "Lighting"),
+                               CardSpec("Particles", "particles", (("enabled", PREFIX + "sparks_enabled"),
+                                                                  ("count", PREFIX + "spark_count"),
+                                                                  ("lifetime", PREFIX + "spark_lifetime"),
+                                                                  ("drift", PREFIX + "spark_drift"),
+                                                                  ("rise", PREFIX + "spark_rise"),
+                                                                  ("size", PREFIX + "spark_size"),
+                                                                  ("glow", PREFIX + "spark_glow"),
+                                                                  ("white", PREFIX + "spark_white"),
+                                                                  ("span", PREFIX + "spark_span"),
+                                                                  ("palette", PREFIX + "palette.high")),
+                                        "Particles (peak)"),
+                               CardSpec("Free Strands", "strands", (("enabled", PREFIX + "strands_enabled"),
+                                                                    ("count", PREFIX + "strand_count"),
+                                                                    ("length", PREFIX + "strand_length"),
+                                                                    ("reach", PREFIX + "strand_reach"),
+                                                                    ("width", PREFIX + "strand_width"),
+                                                                    ("beads", PREFIX + "strand_beads"),
+                                                                    ("glow", PREFIX + "strand_glow"),
+                                                                    ("palette", PREFIX + "palette.high")),
+                                        "Free strands (peak)")))
 
 
 # What each routed target does, in plain words (the tuner's subtitle).
@@ -798,6 +824,18 @@ def ribbon_handles(frame, values, object_id, size, extent, style):
     handles.append({"id": "phase", "property": f"{key}[{index}].phase", "endpoint": 0, "axis": "x",
                     "x": float(screen[crest, 0]), "y": float(min(height - 14.0, base_screen[0, 1] + 18.0)),
                     "perPixel": 2.0 * math.pi / max(8.0, wavelength), "label": "Phase"})
+    # Combined move gizmo (mock): one crosshair on the spine; up/down = height, left/right = phase. It sits
+    # on the visible spine nearest the frame centre, kept clear of the crest's precise handles.
+    crest_x = float(screen[crest, 0])
+    targets = [width * .5, width * .3, width * .7]
+    target = next((t for t in targets if abs(t - crest_x) > 90.0), targets[0])
+    spine = np.flatnonzero(visible)
+    nearest = int(spine[np.argmin(np.abs(screen[spine, 0] - target))])
+    handles.append({"id": "move", "property": f"{key}[{index}].phase", "endpoint": 0, "axis": "xy",
+                    "x": float(screen[nearest, 0]), "y": float(screen[nearest, 1]),
+                    "perPixel": 2.0 * math.pi / max(8.0, wavelength),
+                    "propertyY": f"{key}[{index}].height", "perPixelY": -float(card["height"]) / amplitude_px,
+                    "label": "Move"})
     return {"outline": outline, "handles": handles}
 
 
@@ -852,6 +890,9 @@ class WaveformStudioAdapter(StudioModeAdapter):
     def __init__(self) -> None:
         self._schema: StudioSchema | None = None
 
+    def capabilities(self) -> StudioCapabilities:
+        return StudioCapabilities(viewport=True, camera=True, handles=True)
+
     def schema(self) -> StudioSchema:
         if self._schema is None:
             self._schema = build_schema()
@@ -886,6 +927,26 @@ class WaveformStudioAdapter(StudioModeAdapter):
                    for a, b in zip(pair, values[control.key])):
                 changes[(control.key,)] = pair
         return changes
+
+    # Tile previews: a private evaluator held on the Mid reference at one instant; each starting point
+    # re-publishes that instant with its values (the live-edit path, no replay).
+
+    def release(self) -> None:
+        evaluator, self._preview_evaluator = getattr(self, "_preview_evaluator", None), None
+        if evaluator is not None:
+            evaluator.release()
+
+    def preset_preview(self, group, preset_id, values):
+        from widgets.spotify_visualizer.presentation_geometry import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+        if getattr(self, "_preview_evaluator", None) is None:
+            self._preview_evaluator = WaveformStudioEvaluator()
+            self._preview_evaluator.select("mid")
+        evaluator = self._preview_evaluator
+        view = dict(values)
+        instant = min(3.0, evaluator.fixture.duration)
+        frame = evaluator.evaluate(instant, view, exact=False)
+        base_h = float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1])
+        return frame, (base_h * 1.5, base_h), ()
 
     def scene_handles(self, frame, values, object_id, size, extent, style):
         return ribbon_handles(frame, values, object_id, size, extent, style)

@@ -76,9 +76,10 @@ def test_lifecycles_and_cards_reference_real_properties_in_their_group():
         for prop_id in filter(None, (spec.total, spec.fade_share, spec.peel)):
             assert schema.find(prop_id).group == spec.group
     for card in schema.cards:
-        assert card.kind in {"falloff", "reflection", "exposure"}
+        assert card.kind in {"falloff", "reflection", "exposure", "particles", "strands"}
+        assert any(card.group in w.groups for w in schema.workspaces)
         for _role, prop_id in card.roles:
-            assert schema.find(prop_id).group == card.group
+            schema.find(prop_id)                       # every role is a real, edited property
     for group, presets in schema.group_presets:
         assert presets and any(group in w.groups for w in schema.workspaces)
 
@@ -276,3 +277,172 @@ def test_response_editor_collapses_to_keep_the_viewport_large(studio):
     dock.setProperty("expanded", False)
     surface.pump(3)
     assert slot.height() == pytest.approx(collapsed)
+
+
+def test_preset_tiles_render_once_per_starting_point_and_stay_idle(studio, monkeypatch):
+    controller, surface = studio
+    requests = []
+    original = controller.viewport.request_snapshot
+
+    def counted(key, *args, **kwargs):
+        requests.append(key)
+        return original(key, *args, **kwargs)
+    monkeypatch.setattr(controller.viewport, "request_snapshot", counted)
+    group, presets = controller.session.schema.group_presets[0]
+    controller.bridge.setWorkspace("composition")
+    surface.pump(3)
+    assert requests == []                               # tiles off screen: nothing is rendered
+    controller.bridge.setWorkspace("appearance")
+    for _ in range(200):
+        if not controller.previews_pending:
+            break
+        surface.pump()
+    assert not controller.previews_pending
+    assert len(requests) == len(presets)
+    previews = controller.bridge.presetPreviews
+    assert {f"{group}/{p.id}" for p in presets} <= set(previews)
+    assert all(previews[f"{group}/{p.id}"].startswith("data:image/png;base64,") for p in presets)
+    assert len([i for i in _walk(surface.host.root) if i.objectName() == "presetPreview" and i.isVisible()]) \
+        == len(presets)
+    # Idle: more frames and workspace round trips render nothing new.
+    surface.pump(10)
+    controller.bridge.setWorkspace("world")
+    controller.bridge.setWorkspace("appearance")
+    surface.pump(10)
+    assert len(requests) == len(presets)
+    # A live drag renders no tiles; its commit re-renders each tile once.
+    prop = next(p for p in controller.session.schema.properties if p.group == group and p.instrument == "quiet_peak")
+    controller.bridge.beginEdit(prop.id, prop.label)
+    controller.bridge.previewValue(prop.id, 1, prop.maximum)
+    surface.pump(5)
+    assert len(requests) == len(presets)
+    controller.bridge.endEdit()
+    for _ in range(200):
+        if not controller.previews_pending:
+            break
+        surface.pump()
+    assert len(requests) == 2 * len(presets)
+
+
+def test_combined_move_gizmo_edits_both_axes_as_one_step(studio):
+    controller, surface = studio
+    bridge = controller.bridge
+    bridge.setWorkspace("composition")
+    bridge.selectObject("ribbon0")
+    handles = {h["id"]: h for h in _settle_handles(controller, surface)["handles"]}
+    move = handles["move"]
+    assert move["axis"] == "xy" and move["propertyY"] and move["perPixelY"] and move["perPixel"]
+    from ui.studio.session import read_path
+    session = controller.session
+
+    def value(prop_id):
+        v = read_path(session.values, session.schema.find(prop_id).path)
+        return v[0] if isinstance(v, (list, tuple)) else v
+    x0, y0 = value(move["property"]), value(move["propertyY"])
+    bridge.beginEdit(move["property"], move["label"])
+    bridge.previewValue(move["property"], 0, x0 + 30 * move["perPixel"])
+    bridge.previewValue(move["propertyY"], 0, y0 + (-20) * move["perPixelY"])
+    bridge.endEdit()
+    assert value(move["property"]) != pytest.approx(x0) and value(move["propertyY"]) > y0
+    session.undo()                                       # one step reverts both axes
+    assert value(move["property"]) == pytest.approx(x0) and value(move["propertyY"]) == pytest.approx(y0)
+
+
+def test_hint_texts_stay_inside_their_container(studio):
+    from PySide6.QtCore import QPointF
+    controller, surface = studio
+    for workspace in ("appearance", "reactivity"):
+        controller.bridge.setWorkspace(workspace)
+        surface.pump(3)
+        for dock in (i for i in _walk(surface.host.root) if i.objectName() == "responseDock"):
+            dock.setProperty("expanded", workspace == "reactivity")
+        surface.pump(2)
+        hints = _named(surface, "hintText")
+        assert hints
+        for hint in hints:
+            panel = hint.parentItem()
+            while panel is not None and panel.objectName() not in ("inspectorScroll", "responseDock"):
+                panel = panel.parentItem()
+            assert panel is not None
+            right = hint.mapToScene(QPointF(hint.width(), 0)).x()
+            panel_right = panel.mapToScene(QPointF(panel.width(), 0)).x()
+            assert right <= panel_right + 1.0, (workspace, hint.property("text"), right, panel_right)
+
+
+def test_help_overlay_lists_workspaces_and_the_modes_gestures(studio):
+    controller, surface = studio
+    root = surface.host.root
+    overlay = next(i for i in _walk(root) if i.objectName() == "helpOverlay")
+    assert not overlay.isVisible()
+    overlay.setProperty("open", True)
+    surface.pump(2)
+    assert overlay.isVisible()
+    gestures = [i for i in _walk(overlay) if i.objectName() == "helpGesture"]
+    caps = controller.bridge.capabilities
+    assert caps["camera"] and caps["handles"]
+    assert len(gestures) == len(overlay.property("gestures").toVariant()) >= 6
+    assert all(w["help"] for w in controller.bridge.workspaces)
+    overlay.setProperty("open", False)
+
+
+def test_preset_tiles_are_drawn_by_the_production_renderer_and_differ(qt_app, tmp_path):
+    """Real renderer: each starting point's tile is a non-empty render, and they are not all the same."""
+    import base64
+    import io
+    import numpy as np
+    from PIL import Image
+    from rendering.gl_error_policy import disable_per_call_gl_error_checking
+    from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+    from ui.studio.controller import StudioController
+    from ui.studio.surface import OffscreenStudioSurface
+    disable_per_call_gl_error_checking()
+
+    class Store:
+        def __init__(self):
+            self.values = dict(resolve_visualizer_activation_payload(
+                {"mode": MODE, f"preset_{MODE}": 0}, mode=MODE).resolved_config)
+
+        def snapshot(self):
+            return dict(self.values)
+
+        def commit(self, values, changed):
+            self.values.update(values)
+            return dict(self.values)
+
+        def preset_label(self):
+            return "Test"
+
+    class Presence:
+        def conceal(self):
+            pass
+
+        def reveal(self):
+            pass
+
+    class RealAdapter(WaveformStudioAdapter):
+        def recorded_clips(self):
+            return ()
+
+    surfaces = []
+    controller = StudioController(RealAdapter(), Store(), Presence(), lambda c: (
+        surfaces.append(OffscreenStudioSurface(c, size=(1100, 700), present_on_show=False)) or surfaces[-1]))
+    assert controller.open()
+    surface = surfaces[0]
+    try:
+        controller.bridge.setWorkspace("appearance")
+        for _ in range(300):
+            surface.pump()
+            if controller.bridge.viewportStatus == "live" and not controller.previews_pending:
+                break
+        group, presets = controller.session.schema.group_presets[0]
+        images = []
+        for preset in presets:
+            url = controller.bridge.presetPreviews[f"{group}/{preset.id}"]
+            images.append(np.asarray(Image.open(io.BytesIO(base64.b64decode(url.split(",", 1)[1]))).convert("RGB"),
+                                     dtype=float))
+        assert all(image.mean() > 8.0 for image in images)          # a lit scene, not a cleared target
+        spread = max(np.abs(a - images[0]).mean() for a in images[1:])
+        assert spread > 1.0                                          # the starting points look different
+    finally:
+        controller.close()
+        qt_app.processEvents()

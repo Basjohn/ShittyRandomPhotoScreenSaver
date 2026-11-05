@@ -62,7 +62,7 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
   the 5 Nov work):** 40 files, all reproducible alone. Largest: `test_visualizer_preset_completeness` (13: Bubble and
   Extruded Bubble presets miss the 5.1.3 microbubble/gradient/drift/projection controls — repair-fill them),
   `test_waveform_infinite_floor` (9: orthographic depth/actor-clip/floor-reflection expectations vs the camera
-  helper), `test_qtquick_custom_layout_owner` (8), `test_framed_viewport_aperture` (4: EB/Shockwave custom-side
+  helper), `test_qtquick_custom_layout_owner` (8: its Waveform cases replay without PCM reanalysis, which raw musical replay now requires), `test_framed_viewport_aperture` (4: EB/Shockwave custom-side
   gestures), `test_qtquick_visualizer_all_modes` (4), `test_visualizer_logical_hook_dormancy` (4),
   `test_bubble_reactivity` (3: swish group drift sign/activity — Bubble is BTF-binding, never retune to pass),
   `test_visualizer_plain_orbit` (native crash), `test_visualizer_view_orbit` (Shockwave planar vs freeform; Waveform
