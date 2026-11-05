@@ -33,6 +33,9 @@ class Fog:
     softness: float = .9
     ambient: tuple = (.035, .05, .085)
     light: float = .6
+    # Local light compresses toward this radiance (linear, luminance) and keeps this share of the source hue.
+    light_ceiling: float = .25
+    light_tint: float = .5
     noise: float = .2
     noise_scale: float = .16
     drift: float = .1
@@ -101,6 +104,13 @@ class Floor:
     # The sheets' local light on the ground, with its depth falloff spread this many times and its peak lowered by
     # the square root: the grazing view otherwise compresses it into one bright seam across the image.
     pool_spread: float = 4.
+    # Reflected light compresses smoothly toward this linear luminance (saturating, hue kept): strong preset light
+    # reads as coloured mass under the sheets, never a flooded plane.
+    glow_limit: float = .5
+    # Surface light falls off toward the camera from the sheets' plane over this many world units, to this share far
+    # away: dark wet ground in a wide view, legible concrete under the light.
+    light_reach: float = 35.
+    light_far: float = .5
 
 
 @dataclass(frozen=True)

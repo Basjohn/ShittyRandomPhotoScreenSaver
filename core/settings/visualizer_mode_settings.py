@@ -1821,7 +1821,7 @@ def _waveform_ribbon() -> ModeSettings:
     buckets = tuple(Bucket(key,title,helper,advanced=advanced) for key,title,helper,advanced in (
         ('ribbons','Ribbons','Four retained ribbon identities, colours and character.',False),
         ('shape','Shape & Reactivity','Elastic body, local twisting and quiet to peak targets.',False),
-        ('pulse','Energy Pulse','Music sends swells travelling along the waveform, like waves on water.',False),
+        ('pulse','Reaction','How music swells the waveform, like waves on water: always with its own shape.',False),
         ('flow','Flow & Axial Roll','History travels steadily; axial roll turns the waveform like a skewer.',False),
         ('colour','Colour','Colour nodes and shifts in the most powerful musical regions.',False),
         ('surface','Sheet & Highlights','Silk, fine strands, glowing rims and localized dense highlights.',False),
@@ -1862,6 +1862,10 @@ def _waveform_ribbon() -> ModeSettings:
         ('release','Decay',.1,4.,'reaction'),('rotation_attack','Roll Attack',.01,.5,'flow'),
         ('rotation_release','Roll Decay',.1,6.,'flow'),('colour_threshold','Power Threshold',0.,.95,'colour')):
         entries.append(Slider(prefix+key,label+':',low,high,bucket=bucket,logical=True))
+    entries.append(Choice(prefix+'reaction_mode','Reaction Mode:',('Travelling Pulse','Frozen Past','Whole Swell','Group Wave'),
+        bucket='pulse',logical=True,tooltip='Travelling Pulse: swells travel along the waveform. Frozen Past: the parts a '
+        'swell shaped keep that look until the next swell reaches them. Whole Swell: the whole waveform swells at once '
+        '(ignores direction, width and speed). Group Wave: swells travel as groups that rise toward their leading edge.'))
     entries.append(Choice(prefix+'pulse_direction','Pulse Direction:',('Head To Tail','Tail To Head','Centre Out'),
         bucket='pulse',logical=True,tooltip='Where musical swells start and which way they travel.'))
     for key,label,low,high,tip in (
@@ -1926,6 +1930,18 @@ def _waveform_ribbon() -> ModeSettings:
                              decimals=4 if key=='fog_density' else 2,
                              tooltip='Quiet → peak '+label.lower()+'.'))
     entries.extend((Colour(prefix+'floor_tint','Surface Tint:','Floor Surface Tint',bucket='floor',alpha=False),
+                    Slider(prefix+'floor_glow_limit','Reflection Ceiling:',.02,2.,bucket='floor',decimals=2,
+                           tooltip='Strong reflected light eases toward this level, so bright scenes keep coloured '
+                                   'reflections under the ribbons instead of flooding the floor.'),
+                    Slider(prefix+'floor_contrast','Reflection Contrast:',.5,8.,bucket='floor',
+                           tooltip='Reflected light below this multiple of the scene\'s average fades away, leaving '
+                                   'dark wet ground between the brightest reflections.'),
+                    Slider(prefix+'floor_colour','Reflection Colour:',0.,4.,bucket='floor',
+                           tooltip='How strongly reflections keep the ribbons\' own hue (1 as reflected).'),
+                    Slider(prefix+'floor_light_reach','Light Reach:',2.,200.,bucket='floor',scale=1,decimals=0,
+                           tooltip='How far the ribbons light the concrete before it falls into darkness.'),
+                    Slider(prefix+'floor_light_far','Far Surface Level:',0.,1.,bucket='floor',
+                           tooltip='Concrete brightness far from the ribbons, as a share of its lit level.'),
                     Slider(prefix+'exposure','Exposure:',.2,2.,bucket='lens'),
                     Slider(prefix+'gradient_share','Sheet Gradient:',0.,1.,bucket='colour'),
                     Slider(prefix+'mist_gradient_share','Mist Gradient:',0.,1.,bucket='colour'),

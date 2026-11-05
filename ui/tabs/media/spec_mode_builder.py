@@ -91,13 +91,7 @@ def build_spec_mode_ui(tab, parent_layout, mode_id: str) -> None:
         advanced_attr=f"_{prefix}_advanced",
     )
     layouts = {}
-    if mode_id=='waveform_ribbon':
-        from ui.widgets.waveform_ribbon_preview import WaveformPreview
-        def preview_parameters():
-            values={entry.key:tab._widget_default('spotify_visualizer',entry.key) for entry in spec.controls}
-            values.update(collect_spec_mode_settings(tab,mode_id))
-            return values
-        scaffold.normal_layout.addWidget(WaveformPreview(preview_parameters,scaffold.normal_layout.parentWidget()))
+    _add_studio_launcher(tab, scaffold.normal_layout, mode_id)
     for bucket in spec.buckets:
         _host, layouts[bucket.key] = build_collapsible_bucket(
             tab, scaffold.advanced_layout if bucket.advanced else scaffold.normal_layout,
@@ -194,6 +188,35 @@ def build_spec_mode_ui(tab, parent_layout, mode_id: str) -> None:
         content.addStretch()
     setattr(tab, f"_{prefix}_rows", rows)
     _bind_conditions(tab, spec, rows)
+
+
+def _add_studio_launcher(tab, layout, mode_id: str) -> None:
+    """Custom's entry to the mode's Studio (modes with a Studio adapter only).
+
+    The preset's camera-save checkbox stays with the preset slider, unchanged."""
+    from ui.studio.registry import has_studio
+    if not has_studio(mode_id):
+        return
+    from PySide6.QtWidgets import QHBoxLayout
+    from ui.widgets.outlined_button import OutlinedButton
+    title = get_visualizer_mode_descriptor(mode_id).display_name.split()[0]
+    button = OutlinedButton(f"Open {title} Studio", role="standard")
+    button.setObjectName(f"{mode_id}_open_studio")
+    button.setMinimumHeight(40)
+    button.setToolTip("Edit this mode in a large live preview. Settings hides while the Studio is open "
+                      "and returns when it closes.")
+
+    def open_studio() -> None:
+        from ui.studio.settings_link import open_mode_studio
+        open_mode_studio(tab, mode_id)
+
+    button.clicked.connect(open_studio)
+    row = QHBoxLayout()
+    row.setContentsMargins(0, 4, 0, 4)
+    row.addWidget(button)
+    row.addStretch()
+    layout.addLayout(row)
+    setattr(tab, f"_{require_mode_settings(mode_id).prefix}_studio_button", button)
 
 
 def retire_spec_mode_conditions(tab, mode_id: str) -> None:

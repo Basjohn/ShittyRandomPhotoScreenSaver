@@ -110,8 +110,24 @@ vec4 bodyField(vec3 world) {
 }
 '''
 
-MEDIUM_GLSL=WORLD_FIELD_GLSL+'''
-uniform vec4 uAtmosphere; // ground extinction, height e-fold, clearance transition, local light
+# How the ribbons' local light scatters into the medium. Strength compresses toward a ceiling (strong light can never
+# wash the frame) and the colour keeps only a capped share of the source hue over the medium's own cool hue, so the
+# smoke is tinted near each ribbon but never recoloured. Brightness is set by luminance, independently of the hue.
+ATMOSPHERE_LIGHT_GLSL='''
+uniform vec2 uAtmosphereLight; // ceiling radiance, source-hue share
+vec3 atmosphereLight(vec3 local,vec3 ambient) {
+    float strength=max(max(local.r,local.g),max(local.b,0.0));
+    if(strength<=1e-6)return vec3(0);
+    float ceiling=max(uAtmosphereLight.x,1e-6);
+    float lit=ceiling*(1.0-exp(-strength/ceiling));
+    vec3 own=ambient/max(max(ambient.r,ambient.g),max(ambient.b,1e-6));
+    vec3 hue=mix(own,max(local,vec3(0))/strength,clamp(uAtmosphereLight.y,0.0,1.0));
+    return lit*hue/max(dot(hue,vec3(0.2126,0.7152,0.0722)),1e-3);
+}
+'''
+
+MEDIUM_GLSL=WORLD_FIELD_GLSL+ATMOSPHERE_LIGHT_GLSL+'''
+uniform vec4 uAtmosphere; // ground extinction, height e-fold, clearance transition, local light gain
 uniform vec4 uAtmosphereMotion; // time, drift speed, noise amount, world noise scale
 uniform vec3 uAtmosphereAmbient;
 float atmosphereNoise(vec3 p) {
@@ -134,7 +150,7 @@ void fogMedium(vec3 world,out vec3 radiance,out float extinction,out float stead
     extinction=uAtmosphere.x*(0.0004+exp(-world.y/max(uAtmosphere.y,0.05))*distanceWeight)
         *foreground*variation*clearance;
     steady=extinction;
-    radiance=uAtmosphereAmbient*(0.4+0.6*exp(-behind/30.0))+body.rgb*uAtmosphere.w;
+    radiance=uAtmosphereAmbient*(0.4+0.6*exp(-behind/30.0))+atmosphereLight(body.rgb*uAtmosphere.w,uAtmosphereAmbient);
 }
 '''
 
