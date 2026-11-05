@@ -613,14 +613,20 @@ loudest band — a band **share**, not a level — so bass/mids sat above 0.9 of
 ticks (bass input p05 = p50 = p95 = 1.0 on two songs), beat modulation of the displacement was 2–5%, quiet and loud
 windows differed by ≤ 1.4×, and the smoothness slope limiter held the bass curve on 72–98% of ticks. Fix, owner
 `widgets/spotify_visualizer/devcurve_runtime.py`: each layer's level = its share × the bus loudness (fixed real
-scale); two cascaded height stages (the second follows the first as it stood at the start of the tick, so a hit's
-first tick never jumps the velocity) with adaptive response gain between them (floor in loudness units, the
-remembered peak lands at 0.75 so loud passages leave the slope limiter headroom for accents); a per-layer
+scale); the height is a slow **body** plus fast **accents**: only the body (two slow stages) is divided by the
+remembered peak (floor in loudness units, landing at 0.55), while accents — the fast level above the body and the
+layer's flux lane above its own recent mean, captured and held 0.12 s — are read on fixed scales into the
+reserved 0.42 above it, then eased by two stages (each second stage follows its first as it stood at the start of
+the tick, so a hit's first tick never jumps the velocity). A first cut normalised the whole height, beats included:
+a sustained-chorus kick then lifted the visible reaction by ~2% of its level (6.7% now); **normalise the passage,
+never the beats**, and measure kicks in continuous play (`devcurve_continuous_kicks.py`; same recording twice, so
+identical kicks compare early vs late). A per-layer
 travelling swell born just beyond the right edge, travelling left with the material and multiplying the layer's
 own undulation under the flow rule (closed-form share, rate-limited relaxation). Lesson: **a self-normalised lane
 (band over the loudest band) is a ratio, never a level**; and **check the geometric ceiling** (slope limiter,
 clamps) as you would a drive's Range — a reaction that lands where the geometry is already limited is invisible.
-Evidence: `.artifacts/evidence/devcurve/reactivity_20261105/`; gates `tests/test_devcurve_reactivity.py`.
+Evidence: `.artifacts/evidence/devcurve/reactivity_20261105/`; gates `tests/test_devcurve_reactivity.py`,
+`tests/test_devcurve_continuous_play.py`.
 
 **Collisions with the world**
 - **Preserve the shape: lift the whole object.** Per-point clamps against a floor produce boxy, flat-bottomed troughs;
