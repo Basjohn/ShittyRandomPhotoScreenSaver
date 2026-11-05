@@ -152,9 +152,13 @@ float floorSlope(float y) {  // d floorEased / dy
     return 1.0/(1.0+exp(-(y-uFloorContact.x-uFloorContact.y)/uFloorContact.z));
 }
 // With the floor's give the same map eases onto the yielding surface: the ribbon dips into the dent under it.
-uniform vec2 uFloorGiveFrame;  // packet-local -> world x, z
+uniform vec3 uFloorGiveFrame;  // packet-local -> world: x, z offsets; Travel Direction sign (-1 mirrors x; 0: +1)
+vec2 floorGiveWorld(vec3 p) {
+    vec2 xz=p.xz+uFloorGiveFrame.xy;
+    return vec2(uFloorGiveFrame.z<0.0?-xz.x:xz.x,xz.y);
+}
 float floorGiveSurface(vec3 p) {  // the yielding floor's height under a packet-local point, relative to the plane
-    return -floorGiveDepth(p.xz+uFloorGiveFrame);
+    return -floorGiveDepth(floorGiveWorld(p));
 }
 vec3 floorContact(vec3 p) {
     if(uFloorContact.z>0.0 && uFloorGive.y>0.0) {
@@ -254,7 +258,9 @@ void main() {
     if(uFloorContact.z>0.0 && uFloorGive.y>0.0) {
         // Eased onto the yielding surface h(x,z): y' = h + E(y-h), so dy'/da = E'(y-h)(dy/da-dh/da)+dh/da.
         float h=floorGiveSurface(unsquashed);
-        float dh=-dot(floorGiveGradient(unsquashed.xz+uFloorGiveFrame),acrossSlope.xz);
+        vec2 slope=floorGiveGradient(floorGiveWorld(unsquashed));
+        if(uFloorGiveFrame.z<0.0) slope.x=-slope.x;  // d world x / d local x
+        float dh=-dot(slope,acrossSlope.xz);
         float s=floorSlope(unsquashed.y-h);
         acrossSlope.y=s*(acrossSlope.y-dh)+dh;
     } else if(uFloorContact.z>0.0) acrossSlope.y*=floorSlope(unsquashed.y);

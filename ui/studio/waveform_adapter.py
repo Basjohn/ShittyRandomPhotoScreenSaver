@@ -88,7 +88,8 @@ _WORKSPACES = (
 _ROW_ICONS = {"height": "height", "width": "width", "rate": "wave", "phase": "clock", "light": "sun", "band": "bars",
               "count": "ribbons", "fog_density": "cloud", "floor_brightness": "floor", "floor_reflection": "drop",
               "exposure": "sun", "bloom": "sparkle", "reaction_mode": "bolt", "camera_fov": "lens",
-              "sparks_enabled": "dots", "strands_enabled": "strand", "mist_enabled": "cloud"}
+              "sparks_enabled": "dots", "strands_enabled": "strand", "mist_enabled": "cloud",
+              "travel_direction": "flow", "pulse_direction": "flow"}
 _CAMERA_FIELDS = ("turn", "tilt", "scene_scale", "scene_pan_x", "scene_pan_y")
 # Headline controls lead their group (operator, 5 Nov): mist density and the floor controls tuned most
 # (surface, far surface, reflection, its contrast / ceiling / colour) come first; the reaction mode is the
@@ -96,7 +97,7 @@ _CAMERA_FIELDS = ("turn", "tilt", "scene_scale", "scene_pan_x", "scene_pan_y")
 HEADLINE_FLOOR = ("floor_brightness", "floor_light_far", "floor_reflection", "floor_contrast",
                   "floor_glow_limit", "floor_colour")
 _PRIORITY = {PREFIX + key: rank for rank, key in enumerate((
-    "reaction_mode", "bend", "pulse_direction", "mist_enabled", "fog_density") + HEADLINE_FLOOR)}
+    "travel_direction", "reaction_mode", "bend", "pulse_direction", "mist_enabled", "fog_density") + HEADLINE_FLOOR)}
 # Material starting points (mock: Sheen / Glass / Satin / Crystal): scale the OPENING material values
 # (both quiet and peak endpoints), clamped by the canonical ranges. Applying one replaces the previous
 # one (always from the opening values) and is a single undoable edit; "Original" restores them.
@@ -126,6 +127,9 @@ _CHOICE_NOTES = {PREFIX + "reaction_mode": {
     "Frozen Past": "Each passage leaves its peak swell held on the cloth, carried along with the history.",
     "Whole Swell": "The whole waveform rises and settles together; direction, width and speed do not apply.",
     "Group Wave": "Each swell arrives as a set: several crests lift together, leaning toward the front.",
+}, PREFIX + "travel_direction": {
+    "Right To Left": "New history enters at the right and flows to the left.",
+    "Left To Right": "New history enters at the left and flows to the right (the mirror image).",
 }}
 # Targets kept in data but no longer moving geometry (operator, 5 Nov): Advanced only, never in the tuner.
 _RETIRED_TARGETS = frozenset({"stretch"})
@@ -799,7 +803,8 @@ def ribbon_world_points(frame, index):
         return np.empty((0, 4))
     knots = path[4:].reshape(-1, KNOT_ROWS, 4)[(start + np.arange(count)) % capacity]
     origin = packet.world_origin
-    x = knots[:, 0, 0] + origin[0] + frame.scene.flow.head_x - frame.travel
+    # History axis -> world: Travel Direction mirrors x (Flow.direction, the renderer's one sign).
+    x = (knots[:, 0, 0] + origin[0] + frame.scene.flow.head_x - frame.travel)*frame.scene.flow.direction
     return np.stack((x, knots[:, 0, 1] + origin[1], knots[:, 0, 2] + origin[2], knots[:, 0, 3]), axis=1)
 
 

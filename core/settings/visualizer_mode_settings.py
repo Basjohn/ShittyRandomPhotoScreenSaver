@@ -1887,6 +1887,10 @@ def _waveform_ribbon() -> ModeSettings:
          'chance and glow there. Never adds strands of its own. Needs Free Strands on.')):
         entries.append(Slider(prefix+key,label+':',low,high,bucket='pulse',logical=True,tooltip=tip,
                               suffix=' s' if key=='pulse_fade' else ''))
+    entries.append(Choice(prefix+'travel_direction','Travel Direction:',('Right To Left','Left To Right'),
+        bucket='flow',logical=True,tooltip='Which way the waveform history travels across the view: new history '
+        'enters on one side and flows to the other. Pulse Direction, held swells, sparks, strands and the floor all '
+        'follow it. Changing it fades the ribbons out and back in.'))
     entries.extend((Toggle(prefix+'rotation_enabled','','Axial Roll',bucket='flow',logical=True),
                     Range(prefix+'twist_speed','Twist Rate:',0.,5.,bucket='flow',logical=True,
                           tooltip='Quiet → peak local rolling twist rate in radians per second.')))

@@ -93,7 +93,7 @@ points[i]=vec4(floorContact(p),floorGiveSurface(p)); }'''
                 gl.glUniform3f(location('uFloorContact'), 0., .03, .15)
                 gl.glBindTextureUnit(13, texture); gl.glUniform1i(location('uFloorGiveField'), 13)
                 gl.glUniform4f(location('uFloorGive'), *(give if on else (0., 0., 1., 1.)))
-                gl.glUniform2f(location('uFloorGiveFrame'), 0., 0.)
+                gl.glUniform3f(location('uFloorGiveFrame'), 0., 0., 1.)
                 gl.glDispatchCompute(-(-len(points)//64), 1, 1)
                 result = _read(gl, buffer, points); gl.glDeleteBuffers(1, [buffer])
                 return result
