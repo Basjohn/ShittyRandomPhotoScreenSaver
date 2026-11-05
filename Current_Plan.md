@@ -55,6 +55,13 @@ lead as reviewer/orchestrator.
 - [ ] **Retire Custom's "Edit Preset" Notepad machinery** (button + pop-up) now that the Studios exist, with Studio
   parity proven for each mode that still offered it; and show **Open Studio** on every preset, not only Custom (it
   opens the Studio on that preset).
+- [ ] **Per-frame call-count rises since the 18 Oct overhead baseline (6 Nov run, `tools/overhead_baseline.py`;
+  call counts are load-independent):** every GL-heavy transition +72 Python calls per frame (block_spins 572 -> 644,
+  cube_turn, jigsaw, membrane, ...), Sphere +144 (1473 -> 1617), Extruded Spectrum +144 (1221 -> 1365, already at
+  5a42e9fb), Oscilloscope +67 (1584 -> 1651), Shockwave/Neon +14 GL calls (339 -> 353; likely pass 5's near-band
+  split, intended). Bisect each to its commit, remove anything that is work at rest or a per-frame re-resolve of
+  unchanged inputs (as Spectrum's look options were: 919 -> 770, 2ef22700), keep intended feature work and say so.
+  Evidence `.artifacts/evidence/overhead/`. Re-take the stored baseline on a quiet machine afterwards.
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
