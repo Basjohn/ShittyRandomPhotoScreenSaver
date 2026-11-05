@@ -43,7 +43,7 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
     production capture's frames (in-process callers only)."""
     from PySide6.QtGui import QGuiApplication
     from widgets.spotify_visualizer import logical_frame_capture
-    from widgets.spotify_visualizer.feature_frame import load_jsonl
+    from widgets.spotify_visualizer.compact_clip import load_feature_clip
     from widgets.spotify_visualizer.feature_replay import (
         ReplayBeatEngine, configure_offline_controller, deterministic_clock,
     )
@@ -54,7 +54,7 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
     if QGuiApplication.instance() is None:
         raise RuntimeError("extract() needs an existing QGuiApplication (main() creates one)")
     if features is None:
-        clip = load_jsonl(clip_path)
+        clip = load_feature_clip(clip_path)
         features = clip.frames
     origin_us = features[0].timestamp_us
     frames = [f for f in features if seconds is None or (f.timestamp_us - origin_us) / 1e6 <= seconds]
