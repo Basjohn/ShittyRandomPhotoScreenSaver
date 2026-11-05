@@ -67,7 +67,6 @@ from widgets.spotify_visualizer.render_state import (  # noqa: E402
     BubbleFrame,
     DevCurveFrame,
     OscilloscopeFrame,
-    SineFrame,
     SpectrumFrame,
     VisualizerCommonState,
     VisualizerEnergyState,
@@ -80,9 +79,6 @@ from widgets.spotify_visualizer.oscilloscope_frame_runtime import (  # noqa: E40
 )
 from widgets.spotify_visualizer.spectrum_frame_runtime import (  # noqa: E402
     SpectrumFrameRuntime,
-)
-from widgets.spotify_visualizer.sine_frame_runtime import (  # noqa: E402
-    SineFrameRuntime,
 )
 
 
@@ -788,22 +784,18 @@ _NEUTRAL_CARD_SHADOW = {
 }
 
 
-def _with_line_index_params(params: dict, *, include_sine_shift: bool = False) -> dict:
-    """Fill the per-line (2..6) params the oscilloscope/sine renderers read.
+def _with_line_index_params(params: dict) -> dict:
+    """Fill the per-line (2..6) params the oscilloscope renderer reads.
 
-    ``line_count`` is 1 in these smoke frames, but both renderers unconditionally
-    read ``line{n}_color`` / ``line{n}_glow_color`` / ``ghost_line{n}_enabled`` for
-    n in 2..6 (and sine reads ``sine_line{n}_shift`` for n in 1..6). Provide
-    neutral, inactive values so the immutable frame satisfies the current
-    parameter contract regardless of the drawn line count.
+    ``line_count`` is 1 in these smoke frames, but the renderer unconditionally
+    reads ``line{n}_color`` / ``line{n}_glow_color`` / ``ghost_line{n}_enabled`` for
+    n in 2..6. Provide neutral, inactive values so the immutable frame satisfies
+    the current parameter contract regardless of the drawn line count.
     """
     for n in range(2, 7):
         params.setdefault(f"line{n}_color", (245, 250, 255, 255))
         params.setdefault(f"line{n}_glow_color", (80, 210, 255, 230))
         params.setdefault(f"ghost_line{n}_enabled", False)
-    if include_sine_shift:
-        for n in range(1, 7):
-            params.setdefault(f"sine_line{n}_shift", 0.0)
     return params
 
 
@@ -1046,191 +1038,6 @@ def _oscilloscope_snapshot(case: str, presentation):
                     }
                 )
             ),
-        ),
-    )
-    return compose_visualizer_render_snapshot(
-        logical,
-        presentation,
-        logical_revision=1,
-    )
-
-
-def _sine_snapshot(case: str, presentation):
-    runtime = SineFrameRuntime()
-    if case == "idle":
-        runtime.resolve(
-            now_ts=1.0,
-            runtime_generation=1,
-            engine_generation=2,
-            activation_id=3,
-            source_generation=-1,
-            source_activation_id=-1,
-            source_timestamp=None,
-            playing=False,
-            energy=VisualizerEnergyState(),
-            kick_event=0.0,
-            snare_event=0.0,
-            ghosting_enabled=False,
-            ghost_decay=0.3,
-            line_count=3,
-            line_speed=0.18,
-            travels=(0,) * 6,
-            line_shifts=(0.0,) * 6,
-            transient_width_mix=0.4,
-            base_width_reaction=0.0,
-            base_sensitivity=1.0,
-            base_heartbeat=0.0,
-            heartbeat_slider=0.0,
-        )
-        resolved = runtime.resolve(
-            now_ts=1.05,
-            runtime_generation=1,
-            engine_generation=2,
-            activation_id=3,
-            source_generation=-1,
-            source_activation_id=-1,
-            source_timestamp=None,
-            playing=False,
-            energy=VisualizerEnergyState(),
-            kick_event=0.0,
-            snare_event=0.0,
-            ghosting_enabled=False,
-            ghost_decay=0.3,
-            line_count=3,
-            line_speed=0.18,
-            travels=(0,) * 6,
-            line_shifts=(0.0,) * 6,
-            transient_width_mix=0.4,
-            base_width_reaction=0.0,
-            base_sensitivity=1.0,
-            base_heartbeat=0.0,
-            heartbeat_slider=0.0,
-        )
-        energy = resolved.energy
-        ghost_energy = resolved.ghost_energy
-        heartbeat = resolved.heartbeat_intensity
-        animation_time = resolved.animation_time
-        line_speed = resolved.line_speed
-        travels = resolved.travels
-        shifts = resolved.line_shifts
-        sensitivity = resolved.sensitivity
-        width_reaction = resolved.width_reaction
-        wave_effect_gate = resolved.wave_effect_gate
-        playing = False
-        source_generation = -1
-        source_activation = -1
-        line_count = 3
-    else:
-        energy = VisualizerEnergyState(
-            bass=0.55,
-            mid=0.38,
-            high=0.24,
-            overall=0.62,
-        )
-        ghost_energy = (
-            VisualizerEnergyState(bass=1.2, mid=1.0, high=0.8, overall=0.0)
-            if case == "ghost"
-            else VisualizerEnergyState()
-        )
-        heartbeat = 0.2
-        animation_time = 0.35
-        line_speed = 0.42
-        travels = (1, 2, 1, 2, 1, 2)
-        shifts = (0.0, 0.12, -0.16, 0.24, -0.28, 0.34)
-        sensitivity = 1.25
-        width_reaction = 0.25
-        wave_effect_gate = 1.0
-        playing = True
-        source_generation = 2
-        source_activation = 3
-        line_count = 6
-
-    parameter_values = {
-        "glow_enabled": True,
-        "glow_intensity": 0.55,
-        "glow_size": 1.0,
-        "glow_reactivity": 1.0,
-        "glow_color": (80, 210, 255, 230),
-        "reactive_glow": True,
-        "resolved_sensitivity": sensitivity,
-        "line_color": (245, 250, 255, 255),
-        "line_count": line_count,
-        "line2_color": (255, 120, 50, 230),
-        "line2_glow_color": (255, 120, 50, 180),
-        "line3_color": (50, 255, 120, 230),
-        "line3_glow_color": (50, 255, 120, 180),
-        "line4_color": (255, 0, 150, 230),
-        "line4_glow_color": (255, 0, 150, 180),
-        "line5_color": (0, 255, 200, 230),
-        "line5_glow_color": (0, 255, 200, 180),
-        "line6_color": (200, 100, 255, 230),
-        "line6_glow_color": (200, 100, 255, 180),
-        "line_speed": line_speed,
-        "line_dim": False,
-        "line_offset_bias": 0.55,
-        "sine_card_adaptation": 0.72,
-        "sine_wave_effect": 0.35,
-        "wave_effect_gate": wave_effect_gate,
-        "sine_micro_wobble": 0.2,
-        "sine_crawl_amount": 0.25,
-        "sine_vertical_shift": 70,
-        "sine_heartbeat": 0.35,
-        "resolved_width_reaction": width_reaction,
-        "sine_density": 1.0,
-        "sine_displacement": 0.12,
-        "sine_ghosting_enabled": case == "ghost",
-        "sine_ghost_alpha": 0.9,
-        "rainbow_enabled": False,
-        "rainbow_speed": 0.5,
-    }
-    for name, value in zip(
-        (
-            "sine_wave_travel",
-            "sine_travel_line2",
-            "sine_travel_line3",
-            "sine_travel_line4",
-            "sine_travel_line5",
-            "sine_travel_line6",
-        ),
-        travels,
-    ):
-        parameter_values[name] = value
-    for index, value in enumerate(shifts, start=1):
-        parameter_values[f"sine_line{index}_shift"] = value
-    # Fill any per-line params the current renderer reads but this frame does not
-    # set explicitly (e.g. ghost_line{n}_enabled for n in 2..6); setdefault keeps
-    # the explicit colours/shifts above untouched.
-    _with_line_index_params(parameter_values, include_sine_shift=True)
-
-    logical = VisualizerLogicalFrame(
-        runtime_generation=1,
-        engine_generation=2,
-        activation_id=3,
-        source_generation=source_generation,
-        source_activation_id=source_activation,
-        mode_id="sine_wave",
-        playing=playing,
-        logical_timestamp=1.0,
-        source_timestamp=None,
-        changed=True,
-        present_frame=True,
-        mode_reveal_ready=True,
-        common=VisualizerCommonState(
-            bars=(),
-            bar_count=0,
-            energy=energy,
-            style=freeze_render_fields(
-                {
-                    "fill_color": (18, 220, 92, 255),
-                    "border_color": (245, 250, 255, 255),
-                }
-            ),
-        ),
-        mode_state=SineFrame(
-            heartbeat_intensity=heartbeat,
-            ghost_energy=ghost_energy,
-            animation_time=animation_time,
-            parameters=freeze_render_fields(parameter_values),
         ),
     )
     return compose_visualizer_render_snapshot(
@@ -1652,7 +1459,6 @@ class _VisualizerModeRunner(QObject):
         snapshot_factory = {
             "spectrum": _spectrum_snapshot,
             "oscilloscope": _oscilloscope_snapshot,
-            "sine_wave": _sine_snapshot,
             "bubble": _bubble_snapshot,
             "devcurve": _devcurve_snapshot,
         }[mode_id]
@@ -1855,7 +1661,6 @@ def main(argv: list[str] | None = None) -> int:
             "nested",
             "spectrum",
             "oscilloscope",
-            "sine_wave",
             "bubble",
             "devcurve",
         ),
@@ -1894,7 +1699,7 @@ def main(argv: list[str] | None = None) -> int:
             mode_id=args.policy,
         )
         if args.policy
-        in {"spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve"}
+        in {"spectrum", "oscilloscope", "bubble", "devcurve"}
         else _Runner(app, args.policy)
     )
     QTimer.singleShot(0, runner.start)

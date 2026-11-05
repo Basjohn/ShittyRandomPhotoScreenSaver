@@ -86,7 +86,6 @@ def test_undeclared_callers_keep_synthesizing(paused_engine) -> None:
     ("mode", "demanded"),
     [
         ("oscilloscope", True),
-        ("sine_wave", False),
         ("spectrum", False),
         ("bubble", False),
         ("devcurve", False),

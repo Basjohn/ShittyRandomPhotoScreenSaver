@@ -62,7 +62,7 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
     settings apply. "Logical" here is classified by the actual consumer, not by
     naming: a value is applied here iff authored logical evolution or a
     mode-owned logical frame runtime reads it (Bubble physics, plus the
-    Spectrum/Oscilloscope/Sine inputs consumed by each mode's
+    Spectrum/Oscilloscope inputs consumed by each mode's
     ``*FrameRuntime.resolve`` and the DevCurve inputs consumed by the DevCurve
     logical field solve). Pure renderer/chrome/style values (bar/line/glow
     colours, glow sizing, card radius, rainbow styling) stay presentation-owned
@@ -88,30 +88,6 @@ def apply_logical_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> None:
         host._spectrum_visual_smoothing = max(
             0.0, min(1.0, float(kwargs['spectrum_visual_smoothing']))
         )
-    # --- Sine authored logical inputs (SineFrameRuntime.resolve) -----------
-    if 'sine_line_count' in kwargs:
-        host._sine_line_count = max(1, min(6, int(kwargs['sine_line_count'])))
-    if 'sine_travel_line2' in kwargs:
-        host._sine_travel_line2 = max(0, min(2, int(kwargs['sine_travel_line2'])))
-    if 'sine_travel_line3' in kwargs:
-        host._sine_travel_line3 = max(0, min(2, int(kwargs['sine_travel_line3'])))
-    if 'sine_travel_line4' in kwargs:
-        host._sine_travel_line4 = max(0, min(2, int(kwargs['sine_travel_line4'])))
-    if 'sine_travel_line5' in kwargs:
-        host._sine_travel_line5 = max(0, min(2, int(kwargs['sine_travel_line5'])))
-    if 'sine_travel_line6' in kwargs:
-        host._sine_travel_line6 = max(0, min(2, int(kwargs['sine_travel_line6'])))
-    if 'sine_line2_shift' in kwargs:
-        host._sine_line2_shift = max(-1.0, min(1.0, float(kwargs['sine_line2_shift'])))
-    if 'sine_line3_shift' in kwargs:
-        host._sine_line3_shift = max(-1.0, min(1.0, float(kwargs['sine_line3_shift'])))
-    if 'sine_line4_shift' in kwargs:
-        host._sine_line4_shift = max(-1.0, min(1.0, float(kwargs['sine_line4_shift'])))
-    if 'sine_line5_shift' in kwargs:
-        host._sine_line5_shift = max(-1.0, min(1.0, float(kwargs['sine_line5_shift'])))
-    if 'sine_line6_shift' in kwargs:
-        host._sine_line6_shift = max(-1.0, min(1.0, float(kwargs['sine_line6_shift'])))
-
     # --- DevCurve authored logical inputs (_devcurve_parameter_snapshot) ---
     # The DevCurve field solve runs on the authored logical clock and consumes
     # its full parameter snapshot (including per-layer colour/outline), so these
@@ -210,25 +186,6 @@ def apply_presentation_vis_mode_kwargs(host: Any, kwargs: Dict[str, Any]) -> Non
         color = QColor(host._bar_border_color)
         color.setAlphaF(opacity)
         host._bar_border_color = color
-
-    # --- Sine styling ------------------------------------------------
-    if 'sine_line_dim' in kwargs:
-        host._sine_line_dim = bool(kwargs['sine_line_dim'])
-    for _idx in range(2, 7):
-        _ck = f'sine_line{_idx}_color'
-        _gk = f'sine_line{_idx}_glow_color'
-        if _ck in kwargs:
-            c = _color_or_none(kwargs[_ck])
-            if c is not None:
-                setattr(host, f'_sine_line{_idx}_color', c)
-        if _gk in kwargs:
-            c = _color_or_none(kwargs[_gk])
-            if c is not None:
-                setattr(host, f'_sine_line{_idx}_glow_color', c)
-    for _idx in range(2, 7):
-        _ek = f'sine_ghost_line{_idx}_enabled'
-        if _ek in kwargs:
-            setattr(host, f'_sine_ghost_line{_idx}_enabled', bool(kwargs[_ek]))
 
     # --- Rainbow (per-mode keys fall back to the global key) ---------
     _mode_str = getattr(host, '_vis_mode_str', None) or ''
@@ -379,87 +336,7 @@ def _populate_shared_visualizer_extras(extra: Dict[str, Any], widget: Any) -> No
     extra['spectrum_ghosting_enabled'] = widget._spectrum_ghosting_enabled
     extra['spectrum_ghost_alpha'] = pres._spectrum_ghost_alpha
     extra['spectrum_ghost_decay'] = widget._spectrum_ghost_decay
-    extra['sine_ghosting_enabled'] = widget._sine_ghosting_enabled
-    extra['sine_ghost_alpha'] = widget._sine_ghost_alpha
-    extra['sine_ghost_decay'] = widget._sine_ghost_decay
-    extra['sine_ghost_line2_enabled'] = pres._sine_ghost_line2_enabled
-    extra['sine_ghost_line3_enabled'] = pres._sine_ghost_line3_enabled
     extra['bubble_ghosting_enabled'] = pres._bubble_ghosting_enabled
     extra['bubble_ghost_alpha'] = pres._bubble_ghost_alpha
     extra['bubble_ghost_decay'] = pres._bubble_ghost_decay
-    extra['sine_heartbeat'] = widget._sine_heartbeat
-    extra['heartbeat_intensity'] = widget._heartbeat_intensity
-    extra['sine_density'] = pres._sine_density
-    extra['sine_displacement'] = pres._sine_displacement
 
-
-def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
-    """Attach Sine's line-mode visual parameters.
-
-    Authored-logical inputs (sensitivity/speed/travel/shift/width-reaction/
-    sine line-count) read from the logical host; pure renderer styling (glow,
-    colours, per-line styling, ghost-line toggles) from the presentation owner.
-    """
-    pres = _presentation_source(widget)
-    extra['glow_enabled'] = pres._sine_glow_enabled
-    extra['glow_intensity'] = pres._sine_glow_intensity
-    extra['glow_size'] = 1.0  # fixed shader-space expansion; no longer a product setting
-    extra['glow_reactivity'] = pres._sine_glow_reactivity
-    extra['glow_color'] = QColor(*pres._sine_glow_color)
-    extra['reactive_glow'] = pres._sine_reactive_glow
-    # Authored-logical.
-    extra['line_sensitivity'] = widget._sine_sensitivity
-    extra['line_speed'] = widget._sine_speed
-    # Renderer styling.
-    extra['line_smoothing'] = pres._sine_smoothing
-    extra['line_dim'] = pres._sine_line_dim
-    extra['line_offset_bias'] = pres._sine_line_offset_bias
-    extra['sine_card_adaptation'] = pres._sine_card_adaptation
-    extra['sine_wave_effect'] = pres._sine_wave_effect
-    extra['sine_micro_wobble'] = pres._sine_micro_wobble
-    extra['sine_crawl_amount'] = pres._sine_crawl_amount
-    extra['sine_vertical_shift'] = pres._sine_vertical_shift
-    # Authored-logical (Sine travels / shifts / width reaction).
-    extra['sine_wave_travel'] = widget._sine_wave_travel
-    extra['sine_travel_line2'] = widget._sine_travel_line2
-    extra['sine_travel_line3'] = widget._sine_travel_line3
-    extra['sine_travel_line4'] = widget._sine_travel_line4
-    extra['sine_travel_line5'] = widget._sine_travel_line5
-    extra['sine_travel_line6'] = widget._sine_travel_line6
-    extra['sine_line1_shift'] = widget._sine_line1_shift
-    extra['sine_line2_shift'] = widget._sine_line2_shift
-    extra['sine_line3_shift'] = widget._sine_line3_shift
-    extra['sine_line4_shift'] = widget._sine_line4_shift
-    extra['sine_line5_shift'] = widget._sine_line5_shift
-    extra['sine_line6_shift'] = widget._sine_line6_shift
-    extra['sine_width_reaction'] = widget._sine_width_reaction
-    # Line colours / count (Sine's line count is authored-logical).
-    extra['line_color'] = QColor(*pres._sine_line_color)
-    extra['line_count'] = widget._sine_line_count
-    _side = 'sine'
-    for _i in range(2, 7):
-        extra[f'line{_i}_color'] = getattr(pres, f'_{_side}_line{_i}_color')
-        extra[f'line{_i}_glow_color'] = getattr(pres, f'_{_side}_line{_i}_glow_color')
-    for _i in range(2, 7):
-        extra[f'ghost_line{_i}_enabled'] = bool(
-            getattr(pres, f'_{_side}_ghost_line{_i}_enabled')
-        )
-    # Legacy ghost enabled keys (for shader compatibility)
-    for _i in range(2, 7):
-        extra[f'sine_ghost_line{_i}_enabled'] = bool(getattr(pres, f'_sine_ghost_line{_i}_enabled'))
-
-    # Preset guardrail: when paused, ensure Sine has minimum travel so it
-    # remains visibly alive even if a preset stores travel as NONE.
-    if not bool(getattr(widget, "_spotify_playing", False)):
-        t1 = int(extra['sine_wave_travel'])
-        t2 = int(extra['sine_travel_line2'])
-        t3 = int(extra['sine_travel_line3'])
-        t4 = int(extra['sine_travel_line4'])
-        t5 = int(extra['sine_travel_line5'])
-        t6 = int(extra['sine_travel_line6'])
-        preferred = next((d for d in (t1, t2, t3, t4, t5, t6) if d in (1, 2)), 2)
-        if t1 == 0:
-            extra['sine_wave_travel'] = preferred
-        # Ensure fallback travel is actually visible at idle without becoming
-        # distractingly fast for quiet/paused scenes.
-        extra['line_speed'] = max(0.22, float(extra['line_speed']))

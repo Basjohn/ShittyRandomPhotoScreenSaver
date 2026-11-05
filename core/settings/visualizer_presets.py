@@ -185,6 +185,9 @@ def normalize_visualizer_custom_snapshot_cache(
 
     if not isinstance(cache, Mapping):
         raise TypeError("visualizer Custom cache must be a mapping")
+    from core.settings.visualizer_retired_modes import strip_retired_visualizer_custom_cache
+
+    cache = strip_retired_visualizer_custom_cache(cache)
 
     nested: Dict[str, Dict[str, Any]] = {}
     flat: Dict[str, Dict[str, Any]] = {}
@@ -737,16 +740,6 @@ def _migrate_preset_settings(mode: str, settings: Dict[str, Any]) -> Dict[str, A
                 settings[normalized] = settings[key]
             settings.pop(key, None)
 
-    # Removed: sine_min_height/max_height/height_tendency are dead keys.
-    # If old presets have them but no card_adaptation, derive it.
-    if mode == "sine_wave":
-        if "sine_card_adaptation" not in settings and "sine_min_height" in settings:
-            minh = float(settings["sine_min_height"])
-            settings["sine_card_adaptation"] = round(min(1.0, max(0.05, minh / 0.24)), 2)
-        settings.pop("sine_min_height", None)
-        settings.pop("sine_max_height", None)
-        settings.pop("sine_height_tendency", None)
-
     # spectrum_bar_profile → removed (curved is now always-on, shaping is parameterized)
     if mode == "spectrum":
         settings.pop("spectrum_bar_profile", None)
@@ -800,13 +793,6 @@ def _migrate_preset_settings(mode: str, settings: Dict[str, Any]) -> Dict[str, A
                 )
         settings.pop("spectrum_bass_emphasis", None)
         settings.pop("spectrum_mid_suppression", None)
-    if mode == "sine_wave":
-        for _key in ("sine_ghost_line2_enabled", "sine_ghost_line3_enabled"):
-            if _key not in settings:
-                settings[_key] = require_canonical_default(
-                    f"widgets.spotify_visualizer.{_key}"
-                )
-
     # rainbow_enabled / rainbow_speed → per-mode keys for modes that actually
     # own the shared Rainbow product surface. Experimental modes may opt out in
     # their descriptor; never synthesize persisted keys that the canonical

@@ -142,7 +142,7 @@ unchanged; media widget, app volume slider, mute/OSD and visualizer audio unchan
 
 ## 7. Unrelated findings (not Linux work)
 
-- `tests/test_visualizer_presets.py`: 3 failures on HEAD (Waveform preset JSON lacks `mode`; Sine pill disabled).
+- `tests/test_visualizer_presets.py`: 3 failures on HEAD (Waveform preset JSON lacks `mode`; Sine pill disabled — Sine since retired).
 - Stale tests failing on every OS (seen in the Linux suite, not Linux work): authored preset/content drift
   (`test_visualizer_preset_completeness` 13, `test_defaults_schema_authority`, `test_onboarding_selection` missing
   `visualizer_waveform_ribbon.png`, Sine-disabled dormancy/enable/technical-sync tests, Waveform/Shockwave pose and

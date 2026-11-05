@@ -8,15 +8,12 @@ from pathlib import Path
 from struct import pack
 
 import pytest
-from PySide6.QtGui import QColor
 
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
 from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
 from tests._visualizer_presentation import resolve_presentation as resolve_visualizer_presentation
-from tests._visualizer_frozen_settings import frozen_visualizer_settings
 from widgets.spotify_visualizer.render_state import (
     OscilloscopeFrame,
-    SineFrame,
     VisualizerCommonState,
     VisualizerEnergyState,
     VisualizerLogicalFrame,
@@ -69,49 +66,9 @@ def _logical(mode_id: str) -> VisualizerLogicalFrame:
         waveform_count=0 if mode_id == "oscilloscope" else len(waveform),
         energy=VisualizerEnergyState(bass=0.8, mid=0.6, high=0.4, overall=0.8),
     )
-    if mode_id == "sine_wave":
-        preset = frozen_visualizer_settings("sine_wave")
-        state = SineFrame(
-            animation_time=0.37,
-            parameters=freeze_render_fields({
-                "sine_density": preset["sine_density"],
-                "sine_card_adaptation": preset["sine_card_adaptation"],
-                "line_speed": preset["sine_speed"],
-                "sine_wave_travel": preset["sine_wave_travel"],
-                "sine_wave_effect": preset["sine_wave_effect"],
-                "sine_micro_wobble": preset["sine_micro_wobble"],
-                "line_count": preset["sine_line_count"],
-                "line_color": QColor(*preset["sine_line_color"]),
-                "glow_enabled": True,
-                "glow_intensity": preset["sine_glow_intensity"],
-                "glow_reactivity": preset["sine_glow_reactivity"],
-                "glow_color": QColor(*preset["sine_glow_color"]),
-                "glow_size": 1.0,
-                "reactive_glow": preset["sine_reactive_glow"],
-                "resolved_sensitivity": preset["sine_sensitivity"],
-                "resolved_width_reaction": preset["sine_width_reaction"],
-                "line_dim": preset["sine_line_dim"],
-                "line_offset_bias": preset["sine_line_offset_bias"],
-                "sine_crawl_amount": preset["sine_crawl_amount"],
-                "sine_displacement": preset["sine_displacement"],
-                "sine_ghost_alpha": preset["sine_ghost_alpha"],
-                "sine_ghosting_enabled": preset["sine_ghosting_enabled"],
-                "sine_heartbeat": preset["sine_heartbeat"],
-                "sine_vertical_shift": preset["sine_vertical_shift"],
-                "rainbow_enabled": preset["rainbow_enabled"],
-                "rainbow_speed": preset["rainbow_speed"],
-                "wave_effect_gate": 0.0,
-                "u_rainbow_hue_offset": 0.0,
-                **{f"line{index}_color": QColor(*preset[f"sine_line{index}_color"]) for index in range(2, 7)},
-                **{f"line{index}_glow_color": QColor(*preset[f"sine_line{index}_glow_color"]) for index in range(2, 7)},
-                **{f"ghost_line{index}_enabled": preset[f"sine_ghost_line{index}_enabled"] for index in range(2, 7)},
-                **{f"sine_travel_line{index}": preset[f"sine_travel_line{index}"] for index in range(2, 7)},
-                **{f"sine_line{index}_shift": preset[f"sine_line{index}_shift"] for index in range(1, 7)},
-            }),
-        )
-    elif mode_id == "oscilloscope":
+    if mode_id == "oscilloscope":
         state = _osc_frame(with_glow=True)
-    else:  # pragma: no cover - parametrization only admits the two line modes.
+    else:  # pragma: no cover - parametrization only admits the line mode.
         raise AssertionError(mode_id)
     return VisualizerLogicalFrame(
         runtime_generation=1,
@@ -196,9 +153,7 @@ def _halo_pixel_count(
         def render(enabled: bool) -> bytes:
             logical = snapshot.logical
             parameters = dict(logical.mode_state.parameters)
-            parameters["glow_enabled" if mode_id == "sine_wave" else "osc_glow"] = (
-                enabled if mode_id == "sine_wave" else (0.65 if enabled else 0.0)
-            )
+            parameters["osc_glow"] = 0.65 if enabled else 0.0
             rendered_snapshot = replace(
                 snapshot,
                 logical=replace(
@@ -241,7 +196,7 @@ def _halo_pixel_count(
 @pytest.mark.qt
 @pytest.mark.parametrize(
     ("mode_id", "expected_glow_color"),
-    (("sine_wave", (206, 92, 255, 255)), ("oscilloscope", (40, 255, 120, 255))),
+    (("oscilloscope", (40, 255, 120, 255)),),
 )
 def test_real_gl_line_glow_uses_visible_logical_footprint(
     qt_app,
@@ -295,10 +250,7 @@ def test_real_gl_line_glow_uses_visible_logical_footprint(
             viewport_extent=(420.0 / 0.17, 280.0 / 0.17),
             uniform_visual_scale=0.17,
         )
-        if mode_id == "sine_wave":
-            assert canonical.logical.mode_state.parameters["glow_color"] == expected_glow_color
-        else:
-            assert canonical.logical.mode_state.parameters["osc_beam_glow_color"] == expected_glow_color
+        assert canonical.logical.mode_state.parameters["osc_beam_glow_color"] == expected_glow_color
 
         canonical_pixels = _halo_pixel_count(host, snapshot=canonical, mode_id=mode_id, with_glow=True)
         dpr_150_pixels = _halo_pixel_count(host, snapshot=dpr_150, mode_id=mode_id, with_glow=True)
@@ -306,18 +258,11 @@ def test_real_gl_line_glow_uses_visible_logical_footprint(
         huge_world_pixels = _halo_pixel_count(host, snapshot=huge_authored_world, mode_id=mode_id, with_glow=True)
 
         assert canonical_pixels > 2_000
-        if mode_id == "sine_wave":
-            # Sine retains its logical-pixel Gaussian halo contract.
-            assert dpr_150_pixels / (1.5 * 1.5) == pytest.approx(canonical_pixels, rel=0.18)
-            assert doubled_pixels == pytest.approx(canonical_pixels * 4.0, rel=0.25)
-            # Authored margins/amplitude can change its curve length slightly.
-            assert huge_world_pixels == pytest.approx(canonical_pixels, rel=0.30)
-        else:
-            # Oscilloscope now uses SceneTarget bloom. Check that glow reaches
-            # beyond the beam at every geometry, without imposing the retired
-            # analytic Gaussian shader's area ratios on the bloom pyramid.
-            assert min(dpr_150_pixels, doubled_pixels, huge_world_pixels) > 2_000
-            assert doubled_pixels > canonical_pixels
+        # Oscilloscope uses SceneTarget bloom. Check that glow reaches beyond
+        # the beam at every geometry, without imposing the retired analytic
+        # Gaussian shader's area ratios on the bloom pyramid.
+        assert min(dpr_150_pixels, doubled_pixels, huge_world_pixels) > 2_000
+        assert doubled_pixels > canonical_pixels
     finally:
         host.release_resources()
         context.doneCurrent()

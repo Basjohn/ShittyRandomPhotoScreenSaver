@@ -756,7 +756,7 @@ move the logical runtime.
 During a live edit, the working rectangle also owns its preview scale. Normal logical-frame publications cannot
 restore the saved size at the new dragged origin; independently rounded axes must admit the same uniform scale.
 
-Sine/Oscilloscope glow spreads perpendicular to the curve and scales with visible content area relative to
+Line-visualizer glow spreads perpendicular to the curve and scales with visible content area relative to
 420x280. A huge saved world at a small uniform scale must not weaken a halo on the same visible footprint.
 Glow size/intensity and line-core antialiasing remain independent.
 

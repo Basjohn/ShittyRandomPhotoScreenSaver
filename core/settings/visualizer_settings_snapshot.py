@@ -55,7 +55,6 @@ _RETIRED_GROWTH_KEYS = frozenset(
     {
         "spectrum_growth",
         "osc_growth",
-        "sine_wave_growth",
         "bubble_growth",
         "devcurve_growth",
     }

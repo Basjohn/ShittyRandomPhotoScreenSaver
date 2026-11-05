@@ -125,7 +125,7 @@ def test_visualizer_owner_stop_exception_is_not_swallowed() -> None:
 
 # Representative settings below are not selected because they "sound logical".
 # Each is consumed by an authored logical/mode runtime on the current source path:
-# SpectrumFrameRuntime, OscilloscopeFrameRuntime, SineFrameRuntime or
+# SpectrumFrameRuntime, OscilloscopeFrameRuntime or
 # DevCurveFrameRuntime. They therefore belong to the presentation-neutral current
 # logical owner rather than any presentation widget.
 def _oscilloscope_logical_case() -> tuple[str, dict[str, object], dict[str, object]]:
@@ -160,31 +160,6 @@ _LOGICAL_CONFIG_CASES = (
         },
     ),
     _oscilloscope_logical_case(),
-    (
-        "sine_wave",
-        {
-            "sine_speed": 0.44,
-            "sine_wave_travel": 1,
-            "sine_line1_shift": 0.20,
-            "sine_width_reaction": 0.70,
-            "sine_sensitivity": 2.10,
-            "sine_ghosting_enabled": True,
-            "sine_ghost_decay": 0.55,
-            # Already neutral today; retained as a control beside the missing
-            # Sine authored inputs.
-            "sine_heartbeat": 0.40,
-        },
-        {
-            "_sine_speed": 0.44,
-            "_sine_wave_travel": 1,
-            "_sine_line1_shift": 0.20,
-            "_sine_width_reaction": 0.70,
-            "_sine_sensitivity": 2.10,
-            "_sine_ghosting_enabled": True,
-            "_sine_ghost_decay": 0.55,
-            "_sine_heartbeat": 0.40,
-        },
-    ),
     (
         "bubble",
         {
@@ -223,7 +198,7 @@ _LOGICAL_CONFIG_CASES = (
 @pytest.mark.parametrize(
     ("mode", "kwargs", "expected"),
     _LOGICAL_CONFIG_CASES,
-    ids=("spectrum", "oscilloscope", "sine", "bubble-control", "devcurve"),
+    ids=("spectrum", "oscilloscope", "bubble-control", "devcurve"),
 )
 def test_neutral_logical_config_covers_authored_inputs_for_all_modes(
     mode: str,

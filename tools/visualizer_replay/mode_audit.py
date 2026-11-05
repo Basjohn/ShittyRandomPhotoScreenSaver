@@ -4,7 +4,7 @@
     python -m tools.visualizer_replay.mode_audit --modes bubble --compare logs/bubble_readings.json
 
 Replays every schema 2 clip in ``logs/visualizer_recordings`` (archived takes excluded) through
-Spectrum (whose runtime Extruded Spectrum shares), Oscilloscope, Sine Wave, DevCurve and Shockwave
+Spectrum (whose runtime Extruded Spectrum shares), Oscilloscope, DevCurve and Shockwave
 Grid (its live waves; clips recorded with musical onsets), and reports
 the warning signs of ``Docs/Guides/Visualizer_Reactivity_Authoring.md`` per band of passage
 intensity (<0.35 quiet, 0.35-0.75 usual, >0.75 loud): the output's mean level, how much it moves
@@ -25,7 +25,7 @@ import statistics
 
 from .driver import mode_output, replay_clip
 
-MODES = ("spectrum", "oscilloscope", "sine_wave", "devcurve", "shockwave_grid", "bubble")
+MODES = ("spectrum", "oscilloscope", "devcurve", "shockwave_grid", "bubble")
 BANDS = (("quiet", 0.0, 0.35), ("usual", 0.35, 0.75), ("loud", 0.75, 9.0))
 
 

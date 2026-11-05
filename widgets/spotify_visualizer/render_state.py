@@ -514,45 +514,6 @@ class OscilloscopeFrame:
 
 
 @dataclass(frozen=True, slots=True)
-class SineFrame:
-    heartbeat_intensity: float = 0.0
-    ghost_energy: VisualizerEnergyState = VisualizerEnergyState()
-    ghost_waveforms: tuple[tuple[float, ...], ...] = ()
-    animation_time: float = 0.0
-    parameters: FrozenFields = FrozenFields()
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "heartbeat_intensity",
-            _finite(self.heartbeat_intensity, name="heartbeat intensity"),
-        )
-        if not isinstance(self.ghost_energy, VisualizerEnergyState):
-            raise TypeError("sine ghost energy must be immutable energy state")
-        object.__setattr__(
-            self,
-            "ghost_waveforms",
-            _float_tuple_rows(self.ghost_waveforms, name="sine ghost waveform sample"),
-        )
-        object.__setattr__(
-            self,
-            "animation_time",
-            _finite(self.animation_time, name="sine animation time"),
-        )
-        if self.animation_time < 0.0:
-            raise ValueError("sine animation time must be non-negative")
-        object.__setattr__(
-            self,
-            "parameters",
-            _coerce_frozen_fields(self.parameters, name="sine parameters"),
-        )
-
-    @property
-    def mode_id(self) -> str:
-        return "sine_wave"
-
-
-@dataclass(frozen=True, slots=True)
 class BubbleFrame:
     positions: tuple[float, ...] = ()
     extras: tuple[float, ...] = ()
@@ -805,7 +766,7 @@ class WaveformRibbonFrame:
 
 
 ModeFrame: TypeAlias = (
-    SpectrumFrame | SphereFrame | OscilloscopeFrame | SineFrame | BubbleFrame | DevCurveFrame | ExtrudedBubbleFrame | WaveformRibbonFrame
+    SpectrumFrame | SphereFrame | OscilloscopeFrame | BubbleFrame | DevCurveFrame | ExtrudedBubbleFrame | WaveformRibbonFrame
 )
 
 
@@ -882,7 +843,7 @@ class VisualizerLogicalFrame:
             raise TypeError("common state must be VisualizerCommonState")
         if not isinstance(
             self.mode_state,
-            (SpectrumFrame, SphereFrame, OscilloscopeFrame, SineFrame, BubbleFrame, DevCurveFrame, ExtrudedBubbleFrame, WaveformRibbonFrame),
+            (SpectrumFrame, SphereFrame, OscilloscopeFrame, BubbleFrame, DevCurveFrame, ExtrudedBubbleFrame, WaveformRibbonFrame),
         ):
             raise TypeError("mode state must be one of the canonical immutable frames")
         edges = tuple(self.protected_edges)
@@ -1083,7 +1044,6 @@ __all__ = [
     "ModeFrame",
     "OscilloscopeFrame",
     "ResolvedVisualizerPresentation",
-    "SineFrame",
     "SphereFrame",
     "SpectrumFrame",
     "VisualizerCommonState",

@@ -148,7 +148,6 @@ class TestDefaultsArtifactParity:
         [
             "bubble_manual_floor",
             "oscilloscope_manual_floor",
-            "sine_wave_manual_floor",
             "spectrum_manual_floor",
         ],
     )
