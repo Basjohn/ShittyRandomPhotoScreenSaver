@@ -14,18 +14,24 @@ from ui.studio.adapter import NavAxis, RenderCard, StudioFraming, StudioNavigati
 
 
 def presentation(mode_id: str, logical_size, extent, style):
-    """The production presentation of ``extent`` (the live card's world extent) at a Studio frame size."""
+    """The production presentation of ``extent`` (the live card's world extent) at a Studio frame size.
+
+    The Studio frame is the live card uniformly scaled down, chrome included: the card's border and inset
+    (display pixels on the card committed at its extent) scale with the frame. Unscaled, a 4 px border on a
+    small frame eats a far larger share of the reference height and inflates the lens aperture (7% more
+    world than the live card on the operator's wide TV card)."""
     from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
     from widgets.spotify_visualizer.presentation_geometry import (
         CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE, resolve_visualizer_presentation)
     width, height = logical_size
     extent = extent or CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
     style = dict(style or ())
+    scale = width / extent[0]
     return resolve_visualizer_presentation(
         policy=get_visualizer_presentation_policy(mode_id), display_size=(width, height),
-        viewport_extent=extent, uniform_visual_scale=width / extent[0],
-        border_width=float(style.get("border_width", 0.0)), corner_radius=0.0,
-        content_inset=float(style.get("content_inset", 0.0)), background_color=(0, 0, 0, 0),
+        viewport_extent=extent, uniform_visual_scale=scale,
+        border_width=float(style.get("border_width", 0.0)) * scale, corner_radius=0.0,
+        content_inset=float(style.get("content_inset", 0.0)) * scale, background_color=(0, 0, 0, 0),
         border_color=(0, 0, 0, 0), shadow_enabled=False, shadow_color=(0, 0, 0, 0), shadow_blur=0.0,
         shadow_offset=(0.0, 0.0), shadow_spread=0.0, shadow_extensions=(0.0, 0.0, 0.0, 0.0))
 
@@ -35,15 +41,27 @@ def card_framings(card_extent, card_style=None) -> tuple[StudioFraming, ...]:
     following production's edge-resize rule (same height, more world revealed)."""
     from widgets.spotify_visualizer.presentation_geometry import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
     base_w, base_h = CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
-    card = card_extent or (base_w, base_h)
-    height = float(card[1])
+    card = tuple(float(v) for v in (card_extent or (base_w, base_h)))
+    return live_card_framings(card, card_style)
+
+
+def live_card_framings(card, card_style=None) -> tuple[StudioFraming, ...]:
+    """Framings derived from the live card so none shows less of the world than the card does (the
+    'stuck zoomed in' defect): Fill grows the card to the viewport's shape (production's edge-resize rule:
+    more world revealed, same scale), Live Card is the card itself (letterboxed honestly), and 16:9 / 21:9
+    are the smallest cards of that shape containing the live card's world."""
+    from ui.studio.adapter import fill_extent
     style = tuple(sorted((card_style or {}).items()))
-    return (StudioFraming("card", f"Live Card {card[0] / card[1]:.2f}:1", tuple(card),
-                          "The visualizer card as it is laid out (CUSTOM extent, else the card baseline).", style),
-            StudioFraming("wide", "16:9", (height * 16 / 9, height),
-                          "A 16:9 card at the live card's height: more of the world at the sides.", style),
-            StudioFraming("cinema", "21:9", (height * 21 / 9, height), "A 21:9 card at the live card's height.",
-                          style))
+    return (StudioFraming("fill", "Fill", card,
+                          "Fill the viewport at the live card's scale: everything the card shows, plus more world "
+                          "where the viewport is wider or taller.", style, fill=True),
+            StudioFraming("card", f"Live Card {card[0] / card[1]:.2f}:1", card,
+                          "The visualizer card exactly as it is laid out (CUSTOM extent, else the card baseline).",
+                          style),
+            StudioFraming("wide", "16:9", fill_extent(card, 16 / 9),
+                          "A 16:9 card containing everything the live card shows.", style),
+            StudioFraming("cinema", "21:9", fill_extent(card, 21 / 9),
+                          "A 21:9 card containing everything the live card shows.", style))
 
 
 def camera_navigation(mode_id: str, prefix: str) -> StudioNavigation:

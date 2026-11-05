@@ -72,7 +72,7 @@ class StudioShellHost:
             if not (shiboken6.isValid(slot) and shiboken6.isValid(viewport)):
                 return                      # teardown: the slot's size signals outlive its items
             width, height = slot.width(), slot.height()
-            extent = viewport.extent
+            extent = viewport.fit_slot(width, height)
             if extent is not None and width > 0 and height > 0:
                 scale = min(width / extent[0], height / extent[1])
                 w, h = extent[0] * scale, extent[1] * scale

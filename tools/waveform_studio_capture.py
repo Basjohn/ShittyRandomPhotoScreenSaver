@@ -82,6 +82,8 @@ def _apply_shell_state(surface, args) -> None:
         menu = root.findChild(QObject, "presetMenu")
         if menu is not None:
             QMetaObject.invokeMethod(menu, "open")
+    if args.viewport_expanded:
+        root.setProperty("viewportExpanded", True)
     if args.help_open:
         for overlay in named("helpOverlay"):
             overlay.setProperty("open", True)
@@ -111,7 +113,9 @@ def main() -> int:
     parser.add_argument("--framing", default="", help="Viewport framing id (default: the mode's own default)")
     parser.add_argument("--theme", type=Path, default=None, help="A .srtheme to activate for this capture")
     parser.add_argument("--tag", default="", help="Suffix for output names")
-    parser.add_argument("--card-extent", default="", help="Live card world extent WxH (CUSTOM viewport_extent)")
+    parser.add_argument("--card-extent", default="live",
+                        help="Live card world extent: WxH (CUSTOM viewport_extent), 'live' (default: the card in "
+                             "this machine's saved settings, read only) or 'baseline' (420x280)")
     parser.add_argument("--border", type=float, default=None, help="Live card border width (px)")
     parser.add_argument("--workspaces", default="", help="Comma list (default: every workspace of the mode)")
     parser.add_argument("--object", default="", help="Scene object to select for the first workspace")
@@ -122,6 +126,7 @@ def main() -> int:
     parser.add_argument("--dock-open", action="store_true", help="Expand the Reactivity response editor")
     parser.add_argument("--help-open", action="store_true", help="Show the help overlay")
     parser.add_argument("--preset-menu", action="store_true", help="Open the header preset dropdown")
+    parser.add_argument("--viewport-expanded", action="store_true", help="Expand the viewport over the panels")
     args = parser.parse_args()
     width, height = (int(v) for v in args.size.split("x"))
 
@@ -146,7 +151,18 @@ def main() -> int:
         set_active_settings_theme(load_settings_theme_file(args.theme))
     mode = args.mode
     activation = resolve_visualizer_activation_payload({"mode": mode, f"preset_{mode}": args.preset - 1}, mode=mode)
-    extent = tuple(float(v) for v in args.card_extent.split("x")) if args.card_extent else None
+    if args.card_extent == "live":
+        from core.settings.settings_manager import SettingsManager
+        from ui.studio.settings_link import live_card_extent
+        saved = SettingsManager().get("widgets")          # read only: nothing is written
+        extent = live_card_extent(saved, mode)
+        if args.border is None and isinstance(saved, dict):
+            border = (saved.get("global") or {}).get("card_border_width_px")
+            args.border = float(border) if border is not None else None
+    elif args.card_extent in ("", "baseline"):
+        extent = None
+    else:
+        extent = tuple(float(v) for v in args.card_extent.split("x"))
     values = dict(activation.resolved_config)
     spec = mode_settings(mode)
     if mode != "waveform_ribbon" and spec is not None:
@@ -166,7 +182,7 @@ def main() -> int:
     surface = surfaces[0]
     bridge = controller.bridge
     record = {"mode": mode, "preset": store.label, "size": [width, height], "fixture": args.fixture,
-              "time": args.time}
+              "time": args.time, "card_extent": list(extent) if extent else "baseline", "border": args.border}
     try:
         def settle():
             for _ in range(240):

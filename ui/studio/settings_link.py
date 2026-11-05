@@ -25,6 +25,54 @@ def has_mode_studio(mode_id: str) -> bool:
     return has_studio(mode_id)
 
 
+def live_card_extent(widgets, mode_id: str, screens=()) -> tuple[float, float] | None:
+    """The live card's CUSTOM world extent, resolved with production's own resolver.
+
+    The card lives on the display the visualizer is routed to, which is usually NOT the screen
+    Settings is on (5 Nov: a Settings-screen-only lookup missed the operator's TV card, so the
+    Studio fell back to the 420x280 baseline: aperture 1 instead of ~3.6, a 3.6x magnification).
+    ``screens`` are tried first, then every connected screen; when no connected screen matches
+    (the card's display is off), a single saved display bucket for this mode is still the card."""
+    try:
+        from PySide6.QtGui import QGuiApplication
+        from rendering.custom_layout_contract import (get_screen_signature_aliases, get_widget_layout_variant_payload,
+                                                      load_custom_layout_map)
+        from rendering.custom_layout_session import normalize_viewport_extent
+        from rendering.quick.custom_layout_hydration import resolve_visualizer_custom_entry_for_aliases
+        from core.settings.visualizer_mode_registry import get_visualizer_layout_profile
+        if not isinstance(widgets, dict):
+            return None
+        seen = set()
+        for candidate in [*screens, *QGuiApplication.screens()]:
+            if candidate is None or id(candidate) in seen:
+                continue
+            seen.add(id(candidate))
+            entry = resolve_visualizer_custom_entry_for_aliases(widgets, get_screen_signature_aliases(candidate),
+                                                                mode_id)
+            if entry is not None:
+                extent = normalize_viewport_extent(entry.size_payload.get("viewport_extent"))
+                if extent is not None:
+                    return extent
+        section = widgets.get("spotify_visualizer", {})
+        if not isinstance(section, dict) or str(section.get("position", "")).lower() != "custom":
+            return None
+        profile = get_visualizer_layout_profile(mode_id)
+        displays = load_custom_layout_map(widgets).get("displays", {})
+        extents = []
+        for bucket in displays.values() if isinstance(displays, dict) else ():
+            payload = (get_widget_layout_variant_payload(bucket, "spotify_visualizer", profile)
+                           if isinstance(bucket, dict) else None)
+            if payload is not None:
+                size = payload.get("size_payload", {})
+                extent = normalize_viewport_extent(size.get("viewport_extent")) if isinstance(size, dict) else None
+                if extent is not None:
+                    extents.append(extent)
+        return extents[0] if len(extents) == 1 else None
+    except Exception:
+        logger.debug("[STUDIO] No live card extent", exc_info=True)
+        return None
+
+
 class VisualizerSettingsStore:
     """CanonicalStore over a VisualizersTab-like Settings owner for one mode."""
 
@@ -117,54 +165,17 @@ class VisualizerSettingsStore:
         return names[index] if 0 <= index < len(names) else "Custom"
 
     def card_extent(self, screen=None) -> tuple[float, float] | None:
-        """The live card's CUSTOM world extent, resolved with production's own resolver.
-
-        The card lives on the display the visualizer is routed to, which is usually NOT the screen
-        Settings is on (5 Nov: a Settings-screen-only lookup missed the operator's TV card, so the
-        Studio fell back to the 420x280 baseline: aperture 1 instead of ~3.6, a 3.6x magnification).
-        Every connected screen is tried, the Settings screen first; when no connected screen matches
-        (the card's display is off), a single saved display bucket for this mode is still the card."""
+        """The live card's CUSTOM world extent (see :func:`live_card_extent`)."""
         try:
-            from PySide6.QtGui import QGuiApplication
-            from rendering.custom_layout_contract import (get_screen_signature_aliases, get_widget_layout_variant_payload,
-                                                          load_custom_layout_map)
-            from rendering.custom_layout_session import normalize_viewport_extent
-            from rendering.quick.custom_layout_hydration import resolve_visualizer_custom_entry_for_aliases
-            from core.settings.visualizer_mode_registry import get_visualizer_layout_profile
             widgets = self._tab._settings.get("widgets")
-            if not isinstance(widgets, dict):
-                return None
-            screens = [screen] if screen is not None else []
-            screens += [self._tab.window().screen(), *QGuiApplication.screens()]
-            seen = set()
-            for candidate in screens:
-                if candidate is None or id(candidate) in seen:
-                    continue
-                seen.add(id(candidate))
-                entry = resolve_visualizer_custom_entry_for_aliases(widgets, get_screen_signature_aliases(candidate),
-                                                                    self._mode)
-                if entry is not None:
-                    extent = normalize_viewport_extent(entry.size_payload.get("viewport_extent"))
-                    if extent is not None:
-                        return extent
-            section = widgets.get("spotify_visualizer", {})
-            if not isinstance(section, dict) or str(section.get("position", "")).lower() != "custom":
-                return None
-            profile = get_visualizer_layout_profile(self._mode)
-            displays = load_custom_layout_map(widgets).get("displays", {})
-            extents = []
-            for bucket in displays.values() if isinstance(displays, dict) else ():
-                payload = get_widget_layout_variant_payload(bucket, "spotify_visualizer", profile) \
-                    if isinstance(bucket, dict) else None
-                if payload is not None:
-                    size = payload.get("size_payload", {})
-                    extent = normalize_viewport_extent(size.get("viewport_extent")) if isinstance(size, dict) else None
-                    if extent is not None:
-                        extents.append(extent)
-            return extents[0] if len(extents) == 1 else None
         except Exception:
-            logger.debug("[STUDIO] No live card extent", exc_info=True)
             return None
+        screens = [screen] if screen is not None else []
+        try:
+            screens.append(self._tab.window().screen())
+        except Exception:
+            pass
+        return live_card_extent(widgets, self._mode, screens)
 
     def card_style(self) -> dict | None:
         """The live card chrome production presents with (the display manager's card border rule)."""

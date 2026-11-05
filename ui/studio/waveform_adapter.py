@@ -789,19 +789,8 @@ def studio_presentation(logical_size, extent, style):
 
     Same resolver and uniform-scale rule as the display owner, so ``framed_aperture_scale`` (lens aperture,
     edge-resize reveal/crop) is production's. Shared by the renderer and the handle projection."""
-    from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
-    from widgets.spotify_visualizer.presentation_geometry import (
-        CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE, resolve_visualizer_presentation)
-    width, height = logical_size
-    extent = extent or CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
-    style = dict(style or ())
-    return resolve_visualizer_presentation(
-        policy=get_visualizer_presentation_policy(MODE), display_size=(width, height),
-        viewport_extent=extent, uniform_visual_scale=width / extent[0],
-        border_width=float(style.get("border_width", 0.0)), corner_radius=0.0,
-        content_inset=float(style.get("content_inset", 0.0)), background_color=(0, 0, 0, 0),
-        border_color=(0, 0, 0, 0), shadow_enabled=False, shadow_color=(0, 0, 0, 0), shadow_blur=0.0,
-        shadow_offset=(0.0, 0.0), shadow_spread=0.0, shadow_extensions=(0.0, 0.0, 0.0, 0.0))
+    from ui.studio.framed import presentation
+    return presentation(MODE, logical_size, extent, style)
 
 
 def frame_camera(frame, size, extent, style):
@@ -1151,24 +1140,11 @@ class WaveformStudioAdapter(StudioModeAdapter):
                                 saved_on_keep=frozenset({PREFIX + "camera_fov"}))
 
     def framings(self, card_extent, card_style=None):
-        from ui.studio.adapter import StudioFraming
-        from widgets.spotify_visualizer.presentation_geometry import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
-        base_w, base_h = CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
-        card = card_extent or (base_w, base_h)
-        label = f"Live Card {card[0] / card[1]:.2f}:1"
-        # Wider frames follow production's edge-resize rule: the live card's height, more world revealed at the
-        # sides (exactly what a wider card of that height shows).
-        height = float(card[1])
-        style = tuple(sorted((card_style or {}).items()))
-        return (StudioFraming("card", label, tuple(card),
-                              "The visualizer card as it is laid out (CUSTOM extent, else the card baseline).", style),
-                StudioFraming("wide", "16:9", (height * 16 / 9, height),
-                              "A 16:9 card at the live card's height: more of the world at the sides.", style),
-                StudioFraming("cinema", "21:9", (height * 21 / 9, height),
-                              "A 21:9 card at the live card's height.", style))
+        from ui.studio.framed import card_framings
+        return card_framings(card_extent, card_style)
 
     def default_framing(self) -> str:
-        return "wide"           # the dashboard's wide viewport; Live Card shows the true card, letterboxed
+        return "fill"           # the live card's world and scale, filling the viewport; Live Card is exact
 
     def default_fixture(self, evaluator) -> str | None:
         return "mid"
