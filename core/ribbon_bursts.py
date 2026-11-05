@@ -81,7 +81,7 @@ class RibbonBursts:
             n,start,capacity=int(path[0,0]),int(path[1,1]),int(path[1,2])
             knots=path[4:].reshape(-1,KNOT_ROWS,4)[(start+np.arange(n))%capacity]
             if n<4:continue
-            field=cloth_values(knots,local_x)
+            field=cloth_values(knots,local_x,phase=float(path[1,3]))
             positions.append(np.column_stack((xs,field[:,:2]+origin[1:])))
             widths.append(field[:,2]);twists.append(field[:,3]+path[1,0])
             tint=np.column_stack([np.interp(local_x,knots[:,0,0],knots[:,4,j]) for j in range(4)])

@@ -21,8 +21,8 @@ void packetField(float x,int owner,out vec4 shape,out vec4 light) {
         if(owner<int(uFieldOrigin.w) && min(paths[owner].colourA.a,paths[owner].colourB.a)>0.0) {
             int last=int(paths[owner].meta.x)-1;
             if(last>0) {
-                Knot first=continuationControl(owner,0),end=continuationControl(owner,last);
-                shape=local<first.p.x || local>end.p.x?continuationField(owner,local):clothField(owner,local);
+                float tail=continuationAnchor(owner,true),head=continuationAnchor(owner,false);
+                shape=local<tail || local>head?continuationField(owner,local):clothField(owner,local);
                 shape.xy+=uFieldOrigin.yz;
                 shape.w+=paths[owner].extra.x;
                 int lo=0,hi=last;

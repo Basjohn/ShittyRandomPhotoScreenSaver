@@ -408,7 +408,7 @@ def _response_model(spec, props: list):
             continue           # cells stay editable in Routing Details; the tuner shows live targets only
         targets.append(ResponseTarget(target, label, _TARGET_NOTES.get(target, ""), tuple(cells),
                                       range_property=PREFIX + target if PREFIX + target in labels else ""))
-    timing = tuple(PREFIX + k for k in ("attack", "release", "elastic_frequency", "damping", "impulse")
+    timing = tuple(PREFIX + k for k in ("attack", "release", "breathing", "elastic_frequency", "damping", "impulse")
                    if PREFIX + k in labels)
     return StudioResponse(sources, tuple(targets), gain_bounds, power_bounds, timing,
                           "Attack and decay are shared by every target in this mode.",

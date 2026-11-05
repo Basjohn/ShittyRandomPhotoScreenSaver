@@ -314,6 +314,8 @@ from rendering.gl_programs.ribbon_continuation import CONTINUATION_GLSL
 _CONTINUATION_VERTEX = """
 uniform vec4 uContinuation; // packet-local min/max x, subdivisions, endpoint side (-1/0/+1)
 void continuationMain(int owner,int crossDiv);
+bool continuationAnchored(int owner);
+int continuationAnchorKnot(int owner,bool before);
 """
 _CONTINUATION_MAIN = """
 vec3 continuedSurface(int owner,float x,float across) {
@@ -326,33 +328,48 @@ vec3 continuedSurface(int owner,float x,float across) {
 void continuationMain(int owner,int crossDiv) {
     int last=int(paths[owner].meta.x)-1;
     bool before=uContinuation.w<0.0;
-    Knot edge=continuationControl(owner,before?0:last);
+    float edgeX=continuationAnchor(owner,before);
     float limit=before?uContinuation.x:uContinuation.y;
-    if((before && limit>=edge.p.x) || (!before && limit<=edge.p.x))return;
+    if((before && limit>=edgeX) || (!before && limit<=edgeX))return;
     int interval=gl_VertexID/(6*crossDiv),corner=gl_VertexID%6;
     int strip=(gl_VertexID/6)%crossDiv;
     bool next=corner==1 || corner>=4,highAcross=corner==2 || corner==3 || corner==5;
     float across=float(strip+(highAcross?1:0))/float(crossDiv);
     float t=float(interval+(next?1:0))/uContinuation.z;
     // Cluster stations at the C2 join without moving any world-space point.
-    float x=mix(edge.p.x,limit,t*t);
+    float x=mix(edgeX,limit,t*t);
     vec4 f=continuationField(owner,x);
     vWorld=continuedSurface(owner,x,across);
     vec3 along=continuedSurface(owner,x+0.001,across)-continuedSurface(owner,x-0.001,across);
     vec3 across_=continuedSurface(owner,x,min(1.0,across+0.001))-continuedSurface(owner,x,max(0.0,across-0.001));
     vNormal=normalize(cross(along,across_));
-    vAcross=across;vEmission=edge.side.w;
-    Knot neighbour=continuationControl(owner,before?1:last-1);
-    vLocal=edge.q.x+(x-edge.p.x)*(edge.q.x-neighbour.q.x)/(edge.p.x-neighbour.p.x);
+    // Local time, emission and tint continue from the anchor segment (phase-weighted, so they never step either).
+    int i=continuationAnchored(owner)?continuationAnchorKnot(owner,before):(before?0:last-1);
+    Knot k0=continuationControl(owner,i),k1=continuationControl(owner,i+1);
+    float share=continuationAnchored(owner)?clamp(paths[owner].extra.w,0.0,1.0):(before?0.0:1.0);
+    vAcross=across;vEmission=mix(k0.side.w,k1.side.w,share);
+    vLocal=k0.q.x+(x-k0.p.x)*(k1.q.x-k0.q.x)/(k1.p.x-k0.p.x);
     vPhase=paths[owner].meta.z+vLocal/paths[owner].meta.w;
-    vColour=paths[owner].colourA;vColourB=paths[owner].colourB;vTint=edge.tint;
+    vColour=paths[owner].colourA;vColourB=paths[owner].colourB;vTint=mix(k0.tint,k1.tint,share);
     vCoverage=1.0;vExpanded=0.0;vFaceScale=1.0;
     gl_Position=uMvp*vec4(vWorld,1);
 }
 """
+# The main strip draws only the anchored history [tail anchor, head anchor]; the continuation draws the rest.
+_ANCHORED_STRIP = """
+    if(continuationAnchored(owner)) {
+        int tailKnot=continuationAnchorKnot(owner,true),headKnot=continuationAnchorKnot(owner,false);
+        if(segment<tailKnot || segment>headKnot) return;
+        float share=clamp(paths[owner].extra.w,0.0,1.0);
+        float low=segment==tailKnot?share:0.0,high=segment==headKnot?share:1.0;
+        if(high<=low) return;
+        u0=mix(low,high,u0);u1=mix(low,high,u1);u=mix(low,high,u);
+    }
+"""
 RIBBON_CONTINUOUS_VERTEX = (RIBBON_VERTEX.replace('void main() {', _CONTINUATION_VERTEX+'\nvoid main() {',1)
     .replace('if(segment>=count-1) return;',
              'if(uContinuation.w!=0.0) { continuationMain(owner,crossDiv); return; }\n    if(segment>=count-1) return;',1)
+    .replace('    vec3 l0,r0,l1,r1,n0,n1,t0,t1;\n',_ANCHORED_STRIP+'    vec3 l0,r0,l1,r1,n0,n1,t0,t1;\n',1)
     +CONTINUATION_GLSL+_CONTINUATION_MAIN)
 
 # Sparks attached to the ribbon's history (no state, no CPU per tick): every knot owns a few spark slots; tangent.w

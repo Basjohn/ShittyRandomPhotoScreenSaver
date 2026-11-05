@@ -604,6 +604,15 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` โ
   relaxation, a floor so silence is not amplified) and land that peak below the top of the Range so sustained loud
   passages keep headroom for accents. Gain only: an offset window re-expands a quiet intro to full size. Apply it to
   geometry; light, colour and sparkle keep their fixed calibrated anchors (ยง13A).
+- **Judge reactivity in continuous play, not in a song's first seconds.** Replay whole songs back to back without a
+  reset and tabulate each onset's response by time in song and by passage. Two stacked adaptations (an onset already
+  measured against an adaptive threshold, then judged again against a running mean of its own kind) muted every
+  routine kick of a sustained passage while the start of each song looked fine.
+- **Soft passages must breathe.** A cascaded release doubles the authored decay and fills the dips between soft
+  phrases; measure peak-to-trough contrast in 3 s windows of soft vs loud passages, and shorten the release / widen the
+  swings about the drive's own phrase mean only as the passage gets softer, so loud reach is untouched.
+- **History ends move continuously.** Anything anchored to the oldest/newest stored sample (a continuation, an end
+  taper) steps at every admission; anchor it at a point that advances with the admission phase on a smooth curve.
 
 **Collisions with the world**
 - **Preserve the shape: lift the whole object.** Per-point clamps against a floor produce boxy, flat-bottomed troughs;

@@ -9,11 +9,11 @@ from core.waveform_ribbon_dynamics import PulseControls
 from tests.test_waveform_ribbon_dynamics import controls, primed
 
 
-def accelerations(model, seconds=6., beat_every=24):
+def accelerations(model, seconds=6., beat_every=24, beat=(.9, .8, .7), rest=(.35, .3, .25), intensity=.8):
     frames = []
     for index in range(round(seconds*90)):
-        bands = (.9, .8, .7) if index % beat_every < 3 else (.35, .3, .25)
-        snapshot = model.advance(1/90, hit=1. if index % beat_every == 0 else 0., bands=bands, intensity=.8, presence=1.)
+        bands = beat if index % beat_every < 3 else rest
+        snapshot = model.advance(1/90, hit=1. if index % beat_every == 0 else 0., bands=bands, intensity=intensity, presence=1.)
         data = np.frombuffer(snapshot.packet.payload, np.float32).reshape(dyn.RIBBON_CAPACITY, -1, 4)
         frames.append(data[:3, 4::KNOT_ROWS, :2].copy())
     P = np.stack(frames[90:])
@@ -24,7 +24,7 @@ def accelerations(model, seconds=6., beat_every=24):
 
 
 def test_beats_never_snap_the_body():
-    model = primed(replace(controls(), pulse=PulseControls(speed=12., fade=2.5)))
+    model = primed(replace(controls(), breathing=1., pulse=PulseControls(speed=12., fade=2.5)))
     acc = accelerations(model)
     vertical = acc[..., 1].max()
     sideways = acc[..., 0].max()
@@ -32,3 +32,12 @@ def test_beats_never_snap_the_body():
     # instantaneous spring kicks, a swell born mid-view, whole-field share/compression jumps and a drift-sized taper.
     assert vertical < .02, vertical
     assert sideways < .01, sideways
+
+
+def test_soft_beats_never_snap_the_body_while_the_passage_breathes():
+    # Breathing widens a soft passage's swings and shortens its release (operator, 5 Nov); its beats keep the same
+    # no-twitch bounds as loud ones (two cascaded followers, spread kicks, rate-limited bounds).
+    model = primed(replace(controls(), breathing=1., pulse=PulseControls(speed=12., fade=2.5)))
+    acc = accelerations(model, beat=(.45, .4, .35), rest=(.2, .15, .1), intensity=.3)
+    assert acc[..., 1].max() < .02, acc[..., 1].max()
+    assert acc[..., 0].max() < .01, acc[..., 0].max()
