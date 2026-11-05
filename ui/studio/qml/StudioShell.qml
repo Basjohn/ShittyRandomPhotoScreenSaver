@@ -66,6 +66,9 @@ Rectangle {
             helpOverlay.open = !helpOverlay.open; event.accepted = true
         } else if (event.key === Qt.Key_Escape && helpOverlay.open) {
             helpOverlay.open = false; event.accepted = true
+        } else if (event.key === Qt.Key_Escape) {
+            // Esc leaves the Studio (every edit is already saved); open popups and drags take Esc first.
+            Qt.callLater(studio.requestClose); event.accepted = true   // never tear down inside the handler
         }
     }
 
@@ -1127,7 +1130,9 @@ Rectangle {
                 delegate: Loader {
                     objectName: "inspectorRow"
                     width: parent.width
-                    height: item ? item.implicitHeight || item.height : 0
+                    // A row whose Settings condition does not hold is hidden, as in Settings.
+                    visible: studio.conditionHidden[modelData.id] !== true
+                    height: visible && item ? item.implicitHeight || item.height : 0
                     property var rowData: modelData
                     sourceComponent: {
                         switch (modelData.instrument) {
@@ -1396,16 +1401,151 @@ Rectangle {
                 anchors.right: parent.right; anchors.rightMargin: 14
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 8
+                // Preset picker: opens a list of the mode's presets; only an explicit pick switches.
                 Rectangle {
+                    id: presetPill
+                    objectName: "presetPill"
+                    readonly property bool interactive: studio.presets.length > 0
                     height: 34; width: presetText.implicitWidth + 52; radius: 6
-                    color: shell.cRaised; border.width: 1; border.color: shell.cOutline
-                    Accessible.name: "Preset being edited"
+                    color: pillMouse.containsMouse && interactive ? Qt.lighter(shell.cRaised, 1.15) : shell.cRaised
+                    border.width: presetMenu.opened ? 2 : 1
+                    border.color: presetMenu.opened ? shell.cAccent : shell.cOutline
+                    activeFocusOnTab: interactive
+                    Accessible.role: Accessible.ComboBox
+                    Accessible.name: "Preset: " + studio.presetLabel
                     Row {
                         anchors.centerIn: parent; spacing: 10
                         Text { id: presetText; text: studio.presetLabel; color: shell.cText; font.pixelSize: shell.fontBase + 1
                                anchors.verticalCenter: parent.verticalCenter }
-                        StudioIcon { name: "chevron-down"; width: 14; height: 14; color: shell.cDim
+                        StudioIcon { name: "chevron-down"; width: 14; height: 14; color: shell.cDim; visible: presetPill.interactive
                                      anchors.verticalCenter: parent.verticalCenter }
+                    }
+                    MouseArea { id: pillMouse; anchors.fill: parent; hoverEnabled: true
+                                cursorShape: presetPill.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                onClicked: if (presetPill.interactive) presetMenu.open() }
+                    Keys.onSpacePressed: if (interactive) presetMenu.open()
+                    Keys.onReturnPressed: if (interactive) presetMenu.open()
+                    Keys.onDownPressed: if (interactive) presetMenu.open()
+                    FocusRing { visible: presetPill.activeFocus }
+                    C.ToolTip.visible: pillMouse.containsMouse && !presetMenu.opened
+                    C.ToolTip.text: "Choose the preset to edit. Studio edits are always saved to Custom; switching "
+                                    + "to a curated preset keeps your Custom settings."
+                    C.ToolTip.delay: 600
+                    C.Popup {
+                        id: presetMenu
+                        objectName: "presetMenu"
+                        y: presetPill.height + 6
+                        x: presetPill.width - width
+                        width: Math.max(presetPill.width, 280)
+                        padding: 6
+                        modal: false
+                        focus: true
+                        closePolicy: C.Popup.CloseOnEscape | C.Popup.CloseOnPressOutside
+                        background: Rectangle { radius: 8; color: shell.cRaised; border.width: 1; border.color: shell.cOutline
+                                                SelectionGlow { spread: 2 } }
+                        onOpened: presetList.forceActiveFocus()
+                        readonly property bool onCustom: {
+                            for (var i = 0; i < studio.presets.length; ++i)
+                                if (studio.presets[i].current) return studio.presets[i].custom
+                            return true
+                        }
+                        contentItem: Column {
+                          spacing: 4
+                          ListView {
+                            id: presetList
+                            objectName: "presetList"
+                            width: presetMenu.availableWidth
+                            implicitHeight: Math.min(contentHeight, 420)
+                            height: implicitHeight
+                            clip: true
+                            model: studio.presets
+                            currentIndex: {
+                                for (var i = 0; i < studio.presets.length; ++i) if (studio.presets[i].current) return i
+                                return 0
+                            }
+                            keyNavigationEnabled: true
+                            Keys.onReturnPressed: { presetMenu.close(); Qt.callLater(studio.selectPreset, studio.presets[currentIndex].index) }
+                            Keys.onSpacePressed: { presetMenu.close(); Qt.callLater(studio.selectPreset, studio.presets[currentIndex].index) }
+                            delegate: Rectangle {
+                                objectName: "presetItem"
+                                width: presetList.width; height: 32; radius: 6
+                                color: ListView.isCurrentItem || itemMouse.containsMouse ? shell.cAccentSoft : "transparent"
+                                Row {
+                                    x: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 10
+                                    StudioIcon { name: "check"; width: 14; height: 14; color: shell.cAccent
+                                                 opacity: modelData.current ? 1 : 0; anchors.verticalCenter: parent.verticalCenter }
+                                    Text { text: modelData.label; color: shell.cText; font.pixelSize: shell.fontBase
+                                           font.bold: modelData.current; anchors.verticalCenter: parent.verticalCenter }
+                                }
+                                MouseArea { id: itemMouse; anchors.fill: parent; hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: { presetMenu.close(); Qt.callLater(studio.selectPreset, modelData.index) } }
+                            }
+                          }
+                          // The rest of Settings' preset row: the same actions, offered where they apply.
+                          Rectangle { width: presetMenu.availableWidth; height: 1; color: shell.cOutline }
+                          Repeater {
+                            model: [
+                              { key: "move", label: "Move To Custom", icon: "copy", shown: !presetMenu.onCustom,
+                                tip: "Copy this curated preset into Custom and edit it there." },
+                              { key: "file", label: "Edit Preset File", icon: "edit", shown: !presetMenu.onCustom,
+                                tip: studio.presetFileEditable ? "Open this preset's JSON file in your default editor."
+                                                               : "Preset JSON not found on disk." },
+                              { key: "save", label: "Save Preset As…", icon: "save", shown: presetMenu.onCustom,
+                                tip: "Save the current Custom settings as a preset file." }
+                            ]
+                            delegate: Rectangle {
+                                objectName: "presetAction"
+                                property string actionKey: modelData.key
+                                readonly property bool live: modelData.key !== "file" || studio.presetFileEditable
+                                visible: modelData.shown
+                                width: presetMenu.availableWidth; height: visible ? 30 : 0; radius: 6
+                                color: actionMouse.containsMouse && live ? shell.cAccentSoft : "transparent"
+                                opacity: live ? 1 : 0.45
+                                Row {
+                                    x: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 10
+                                    StudioIcon { name: modelData.icon; width: 14; height: 14; color: shell.cDim
+                                                 anchors.verticalCenter: parent.verticalCenter }
+                                    Text { text: modelData.label; color: shell.cText; font.pixelSize: shell.fontBase - 1
+                                           anchors.verticalCenter: parent.verticalCenter }
+                                }
+                                MouseArea {
+                                    id: actionMouse; anchors.fill: parent; hoverEnabled: true
+                                    cursorShape: parent.live ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    onClicked: {
+                                        if (!parent.live) return
+                                        presetMenu.close()
+                                        if (modelData.key === "move") Qt.callLater(studio.moveToCustom)
+                                        else if (modelData.key === "file") Qt.callLater(studio.editPresetFile)
+                                        else Qt.callLater(studio.savePresetAs)
+                                    }
+                                }
+                                C.ToolTip.visible: actionMouse.containsMouse
+                                C.ToolTip.text: modelData.tip
+                                C.ToolTip.delay: 500
+                            }
+                          }
+                          Rectangle {
+                            objectName: "includeViewRow"
+                            visible: studio.includeView >= 0 && presetMenu.onCustom
+                            width: presetMenu.availableWidth; height: visible ? 30 : 0; radius: 6
+                            color: viewMouse.containsMouse ? shell.cAccentSoft : "transparent"
+                            Row {
+                                x: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 10
+                                StudioIcon { name: "check"; width: 14; height: 14; color: shell.cAccent
+                                             opacity: studio.includeView > 0 ? 1 : 0.15
+                                             anchors.verticalCenter: parent.verticalCenter }
+                                Text { text: "Include Camera View When Saving"; color: shell.cText
+                                       font.pixelSize: shell.fontBase - 1; anchors.verticalCenter: parent.verticalCenter }
+                            }
+                            MouseArea { id: viewMouse; anchors.fill: parent; hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: studio.setIncludeView(!(studio.includeView > 0)) }
+                            C.ToolTip.visible: viewMouse.containsMouse
+                            C.ToolTip.text: "Save the current camera view into the preset (Settings' own choice)."
+                            C.ToolTip.delay: 500
+                          }
+                        }
                     }
                 }
                 Text {
@@ -1432,7 +1572,7 @@ Rectangle {
                                onClicked: studio.savePresetAs() }
                 StudioButton { text: "Close"; primary: true
                                tip: "Close the Studio and return to Settings (edits are already saved to Custom)"
-                               onClicked: studio.requestClose() }
+                               onClicked: Qt.callLater(studio.requestClose) }
             }
         }
 

@@ -59,13 +59,14 @@ _WORKSPACES = (
               columns=(WorkspaceColumn("Ribbon Shape", ("{object}",), "wave", "Selected ribbon", 1.2),
                        WorkspaceColumn("Global", ("Ribbons", "Flow"), "ribbons", "Every ribbon"))),
     Workspace("reactivity", "Reactivity", ("Energy Pulse", "Shape Response", "Roll & Twist", "Timing",
-                                           "Routing Details", "Advanced (Retired)"),
+                                           "Routing Details", "Audio Analysis", "Advanced (Retired)"),
               open_groups=("Energy Pulse", "Shape Response", "Timing"), icon="bars",
               help="Decide how the music moves the scene: the travelling pulse, what each target listens to "
                    "(the Response Editor panel) and how quickly it reacts.",
               columns=(WorkspaceColumn("Reactivity", (RESPONSE_PANEL,), "bars", "Response Editor", 2.0),
                        WorkspaceColumn("Energy & Timing", ("Energy Pulse", "Shape Response", "Roll & Twist", "Timing",
-                                                           "Routing Details", "Advanced (Retired)"), "bolt",
+                                                           "Routing Details", "Audio Analysis", "Advanced (Retired)"),
+                                       "bolt",
                                        "Pulse, shape and timing"))),
     Workspace("appearance", "Appearance", ("Gradient Nodes", "Sheet & Highlights", "{object} Colours", "Colour",
                                            "Particles", "Free Strands"),
@@ -164,6 +165,45 @@ def _card_limits() -> dict[str, tuple[float, float]]:
 from ui.studio.colour import display_hex, linear_from_hex  # noqa: E402  (re-exported for callers)
 
 
+TECHNICAL_GROUP = "Audio Analysis"
+
+
+def _technical_properties() -> dict:
+    """The mode's technical (audio analysis) controls exactly as Settings' Technical group builds them
+    (``ui.tabs.media.technical_controls``): same storage keys, ranges, choices and labels."""
+    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
+    out = {}
+    note = ("Live audio analysis for this mode (Settings' Technical controls). The synthetic previews bypass "
+            "analysis; recorded clips are re-analysed with these values.")
+    for defn in _control_defs_for_mode(MODE):
+        key = _storage_key(MODE, defn)
+        label = _label((defn.label_text or defn.checkbox_text or key).replace("\n", " "))
+        tooltip = (defn.tooltip or "") + ("\n" if defn.tooltip else "") + note
+        common = dict(id=key, path=(key,), label=label, workspace="reactivity", group=TECHNICAL_GROUP,
+                      tooltip=tooltip)
+        if defn.widget_kind == "checkbox":
+            prop = StudioProperty(instrument=SWITCH, **common)
+        elif defn.widget_kind == "combo":
+            prop = StudioProperty(instrument=CHOICE, choices=tuple(label for label, _v in defn.options),
+                                  choice_values=tuple(value for _l, value in defn.options), **common)
+        else:
+            integer = defn.default_type == "int"
+            prop = StudioProperty(instrument=SCALAR, minimum=float(defn.minimum), maximum=float(defn.maximum),
+                                  decimals=0 if integer else 2, integer=integer, units=f" {defn.suffix_text}"
+                                  if getattr(defn, "suffix_text", "") else "", **common)
+        out[key] = (prop, defn)
+    return out
+
+
+def _condition(control) -> tuple:
+    """The spec control's ``when`` as Studio terms: ((key, (accepted values...)), ...)."""
+    when = getattr(control, "when", None)
+    if not when:
+        return ()
+    terms = (when,) if isinstance(when[0], str) else when
+    return tuple((key, tuple(value) if isinstance(value, tuple) else (value,)) for key, value in terms)
+
+
 def build_schema() -> StudioSchema:
     spec = require_mode_settings(MODE)
     from core.waveform_ribbon_authoring import RIBBON_CAPACITY, SOURCES
@@ -189,7 +229,7 @@ def build_schema() -> StudioSchema:
         label = _label(control.label) or _label(getattr(control, "text", "")) or control.key
         tooltip = getattr(control, "tooltip", "")
         common = dict(id=control.key, path=(control.key,), label=label, workspace=workspace, group=group,
-                      tooltip=tooltip, priority=_PRIORITY.get(control.key, 100))
+                      tooltip=tooltip, priority=_PRIORITY.get(control.key, 100), when=_condition(control))
         if isinstance(control, Range):
             props.append(StudioProperty(instrument=QUIET_PEAK, minimum=control.low, maximum=control.high,
                                         decimals=0 if control.integer else control.decimals,
@@ -260,9 +300,16 @@ def build_schema() -> StudioSchema:
     props = [dataclasses.replace(p, icon=_ROW_ICONS.get(p.id.rsplit(".", 1)[-1] if "[" in p.id
                                                         else p.id[len(PREFIX):], ""))
              if not p.icon else p for p in props]
+    technical = _technical_properties()
+    props.extend(prop for prop, _defn in technical.values())
     controls = {control.key: control for control in spec.controls}
 
     def admit(key: str, candidate: Any, previous: Any) -> Any:
+        if key in technical:
+            from ui.tabs.media.technical_controls import _clamp_numeric, _coerce_value
+            prop, defn = technical[key]
+            value = _coerce_value(candidate, defn, previous)
+            return _clamp_numeric(value, defn) if prop.instrument == SCALAR else value
         return controls[key].admit(candidate, previous)
 
     response = _response_model(spec, props)

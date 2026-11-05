@@ -42,6 +42,14 @@ class MemoryStore:
     def preset_label(self):
         return self.label
 
+    def presets(self):
+        from core.settings.visualizer_presets import get_preset_names
+        return list(get_preset_names("waveform_ribbon"))
+
+    def preset_index(self):
+        names = self.presets()
+        return names.index(self.label) if self.label in names else -1
+
 
 class NoPresence:
     def conceal(self):
@@ -67,6 +75,11 @@ def _apply_shell_state(surface, args) -> None:
     if args.pick_node >= 0:
         for row in named("gradientRow")[:1]:
             row.setProperty("selected", args.pick_node)
+    if args.preset_menu:
+        from PySide6.QtCore import QMetaObject, QObject
+        menu = root.findChild(QObject, "presetMenu")
+        if menu is not None:
+            QMetaObject.invokeMethod(menu, "open")
     if args.help_open:
         for overlay in named("helpOverlay"):
             overlay.setProperty("open", True)
@@ -104,6 +117,7 @@ def main() -> int:
     parser.add_argument("--scroll", type=float, default=0.0, help="Inspector scroll offset (px; negative = bottom)")
     parser.add_argument("--dock-open", action="store_true", help="Expand the Reactivity response editor")
     parser.add_argument("--help-open", action="store_true", help="Show the help overlay")
+    parser.add_argument("--preset-menu", action="store_true", help="Open the header preset dropdown")
     args = parser.parse_args()
     width, height = (int(v) for v in args.size.split("x"))
 
