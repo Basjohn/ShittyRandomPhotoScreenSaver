@@ -200,7 +200,8 @@ lose this"). Every later dynamics change shows, on the recorded clips, that Pres
   70-130 s). Causes: Group Wave's set envelope was built from the long-fade field with a peak-keeping blur, so the swell
   sat at its soft bound over the visible span (median/max .98) and the whole body inflated with Pulse Strength (bass);
   and the adaptive gain's 30 s memory re-normalised a quieter passage to loud reach. Fixed: Group Wave follows the fresh
-  field (as Travelling Pulse); Breathing holds the gain memory (Preset 4, Breathing 0, is bit-exact with the tag).
+  field (as Travelling Pulse); Breathing holds the gain memory through a quieter passage only, keyed to the slow
+  passage level, never beat gaps (Preset 4, Breathing 0, is bit-exact with the tag).
   Evidence and per-passage tables: `.artifacts/evidence/waveform_ribbon/reactivity_preset7/`. Open: operator review of
   Preset 7 (bodies are smaller in loud passages now that the uniform inflation is gone: sustained-loud visible
   amplitude 6.4 -> 5.4); Whole Swell (Preset 6) sits at its soft bound in all music by design (one global level;

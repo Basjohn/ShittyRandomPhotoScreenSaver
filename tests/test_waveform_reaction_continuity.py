@@ -47,6 +47,23 @@ def test_a_quieter_passage_after_a_loud_one_never_rises_to_loud_reach():
         assert (late <= .9*loud).all() == held, (breathing, late, loud)
 
 
+def test_the_quieter_passage_hold_never_engages_inside_a_sustained_passage():
+    """Beat gaps, phrase swells and strong/light bars at one passage level are not a quieter passage: the slow level
+    the hold reads stays within HOLD_BELOW[0] of the loud level, so the gain keeps its 30 s memory (no mid-song mute)."""
+    model = primed(replace(controls(), breathing=1.))
+    ratios = []
+    for index in range(round(60/DT)):
+        t = index*DT
+        swell = 1. if t % 3. < 1. else 0.
+        strong = int(t//4) % 2 == 0
+        bands = tuple((.6+.4*swell)*share for share in (1., .85, .7))
+        model.advance(DT, bands=bands, intensity=.7+.3*swell, presence=1.,
+                      hit=(.8 if strong else .2) if index % 45 == 0 else 0.)
+        if t >= 10.:
+            ratios.append(model._sustain/model._loud_level)
+    assert min(ratios) > dyn.HOLD_BELOW[0], min(ratios)
+
+
 def group_wave(**pulse):
     pulse = {'direction': 'Head To Tail', 'width': 3.5, 'speed': 16., 'fade': 3., 'mode': 'Group Wave', **pulse}
     return primed(replace(controls(), rotation_enabled=False, pulse=PulseControls(**pulse)))

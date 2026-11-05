@@ -613,12 +613,17 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` โ
   relaxation, a floor so silence is not amplified) and land that peak below the top of the Range so sustained loud
   passages keep headroom for accents. Gain only: an offset window re-expands a quiet intro to full size. Apply it to
   geometry; light, colour and sparkle keep their fixed calibrated anchors (ยง13A).
-- **The gain's memory must be song-scale, not passage-scale.** A 30 s relaxation re-normalises a quieter passage back
-  up to loud reach within one verse (a passage at 70% of the loud input reached Pulse Strength .88 against the loud
-  passage's .87 after 25 s): "it swelled up to full power when the song went quieter". Hold the memory while the
-  music sits below it (Waveform: 30 s x (1 + 5 x Breathing)), so a quiet passage keeps its proportion and only a song
-  that stays softer for minutes is re-normalised. The 60 s recorded clips cannot show this (the memory sat near its
-  floor on them); reproduce it with a long synthetic quieter passage after loud phrases, and keep a negative control.
+- **Hold the gain's memory through a quieter PASSAGE, never through beat gaps.** A 30 s relaxation re-normalises a
+  quieter passage back up to loud reach within one verse (a passage at 70% of the loud input reached Pulse Strength .88
+  against the loud passage's .87 after 25 s): "it swelled up to full power when the song went quieter". Keying a
+  longer memory to the drive being below its peak is wrong: a drive sits below its peak between almost every pair of
+  beats, so that held ALL music (a global retune; Preset 1's late kicks fell .58 -> .45). Key it to a slow level that
+  never dips between beats (Waveform: the published passage held over seconds, against the loud level the peaks were
+  set at; held only below .8 of it, fully at .7). On five recorded songs back to back it engaged on 15% of music ticks,
+  sustained-loud kicks stayed identical to no hold at every time in song, and quieter-section kicks moved 1-4%. The 60 s
+  clips hold little long-form contrast (the memory sat near its floor on them): prove the benefit with a long synthetic
+  quieter passage after loud phrases, with a negative control, and the no-mute side on the recorded clips. Also keep
+  the gain itself honest: with it off (fixed calibrated targets) every kick on the same clips was 30-50% smaller.
 - **Judge reactivity in continuous play, not in a song's first seconds.** Replay whole songs back to back without a
   reset and tabulate each onset's response by time in song and by passage. Two stacked adaptations (an onset already
   measured against an adaptive threshold, then judged again against a running mean of its own kind) muted every
