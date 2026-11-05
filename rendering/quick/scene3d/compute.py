@@ -33,10 +33,12 @@ def dispatch(groups: tuple[int, int, int], barriers: int) -> None:
 
 
 @contextmanager
-def bound_image(unit: int, texture: int, access: int, image_format: int, *, layered: bool = False) -> Iterator[None]:
+def bound_image(unit: int, texture: int, access: int, image_format: int, *, layered: bool = False,
+                restore: bool = True) -> Iterator[None]:
     """Bind level 0 of ``texture`` to image ``unit`` for the scope, then restore the unit. ``layered`` exposes every
-    layer (a 3D texture's whole depth to ``image3D``)."""
-    previous = gl_query.get_indexed_int(gl.GL_IMAGE_BINDING_NAME, unit)
+    layer (a 3D texture's whole depth to ``image3D``). ``restore=False``: the caller owns the unit for its frame, so
+    nothing is read back (a driver round trip) and the unit is left unbound."""
+    previous = gl_query.get_indexed_int(gl.GL_IMAGE_BINDING_NAME, unit) if restore else 0
     if previous:
         inherited = (previous,
                      gl_query.get_indexed_int(gl.GL_IMAGE_BINDING_LEVEL, unit),

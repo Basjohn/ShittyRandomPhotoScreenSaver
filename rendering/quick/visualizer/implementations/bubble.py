@@ -26,6 +26,7 @@ from widgets.spotify_visualizer.render_state import (
 )
 from widgets.spotify_visualizer.shaders import load_fragment_shader
 
+from ..gl_state import _int_state
 from ..implementation_values import parameter, rgba, safe_hue
 from ..render_contract import (
     QUICK_VISUALIZER_VERTEX_SOURCE,
@@ -257,13 +258,13 @@ class QuickBubbleRenderer:
         # The canonical Bubble shader then inserts it between the background
         # gradient and all existing wake, ghost and 110-body contributions.
         # No texture, framebuffer or extra GL calls on the opt-out path.
-        ambient_texture = 0
+        ambient_texture = ambient_light = 0
         if payload.ambient_points:
             from .bubble_ambient_gl import QuickBubbleAmbientPoints
             if self._ambient_renderer is None:
                 self._ambient_renderer = QuickBubbleAmbientPoints()
             from widgets.spotify_visualizer.bubble_ambient_geometry import ambient_sprite_scale
-            ambient_texture = self._ambient_renderer.render_texture(
+            ambient_texture, ambient_light = self._ambient_renderer.render_texture(
                 layout.content_rect, presentation.dpr, payload.ambient_points,
                 sprite_scale=ambient_sprite_scale(layout.effect_scale),
                 glow_spread=float(parameter(parameters, "bubble_particle_glow_spread")),
@@ -279,8 +280,11 @@ class QuickBubbleRenderer:
             self._ambient_renderer = None
         gl.glUseProgram(self._program)
         gl.glUniform1i(uniforms["u_ambient_enabled"], int(bool(ambient_texture)))
+        gl.glUniform1i(uniforms["u_ambient_light_enabled"], int(bool(ambient_light)))
         if ambient_texture:
             gl.glUniform1i(uniforms["u_ambient_texture"], 0)
+        if ambient_light:
+            gl.glUniform1i(uniforms["u_ambient_light"], 1)
         gl.glUniformMatrix4fv(
             uniforms["uMatrix"],
             1,
@@ -427,13 +431,23 @@ class QuickBubbleRenderer:
         if trace is not None:
             trace.mark(FrameTraceEvent.BUBBLE_VAO_READY)
         if ambient_texture:
-            prior_active = int(gl.glGetIntegerv(gl.GL_ACTIVE_TEXTURE))
+            prior_active = _int_state(gl.GL_ACTIVE_TEXTURE)
             gl.glActiveTexture(gl.GL_TEXTURE0)
-            prior_bound = int(gl.glGetIntegerv(gl.GL_TEXTURE_BINDING_2D))
+            prior_bound = _int_state(gl.GL_TEXTURE_BINDING_2D)
+            prior_light = 0
             try:
                 gl.glBindTexture(gl.GL_TEXTURE_2D, ambient_texture)
+                if ambient_light:
+                    # Glowing particles' linear light on unit 1, for this draw only.
+                    gl.glActiveTexture(gl.GL_TEXTURE1)
+                    prior_light = _int_state(gl.GL_TEXTURE_BINDING_2D)
+                    gl.glBindTexture(gl.GL_TEXTURE_2D, ambient_light)
                 gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
             finally:
+                if ambient_light:
+                    gl.glActiveTexture(gl.GL_TEXTURE1)
+                    gl.glBindTexture(gl.GL_TEXTURE_2D, prior_light)
+                    gl.glActiveTexture(gl.GL_TEXTURE0)
                 gl.glBindTexture(gl.GL_TEXTURE_2D, prior_bound)
                 gl.glActiveTexture(prior_active)
         else:
@@ -498,6 +512,8 @@ class QuickBubbleRenderer:
                 "u_ghost_decay",
                 "u_ambient_enabled",
                 "u_ambient_texture",
+                "u_ambient_light_enabled",
+                "u_ambient_light",
             )
             uniforms = {
                 name: int(gl.glGetUniformLocation(program, name))
