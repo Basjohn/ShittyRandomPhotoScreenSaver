@@ -20,9 +20,55 @@ from ..render_contract import (
     QuickVisualizerRenderFrame,
 )
 from ..implementation_values import parameter, rgba, safe_hue
+from rendering.gl_programs.spectrum_options import SPECTRUM_PATTERN_ANCHORS, SPECTRUM_PATTERNS
 
 
 _MAX_BARS = 64
+
+
+def resolve_spectrum_decor_uniforms(
+    parameters, visual_scale: float,
+) -> tuple[tuple[str, str, tuple], ...]:
+    """(uniform, kind, values) for Spectrum's optional decoration from its frame parameters.
+
+    Every value is already resolved by the presentation owner (``spectrum_decor``): this only maps it to the
+    shader's units. Mixes are the owner's fade envelopes; a strength rides on its mix.
+    """
+
+    def unit(name: str) -> float:
+        return max(0.0, min(1.0, float(parameter(parameters, name))))
+
+    pattern = str(parameter(parameters, "spectrum_pattern_shown"))
+    pattern_index = SPECTRUM_PATTERNS.index(pattern) if pattern in SPECTRUM_PATTERNS else 0
+    return (
+        ("u_ghost_custom_mix", "1f", (unit("spectrum_ghost_custom_mix"),)),
+        ("u_ghost_color", "4f", rgba(parameter(parameters, "spectrum_ghost_color"))),
+        ("u_ghost_gradient_mix", "1f", (unit("spectrum_ghost_gradient_mix"),)),
+        ("u_ghost_tip_color", "4f", rgba(parameter(parameters, "spectrum_ghost_tip_color"))),
+        ("u_gloss", "1f", (unit("spectrum_gloss"),)),
+        ("u_fill_gradient_mix", "1f", (unit("spectrum_fill_gradient_mix"),)),
+        ("u_fill_tip_color", "4f", rgba(parameter(parameters, "spectrum_fill_tip_color"))),
+        ("u_peak_cap_mix", "1f", (unit("spectrum_peak_caps_mix"),)),
+        ("u_peak_cap_color", "4f", rgba(parameter(parameters, "spectrum_peak_cap_color"))),
+        ("u_peak_cap_thickness", "1f", (
+            max(1.0, min(6.0, float(parameter(parameters, "spectrum_peak_cap_thickness"))))
+            * max(0.01, float(visual_scale)),)),
+        ("u_pattern", "1i", (pattern_index,)),
+        ("u_pattern_shared", "1i", (
+            1 if str(parameter(parameters, "spectrum_pattern_anchor_shown")) == SPECTRUM_PATTERN_ANCHORS[1] else 0,)),
+        ("u_pattern_mix", "1f", (
+            unit("spectrum_pattern_mix") * unit("spectrum_pattern_strength") if pattern_index else 0.0,)),
+        ("u_pattern_color", "4f", rgba(parameter(parameters, "spectrum_pattern_color"))),
+        ("u_pattern_scale", "1f", (
+            max(0.25, min(4.0, float(parameter(parameters, "spectrum_pattern_scale")))),)),
+    )
+
+
+_DECOR_UNIFORMS = (
+    "u_ghost_custom_mix", "u_ghost_color", "u_ghost_gradient_mix", "u_ghost_tip_color", "u_gloss",
+    "u_fill_gradient_mix", "u_fill_tip_color", "u_peak_cap_mix", "u_peak_cap_color", "u_peak_cap_thickness",
+    "u_pattern", "u_pattern_shared", "u_pattern_mix", "u_pattern_color", "u_pattern_scale",
+)
 
 
 def prepare_spectrum_shader_levels(
@@ -120,6 +166,7 @@ class QuickSpectrumRenderer:
         self._program = 0
         self._uniforms: dict[str, int] = {}
         self._last_content_rotation_quarters: int | None = None
+        self._last_decor: tuple | None = None
 
     @property
     def has_resources(self) -> bool:
@@ -286,6 +333,20 @@ class QuickSpectrumRenderer:
         gl.glUniform1f(uniforms["u_bar_width_px"], layout.bar_width)
         gl.glUniform1f(uniforms["u_bar_gap_px"], layout.bar_gap)
         gl.glUniform1f(uniforms["u_bar_span_px"], layout.bar_span)
+        # Optional decoration: program state persists, so upload only when it changes (at rest: never).
+        decor = resolve_spectrum_decor_uniforms(
+            parameters, presentation.uniform_visual_scale,
+        )
+        if decor != self._last_decor:
+            for name, kind, values in decor:
+                location = uniforms[name]
+                if kind == "1f":
+                    gl.glUniform1f(location, *values)
+                elif kind == "1i":
+                    gl.glUniform1i(location, *values)
+                else:
+                    gl.glUniform4f(location, *values)
+            self._last_decor = decor
         playing_location = uniforms.get("u_playing", -1)
         if playing_location >= 0:
             gl.glUniform1i(playing_location, 1 if logical.playing else 0)
@@ -298,6 +359,7 @@ class QuickSpectrumRenderer:
         gl.glDeleteProgram(self._program)
         self._program = 0
         self._last_content_rotation_quarters = None
+        self._last_decor = None
         self._uniforms.clear()
 
     def _initialize(self) -> None:
@@ -345,6 +407,7 @@ class QuickSpectrumRenderer:
                 "u_bar_width_px",
                 "u_bar_gap_px",
                 "u_bar_span_px",
+                *_DECOR_UNIFORMS,
             )
             names = (*required, "u_playing")
             uniforms = {
@@ -368,6 +431,7 @@ def create_visualizer_renderer() -> QuickSpectrumRenderer:
 
 
 __all__ = [
+    "resolve_spectrum_decor_uniforms",
     "QuickSpectrumLayout",
     "QuickSpectrumRenderer",
     "compute_quick_spectrum_layout",

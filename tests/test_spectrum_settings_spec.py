@@ -79,7 +79,13 @@ def test_spectrum_specs_reach_real_source_logical_presentation_and_capture_param
               "spectrum_glow_color": [13, 47, 82, 123], "spectrum_glow_intensity": 1.27,
               "spectrum_border_radius": 19.0, "spectrum_ghosting_enabled": True,
               "spectrum_ghost_alpha": 0.37, "spectrum_ghost_decay": 0.46,
-              "spectrum_wave_amplitude": 0.63, "spectrum_profile_floor": 0.21, "spectrum_drop_speed": 2.14}
+              "spectrum_wave_amplitude": 0.63, "spectrum_profile_floor": 0.21, "spectrum_drop_speed": 2.14,
+              "spectrum_ghost_color_source": "Custom", "spectrum_ghost_color": [1, 2, 3, 4],
+              "spectrum_ghost_gradient": True, "spectrum_ghost_tip_color": [5, 6, 7, 8], "spectrum_gloss": 0.33,
+              "spectrum_fill_gradient": True, "spectrum_fill_tip_color": [9, 10, 11, 12], "spectrum_peak_caps": True,
+              "spectrum_peak_cap_color": [13, 14, 15, 16], "spectrum_peak_cap_thickness": 5,
+              "spectrum_pattern": "Grid", "spectrum_pattern_color": [17, 18, 19, 20], "spectrum_pattern_scale": 2.5,
+              "spectrum_pattern_strength": 0.44, "spectrum_pattern_anchor": "Shared"}
     projected = resolve_mode_source_config("spectrum", values)
     apply_logical_vis_mode_kwargs(logical, projected)
     apply_presentation_vis_mode_kwargs(presentation, projected)
@@ -112,6 +118,11 @@ def test_spectrum_specs_reach_real_source_logical_presentation_and_capture_param
                 "spectrum_glow_enabled", "spectrum_glow_intensity", "spectrum_glow_color",
                 "spectrum_ghosting_enabled", "spectrum_ghost_alpha", "spectrum_ghost_decay"):
         assert list(extra[key]) == values[key] if isinstance(values[key], list) else extra[key] == values[key], key
+    # Spectrum's own capture adds the decoration controls, each from the one presentation owner.
+    from widgets.spotify_visualizer.spectrum_decor import DECOR_KEYS, spectrum_decor_parameters
+    decor = spectrum_decor_parameters(presentation)
+    for key in DECOR_KEYS:
+        assert list(decor[key]) == values[key] if isinstance(values[key], list) else decor[key] == values[key], key
     style = _common_style(logical)
     assert style["single_piece"] is False and style["border_radius"] == 19.0
     model = SpotifyVisualizerSettings.from_mapping(values, apply_preset_overlay=False)
