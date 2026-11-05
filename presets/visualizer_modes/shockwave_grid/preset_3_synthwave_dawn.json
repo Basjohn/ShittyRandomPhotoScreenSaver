@@ -112,7 +112,7 @@
         "shockwave_grid_nebula_enabled": true,
         "shockwave_grid_nebula_filaments": 0.9,
         "shockwave_grid_nebula_intensity": 0.45,
-        "shockwave_grid_nebula_position": 0.75,
+        "shockwave_grid_nebula_position": 0.9,
         "shockwave_grid_nebula_scale": 0.8,
         "shockwave_grid_notch_positions_linear": [
           [
@@ -4519,7 +4519,7 @@
         "shockwave_grid_water_reflection": 0.77,
         "shockwave_grid_water_shine": 0.9,
         "shockwave_grid_wave_amplitude": 0.75,
-        "shockwave_grid_wave_height": 0.35,
+        "shockwave_grid_wave_height": 0.15,
         "shockwave_grid_wave_speed": 0.51,
         "shockwave_grid_wire_display": "Glass"
       }
