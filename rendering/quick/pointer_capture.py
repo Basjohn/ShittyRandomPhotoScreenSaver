@@ -116,3 +116,51 @@ class NativeOrbitCapture:
                         error = exc
         if error is not None:
             raise error
+
+
+class QtOrbitCapture:
+    """Non-Windows orbit capture: the Qt mouse grab only, without cursor confinement.
+
+    Native confinement (ClipCursor) is Windows-only and Wayland forbids clients
+    from confining the pointer, so off Windows the gesture keeps receiving
+    motion through Qt's grab but the cursor is not clipped to the card.
+    """
+
+    def __init__(self, window):
+        self.window = window
+        self.grabbed = False
+
+    @property
+    def cleanup_pending(self) -> bool:
+        return self.grabbed
+
+    def acquire(self, card: QRectF):
+        del card
+        if not self.window.setMouseGrabEnabled(True):
+            raise RuntimeError('Orbit Qt mouse capture failed')
+        self.grabbed = True
+
+    def release(self):
+        if self.grabbed:
+            self.window.setMouseGrabEnabled(False)
+            self.grabbed = False
+
+
+_QT_ORBIT_ANNOUNCED = False
+
+
+def new_orbit_capture(window):
+    """Return the platform's orbit capture owner for one gesture."""
+    from core import platform_paths
+
+    if platform_paths.IS_WINDOWS:
+        return NativeOrbitCapture(window)
+    global _QT_ORBIT_ANNOUNCED
+    if not _QT_ORBIT_ANNOUNCED:
+        _QT_ORBIT_ANNOUNCED = True
+        from core.logging.logger import get_logger
+
+        get_logger(__name__).info(
+            '[PLATFORM] Orbit cursor confinement is Windows-only; orbit uses a Qt mouse grab without confinement'
+        )
+    return QtOrbitCapture(window)
