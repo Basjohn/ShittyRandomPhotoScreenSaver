@@ -19,9 +19,17 @@ Supersedes the open question in `Future_Work.md` §2 / §2.5 and `Current_Plan.m
    Visualizer is accepted (its full-display measurements decide whether the triggers fire) and only under the
    port-readiness rules.
 
+**For the agent that implements this WHEN a trigger fires (binding, also in `Docs/Guardrails.md`):** the benefit of
+Vulkan exists only as a native render core. Moving the existing Python GL calls to Python Vulkan calls (via a Python
+binding, or Qt's QRhi driven from Python per draw) makes the product *worse* than today's GL: Vulkan needs more calls per
+frame (command buffers, descriptor sets, barriers), and from Python each one contends for the GIL with the logical tick,
+which is already the measured live bottleneck. The core must record its frames in native code without the GIL, with
+Python only publishing immutable frame data across the existing frame/snapshot boundary.
+
 ## Why
 
-**What a Vulkan backend would buy, measured against this product:**
+**What a Vulkan backend would buy, measured against this product** (as a native render core; a Python-driven port buys
+nothing and costs GIL contention):
 
 | Benefit | Real for SRPSS? |
 | --- | --- |
@@ -52,7 +60,7 @@ measured, which no API change made from Python can fix.
 ## Triggers that start the native Vulkan render core (any one, measured, recorded in `Current_Plan.md`)
 
 1. **GPU budget:** an accepted 3D mode at Full Display 4K under `tools/visualizer_live_check.py --load game60` exceeds its
-   render budget even with spatial upscaling (below) at its quality floor.
+   render budget even with mixed-resolution soft layers (below) at its quality floor.
 2. **Render-thread starvation:** after logical-tick optimisation, GIL starvation of the render/GUI threads remains the
    top live-hitch cause (live-check `logical_gil_share`, age chain, hitches/min), with a native render path the remaining
    fix.
@@ -61,11 +69,15 @@ measured, which no API change made from Python can fix.
 
 ## Meanwhile: cheap wins on OpenGL
 
-- **Spatial upscaling for Full Display:** render heavy 3D modes at a reduced internal resolution and upscale with
-  FSR 1 (EASU + RCAS; open shader source, API-neutral) or an equivalent sharpening upscaler, as an optional quality tier.
-  This captures most of the GPU saving of upscaling without temporal artifacts, and ports unchanged to Vulkan.
-- **Measure, don't assume:** plan 01 records per-mode GPU time at full display 4K (off/on spatial upscale) with system
-  conditions, per the benchmarking rules (relative to a control, load recorded).
+- **Mixed resolution, never whole-frame upscaling.** Our content is mostly thin emissive lines (lattices, rims, contour
+  lines), dot grids, 1-px particle cores and sharp music-driven flashes. A spatial upscaler such as FSR 1 (EASU + RCAS)
+  has no history so it does not smear in time, but it cannot recreate those details: it softens lines and rings on dots
+  and cores (operator, 5 Nov: "smeary and ugly"). Temporal upscalers smear them over time. So: render only the soft,
+  expensive layers (mist/fog volumes, bloom, reflection and glass blur, wide glows) at reduced resolution with
+  depth-aware/bilateral upsampling, and keep every line, dot, particle and rim at native resolution. Parts of the
+  codebase already do this (the reduced-resolution fog march; S3D-7). This ports unchanged to Vulkan.
+- **Measure, don't assume:** plan 01 records per-mode GPU time at full display 4K (with and without the reduced-resolution
+  soft layers) with system conditions, per the benchmarking rules (relative to a control, load recorded).
 
 ## Port-readiness rules (all new GPU code, from 5 Nov 2026)
 
