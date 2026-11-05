@@ -17,7 +17,8 @@ from rendering.gl_programs.ribbon import (RIBBON_VERTEX,RIBBON_BODY_FRAGMENT,RIB
     RIBBON_SPARK_VERTEX,RIBBON_SPARK_FRAGMENT,RIBBON_STRAY_VERTEX,RIBBON_STRAY_FRAGMENT)
 
 
-def physical_view(parameters,aspect,aperture_scale=1.,*,geometry_bounds=None):
+def physical_view(parameters,aspect,aperture_scale=1.,*,geometry_bounds=None,zoom=1.):
+    """``zoom`` scales the visible extent (Dynamic Zoom); the physical eye, pose and world never move."""
     def value(key):return parameters['waveform_ribbon_'+key]
     turn,tilt,scale=(float(value(key)) for key in ('turn','tilt','scene_scale'))
     fov=float(value('camera_fov'))
@@ -29,10 +30,11 @@ def physical_view(parameters,aspect,aperture_scale=1.,*,geometry_bounds=None):
     if orthographic:
         tangents=fc.viewport_tangents(ORTHO_REFERENCE_FOV,aspect,aperture_scale,SPEC.fov_range)
         distance=fc.projection_reference_distance(SPEC,scale,eye)
-        lens=(tangents[0]*distance,tangents[1]*distance,True)
+        lens=(tangents[0]*distance*zoom,tangents[1]*distance*zoom,True)
         projection=orthographic_raster_projection(view,lens[:2],geometry_bounds,guard=SPEC.clearance)
     else:
         tangents=fc.viewport_tangents(fov,aspect,aperture_scale,SPEC.fov_range)
+        tangents=(tangents[0]*zoom,tangents[1]*zoom)
         lens=(*tangents,False);projection=fc.perspective_matrix(tangents,NEAR,FAR)
     return view,np.asarray(projection).reshape(4,4,order='F'),np.asarray(eye),lens
 
@@ -85,7 +87,7 @@ class QuickWaveformRibbonRenderer:
             burst_payload=state.particles,burst_origin=state.particle_origin,strand_payload=state.strands)
             if state.parameters['waveform_ribbon_camera_projection']=='Orthographic' else None)
         view,projection,eye,lens=physical_view(state.parameters,width/height,
-            framed_aperture_scale(frame.snapshot.presentation,content=True),geometry_bounds=support)
+            framed_aperture_scale(frame.snapshot.presentation,content=True),geometry_bounds=support,zoom=state.zoom)
         self._scene.render(state.packet,capacity=256,now=state.time,travel=state.travel,recipe=state.scene,
             size=(width,height),view=view,projection=projection,eye=eye,camera_lens=lens,card=frame,overlay=opacity,
             burst_payload=state.particles,burst_origin=state.particle_origin,react=state.passage,

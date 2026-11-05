@@ -124,7 +124,10 @@ and admissions are historical evidence, not instructions to restore a rejected l
 Design Waveform Ribbon for **Orthographic by default**, with Perspective as a separately exercised optional choice.
 Use the shared admitted physical eye, pivot and world; record projection kind, physical half-extents/magnification,
 clip range and actual inner viewport aspect in the scene signature. Low/high never changes these values. Widening
-reveals additional fixed world at preserved scale; no actor stretch or audio-driven lens/pose/population changes.
+reveals additional fixed world at preserved scale; no actor stretch or audio-driven lens/pose/population changes. Sole exception (operator, 5 November): the opt-in
+Camera **Dynamic Zoom** (default Off) scales only the visible extent by up to ±20% from the logical sustained level
+(out quickly in heavy sustained passages, in slowly when soft/idle), frozen while the user moves the camera; the
+physical eye, pose, world and populations never change.
 Perspective's FOV is relevant only in that projection. Do not fit a Perspective scene and assume a matrix swap
 establishes Orthographic likeness. A still cannot uniquely recover 3D camera position, and Orthographic has no finite
 projective horizon: fit floor boundaries and visible landmarks without warping the reference.

@@ -8,6 +8,11 @@ from core.ribbon_packet import KNOT_ROWS
 COHORT_ROWS=4  # timing/admission, held geometry/light, held finish, EoL/fade/restore/activation
 COHORT_BYTES=MAX_PATH_SAMPLES*COHORT_ROWS*16
 ROOTS_PER_ACCENT=8
+# A passing swell may lean an accent's few roots toward itself and lift their chance and glow a little.
+# Restrained by design (operator: never hairy): no new admissions, no extra roots, life and fade untouched.
+SWELL_LEAN=2.
+SWELL_CHANCE=.5
+SWELL_GLOW=.5
 
 
 def remaining_strand(age,lifetime,fade,seed):
@@ -35,7 +40,7 @@ class RibbonStrandCohorts:
         self._history=None
         self._accent_serial=0
 
-    def update(self,snapshot,controls,hit,*,history,knot_hz):
+    def update(self,snapshot,controls,hit,*,history,knot_hz,swell=None,gather=0.):
         now=snapshot.time
         changed_history=history is not self._history
         if hit<.08 and not changed_history:
@@ -66,7 +71,18 @@ class RibbonStrandCohorts:
                 # A musical accent selects a few fixed-world roots; it must not renew every visible strand.
                 roots=np.flatnonzero(candidate);count=min(len(roots),ROOTS_PER_ACCENT)
                 phase=(self._accent_serial*.6180339887498949)%1.
-                chosen=roots[(((phase+np.arange(count)/count)%1.)*len(roots)).astype(int)]
+                picks=(phase+np.arange(count)/count)%1.
+                local=None
+                if swell is not None and gather>0.:
+                    local=np.clip(np.asarray(swell(x),np.float64),0.,1.)
+                    if local.flat[roots].max()<=.02:local=None
+                if local is None:
+                    chosen=roots[(picks*len(roots)).astype(int)]
+                else:
+                    # Same evenly spaced picks through a swell-warped root density: the picks lean toward the
+                    # swell (duplicates merge, so a lean can only lower the count, never raise it).
+                    density=np.cumsum(1.+SWELL_LEAN*gather*local.flat[roots])
+                    chosen=roots[np.minimum(np.searchsorted(density/density[-1],picks,side='right'),len(roots)-1)]
                 selected=np.zeros_like(candidate);selected.flat[chosen]=True
                 eligible=(~active)&selected
                 origin=math.floor(now/16.)*16.
@@ -92,6 +108,10 @@ class RibbonStrandCohorts:
                 self.records[:,:,1][eligible]=[pair(key) for key in ('strand_length','strand_reach','strand_width','strand_light')]
                 self.records[:,:,2][eligible]=[pair(key) for key in ('strand_beads','strand_peel','strand_halo','strand_glow')]
                 life[eligible]=[pair('strand_eol'),pair('strand_eol')*pair('strand_fade'),1.,now-self.origin]
+                if local is not None:
+                    lift=gather*local[eligible]
+                    timing[:,:,0][eligible]=np.minimum(1.,admission*(1.+SWELL_CHANCE*lift))
+                    self.records[:,:,2,3][eligible]*=1.+SWELL_GLOW*lift
                 changed=True
         if changed:
             self.payload=self.records.tobytes()

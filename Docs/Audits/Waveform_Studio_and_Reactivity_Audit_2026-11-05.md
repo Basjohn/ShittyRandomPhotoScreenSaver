@@ -92,6 +92,35 @@ Against `references/Preset3Goal1.png`, `Preset3ReactivityGoalExample.png`, `Mist
 - **Reuse for 3D modes:** shell, viewport host, gesture binding, transport, response curve, gradient strip and
   lifetime timeline are mode-neutral; a mode contributes an adapter (schema, evaluator, fixtures, scene selection).
 
+### Studio viewport decision
+
+Chosen: **(a) a Studio-owned inline `QSGRenderNode`** (`ui/studio/viewport.py`) whose render-thread renderer is
+the mode adapter's; for Waveform that renderer wraps the production `QuickWaveformRibbonRenderer` (its own
+`WaveformScene`) and is fed a `WaveformRibbonFrame` built exactly as `capture_waveform_ribbon` builds it, from the
+Studio's own `WaveformRibbonFrameRuntime`/`WaveformDynamics`. This supersedes the "offscreen target + present as
+texture / readback" first slice above.
+
+- **Why not (b) the production `VisualizerRenderItem`:** it is bound to a `VisualizerSnapshotBridge`, runtime
+  identities, `ResolvedVisualizerPresentation` card shell/clip SDF and mode registry resolution. A Studio bridge
+  would have to forge runtime identities and presentation for a non-runtime surface; the render node, mode
+  renderer and `WaveformScene` are the parts that carry visual truth, and (a) reuses exactly those.
+- **Why not `QQuickFramebufferObject`:** an extra FBO + texture node and a copy per frame; the production scene
+  already renders into its own scene target and composites through the item quad, so it can draw inline.
+- **No readback, no rebuild per edit:** pixels go straight to the window framebuffer. The GUI thread evaluates at
+  most once per Quick frame (`afterAnimating`), only when an edit, scrub or playback moved; a live drag
+  re-publishes the current instant (dt = 0) and the gesture end replays exactly. Renderer resources live across
+  edits; GL is released on `sceneGraphInvalidated` / node release with the scene-graph context current.
+- **Measured** (`tools/waveform_studio_capture.py`, hidden `QQuickRenderControl`, 1600×900, Preset 3, Peak fixture,
+  this workstation, system load not controlled, glFinish per frame, playing): whole Studio frame p50 17.0 ms /
+  p90 19.9 ms (QML shell + production scene + one logical step); one logical evaluation step p50 2.9 ms /
+  p90 6.5 ms. Relative only: GPU timer queries and a no-scene control are still open. A backward scrub replays from
+  the fixture start (≈1.3 ms per logical step; a full 10 s synthetic fixture ≈0.9 s); forward scrubs are
+  incremental. The threaded visible window was not measured (no visible windows in probes).
+- **Settings concealment:** Settings lives inside `QDialog.exec()` in the runtime; `QDialog.hide()` would end that
+  loop and close Settings. The Studio conceals the same window natively (`ShowWindow(SW_HIDE)`) after the Studio's
+  first swapped frame and shows it again on every exit path; the Studio window is application-modal so the modal
+  Settings loop does not block it.
+
 ## 5. Decisions (what is superseded, and why)
 
 Checkpoint before these changes: commit `checkpoint: Waveform pre-Studio baseline` (pushed).
@@ -108,6 +137,22 @@ Checkpoint before these changes: commit `checkpoint: Waveform pre-Studio baselin
    sweep carried by the ribbon rather than a stationary lump field.
 4. **Range-slider policy:** the design pack's control policy (§9) supersedes the 1 November "every pair is a range
    slider" rule for the authoring UI. Serialized `[low, high]` data is unchanged.
+6. **Opt-in Dynamic Zoom (operator request, 5 Nov)** supersedes "music never changes the lens" for that option
+   only: `WaveformDynamics` holds a sustained-level follower (2.5 s up / 4 s down) and a zoom state (1.2 s out /
+   7 s in, ±20%), frozen while `view_camera_operated`; `physical_view(zoom=)` scales the lens extents only. Off by
+   default in every preset; tests in `tests/test_waveform_dynamic_zoom.py`.
+7. **Travelling energy pulse replaces the standing elastic bend (operator, 5 Nov).** The operator judged R1/R2 motion
+   "fundamentally wrong": reactions must feel like water waves, gentle but strong, always WITH the waveform's shape.
+   Root cause in source: Bend inflated a fixed spatial sine the travelling ribbon slid through. Alternatives weighed
+   (research: damped wave-equation height fields; Gaussian wavelet packets carrying `sin(kx-wt)`): both add their own
+   crest/trough oscillation on top of the ribbon, i.e. motion against its shape. Chosen: a travelling *envelope*
+   that multiplies the waveform's own displacement about its axis (sign never flips), plus width/light/colour.
+   Beats inject (typed hits + body-energy rises above 0.08), no steady baseline (it merged swells into a bulge);
+   dense rhythms form a moving swell train. Controls: direction, width, speed, colour shift, fade; Bend range =
+   Pulse Strength. Evidence: `pulse2_p3_ragdoll_20s/` and `strip_pulse2_t5.png` (125 ms steps).
+   Open operator options, not yet built: **Frozen past** (a passing swell leaves the parts it shaped holding their
+   colour/size/shape until the next swell arrives) and a **selectable reaction mode** if a second model reaches
+   comparable fidelity (Studio + presets). Neither is a reason to keep the rejected standing bend.
 5. **The Settings Custom body for Waveform** becomes the sparse Studio launcher (button + camera-save checkbox), per
    the pack. The rejected builder stays reachable only until the Studio covers every field (Advanced coverage gate).
 
@@ -115,9 +160,26 @@ Checkpoint before these changes: commit `checkpoint: Waveform pre-Studio baselin
 
 Ordered; each step has its own evidence. `[ ]` open, `[~]` candidate awaiting evidence/validation.
 
-- [ ] **R1 Reactivity correctness:** roll-invariant vertical response, calibrated range drive, travelling bend.
+- [~] **R1 Reactivity correctness:** roll-invariant vertical response, calibrated range drive, travelling bend.
   Gate: motion audit on ≥3 clips — hot-quartile envelope ≥ 1.6× quiet-quartile on the dynamic clip, envelope ↔ drive
   correlation ≥ 0.6, idle unchanged within 10%, inflections/unit not above baseline; native capture with audio.
+  **Candidate landed (`core/waveform_ribbon_dynamics.py`), awaiting operator eyes/ears.** Preset 3, four clips,
+  `motion_audit_r1a_p3_*.json` vs `motion_audit_baseline_p3_*.json`:
+
+  | Clip | Per-ribbon p-p hot/quiet (before → after) | Hot p-p (before → after) | Envelope ↔ level r |
+  | --- | --- | --- | --- |
+  | ragdoll_quiet_intro_loud_end1 | 0.84 → 1.55 | 2.39 → 4.76 | 0.00 → 0.88 |
+  | human_heavy1 | 1.97 → 1.94 | 2.80 → 3.26 | 0.68 → 0.75 |
+  | nightsolong_acousticsoft1 | 1.00 → 1.70 | 2.82 → 5.24 | 0.60 → 0.93 |
+  | anything_mixed2 | 1.77 → 1.88 | 3.22 → 5.10 | 0.62 → 0.89 |
+
+  Idle control unchanged (0.52 → 0.51); inflections/unit unchanged or lower (0.15–0.18). Union-envelope hot/quiet on
+  ragdoll is 1.51, just under the 1.6 gate: the bundle's own separation sets a floor on the union, while per-ribbon
+  shape change passes. Centre speed roughly doubled with amplitude (second difference scales with it); smoothness
+  is a native-motion judgement, see `strip_baseline_vs_r1a.png` and `r1a_p3_ragdoll_20s/motion_with_audio.mp4`.
+  A hard clamp in the calibrated span pinned a sustained hot bass at exactly 1.0; it now uses the body lanes' soft
+  knee (focused test). Operator direction (5 Nov): peaks may rise high; the framing zooms out instead — all three
+  presets and the canonical default lens moved from 3° to 5° (integer control), no vertical ceiling.
 - [ ] **R2 Punch and grace:** kick impulses visible as a fast vertical lift with a slow graceful settle; no twitch.
   Gate: attack ≤ 120 ms to 70% of peak excursion, settle 0.5–1.2 s, second-difference p95 not worse than baseline ×1.5.
 - [ ] **V1 Floor fidelity:** continuous textured wet foreground, long vertical streaked reflections, horizon dissolved.
