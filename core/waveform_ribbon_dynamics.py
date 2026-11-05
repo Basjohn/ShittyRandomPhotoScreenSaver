@@ -107,6 +107,15 @@ RESPONSE_REACH, RESPONSE_MEMORY, RESPONSE_PEAK_FLOOR, RESPONSE_TOP = .5, 30., .4
 RESPONSE_TARGETS = frozenset(('height','width','bend','torsion','twist','stretch','lift','spread','depth'))
 GLOBAL_TARGETS = frozenset(('height','lift','width'))
 GLOBAL_ATTACK = .35
+# Breathing (operator, 5 Nov: soft passages "look sustained instead of feeling their big changes"). Two causes, measured
+# on continuous play: Decay is the release of BOTH cascaded stages of every geometry drive, so the body let go of a swell
+# over about twice the authored Decay and the dips between a soft passage's phrases filled in; and a soft passage's drives
+# move little around their own level. Softness is how far the published passage sits below BREATHING_LOUD (0 at or above
+# it), times Breathing. A soft passage then (1) releases faster, by up to BREATHING_REACH of Decay, and (2) widens each
+# geometry drive's swings about its own phrase-scale mean (a BREATHING_BASE-second follower of the drive's target) by up
+# to BREATHING_CONTRAST: it swells AND lets go without being lifted as a whole. Loud passages keep their authored Decay,
+# their targets and their reach. Attack, both follower stages and the rate limits are unchanged (no twitch).
+BREATHING_REACH, BREATHING_CONTRAST, BREATHING_LOUD, BREATHING_BASE = .75, 1.5, .8, 3.
 
 # Floor clearance (operator, 5 Nov; see WaveformDynamics._floor_room): the packet origin sits PACKET_FLOOR_HEIGHT above
 # the world floor; a ribbon whose lower edge would come within TROUGH_CLEARANCE of it lifts as a whole (never reshaped),
@@ -306,6 +315,7 @@ class HybridControls:
     pulse: PulseControls = PulseControls()
     height_mode: str = 'Dynamic Height Shift'
     tilt_shift: bool = False
+    breathing: float = 0.
 
 
 @dataclass(frozen=True)
@@ -364,6 +374,7 @@ class WaveformDynamics:
         self._push = [[0.,0.,0.] for _ in range(RIBBON_CAPACITY)]  # undelivered kick momentum (IMPULSE_SPREAD)
         self.drive = {key:0. for key in TARGETS}
         self._drive_stage = {key:0. for key in SMOOTH_TARGETS}
+        self._breath_base = {key:0. for key in RESPONSE_TARGETS}  # phrase-scale mean of each drive's target (Breathing)
         self._response_peak = {key:RESPONSE_PEAK_FLOOR for key in RESPONSE_TARGETS}  # recent peak per drive (gain)  # first stage of the geometry drives' smoothing
         self.count_share = [1. if index < controls.count else 0. for index in range(RIBBON_CAPACITY)]
         self.direction = controls.scene.flow.direction
@@ -466,6 +477,8 @@ class WaveformDynamics:
         # Fast bands articulate inside the level; a quiet passage still shows its beats, only smaller.
         gate = .35+.65*self.passage
         energy_shaped = sum(weight*value for weight,value in zip(ENERGY_WEIGHTS,bands))
+        softness = unit(c.breathing)*unit((BREATHING_LOUD-self.passage)/BREATHING_LOUD)
+        geometry_release = c.release*(1.-BREATHING_REACH*softness)
         for key in TARGETS:
             target = route(c.routing[key],sources,passage=gate)
             if key in RESPONSE_TARGETS:
@@ -480,13 +493,15 @@ class WaveformDynamics:
                 self._response_peak[key] = max(RESPONSE_PEAK_FLOOR,follower(
                     self._response_peak[key],target,dt,RESPONSE_REACH,RESPONSE_MEMORY))
                 target = unit(RESPONSE_TOP*target/self._response_peak[key])
+                base = self._breath_base[key] = follower(self._breath_base[key],target,dt,BREATHING_BASE,BREATHING_BASE)
+                target = unit(base+(target-base)*(1.+BREATHING_CONTRAST*softness))
             if key in SMOOTH_TARGETS:
                 # Geometry never snaps (operator, 5 Nov: "twitch"): two cascaded followers, so the drive's VELOCITY
                 # is continuous. A single 45 ms first-order attack made lift/bend/width/twist jump on every transient
                 # (vertical acceleration spiked >4x its median on 18% of ticks on recorded music).
                 attack = max(c.attack,GLOBAL_ATTACK if key in GLOBAL_TARGETS else GEOMETRY_ATTACK)
-                self._drive_stage[key] = follower(self._drive_stage[key],target,dt,attack,c.release)
-                self.drive[key] = follower(self.drive[key],self._drive_stage[key],dt,attack,c.release)
+                self._drive_stage[key] = follower(self._drive_stage[key],target,dt,attack,geometry_release)
+                self.drive[key] = follower(self.drive[key],self._drive_stage[key],dt,attack,geometry_release)
             else:
                 self.drive[key] = follower(self.drive[key],target,dt,c.attack,c.release)
         released = self._advance_pulse(dt,hit,energy_shaped)
