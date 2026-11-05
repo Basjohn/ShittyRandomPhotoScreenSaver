@@ -13,7 +13,7 @@ from typing import Any, Callable
 from ui.studio.adapter import NavAxis, RenderCard, StudioFraming, StudioNavigation
 
 
-def presentation(mode_id: str, logical_size, extent, style):
+def presentation(mode_id: str, logical_size, extent, style, *, dpr: float = 1.0):
     """The production presentation of ``extent`` (the live card's world extent) at a Studio frame size.
 
     The Studio frame is the live card uniformly scaled down, chrome included: the card's border and inset
@@ -28,7 +28,7 @@ def presentation(mode_id: str, logical_size, extent, style):
     style = dict(style or ())
     scale = width / extent[0]
     return resolve_visualizer_presentation(
-        policy=get_visualizer_presentation_policy(mode_id), display_size=(width, height),
+        policy=get_visualizer_presentation_policy(mode_id), display_size=(width, height), dpr=float(dpr),
         viewport_extent=extent, uniform_visual_scale=scale,
         border_width=float(style.get("border_width", 0.0)) * scale, corner_radius=0.0,
         content_inset=float(style.get("content_inset", 0.0)) * scale, background_color=(0, 0, 0, 0),

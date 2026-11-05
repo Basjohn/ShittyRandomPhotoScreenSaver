@@ -165,43 +165,18 @@ def _card_limits() -> dict[str, tuple[float, float]]:
 from ui.studio.colour import display_hex, linear_from_hex  # noqa: E402  (re-exported for callers)
 
 
-TECHNICAL_GROUP = "Audio Analysis"
+from ui.studio.technical import TECHNICAL_GROUP  # noqa: E402
 
 
 def _technical_properties() -> dict:
-    """The mode's technical (audio analysis) controls exactly as Settings' Technical group builds them
-    (``ui.tabs.media.technical_controls``): same storage keys, ranges, choices and labels."""
-    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
-    out = {}
-    note = ("Live audio analysis for this mode (Settings' Technical controls). The synthetic previews bypass "
-            "analysis; recorded clips are re-analysed with these values.")
-    for defn in _control_defs_for_mode(MODE):
-        key = _storage_key(MODE, defn)
-        label = _label((defn.label_text or defn.checkbox_text or key).replace("\n", " "))
-        tooltip = (defn.tooltip or "") + ("\n" if defn.tooltip else "") + note
-        common = dict(id=key, path=(key,), label=label, workspace="reactivity", group=TECHNICAL_GROUP,
-                      tooltip=tooltip)
-        if defn.widget_kind == "checkbox":
-            prop = StudioProperty(instrument=SWITCH, **common)
-        elif defn.widget_kind == "combo":
-            prop = StudioProperty(instrument=CHOICE, choices=tuple(label for label, _v in defn.options),
-                                  choice_values=tuple(value for _l, value in defn.options), **common)
-        else:
-            integer = defn.default_type == "int"
-            prop = StudioProperty(instrument=SCALAR, minimum=float(defn.minimum), maximum=float(defn.maximum),
-                                  decimals=0 if integer else 2, integer=integer, units=f" {defn.suffix_text}"
-                                  if getattr(defn, "suffix_text", "") else "", **common)
-        out[key] = (prop, defn)
-    return out
+    """The mode's technical (audio analysis) controls exactly as Settings' Technical group builds them."""
+    from ui.studio.technical import technical_properties
+    return technical_properties(MODE, workspace="reactivity")
 
 
 def _condition(control) -> tuple:
-    """The spec control's ``when`` as Studio terms: ((key, (accepted values...)), ...)."""
-    when = getattr(control, "when", None)
-    if not when:
-        return ()
-    terms = (when,) if isinstance(when[0], str) else when
-    return tuple((key, tuple(value) if isinstance(value, tuple) else (value,)) for key, value in terms)
+    from ui.studio.adapter import control_condition
+    return control_condition(control)
 
 
 def build_schema() -> StudioSchema:
@@ -306,10 +281,8 @@ def build_schema() -> StudioSchema:
 
     def admit(key: str, candidate: Any, previous: Any) -> Any:
         if key in technical:
-            from ui.tabs.media.technical_controls import _clamp_numeric, _coerce_value
-            prop, defn = technical[key]
-            value = _coerce_value(candidate, defn, previous)
-            return _clamp_numeric(value, defn) if prop.instrument == SCALAR else value
+            from ui.studio.technical import admit_technical
+            return admit_technical(technical[key], candidate, previous)
         return controls[key].admit(candidate, previous)
 
     response = _response_model(spec, props)
