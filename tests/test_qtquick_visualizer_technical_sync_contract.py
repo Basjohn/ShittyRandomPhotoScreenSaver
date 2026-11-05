@@ -133,8 +133,6 @@ def _mode_technical_model(mode: str) -> SpotifyVisualizerSettings:
             bubble_transient_mix_bass=0.58,
             bubble_transient_mix_vocal=0.29,
         )
-    elif mode == "sine_wave":
-        payload["sine_wave_transient_width_mix"] = 0.73
     return SpotifyVisualizerSettings.from_mapping(
         payload,
         apply_preset_overlay=False,
@@ -213,8 +211,6 @@ def test_quick_owner_applies_cached_technical_config_to_shared_engine() -> None:
                 "_bubble_transient_mix_vocal": 0.29,
             },
         ),
-        # Sine was soft-retired in 5.1.3 (f9f09679): registered, never offered or
-        # selectable, so it is no longer an authored consumer to sync.
     ),
 )
 def test_technical_values_consumed_by_authored_runtime_reach_logical_state(
@@ -360,7 +356,6 @@ def _quiet(monkeypatch) -> None:
     monkeypatch.setattr(
         tick_pipeline, "consume_engine_bars", lambda _owner, _now: (True, True)
     )
-    monkeypatch.setattr(tick_pipeline, "process_heartbeat", lambda _owner, _now: None)
     monkeypatch.setattr(tick_pipeline, "record_tick_perf", lambda _owner, _now: None)
 
 

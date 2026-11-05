@@ -56,7 +56,7 @@ It does **not** mutate:
 ### Configuration ownership follows the consumer
 
 Do not classify visualizer settings by legacy widget field location, Settings subsection, or by whether a name sounds
-"visual" or "technical". If authored logical evolution or a Spectrum/Oscilloscope/Sine/Bubble/DevCurve mode-owned logical
+"visual" or "technical". If authored logical evolution or a Spectrum/Oscilloscope/Bubble/DevCurve mode-owned logical
 frame runtime consumes the value, the value must be available through presentation-neutral resolved logical/runtime
 configuration. Renderer-only colour/glow/card/chrome/style remains presentation-owned. Do not solve missing neutral
 configuration by copying every `SpotifyVisualizerWidget` attribute into the controller.
@@ -104,7 +104,7 @@ mode N+1 must not add recurring work to mode N.
 
 `VisualizerRuntimeController` retains the one optional callable returned by descriptor-owned
 `load_mode_logical_tick_hook()` at construction or mode activation. The common tick invokes only that callable.
-Sine heartbeat checks active identity before any energy/transient/event query, including a concurrent replacement fence.
+A hook checks active identity before any energy/transient/event query, including a concurrent replacement fence.
 
 Disabled or unselected mode Settings bodies, frame runtimes and renderers stay lazy under their existing contracts. A retired
 mode's logical state and consumer-owned resources do not remain parked for possible reuse unless a resource is genuinely shared
@@ -274,7 +274,7 @@ Card frame and custom GL may not use competing geometry calculations.
 
 ## 9. Geometry: one baseline aspect; scale and viewport extent are distinct
 
-Modes using the shared card policy share one canonical baseline viewport aspect in the Quick architecture. Mode changes and mode presets do not resize that baseline viewport. The legacy per-mode `spectrum_growth`, `osc_growth`, `sine_wave_growth`, `bubble_growth`, and `devcurve_growth` card-height controls are retired and must not be copied into Quick.
+Modes using the shared card policy share one canonical baseline viewport aspect in the Quick architecture. Mode changes and mode presets do not resize that baseline viewport. The legacy per-mode `spectrum_growth`, `osc_growth`, `bubble_growth`, and `devcurve_growth` card-height controls are retired and must not be copied into Quick.
 
 The visualizer geometry model must distinguish:
 
@@ -340,10 +340,9 @@ Historical five-technical-mode audit (2026-09-02):
 | **Spectrum** | Bars fill the current vertical field; width changes bar distribution/width, height changes bar travel distance and renderer segment density. | **R-76 proven/fixed:** live Quick visual smoothing scales from expanded vertical bar-field height only; continuous-bar hysteresis uses one canonical internal temporal segment domain. | Width alone must not slow bars. Do not also change BeatEngine, `0.55` transfer, height boost or peak lifetime without separate evidence. |
 | **Bubble** | World grows in canonical-card units; positions/trails/collisions are canonical literals, heads stay circular, population follows area (R-170). | R-170 fixed the shape-dependent speed at its unit; R-69/BTF cover the radius projection. | Never add aspect/extent speed or count modifiers, and never globally compress head/Ghost radius, motion or amplitude because the viewport is large. |
 | **Oscilloscope** | Waveform X spans the current width; waveform amplitude/line placement uses the current vertical field. Vertical line-spacing control scales with height; line/glow thickness follows uniform scale. | 60/120 ms energy filtering and waveform blend remain authored/viewport-neutral. Continuous antialiased curves naturally traverse more pixels in a taller card; no source-proven flicker seam was found. | Do not pre-emptively slow/attenuate the waveform for tall cards. If physical tall-only strobing is observed, trace Y displacement first and apply at most one height-local presentation correction. |
-| **Sine** | Wave/amplitude is normalized into current height; phase/travel spans current width; vertical line spacing scales with height; line/glow thickness follows uniform scale. | Reactivity/envelopes are viewport-neutral. Extreme width therefore increases physical X travel per normalized phase and extreme height increases physical Y displacement, but current source contains no discrete viewport-dependent rate switch analogous to Spectrum. | Treat extreme-wide X travel and extreme-tall Y motion as **watchpoints**, not bugs. Any future fix must target the implicated axis/channel, never generic source sensitivity. |
 | **DevCurve** | Four normalized curves fill the content rect. Quick explicitly rebases pixel-like outline/specular geometry with baseline/current normalized scales. | Solver energy smoothing/slope limits and foreground/specular travel are normalized-domain. Extreme width can increase physical X travel speed and extreme height can increase physical Y displacement, but no viewport-dependent temporal branch/reset was found. | Watch physical X travel/specular speed at very wide extents. Preserve the existing normalized-scale renderer correction; do not globally retune solver energy/amplitude to correct a viewport symptom. (The slow passage drive of 2026-10-04 that scales travel, phase speed and swing is a musical response, not a viewport correction.) |
 
-The audit conclusion is deliberately conservative: **Spectrum is the only additional source-proven temporal scaling bug in this pass.** Oscilloscope/Sine/DevCurve have plausible physical-pixel scaling watchpoints, but changing them without operator evidence would risk repeating the R-69 over-compensation failure. When a new extreme-aspect symptom appears, compare canonical / wide-only / tall-only / wide+tall using the same recorded logical input before tuning anything.
+The audit conclusion is deliberately conservative: **Spectrum is the only additional source-proven temporal scaling bug in this pass.** Oscilloscope/DevCurve have plausible physical-pixel scaling watchpoints, but changing them without operator evidence would risk repeating the R-69 over-compensation failure. When a new extreme-aspect symptom appears, compare canonical / wide-only / tall-only / wide+tall using the same recorded logical input before tuning anything.
 
 ## 10. Readiness
 

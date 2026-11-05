@@ -108,7 +108,6 @@ _SOURCE_KEY_PREFIXES = (
     "bubble_",
     "devcurve_",
     "osc_",
-    "sine_",
     "spectrum_",
 )
 

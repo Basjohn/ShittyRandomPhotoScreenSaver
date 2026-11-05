@@ -1546,54 +1546,6 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
             self._media_volume_fill_color = color
             self._save_settings()
 
-    def _choose_sine_glow_color(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_sine_glow_color', self._color_from_default('spotify_visualizer', 'sine_glow_color')),
-            self, "Choose Sine Wave Glow Color")
-        if color is not None:
-            self._sine_glow_color = color
-            self._save_settings()
-
-    def _choose_sine_line_color(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_sine_line_color', self._color_from_default('spotify_visualizer', 'sine_line_color')),
-            self, "Choose Sine Wave Line Color")
-        if color is not None:
-            self._sine_line_color = color
-            self._save_settings()
-
-    def _choose_sine_line2_color(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_sine_line2_color', self._color_from_default('spotify_visualizer', 'sine_line2_color')),
-            self, "Choose Sine Line 2 Color")
-        if color is not None:
-            self._sine_line2_color = color
-            self._save_settings()
-
-    def _choose_sine_line2_glow_color(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_sine_line2_glow_color', self._color_from_default('spotify_visualizer', 'sine_line2_glow_color')),
-            self, "Choose Sine Line 2 Glow Color")
-        if color is not None:
-            self._sine_line2_glow_color = color
-            self._save_settings()
-
-    def _choose_sine_line3_color(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_sine_line3_color', self._color_from_default('spotify_visualizer', 'sine_line3_color')),
-            self, "Choose Sine Line 3 Color")
-        if color is not None:
-            self._sine_line3_color = color
-            self._save_settings()
-
-    def _choose_sine_line3_glow_color(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_sine_line3_glow_color', self._color_from_default('spotify_visualizer', 'sine_line3_glow_color')),
-            self, "Choose Sine Line 3 Glow Color")
-        if color is not None:
-            self._sine_line3_glow_color = color
-            self._save_settings()
-
     def _choose_reddit_color(self) -> None:
         """Choose Reddit text color."""
         color = StyledColorPicker.get_color(self._reddit_color, self, "Choose Reddit Color")

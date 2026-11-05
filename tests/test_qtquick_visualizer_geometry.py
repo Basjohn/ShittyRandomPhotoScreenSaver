@@ -344,7 +344,6 @@ def test_quick_geometry_has_no_legacy_growth_or_qt_authority() -> None:
         "DEFAULT_GROWTH",
         "spectrum_growth",
         "osc_growth",
-        "sine_wave_growth",
         "bubble_growth",
         "devcurve_growth",
     ):

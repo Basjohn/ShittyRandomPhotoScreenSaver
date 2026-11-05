@@ -258,7 +258,6 @@ def build(sheet_path: Path, output: Path) -> list[str]:
 VISUALIZER_CARDS: Final = {
     "devcurve": (218, 10, 902, 428),
     "spectrum": (957, 17, 1641, 434),
-    "sine_wave": (834, 510, 1518, 927),
     "bubble": (1569, 587, 2253, 1004),
 }
 # Voxel Sphere has no card in the screenshot: keep its own background and give

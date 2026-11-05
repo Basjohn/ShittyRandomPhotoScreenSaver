@@ -26,7 +26,6 @@ from widgets.spotify_visualizer.render_state import (
     ShockwaveGridFrame,
     ModeFrame,
     OscilloscopeFrame,
-    SineFrame,
     SpectrumFrame,
     VisualizerCommonState,
     VisualizerEnergyState,
@@ -118,7 +117,7 @@ def _source_identity(
             if generation >= 0
             else -1
         )
-    elif mode_id in {"oscilloscope", "sine_wave"}:
+    elif mode_id == "oscilloscope":
         generation = _identity_from_engine(
             engine,
             "get_latest_generation_with_waveform",
@@ -242,20 +241,6 @@ def _base_extras(widget: Any, mode_id: str, engine: Any) -> dict[str, Any]:
     if floor_snapshot is not None:
         extra["floor_snapshot"] = floor_snapshot
 
-    if mode_id == "sine_wave":
-        scheduler = _safe_call("get_event_scheduler")
-        peek = getattr(scheduler, "peek_latest", None)
-        for event_name, field_name, max_age_s in (
-            ("kick", "line_kick_event_strength", 0.16),
-            ("snare", "line_snare_event_strength", 0.20),
-        ):
-            event = None
-            if callable(peek):
-                try:
-                    event = peek(event_name, max_age_s=max_age_s)
-                except Exception:
-                    event = None
-            extra[field_name] = float(getattr(event, "strength", 0.0) or 0.0)
     return extra
 
 
@@ -672,132 +657,6 @@ def _capture_oscilloscope(
     )
 
 
-def _capture_sine(
-    widget: Any,
-    engine: Any,
-    context: _CaptureContext,
-) -> tuple[ModeFrame, dict[str, Any]] | None:
-    extra = _base_extras(widget, "sine_wave", engine)
-    config_applier._append_line_mode_visual_extras(extra, widget)
-    extra["sine_wave_transient_width_mix"] = widget._sine_wave_transient_width_mix
-    controller = getattr(widget, "runtime_controller", None)
-    if controller is None:
-        raise RuntimeError("Sine logical capture requires its runtime controller owner")
-    SineFrameRuntime = _mode_frame_runtime_type("sine_wave")
-    runtime = _resolve_current_mode_runtime(
-        controller,
-        "sine_wave",
-        SineFrameRuntime,
-    )
-    if runtime is None:
-        return None
-    if not isinstance(runtime, SineFrameRuntime):
-        raise TypeError("Sine logical mode state has the wrong type")
-    raw_energy = _energy_state(extra.get("energy_bands"))
-    raw_kick = float(extra.get("line_kick_event_strength", 0.0) or 0.0)
-    raw_snare = float(extra.get("line_snare_event_strength", 0.0) or 0.0)
-    resolved = runtime.resolve(
-        now_ts=context.now_ts,
-        runtime_generation=context.runtime_generation,
-        engine_generation=context.engine_generation,
-        activation_id=context.activation_id,
-        source_generation=context.source_generation,
-        source_activation_id=context.source_activation_id,
-        source_timestamp=context.source_timestamp,
-        playing=context.playing,
-        energy=raw_energy,
-        kick_event=raw_kick,
-        snare_event=raw_snare,
-        ghosting_enabled=bool(
-            extra["sine_ghosting_enabled"]
-            and float(extra["sine_ghost_alpha"]) > 0.001
-        ),
-        ghost_decay=float(extra["sine_ghost_decay"]),
-        line_count=int(extra["line_count"]),
-        line_speed=float(extra["line_speed"]),
-        travels=tuple(
-            extra[name]
-            for name in (
-                "sine_wave_travel",
-                "sine_travel_line2",
-                "sine_travel_line3",
-                "sine_travel_line4",
-                "sine_travel_line5",
-                "sine_travel_line6",
-            )
-        ),
-        line_shifts=tuple(
-            extra[f"sine_line{index}_shift"]
-            for index in range(1, 7)
-        ),
-        transient_width_mix=float(
-            extra["sine_wave_transient_width_mix"]
-        ),
-        base_width_reaction=float(extra["sine_width_reaction"]),
-        base_sensitivity=float(extra["line_sensitivity"]),
-        base_heartbeat=float(extra["heartbeat_intensity"]),
-        heartbeat_slider=float(extra["sine_heartbeat"]),
-    )
-    if resolved is None:
-        if controller.peek_logical_mode_state("sine_wave") is not runtime:
-            return None
-        raise RuntimeError("Sine logical state retired during capture")
-    if controller.peek_logical_mode_state("sine_wave") is not runtime:
-        return None
-    if is_viz_diagnostics_enabled():
-        maybe_log_reactivity_boundary(
-            widget,
-            logger,
-            now_ts=context.now_ts,
-            mode="sine_wave",
-            playing=context.playing,
-            source_ready=resolved.reactive_source_ready,
-            runtime_generation=context.runtime_generation,
-            engine_generation=context.engine_generation,
-            engine_activation=context.activation_id,
-            source_generation=context.source_generation,
-            source_activation=context.source_activation_id,
-            source_timestamp=context.source_timestamp,
-            input_energy=raw_energy,
-            resolved_energy=resolved.energy,
-            event_summary=f"kick={raw_kick:.3f},snare={raw_snare:.3f}",
-        )
-    extra["_quick_resolved_energy"] = resolved.energy
-    extra["_quick_mode_changed"] = resolved.changed
-    parameter_values = {
-        name: value
-        for name, value in extra.items()
-        if not name.startswith("_quick_")
-    }
-    parameter_values["line_speed"] = resolved.line_speed
-    for name, value in zip(
-        (
-            "sine_wave_travel",
-            "sine_travel_line2",
-            "sine_travel_line3",
-            "sine_travel_line4",
-            "sine_travel_line5",
-            "sine_travel_line6",
-        ),
-        resolved.travels,
-    ):
-        parameter_values[name] = value
-    for index, value in enumerate(resolved.line_shifts, start=1):
-        parameter_values[f"sine_line{index}_shift"] = value
-    parameter_values["resolved_sensitivity"] = resolved.sensitivity
-    parameter_values["resolved_width_reaction"] = resolved.width_reaction
-    parameter_values["wave_effect_gate"] = resolved.wave_effect_gate
-    return (
-        SineFrame(
-            heartbeat_intensity=resolved.heartbeat_intensity,
-            ghost_energy=resolved.ghost_energy,
-            animation_time=resolved.animation_time,
-            parameters=_render_parameters(parameter_values),
-        ),
-        extra,
-    )
-
-
 def _capture_bubble(
     widget: Any,
     engine: Any,
@@ -935,7 +794,6 @@ _BUILTIN_MODE_CAPTURE: dict[str, ModeCapture] = {
     "shockwave_grid": _capture_shockwave_grid,
     "extruded_bubble": _capture_extruded_bubble,
     "oscilloscope": _capture_oscilloscope,
-    "sine_wave": _capture_sine,
     "bubble": _capture_bubble,
     "devcurve": _capture_devcurve,
 }

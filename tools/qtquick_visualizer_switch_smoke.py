@@ -7,7 +7,7 @@ This reuses the proven real-``QQuickWindow`` / ``VisualizerRenderItem`` /
 ``VisualizerSnapshotBridge`` plumbing and the per-mode snapshot factories from
 ``qtquick_visualizer_clip_smoke.py`` rather than inventing a fake compositor. It
 drives a deterministic mode sequence (default
-``spectrum -> oscilloscope -> sine_wave -> bubble -> devcurve``) for N cycles,
+``spectrum -> oscilloscope -> bubble -> devcurve``) for N cycles,
 then holds Bubble, advancing only after each target mode has produced and drawn
 an accepted snapshot -- never on a blind wall-clock toggle.
 
@@ -88,11 +88,10 @@ _ORIGIN = (80.0, 60.0)
 _SNAPSHOT_FACTORIES = {
     "spectrum": clip._spectrum_snapshot,
     "oscilloscope": clip._oscilloscope_snapshot,
-    "sine_wave": clip._sine_snapshot,
     "bubble": clip._bubble_snapshot,
     "devcurve": clip._devcurve_snapshot,
 }
-_DEFAULT_SEQUENCE = ("spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve")
+_DEFAULT_SEQUENCE = ("spectrum", "oscilloscope", "bubble", "devcurve")
 
 
 # Neutral card/shadow inputs: this ownership probe measures switch/retirement, not

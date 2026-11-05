@@ -357,7 +357,7 @@ scalar-to-range audit remains deferred until explicitly reprioritized.
   Fixing it changes canonical Bubble output, so it needs an explicit BTF behaviour-change decision first.
 ## 9. Studio for every visualizer (replaces the builders)
 
-Operator (5 Nov): instead of a Bubble UX sweep, every visualizer except Sine (retiring) gets a version of the reusable
+Operator (5 Nov): instead of a Bubble UX sweep, every visualizer (Sine retired 2026-11-05) gets a version of the reusable
 Studio (`ui/studio`, mode registry + adapters) that replaces its builder. The Waveform Studio is the first adapter and
 the framework bar; each mode contributes only an adapter (typed schema from the canonical registry, truthful evaluator
 on its production logical/render path, fixtures, scene objects, workspaces and instruments), never a copied shell.

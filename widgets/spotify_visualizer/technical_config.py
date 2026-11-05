@@ -63,10 +63,6 @@ def build_technical_cache(
             mode_config["bubble_transient_mix_vocal"] = (
                 model.resolve_bubble_transient_mix_vocal()
             )
-        elif mode_key == "sine_wave":
-            mode_config["sine_wave_transient_width_mix"] = (
-                model.resolve_sine_wave_transient_width_mix()
-            )
         cache[mode_key] = mode_config
     return cache
 

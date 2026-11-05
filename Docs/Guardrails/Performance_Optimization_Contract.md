@@ -43,7 +43,7 @@ Before any performance patch, confirm every relevant box remains binding:
 - [ ] Newest-state semantics remain intact; do not add FIFO/catch-up queues or deliberately present stale history.
 - [ ] Source/snapshot age remains healthy; a prettier FPS/GC/CPU number with materially older visible state is not an optimization.
 - [ ] Bubble preserves R-69: no global viewport-dependent compression of head/radius response, motion, Ghost/history displacement or other authored reaction.
-- [ ] Spectrum/Oscilloscope/Sine/DevCurve geometry adaptation may reframe/reflow/smooth presentation but may not quietly weaken musical response.
+- [ ] Spectrum/Oscilloscope/DevCurve geometry adaptation may reframe/reflow/smooth presentation but may not quietly weaken musical response.
 - [ ] Bubble temporal fidelity/integration remains intact; do not skip authored logical steps to reduce work.
 - [ ] If Bubble itself is touched, idle traces are not acceptance: require an active-music physical lane proving source freshness, attack/settle, elasticity/breathing, loud-passage expansion, ghost/tail motion and operator feel.
 - [ ] The persistent `visualizer.audio_analysis` lane remains one-in-flight + newest-pending, with no per-frame generic Future/task fallback.

@@ -75,7 +75,6 @@ def _slow_tick(monkeypatch, *, perf: bool) -> tuple[list[str], int]:
         return True, True
 
     monkeypatch.setattr(tick_pipeline, "consume_engine_bars", _slow_consume)
-    monkeypatch.setattr(tick_pipeline, "process_heartbeat", lambda owner, now: None)
     monkeypatch.setattr(tick_pipeline, "record_tick_perf", lambda owner, now: None)
     monkeypatch.setattr(tick_pipeline, "dispatch_devcurve_field", lambda owner, now: None)
     monkeypatch.setattr(tick_pipeline, "is_perf_metrics_enabled", lambda: perf)

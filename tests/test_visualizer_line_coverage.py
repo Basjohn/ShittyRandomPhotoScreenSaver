@@ -8,16 +8,13 @@ from pathlib import Path
 from struct import pack
 
 import pytest
-from PySide6.QtGui import QColor
 
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
 from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
 from tests._visualizer_presentation import resolve_presentation as resolve_visualizer_presentation
-from tests._visualizer_frozen_settings import frozen_visualizer_settings
 from widgets.spotify_visualizer.render_state import (
     DevCurveFrame,
     OscilloscopeFrame,
-    SineFrame,
     VisualizerCommonState,
     VisualizerEnergyState,
     VisualizerLogicalFrame,
@@ -87,69 +84,7 @@ def _logical(mode_id: str, *, with_glow: bool = False) -> VisualizerLogicalFrame
         waveform_count=0 if mode_id == "oscilloscope" else len(waveform),
         energy=VisualizerEnergyState(bass=0.8, mid=0.6, high=0.4, overall=0.8),
     )
-    if mode_id == "sine_wave":
-        # Exercise the actual high-detail curated Sine shape rather than the
-        # former generic sinusoid. Wobble Groove has six travelling lines,
-        # 0.55 wave effect and 0.55 micro wobble, the combination reported to
-        # reopen tiny-scale gaps during strong music.
-        preset = frozen_visualizer_settings("sine_wave")
-        state = SineFrame(
-            animation_time=0.37,
-            parameters=freeze_render_fields({
-                "sine_density": preset["sine_density"],
-                "sine_card_adaptation": preset["sine_card_adaptation"],
-                "line_speed": preset["sine_speed"],
-                "sine_wave_travel": preset["sine_wave_travel"],
-                "sine_wave_effect": preset["sine_wave_effect"],
-                "sine_micro_wobble": preset["sine_micro_wobble"],
-                "line_count": preset["sine_line_count"],
-                # Production presentation state converts persisted color lists
-                # to QColor before frozen capture. Keep that exact boundary in
-                # this real-GL fixture so fallback defaults cannot mask it.
-                "line_color": QColor(*preset["sine_line_color"]),
-                "glow_enabled": with_glow and preset["sine_glow_enabled"],
-                "glow_intensity": preset["sine_glow_intensity"],
-                "glow_reactivity": preset["sine_glow_reactivity"],
-                "glow_color": QColor(*preset["sine_glow_color"]),
-                "resolved_sensitivity": preset["sine_sensitivity"],
-                "glow_size": 1.0,
-                "reactive_glow": preset["sine_reactive_glow"],
-                "resolved_width_reaction": preset["sine_width_reaction"],
-                "line_dim": preset["sine_line_dim"],
-                "line_offset_bias": preset["sine_line_offset_bias"],
-                "sine_crawl_amount": preset["sine_crawl_amount"],
-                "sine_displacement": preset["sine_displacement"],
-                "sine_ghost_alpha": preset["sine_ghost_alpha"],
-                "sine_ghosting_enabled": preset["sine_ghosting_enabled"],
-                "sine_heartbeat": preset["sine_heartbeat"],
-                "sine_vertical_shift": preset["sine_vertical_shift"],
-                "rainbow_enabled": preset["rainbow_enabled"],
-                "rainbow_speed": preset["rainbow_speed"],
-                "wave_effect_gate": 0.0,
-                "u_rainbow_hue_offset": 0.0,
-                **{
-                    f"line{index}_color": QColor(*preset[f"sine_line{index}_color"])
-                    for index in range(2, 7)
-                },
-                **{
-                    f"line{index}_glow_color": QColor(*preset[f"sine_line{index}_glow_color"])
-                    for index in range(2, 7)
-                },
-                **{
-                    f"ghost_line{index}_enabled": preset[f"sine_ghost_line{index}_enabled"]
-                    for index in range(2, 7)
-                },
-                **{
-                    f"sine_travel_line{index}": preset[f"sine_travel_line{index}"]
-                    for index in range(2, 7)
-                },
-                **{
-                    f"sine_line{index}_shift": preset[f"sine_line{index}_shift"]
-                    for index in range(1, 7)
-                },
-            }),
-        )
-    elif mode_id == "oscilloscope":
+    if mode_id == "oscilloscope":
         state = _osc_frame(with_glow=with_glow)
     elif mode_id == "devcurve":
         curve = tuple(0.50 + 0.32 * math.sin(index * math.tau * 3.0 / 95.0) for index in range(96))
@@ -209,7 +144,7 @@ def _snapshot(mode_id: str, *, fractional_x: float, with_glow: bool = False):
     )
 
 @pytest.mark.qt
-@pytest.mark.parametrize("mode_id", ("sine_wave", "oscilloscope", "devcurve"))
+@pytest.mark.parametrize("mode_id", ("oscilloscope", "devcurve"))
 def test_real_gl_tiny_scale_steep_lines_keep_fractional_translation_coverage(qt_app, mode_id: str):
     """Coverage stays present and smooth at DPR 1.5 without retuning geometry."""
     from OpenGL import GL as gl
@@ -235,12 +170,9 @@ def test_real_gl_tiny_scale_steep_lines_keep_fractional_translation_coverage(qt_
     try:
         # The coverage oracle deliberately renders the line modes' core only:
         # glow could populate a column whose stroke coverage has regressed.
-        if mode_id in ("sine_wave", "oscilloscope"):
+        if mode_id == "oscilloscope":
             parameters = _snapshot(mode_id, fractional_x=0.0).logical.mode_state.parameters
-            if mode_id == "sine_wave":
-                assert parameters["glow_enabled"] is False
-            else:
-                assert parameters["osc_glow"] == 0.0
+            assert parameters["osc_glow"] == 0.0
         color = gl.glGenTextures(1)
         gl.glBindTexture(gl.GL_TEXTURE_2D, color)
         gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None)
@@ -306,7 +238,7 @@ def test_real_gl_tiny_scale_steep_lines_keep_fractional_translation_coverage(qt_
 @pytest.mark.qt
 @pytest.mark.parametrize(
     ("mode_id", "expected_glow_color"),
-    (("sine_wave", (206, 92, 255, 255)), ("oscilloscope", (40, 255, 120, 255))),
+    (("oscilloscope", (40, 255, 120, 255)),),
 )
 def test_real_gl_curated_line_glow_changes_opaque_background(qt_app, mode_id: str, expected_glow_color: tuple[int, int, int, int]):
     """Curated glow survives frozen capture and visibly reaches past the core."""
@@ -333,12 +265,8 @@ def test_real_gl_curated_line_glow_changes_opaque_background(qt_app, mode_id: st
     try:
         frozen = _snapshot(mode_id, fractional_x=0.0, with_glow=True)
         parameters = frozen.logical.mode_state.parameters
-        if mode_id == "sine_wave":
-            assert parameters["glow_enabled"] is True
-            assert parameters["glow_color"] == expected_glow_color
-        else:
-            assert parameters["osc_glow"] > 0.0
-            assert parameters["osc_beam_glow_color"] == expected_glow_color
+        assert parameters["osc_glow"] > 0.0
+        assert parameters["osc_beam_glow_color"] == expected_glow_color
         color = gl.glGenTextures(1)
         gl.glBindTexture(gl.GL_TEXTURE_2D, color)
         gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, width, height, 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None)
@@ -393,11 +321,10 @@ def test_real_gl_curated_line_glow_changes_opaque_background(qt_app, mode_id: st
 
 def test_line_shaders_keep_style_scale_separate_from_derivative_coverage() -> None:
     root = __import__("pathlib").Path(__file__).resolve().parent.parent
-    sine = (root / "widgets/spotify_visualizer/shaders/sine_wave.frag").read_text(encoding="utf-8")
     osc = (root / "widgets/spotify_visualizer/shaders/oscilloscope.frag").read_text(encoding="utf-8")
     devcurve = (root / "widgets/spotify_visualizer/shaders/devcurve.frag").read_text(encoding="utf-8")
 
-    for source in (sine, osc):
+    for source in (osc,):
         # Coverage differentiates signed distance. ``abs`` can cancel inside
         # a quad straddling a steep pulse crest and reopen the old tiny-scale
         # line gaps even though an fwidth call remains present.

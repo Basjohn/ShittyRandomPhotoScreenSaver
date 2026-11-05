@@ -61,8 +61,8 @@ def test_write_side_builder_dedupes_and_resolver_uses_registry_order():
 
 
 def test_write_side_builder_accepts_single_mode_id():
-    activation = build_visualizer_mode_activation("sine_wave")
-    assert resolve_effective_enabled_modes(activation) == ("sine_wave",)
+    activation = build_visualizer_mode_activation("devcurve")
+    assert resolve_effective_enabled_modes(activation) == ("devcurve",)
 
 
 def test_requested_enabled_mode_is_returned_unchanged():
@@ -74,11 +74,15 @@ def test_requested_enabled_mode_is_returned_unchanged():
 def test_disabled_canonical_mode_substitutes_next_enabled_in_canonical_order():
     mode, substituted = resolve_effective_mode(
         "oscilloscope",
-        _activation("spectrum", "sine_wave", "bubble", "devcurve"),
+        _activation("spectrum", "bubble", "devcurve"),
     )
-    # Sine is soft-retired (5.1.3, f9f09679): even when a stored activation still
-    # enables it, it is never selectable, so substitution continues past it.
-    assert (mode, substituted) == ("bubble", True)
+    expected = next(
+        candidate
+        for candidate in VISUALIZER_MODE_IDS[VISUALIZER_MODE_IDS.index("oscilloscope") + 1:]
+        + VISUALIZER_MODE_IDS
+        if candidate in ("spectrum", "bubble", "devcurve")
+    )
+    assert (mode, substituted) == (expected, True)
 
 
 def test_disabled_canonical_mode_wraps_once_when_needed():
@@ -124,8 +128,9 @@ def test_cycling_restricted_to_mode_activation_v3():
     activation = _activation("spectrum", "bubble")
     assert next_visualizer_mode_id("spectrum", activation) == "bubble"
     assert next_visualizer_mode_id("bubble", activation) == "spectrum"
-    # A disabled current mode starts at the first enabled mode.
-    assert next_visualizer_mode_id("sine_wave", activation) == "spectrum"
+    # A retired current mode (Sine) cycles exactly like any unknown id, into an enabled mode.
+    assert next_visualizer_mode_id("sine_wave", activation) == next_visualizer_mode_id("garbage", activation)
+    assert next_visualizer_mode_id("sine_wave", activation) in ("spectrum", "bubble")
 
     single = _activation("bubble")
     assert next_visualizer_mode_id("bubble", single) == "bubble"

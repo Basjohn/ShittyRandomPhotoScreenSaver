@@ -128,7 +128,6 @@ def _quiet_tick(monkeypatch):
     monkeypatch.setattr(
         tick_pipeline, "consume_engine_bars", lambda owner, now: (True, True)
     )
-    monkeypatch.setattr(tick_pipeline, "process_heartbeat", lambda owner, now: None)
     monkeypatch.setattr(tick_pipeline, "record_tick_perf", lambda owner, now: None)
     monkeypatch.setattr(tick_pipeline, "dispatch_devcurve_field", lambda owner, now: None)
 
