@@ -60,7 +60,11 @@ def capture(args):
     settings={**activation.resolved_config,**overrides}
     print('Replaying production PCM',args.preset,args.start,stop,flush=True)
     with reanalyzed_bubble_bands():
-        result=replay_clip(FeatureClip('waveform_capture',tuple(frames)),'waveform_ribbon',settings=settings,snapshots_at=indices)
+        # The edge-resize world is configuration the logical step reads too (the pulse is born at the card's visible
+        # edge), so the replay commits the same CUSTOM extent the frames are presented at.
+        logical_extent=dimensions(args.size) if args.edge_viewport and not args.viewports else None
+        result=replay_clip(FeatureClip('waveform_capture',tuple(frames)),'waveform_ribbon',settings=settings,snapshots_at=indices,
+                           viewport_extent=logical_extent)
     print('Logical replay ready',result['mode_metrics'],flush=True)
     views=[dimensions(value) for value in args.viewports.split(',')] if args.viewports else [dimensions(args.size)]
     if args.viewports and len(indices)>3:raise ValueError('Viewport audit captures at most three source instants')
