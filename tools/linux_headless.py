@@ -108,12 +108,18 @@ def generate_images(folder: Path, count: int) -> None:
 
 def seed_profile(env: dict[str, str], images: Path, interval: int,
                  disabled_widgets: tuple[str, ...] = DEFAULT_DISABLED_WIDGETS) -> None:
-    """Write the isolated profile's folder source, interval and disabled widgets."""
+    """Write the isolated profile's folder source, interval and disabled widgets.
+
+    Runs on the harness's own (already started) display: saving Settings records
+    per-widget monitor bindings to the current screens' identities, so seeding on
+    another platform (e.g. ``offscreen``) would bind every widget to a screen the
+    run never has and suppress them all.
+    """
 
     subprocess.run(
         [sys.executable, "-c", PROFILE_SCRIPT, str(images), str(interval), ",".join(disabled_widgets)],
         cwd=REPO,
-        env={**env, "QT_QPA_PLATFORM": "offscreen"},
+        env=env,
         capture_output=True,
         check=True,
     )
