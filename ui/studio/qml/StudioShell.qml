@@ -77,6 +77,9 @@ Rectangle {
         }
     }
 
+    // A theme colour with full alpha (backings that must hide the scene behind them).
+    function opaque(c) { return Qt.rgba(c.r, c.g, c.b, 1.0) }
+
     function fmt(value, decimals, units) {
         if (value === undefined || value === null) return "–"
         return Number(value).toFixed(decimals) + (units || "")
@@ -1741,101 +1744,116 @@ Rectangle {
                     border.width: 1; border.color: shell.cOutline
                     PanelRim {}
 
-                    // Toolbar
-                    Row {
-                        id: toolbar
-                        x: 12; y: 10
-                        spacing: 8
-                        z: 2
-                        StudioButton { icon: studio.playing ? "pause" : "play"; iconSize: 20; width: 40; primary: true
-                                       tip: (studio.playing ? "Pause" : "Play") + " the preview (Space)"
-                                       onClicked: studio.togglePlay() }
-                        C.ComboBox {
-                            id: fixtureBox
-                            width: 230; height: 30
-                            model: studio.fixtures
-                            textRole: "label"
-                            valueRole: "id"
-                            currentIndex: {
-                                for (var i = 0; i < studio.fixtures.length; ++i)
-                                    if (studio.fixtures[i].id === studio.fixtureId) return i
-                                return -1
-                            }
-                            displayText: currentIndex >= 0 ? studio.fixtures[currentIndex].label : "Choose input"
-                            onActivated: function(index) { studio.selectFixture(studio.fixtures[index].id) }
-                            delegate: C.ItemDelegate {
-                                width: fixtureBox.width
-                                contentItem: Text {
-                                    text: modelData.label + (modelData.kind === "recorded"
-                                          ? (modelData.status === "loading" ? "  · analysing…"
-                                             : modelData.status === "error" ? "  · failed" : "  · recorded")
-                                          : modelData.kind === "synthetic" ? "  · synthetic" : "  · reference")
-                                    color: shell.cText; font.pixelSize: shell.fontBase - 1
+                    // Toolbar groups sit on opaque themed backings (mock): the scene never shows through a chip.
+                    Rectangle {
+                        objectName: "toolbarBacking"
+                        x: 8; y: 6; z: 2
+                        width: toolbar.width + 8; height: toolbar.height + 8
+                        radius: 8; color: shell.opaque(shell.cPanel)
+                        border.width: 1; border.color: shell.cOutlineSoft
+                        Row {
+                            id: toolbar
+                            x: 4; y: 4
+                            spacing: 8
+                            z: 2
+                            StudioButton { icon: studio.playing ? "pause" : "play"; iconSize: 20; width: 40; primary: true
+                                           tip: (studio.playing ? "Pause" : "Play") + " the preview (Space)"
+                                           onClicked: studio.togglePlay() }
+                            C.ComboBox {
+                                id: fixtureBox
+                                width: 230; height: 30
+                                model: studio.fixtures
+                                textRole: "label"
+                                valueRole: "id"
+                                currentIndex: {
+                                    for (var i = 0; i < studio.fixtures.length; ++i)
+                                        if (studio.fixtures[i].id === studio.fixtureId) return i
+                                    return -1
                                 }
-                                background: Rectangle { color: highlighted ? shell.cAccentSoft : shell.cRaised }
-                                highlighted: fixtureBox.highlightedIndex === index
+                                displayText: currentIndex >= 0 ? studio.fixtures[currentIndex].label : "Choose input"
+                                onActivated: function(index) { studio.selectFixture(studio.fixtures[index].id) }
+                                delegate: C.ItemDelegate {
+                                    width: fixtureBox.width
+                                    contentItem: Text {
+                                        text: modelData.label + (modelData.kind === "recorded"
+                                              ? (modelData.status === "loading" ? "  · analysing…"
+                                                 : modelData.status === "error" ? "  · failed" : "  · recorded")
+                                              : modelData.kind === "synthetic" ? "  · synthetic" : "  · reference")
+                                        color: shell.cText; font.pixelSize: shell.fontBase - 1
+                                    }
+                                    background: Rectangle { color: highlighted ? shell.cAccentSoft : shell.cRaised }
+                                    highlighted: fixtureBox.highlightedIndex === index
+                                }
+                                background: Rectangle { radius: 5; color: shell.cPanel; border.width: 1
+                                                        border.color: fixtureBox.activeFocus ? shell.cAccent : shell.cOutlineSoft }
+                                contentItem: Text { leftPadding: 10; text: fixtureBox.displayText; color: shell.cText
+                                                    font.pixelSize: shell.fontBase; verticalAlignment: Text.AlignVCenter
+                                                    elide: Text.ElideRight }
+                                popup.background: Rectangle { color: shell.cRaised; border.color: shell.cOutline; radius: 5 }
+                                C.ToolTip.visible: hovered
+                                C.ToolTip.text: "Preview input: held references, synthetic tests, or recorded music"
+                                C.ToolTip.delay: 600
                             }
-                            background: Rectangle { radius: 5; color: shell.cPanel; border.width: 1
-                                                    border.color: fixtureBox.activeFocus ? shell.cAccent : shell.cOutlineSoft }
-                            contentItem: Text { leftPadding: 10; text: fixtureBox.displayText; color: shell.cText
-                                                font.pixelSize: shell.fontBase; verticalAlignment: Text.AlignVCenter
-                                                elide: Text.ElideRight }
-                            popup.background: Rectangle { color: shell.cRaised; border.color: shell.cOutline; radius: 5 }
-                            C.ToolTip.visible: hovered
-                            C.ToolTip.text: "Preview input: held references, synthetic tests, or recorded music"
-                            C.ToolTip.delay: 600
-                        }
-                        Repeater {            // the mode's held reference states (e.g. Quiet / Mid / Peak)
-                            model: studio.fixtures.filter(function(f) { return f.kind === "reference" })
-                            delegate: Chip {
-                                text: modelData.label
-                                selected: studio.fixtureId === modelData.id
-                                anchors.verticalCenter: parent.verticalCenter
-                                onPicked: studio.selectFixture(modelData.id)
+                            Repeater {            // the mode's held reference states (e.g. Quiet / Mid / Peak)
+                                model: studio.fixtures.filter(function(f) { return f.kind === "reference" })
+                                delegate: Chip {
+                                    text: modelData.label
+                                    selected: studio.fixtureId === modelData.id
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    onPicked: studio.selectFixture(modelData.id)
+                                }
                             }
                         }
                     }
-                    Row {
-                        anchors.right: parent.right; anchors.rightMargin: 12; y: 10
-                        spacing: 8; z: 2
-                        Repeater {
-                            model: studio.framings
-                            delegate: Chip {
-                                text: modelData.label
-                                selected: studio.framingId === modelData.id
-                                anchors.verticalCenter: parent.verticalCenter
-                                onPicked: studio.selectFraming(modelData.id)
-                                C.ToolTip.visible: hovered_ && modelData.description !== ""
-                                C.ToolTip.text: modelData.description
-                                C.ToolTip.delay: 500
-                                property bool hovered_: false
+                    Rectangle {
+                        objectName: "toolbarBacking"
+                        anchors.right: parent.right; anchors.rightMargin: 8; y: 6; z: 2
+                        width: toolbarRight.width + 8; height: toolbarRight.height + 8
+                        radius: 8; color: shell.opaque(shell.cPanel)
+                        border.width: 1; border.color: shell.cOutlineSoft
+                        Row {
+                            id: toolbarRight
+                            x: 4; y: 4
+                            spacing: 8; z: 2
+                            Repeater {
+                                model: studio.framings
+                                delegate: Chip {
+                                    text: modelData.label
+                                    selected: studio.framingId === modelData.id
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    onPicked: studio.selectFraming(modelData.id)
+                                    C.ToolTip.visible: hovered_ && modelData.description !== ""
+                                    C.ToolTip.text: modelData.description
+                                    C.ToolTip.delay: 500
+                                    property bool hovered_: false
+                                }
                             }
+                            StudioButton { icon: "check"; iconSize: 20; width: 36; enabledState: studio.viewModified
+                                           objectName: "keepViewButton"; visible: shell.caps.camera === true
+                                           tip: "Keep View: save the previewed lens (FOV); the orbit saves only when the "
+                                                + "preset's camera checkbox is on; dolly and pan stay previews"
+                                           onClicked: studio.keepView() }
+                            Rectangle { width: 1; height: 24; color: shell.cOutlineSoft; anchors.verticalCenter: parent.verticalCenter }
+                            StudioButton { icon: shell.overlaysHidden ? "eye-off" : "eye"; iconSize: 20; width: 36
+                                           objectName: "overlaysButton"; visible: shell.caps.handles === true
+                                           checked: !shell.overlaysHidden
+                                           tip: shell.overlaysHidden ? "Show the handles and outline over the scene"
+                                                                     : "Hide the handles and outline: see the scene alone"
+                                           onClicked: shell.overlaysHidden = !shell.overlaysHidden }
+                            StudioButton { icon: "camera"; iconSize: 20; width: 36; objectName: "copyFrameButton"
+                                           tip: "Copy Frame: the scene as rendered (no handles) to the clipboard"
+                                           onClicked: studio.copyFrame() }
+                            StudioButton { icon: "frame"; iconSize: 20; width: 36; enabledState: studio.viewModified
+                                           objectName: "resetViewButton"; visible: shell.caps.camera === true
+                                           tip: "Frame The Card: back to the saved camera, as the live card shows it "
+                                                + "(or double-click the scene)"
+                                           onClicked: studio.resetCamera() }
+                            StudioButton { icon: shell.viewportExpanded ? "collapse" : "expand"; iconSize: 20; width: 36
+                                           objectName: "expandViewportButton"; checked: shell.viewportExpanded
+                                           tip: shell.viewportExpanded ? "Show the panels again (F11)"
+                                                                       : "Expand the viewport over the panels (F11)"
+                                           onClicked: shell.viewportExpanded = !shell.viewportExpanded }
                         }
-                        StudioButton { icon: "check"; iconSize: 20; width: 36; enabledState: studio.viewModified
-                                       objectName: "keepViewButton"; visible: shell.caps.camera === true
-                                       tip: "Keep View: save the previewed lens (FOV); the orbit saves only when the "
-                                            + "preset's camera checkbox is on; dolly and pan stay previews"
-                                       onClicked: studio.keepView() }
-                        Rectangle { width: 1; height: 24; color: shell.cOutlineSoft; anchors.verticalCenter: parent.verticalCenter }
-                        StudioButton { icon: shell.overlaysHidden ? "eye-off" : "eye"; iconSize: 20; width: 36
-                                       objectName: "overlaysButton"; visible: shell.caps.handles === true
-                                       checked: !shell.overlaysHidden
-                                       tip: shell.overlaysHidden ? "Show the handles and outline over the scene"
-                                                                 : "Hide the handles and outline: see the scene alone"
-                                       onClicked: shell.overlaysHidden = !shell.overlaysHidden }
-                        StudioButton { icon: "camera"; iconSize: 20; width: 36; objectName: "copyFrameButton"
-                                       tip: "Copy Frame: the scene as rendered (no handles) to the clipboard"
-                                       onClicked: studio.copyFrame() }
-                        StudioButton { icon: "frame"; iconSize: 20; width: 36; enabledState: studio.viewModified
-                                       objectName: "resetViewButton"; visible: shell.caps.camera === true
-                                       tip: "Frame The Card: back to the saved camera, as the live card shows it "
-                                            + "(or double-click the scene)"
-                                       onClicked: studio.resetCamera() }
-                        StudioButton { icon: shell.viewportExpanded ? "collapse" : "expand"; iconSize: 20; width: 36
-                                       objectName: "expandViewportButton"; checked: shell.viewportExpanded
-                                       tip: shell.viewportExpanded ? "Show the panels again (F11)"
-                                                                   : "Expand the viewport over the panels (F11)"
-                                       onClicked: shell.viewportExpanded = !shell.viewportExpanded }
                     }
 
                     // The production scene is drawn under this slot by the Studio viewport item.
@@ -1844,7 +1862,8 @@ Rectangle {
                         objectName: "viewportSlot"
                         x: 1; y: 1
                         width: parent.width - 2
-                        height: parent.height - 2
+                        // The scene ends where the (opaque) scrub bar starts: no part of the frame hides under it.
+                        height: parent.height - 2 - scrubBar.height
                         clip: true
                         // Set by the shell host: where the letterboxed presented frame (the live card's
                         // world extent, production aperture) sits inside this slot.
@@ -2113,11 +2132,12 @@ Rectangle {
                     // Scrub / time bar
                     Rectangle {
                         id: scrubBar
+                        objectName: "scrubBar"
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: 1; x: 1
                         width: parent.width - 2; height: 48
                         radius: 9
-                        color: Qt.rgba(shell.cViewport.r, shell.cViewport.g, shell.cViewport.b, 0.72)
+                        color: shell.opaque(shell.cViewport)
                         Rectangle { width: parent.width; height: 1; color: shell.cOutlineSoft }
                         Row {
                             anchors.fill: parent; anchors.margins: 10
