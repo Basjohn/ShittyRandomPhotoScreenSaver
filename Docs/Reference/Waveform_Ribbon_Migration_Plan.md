@@ -78,7 +78,9 @@ constants); all state integrates on the sole logical clock and the projection on
   (a per-cell passage peak held on the cloth and advected with it, so shaped parts keep their size/colour until the
   next swell, decaying slowly in silence and never vanishing); **Whole Swell** (one global level, ignores direction,
   width and speed); **Group Wave** (each swell arrives as a set spanning several carrier wavelengths, leaning toward
-  its leading edge with a stronger surge). Every mode obeys the flow rule and the no-twitch rules.
+  its leading edge with a stronger surge; like Travelling Pulse, its geometry and surge follow the fresh field: built
+  from the long-fade field its peak-keeping set envelope pinned the swell at the soft bound over the view, 5 Nov
+  Preset 7). Every mode obeys the flow rule and the no-twitch rules.
 - **Adaptive response gain.** Geometry drives are divided by a memory of their own recent peak (fast reach, slow
   relaxation, a floor), so each song uses the whole authored Quiet→Peak ramp while a quiet passage after a loud one
   stays quiet; the remembered peak lands below Peak, keeping headroom for accents. Light, colour and sparkle keep the
@@ -92,7 +94,10 @@ constants); all state integrates on the sole logical clock and the projection on
 - **Breathing** (5 Nov, Reaction bucket). Softness = Breathing x how far the published passage sits below
   `BREATHING_LOUD`; a soft passage releases its geometry drives faster (up to `BREATHING_REACH` of Decay, on both
   stages) and widens each drive's swings about its own phrase-scale mean (up to `1 + BREATHING_CONTRAST`), so it
-  swells and lets go within its phrases instead of holding. Loud passages keep Decay, targets and reach.
+  swells and lets go within its phrases instead of holding. Loud passages keep Decay, targets and reach. Breathing
+  also holds the adaptive gain's memory while a drive sits below it (`RESPONSE_MEMORY x (1 + Breathing x
+  (RESPONSE_HOLD - 1))`, song-scale), so a quieter passage after a loud one is not re-normalised to loud reach.
+  Breathing 0 is bit-exact with the 5 Nov baseline (Preset 4).
 - **Anchored history ends** (5 Nov, side-angle tail stagger). The packet header carries the history ring's admission
   phase (`extra.w`); the drawn history ends `ANCHOR_INSET` knots inside each end at anchors fixed in the scene, and the
   C2 continuation starts from the spline's own jet there (`core/ribbon_continuation.py` mirror, ribbon/atmosphere
@@ -109,7 +114,8 @@ constants); all state integrates on the sole logical clock and the projection on
 Gates: `tests/test_waveform_energy_pulse.py`, `tests/test_waveform_reaction_modes.py`,
 `tests/test_waveform_pulse_coupling.py`, `tests/test_waveform_no_twitch.py`, `tests/test_waveform_trough_clearance.py`,
 `tests/test_waveform_dynamic_zoom.py`, `tests/test_waveform_ribbon_dynamics.py`, `tests/test_waveform_continuous_play.py`,
-`tests/test_waveform_breathing.py` and `tests/test_waveform_tail_continuity.py` (test-owned controls; structure, never
+`tests/test_waveform_breathing.py`, `tests/test_waveform_reaction_continuity.py` (quieter passage after a loud one,
+Group Wave sets in sustained/soft passages) and `tests/test_waveform_tail_continuity.py` (test-owned controls; structure, never
 authored values). Probes: `tools/visualizer_replay/waveform_ribbon_breathing_probe.py` (continuous play: songs back to
 back without a reset; kick response by time in song and passage, breathing contrast, reach) and
 `tools/visualizer_replay/waveform_ribbon_tail_probe.py`.
