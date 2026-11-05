@@ -341,6 +341,10 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
 - [ ] Adapters in order of authoring pain (Extruded Bubble and Bubble built; Sphere in progress): Spectrum/Rainbow Ghost,
   Extruded Spectrum, Shockwave Grid, DevCurve, Oscilloscope. Each: full registry coverage test, production-parity preview test, theme,
   Settings Custom launcher replacing that builder body once the operator accepts it.
+- [ ] Flaky render test: `tests/test_waveform_studio_editors.py::test_preview_layer_omission_changes_only_flagged_renders`
+  failed once (`plain_a != plain_b`, two snapshot requests of one frame) in a 282-test Studio + build run, then
+  passed alone twice and in the next full Studio gate (5 Nov). Identical requests should be byte-equal: find the
+  render state that leaks between snapshots.
 
 ## Operator execution and evidence rules
 
