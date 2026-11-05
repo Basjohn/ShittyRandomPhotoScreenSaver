@@ -58,6 +58,7 @@ uniform vec3 uMaterialShape; // material elongation along world z, relief mip bi
 uniform float uPool;
 uniform float uPoolZ;       // the sheets' depth (world z)
 uniform vec3 uColumn;       // fade length toward the camera, far sparkle strength, sparkle threshold
+uniform float uReflectionHue; // reflected chroma about its luminance (1 as reflected)
 uniform int uSpecMode;      // reflection term: 0 inline, 1 write it alone (pre-pass), 2 read it from uSpecular
 uniform sampler2D uSpecular;
 uniform vec3 uForward;
@@ -73,24 +74,29 @@ vec2 slopeAt(vec2 xz, float tile, float bias) {
     vec2 far=transpose(turn)*texture(uSlope,turn*uv*1.37+vec2(.31,.47),bias).rg*1.37;
     return (0.6*near+0.4*far)/tile;
 }
-// A wet floor's column: the reflected image drawn out along the view. A plain average over a long column is the
-// mean of every crossing sheet above it (a uniform grey veil); a column belongs to the hot light it reflects. Taps
-// are weighted by their luminance (power COLUMN_POWER), so each column keeps the hue and much of the strength of the
-// brightest light along it and dim reflected light stays dim. Light high above the floor spreads its column over
-// far more floor (glossy spread grows with height), so each tap's light falls with its own reflected height (the
-// emitters' luminance-weighted height in alpha): columns stand under the low sheets, not under all of them. Each
-// tap's footprint covers its share of the column, so it is continuous without per-pixel jitter (grain).
+// A wet floor's column: the reflected image drawn out along the view, as smooth coloured mass. A plain average over
+// a long column is the mean of every crossing sheet above it (a uniform grey veil); a column belongs to the light it
+// reflects. Taps are weighted by their luminance (power COLUMN_POWER), so the column carries the strength of the
+// light along it and dim reflected light stays dim. The power is gentle on purpose: a steep power is winner-take-all,
+// and as sheets move the winning tap jumps, so the column's colour and level pop between frames (flicker). Its hue
+// comes from the coloured light along it (chroma-weighted), so a grey haze or a white crossing never washes a column
+// out to pastel. Light high above the floor spreads its column over far more floor (glossy spread grows with height),
+// so each tap's light falls with its own reflected height (the emitters' luminance-weighted height in alpha). Tap
+// footprints overlap (COLUMN_OVERLAP spacings tall): a sheet thinner than a reflection texel never falls between taps
+// or through a footprint edge, so the column changes only as smoothly as the sheets above it, a soft smeared mass
+// rather than a crisp streak.
 const int COLUMN_TAPS=8;
-const float COLUMN_POWER=4.0;
+const float COLUMN_POWER=2.0;
+const float COLUMN_OVERLAP=2.0;
 vec3 columnReflection(vec2 screenUv, vec2 offset, float halfLength, float across) {
     vec2 size=vec2(textureSize(uReflection,0));
     float pixelSpan=max(length(dFdx(screenUv)*size),length(dFdy(screenUv)*size));
     float span=max(across,pixelSpan);
     float spacing=2.0*halfLength/float(COLUMN_TAPS);
-    vec2 dx=vec2(span/size.x,0.0), dy=vec2(0.0,max(span/size.y,spacing));
+    vec2 dx=vec2(span/size.x,0.0), dy=vec2(0.0,max(span/size.y,COLUMN_OVERLAP*spacing));
     vec2 uv=screenUv+offset;
     vec3 colour=vec3(0.0);
-    float weight=0.0, moment=0.0, total=0.0;
+    float tint=0.0, weight=0.0, moment=0.0, total=0.0;
     for(int i=0;i<COLUMN_TAPS;i++) {
         float t=(float(i)+0.5)*2.0/float(COLUMN_TAPS)-1.0;
         vec4 sample_=textureGrad(uReflection,clamp(uv+vec2(0.0,t*halfLength),vec2(0),vec2(1)),dx,dy);
@@ -104,12 +110,17 @@ vec3 columnReflection(vec2 screenUv, vec2 offset, float halfLength, float across
         float along=exp(-2.0*t*t);
         float decayed=along*luminance;
         float hot=pow(decayed,COLUMN_POWER);
-        colour+=hot*tap; weight+=hot; moment+=hot*decayed; total+=pow(along,COLUMN_POWER+1.0);
+        // Chroma share of this tap (0 grey .. 1 pure hue): coloured light names the column's hue.
+        float peak=max(max(tap.r,tap.g),tap.b);
+        float chroma=peak>1e-6?(peak-min(min(tap.r,tap.g),tap.b))/peak:0.0;
+        float hue=hot*(0.05+chroma*chroma);
+        colour+=hue*tap/max(luminance,1e-6); tint+=hue;
+        weight+=hot; moment+=hot*decayed; total+=pow(along,COLUMN_POWER+1.0);
     }
-    if(weight<=1e-12) return vec3(0.0);
-    colour/=weight;
+    if(weight<=1e-12 || tint<=1e-12) return vec3(0.0);
+    colour/=tint;  // unit-luminance hue of the coloured light along the column
     // Strength: the power mean of the decayed light along the column (a uniform field keeps its own level),
-    // carried by the dominant light's colour.
+    // carried by the column's hue.
     float strength=pow(moment/total,1.0/(COLUMN_POWER+1.0));
     return colour*strength/max(dot(colour,vec3(0.2126,0.7152,0.0722)),1e-6);
 }
@@ -165,17 +176,25 @@ void main() {
     float hot=dot(reflected,vec3(0.2126,0.7152,0.0722));
     float scene=dot(textureLod(uReflection,vec2(0.5),20.0).rgb,vec3(0.2126,0.7152,0.0722));
     reflected*=pow(clamp(hot/max(uHot.x*scene,1e-4),0.0,1.0),uHot.z);
-    float film=texture(uAlbedo,uv*2.3+vec2(.17,.61)).r/max(texture(uAlbedo,uv*2.3+vec2(.17,.61),6.0).r,1e-3);
-    reflected*=mix(1.0,smoothstep(0.6,1.25,film),uHot.y);
+    // The reflection carries the sheets' own saturated hue: chroma about its luminance is lifted (uReflectionHue),
+    // so the coloured mass reads as teal or orange over the grey concrete rather than a pastel wash.
+    float hueLevel=dot(reflected,vec3(0.2126,0.7152,0.0722));
+    reflected=max(vec3(hueLevel)+(reflected-vec3(hueLevel))*uReflectionHue,vec3(0.0));
+    // Wet-film grain and sparkle sample the albedo's finest level; at this grazing view that grain is sub-pixel
+    // and shimmers as the light under it moves, so both are opt-in (uHot.y, uColumn.z; 0 is a smooth column).
+    float film=1.0;
+    if(uHot.y>0.0 || uColumn.z>0.0)
+        film=texture(uAlbedo,uv*2.3+vec2(.17,.61)).r/max(texture(uAlbedo,uv*2.3+vec2(.17,.61),6.0).r,1e-3);
+    if(uHot.y>0.0) reflected*=mix(1.0,smoothstep(0.6,1.25,film),uHot.y);
     // Relief breakup: facets tilted along the view send the column's light toward or away from the eye. Linear in
     // the zero-mean rise, so the column's mass is broken into the relief's long horizontal bands at any filtering
     // distance, never dimmed or brightened overall.
     reflected*=max(1.0-uMaterial.z*rise,0.0);
-    // Column shaping: brightest at the contact under the sheets, fading toward the camera, where only the
-    // wet film's brighter grains still catch it (sparkle).
+    // Column shaping: brightest at the contact under the sheets, fading toward the camera to its far level
+    // (where, with a sparkle threshold, only the wet film's brighter grains still catch it).
     float toward=max(vWorldPos.z-uPoolZ,0.0);
     float near=exp(-toward/max(uColumn.x,1e-3));
-    float sparkle=smoothstep(uColumn.z,1.0,film);
+    float sparkle=uColumn.z>0.0?smoothstep(uColumn.z,1.0,film):1.0;
     reflected*=mix(sparkle*uColumn.y,1.0,near);
     specular=reflected*fresnel*uFloor.z;
     }
