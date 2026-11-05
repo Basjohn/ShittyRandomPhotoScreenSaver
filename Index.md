@@ -148,6 +148,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | historical bug / rejected-method routing | `Docs/Historical_Bugs.md` (sole index) |
 | compatibility / schema-migration bridges | `Docs/Architecture/Persisted_Input_Compatibility.md` |
 | deferred features / long-horizon graphics and Visualizer ideas | `Future_Work.md` |
+| graphics backend decision (Vulkan vs SMP & Full Display), triggers and port-readiness rules for new GPU code | `Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md` |
 | Usu Moonscape vertical: behaviour, reactivity, required 3D architecture (S19–S27), asset gates | `Docs/Future_Work/Usu_Moonscape.md` |
 | Usu Blender work: previewing Usu, rig/clip fixes, missing clips, bake/export preparation | `Docs/Future_Work/Usu_Blender_Work.md` |
 | Games You Follow product/source/CUSTOM | `Docs/Reference/Steam_Games_You_Follow.md` |
