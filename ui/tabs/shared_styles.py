@@ -925,6 +925,9 @@ def _build_combobox_style(theme: SettingsThemeSpec | None = None) -> str:
         border: 2px solid @@color:control.input.border@@;
         border-radius: 18px;
         background-color: @@color:control.input.surface@@;
+        /* Always the list popup (what the Windows styles use): menu-style popups (Fusion on
+           Linux) add opaque scroller strips outside the rounded popup view. */
+        combobox-popup: 0;
     }
     
     QComboBox[customCombo='true']:hover {
