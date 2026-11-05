@@ -61,8 +61,11 @@ DEVCURVE_RESPONSE_REACH_S = 1.0
 DEVCURVE_RESPONSE_MEMORY_S = 20.0
 DEVCURVE_RESPONSE_GAMMA = 1.6
 DEVCURVE_RESPONSE_FLOOR = {"bass": 6.0, "vocals": 6.0, "mids": 6.0, "transients": 0.25}
-DEVCURVE_BODY_TOP, DEVCURVE_BODY_OVER = 0.55, 0.08
-DEVCURVE_ACCENT_ROOM = 0.42
+DEVCURVE_BODY_OVER = 0.08
+# Body top and accent room per layer (they sum to 1). The transients layer exists for the hits: a small
+# body and most of its range reserved for them.
+DEVCURVE_BODY_TOP = {"bass": 0.5, "vocals": 0.5, "mids": 0.5, "transients": 0.3}
+DEVCURVE_ACCENT_ROOM = {"bass": 0.45, "vocals": 0.45, "mids": 0.45, "transients": 0.7}
 DEVCURVE_ACCENT_REF = {"bass": 4.0, "vocals": 4.0, "mids": 4.0, "transients": 0.35}
 # Typed beats reach the body layers through their own flux lanes too (the swell's sources, already
 # passage-ramped): on dense real music a kick barely lifts the loudness above its body, so the level
@@ -99,13 +102,26 @@ DEVCURVE_SWELL_SOURCES = {"bass": ("bass",), "vocals": ("mid", "high"), "mids": 
 DEVCURVE_FLOW_WAVENUMBER = 2.0 * math.pi * 2.75
 DEVCURVE_FLOW_SLOPE, DEVCURVE_FLOW_CURVE = 0.2, 0.3
 DEVCURVE_FLOW_SHARE_RISE = 1.5
-# Height x swell eases toward a ceiling above 1 (the old pinned height): a swell over a loud
-# passage still crests, smoothly bounded, never clipped.
-DEVCURVE_REACTION_KNEE, DEVCURVE_REACTION_ROOM = 1.0, 0.4
+# Geometric headroom (operator review 2026-11-05: "the kick is bass"). The drawn undulation has a
+# ceiling of its own: the smoothness slope limiter and the top knee/bottom clamp. Presets with large
+# powers (Deep Blue: bass 3.0 at motion 1.72) sat at it on 76-98% of ticks, so a kick had nowhere to
+# go. The same reserved-headroom rule as the drive, one stage later: per sample, the ceiling amplitude
+# is the smaller of the slope the limiter allows (for the reactive carrier's steepest slope, 11.65 per
+# unit amplitude per width, with a margin) and the room to the knee/clamp; the BODY's amplitude is
+# compressed softly into (1 - DEVCURVE_GEOM_ACCENT_ROOM) of it, the accent's amplitude is added on top
+# uncompressed, and only the total eases softly toward DEVCURVE_GEOM_OVER x the ceiling. Below the
+# knees the mapping is the identity (authored looks unchanged where they had room).
+DEVCURVE_GEOM_CARRIER_SLOPE = 2.0 * math.pi * (1.35 * 0.64 + 2.75 * 0.36)
+DEVCURVE_GEOM_SLOPE_MARGIN = 0.85
+DEVCURVE_GEOM_TOP, DEVCURVE_GEOM_BOTTOM = 0.95, 0.04
+DEVCURVE_GEOM_ACCENT_ROOM = 0.35
+DEVCURVE_GEOM_BODY_KNEE = 0.6
+DEVCURVE_GEOM_TOTAL_KNEE, DEVCURVE_GEOM_OVER = 0.9, 1.15
 # The drawn curves follow the solved shape within a few frames (playing, paused).
 DEVCURVE_CURVE_FOLLOW_S = (0.03, 0.06)
 _LAYER_ORDER = ("bass", "vocals", "mids", "transients")
 _SAMPLE_XS = np.linspace(0.0, 1.0, DEVCURVE_SAMPLE_COUNT)
+_ONES = np.ones(DEVCURVE_SAMPLE_COUNT)
 _BODY_LAYERS = frozenset(("bass", "vocals", "mids"))   # the transients layer's level already is its flux lane
 _LAYER_INDEX = {name: idx for idx, name in enumerate(_LAYER_ORDER)}
 
@@ -143,7 +159,7 @@ def _body_response(ratio: float) -> float:
     value = max(0.0, ratio) ** DEVCURVE_RESPONSE_GAMMA
     if value > 1.0:
         value = 1.0 + DEVCURVE_BODY_OVER * (1.0 - math.exp(-(value - 1.0) / DEVCURVE_BODY_OVER))
-    return DEVCURVE_BODY_TOP * value
+    return value
 
 
 def _accent_strength(excess: float, reference: float, flux: float = 0.0) -> float:
@@ -151,24 +167,32 @@ def _accent_strength(excess: float, reference: float, flux: float = 0.0) -> floa
     return max(0.0, excess) / reference + max(0.0, flux) / DEVCURVE_ACCENT_FLUX_REF
 
 
-def _accent_response(strength: float) -> float:
+def _accent_response(strength: float, room: float) -> float:
     """Accent strength -> share of the reserved accent room (eased, never past it)."""
-    return DEVCURVE_ACCENT_ROOM * (1.0 - math.exp(-max(0.0, strength)))
+    return room * (1.0 - math.exp(-max(0.0, strength)))
 
 
-def _reaction_top(value: float) -> float:
-    if value <= DEVCURVE_REACTION_KNEE:
-        return value
-    return DEVCURVE_REACTION_KNEE + DEVCURVE_REACTION_ROOM * (
-        1.0 - math.exp(-(value - DEVCURVE_REACTION_KNEE) / DEVCURVE_REACTION_ROOM)
-    )
+def _soft_ceiling(values: np.ndarray, ceiling: np.ndarray, knee: float) -> np.ndarray:
+    """Identity below ``knee`` x ceiling, then an exponential approach to the ceiling (never flat)."""
+    start = knee * ceiling
+    room = np.maximum((1.0 - knee) * ceiling, 1e-9)
+    eased = start + room * (1.0 - np.exp(-np.maximum(values - start, 0.0) / room))
+    return np.where(values <= start, values, eased)
 
 
-def _reaction_top_array(values: np.ndarray) -> np.ndarray:
-    """``_reaction_top`` element-wise (identical arithmetic)."""
-    over = np.maximum(values - DEVCURVE_REACTION_KNEE, 0.0)
-    eased = DEVCURVE_REACTION_KNEE + DEVCURVE_REACTION_ROOM * (1.0 - np.exp(-over / DEVCURVE_REACTION_ROOM))
-    return np.where(values <= DEVCURVE_REACTION_KNEE, values, eased)
+def geometric_ceiling(profile: np.ndarray, offset: float, smoothness: float) -> np.ndarray:
+    """Per-sample amplitude the drawn undulation can reach before the slope limiter or the knee/clamp
+    holds it (see DEVCURVE_GEOM_*)."""
+    max_step = 0.040 - 0.020 * _clamp(float(smoothness), 0.0, 1.0)
+    slope = DEVCURVE_GEOM_SLOPE_MARGIN * max_step * (DEVCURVE_SAMPLE_COUNT - 1) / DEVCURVE_GEOM_CARRIER_SLOPE
+    base = np.clip(profile + offset, 0.02, 0.98)
+    return np.maximum(np.minimum(np.minimum(DEVCURVE_GEOM_TOP - base, base - DEVCURVE_GEOM_BOTTOM), slope), 0.005)
+
+
+def reaction_amplitudes(body: np.ndarray, accent: np.ndarray, ceiling: np.ndarray) -> np.ndarray:
+    """Body amplitude compressed into its share of the ceiling, the accent added on top, the total eased."""
+    body = _soft_ceiling(body, (1.0 - DEVCURVE_GEOM_ACCENT_ROOM) * ceiling, DEVCURVE_GEOM_BODY_KNEE)
+    return _soft_ceiling(body + accent, DEVCURVE_GEOM_OVER * ceiling, DEVCURVE_GEOM_TOTAL_KNEE / DEVCURVE_GEOM_OVER)
 
 
 def _uniform_gradient(f: np.ndarray, spacing: float) -> np.ndarray:
@@ -419,6 +443,8 @@ class DevCurveRuntimeState:
     accent_stage: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
     response_peak: Dict[str, float] = field(default_factory=lambda: dict(DEVCURVE_RESPONSE_FLOOR))
     drive: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
+    drive_body: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
+    drive_accent: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
     accent_mean: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
     swell_pending: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
     swell_stage: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
@@ -634,11 +660,15 @@ def solve_devcurve_frame(
             state.response_peak[key] = peak
             # The level above the body arrives through the fast stage (per-frame loudness is noisy: a held
             # capture of it would sit at its maxima); the flux spike through its held capture.
-            gained = _body_response(body / peak) + _accent_response(
-                (_accent_strength(stage - body, DEVCURVE_ACCENT_REF[key]) if key in _BODY_LAYERS else 0.0) + accent)
+            body_target = DEVCURVE_BODY_TOP[key] * _body_response(body / peak)
+            accent_target = _accent_response(
+                (_accent_strength(stage - body, DEVCURVE_ACCENT_REF[key]) if key in _BODY_LAYERS else 0.0) + accent,
+                DEVCURVE_ACCENT_ROOM[key])
         else:
-            gained = stage
-        state.drive[key] = _follow(state.drive[key], gained, dt, attack, release)
+            body_target, accent_target = stage, 0.0
+        state.drive_body[key] = _follow(state.drive_body[key], body_target, dt, attack, release)
+        state.drive_accent[key] = _follow(state.drive_accent[key], accent_target, dt, attack, release)
+        state.drive[key] = state.drive_body[key] + state.drive_accent[key]
         state.smooth_energy[key] = state.drive[key]
     travel = _passage_lerp(DEVCURVE_PASSAGE_TRAVEL, state.passage_drive)
     swell_speed = _clamp(float(swell_speed), 0.0, 3.0) * travel
@@ -663,20 +693,27 @@ def solve_devcurve_frame(
         sources = DEVCURVE_SWELL_SOURCES[key]
         accent = sum(_lane(transient_bus, lane) for lane in sources) / len(sources) if playing and enabled else 0.0
         envelope = _advance_swell(state, key, dt=dt, accent=accent, speed=swell_speed, strength=swell_strength)
-        drive = state.drive[key] if enabled else 0.0
-        if envelope is None:
-            swell_peaks[key] = 0.0
-            reactive = [_reaction_top(drive)] * DEVCURVE_SAMPLE_COUNT
-        else:
-            gain = np.interp(_SAMPLE_XS, DEVCURVE_SWELL_GRID, envelope)
-            swell_peaks[key] = float(gain.max() - 1.0)
-            reactive = _reaction_top_array(drive * gain).tolist()
-        # The visible reaction: the mean multiplier the music puts on this layer's undulation.
-        reactions[key] = sum(reactive) / DEVCURVE_SAMPLE_COUNT
         nodes = layer_shape_nodes[key]
         if len(nodes) < 2:
             raise ValueError(f"DevCurve layer {key!r} requires resolved shape nodes")
         profile = _smooth_points(nodes, DEVCURVE_SAMPLE_COUNT)
+        if envelope is None:
+            swell_peaks[key] = 0.0
+            gain = _ONES
+        else:
+            gain = np.interp(_SAMPLE_XS, DEVCURVE_SWELL_GRID, envelope)
+            swell_peaks[key] = float(gain.max() - 1.0)
+        # Amplitude per sample as _build_curve draws it (0.135 x power x the profile weight), split into body
+        # and accent so the geometric ceiling compresses the body and leaves the accent its room.
+        weight = np.clip(np.asarray(profile), 0.0, 1.0)
+        unit = 0.135 * motion_power * power * swing * (0.55 + 0.45 * weight)
+        body_drive = state.drive_body[key] if enabled else 0.0
+        accent_drive = state.drive_accent[key] if enabled else 0.0
+        ceiling = geometric_ceiling(weight, offset, smoothness)
+        amplitude = reaction_amplitudes(unit * body_drive * gain, unit * accent_drive * gain, ceiling)
+        reactive = np.where(unit > 1e-9, amplitude / np.maximum(unit, 1e-9), 0.0).tolist()
+        # The visible reaction: the undulation's mean amplitude as a share of its geometric ceiling.
+        reactions[key] = float(np.mean(amplitude / ceiling))
         c = _build_curve(
             sample_count=DEVCURVE_SAMPLE_COUNT,
             base_level=base_level,

@@ -137,6 +137,17 @@ def tabulate(kicks):
                 cell[f"react_{key}"] = float(np.mean([k[f"react_{key}"] for k in sel]))
                 cell[f"rms_{key}"] = float(np.mean([k[f"rms_{key}"] for k in sel]))
             table[f"{passage} {lo:g}-{'end' if hi > 1e8 else f'{hi:g}'}s"] = cell
+    # Per recording (clip index in the play order), per passage.
+    for clip in sorted({k["clip"] for k in kicks}):
+        for passage in ("sustained_loud", "quiet"):
+            sel = [k for k in kicks if k["clip"] == clip and k["passage"] == passage]
+            if not sel:
+                continue
+            cell = {"kicks": len(sel)}
+            for key in (*BODY, "transients"):
+                for metric in ("drive", "react", "rms"):
+                    cell[f"{metric}_{key}"] = float(np.mean([k[f"{metric}_{key}"] for k in sel]))
+            table[f"clip{clip} {passage}"] = cell
     return table
 
 
