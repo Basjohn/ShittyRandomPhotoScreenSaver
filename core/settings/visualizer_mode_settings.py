@@ -48,6 +48,7 @@ from typing import Union
 
 from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
 from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
+from core.constants.neon_lake_world import TILT_RANGE as NEON_TILT_RANGE, TURN_RANGE as NEON_TURN_RANGE
 from core.settings.visualizer_settings_contract import SPHERE_FINISH_VALUES
 
 
@@ -698,8 +699,9 @@ _SHOCKWAVE_GRID = ModeSettings(
         Slider("shockwave_grid_water_shine", "Water Shine:", 0.0, 1.0,
                "The water's own surface, whatever the land's style: a tinted body under a rippled mirror of the sky, "
                "dark looking down and bright at grazing angles, with the Sun or Moon glinting in it.", bucket="waves"),
-        Slider("shockwave_grid_splashes", "Splashes:", 0.0, 1.0,
-               "Droplets thrown up where the heaviest hits land on the water. 0 turns them off.", bucket="waves"),
+        Slider("shockwave_grid_water_glint", "Sun / Moon Path:", 0.0, 1.0,
+               "A glittering path of light on the water below the Sun or Moon, brightening with its halo's "
+               "music. 0 turns it off.", bucket="waves", enabled_when=_BASIN_BODY),
         Toggle("shockwave_grid_terrain_reaction_enabled", "React to Music:", "Reshape the land with the music",
                "Off keeps the land exactly as authored, with no reaction work at all.", bucket="reaction"),
         Slider("shockwave_grid_terrain_reaction_strength", "Strength:", 0.0, 1.0,
@@ -742,6 +744,9 @@ _SHOCKWAVE_GRID = ModeSettings(
                when=("shockwave_grid_wire_display", _BASIN_GLASS_POINTS)),
         Slider("shockwave_grid_density", "Surface Detail:", 0.0, 1.0, "Vertex density and water-surface detail (also affects render workload).",
                bucket="render"),
+        Slider("shockwave_grid_depth_scale", "Depth Scale:", 0.0, 1.0,
+               "Vertices and ridge lines grow toward the camera, as if drawn on the land itself (up to three "
+               "times their size). 0 keeps them one size on screen.", bucket="render"),
         Slider("shockwave_grid_floor", "Base Opacity:", 0.0, 1.0,
                "Shared base visibility of land and water before their independent colour alpha.", bucket="render"),
         Slider("shockwave_grid_horizon_thickness", "Horizon Thickness:", 0.0, 4.0,
@@ -877,6 +882,13 @@ _SHOCKWAVE_GRID = ModeSettings(
         Slider("shockwave_grid_water_line_glow", "Water Line Glow Strength:", 0.0, 3.0,
                "How brightly the lines on the water glow, on top of Surface Glow; 1 is the shared surface glow.",
                bucket="glow"),
+        Slider("shockwave_grid_shore_glow", "Shore Glow:", 0.0, 2.0,
+               "Light along the water's edge, spreading out over the water and a little up the bank; it swells "
+               "with the music. 0 keeps only the shoreline. Glows only while Surface Glow is above zero.",
+               bucket="glow"),
+        Colour("shockwave_grid_shore_glow_color", "Shore Glow Colour:", "Choose Shore Glow Colour",
+               "The colour of the water's edge glow. Alpha is how far it moves from the shoreline's own colours "
+               "toward this one (0 keeps the shoreline colours).", bucket="glow"),
         Custom("shape", "response", build="ui.tabs.media.shockwave_grid_builder:build_response_section",
                load="ui.tabs.media.shockwave_grid_settings_binding:load_response_section",
                collect="ui.tabs.media.shockwave_grid_settings_binding:collect_response_section",
@@ -910,8 +922,8 @@ _SHOCKWAVE_GRID = ModeSettings(
         # The shared framed camera (core.settings.framed_camera), moved live: W/A/S/D flight, Q/E yaw,
         # Shift+W/S pitch, held-left orbit, Alt+right pan, Alt+wheel dolly and R home. Tilt 0 is a level
         # horizon; the eye itself never enters the land or water.
-        Slider("shockwave_grid_tilt", "", -0.10, 0.58, bucket=""),
-        Slider("shockwave_grid_turn", "", -0.50, 0.50, bucket=""),
+        Slider("shockwave_grid_tilt", "", NEON_TILT_RANGE[0], NEON_TILT_RANGE[1], bucket=""),
+        Slider("shockwave_grid_turn", "", NEON_TURN_RANGE[0], NEON_TURN_RANGE[1], bucket=""),
         SceneCameraPosition("shockwave_grid_camera_position", "Camera Position:", bucket="camera",
                tooltip="Move the real camera eye over the landscape without changing the lens. It stays above the "
                        "land and water. Drag the diamond to move, Shift+drag for depth, drag the Aim point to turn; "

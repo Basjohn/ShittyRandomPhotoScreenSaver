@@ -10,6 +10,7 @@ import ctypes
 
 from OpenGL import GL as gl
 
+from rendering.gl_programs.heightfield import HEIGHTFIELD_MAX_SIZE
 from rendering.quick import gl_query
 
 
@@ -37,8 +38,8 @@ class HeightfieldTexture:
         return self._components
 
     def ensure(self, size: int, data: bytes) -> int:
-        if isinstance(size, bool) or not isinstance(size, int) or not 2 <= size <= 65:
-            raise ValueError(f"{self.label}: heightfield size must be within 2..65")
+        if isinstance(size, bool) or not isinstance(size, int) or not 2 <= size <= HEIGHTFIELD_MAX_SIZE:
+            raise ValueError(f"{self.label}: heightfield size must be within 2..{HEIGHTFIELD_MAX_SIZE}")
         if not isinstance(data, bytes) or len(data) != size * size * self._components * 4:
             raise ValueError(f"{self.label}: heightfield data must contain complete float32 texels for {self._components} components")
         if self._texture and size == self._size and data is self._data:

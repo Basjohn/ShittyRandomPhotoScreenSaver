@@ -79,6 +79,26 @@ def test_an_extended_grid_keeps_the_basin_and_renders_it_unchanged(qt_app):
     assert np.abs(a[..., 0] - b[..., 0]).max() < 1e-5              # same surface heights
 
 
+def test_a_full_size_basin_extended_past_65_cells_uploads_and_renders_unchanged(qt_app):
+    """The GPU texture admits every canonical grid: one Extend on a 65-cell basin (the shipped presets' size)
+    used to raise mid-frame because the texture alone capped grids at 65."""
+    from rendering.gl_programs.heightfield import HEIGHTFIELD_MAX_SIZE, basin_profile
+
+    terrain = normalize_heightfield(basin_profile(65))
+    extended = extend_heightfield(terrain, *horizon_extension_cells(terrain))
+    assert 65 < extended["size"] <= HEIGHTFIELD_MAX_SIZE == MAX_GRID_SIZE
+    images = []
+    for record in (terrain, extended):
+        probe = _GridProbe(record)
+        try:
+            images.append(probe.draw(uv_rect=(0.15, 0.15, 0.85, 0.85)))
+        finally:
+            probe.close()
+    a, b = images
+    assert np.array_equal(a[..., 1], b[..., 1])
+    assert np.abs(a[..., 0] - b[..., 0]).max() < 1e-5
+
+
 def test_extension_is_bounded_and_keeps_cells_square():
     terrain = _stream_terrain()
     with pytest.raises(ValueError):
@@ -231,3 +251,17 @@ def test_the_dragged_sun_settles_on_gentle_steps_and_keeps_its_size():
         distance = math.dist((x * NOMINAL_HALF_WIDTH, y, z), CELESTIAL_REFERENCE)
         assert distance == pytest.approx(3.0, abs=1e-6)
     assert angled.place_body(projection, point, 3.0, snap=True) != angled.place_body(projection, point, 3.0, snap=False)
+
+
+def test_the_camera_floor_unpacks_a_render_payload_once():
+    """The renderer asks for the camera floor every frame; its frozen payload is unpacked once, not per frame
+    (a 121-cell extended grid cost about 1.5 ms a frame)."""
+    from rendering.gl_programs.heightfield import basin_profile, heightfield_surface_bytes
+    from core.settings import neon_lake_camera
+
+    terrain = normalize_heightfield(basin_profile(17))
+    record = {"size": terrain["size"], "data": heightfield_surface_bytes(terrain)}
+    neon_lake_camera._packed_heights.cache_clear()
+    floors = [neon_lake_camera.terrain_floor(record, 1.0)(0.0, -1.2) for _ in range(3)]
+    assert floors[0] > 0.0 and floors.count(floors[0]) == 3
+    assert neon_lake_camera._packed_heights.cache_info().misses == 1

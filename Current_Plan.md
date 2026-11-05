@@ -32,6 +32,19 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
+- [ ] **Neon Lake goal mocks (Presets 1 and 3, 5 Nov second pass, awaiting operator look):** shared sky/water/
+  shoreline/mark fidelity, terrain to the horizon and the collision-bounded looser camera
+  (`Docs/Reference/Neon_Lake_Basin.md`, "Goal-mock fidelity pass" and "Terrain to the horizon"). Still short of
+  `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`: Preset 1's lake sits lower and flatter in the
+  frame than the mock's (the mock looks down on it), its mountains lack the rolling foothills between range and
+  lake, the island has no glow or concentric rings, the moon has no wide blue-violet halo, and at high react the
+  dunes and wavelet net glow far less than the mock; Preset 3's near-left hills still draw long straight gold
+  ridge bands where the mock has glossy rounded dunes, its Sun path column is fainter and wider than the mock's,
+  and the mock's dense glossy reflections are missing. GPU at 1300x750 (baseline -> now): Preset 1 1.01 -> 0.57 ms,
+  Preset 3 0.44 -> 0.82 ms (Glass over far more land, band nebula in five glass taps); water motion is smooth (no
+  one-frame pops) but busier than the baseline (lag-1 water change 0.7 -> ~2.8/255 on Preset 3). Evidence:
+  `.artifacts/evidence/neon_lake/fidelity_20261105/` in the worktree (`triptych/`, `camera_extremes/final/`).
+
 - [ ] **Display Settings capacity (physical hotplug):** on a real monitor disconnect/return or explicit reauthoring,
   Settings' current-screen rows and selections/bindings stay coherent (focused checks pass; hidden form evidence
   `tmp/pytest_ux30_display/test_display_ui_rows_follow_to0/six_display_rows.png`).
