@@ -50,7 +50,7 @@ The existing user-desktop helper consumes only admitted queue work, waits for th
   shared owner each (`core.sources.readiness`, `ui.wallpaper_pool_popup`). Provider/persistence semantics belong to
   `sources.rss.pools` and `Docs/Reference/Wallpaper_Pool_Selection.md`. The source-less close guard stays active.
 - `ui/onboarding` is a lazy Settings surface, not a runtime. No onboarding import or background hydration starts
-  a source, audio consumer, QML scene, polling timer or preview renderer. Quick Start's Arrange bucket is lazy again.
+  a source, audio consumer, QML scene, polling timer or preview renderer. The Layout tab's Arrange bucket is lazy (built when it opens).
   An open Arrange page measures widget sizes on detached family QML items (never a window or scene, no service).
 - Account entry/actions require `core.windows.desktop_context.is_interactive_user_desktop()`. Unknown desktop fails
   closed. Shared account controllers validate before encrypted persistence and completions are page-lifetime fenced.
@@ -73,7 +73,7 @@ The existing user-desktop helper consumes only admitted queue work, waits for th
   corner drag (`uniform_corner_drag_scale`, peer snap), wheel (`uniform_wheel_scale`), width/height
   (`edge_resize_rect`) and the Visualizer's two-axis corner are the same functions, so one gesture saves one entry in
   either editor. A never-placed card saves content-sized in both, and moves keep content-sized anchored placement;
-  any resize, and a Runtime Edit child edit, establishes explicit geometry. Leaving Quick Start's Arrange with an
+  any resize, and a Runtime Edit child edit, establishes explicit geometry. Leaving the Layout tab's Arrange with an
   unapplied draft (closing Settings, another tab, Guided Setup) asks Apply/Discard/Stay first, as does leaving
   Guided Setup's Arrange step with Back or Next. Guided Setup ends with Finish or Finish & Run (both save; Finish & Run
   closes Settings asking to run, and a Settings-only launch continues into RUN in the same process). Child geometry and content rotation remain runtime operations. A declared

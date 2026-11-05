@@ -173,7 +173,15 @@ def test_visualizer_guided_setup_prioritizes_bubble_and_marks_extruded_bubble_co
 
         page.rows.setCurrentRow(1)
         assert page.preview_note.isVisibleTo(page)
-        assert page.preview_note.font().bold()
+        # The effective weight after the style sheet polishes the label (a setBold under
+        # an info role's own font-weight used to be overridden), against an ordinary
+        # info label on the same page as the negative control.
+        from PySide6.QtGui import QFont, QFontInfo
+        page.preview_note.ensurePolished()
+        page.status.ensurePolished()
+        assert page.preview_note.font().weight() >= QFont.Weight.Bold
+        assert QFontInfo(page.preview_note.font()).weight() >= QFont.Weight.Bold
+        assert page.status.font().weight() < QFont.Weight.Bold
         assert page.preview_note.text().strip()
 
         page.rows.setCurrentRow(0)

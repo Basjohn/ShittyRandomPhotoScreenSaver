@@ -68,10 +68,10 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
   `test_visualizer_plain_orbit` (native crash), `test_visualizer_view_orbit` (Shockwave planar vs freeform; Waveform
   full-circle turn), `test_defaults_schema_authority` (Waveform presets carry `mode` only at top level), plus 1-3
   failures in bubble_ambient_glow, build_runner, feed_f2 (RSS log redaction), frame_trace, framed_scene_input,
-  input_gain, monitor_replay_admission, neon_scene_materials, onboarding_preview_assets/selection,
+  input_gain, monitor_replay_admission, neon_scene_materials,
   qt611_shader_admission, qtquick_build_packaging/ordinary_widget_host/visualizer_bubble/all_five_owner_chain/
   fade_authority/technical_sync_contract, release_media, run_matrix_harness, settings_theme_lifetime_contract,
-  startup_source_onboarding_resume, test_suite_durability, transition_distribution, visualizer_custom_geometry_profiles,
+  startup_source_onboarding_resume, transition_distribution, visualizer_custom_geometry_profiles,
   lazy_preset_collection, mode_dormancy, mode_enable_resolver, presets, settings_plumbing,
   widget_theme_no_material_contract. Reconcile per assertion (current architecture authoritative; never bless
   unexplained drift); fix product defects found on the way.
