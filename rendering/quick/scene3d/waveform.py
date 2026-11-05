@@ -17,6 +17,7 @@ from rendering.gl_programs.waveform_atmosphere import MEDIUM_GLSL,SKY_VERTEX,SKY
 from rendering.gl_programs.mist import FOG_OFF
 from rendering.gl_programs.reflection import mirror_view
 from rendering.quick.scene3d.fog_volume import FogVolume
+from rendering.quick.scene3d.floor_give import FloorGiveField, FLOOR_GIVE_UNIT
 from rendering.quick.scene3d.reflection import PlanarReflection
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.ribbon import GRADE_STOPS, RibbonPrimitive, ribbon_grade
@@ -130,6 +131,8 @@ class WaveformScene:
         self.fog_resources = MeshResources('waveform scene mist programs')
         self.bursts = RibbonBurstRenderer()
         self.field = WaveformField()
+        self.floor_give = FloorGiveField()  # the yielding floor's field: only while the recipe's floor gives
+        self._floor_give = None
         self.reflection = PlanarReflection('waveform scene floor')
         self.fog, self.reflected_fog = FogVolume('waveform scene mist'), FogVolume('waveform scene reflected mist')
         self._specular, self._specular_size = None, None
@@ -144,7 +147,7 @@ class WaveformScene:
         return bool(self.textures or self._specular or self.resources.has_resources or self.scene.has_resources
                     or self.ribbons.has_resources or self.reflection.has_resources or self.fog.has_resources
                     or self.reflected_fog.has_resources or self.fog_resources.has_resources
-                    or self.bursts.has_resources or self.field.has_resources)
+                    or self.bursts.has_resources or self.field.has_resources or self.floor_give.has_resources)
 
 
     def _check_context(self, *, admit=False):
@@ -190,7 +193,7 @@ class WaveformScene:
                       self.reflection.release, self._release_specular, self.fog.release, self.reflected_fog.release,
                       self.ribbons.release, self.scene.release,
                       self.resources.release_resources, self.fog_resources.release_resources, self.bursts.release,
-                      self.field.release))
+                      self.field.release, self.floor_give.release))
         self._context = None
 
 
@@ -213,6 +216,9 @@ class WaveformScene:
         if recipe.fog is None and (self.fog.has_resources or self.reflected_fog.has_resources
                 or self.fog_resources.has_resources or self.field.has_resources):
             self._release_fog()
+        giving = not flat and recipe.floor.give > 0.
+        if not giving and self.floor_give.has_resources:
+            self.floor_give.release()
         self._now=now
         width, height = size
         environment, flow = recipe.environment, recipe.flow
@@ -243,6 +249,13 @@ class WaveformScene:
                     mist=environment.mist, mist_frame=(scroll[0, 3], 0., 0.),
                     grade=ribbon_grade(*colour_grade(recipe, react)[:3]))
         with unclipped_prepasses():
+            # First inside the packet scope: the reduction reads the packet bound by it (the same knots every pass
+            # draws), and the floor, the reflection and the ribbons then read one yielding surface.
+            if giving:
+                self.floor_give.update(packet, translation=scroll[:3, 3], floor=recipe.floor, contact=FLOOR_CONTACT,
+                                       camber=recipe.material.cross_curve)
+            self._floor_give = (self.floor_give.texture, self.floor_give.uniforms) if giving else None
+            draw['floor_give'] = self._floor_give
             fogged = not flat and recipe.fog is not None
             if fogged:
                 self._field_grade=colour_grade(recipe,react)
@@ -342,13 +355,14 @@ class WaveformScene:
                     if recipe.sparks is not None and self._burst_payload is None:
                         self.ribbons.draw(packet, ribbon_mvp, shading='sparks', sparks=recipe.sparks, now=now,
                                           mist=draw['mist'], mist_frame=draw['mist_frame'], material=recipe.material,
-                                          sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'])
+                                          sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'],
+                                          floor_give=draw['floor_give'])
                     if recipe.strays is not None:
                         self.ribbons.draw(packet, ribbon_mvp, shading='strays', strays=recipe.strays, now=now,
                                           mist=draw['mist'], mist_frame=draw['mist_frame'], material=recipe.material,
                                           sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'],
                                           strand_births=self._strand_payload,strand_origin=self._strand_origin,
-                                          continuation=draw['continuation'])
+                                          continuation=draw['continuation'],floor_give=draw['floor_give'])
                     if recipe.sparks is not None and self._burst_payload:
                         self.bursts.draw(self._burst_payload,mvp=mvp,now=now-self._burst_origin,
                                          viewport=(width,height),mist=draw['mist'],grade=draw['grade'])
@@ -378,13 +392,14 @@ class WaveformScene:
             if self.recipe.sparks is not None and self._burst_payload is None:
                 self.ribbons.draw(packet, reflected_mvp, shading='sparks', sparks=self.recipe.sparks, now=draw['age_fade'][0],
                                   mist=draw['mist'], mist_frame=draw['mist_frame'], material=self.recipe.material,
-                                  sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'])
+                                  sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'],
+                                          floor_give=draw['floor_give'])
             if self.recipe.strays is not None:
                 self.ribbons.draw(packet, reflected_mvp, shading='strays', strays=self.recipe.strays,
                                   now=draw['age_fade'][0], mist=draw['mist'], mist_frame=draw['mist_frame'],
                                   material=self.recipe.material, sweep_axis=draw['sweep_axis'], grade=draw['grade'],
                                   floor=draw['floor'],strand_births=self._strand_payload,strand_origin=self._strand_origin,
-                                  continuation=draw['continuation'])
+                                  continuation=draw['continuation'],floor_give=draw['floor_give'])
             if self.recipe.sparks is not None and self._burst_payload:
                 self.bursts.draw(self._burst_payload,mvp=tuple((projection @ mirrored).flatten(order='F')),
                     now=draw['age_fade'][0]-self._burst_origin,
@@ -405,7 +420,8 @@ class WaveformScene:
                  'uViewport', 'uBackdrop', 'uAmbient', 'uFloor', 'uFloorTone', 'uRipple', 'uEye',
                  'uForward', 'uOrthographic', 'uMist', 'uMistShape', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange',
                  'uStreak', 'uHot', 'uBodyField', 'uBodySpan', 'uBodyShape', 'uPool', 'uColumn', 'uSpecMode',
-                 'uSpecular', 'uFloorTint', 'uMaterial', 'uMaterialShape', 'uReflectionHue', 'uBound')
+                 'uSpecular', 'uFloorTint', 'uMaterial', 'uMaterialShape', 'uReflectionHue', 'uBound',
+                 'uFloorGive', 'uFloorGiveField', 'uFloorGiveLook')
         u = self.resources.uniforms('floor', names, required=False)
         gl.glUseProgram(program)
         inverse=np.linalg.inv(np.asarray(mvp,float).reshape(4,4,order='F'))
@@ -423,6 +439,13 @@ class WaveformScene:
         gl.glUniform3f(u['uColumn'],*floor.column)
         gl.glUniform1f(u['uReflectionHue'], floor.hue)
         gl.glUniform3f(u['uBound'], floor.glow_limit, floor.light_reach, floor.light_far)
+        give = None if flat else self._floor_give
+        if give is None:
+            gl.glUniform4f(u['uFloorGive'], 0., 0., 1., 1.)
+        else:
+            gl.glBindTextureUnit(FLOOR_GIVE_UNIT, give[0]); gl.glUniform1i(u['uFloorGiveField'], FLOOR_GIVE_UNIT)
+            gl.glUniform4f(u['uFloorGive'], *give[1])
+            gl.glUniform2f(u['uFloorGiveLook'], floor.give_reach, floor.shading)
         if lit:self._field_uniforms(program)
         gl.glUniform4f(u['uStreak'], floor.streak_length, floor.streak[1], floor.streak[2], 8.)
         gl.glUniform4f(u['uMaterial'], floor.contrast, floor.shading, floor.breakup, floor.pool_spread)
@@ -475,7 +498,7 @@ class WaveformScene:
             gl.glBindTextureUnit(4, texture)
             gl.glUniform1i(u['uSpecular'], 4)
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
-        for unit in (0, 1, 2, 3, 4, 14):
+        for unit in (0, 1, 2, 3, 4, 14) if give is None else (0, 1, 2, 3, 4, 14, FLOOR_GIVE_UNIT):
             gl.glBindTextureUnit(unit, 0)
 
 
