@@ -36,7 +36,7 @@ DEVCURVE_PASSAGE_TAU_S = 1.2
 # gain between them, so the height's velocity is continuous (a single 45 ms first-order attack
 # jumped the velocity on every transient: acceleration spikes > 4x the median on ~19% of the
 # transients layer's ticks on recorded music).
-DEVCURVE_SWING_STAGE_S = (0.05, 0.4)
+DEVCURVE_SWING_STAGE_S = (0.04, 0.3)
 # Real contrast (operator 2026-11-05: "its smoothness is great but it has almost no
 # reactivity"). The shared control lanes are each band over a fast-adapting norm of the loudest
 # band: the dominant band sits at 1.0 whatever the music does (bass/mids drives were above 0.9
@@ -51,7 +51,7 @@ DEVCURVE_SWING_STAGE_S = (0.05, 0.4)
 # transients layer in units of its gated flux lane (its passage ramp keeps quiet passages small).
 DEVCURVE_RESPONSE_REACH_S = 0.5
 DEVCURVE_RESPONSE_MEMORY_S = 20.0
-DEVCURVE_RESPONSE_TOP = 0.6
+DEVCURVE_RESPONSE_TOP = 0.75
 DEVCURVE_RESPONSE_GAMMA = 1.6
 DEVCURVE_RESPONSE_FLOOR = {"bass": 7.0, "vocals": 7.0, "mids": 7.0, "transients": 0.5}
 # Travelling swell (guide 13D: energy moves with the shape). Each layer's accents (its flux lane
@@ -418,10 +418,9 @@ def _advance_swell(state: "DevCurveRuntimeState", key: str, *, dt: float, accent
     state.swell_pending[key] += DEVCURVE_SWELL_GAIN * excess * dt
     ease = 1.0 - math.exp(-dt / DEVCURVE_SWELL_STAGE_S)
     moved = state.swell_pending[key] * ease
+    release = state.swell_stage[key] * ease          # the second stage drains what the first held
     state.swell_pending[key] -= moved
-    state.swell_stage[key] += moved
-    release = state.swell_stage[key] * ease
-    state.swell_stage[key] -= release
+    state.swell_stage[key] += moved - release
     swell = state.swell_field[key]
     if swell.any() or release > 0.0:
         shift = speed * dt
@@ -559,8 +558,10 @@ def solve_devcurve_frame(
         # Paused: the authored idle lanes, below any gain (silence is never amplified).
         targets = _layer_energy_map(energy_bands, transient_bus, playing)
     for key in _LAYER_ORDER:
-        stage = _follow(state.level_stage[key], targets[key], dt, attack, release)
-        state.level_stage[key] = stage
+        # The second stage follows the first as it stood at the start of this tick, so a hit's first
+        # tick moves the drive by (almost) nothing: the velocity is continuous on the logical clock.
+        stage = state.level_stage[key]
+        state.level_stage[key] = _follow(stage, targets[key], dt, attack, release)
         if playing:
             peak = max(DEVCURVE_RESPONSE_FLOOR[key], _follow(
                 state.response_peak[key], stage, dt, DEVCURVE_RESPONSE_REACH_S, DEVCURVE_RESPONSE_MEMORY_S))
