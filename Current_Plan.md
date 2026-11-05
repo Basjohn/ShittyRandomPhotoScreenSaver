@@ -52,9 +52,6 @@ lead as reviewer/orchestrator.
   by the power plan, then check Task Manager CPU/GPU for the saver while dark, that wake input reaches the saver, and
   the first seconds after wake (no stale frame, jump or hitch; run with `--frame-trace --usage`). Per-monitor power is
   not observable on Windows: an HDMI panel switched off at its own button that stays enumerated keeps running.
-- [ ] **Retire Custom's "Edit Preset" Notepad machinery** (button + pop-up) now that the Studios exist, with Studio
-  parity proven for each mode that still offered it; and show **Open Studio** on every preset, not only Custom (it
-  opens the Studio on that preset).
 - [ ] **Re-take the stored overhead baseline on a quiet machine** (`tools/overhead_baseline.py --size 2560x1440`,
   commit it under `tools/baselines/overhead/`). The 6 Nov call-count rises against `2026-10-18_f4dbb4ab.json` are
   resolved: the +72/+144 (scene3d transitions, Oscilloscope, Sphere, Extruded Spectrum; d91eb165's float32 raster
@@ -201,13 +198,22 @@ Centre Out "like night and day"; logical cadence survives heavy game load; **Pre
 lose this"). Every later dynamics change shows, on the recorded clips, that Preset 4 is unchanged against this tag
 (or names the improvement for operator sign-off). Preset 4 keeps Breathing 0 (exactly the baseline dynamics).
 
-- [ ] **Preset 7 and the other reaction modes (operator log `logse7a84d332e.zip`, Rag Doll, 5 Nov):** no
-  decay/breathing in soft passages, sustained passages with changes inside them read as almost flat, and once it swelled
-  to full power as the song got QUIETER (normalisation lifting a quiet passage; see the continuous-play rule). Fix per
-  mode at the owner, judged over whole songs in continuous play, with Preset 4 held to the baseline. Pulse-visibility
-  WIP (span-sized reactions, branch `worktree-agent-a470c20ffe5fe8b02`) is parked: the operator accepted the pulse as is.
+- [~] **Preset 7 and the other reaction modes (operator log `logse7a84d332e.zip`, Rag Doll, 5 Nov) - awaiting
+  operator eyes:** no decay/breathing in soft passages, sustained passages with changes read almost flat, and a swell to
+  full power as the song got QUIETER. Preset 7 is Group Wave (song 31-123 s in the log; the recorded clip is song
+  70-130 s). Causes: Group Wave's set envelope was built from the long-fade field with a peak-keeping blur, so the swell
+  sat at its soft bound over the visible span (median/max .98) and the whole body inflated with Pulse Strength (bass);
+  and the adaptive gain's 30 s memory re-normalised a quieter passage to loud reach. Fixed: Group Wave follows the fresh
+  field (as Travelling Pulse); Breathing holds the gain memory through a quieter passage only, keyed to the slow
+  passage level, never beat gaps (Preset 4, Breathing 0, is bit-exact with the tag).
+  Evidence and per-passage tables: `.artifacts/evidence/waveform_ribbon/reactivity_preset7/`. Open: operator review of
+  Preset 7 (bodies are smaller in loud passages now that the uniform inflation is gone: sustained-loud visible
+  amplitude 6.4 -> 5.4); Whole Swell (Preset 6) sits at its soft bound in all music by design (one global level;
+  de-saturating it barely changed the visible body, so it was left). Pulse-visibility WIP (branch
+  `worktree-agent-a470c20ffe5fe8b02`) stays parked: the operator accepted the pulse as is.
 - [~] **Breathing + anchored history ends (merged b0ddc041) — awaiting operator ears/eyes:** soft passages let go
-  between swells (0.7 in every preset but 4); the tail no longer staggers at side angles. Evidence
+  between swells (0.7 in every preset but 4) and, since the Preset 7 fix, a quieter passage after a loud one stays
+  quieter (gain memory held); the tail no longer staggers at side angles. Evidence
   `.artifacts/evidence/waveform_ribbon/breathing_20261105/`.
 
 **Operator-selected recovery baseline (3 Nov):**
@@ -270,11 +276,14 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   each fragment's history x (direct and reflected light), so every Reaction Mode and both Travel Directions put it
   exactly on the pulse; the field's own smooth shape is the falloff. Evidence
   `.artifacts/evidence/waveform_ribbon/pulse_rim/`; design in the Migration Plan's Reaction bucket.
-- [ ] **Swells reach the Preset camera already faded (side defect, 5 Nov, found by Pulse Rim):** the Preset 1 camera
-  sees history x in about [-5, 5], but `PULSE_ORIGIN` (44) still assumes a ~±30 view; a swell travels ~3 s before it
+- [ ] **Swells reach the Preset camera already faded (side defect, 5 Nov, found by Pulse Rim):** the lens alone sees
+  history x in about [-4, 4], and with the production aperture (capture `aperture_scale` 3.59 at 1282x1005) about
+  [-14, 14], but `PULSE_ORIGIN` (44) and `TROUGH_VIEW` still assume a ~±30 view; a swell travels ~2-2.5 s before it
   is visible, so on recorded music the in-view appearance field is a faint plateau (human_heavy1: in-view max p50
-  .11, peak/median 1.6) and the fresh-led band has already settled. Re-derive the origin (and the fresh fade) from the
-  framed camera's visible span; then recheck Pulse Rim's REFERENCE level.
+  .11, peak/median 1.6) and the fresh-led band has already settled. Continuous play (5 Nov, five songs): the in-view
+  geometric swell of Head To Tail Travelling Pulse is p50 .11 (Preset 1) / .21 (Preset 7's controls) against 1.39 for
+  Preset 4 (Centre Out, born in view); this is most of why Presets 1-3 read flat in sustained passages. Re-derive the
+  origin (and the fresh fade) from the framed camera's visible span; then recheck Pulse Rim's REFERENCE level.
 - [~] **Travel Direction (operator, 5 Nov: "Travel Direction ... chosen in the studio ... an important basic need") —
   awaiting operator eyes:** Flow-bucket Choice, Right To Left (default, unchanged) or Left To Right (the mirror image:
   history enters at the left; pulses, held swells, Tilt Shift, sparks, strands and floor give follow; the world colour
@@ -451,6 +460,11 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   `.artifacts/evidence/spectrum/studio_20261105/`); its Studio now reaches everything Settings' Spectrum builder saves
   (shape nodes added/removed, lanes reordered), so the builder body can be replaced on acceptance. Each: full registry coverage test, production-parity preview test, theme,
   Settings Custom launcher replacing that builder body once the operator accepts it.
+- [ ] **Edit Preset survives only for modes without a Studio** (Shockwave Grid, DevCurve, Oscilloscope): Studio modes
+  author curated presets with Open Studio (preset row, every slot) and the Studio's confirmed Save To <Preset>
+  (`Docs/Reference/Visualizer_Studio.md` §4); the Notepad path and its pop-up go for each mode when its adapter
+  registers (automatic: the slider builds Edit Preset only for `not has_studio(mode)`); delete `_open_preset_json`
+  with the last one. Operator look pending (6 Nov): Open Studio's place in the preset row and the Save To flow.
 
 ## Operator execution and evidence rules
 

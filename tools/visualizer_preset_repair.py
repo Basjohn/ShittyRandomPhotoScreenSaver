@@ -52,10 +52,6 @@ if str(ROOT) not in sys.path:
 from core.settings import visualizer_presets as vp  # noqa: E402
 from core.utils.atomic_files import atomic_write_bytes, atomic_write_text  # noqa: E402
 from core.settings.models import _normalize_spectrum_linear_notches  # noqa: E402
-from core.settings.visualizer_settings_snapshot import (  # noqa: E402
-    _TECHNICAL_GLOBAL_KEYS,
-    normalize_visualizer_mode_payload,
-)
 from core.settings.visualizer_settings_contract import LEGACY_GLOBAL_SHARED_VISUAL_KEYS  # noqa: E402
 from core.visualizer_preset_tree import refresh_shipped_visualizer_presets  # noqa: E402
 from tools.foundry_chrome import (  # noqa: E402
@@ -64,24 +60,16 @@ from tools.foundry_chrome import (  # noqa: E402
 )
 from tools.godzip_foundry_theme import render_foundry_stylesheet  # noqa: E402
 
-_DEFAULTS_CACHE: Dict[str, Any] | None = None
-_MANDATORY_TECH_SUFFIXES: Tuple[str, ...] = tuple(sorted(_TECHNICAL_GLOBAL_KEYS))
+from core.settings import visualizer_preset_file as _preset_file  # noqa: E402  (shape-preserving preset-file owner)
+
+_MANDATORY_TECH_SUFFIXES: Tuple[str, ...] = _preset_file.MANDATORY_TECH_SUFFIXES
 
 _DEPRECATED_COMPAT_TECH_SUFFIXES: Tuple[str, ...] = (
     "energy_boost",
     "use_raw_energy",
 )
-_DEPRECATED_AUTHORED_GLOBAL_KEYS: Tuple[str, ...] = (
-    "bar_fill_color",
-    "bar_border_color",
-    "bar_border_opacity",
-    "ghosting_enabled",
-    "ghost_alpha",
-    "ghost_decay",
-)
-_DEPRECATED_MODE_ALIAS_KEYS: Dict[str, Tuple[str, ...]] = {
-    "oscilloscope": ("osc_sensitivity",),
-}
+_DEPRECATED_AUTHORED_GLOBAL_KEYS: Tuple[str, ...] = _preset_file.DEPRECATED_AUTHORED_GLOBAL_KEYS
+_DEPRECATED_MODE_ALIAS_KEYS: Dict[str, Tuple[str, ...]] = _preset_file.DEPRECATED_MODE_ALIAS_KEYS
 
 _BACKUP_ROOT = ROOT / "temp" / "visualizer_preset_backups"
 _UNDO_STATE_PATH = _BACKUP_ROOT / "undo_state.json"
@@ -181,20 +169,9 @@ class ReindexEntry:
     current_index: int | None
 
 
-def _load_visualizer_defaults() -> Dict[str, Any]:
-    global _DEFAULTS_CACHE
-    if _DEFAULTS_CACHE is None:
-        from core.settings.defaults import get_default_settings
-
-        defaults = deepcopy(get_default_settings()["widgets"]["spotify_visualizer"])
-        _DEFAULTS_CACHE = defaults
-    return deepcopy(_DEFAULTS_CACHE)
-
-
-def _canonical_mode_defaults(mode: str) -> Dict[str, Any]:
-    defaults = _load_visualizer_defaults()
-    defaults["mode"] = mode
-    return normalize_visualizer_mode_payload(mode, defaults)
+# The shape-preserving preset-file owner is core.settings.visualizer_preset_file (shared with the Studio).
+_load_visualizer_defaults = _preset_file.load_visualizer_defaults
+_canonical_mode_defaults = _preset_file.canonical_mode_defaults
 
 
 def _canonical_spectrum_linear_notches() -> Any:
@@ -530,130 +507,9 @@ def _build_clean_payload(path: Path, payload: Mapping[str, Any], mode: str, clea
     return lean, updated_paths
 
 
-def _is_visualizer_setting_key(key: Any) -> bool:
-    """A key the repair owns: any mode's setting family, a shared/legacy visualizer key or a retired alias."""
-    if not isinstance(key, str):
-        return False
-    if key in vp.GLOBAL_ALLOWED_KEYS or key in LEGACY_GLOBAL_SHARED_VISUAL_KEYS:
-        return True
-    if key in _DEPRECATED_AUTHORED_GLOBAL_KEYS or key in _MANDATORY_TECH_SUFFIXES:
-        return True
-    if any(key in aliases for aliases in _DEPRECATED_MODE_ALIAS_KEYS.values()):
-        return True
-    return any(
-        prefix and key.startswith(prefix)
-        for prefixes in vp.MODE_KEY_PREFIXES.values()  # type: ignore[attr-defined]
-        for prefix in prefixes
-    )
-
-
-def _merge_cleaned_section(mode: str, original: Mapping[str, Any], cleaned: Mapping[str, Any]) -> Dict[str, Any]:
-    """Return ``original`` patched with ``cleaned``, keeping the authored file's own shape.
-
-    Existing keys keep their position (a value changes only where the shared migration changed it); a key is
-    removed only when it is a visualizer setting the sanitizer retired, renamed or ruled foreign, while inert
-    authored entries (the view pose inside the artwork, ``preset_<mode>`` slot metadata, notes) stay verbatim.
-    New controls go into a key-sorted section at their sorted place, otherwise right after their nearest
-    registry predecessor that the section already has (before the nearest successor, else at the end).
-    """
-    from core.settings.visualizer_view_orbit import get_visualizer_view_pose_keys
-
-    pose = set(get_visualizer_view_pose_keys(mode))
-    merged: Dict[str, Any] = {}
-    for key, value in original.items():
-        if key in cleaned:
-            merged[key] = deepcopy(cleaned[key])
-        elif key in pose or not _is_visualizer_setting_key(key):
-            merged[key] = deepcopy(value)
-    missing = [key for key in cleaned if key not in merged]
-    if not missing:
-        return merged
-    string_keys = [key for key in merged if isinstance(key, str)]
-    if len(string_keys) == len(merged) and string_keys == sorted(string_keys):
-        for key in missing:
-            merged[key] = deepcopy(cleaned[key])
-        return {key: merged[key] for key in sorted(merged)}
-    registry = list(dict.fromkeys([*vp.preset_artwork_keys(mode), *_canonical_mode_defaults(mode), *cleaned]))
-    rank = {key: index for index, key in enumerate(registry)}
-    order = list(merged)
-    for key in sorted(missing, key=lambda item: rank.get(item, len(rank))):
-        position = rank.get(key, len(rank))
-        before = [i for i, existing in enumerate(order) if existing in rank and rank[existing] < position]
-        after = [i for i, existing in enumerate(order) if existing in rank and rank[existing] > position]
-        if before:
-            order.insert(max(before, key=lambda i: rank[order[i]]) + 1, key)
-        elif after:
-            order.insert(min(after, key=lambda i: rank[order[i]]), key)
-        else:
-            order.append(key)
-        merged[key] = deepcopy(cleaned[key])
-    return {key: merged[key] for key in order}
-
-
-def _apply_cleaned_payload_in_place(payload: Dict[str, Any], cleaned: Mapping[str, Any]) -> list[str]:
-    """Patch visualizer payload blocks in place without rebuilding authored metadata or reordering keys."""
-    updated_paths: list[str] = []
-    cleaned_block = deepcopy(dict(cleaned))
-    mode = str(cleaned_block.get("mode") or "")
-
-    def merged(original: Any) -> Dict[str, Any]:
-        if not mode or not isinstance(original, Mapping):
-            return deepcopy(cleaned_block)
-        return _merge_cleaned_section(mode, original, cleaned_block)
-
-    snapshot = payload.get("snapshot")
-    if isinstance(snapshot, dict):
-        widgets_section = snapshot.get("widgets")
-        if isinstance(widgets_section, dict) and isinstance(widgets_section.get("spotify_visualizer"), Mapping):
-            widgets_section["spotify_visualizer"] = merged(widgets_section["spotify_visualizer"])
-            updated_paths.append("snapshot.widgets.spotify_visualizer")
-
-        backup_section = snapshot.get("custom_preset_backup")
-        if isinstance(backup_section, dict):
-            snapshot.pop("custom_preset_backup", None)
-            updated_paths.append("snapshot.custom_preset_backup")
-
-    if isinstance(payload.get("spotify_visualizer"), Mapping):
-        payload["spotify_visualizer"] = merged(payload["spotify_visualizer"])
-        updated_paths.append("spotify_visualizer")
-
-    settings_section = payload.get("settings")
-    if isinstance(settings_section, dict):
-        dotted_prefix = "widgets.spotify_visualizer."
-        dotted_keys = [
-            key for key in list(settings_section.keys())
-            if isinstance(key, str) and key.startswith(dotted_prefix)
-        ]
-        if dotted_keys:
-            block = merged({key[len(dotted_prefix):]: settings_section[key] for key in dotted_keys})
-            rebuilt: Dict[str, Any] = {}
-            for key, value in settings_section.items():
-                if key == dotted_keys[0]:
-                    rebuilt.update({f"{dotted_prefix}{name}": item for name, item in block.items()})
-                elif key not in dotted_keys:
-                    rebuilt[key] = value
-            settings_section.clear()
-            settings_section.update(rebuilt)
-            updated_paths.append("settings")
-        else:
-            payload["settings"] = merged(settings_section)
-            updated_paths.append("settings")
-
-    if any(path != "snapshot.custom_preset_backup" for path in updated_paths):
-        # De-duplicate while preserving first-seen order for stable reporting.
-        return list(dict.fromkeys(updated_paths))
-
-    # Forward-migrate a legacy backup-only payload into its one live section.
-    snapshot_map = payload.get("snapshot")
-    if not isinstance(snapshot_map, dict):
-        snapshot_map = {}
-        payload["snapshot"] = snapshot_map
-    widgets_map = snapshot_map.get("widgets")
-    if not isinstance(widgets_map, dict):
-        widgets_map = {}
-        snapshot_map["widgets"] = widgets_map
-    widgets_map["spotify_visualizer"] = deepcopy(cleaned_block)
-    return [*updated_paths, "snapshot.widgets.spotify_visualizer"]
+_is_visualizer_setting_key = _preset_file.is_visualizer_setting_key
+_merge_cleaned_section = _preset_file.merge_section
+_apply_cleaned_payload_in_place = _preset_file.apply_cleaned_payload_in_place
 
 
 def _ensure_backup(path: Path) -> Path:
@@ -967,31 +823,8 @@ def restore_undo_entry(entry: UndoEntry) -> None:
         raise
 
 
-def _key_order(value: Any) -> Any:
-    """Nested key order of a JSON value (dict equality ignores order)."""
-    if isinstance(value, Mapping):
-        return [(key, _key_order(item)) for key, item in value.items()]
-    if isinstance(value, list):
-        return [_key_order(item) for item in value]
-    return None
-
-
-def _format_like_source(payload: Mapping[str, Any], source_text: str) -> str:
-    """Serialize ``payload`` with the source file's indentation, escaping, line endings and final newline."""
-    indent: int | str = 2
-    for line in source_text.splitlines()[1:]:
-        stripped = line.lstrip(" \t")
-        if stripped and len(stripped) < len(line):
-            leading = line[: len(line) - len(stripped)]
-            indent = leading if "\t" in leading else len(leading)
-            break
-    ensure_ascii = all(ord(ch) < 128 for ch in source_text)
-    text = json.dumps(payload, indent=indent, ensure_ascii=ensure_ascii)
-    if source_text.endswith("\n") or not source_text:
-        text += "\n"
-    if "\r\n" in source_text:
-        text = text.replace("\n", "\r\n")
-    return text
+_key_order = _preset_file.key_order
+_format_like_source = _preset_file.format_like_source
 
 
 def repair_file(
