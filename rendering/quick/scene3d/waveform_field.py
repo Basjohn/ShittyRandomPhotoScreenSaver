@@ -26,7 +26,7 @@ class WaveformField:
         self._check()
         return warm_programs(((self.resources,'field',FIELD_COMPUTE),))
 
-    def update(self,packet,*,translation,span,grade):
+    def update(self,packet,*,translation,span,grade,side=1.):
         self._check();first,last,samples=span;samples=int(samples)
         if not 4<=samples<=2048 or packet.instances>FIELD_RIBBONS or not first<last:
             raise ValueError('Waveform world field exceeds its bounded domain')
@@ -41,7 +41,8 @@ class WaveformField:
         before=gl_query.get_int(gl.GL_CURRENT_PROGRAM)
         try:
             program=self.resources.compute_program('field',FIELD_COMPUTE);gl.glUseProgram(program)
-            locations=self.resources.uniforms('field',('uFieldSpan','uFieldOrigin','uGrade','uGradeStops'),required=False)
+            locations=self.resources.uniforms('field',('uFieldSpan','uFieldOrigin','uGrade','uGradeStops','uFieldSide'),required=False)
+            gl.glUniform1f(locations['uFieldSide'],float(side))
             gl.glUniform4f(locations['uFieldSpan'],first,last,samples,packet.instances)
             gl.glUniform4f(locations['uFieldOrigin'],*(float(a+b) for a,b in zip(packet.world_origin,translation)),packet.instances)
             values=ribbon_grade(grade[0],grade[1],grade[3])

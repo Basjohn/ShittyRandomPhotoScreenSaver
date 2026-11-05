@@ -8,7 +8,6 @@ import numpy as np
 from PIL import Image
 from OpenGL import GL as gl
 from core.ribbon_packet import KNOT_ROWS
-from core.settings.framed_camera import orthographic_depth_interval
 from core.ribbon_continuation import continuation_bounds, frustum_axial_span
 from core.waveform_ribbon_scene import Floor, Recipe, SPEC, FLOOR_CONTACT
 from rendering.gl_programs.waveform_ribbon import (FLOOR_VERTEX, FLOOR_FRAGMENT, FLAT)
@@ -133,6 +132,7 @@ class WaveformScene:
         self.field = WaveformField()
         self.floor_give = FloorGiveField()  # the yielding floor's field: only while the recipe's floor gives
         self._floor_give = None
+        self._history_mirror = None  # Travel Direction: None, or the x mirror from the history axis into the world
         self.reflection = PlanarReflection('waveform scene floor')
         self.fog, self.reflected_fog = FogVolume('waveform scene mist'), FogVolume('waveform scene reflected mist')
         self._specular, self._specular_size = None, None
@@ -225,53 +225,72 @@ class WaveformScene:
         scroll = np.identity(4)
         scroll[0, 3] = flow.head_x - travel
         mvp = (projection @ view).flatten(order='F')
-        ribbon_view = view @ scroll
+        # Travel Direction: the history (ribbons, sparks, strands, their fields) lives on its own axis, mirrored into
+        # the world here (world x = side * axis) and nowhere else. +1 is the identity and multiplies nothing.
+        side = -1. if flow.direction < 0. else 1.
+        mirror = None if side > 0. else np.diag((-1., 1., 1., 1.))
+        history_view = view if mirror is None else view @ mirror
+        self._history_mirror = mirror
+        ribbon_view = history_view @ scroll
         ribbon_mvp = tuple((projection @ ribbon_view).flatten(order='F'))
-        orthographic = camera_lens[2]
-        if orthographic and recipe.fog is not None:
-            near,far=orthographic_depth_interval(projection)
-            # Ground intersections can lie beyond the actor slab. Cover the exact same signed pixel lines.
-            x,y=camera_lens[:2]
-            corners=[(eye[1]+sx*x*view[0,1]+sy*y*view[1,1])/view[2,1]
-                     for sx in (-1.,1.) for sy in (-1.,1.)]
-            fog_near,fog_far=recipe.fog.signed_depth_range
-            self._fog_depth_range=(min(fog_near,near,min(corners)-1.),max(fog_far,far,max(corners)+1.))
         self._continuation_origin=tuple(np.asarray(packet.world_origin)+scroll[:3,3])
         self._continuation_count=packet.instances
         self._continuation_camber=recipe.material.cross_curve
         transverse=continuation_bounds(packet,scroll[:3,3],recipe.material.cross_curve)
-        main_span=frustum_axial_span(projection@view,transverse)
-        reflected_span=frustum_axial_span(projection@mirror_view(view,0.),transverse)
+        main_span=frustum_axial_span(projection@history_view,transverse)
+        reflected_span=frustum_axial_span(projection@(mirror_view(view,0.) if mirror is None
+                                                      else mirror_view(view,0.)@mirror),transverse)
         span=(min(main_span[0],reflected_span[0]),max(main_span[1],reflected_span[1]))
-        draw = dict(view=tuple(ribbon_view.flatten(order='F')), material=recipe.material, orthographic=orthographic,
+        draw = dict(view=tuple(ribbon_view.flatten(order='F')), material=recipe.material,
                     sweep_axis=(1.,0.,0.), floor=FLOOR_CONTACT,
                     age_fade=(now, 0., (capacity - 1)/flow.knot_hz, 0.),continuation=(*span,2048),
                     mist=environment.mist, mist_frame=(scroll[0, 3], 0., 0.),
-                    grade=ribbon_grade(*colour_grade(recipe, react)[:3]))
+                    grade=ribbon_grade(*self._history_grade(colour_grade(recipe, react)[:3])))
         with unclipped_prepasses():
             # First inside the packet scope: the reduction reads the packet bound by it (the same knots every pass
             # draws), and the floor, the reflection and the ribbons then read one yielding surface.
             if giving:
                 self.floor_give.update(packet, translation=scroll[:3, 3], floor=recipe.floor, contact=FLOOR_CONTACT,
-                                       camber=recipe.material.cross_curve)
+                                       camber=recipe.material.cross_curve, side=side)
             self._floor_give = (self.floor_give.texture, self.floor_give.uniforms) if giving else None
-            draw['floor_give'] = self._floor_give
+            draw['floor_give'] = self._floor_give if not giving or mirror is None else (*self._floor_give, side)
             fogged = not flat and recipe.fog is not None
             if fogged:
                 self._field_grade=colour_grade(recipe,react)
                 self.field.update(packet,translation=scroll[:3,3],span=recipe.fog.field_span,
-                                  grade=colour_grade(recipe,react))
+                                  grade=colour_grade(recipe,react),side=side)
                 self._update_fog(self.fog,view,camera_lens,size,recipe.fog.cell,recipe.fog.slices)
                 self._update_fog(self.reflected_fog,mirror_view(view,0.),camera_lens,size,
                                  recipe.fog.reflection_cell,recipe.fog.reflection_slices)
             if not flat:
                 with self._fog_bound(self.reflected_fog if fogged else None) as fog:
-                    self._reflect(packet, projection, view, scroll, {**draw, 'mist': {**draw['mist'], **fog}})
+                    self._reflect(packet, projection, view, scroll,
+                                  {**draw, 'mist': self._history_mist({**draw['mist'], **fog})})
         with self._fog_bound(self.fog if fogged else None) as fog:
-            draw = {**draw, 'mist': {**draw['mist'], **fog}}
-            self._draw_scene(flat, packet, draw, mvp, eye, view, orthographic, ribbon_mvp, card, now, fogged)
+            draw = {**draw, 'mist': self._history_mist({**draw['mist'], **fog})}
+            self._draw_scene(flat, packet, draw, mvp, eye, view, ribbon_mvp, card, now, fogged)
 
 
+
+    def _history_mist(self, mist):
+        """Mist uniforms for history-bound draws: their world positions are on the history axis, so the volume's
+        world -> view transform takes the Travel Direction mirror first."""
+        if self._history_mirror is None or 'uFogView' not in mist:
+            return mist
+        view = np.asarray(mist['uFogView'], float).reshape(4, 4, order='F') @ self._history_mirror
+        return {**mist, 'uFogView': tuple(view.flatten(order='F'))}
+
+    def _history_grade(self, grade):
+        """(nodes, world x range, share) of the colour grade as read at history-axis x: with the history mirrored the
+        range and its nodes are mirrored, so the grade stays where it is in the world."""
+        if self._history_mirror is None:
+            return grade
+        nodes, (x0, x1), share = grade
+        return tuple((1.-position, colour) for position, colour in reversed(nodes)), (-x1, -x0), share
+
+    def _history_mvp(self, matrix):
+        """A world clip matrix for history-axis positions (bursts' births)."""
+        return matrix if self._history_mirror is None else matrix @ self._history_mirror
 
     def _fog_bound(self, volume):
         """The volume bound for its passes, or a no-op scope with the analytic-mist uniforms."""
@@ -283,10 +302,9 @@ class WaveformScene:
         fog=self.recipe.fog
         grid=(min(128,-(-size[0]//cell)),min(72,-(-size[1]//cell)),slices)
         program=self.fog_resources.compute_program('fog medium',fog_inject_source(MEDIUM_GLSL))
-        volume.update(program,view=view,lens=camera_lens,
-                      depth_range=self._fog_depth_range if camera_lens[2] else fog.depth_range,
+        volume.update(program,view=view,lens=camera_lens,depth_range=fog.depth_range,
                       grid=grid,medium=self._fog_uniforms,
-                      focus_depth=0. if camera_lens[2] else -float((view@np.array((*SPEC.pivot,1.)))[2]))
+                      focus_depth=-float((view@np.array((*SPEC.pivot,1.)))[2]))
 
     def _field_uniforms(self,program):
         fog=self.recipe.fog;first,last,samples=fog.field_span;step=(last-first)/(samples-1)
@@ -294,6 +312,7 @@ class WaveformScene:
         gl.glBindTextureUnit(14,self.field.texture)
         gl.glUniform1i(location('uBodyField'),14)
         gl.glUniform4f(location('uFieldOrigin'),*self._continuation_origin,float(self._continuation_count))
+        gl.glUniform1f(location('uFieldSide'),1. if self._history_mirror is None else -1.)
         grade=self._field_grade
         values=ribbon_grade(grade[0],grade[1],grade[3])
         gl.glUniform4f(location('uGrade'),*values['uGrade'])
@@ -323,7 +342,7 @@ class WaveformScene:
         gl.glUniform1i(location('uSkyReflection'),int(reflection))
         gl.glBindVertexArray(vao);gl.glDrawArrays(gl.GL_TRIANGLES,0,3)
 
-    def _draw_scene(self, flat, packet, draw, mvp, eye, view, orthographic, ribbon_mvp, card, now, fogged):
+    def _draw_scene(self, flat, packet, draw, mvp, eye, view, ribbon_mvp, card, now, fogged):
         recipe, (width, height) = self.recipe, self.size
         environment = recipe.environment
         with self.scene.scope(card, 4, self.resources, overlay=self._overlay, bloom=0. if flat else recipe.bloom,
@@ -340,7 +359,7 @@ class WaveformScene:
                     gl.glDisable(gl.GL_DEPTH_TEST);gl.glDepthMask(gl.GL_FALSE)
                     self._sky(self.fog)
                     gl.glEnable(gl.GL_DEPTH_TEST);gl.glDepthMask(gl.GL_TRUE)
-                self._floor(mvp, eye, view, orthographic, (width, height), flat=flat)
+                self._floor(mvp, eye, view, (width, height), flat=flat)
                 if flat:
                     self._flat_ribbons(packet, ribbon_mvp)
             if not flat and 'actors' not in self.preview_hidden:
@@ -364,7 +383,8 @@ class WaveformScene:
                                           strand_births=self._strand_payload,strand_origin=self._strand_origin,
                                           continuation=draw['continuation'],floor_give=draw['floor_give'])
                     if recipe.sparks is not None and self._burst_payload:
-                        self.bursts.draw(self._burst_payload,mvp=mvp,now=now-self._burst_origin,
+                        self.bursts.draw(self._burst_payload,now=now-self._burst_origin,
+                                         mvp=tuple(self._history_mvp(np.asarray(mvp,float).reshape(4,4,order='F')).flatten(order='F')),
                                          viewport=(width,height),mist=draw['mist'],grade=draw['grade'])
                     gl.glDepthMask(gl.GL_TRUE)
                     gl.glDisablei(gl.GL_BLEND, 0)
@@ -386,7 +406,7 @@ class WaveformScene:
                 self._sky(self.reflected_fog,reflection=True)
             if 'reflected_actors' in self.preview_hidden:
                 return                    # Studio preview only: the mirrored mist without its emitters
-            reflected_view = mirrored @ scroll
+            reflected_view = (mirrored if self._history_mirror is None else mirrored @ self._history_mirror) @ scroll
             reflected_mvp = tuple((projection @ reflected_view).flatten(order='F'))
             self.ribbons.draw(packet, reflected_mvp, shading='light', **{**draw, 'view': tuple(reflected_view.flatten(order='F'))})
             if self.recipe.sparks is not None and self._burst_payload is None:
@@ -401,7 +421,7 @@ class WaveformScene:
                                   floor=draw['floor'],strand_births=self._strand_payload,strand_origin=self._strand_origin,
                                   continuation=draw['continuation'],floor_give=draw['floor_give'])
             if self.recipe.sparks is not None and self._burst_payload:
-                self.bursts.draw(self._burst_payload,mvp=tuple((projection @ mirrored).flatten(order='F')),
+                self.bursts.draw(self._burst_payload,mvp=tuple(self._history_mvp(projection @ mirrored).flatten(order='F')),
                     now=draw['age_fade'][0]-self._burst_origin,
                     viewport=self.reflection.size,mist=draw['mist'],grade=draw['grade'])
         finally:
@@ -409,7 +429,7 @@ class WaveformScene:
             self.reflection.end()
 
 
-    def _floor(self, mvp, eye, view, orthographic, size, *, flat=False, mist_off=False):
+    def _floor(self, mvp, eye, view, size, *, flat=False, mist_off=False):
         recipe = self.recipe
         floor, environment = recipe.floor, recipe.environment
         if 'albedo' not in self.textures:
@@ -418,7 +438,7 @@ class WaveformScene:
         program = self.resources.program('floor', FLOOR_VERTEX, FLOOR_FRAGMENT)
         names = ('uMvp', 'uFloorInverseMvp', 'uFlat', 'uAlbedo', 'uRoughness', 'uSlope', 'uFogLit', 'uReflection', 'uReflectionLook',
                  'uViewport', 'uBackdrop', 'uAmbient', 'uFloor', 'uFloorTone', 'uRipple', 'uEye',
-                 'uForward', 'uOrthographic', 'uMist', 'uMistShape', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange',
+                 'uForward', 'uMist', 'uMistShape', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange',
                  'uStreak', 'uHot', 'uBodyField', 'uBodySpan', 'uBodyShape', 'uPool', 'uColumn', 'uSpecMode',
                  'uSpecular', 'uFloorTint', 'uMaterial', 'uMaterialShape', 'uReflectionHue', 'uBound',
                  'uFloorGive', 'uFloorGiveField', 'uFloorGiveLook')
@@ -459,7 +479,6 @@ class WaveformScene:
         gl.glUniform3f(u['uRipple'], *floor.ripple)
         gl.glUniform3f(u['uEye'], *eye)
         gl.glUniform3f(u['uForward'], *(-view[2, :3]))
-        gl.glUniform1i(u['uOrthographic'], int(orthographic))
         gl.glUniform4f(u['uMist'], *environment.mist['uMist'])
         gl.glUniform4f(u['uMistShape'], *((0., 0., 0., 0.) if mist_off else environment.mist['uMistShape']))
         gl.glUniform1i(u['uFogVolume'], FOG_OFF['uFogVolume'])

@@ -152,9 +152,13 @@ float floorSlope(float y) {  // d floorEased / dy
     return 1.0/(1.0+exp(-(y-uFloorContact.x-uFloorContact.y)/uFloorContact.z));
 }
 // With the floor's give the same map eases onto the yielding surface: the ribbon dips into the dent under it.
-uniform vec2 uFloorGiveFrame;  // packet-local -> world x, z
+uniform vec3 uFloorGiveFrame;  // packet-local -> world: x, z offsets; Travel Direction sign (-1 mirrors x; 0: +1)
+vec2 floorGiveWorld(vec3 p) {
+    vec2 xz=p.xz+uFloorGiveFrame.xy;
+    return vec2(uFloorGiveFrame.z<0.0?-xz.x:xz.x,xz.y);
+}
 float floorGiveSurface(vec3 p) {  // the yielding floor's height under a packet-local point, relative to the plane
-    return -floorGiveDepth(p.xz+uFloorGiveFrame);
+    return -floorGiveDepth(floorGiveWorld(p));
 }
 vec3 floorContact(vec3 p) {
     if(uFloorContact.z>0.0 && uFloorGive.y>0.0) {
@@ -178,8 +182,6 @@ uniform mat4 uMvp;
 uniform vec2 uViewport;     // pixels; with uRim.w (minimum on-screen width) zero, no widening
 uniform vec4 uRim;
 uniform vec3 uEye;
-uniform vec3 uForward;
-uniform int uOrthographic;
 out vec3 vWorld;
 out vec3 vNormal;
 out float vPhase;
@@ -254,7 +256,9 @@ void main() {
     if(uFloorContact.z>0.0 && uFloorGive.y>0.0) {
         // Eased onto the yielding surface h(x,z): y' = h + E(y-h), so dy'/da = E'(y-h)(dy/da-dh/da)+dh/da.
         float h=floorGiveSurface(unsquashed);
-        float dh=-dot(floorGiveGradient(unsquashed.xz+uFloorGiveFrame),acrossSlope.xz);
+        vec2 slope=floorGiveGradient(floorGiveWorld(unsquashed));
+        if(uFloorGiveFrame.z<0.0) slope.x=-slope.x;  // d world x / d local x
+        float dh=-dot(slope,acrossSlope.xz);
         float s=floorSlope(unsquashed.y-h);
         acrossSlope.y=s*(acrossSlope.y-dh)+dh;
     } else if(uFloorContact.z>0.0) acrossSlope.y*=floorSlope(unsquashed.y);
@@ -282,7 +286,7 @@ void main() {
         vec2 along=(cb.xy/cb.w-ca.xy/ca.w)*half_;
         if(drawn<minimum && dot(along,along)>1e-8) {
             vec3 middle=(lo+hi)*0.5;
-            vec3 view=uOrthographic==1?normalize(uForward):normalize(middle-uEye);
+            vec3 view=normalize(middle-uEye);
             // Orient the widened edges by the sheet's facing, sign(N.V), computed in world space: it flips once
             // where the sheet turns over. The sign of the projected width is numerical noise along a long
             // near-edge-on stretch, and each flip drew a bow-tie (the fold broke into a gap). In screen space
@@ -666,9 +670,7 @@ flat in vec4 vColour;
 flat in vec4 vColourB;
 in vec4 vTint;
 uniform vec4 uViewZ;        // local -> view-space z (row 2 of the rebased view matrix)
-uniform vec3 uEye;          // local eye (Perspective)
-uniform vec3 uForward;      // view direction (Orthographic; directions are unchanged by rebasing)
-uniform int uOrthographic;
+uniform vec3 uEye;          // local eye
 uniform vec4 uRim;          // half-width (across units), light, path-length cap, minimum on-screen width (px)
 uniform vec4 uStrands;      // count across the width, half-width (strand spacing units), light, warp
 uniform vec4 uBody;         // alpha, tint, strand intensity variation, warp frequency (per phase unit)
@@ -714,7 +716,7 @@ float viewDepth() { return -dot(uViewZ,vec4(vWorld,1.0)); }
 // A fixed "grazing" boost instead lit the whole near-edge-on stretch as one flat neon band.
 float pathLength() {
     vec3 n=normalize(vNormal);
-    vec3 view=uOrthographic==1?normalize(uForward):normalize(vWorld-uEye);
+    vec3 view=normalize(vWorld-uEye);
     float path=min(1.0/max(abs(dot(n,view)),1e-4),max(uRim.z,1.0));
     return mix(path,vFaceScale,clamp(vExpanded,0.0,1.0));
 }

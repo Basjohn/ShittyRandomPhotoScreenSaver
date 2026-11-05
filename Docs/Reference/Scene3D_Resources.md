@@ -19,12 +19,10 @@ globalize landscape angles, wrap bounded modes, give future modes copied camera 
 behavior. Live gesture pose persistence stays with the existing view-pose/presentation owner; a mode's authored initial
 pose retains its declared Settings/preset keys.
 
-New 3D modes should start with Orthographic as their default and offer Perspective optionally (operator decision,
-28 October). Shared `orthographic_matrix` and `rendering/gl_programs/framed_camera.py` provide parallel projection
-and explicit per-pixel ray origins/directions. Design geometry, lighting, optical lookups and footprints for that
-contract from the start; copying a perspective-built effect and replacing only its matrix is insufficient.
-Existing modes retain their admitted defaults; EB's Orthographic authoring option is disabled and its appearance
-parity is deferred beyond the entire backlog (`Future_Work.md`, final section).
+Perspective is the only camera projection for every 3D mode. The 28 October "Orthographic default" decision is
+superseded: Orthographic was removed from the whole project on 5 Nov 2026 (operator), including `orthographic_matrix`,
+the parallel-ray branch of `rendering/gl_programs/framed_camera.py` and every per-mode Projection control. That GLSL
+supplies the explicit Perspective per-pixel ray origins/directions and footprints.
 
 Before a consumer with overlapping translucent geometry, prove these **separate, lazy shared primitives**:
 

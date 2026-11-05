@@ -39,7 +39,7 @@ def replay_bubbles(clip, *, settings=None, snapshots_at=()):
                 "big": bubble.is_big, "promoted": bubble.promoted,
                 "popping": bubble.popping, "exiting": bubble.exiting,
                 "physics": tuple(getattr(bubble, name) for name in physics_fields),
-                "authority_height": simulation._viewport_profile.height,
+                "authority_height": simulation._world.height,
             })
         observations.append(samples)
         return payload

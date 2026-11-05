@@ -8,7 +8,7 @@ from rendering.gl_error_policy import disable_per_call_gl_error_checking
 disable_per_call_gl_error_checking()
 from OpenGL import GL as gl
 from core.ribbon_ring import RibbonRing
-from core.settings.framed_camera import orthographic_matrix
+from tests.test_ribbon_gpu import parallel_mvp
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.ribbon import RibbonMaterial, RibbonPrimitive
 from rendering.quick.scene3d.target import SceneTarget
@@ -17,7 +17,7 @@ from tools.labs.render_target import OffscreenRenderTarget
 pytestmark = pytest.mark.qt
 W, H = 200, 120
 VIEW = tuple(np.identity(4).flatten(order='F'))  # eye at the origin looking down -z
-MVP = orthographic_matrix((2.5, 1.5), .1, 100)
+MVP = parallel_mvp((2.5, 1.5), .1, 100)
 
 
 def strip(y, z, colour, *, width=.3, emission=1.):
@@ -257,8 +257,6 @@ void main() {
     gl.glUseProgram(program)
     for name,value in material.uniforms().items():
         {2:gl.glUniform2f,3:gl.glUniform3f,4:gl.glUniform4f}[len(value)](gl.glGetUniformLocation(program,name),*value)
-    gl.glUniform1i(gl.glGetUniformLocation(program,'uOrthographic'),1)
-    gl.glUniform3f(gl.glGetUniformLocation(program,'uForward'),0.,0.,-1.)
     gl.glDisable(gl.GL_DEPTH_TEST)
     gl.glDisable(gl.GL_BLEND)
     gl.glBindVertexArray(scene.target.vao)

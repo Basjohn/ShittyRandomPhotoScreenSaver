@@ -13,9 +13,10 @@ struct Knot {vec4 p;vec4 q;vec4 tangent;vec4 side;vec4 tint;};
 struct Path {vec4 meta;vec4 extra;vec4 colourA;vec4 colourB;Knot knots[MAX_KNOTS];};
 layout(std430,binding=0) readonly buffer Paths {Path paths[];};
 uniform vec4 uFieldOrigin; // packet origin+scroll, ribbon count
+uniform float uFieldSide;   // Travel Direction: -1 maps world x to the history axis mirrored (0/unset: +1)
 '''+CONTINUATION_GLSL+RIBBON_GRADE_GLSL+'''
 void packetField(float x,int owner,out vec4 shape,out vec4 light) {
-    float local=x-uFieldOrigin.x;
+    float local=(uFieldSide<0.0?-x:x)-uFieldOrigin.x;
         shape=vec4(0);light=vec4(0);
         if(owner<int(uFieldOrigin.w) && min(paths[owner].colourA.a,paths[owner].colourB.a)>0.0) {
             int last=int(paths[owner].meta.x)-1;
@@ -141,9 +142,9 @@ void fogMedium(vec3 world,out vec3 radiance,out float extinction,out float stead
     vec3 moving=world*uAtmosphereMotion.w+uAtmosphereMotion.x*uAtmosphereMotion.y*vec3(0.07,-0.11,0.03);
     float variation=mix(1.0,0.6+0.8*atmosphereNoise(moving),uAtmosphereMotion.z);
     float clearance=smoothstep(uBodyShape.w,uBodyShape.w+uAtmosphere.z,body.a);
-    // One continuous medium. Tiny high-altitude density avoids an opaque long signed-Ortho prefix.
+    // One continuous medium with a tiny high-altitude density.
     // Distance thickening belongs to this same medium, behind the world waveform rather than the viewport.
-    // Without it parallel rays through the same ground-height profile expose textured far ground across the sky.
+    // Without it grazing rays through the same ground-height profile expose textured far ground across the sky.
     float behind=max(-world.z-6.0,0.0);
     float distanceWeight=1.0+min(pow(behind/12.0,2.0),64.0);
     float foreground=mix(1.0,0.15,smoothstep(4.0,35.0,world.z));

@@ -1638,12 +1638,8 @@ _EXTRUDED_BUBBLE = ModeSettings(
                tooltip='Choose which ordinary bubbles can participate in collision behavior: All, Big, Small, or Off.'),
         SceneCameraPosition("extruded_bubble_camera_position", "Camera Position:", bucket="camera",
                tooltip='Move the real camera eye inside the populated tank without changing FOV. The same water-clearance bounds apply here and during travel. WASD travels relative to view; Shift+WASD rotates; Q/E yaw; R resets. [NEEDS AUDIT] Confirm native drag feel and compositor presentation.'),
-        Choice("extruded_bubble_camera_projection", "Projection:", ("Perspective", "Orthographic"), bucket="camera",
-               unavailable_choices=(("Orthographic", "Unavailable for Extruded Bubble: its perspective-built lighting and optical appearance need a separate parity pass. Deferred until after the current future-work backlog."),),
-               tooltip='Perspective keeps the existing lens and depth scaling. Orthographic uses parallel viewing rays and equal magnification at every depth; Scene Scale adjusts its magnification.'),
         Slider("extruded_bubble_camera_fov", "Camera Field of View:", 35.0, 62.0,
                scale=1, integer=True, suffix="°", decimals=0, bucket="camera",
-               when=("extruded_bubble_camera_projection", "Perspective"),
                tooltip='Change the vertical viewing angle independently of camera travel and zoom/dolly. Narrower angles usually reduce peripheral perspective stretch.'),
         Toggle("extruded_bubble_auto_rotate", "", "Auto Rotate", bucket="camera",
                tooltip='Allow the camera to rotate by itself after the configured period without manual camera input.'),
@@ -1789,6 +1785,10 @@ def _waveform_ribbon() -> ModeSettings:
          'chance and glow there. Never adds strands of its own. Needs Free Strands on.')):
         entries.append(Slider(prefix+key,label+':',low,high,bucket='pulse',logical=True,tooltip=tip,
                               suffix=' s' if key=='pulse_fade' else ''))
+    entries.append(Choice(prefix+'travel_direction','Travel Direction:',('Right To Left','Left To Right'),
+        bucket='flow',logical=True,tooltip='Which way the waveform history travels across the view: new history '
+        'enters on one side and flows to the other. Pulse Direction, held swells, sparks, strands and the floor all '
+        'follow it. Changing it fades the ribbons out and back in.'))
     entries.extend((Toggle(prefix+'rotation_enabled','','Axial Roll',bucket='flow',logical=True),
                     Range(prefix+'twist_speed','Twist Rate:',0.,5.,bucket='flow',logical=True,
                           tooltip='Quiet → peak local rolling twist rate in radians per second.')))
@@ -1858,9 +1858,8 @@ def _waveform_ribbon() -> ModeSettings:
                     Slider(prefix+'mist_gradient_share','Mist Gradient:',0.,1.,bucket='colour'),
                     Choice(prefix+'quality','Quality:',('Low','Medium','High'),bucket='lens'),
                     SceneCameraPosition(prefix+'camera_position','Camera Position:',bucket='camera'),
-                    Choice(prefix+'camera_projection','Projection:',('Orthographic','Perspective'),bucket='camera'),
                     Slider(prefix+'camera_fov','Field of View:',*FOV_RANGE,bucket='camera',scale=1,integer=True,
-                           suffix='°',when=(prefix+'camera_projection','Perspective')),
+                           suffix='°'),
                     Toggle(prefix+'auto_rotate','','Auto Orbit',bucket='camera'),
                     Toggle(prefix+'dynamic_zoom','','Dynamic Zoom',bucket='camera',
                            tooltip='Zoom out up to 20% in heavy sustained passages and back in slowly when soft or idle; paused while you move the camera.'),

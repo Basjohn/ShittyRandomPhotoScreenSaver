@@ -61,6 +61,10 @@ _RETIRED_VISUALIZER_KEYS = frozenset({
     # Spectrum fill/border link state: serialized but never read by any UI or
     # renderer; Fill and Border stay independent controls (2026-10-24, SC3).
     "spectrum_link_fill_border",
+    # Orthographic camera projection retired 5 Nov 2026 (operator): Perspective is the only framed
+    # projection, so the per-mode choice is gone and a saved Orthographic resolves to Perspective.
+    "waveform_ribbon_camera_projection",
+    "extruded_bubble_camera_projection",
 })
 _RETIRED_VISUALIZER_PREFIXES = ("blob_", "sine_", "sinewave_")
 

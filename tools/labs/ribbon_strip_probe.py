@@ -25,7 +25,7 @@ from core.ribbon_geometry import PathSample
 from core.ribbon_geometry import MAX_PATH_SAMPLES
 from core.ribbon_packet import MAX_RIBBONS, pack_ribbons
 from core.ribbon_ring import RibbonRing
-from core.settings.framed_camera import orthographic_matrix, perspective_matrix
+from core.settings.framed_camera import perspective_matrix
 from rendering.quick.scene3d.ribbon import RibbonPrimitive
 from tools.labs.render_target import OffscreenRenderTarget
 
@@ -122,8 +122,8 @@ def run(output, frames):
                 packet = fixture(count, knots)
                 times.append((time.perf_counter()-start)*1000)
             builds[name] = dict(median=float(np.median(times)), p90=float(np.percentile(times, 90)))
-            for projection in ('orthographic', 'perspective'):
-                mvp = orthographic_matrix((5, 3), .1, 100) if projection == 'orthographic' else perspective_matrix((.5, .3), .1, 100)
+            for projection in ('perspective',):
+                mvp = perspective_matrix((.5, .3), .1, 100)
                 for _ in range(8):
                     target.bind()
                     primitive.draw(packet, mvp)
@@ -146,8 +146,8 @@ def run(output, frames):
                     gpu_draw_ms=dict(median=float(np.median(gpu)), p90=float(np.percentile(gpu, 90))),
                     cpu_submit_ms=dict(median=float(np.median(cpu)), p90=float(np.percentile(cpu, 90))))
         incremental = {}
-        for projection in ('orthographic', 'perspective'):
-            mvp = orthographic_matrix((5, 3), .1, 100) if projection == 'orthographic' else perspective_matrix((.5, .3), .1, 100)
+        for projection in ('perspective',):
+            mvp = perspective_matrix((.5, .3), .1, 100)
             incremental[projection], pixels = ring_costs(primitive, target, query, mvp, frames)
             if not pixels[:, :, 3].any():
                 raise RuntimeError('Incremental ring produced no coverage')

@@ -24,23 +24,21 @@ def capture(output):
     card = Image.new('RGB', (960, 640), '#101722')
     draw = ImageDraw.Draw(card)
     traces = {}
-    for index, (mode, projection, twisting) in enumerate((
-        ('oriented', 'orthographic', False), ('oriented', 'orthographic', True),
-        ('camera_facing', 'orthographic', False), ('camera_facing', 'perspective', False))):
+    for index, (mode, twisting) in enumerate((('oriented', False), ('oriented', True), ('camera_facing', False))):
         samples, tangents = [], []
         for i in range(81):
             q = i*3/80
             samples.append(PathSample(q, (q-1.5, math.sin(q), math.cos(q)-10), .25, q*3 if twisting else 0))
             tangents.append((1., math.cos(q), -math.sin(q)))
-        stations = strip_path(samples, tangents, mode=mode, projection=projection, eye=(0, 0, 0))
-        fixture = projection_fixture(480, 320, projection, half_height=2.)
+        stations = strip_path(samples, tangents, mode=mode, eye=(0, 0, 0))
+        fixture = projection_fixture(480, 320, half_height=2.)
         m = fixture['matrix']
         ox, oy = (index % 2)*480, (index // 2)*320
         def pixel(p):
             w = m[11]*p[2]+m[15]
             return (ox+(1+(m[0]*p[0]+m[12])/w)*240,
                     oy+(1-(m[5]*p[1]+m[13])/w)*160)
-        label = f'{mode} {projection} twist={twisting}'
+        label = f'{mode} perspective twist={twisting}'
         draw.text((ox+12, oy+12), label, fill='white')
         draw.line([pixel(s.left) for s in stations], fill='#56ced9', width=2)
         draw.line([pixel(s.right) for s in stations], fill='#dc78e1', width=2)
@@ -52,7 +50,8 @@ def capture(output):
     anchor = width_frame((1, 0, 0))
     for name, tangent, options in (
         ('cusp', (-1, 0, 0), {}),
-        ('roll_ambiguity', (1, 0, 0), dict(mode='camera_facing', view_direction=(math.sqrt(1-.04**2), .04, 1e-10)))):
+        ('roll_ambiguity', (1, 0, 0), dict(mode='camera_facing', position=(math.sqrt(1-.04**2), .04, 1e-10),
+                                           eye=(0, 0, 0)))):
         try:
             width_frame(tangent, previous=anchor, **options)
         except FrameDiscontinuity as error:

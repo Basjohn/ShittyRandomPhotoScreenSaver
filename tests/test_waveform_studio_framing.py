@@ -15,6 +15,8 @@ from core.settings.visualizer_presets import get_preset_names, resolve_visualize
 from ui.studio.adapter import fill_extent
 from ui.studio.waveform_adapter import MODE, WaveformStudioEvaluator, studio_presentation
 
+PREFIX_KEY = MODE + "_"
+
 # A wide CUSTOM card on a 4K display (the operator's TV card shape) and the 420x280 baseline card.
 CARDS = {"tv_wide": ((3874.7, 1449.5), (3840.0, 2160.0)), "baseline": ((420.0, 280.0), (1920.0, 1080.0))}
 STYLE = (("border_width", 4.0), ("content_inset", 0.0))
@@ -44,18 +46,13 @@ def studio_frame_presentation(slot, extent):
 def visible_world(frame, presentation):
     """(horizontal tangent, vertical tangent, world-x span, world-y span) at the camera pivot."""
     from core.settings.framed_camera import spec_for_mode
-    from core.settings.waveform_ribbon_camera import scene_raster_support
     from rendering.quick.visualizer.implementations.waveform_ribbon import physical_view
     from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
     content = presentation.content_rect
     width, height = float(content[2]), float(content[3])
     aperture = framed_aperture_scale(presentation, content=True)
     parameters = frame.parameters
-    support = (scene_raster_support(frame.packet, frame.scene, frame.travel, now=frame.time,
-                                    viewport=(width, height), burst_payload=frame.particles,
-                                    burst_origin=frame.particle_origin, strand_payload=frame.strands)
-               if parameters[f"{MODE}_camera_projection"] == "Orthographic" else None)
-    view, projection, _eye, lens = physical_view(parameters, width / height, aperture, geometry_bounds=support,
+    view, projection, _eye, lens = physical_view(parameters, width / height, aperture,
                                                  zoom=float(getattr(frame, "zoom", 1.0)))
     clip = projection @ view
     pivot = np.asarray(spec_for_mode(MODE).pivot, dtype=float)
@@ -336,3 +333,61 @@ def test_curve_shape_thumbnails_pick_the_response_curve(card_studio):
     _click(surface, tiles[presets.index(shape)])
     assert bridge.values[cell["power"]] == pytest.approx(shape["power"])
     assert bridge.canUndo
+
+
+def _row_items(root):
+    return [item for item in _items(root, "inspectorRow") if item.isVisible()]
+
+
+def _visible_without_scrolling(item) -> bool:
+    """The row lies inside every clipping ancestor (its panel's scroll area, the panel, the window)."""
+    from PySide6.QtCore import QPointF
+    top = item.mapToScene(QPointF(0, 0))
+    bottom = item.mapToScene(QPointF(0, item.height()))
+    parent = item.parentItem()
+    while parent is not None:
+        if parent.clip():
+            a = parent.mapToScene(QPointF(0, 0))
+            b = parent.mapToScene(QPointF(0, parent.height()))
+            if top.y() < a.y() - 0.5 or bottom.y() > b.y() + 0.5:
+                return False
+        parent = parent.parentItem()
+    window = item.window()
+    return bottom.y() <= window.height() + 0.5
+
+
+def _row(root, property_id):
+    return next((item for item in _row_items(root) if (item.property("rowData") or {}).get("id") == property_id),
+                None)
+
+
+DIRECTIONS = (("reactivity", PREFIX_KEY + "pulse_direction"), ("composition", PREFIX_KEY + "travel_direction"))
+
+
+@pytest.mark.parametrize("workspace, key", DIRECTIONS)
+def test_direction_controls_are_compact_segmented_rows_visible_without_scrolling(card_studio, workspace, key):
+    controller, surface, _values = card_studio
+    schema = controller.session.schema
+    if key not in {p.id for p in schema.properties}:
+        pytest.skip(f"{key} is not in the Waveform registry yet")
+    prop = schema.find(key)
+    assert prop.instrument == "choice"                              # chips, like Reaction Mode
+    others = [p for p in schema.properties if p.group == prop.group and p.workspace == prop.workspace
+              and p.id not in (key, PREFIX_KEY + "reaction_mode")]
+    assert all(prop.priority < p.priority for p in others)          # heads its group (after Reaction Mode)
+    controller.bridge.setWorkspace(workspace)
+    surface.pump(4)
+    row = _row(surface.host.root, key)
+    assert row is not None and _visible_without_scrolling(row)
+    if key.endswith("pulse_direction"):                            # together with Reaction Mode
+        mode = _row(surface.host.root, PREFIX_KEY + "reaction_mode")
+        assert mode is not None and _visible_without_scrolling(mode)
+
+
+def test_the_visibility_check_detects_a_row_below_the_fold_negative_control(card_studio):
+    controller, surface, _values = card_studio
+    controller.bridge.setWorkspace("reactivity")
+    surface.pump(4)
+    rows = [r for r in _row_items(surface.host.root)
+            if (r.property("rowData") or {}).get("id", "").startswith(PREFIX_KEY)]
+    assert rows and not all(_visible_without_scrolling(r) for r in rows)

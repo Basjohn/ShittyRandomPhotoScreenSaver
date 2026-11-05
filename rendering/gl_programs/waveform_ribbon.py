@@ -9,29 +9,26 @@ layout(location=0) in vec3 aPosition;
 out vec2 vFloorNdc;
 void main() { vFloorNdc=aPosition.xz*2.0-1.0; gl_Position=vec4(vFloorNdc,0.0,1.0); }
 """
-# The ground is an opaque infinite world plane, not a finite actor. Orthographic
-# pixel lines can meet it before the arbitrary eye-reference plane or beyond the
-# actor far clip. Only this primitive clamps its projected depth; actors retain
-# their camera-owned raster interval; Perspective remains positive.
+# The ground is an opaque infinite world plane, not a finite actor: each Perspective
+# pixel ray from the eye meets it, possibly beyond the actor far clip. Only this
+# primitive clamps its projected depth; actors retain their camera-owned raster interval.
 # With the floor's give on (opt-in) the ray continues past the plane to the yielding surface: it meets the plane first
 # and can reach the deepest possible dent (uFloorGive.z) no farther than that depth below it, so its first crossing
 # of the surface lies on that interval. A fixed march finds the first step below the surface and bisection refines it.
-# Coverage is unchanged (the same rays hit), and the depth is that of the dented point. Perspective only.
+# Coverage is unchanged (the same rays hit), and the depth is that of the dented point.
 FLOOR_WORLD_GLSL = FLOOR_GIVE_GLSL + """
 in vec2 vFloorNdc;
 uniform mat4 uMvp;
 uniform mat4 uFloorInverseMvp;
 uniform vec3 uEye;
-uniform int uOrthographic;
 bool floorWorldHit(out vec3 world, out float depth) {
-    vec4 a=uFloorInverseMvp*vec4(vFloorNdc,-1.0,1.0);
     vec4 b=uFloorInverseMvp*vec4(vFloorNdc,1.0,1.0);
-    vec3 nearPoint=a.xyz/a.w,farPoint=b.xyz/b.w;
-    vec3 origin=uOrthographic==1?nearPoint:uEye;
+    vec3 farPoint=b.xyz/b.w;
+    vec3 origin=uEye;
     vec3 direction=normalize(farPoint-origin);
     if(direction.y>=0.0)return false;
     float distance_=-origin.y/direction.y;
-    if(uOrthographic!=1 && distance_<=0.0)return false;
+    if(distance_<=0.0)return false;
     world=origin+direction*distance_;
     world.y=0.0;
     if(uFloorGive.y>0.0) {
@@ -206,7 +203,7 @@ void main() {
     float streak=uStreak.x*uReflectionLook.x*projected;
     vec3 reflected=columnReflection(gl_FragCoord.xy/uViewport,offset,streak*roughness,
                                     exp2(mix(uReflectionLook.y,uReflectionLook.z,roughness)));
-    vec3 view=uOrthographic==1?normalize(uForward):normalize(vWorldPos-uEye);
+    vec3 view=normalize(vWorldPos-uEye);
     float cosine=clamp(abs(uFloorGive.y>0.0?dot(view,giveNormal):view.y),0.0,1.0);
     float fresnel=uFloor.w+(1.0-uFloor.w)*pow(1.0-cosine,5.0);
     // A rough wet floor shows its hot light, not a dim copy of everything: reflected light below uHot.x falls

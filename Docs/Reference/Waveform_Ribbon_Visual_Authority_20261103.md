@@ -1,5 +1,7 @@
 # Waveform Ribbon | 3 November visual authority, accepted direction and negative examples
 
+> **Orthographic removed 5 Nov 2026 (operator):** Perspective is the only camera projection in the whole project. Orthographic, its Projection control, raster-slab fit and parallel-ray paths are deleted; any Orthographic passage below is historical and superseded.
+
 **Visual decision router, not a new preset specification.** This short document prevents later agents from mistaking the obsolete 2 November failures for the current acceptance state or spending days unsuccessfully reworking the floor. Detailed live tasks, audio evidence and sign-off belong in `Waveform_Ribbon_Lab_Plan.md`. This is a record of the operator's latest aesthetic priorities **as of 3 November 2026**, subject to later explicit decisions and authorized major redesign.
 
 ## 1. Reference priority (highest first)

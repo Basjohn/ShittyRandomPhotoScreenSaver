@@ -17,7 +17,8 @@ from core.settings.bubble_gradient_semantics import (
 )
 from rendering.quick.render.gl_resources import compile_program
 from widgets.spotify_visualizer.bubble_viewport_profile import (
-    resolve_bubble_viewport_profile,
+    BUBBLE_RENDER_CAPACITY,
+    bubble_stroke_extra_half_px,
 )
 from widgets.spotify_visualizer.render_state import (
     BubbleFrame,
@@ -32,7 +33,7 @@ from ..render_contract import (
 )
 
 
-_MAX_BUBBLES = 110
+_MAX_BUBBLES = BUBBLE_RENDER_CAPACITY
 _BUBBLE_POS_SIZE = _MAX_BUBBLES * 4
 _BUBBLE_EXTRA_SIZE = _MAX_BUBBLES * 4
 _BUBBLE_TRAIL_SIZE = _MAX_BUBBLES * 3 * 3
@@ -71,7 +72,7 @@ class QuickBubbleLayout:
     content_rect: tuple[float, float, float, float]
     aspect_ratio: float
     visual_scale: float
-    trail_axis_scale: tuple[float, float]
+    # Content-height fractions of the canonical card's wake ring geometry (1 on the canonical card).
     trail_radial_scale: float
     viewport_stroke_extra_half_px: float
     specular_reference_aspect: float
@@ -97,67 +98,56 @@ def compute_quick_bubble_layout(
     visual_scale: float,
     viewport_extent: Sequence[object],
     baseline_viewport_size: Sequence[object],
+    world_scale: float = 1.0,
 ) -> QuickBubbleLayout:
+    """Project Bubble's canonical-card units onto this card.
+
+    The simulation works in canonical-card units on every card shape and
+    publishes radius in them (``BubbleWorld``). One radius unit therefore covers
+    the canonical card's response height at the current uniform scale and inset,
+    times the world's capacity zoom ``world_scale`` - never the current card's
+    height or area. That keeps every shape's bubbles, wakes and outlines the
+    canonical card's size at equal uniform scale.
+    """
     if len(local_content_rect) != 4:
         raise ValueError("Bubble content geometry is incomplete")
     content = tuple(float(value) for value in local_content_rect)
     scale = float(visual_scale)
+    zoom = float(world_scale)
     if len(viewport_extent) != 2 or len(baseline_viewport_size) != 2:
         raise ValueError("Bubble viewport geometry is incomplete")
     extent = tuple(float(value) for value in viewport_extent)
     baseline = tuple(float(value) for value in baseline_viewport_size)
     if min(content[2], content[3], scale, *extent, *baseline) <= 0.0:
         raise ValueError("Bubble content geometry must be positive")
-    # Bubble history remains renderer-normalized content geometry.  The wake is
-    # an authored presentation effect, however: allowing the same normalized
-    # history separation to expand with a CUSTOM axis made its three samples
-    # read as three extra bubbles at tall/wide extents.  Compress only the
-    # rendered sample offset back to baseline-pixel authority.
-    trail_axis_scale = (
-        min(1.0, baseline[0] / extent[0]),
-        min(1.0, baseline[1] / extent[1]),
-    )
-    # Ripple distance is aspect-corrected in units of content height.  Its
-    # radius/ring spacing therefore need the vertical baseline/current ratio
-    # as well; otherwise R4's compact source centres still emit enormous wake
-    # fields on a tall edge-resized viewport.  Uniform whole-card scale is
-    # intentionally independent and continues to scale the finished effect.
-    trail_radial_scale = min(1.0, baseline[1] / extent[1])
-
-    # The operator rejected the height-only projection: reshaping the same
-    # area into a wide card weakened every visible reaction, and a tall card
-    # amplified it. Project the entire authored waveform through an equal-area
-    # canonical rectangle, independent of how extent/scale encode that area.
-    # This is not the retired baseline/current cap: large views still grow and
-    # temporal attack/overshoot/settling remain fully intact.
-    response_height = math.sqrt(content[2] * content[3] / (baseline[0] / baseline[1]))
-    effect_scale = response_height / baseline[1]
-
-    # Resolve the same continuous geometry profile used by the simulation.  The
-    # result is physical half-stroke pixels, independent of effect scale, so
-    # extreme shapes firm up gradually without the old late accelerating ramp.
-    viewport_profile = resolve_bubble_viewport_profile(
-        extent,
-        baseline_viewport_size=baseline,
-    )
-    # Specular mutation and ellipse orientation were authored at canonical
-    # content aspect. Recover that content size at the current uniform scale
-    # and resolved inset, so an edge resize cannot stretch a bubble-local light.
-    # The shader uses a one-pixel height floor in its aspect metric as well.
+    if not math.isfinite(zoom) or zoom <= 0.0:
+        raise ValueError("Bubble world scale must be finite and positive")
+    # The canonical card's content at this uniform scale and inset. Specular
+    # mutation and ellipse orientation keep that card's aspect, so an edge
+    # resize cannot stretch a bubble-local light. The shader uses a one-pixel
+    # height floor in its aspect metric as well.
     excluded_width = max(0.0, extent[0] * scale - content[2])
     excluded_height = max(0.0, extent[1] * scale - content[3])
     reference_width = max(1e-6, baseline[0] * scale - excluded_width)
     reference_height = max(1.0, baseline[1] * scale - excluded_height)
+    # On a canonical axis the reference is the content itself, exactly.
+    canonical_width = content[2] if extent[0] == baseline[0] else reference_width
+    canonical_height = content[3] if extent[1] == baseline[1] else reference_height
+    # One radius unit: the canonical card's equal-area response height (the
+    # operator's 2026-09-05 response contract on that card), times the zoom.
+    response_height = math.sqrt(
+        canonical_width * canonical_height / (baseline[0] / baseline[1])
+    ) * zoom
     return QuickBubbleLayout(
         content_rect=content,  # type: ignore[arg-type]
         aspect_ratio=content[2] / content[3],
         visual_scale=scale,
-        trail_axis_scale=trail_axis_scale,
-        trail_radial_scale=trail_radial_scale,
-        viewport_stroke_extra_half_px=viewport_profile.stroke_extra_half_px,
+        # Wake rings are authored in canonical content heights.
+        trail_radial_scale=zoom * canonical_height / content[3],
+        viewport_stroke_extra_half_px=bubble_stroke_extra_half_px(zoom),
         specular_reference_aspect=reference_width / reference_height,
         response_radius_scale=response_height / content[3],
-        effect_scale=effect_scale,
+        effect_scale=response_height / baseline[1],
     )
 
 
@@ -241,6 +231,7 @@ class QuickBubbleRenderer:
             presentation.uniform_visual_scale,
             presentation.logical_viewport_extent,
             presentation.baseline_viewport_size,
+            mode_state.world_scale,
         )
         if self._layout_cache_key != layout_key or self._layout_cache is None:
             self._layout_cache = compute_quick_bubble_layout(
@@ -248,6 +239,7 @@ class QuickBubbleRenderer:
                 visual_scale=presentation.uniform_visual_scale,
                 viewport_extent=presentation.logical_viewport_extent,
                 baseline_viewport_size=presentation.baseline_viewport_size,
+                world_scale=mode_state.world_scale,
             )
             self._layout_cache_key = layout_key
         layout = self._layout_cache
@@ -373,7 +365,6 @@ class QuickBubbleRenderer:
             tail_opacity = 0.0
         gl.glUniform1f(uniforms["u_trail_strength"], trail_strength)
         gl.glUniform1f(uniforms["u_tail_opacity"], tail_opacity)
-        gl.glUniform2f(uniforms["u_trail_axis_scale"], *layout.trail_axis_scale)
         gl.glUniform1f(uniforms["u_trail_radial_scale"], layout.trail_radial_scale)
         gl.glUniform1f(
             uniforms["u_viewport_stroke_extra_half_px"],
@@ -493,7 +484,6 @@ class QuickBubbleRenderer:
                 "u_bubbles_trail",
                 "u_trail_strength",
                 "u_tail_opacity",
-                "u_trail_axis_scale",
                 "u_trail_radial_scale",
                 "u_viewport_stroke_extra_half_px",
                 "u_specular_dir",

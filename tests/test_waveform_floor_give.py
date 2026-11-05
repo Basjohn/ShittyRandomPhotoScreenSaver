@@ -93,7 +93,7 @@ points[i]=vec4(floorContact(p),floorGiveSurface(p)); }'''
                 gl.glUniform3f(location('uFloorContact'), 0., .03, .15)
                 gl.glBindTextureUnit(13, texture); gl.glUniform1i(location('uFloorGiveField'), 13)
                 gl.glUniform4f(location('uFloorGive'), *(give if on else (0., 0., 1., 1.)))
-                gl.glUniform2f(location('uFloorGiveFrame'), 0., 0.)
+                gl.glUniform3f(location('uFloorGiveFrame'), 0., 0., 1.)
                 gl.glDispatchCompute(-(-len(points)//64), 1, 1)
                 result = _read(gl, buffer, points); gl.glDeleteBuffers(1, [buffer])
                 return result
@@ -140,7 +140,7 @@ hits[int(gl_FragCoord.y)*int(uTestWidth)+int(gl_FragCoord.x)]=vec4(world,depth);
             program = resources.program('ground', FLOOR_VERTEX, fragment)
             vao, count = resources.mesh('coverage', floor_vertices(), (3,))
             texture, give = synthetic_field(gl)
-        view, projection, eye, lens = physical_view(camera(camera_projection='Perspective', tilt=-1.), width/height)
+        view, projection, eye, lens = physical_view(camera(tilt=-1.), width/height)
         mvp = projection@view
 
         def draw(on):
@@ -153,7 +153,7 @@ hits[int(gl_FragCoord.y)*int(uTestWidth)+int(gl_FragCoord.x)]=vec4(world,depth);
                 location = lambda name: gl.glGetUniformLocation(program, name)
                 for name, matrix in (('uMvp', mvp), ('uFloorInverseMvp', np.linalg.inv(mvp))):
                     gl.glUniformMatrix4fv(location(name), 1, gl.GL_FALSE, np.asarray(matrix.flatten(order='F'), np.float32))
-                gl.glUniform3f(location('uEye'), *eye); gl.glUniform1i(location('uOrthographic'), 0)
+                gl.glUniform3f(location('uEye'), *eye)
                 gl.glUniform1f(location('uTestWidth'), width)
                 gl.glBindTextureUnit(13, texture); gl.glUniform1i(location('uFloorGiveField'), 13)
                 gl.glUniform4f(location('uFloorGive'), *(give if on else (0., 0., 1., 1.)))
@@ -238,16 +238,18 @@ def _stripped_sources(monkeypatch):
     """Every give branch removed from the production sources the scene compiles (constant false)."""
     import rendering.quick.scene3d.ribbon as ribbon_module
     import rendering.quick.scene3d.waveform as waveform_module
+    import rendering.quick.visualizer.implementations.waveform_ribbon as implementation_module
     branch = 'uFloorGive.y>0.0'
     replaced = 0
+    # The renderer's warm-up compiles the floor from its own import: patch that name too, or the reference reuses it.
     for module, names in ((ribbon_module, ('RIBBON_VERTEX', 'RIBBON_CONTINUOUS_VERTEX', 'RIBBON_SPARK_VERTEX',
                                            'RIBBON_STRAY_VERTEX', 'RIBBON_COHORT_STRAY_VERTEX')),
-                          (waveform_module, ('FLOOR_FRAGMENT',))):
+                          (waveform_module, ('FLOOR_FRAGMENT',)), (implementation_module, ('FLOOR_FRAGMENT',))):
         for name in names:
             source = getattr(module, name)
             replaced += source.count(branch)
             monkeypatch.setattr(module, name, source.replace(branch, 'false'))
-    assert replaced >= 10
+    assert replaced >= 12
 
 
 def test_floor_give_off_is_pixel_identical_to_the_rigid_floor(qt_app, monkeypatch):
