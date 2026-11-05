@@ -1,4 +1,5 @@
 """Real glyph-weight and exact dark round-trip checks, with fixture palettes."""
+import sys
 from dataclasses import replace
 
 import pytest
@@ -20,6 +21,15 @@ def test_runtime_font_projection_import_does_not_load_qtwidgets():
         cwd=root, capture_output=True, text=True, timeout=10,
     )
     assert result.returncode == 0, result.stderr
+
+
+def _effective_weight(font):
+    """The weight the font renders at. Windows DirectWrite reports the instanced variable
+    weight through QFontInfo; fontconfig reports the matched named face (400/600/700), so
+    elsewhere the requested ``wght`` axis is the effective weight. Ink checks prove it."""
+    if sys.platform != "win32" and font.isVariableAxisSet(QFont.Tag("wght")):
+        return round(font.variableAxisValue(QFont.Tag("wght")))
+    return QFontInfo(font).weight()
 
 
 def _palette(light):
@@ -50,7 +60,7 @@ def test_light_jost_has_real_intermediate_ink_without_changing_the_source_font(q
     assert source == before
     assert adjusted.pointSizeF() == source.pointSizeF()
     assert adjusted.family() == READABILITY_JOST_FAMILY
-    assert QFontInfo(adjusted).weight() == QFontInfo(source).weight()+50
+    assert _effective_weight(adjusted) == _effective_weight(source)+50
     assert _ink(adjusted)[0] > _ink(source)[0]
 
 
@@ -90,7 +100,7 @@ def test_settings_font_policy_is_idempotent_and_restores_dark_pixels(qt_app):
         root.setStyleSheet(settings_typography_qss(base_qss,_palette(True)))
         apply_settings_typography(root,_palette(True))
         first = QFont(label.font())
-        assert QFontInfo(first).weight() == 650
+        assert _effective_weight(first) == 650
         apply_settings_typography(root,_palette(True))
         assert label.font() == first
         root.setStyleSheet(settings_typography_qss(base_qss,_palette(False)))
@@ -116,7 +126,7 @@ def test_nested_inherited_font_weights_do_not_accumulate_and_restore_dark(qt_app
     try:
         root.setStyleSheet(settings_typography_qss(base_qss,_palette(True)))
         apply_settings_typography(root,_palette(True))
-        assert QFontInfo(label.font()).weight() == 450
+        assert _effective_weight(label.font()) == 450
         root.setStyleSheet(base_qss)
         apply_settings_typography(root,_palette(False))
         assert label.font() == original
@@ -152,7 +162,7 @@ def test_settings_shared_tooltip_font_is_reversible_and_does_not_accumulate(qt_a
     try:
         apply_settings_tooltip_typography(_palette(True))
         first = QFont(QToolTip.font())
-        assert QFontInfo(first).weight() > QFontInfo(original).weight()
+        assert _effective_weight(first) > _effective_weight(original)
         apply_settings_tooltip_typography(_palette(True))
         assert QToolTip.font() == first
         apply_settings_tooltip_typography(_palette(False))
@@ -185,7 +195,7 @@ def test_shared_quick_text_uses_one_generation_semantic_font_copy(qt_app, compon
         source = item.property(font_property)
         effective = item.property("font" if component_name == "ThemedText" else "effectiveFont")
         assert source.family() == "Jost"
-        assert QFontInfo(effective).weight() == QFontInfo(source).weight() + 50
+        assert _effective_weight(effective) == _effective_weight(source) + 50
         assert effective.pixelSize() == source.pixelSize()
         assert effective.italic() == source.italic()
     finally:
