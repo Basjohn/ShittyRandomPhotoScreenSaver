@@ -46,7 +46,7 @@ fi
 # Runtime libraries PySide6 (xcb + OpenGL), PortAudio (sounddevice) and D-Bus need.
 APT_RUNTIME=(libegl1 libgl1 libopengl0 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1
   libxcb-shape0 libxcb-xinerama0 libxcb-randr0 libxcb-render-util0 libxcb-image0 libxcb-xkb1
-  libfontconfig1 libdbus-1-3 libportaudio2 libglib2.0-0)
+  libfontconfig1 libdbus-1-3 libportaudio2 libglib2.0-0 pulseaudio-utils)
 APT_HEADLESS=(xvfb x11-xserver-utils mesa-utils libgl1-mesa-dri)
 APT_BUILD=(patchelf gcc ccache)
 
