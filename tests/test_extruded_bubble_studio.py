@@ -266,16 +266,16 @@ def test_live_gesture_republishes_the_instant_without_moving_time():
 
 
 def _native_clip():
-    from ui.studio.waveform_recorded_inputs import has_native_history
-    directory = Path(__file__).resolve().parents[1] / "logs" / "visualizer_recordings"
-    clips = sorted(directory.glob("*.jsonl"), key=lambda p: p.stat().st_size) if directory.is_dir() else []
-    return next((clip for clip in clips if has_native_history(clip)), None)
+    """The first shipped Studio clip (always present; the Studios' default recorded source)."""
+    from ui.studio.waveform_recorded_inputs import shipped_clips
+    clips = shipped_clips()
+    return Path(clips[0].description) if clips else None
 
 
 def test_recorded_clip_replay_matches_the_production_capture_frame_for_frame(qt_app):
     clip = _native_clip()
     if clip is None:
-        pytest.skip("No native-PCM visualizer recording in logs/visualizer_recordings")
+        pytest.skip("No shipped Studio clip (assets/production/studio_clips)")
     from ui.studio.adapter import RECORDED, StudioFixture
     from ui.studio.extruded_bubble_recorded_inputs import extract, to_inputs
     values = preset_values(0)

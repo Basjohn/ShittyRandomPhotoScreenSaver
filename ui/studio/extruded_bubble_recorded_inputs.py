@@ -47,7 +47,7 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
     from widgets.spotify_visualizer import logical_frame_capture
     from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
     from widgets.spotify_visualizer.extruded_bubble_frame_runtime import ExtrudedBubbleFrameRuntime
-    from widgets.spotify_visualizer.feature_frame import load_jsonl
+    from widgets.spotify_visualizer.compact_clip import load_feature_clip
     from widgets.spotify_visualizer.feature_replay import (
         PcmReanalysis, ReplayBeatEngine, configure_offline_controller, deterministic_clock,
     )
@@ -56,7 +56,7 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
 
     if QGuiApplication.instance() is None:
         raise RuntimeError("extract() needs an existing QGuiApplication (main() creates one)")
-    clip = load_jsonl(clip_path)
+    clip = load_feature_clip(clip_path)
     origin_us = clip.frames[0].timestamp_us
     frames = [f for f in clip.frames if seconds is None or (f.timestamp_us - origin_us) / 1e6 <= seconds]
     if any(f.capture_history is None for f in frames):
