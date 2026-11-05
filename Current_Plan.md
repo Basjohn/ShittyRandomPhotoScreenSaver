@@ -379,12 +379,6 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   `.artifacts/evidence/spectrum/studio_20261105/`); its Studio edits existing shape nodes but cannot add or remove one
   (Settings' shape editor still does), so its builder stays until that is decided. Each: full registry coverage test, production-parity preview test, theme,
   Settings Custom launcher replacing that builder body once the operator accepts it.
-- [ ] Studio default source overrides the user's fixture: the default recorded clip still analysing when the user picks
-  another fixture lands and selects itself (`StudioController._load_clip.finished`: `_auto_clip` None after a user
-  choice also matches "the user asked for this clip"). Track user-requested clip loads separately.
-- [ ] Settings percent sliders truncate on load: `load_spectrum_smoothing` and `load_shared_visualizer_appearance_settings`
-  set `int(value * 100)`, so a stored 0.29 / 0.57 / 0.58 reloads (and re-saves) as 0.28 / 0.56 / 0.57. A Studio commit
-  of such a value comes back one hundredth lower. Round instead, with a round-trip test.
 - [ ] Flaky render test: `tests/test_waveform_studio_editors.py::test_preview_layer_omission_changes_only_flagged_renders`
   failed once (`plain_a != plain_b`, two snapshot requests of one frame) in a 282-test Studio + build run, then
   passed alone twice and in the next full Studio gate (5 Nov). Identical requests should be byte-equal: find the
