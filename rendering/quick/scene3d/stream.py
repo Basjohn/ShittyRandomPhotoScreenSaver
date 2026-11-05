@@ -93,14 +93,18 @@ class StreamRing:
         return False
 
     @contextmanager
-    def bound(self, target: int, binding: int, data: bytes, *, reuse: bool = False) -> Iterator[_StreamLease | None]:
-        """Write ``data`` and bind it to ``binding`` of ``target`` for the scope; restore after."""
+    def bound(self, target: int, binding: int, data: bytes, *, reuse: bool = False,
+              restore: bool = True) -> Iterator[_StreamLease | None]:
+        """Write ``data`` and bind it to ``binding`` of ``target`` for the scope; restore after.
+
+        ``restore=False`` is for a caller that owns the binding point for its whole frame: nothing is read back (each
+        query is a round trip to the driver thread) and the point is left unbound, never pointing into the ring."""
         names = _BINDINGS[int(target)]
-        previous = (
+        previous = ((
             gl_query.get_indexed_int(names[0], binding),
             gl_query.get_indexed_int64(names[1], binding),
             gl_query.get_indexed_int64(names[2], binding),
-        )
+        ) if restore else (0, 0, 0))
         if self._depth == 0:
             self._begin_hold()
         self._depth += 1
