@@ -11,7 +11,6 @@ def render_samples(parameters, *, turned=False, size=(480,300)):
     from core.waveform_ribbon_dynamics import WaveformDynamics
     from widgets.spotify_visualizer.waveform_ribbon_parameters import CompiledWaveformSettings
     from rendering.quick.visualizer.implementations.waveform_ribbon import physical_view
-    from core.settings.waveform_ribbon_camera import scene_raster_support
     from rendering.quick.scene3d.waveform import WaveformScene
     from rendering.quick.offscreen_target import OffscreenRenderTarget
     from PySide6.QtGui import QOpenGLContext
@@ -33,10 +32,7 @@ def render_samples(parameters, *, turned=False, size=(480,300)):
                 snapshot=model.advance(1/90,bands=(drive,.8*drive,.7*drive),intensity=drive,
                                        presence=1.,hit=.9 if drive and index in (30,90,150) else 0.)
             recipe=config.scene(snapshot)
-            support=(scene_raster_support(snapshot.packet,recipe,snapshot.travel,now=snapshot.time,viewport=size,
-                burst_payload=snapshot.particles,burst_origin=snapshot.particle_origin,strand_payload=snapshot.strands)
-                if camera['waveform_ribbon_camera_projection']=='Orthographic' else None)
-            view,projection,eye,lens=physical_view(camera,width/height,geometry_bounds=support)
+            view,projection,eye,lens=physical_view(camera,width/height)
             if recipe.sparks is not None:
                 for _ in range(8):
                     if scene.bursts.prepare_step():break

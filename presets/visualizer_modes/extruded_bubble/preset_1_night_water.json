@@ -129,7 +129,6 @@
           0.0,
           -0.024923
         ],
-        "extruded_bubble_camera_projection": "Perspective",
         "extruded_bubble_camera_fov": 45,
         "extruded_bubble_auto_rotate": false,
         "extruded_bubble_auto_rotate_after": 20,

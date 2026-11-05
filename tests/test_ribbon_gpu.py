@@ -6,12 +6,19 @@ disable_per_call_gl_error_checking()
 from OpenGL import GL as gl
 from core.ribbon_geometry import PathSample
 from core.ribbon_packet import pack_ribbons
-from core.settings.framed_camera import orthographic_matrix, perspective_matrix
+from core.settings.framed_camera import perspective_matrix
 from rendering.quick import gl_query
 from rendering.quick.scene3d.ribbon import RibbonPrimitive
 from tools.labs.render_target import OffscreenRenderTarget
 
 pytestmark = pytest.mark.qt
+
+
+def parallel_mvp(half_extent, near, far):
+    """Test-only linear clip transform for exact primitive pixel geometry (not a camera projection)."""
+    x, y = half_extent
+    return (1. / x, 0., 0., 0., 0., 1. / y, 0., 0., 0., 0.,
+            -2. / (far - near), 0., 0., 0., -(far + near) / (far - near), 1.)
 
 
 def capture_vertices(primitive, packet, matrix, *, is_sparks=False, **kwargs):
@@ -52,11 +59,10 @@ def line(origin=0):
     return ([PathSample(origin, (-1, 0, -10), .25), PathSample(origin+1, (1, 0, -10), .25)], [(1, 0, 0)]*2, None)
 
 
-@pytest.mark.parametrize('projection', ('orthographic', 'perspective'))
-def test_native_strip_bounds_normals_depth_and_retirement(qt_app, projection):
+def test_native_strip_bounds_normals_depth_and_retirement(qt_app):
     target = OffscreenRenderTarget(160, 120)
     primitive = RibbonPrimitive()
-    mvp = orthographic_matrix((2, 1.5), .1, 100) if projection == 'orthographic' else perspective_matrix((.2, .15), .1, 100)
+    mvp = perspective_matrix((.2, .15), .1, 100)
     packet = pack_ribbons([line()])
     try:
         primitive.draw(pack_ribbons([]), mvp)
@@ -88,7 +94,7 @@ def test_native_strip_bounds_normals_depth_and_retirement(qt_app, projection):
 def test_native_gap_and_failed_draw_restore_caller_state(qt_app, monkeypatch):
     target = OffscreenRenderTarget(160, 120)
     primitive = RibbonPrimitive()
-    mvp = orthographic_matrix((2, 1.5), .1, 100)
+    mvp = parallel_mvp((2, 1.5), .1, 100)
     samples = [PathSample(i, (i-2, 0, -10), .2) for i in range(5)]
     packet = pack_ribbons([(samples, [(1, 0, 0)]*2+[(0, 0, 0)]+[(1, 0, 0)]*2, None)])
     sentinel = int(np.asarray(gl.glGenBuffers(1)).reshape(-1)[0])
@@ -124,7 +130,7 @@ def test_native_context_affinity_and_reactivation(qt_app):
     first = OffscreenRenderTarget(32, 24)
     second = OffscreenRenderTarget(32, 24)
     primitive = RibbonPrimitive()
-    matrix = orthographic_matrix((2, 1.5), .1, 100)
+    matrix = parallel_mvp((2, 1.5), .1, 100)
     packet = pack_ribbons([line()])
     try:
         first.bind()
@@ -154,7 +160,7 @@ def test_native_context_affinity_and_reactivation(qt_app):
 def test_native_phase_survives_history_origin_rebase(qt_app):
     target = OffscreenRenderTarget(160, 120)
     primitive = RibbonPrimitive()
-    mvp = orthographic_matrix((2, 1.5), .1, 100)
+    mvp = parallel_mvp((2, 1.5), .1, 100)
     origin = 1e9
     first = ([PathSample(origin+i*.25, (i-2, 0, -10), .2) for i in range(5)], [(1, 0, 0)]*5, None)
     second = (first[0][1:], first[1][1:], None)
@@ -174,7 +180,7 @@ def test_native_phase_survives_history_origin_rebase(qt_app):
 def test_native_large_world_translation_preserves_geometry(qt_app):
     target = OffscreenRenderTarget(160, 120)
     primitive = RibbonPrimitive()
-    mvp = orthographic_matrix((2, 1.5), .1, 100)
+    mvp = parallel_mvp((2, 1.5), .1, 100)
     try:
         target.bind()
         primitive.draw(pack_ribbons([line()]), mvp)
@@ -190,14 +196,13 @@ def test_native_large_world_translation_preserves_geometry(qt_app):
         target.close()
 
 
-@pytest.mark.parametrize('projection', ('orthographic', 'perspective'))
-def test_native_curved_twisted_strip_follows_cpu_centripetal_centres(projection, qt_app):
+def test_native_curved_twisted_strip_follows_cpu_centripetal_centres(qt_app):
     from core.ribbon_geometry import centripetal_point
     points = [(-1.5, 0., -10.), (-.5, 1., -10.), (.5, -1., -10.), (1.5, 0., -10.)]
     samples = [PathSample(i, p, .08, .4+i*.3) for i, p in enumerate(points)]
     target = OffscreenRenderTarget(320, 240)
     primitive = RibbonPrimitive()
-    matrix = orthographic_matrix((2, 1.5), .1, 100) if projection == 'orthographic' else perspective_matrix((.2, .15), .1, 100)
+    matrix = perspective_matrix((.2, .15), .1, 100)
     packet = pack_ribbons([(samples, [(1, 0, 0)]*4, None)])
     try:
         target.bind()
@@ -225,7 +230,7 @@ def test_context_reactivation_recomputes_larger_alignment_budget(qt_app, monkeyp
     first, second = OffscreenRenderTarget(32, 24), OffscreenRenderTarget(32, 24)
     primitive = RibbonPrimitive()
     packet = pack_ribbons([line()]*8)
-    matrix = orthographic_matrix((2, 1.5), .1, 100)
+    matrix = parallel_mvp((2, 1.5), .1, 100)
     original = gl_query.get_int
     try:
         first.bind()
@@ -265,7 +270,7 @@ def test_native_wrapped_ring_renders_like_the_stateless_oracle(qt_app):
     assert np.frombuffer(packet.payload, np.float32)[4+1] != 0  # ring start is mid-buffer
     target = OffscreenRenderTarget(320, 240)
     primitive = RibbonPrimitive()
-    mvp = orthographic_matrix((2, 1.5), .1, 100)
+    mvp = parallel_mvp((2, 1.5), .1, 100)
     try:
         images = []
         for candidate in (oracle, packet):
@@ -292,7 +297,7 @@ def test_native_strip_start_flag_cuts_the_joining_interval(qt_app):
     cut = RibbonPacket(data.tobytes(), packet.instances, packet.vertices, packet.world_origin)
     target = OffscreenRenderTarget(160, 120)
     primitive = RibbonPrimitive()
-    mvp = orthographic_matrix((2, 1.5), .1, 100)
+    mvp = parallel_mvp((2, 1.5), .1, 100)
     try:
         rows = []
         for candidate in (packet, cut):
@@ -316,12 +321,12 @@ def test_axial_sweep_cannot_fold_wide_inner_bends_back_along_the_path(qt_app):
     try:
         target.bind()
         args = dict(material=RibbonMaterial(cross_curve=.35))
-        fixed = capture_vertices(primitive, packet, orthographic_matrix((5,5), .1,100), sweep_axis=(1.,0.,0.), **args)
+        fixed = capture_vertices(primitive, packet, parallel_mvp((5,5), .1,100), sweep_axis=(1.,0.,0.), **args)
         # Equal chord lengths make centre X equal to the path coordinate. Every vertex must stay in that
         # cross-section plane, even when the half-width exceeds the inner bend radius.
         assert np.isfinite(fixed).all()
         assert np.max(np.abs(fixed[:,0,0]-fixed[:,0,3])) < 2e-6
-        transported = capture_vertices(primitive, packet, orthographic_matrix((5,5), .1,100), **args)
+        transported = capture_vertices(primitive, packet, parallel_mvp((5,5), .1,100), **args)
         assert np.max(np.abs(transported[:,0,0]-transported[:,0,3])) > .2
     finally:
         primitive.release()
@@ -336,7 +341,7 @@ def test_swept_normals_and_zero_drift_sparks_follow_the_emitted_cloth(qt_app):
         ring.append(i, [(i, 0., -10.)], .8+.1*i, i*.6, 1., 1.)
     packet = ring.packet()
     target, primitive = OffscreenRenderTarget(64,64), RibbonPrimitive()
-    matrix = orthographic_matrix((6,6), .1,100)
+    matrix = parallel_mvp((6,6), .1,100)
     args = dict(material=RibbonMaterial(cross_curve=.35), sweep_axis=(1.,0.,0.))
     try:
         target.bind()
@@ -377,7 +382,7 @@ def test_axial_cloth_has_one_surface_slope_on_both_sides_of_each_knot(qt_app):
     target,primitive = OffscreenRenderTarget(64,64),RibbonPrimitive()
     try:
         target.bind()
-        data = capture_vertices(primitive,ring.packet(),orthographic_matrix((6,6),.1,100),
+        data = capture_vertices(primitive,ring.packet(),parallel_mvp((6,6),.1,100),
                                 sweep_axis=(1.,0.,0.),material=RibbonMaterial(cross_curve=.35))
         # At each shared vertex the previous interval evaluates u=1 and the next u=0. Their surface normals
         # must agree. Testing only the centreline misses the visible kink on variable-width sheet edges.
@@ -402,7 +407,7 @@ def test_axial_sweep_stays_monotone_with_unequal_sample_spacing(qt_app):
     target,primitive=OffscreenRenderTarget(64,64),RibbonPrimitive()
     try:
         target.bind()
-        data=capture_vertices(primitive,ring.packet(),orthographic_matrix((4,4),.1,100),
+        data=capture_vertices(primitive,ring.packet(),parallel_mvp((4,4),.1,100),
                               sweep_axis=(1.,0.,0.),material=RibbonMaterial(cross_curve=.35))
         points=sorted(set((float(v[0,3]),float(v[0,0])) for v in data))
         assert np.min(np.diff([x for t,x in points]))>0., 'unequal spacing must not reintroduce a fold-back'

@@ -1,7 +1,7 @@
 """World-space scene mist: one analytic transmittance every pass of a scene shares (opaque, OIT and additive light).
 
-Mist belongs to the world, not the eye: an Orthographic eye distance is arbitrary and a navigating camera dollies,
-so mist by view distance would breathe with the camera. Here clear air fills an ellipse around a centre on the
+Mist belongs to the world, not the eye: a navigating camera dollies, so mist by view distance would breathe with
+the camera. Here clear air fills an ellipse around a centre on the
 floor plane (radii along x and z) and the mist thickens beyond it, and more near the floor. Opaque surfaces mix
 toward the backdrop colour by ``1 - mistTransmittance``; additive light and translucent coverage are multiplied by it.
 With ``uMist.w`` (falloff) zero the function returns 1 and the scene is unchanged.
@@ -22,14 +22,14 @@ uniform vec4 uMist;        // clear-air centre x, centre z, radius x, radius z (
 uniform vec4 uMistShape;   // falloff (radii beyond the edge per e-fold), floor thickening, thickening height, low glow
 uniform sampler3D uFogVolume; // integrated in-scatter (rgb) and transmittance (a), exponential view-depth slices
 uniform mat4 uFogView;     // world -> the volume camera's view
-uniform vec4 uFogLens;     // lens extents, orthographic flag, asinh scale (0: positive logarithmic depth)
+uniform vec4 uFogLens;     // Perspective tangents, unused, asinh scale (0: positive logarithmic depth)
 uniform vec4 uFogRange;    // near, far, slices, 1 + optional focus depth (0: disabled)
 """ + FOG_DEPTH_MAPPING_GLSL + """
 // Volume coordinates of a world point: xy over the view, z the continuous slice (0 at near, slices at far).
 vec3 fogCoordinate(vec3 world) {
     vec3 v=(uFogView*vec4(world,1.0)).xyz;
     float depth=uFogLens.w>0.0?-v.z:max(-v.z,1e-4);
-    vec2 ndc=uFogLens.z>0.5?v.xy/uFogLens.xy:v.xy/(uFogLens.xy*depth);
+    vec2 ndc=v.xy/(uFogLens.xy*depth);
     float slice=fogDepthFraction(depth);
     return vec3(ndc*0.5+0.5,slice*uFogRange.z);
 }
@@ -48,13 +48,12 @@ float mistTransmittance(vec3 world) {
     return exp(-beyond*beyond*(1.0+uMistShape.y*low));
 }
 // The mist's own colour: the backdrop, lit where the haze is low and near the edge of the clear air, fading into
-// darkness deeper in. (Glow by height alone lit the whole far floor, which an Orthographic view shows as the entire
-// upper field.)
+// darkness deeper in. (Glow by height alone lit the whole far floor.)
 vec3 mistColour(vec3 backdrop, vec3 world) {
     vec2 radii=max(uMist.zw,vec2(1e-3));
     float beyond=max(0.0,length((world.xz-uMist.xy)/radii)-1.0)/max(uMistShape.x,1e-3);
     float low=uMistShape.z>0.0?exp(-max(world.y,0.0)/uMistShape.z):0.0;
-    // Deeper mist also darkens (the far floor is the Orthographic upper field: dark at the top, lit low).
+    // Deeper mist also darkens (the far floor: dark toward the horizon, lit low).
     return backdrop*(0.35+0.65*exp(-0.25*beyond))*(1.0+uMistShape.w*low*exp(-0.6*beyond*beyond));
 }
 // An opaque surface seen through the mist: the volume's in-scatter in front of it, or the analytic mix.

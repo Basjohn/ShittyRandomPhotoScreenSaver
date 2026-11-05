@@ -29,12 +29,12 @@ class FloorHarness:
         self.scene = WaveformScene()
         self.scene.admit_preparation()
 
-    def render(self, floor, *, kind, source=None, **view_changes):
+    def render(self, floor, *, source=None, **view_changes):
         """Floor pixels (float RGB) and the floor mask. ``source``: (x0, y0, x1, y1) uv rectangle, rgb, height."""
         from core.waveform_ribbon_scene import Recipe
         gl, scene = self.gl, self.scene
         scene.recipe, scene.size = Recipe(fog=None, floor=floor), (WIDTH, HEIGHT)
-        view, projection, eye, lens = physical_view(camera(**{'camera_projection': kind, 'tilt': .5, **view_changes}), WIDTH/HEIGHT)
+        view, projection, eye, lens = physical_view(camera(**{'tilt': .5, **view_changes}), WIDTH/HEIGHT)
         mvp = tuple((projection @ view).flatten(order='F'))
         size = (WIDTH//2, HEIGHT//2)
         scene.reflection.begin(*size)
@@ -52,7 +52,7 @@ class FloorHarness:
         gl.glClearBufferfv(gl.GL_COLOR, 0, SENTINEL)
         gl.glClearBufferfv(gl.GL_DEPTH, 0, (1.,))
         gl.glEnable(gl.GL_DEPTH_TEST); gl.glDepthFunc(gl.GL_LESS)
-        scene._floor(mvp, eye, view, lens[2], (WIDTH, HEIGHT))
+        scene._floor(mvp, eye, view, (WIDTH, HEIGHT))
         pixels = self.target.read_rgba()[:, :, :3].astype(float)
         floor_mask = ~((pixels[:, :, 0] > 250) & (pixels[:, :, 1] < 5) & (pixels[:, :, 2] > 250))
         return pixels, floor_mask
@@ -88,12 +88,11 @@ def reflection_only(**changes):
     return replace(floor, **{**values, **changes})
 
 
-@pytest.mark.parametrize('kind', ('Perspective', 'Orthographic'))
-def test_concrete_reads_with_reflection_off_without_changing_its_level(harness, kind):
-    textured, mask = harness.render(material_only(), kind=kind)
+def test_concrete_reads_with_reflection_off_without_changing_its_level(harness):
+    textured, mask = harness.render(material_only())
     assert mask.mean() > .2, 'the view must show a substantial floor area'
-    plain, plain_mask = harness.render(material_only(contrast=1., shading=0.), kind=kind)
-    flat, _ = harness.render(material_only(contrast=0., shading=0.), kind=kind)
+    plain, plain_mask = harness.render(material_only(contrast=1., shading=0.))
+    flat, _ = harness.render(material_only(contrast=0., shading=0.))
     np.testing.assert_array_equal(mask, plain_mask)
     floor = textured[mask].mean(axis=1)
     # Finite everywhere: a NaN would read back as a black hole in the lit material.
@@ -106,10 +105,9 @@ def test_concrete_reads_with_reflection_off_without_changing_its_level(harness, 
     assert abs(floor.mean() - flat[mask].mean())/flat[mask].mean() < .1
 
 
-@pytest.mark.parametrize('kind', ('Perspective', 'Orthographic'))
-def test_reflected_light_forms_a_vertical_column_registered_under_its_source(harness, kind):
+def test_reflected_light_forms_a_vertical_column_registered_under_its_source(harness):
     source = ((.49, .15, .51, .19), (4., 2., .5), .2)
-    pixels, mask = harness.render(reflection_only(), kind=kind, source=source)
+    pixels, mask = harness.render(reflection_only(), source=source)
     light = np.where(mask, pixels.sum(axis=2), 0.)
     assert light.max() > 30.
     rows, columns = np.nonzero(light > .25*light.max())
@@ -123,7 +121,7 @@ def test_reflected_light_forms_a_vertical_column_registered_under_its_source(har
 
 def test_low_reflected_light_keeps_a_stronger_column_than_high_light(harness):
     def peak(height):
-        pixels, mask = harness.render(reflection_only(), kind='Perspective',
+        pixels, mask = harness.render(reflection_only(),
                                       source=((.45, .15, .55, .19), (1., 1., 1.), height))
         return float(np.where(mask, pixels.sum(axis=2), 0.).max())
     low, high = peak(.1), peak(30.)
@@ -132,19 +130,18 @@ def test_low_reflected_light_keeps_a_stronger_column_than_high_light(harness):
 
 def test_relief_breaks_the_column_without_dimming_its_mass(harness):
     source = ((.40, .15, .60, .19), (2., 2., 2.), .2)
-    smooth, mask = harness.render(reflection_only(), kind='Perspective', source=source)
-    broken, _ = harness.render(reflection_only(breakup=1.), kind='Perspective', source=source)
+    smooth, mask = harness.render(reflection_only(), source=source)
+    broken, _ = harness.render(reflection_only(breakup=1.), source=source)
     lit = mask & (smooth.sum(axis=2) > .25*smooth.sum(axis=2).max())
     a, b = smooth[lit].sum(axis=1), broken[lit].sum(axis=1)
     assert np.std(b/np.maximum(a, 1.)) > .05  # visible breakup by the surface relief
     assert .6 < b.mean()/a.mean() < 1.4  # the reflected mass keeps its strength
 
 
-@pytest.mark.parametrize('kind', ('Perspective', 'Orthographic'))
-def test_capped_reflection_prepass_matches_the_inline_column(harness, kind):
+def test_capped_reflection_prepass_matches_the_inline_column(harness):
     source = ((.40, .15, .60, .19), (2., 2., 2.), .2)
-    inline, mask = harness.render(reflection_only(specular_max_height=10000), kind=kind, source=source)
-    capped, _ = harness.render(reflection_only(specular_max_height=HEIGHT//2), kind=kind, source=source)
+    inline, mask = harness.render(reflection_only(specular_max_height=10000), source=source)
+    capped, _ = harness.render(reflection_only(specular_max_height=HEIGHT//2), source=source)
     a, b = inline[mask].mean(), capped[mask].mean()
     assert a > 1. and .8 < b/a < 1.2, (a, b)
 
@@ -153,7 +150,7 @@ def test_reflected_light_is_bounded_smoothly_without_changing_restrained_light(h
     """Strong reflected light compresses toward the ceiling (bounded, monotone, hue kept); restrained light below
     it keeps nearly its linear level."""
     def column(rgb, limit):
-        pixels, mask = harness.render(reflection_only(glow_limit=limit), kind='Perspective',
+        pixels, mask = harness.render(reflection_only(glow_limit=limit),
                                       source=((.45, .15, .55, .19), rgb, .2))
         return pixels[mask]
     unbounded = lambda rgb: column(rgb, 1e4)
@@ -174,9 +171,9 @@ def test_reflected_light_is_bounded_smoothly_without_changing_restrained_light(h
 def test_surface_light_falls_off_toward_the_camera_into_darkness(harness):
     """The concrete is lit near the sheets and darker toward the camera (dark wet ground in a wide view), smoothly
     and to its far level, never black."""
-    reach, _ = harness.render(replace(material_only(light_reach=5., light_far=.4), albedo_gain=1.), kind='Perspective',
+    reach, _ = harness.render(replace(material_only(light_reach=5., light_far=.4), albedo_gain=1.),
                          camera_fov=20.)
-    even, mask = harness.render(replace(material_only(light_reach=1e6, light_far=1.), albedo_gain=1.), kind='Perspective',
+    even, mask = harness.render(replace(material_only(light_reach=1e6, light_far=1.), albedo_gain=1.),
                               camera_fov=20.)
     rows = [r for r in range(HEIGHT) if mask[r].mean() > .9]
     near, far = rows[-max(4, len(rows)//6):], rows[:max(4, len(rows)//6)]  # bottom rows are nearest the camera
@@ -205,9 +202,9 @@ def test_a_slowly_moving_source_changes_the_floor_smoothly_without_flicker(harne
     for step in range(12):
         y = .12 + step*texel
         sx = .40 + step*texel*.5  # and drifting sideways, slower
-        frames.append(harness.render(floor, kind='Perspective',
+        frames.append(harness.render(floor,
                                      source=((sx, y, sx+.12, y+texel), (1., 3., 2.5), .2))[0])
-    mask = harness.render(floor, kind='Perspective')[1]
+    mask = harness.render(floor)[1]
     lit = np.stack([frame.sum(axis=2) for frame in frames])[:, mask]
     assert lit.max() > 30., 'the moving sheet must light the floor'
     assert _flicker(frames, mask) < .0095  # the previous sparse, steep, narrow column scored .012
@@ -233,7 +230,7 @@ def test_columns_carry_their_sources_saturated_hue_through_a_grey_haze(harness):
         original_end()
     scene.reflection.end = with_sources
     try:
-        pixels, mask = harness.render(floor, kind='Perspective', source=((0., 0., 1., 1.), (.25, .25, .25), 1.))
+        pixels, mask = harness.render(floor, source=((0., 0., 1., 1.), (.25, .25, .25), 1.))
     finally:
         scene.reflection.end = original_end
     for (x0, x1), rgb in (((.20, .34), teal), ((.66, .80), orange)):

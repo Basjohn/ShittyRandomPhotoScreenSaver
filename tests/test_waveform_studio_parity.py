@@ -316,7 +316,9 @@ def test_conditional_rows_hide_as_in_settings(studio_on):
     bridge = controller.bridge
     schema = build_schema()
     conditional = [prop for prop in schema.properties if prop.when]
-    assert conditional
+    if not conditional:
+        # The only one (Field of View while Perspective) left with the Projection control (5 Nov 2026).
+        pytest.skip("Waveform currently has no conditional Studio rows")
     for prop in conditional:
         for key, accepted in prop.when:
             source = schema.find(key)

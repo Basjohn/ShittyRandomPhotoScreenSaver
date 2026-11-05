@@ -49,12 +49,10 @@ def test_batch_and_eviction_anchor_keep_identical_roll():
     assert not np.allclose(reseeded[-1].frame.side, whole[-1].frame.side)
 
 
-def test_orthographic_parallel_sight_ignores_eye_and_depth_but_perspective_does_not():
+def test_perspective_sight_follows_the_eye_to_the_station():
     tangent = (1., 1., 0.)
-    a = width_frame(tangent, mode='camera_facing', position=(0, 0, -5), eye=(2, 3, 10))
-    b = width_frame(tangent, mode='camera_facing', position=(5, 3, -50), eye=(9, -6, 2))
-    assert a == b
-    p = width_frame(tangent, mode='camera_facing', projection='perspective', position=(5, 3, -5))
+    a = width_frame(tangent, mode='camera_facing', position=(0, 0, -5))
+    p = width_frame(tangent, mode='camera_facing', position=(5, 3, -5))
     assert not np.allclose(a.side, p.side)
     np.testing.assert_allclose(np.dot(p.side, (5, 3, -15)), 0, atol=1e-12)
     check(a)
@@ -98,7 +96,7 @@ def test_bad_inputs_and_capacity_fail_without_mutating_anchor():
     with pytest.raises(ValueError):
         width_frame((math.nan, 0, 0))
     with pytest.raises(ValueError):
-        width_frame((1, 0, 0), mode='camera_facing', view_direction=(0, 0, 0))
+        width_frame((1, 0, 0), mode='camera_facing', position=(0, 0, 10))
     assert previous == width_frame((1, 0, 0))
 
 
@@ -119,7 +117,7 @@ def test_camera_defined_initial_side_does_not_require_an_unrelated_seed():
 
 @pytest.mark.parametrize('scale', (1e-300, 1e-11, 1., 1e300))
 def test_direction_magnitude_does_not_erase_slow_paths(scale):
-    frame = width_frame((scale, scale, 0), mode='camera_facing', view_direction=(0, 0, -scale))
+    frame = width_frame((scale, scale, 0), mode='camera_facing')
     check(frame)
     expected = width_frame((1, 1, 0), mode='camera_facing')
     np.testing.assert_allclose(frame.side, expected.side, atol=1e-14)
@@ -130,7 +128,7 @@ def test_camera_pole_azimuth_seam_never_silently_flips_roll(epsilon):
     anchor = width_frame((1, 0, 0))
     sight = (math.sqrt(1-.04**2), .04, epsilon)
     with pytest.raises(FrameDiscontinuity, match='roll-ambiguous'):
-        width_frame((1, 0, 0), previous=anchor, mode='camera_facing', view_direction=sight)
+        width_frame((1, 0, 0), previous=anchor, mode='camera_facing', position=sight, eye=(0, 0, 0))
     assert anchor == width_frame((1, 0, 0))
 
 
