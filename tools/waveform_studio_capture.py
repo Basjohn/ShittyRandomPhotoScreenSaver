@@ -105,7 +105,8 @@ def main() -> int:
     parser.add_argument("--size", default="1600x900")
     parser.add_argument("--fixture", default="peak")
     parser.add_argument("--time", type=float, default=5.0)
-    parser.add_argument("--clip", default="", help="Recorded clip stem to analyse and show (slow)")
+    parser.add_argument("--clip", default="", help="Recorded clip to analyse and show (slow): a shipped clip id "
+                             "(rag_doll, human, growing_pains) or a logs/visualizer_recordings stem")
     parser.add_argument("--source-time", type=float, default=None,
                         help="With --clip: seconds from the recording's first frame (as tools/waveform_ribbon_capture --start)")
     parser.add_argument("--compare", type=Path, default=None,
@@ -202,8 +203,8 @@ def main() -> int:
             controller.evaluator.add_recorded(to_inputs(data, replace(clip, duration=float(data["duration"]))))
             controller.select_fixture(clip.id)
             if args.source_time is not None:
-                with open(clip.description, encoding="utf-8") as stream:
-                    first = json.loads(stream.readline())["timestamp_us"] / 1e6
+                from widgets.spotify_visualizer.compact_clip import first_timestamp_us
+                first = first_timestamp_us(clip.description) / 1e6
                 args.time = args.source_time + first - float(data["origin"])
                 record["studio_time"] = args.time
         else:

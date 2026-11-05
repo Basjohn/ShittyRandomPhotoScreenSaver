@@ -721,15 +721,11 @@ class ExtrudedBubbleStudioAdapter(StudioModeAdapter):
         return "mid"
 
     def recorded_clips(self) -> tuple[StudioFixture, ...]:
-        """Project recordings with native PCM (EB's production body feed is recomputed from it)."""
+        """The shipped clips (Rag Doll, Human, Growing Pains), then a checkout's native-PCM recordings (EB's
+        production body feed is recomputed from their PCM)."""
         from ui.studio.waveform_adapter import recordings_directory
-        from ui.studio.waveform_recorded_inputs import frozen_build, has_native_history
-        directory = recordings_directory()
-        if frozen_build() or not directory.is_dir():
-            return ()     # the replay analysis runs only from the source tree
-        return tuple(StudioFixture("clip:" + path.stem, path.stem.replace("_", " ").title(), RECORDED, 0.0,
-                                   str(path)) for path in sorted(directory.glob("*.jsonl"))
-                     if has_native_history(path))
+        from ui.studio.waveform_recorded_inputs import studio_clips
+        return studio_clips(recordings_directory())
 
     # Analysed clips for this process, keyed by clip and the non-authored (analysis) settings: the advance inputs
     # do not depend on EB's authored controls, so reopening the Studio does not re-run the analysis.
