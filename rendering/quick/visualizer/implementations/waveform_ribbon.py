@@ -81,7 +81,7 @@ class QuickWaveformRibbonRenderer:
         self._scene.render(state.packet,capacity=256,now=state.time,travel=state.travel,recipe=state.scene,
             size=(width,height),view=view,projection=projection,eye=eye,camera_lens=lens,card=frame,overlay=opacity,
             burst_payload=state.particles,burst_origin=state.particle_origin,react=state.passage,
-            strand_payload=state.strands,strand_origin=state.strand_origin)
+            strand_payload=state.strands,strand_origin=state.strand_origin,pulse=state.pulse)
 
     def render(self,frame):
         opacity=frame.snapshot.presentation.content_fade

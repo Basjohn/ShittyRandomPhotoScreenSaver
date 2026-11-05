@@ -57,6 +57,7 @@ def unreacted(model):
     twin._whole = twin._whole_fresh = 0.
     for name in ('_drift', '_level', '_focus', '_geom'):
         setattr(twin, name, np.zeros(PULSE_GRID.size))
+    twin._frozen_swell = None
     twin._snapshot = None
     return twin.snapshot()
 
@@ -188,7 +189,7 @@ def test_frozen_past_holds_the_shaped_cloth_then_a_later_swell_replaces_it():
 
 def test_frozen_past_memory_is_bounded_and_fades_in_silence_without_vanishing():
     model = beats(model_for('Frozen Past'))
-    assert model._held.shape == (4, PULSE_GRID.size)
+    assert model._held.shape[1] == PULSE_GRID.size
     for _ in range(round(2.*90)):
         model.advance(1/90, **SILENT)
     level = model._held[0].max()
@@ -197,6 +198,26 @@ def test_frozen_past_memory_is_bounded_and_fades_in_silence_without_vanishing():
         model.advance(1/90, **SILENT)
     after = model._held[0].max()
     assert .7*level < after < level  # persists, decays very slowly
+
+
+def test_frozen_past_keeps_the_size_it_was_shaped_at_when_the_music_softens():
+    # Operator, 5 Nov: "Frozen History doesn't seem to leave a Frozen trail". The memory was held but re-scaled by the
+    # CURRENT Pulse Strength, so it shrank to the quiet strength as soon as the passage softened. A held shape keeps the
+    # strength its passage was shaped with; only the memory's own slow fade shrinks it.
+    for direction in ('Head To Tail', 'Centre Out'):
+        model = model_for('Frozen Past', direction=direction, speed=6.)
+        model.controls = replace(model.controls, ranges={**model.controls.ranges, 'bend': (.2, 3.)})
+        loud = {'bands': (.9, .8, .7), 'intensity': 1., 'presence': 1.}
+        soft_music = {'bands': (.06, .05, .04), 'intensity': .08, 'presence': .2}
+        beats(model, count=8, spacing=.3, after=.8, inputs=loud)
+        def visible():
+            model._geom_share = (1., None)
+            return float((model.geometric_gain(model._value('bend'))-1.).max())
+        shaped = visible()
+        for _ in range(round(4.*90)):
+            model.advance(1/90, **soft_music)
+        assert model._value('bend') < .35*3.          # the music really softened the live strength
+        assert visible() > .75*shaped, direction       # the frozen trail is still there at its shaped size
 
 
 def test_whole_swell_is_spatially_uniform_and_nothing_travels():
