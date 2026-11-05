@@ -2,7 +2,7 @@
 from dataclasses import replace
 import numpy as np
 import pytest
-from core.ribbon_continuation import endpoint_jet,continued_values,cloth_values,frustum_axial_span
+from core.ribbon_continuation import anchors,endpoint_jet,continued_values,cloth_values,frustum_axial_span
 from core.ribbon_ring import RibbonRing
 from core.waveform_ribbon_scene import SPEC,FLOOR_CONTACT,Recipe,VIEW_SLOPE
 from rendering.quick.visualizer.implementations.waveform_ribbon import physical_view
@@ -90,7 +90,8 @@ void main(){ribbonMain();if(uContinuation.w!=0.0)captured[gl_VertexID]=vec4(vWor
         gl.glDisable(gl.GL_RASTERIZER_DISCARD);gl.glMemoryBarrier(gl.GL_TEXTURE_UPDATE_BARRIER_BIT)
         table=np.empty((8,1024,4),np.float32);gl.glGetTextureImage(gpu.texture,0,gl.GL_RGBA,gl.GL_FLOAT,table.nbytes,table)
         xs=np.linspace(*fog.field_span)
-        expected=cloth_values(knots,xs-packet.world_origin[0])
+        phase=float(np.frombuffer(packet.payload,np.float32).reshape(packet.instances,-1,4)[0,1,3])
+        expected=cloth_values(knots,xs-packet.world_origin[0],phase=phase)  # the anchored history and its continuation
         expected[:,:2]+=np.asarray(packet.world_origin)[None,1:]
         expected[:,3]+=np.frombuffer(packet.payload,np.float32).reshape(packet.instances,-1,4)[0,1,0]
         np.testing.assert_allclose(table[0],expected,atol=4e-4,rtol=4e-4)
@@ -102,8 +103,8 @@ void main(){ribbonMain();if(uContinuation.w!=0.0)captured[gl_VertexID]=vec4(vWor
             np.testing.assert_array_equal(after,table)  # API has no camera input to distort the field
         assert np.min(points[:,1])>=FLOOR_CONTACT[0]+FLOOR_CONTACT[1]-1e-5
         assert points[:,0].max()==pytest.approx(200.,abs=1e-5)
-        # Last extension draw is the +x side; it joins at the actual finite endpoint without a cap.
-        assert points[:,0].min()==pytest.approx(knots[-1,0,0]+packet.world_origin[0],abs=1e-5)
+        # Last extension draw is the +x side; it joins at the head anchor (the drawn history's end) without a cap.
+        assert points[:,0].min()==pytest.approx(anchors(knots,phase)[1]+packet.world_origin[0],abs=1e-5)
         # Run the actual mist's far-table clearance function over the real raster vertex-stage output.
         from rendering.gl_programs.waveform_atmosphere import WORLD_FIELD_GLSL
         shader='#version 460 core\n'+WORLD_FIELD_GLSL+'''
