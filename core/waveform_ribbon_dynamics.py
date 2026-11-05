@@ -116,6 +116,10 @@ GLOBAL_ATTACK = .35
 # to BREATHING_CONTRAST: it swells AND lets go without being lifted as a whole. Loud passages keep their authored Decay,
 # their targets and their reach. Attack, both follower stages and the rate limits are unchanged (no twitch).
 BREATHING_REACH, BREATHING_CONTRAST, BREATHING_LOUD, BREATHING_BASE = .75, 1.5, .8, 3.
+# Breathing also keeps a quieter passage quiet (see advance): while a drive sits below its remembered peak the memory
+# relaxes over RESPONSE_MEMORY x (1 + Breathing x (RESPONSE_HOLD - 1)): a song-scale memory (135 s at Breathing .7)
+# instead of a passage-scale one. Breathing 0 keeps RESPONSE_MEMORY exactly.
+RESPONSE_HOLD = 6.
 
 # Floor clearance (operator, 5 Nov; see WaveformDynamics._floor_room): the packet origin sits PACKET_FLOOR_HEIGHT above
 # the world floor; a ribbon whose lower edge would come within TROUGH_CLEARANCE of it lifts as a whole (never reshaped),
@@ -481,7 +485,8 @@ class WaveformDynamics:
         # Fast bands articulate inside the level; a quiet passage still shows its beats, only smaller.
         gate = .35+.65*self.passage
         energy_shaped = sum(weight*value for weight,value in zip(ENERGY_WEIGHTS,bands))
-        softness = unit(c.breathing)*unit((BREATHING_LOUD-self.passage)/BREATHING_LOUD)
+        hold = unit(c.breathing)
+        softness = hold*unit((BREATHING_LOUD-self.passage)/BREATHING_LOUD)
         geometry_release = c.release*(1.-BREATHING_REACH*softness)
         for key in TARGETS:
             target = route(c.routing[key],sources,passage=gate)
@@ -494,11 +499,20 @@ class WaveformDynamics:
                 # a loud one stays quiet (an offset window re-expanded quiet intros to full size). The remembered
                 # peak lands at RESPONSE_TOP, so a sustained loud passage keeps headroom for its accents instead of
                 # pinning at Peak (operator: sustained passages need the most judgement).
-                self._response_peak[key] = max(RESPONSE_PEAK_FLOOR,follower(
-                    self._response_peak[key],target,dt,RESPONSE_REACH,RESPONSE_MEMORY))
+                peak = self._response_peak[key]
+                memory = RESPONSE_MEMORY
+                if hold and target < peak:
+                    # Breathing keeps a quieter passage quiet (operator, 5 Nov: Preset 7 "swelled up to full power when
+                    # the song went QUIETER"). The passage-scale 30 s memory re-normalised a passage at 70% of the loud
+                    # input back up to loud reach (Pulse Strength .73 -> .88, above the loud passage's .87) within 25 s.
+                    # Held for a song-scale time, a quiet passage keeps its proportion to the loud one; a song that
+                    # stays softer is still re-normalised, over minutes. Rises still reach the peak in RESPONSE_REACH.
+                    memory = RESPONSE_MEMORY*(1.+hold*(RESPONSE_HOLD-1.))
+                self._response_peak[key] = max(RESPONSE_PEAK_FLOOR,follower(peak,target,dt,RESPONSE_REACH,memory))
                 target = unit(RESPONSE_TOP*target/self._response_peak[key])
                 base = self._breath_base[key] = follower(self._breath_base[key],target,dt,BREATHING_BASE,BREATHING_BASE)
-                target = unit(base+(target-base)*(1.+BREATHING_CONTRAST*softness))
+                if softness:  # Breathing 0 (or a loud passage) keeps the exact unwidened target
+                    target = unit(base+(target-base)*(1.+BREATHING_CONTRAST*softness))
             if key in SMOOTH_TARGETS:
                 # Geometry never snaps (operator, 5 Nov: "twitch"): two cascaded followers, so the drive's VELOCITY
                 # is continuous. A single 45 ms first-order attack made lift/bend/width/twist jump on every transient
@@ -717,7 +731,12 @@ class WaveformDynamics:
             self._focus = self._level
             total = np.zeros(PULSE_GRID.size)
             for index,sign in enumerate((-1.,1.)):
-                wide = broad(self._pulse[index])
+                # The set's geometry and surge follow the FRESH energy, as Travelling Pulse's do (operator, 5 Nov,
+                # Preset 7 on Rag Doll: no decay in soft passages, sustained passages flat). Built from the long-fade
+                # field, the peak-keeping set envelope (sigma_g/sigma_w, x7.4 on Preset 7) piled every beat of the last
+                # Pulse Fade seconds into one bound: the swell sat at PULSE_SATURATION over 67% of the view (median/max
+                # .98), so the whole body inflated at once with the Pulse Strength drive and never let go.
+                wide = PULSE_FRESH_GAIN*broad(self._fresh[index])
                 lead = -sign*sigma_g*np.gradient(wide,PULSE_DX)/(wide+1e-6)
                 weighted = wide*(1.+GROUP_LEAD*np.tanh(lead))
                 total += weighted
