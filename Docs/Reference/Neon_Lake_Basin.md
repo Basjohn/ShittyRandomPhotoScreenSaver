@@ -385,8 +385,13 @@ avoid per-frame mesh rebuilds or unrelated-mode costs. Any reopening is admitted
 **Since 2026-10-24 Neon Lake uses the shared framed physical camera** (`core/settings/framed_camera.py`, spec
 `core/settings/neon_lake_camera.py`; operator: EB's camera controls are the standard for framed 3D). A real eye
 orbits the basin centre `(0, 0, -1.2)` at 3.6 (Scene Scale dollies it), pans by translating, flies with W/A/S/D
-(Q/E yaw, Shift+W/S pitch), moves by Camera Position and resets with R. Turn spans **-0.50..0.50** (±90°, saturating,
-never wrapping); tilt **-0.10..0.58**: 0 is a level horizon, negative looks slightly up. Camera Field of View
+(Q/E yaw, Shift+W/S pitch), moves by Camera Position and resets with R. Turn spans **-0.75..0.75** (saturating,
+never wrapping); tilt **-0.15..0.70**: 0 is a level horizon, negative looks slightly up (both loosened 2026-11-05,
+`TURN_RANGE` / `TILT_RANGE` in `core/constants/neon_lake_world.py`; the eye box grew to ±14 / 0..6 round the basin).
+What keeps the eye out of the scene is collision, not a pose clamp: the floor under the eye is the highest drawable
+surface within `_COLLISION_RADIUS` (0.08, twice the 0.04 near plane) of it, so no near-plane corner can dip under a
+slope beside the eye (`tests/test_neon_lake_camera_limits.py`: 27 extreme poses pushed down over a spiky test
+terrain; with radius 0 it fails). Camera Field of View
 (20°..62°, default 30°, Camera bucket) is the lens; Auto Rotate (same bucket, off by default) sweeps the view back
 and forth across the turn range, easing to a stop at each end; Camera Position (same bucket) is the shared
 editor, with the basin's water-level outline drawn in its eye box. The eye, not the pose, is bounded: inside a box around the basin
@@ -402,8 +407,18 @@ The overscanned surface can cross the camera near plane under admitted views. It
 emits a homogeneous clip position and relies on hardware clipping rather than dividing
 before clipping. Surface triangles, glass normals, point markers, skyline and celestial
 apparent position must agree with the same projection/scene pose, including extreme zoom/aspect.
-Foreground continuation fades before near-camera cutoffs; no second mesh or renderer is
-permitted to hide holes.
+No second mesh or renderer is permitted to hide holes.
+
+**Terrain to the horizon (2026-11-05).** The land no longer ends: past the authored grid's continuation it settles
+into broad far hills (`FAR_HILLS`) and the whole distant world curves away gently (`DISTANT_CURVATURE` 0.22 per basin
+uv squared past `DISTANT_FLAT`, was 0.38), so the horizon line is still a real terrain/sky tangency in every
+direction while land reaches tens of units out. The overscan mesh reaches `FAR_OVERSCAN` (12/12/8/20 basin uv
+left/right/front/back) with cells growing with distance (about 13.7k vertices), the far plane is `FAR_PLANE` (120);
+coverage never fades (the camera-facing skirt fade left land floating over sky once the eye could roam), only detail
+and glow settle into the haze (`basinDetailFade`). The CPU mirrors (`neon_terrain_extent.far_hills`, the editor's
+`terrain_angled_view`) share the constants. Past the grid, glass takes one environment sample and land is lit
+unshadowed (that far land is most of the screen). Extreme-pose renders:
+`.artifacts/evidence/neon_lake/fidelity_20261105/camera_extremes/final/contact.png` (worktree evidence).
 
 The **main mountain skyline** uses depth-tested land geometry offset narrowly in
 screen space against the real surface depth; water is excluded and its **lake shoreline**
@@ -523,6 +538,24 @@ camera floor unpacks the frozen terrain payload once per payload (1.57 ms a fram
 Preset 1's terrain is an extended grid (basin `[28, 56, 64]` of 121) whose front rows are authored dunes: the
 camera stands over authored land, so its foreground crests are real silhouettes. Contracts:
 `tests/test_neon_fidelity_controls.py`.
+
+**Second pass (2026-11-05, operator: "fidelity and reactivity are not even close").** Shared, every preset:
+- *Nebula* (`skyNebula`): the gas crowds along one meandering great circle (a galactic band rising diagonally from
+  the horizon) and streams along it, with sparse patches elsewhere; Nebula Position turns the band round the sky.
+- *Stars*: per-star magnitudes and a sparse bright layer; reflections leave stars out (rippled water smeared them
+  into sparks).
+- *Water*: small view-aligned ripple trains tilt the mirror and break the Sun/Moon path into thin sharp streaks a
+  few pixels apart; the mirror shows the land and its glowing skyline (`basinMirrorLand`, a 30-step horizon-profile
+  march); the wavelet network is broad enough to draw instead of fading; the mirror never drops below a floor
+  looking down (a neon lake is a dark mirror).
+- *Shoreline*: sampled per fragment from a cell-wide box over the cubic contour (vertex interpolation beaded the
+  line into a chain of arcs; the raw cubic on painted cells scalloped once per cell); water within the cubic's reach
+  draws its share of the line and the glow eases from the cached bank distance into the same contour, and the wet
+  fringe takes water's fill and alpha, so no square cell shows as a block beside an island or cove.
+- *Marks* light with the land's relief toward the authored Sun/Moon direction (bright facing slopes, dark troughs).
+Presets 1 and 3 were re-authored toward their mocks (Preset 1: new extended-grid terrain with dune crests, Moon
+above the far hills, dark navy ground with small pale marks and Depth Scale 0, opaque sky, band nebula; Preset 3:
+nebula turned into the upper right, gentler waves 0.15). Remaining gaps are listed in `Current_Plan.md`.
 
 ## Operator-authorized future water improvements (2026-10-18; deferred, baseline accepted)
 
