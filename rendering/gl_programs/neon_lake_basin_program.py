@@ -119,7 +119,10 @@ float basinOutside(vec2 uv) {
 _PROJECTION = _GRID_GLSL + f"""
 const float SHOCKWAVE_DEPTH = {SHOCKWAVE_DEPTH:.6f};
 const float WATER_PEAK = {WATER_PEAK:.6f};
-const float LAND_CONTOUR_SPACING = 0.035; // Contour Lines: world height between level lines
+const float LAND_CONTOUR_SPACING = 0.03; // Contour Lines: world depth between the range's wireframe rows
+// Contour Lines' land: the raised ground beyond the basin's near edge (the range and its foothills), not the
+// dunes in front of it nor the low banks. Shared by the lines and the marks that give way to them.
+float basinContourRegion(vec2 uv,float base) {{ return smoothstep(0.15,0.3,base)*smoothstep(0.0,0.08,uv.y); }}
 const vec2 FAR_HILLS_LEVEL = vec2({FAR_HILLS[0]:.6f}, {FAR_HILLS[1]:.6f});
 const vec4 FAR_HILLS_WAVE = vec4({FAR_HILLS[2]:.6f}, {FAR_HILLS[3]:.6f}, {FAR_HILLS[4]:.6f}, {FAR_HILLS[5]:.6f});
 const float DISTANT_FLAT = {DISTANT_FLAT:.6f};
@@ -375,12 +378,11 @@ out float vCurvedBase;
 out vec3 vSurfaceNormal;
 out float vPointPx;
 uniform int uSmoothGlass;
-uniform float uContourLines;
 void main() {
     vec3 world = basinSurface(aUv, vCrest, vEnergy, vCurvedBase);
     vSurfaceNormal=vec3(0.0,1.0,0.0);
     // Glass triangles and the direct land marks (whose brightness follows the relief) take the true normal.
-    if (uPass==1 && uDepthOnly==0 && (uMarks==1 || uSmoothGlass==1 || uContourLines>0.0)) {
+    if (uPass==1 && uDepthOnly==0 && (uMarks==1 || uSmoothGlass==1)) {
         // Central derivatives of the very same displaced surface, evaluated
         // only for glass. Interpolation removes per-triangle highlight steps;
         // water, shore taper, cubic land and growth retain one height owner.
@@ -610,6 +612,10 @@ void main() {
         // staircase of square control cells along every shining shore.
         float wetMark=water ? 1.0 : (basinOutside(vUv)<1e-6 ? 1.0-smoothstep(0.0,BASIN_SHORE_HEIGHT,vCurvedBase) : 0.0);
         coverage*=1.0-smoothstep(0.0,0.6,uWaterShine)*wetMark;
+        // Where Contour Lines draw the high land's slopes, the lines are its surface: the marks give way, so
+        // ranges read as a contour wireframe and the dots stay on the dunes and gentle ground.
+        if (uContourLines>0.0 && !water)
+            coverage*=1.0-uContourLines*basinContourRegion(vUv,base);
         if (uPass==0) coverage*=uReflection*0.55*exp(-abs(vWorld.y)*1.5)*(1.0-0.6*uWaterShine)
                            *smoothstep(-0.5,0.6,sin(reflectionPlane.z*95.0+uTime*0.16));
         float alpha=coverage*pointColour.a*distanceFade*detailFade;
@@ -630,8 +636,7 @@ void main() {
                          +basinCurve(vUv+vec2(halfCell,-halfCell))+basinCurve(vUv-vec2(halfCell)));
     }
     // The land lines' measures and their derivatives, in uniform control flow.
-    vec3 landNormal=normalize(vSurfaceNormal);
-    float landContour=vWorld.y/LAND_CONTOUR_SPACING;
+    float landContour=vWorld.z/LAND_CONTOUR_SPACING;
     float landContourPerPixel=fwidth(landContour);
     vec3 landLineGlow=vec3(0.0);
     // Derivatives for the edge glow and glint, taken here in uniform control flow.
@@ -678,7 +683,8 @@ void main() {
         float distance=abs(fract(ripple-0.5)-0.5)/max(fwidth(ripple),1e-5);
         float sheen=1.0-smoothstep(0.0,0.65*uEdgePx,distance);
         // A shining surface shows its water, not a ruled grid: the resting curves fade, crests stay whole.
-        float curveCoverage=waveWire*(0.11*(1.0-0.8*uWaterShine)+0.55*min(crest,1.5));
+        // A passing crest lights its curves gently (they used to flash at over half strength, the lake's busiest motion).
+        float curveCoverage=waveWire*(0.11*(1.0-0.8*uWaterShine)+0.22*min(crest,1.5));
         float network=(1.0-smoothstep(0.0,0.9*uEdgePx,rippleDistance))*rippleClarity
                       *(0.14+0.3*min(crest,1.5)+0.25*vEnergy)*min(3.0*uWaterDetail,1.4);   // Water Detail 0: none
         // Rings lapping out from every shore (concentric round an island), drifting slowly outward and
@@ -691,7 +697,7 @@ void main() {
                     *(water ? smoothstep(0.004,0.02,bankUv) : 0.0);
         network=max(network,rings);
         curveCoverage=mix(curveCoverage,clamp(network,0.0,1.0),uWaterShine);
-        float sheenCoverage=sheen*(0.12+0.16*crest)*uWaterDetail;
+        float sheenCoverage=sheen*(0.12+0.08*crest)*uWaterDetail;
         line=(1.0-(1.0-curveCoverage)*(1.0-sheenCoverage))*waterCoverage;
     }
     float ridgeWeight=clamp(base*0.8+0.2*light+0.15*sin(vWorld.x*7.0+vWorld.z*5.0),0.0,1.0);
@@ -717,7 +723,7 @@ void main() {
     }
     // The original event crest illuminates curved water detail. Keep troughs
     // dark instead of covering each crest with an opaque luminous sheet.
-    float ring = water ? clamp(crest*0.08,0.0,0.20) : 0.0;
+    float ring = water ? clamp(crest*0.03,0.0,0.08) : 0.0;   // gentle: a crest washing the lake read as busy flashing patches
     vec3 eye=uEye;
     vec3 view=normalize(eye-vWorld);
     n=faceforward(n,-view,n);
@@ -755,6 +761,13 @@ void main() {
         // while the shared Fresnel response exposes continuous grazing curves.
         vec3 glass=uGlassTint.rgb*0.035+environment*3.0*sceneEnvironmentBrdf(sceneMaterialF0(material),roughness,max(dot(n,view),1e-4));
         if (bodyLight) glass+=sceneBrdfLight(material,n,view,toBody,bodyColour.rgb*bodyColour.a*0.7);
+        // Glossy rims: grazing glass the Sun/Moon can see catches its light along every crest and silhouette (a
+        // Fresnel sheen in the body's colour), so rolling glass dunes read as polished, rim-lit forms.
+        if (bodyLight) {
+            float grazing=1.0-clamp(dot(n,view),0.0,1.0);
+            // Only surfaces facing the body's side catch it (a body below their horizon lights nothing).
+            glass+=bodyColour.rgb*bodyColour.a*pow(grazing,4.0)*0.9*smoothstep(0.0,0.25,dot(n,toBody));
+        }
         fill=mix(fill,glass,glassWeight);
         fillAlpha=max(fillAlpha,glassWeight*0.85);
     }
@@ -771,7 +784,7 @@ void main() {
         // The mirror leans only partly with the mesh's facets: their flat triangles, tilting as waves pass,
         // made the reflection jump in blotches from triangle to triangle (busy motion on a calm lake).
         vec3 calm=normalize(mix(vec3(0.0,1.0,0.0),n,0.15));
-        vec3 wn=normalize(calm+0.1*uWaterDetail*ripple+vec3(-rippleSlope.x,0.0,-rippleSlope.y)*20.0*uWaterDetail);
+        vec3 wn=normalize(calm+0.04*uWaterDetail*ripple+vec3(-rippleSlope.x,0.0,-rippleSlope.y)*8.0*uWaterDetail);
         vec3 mirror=reflect(-view,wn);
         mirror.y=abs(mirror.y);                       // the mirror shows the sky above the water
         vec3 sky=basinVisibleSkyRadiance(vWorld,mirror);
@@ -821,17 +834,17 @@ void main() {
     vec3 shoreColour=mix(uLineColor.rgb,uCrestColor.rgb,clamp(0.5+0.45*sin(vWorld.x*3.0+vWorld.z*2.0),0.0,1.0));
     premult=premult*(1.0-shoreAlpha)+shoreColour*shoreAlpha;
     alpha=alpha*(1.0-shoreAlpha)+shoreAlpha;
-    // Contour Lines: level lines of the land's height over its real slopes (hillsides and ranges), a few pixels
-    // apart at least (they fade where they would crowd), in the palette leaning toward the ridge colour and
-    // brightening with the spectrum's energy. Crests themselves are the skyline pass's silhouettes.
+    // Contour Lines: the range drawn as a wireframe of rows across it (lines of constant depth draped over the
+    // land, so every ridge and foothill shows its profile slice), a few pixels apart at least (they fade where
+    // they would crowd), in the palette leaning toward the ridge colour and brightening with the spectrum's
+    // energy. Crests themselves are the skyline pass's silhouettes.
     if (uPass==1 && uContourLines>0.0) {
         float dry=(water ? 0.0 : 1.0)*(1.0-wetShore)*detailFade*smoothstep(0.0,0.05,base);
         float contourPx=abs(fract(landContour-0.5)-0.5)/max(landContourPerPixel,1e-5);
-        // Only on the high land's real slopes (hillsides and ranges): on dunes and gentle ground they ruled it like a map.
         float contour=(1.0-smoothstep(0.35,1.1,contourPx))*(1.0-smoothstep(0.2,0.45,landContourPerPixel))
-                      *smoothstep(0.08,0.3,1.0-landNormal.y)*smoothstep(0.22,0.4,base);
+                      *basinContourRegion(vUv,base);
         float contourAlpha=clamp(contour*uContourLines*0.7*(0.75+1.1*vEnergy),0.0,1.0)*dry;
-        vec3 contourColour=mix(palette,uCrestColor.rgb,0.15*base);
+        vec3 contourColour=mix(uLineColor.rgb,palette,0.3+0.4*smoothstep(0.4,0.9,base));
         premult=premult*(1.0-contourAlpha)+contourColour*contourAlpha;
         alpha=alpha*(1.0-contourAlpha)+contourAlpha;
         landLineGlow=contourColour*contourAlpha*0.9;

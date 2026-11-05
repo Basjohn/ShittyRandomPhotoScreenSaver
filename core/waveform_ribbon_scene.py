@@ -218,6 +218,9 @@ class Recipe:
     grade_share: tuple = (.3, .75)
     bloom: float = .14
     exposure: float = 1.
+    # Pulse Rim: the rims (crisp line and rim glow) brighten by 1 + pulse_rim x the published pulse appearance field
+    # where the pulse is (light pass only). 0 draws exactly the rims without it.
+    pulse_rim: float = 0.
 
 
 FLOOR_CONTACT = (0., .03, .15)
