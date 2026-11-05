@@ -69,7 +69,6 @@ yarn-error.log*
 agent.md
 *.lnk
 *.zip
-!Docs/Future_Work/Additional_Future_Transitions_Package.zip
 
 # Build/release binary artifacts
 release/
@@ -232,11 +231,15 @@ output/
 # loaded by path: large GL textures do not belong in the Qt resource pack).
 /assets/*
 !/assets/production/
+# The existing Waveform Ribbon floor maps are *runtime source textures*, not private mocks.
+# Keep the entire authored floor-map folder versionable, including newly added maps.
+!/assets/textures/
+/assets/textures/*
+!/assets/textures/waveform_floor/
 # Transition showcase WebPs (tools/release_media.py), release-only and regenerable.
 /assets/webp/
 # Machine-local MCP servers for Claude Code (e.g. Blender via uvx mcp-for-blender).
 /.mcp.json
-
 
 # GODZIP archive metadata, Foundry repo-local state and debris staging.
 # A GODZIP archive embeds its manifest at .godzip/manifest.json; if an archive
@@ -247,7 +250,6 @@ output/
 /deleteme/
 *.godzip
 
-
 # Operator-owned onboarding preview source sheets (unshipped, never committed)
 tools/onboarding_sources/
 
@@ -256,5 +258,24 @@ tools/onboarding_sources/
 # are described by Docs/Reference/Extruded_Bubble/README.md and Investigation.md.
 /Docs/Reference/Extruded_Bubble/Evidence/
 
-# Explicit diagnostic \ screenshot key; never a Godzip/repo payload.
+# Explicit diagnostic screenshot key; never a Godzip/repo payload.
 /captures/
+
+# ---------------------------------------------------------------------------
+# Operator-only design material: local visual references, not runnable assets.
+# Do not use broad **/reference/ or *.png patterns: current docs, runtime
+# resources, onboarding sources and test goldens deliberately include images.
+# ---------------------------------------------------------------------------
+/references/
+/ui/assets/reference/
+/mocks/
+/mockups/
+/Docs/**/mocks/
+/Docs/**/mockups/
+
+# Generated Qt binary resource packs. The tracked .qrc files and all their
+# source images are canonical. Build Runner and the build scripts execute
+# tools/regen_qrc.py before packaging. For a clean *source* run, regenerate
+# these packs first; ui/resources/registration.py loads them at runtime.
+/ui/resources/*.rcc
+/ui/resources/*.rcc.provenance.json
