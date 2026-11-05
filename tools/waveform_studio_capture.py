@@ -51,6 +51,32 @@ class NoPresence:
         pass
 
 
+def _apply_shell_state(surface, args) -> None:
+    """Evidence-only shell state (picker open, dock expanded, inspector scroll) via QML object names."""
+    root = surface.host.root
+
+    def named(name):
+        stack, found = [root], []
+        while stack:
+            item = stack.pop()
+            if item.objectName() == name:
+                found.append(item)
+            stack.extend(reversed(item.childItems()))
+        return found
+
+    if args.pick_node >= 0:
+        for row in named("gradientRow")[:1]:
+            row.setProperty("selected", args.pick_node)
+    if args.dock_open:
+        for dock in named("responseDock"):
+            dock.setProperty("expanded", True)
+    if args.scroll:
+        for scroll in named("inspectorScroll"):
+            flick = scroll.property("contentItem")
+            bottom = max(0.0, flick.property("contentHeight") - flick.height())
+            flick.setProperty("contentY", bottom if args.scroll < 0 else min(bottom, args.scroll))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
@@ -69,6 +95,11 @@ def main() -> int:
     parser.add_argument("--card-extent", default="", help="Live card world extent WxH (CUSTOM viewport_extent)")
     parser.add_argument("--border", type=float, default=None, help="Live card border width (px)")
     parser.add_argument("--workspaces", default="composition,reactivity,appearance,world")
+    parser.add_argument("--expand", default="", help="Inspector groups to open (comma list, or 'all')")
+    parser.add_argument("--pick-node", type=int, default=-1,
+                        help="Open the colour picker on this gradient node (Appearance)")
+    parser.add_argument("--scroll", type=float, default=0.0, help="Inspector scroll offset (px; negative = bottom)")
+    parser.add_argument("--dock-open", action="store_true", help="Expand the Reactivity response editor")
     args = parser.parse_args()
     width, height = (int(v) for v in args.size.split("x"))
 
@@ -181,6 +212,17 @@ def main() -> int:
             bridge.setWorkspace(workspace)
             if workspace == "appearance":
                 bridge.selectObject("ribbon1")
+            if args.expand:
+                groups = {g for w in controller.session.schema.workspaces for g in w.groups} \
+                    if args.expand == "all" else set(args.expand.split(","))
+                import dataclasses
+                # Evidence only: exactly these groups open (the bridge's own schema copy).
+                bridge._schema = dataclasses.replace(bridge._schema, workspaces=tuple(
+                    dataclasses.replace(w, open_groups=tuple(g for g in w.groups if g in groups) or ("(none)",))
+                    for w in bridge._schema.workspaces))
+                bridge._rebuild_inspector()
+            surface.pump(3)
+            _apply_shell_state(surface, args)
             surface.pump(3)
             name = args.output / f"studio_{workspace}{suffix}.png"
             Image.fromarray(surface.grab()).save(name)

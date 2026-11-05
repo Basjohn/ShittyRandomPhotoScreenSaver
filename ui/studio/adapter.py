@@ -121,6 +121,20 @@ class StudioModeAdapter(ABC):
         """(path, value) edit that adds one scene object, or None at capacity / unsupported."""
         return None
 
+    def apply_preset(self, group: str, preset_id: str, baseline: Mapping[str, Any],
+                     values: Mapping[str, Any]) -> dict:
+        """{path: value} changes for a group preset (relative to ``baseline``: reversible)."""
+        return {}
+
+    def scene_handles(self, frame: Any, values: Mapping[str, Any], object_id: str,
+                      size: tuple[float, float], extent, style) -> dict:
+        """Direct-manipulation handles for the selected object, projected through the mode's real camera.
+
+        Returns {"outline": [[x, y], ...], "handles": [{"id", "property", "endpoint", "axis" ("x"|"y"),
+        "x", "y", "perPixel", "label"}]} in presented-frame pixels (origin top-left); ``perPixel`` is the value change per
+        screen pixel of drag along ``axis`` (y grows downwards)."""
+        return {"outline": [], "handles": []}
+
     def default_fixture(self, evaluator) -> str | None:
         """The preview input the transport starts on (None: the evaluator's own default)."""
         return None

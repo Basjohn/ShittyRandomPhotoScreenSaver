@@ -11,6 +11,11 @@ Rectangle {
     focus: true
 
     readonly property var t: studio.theme
+    function endpointValue(id, endpoint) {
+        var v = studio.values[id]
+        if (v === undefined) return 0
+        return (typeof v === "object" && v !== null && v.length !== undefined) ? Number(v[endpoint]) : Number(v)
+    }
     function tc(name, fallback) { return (t && t[name]) ? t[name] : fallback }
     readonly property color cBg: tc("bg", "#0b0d14")
     readonly property color cPanel: tc("panel", "#121621")
@@ -71,8 +76,10 @@ Rectangle {
         property bool checked: false
         property bool enabledState: true
         property int textSize: shell.fontBase
+        property string icon: ""
+        property int iconSize: 18
         signal clicked()
-        implicitWidth: Math.max(34, label.implicitWidth + 22)
+        implicitWidth: Math.max(34, (icon !== "" ? iconSize + (text !== "" ? 8 : 0) : 0) + label.implicitWidth + 22)
         implicitHeight: 30
         radius: 5
         opacity: enabledState ? 1.0 : 0.45
@@ -82,13 +89,21 @@ Rectangle {
         activeFocusOnTab: true
         Accessible.role: Accessible.Button
         Accessible.name: text || tip
-        Text {
-            id: label
+        Row {
             anchors.centerIn: parent
-            text: btn.text
-            color: btn.checked ? shell.cText : (btn.primary ? shell.cAccent : shell.cText)
-            font.pixelSize: btn.textSize
-            font.bold: btn.checked
+            spacing: 8
+            StudioIcon { visible: btn.icon !== ""; name: btn.icon; width: btn.iconSize; height: btn.iconSize
+                         anchors.verticalCenter: parent.verticalCenter
+                         color: btn.primary ? shell.cAccent : shell.cText; filled: btn.icon === "play" }
+            Text {
+                id: label
+                visible: text !== ""
+                anchors.verticalCenter: parent.verticalCenter
+                text: btn.text
+                color: btn.checked ? shell.cText : (btn.primary ? shell.cAccent : shell.cText)
+                font.pixelSize: btn.textSize
+                font.bold: btn.checked
+            }
         }
         MouseArea {
             id: mouse
@@ -234,6 +249,18 @@ Rectangle {
             Keys.onEscapePressed: { text = nf.display; focus = false }
         }
         Binding { target: input; property: "text"; value: nf.display; when: !input.activeFocus }
+        Connections {
+            target: studio
+            function onRevealed(id, endpoint) {
+                if (id !== nf.propId || endpoint !== nf.endpoint) return
+                input.forceActiveFocus(); input.selectAll()
+                Qt.callLater(function() {
+                    var flick = inspectorScroll.contentItem
+                    var p = nf.mapToItem(flick.contentItem, 0, 0)
+                    flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height, p.y - 80))
+                })
+            }
+        }
     }
 
     component RowLabel: Text {
@@ -293,6 +320,504 @@ Rectangle {
             }
         }
         Accessible.name: "Live trace: " + channels.join(", ")
+    }
+
+
+    // ------------------------------------------------------------- colour helpers (display sRGB)
+    function hexToRgb(h) {
+        h = String(h).replace("#", "")
+        if (h.length === 8) h = h.slice(2)
+        return [parseInt(h.slice(0, 2), 16) / 255, parseInt(h.slice(2, 4), 16) / 255, parseInt(h.slice(4, 6), 16) / 255]
+    }
+    function rgbToHex(c) {
+        function two(v) { var s = Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16); return s.length < 2 ? "0" + s : s }
+        return "#" + two(c[0]) + two(c[1]) + two(c[2])
+    }
+    function rgbToHsv(c) {
+        var mx = Math.max(c[0], c[1], c[2]), mn = Math.min(c[0], c[1], c[2]), d = mx - mn, h = 0
+        if (d > 1e-6) {
+            if (mx === c[0]) h = ((c[1] - c[2]) / d) % 6
+            else if (mx === c[1]) h = (c[2] - c[0]) / d + 2
+            else h = (c[0] - c[1]) / d + 4
+            h /= 6; if (h < 0) h += 1
+        }
+        return [h, mx > 0 ? d / mx : 0, mx]
+    }
+    function hsvToRgb(h, sat, v) {
+        var i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - sat), q = v * (1 - f * sat), t = v * (1 - (1 - f) * sat)
+        switch (((i % 6) + 6) % 6) {
+        case 0: return [v, t, p]; case 1: return [q, v, p]; case 2: return [p, v, t]
+        case 3: return [p, q, v]; case 4: return [t, p, v]; default: return [v, p, q]
+        }
+    }
+
+    // A display-space HSV picker. `changed` previews while dragging, `picked` commits on release / Enter.
+    component ColourPicker: Column {
+        id: picker
+        property string hex: "#808080"
+        signal changed(string hex)
+        signal picked(string hex)
+        property var hsv: shell.rgbToHsv(shell.hexToRgb(hex))
+        onHexChanged: if (!svArea.pressed && !hueArea.pressed) hsv = shell.rgbToHsv(shell.hexToRgb(hex))
+        function current() { return shell.rgbToHex(shell.hsvToRgb(hsv[0], hsv[1], hsv[2])) }
+        spacing: 6
+        Row {
+            spacing: 8
+            Rectangle {
+                id: sv
+                width: Math.max(120, picker.width - 116); height: 108; radius: 4
+                border.width: 1; border.color: shell.cOutlineSoft
+                color: shell.rgbToHex(shell.hsvToRgb(picker.hsv[0], 1, 1))
+                Rectangle { anchors.fill: parent; radius: 4
+                            gradient: Gradient { orientation: Gradient.Horizontal
+                                                 GradientStop { position: 0; color: "#ffffffff" }
+                                                 GradientStop { position: 1; color: "#00ffffff" } } }
+                Rectangle { anchors.fill: parent; radius: 4
+                            gradient: Gradient { GradientStop { position: 0; color: "#00000000" }
+                                                 GradientStop { position: 1; color: "#ff000000" } } }
+                Rectangle { x: picker.hsv[1] * sv.width - 6; y: (1 - picker.hsv[2]) * sv.height - 6
+                            width: 12; height: 12; radius: 6; color: "transparent"; border.width: 2; border.color: "white" }
+                MouseArea {
+                    id: svArea
+                    anchors.fill: parent
+                    function pick(m) {
+                        picker.hsv = [picker.hsv[0], Math.max(0, Math.min(1, m.x / width)), Math.max(0, Math.min(1, 1 - m.y / height))]
+                        picker.changed(picker.current())
+                    }
+                    onPressed: function(m) { pick(m) }
+                    onPositionChanged: function(m) { if (pressed) pick(m) }
+                    onReleased: picker.picked(picker.current())
+                }
+            }
+            Rectangle {
+                id: hueBar
+                width: 16; height: 108; radius: 3
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: "#ff0000" } GradientStop { position: 0.17; color: "#ffff00" }
+                    GradientStop { position: 0.33; color: "#00ff00" } GradientStop { position: 0.5; color: "#00ffff" }
+                    GradientStop { position: 0.67; color: "#0000ff" } GradientStop { position: 0.83; color: "#ff00ff" }
+                    GradientStop { position: 1.0; color: "#ff0000" }
+                }
+                Rectangle { y: picker.hsv[0] * hueBar.height - 2; width: hueBar.width; height: 4; color: "white" }
+                MouseArea {
+                    id: hueArea
+                    anchors.fill: parent
+                    function pick(m) {
+                        picker.hsv = [Math.max(0, Math.min(0.999, m.y / height)), picker.hsv[1], picker.hsv[2]]
+                        picker.changed(picker.current())
+                    }
+                    onPressed: function(m) { pick(m) }
+                    onPositionChanged: function(m) { if (pressed) pick(m) }
+                    onReleased: picker.picked(picker.current())
+                }
+            }
+            Column {
+                spacing: 6
+                Rectangle { width: 46; height: 30; radius: 4; color: picker.current(); border.width: 1; border.color: shell.cOutline }
+                Rectangle {
+                    width: 76; height: 24; radius: 4; color: shell.cInput; border.width: 1
+                    border.color: hexInput.activeFocus ? shell.cAccent : shell.cOutlineSoft
+                    TextInput { id: hexInput; anchors.fill: parent; anchors.margins: 4; color: shell.cText
+                                font.pixelSize: shell.fontBase - 1; selectByMouse: true; text: picker.current()
+                                Accessible.name: "Hex colour"
+                                onAccepted: if (/^#?[0-9a-fA-F]{6}$/.test(text)) picker.picked(text.charAt(0) === "#" ? text : "#" + text) }
+                }
+            }
+        }
+    }
+
+    // Ordered colour nodes on a strip: drag to move, click to pick a colour, double-click to add.
+    component GradientRow: Column {
+        id: gr
+        objectName: "gradientRow"
+        property var row
+        readonly property var nodes: studio.values[row.id] || []
+        property int selected: -1
+        property var working: null        // nodes during a drag/pick (display), else null
+        readonly property var shown: working || nodes
+        function payload(list) {
+            var out = []
+            for (var i = 0; i < list.length; ++i) out.push({"pos": list[i].pos, "hex": list[i].hex, "from": list[i].from})
+            return JSON.stringify(out)
+        }
+        function tagged() {
+            var out = []
+            for (var i = 0; i < nodes.length; ++i) out.push({"pos": nodes[i].pos, "hex": nodes[i].hex, "from": i})
+            return out
+        }
+        spacing: 6
+        Row {
+            spacing: 8
+            RowLabel { text: row.label; tip: row.tooltip; propId: row.id; height: 22; width: 118 }
+            Text { anchors.verticalCenter: parent.verticalCenter; text: gr.shown.length + " / " + Math.round(row.max) + " nodes"
+                   color: shell.cDim; font.pixelSize: shell.fontBase - 2 }
+        }
+        Item {
+            id: strip
+            width: gr.width; height: 34
+            Canvas {
+                id: stripCanvas
+                anchors.fill: parent
+                anchors.topMargin: 4; anchors.bottomMargin: 8
+                onPaint: {
+                    var ctx = getContext("2d"); ctx.reset()
+                    var list = gr.shown
+                    if (!list.length) return
+                    var g = ctx.createLinearGradient(0, 0, width, 0)
+                    for (var i = 0; i < list.length; ++i) g.addColorStop(Math.max(0, Math.min(1, list[i].pos)), list[i].hex)
+                    ctx.fillStyle = g
+                    ctx.fillRect(0, 0, width, height)
+                    ctx.strokeStyle = shell.cOutline; ctx.lineWidth = 1; ctx.strokeRect(0.5, 0.5, width - 1, height - 1)
+                }
+                Connections { target: gr; function onShownChanged() { stripCanvas.requestPaint() } }
+                Component.onCompleted: requestPaint()
+            }
+            MouseArea {
+                anchors.fill: parent
+                onDoubleClicked: function(m) {
+                    if (gr.nodes.length >= row.max) return
+                    var list = gr.tagged(), pos = m.x / width, hex = list.length ? list[0].hex : "#808080"
+                    for (var i = 0; i < list.length; ++i) if (list[i].pos <= pos) hex = list[i].hex
+                    list.push({"pos": pos, "hex": hex, "from": -1})
+                    list.sort(function(a, b) { return a.pos - b.pos })
+                    studio.commitGradient(row.id, gr.payload(list))
+                }
+            }
+            Repeater {
+                model: gr.shown
+                delegate: Rectangle {
+                    id: node
+                    x: modelData.pos * (strip.width - 14)
+                    y: 0
+                    width: 14; height: 30; radius: 3
+                    color: modelData.hex
+                    border.width: gr.selected === index ? 3 : 1.5
+                    border.color: gr.selected === index ? shell.cFocus : "white"
+                    activeFocusOnTab: true
+                    Accessible.role: Accessible.Slider
+                    Accessible.name: row.label + " node " + (index + 1)
+                    MouseArea {
+                        anchors.fill: parent
+                        anchors.margins: -4
+                        cursorShape: Qt.SizeHorCursor
+                        property real startX: 0
+                        property bool moved: false
+                        onPressed: function(m) { gr.selected = index; startX = node.x; moved = false
+                                                 gr.working = gr.tagged(); node.forceActiveFocus() }
+                        onPositionChanged: function(m) {
+                            if (!pressed) return
+                            var list = gr.tagged()
+                            var p = Math.max(0, Math.min(1, (node.x + m.x - 7) / (strip.width - 14)))
+                            var lo = index > 0 ? list[index - 1].pos + 0.001 : 0
+                            var hi = index < list.length - 1 ? list[index + 1].pos - 0.001 : 1
+                            list[index].pos = Math.max(lo, Math.min(hi, p))
+                            moved = true
+                            gr.working = list
+                            studio.previewGradient(row.id, gr.payload(list))
+                        }
+                        onReleased: {
+                            if (moved) studio.commitGradient(row.id, gr.payload(gr.working))
+                            gr.working = null
+                        }
+                    }
+                    Keys.onDeletePressed: if (gr.nodes.length > row.min) {
+                        var list = gr.tagged(); list.splice(index, 1); gr.selected = -1
+                        studio.commitGradient(row.id, gr.payload(list))
+                    }
+                    FocusRing { visible: node.activeFocus }
+                }
+            }
+        }
+        Text {
+            visible: gr.selected < 0
+            text: "Click a node to colour it · drag to move · double-click the strip to add"
+            color: shell.cDim; font.pixelSize: shell.fontBase - 3
+            width: gr.width; elide: Text.ElideRight
+        }
+        Column {
+            visible: gr.selected >= 0 && gr.selected < gr.nodes.length
+            spacing: 6
+            ColourPicker {
+                width: gr.width
+                hex: gr.selected >= 0 && gr.selected < gr.nodes.length ? gr.nodes[gr.selected].hex : "#808080"
+                onChanged: function(h) {
+                    var list = gr.tagged(); list[gr.selected].hex = h; gr.working = list
+                    studio.previewGradient(row.id, gr.payload(list))
+                }
+                onPicked: function(h) {
+                    var list = gr.tagged(); list[gr.selected].hex = h; gr.working = null
+                    studio.commitGradient(row.id, gr.payload(list))
+                }
+            }
+            Row {
+                spacing: 8
+                StudioButton { text: "Remove Node"; icon: "minus"; iconSize: 14; enabledState: gr.nodes.length > row.min
+                               tip: "Remove this node (Delete)"
+                               onClicked: { var list = gr.tagged(); list.splice(gr.selected, 1); gr.selected = -1
+                                            studio.commitGradient(row.id, gr.payload(list)) } }
+                StudioButton { text: "Done"; onClicked: gr.selected = -1 }
+            }
+        }
+    }
+
+    // Reversible starting points for a group (e.g. materials): one tile = one undoable edit.
+    component PresetTiles: Flow {
+        id: tiles
+        property var presets: []
+        property string group: ""
+        spacing: 8
+        Repeater {
+            model: tiles.presets
+            delegate: Rectangle {
+                id: tile
+                readonly property bool active: studio.activePresets[tiles.group] === modelData.id
+                width: Math.max(58, Math.floor((tiles.width - tiles.spacing * (tiles.presets.length - 1)) / Math.max(1, tiles.presets.length)))
+                height: 70; radius: 6
+                color: tileMouse.containsMouse ? shell.cRaised : shell.cPanel
+                border.width: active ? 2 : 1
+                border.color: active ? shell.cAccent : shell.cOutlineSoft
+                activeFocusOnTab: true
+                Accessible.role: Accessible.Button
+                Accessible.name: modelData.label
+                Rectangle {
+                    x: 6; y: 6; width: parent.width - 12; height: 40; radius: 4
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0; color: modelData.swatch[0] || shell.cTrack }
+                        GradientStop { position: 1; color: modelData.swatch[1] || shell.cTrack }
+                    }
+                    Rectangle { anchors.fill: parent; radius: 4
+                                gradient: Gradient { GradientStop { position: 0; color: "#55ffffff" }
+                                                     GradientStop { position: .5; color: "#00ffffff" } } }
+                }
+                Text { anchors.horizontalCenter: parent.horizontalCenter; y: 50; text: modelData.label
+                       color: shell.cText; font.pixelSize: shell.fontBase - 2; font.bold: tile.active }
+                MouseArea { id: tileMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                            onClicked: studio.applyPreset(tiles.group, modelData.id) }
+                Keys.onSpacePressed: studio.applyPreset(tiles.group, modelData.id)
+                FocusRing { visible: tile.activeFocus }
+                C.ToolTip.visible: tileMouse.containsMouse
+                C.ToolTip.text: modelData.description + "\nApplies to the real material values; Undo reverts it."
+                C.ToolTip.delay: 400
+            }
+        }
+    }
+
+    // Birth -> sustain -> tip fade over a real lifetime (quiet or peak endpoint), with draggable boundaries.
+    component LifecycleTimeline: Column {
+        id: life
+        property var spec: ({})
+        property int endpoint: 0
+        readonly property var total: studio.values[spec.total ? spec.total.id : ""] || [0, 0]
+        readonly property var fade: spec.fade && spec.fade.id ? (studio.values[spec.fade.id] || [0, 0]) : null
+        readonly property var peel: spec.peel && spec.peel.id ? (studio.values[spec.peel.id] || [0, 0]) : null
+        readonly property real maxT: spec.total ? spec.total.max : 1
+        readonly property real t: total[endpoint]
+        readonly property real f: fade ? fade[endpoint] : 0
+        readonly property real pl: peel ? Math.min(peel[endpoint], t) : 0
+        spacing: 4
+        Row {
+            spacing: 8
+            Text { text: life.spec.label || "Lifetime"; color: shell.cText; font.pixelSize: shell.fontBase - 1; font.bold: true
+                   anchors.verticalCenter: parent.verticalCenter }
+            Repeater {
+                model: ["Quiet", "Peak"]
+                delegate: Chip { text: modelData; selected: life.endpoint === index; onPicked: life.endpoint = index }
+            }
+            Text { anchors.verticalCenter: parent.verticalCenter; color: shell.cDim; font.pixelSize: shell.fontBase - 2
+                   text: life.t.toFixed(2) + " s" + (life.fade ? " · fade " + Math.round(life.f * 100) + "%" : "")
+                         + (life.peel ? " · peel " + life.pl.toFixed(2) + " s" : "") }
+        }
+        Item {
+            id: lane
+            objectName: "lifecycleLane"
+            width: life.width; height: life.peel !== null ? 62 : 44
+            property bool dragging: false
+            property real frozenScale: 1
+            // Axis: a little past the longest lifetime/peel of either endpoint; frozen while dragging so the
+            // grip stays under the pointer.
+            readonly property real liveScale: 1.25 * Math.max(0.1, life.total[0], life.total[1],
+                                                              life.peel ? life.peel[0] : 0, life.peel ? life.peel[1] : 0)
+            readonly property real scaleT: dragging ? frozenScale : liveScale
+            readonly property real fadeStart: life.t * (1 - life.f)
+            function px(seconds) { return 8 + (width - 16) * Math.max(0, Math.min(1, seconds / scaleT)) }
+            // Lifetime lane: sustain then tip fade
+            Rectangle { x: 8; y: 8; width: lane.width - 16; height: 10; radius: 5; color: shell.cTrack }
+            Rectangle { x: lane.px(0); y: 8; width: Math.max(0, lane.px(lane.fadeStart) - lane.px(0)); height: 10; radius: 5
+                        color: shell.cAccent }
+            Rectangle { x: lane.px(lane.fadeStart); y: 8; width: Math.max(0, lane.px(life.t) - lane.px(lane.fadeStart)); height: 10
+                        gradient: Gradient { orientation: Gradient.Horizontal
+                                             GradientStop { position: 0; color: shell.cAccent }
+                                             GradientStop { position: 1; color: "transparent" } } }
+            Text { readonly property real room: lane.px(lane.fadeStart) - lane.px(0)
+                   visible: room > implicitWidth + 6
+                   x: lane.px(0) + (room - implicitWidth) / 2; y: 20; text: "sustain"; color: shell.cDim; font.pixelSize: shell.fontBase - 3 }
+            Text { readonly property real room: lane.px(life.t) - lane.px(lane.fadeStart)
+                   visible: life.fade !== null && room > implicitWidth + 6
+                   x: lane.px(lane.fadeStart) + (room - implicitWidth) / 2; y: 20; text: "tip fade"; color: shell.cDim
+                   font.pixelSize: shell.fontBase - 3 }
+            Rectangle {     // the other endpoint's lifetime, for reference
+                x: lane.px(life.total[1 - life.endpoint]) - 1; y: 4; width: 2; height: 18; radius: 1
+                color: shell.cDim; opacity: .7
+            }
+            // Peel lane: how long a strand takes to detach (runs alongside the lifetime)
+            Rectangle { visible: life.peel !== null; x: 8; y: 38; width: lane.width - 16; height: 6; radius: 3; color: shell.cTrack }
+            Rectangle { visible: life.peel !== null; x: lane.px(0); y: 38; width: Math.max(0, lane.px(life.pl) - lane.px(0)); height: 6
+                        radius: 3; color: shell.cTrace3 }
+            Text { visible: life.peel !== null; x: Math.min(lane.width - implicitWidth, lane.px(life.pl) + 10); y: 34
+                   text: "peel"; color: shell.cDim; font.pixelSize: shell.fontBase - 3 }
+            Text { x: 8; y: lane.height - 12; text: "0 s"; color: shell.cDim; font.pixelSize: shell.fontBase - 4 }
+            Text { x: lane.width - 8 - implicitWidth; y: lane.height - 12; text: lane.scaleT.toFixed(1) + " s"; color: shell.cDim
+                   font.pixelSize: shell.fontBase - 4 }
+            // Drag grips: lifetime end, fade start, peel
+            Repeater {
+                model: [{"key": "total", "show": true, "y": 3}, {"key": "fade", "show": life.fade !== null, "y": 3},
+                        {"key": "peel", "show": life.peel !== null, "y": 33}]
+                delegate: Rectangle {
+                    id: grip
+                    objectName: "lifecycleGrip"
+                    property string key: modelData.key
+                    visible: modelData.show
+                    readonly property real at: modelData.key === "total" ? lane.px(life.t)
+                                               : modelData.key === "fade" ? lane.px(lane.fadeStart) : lane.px(life.pl)
+                    readonly property var prop: modelData.key === "total" ? life.spec.total
+                                                : modelData.key === "fade" ? life.spec.fade : life.spec.peel
+                    x: at - 5; y: modelData.y; width: 10; height: modelData.key === "peel" ? 16 : 20; radius: 3
+                    color: gripMouse.pressed ? shell.cAccent : shell.cText; border.width: 1; border.color: shell.cOutline
+                    function valueAt(x) {
+                        var seconds = (x - 8) / Math.max(1, lane.width - 16) * lane.scaleT
+                        if (modelData.key === "fade") return Math.max(0, Math.min(1, 1 - seconds / Math.max(1e-6, life.t)))
+                        return seconds
+                    }
+                    MouseArea {
+                        id: gripMouse
+                        anchors.fill: parent; anchors.margins: -5
+                        hoverEnabled: true
+                        preventStealing: true
+                        cursorShape: Qt.SizeHorCursor
+                        onPressed: { lane.frozenScale = lane.liveScale; lane.dragging = true
+                                     studio.beginEdit(grip.prop.id, grip.prop.label) }
+                        onPositionChanged: function(m) {
+                            if (pressed) studio.previewValue(grip.prop.id, life.endpoint, grip.valueAt(grip.x + m.x))
+                        }
+                        onReleased: { lane.dragging = false; studio.endEdit() }
+                    }
+                    C.ToolTip.visible: gripMouse.containsMouse && !gripMouse.pressed
+                    C.ToolTip.text: (grip.prop ? grip.prop.label : "") + " (" + (life.endpoint ? "Peak" : "Quiet") + ") — drag"
+                    C.ToolTip.delay: 500
+                }
+            }
+        }
+    }
+
+    // Schematic diagrams of real values above a group (never a render).
+    component SchematicCard: Rectangle {
+        id: card
+        property var spec: ({})
+        function v(role, idx) {
+            var id = spec.roles ? spec.roles[role] : undefined
+            var x = id !== undefined ? studio.values[id] : undefined
+            if (x === undefined) return 0
+            if (typeof x === "object" && x !== null && x.length !== undefined) return Number(x[idx === undefined ? 1 : idx])
+            return x
+        }
+        function caption(roles) {
+            var out = []
+            for (var i = 0; i < roles.length; ++i) {
+                var label = spec.labels ? spec.labels[roles[i]] : roles[i]
+                var x = card.v(roles[i])
+                out.push((label || roles[i]).toLowerCase() + " " + (Math.abs(x) < 0.1 ? x.toFixed(3) : x.toFixed(2)))
+            }
+            return out.join(" · ")
+        }
+        function hex(role) { var id = spec.roles ? spec.roles[role] : undefined; return id ? (studio.values[id] || "#808080") : "#808080" }
+        implicitHeight: 128
+        radius: 6
+        color: shell.cViewport
+        border.width: 1; border.color: shell.cOutlineSoft
+        Text { x: 8; y: 6; text: card.spec.title || ""; color: shell.cDim; font.pixelSize: shell.fontBase - 2 }
+        Canvas {
+            id: diagram
+            anchors.fill: parent; anchors.margins: 8; anchors.topMargin: 22
+            onPaint: {
+                var ctx = getContext("2d"); ctx.reset()
+                var w = width, h = height
+                if (card.spec.kind === "falloff") {
+                    var on = card.v("enabled") !== false
+                    var density = card.v("density", 1), height_ = Math.max(0.1, card.v("height", 1))
+                    var clear = card.v("clearance", 1), soft = Math.max(0.1, card.v("softness", 1))
+                    var floorY = h - 12, ry = floorY * 0.42
+                    var bg = ctx.createLinearGradient(0, 0, 0, floorY)
+                    bg.addColorStop(0, "#04050a"); bg.addColorStop(1, "#0b0d18")
+                    ctx.fillStyle = bg; ctx.fillRect(0, 0, w, floorY)
+                    if (on) {
+                        // Soft volume: deterministic puffs, denser near the ground (ground diffusion = how high
+                        // it reaches), parted around the subject line by the displacement role.
+                        var tone = [0.55 + 0.25 * shell.cAccent.r, 0.55 + 0.2 * shell.cAccent.g, 0.75 + 0.2 * shell.cAccent.b]
+                        var seed = 7
+                        function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647 }
+                        for (var i = 0; i < 46; ++i) {
+                            var px = rnd() * w, alt = Math.pow(rnd(), 1.6) * 4.0
+                            var py = floorY - alt / 4.0 * floorY
+                            var r = (14 + rnd() * 26) * (0.6 + 0.4 * soft)
+                            var a = Math.min(0.55, density * 6 * Math.exp(-alt / height_))
+                            var parted = Math.abs(py - (ry + Math.sin(px / w * 9.42) * 8))
+                            a *= Math.min(1, parted / (6 + clear * 26))
+                            var rg = ctx.createRadialGradient(px, py, 0, px, py, r)
+                            rg.addColorStop(0, Qt.rgba(tone[0], tone[1], tone[2], a))
+                            rg.addColorStop(1, Qt.rgba(tone[0], tone[1], tone[2], 0))
+                            ctx.fillStyle = rg; ctx.fillRect(px - r, py - r, 2 * r, 2 * r)
+                        }
+                    }
+                    ctx.strokeStyle = shell.cAccent; ctx.lineWidth = 2; ctx.beginPath()
+                    for (var x = 0; x <= w; x += 4) { var yy = ry + Math.sin(x / w * 9.42) * 8; if (x === 0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy) }
+                    ctx.stroke()
+                    ctx.fillStyle = "#1a1c24"; ctx.fillRect(0, floorY, w, h - floorY)
+                    ctx.fillStyle = shell.cDim; ctx.font = "10px sans-serif"
+                    ctx.fillText(on ? card.caption(["density", "height", "clearance"]) : "atmosphere off", 4, h - 1)
+                } else if (card.spec.kind === "reflection") {
+                    var tint = shell.hexToRgb(card.hex("tint")), b = card.v("brightness", 1) / 3
+                    var refl = Math.min(1, card.v("reflection", 1) / 8), wet = card.v("wetness", 1), streak = card.v("streak", 1)
+                    var horizon = h * 0.35
+                    var lum = Math.min(1, card.v("brightness", 1) / 6) * 0.35
+                    var floorGrad = ctx.createLinearGradient(0, horizon, 0, h)
+                    floorGrad.addColorStop(0, Qt.rgba(tint[0] * lum, tint[1] * lum, tint[2] * lum, 1))
+                    floorGrad.addColorStop(1, Qt.rgba(tint[0] * lum * 0.3, tint[1] * lum * 0.3, tint[2] * lum * 0.3, 1))
+                    ctx.fillStyle = floorGrad; ctx.fillRect(0, horizon, w, h - horizon)
+                    var cols = [0.15, 0.32, 0.5, 0.68, 0.85]
+                    for (var i = 0; i < cols.length; ++i) {
+                        var gx = cols[i] * w, len = (h - horizon) * (0.25 + 0.75 * streak)
+                        var gg = ctx.createLinearGradient(0, horizon, 0, horizon + len)
+                        gg.addColorStop(0, Qt.rgba(shell.cAccent.r, shell.cAccent.g, shell.cAccent.b, 0.25 + 0.6 * refl)); gg.addColorStop(1, "rgba(0,0,0,0)")
+                        ctx.fillStyle = gg; ctx.fillRect(gx - 4 - wet * 4, horizon, 8 + wet * 8, len)
+                    }
+                    ctx.strokeStyle = shell.cAccent; ctx.lineWidth = 2; ctx.beginPath()
+                    for (var x2 = 0; x2 <= w; x2 += 4) { var y2 = horizon - 14 + Math.sin(x2 / w * 9) * 8; if (x2 === 0) ctx.moveTo(x2, y2); else ctx.lineTo(x2, y2) }
+                    ctx.stroke()
+                    ctx.fillStyle = shell.cDim; ctx.font = "10px sans-serif"
+                    ctx.fillText(card.caption(["brightness", "reflection", "streak"]), 4, h - 1)
+                } else if (card.spec.kind === "exposure") {
+                    var e = card.v("exposure"), bq = card.v("bloom", 0), bp = card.v("bloom", 1)
+                    ctx.strokeStyle = shell.cOutlineSoft; ctx.strokeRect(0.5, 0.5, w - 1, h - 12)
+                    ctx.strokeStyle = shell.cAccent; ctx.lineWidth = 2; ctx.beginPath()
+                    var clipped = false
+                    for (var i2 = 0; i2 <= 60; ++i2) {
+                        var xi = i2 / 60, out = 1 - Math.exp(-xi * 2.2 * e)
+                        if (out > 0.97) clipped = true
+                        var px = xi * w, py = (h - 12) * (1 - Math.min(1, out))
+                        if (i2 === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py)
+                    }
+                    ctx.stroke()
+                    ctx.fillStyle = Qt.rgba(1, 1, 1, 0.08 + 0.4 * bp); ctx.beginPath(); ctx.arc(w * 0.82, (h - 12) * 0.3, 6 + bp * 20, 0, 6.283); ctx.fill()
+                    ctx.fillStyle = clipped ? shell.cDanger : shell.cDim; ctx.font = "10px sans-serif"
+                    ctx.fillText("exposure " + e.toFixed(2) + " · bloom " + bq.toFixed(2) + "→" + bp.toFixed(2)
+                                 + (clipped ? " · highlights clip" : ""), 4, h - 1)
+                }
+            }
+            Connections { target: studio; function onValuesChanged() { diagram.requestPaint() } }
+            Component.onCompleted: requestPaint()
+        }
+        Accessible.name: (spec.title || "") + " schematic"
     }
 
     // ------------------------------------------------------------------- rows
@@ -445,19 +970,37 @@ Rectangle {
         }
     }
 
-    component ColourRow: Row {
+    component ColourRow: Column {
+        id: colourRow
         property var row
-        spacing: 8
-        height: 30
-        RowLabel { text: row.label; tip: row.tooltip; propId: row.id; height: parent.height }
-        Rectangle {
-            anchors.verticalCenter: parent.verticalCenter
-            width: 40; height: 22; radius: 4
-            color: studio.values[row.id] || "#000000"
-            border.width: 1; border.color: shell.cOutline
+        property bool picking: false
+        spacing: 4
+        Row {
+            spacing: 8
+            height: 30
+            RowLabel { text: row.label; tip: row.tooltip; propId: row.id; height: parent.height }
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: 40; height: 22; radius: 4
+                color: studio.values[row.id] || "#000000"
+                border.width: colourRow.picking ? 2 : 1; border.color: colourRow.picking ? shell.cFocus : shell.cOutline
+                activeFocusOnTab: true
+                Accessible.role: Accessible.Button
+                Accessible.name: row.label + " colour"
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                            onClicked: colourRow.picking = !colourRow.picking }
+                Keys.onSpacePressed: colourRow.picking = !colourRow.picking
+            }
+            NumberField { implicitWidth: 84; propId: row.id; anchors.verticalCenter: parent.verticalCenter
+                          display: studio.values[row.id] || "" }
         }
-        NumberField { implicitWidth: 84; propId: row.id; anchors.verticalCenter: parent.verticalCenter
-                      display: studio.values[row.id] || "" }
+        ColourPicker {
+            width: colourRow.width
+            visible: colourRow.picking
+            hex: studio.values[row.id] || "#808080"
+            onChanged: function(h) { studio.previewColour(row.id, h) }
+            onPicked: function(h) { studio.previewColour(row.id, h); studio.endEdit() }
+        }
     }
 
     // ------------------------------------------------------------------- layout
@@ -529,13 +1072,13 @@ Rectangle {
                     color: shell.cAccent; font.pixelSize: shell.fontBase - 1; font.bold: true
                     Accessible.name: "Modified since the Studio opened"
                 }
-                StudioButton { text: "Undo"; enabledState: studio.canUndo
+                StudioButton { text: "Undo"; icon: "undo"; iconSize: 16; enabledState: studio.canUndo
                                tip: studio.canUndo ? "Undo " + studio.undoText + " (Ctrl+Z)" : "Nothing to undo"
                                onClicked: studio.undo() }
-                StudioButton { text: "Redo"; enabledState: studio.canRedo
+                StudioButton { text: "Redo"; icon: "redo"; iconSize: 16; enabledState: studio.canRedo
                                tip: studio.canRedo ? "Redo " + studio.redoText + " (Ctrl+Y)" : "Nothing to redo"
                                onClicked: studio.redo() }
-                StudioButton { text: "Revert"; enabledState: studio.dirty
+                StudioButton { text: "Revert"; icon: "reset"; iconSize: 16; enabledState: studio.dirty
                                tip: "Restore everything to the state the Studio opened with (undoable)"
                                onClicked: studio.revertAll() }
                 StudioButton { text: "Save Preset As…"; tip: "Save the current Custom settings as a preset file"
@@ -567,8 +1110,8 @@ Rectangle {
                         Row {
                             anchors.centerIn: parent
                             spacing: 8
-                            Text { text: modelData.icon || ""; visible: text !== ""; color: tab.current ? shell.cAccent : shell.cDim
-                                   font.pixelSize: shell.fontBase + 5; anchors.verticalCenter: parent.verticalCenter }
+                            StudioIcon { name: modelData.icon || ""; visible: modelData.icon !== ""; width: 18; height: 18
+                                         color: tab.current ? shell.cAccent : shell.cDim; anchors.verticalCenter: parent.verticalCenter }
                             Text { text: modelData.title; color: shell.cText; anchors.verticalCenter: parent.verticalCenter
                                    font.pixelSize: shell.fontBase + 1; font.bold: tab.current }
                         }
@@ -633,8 +1176,9 @@ Rectangle {
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: 26; height: 22; radius: 4
                                 color: eyeMouse.containsMouse ? shell.cRaised : "transparent"
-                                Text { anchors.centerIn: parent; text: modelData.visible ? "◉" : "◌"
-                                       color: modelData.visible ? shell.cText : shell.cDim; font.pixelSize: shell.fontBase + 5 }
+                                StudioIcon { anchors.centerIn: parent; width: 18; height: 18
+                                             name: modelData.visible ? "eye" : "eye-off"
+                                             color: modelData.visible ? shell.cText : shell.cDim }
                                 MouseArea { id: eyeMouse; anchors.fill: parent; hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: studio.setObjectVisible(modelData.id, !modelData.visible) }
@@ -649,7 +1193,8 @@ Rectangle {
                     }
                     StudioButton {
                         width: parent.width
-                        text: "+  Add " + studio.objectNoun
+                        icon: "plus"
+                        text: "Add " + studio.objectNoun
                         enabledState: studio.canAddObject
                         tip: studio.canAddObject ? "Show one more " + studio.objectNoun.toLowerCase()
                                                  : "All " + studio.objectNoun.toLowerCase() + "s are shown"
@@ -679,7 +1224,7 @@ Rectangle {
                         x: 12; y: 10
                         spacing: 8
                         z: 2
-                        StudioButton { text: studio.playing ? "❚❚" : "▶"; width: 36; primary: true; textSize: 16
+                        StudioButton { icon: studio.playing ? "pause" : "play"; iconSize: 20; width: 40; primary: true
                                        tip: (studio.playing ? "Pause" : "Play") + " the preview (Space)"
                                        onClicked: studio.togglePlay() }
                         C.ComboBox {
@@ -743,11 +1288,11 @@ Rectangle {
                                 property bool hovered_: false
                             }
                         }
-                        StudioButton { text: "✓"; width: 34; textSize: 16; enabledState: studio.viewModified
+                        StudioButton { icon: "check"; iconSize: 20; width: 36; enabledState: studio.viewModified
                                        tip: "Keep View: save the previewed lens (FOV); the orbit saves only when the "
                                             + "preset's camera checkbox is on; dolly and pan stay previews"
                                        onClicked: studio.keepView() }
-                        StudioButton { text: "⟲"; width: 34; textSize: 18; enabledState: studio.viewModified
+                        StudioButton { icon: "reset"; iconSize: 20; width: 36; enabledState: studio.viewModified
                                        tip: "Reset View: back to the saved camera (or double-click the scene)"
                                        onClicked: studio.resetCamera() }
                     }
@@ -801,6 +1346,127 @@ Rectangle {
                                 w.accepted = true
                             }
                         }
+                        // Direct manipulation: the selected object's outline + handles, projected through
+                        // the production camera (presented-frame pixels -> slot via frameX/frameY).
+                        Item {
+                            id: handleLayer
+                            objectName: "handleLayer"
+                            x: viewportSlot.frameX; y: viewportSlot.frameY
+                            width: viewportSlot.frameWidth; height: viewportSlot.frameHeight
+                            readonly property var outline: studio.handles.outline || []
+                            readonly property var items: studio.handles.handles || []
+                            Canvas {
+                                id: outlineCanvas
+                                anchors.fill: parent
+                                onPaint: {
+                                    var ctx = getContext("2d"); ctx.reset()
+                                    var pts = handleLayer.outline
+                                    if (pts.length < 2) return
+                                    ctx.lineJoin = "round"
+                                    ctx.strokeStyle = "#66000000"; ctx.lineWidth = 5
+                                    ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1])
+                                    for (var i = 1; i < pts.length; ++i) ctx.lineTo(pts[i][0], pts[i][1])
+                                    ctx.stroke()
+                                    ctx.strokeStyle = shell.cAccent; ctx.lineWidth = 2; ctx.setLineDash([6, 4])
+                                    ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1])
+                                    for (var j = 1; j < pts.length; ++j) ctx.lineTo(pts[j][0], pts[j][1])
+                                    ctx.stroke()
+                                }
+                                Connections { target: handleLayer; function onOutlineChanged() { outlineCanvas.requestPaint() } }
+                            }
+                            Repeater {
+                                model: handleLayer.items
+                                delegate: Item {
+                                    id: handle
+                                    objectName: "sceneHandle"
+                                    property string handleId: modelData.id
+                                    x: modelData.x - 13; y: modelData.y - 13
+                                    width: 26; height: 26
+                                    property bool dragging: false
+                                    // Width bracket: a bar across the span, drawn around the anchor.
+                                    Item {          // drag-axis guide with arrowheads (like a gizmo)
+                                        visible: modelData.span === undefined
+                                        anchors.centerIn: parent
+                                        width: modelData.axis === "x" ? 84 : 14
+                                        height: modelData.axis === "x" ? 14 : 84
+                                        opacity: hMouse.containsMouse || handle.dragging ? 1 : .7
+                                        Rectangle { anchors.centerIn: parent; color: "#e6ffffff"
+                                                    width: modelData.axis === "x" ? parent.width - 8 : 2
+                                                    height: modelData.axis === "x" ? 2 : parent.height - 8 }
+                                        StudioIcon { width: 14; height: 14; stroke: 2.4; color: "#e6ffffff"
+                                                     name: modelData.axis === "x" ? "chevron-right" : "chevron-down"
+                                                     rotation: 180
+                                                     x: modelData.axis === "x" ? -2 : 0; y: modelData.axis === "x" ? 0 : -2 }
+                                        StudioIcon { width: 14; height: 14; stroke: 2.4; color: "#e6ffffff"
+                                                     name: modelData.axis === "x" ? "chevron-right" : "chevron-down"
+                                                     x: modelData.axis === "x" ? parent.width - 12 : 0
+                                                     y: modelData.axis === "x" ? 0 : parent.height - 12 }
+                                    }
+                                    Item {          // width bracket: handle (sheet edge) down to the spine
+                                        visible: modelData.span !== undefined
+                                        x: handle.width / 2 - 6; y: handle.height / 2
+                                        width: 12; height: modelData.span || 0
+                                        Rectangle { x: 5; width: 2; height: parent.height; color: shell.cAccent }
+                                        Rectangle { y: parent.height - 1; width: 12; height: 2; color: shell.cAccent }
+                                    }
+                                    Rectangle {
+                                        anchors.centerIn: parent
+                                        width: handle.dragging || hMouse.containsMouse ? 22 : 18
+                                        height: width
+                                        radius: modelData.shape === "diamond" ? 2 : width / 2
+                                        rotation: modelData.shape === "diamond" ? 45 : 0
+                                        color: handle.dragging ? shell.cAccent : "#e6ffffff"
+                                        border.width: 2; border.color: shell.cAccent
+                                    }
+                                    StudioIcon {
+                                        anchors.centerIn: parent; width: 12; height: 12; stroke: 2.6
+                                        name: modelData.axis === "x" ? "flow" : "height"
+                                        color: handle.dragging ? "white" : shell.cAccent
+                                        rotation: 0
+                                    }
+                                    Rectangle {      // label (live value while hovered / dragged)
+                                        x: modelData.id === "width" ? -width - 4 : (modelData.axis === "x" ? 50 : 26)
+                                        y: modelData.axis === "x" ? 2 : -10
+                                        opacity: hMouse.containsMouse || handle.dragging ? 1 : .8
+                                        width: hText.implicitWidth + 12; height: 22; radius: 4
+                                        color: "#cc000000"
+                                        Text { id: hText; anchors.centerIn: parent; color: "white"; font.pixelSize: shell.fontBase - 2
+                                               text: modelData.label + (hMouse.containsMouse || handle.dragging
+                                                     ? "  " + Number(shell.endpointValue(modelData.property, modelData.endpoint)).toFixed(3) : "") }
+                                    }
+                                    MouseArea {
+                                        id: hMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        preventStealing: true
+                                        cursorShape: modelData.axis === "x" ? Qt.SizeHorCursor : Qt.SizeVerCursor
+                                        property real startValue: 0
+                                        property real startX: 0
+                                        property real startY: 0
+                                        onPressed: function(m) {
+                                            var p = mapToItem(handleLayer, m.x, m.y)
+                                            startX = p.x; startY = p.y
+                                            startValue = shell.endpointValue(modelData.property, modelData.endpoint)
+                                            handle.dragging = true
+                                            studio.beginEdit(modelData.property, modelData.label)
+                                        }
+                                        onPositionChanged: function(m) {
+                                            if (!pressed) return
+                                            var p = mapToItem(handleLayer, m.x, m.y)
+                                            var delta = modelData.axis === "x" ? p.x - startX : p.y - startY     // screen pixels (perPixel is per screen px)
+                                            studio.previewValue(modelData.property, modelData.endpoint,
+                                                                startValue + delta * modelData.perPixel)
+                                        }
+                                        onReleased: { handle.dragging = false; studio.endEdit() }
+                                        onDoubleClicked: studio.revealProperty(modelData.property, modelData.endpoint)
+                                    }
+                                    C.ToolTip.visible: hMouse.containsMouse && !handle.dragging
+                                    C.ToolTip.text: modelData.label + " — drag to edit (Undo reverts); double-click to type an exact value"
+                                    C.ToolTip.delay: 600
+                                }
+                            }
+                        }
+
                         // Live view readout (bottom-left of the presented frame)
                         Rectangle {
                             x: viewportSlot.frameX + 8
@@ -932,10 +1598,42 @@ Rectangle {
                 visible: studio.workspace === "reactivity" && studio.response.targets !== undefined
                 anchors.bottom: parent.bottom
                 width: parent.width
-                height: 250
+                property bool expanded: false
+                objectName: "responseDock"
+                height: expanded ? 250 : 40
+                clip: true
                 radius: 8
                 color: shell.cPanel
                 border.width: 1; border.color: shell.cOutline
+                Rectangle {
+                    id: dockHeader
+                    z: 3
+                    width: parent.width; height: 40; color: shell.cPanel; radius: 8
+                    visible: !responseDock.expanded
+                    activeFocusOnTab: true
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Show response editor"
+                    Row {
+                        x: 12; anchors.verticalCenter: parent.verticalCenter; spacing: 10
+                        StudioIcon { name: "chevron-right"; width: 14; height: 14; color: shell.cDim; anchors.verticalCenter: parent.verticalCenter }
+                        StudioIcon { name: "bolt"; width: 16; height: 16; color: shell.cAccent; anchors.verticalCenter: parent.verticalCenter }
+                        Text { text: "Response Editor"; color: shell.cText; font.bold: true; font.pixelSize: shell.fontBase
+                               anchors.verticalCenter: parent.verticalCenter }
+                        Text { text: responseDock.target ? "· " + responseDock.target.label + " — source mix, curve and range" : ""
+                               color: shell.cDim; font.pixelSize: shell.fontBase - 1; anchors.verticalCenter: parent.verticalCenter }
+                    }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: responseDock.expanded = true }
+                    Keys.onSpacePressed: responseDock.expanded = true
+                    FocusRing { visible: dockHeader.activeFocus }
+                }
+                StudioButton {
+                    z: 3
+                    visible: responseDock.expanded
+                    anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 6
+                    icon: "chevron-down"; iconSize: 16; width: 30; height: 26
+                    tip: "Collapse the response editor"
+                    onClicked: responseDock.expanded = false
+                }
                 readonly property var targets: studio.response.targets || []
                 readonly property var sources: studio.response.sources || []
                 readonly property var target: {
@@ -1164,6 +1862,7 @@ Rectangle {
                 border.width: 1; border.color: shell.cOutline
                 C.ScrollView {
                     id: inspectorScroll
+                    objectName: "inspectorScroll"
                     anchors.fill: parent; anchors.margins: 12
                     clip: true
                     contentWidth: availableWidth
@@ -1184,10 +1883,16 @@ Rectangle {
                                     activeFocusOnTab: true
                                     Accessible.role: Accessible.Button
                                     Accessible.name: modelData.title
-                                    Text { x: 10; anchors.verticalCenter: parent.verticalCenter
-                                           text: (group.open ? "▾  " : "▸  ") + (modelData.icon ? modelData.icon + "  " : "")
-                                                 + modelData.title
-                                           color: shell.cText; font.pixelSize: shell.fontBase; font.bold: true }
+                                    Row {
+                                        x: 8; anchors.verticalCenter: parent.verticalCenter
+                                        spacing: 8
+                                        StudioIcon { name: group.open ? "chevron-down" : "chevron-right"; color: shell.cDim
+                                                     width: 14; height: 14; anchors.verticalCenter: parent.verticalCenter }
+                                        StudioIcon { name: modelData.icon || ""; visible: modelData.icon !== ""; color: shell.cAccent
+                                                     width: 16; height: 16; anchors.verticalCenter: parent.verticalCenter }
+                                        Text { text: modelData.title; color: shell.cText; font.pixelSize: shell.fontBase
+                                               font.bold: true; anchors.verticalCenter: parent.verticalCenter }
+                                    }
                                     MouseArea { id: groupMouse; anchors.fill: parent; hoverEnabled: true
                                                 cursorShape: Qt.PointingHandCursor; onClicked: group.open = !group.open }
                                     Keys.onSpacePressed: group.open = !group.open
@@ -1197,6 +1902,23 @@ Rectangle {
                                     visible: group.open && modelData.traces.length > 0
                                     width: parent.width
                                     channels: modelData.traces
+                                }
+                                SchematicCard {
+                                    visible: group.open && modelData.card.kind !== undefined
+                                    width: parent.width
+                                    height: visible ? implicitHeight : 0
+                                    spec: modelData.card
+                                }
+                                PresetTiles {
+                                    visible: group.open && modelData.presets.length > 0
+                                    width: parent.width
+                                    presets: modelData.presets
+                                    group: modelData.group
+                                }
+                                LifecycleTimeline {
+                                    visible: group.open && modelData.lifecycle.total !== undefined
+                                    width: parent.width
+                                    spec: modelData.lifecycle
                                 }
                                 Column {
                                     visible: group.open
@@ -1216,6 +1938,7 @@ Rectangle {
                                                 case "choice": return choiceDelegate
                                                 case "count": return countDelegate
                                                 case "colour": return colourDelegate
+                                                case "gradient": return gradientDelegate
                                                 default: return scalarDelegate
                                                 }
                                             }
@@ -1236,4 +1959,5 @@ Rectangle {
     Component { id: choiceDelegate; ChoiceRow { width: parent ? parent.width : 0; row: rowData } }
     Component { id: countDelegate; CountRow { width: parent ? parent.width : 0; row: rowData } }
     Component { id: colourDelegate; ColourRow { width: parent ? parent.width : 0; row: rowData } }
+    Component { id: gradientDelegate; GradientRow { width: parent ? parent.width : 0; row: rowData } }
 }

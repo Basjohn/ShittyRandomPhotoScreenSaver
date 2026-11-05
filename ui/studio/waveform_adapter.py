@@ -22,8 +22,8 @@ from ui.studio.adapter import (
     RECORDED, REFERENCE, SYNTHETIC, RenderCard, StudioFixture, StudioModeAdapter,
 )
 from ui.studio.schema import (
-    CHOICE, COLOUR, COUNT, QUIET_PEAK, SCALAR, SWITCH, SceneObject, StudioProperty,
-    StudioSchema, Workspace,
+    CHOICE, COLOUR, COUNT, GRADIENT, QUIET_PEAK, SCALAR, SWITCH, CardSpec, LifecycleSpec, SceneObject,
+    StudioPreset, StudioProperty, StudioSchema, Workspace,
 )
 
 MODE = "waveform_ribbon"
@@ -51,14 +51,15 @@ _BUCKET_PLACEMENT = {
 _ROLL_KEYS = frozenset(PREFIX + k for k in ("rotation_enabled", "rotation", "twist_speed",
                                             "rotation_attack", "rotation_release"))
 _WORKSPACES = (
-    Workspace("composition", "Composition", ("Ribbons", "{object}", "Flow"), icon="∿"),
+    Workspace("composition", "Composition", ("Ribbons", "{object}", "Flow"), icon="wave"),
     Workspace("reactivity", "Reactivity", ("Energy Pulse", "Shape Response", "Roll & Twist", "Timing",
                                            "Routing Details", "Advanced (Retired)"),
-              open_groups=("Energy Pulse", "Shape Response"), icon="▮▮▮"),
-    Workspace("appearance", "Appearance", ("{object} Colours", "Colour", "Gradient Nodes",
-                                           "Sheet & Highlights", "Particles", "Free Strands"), icon="◐"),
+              open_groups=("Energy Pulse", "Shape Response"), icon="bars"),
+    Workspace("appearance", "Appearance", ("Gradient Nodes", "Sheet & Highlights", "{object} Colours", "Colour",
+                                           "Particles", "Free Strands"),
+              open_groups=("Gradient Nodes", "Sheet & Highlights"), icon="palette"),
     Workspace("world", "World", ("Mist", "Floor", "Lens & Quality", "Camera", "View"),
-              open_groups=("Mist", "Floor"), icon="⬡"),
+              open_groups=("Mist", "Floor"), icon="cube"),
 )
 _CAMERA_FIELDS = ("turn", "tilt", "scene_scale", "scene_pan_x", "scene_pan_y")
 # Headline controls lead their group (operator, 5 Nov): mist density and floor look are tuned constantly;
@@ -66,6 +67,27 @@ _CAMERA_FIELDS = ("turn", "tilt", "scene_scale", "scene_pan_x", "scene_pan_y")
 _PRIORITY = {PREFIX + key: rank for rank, key in enumerate((
     "reaction_mode", "bend", "pulse_direction", "mist_enabled", "fog_density", "floor_brightness",
     "floor_reflection", "floor_tint"))}
+# Material starting points (mock: Sheen / Glass / Satin / Crystal): scale the OPENING material values
+# (both quiet and peak endpoints), clamped by the canonical ranges. Applying one replaces the previous
+# one (always from the opening values) and is a single undoable edit; "Original" restores them.
+_MATERIAL_SCALES = {
+    "sheen": {"material_body_alpha": .8, "material_fill_light": 1.4, "material_cross_curve": 1.2,
+              "material_glow": 1.0, "material_rim_light": 1.05},
+    "glass": {"material_body_alpha": .45, "material_rim_light": 1.35, "material_rim_glow_light": 1.3,
+              "material_fill_centre": .6, "material_glow": 1.2, "material_fill_light": .8},
+    "satin": {"material_body_alpha": 1.35, "material_fill_light": 1.2, "material_rim_light": .75,
+              "material_glint_light": .6, "material_glow": .8, "material_cross_curve": .8},
+    "crystal": {"material_glint_density": 1.6, "material_glint_light": 1.4, "material_rim_white": 1.5,
+                "material_strand_white": 1.4, "material_glow": 1.1, "material_body_alpha": .7},
+}
+MATERIAL_PRESETS = (
+    StudioPreset("original", "Original", "The material the Studio opened with.", ("#5b5f7a", "#9aa0c8")),
+    StudioPreset("sheen", "Sheen", "Brighter fill and a fuller curve: a soft satin sheen.", ("#4a64d8", "#c8d4ff")),
+    StudioPreset("glass", "Glass", "Thin body, strong glowing rims: see-through glass.", ("#3a2a8a", "#e4dcff")),
+    StudioPreset("satin", "Satin", "Denser body, softer rims and fewer glints.", ("#6a3aa0", "#b890e0")),
+    StudioPreset("crystal", "Crystal", "Dense bright glints and whiter edges.", ("#2a6ad0", "#ffffff")),
+)
+
 # One line per reaction mode, matched by name so a reordered registry tuple stays correct.
 _CHOICE_NOTES = {PREFIX + "reaction_mode": {
     "Travelling Pulse": "Music launches swells that travel along the waveform like waves on water.",
@@ -172,18 +194,14 @@ def build_schema() -> StudioSchema:
                                     maximum=control.high, decimals=3, view_pose=True,
                                     tooltip="Preview view. Drag the viewport to orbit. Orbit is saved only when "
                                             "the preset's camera checkbox includes the view."))
-    # Colour gradient nodes (quiet and peak): position + display colour per existing node.
+    # Colour gradient nodes (quiet and peak): one strip each, draggable nodes + picker (1..6 nodes).
     palette_key = PREFIX + "palette"
-    for side, side_label in (("low", "Quiet"), ("high", "Peak")):
-        for node in range(6):
-            props.append(StudioProperty(id=f"{palette_key}.{side}.{node}.position",
-                path=(palette_key, side, node, 0), label=f"{side_label} Node {node + 1} Position",
-                workspace="appearance", group="Gradient Nodes", instrument=SCALAR, minimum=0.0, maximum=1.0,
-                decimals=3, tooltip="Node position; nodes stay ordered (canonical admission)."))
-            props.append(StudioProperty(id=f"{palette_key}.{side}.{node}.colour",
-                path=(palette_key, side, node, 1), label=f"{side_label} Node {node + 1} Colour",
-                workspace="appearance", group="Gradient Nodes", instrument=COLOUR, colour_format="linear01",
-                tooltip="Linear-light node colour, shown and entered as a display colour."))
+    for side, side_label in (("low", "Quiet Gradient"), ("high", "Peak Gradient")):
+        props.append(StudioProperty(id=f"{palette_key}.{side}", path=(palette_key, side), label=side_label,
+            workspace="appearance", group="Gradient Nodes", instrument=GRADIENT, minimum=1, maximum=6,
+            colour_format="linear01", priority=10 if side == "low" else 11,
+            tooltip="World colour gradient. Drag a node to move it, click to pick its colour, "
+                    "double-click the strip to add a node; nodes stay ordered."))
     # Per-ribbon cards: one inspector per selected ribbon.
     limits = _card_limits()
     bands = ("All", *SOURCES[:3])
@@ -219,13 +237,34 @@ def build_schema() -> StudioSchema:
     return StudioSchema(MODE, "Waveform Studio", workspaces, tuple(props), admit, response=response,
                         group_traces=(("Energy Pulse", ("Input Energy", "Travelling Pulse")),
                                       ("Shape Response", ("Passage", "Height", "Pulse Strength"))),
-                        group_icons=(("Ribbons", "≋"), ("{object}", "∿"), ("Flow", "➝"), ("Energy Pulse", "⚡"),
-                                     ("Shape Response", "↕"), ("Roll & Twist", "⟳"), ("Timing", "◷"),
-                                     ("Routing Details", "▦"), ("{object} Colours", "◐"), ("Colour", "◑"),
-                                     ("Gradient Nodes", "▬"), ("Sheet & Highlights", "✦"), ("Particles", "∴"),
-                                     ("Free Strands", "⌇"), ("Mist", "☁"), ("Floor", "▁"),
-                                     ("Lens & Quality", "◎"), ("Camera", "⌖"), ("View", "⤢")),
-                        object_noun="Ribbon")
+                        group_icons=(("Ribbons", "ribbons"), ("{object}", "wave"), ("Flow", "flow"),
+                                     ("Energy Pulse", "bolt"), ("Shape Response", "height"),
+                                     ("Roll & Twist", "roll"), ("Timing", "clock"), ("Routing Details", "grid"),
+                                     ("Advanced (Retired)", "grid"), ("{object} Colours", "colour"),
+                                     ("Colour", "palette"), ("Gradient Nodes", "gradient"),
+                                     ("Sheet & Highlights", "material"), ("Particles", "dots"),
+                                     ("Free Strands", "strand"), ("Mist", "cloud"), ("Floor", "floor"),
+                                     ("Lens & Quality", "sun"), ("Camera", "camera"), ("View", "view")),
+                        object_noun="Ribbon",
+                        group_presets=(("Sheet & Highlights", MATERIAL_PRESETS),),
+                        lifecycles=(LifecycleSpec("Particles", PREFIX + "spark_lifetime", label="Particle life"),
+                                    LifecycleSpec("Free Strands", PREFIX + "strand_eol", PREFIX + "strand_fade",
+                                                  PREFIX + "strand_peel", label="Strand life")),
+                        cards=(CardSpec("Mist", "falloff", (("density", PREFIX + "fog_density"),
+                                                            ("height", PREFIX + "fog_height"),
+                                                            ("clearance", PREFIX + "fog_clearance"),
+                                                            ("softness", PREFIX + "fog_softness"),
+                                                            ("enabled", PREFIX + "mist_enabled")),
+                                        "Atmosphere cross-section"),
+                               CardSpec("Floor", "reflection", (("brightness", PREFIX + "floor_brightness"),
+                                                                ("reflection", PREFIX + "floor_reflection"),
+                                                                ("wetness", PREFIX + "floor_wetness"),
+                                                                ("streak", PREFIX + "floor_streak"),
+                                                                ("tint", PREFIX + "floor_tint")),
+                                        "Floor & reflections"),
+                               CardSpec("Lens & Quality", "exposure", (("exposure", PREFIX + "exposure"),
+                                                                       ("bloom", PREFIX + "bloom")),
+                                        "Lighting")))
 
 
 # What each routed target does, in plain words (the tuner's subtitle).
@@ -634,6 +673,134 @@ class WaveformStudioEvaluator:
         self._configuration = None
 
 
+# ------------------------------------------------------------------ presentation + handles
+def studio_presentation(logical_size, extent, style):
+    """The production presentation of the presented card extent at a Studio frame size.
+
+    Same resolver and uniform-scale rule as the display owner, so ``framed_aperture_scale`` (lens aperture,
+    edge-resize reveal/crop) is production's. Shared by the renderer and the handle projection."""
+    from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+    from widgets.spotify_visualizer.presentation_geometry import (
+        CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE, resolve_visualizer_presentation)
+    width, height = logical_size
+    extent = extent or CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+    style = dict(style or ())
+    return resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy(MODE), display_size=(width, height),
+        viewport_extent=extent, uniform_visual_scale=width / extent[0],
+        border_width=float(style.get("border_width", 0.0)), corner_radius=0.0,
+        content_inset=float(style.get("content_inset", 0.0)), background_color=(0, 0, 0, 0),
+        border_color=(0, 0, 0, 0), shadow_enabled=False, shadow_color=(0, 0, 0, 0), shadow_blur=0.0,
+        shadow_offset=(0.0, 0.0), shadow_spread=0.0, shadow_extensions=(0.0, 0.0, 0.0, 0.0))
+
+
+def frame_camera(frame, size, extent, style):
+    """(clip-from-world matrix, aperture) exactly as the production renderer would draw ``frame``."""
+    import numpy as np
+    from core.settings.waveform_ribbon_camera import scene_raster_support
+    from rendering.quick.visualizer.implementations.waveform_ribbon import physical_view
+    from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
+    width, height = size
+    aperture = framed_aperture_scale(studio_presentation(size, extent, style), content=True)
+    parameters = frame.parameters
+    support = (scene_raster_support(frame.packet, frame.scene, frame.travel, now=frame.time,
+                                    viewport=(width, height), burst_payload=frame.particles,
+                                    burst_origin=frame.particle_origin, strand_payload=frame.strands)
+               if parameters[PREFIX + "camera_projection"] == "Orthographic" else None)
+    view, projection, _eye, _lens = physical_view(parameters, width / height, aperture, geometry_bounds=support,
+                                                  zoom=float(getattr(frame, "zoom", 1.0)))
+    return np.asarray(projection) @ np.asarray(view), aperture
+
+
+def ribbon_world_points(frame, index):
+    """World (x, y, z, half_width) of one ribbon's published knots, in axial order."""
+    import numpy as np
+    from core.ribbon_packet import KNOT_ROWS
+    from core.waveform_ribbon_authoring import RIBBON_CAPACITY
+    packet = frame.packet
+    if not packet.payload:
+        return np.empty((0, 4))
+    data = np.frombuffer(packet.payload, np.float32).reshape(RIBBON_CAPACITY, -1, 4)
+    path = data[index]
+    count, start, capacity = int(path[0, 0]), int(path[1, 1]), int(path[1, 2])
+    if count < 4 or capacity <= 0:
+        return np.empty((0, 4))
+    knots = path[4:].reshape(-1, KNOT_ROWS, 4)[(start + np.arange(count)) % capacity]
+    origin = packet.world_origin
+    x = knots[:, 0, 0] + origin[0] + frame.scene.flow.head_x - frame.travel
+    return np.stack((x, knots[:, 0, 1] + origin[1], knots[:, 0, 2] + origin[2], knots[:, 0, 3]), axis=1)
+
+
+def _project(matrix, points, size):
+    import numpy as np
+    homogeneous = np.c_[points[:, :3], np.ones(len(points))]
+    clip = homogeneous @ matrix.T
+    w = clip[:, 3:4]
+    ndc = clip[:, :3] / np.where(np.abs(w) < 1e-9, 1e-9, w)
+    screen = np.c_[(ndc[:, 0] + 1.0) * .5 * size[0], (1.0 - ndc[:, 1]) * .5 * size[1]]
+    visible = (w[:, 0] > 0) & (np.abs(ndc[:, 0]) <= 1.05) & (np.abs(ndc[:, 1]) <= 1.05)
+    return screen, visible
+
+
+def ribbon_handles(frame, values, object_id, size, extent, style):
+    """Selected ribbon outline + height / width / phase handles, through the production camera.
+
+    Each handle edits a real card value. ``perPixel`` maps a drag in presented-frame pixels to the value
+    so the handle tracks the projected geometry: height scales the carrier amplitude, width the sheet's
+    projected span, phase one projected wavelength per 2*pi."""
+    import math
+    import numpy as np
+    empty = {"outline": [], "handles": []}
+    try:
+        index = int(str(object_id).replace("ribbon", ""))
+    except ValueError:
+        return empty
+    width, height = float(size[0]), float(size[1])
+    if width <= 1 or height <= 1 or frame is None or not getattr(frame, "ready", False):
+        return empty
+    cards = values.get(PREFIX + "ribbons") or ()
+    if index >= len(cards) or index >= int(values.get(PREFIX + "count", len(cards))):
+        return empty
+    points = ribbon_world_points(frame, index)
+    if len(points) < 4:
+        return empty
+    matrix, _aperture = frame_camera(frame, (width, height), extent, style)
+    screen, visible = _project(matrix, points, (width, height))
+    if visible.sum() < 4:
+        return empty
+    step = max(1, int(visible.sum() // 160))
+    outline = [[round(float(x), 1), round(float(y), 1)] for (x, y), v in zip(screen[::step], visible[::step]) if v]
+    # Crest: the highest visible knot in the central 70% of the frame.
+    centre = visible & (screen[:, 0] > .15 * width) & (screen[:, 0] < .85 * width)
+    candidates = np.flatnonzero(centre if centre.any() else visible)
+    crest = int(candidates[np.argmin(screen[candidates, 1])])
+    base_y = float(np.median(points[visible, 1]))
+    crest_point = points[crest]
+    base_screen, _ = _project(matrix, np.array([[crest_point[0], base_y, crest_point[2], 0.]]), (width, height))
+    amplitude_px = max(4.0, float(base_screen[0, 1] - screen[crest, 1]))
+    card = cards[index]
+    key = PREFIX + "ribbons"
+    handles = [{"id": "height", "property": f"{key}[{index}].height", "endpoint": 0, "axis": "y",
+                "x": float(screen[crest, 0]), "y": float(screen[crest, 1]),
+                "perPixel": -float(card["height"]) / amplitude_px, "label": "Height"}]
+    half = float(crest_point[3])
+    edge, _ = _project(matrix, np.array([[crest_point[0], crest_point[1] + max(half, 1e-3), crest_point[2], 0.]]),
+                       (width, height))
+    span_px = max(4.0, abs(float(screen[crest, 1] - edge[0, 1])))
+    handles.append({"id": "width", "property": f"{key}[{index}].width", "endpoint": 0, "axis": "y",
+                    "x": float(screen[crest, 0]) - 30.0, "y": float(screen[crest, 1] - span_px),
+                    "perPixel": -float(card["width"]) / span_px, "label": "Width", "span": span_px})
+    # Wavelength: distance to the next visible crest of this ribbon (local maxima in screen height).
+    ys = screen[:, 1]
+    maxima = [i for i in range(1, len(ys) - 1) if visible[i] and ys[i] <= ys[i - 1] and ys[i] < ys[i + 1]]
+    spacing = [abs(float(screen[b, 0] - screen[a, 0])) for a, b in zip(maxima, maxima[1:])]
+    wavelength = float(np.median(spacing)) if spacing else width / 3.0
+    handles.append({"id": "phase", "property": f"{key}[{index}].phase", "endpoint": 0, "axis": "x",
+                    "x": float(screen[crest, 0]), "y": float(min(height - 14.0, base_screen[0, 1] + 18.0)),
+                    "perPixel": 2.0 * math.pi / max(8.0, wavelength), "label": "Phase"})
+    return {"outline": outline, "handles": handles}
+
+
 # -------------------------------------------------------------------------- renderer
 class WaveformStudioRenderer:
     """Render-thread adapter around the production Quick renderer (own scene instance)."""
@@ -651,20 +818,7 @@ class WaveformStudioRenderer:
         reveal/crop) is production's. Card chrome (border/inset) is not drawn by the Studio."""
         key = (card.logical_size, card.extent, card.style)
         if key != self._presentation_key:
-            from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
-            from widgets.spotify_visualizer.presentation_geometry import (
-                CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE, resolve_visualizer_presentation)
-            width, height = card.logical_size
-            extent = card.extent or CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
-            style = dict(card.style)
-            # Same uniform-scale rule as the display owner: outer = extent * (outer width / extent width).
-            self._presentation = resolve_visualizer_presentation(
-                policy=get_visualizer_presentation_policy(MODE), display_size=(width, height),
-                viewport_extent=extent, uniform_visual_scale=width / extent[0],
-                border_width=float(style.get("border_width", 0.0)), corner_radius=0.0,
-                content_inset=float(style.get("content_inset", 0.0)), background_color=(0, 0, 0, 0),
-                border_color=(0, 0, 0, 0), shadow_enabled=False, shadow_color=(0, 0, 0, 0), shadow_blur=0.0,
-                shadow_offset=(0.0, 0.0), shadow_spread=0.0, shadow_extensions=(0.0, 0.0, 0.0, 0.0))
+            self._presentation = studio_presentation(card.logical_size, card.extent, card.style)
             self._presentation_key = key
         return self._presentation
 
@@ -712,6 +866,29 @@ class WaveformStudioAdapter(StudioModeAdapter):
                                  swatch=display_hex(card["quiet"][0]), visible=index < count, toggleable=True,
                                  hidden_note="" if index < count else "beyond Ribbon Count")
                      for index, card in enumerate(cards))
+
+    def apply_preset(self, group, preset_id, baseline, values):
+        if group != "Sheet & Highlights":
+            return {}
+        spec = require_mode_settings(MODE)
+        scales = _MATERIAL_SCALES.get(preset_id, {})
+        changes = {}
+        for control in spec.controls:
+            if not control.key.startswith(PREFIX + "material_"):
+                continue
+            field = control.key[len(PREFIX):]
+            factor = scales.get(field, 1.0)
+            pair = [min(control.high, max(control.low, float(v) * factor)) for v in baseline[control.key]]
+            if control.integer:
+                pair = [int(round(v)) for v in pair]
+            # The canonical store may quantise what it saves: equal within its precision is "already applied".
+            if any(abs(float(a) - float(b)) > 1e-4 * max(1.0, abs(float(a)))
+                   for a, b in zip(pair, values[control.key])):
+                changes[(control.key,)] = pair
+        return changes
+
+    def scene_handles(self, frame, values, object_id, size, extent, style):
+        return ribbon_handles(frame, values, object_id, size, extent, style)
 
     def set_object_visible(self, values, object_id, visible):
         index = int(object_id.replace("ribbon", ""))

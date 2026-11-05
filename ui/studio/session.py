@@ -108,6 +108,18 @@ class StudioEditSession:
     def committed_values(self) -> dict[str, Any]:
         return self._committed
 
+    @property
+    def baseline_values(self) -> dict[str, Any]:
+        """The canonical values the session opened with (reversible starting points use these)."""
+        return self._baseline
+
+    def set_many(self, changes: dict[Path, Any], label: str) -> bool:
+        """Several values as ONE committed, undoable action (e.g. a material starting point)."""
+        self.begin_gesture(label)
+        for path, value in changes.items():
+            self.preview(path, value)
+        return self.end_gesture()
+
     def get(self, path: Path) -> Any:
         return read_path(self.values, path)
 
