@@ -488,6 +488,11 @@ shifted to hide latency. Pixels are evidence, not visual or listening acceptance
 .\.venv\Scripts\python.exe tools\visualizer_replay\waveform_ribbon_motion_audit.py --clip logs\visualizer_recordings\anything_mixed2.jsonl --preset 3 --output <new dir>
 # Native-PCM floor A/B and pooled raw/music statistics; --mode-output also hashes every body/birth publication
 .\.venv\Scripts\python.exe tools\visualizer_replay\waveform_ribbon_signal_audit.py --clips <clip.jsonl> [...] --output <new dir> --mode-output
+# DevCurve: drive distributions (fraction of Range, time above .9), realised displacement vs a lockstep no-energy
+# twin, quiet/loud 2 s windows, slope-limiter/clamp occupancy, per-band accel/jerk and a space-time map PNG
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.devcurve_reactivity_audit --clip logs\visualizer_recordings\human_heavy1.jsonl --preset 1 --output <new dir>
+# DevCurve offscreen GL capture (uniform cadence dividing the 90 Hz clock, PNG frames + strip + stills; no window)
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.devcurve_capture --clip logs\visualizer_recordings\human_heavy1.jsonl --preset 1 --start 26 --duration 2 --fps 45 --png-all --output <new dir>
 # Side-by-side time strip from capture MP4s (motion review aid)
 .\.venv\Scripts\python.exe tools\visualizer_replay\capture_time_strip.py --ffmpeg <ffmpeg.exe> --output strip.png --start 5 --step .125 --count 8 <run dir> [<run dir> ...]
 # Hidden Studio capture (no window, in-memory store): one PNG per workspace plus timings; --mode picks any registered Studio,
