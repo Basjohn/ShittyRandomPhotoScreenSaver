@@ -582,6 +582,17 @@ Motion: per moving pixel, water and land change no more per frame than the accep
 3.35/255, Preset 1 4.2 vs 4.6); Preset 1's frame mean is at the baseline (1.08 vs 1.11), Preset 3's is higher only
 because its lake now covers about five times the screen.
 
+**Fourth pass (2026-11-05).** Contour Lines became the range's **wireframe**: rows of constant depth
+(`LAND_CONTOUR_SPACING` 0.03) draped over the raised land beyond the basin's near edge
+(`basinContourRegion`: base 0.15..0.3 and up, basin uv y > 0), so every ridge and foothill shows its profile slice
+as the mock's ranges do; the vertex marks give way to them there, leaving the dots on the dunes. Their colour
+leans to the line colour, toward the palette on the peaks. Glass gains **glossy rims**: grazing glass the Sun/Moon
+can see, on surfaces facing its side, catches its light along every crest (a Fresnel sheen). Water is calmer:
+ripple tilt and swell lean the mirror 60% less, a passing crest lights the curves and washes the body far more
+gently (they flashed in busy patches). Preset 1: four large meandering dunes (`terrain/k1.json`), glow 0.4,
+ridge colour softened, shore glow 1.0; Preset 2 follows it (`scripts/sync_p2.py`); Preset 3: contour 0.8,
+reflection 1.0, dimmer horizon, gentler reaction (0.12), waves 0.03, detail 0.06.
+
 ## Operator-authorized future water improvements (2026-10-18; deferred, baseline accepted)
 
 These are three **new capabilities**, not permission to reopen the accepted Neon Lake graphics, change authored
