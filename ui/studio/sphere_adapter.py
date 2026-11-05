@@ -512,20 +512,9 @@ class SphereStudioRenderer(framed.ContractModeRenderer):
         self._settled = None
 
     def _settle_environment(self, frame) -> None:
-        from rendering.quick.visualizer.implementation_values import parameter
         from rendering.quick.visualizer.implementations.sphere_voxel import sphere_mirror
-        logical = frame if hasattr(frame, "mode_state") else None
-        state = logical.mode_state if logical is not None else frame
-        parameters = state.parameters
-        if sphere_mirror(parameters) <= 0.0:
-            return
-        backdrop = parameter(parameters, "backdrop")
-        identity = str(backdrop["identity"])
-        if identity == self._settled:
-            return
-        now = float(getattr(logical, "logical_timestamp", 0.0))
-        self._impl.settle_backdrop(backdrop, now, parameter(parameters, "backdrop_blend_s"))
-        self._settled = identity
+        from ui.studio.environment import settle_backdrop
+        self._settled = settle_backdrop(self._impl, frame, sphere_mirror, self._settled)
 
     def prepare(self, card, frame) -> bool:
         self._settle_environment(frame)
