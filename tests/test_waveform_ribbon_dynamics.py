@@ -11,6 +11,15 @@ from core.ribbon_ring import RibbonRing
 from widgets.spotify_visualizer.waveform_ribbon_frame_runtime import WaveformRibbonFrameRuntime
 
 
+@pytest.fixture(autouse=True)
+def _swell_mechanics_on_test_paths(monkeypatch):
+    """These tests examine swell mechanics on short test paths near the centre: launch the swell inside them and keep
+    the fixed end taper short (production births swells beyond the ~±30 view and tapers the slide over 20 units)."""
+    import core.waveform_ribbon_dynamics as dyn
+    monkeypatch.setattr(dyn, 'PULSE_ORIGIN', 3.5)
+    monkeypatch.setattr(dyn, 'SURGE_TAPER', 2.)
+
+
 def controls():
     routing = {key:[[0.,1.] for _ in range(6)] for key in TARGETS}
     for key,source in (('height',3),('width',0),('bend',0),('torsion',1),('twist',1),('stretch',0),
@@ -170,12 +179,15 @@ def test_runtime_consumes_onsets_once_fences_sources_and_is_terminal_after_retir
     onset = SimpleNamespace(serial=10,strength=1.,magnitude=2.,kind='kick',loudness=.8,presence=1.)
     args['onsets'] = (onset,)
     first = runtime.advance(now_ts=65/90,**args)
+    first_stage = runtime._model._drive_stage['height']
     again = runtime.advance(now_ts=65/90,**args)
     assert again.packet.payload==first.packet.payload and runtime.onset_serial==10
     args['source_identity']=(9,9)
     silent = runtime.advance(now_ts=66/90,**args)
     assert silent.ready and silent.time>first.time
-    assert dict(silent.drives)['height']<=dict(first.drives)['height']
+    # Silence adds no energy: the geometry drives are velocity-continuous (two stages), so height may carry on a
+    # hair for a tick, but the stage that takes the input does not rise.
+    assert runtime._model._drive_stage['height']<=first_stage+1e-12
     runtime.retire()
     assert runtime.advance(now_ts=67/90,**args) is None
 

@@ -44,7 +44,7 @@ ZOOM_OUT_SECONDS, ZOOM_IN_SECONDS = 1.2, 7.
 PULSE_GRID = np.linspace(-48., 48., 385)
 PULSE_DX = float(PULSE_GRID[1]-PULSE_GRID[0])
 PULSE_DIRECTIONS = ('Head To Tail', 'Tail To Head', 'Centre Out')
-PULSE_ORIGIN = 3.5          # world x of the edge origins, well inside the authored view so a hit is seen at once
+PULSE_ORIGIN = 44.          # world x of the edge origins: just beyond the view (~±30), so a swell slides in already formed (born at 3.5, mid-view, it popped into existence)
 PULSE_RISE = .08             # seconds: a beat lands quickly (DevCurve: fast rise, gentle settle), never a one-tick pop
 PULSE_DIFFUSION = .35        # world units^2 per second: packets widen gently as they travel
 PULSE_SATURATION = 1.2       # soft bound of the sampled swell
@@ -66,6 +66,9 @@ PULSE_GLOW = 2.5           # light a full swell adds where it is (the narrow aut
 # FRESH_FADE marks the swells launched in the last moments, so each beat's band is brightest as it travels and the
 # older pile settles to APP_BASE of that look. Geometry never uses this (it stays broad and bounded).
 APP_SCALE, APP_BASE, FRESH_FADE = 1.5, .85, .7
+# The travelling swell's geometry follows the fresh field (5 Nov: the long-fade field overlapped into a uniform inflation
+# of the whole view, median/max .87); this gain gives a fresh beat the strength the pile used to have.
+PULSE_FRESH_GAIN = 2.4
 # Twitch (operator, 5 Nov: "just twitching"): the rim light used to flash with the raw 120 ms hit decay, the
 # strongest beat-rate flicker in the trace. It now swells like the pulse: quick rise, gentle settle.
 HIT_GLOW, HIT_GLOW_RISE, HIT_GLOW_SETTLE = 3., .04, .65
@@ -77,21 +80,38 @@ HIT_GLOW, HIT_GLOW_RISE, HIT_GLOW_SETTLE = 3., .04, .65
 # |g''|/g <= GEOM_CURVE*k^2 (k = carrier wavenumber). At a crest the cg'' term then stays below 30% of c''g; near a
 # carrier zero crossing the 2c'g' term can only move the waveform's OWN inflection by at most 2*GEOM_SLOPE/k
 # (about 6% of a wavelength): it never adds an inflection, an inward dent or a flattened kink.
-GEOM_WAVES = 1.5
+GEOM_WAVES = .8
 GEOM_SLOPE, GEOM_CURVE = .2, .3
+GEOM_SHARE_RISE = 1.5  # per second: the flow-rule share relaxes upward smoothly (never a whole-field pop)
 GEOM_MAX_WAVELENGTH = 48.   # a stationary carrier (rate 0) bounds the envelope by the field's own span
 # The along-curve surge slides knots ALONG their own curve (exact resampling of the unsurged body), so it moves the
 # cloth's material with the swell without changing the curve itself. Bounded compression and rate of change.
 SURGE_MAX_COMPRESSION = .3  # knot spacing may shrink by at most 30% locally
+SURGE_EASE = .15            # seconds per easing stage of the surge (velocity-continuous sideways motion)
+SURGE_TAPER, SURGE_BOUND_RISE = 20., 1.5  # fixed end-taper length (world units); compression bound relaxation per second
 SURGE_RATE = 1.             # swell units per second: the surge can never lurch on a beat's fast rise
 
-# Floor clearance (operator, 5 Nov; see WaveformDynamics._trough_depth): the packet origin sits PACKET_FLOOR_HEIGHT
-# above the world floor and the rest line TROUGH_RAISE higher still; troughs keep their lower edge TROUGH_CLEARANCE
-# above the floor. Scale floor (monotone above ~.31), the unscaled zone around the rest line, follow times on the
-# logical clock, the visible half-span watched (world units) and the share of the sheet's hang that counts.
-PACKET_FLOOR_HEIGHT, TROUGH_RAISE, TROUGH_CLEARANCE, TROUGH_ROOM_MIN = 2., .35, .3, .4
-TROUGH_SCALE_MIN, TROUGH_SOFT, TROUGH_ATTACK, TROUGH_RELEASE, TROUGH_VIEW, TROUGH_HANG = .35, 1.2, .08, 1.2, 12., .5
-TROUGH_SAFETY_KNEE, TROUGH_SAFETY_SLOPE = .7, .04  # transient safety for swell-deepened troughs (see _trough_depth)
+# Geometry drives (shape, sway, twist, lift, rotation) follow their routed bands through two cascaded followers with at
+# least GEOMETRY_ATTACK each: a quick but velocity-continuous rise (~0.2 s to 90%) instead of a 45 ms snap. Light,
+# colour, sparkle and highlights keep the authored attack: a flash of light is not a twitch of the body.
+IMPULSE_SPREAD = .06  # seconds over which a hit's kick to the sway/torsion springs is delivered
+SMOOTH_TARGETS = frozenset(('height','width','bend','torsion','twist','stretch','lift','spread','depth'))
+GEOMETRY_ATTACK = .06
+# The whole body's size (height, lift, width) follows the passage, not each beat (operator, 5 Nov: "no reactivity besides
+# the twitch"; space-time maps showed the whole view pumping in unison on every beat, drowning the travelling pulse).
+# Beats belong to the travelling pulse, which makes the biggest reaction where it is.
+# Adaptive response gain (see advance): geometry drives use each song's own recent peak over the full
+# authored Quiet->Peak ramp. Light, colour and sparkle (particles, strands) keep their calibrated mapping.
+RESPONSE_REACH, RESPONSE_MEMORY, RESPONSE_PEAK_FLOOR, RESPONSE_TOP = .5, 30., .45, .85
+RESPONSE_TARGETS = frozenset(('height','width','bend','torsion','twist','stretch','lift','spread','depth'))
+GLOBAL_TARGETS = frozenset(('height','lift','width'))
+GLOBAL_ATTACK = .35
+
+# Floor clearance (operator, 5 Nov; see WaveformDynamics._floor_room): the packet origin sits PACKET_FLOOR_HEIGHT above
+# the world floor; a ribbon whose lower edge would come within TROUGH_CLEARANCE of it lifts as a whole (never reshaped),
+# by up to TROUGH_LIFT_MAX, easing up over TROUGH_ATTACK and down over TROUGH_RELEASE per stage (two stages).
+PACKET_FLOOR_HEIGHT, TROUGH_CLEARANCE, TROUGH_ROOM_MIN, TROUGH_LIFT_MAX = 2., .3, .4, 1.5
+TROUGH_ATTACK, TROUGH_RELEASE, TROUGH_VIEW = .15, 1.2, 32.  # the authored long lens sees ~±30 world units
 
 # Selectable reaction modes (operator, 5 Nov). All share the injection and the couplings above.
 REACTION_MODES = ('Travelling Pulse', 'Frozen Past', 'Whole Swell', 'Group Wave')
@@ -124,9 +144,9 @@ def pulse_sources(direction):
 class PulseControls:
     direction: str = 'Head To Tail'
     width: float = 2.5           # full width at half height of the travelling light/colour band (geometry uses its own broad envelope)
-    speed: float = 6.            # world units per second along the scene axis: successive beats stay separate bands
+    speed: float = 12.           # world units per second along the scene axis: successive beats stay separate bands
     colour: float = .6           # share of the peak colour the pulse carries
-    fade: float = 4.             # seconds for the travelling energy to fall to 1/e
+    fade: float = 2.5            # seconds for the travelling energy to fall to 1/e
     saturation: float = 0.       # share of the remaining saturation a full swell adds (hue and value unchanged)
     particles: float = 0.        # swell-carried births and the lean of accent births toward the swell
     strands: float = 0.          # restrained lean/chance/glow of accent strands near the swell
@@ -178,6 +198,20 @@ def impulse_velocity(frequency, damping):
     """
     root=math.sqrt(1.-damping*damping)
     return 2.*math.pi*frequency*math.exp(damping*math.acos(damping)/root)
+
+
+def spread_impulse_velocity(frequency, damping):
+    """Momentum whose kick, delivered over IMPULSE_SPREAD, gives the spring a unit peak displacement (the spread kick
+    peaks lower than an instantaneous one; this keeps the authored hit excursion). Integrated finely once per spring
+    configuration with the exact spring step."""
+    step, push, x, v, peak = 1./4000., 1., 0., 0., 0.
+    keep = math.exp(-step/IMPULSE_SPREAD)
+    for _ in range(int(4000*max(1.,2./frequency))):
+        delivered = push*(1.-keep)
+        push -= delivered
+        x,v = elastic(x,v+delivered,0.,step,frequency,damping)
+        peak = max(peak,x)
+    return 1./peak
 
 
 def carrier_wavelength(controls):
@@ -279,20 +313,26 @@ class WaveformDynamics:
         self._pulse = np.zeros((2,PULSE_GRID.size))  # travelling toward -x, toward +x
         self._fresh = np.zeros((2,PULSE_GRID.size))  # the same transport with a short fade: recently launched swells
         self._pulse_pending = 0.
-        self._trough_scale,self._trough_time = np.ones((RIBBON_CAPACITY,1)),None  # lower-half depth scale per ribbon
+        self._trough_stage,self._trough_lift,self._trough_time = np.zeros((RIBBON_CAPACITY,1)),np.zeros((RIBBON_CAPACITY,1)),None
         self._held = np.zeros((4,PULSE_GRID.size))  # Frozen Past on the cloth: memory, peak, previous swell, rising
         self._whole = self._whole_fresh = 0.         # Whole Swell global raw level and its short-fade copy
+        self._drift_stage = np.zeros(PULSE_GRID.size)  # first stage of the surge's easing
         self._drift = np.zeros(PULSE_GRID.size)      # rate-limited signed surge field (swell units)
         self._level = np.zeros(PULSE_GRID.size)      # published appearance swell (authored width)
         self._focus = np.zeros(PULSE_GRID.size)      # where swell-carried particles/strands gather
         self._geom = np.zeros(PULSE_GRID.size)       # broad geometric swell (pre owner bound)
         self._kernel = (None,None)
+        self._geom_share = (1.,None)
+        self._surge_bound = {}  # per ribbon: compression bound last applied and its logical time  # flow-rule share last applied and its logical time (rises smoothly)
         self._pulse_credit = self._pulse_births = 0.  # births bought by injected energy / released and due
         self._flux_fast = self._flux_slow = 0.
         self._shape_input = np.zeros((2,5),np.float64)  # two stages: bass/mid/high, power, hit
         self.spring = [[0.,0.,0.] for _ in range(RIBBON_CAPACITY)]
         self.velocity = [[0.,0.,0.] for _ in range(RIBBON_CAPACITY)]
+        self._push = [[0.,0.,0.] for _ in range(RIBBON_CAPACITY)]  # undelivered kick momentum (IMPULSE_SPREAD)
         self.drive = {key:0. for key in TARGETS}
+        self._drive_stage = {key:0. for key in SMOOTH_TARGETS}
+        self._response_peak = {key:RESPONSE_PEAK_FLOOR for key in RESPONSE_TARGETS}  # recent peak per drive (gain)  # first stage of the geometry drives' smoothing
         self.count_share = [1. if index < controls.count else 0. for index in range(RIBBON_CAPACITY)]
         self._primed = 0
         self._next_knot = 1./controls.scene.flow.knot_hz
@@ -346,7 +386,7 @@ class WaveformDynamics:
         if self._elastic_config != (c.frequency,c.damping):
             self._elastic_config=(c.frequency,c.damping)
             self._elastic_frequencies=tuple(c.frequency*share for share in (1.,1.75,2.75))
-            self._impulse_scales=tuple(impulse_velocity(frequency,c.damping) for frequency in self._elastic_frequencies)
+            self._impulse_scales=tuple(spread_impulse_velocity(frequency,c.damping) for frequency in self._elastic_frequencies)
         if not self.ready:
             # A bounded activation preparation step, not replayed/catch-up audio. Remain at the initial state until
             # the idle history is complete; prepared reveal cannot expose provisional head/tail segments.
@@ -394,13 +434,39 @@ class WaveformDynamics:
         energy_shaped = sum(weight*value for weight,value in zip(ENERGY_WEIGHTS,bands))
         for key in TARGETS:
             target = route(c.routing[key],sources,passage=gate)
-            self.drive[key] = follower(self.drive[key],target,dt,c.attack,c.release)
+            if key in RESPONSE_TARGETS:
+                # Every song uses the whole authored Quiet->Peak ramp (operator, 5 Nov: "reactivity needs much more
+                # granularity and to actually hit that granularity"; no geometry drive ever passed .79 and a fixed
+                # span over-drove soft songs while heavy ones stayed low). Gain only: each drive is divided by a
+                # memory of its own recent peak (reached in RESPONSE_REACH seconds, relaxing over RESPONSE_MEMORY,
+                # never below RESPONSE_PEAK_FLOOR), so a song's loudest moments reach Peak while a quiet passage after
+                # a loud one stays quiet (an offset window re-expanded quiet intros to full size). The remembered
+                # peak lands at RESPONSE_TOP, so a sustained loud passage keeps headroom for its accents instead of
+                # pinning at Peak (operator: sustained passages need the most judgement).
+                self._response_peak[key] = max(RESPONSE_PEAK_FLOOR,follower(
+                    self._response_peak[key],target,dt,RESPONSE_REACH,RESPONSE_MEMORY))
+                target = unit(RESPONSE_TOP*target/self._response_peak[key])
+            if key in SMOOTH_TARGETS:
+                # Geometry never snaps (operator, 5 Nov: "twitch"): two cascaded followers, so the drive's VELOCITY
+                # is continuous. A single 45 ms first-order attack made lift/bend/width/twist jump on every transient
+                # (vertical acceleration spiked >4x its median on 18% of ticks on recorded music).
+                attack = max(c.attack,GLOBAL_ATTACK if key in GLOBAL_TARGETS else GEOMETRY_ATTACK)
+                self._drive_stage[key] = follower(self._drive_stage[key],target,dt,attack,c.release)
+                self.drive[key] = follower(self.drive[key],self._drive_stage[key],dt,attack,c.release)
+            else:
+                self.drive[key] = follower(self.drive[key],target,dt,c.attack,c.release)
         released = self._advance_pulse(dt,hit,energy_shaped)
         self._advance_pulse_births(dt,released)
         for owner,card in enumerate(c.cards):
             support = 1. if card['band']=='All' else bands[('Bass','Mids','Highs').index(card['band'])]
             for index,target in enumerate((self.drive['bend'],self.drive['torsion'],self.drive['depth'])):
-                self.velocity[owner][index] += support*impulses[index]*c.impulse*self._impulse_scales[index]
+                # A kick is delivered as a short force (IMPULSE_SPREAD), not an instantaneous velocity jump: the same
+                # momentum, but the sway/torsion velocity stays continuous (operator, 5 Nov: the lattice twitched
+                # left and right in every mode on each hit).
+                self._push[owner][index] += support*impulses[index]*c.impulse*self._impulse_scales[index]
+                delivered = self._push[owner][index]*(1.-math.exp(-dt/IMPULSE_SPREAD))
+                self._push[owner][index] -= delivered
+                self.velocity[owner][index] += delivered
                 self.spring[owner][index],self.velocity[owner][index] = elastic(
                     self.spring[owner][index],self.velocity[owner][index],target*support,dt,
                     self._elastic_frequencies[index],c.damping)
@@ -570,10 +636,19 @@ class WaveformDynamics:
         else:
             self._level = look
             self._focus = look
-            self._geom = soft(broad(travelling))
-            drift_target = soft(broad(self._pulse[1]))-soft(broad(self._pulse[0]))
+            # Geometry and surge follow the FRESH energy (the same transport with a short fade): each beat is a
+            # travelling bump with calmer waveform around it. Driven by the long-fade field the swells overlapped
+            # into one uniform inflation of the whole view (5 Nov: median/max .98 over the visible span), so the
+            # operator could not see a pulse at all. Light keeps its own fresh-led look above.
+            self._geom = soft(PULSE_FRESH_GAIN*broad(self._fresh[0]+self._fresh[1]))
+            drift_target = soft(PULSE_FRESH_GAIN*broad(self._fresh[1]))-soft(PULSE_FRESH_GAIN*broad(self._fresh[0]))
+        # The surge eases (two cascaded followers, SURGE_EASE each) so the cloth's sideways velocity is continuous; the
+        # old clipped step had piecewise-constant velocity, a sideways jolt at every change (operator, 5 Nov: lattice
+        # twitching left and right). SURGE_RATE still bounds the change per second.
+        ease = 1.-math.exp(-dt/SURGE_EASE) if dt>0. else 0.
+        self._drift_stage = self._drift_stage+(drift_target-self._drift_stage)*ease
         step = SURGE_RATE*dt
-        self._drift = self._drift+np.clip(drift_target-self._drift,-step,step)
+        self._drift = self._drift+np.clip((self._drift_stage-self._drift)*ease,-step,step)
 
     def _advance_pulse_births(self,dt,released):
         """Injected energy buys a bounded number of swell-carried births, released over the swell's journey and
@@ -604,6 +679,7 @@ class WaveformDynamics:
         """Gain envelope on the pulse grid, bounded at the owner by the flow rule (see GEOM_SLOPE/GEOM_CURVE)."""
         swell = .7*strength*self._geom
         if not np.any(swell):
+            self._geom_share = (1.,self.time)
             return np.ones(PULSE_GRID.size)
         k = 2.*math.pi/carrier_wavelength(self.controls)
         def excess(share):
@@ -618,6 +694,13 @@ class WaveformDynamics:
                 share = .5*(low+high)
                 low,high = (share,high) if excess(share)<=1. else (low,share)
             share = low
+        # One share bounds the whole field, so when the binding constraint somewhere lets go every swell on screen grew
+        # at once (5 Nov: the gain jumped 2.39 -> 2.89 in one tick, a vertical pop). The share may fall at once (that
+        # is the flow-rule safety) but rises at most GEOM_SHARE_RISE per second; a smaller share is always safe.
+        previous,when = self._geom_share
+        if when is not None and self.time>=when:
+            share = min(share,previous+GEOM_SHARE_RISE*(self.time-when))
+        self._geom_share = (share,self.time)
         return 1.+share*swell
 
     def _surge(self,data,x,y,z,amount):
@@ -644,13 +727,21 @@ class WaveformDynamics:
             if not moving.any():
                 continue
             rows,xs,ds = rows[moving],xs[moving],ds[moving]
-            # The ends never slide: a smooth taper long enough to respect the compression bound.
-            ramp = np.maximum(1e-6,np.abs(ds).max(axis=1,keepdims=True)/(.9*SURGE_MAX_COMPRESSION))
-            edge = np.clip(np.minimum(xs-xs[:,:1],xs[:,-1:]-xs)/ramp,0.,1.)
+            # The ends never slide: a smooth taper of fixed length (a taper sized from the current drift changed length
+            # every tick and jittered the knots near the head; 5 Nov per-tick acceleration probe).
+            edge = np.clip(np.minimum(xs-xs[:,:1],xs[:,-1:]-xs)/SURGE_TAPER,0.,1.)
             ds = ds*(edge*edge*(3.-2.*edge))
             squeeze = (np.diff(ds,axis=1)/np.diff(xs,axis=1)).min(axis=1,keepdims=True)
             limited = squeeze < -SURGE_MAX_COMPRESSION
-            ds = np.where(limited,ds*(SURGE_MAX_COMPRESSION/np.where(limited,-squeeze,1.)),ds)
+            bound = np.where(limited,SURGE_MAX_COMPRESSION/np.where(limited,-squeeze,1.),1.)
+            # The compression bound scales a whole ribbon's surge: it may tighten at once but relaxes at most
+            # SURGE_BOUND_RISE per second, so a constraint letting go never jolts the whole ribbon sideways.
+            for row,member in enumerate(rows[:,0]):
+                previous,when = self._surge_bound.get(int(member),(1.,None))
+                if when is not None and self.time>=when:
+                    bound[row,0] = min(bound[row,0],previous+SURGE_BOUND_RISE*(self.time-when))
+                self._surge_bound[int(member)] = (float(bound[row,0]),self.time)
+            ds = ds*bound
             target = xs+ds
             cell = np.stack([np.searchsorted(row,goal) for row,goal in zip(xs,target)])
             cell = np.clip(cell-1,0,count-2)
@@ -667,37 +758,23 @@ class WaveformDynamics:
             x[rows,order] = target
         return x,y,z
 
-    def _trough_depth(self,centre,plain,hang,room,visible):
-        """Scale each ribbon's lower half so its lower edge stays above the floor (operator, 5 Nov: "perhaps how far
-        the bottom half can go down could be clamped"). Proportional, so a deep trough stays a round trough, never a
-        flat run; the scale is exactly 1 near the rest line (phi = s + (1-s)*exp(-(h/TROUGH_SOFT)^2), C2 there and
-        monotone for s >= TROUGH_SCALE_MIN); it follows the deepest visible need quickly (TROUGH_ATTACK) and relaxes
-        slowly (TROUGH_RELEASE), on the logical clock. Crests are untouched. The need is measured on ``plain`` (the
-        waveform without the travelling swell): the scale never reacts to a swell, so a swell only deepens."""
-        plain_near = np.exp(-(plain/TROUGH_SOFT)**2)
-        below = (plain<0.)&visible&(hang-plain>room)
-        with np.errstate(divide='ignore',invalid='ignore'):
-            allowed = ((room-hang)/np.where(below,-plain,1.)-plain_near)/np.maximum(1.-plain_near,1e-6)
-        near = np.exp(-(centre/TROUGH_SOFT)**2)
-        target = np.clip(np.where(below,allowed,1.).min(axis=1,keepdims=True),TROUGH_SCALE_MIN,1.)
+    def _floor_room(self,height,hang,room,visible):
+        """Per ribbon: how far to lift the whole ribbon so its lower edge stays TROUGH_CLEARANCE above the floor (see
+        snapshot). Two cascaded followers (TROUGH_ATTACK up, TROUGH_RELEASE down, on the logical clock), so the lift's
+        velocity is continuous: a one-stage follower jumped on every new trough, which was itself a twitch."""
+        sinking = np.where(visible,hang-height,-np.inf)                     # depth of the lower edge below rest
+        target = np.clip(sinking.max(axis=1,keepdims=True)-room,0.,TROUGH_LIFT_MAX)
         if self._trough_time is None:
-            self._trough_scale = target
+            self._trough_stage = self._trough_lift = target
         elif self.time>self._trough_time:
             dt = self.time-self._trough_time
-            tau = np.where(target<self._trough_scale,TROUGH_ATTACK,TROUGH_RELEASE)
-            self._trough_scale = self._trough_scale+(target-self._trough_scale)*(1.-np.exp(-dt/tau))
+            for name,goal in (('_trough_stage',target),('_trough_lift',None)):
+                goal = self._trough_stage if goal is None else goal
+                current = getattr(self,name)
+                tau = np.where(goal>current,TROUGH_ATTACK,TROUGH_RELEASE)
+                setattr(self,name,current+(goal-current)*(1.-np.exp(-dt/tau)))
         self._trough_time = self.time
-        scale = self._trough_scale
-        centre = np.where(centre<0.,centre*(scale+(1.-scale)*near),centre)
-        # A strong swell may deepen a trough beyond what the swell-free scale planned. Past TROUGH_SAFETY_KNEE of the
-        # room the lower edge eases with a small residual slope: one swell-free hang per ribbon (its widest visible),
-        # so this stays a monotone function of height alone (a swell still only deepens; surge stays on the curve).
-        widest = np.where(visible,hang,0.).max(axis=1,keepdims=True)
-        knee = TROUGH_SAFETY_KNEE*room
-        ease = room-knee
-        deep = np.maximum(0.,widest-centre-knee)
-        settled = widest-knee-TROUGH_SAFETY_SLOPE*deep-(1.-TROUGH_SAFETY_SLOPE)*ease*np.tanh(deep/ease)
-        return np.where(deep>0.,settled,centre)
+        return self._trough_lift
 
     def _advance_zoom(self,dt,enabled,hold):
         self._sustain = follower(self._sustain,self.passage,dt,ZOOM_SUSTAIN_ATTACK,ZOOM_SUSTAIN_RELEASE)
@@ -760,21 +837,16 @@ class WaveformDynamics:
         cz = depth_wave*values['height']*gain+separation*values['spread']
         cosine,sine = math.cos(self.angle),math.sin(self.angle)
         y,z = cosine*cy-sine*cz,sine*cy+cosine*cz
-        # The trough depth scale is sized on the waveform WITHOUT the travelling swell, so a swell only ever deepens
-        # its own troughs (flow rule) instead of making the rest of the ribbon shallower.
-        plain = cosine*carrier*values['height']-sine*(depth_wave*values['height']+separation*values['spread'])
         # Depth sway acts in world space after the roll and travels with the cloth. The former standing bend
         # (a fixed spatial sine the ribbon slid through) is replaced by the travelling pulse above.
         z = z+.4*values['depth']*m*np.cos(.65*u+owner)
         idle=self.controls.idle_motion*(1.-self.passage)
         y+=idle*.08*np.sin(.45*self.time+.6*u+owner)
         z+=idle*.05*np.cos(.33*self.time+.4*u-owner)
-        visible = np.abs(x)<TROUGH_VIEW  # before the surge: the trough scale never reacts to a swell
         x,y,z = self._surge(data,x,y,z,PULSE_SURGE*values['bend'])
         rows[:,:,0] = x-raw.world_origin[0]-self.controls.scene.flow.head_x+self.travel
         # One common smooth bounding domain prevents floor-crossing/clamp kinks at extreme editor values. Peaks
         # are meant to rise high: the framing makes room for them, the body is never capped to fit a frame.
-        plain_width = 3.5*np.tanh(rows[:,:,3]*values['width']/3.5)  # without the swell's widening
         rows[:,:,3] = 3.5*np.tanh(rows[:,:,3]*values['width']*(1.+.35*geometric)/3.5)
         rows[:,:,2] = 5.*np.tanh(z/5.)
         origin_twist = (data[:,1,0,None]+math.pi)%(2*math.pi)-math.pi
@@ -782,18 +854,17 @@ class WaveformDynamics:
         twist = twist*values['twist']+values['torsion']*(1.6*m*np.sin(.45*u+owner)+.12*h*np.sin(.7*u-owner))
         data[:,5::KNOT_ROWS,1] = twist+self.twist_phase+self.angle+idle*.18*np.sin(.28*self.time+.3*u+owner)
         data[:,1,0] = 0.
-        # Troughs stay round above the floor instead of being eased flat along it (operator, 5 Nov: "we collide
-        # with the floor a lot ... the flat collision looks poor ... perhaps how far the bottom half can go down could
-        # be clamped"). Each ribbon's lower half is scaled so its lower edge (the cloth sweep's side is
-        # cos(twist)*Y + sin(twist)*Z, so the sheet hangs width*|cos(twist)| below its centre; TROUGH_HANG of that
-        # counts) stays TROUGH_CLEARANCE above the floor: proportional, so a deep trough is a smaller round trough,
-        # never a flat run (saturating per-knot limits made plateaus and broke the flow rule). The rest line sits
-        # TROUGH_RAISE higher to give the troughs room; crests are untouched. The symmetric 5*tanh(y/5) bound shapes
-        # crests only: on troughs it saturated deep ones into flat runs. The floor contact map is a last resort.
-        centre = np.where(y>=0.,5.*np.tanh(y/5.),y)
-        hang = TROUGH_HANG*np.abs(plain_width*np.cos(data[:,5::KNOT_ROWS,1]))
-        room = max(TROUGH_ROOM_MIN,PACKET_FLOOR_HEIGHT+values['lift']+TROUGH_RAISE-TROUGH_CLEARANCE)
-        rows[:,:,1] = self._trough_depth(centre,plain,hang,room,visible)+values['lift']+TROUGH_RAISE
+        # The floor is never hit and the shape never changes (operator, 5 Nov: "we collide with the floor a lot";
+        # then: per-knot trough limits made boxy flat-bottomed troughs "instead of FLOWING"). When a ribbon's lower
+        # edge (the cloth sweep's side is cos(twist)*Y + sin(twist)*Z, so the sheet hangs width*|cos(twist)| below its
+        # centre) would come within TROUGH_CLEARANCE of the floor, the ribbon first rises a little (up to
+        # TROUGH_LIFT_MAX) and then its WHOLE wave scales uniformly, crests and troughs alike: a uniform scale is the
+        # only bound that preserves the shape exactly (a strong swell may ease its whole ribbon down a little; it never
+        # bends anything against its shape). Both ease slowly on the logical clock.
+        hang = np.abs(rows[:,:,3]*np.cos(data[:,5::KNOT_ROWS,1]))
+        room = max(TROUGH_ROOM_MIN,PACKET_FLOOR_HEIGHT+values['lift']-TROUGH_CLEARANCE)
+        rise = self._floor_room(y,hang,room,np.abs(x)<TROUGH_VIEW)
+        rows[:,:,1] = 5.*np.tanh(y/5.)+values['lift']+rise
         # Strong local musical regions change colour immediately, even before new head history enters view.
         # The crest mask is carried by immutable carrier geometry, so coloured regions travel with the waveform.
         # All cards at once as rows; each card's Python scalars become a column in exactly the dtype NumPy would
