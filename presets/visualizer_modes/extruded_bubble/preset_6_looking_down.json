@@ -33,6 +33,7 @@
           0.0,
           0.0
         ],
+        "extruded_bubble_camera_projection": "Perspective",
         "extruded_bubble_clarity": 0.94,
         "extruded_bubble_collision": [
           0.4,
@@ -52,7 +53,31 @@
           0.3,
           0.8
         ],
+        "extruded_bubble_drift_chains": [
+          0.0,
+          0.0
+        ],
         "extruded_bubble_drift_direction": "Wander",
+        "extruded_bubble_drift_fused": [
+          1.0,
+          1.0
+        ],
+        "extruded_bubble_drift_large": [
+          1.0,
+          1.0
+        ],
+        "extruded_bubble_drift_small": [
+          1.0,
+          1.0
+        ],
+        "extruded_bubble_drift_snow": [
+          0.0,
+          0.0
+        ],
+        "extruded_bubble_drift_specks": [
+          0.0,
+          0.0
+        ],
         "extruded_bubble_dust": 0.0,
         "extruded_bubble_dynamic_floor": false,
         "extruded_bubble_emission_geometry": "SCENE",
@@ -103,7 +128,7 @@
           0.06,
           0.12
         ],
-        "extruded_bubble_ray_flicker": 0.3,
+        "extruded_bubble_ray_modulation": 1.0,
         "extruded_bubble_ray_path": [
           0.0,
           1.0,
@@ -113,6 +138,7 @@
           0.0
         ],
         "extruded_bubble_ray_reach": 0.6,
+        "extruded_bubble_ray_shimmer": 0.3,
         "extruded_bubble_ray_softness": 0.35,
         "extruded_bubble_rays": [
           0.3,
