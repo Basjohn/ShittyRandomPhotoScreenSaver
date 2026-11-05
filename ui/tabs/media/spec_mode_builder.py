@@ -91,7 +91,7 @@ def build_spec_mode_ui(tab, parent_layout, mode_id: str) -> None:
         advanced_attr=f"_{prefix}_advanced",
     )
     layouts = {}
-    _add_studio_launcher(tab, scaffold.normal_layout, mode_id)
+    _add_studio_launcher(tab, mode_id)
     for bucket in spec.buckets:
         _host, layouts[bucket.key] = build_collapsible_bucket(
             tab, scaffold.advanced_layout if bucket.advanced else scaffold.normal_layout,
@@ -198,7 +198,7 @@ def build_studio_owned_mode_ui(tab, parent_layout, mode_id: str, intro: str) -> 
 
     The technical (audio analysis) controls keep their canonical widgets as the value owners, in a
     never-shown holder: Settings' technical load/collect and save stay the single authority."""
-    from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
+    from PySide6.QtWidgets import QVBoxLayout
     spec = require_mode_settings(mode_id)
     for bucket in spec.buckets:
         tab.get_visualizer_bucket_state(mode_id, bucket.key)
@@ -237,29 +237,24 @@ def build_studio_owned_mode_ui(tab, parent_layout, mode_id: str, intro: str) -> 
     text = QLabel(intro)
     text.setObjectName(f"{mode_id}_studio_intro")
     text.setWordWrap(True)
-    row = QHBoxLayout()
-    row.setContentsMargins(0, 4, 0, 4)
-    row.setSpacing(14)
-    _add_studio_launcher(tab, row, mode_id, always=True)
-    row.addWidget(text, 1)
-    scaffold.layout.addLayout(row)
+    scaffold.layout.addWidget(text)
+    _add_studio_launcher(tab, mode_id)
 
 
-def _add_studio_launcher(tab, layout, mode_id: str, *, always: bool = False) -> None:
-    """Custom's entry to the mode's Studio (modes with a Studio adapter only).
+def _add_studio_launcher(tab, mode_id: str) -> None:
+    """The mode's entry to its Studio (modes with a Studio adapter only), in the preset row where Edit
+    Preset was: offered on every preset slot, and the Studio opens on the slot shown.
 
     The preset's camera-save checkbox stays with the preset slider, unchanged."""
     from ui.studio.registry import has_studio, studio_modes
     if not has_studio(mode_id):
         return
-    from PySide6.QtWidgets import QHBoxLayout
     from ui.widgets.outlined_button import OutlinedButton
     title = next(entry.title for entry in studio_modes() if entry.mode_id == mode_id)    # the Studio's own name
-    button = OutlinedButton(f"Open {title} Studio", role="standard")
+    button = OutlinedButton("Open Studio", role="secondary")     # the preset row's own button style
     button.setObjectName(f"{mode_id}_open_studio")
-    button.setMinimumHeight(40)
-    button.setToolTip("Edit this mode in a large live preview. Settings hides while the Studio is open "
-                      "and returns when it closes.")
+    button.setToolTip(f"Edit this preset in the {title} Studio's large live preview. Settings hides while the "
+                      "Studio is open and returns when it closes.")
 
     def open_studio() -> None:
         from ui.studio.settings_link import open_mode_studio
@@ -267,14 +262,8 @@ def _add_studio_launcher(tab, layout, mode_id: str, *, always: bool = False) -> 
 
     button.clicked.connect(open_studio)
     setattr(tab, f"_{require_mode_settings(mode_id).prefix}_studio_button", button)
-    if always:
-        layout.addWidget(button)
-        return
-    row = QHBoxLayout()
-    row.setContentsMargins(0, 4, 0, 4)
-    row.addWidget(button)
-    row.addStretch()
-    layout.addLayout(row)
+    slider = getattr(tab, get_visualizer_mode_descriptor(mode_id).preset_slider_attr)
+    slider.set_studio_launcher(button)
 
 
 def retire_spec_mode_conditions(tab, mode_id: str) -> None:

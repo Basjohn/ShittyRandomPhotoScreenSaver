@@ -52,9 +52,6 @@ lead as reviewer/orchestrator.
   by the power plan, then check Task Manager CPU/GPU for the saver while dark, that wake input reaches the saver, and
   the first seconds after wake (no stale frame, jump or hitch; run with `--frame-trace --usage`). Per-monitor power is
   not observable on Windows: an HDMI panel switched off at its own button that stays enumerated keeps running.
-- [ ] **Retire Custom's "Edit Preset" Notepad machinery** (button + pop-up) now that the Studios exist, with Studio
-  parity proven for each mode that still offered it; and show **Open Studio** on every preset, not only Custom (it
-  opens the Studio on that preset).
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
@@ -437,6 +434,11 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   `.artifacts/evidence/spectrum/studio_20261105/`); its Studio now reaches everything Settings' Spectrum builder saves
   (shape nodes added/removed, lanes reordered), so the builder body can be replaced on acceptance. Each: full registry coverage test, production-parity preview test, theme,
   Settings Custom launcher replacing that builder body once the operator accepts it.
+- [ ] **Edit Preset survives only for modes without a Studio** (Shockwave Grid, DevCurve, Oscilloscope): Studio modes
+  author curated presets with Open Studio (preset row, every slot) and the Studio's confirmed Save To <Preset>
+  (`Docs/Reference/Visualizer_Studio.md` §4); the Notepad path and its pop-up go for each mode when its adapter
+  registers (automatic: the slider builds Edit Preset only for `not has_studio(mode)`); delete `_open_preset_json`
+  with the last one. Operator look pending (6 Nov): Open Studio's place in the preset row and the Save To flow.
 
 ## Operator execution and evidence rules
 
