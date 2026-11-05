@@ -1,7 +1,7 @@
 # SRPSS canonical pinned CPython 3.14 x64 (standard GIL) dependency set.
 # Single dependency authority for Windows and Linux: Windows-only distributions carry a
 # PEP 508 `sys_platform == "win32"` marker; Linux needs no separate list
-# (Docs/Guides/Linux_Port.md).
+# (Docs/Guardrails/Linux_Compatibility.md).
 # The repo-root .venv is the sole development/test/frozen-build interpreter.
 # Windows acceptance is required before labeling this set known-good.
 

@@ -28,6 +28,8 @@ CLI/sidecars, never environment-variable configuration. Smallest meaningful focu
 chunked suite only at milestones; no build/installer unless requested. Visual work is judged on rendered pixels against
 its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed" needs the failure reproduced first.
 
+**Linux compatibility** runs as a separate operator-requested plan, `Linux_Plan.md`; it does not reorder this plan.
+
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
 - [ ] **Authored preset completeness debt (2 Nov focused gate):** 18 existing Bubble presets omit

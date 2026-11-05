@@ -29,6 +29,13 @@ Visualizer defaults and hover/Edit preset-navigation controls are documented in
 
 Do not improve counters by reducing authored cadence, visual quality, overlay behavior or topology support.
 
+## Platforms
+
+Windows is the reference product (`.scr` modes, installer, secure-desktop helper, WinRT media, WASAPI).
+Linux runs the same source: per-OS data roots come from `core/platform_paths.py`, Windows-only features present
+as unavailable there, and Windows behaviour never changes for Linux. Rules:
+[Linux Compatibility](Docs/Guardrails/Linux_Compatibility.md); live work: `Linux_Plan.md`.
+
 ## Accepted runtime presentation
 
 ```text

@@ -16,7 +16,7 @@
 #
 # Python: SRPSS pins CPython 3.14 (64-bit, standard GIL). Without --python the
 # script uses python3.14 from PATH, else asks uv for a managed 3.14 if uv exists.
-# Docs: Docs/Guides/Linux_Port.md
+# Docs: Linux_Plan.md; rules: Docs/Guardrails/Linux_Compatibility.md
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
