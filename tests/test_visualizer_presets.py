@@ -16,10 +16,14 @@ from ui.tabs.visualizers_tab import VisualizersTab
 
 @pytest.fixture(autouse=True)
 def _restore_visualizer_preset_registry():
-    original_presets = {mode: list(presets) for mode, presets in vp._PRESETS.items()}
+    # _build_presets_for_mode also records authored source paths/slots; tests that build from tmp roots
+    # must not leave those behind (later files resolve authored files through them).
+    registries = (vp._PRESETS, vp._PRESET_SOURCE_PATHS, vp._PRESET_SOURCE_SLOTS)
+    originals = [{mode: list(values) for mode, values in registry.items()} for registry in registries]
     yield
-    vp._PRESETS.clear()
-    vp._PRESETS.update(original_presets)
+    for registry, original in zip(registries, originals):
+        registry.clear()
+        registry.update(original)
 
 
 def _seed_curated_slots(curated_root: Path, mode: str, count: int) -> None:
