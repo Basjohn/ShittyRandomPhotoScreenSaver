@@ -894,6 +894,11 @@
           6.0,
           6.0
         ],
+        "waveform_ribbon_floor_contrast": 3.5,
+        "waveform_ribbon_floor_light_far": 0.5,
+        "waveform_ribbon_floor_light_reach": 35.0,
+        "waveform_ribbon_floor_colour": 1.8,
+        "waveform_ribbon_floor_glow_limit": 0.2,
         "waveform_ribbon_turn": 0.0,
         "waveform_ribbon_tilt": 0.0,
         "waveform_ribbon_scene_scale": 1.0,
