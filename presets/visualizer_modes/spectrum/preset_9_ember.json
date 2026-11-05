@@ -28,9 +28,31 @@
         "spectrum_drop_speed": 0.72,
         "spectrum_dynamic_floor": true,
         "spectrum_dynamic_range_enabled": true,
+        "spectrum_fill_gradient": false,
+        "spectrum_fill_tip_color": [
+          90,
+          200,
+          255,
+          230
+        ],
         "spectrum_ghost_alpha": 0.6,
+        "spectrum_ghost_color": [
+          255,
+          190,
+          90,
+          255
+        ],
+        "spectrum_ghost_color_source": "Bar Colour",
         "spectrum_ghost_decay": 0.18,
+        "spectrum_ghost_gradient": false,
+        "spectrum_ghost_tip_color": [
+          255,
+          80,
+          200,
+          255
+        ],
         "spectrum_ghosting_enabled": true,
+        "spectrum_gloss": 0.0,
         "spectrum_glow_color": [
           255,
           200,
@@ -97,6 +119,23 @@
             "Vocal"
           ]
         ],
+        "spectrum_pattern": "Off",
+        "spectrum_pattern_color": [
+          255,
+          255,
+          255,
+          110
+        ],
+        "spectrum_pattern_scale": 1.0,
+        "spectrum_pattern_strength": 0.6,
+        "spectrum_peak_cap_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "spectrum_peak_cap_thickness": 2,
+        "spectrum_peak_caps": false,
         "spectrum_profile_floor": 0.2,
         "spectrum_rainbow_border": false,
         "spectrum_rainbow_enabled": false,
