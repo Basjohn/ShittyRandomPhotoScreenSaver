@@ -1,87 +1,136 @@
-"""Physical-size and light-footprint accuracy of Bubble's opt-in particle glow.
+"""Bubble's opt-in particle glow, measured on the production ambient pass in native GL.
 
-The useful metric is luminance *outside* the unchanged core in scene pixels,
-not the peak opacity or RGB at the point centre. No Qt/OpenGL is needed here;
-actual GPU appearance and FPS must still be accepted natively.
+One particle through ``QuickBubbleAmbientPoints.render_texture`` into its own offscreen target; the
+coverage (8-bit) and light (float, linear) attachments are read back. Properties, not authored values:
+a fixed core whatever the glow, light that falls monotonically from the core (no dark moat), light in
+the particle's own hue, steady total light as the particle moves between pixel centres (no twinkle),
+and no light target at all while nothing glows.
 """
 from __future__ import annotations
 
 import math
-from pathlib import Path
+
+import numpy as np
+import pytest
+
+SIZE = 64
 
 
-def _smoothstep(lo: float, hi: float, value: float) -> float:
-    t = min(1.0, max(0.0, (value - lo) / (hi - lo)))
-    return t * t * (3.0 - 2.0 * t)
+@pytest.fixture
+def ambient(qt_app):
+    from PySide6.QtGui import QOffscreenSurface, QOpenGLContext, QSurfaceFormat
+
+    fmt = QSurfaceFormat()
+    fmt.setRenderableType(QSurfaceFormat.OpenGL)
+    fmt.setProfile(QSurfaceFormat.CoreProfile)
+    fmt.setVersion(4, 6)
+    context = QOpenGLContext()
+    context.setFormat(fmt)
+    if not context.create():
+        pytest.skip("OpenGL 4.6 context unavailable on this runner")
+    surface = QOffscreenSurface()
+    surface.setFormat(fmt)
+    surface.create()
+    if not surface.isValid() or not context.makeCurrent(surface):
+        pytest.skip("offscreen OpenGL context unavailable")
+    from rendering.quick.visualizer.implementations.bubble_ambient_gl import QuickBubbleAmbientPoints
+
+    renderer = QuickBubbleAmbientPoints()
+    try:
+        yield renderer
+    finally:
+        renderer.release_resources()
+        context.doneCurrent()
+        surface.destroy()
 
 
-def _sprite_diameter(body_diameter: float, glow: float) -> float:
-    multiplier = 2.2 if glow <= 0.001 else 8.0 + 4.0 * min(1.0, max(0.0, glow / 6.0))
-    return min(128.0, max(1.0, body_diameter * multiplier))
+def _draw(renderer, x, y, diameter, glow, colour=(0.55, 0.75, 1.0, 1.0)):
+    """Render one particle at pixel position (x, y); return (coverage RGBA, light RGB or None)."""
+    from OpenGL import GL as gl
+
+    point = (x / SIZE, y / SIZE, diameter, 1.0, glow, 1.0)
+    texture, light = renderer.render_texture(
+        (0.0, 0.0, float(SIZE), float(SIZE)), 1.0, point, sprite_scale=1.0, glow_spread=1.0,
+        micro_color=(1.0, 1.0, 1.0, 1.0), particle_color=colour)
+    assert texture
+    gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, renderer._fbo)
+    gl.glReadBuffer(gl.GL_COLOR_ATTACHMENT0)
+    coverage = np.frombuffer(gl.glReadPixels(0, 0, SIZE, SIZE, gl.GL_RGBA, gl.GL_FLOAT),
+                             dtype=np.float32).reshape(SIZE, SIZE, 4)[::-1].copy()
+    radiance = None
+    if light:
+        gl.glReadBuffer(gl.GL_COLOR_ATTACHMENT1)
+        radiance = np.frombuffer(gl.glReadPixels(0, 0, SIZE, SIZE, gl.GL_RGB, gl.GL_FLOAT),
+                                 dtype=np.float32).reshape(SIZE, SIZE, 3)[::-1].copy()
+    gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, 0)
+    assert gl.glGetError() == gl.GL_NO_ERROR
+    return coverage, radiance
 
 
-def _core_coverage(distance_px: float, body_diameter: float, glow: float) -> float:
-    sprite = _sprite_diameter(body_diameter, glow)
-    d = distance_px / (sprite * .5)
-    ratio = min(1.0, body_diameter / sprite)
-    return 1.0 - _smoothstep(.50 * ratio, 1.05 * ratio, d)
+def _linear_light(coverage, radiance):
+    """Total light the particle adds over black: coverage colour (sRGB) decoded, plus emitted light."""
+    rgb = coverage[..., :3]
+    linear = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+    luminance = linear @ np.array([0.2126, 0.7152, 0.0722])
+    if radiance is not None:
+        luminance = luminance + radiance @ np.array([0.2126, 0.7152, 0.0722])
+    return luminance
 
 
-def _radiance(distance_px: float, body_diameter: float, glow: float) -> float:
-    sprite = _sprite_diameter(body_diameter, glow)
-    d = distance_px / (sprite * .5)
-    if d > 1.0:
-        return 0.0
-    core = _core_coverage(distance_px, body_diameter, glow)
-    response = 1.0 - math.exp(-.36 * max(0.0, glow))
-    inner = math.exp(-((d / .18) ** 2))
-    outer = math.exp(-((d / .66) ** 2))
-    falloff = (.38 * inner + .72 * outer) * (1.0 - _smoothstep(.84, 1.0, d))
-    return response * falloff * (1.0 - .96 * core)
+@pytest.mark.qt
+def test_nothing_glowing_allocates_no_light_target(ambient):
+    _coverage, radiance = _draw(ambient, 32.5, 32.5, 2.4, 0.0)
+    assert radiance is None and ambient._light_texture == 0
+    _coverage, radiance = _draw(ambient, 32.5, 32.5, 2.4, 1.0)
+    assert radiance is not None and ambient._light_texture
+    _coverage, radiance = _draw(ambient, 32.5, 32.5, 2.4, 0.0)
+    assert radiance is None and ambient._light_texture == 0
 
 
-def test_glow_keeps_the_exact_physical_core_at_all_intensities_and_sizes():
-    for size in (1.4, 2.4, 7.0, 14.0):
-        baseline = [_core_coverage(x * size / 20, size, 0.0) for x in range(25)]
-        for glow in (0.6, 2.0, 4.0, 6.0):
-            result = [_core_coverage(x * size / 20, size, glow) for x in range(25)]
-            assert all(abs(a - b) < 1e-9 for a, b in zip(baseline, result))
+@pytest.mark.qt
+def test_core_coverage_is_fixed_whatever_the_glow(ambient):
+    for diameter in (0.9, 2.4, 7.0):
+        reference, _ = _draw(ambient, 32.3, 31.7, diameter, 0.0)
+        for glow in (0.2, 2.0, 6.0):
+            coverage, radiance = _draw(ambient, 32.3, 31.7, diameter, glow)
+            # Same pixels; the 8-bit target may round a filtered edge pixel differently (sprite size differs).
+            assert np.abs(coverage - reference).max() <= 1.0 / 255.0 + 1e-6, (diameter, glow)
+            assert np.array_equal(coverage[..., 3] > 0, reference[..., 3] > 0)
+            assert radiance is not None and radiance.max() > 0.0
 
 
-def test_maximum_glow_lights_water_beyond_core_instead_of_making_a_solid_disc():
-    # Typical 2.4px particle, 100% opacity, lightest colour. These are
-    # emissive values before the particle's own stable per-dot opacity and tint.
-    assert _core_coverage(2.0, 2.4, 6.0) == 0.0
-    assert _core_coverage(8.0, 2.4, 6.0) == 0.0
-    assert _radiance(5.0, 2.4, 6.0) > 0.35
-    assert _radiance(8.0, 2.4, 6.0) > 0.20
-    assert _radiance(11.0, 2.4, 6.0) > 0.10
-    assert _radiance(14.4, 2.4, 6.0) == 0.0
-    assert _radiance(8.0, 2.4, 6.0) > 3 * _radiance(8.0, 2.4, 0.65)
+@pytest.mark.qt
+def test_light_falls_monotonically_from_the_core_in_the_particle_hue(ambient):
+    colour = (0.55, 0.75, 1.0, 1.0)
+    coverage, radiance = _draw(ambient, 32.5, 32.5, 1.5, 2.0, colour)
+    yy, xx = np.mgrid[0:SIZE, 0:SIZE]
+    distance = np.hypot(xx + 0.5 - 32.5, yy + 0.5 - 32.5)
+    luminance = radiance @ np.array([0.2126, 0.7152, 0.0722])
+    rings = [float(luminance[(distance >= r) & (distance < r + 1.0)].mean()) for r in range(0, 16)]
+    # No dark moat: every ring is at most as bright as the one inside it, and the light reaches well past the core.
+    assert all(outer <= inner * 1.0001 for inner, outer in zip(rings, rings[1:]))
+    assert rings[6] > 0.0 and rings[0] > 20 * rings[6]
+    # Coverage stays inside the core; light is what reaches the water around it.
+    assert coverage[..., 3][distance > 4.0].max() == 0.0
+    # The halo keeps the emitter's hue: same channel order as the colour, never washed toward grey.
+    halo = radiance[(distance > 3.0) & (distance < 8.0)].mean(axis=0)
+    assert halo[2] > halo[1] > halo[0] > 0.0
+    lin = [((c + 0.055) / 1.055) ** 2.4 for c in colour[:3]]
+    assert (halo[2] - halo[0]) / halo[2] >= (lin[2] - lin[0]) / lin[2]
 
 
-def test_emission_is_bounded_and_fades_at_the_sprite_edge():
-    for glow in (0.0, 0.65, 2.0, 4.0, 6.0):
-        sprite = _sprite_diameter(2.4, glow)
-        values = [_radiance(sprite * .5 * i / 100, 2.4, glow) for i in range(101)]
-        assert max(values) < 1.0
-        assert values[-1] == 0.0
-    assert _radiance(4.0, 2.4, 6.0) > _radiance(8.0, 2.4, 6.0)
-    assert _radiance(8.0, 2.4, 6.0) > _radiance(12.0, 2.4, 6.0)
-
-
-def test_shader_light_and_coverage_are_independent_and_physical_core_ratio_is_used():
-    ambient = Path('rendering/quick/visualizer/implementations/bubble_ambient_gl.py').read_text()
-    main = Path('widgets/spotify_visualizer/shaders/bubble.frag').read_text()
-    assert 'vCoreRatio = min(1.0, coreDiameterPx / gl_PointSize);' in ambient
-    assert 'alpha = core * uParticleColor.a;' in ambient
-    # 5.1.3 shipped a hollow-centre emitter: light rises outside the core
-    # (scaled by the same core ratio) instead of a coreShield multiplier, and
-    # stays independent of the core's alpha coverage.
-    assert 'float rise = smoothstep(0.95 * vCoreRatio, 3.0 * vCoreRatio, d);' in ambient
-    emission_line = next(line for line in ambient.splitlines()
-                         if line.strip().startswith('emission = uParticleColor.rgb'))
-    assert 'response * falloff' in emission_line
-    assert 'core' not in emission_line and 'alpha' not in emission_line
-    assert 'a > 0.00001 || light > 0.00001' in main
-    assert 'if (a > 0.00001) {' not in main
+@pytest.mark.qt
+@pytest.mark.parametrize("diameter", (0.9, 1.5, 2.4, 4.0))
+@pytest.mark.parametrize("glow", (0.0, 0.3, 2.0))
+def test_total_light_is_steady_as_the_particle_moves_between_pixel_centres(ambient, diameter, glow):
+    """Sixteen sub-pixel offsets: a particle drifting slowly must not twinkle (it used to vary by up to 136%)."""
+    totals = []
+    for k in range(16):
+        x = 32.0 + (k % 4) / 4.0 + 0.125
+        y = 31.0 + (k // 4) / 4.0 + 0.125
+        coverage, radiance = _draw(ambient, x, y, diameter, glow)
+        totals.append(float(_linear_light(coverage, radiance).sum()))
+    mean = sum(totals) / len(totals)
+    assert mean > 0.0
+    spread = math.sqrt(sum((t - mean) ** 2 for t in totals) / len(totals)) / mean
+    assert spread < 0.03, (diameter, glow, spread)

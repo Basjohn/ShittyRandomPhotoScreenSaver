@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
+
 MAX_AMBIENT_TEXTURE_EDGE = 2048
 
 
@@ -59,37 +61,53 @@ def select_ambient_occluders(bubbles, positions) -> tuple[float, ...]:
     )
 
 
-def ambient_occluder_quads(
+# Triangle-pair corners of one occluder quad, in the vertex order the mask draw expects.
+_CORNERS = np.array(((-1., -1.), (1., -1.), (1., 1.), (-1., -1.), (1., 1.), (-1., 1.)))
+
+
+def ambient_occluder_vertices(
     occluders: tuple[float, ...], width: int, height: int,
     response_radius_scale: float = 1.0,
-) -> tuple[float, ...]:
-    """Encode true rendered bubble circles as bounded triangle masks.
+) -> np.ndarray:
+    """Encode true rendered bubble circles as bounded triangle masks: an (N, 5) float64 array.
 
     Each (x, y, height-normalized radius, alpha) is copied from the SAME
     bubble snapshot as the hero draw. Radius and aspect match the canonical
     shader's `delta.x *= aspect`, even for extreme-wide/tall content textures.
     Point-size limits cannot truncate the triangles. This is CPU-only geometry
     for the optional decoration texture, not a new simulation or fullscreen pass.
+    Rows are (x, y, unit-circle x, unit-circle y, alpha) per vertex, six per
+    visible circle; one vectorised pass (it was a per-frame Python loop).
     """
     if len(occluders) % 4 or len(occluders) > 110 * 4:
         raise ValueError('Ambient occluders are not bounded complete circles')
     if width <= 0 or height <= 0 or not math.isfinite(response_radius_scale) or response_radius_scale <= 0:
         raise ValueError('Invalid ambient occluder viewport scale')
-    result: list[float] = []
-    corners = ((-1., -1.), (1., -1.), (1., 1.),
-               (-1., -1.), (1., 1.), (-1., 1.))
-    for i in range(0, len(occluders), 4):
-        x,y,r,alpha = occluders[i:i+4]
-        if not all(math.isfinite(v) for v in (x,y,r,alpha)):
-            raise ValueError('Nonfinite ambient occluder')
-        if r <= 0.0 or alpha <= 0.0:
-            continue
-        radius_y = r * response_radius_scale
-        radius_x = radius_y * height / width
-        for dx,dy in corners:
-            result.extend((x+dx*radius_x,y+dy*radius_y,dx,dy,min(1.,max(0.,alpha))))
-    return tuple(result)
+    if not occluders:
+        return np.empty((0, 5))
+    rows = np.asarray(occluders, dtype=np.float64).reshape(-1, 4)
+    if not np.isfinite(rows).all():
+        raise ValueError('Nonfinite ambient occluder')
+    rows = rows[(rows[:, 2] > 0.0) & (rows[:, 3] > 0.0)]
+    radius_y = rows[:, 2] * response_radius_scale
+    radius_x = radius_y * height / width
+    vertices = np.empty((len(rows), 6, 5))
+    vertices[:, :, 0] = rows[:, 0, None] + _CORNERS[None, :, 0] * radius_x[:, None]
+    vertices[:, :, 1] = rows[:, 1, None] + _CORNERS[None, :, 1] * radius_y[:, None]
+    vertices[:, :, 2] = _CORNERS[None, :, 0]
+    vertices[:, :, 3] = _CORNERS[None, :, 1]
+    vertices[:, :, 4] = np.minimum(1.0, rows[:, 3])[:, None]
+    return vertices.reshape(-1, 5)
+
+
+def ambient_occluder_quads(
+    occluders: tuple[float, ...], width: int, height: int,
+    response_radius_scale: float = 1.0,
+) -> tuple[float, ...]:
+    """The flat tuple form of :func:`ambient_occluder_vertices` (same values)."""
+    return tuple(ambient_occluder_vertices(occluders, width, height, response_radius_scale).ravel().tolist())
 
 
 __all__ = ['ambient_target_size', 'ambient_sprite_scale', 'select_ambient_occluders', 'ambient_occluder_quads',
+           'ambient_occluder_vertices',
            'MAX_AMBIENT_TEXTURE_EDGE']

@@ -288,6 +288,8 @@ GPU resources retire on the legal render owner.
 
 - [ ] Visible Play/Pause edge can be decomposed Media truth -> owner -> BeatEngine -> first current source -> mode readiness -> logical publication -> Quick snapshot -> retained draw.
 - [ ] Historical BeatEngine cold ramp is not changed to hide a new delay; warm resumes are tested separately.
+- [ ] A new mode state that integrates dt from its own last-step timestamp implements `rebase_clock()`, so a display-power
+  resume integrates no parked gap (`tests/test_display_power.py` lists the covered states).
 
 ## 11. Required proof for geometry changes
 

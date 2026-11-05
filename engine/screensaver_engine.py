@@ -277,6 +277,10 @@ class ScreensaverEngine(QObject):
         
         self._display_initialized: bool = False  # Still needed for display-specific init
         self._rotation_timer: Optional[QTimer] = None
+        # Process-scoped console display power truth (core.display_power):
+        # created in initialize(), retired in cleanup(), outliving every display
+        # runtime generation and Settings round trip.
+        self._display_power = None
         self._current_image: Optional[ImageMetadata] = None
         # A sources.* key this engine is writing itself (see _register_collection_folder).
         self._own_sources_write: Optional[str] = None
@@ -513,6 +517,8 @@ class ScreensaverEngine(QObject):
             if not self._initialize_core_systems():
                 logger.error("Failed to initialize core systems")
                 return False
+
+            self._initialize_display_power()
             
             # Load settings
             if not self._load_settings():
@@ -977,6 +983,57 @@ class ScreensaverEngine(QObject):
         probe = getattr(self.display_manager, "is_selection_suspended", None)
         return bool(probe()) if callable(probe) else False
 
+    def _initialize_display_power(self) -> None:
+        """Create the one display-power authority for this process (idempotent)."""
+        if self._display_power is not None:
+            return
+        from core.display_power import DisplayPowerAuthority
+
+        authority = DisplayPowerAuthority(parent=self)
+        authority.power_changed.connect(self._on_display_power_changed)
+        authority.start(thread_manager=self.thread_manager)
+        self._display_power = authority
+
+    def _display_power_on(self) -> bool:
+        authority = self._display_power
+        return True if authority is None else bool(authority.is_on)
+
+    def _on_display_power_changed(self, on: bool, generation: int) -> None:
+        """Console displays off/on: pause or resume rotation and every display consumer.
+
+        Off stops the rotation schedule (nothing new is admitted to a dark panel);
+        DisplayManager then snaps any in-flight transition to its destination,
+        suspends transition frames and parks the Visualizer, and the shared clock
+        ticker stops. On re-applies the manager first, ticks the clock at once and
+        restarts rotation from a full interval: a fresh hold,
+        never a catch-up. A stale edge (an older generation reaching here after
+        a newer one) is ignored.
+        """
+        authority = self._display_power
+        if authority is None or int(generation) != authority.generation or self._shutting_down:
+            return
+        timer = self._rotation_timer
+        if not on and timer is not None:
+            try:
+                if timer.isActive():
+                    timer.stop()
+                    logger.info("[DISPLAY_POWER] Rotation paused")
+            except Exception:
+                logger.debug("[DISPLAY_POWER] Rotation pause failed", exc_info=True)
+        manager = self.display_manager
+        if manager is not None:
+            manager.set_display_power(bool(on), generation=int(generation))
+        from widgets.clock_ticker import get_global_clock_ticker
+
+        get_global_clock_ticker().set_display_power_suspended(not on)
+        if on and timer is not None and self._running and not self._display_selection_suspended():
+            try:
+                if not timer.isActive():
+                    timer.start()
+                    logger.info("[DISPLAY_POWER] Rotation resumed with a fresh %dms hold", int(timer.interval()))
+            except Exception:
+                logger.debug("[DISPLAY_POWER] Rotation resume failed", exc_info=True)
+
     def _initialize_display(self) -> bool:
         """Initialize display manager."""
         pending_barrier = self._pending_runtime_destruction_barrier
@@ -1021,6 +1078,9 @@ class ScreensaverEngine(QObject):
             )
             
             display_manager = self.display_manager
+            if self._display_power is not None and not self._display_power.is_on:
+                # A generation built while the displays are off starts paused.
+                display_manager.set_display_power(False, generation=self._display_power.generation)
             display_manager.set_random_transition_selection(
                 self._random_transition_history.current
             )
@@ -1501,9 +1561,11 @@ class ScreensaverEngine(QObject):
                     self._schedule_startup_first_image_retry()
             
             # Start rotation timer
-            if self._rotation_timer and not suspended:
+            if self._rotation_timer and not suspended and self._display_power_on():
                 self._rotation_timer.start()
                 logger.info(f"Rotation timer started ({self._rotation_timer.interval()}ms)")
+            elif self._rotation_timer and not suspended:
+                logger.info("[DISPLAY_POWER] Rotation waits for the displays to come back on")
             
             # Transition to RUNNING state
             self._transition_state(EngineState.RUNNING)

@@ -110,6 +110,11 @@ class ExtrudedBubbleFrameRuntime(RetirableFrameRuntime):
         self._last_ts = None
         self._latest = ExtrudedBubbleSnapshot()
 
+    @retirement_fenced
+    def rebase_clock(self) -> None:
+        """Display power resumed after a park: the next step integrates no parked gap (state stays warm)."""
+        self._last_ts = None
+
     @property
     def onset_serial(self) -> int:
         """The last onset serial taken: ask the engine only for the onsets after it."""

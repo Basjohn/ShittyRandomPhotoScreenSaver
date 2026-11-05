@@ -1,7 +1,15 @@
 """CLI overrides must survive the same curated/Custom activation used by the live owner."""
 import json
-from tools.visualizer_live_check import _prepare_profile
+import pytest
+from tools.visualizer_live_check import _prepare_profile, parse_display_off
 from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+
+
+def test_display_off_schedule_is_sorted_pairs_and_rejects_overlap_or_nonpositive_times():
+    assert parse_display_off("50:10,20:5") == [(20.0, 25.0), (50.0, 60.0)]
+    for bad in ("20:0", "0:5", "20:10,25:5", "x:1"):
+        with pytest.raises(ValueError):
+            parse_display_off(bad)
 
 
 def test_isolated_profile_overrides_survive_curated_activation_without_editing_presets(tmp_path):
