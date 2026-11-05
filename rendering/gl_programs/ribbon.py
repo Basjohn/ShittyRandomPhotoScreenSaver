@@ -178,8 +178,6 @@ uniform mat4 uMvp;
 uniform vec2 uViewport;     // pixels; with uRim.w (minimum on-screen width) zero, no widening
 uniform vec4 uRim;
 uniform vec3 uEye;
-uniform vec3 uForward;
-uniform int uOrthographic;
 out vec3 vWorld;
 out vec3 vNormal;
 out float vPhase;
@@ -282,7 +280,7 @@ void main() {
         vec2 along=(cb.xy/cb.w-ca.xy/ca.w)*half_;
         if(drawn<minimum && dot(along,along)>1e-8) {
             vec3 middle=(lo+hi)*0.5;
-            vec3 view=uOrthographic==1?normalize(uForward):normalize(middle-uEye);
+            vec3 view=normalize(middle-uEye);
             // Orient the widened edges by the sheet's facing, sign(N.V), computed in world space: it flips once
             // where the sheet turns over. The sign of the projected width is numerical noise along a long
             // near-edge-on stretch, and each flip drew a bow-tie (the fold broke into a gap). In screen space
@@ -666,9 +664,7 @@ flat in vec4 vColour;
 flat in vec4 vColourB;
 in vec4 vTint;
 uniform vec4 uViewZ;        // local -> view-space z (row 2 of the rebased view matrix)
-uniform vec3 uEye;          // local eye (Perspective)
-uniform vec3 uForward;      // view direction (Orthographic; directions are unchanged by rebasing)
-uniform int uOrthographic;
+uniform vec3 uEye;          // local eye
 uniform vec4 uRim;          // half-width (across units), light, path-length cap, minimum on-screen width (px)
 uniform vec4 uStrands;      // count across the width, half-width (strand spacing units), light, warp
 uniform vec4 uBody;         // alpha, tint, strand intensity variation, warp frequency (per phase unit)
@@ -714,7 +710,7 @@ float viewDepth() { return -dot(uViewZ,vec4(vWorld,1.0)); }
 // A fixed "grazing" boost instead lit the whole near-edge-on stretch as one flat neon band.
 float pathLength() {
     vec3 n=normalize(vNormal);
-    vec3 view=uOrthographic==1?normalize(uForward):normalize(vWorld-uEye);
+    vec3 view=normalize(vWorld-uEye);
     float path=min(1.0/max(abs(dot(n,view)),1e-4),max(uRim.z,1.0));
     return mix(path,vFaceScale,clamp(vExpanded,0.0,1.0));
 }

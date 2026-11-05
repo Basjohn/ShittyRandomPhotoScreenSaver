@@ -41,13 +41,12 @@ def test_continuation_phase_survives_packet_coordinate_rebase():
     np.testing.assert_allclose(cloth_values(knots,xs),cloth_values(rebased,xs-128.),atol=1e-11)
 
 
-@pytest.mark.parametrize('projection',('Orthographic','Perspective'))
 @pytest.mark.parametrize('aspect',(.2,1.5,12.))
-def test_frustum_culling_contains_every_visible_fixed_world_point(projection,aspect):
+def test_frustum_culling_contains_every_visible_fixed_world_point(aspect):
     transverse=((0.,9.),(-8.,8.))
     points=np.array([(x,y,z,1.) for x in np.linspace(-400,400,81) for y in (0.,4.,9.) for z in (-8.,0.,8.)])
     for turn in (-1.,-.5,0.,.5,1.):
-        view,matrix,_,_=physical_view(camera(turn=turn,camera_projection=projection,scene_scale=.25),aspect)
+        view,matrix,_,_=physical_view(camera(turn=turn,scene_scale=.25),aspect)
         mvp=matrix@view;low,high=frustum_axial_span(mvp,transverse)
         clip=points@mvp.T
         visible=(clip[:,3]>0)&(np.abs(clip[:,:3])<=clip[:,3,None]+1e-9).all(1)

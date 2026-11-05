@@ -35,8 +35,8 @@ def test_lit_render_has_light_and_no_overflow(lab):
     assert rgb.max() > 200 and not garbage.any()
 
 
-def test_perspective_far_floor_dissolves_into_the_same_background(lab):
-    upper = lab.render('low', flat=False, pose='perspective')[:190, :, :3].astype(int).mean(2)
+def test_wide_lens_far_floor_dissolves_into_the_same_background(lab):
+    upper = lab.render('low', flat=False, pose='wide')[:190, :, :3].astype(int).mean(2)
     # A different clear colour exposed the finite ground as a straight horizontal seam.
     assert np.abs(np.diff(upper, axis=0)).mean(1).max() < 2.
 

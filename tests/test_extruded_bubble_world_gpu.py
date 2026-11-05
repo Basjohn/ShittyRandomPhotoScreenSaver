@@ -50,11 +50,10 @@ def sphere_pixels(qt_app, request):
 
         def draw(kind,centre=(0.,0.,-6.),radius=.6,alpha=1.,second=None,alphas=None,diag=5,
                  circle=False,composite=False,orientation=None,extra=(.3,0.),
-                 projection_kind='Perspective',half_height=2.,depth=False,occluder_depth=1.,blend=0.,**uniforms):
+                 depth=False,occluder_depth=1.,blend=0.,**uniforms):
             from rendering.quick.scene3d.defocus import DefocusLayer
-            from core.settings.framed_camera import orthographic_matrix
-            span=(half_height*width/height,half_height) if projection_kind=='Orthographic' else tan
-            projection_matrix=orthographic_matrix(span,.05,90.) if projection_kind=='Orthographic' else projection
+            span=tan
+            projection_matrix=projection
             budget=_near_spread(height)
             layer=DefocusLayer('native EB lens protection') if composite else None
             if layer is not None:
@@ -67,7 +66,6 @@ def sphere_pixels(qt_app, request):
             program=programs[kind];gl.glUseProgram(program)
             loc=lambda key:gl.glGetUniformLocation(program,key)
             for name,value in {'uPixel':2*span[1]/height,'uPixelSize':2*span[1]/height,'uCrisp':1.,
-                               'uOrthographic':float(projection_kind=='Orthographic'),
                                'uEye':(0.,0.,0.),
                                'uFocus':0.,'uAperture':0.,'uNearCoc':22.*height/941.,'uNearMax':budget,
                                'uNearLayer':float(kind.startswith('near')),'uNearGain':1.,'uProbeLevels':1.,
@@ -152,71 +150,6 @@ def test_ordinary_and_fused_coverage_share_true_pinhole_projection(sphere_pixels
             ratios.append(math.sqrt(eigen[1]/eigen[0]))
         expected=math.sqrt(1+(centre[0]**2+centre[1]**2)/(centre[2]**2-.6**2))
         assert ratios==pytest.approx((expected,expected),abs=.02)
-
-
-@pytest.mark.qt
-@pytest.mark.parametrize('kind',('ordinary','cluster'))
-def test_orthographic_spheres_keep_round_size_and_normals_across_position_and_depth(sphere_pixels,kind):
-    samples=[]
-    for centre in ((0.,0.,-6.),(1.25,.75,-6.),(1.25,.75,-18.)):
-        _,coverage=sphere_pixels(kind,centre,projection_kind='Orthographic')
-        yy,xx=np.nonzero(coverage>.5)
-        eigen=np.linalg.eigvalsh(np.cov(np.vstack((xx,yy)),bias=True))
-        assert math.sqrt(eigen[1]/eigen[0])==pytest.approx(1.,abs=.01)
-        # True radius .6 / constant .0125 world units/pixel, independent of z.
-        assert len(xx)==pytest.approx(math.pi*48**2,rel=.035)
-        rgba,_=sphere_pixels(kind,centre,projection_kind='Orthographic',diag=4)
-        rgb=np.divide(rgba[:,:,:3],rgba[:,:,3,None],out=np.zeros_like(rgba[:,:,:3]),where=rgba[:,:,3,None]>1e-8)
-        cx=round(240+centre[0]/.0125);cy=round(160+centre[1]/.0125)
-        samples.append(rgb[cy-28:cy+28,cx-28:cx+28])
-    assert np.max(np.abs(samples[0]-samples[1]))<.003
-    assert np.max(np.abs(samples[0]-samples[2]))<.003
-
-
-@pytest.mark.qt
-def test_orthographic_refraction_uses_translated_parallel_origins(sphere_pixels):
-    samples=[]
-    for x,y,z in ((0.,0.,-6.),(1.25,.75,-6.),(1.25,.75,-18.)):
-        rgba,_=sphere_pixels('ordinary',(x,y,z),projection_kind='Orthographic',diag=2)
-        rgb=np.divide(rgba[:,:,:3],rgba[:,:,3,None],out=np.zeros_like(rgba[:,:,:3]),where=rgba[:,:,3,None]>1e-8)
-        cx=round(240+x/.0125);cy=round(160+y/.0125)
-        samples.append(rgb[cy-28:cy+28,cx-28:cx+28])
-    # Constant background/probe: changing view position cannot change refraction.
-    assert np.max(np.abs(samples[0]-samples[1]))<.003
-    assert np.max(np.abs(samples[0]-samples[2]))<.003
-
-
-@pytest.mark.qt
-@pytest.mark.parametrize('kind',('ordinary','cluster'))
-def test_orthographic_front_depth_and_occlusion_match_the_world_surface(sphere_pixels,kind):
-    _,coverage,depth=sphere_pixels(kind,projection_kind='Orthographic',depth=True)
-    # The central sample lies .00625 world units from each axis, not exactly on it.
-    front=6.-math.sqrt(.6**2-2*.00625**2)
-    expected=(front-.05)/(90.-.05)
-    assert depth[160,240]==pytest.approx(expected,abs=2e-6)
-    assert coverage[160,240]>.9
-    _,hidden,_=sphere_pixels(kind,projection_kind='Orthographic',depth=True,
-                            occluder_depth=(5.2-.05)/(90.-.05))
-    assert np.max(hidden)==0.
-    _,partial,_=sphere_pixels(kind,projection_kind='Orthographic',depth=True,
-                             occluder_depth=(5.7-.05)/(90.-.05))
-    assert 0<np.count_nonzero(partial)<np.count_nonzero(coverage)
-
-
-@pytest.mark.qt
-def test_orthographic_fused_members_keep_connected_geometry_and_depth_independent_normals(sphere_pixels):
-    images=[];masks=[]
-    for z in (-6.,-18.):
-        _,coverage=sphere_pixels('cluster',(-.45,0.,z),second=(.45,0.,z,.6),
-            projection_kind='Orthographic',blend=.18)
-        assert coverage[160,240]>.9
-        masks.append(coverage>.5)
-        rgba,_=sphere_pixels('cluster',(-.45,0.,z),second=(.45,0.,z,.6),
-            projection_kind='Orthographic',blend=.18,diag=4)
-        rgb=np.divide(rgba[:,:,:3],rgba[:,:,3,None],out=np.zeros_like(rgba[:,:,:3]),where=rgba[:,:,3,None]>1e-8)
-        images.append(rgb[140:180,180:300])
-    assert np.array_equal(masks[0],masks[1])
-    assert np.max(np.abs(images[0]-images[1]))<.003
 
 
 @pytest.mark.qt

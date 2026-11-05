@@ -64,7 +64,7 @@ class StudioProperty:
     # CHOICE only: the stored value of each choice when it is not the label itself (e.g. 256 for "256 samples").
     choice_values: tuple = ()
     # Shown only while every term holds: ((property id, (accepted stored values...)), ...) - the canonical
-    # Settings condition ("Field of View" only for a Perspective projection).
+    # Settings condition (e.g. a control shown only while its feature toggle is on).
     when: tuple = ()
 
     def __post_init__(self) -> None:

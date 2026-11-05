@@ -1,8 +1,8 @@
 """S3D-7 froxel fog volume programs: inject a consumer's medium, integrate along view rays. Pure; no GL state.
 
 The volume is a reduced-resolution grid over the camera's view: x/y follow the viewport, z is exponential in view
-depth between ``near`` and ``far`` (fine where the scene is, coarse far away). Orthographic cells are boxes,
-Perspective cells frusta; both use the same view matrix the scene is drawn with. A consumer writes
+depth between ``near`` and ``far`` (fine where the scene is, coarse far away). Cells are Perspective frusta in the
+same view matrix the scene is drawn with. A consumer writes
 ``void fogMedium(vec3 world, out vec3 radiance, out float extinction, out float steady)``: extinction per world unit,
 the share of it a detail march must not erode (smooth haze), and the radiance the medium scatters toward the eye
 there (lighting and albedo folded in). It is evaluated once per cell per update;
@@ -29,7 +29,7 @@ float fogSliceDepth(float f) {
 }
 """
 FOG_SLICE_GLSL = """
-uniform vec4 uFogLens;     // lens extents, orthographic flag, asinh scale (0: legacy positive log mapping)
+uniform vec4 uFogLens;     // Perspective tangents, unused, asinh scale (0: legacy positive log mapping)
 uniform vec4 uFogRange;    // near, far, slices, 1 + optional focus depth (0: disabled sampling)
 """ + FOG_DEPTH_MAPPING_GLSL
 
@@ -47,7 +47,7 @@ void main() {
     if(any(greaterThanEqual(cell,size))) return;
     vec2 ndc=(vec2(cell.xy)+0.5)/vec2(size.xy)*2.0-1.0;
     float depth=fogSliceDepth(float(cell.z)+0.5);
-    vec3 view=uFogLens.z>0.5?vec3(ndc*uFogLens.xy,-depth):vec3(ndc*uFogLens.xy*depth,-depth);
+    vec3 view=vec3(ndc*uFogLens.xy*depth,-depth);
     vec3 radiance; float extinction, steady=0.0;
     fogMedium((uFogInvView*vec4(view,1.0)).xyz,radiance,extinction,steady);
     extinction=max(extinction,0.0);
@@ -76,7 +76,7 @@ void main() {
     if(any(greaterThanEqual(column,size.xy))) return;
     vec2 ndc=(vec2(column)+0.5)/vec2(size.xy)*2.0-1.0;
     // World length per unit of view depth along this column's ray.
-    float stretch=uFogLens.z>0.5?1.0:length(vec3(ndc*uFogLens.xy,1.0));
+    float stretch=length(vec3(ndc*uFogLens.xy,1.0));
     vec3 scatter=vec3(0.0);
     float transmittance=1.0;
     for(int k=0;k<size.z;k++) {
@@ -125,7 +125,7 @@ layout(location=0) out vec4 FragColor;
 vec3 coarseUvw(vec3 world) {
     vec3 v=(uFogView*vec4(world,1.0)).xyz;
     float depth=uFogLens.w>0.0?-v.z:max(-v.z,1e-4);
-    vec2 ndc=uFogLens.z>0.5?v.xy/uFogLens.xy:v.xy/(uFogLens.xy*depth);
+    vec2 ndc=v.xy/(uFogLens.xy*depth);
     float f=fogDepthFraction(depth)*uFogRange.z;
     return clamp(vec3(ndc*0.5+0.5,f/uFogRange.z),vec3(0.0),vec3(1.0));
 }
@@ -147,17 +147,10 @@ float eroded(float coverage, vec3 p) {
     return clamp((coverage-e)/max(1.0-e,1e-3),0.0,1.0);
 }
 void main() {
-    vec3 origin, direction;
-    float stretch=1.0;
-    if(uFogLens.z>0.5) {
-        origin=(uFogInvView*vec4(vNdc*uFogLens.xy,0.0,1.0)).xyz;
-        direction=normalize((uFogInvView*vec4(0.0,0.0,-1.0,0.0)).xyz);
-    } else {
-        origin=(uFogInvView*vec4(0.0,0.0,0.0,1.0)).xyz;
-        vec3 ray=vec3(vNdc*uFogLens.xy,-1.0);
-        stretch=length(ray);
-        direction=normalize((uFogInvView*vec4(ray,0.0)).xyz);
-    }
+    vec3 origin=(uFogInvView*vec4(0.0,0.0,0.0,1.0)).xyz;
+    vec3 ray=vec3(vNdc*uFogLens.xy,-1.0);
+    float stretch=length(ray);
+    vec3 direction=normalize((uFogInvView*vec4(ray,0.0)).xyz);
     float end=uFogRange.y;
     if(uMarchShade.w>0.5 && direction.y<-1e-5)
         end=min(end,max((uMarchShade.z-origin.y)/direction.y/stretch,uFogRange.x));

@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import ctypes
 import math
-from functools import lru_cache
 
 import numpy as np
 from OpenGL import GL as gl
@@ -72,30 +71,9 @@ _PROGRAMS = (
 )
 
 
-@lru_cache(maxsize=2)
-def projection_programs(projection_kind: str):
-    """Bounded lazy specializations of the same traced-surface source.
-
-    A dynamic projection branch changes GPU compiler arithmetic around very
-    bright glass glints even when its value is Perspective. Constant folding
-    preserves the accepted Perspective pixels and removes that per-ray branch.
-    Cube/main mixed programs retain their ordinary uniform; only traced surface
-    fragments specialize. Preparation and drawing use these exact cache keys.
-    """
-    if projection_kind not in ('Perspective', 'Orthographic'):
-        raise ValueError(f'Unknown framed projection: {projection_kind!r}')
-    rows=[]
-    for key,vertex,fragment in _PROGRAMS:
-        resource_key=key
-        if key in ('shells','clusters','beads','near','near_clusters'):
-            declaration='uniform float uOrthographic;'
-            if fragment.count(declaration)!=1:
-                raise ValueError(f'{key}: expected one framed projection declaration')
-            value='1.0' if projection_kind=='Orthographic' else '0.0'
-            fragment=fragment.replace(declaration,f'const float uOrthographic={value};')
-            resource_key=f'{key}:{projection_kind}'
-        rows.append((key,(resource_key,vertex,fragment)))
-    return tuple(rows)
+# Preparation and drawing use these exact resource keys. Perspective is the only projection (Orthographic and
+# its constant-folded per-projection program specializations retired 5 Nov 2026).
+_PROGRAM_ROWS = tuple((key, (key, vertex, fragment)) for key, vertex, fragment in _PROGRAMS)
 # The probe's cube face size per 3D Detail tier (what bubbles mirror; smaller is softer and cheaper).
 _PROBE_SIZE = {"High": 256, "Balanced": 256, "Performance": 128, "KAK": 64}
 _BLOOM = 0.55
@@ -361,9 +339,9 @@ class QuickExtrudedBubbleRenderer:
             self._probe = SceneProbe("Extruded Bubble probe", size)
         return self._probe
 
-    def _programs(self, samples: int, projection_kind: str = 'Perspective'):
+    def _programs(self, samples: int):
         r = self._resources
-        return [*((r, *program) for _key,program in projection_programs(projection_kind)),
+        return [*((r, *program) for _key,program in _PROGRAM_ROWS),
                 *((r, key, source) for key, source in _DRIFT_PROGRAMS),
                 *((r, *program) for program in scene_target_programs(samples, True, False, overlay=True,
                                                                        background=True, oit=True, hdr=True))]
@@ -374,7 +352,7 @@ class QuickExtrudedBubbleRenderer:
         once nothing is left."""
         parameters = frame.snapshot.logical.mode_state.parameters
         samples = _scene_samples(parameters)
-        if not warm_programs(self._programs(samples, str(parameter(parameters, "extruded_bubble_camera_projection")))):
+        if not warm_programs(self._programs(samples)):
             return False
         if not self._shells.vao:
             self._allocate_instances()
@@ -409,8 +387,7 @@ class QuickExtrudedBubbleRenderer:
         knobs = self._knobs
         samples = _scene_samples(parameters)
         r = self._resources
-        projection_kind = str(parameter(parameters, "extruded_bubble_camera_projection"))
-        programs = {key: r.program(*program) for key,program in projection_programs(projection_kind)}
+        programs = {key: r.program(*program) for key,program in _PROGRAM_ROWS}
         if not self._shells.vao:
             self._allocate_instances()
         self._shafts.warm(width, height)
@@ -419,7 +396,6 @@ class QuickExtrudedBubbleRenderer:
         pose = (float(parameter(parameters, "extruded_bubble_turn")), float(parameter(parameters, "extruded_bubble_tilt")))
         scale = float(parameter(parameters, "extruded_bubble_scene_scale"))
         fov_y = float(parameter(parameters, "extruded_bubble_camera_fov"))
-        orthographic = 1.0 if projection_kind == "Orthographic" else 0.0
         # Orbit = Alt+left drag; Scene Pan = physical lateral/up translation;
         # Scene Scale = physical dolly. None of these change the centred lens.
         view_to_world, world_to_view, eye, tan, projection = physical_camera(
@@ -428,7 +404,7 @@ class QuickExtrudedBubbleRenderer:
             pan_y=float(parameter(parameters, "extruded_bubble_scene_pan_y")),
             position_offset=tuple(parameter(parameters, "extruded_bubble_camera_position")),
             fov_y_degrees=fov_y, surface_bound=knobs["mode"] == "surface",
-            aperture_scale=framed_aperture_scale(presentation), projection_kind=projection_kind)
+            aperture_scale=framed_aperture_scale(presentation))
         if knobs["mode"] == "deep":
             to_emitter = tuple(float(p) - float(e) for p, e in zip(knobs["light_source"], eye))
             distance = math.sqrt(sum(v*v for v in to_emitter))
@@ -460,7 +436,6 @@ class QuickExtrudedBubbleRenderer:
                          tan=tan, time=state.motion_phase, surface_travel=state.motion_phase,
                          rays=ray_strength(parameters, state.rays),
                          streak=screen_streak(state.stream))
-        common["uOrthographic"] = orthographic
         dust_across, _depth = stream_basis(_floats(state.stream))
         common.update({"uDustAlong": _floats(state.stream), "uDustAcross": dust_across,
                        "uDustBands": (float(knobs["band_freq"]), float(WORLD_UNIT), float(knobs["band_gather"]))})
@@ -577,8 +552,7 @@ class QuickExtrudedBubbleRenderer:
             allocation = self._target.allocation
             self._uniforms.set(programs["backdrop"], {"uProbeMode": 0.0, "uViewToWorld": _floats(view_to_world),
                                                       "uTan": _floats(tan), "uShafts": _UNIT_SHAFTS, "uLensShift": shift,
-                                                      "uFrameSize": (float(width), float(height)),
-                                                      "uOrthographic": orthographic})
+                                                      "uFrameSize": (float(width), float(height))})
             target_size = (float(allocation[0]), float(allocation[1]))
             for key in ("shells", "clusters", "near", "near_clusters", "beads"):
                 self._uniforms.set(programs[key], {"uTargetSize": target_size})
@@ -680,7 +654,7 @@ class QuickExtrudedBubbleRenderer:
 
         def draw(face, world_to_face, projection):
             self._uniforms.set(backdrop, {"uViewToWorld": _floats(world_to_face), "uTan": (1.0, 1.0), "uLensShift": (0.0, 0.0),
-                                          "uProbeMode": 1.0, "uOrthographic": 0.0,
+                                          "uProbeMode": 1.0,
                                           "uFrameSize": (float(probe.size), float(probe.size))})
             gl.glDisable(gl.GL_BLEND)
             gl.glUseProgram(backdrop)
@@ -688,8 +662,7 @@ class QuickExtrudedBubbleRenderer:
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
             if not proxy_count:
                 return
-            self._uniforms.set(proxies, {"uWorldToView": _floats(world_to_face), "uProjection": _floats(projection),
-                                        "uOrthographic": 0.0})
+            self._uniforms.set(proxies, {"uWorldToView": _floats(world_to_face), "uProjection": _floats(projection)})
             gl.glEnablei(gl.GL_BLEND, 0)
             gl.glBlendEquationSeparatei(0, gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
             gl.glBlendFuncSeparatei(0, gl.GL_ONE, gl.GL_ONE, gl.GL_ZERO, gl.GL_ONE)

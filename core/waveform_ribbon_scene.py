@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import math
 from core.ribbon_style import RibbonMaterial, RibbonSparks, RibbonStrays
 from core.settings import framed_camera as fc
-from core.settings.waveform_ribbon_camera import GROUNDED_ORBIT, YAW_SPAN, FOV_RANGE, ORTHO_REFERENCE_FOV
+from core.settings.waveform_ribbon_camera import GROUNDED_ORBIT, YAW_SPAN, FOV_RANGE
 from rendering.gl_programs.mist import mist_uniforms
 
 SPEC = fc.FramedCameraSpec(
@@ -40,8 +40,6 @@ class Fog:
     noise_scale: float = .16
     drift: float = .1
     field_span: tuple = (-80., 80., 1024)
-    # Signed Orthographic rays require the same ordered world line as the infinite floor.
-    signed_depth_range: tuple = (-2048., 2048.)
     depth_range: tuple = (.3, 300.)
     cell: int = 24
     slices: int = 128
