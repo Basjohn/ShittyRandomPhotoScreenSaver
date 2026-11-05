@@ -70,21 +70,13 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
   `test_visualizer_plain_orbit` (native crash), `test_visualizer_view_orbit` (Shockwave planar vs freeform; Waveform
   full-circle turn), `test_defaults_schema_authority` (Waveform presets carry `mode` only at top level), plus 1-3
   failures in bubble_ambient_glow, build_runner, feed_f2 (RSS log redaction), frame_trace, framed_scene_input,
-  input_gain, monitor_replay_admission, neon_scene_materials, onboarding_preview_assets/selection,
+  input_gain, monitor_replay_admission, neon_scene_materials,
   qt611_shader_admission, qtquick_build_packaging/ordinary_widget_host/visualizer_bubble/all_five_owner_chain/
   fade_authority/technical_sync_contract, release_media, run_matrix_harness, settings_theme_lifetime_contract,
-  startup_source_onboarding_resume, test_suite_durability, transition_distribution, visualizer_custom_geometry_profiles,
+  startup_source_onboarding_resume, transition_distribution, visualizer_custom_geometry_profiles,
   lazy_preset_collection, mode_dormancy, mode_enable_resolver, presets, settings_plumbing,
   widget_theme_no_material_contract. Reconcile per assertion (current architecture authoritative; never bless
   unexplained drift); fix product defects found on the way.
-- [~] **Linux branch `claude/eager-carson-5da6ge` — both hold reasons resolved, awaiting merge:** the 5 Nov
-  Windows run (804/848 green, every other red pre-existing) held it for raw `threading.Thread`s in
-  `core/media/pulse_volume.py` and for Linux-only tests in shared files. Since then the sidecar readers run on
-  ThreadManager workers (`tests/unit/test_policy_compliance.py` passes), Linux-branch tests moved to
-  `tests/test_linux_*.py` (never selected, collected or run off Linux), and `tests/test_platform_selection.py`
-  pins every Windows owner. The branch also carries cross-platform fixes: Extruded Bubble vertex shaders no
-  longer contain fragment-only `fwidth` (Mesa rejected them), Studio clip-job QProcess release after its own
-  signal, and custom combo list popups. Before merging: rerun the Windows gate list in `Linux_Plan.md` §4.
 - [ ] **Cross-display Media shortcuts** delivered once on the other display, when exercised.
 - [ ] **Music recorder** 60-second clip, signal/history, cancel and mixed-DPR UI, when recording is needed.
 - [ ] **Helper breadcrumb diagnostics unavailable:** current native MC evidence logs no access to
@@ -173,11 +165,6 @@ chosen image/settings/source. Use this material direction; do not darken the bac
 level. Floor brightness is provisionally approved, not the entire floor/atmosphere. Remaining lumps and reactive
 detail still need improvement. Baseline settings are applied to Preset 3; retain this reference before further work.
 
-- [ ] **Live activation parity (narrowed 5 Nov):** offline replay now proves the body is not dormant: recorded PCM
-  through the production worker/bus/runtime moves the published body ~8x its true paused control (motion audit,
-  `Docs/Audits/Waveform_Studio_and_Reactivity_Audit_2026-11-05.md` §2). Remaining: reproduce the operator's live "no
-  change from paused to playing" against the actual capture boundary and saved pose/aperture; do not add gain.
-
 - [~] **Four-ribbon maximum and Preset 3 — Awaiting Validation:** the candidate now admits FOUR cards across
   authoring/runtime/clearance/accent/range paths, preserving Presets 1/2's three active identities. Validate Preset 3 against
   `references/Preset3Goal1.png` and `references/Preset3ReactivityGoalExample.png`: teal/orange contrast, readable
@@ -212,8 +199,13 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   appearance. Retain birth look during travel; finite history eviction must not cut off a visible unfinished fade.
 - [~] **Colour, floor and mist (5 Nov candidates):** lattice sheets (V3); wet concrete with stable soft coloured
   reflection mass (no horizon line, no flicker-prone streaks; operator prefers smeared colour to streaks); one bounded
-  night medium with a slight local ribbon tint (strong Local Light can no longer wash the frame). Open: floor reflection
-  saturation still below the references; Presets 1/2 floor pool glow being bounded.
+  night medium with a slight local ribbon tint (strong Local Light can no longer wash the frame). 5 Nov vs `Preset3Goal1`:
+  the grey base was the far concrete level and surface brightness, and Reflection Colour was not the hue drift (lower
+  read pastel). All presets darker far surface (.2) and brightness (1.2); P3 stronger, wider-smeared reflection
+  masses (lit saturation .60 vs reference .59, current .54). Consecutive frames smooth (flicker .0068 -> .0105, from
+  brighter moving masses, no column popping); evidence `studio_20261105/floor4/`.
+  Floor collision (operator, 5 Nov): troughs no longer meet the floor — a per-ribbon lower-half depth scale keeps them
+  round above it (centre contact 51-67% -> 0%, visible hot envelope -4 to -8%, tick +0.13 ms); verify on hardware.
 - [ ] **Dense highlights, moving colour and rim glow:** playback still lacks rewarded high-energy density and glow.
   Verify local crest/high-power colour, bright tunable rim/glow and denser highlights against actual music, including
   quiet/loud differences. Consumer reachability does not establish visible strength. Keep both range handles effective.
@@ -264,6 +256,10 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   reaction strength to conceal cost. Preset 2 with persistent strands currently exceeds the render budget (~14 ms
   median under game60); reduce repeated submission/preparation and prove tails without weakening the approved strands.
   Requested CLI settings can be overwritten by curated activation.
+  5 Nov: the logical tick (Waveform dynamics) was 2.2-3.2 ms median offline (live ~1.4x, budget 2.5 ms) after the
+  reaction work; the along-curve surge and per-card colouring now run as rows (byte-identical packets proven per tick
+  on real replays; paired -0.33 and -0.18 ms), quiet-machine median 1.32-1.35 ms all presets. Offline GPU at the
+  live card size: P2 7.2-7.6 ms with strands, 6.0-6.6 without (strands ~1.1 ms). Next: the game60 live check.
 
 Chosen first: the smallest contained scene and the first consumer of S3D-1/S3D-2/S3D-5. Brief and hard gates:
 `Docs/Future_Work/Waveform_Ribbon.md`. The detailed working checklist and visual target custody live in

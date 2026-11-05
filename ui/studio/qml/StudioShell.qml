@@ -41,8 +41,18 @@ Rectangle {
     readonly property color cTrace3: tc("trace3", "#6aa9d9")
     readonly property int unit: 8
     readonly property int fontBase: 13
+    // Glow semantics (mock): every highlight is the theme accent at a few strengths, never a fixed colour.
+    function accentA(alpha) { return Qt.rgba(cAccent.r, cAccent.g, cAccent.b, alpha) }
+    readonly property color cGlow: accentA(0.38)
+    readonly property color cGlowSoft: accentA(0.16)
+    readonly property color cPanelTop: Qt.lighter(cPanel, 1.18)
 
     color: cBg
+    gradient: Gradient {
+        GradientStop { position: 0.0; color: Qt.lighter(shell.cBg, 1.35) }
+        GradientStop { position: 0.45; color: shell.cBg }
+        GradientStop { position: 1.0; color: Qt.darker(shell.cBg, 1.2) }
+    }
 
     Keys.onPressed: function(event) {
         if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Z) {
@@ -72,6 +82,31 @@ Rectangle {
         color: "transparent"
         border.width: 2
         border.color: shell.cFocus
+    }
+
+    // A soft accent halo around a selected / active element (mock's glowing selection).
+    component SelectionGlow: Rectangle {
+        property real spread: 3
+        anchors.fill: parent
+        anchors.margins: -spread
+        radius: (parent.radius || 0) + spread
+        color: "transparent"
+        border.width: spread
+        border.color: shell.cGlowSoft
+        z: -1
+        Rectangle { anchors.fill: parent; anchors.margins: parent.spread - 1; radius: parent.radius - parent.spread + 1
+                    color: "transparent"; border.width: 1; border.color: shell.cGlow }
+    }
+
+    // Panel finish: a lit top edge fading down, and a faint accent rim.
+    component PanelRim: Rectangle {
+        anchors.fill: parent
+        anchors.margins: -1
+        radius: (parent.radius || 0) + 1
+        color: "transparent"
+        border.width: 1
+        border.color: shell.accentA(0.22)
+        z: -1
     }
 
     component StudioButton: Rectangle {
@@ -120,6 +155,7 @@ Rectangle {
         }
         Keys.onReturnPressed: if (enabledState) clicked()
         Keys.onSpacePressed: if (enabledState) clicked()
+        SelectionGlow { visible: btn.checked || (btn.primary && mouse.containsMouse && btn.enabledState); spread: 2 }
         FocusRing { visible: btn.activeFocus }
         C.ToolTip.visible: mouse.containsMouse && btn.tip !== ""
         C.ToolTip.text: btn.tip
@@ -153,6 +189,7 @@ Rectangle {
                     onClicked: { chip.forceActiveFocus(); chip.picked() } }
         Keys.onReturnPressed: picked()
         Keys.onSpacePressed: picked()
+        SelectionGlow { visible: chip.selected; spread: 2 }
         FocusRing { visible: chip.activeFocus; radius: 15 }
     }
 
@@ -184,11 +221,18 @@ Rectangle {
         activeFocusOnTab: true
         Accessible.role: Accessible.Slider
         Accessible.name: label
-        Rectangle {                        // track
+        Rectangle {                        // track, filled with the accent up to the value
             anchors.verticalCenter: parent.verticalCenter
-            x: 7; width: parent.width - 14; height: 4; radius: 2
+            x: 7; width: parent.width - 14; height: 6; radius: 3
             color: shell.cTrack
-            Rectangle { width: parent.width * vs.frac(vs.shown); height: parent.height; radius: 2; color: shell.cAccent }
+            Rectangle {
+                width: Math.max(parent.height, parent.width * vs.frac(vs.shown)); height: parent.height; radius: 3
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: Qt.darker(shell.cAccent, 1.7) }
+                    GradientStop { position: 1.0; color: shell.cAccent }
+                }
+            }
         }
         Rectangle {                        // ghost of the other endpoint
             visible: !isNaN(vs.ghost)
@@ -196,17 +240,25 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             width: 2; height: 12; color: shell.cOutline
         }
+        Rectangle {                        // knob halo while hovered / dragged
+            x: 7 + (vs.width - 14) * vs.frac(vs.shown) - width / 2
+            anchors.verticalCenter: parent.verticalCenter
+            width: 26; height: 26; radius: 13
+            color: shell.cGlowSoft
+            visible: vs.dragging || area.containsMouse
+        }
         Rectangle {                        // handle
             x: 7 + (vs.width - 14) * vs.frac(vs.shown) - width / 2
             anchors.verticalCenter: parent.verticalCenter
-            width: 14; height: 14; radius: 7
-            color: vs.dragging ? shell.cText : shell.cRaised
+            width: 16; height: 16; radius: 8
+            color: vs.dragging ? shell.cText : Qt.lighter(shell.cRaised, 1.4)
             border.width: 2
             border.color: vs.activeFocus ? shell.cFocus : shell.cAccent
         }
         MouseArea {
             id: area
             anchors.fill: parent
+            hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onPressed: function(mouse) {
                 vs.forceActiveFocus()
@@ -623,7 +675,23 @@ Rectangle {
                         fillMode: Image.PreserveAspectCrop
                         smooth: true; mipmap: true
                     }
+                    Canvas {         // soft vignette over the render (theme base colour), like the mock's tiles
+                        anchors.fill: parent
+                        visible: swatch.preview !== ""
+                        onPaint: {
+                            var ctx = getContext("2d"); ctx.reset()
+                            var g = ctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * 0.3,
+                                                             width / 2, height / 2, Math.max(width, height) * 0.72)
+                            g.addColorStop(0, Qt.rgba(shell.cBg.r, shell.cBg.g, shell.cBg.b, 0))
+                            g.addColorStop(1, Qt.rgba(shell.cBg.r, shell.cBg.g, shell.cBg.b, 0.78))
+                            ctx.fillStyle = g; ctx.fillRect(0, 0, width, height)
+                            var top = ctx.createLinearGradient(0, 0, 0, height)
+                            top.addColorStop(0, shell.accentA(0.10)); top.addColorStop(0.5, shell.accentA(0))
+                            ctx.fillStyle = top; ctx.fillRect(0, 0, width, height)
+                        }
+                    }
                 }
+                SelectionGlow { visible: tile.active; spread: 3 }
                 Text { anchors.horizontalCenter: parent.horizontalCenter; y: swatch.height + 10; text: modelData.label
                        color: shell.cText; font.pixelSize: shell.fontBase - 2; font.bold: tile.active }
                 MouseArea { id: tileMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
@@ -753,7 +821,7 @@ Rectangle {
             var id = spec.roles ? spec.roles[role] : undefined
             var x = id !== undefined ? studio.values[id] : undefined
             if (x === undefined) return 0
-            if (typeof x === "object" && x !== null && x.length !== undefined) return Number(x[idx === undefined ? 1 : idx])
+            if (typeof x === "object" && x !== null && x.length !== undefined) return Number(x[idx === undefined ? card.endpoint : idx])
             return x
         }
         function paletteRgb(t) {
@@ -781,13 +849,45 @@ Rectangle {
             return out.join(" · ")
         }
         function hex(role) { var id = spec.roles ? spec.roles[role] : undefined; return id ? (studio.values[id] || "#808080") : "#808080" }
-        implicitHeight: 128
+        // A rendered card (the mode's renderer, once per commit) replaces the diagram once it arrives.
+        readonly property string render: card.spec.rendered ? (studio.previews["card/" + card.spec.group] || "") : ""
+        readonly property int endpoint: card.spec.rendered ? (studio.cardEndpoints[card.spec.group] || 0) : 1
+        implicitHeight: card.spec.rendered ? Math.round(cardImage.height) + 52 : 128
         radius: 6
         color: shell.cViewport
         border.width: 1; border.color: shell.cOutlineSoft
         Text { x: 8; y: 6; text: card.spec.title || ""; color: shell.cDim; font.pixelSize: shell.fontBase - 2 }
+        Row {
+            visible: card.spec.rendered === true
+            anchors.right: parent.right; anchors.rightMargin: 6; y: 3
+            spacing: 4
+            Repeater {
+                model: ["Quiet", "Peak"]
+                delegate: Chip { text: modelData; selected: card.endpoint === index; implicitHeight: 20
+                                 onPicked: studio.setCardEndpoint(card.spec.group, index) }
+            }
+        }
+        Image {
+            id: cardImage
+            objectName: "cardRender"
+            visible: card.render !== ""
+            x: 6; y: 28; width: card.width - 12
+            // The render keeps its own shape (no crop of the crop): height follows the image's aspect.
+            height: implicitWidth > 0 ? width * implicitHeight / implicitWidth : Math.round(width * 0.42)
+            source: card.render
+            fillMode: Image.PreserveAspectFit
+            smooth: true; mipmap: true
+        }
+        HintText {
+            visible: card.render !== ""
+            x: 8; anchors.bottom: parent.bottom; anchors.bottomMargin: 4; width: parent.width - 16
+            text: (card.endpoint ? "Peak" : "Quiet") + " lane · rendered by the visualizer · "
+                  + (card.spec.kind === "falloff" ? card.caption(["density", "height", "clearance"])
+                                                  : card.caption(["brightness", "reflection"]))
+        }
         Canvas {
             id: diagram
+            visible: card.render === ""
             anchors.fill: parent; anchors.margins: 8; anchors.topMargin: 22
             onPaint: {
                 var ctx = getContext("2d"); ctx.reset()
@@ -1127,19 +1227,28 @@ Rectangle {
         // Header ---------------------------------------------------------------------
         Rectangle {
             id: header
-            width: parent.width; height: 52
+            width: parent.width; height: 56
             color: shell.cHeader
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: Qt.lighter(shell.cHeader, 1.3) }
+                GradientStop { position: 1.0; color: shell.cHeader }
+            }
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: shell.cOutlineSoft }
             Row {
                 anchors.left: parent.left; anchors.leftMargin: 18
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 14
-                Text { text: "SRPSS"; color: shell.cAccent; font.pixelSize: 18; font.bold: true }
-                Rectangle { width: 1; height: 22; color: shell.cOutlineSoft; anchors.verticalCenter: parent.verticalCenter }
-                Text { text: "Studio"; color: shell.cText; font.pixelSize: 18; anchors.verticalCenter: parent.verticalCenter }
+                spacing: 12
+                StudioIcon { name: "wave"; width: 30; height: 30; stroke: 2.2; color: shell.cAccent
+                             anchors.verticalCenter: parent.verticalCenter }
+                Text { text: "SRPSS"; color: shell.cText; font.pixelSize: 19; font.bold: true; font.letterSpacing: 1
+                       anchors.verticalCenter: parent.verticalCenter }
+                Rectangle { width: 1; height: 24; color: shell.cOutlineSoft; anchors.verticalCenter: parent.verticalCenter }
+                Text { objectName: "studioTitle"; text: studio.title; color: shell.cText; font.pixelSize: 19
+                       visible: studio.modes.length <= 1; anchors.verticalCenter: parent.verticalCenter }
                 // Mode switcher: every registered Studio mode (one shell, one save path per mode).
                 C.ComboBox {
                     id: modeBox
+                    visible: studio.modes.length > 1
                     anchors.verticalCenter: parent.verticalCenter
                     width: 190; height: 30
                     model: studio.modes
@@ -1174,11 +1283,15 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 8
                 Rectangle {
-                    height: 30; width: presetText.implicitWidth + 28; radius: 5
+                    height: 34; width: presetText.implicitWidth + 52; radius: 6
                     color: shell.cRaised; border.width: 1; border.color: shell.cOutline
+                    Accessible.name: "Preset being edited"
                     Row {
-                        anchors.centerIn: parent; spacing: 8
-                        Text { id: presetText; text: studio.presetLabel; color: shell.cText; font.pixelSize: shell.fontBase }
+                        anchors.centerIn: parent; spacing: 10
+                        Text { id: presetText; text: studio.presetLabel; color: shell.cText; font.pixelSize: shell.fontBase + 1
+                               anchors.verticalCenter: parent.verticalCenter }
+                        StudioIcon { name: "chevron-down"; width: 14; height: 14; color: shell.cDim
+                                     anchors.verticalCenter: parent.verticalCenter }
                     }
                 }
                 Text {
@@ -1188,14 +1301,14 @@ Rectangle {
                     color: shell.cAccent; font.pixelSize: shell.fontBase - 1; font.bold: true
                     Accessible.name: "Modified since the Studio opened"
                 }
-                StudioButton { text: "Undo"; icon: "undo"; iconSize: 16; enabledState: studio.canUndo
+                StudioButton { icon: "undo"; iconSize: 18; width: 36; enabledState: studio.canUndo
                                tip: studio.canUndo ? "Undo " + studio.undoText + " (Ctrl+Z)" : "Nothing to undo"
                                onClicked: studio.undo() }
-                StudioButton { text: "Redo"; icon: "redo"; iconSize: 16; enabledState: studio.canRedo
+                StudioButton { icon: "redo"; iconSize: 18; width: 36; enabledState: studio.canRedo
                                tip: studio.canRedo ? "Redo " + studio.redoText + " (Ctrl+Y)" : "Nothing to redo"
                                onClicked: studio.redo() }
-                StudioButton { text: "Revert"; icon: "reset"; iconSize: 16; enabledState: studio.dirty
-                               tip: "Restore everything to the state the Studio opened with (undoable)"
+                StudioButton { icon: "reset"; iconSize: 18; width: 36; enabledState: studio.dirty
+                               tip: "Revert: restore everything to the state the Studio opened with (undoable)"
                                onClicked: studio.revertAll() }
                 StudioButton { objectName: "helpButton"; icon: "help"; iconSize: 18; width: 34
                                checked: helpOverlay.open
@@ -1211,19 +1324,29 @@ Rectangle {
 
         // Workspace tabs ------------------------------------------------------------------
         Item {
-            width: parent.width; height: 44
-            Row {
+            width: parent.width; height: 52
+            Rectangle {                       // the segmented bar the tabs sit in
                 anchors.centerIn: parent
-                spacing: 6
+                width: tabRow.width + 8; height: 42; radius: 9
+                color: Qt.darker(shell.cPanel, 1.15)
+                border.width: 1; border.color: shell.cOutlineSoft
+                PanelRim {}
+            }
+            Row {
+                id: tabRow
+                anchors.centerIn: parent
+                spacing: 2
                 Repeater {
                     model: studio.workspaces
                     delegate: Rectangle {
                         id: tab
                         readonly property bool current: studio.workspace === modelData.id
-                        width: 170; height: 34; radius: 6
-                        color: current ? shell.cAccentSoft : (tabMouse.containsMouse ? shell.cRaised : shell.cPanel)
-                        border.width: current ? 2 : 1
-                        border.color: current ? shell.cAccent : shell.cOutlineSoft
+                        width: 196; height: 34; radius: 7
+                        color: current ? shell.cAccentSoft : (tabMouse.containsMouse ? shell.cRaised : "transparent")
+                        gradient: current ? currentTabFill : null
+                        border.width: current ? 1 : 0
+                        border.color: shell.cAccent
+                        SelectionGlow { visible: tab.current; spread: 2 }
                         activeFocusOnTab: true
                         Accessible.role: Accessible.PageTab
                         Accessible.name: modelData.title
@@ -1248,7 +1371,7 @@ Rectangle {
         Item {
             id: mainRow
             width: parent.width
-            height: parent.height - header.height - 44
+            height: parent.height - header.height - 52
             // The viewport keeps visual priority (~60-70% of the width at desktop sizes).
             readonly property int leftW: Math.max(160, Math.min(220, width * 0.13))
             readonly property int rightW: Math.max(320, Math.min(400, width * 0.22))
@@ -1258,8 +1381,11 @@ Rectangle {
                 id: objectsPanel
                 x: 10; y: 0
                 width: mainRow.leftW; height: parent.height - 10
-                radius: 8; color: shell.cPanel
+                radius: 10; color: shell.cPanel
+                gradient: Gradient { GradientStop { position: 0.0; color: shell.cPanelTop }
+                                     GradientStop { position: 0.35; color: shell.cPanel } }
                 border.width: 1; border.color: shell.cOutline
+                PanelRim {}
                 Column {
                     anchors.fill: parent; anchors.margins: 12
                     spacing: 8
@@ -1270,10 +1396,11 @@ Rectangle {
                         delegate: Rectangle {
                             id: obj
                             readonly property bool selected: studio.selectedObject === modelData.id
-                            width: parent.width; height: 36; radius: 6
+                            width: parent.width; height: 38; radius: 7
                             color: selected ? shell.cAccentSoft : (objMouse.containsMouse ? shell.cRaised : "transparent")
                             border.width: selected ? 2 : 1
                             border.color: selected ? shell.cAccent : shell.cOutlineSoft
+                            SelectionGlow { visible: obj.selected; spread: 3 }
                             opacity: modelData.visible ? 1.0 : 0.5
                             activeFocusOnTab: true
                             Accessible.role: Accessible.ListItem
@@ -1281,8 +1408,8 @@ Rectangle {
                             Row {
                                 anchors.verticalCenter: parent.verticalCenter
                                 x: 10; spacing: 10
-                                Rectangle { width: 16; height: 16; radius: 3; color: modelData.swatch
-                                            border.width: 1; border.color: shell.cOutline
+                                Rectangle { width: 18; height: 18; radius: 4; color: modelData.swatch
+                                            border.width: 1; border.color: Qt.lighter(modelData.swatch, 1.4)
                                             anchors.verticalCenter: parent.verticalCenter }
                                 Text { text: modelData.label; color: shell.cText; font.pixelSize: shell.fontBase
                                        font.bold: obj.selected; anchors.verticalCenter: parent.verticalCenter }
@@ -1334,9 +1461,10 @@ Rectangle {
                     id: viewportFrame
                     width: parent.width
                     height: parent.height - (responseDock.visible ? responseDock.height + 10 : 0)
-                    radius: 8
+                    radius: 10
                     color: shell.cViewport
                     border.width: 1; border.color: shell.cOutline
+                    PanelRim {}
 
                     // Toolbar
                     Row {
@@ -1718,7 +1846,12 @@ Rectangle {
                                         var mid = height / 2, w = width / n
                                         for (var i = 0; i < n; ++i) {
                                             var h = Math.max(1, levels[i] * (height - 6) / 2)
-                                            ctx.fillStyle = (i / n) <= scrub.frac ? shell.cAccent : shell.cTrack
+                                            var played = (i / n) <= scrub.frac
+                                            if (played) {         // a soft halo under the played part
+                                                ctx.fillStyle = shell.accentA(0.18)
+                                                ctx.fillRect(i * w - 1, mid - h - 2, Math.max(1, w + 1), 2 * h + 4)
+                                            }
+                                            ctx.fillStyle = played ? shell.cAccent : shell.cTrack
                                             ctx.fillRect(i * w, mid - h, Math.max(1, w - 1), 2 * h)
                                         }
                                     }
@@ -1742,7 +1875,7 @@ Rectangle {
                             Text { id: timeText; anchors.verticalCenter: parent.verticalCenter; width: 92
                                    text: studio.time.toFixed(2) + " / " + studio.duration.toFixed(1) + " s"
                                    color: shell.cDim; font.pixelSize: shell.fontBase - 1 }
-                            StudioButton { id: loopBtn; text: "Loop"; checked: studio.loop
+                            StudioButton { id: loopBtn; icon: "loop"; iconSize: 18; width: 38; checked: studio.loop
                                            anchors.verticalCenter: parent.verticalCenter
                                            tip: "Repeat the preview input"; onClicked: studio.setLoop(!studio.loop) }
                         }
@@ -2033,8 +2166,11 @@ Rectangle {
                 id: inspectorPanel
                 x: viewportColumn.x + viewportColumn.width + 10
                 width: mainRow.rightW; height: parent.height - 10
-                radius: 8; color: shell.cPanel
+                radius: 10; color: shell.cPanel
+                gradient: Gradient { GradientStop { position: 0.0; color: shell.cPanelTop }
+                                     GradientStop { position: 0.35; color: shell.cPanel } }
                 border.width: 1; border.color: shell.cOutline
+                PanelRim {}
                 C.ScrollView {
                     id: inspectorScroll
                     objectName: "inspectorScroll"
@@ -2219,6 +2355,12 @@ Rectangle {
                            icon: "close"; iconSize: 16; width: 30; height: 28; tip: "Close help (Esc)"
                            onClicked: helpOverlay.open = false }
         }
+    }
+
+    Gradient {
+        id: currentTabFill
+        GradientStop { position: 0.0; color: Qt.lighter(shell.cAccentSoft, 1.35) }
+        GradientStop { position: 1.0; color: shell.cAccentSoft }
     }
 
     Component { id: scalarDelegate; ScalarRow { width: parent ? parent.width : 0; row: rowData } }

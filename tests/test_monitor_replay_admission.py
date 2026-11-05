@@ -55,6 +55,11 @@ class _Queue:
         self.next_calls += 1
         return _meta(f"queued_{self.next_calls}.jpg")
 
+    def total_images(self) -> int:
+        # ImageQueue surface read by engine_rss.startup_image_pending (7bc62183);
+        # this fake always has a next image, so it is never empty.
+        return 1
+
 
 class _Supervisor:
     def is_running(self, _worker_type) -> bool:

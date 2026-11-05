@@ -142,13 +142,15 @@ def test_settings_dialog_has_tabs(qapp, settings_manager, animation_manager):
     """Dialog exposes the current top-level tab set, including Visualizers."""
     dialog = SettingsDialog(settings_manager, animation_manager)
 
-    # V7 promoted Visualizers to its own top-level tab, sitting after Widgets; the 3D
-    # Settings tab (3D detail for transitions and Visualizers) follows it.
+    # Layout (Arrange, layout slots, reset) follows Widgets; V7 promoted Visualizers to its
+    # own top-level tab after it; the 3D Quality tab (3D detail for transitions and
+    # Visualizers) follows Visualizers.
     expected_keys = [
         "sources",
         "display",
         "transitions",
         "widgets",
+        "layout",
         "visualizers",
         "scene3d",
         "accessibility",
@@ -565,7 +567,7 @@ def test_settings_dialog_background_hydration_only_warms_display_and_transitions
     # subscribers may be warmed: no Themes/About art or heavyweight widget UI.
     queued_keys = {dialog._tab_key_for_index(i) for i in dialog._background_tab_queue}
     assert queued_keys == {"display", "transitions"}
-    assert {"sources", "widgets", "visualizers", "scene3d", "accessibility", "themes", "about", "quick_start"}.isdisjoint(queued_keys)
+    assert {"sources", "widgets", "layout", "visualizers", "scene3d", "accessibility", "themes", "about", "quick_start"}.isdisjoint(queued_keys)
 
     # Neither excluded tab has been constructed: their stacked-widget slots are
     # still the placeholders installed at setup.

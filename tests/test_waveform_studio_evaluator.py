@@ -209,8 +209,9 @@ def test_world_and_reaction_headline_controls_lead_open_groups():
     world = next(w for w in schema.workspaces if w.id == "world")
     assert {"Mist", "Floor"} <= set(world.open_groups)
     assert "waveform_ribbon_fog_density" in first_rows("Mist", 2)
-    assert first_rows("Floor", 3) == ["waveform_ribbon_floor_brightness", "waveform_ribbon_floor_reflection",
-                                      "waveform_ribbon_floor_tint"]
+    from ui.studio.waveform_adapter import HEADLINE_FLOOR
+    headline = [f"waveform_ribbon_{key}" for key in HEADLINE_FLOOR if f"waveform_ribbon_{key}" in by_id]
+    assert len(headline) >= 4 and first_rows("Floor", len(headline)) == headline
     assert by_id["waveform_ribbon_fog_density"].instrument == "quiet_peak"
     mode = by_id.get("waveform_ribbon_reaction_mode")
     if mode is None:

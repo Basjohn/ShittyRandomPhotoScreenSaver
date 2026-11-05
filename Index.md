@@ -126,7 +126,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | runtime audit 2026-09-22 outcomes and rejected ideas (closed) | `Docs/Guardrails/Performance_Optimization_Contract.md` |
 | FEEDS architecture, terminal failure/queued settlement, bundle admission and open physical acceptance | `Docs/Reference/Feeds.md`; `Docs/TestSuite.md` → FEEDS |
 | defaults | `Docs/Guides/Defaults_Guide.md` |
-| Guided Setup / Quick Start / Settings Arrange | `Docs/Reference/Guided_Setup.md` (open physical acceptance at its end) |
+| Guided Setup / Quick Start / Settings Layout (Arrange, layout slots) | `Docs/Reference/Guided_Setup.md` (open physical acceptance at its end) |
 | logging / bounded MC CLI capture / Qt-QML observability | `Docs/Guides/Logging_Guide.md` + `Docs/Guides/Qt_QML_Observability.md` |
 | documentation maintenance | `Docs/Guides/Documentation_Maintenance.md` |
 | test inventory / acceptance authority | `Docs/TestSuite.md` |

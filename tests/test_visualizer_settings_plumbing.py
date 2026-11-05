@@ -1772,7 +1772,6 @@ class TestVisualizerModeBinding:
             assert payload == {
                 "preset_spectrum": 1,
                 "preset_oscilloscope": 0,
-                "preset_sine_wave": 2,
                 "preset_bubble": 1,
                 "preset_devcurve": 4,
             }
@@ -1789,7 +1788,9 @@ class TestVisualizerModeBinding:
 
             assert tab._spectrum_preset_slider.preset_index() == 0
             assert tab._osc_preset_slider.preset_index() == 2
-            assert tab._sine_preset_slider.preset_index() == 1
+            # Sine is soft-retired (5.1.3, f9f09679): no longer an offered descriptor,
+            # so its slider is neither collected nor loaded.
+            assert tab._sine_preset_slider.preset_index() == 2
             assert tab._bubble_preset_slider.preset_index() == resolve_preset_index_from_mapping(
                 "bubble",
                 {"preset_bubble": 3},

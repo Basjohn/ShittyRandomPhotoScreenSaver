@@ -285,7 +285,8 @@ def test_preset_tiles_render_once_per_starting_point_and_stay_idle(studio, monke
     original = controller.viewport.request_snapshot
 
     def counted(key, *args, **kwargs):
-        requests.append(key)
+        if not key.startswith("card/"):                 # rendered world cards are covered separately
+            requests.append(key)
         return original(key, *args, **kwargs)
     monkeypatch.setattr(controller.viewport, "request_snapshot", counted)
     group, presets = controller.session.schema.group_presets[0]
@@ -443,6 +444,234 @@ def test_preset_tiles_are_drawn_by_the_production_renderer_and_differ(qt_app, tm
         assert all(image.mean() > 8.0 for image in images)          # a lit scene, not a cleared target
         spread = max(np.abs(a - images[0]).mean() for a in images[1:])
         assert spread > 1.0                                          # the starting points look different
+    finally:
+        controller.close()
+        qt_app.processEvents()
+
+
+def test_material_tiles_show_only_the_selected_ribbon_close_up():
+    adapter = WaveformStudioAdapter()
+    from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+    values = dict(resolve_visualizer_activation_payload({"mode": MODE, f"preset_{MODE}": 0}, mode=MODE).resolved_config)
+    cards = values[f"{MODE}_ribbons"]
+    view = adapter.tile_values(values, "ribbon2")
+    assert view[f"{MODE}_count"] == 1 and view[f"{MODE}_ribbons"][0] == cards[2]
+    assert sorted(map(repr, view[f"{MODE}_ribbons"])) == sorted(map(repr, cards))     # the set stays complete
+    for key in ("sparks_enabled", "strands_enabled", "mist_enabled"):
+        if f"{MODE}_{key}" in values:
+            assert view[f"{MODE}_{key}"] is False
+    assert values[f"{MODE}_ribbons"] == cards                                          # input untouched
+
+
+def _settle_previews(controller, surface, limit=300):
+    for _ in range(limit):
+        if not controller.previews_pending:
+            return
+        surface.pump()
+    raise AssertionError("previews did not settle")
+
+
+def test_world_cards_render_per_commit_follow_the_edited_lane_and_rest_idle(studio, monkeypatch):
+    controller, surface = studio
+    bridge = controller.bridge
+    schema = controller.session.schema
+    rendered = [card.group for card in schema.cards if card.rendered]
+    assert {"Mist", "Floor"} <= set(rendered)
+    requests = []
+    original = controller.viewport.request_snapshot
+
+    def counted(key, *args, **kwargs):
+        requests.append(key.split("|")[0])
+        return original(key, *args, **kwargs)
+    monkeypatch.setattr(controller.viewport, "request_snapshot", counted)
+    controller.select_fixture("peak")
+    controller.seek(4.0)
+    surface.pump(4)
+    bridge.setWorkspace("world")
+    _settle_previews(controller, surface)
+    assert sorted(requests) == sorted(f"card/{g}" for g in rendered)
+    assert all(bridge.previews[f"card/{g}"].startswith("data:image/png;base64,") for g in rendered)
+    surface.pump(2)
+    shown = [i for i in _walk(surface.host.root) if i.objectName() == "cardRender"]
+    assert len([i for i in shown if i.isVisible()]) == len(rendered)
+    surface.pump(10)                                        # at rest: nothing new
+    assert len(requests) == len(rendered)
+    # Editing the Quiet lane of a Mist value moves the Mist card to that lane; the commit re-renders once.
+    density = next(p for p in schema.properties if p.group == "Mist" and p.instrument == "quiet_peak")
+    bridge.beginEdit(density.id, density.label)
+    bridge.previewValue(density.id, 0, density.maximum)
+    surface.pump(4)
+    assert len(requests) == len(rendered)                   # no renders during the drag
+    assert bridge.cardEndpoints["Mist"] == 0
+    bridge.endEdit()
+    _settle_previews(controller, surface)
+    assert requests.count("card/Mist") == 2
+    bridge.setCardEndpoint("Mist", 1)
+    _settle_previews(controller, surface)
+    assert requests.count("card/Mist") == 3
+    bridge.setWorkspace("composition")
+    bridge.commitValue(density.id, 1, density.minimum)
+    surface.pump(10)
+    assert requests.count("card/Mist") == 3                 # off screen: nothing renders
+
+
+def test_floor_card_render_is_the_production_floor_and_tracks_floor_values(qt_app):
+    """Real renderer: the Floor card is a lit render and a Floor commit changes it."""
+    import base64
+    import io
+    import numpy as np
+    from PIL import Image
+    from rendering.gl_error_policy import disable_per_call_gl_error_checking
+    from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+    from ui.studio.controller import StudioController
+    from ui.studio.surface import OffscreenStudioSurface
+    disable_per_call_gl_error_checking()
+
+    class Store:
+        def __init__(self):
+            self.values = dict(resolve_visualizer_activation_payload(
+                {"mode": MODE, f"preset_{MODE}": 0}, mode=MODE).resolved_config)
+
+        def snapshot(self):
+            return dict(self.values)
+
+        def commit(self, values, changed):
+            self.values.update(values)
+            return dict(self.values)
+
+        def preset_label(self):
+            return "Test"
+
+    class Presence:
+        def conceal(self):
+            pass
+
+        def reveal(self):
+            pass
+
+    class RealAdapter(WaveformStudioAdapter):
+        def recorded_clips(self):
+            return ()
+
+    surfaces = []
+    controller = StudioController(RealAdapter(), Store(), Presence(), lambda c: (
+        surfaces.append(OffscreenStudioSurface(c, size=(1100, 700), present_on_show=False)) or surfaces[-1]))
+    assert controller.open()
+    surface = surfaces[0]
+
+    def floor_image():
+        url = controller.bridge.previews["card/Floor"]
+        return np.asarray(Image.open(io.BytesIO(base64.b64decode(url.split(",", 1)[1]))).convert("RGB"), dtype=float)
+    try:
+        controller.select_fixture("peak")
+        controller.seek(4.0)
+        for _ in range(300):
+            surface.pump()
+            if controller.bridge.viewportStatus == "live":
+                break
+        controller.bridge.setWorkspace("world")
+        _settle_previews(controller, surface)
+        before = floor_image()
+        assert before.mean() > 8.0
+        prop = controller.session.schema.find(f"{MODE}_floor_brightness")
+        controller.bridge.commitValue(prop.id, 1, prop.minimum)
+        controller.bridge.commitValue(prop.id, 0, prop.minimum)
+        _settle_previews(controller, surface)
+        after = floor_image()
+        assert after.shape == before.shape and np.abs(after - before).mean() > 0.5
+    finally:
+        controller.close()
+        qt_app.processEvents()
+
+
+def test_preview_only_layer_omission_is_unreachable_from_production():
+    """The scene's preview-only omission defaults off and only the Studio sets it (never settings or runtime)."""
+    import ast
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    from rendering.quick.scene3d.waveform import WaveformScene
+    assert WaveformScene.__init__.__code__.co_names.count("preview_hidden") >= 1
+    writers = []
+    for base in ("core", "engine", "rendering", "ui", "widgets"):
+        for path in (root / base).rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            if "preview_hidden" not in text:
+                continue
+            for node in ast.walk(ast.parse(text)):
+                if isinstance(node, (ast.Assign, ast.AugAssign)):
+                    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                    if any(isinstance(t, ast.Attribute) and t.attr == "preview_hidden" for t in targets):
+                        writers.append(path.relative_to(root).as_posix())
+    assert sorted(set(writers)) == ["rendering/quick/scene3d/waveform.py", "ui/studio/waveform_adapter.py"]
+
+
+def test_preview_layer_omission_changes_only_flagged_renders(qt_app):
+    """Real renderer: the same frame drawn through the Studio snapshot path with no flag equals a second
+    unflagged draw (the production path is deterministic and untouched), while hiding the actors changes it."""
+    import numpy as np
+    from rendering.gl_error_policy import disable_per_call_gl_error_checking
+    from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+    from ui.studio.controller import StudioController
+    from ui.studio.surface import OffscreenStudioSurface
+    disable_per_call_gl_error_checking()
+
+    class Store:
+        def __init__(self):
+            self.values = dict(resolve_visualizer_activation_payload(
+                {"mode": MODE, f"preset_{MODE}": 0}, mode=MODE).resolved_config)
+
+        def snapshot(self):
+            return dict(self.values)
+
+        def commit(self, values, changed):
+            self.values.update(values)
+            return dict(self.values)
+
+        def preset_label(self):
+            return "Test"
+
+    class Presence:
+        def conceal(self):
+            pass
+
+        def reveal(self):
+            pass
+
+    class RealAdapter(WaveformStudioAdapter):
+        def recorded_clips(self):
+            return ()
+
+    surfaces = []
+    controller = StudioController(RealAdapter(), Store(), Presence(), lambda c: (
+        surfaces.append(OffscreenStudioSurface(c, size=(900, 600), present_on_show=False)) or surfaces[-1]))
+    assert controller.open()
+    surface = surfaces[0]
+    shots = {}
+    controller.viewport.snapshotReady.connect(
+        lambda key, w, h, pixels: shots.__setitem__(key, np.frombuffer(pixels, np.uint8).reshape(h, w, 4).astype(float)))
+    try:
+        controller.select_fixture("peak")
+        controller.seek(4.0)
+        for _ in range(300):
+            surface.pump()
+            if controller.bridge.viewportStatus == "live":
+                break
+        frame = controller.last_frame
+        extent = controller.framings[0].extent
+        for key, style in (("plain_a", ()), ("plain_b", ()),
+                           ("haze", (("preview_hidden", ("actors", "reflected_actors")),))):
+            controller.viewport.request_snapshot(key, frame, (240, 160), (120.0, 80.0), extent, style)
+        for _ in range(200):
+            surface.pump()
+            qt_app.processEvents()
+            if len(shots) == 3:
+                break
+        assert set(shots) == {"plain_a", "plain_b", "haze"}
+        assert np.array_equal(shots["plain_a"], shots["plain_b"])
+        assert shots["plain_a"].mean() > 8.0
+        assert np.abs(shots["haze"] - shots["plain_a"]).mean() > 2.0
+        # The live viewport kept drawing with the actors (its style never carries the flag).
+        assert not dict(controller.framings[0].style).get("preview_hidden")
     finally:
         controller.close()
         qt_app.processEvents()

@@ -861,11 +861,19 @@ def test_chk26_clipped_gl_state_is_captured_once_and_carried_through_mode() -> N
     # changing color writes must extend the common fence instead of silently
     # invalidating the carried-state contract.
     implementation_root = root / "rendering" / "quick" / "visualizer" / "implementations"
-    implementation_source = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in sorted(implementation_root.glob("*.py"))
-    )
-    assert "glColorMask" not in implementation_source
+    # 5.1.3 (f9f09679) added Bubble's ambient pass, which draws into its OWN
+    # FBO and must open color writes there. It is admitted only because it
+    # captures the live mask first and restores it in ``finally``, so the
+    # carried snapshot is still truthful when control returns to the mode.
+    for path in sorted(implementation_root.glob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        if "glColorMask" not in source:
+            continue
+        assert path.name == "bubble_ambient_gl.py", path.name
+        assert "color_mask = tuple(bool(v) for v in gl.glGetBooleanv(gl.GL_COLOR_WRITEMASK))" in source
+        restore_tail = source.split("finally:", 1)[1]
+        assert "gl.glColorMask(*color_mask)" in restore_tail
+        assert source.count("glColorMask(") == 2
     assert "glColorMask" not in host
 
 

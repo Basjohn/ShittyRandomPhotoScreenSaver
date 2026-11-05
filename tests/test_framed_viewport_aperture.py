@@ -61,22 +61,27 @@ def test_real_neon_inner_field_preserves_landmarks_with_fixed_chrome():
     assert observations[2]==pytest.approx(observations[0])
 
 
+# Since 477a1cf9 framed 3D modes share the ``planar`` CUSTOM slot and geometry kind with framed 2D
+# (Contracts: layout_profile; is_framed_visualizer_layout_profile), so their side handles use the
+# planar viewport-world rule. The retired distinct-profile mechanics that admitted historical stage
+# aspects (e.g. a 630x210 rect over a 420x280 world) no longer exist; that case was removed.
 @pytest.mark.parametrize('mode',('extruded_bubble','shockwave_grid'))
-@pytest.mark.parametrize('initial_size',((420,280),(630,210)))
-def test_actual_custom_side_gestures_reveal_fixed_world_including_historical_stage_aspects(mode,initial_size):
+@pytest.mark.parametrize('initial_size',((420,280),))
+def test_actual_custom_side_gestures_reveal_fixed_world(mode,initial_size):
     from PySide6.QtCore import QPoint,QRect
     from rendering.custom_layout_session import CustomLayoutKey
     from rendering.quick.custom_layout_owner import _DisplayBinding
     from tests.test_qtquick_visualizer_custom_geometry_regressions import _owner,_visualizer_item,_Unit,_Scene
     from widgets.spotify_visualizer.presentation_geometry import resolve_visualizer_presentation,framed_aperture_scale
-    from core.settings.visualizer_mode_registry import get_visualizer_layout_profile,get_visualizer_presentation_policy
+    from core.settings.visualizer_mode_registry import (get_visualizer_layout_profile,
+        get_visualizer_presentation_policy,get_visualizer_geometry_kind)
     owner=_owner()
     owner._bindings={'display:a':_DisplayBinding('display:a','1',_Unit(_Scene()),object(),QRect(0,0,3000,2000))}
-    item=_visualizer_item();item.geometry_kind='freeform_3d'
+    item=_visualizer_item();item.geometry_kind=get_visualizer_geometry_kind(mode)
     item.source_key=CustomLayoutKey('spotify_visualizer','display:a',get_visualizer_layout_profile(mode))
     width,height=initial_size
     item.current_global_rect=QRect(100,100,width,height)
-    owner._visualizer_pixels_per_world[item.source_key]=width/420.  # old width-derived cache must not drive height
+    owner._visualizer_pixels_per_world[item.source_key]=width/420.  # the planar pixels-per-world authority
     observations=[]
     params=frozen_visualizer_settings('shockwave_grid')
     def observe():

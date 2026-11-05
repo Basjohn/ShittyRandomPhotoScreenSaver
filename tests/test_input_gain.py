@@ -59,6 +59,8 @@ def _make_mock_worker(np_mod, *, input_gain: float = 1.0, bar_count: int = 32):
     worker._floor_headroom = 0.15
     worker._floor_response = 0.5
     worker._zero_bars = [0.0] * bar_count
+    # Real worker default (audio_worker.py); only Waveform enables raw lanes.
+    worker._raw_musical_signals = False
     return worker
 
 

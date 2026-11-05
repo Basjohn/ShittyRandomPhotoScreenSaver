@@ -60,8 +60,8 @@
         "waveform_ribbon_elastic_frequency": 0.85,
         "waveform_ribbon_exposure": 0.85,
         "waveform_ribbon_floor_brightness": [
-          1.7,
-          1.7
+          1.2,
+          1.2
         ],
         "waveform_ribbon_floor_reflection": [
           1.2,
@@ -879,7 +879,7 @@
           6.0
         ],
         "waveform_ribbon_floor_contrast": 3.5,
-        "waveform_ribbon_floor_light_far": 0.5,
+        "waveform_ribbon_floor_light_far": 0.2,
         "waveform_ribbon_floor_light_reach": 35.0,
         "waveform_ribbon_floor_colour": 1.8,
         "waveform_ribbon_floor_glow_limit": 0.2,
@@ -920,7 +920,8 @@
         "waveform_ribbon_strand_fade": [
           0.85,
           0.9
-        ]
+        ],
+        "mode": "waveform_ribbon"
       }
     }
   }

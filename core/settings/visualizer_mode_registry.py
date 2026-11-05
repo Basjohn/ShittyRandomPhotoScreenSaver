@@ -439,7 +439,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
     ),
 )
 
-# Registered modes not yet offered: never selectable, cycled, shown in Guided Setup or the 3D tab, and given no
+# Registered modes not yet offered: never selectable, cycled, shown in Guided Setup or the 3D Quality tab, and given no
 # runtime work. A gate opens in code at its acceptance, never through an environment flag.
 # SINE is intentionally disabled pending eventual retirement (not deletion).
 # Keep its implementation, settings keys and presets available for migration;

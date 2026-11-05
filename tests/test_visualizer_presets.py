@@ -742,7 +742,6 @@ def test_snapshot_override_keeps_curated_slot_name(tmp_path, monkeypatch):
         # use current per-mode controls as the surviving-key witnesses).
         ("spectrum", "_spectrum_preset_slider", "spectrum_drop_speed", 1.9),
         ("bubble", "_bubble_preset_slider", "bubble_big_bass_pulse", 0.61),
-        ("sine_wave", "_sine_preset_slider", "sine_micro_wobble", 0.15),
         ("oscilloscope", "_osc_preset_slider", "osc_gain", 3.1),
     ],
 )

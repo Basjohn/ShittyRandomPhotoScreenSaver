@@ -52,6 +52,12 @@
           255
         ],
         "bubble_gradient_direction": "top",
+        "bubble_gradient_endpoints": [
+          0.5,
+          1.0,
+          0.5,
+          0.0
+        ],
         "bubble_gradient_light": [
           255,
           222,
@@ -64,12 +70,34 @@
         "bubble_input_gain": 0.75,
         "bubble_kick_lane_gain": 0.8,
         "bubble_manual_floor": 0.3,
+        "bubble_microbubble_columnarity": 0.0,
+        "bubble_microbubble_density": 0.35,
+        "bubble_microbubble_direction_mode": "same",
+        "bubble_microbubble_drift": false,
+        "bubble_microbubble_size": 3.0,
+        "bubble_microbubble_stream": false,
         "bubble_outline_color": [
           255,
           247,
           225,
           255
         ],
+        "bubble_particle_color": [
+          195,
+          226,
+          255,
+          210
+        ],
+        "bubble_particle_density": 0.32,
+        "bubble_particle_direction_mode": "same",
+        "bubble_particle_drift": false,
+        "bubble_particle_glow": false,
+        "bubble_particle_glow_intensity": 0.9,
+        "bubble_particle_glow_reactivity": 1.35,
+        "bubble_particle_glow_release_ms": 160,
+        "bubble_particle_glow_spread": 1.0,
+        "bubble_particle_size": 2.4,
+        "bubble_particle_stream": false,
         "bubble_pop_color": [
           225,
           218,

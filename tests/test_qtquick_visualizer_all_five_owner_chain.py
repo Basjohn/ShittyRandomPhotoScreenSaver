@@ -75,6 +75,14 @@ class _Engine:
         return SimpleNamespace(bass=0.2, mid=0.1, high=0.05, overall=0.15)
 
     get_extruded_bubble_body_bands = get_bubble_energy_bands
+    # Waveform's capture reads (waveform_ribbon_capture.py).
+    get_waveform_ribbon_body_bands = get_bubble_energy_bands
+
+    def get_onset_events(self, after_serial: int = 0):
+        return ()
+
+    def get_musical_level(self):
+        return (0.0, 0.0)
 
     def get_transient_energy_bands(self):
         return SimpleNamespace(

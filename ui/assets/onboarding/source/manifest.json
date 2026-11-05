@@ -579,14 +579,6 @@
       ]
     },
     {
-      "mode_id": "sine_wave",
-      "path": "visualizer_sine_wave.png",
-      "size": [
-        778,
-        511
-      ]
-    },
-    {
       "mode_id": "bubble",
       "path": "visualizer_bubble.png",
       "size": [
@@ -633,11 +625,19 @@
         784,
         518
       ]
+    },
+    {
+      "mode_id": "waveform_ribbon",
+      "path": "visualizer_waveform_ribbon.png",
+      "size": [
+        784,
+        518
+      ]
     }
   ],
   "generation": {
     "widgets": "hidden Windows-QPA QQuickRenderControl worker",
     "gl": "hidden Windows-QPA QOffscreenSurface worker"
   },
-  "total_bytes": 27198329
+  "total_bytes": 27525369
 }

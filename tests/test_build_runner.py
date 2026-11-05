@@ -262,6 +262,10 @@ def test_preflight_passes_a_complete_release_tree(
         tmp_path / "ui" / "resources" / "onboarding_assets.qrc",
         tmp_path / "resources" / "tutuogg.ogg",
         tmp_path / "resources" / "jedimodeyall.mp3",
+        # Waveform floor textures became required release assets in 548ccdab.
+        tmp_path / "assets" / "textures" / "waveform_floor" / "concrete_albedo.png",
+        tmp_path / "assets" / "textures" / "waveform_floor" / "concrete_roughness.png",
+        tmp_path / "assets" / "textures" / "waveform_floor" / "wet_surface_height.png",
         tmp_path / "rendering" / "quick" / "qml" / "DisplayScene.qml",
         tmp_path / "rendering" / "quick" / "qml" / "VisualizerPresentation.qml",
         tmp_path / "rendering" / "quick" / "qml" / "FriendPulsePresentation.qml",
@@ -310,7 +314,9 @@ def test_preflight_passes_a_complete_release_tree(
     # Generated binary packs may be absent: the Foundry prerequisite creates them.
     assert not (tmp_path / "ui" / "resources" / "assets.rcc").exists()
     assert result.errors == []
-    assert result.unavailable_jobs == set()
+    # Only optional jobs this synthetic tree does not stage (the Linux job needs gh and its own script) may be
+    # unavailable; every default-selected job is ready.
+    assert result.unavailable_jobs <= {job.key for job in jobs if not job.default_selected}
     assert any("both build modes" in warning for warning in result.warnings)
 
 

@@ -11,6 +11,7 @@ import pytest
 
 from core.settings.visualizer_mode_registry import (
     get_visualizer_presentation_policy,
+    is_mode_active,
 )
 from core.settings.default_contract import get_raw_default_settings
 from rendering.quick.visualizer import render_host as render_host_module
@@ -65,6 +66,25 @@ from widgets.spotify_visualizer.sphere_frame_runtime import SphereFrameRuntime
 from widgets.spotify_visualizer.render_state import ExtrudedBubbleFrame, ExtrudedSpectrumFrame, ShockwaveGridFrame
 from widgets.spotify_visualizer.extruded_bubble_frame_runtime import ExtrudedBubbleFrameRuntime, controls_from_parameters
 from widgets.spotify_visualizer.shockwave_frame_runtime import ShockwaveGridFrameRuntime
+from widgets.spotify_visualizer.waveform_ribbon_frame_runtime import WaveformRibbonFrameRuntime
+
+
+def _waveform_values() -> dict:
+    """Waveform's own controls from the frozen fixture (what its capture hands configure())."""
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    frozen = _resolved_mode_config("waveform_ribbon")
+    return {control.key: frozen[control.key] for control in require_mode_settings("waveform_ribbon").controls}
+
+
+def _waveform_ribbon_frame():
+    from core.waveform_ribbon_dynamics import WaveformDynamics
+    from widgets.spotify_visualizer.render_state import WaveformRibbonFrame
+    from widgets.spotify_visualizer.waveform_ribbon_parameters import CompiledWaveformSettings
+    configuration = CompiledWaveformSettings(_waveform_values())
+    snapshot = WaveformDynamics(configuration.controls).advance(
+        1 / 90, bands=(0., 0., 0.), intensity=0., presence=0.)
+    return WaveformRibbonFrame(snapshot.packet, configuration.scene(snapshot), snapshot.time, snapshot.travel,
+        snapshot.rotation_angle, snapshot.rotation_speed, snapshot.drives, snapshot.realized, ready=snapshot.ready)
 
 
 # EXACT-VALUE INVARIANT: this is an exhaustive fixture-constructor map, not a
@@ -80,6 +100,7 @@ _MODE_STATES = {
     "extruded_spectrum": ExtrudedSpectrumFrame,
     "shockwave_grid": ShockwaveGridFrame,
     "extruded_bubble": ExtrudedBubbleFrame,
+    "waveform_ribbon": _waveform_ribbon_frame,
 }
 _MODE_IDS = tuple(
     descriptor.mode_id
@@ -128,6 +149,8 @@ def _runtime(mode_id: str):
         return SphereFrameRuntime()
     if mode_id == "extruded_bubble":
         return ExtrudedBubbleFrameRuntime()
+    if mode_id == "waveform_ribbon":
+        return WaveformRibbonFrameRuntime()
     raise AssertionError(f"unhandled test mode: {mode_id}")
 
 
@@ -288,6 +311,21 @@ def _drive_runtime(
             return None
         # Its snapshot holds no identity; readiness is the runtime's own source fence.
         return SimpleNamespace(frame=resolved, reactive_source_ready=bool(fresh_source and playing))
+    if mode_id == "waveform_ribbon":
+        configuration = runtime.configure(_waveform_values())
+        if configuration is None:
+            return None
+        resolved = runtime.advance(
+            onsets=(), now_ts=now_ts, playing=playing,
+            identity=(identity["runtime_generation"], identity["engine_generation"], identity["activation_id"]),
+            source_identity=(identity["source_generation"], identity["source_activation_id"]),
+            controls=configuration.controls, body_bands=(0.25, 0.5, 0.2),
+            intensity=0.0, loudness=0.0, presence=0.0,
+        )
+        if resolved is None:
+            return None
+        # Like Extruded Bubble: identity stays on the logical frame; readiness is the source fence.
+        return SimpleNamespace(frame=resolved, reactive_source_ready=bool(fresh_source and playing))
     raise AssertionError(f"unhandled test mode: {mode_id}")
 
 
@@ -333,7 +371,9 @@ def _has_current_source(resolved: Any) -> bool:
     )
 
 
-@pytest.mark.parametrize("mode_id", _MODE_IDS)
+# Sine is soft-retired (5.1.3, f9f09679): its renderer stays registered, but the controller never
+# admits it as a current mode, so it has no live runtime lifecycle to exercise.
+@pytest.mark.parametrize("mode_id", tuple(mode for mode in _MODE_IDS if is_mode_active(mode)))
 def test_all_registered_modes_keep_one_runtime_across_pause_play_and_retire_terminally(
     mode_id: str,
 ) -> None:

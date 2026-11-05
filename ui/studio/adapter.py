@@ -66,6 +66,19 @@ class StudioCapabilities:
                 "handles": self.handles and self.viewport}
 
 
+@dataclass(frozen=True)
+class StudioPreview:
+    """One small render the Studio asks the mode's renderer for (a tile or a rendered card).
+
+    ``frame`` is drawn at ``logical`` item size (twice that in pixels) presenting ``extent``/``style``,
+    then cropped to ``crop`` (normalised x, y, w, h, origin top-left)."""
+    frame: Any
+    extent: tuple[float, float] | None
+    style: tuple = ()
+    logical: tuple[float, float] = (96.0, 64.0)
+    crop: tuple[float, float, float, float] = (0.0, 0.0, 1.0, 1.0)
+
+
 class StudioEvaluator(Protocol):
     """Deterministic: the same fixture, values and time always yield the same frame."""
 
@@ -157,10 +170,19 @@ class StudioModeAdapter(ABC):
         """{path: value} changes for a group preset (relative to ``baseline``: reversible)."""
         return {}
 
-    def preset_preview(self, group: str, preset_id: str, values: Mapping[str, Any]):
-        """``(frame, extent, style)`` showing ``values`` (a starting point already applied) for that
-        preset's tile, drawn once by the mode's renderer at thumbnail size; None keeps the swatch.
-        Consulted only with a viewport, after commits while the tiles are on screen (never per frame)."""
+    def preset_preview(self, group: str, preset_id: str, values: Mapping[str, Any],
+                       object_id: str = "") -> "StudioPreview | None":
+        """The tile render for a starting point (``values`` already has it applied; ``object_id`` is the
+        selected scene object), drawn once by the mode's renderer; None keeps the swatch. Consulted
+        only with a viewport, after commits while the tiles are on screen (never per frame)."""
+        return None
+
+    def card_preview(self, group: str, values: Mapping[str, Any], endpoint: int,
+                     framing: "StudioFraming | None", evaluator: Any = None) -> "StudioPreview | None":
+        """A rendered card for a group whose ``CardSpec.rendered`` is set: the scene on screen (``evaluator``
+        is the Studio's evaluator at the instant shown; ``values`` the current values) with the group's
+        Quiet/Peak pairs held at ``endpoint`` (0 quiet, 1 peak), through the production renderer at the live
+        ``framing``. Same rules as tiles: once per commit while visible, never per frame."""
         return None
 
     def scene_handles(self, frame: Any, values: Mapping[str, Any], object_id: str,
@@ -221,7 +243,7 @@ class StudioFraming:
 
 __all__ = [
     "NavAxis", "RECORDED", "REFERENCE", "SYNTHETIC", "RenderCard", "StudioCapabilities", "StudioEvaluator",
-    "StudioFixture",
+    "StudioFixture", "StudioPreview",
     "StudioFraming", "StudioNavigation",
     "StudioModeAdapter", "StudioRenderer",
 ]

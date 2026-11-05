@@ -123,9 +123,14 @@ def test_f3_exposes_image_control_with_persisted_settings_and_local_only_renderi
 
 
 def test_legacy_rss_background_log_redacts_feed_query_tokens():
+    # Since 7bc62183 (staged wallpaper pools) the engine's background refresh
+    # no longer picks or logs a feed URL at all; per-source URL logging lives
+    # in the shared feed core and is redacted there.
     source = _text("engine/engine_rss.py")
-    assert "redacted_url_for_log(feed_url)" in source
-    assert "feed_url[:60]" not in source
+    assert "feed_url" not in source
+    assert 'logger.debug("Background RSS refresh: next bounded source opportunity")' in source
+    feed_source = _text("core/feeds/source.py")
+    assert "redacted_url_for_log(self.spec.url)" in feed_source
 
 
 def test_feed_presentation_capacity_never_clips_configured_rows_or_steals_edit_wheel():

@@ -455,7 +455,7 @@ Values still kept per scene until their control exists: mock 1's `ray_cut`, came
 declared on the descriptor (turn/tilt
 orbit wrapping a full circle, `view_auto_rotate_settings`, scene scale/pan with a `scene_pan_envelope`), prepared
 reveal. Offered since 2026-10-18 (operator): selectable, cycled, in Guided Setup (its preview rendered by the
-onboarding foundry from preset 1) and the 3D tab, so its physical acceptance (EB5) runs on real displays. It sat
+onboarding foundry from preset 1) and the 3D Quality tab, so its physical acceptance (EB5) runs on real displays. It sat
 behind the `_GATED_MODES` code gate from S2 until then.
 
 **Simulation (CPU, logical clock).** `widgets/spotify_visualizer/extruded_bubble_frame_runtime.py` owns an
@@ -499,7 +499,7 @@ now a share of its own span. Passage intensity is the track's level on the fixed
 measures as loud as the heavy ones (median 7.7), so its high sustain is correct.
 
 **S2 landed (2026-10-18).** `extruded_bubble` is registered behind its closed code gate (`_GATED_MODES`: not
-selectable, cycled, offered in Guided Setup or listed in the 3D tab). Its own Settings spec (§9: Light, Light Rays,
+selectable, cycled, offered in Guided Setup or listed in the 3D Quality tab). Its own Settings spec (§9: Light, Light Rays,
 Bubbles, Motion, Reaction, Collision, Camera; advanced Water, Glass, Particles, Lens) uses the direction mappers,
 the collision triangle and range sliders with `when` conditionals; its analysis profile owns Oscilloscope's
 technical subset (floors default off; its reactivity reads only fixed-scale intensity and onsets). The capture

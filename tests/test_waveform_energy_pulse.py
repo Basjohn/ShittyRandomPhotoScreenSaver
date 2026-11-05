@@ -4,7 +4,7 @@ Test-owned controls only (never presets). The field is logical state on the sole
 """
 from dataclasses import replace
 import numpy as np
-from core.waveform_ribbon_dynamics import PULSE_GRID, PULSE_ORIGIN, PulseControls
+from core.waveform_ribbon_dynamics import PULSE_GRID, PULSE_ORIGIN, TROUGH_RAISE, PulseControls
 from tests.test_waveform_ribbon_dynamics import controls, primed, data
 
 
@@ -55,8 +55,8 @@ def test_the_swell_amplifies_the_waveform_with_its_shape_never_against_it():
         a, b = moved.advance(1/90, **quiet), still.advance(1/90, **quiet)
     ya, yb = data(a)[0, 4::5, 1], data(b)[0, 4::5, 1]
     count = int(data(a)[0, 0, 0])
-    lift = dict(b.realized)['lift']
-    da, db = (ya[:count]-lift), (yb[:count]-lift)
+    rest = dict(b.realized)['lift']+TROUGH_RAISE  # the rest line the waveform swings about
+    da, db = (ya[:count]-rest), (yb[:count]-rest)
     moved_part = np.abs(da-db) > 1e-3
     assert moved_part.any()
     # Crests rise, troughs deepen: the swell scales displacement about the axis, so its sign never flips.

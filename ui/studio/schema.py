@@ -165,6 +165,8 @@ class CardSpec:
     kind: str
     roles: tuple[tuple[str, str], ...]
     title: str = ""
+    # True: the mode renders this card (``StudioModeAdapter.card_preview``); the diagram is the fallback.
+    rendered: bool = False
 
 
 @dataclass(frozen=True)

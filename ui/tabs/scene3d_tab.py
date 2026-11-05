@@ -1,4 +1,4 @@
-"""The 3D Settings tab: how much detail every 3D transition and 3D Visualizer draws with.
+"""The 3D Quality Settings tab: how much detail every 3D transition and 3D Visualizer draws with.
 
 Three pills over one ``scene3d`` settings section, each level storing only its own choice:
 **General** (the tier for everything 3D; Auto picks by the GPU), **3D Transitions** and
@@ -193,7 +193,7 @@ class Scene3DTab(QWidget):
         layout = QVBoxLayout(content)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(20)
-        title = QLabel("3D Settings")
+        title = QLabel("3D Quality")
         shared_styles.apply_shared_label_style(title, "PAGE_TITLE_STYLE")
         layout.addWidget(title)
         intro = QLabel("How much detail 3D transitions and 3D Visualizers draw with, for this computer.")
@@ -249,7 +249,7 @@ class Scene3DTab(QWidget):
 
     def show_page(self, key: str) -> None:
         if key not in self._pages:
-            raise KeyError(f"unknown 3D Settings page: {key!r}")
+            raise KeyError(f"unknown 3D Quality page: {key!r}")
         for page_key, page in self._pages.items():
             page.setVisible(page_key == key)
         button = self._nav_buttons[key]
