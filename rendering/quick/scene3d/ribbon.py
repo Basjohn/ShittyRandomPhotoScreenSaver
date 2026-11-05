@@ -88,19 +88,21 @@ _FLOOR_GIVE_UNIFORMS = ('uFloorGive', 'uFloorGiveField', 'uFloorGiveFrame')
 # Texture unit of the Pulse Rim field (``rendering.quick.scene3d.pulse_rim``): clear of the floor's 0-4, the mist's 8-12
 # and 15, the yielding floor's 13 and the world field's 14. Bound for the light pass only and unbound after it.
 PULSE_RIM_UNIT = 7
-_PULSE_RIM_UNIFORMS = ('uPulseRim', 'uPulseRimField')
+_PULSE_RIM_UNIFORMS = ('uPulseRim', 'uPulseRimField', 'uPulseRimShape')
 
 
 def _apply_pulse_rim(locations, pulse_rim):
-    """``pulse_rim`` = (field texture, ``uPulseRim`` vec4) from the scene's Pulse Rim field, or None (off: the rims
-    exactly as without the option). Always written: program uniforms persist. Returns whether a texture was bound."""
+    """``pulse_rim`` = (field texture, ``uPulseRim`` vec4, ``uPulseRimShape`` vec2) from the scene's Pulse Rim field,
+    or None (off: the rims exactly as without the option). Always written: program uniforms persist. Returns whether
+    a texture was bound."""
     if pulse_rim is None:
         gl.glUniform4f(locations['uPulseRim'], 0., 0., 0., 0.)
         return False
-    texture, values = pulse_rim
+    texture, values, shape = pulse_rim
     gl.glBindTextureUnit(PULSE_RIM_UNIT, int(texture))
     gl.glUniform1i(locations['uPulseRimField'], PULSE_RIM_UNIT)
     gl.glUniform4f(locations['uPulseRim'], *values)
+    gl.glUniform2f(locations['uPulseRimShape'], *shape)
     return True
 
 

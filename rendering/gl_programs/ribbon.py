@@ -750,19 +750,28 @@ void main() {
 # Pulse Rim (opt-in; uPulseRim.z 0 is off and nothing samples it): where the travelling pulse is, the rims (crisp line
 # and rim glow) brighten further. The field is the logical owner's published pulse appearance (``pulse_at``, on the
 # history axis: the fragment's history x is vWorld.x+uMistOrigin.x, the same x the grade reads, so Travel Direction's
-# mirror needs nothing here), uploaded once per frame; its own smooth shape is the falloff, and three binomial taps
-# widen it slightly so the brightening fades along the rim instead of ending where the band does.
+# mirror needs nothing here), uploaded once per frame. Three binomial taps widen it slightly so the brightening fades
+# along the rim instead of ending where the band does. The response is the square of the field over a reference level
+# (uPulseRimShape.x is its inverse), softly capped at uPulseRimShape.y: on recorded music the visible span carries the
+# swell's band over a lower plateau of older swells, and squaring keeps the plateau's rims close to their own light
+# while a passing swell's rims light up (linear, the whole rim set brightened together and the pulse did not read).
+# Smooth in the field (a square and a tanh), so the brightening has the field's own soft falloff and never a hard edge.
 PULSE_RIM_GLSL = """
 uniform sampler2D uPulseRimField;
-uniform vec4 uPulseRim;  // field edge x (history axis), inverse covered length, strength (0: off), tap spread (field u)
+uniform vec4 uPulseRim;       // field edge x (history axis), inverse covered length, strength (0: off), tap spread (u)
+uniform vec2 uPulseRimShape;  // inverse reference field level, response ceiling
 float pulseRimField(float x) {
     float u=(x-uPulseRim.x)*uPulseRim.y;
     return 0.25*textureLod(uPulseRimField,vec2(u-uPulseRim.w,0.5),0.0).r+0.5*textureLod(uPulseRimField,vec2(u,0.5),0.0).r
           +0.25*textureLod(uPulseRimField,vec2(u+uPulseRim.w,0.5),0.0).r;
 }
+float pulseRimResponse(float x) {
+    float level=max(pulseRimField(x),0.0)*uPulseRimShape.x;
+    return uPulseRimShape.y*tanh(level*level/uPulseRimShape.y);
+}
 """
 # The one line the light pass gains; without it (or with uPulseRim.z 0) the rims are exactly today's.
-PULSE_RIM_LINE = "    if(uPulseRim.z>0.0) boundary*=1.0+uPulseRim.z*max(pulseRimField(vWorld.x+uMistOrigin.x),0.0);\n"
+PULSE_RIM_LINE = "    if(uPulseRim.z>0.0) boundary*=1.0+uPulseRim.z*pulseRimResponse(vWorld.x+uMistOrigin.x);\n"
 RIBBON_LIGHT_FRAGMENT = ("#version 460 core\nlayout(location=0) out vec4 FragColor;\n"
                          "layout(location=1) out vec4 Emission;\n" + _RIBBON_MATERIAL_GLSL + PULSE_RIM_GLSL + """
 void main() {

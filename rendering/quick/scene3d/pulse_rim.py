@@ -13,10 +13,16 @@ STEP = (LAST-FIRST)/(SAMPLES-1)
 # Spread of the shader's three binomial taps (world units along the history axis): the brightening fades softly
 # along the rim, a little wider than the authored band, never ending in a hard edge.
 SPREAD = .75
+# Response = CEILING*tanh((field/REFERENCE)^2/CEILING). REFERENCE is a passing swell's level in the visible span on
+# recorded music (human_heavy1, Preset 1 camera, 5 Nov: in-view peak p90 .12, plateau median .06), so Pulse Rim k
+# lights a passing swell's rims to about 1+k times and leaves the plateau near 1+k/4; CEILING bounds a strong or
+# Whole Swell (1+2k at most).
+REFERENCE, CEILING = .12, 2.
 
 
 class PulseRimField:
-    """Caller owns the current GL context; ``update`` once per frame returns the light pass's (texture, uPulseRim)."""
+    """Caller owns the current GL context; ``update`` once per frame returns the light pass's
+    (texture, uPulseRim, uPulseRimShape)."""
     def __init__(self):
         self.texture = 0
         self._payload = None
@@ -55,7 +61,7 @@ class PulseRimField:
             self._payload = payload
         length = LAST-FIRST+STEP
         # Texel i's centre is PULSE_GRID[i]; beyond the grid the edge value continues (as ``pulse_at`` does).
-        return self.texture, (FIRST-.5*STEP, 1./length, float(strength), SPREAD/length)
+        return self.texture, (FIRST-.5*STEP, 1./length, float(strength), SPREAD/length), (1./REFERENCE, CEILING)
 
     def release(self):
         if self.texture:
