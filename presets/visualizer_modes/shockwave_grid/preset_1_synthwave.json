@@ -14898,7 +14898,7 @@
         "shockwave_grid_terrain_peaks": 0.7,
         "shockwave_grid_terrain_pulses": 0.8,
         "shockwave_grid_terrain_reaction_enabled": true,
-        "shockwave_grid_terrain_reaction_strength": 0.6,
+        "shockwave_grid_terrain_reaction_strength": 0.45,
         "shockwave_grid_terrain_shaper": {
           "lanes": {
             "Bass": 0.5384615384615429,
