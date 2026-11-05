@@ -45,7 +45,6 @@ from widgets.spotify_visualizer.render_state import (
     BubbleFrame,
     DevCurveFrame,
     OscilloscopeFrame,
-    SineFrame,
     SphereFrame,
     SpectrumFrame,
     VisualizerCommonState,
@@ -58,7 +57,6 @@ from widgets.spotify_visualizer.render_state import (
 from widgets.spotify_visualizer.runtime_controller import (
     VisualizerRuntimeController,
 )
-from widgets.spotify_visualizer.sine_frame_runtime import SineFrameRuntime
 from widgets.spotify_visualizer.spectrum_frame_runtime import (
     SpectrumFrameRuntime,
 )
@@ -93,7 +91,6 @@ def _waveform_ribbon_frame():
 _MODE_STATES = {
     "spectrum": SpectrumFrame,
     "oscilloscope": OscilloscopeFrame,
-    "sine_wave": SineFrame,
     "bubble": BubbleFrame,
     "devcurve": DevCurveFrame,
     "sphere": SphereFrame,
@@ -139,8 +136,6 @@ def _runtime(mode_id: str):
         return ShockwaveGridFrameRuntime()
     if mode_id == "oscilloscope":
         return OscilloscopeFrameRuntime()
-    if mode_id == "sine_wave":
-        return SineFrameRuntime()
     if mode_id == "bubble":
         return BubbleFrameRuntime(simulation_factory=_BubbleSimulation)
     if mode_id == "devcurve":
@@ -226,26 +221,6 @@ def _drive_runtime(
             presence=0.0,
             intensity=0.0,
             spectrum=(),
-        )
-    if mode_id == "sine_wave":
-        return runtime.resolve(
-            now_ts=now_ts,
-            energy=VisualizerEnergyState(bass=0.5, overall=0.5),
-            kick_event=0.0,
-            snare_event=0.0,
-            ghosting_enabled=False,
-            ghost_decay=0.4,
-            line_count=2,
-            line_speed=0.5,
-            travels=(0.0,) * 6,
-            line_shifts=(0.0,) * 6,
-            transient_width_mix=0.4,
-            base_width_reaction=0.0,
-            base_sensitivity=1.0,
-            base_heartbeat=0.0,
-            heartbeat_slider=0.0,
-            source_timestamp=(now_ts if playing else None),
-            **identity,
         )
     if mode_id == "bubble":
         return runtime.advance(
@@ -371,8 +346,8 @@ def _has_current_source(resolved: Any) -> bool:
     )
 
 
-# Sine is soft-retired (5.1.3, f9f09679): its renderer stays registered, but the controller never
-# admits it as a current mode, so it has no live runtime lifecycle to exercise.
+# A closed-gate mode's renderer stays registered, but the controller never admits it as a current
+# mode, so it has no live runtime lifecycle to exercise.
 @pytest.mark.parametrize("mode_id", tuple(mode for mode in _MODE_IDS if is_mode_active(mode)))
 def test_all_registered_modes_keep_one_runtime_across_pause_play_and_retire_terminally(
     mode_id: str,

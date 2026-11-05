@@ -416,9 +416,6 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
         tick_pipeline, "consume_engine_bars", lambda _owner, _now: (True, True)
     )
     monkeypatch.setattr(
-        tick_pipeline, "process_heartbeat", lambda _owner, _now: None
-    )
-    monkeypatch.setattr(
         tick_pipeline, "record_tick_perf", lambda _owner, _now: None
     )
     monkeypatch.setattr(QuickDisplayUnit, "show_on_screen", lambda _unit: None)

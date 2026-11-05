@@ -3,7 +3,6 @@
 Verifies:
   1. Spectrum kick express lane: transient bass boosts bass-zone bars.
   2. Bubble transient pulse: transient bass mixes into bubble pulse energy.
-  4. Sine/Osc heartbeat: transient kick onset lowers trigger gate.
   5. GL overlay: transient_energy stored on overlay for renderer access.
 """
 from __future__ import annotations
@@ -285,55 +284,6 @@ class TestBubbleTransientPulse:
 
 
 # ===========================================================================
-# 4. Sine/Osc Heartbeat Transient Boost
-# ===========================================================================
-
-class TestHeartbeatTransientBoost:
-    """Verify transient kick onset lowers heartbeat trigger gate."""
-
-    def test_kick_onset_lowers_gate(self):
-        """Confirmed kick should reduce trigger gate by 40%."""
-        base_gate = 1.0 + (0.60 - 0.45 * 0.5)  # slider=0.5 → gate=1.375
-        _tb_kick = True
-
-        gate_boosted = base_gate * (0.6 if _tb_kick else 1.0)
-        assert gate_boosted < base_gate
-        assert abs(gate_boosted - base_gate * 0.6) < 1e-9
-
-    def test_no_onset_gate_unchanged(self):
-        """No kick onset should leave trigger gate unchanged."""
-        base_gate = 1.375
-        _tb_kick = False
-
-        gate_result = base_gate * (0.6 if _tb_kick else 1.0)
-        assert gate_result == base_gate
-
-    def test_kick_detection_from_worker(self):
-        """Worker onset_detected + onset_type == 'kick' should flag kick."""
-        worker = _StubWorker()
-        worker._onset_detected = True
-        worker._onset_type = 'kick'
-
-        _tb_kick = (
-            getattr(worker, '_onset_detected', False)
-            and getattr(worker, '_onset_type', '') == 'kick'
-        )
-        assert _tb_kick is True
-
-    def test_snare_onset_no_kick_flag(self):
-        """Snare onset should not flag as kick."""
-        worker = _StubWorker()
-        worker._onset_detected = True
-        worker._onset_type = 'snare'
-
-        _tb_kick = (
-            getattr(worker, '_onset_detected', False)
-            and getattr(worker, '_onset_type', '') == 'kick'
-        )
-        assert _tb_kick is False
-
-
-# ===========================================================================
 # 5. GPU Push Integration — transient_energy in kwargs
 # ===========================================================================
 
@@ -447,7 +397,6 @@ class TestTransientMixSettingsModel:
         'spectrum_lane_transient_mix',
         'bubble_transient_mix_bass',
         'bubble_transient_mix_vocal',
-        'sine_wave_transient_width_mix',
     )
 
     def test_defaults_present_on_model_follow_canonical_authority(self):
@@ -469,12 +418,10 @@ class TestTransientMixSettingsModel:
             'mode': 'spectrum',
             'preset_spectrum': vp.get_custom_preset_index('spectrum'),
             'preset_bubble': vp.get_custom_preset_index('bubble'),
-            'preset_sine_wave': vp.get_custom_preset_index('sine_wave'),
             'preset_oscilloscope': vp.get_custom_preset_index('oscilloscope'),
             'spectrum_lane_transient_mix': 0.9,
             'bubble_transient_mix_bass': 0.1,
             'bubble_transient_mix_vocal': 0.8,
-            'sine_wave_transient_width_mix': 0.15,
         }
         model = SpotifyVisualizerSettings.from_mapping(custom)
         exported = model.to_dict()
@@ -495,7 +442,6 @@ class TestTransientMixSettingsModel:
             "spectrum_lane_transient_mix": model.resolve_spectrum_lane_transient_mix,
             "bubble_transient_mix_bass": model.resolve_bubble_transient_mix_bass,
             "bubble_transient_mix_vocal": model.resolve_bubble_transient_mix_vocal,
-            "sine_wave_transient_width_mix": model.resolve_sine_wave_transient_width_mix,
         }
         for key, resolver in resolver_by_key.items():
             assert resolver() == pytest.approx(
@@ -571,174 +517,3 @@ class TestBubbleTransientMixWeights:
 
 # ===========================================================================
 # ===========================================================================
-
-
-
-# ===========================================================================
-# 11. Sine/Osc Scheduler Event Wiring (§2.4)
-# ===========================================================================
-
-class TestSineTransientWidthMix:
-    """Verify Sine's authored transient width mix modulates rendered output."""
-
-    def test_sine_width_reaction_modulated(self):
-        """Sine width reaction should be amplified by bass * mix."""
-        base_wr = 0.5
-        bass = 0.7
-        mix = 0.4
-        modulated = min(1.0, base_wr * (1.0 + bass * mix))
-        expected = min(1.0, 0.5 * (1.0 + 0.7 * 0.4))
-        assert abs(modulated - expected) < 1e-9
-
-    def test_sine_mix_zero_no_modulation(self):
-        """Mix of 0 should leave width reaction unchanged."""
-        base_wr = 0.6
-        modulated = min(1.0, base_wr * (1.0 + 0.8 * 0.0))
-        assert modulated == base_wr
-
-    def test_sine_width_clamped_to_1(self):
-        """Modulated width reaction should not exceed 1.0."""
-        base_wr = 0.9
-        modulated = min(1.0, base_wr * (1.0 + 1.0 * 1.0))
-        assert modulated == 1.0
-
-
-class TestSineSchedulerBeatAssist:
-    """Verify Sine-only assist at its current presentation-neutral owner."""
-
-    @staticmethod
-    def _state():
-        from types import SimpleNamespace
-
-        return SimpleNamespace(
-            _line_smoothed_bass=0.20,
-            _line_smoothed_mid=0.10,
-            _line_smoothed_high=0.05,
-            _line_kick_event_strength=0.80,
-            _line_snare_event_strength=0.45,
-            _sine_wave_transient_width_mix=0.40,
-            _sine_width_reaction=0.35,
-            _sine_heartbeat=0.34,
-            _line_sensitivity=1.10,
-            _heartbeat_intensity=0.10,
-            _energy_bands=SimpleNamespace(overall=0.18),
-        )
-
-    @staticmethod
-    def _targets(state):
-        from widgets.spotify_visualizer.sine_reactivity import (
-            compute_sine_reactivity_targets,
-        )
-
-        return compute_sine_reactivity_targets(
-            smoothed_bass=state._line_smoothed_bass,
-            smoothed_mid=state._line_smoothed_mid,
-            smoothed_high=state._line_smoothed_high,
-            overall_energy=state._energy_bands.overall,
-            kick_event=state._line_kick_event_strength,
-            snare_event=state._line_snare_event_strength,
-            transient_width_mix=state._sine_wave_transient_width_mix,
-            base_width_reaction=state._sine_width_reaction,
-            base_sensitivity=state._line_sensitivity,
-            base_heartbeat=state._heartbeat_intensity,
-            heartbeat_slider=state._sine_heartbeat,
-        )
-
-    def test_scheduler_boosts_sine_energy_and_amplitude(self):
-        reactive = self._targets(self._state())
-
-        assert reactive["bass_energy"] > 0.20
-        assert reactive["mid_energy"] > 0.10
-        assert reactive["high_energy"] > 0.05
-        assert reactive["overall_energy"] > 0.18
-        assert reactive["sensitivity"] > 1.20
-        assert reactive["heartbeat_intensity"] > 0.10
-        assert reactive["width_reaction"] > 0.44
-        assert reactive["heartbeat_intensity"] < 0.36
-        assert reactive["sensitivity"] < 1.30
-        assert reactive["wave_effect_gate"] > 0.35
-
-    def test_zero_events_leave_sine_base_signals_alone(self):
-        state = self._state()
-        state._line_kick_event_strength = 0.0
-        state._line_snare_event_strength = 0.0
-        state._sine_wave_transient_width_mix = 0.0
-
-        reactive = self._targets(state)
-
-        assert abs(reactive["bass_energy"] - 0.20) < 1e-9
-        assert abs(reactive["mid_energy"] - 0.10) < 1e-9
-        assert abs(reactive["high_energy"] - 0.05) < 1e-9
-        assert abs(reactive["overall_energy"] - 0.18) < 1e-9
-        assert abs(reactive["heartbeat_intensity"] - 0.10) < 1e-9
-        assert reactive["sensitivity"] > 1.10
-        assert reactive["width_reaction"] > 0.35
-        assert reactive["wave_effect_gate"] > 0.25
-
-    def test_strong_events_on_calm_phrase_do_not_create_huge_pseudo_heartbeat(self):
-        state = self._state()
-        state._line_smoothed_bass = 0.03
-        state._line_smoothed_mid = 0.05
-        state._line_smoothed_high = 0.03
-        state._energy_bands.overall = 0.05
-        state._line_kick_event_strength = 0.95
-        state._line_snare_event_strength = 0.60
-        state._heartbeat_intensity = 0.0
-
-        reactive = self._targets(state)
-
-        assert reactive["heartbeat_intensity"] < 0.14
-        assert reactive["sensitivity"] < 1.18
-        assert reactive["width_reaction"] < 0.40
-        assert reactive["bass_energy"] < 0.15
-        assert reactive["wave_effect_gate"] < 0.10
-
-    def test_real_heartbeat_envelope_still_wins_over_scheduler_assist(self):
-        state = self._state()
-        state._heartbeat_intensity = 0.72
-        state._line_kick_event_strength = 0.25
-        state._line_snare_event_strength = 0.10
-
-        reactive = self._targets(state)
-        assert reactive["heartbeat_intensity"] == 0.72
-
-    def test_low_sensitivity_slider_is_not_artificially_crushed(self):
-        state = self._state()
-        state._line_sensitivity = 0.42
-        state._line_kick_event_strength = 0.0
-        state._line_snare_event_strength = 0.0
-        state._sine_wave_transient_width_mix = 0.0
-
-        reactive = self._targets(state)
-        assert reactive["sensitivity"] >= 0.42
-
-    def test_reactivity_spikes_rise_quickly_but_release_smoothly(self):
-        from widgets.spotify_visualizer.sine_reactivity import advance_sine_reactivity
-
-        state = self._state()
-        state._line_kick_event_strength = 0.0
-        state._line_snare_event_strength = 0.0
-        state._sine_wave_transient_width_mix = 0.0
-        baseline_target = self._targets(state)
-        baseline = advance_sine_reactivity(None, baseline_target, dt=1.0 / 60.0)
-
-        state._line_kick_event_strength = 0.95
-        state._line_snare_event_strength = 0.55
-        state._sine_wave_transient_width_mix = 0.40
-        hit_target = self._targets(state)
-        hit_frame = advance_sine_reactivity(baseline, hit_target, dt=0.016)
-
-        state._line_kick_event_strength = 0.0
-        state._line_snare_event_strength = 0.0
-        state._sine_wave_transient_width_mix = 0.0
-        calm_target = self._targets(state)
-        release_1 = advance_sine_reactivity(hit_frame, calm_target, dt=0.016)
-        release_2 = advance_sine_reactivity(release_1, calm_target, dt=0.016)
-
-        assert hit_frame["width_reaction"] > baseline["width_reaction"]
-        assert hit_frame["width_reaction"] < hit_target["width_reaction"]
-        assert release_1["width_reaction"] > calm_target["width_reaction"]
-        assert release_2["width_reaction"] > calm_target["width_reaction"]
-        assert release_1["width_reaction"] < hit_frame["width_reaction"]
-        assert release_2["width_reaction"] < release_1["width_reaction"]
-        assert release_1["sensitivity"] > calm_target["sensitivity"]

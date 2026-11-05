@@ -57,7 +57,6 @@ def _vis_settings(mode: str = "bubble", *, enabled_modes=None) -> dict:
         "spectrum_drop_speed": 1.85,
         "preset_spectrum": get_custom_preset_index("spectrum"),
         "preset_oscilloscope": get_custom_preset_index("oscilloscope"),
-        "preset_sine_wave": get_custom_preset_index("sine_wave"),
         "preset_bubble": get_custom_preset_index("bubble"),
         "preset_devcurve": get_custom_preset_index("devcurve"),
     }

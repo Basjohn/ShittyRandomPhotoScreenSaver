@@ -143,11 +143,6 @@ def test_bubble_rainbow_uses_controller_owned_presentation_state() -> None:
             _osc_ghosting_enabled=False,
             _osc_ghost_intensity=0.5,
             _osc_ghost_decay=0.4,
-            _sine_ghosting_enabled=False,
-            _sine_ghost_alpha=0.5,
-            _sine_ghost_decay=0.4,
-            _sine_heartbeat=False,
-            _heartbeat_intensity=0.0,
         ),
     )
 
@@ -399,8 +394,7 @@ def test_bubble_retirement_waits_for_inflight_step_then_clears_state() -> None:
 
     def _retire() -> None:
         try:
-            # Any other selectable mode retires Bubble (Sine, the old target,
-            # is soft-retired since 5.1.3 and is coerced back to Bubble).
+            # Any other selectable mode retires Bubble.
             controller.set_mode("spectrum")
         except BaseException as exc:  # pragma: no cover - assertion reports it
             errors.append(exc)
