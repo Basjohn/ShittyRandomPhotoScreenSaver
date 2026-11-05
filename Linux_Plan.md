@@ -143,9 +143,6 @@ unchanged; media widget, app volume slider, mute/OSD and visualizer audio unchan
 
 ## 7. Unrelated findings (not Linux work)
 
-- Cloud-container-only reds (not code): `test_release_media::test_source_change_during_capture_discards_media`
-  needs the operator's gitignored Usu scene originals; `test_bubble_reactivity` 510520e-shape test needs full git
-  history (shallow clone). The swish group-drift red is tracked in `Current_Plan.md`.
 - `SRPSS_FORCE_LOG_DIR` (logger) is an environment-variable hook used by harnesses; a CLI/sidecar equivalent
   would match the no-env-var preference.
 - Reddit cards display raw `requests` exception text (proxy/connection errors) to the user.
