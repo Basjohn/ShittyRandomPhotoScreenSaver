@@ -212,6 +212,10 @@ class StudioSchema:
     group_presets: tuple[tuple[str, tuple[StudioPreset, ...]], ...] = ()
     lifecycles: tuple[LifecycleSpec, ...] = ()
     cards: tuple[CardSpec, ...] = ()
+    # Dependent edits the mode's Settings body makes alongside one (key, admitted value, current values) ->
+    # {other key: value}: e.g. a finish choice writes Gloss and Specular, a manual Gloss edit marks the finish
+    # Custom. Applied in the same undoable edit and admitted like any other value.
+    follow: Callable[[str, Any, Any], dict] | None = field(compare=False, repr=False, default=None)
 
     def __post_init__(self) -> None:
         ids = [prop.id for prop in self.properties]

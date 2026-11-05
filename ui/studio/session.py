@@ -161,6 +161,15 @@ class StudioEditSession:
         if key not in self._gesture_before:
             self._gesture_before[key] = deepcopy(self._committed[key])
         self._preview[key] = admitted
+        follow = getattr(self._schema, "follow", None)
+        if follow is not None:
+            for other, value in dict(follow(key, admitted, self.values) or {}).items():
+                if other == key or other not in self._schema.keys:
+                    continue
+                previous = self.values[other]
+                if other not in self._gesture_before:
+                    self._gesture_before[other] = deepcopy(self._committed[other])
+                self._preview[other] = self._schema.admit(other, value, previous)
         self._changed("preview")
         return read_path({key: admitted}, (key, *path[1:]))
 
