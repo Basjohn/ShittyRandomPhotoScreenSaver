@@ -87,16 +87,19 @@ Shared files touched for Linux and the focused Windows tests that cover them. Ru
 `.venv` before merging; failures block the merge.
 
 ```text
-tests/test_platform_paths.py tests/test_storage_paths.py tests/test_storage_root_isolation.py
-tests/test_logging_config.py tests/test_notification_sound_paths.py tests/test_settings_theme_system.py
-tests/test_steam_credentials.py tests/test_widget_theme_link_and_asset_contract.py tests/test_visualizer_presets.py
-tests/test_qrc_regeneration.py tests/test_python314_migration_contract.py tests/test_build_layout.py
-tests/test_build_runner.py tests/test_clock_timezone_resolution.py tests/test_secure_url_launcher.py
-tests/test_main_reddit_helper_preload.py tests/test_reddit_helper_runtime.py tests/test_desktop_context.py
-tests/test_onboarding_flow.py tests/test_settings_polish_round.py tests/test_settings_material_underlay.py
-tests/test_visualizer_plain_orbit.py tests/test_gmail_oauth.py tests/test_mpris_controller.py
-tests/test_audio_capture_pulse.py tests/test_pulse_volume.py tests/test_audio_event_session.py tests/test_linux_build.py
+tests/test_platform_selection.py tests/test_platform_paths.py tests/test_storage_paths.py
+tests/test_storage_root_isolation.py tests/test_logging_config.py tests/test_notification_sound_paths.py
+tests/test_settings_theme_system.py tests/test_steam_credentials.py tests/test_widget_theme_link_and_asset_contract.py
+tests/test_visualizer_presets.py tests/test_qrc_regeneration.py tests/test_python314_migration_contract.py
+tests/test_build_layout.py tests/test_build_runner.py tests/test_clock_timezone_resolution.py
+tests/test_secure_url_launcher.py tests/test_main_reddit_helper_preload.py tests/test_reddit_helper_runtime.py
+tests/test_desktop_context.py tests/test_onboarding_flow.py tests/test_settings_polish_round.py
+tests/test_visualizer_plain_orbit.py tests/test_gmail_oauth.py tests/test_audio_event_session.py
+tests/test_media_volume_runtime.py tests/test_native_thread_pools.py tests/test_qtquick_native_texture_handoff.py
+tests/test_s_hotkey_workflow.py tests/test_visualizer_live_check.py tests/test_core_audio_callback_probe.py
 ```
+
+`tests/test_linux_*.py` never run on Windows (selection, directory collection and explicit runs all skip them).
 
 Also on Windows: `tools/regen_qrc.py` reports current; one `main.py /c` and `/s` launch; Settings Glass/Acrylic
 unchanged; media widget, app volume slider, mute/OSD and visualizer audio unchanged.

@@ -73,10 +73,3 @@ def test_linux_factory_uses_the_monitor_backend_or_none_loudly(monkeypatch) -> N
     monkeypatch.setattr(audio_capture_pulse.logger, "warning", lambda message, *args: warnings.append(message % args))
     assert audio_capture.create_audio_capture() is None
     assert warnings and "[PLATFORM]" in warnings[0] and "pulseaudio-utils" in warnings[0]
-
-
-def test_windows_factory_keeps_wasapi_loopback(monkeypatch) -> None:
-    monkeypatch.setattr(audio_capture.platform, "system", lambda: "Windows")
-    monkeypatch.setattr(audio_capture_pulse, "create_pulse_monitor_backend",
-                        lambda *_: pytest.fail("monitor backend on Windows"))
-    assert isinstance(audio_capture.create_audio_capture(), audio_capture.PyAudioWPatchBackend)

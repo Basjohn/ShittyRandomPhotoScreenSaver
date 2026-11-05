@@ -343,17 +343,3 @@ def test_settings_owner_destruction_cancels_oauth_flow() -> None:
     assert len(tab.destroyed.callbacks) == 1
     tab.destroyed.emit()
     assert manager.cancel_calls == 1
-
-
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes")
-def test_non_windows_plain_credential_file_is_owner_only(tmp_path):
-    import stat
-
-    from core.windows.dpapi import load_encrypted, save_encrypted
-
-    target = tmp_path / "imap.bin"
-    target.write_bytes(b"old")
-    target.chmod(0o644)  # a pre-existing world-readable file is tightened too
-    save_encrypted(target, b"secret")
-    assert stat.S_IMODE(target.stat().st_mode) == 0o600
-    assert load_encrypted(target) == b"secret"

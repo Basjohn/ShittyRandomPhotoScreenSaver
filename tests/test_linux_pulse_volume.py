@@ -80,20 +80,6 @@ def test_system_probe_reports_volume_and_default_device_changes_from_subscribe(m
         probe.set_volume(1.5)
 
 
-def test_platform_selects_pactl_owners_off_windows_and_core_audio_on_windows(monkeypatch) -> None:
-    from core.media import audio_event_session
-    from core.media.core_audio_callback_probe import CoreAudioCallbackProbe
-    from widgets import media_volume_runtime
-
-    callbacks = {"on_volume": lambda v, m: None, "on_default_device": lambda: None}
-    monkeypatch.setattr("core.platform_paths.IS_WINDOWS", False)
-    assert isinstance(audio_event_session._platform_probe(**callbacks), pulse_volume.PulseSystemVolumeProbe)
-    assert isinstance(media_volume_runtime._create_volume_controller("spotify"), pulse_volume.PulseAppVolumeController)
-
-    monkeypatch.setattr("core.platform_paths.IS_WINDOWS", True)
-    assert isinstance(audio_event_session._platform_probe(**callbacks), CoreAudioCallbackProbe)
-    from core.media.spotify_volume import SpotifyVolumeController
-    assert isinstance(media_volume_runtime._create_volume_controller("spotify"), SpotifyVolumeController)
 
 
 def test_session_listener_follows_only_the_selected_stream_and_its_removal(monkeypatch) -> None:
@@ -139,3 +125,13 @@ def test_session_listener_follows_only_the_selected_stream_and_its_removal(monke
     assert pushed == [("volume", 3, 0.5, False), ("device",)]
     listener.close()
     assert not listener.active
+
+
+def test_volume_owners_are_pactl_off_windows(monkeypatch) -> None:
+    from core.media import audio_event_session
+    from widgets import media_volume_runtime
+
+    callbacks = {"on_volume": lambda v, m: None, "on_default_device": lambda: None}
+    monkeypatch.setattr("core.platform_paths.IS_WINDOWS", False)
+    assert isinstance(audio_event_session._platform_probe(**callbacks), pulse_volume.PulseSystemVolumeProbe)
+    assert isinstance(media_volume_runtime._create_volume_controller("spotify"), pulse_volume.PulseAppVolumeController)

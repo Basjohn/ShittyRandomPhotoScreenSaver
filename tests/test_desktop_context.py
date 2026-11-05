@@ -49,10 +49,3 @@ def test_native_adapter_uses_kernel_thread_id_and_user_desktop_api(monkeypatch, 
                            GetUserObjectInformationW=Function(information))
     monkeypatch.setattr(ctypes, "WinDLL", lambda name, **kwargs: {"kernel32":kernel,"user32":user}[name], raising=False)
     assert is_interactive_user_desktop() is True
-
-
-def test_linux_session_is_the_users_interactive_desktop(monkeypatch):
-    monkeypatch.setattr("core.platform_paths.IS_WINDOWS", False)
-    assert is_interactive_user_desktop() is True
-    # An explicit adapter is still authoritative (fake-Win32 tests on any OS).
-    assert is_interactive_user_desktop(FakeWin32("Winlogon")) is False
