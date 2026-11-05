@@ -120,6 +120,7 @@
           ]
         ],
         "spectrum_pattern": "Off",
+        "spectrum_pattern_anchor": "Per Bar",
         "spectrum_pattern_color": [
           255,
           255,

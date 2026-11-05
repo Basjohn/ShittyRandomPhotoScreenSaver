@@ -53,6 +53,7 @@ uniform float u_peak_cap_mix;
 uniform vec4 u_peak_cap_color;
 uniform float u_peak_cap_thickness; // item px
 uniform int u_pattern;              // SPECTRUM_PATTERNS index (0 = Off)
+uniform int u_pattern_shared;       // 1 = one sheet over the whole bar field (SPECTRUM_PATTERN_ANCHORS "Shared")
 uniform float u_pattern_mix;        // strength x fade
 uniform vec4 u_pattern_color;
 uniform float u_pattern_scale;
@@ -145,8 +146,14 @@ float spectrum_box_stripe(float t, float w, float d) {
 
 // Pattern coverage (0..1) at bar-local x ``lx`` of a bar ``bw`` wide, height ``y`` above the baseline and field x
 // ``fx``. Every pattern is fixed to the baseline (and to each bar's own width or the field), so moving bars only
-// reveal more or less of it; columns fit a whole number into each bar so it reads at every bar width.
+// reveal more or less of it; columns fit a whole number into each bar so it reads at every bar width. Shared: the
+// horizontal frame is the whole bar field (columns fitted across it, chevrons centred on it): one sheet running
+// through bars and gaps alike, seen only through the fills.
 float spectrum_pattern_coverage(float lx, float bw, float y, float fx, float scale) {
+    if (u_pattern_shared == 1) {
+        lx = fx;
+        bw = u_bar_span_px;
+    }
     float cell = 6.0 * scale * clamp(u_pattern_scale, 0.25, 4.0);
     if (u_pattern == 1) {                       // Horizontal Bands
         float period = 2.0 * cell;

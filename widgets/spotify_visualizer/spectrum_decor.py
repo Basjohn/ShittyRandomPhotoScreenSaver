@@ -4,7 +4,7 @@ The values are the presentation owner's spec'd controls (``core/settings/visuali
 decoration fades in and out instead of popping: ``SpectrumDecorFade`` keeps one envelope per decoration on the
 presentation owner and advances it on the capture's own logical timestamp (``now_ts``), so it adds no clock, timer
 or thread, and a fresh owner (a new activation, an exact Studio replay) starts settled at the current settings. A
-pattern switched to another pattern dips through zero and comes back as the new one.
+pattern switched to another pattern (or another anchor) dips through zero and comes back as the new one.
 
 Every envelope at rest is exactly 0 or 1, so the default (all off) parameters are constants and the shader takes
 none of the decoration branches.
@@ -28,7 +28,7 @@ DECOR_KEYS = (
     "spectrum_ghost_color_source", "spectrum_ghost_color", "spectrum_ghost_gradient", "spectrum_ghost_tip_color",
     "spectrum_gloss", "spectrum_fill_gradient", "spectrum_fill_tip_color", "spectrum_peak_caps",
     "spectrum_peak_cap_color", "spectrum_peak_cap_thickness", "spectrum_pattern", "spectrum_pattern_color",
-    "spectrum_pattern_scale", "spectrum_pattern_strength",
+    "spectrum_pattern_scale", "spectrum_pattern_strength", "spectrum_pattern_anchor",
 )
 _ATTRS = tuple((key, "_" + key) for key in DECOR_KEYS)
 _TOGGLES = {
@@ -48,10 +48,14 @@ class SpectrumDecorFade:
 
     def __init__(self, pres: Any) -> None:
         self._levels = {name: (1.0 if wanted(pres) else 0.0) for name, wanted in _TOGGLES.items()}
-        self._pattern = str(pres._spectrum_pattern)
+        self._pattern, self._anchor = self._wanted_pattern(pres)
         self._pattern_level = 0.0 if self._pattern == SPECTRUM_PATTERNS[0] else 1.0
         self._last_ts: float | None = None
         self._mixes: dict[str, object] | None = None      # rebuilt only when a level moves
+
+    @staticmethod
+    def _wanted_pattern(pres: Any) -> tuple[str, str]:
+        return str(pres._spectrum_pattern), str(pres._spectrum_pattern_anchor)
 
     def advance(self, pres: Any, now_ts: float) -> bool:
         """Move every envelope toward the current settings; True while any is still moving."""
@@ -68,17 +72,18 @@ class SpectrumDecorFade:
                 self._levels[name] = level
                 self._mixes = None
                 moving = moving or level != target
-        target_pattern = str(pres._spectrum_pattern)
-        if target_pattern != self._pattern or (self._pattern != SPECTRUM_PATTERNS[0] and self._pattern_level < 1.0):
+        target_pattern = self._wanted_pattern(pres)
+        shown = (self._pattern, self._anchor)
+        if target_pattern != shown or (self._pattern != SPECTRUM_PATTERNS[0] and self._pattern_level < 1.0):
             self._mixes = None
-        if target_pattern != self._pattern:
+        if target_pattern != shown:
             # Fade the shown pattern out; then show the new one (Off shows nothing) and fade it in.
             self._pattern_level = _toward(self._pattern_level, 0.0, step)
             if self._pattern_level <= 0.0:
-                self._pattern = target_pattern
+                self._pattern, self._anchor = target_pattern
         elif self._pattern != SPECTRUM_PATTERNS[0] and self._pattern_level < 1.0:
             self._pattern_level = _toward(self._pattern_level, 1.0, step)
-        moving = moving or target_pattern != self._pattern or (
+        moving = moving or target_pattern != (self._pattern, self._anchor) or (
             self._pattern != SPECTRUM_PATTERNS[0] and self._pattern_level < 1.0)
         return moving
 
@@ -86,6 +91,7 @@ class SpectrumDecorFade:
         if self._mixes is None:
             out: dict[str, object] = {f"spectrum_{name}_mix": _smooth(level) for name, level in self._levels.items()}
             out["spectrum_pattern_shown"] = self._pattern
+            out["spectrum_pattern_anchor_shown"] = self._anchor
             out["spectrum_pattern_mix"] = (0.0 if self._pattern == SPECTRUM_PATTERNS[0]
                                            else _smooth(self._pattern_level))
             self._mixes = out

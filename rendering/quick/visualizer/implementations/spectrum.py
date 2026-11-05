@@ -20,7 +20,7 @@ from ..render_contract import (
     QuickVisualizerRenderFrame,
 )
 from ..implementation_values import parameter, rgba, safe_hue
-from rendering.gl_programs.spectrum_options import SPECTRUM_PATTERNS
+from rendering.gl_programs.spectrum_options import SPECTRUM_PATTERN_ANCHORS, SPECTRUM_PATTERNS
 
 
 _MAX_BARS = 64
@@ -54,6 +54,8 @@ def resolve_spectrum_decor_uniforms(
             max(1.0, min(6.0, float(parameter(parameters, "spectrum_peak_cap_thickness"))))
             * max(0.01, float(visual_scale)),)),
         ("u_pattern", "1i", (pattern_index,)),
+        ("u_pattern_shared", "1i", (
+            1 if str(parameter(parameters, "spectrum_pattern_anchor_shown")) == SPECTRUM_PATTERN_ANCHORS[1] else 0,)),
         ("u_pattern_mix", "1f", (
             unit("spectrum_pattern_mix") * unit("spectrum_pattern_strength") if pattern_index else 0.0,)),
         ("u_pattern_color", "4f", rgba(parameter(parameters, "spectrum_pattern_color"))),
@@ -65,7 +67,7 @@ def resolve_spectrum_decor_uniforms(
 _DECOR_UNIFORMS = (
     "u_ghost_custom_mix", "u_ghost_color", "u_ghost_gradient_mix", "u_ghost_tip_color", "u_gloss",
     "u_fill_gradient_mix", "u_fill_tip_color", "u_peak_cap_mix", "u_peak_cap_color", "u_peak_cap_thickness",
-    "u_pattern", "u_pattern_mix", "u_pattern_color", "u_pattern_scale",
+    "u_pattern", "u_pattern_shared", "u_pattern_mix", "u_pattern_color", "u_pattern_scale",
 )
 
 
