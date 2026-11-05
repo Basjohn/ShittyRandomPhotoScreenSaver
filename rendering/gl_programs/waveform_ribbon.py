@@ -35,6 +35,9 @@ bool floorWorldHit(out vec3 world, out float depth) {
     return true;
 }
 """
+# RMS slope per uv unit of the shipped smooth wet-surface height map: relief terms work in units of it, so the
+# material's shading and the reflection breakup keep their strength if the map is regenerated at another contrast.
+HEIGHT_SLOPE_RMS = 5.
 FLOOR_FRAGMENT = "#version 460 core\n" + FLOOR_WORLD_GLSL + """
 uniform sampler2D uAlbedo;
 uniform sampler2D uRoughness;
@@ -48,8 +51,10 @@ uniform vec3 uFloorTint;
 uniform vec4 uFloor;        // tile, micro tile, reflection gain, f0
 uniform vec3 uFloorTone;    // albedo gain, broad relief amplitude, micro relief amplitude
 uniform vec3 uRipple;       // reflection offset per unit slope: broad, micro across, micro along
-uniform vec4 uStreak;       // unused, roughness min/max, broad-slope gain to roughness
+uniform vec4 uStreak;       // optical streak length (world units at Streak Length 1), roughness min/max, broad-slope gain to roughness
 uniform vec4 uHot;          // reflected luminance at full strength; wet-film breakup share; suppression power; albedo mip bias
+uniform vec4 uMaterial;     // albedo contrast, relief shading, reflection relief breakup, source-light depth spread
+uniform vec3 uMaterialShape; // material elongation along world z, relief mip bias, column height falloff (world)
 uniform float uPool;
 uniform float uPoolZ;       // the sheets' depth (world z)
 uniform vec3 uColumn;       // fade length toward the camera, far sparkle strength, sparkle threshold
@@ -59,13 +64,54 @@ uniform vec3 uForward;
 layout(location=0) out vec4 FragColor;
 layout(location=1) out vec4 Emission;
 """ + WORLD_FIELD_GLSL + MIST_GLSL + PLANAR_REFLECTION_GLSL + """
+const float HEIGHT_SLOPE_RMS=""" + repr(HEIGHT_SLOPE_RMS) + """;
 // World-space slope of one height sample set at two incommensurate orientations (no visible tile lattice).
-vec2 slopeAt(vec2 xz, float tile) {
+vec2 slopeAt(vec2 xz, float tile, float bias) {
     mat2 turn=mat2(0.6,-0.8,0.8,0.6);
     vec2 uv=xz/tile;
-    vec2 near=texture(uSlope,uv).rg;
-    vec2 far=transpose(turn)*texture(uSlope,turn*uv*1.37+vec2(.31,.47)).rg*1.37;
+    vec2 near=texture(uSlope,uv,bias).rg;
+    vec2 far=transpose(turn)*texture(uSlope,turn*uv*1.37+vec2(.31,.47),bias).rg*1.37;
     return (0.6*near+0.4*far)/tile;
+}
+// A wet floor's column: the reflected image drawn out along the view. A plain average over a long column is the
+// mean of every crossing sheet above it (a uniform grey veil); a column belongs to the hot light it reflects. Taps
+// are weighted by their luminance (power COLUMN_POWER), so each column keeps the hue and much of the strength of the
+// brightest light along it and dim reflected light stays dim. Light high above the floor spreads its column over
+// far more floor (glossy spread grows with height), so each tap's light falls with its own reflected height (the
+// emitters' luminance-weighted height in alpha): columns stand under the low sheets, not under all of them. Each
+// tap's footprint covers its share of the column, so it is continuous without per-pixel jitter (grain).
+const int COLUMN_TAPS=8;
+const float COLUMN_POWER=4.0;
+vec3 columnReflection(vec2 screenUv, vec2 offset, float halfLength, float across) {
+    vec2 size=vec2(textureSize(uReflection,0));
+    float pixelSpan=max(length(dFdx(screenUv)*size),length(dFdy(screenUv)*size));
+    float span=max(across,pixelSpan);
+    float spacing=2.0*halfLength/float(COLUMN_TAPS);
+    vec2 dx=vec2(span/size.x,0.0), dy=vec2(0.0,max(span/size.y,spacing));
+    vec2 uv=screenUv+offset;
+    vec3 colour=vec3(0.0);
+    float weight=0.0, moment=0.0, total=0.0;
+    for(int i=0;i<COLUMN_TAPS;i++) {
+        float t=(float(i)+0.5)*2.0/float(COLUMN_TAPS)-1.0;
+        vec4 sample_=textureGrad(uReflection,clamp(uv+vec2(0.0,t*halfLength),vec2(0),vec2(1)),dx,dy);
+        float raw=max(dot(sample_.rgb,vec3(0.2126,0.7152,0.0722)),0.0);
+        float height=raw>1e-6?max(sample_.a/raw,0.0):0.0;
+        float spread=uMaterialShape.z/(uMaterialShape.z+height);
+        spread*=spread;  // the glossy lobe spreads in both image axes
+        vec3 tap=sample_.rgb*spread;
+        float luminance=raw*spread;
+        // Light decays with its distance along the column, so a column fades away from its source, not a bar.
+        float along=exp(-2.0*t*t);
+        float decayed=along*luminance;
+        float hot=pow(decayed,COLUMN_POWER);
+        colour+=hot*tap; weight+=hot; moment+=hot*decayed; total+=pow(along,COLUMN_POWER+1.0);
+    }
+    if(weight<=1e-12) return vec3(0.0);
+    colour/=weight;
+    // Strength: the power mean of the decayed light along the column (a uniform field keeps its own level),
+    // carried by the dominant light's colour.
+    float strength=pow(moment/total,1.0/(COLUMN_POWER+1.0));
+    return colour*strength/max(dot(colour,vec3(0.2126,0.7152,0.0722)),1e-6);
 }
 void main() {
     vec3 vWorldPos;float groundDepth;
@@ -73,20 +119,30 @@ void main() {
     gl_FragDepth=groundDepth;
     if(uFlat==1) { FragColor=vec4(vec3(0.25),1.0); Emission=vec4(0.0); return; }
     mat2 turn=mat2(0.6,-0.8,0.8,0.6);
-    vec2 uv=vWorldPos.xz/uFloor.x;
-    // Mip-biased and toned down: at this grazing angle the colour scan aliases into horizontal bands once lit.
-    vec3 albedo=mix(texture(uAlbedo,uv,uHot.w).rgb,texture(uAlbedo,turn*uv*1.37+vec2(.31,.47),uHot.w).rgb,.4);
+    // The material is laid out elongated along world z: this camera looks along the ground at a few degrees, which
+    // flattens isotropic concrete into hairline scanlines; elongated, its blotches and relief read at the
+    // proportions of a wet floor seen from standing height. World-fixed, so it never swims with the view.
+    vec2 materialXz=vec2(vWorldPos.x,vWorldPos.z/max(uMaterialShape.x,1.0));
+    vec2 uv=materialXz/uFloor.x;
+    // Mip-biased: at this grazing angle the colour scan aliases into horizontal bands once lit. The concrete's own
+    // variation is restored around its exact mean (the 1x1 level), so legibility never changes the floor's level.
+    vec3 grain=mix(texture(uAlbedo,uv,uHot.w).rgb,texture(uAlbedo,turn*uv*1.37+vec2(.31,.47),uHot.w).rgb,.4);
+    vec3 mean=textureLod(uAlbedo,vec2(0.5),20.0).rgb;
+    vec3 albedo=max(mean+(grain-mean)*uMaterial.x,vec3(0.0))*uFloorTone.x;
     float surfaceRoughness=texture(uRoughness,uv,uHot.w).r;
-    albedo*=uFloorTone.x;
+    // Offsets and relief follow the viewed ground axes, so a turned camera streaks along its own view.
+    vec3 groundForward=normalize(vec3(uForward.x,0.0,uForward.z));
+    vec3 groundRight=cross(groundForward,vec3(0,1,0));
+    vec2 broadSlope=slopeAt(materialXz,uFloor.x,uMaterialShape.y);
+    // Unit-RMS rise of the broad relief along the view. Foreshortening turns it into the long horizontal breaks a
+    // grazing wet floor shows; the material's shading and the reflection's breakup are both this one surface.
+    float rise=dot(vec3(broadSlope.x,0,broadSlope.y),groundForward)*uFloor.x/HEIGHT_SLOPE_RMS;
     vec3 specular;
     if(uSpecMode==2) {
         specular=texture(uSpecular,gl_FragCoord.xy/uViewport).rgb;
     } else {
-    vec2 broad=slopeAt(vWorldPos.xz,uFloor.x)*uFloorTone.y;
-    vec2 micro=slopeAt(vWorldPos.xz,uFloor.y)*uFloorTone.z;
-    // Offsets follow the viewed ground axes, so a turned camera streaks along its own view.
-    vec3 groundForward=normalize(vec3(uForward.x,0.0,uForward.z));
-    vec3 groundRight=cross(groundForward,vec3(0,1,0));
+    vec2 broad=broadSlope*uFloorTone.y;
+    vec2 micro=slopeAt(vWorldPos.xz,uFloor.y,0.0)*uFloorTone.z;
     vec2 axes=vec2(dot(vec3(broad.x,0,broad.y),groundRight),dot(vec3(broad.x,0,broad.y),groundForward));
     vec2 fine=vec2(dot(vec3(micro.x,0,micro.y),groundRight),dot(vec3(micro.x,0,micro.y),groundForward));
     vec2 offset=axes*uRipple.x+fine*vec2(uRipple.y,uRipple.z);
@@ -96,8 +152,9 @@ void main() {
     vec4 clip=uMvp*vec4(vWorldPos,1.0);
     vec4 direction=uMvp*vec4(groundForward,0.0);
     float projected=abs(0.5*(direction.y*clip.w-clip.y*direction.w)/(clip.w*clip.w));
-    float streak=38.4*uReflectionLook.x*projected;
-    vec3 reflected=planarReflection(gl_FragCoord.xy/uViewport,offset,roughness,streak);
+    float streak=uStreak.x*uReflectionLook.x*projected;
+    vec3 reflected=columnReflection(gl_FragCoord.xy/uViewport,offset,streak*roughness,
+                                    exp2(mix(uReflectionLook.y,uReflectionLook.z,roughness)));
     vec3 view=uOrthographic==1?normalize(uForward):normalize(vWorldPos-uEye);
     float cosine=clamp(abs(view.y),0.0,1.0);
     float fresnel=uFloor.w+(1.0-uFloor.w)*pow(1.0-cosine,5.0);
@@ -110,18 +167,30 @@ void main() {
     reflected*=pow(clamp(hot/max(uHot.x*scene,1e-4),0.0,1.0),uHot.z);
     float film=texture(uAlbedo,uv*2.3+vec2(.17,.61)).r/max(texture(uAlbedo,uv*2.3+vec2(.17,.61),6.0).r,1e-3);
     reflected*=mix(1.0,smoothstep(0.6,1.25,film),uHot.y);
+    // Relief breakup: facets tilted along the view send the column's light toward or away from the eye. Linear in
+    // the zero-mean rise, so the column's mass is broken into the relief's long horizontal bands at any filtering
+    // distance, never dimmed or brightened overall.
+    reflected*=max(1.0-uMaterial.z*rise,0.0);
     // Column shaping: brightest at the contact under the sheets, fading toward the camera, where only the
     // wet film's brighter grains still catch it (sparkle).
     float toward=max(vWorldPos.z-uPoolZ,0.0);
     float near=exp(-toward/max(uColumn.x,1e-3));
-    float grain=smoothstep(uColumn.z,1.0,film);
-    reflected*=mix(grain*uColumn.y,1.0,near);
+    float sparkle=smoothstep(uColumn.z,1.0,film);
+    reflected*=mix(sparkle*uColumn.y,1.0,near);
     specular=reflected*fresnel*uFloor.z;
     }
     if(uSpecMode==1) { FragColor=vec4(specular,1.0); Emission=vec4(0.0); return; }
-    // Local source light uses the same physical cloth field as the atmosphere, never a projected envelope.
-    vec3 pool=uFogLit==1?groundLight(vWorldPos)*uPool:vec3(0.0);
-    vec3 colour=albedo*uFloorTint*(uAmbient+pool)+specular;
+    // Local source light uses the same physical cloth field as the atmosphere, never a projected envelope. A grazing
+    // view compresses its depth falloff into one bright line across the image, so the receiver reads it with depth
+    // spread out from the sheets' plane and its peak lowered by the square root of that spread (a soft pool, not a
+    // seam; its light still reaches the ground under the sheets).
+    float spread=max(uMaterial.w,1.0);
+    vec3 poolPoint=vec3(vWorldPos.x,0.0,uPoolZ+(vWorldPos.z-uPoolZ)/spread);
+    vec3 pool=uFogLit==1?groundLight(poolPoint)*uPool/sqrt(spread):vec3(0.0);
+    // Relief shading: light arrives from beyond the sheets, so faces falling away from the eye catch it. Zero-mean
+    // over the relief: the concrete reads at every reflection strength without changing its level.
+    float shade=clamp(1.0-uMaterial.y*rise,0.25,2.0);
+    vec3 colour=albedo*uFloorTint*(uAmbient+pool)*shade+specular;
     float clear=mistTransmittance(vWorldPos);
     colour=mistOver(colour,uBackdrop,vWorldPos);
     FragColor=vec4(colour,1.0);

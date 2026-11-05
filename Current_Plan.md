@@ -58,6 +58,9 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
   The next MC run (19:47) and an invisible live check on current code were normal. On recurrence the sampler now
   logs `[USAGE] topology added ... name= parent= threads=` for every process entering the tree: identify them, then
   decide whether the sampler must exclude/outsource them. Not the Extruded Bubble chain fix (no processes, tick unchanged).
+- [ ] **Stale red: `tests/test_waveform_infinite_floor.py` (9 failures, present at a74dfaa0, before 5 Nov work):**
+  Orthographic bottom-row depth, actor-clip and production-floor reflection expectations no longer match the camera
+  helper. Decide per assertion whether the test or the camera/floor contract is stale; do not bless drift blindly.
 - [ ] **Cross-display Media shortcuts** delivered once on the other display, when exercised.
 - [ ] **Music recorder** 60-second clip, signal/history, cancel and mixed-DPR UI, when recording is needed.
 - [ ] **Helper breadcrumb diagnostics unavailable:** current native MC evidence logs no access to

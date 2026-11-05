@@ -395,10 +395,10 @@ class WaveformScene:
         vao, count = self.resources.mesh('floor', floor_vertices(), (3,))
         program = self.resources.program('floor', FLOOR_VERTEX, FLOOR_FRAGMENT)
         names = ('uMvp', 'uFloorInverseMvp', 'uFlat', 'uAlbedo', 'uRoughness', 'uSlope', 'uFogLit', 'uReflection', 'uReflectionLook',
-                 'uReflectionContact', 'uViewport', 'uBackdrop', 'uAmbient', 'uFloor', 'uFloorTone', 'uRipple', 'uEye',
+                 'uViewport', 'uBackdrop', 'uAmbient', 'uFloor', 'uFloorTone', 'uRipple', 'uEye',
                  'uForward', 'uOrthographic', 'uMist', 'uMistShape', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange',
                  'uStreak', 'uHot', 'uBodyField', 'uBodySpan', 'uBodyShape', 'uPool', 'uColumn', 'uSpecMode',
-                 'uSpecular', 'uFloorTint')
+                 'uSpecular', 'uFloorTint', 'uMaterial', 'uMaterialShape')
         u = self.resources.uniforms('floor', names, required=False)
         gl.glUseProgram(program)
         inverse=np.linalg.inv(np.asarray(mvp,float).reshape(4,4,order='F'))
@@ -410,13 +410,14 @@ class WaveformScene:
                                               ('uReflection',self.reflection.texture),('uRoughness',self.textures['roughness']))):
             gl.glBindTextureUnit(unit,texture);gl.glUniform1i(u[name],unit)
         gl.glUniform1i(u['uFogLit'], int(lit))
-        gl.glUniform4f(u['uReflectionLook'], floor.streak[0], floor.lod[0], floor.lod[1], floor.blur)
+        gl.glUniform4f(u['uReflectionLook'], floor.streak[0], floor.lod[0], floor.lod[1], 0.)
         gl.glUniform4f(u['uHot'], *floor.hot, floor.albedo_bias)
         gl.glUniform1f(u['uPool'],floor.pool if lit else 0.)
         gl.glUniform3f(u['uColumn'],*floor.column)
         if lit:self._field_uniforms(program)
-        gl.glUniform4f(u['uStreak'], 0., floor.streak[1], floor.streak[2], 8.)
-        gl.glUniform4f(u['uReflectionContact'], 0., *floor.contact)
+        gl.glUniform4f(u['uStreak'], floor.streak_length, floor.streak[1], floor.streak[2], 8.)
+        gl.glUniform4f(u['uMaterial'], floor.contrast, floor.shading, floor.breakup, floor.pool_spread)
+        gl.glUniform3f(u['uMaterialShape'], floor.elongation, floor.relief_bias, floor.column_height)
         gl.glUniform2f(u['uViewport'], *size)
         gl.glUniform3f(u['uBackdrop'], *environment.backdrop)
         gl.glUniform3f(u['uAmbient'], *floor.ambient)
@@ -438,7 +439,7 @@ class WaveformScene:
         else:
             gl.glUniform4f(u['uFogRange'], *FOG_OFF['uFogRange'])
         gl.glBindVertexArray(vao)
-        # The reflection term (streak taps, contact probe) holds no detail finer than its reflection target, so on
+        # The reflection term (column taps) holds no detail finer than its reflection target, so on
         # large displays it is evaluated at a capped height and read back by the full-resolution pass.
         factor = min(1., floor.specular_max_height/max(size[1], 1))
         if flat or factor >= 1.:
