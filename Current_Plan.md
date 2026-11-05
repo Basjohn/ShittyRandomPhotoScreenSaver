@@ -208,8 +208,11 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   appearance. Retain birth look during travel; finite history eviction must not cut off a visible unfinished fade.
 - [~] **Colour, floor and mist (5 Nov candidates):** lattice sheets (V3); wet concrete with stable soft coloured
   reflection mass (no horizon line, no flicker-prone streaks; operator prefers smeared colour to streaks); one bounded
-  night medium with a slight local ribbon tint (strong Local Light can no longer wash the frame). Open: floor reflection
-  saturation still below the references; Presets 1/2 floor pool glow being bounded.
+  night medium with a slight local ribbon tint (strong Local Light can no longer wash the frame). 5 Nov vs `Preset3Goal1`:
+  the grey base was the far concrete level and surface brightness, and Reflection Colour was not the hue drift (lower
+  read pastel). All presets darker far surface (.2) and brightness (1.2); P3 stronger, wider-smeared reflection
+  masses (lit saturation .60 vs reference .59, current .54). Consecutive frames smooth (flicker .0068 -> .0105, from
+  brighter moving masses, no column popping); evidence `studio_20261105/floor4/`.
 - [ ] **Dense highlights, moving colour and rim glow:** playback still lacks rewarded high-energy density and glow.
   Verify local crest/high-power colour, bright tunable rim/glow and denser highlights against actual music, including
   quiet/loud differences. Consumer reachability does not establish visible strength. Keep both range handles effective.
