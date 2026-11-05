@@ -40,6 +40,7 @@ def test_sky_opacity_has_no_independent_angular_cut_and_outline_never_revives_fa
     assert 'float starVisibility=1.0-basinCelestialSkyMask(eye,ray);' in land
     assert 'vContourFade=basinDistanceFade(aUv);' in land
     assert 'vContourFade=max(' not in land
-    assert 'float alpha=uCrestColor.a*vContourFade;' in land
+    # The outline's alpha is the faded coverage times bounded (<=1) ridge shaping, never a revived floor.
+    assert 'float alpha=uCrestColor.a*vContourFade*' in land
     assert 'vec4(0.0,0.0,0.0,distanceFade)' in land
     assert 'GL_LINE_STRIP' not in owner
