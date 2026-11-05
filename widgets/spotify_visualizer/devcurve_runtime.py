@@ -6,7 +6,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import math
-from typing import Dict, List
+from typing import Dict, List, Sequence
+
+import numpy as np
 
 
 DEVCURVE_SAMPLE_COUNT = 96
@@ -28,14 +30,62 @@ DEVCURVE_PASSAGE_SWING = (0.55, 1.45)
 DEVCURVE_PASSAGE_POINTS = (0.25, 0.65, 0.95)
 DEVCURVE_PASSAGE_USUAL = DEVCURVE_PASSAGE_POINTS[1]
 DEVCURVE_PASSAGE_TAU_S = 1.2
-# The reaction is the curves' height: each layer's energy rises with a hit at once and settles
-# gently (operator 2026-10-04: ramp-downs are gentle). The old per-frame 0.30 blend fell as fast
-# as it rose (~50 ms), so every beat read fast/slow/fast/slow.
-DEVCURVE_SWING_ATTACK_S = 0.045
-DEVCURVE_SWING_RELEASE_S = 0.65
+# The reaction is the curves' height (operator 2026-10-04: a hit lifts it quickly, ramp-downs
+# are gentle) plus a travelling swell (2026-11-05). Each layer's height drive passes through two
+# cascaded followers of DEVCURVE_SWING_STAGE_S (attack, release) each, with the adaptive response
+# gain between them, so the height's velocity is continuous (a single 45 ms first-order attack
+# jumped the velocity on every transient: acceleration spikes > 4x the median on ~19% of the
+# transients layer's ticks on recorded music).
+DEVCURVE_SWING_STAGE_S = (0.05, 0.4)
+# Real contrast (operator 2026-11-05: "its smoothness is great but it has almost no
+# reactivity"). The shared control lanes are each band over a fast-adapting norm of the loudest
+# band: the dominant band sits at 1.0 whatever the music does (bass/mids drives were above 0.9
+# on 95-98% of playing ticks on three recordings). They are the band's SHARE; the band's level is
+# that share times the bus loudness on the fixed real-music scale (3-17 in music). Adaptive
+# response gain (guide 13D): each layer's level is divided by a memory of its own recent peak
+# (reached in DEVCURVE_RESPONSE_REACH_S, relaxing over DEVCURVE_RESPONSE_MEMORY_S, never below
+# its floor), landing the remembered peak at DEVCURVE_RESPONSE_TOP: every song uses the whole
+# height range, a sustained loud passage keeps headroom for its accents and a quiet passage after
+# a loud one stays quiet. Gain only, no offset window. The floors are fixed anchors: bass, vocals
+# and mids in loudness units (usual music 8.5; their eased levels sit ~5-14 on real music), the
+# transients layer in units of its gated flux lane (its passage ramp keeps quiet passages small).
+DEVCURVE_RESPONSE_REACH_S = 0.5
+DEVCURVE_RESPONSE_MEMORY_S = 20.0
+DEVCURVE_RESPONSE_TOP = 0.6
+DEVCURVE_RESPONSE_GAMMA = 1.6
+DEVCURVE_RESPONSE_FLOOR = {"bass": 7.0, "vocals": 7.0, "mids": 7.0, "transients": 0.5}
+# Travelling swell (guide 13D: energy moves with the shape). Each layer's accents (its flux lane
+# above that lane's own recent mean) inject energy just beyond the right edge; it travels left
+# with the material at Swell Speed x the passage travel factor, fades over
+# DEVCURVE_SWELL_FADE_S and, wherever it is, swells that layer's OWN undulation: the reactive
+# displacement is multiplied by a positive envelope, so crests rise and troughs deepen and no new
+# bump is invented. Injection eases in through two stages (velocity-continuous, never a pop).
+DEVCURVE_SWELL_GRID = np.linspace(-0.5, 1.5, 161)
+DEVCURVE_SWELL_DX = float(DEVCURVE_SWELL_GRID[1] - DEVCURVE_SWELL_GRID[0])
+DEVCURVE_SWELL_ORIGIN = 1.22          # born outside the view: it slides in already formed
+DEVCURVE_SWELL_SIGMA = 0.12           # FWHM 0.28: at least 0.8 of the shortest carrier wavelength
+DEVCURVE_SWELL_FADE_S = 1.3
+DEVCURVE_SWELL_STAGE_S = 0.05
+DEVCURVE_SWELL_ACCENT_S = 0.6         # the lane's recent mean an accent must stand above
+DEVCURVE_SWELL_ACCENT_FLOOR = 0.04
+DEVCURVE_SWELL_GAIN = 70.0            # injected energy per (lane excess x second): a strong hit ~1
+DEVCURVE_SWELL_DEPTH = 1.0            # envelope gain of a full swell at Swell Strength 1
+DEVCURVE_SWELL_SATURATION = 1.2
+DEVCURVE_SWELL_SOURCES = {"bass": ("bass",), "vocals": ("mid", "high"), "mids": ("mid",), "transients": ("bass",)}
+# Flow rule: for y = c(x) g(x) the envelope may deepen the carrier's curvature but never reverse
+# it: |g'|/g <= SLOPE k and |g''|/g <= CURVE k^2, k the shortest reactive carrier's wavenumber
+# (2.75 cycles per width). One share per layer bounds the envelope in closed form; it may fall at
+# once and rises at most DEVCURVE_FLOW_SHARE_RISE per second (never a whole-curve pop).
+DEVCURVE_FLOW_WAVENUMBER = 2.0 * math.pi * 2.75
+DEVCURVE_FLOW_SLOPE, DEVCURVE_FLOW_CURVE = 0.2, 0.3
+DEVCURVE_FLOW_SHARE_RISE = 1.5
+# Height x swell eases toward a ceiling above 1 (the old pinned height): a swell over a loud
+# passage still crests, smoothly bounded, never clipped.
+DEVCURVE_REACTION_KNEE, DEVCURVE_REACTION_ROOM = 0.9, 0.35
 # The drawn curves follow the solved shape within a few frames (playing, paused).
 DEVCURVE_CURVE_FOLLOW_S = (0.03, 0.06)
 _LAYER_ORDER = ("bass", "vocals", "mids", "transients")
+_SAMPLE_XS = np.linspace(0.0, 1.0, DEVCURVE_SAMPLE_COUNT)
 _LAYER_INDEX = {name: idx for idx, name in enumerate(_LAYER_ORDER)}
 
 
@@ -58,6 +108,55 @@ def _passage_lerp(span: tuple[float, float], drive: float) -> float:
     if drive <= 0.5:
         return span[0] + (1.0 - span[0]) * (drive / 0.5)
     return 1.0 + (span[1] - 1.0) * ((drive - 0.5) / 0.5)
+
+
+def _follow(value: float, target: float, dt: float, attack: float, release: float) -> float:
+    tau = attack if target > value else release
+    return target + (value - target) * math.exp(-dt / tau)
+
+
+def _response(ratio: float) -> float:
+    """Level over its remembered peak -> height drive: TOP x ratio^GAMMA (gamma > 1 keeps the
+    middle of the range for ordinary music), easing exponentially toward 1 above TOP (never
+    flat, so a hot accent still moves)."""
+    value = DEVCURVE_RESPONSE_TOP * max(0.0, ratio) ** DEVCURVE_RESPONSE_GAMMA
+    if value <= DEVCURVE_RESPONSE_TOP:
+        return value
+    room = 1.0 - DEVCURVE_RESPONSE_TOP
+    return DEVCURVE_RESPONSE_TOP + room * (1.0 - math.exp(-(value - DEVCURVE_RESPONSE_TOP) / room))
+
+
+def _reaction_top(value: float) -> float:
+    if value <= DEVCURVE_REACTION_KNEE:
+        return value
+    return DEVCURVE_REACTION_KNEE + DEVCURVE_REACTION_ROOM * (
+        1.0 - math.exp(-(value - DEVCURVE_REACTION_KNEE) / DEVCURVE_REACTION_ROOM)
+    )
+
+
+def _uniform_gradient(f: np.ndarray, spacing: float) -> np.ndarray:
+    out = np.empty_like(f)
+    out[1:-1] = (f[2:] - f[:-2]) / (2.0 * spacing)
+    out[0] = (f[1] - f[0]) / spacing
+    out[-1] = (f[-1] - f[-2]) / spacing
+    return out
+
+
+def flow_share(swell: np.ndarray) -> float:
+    """The largest share in [0, 1] with |g'|/g <= SLOPE k and |g''|/g <= CURVE k^2 for
+    g = 1 + share * swell (closed form: each ratio rises monotonically with the share)."""
+    if not np.any(swell):
+        return 1.0
+    k = DEVCURVE_FLOW_WAVENUMBER
+    first = _uniform_gradient(swell, DEVCURVE_SWELL_DX)
+    second = _uniform_gradient(first, DEVCURVE_SWELL_DX)
+    share = 1.0
+    for slope, limit in ((np.abs(first), DEVCURVE_FLOW_SLOPE * k), (np.abs(second), DEVCURVE_FLOW_CURVE * k * k)):
+        over = slope - limit * swell
+        binding = over > limit
+        if binding.any():
+            share = min(share, float((limit / over[binding]).min()))
+    return share
 
 
 def _smoothstep(x: float) -> float:
@@ -273,6 +372,69 @@ class DevCurveRuntimeState:
         ]
     )
     specular_spawn_counter: int = 0
+    # Reaction state per layer (see DEVCURVE_SWING_STAGE_S / RESPONSE / SWELL): the first height
+    # stage, the remembered peak, the drive (second stage), the accent mean, the two injection
+    # stages, the travelling field and the rate-limited flow-rule share.
+    level_stage: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
+    response_peak: Dict[str, float] = field(default_factory=lambda: dict(DEVCURVE_RESPONSE_FLOOR))
+    drive: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
+    accent_mean: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
+    swell_pending: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
+    swell_stage: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
+    swell_field: Dict[str, np.ndarray] = field(
+        default_factory=lambda: {name: np.zeros(DEVCURVE_SWELL_GRID.size) for name in _LAYER_ORDER}
+    )
+    flow_share: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 1.0))
+
+
+def _lane(transient_bus, name: str) -> float:
+    if transient_bus is None:
+        return 0.0
+    return float(getattr(transient_bus, f"{name}_transient", getattr(transient_bus, name, 0.0)) or 0.0)
+
+
+def _layer_levels(eb, transient_bus, loudness: float) -> Dict[str, float]:
+    """Each layer's level on a real scale: its band share (control lane) x the bus loudness;
+    the transients layer reads its (already passage-ramped) bass flux lane."""
+    bass = _clamp(float(getattr(eb, "bass", 0.0) if eb is not None else 0.0), 0.0, 1.0)
+    mid = _clamp(float(getattr(eb, "mid", 0.0) if eb is not None else 0.0), 0.0, 1.0)
+    high = _clamp(float(getattr(eb, "high", 0.0) if eb is not None else 0.0), 0.0, 1.0)
+    level = max(0.0, float(loudness))
+    return {
+        "bass": bass * level,
+        "vocals": (mid * 0.62 + high * 0.38) * level,
+        "mids": mid * level,
+        "transients": _clamp(_lane(transient_bus, "bass"), 0.0, 2.0),
+    }
+
+
+def _advance_swell(state: "DevCurveRuntimeState", key: str, *, dt: float, accent: float,
+                   speed: float, strength: float) -> np.ndarray:
+    """Inject, carry and fade one layer's travelling energy; return its flow-bounded envelope
+    on DEVCURVE_SWELL_GRID (1 where no swell is)."""
+    mean = state.accent_mean[key]
+    excess = max(0.0, accent - mean - DEVCURVE_SWELL_ACCENT_FLOOR)
+    state.accent_mean[key] = mean + (accent - mean) * (1.0 - math.exp(-dt / DEVCURVE_SWELL_ACCENT_S))
+    state.swell_pending[key] += DEVCURVE_SWELL_GAIN * excess * dt
+    ease = 1.0 - math.exp(-dt / DEVCURVE_SWELL_STAGE_S)
+    moved = state.swell_pending[key] * ease
+    state.swell_pending[key] -= moved
+    state.swell_stage[key] += moved
+    release = state.swell_stage[key] * ease
+    state.swell_stage[key] -= release
+    swell = state.swell_field[key]
+    if swell.any() or release > 0.0:
+        shift = speed * dt
+        if shift > 0.0:
+            swell[:] = np.interp(DEVCURVE_SWELL_GRID + shift, DEVCURVE_SWELL_GRID, swell, left=0.0, right=0.0)
+        swell *= math.exp(-dt / DEVCURVE_SWELL_FADE_S)
+        if release > 0.0:
+            swell += release * np.exp(-0.5 * ((DEVCURVE_SWELL_GRID - DEVCURVE_SWELL_ORIGIN) / DEVCURVE_SWELL_SIGMA) ** 2)
+        swell[swell < 1e-7] = 0.0
+    envelope = strength * DEVCURVE_SWELL_DEPTH * DEVCURVE_SWELL_SATURATION * np.tanh(swell / DEVCURVE_SWELL_SATURATION)
+    share = min(flow_share(envelope), state.flow_share[key] + DEVCURVE_FLOW_SHARE_RISE * dt)
+    state.flow_share[key] = share
+    return 1.0 + share * envelope
 
 
 def _layer_energy_map(eb, transient_bus, playing: bool) -> Dict[str, float]:
@@ -307,13 +469,14 @@ def _build_curve(
     idle_motion: float,
     idle_speed: float,
     smoothness: float,
-    reactive: float,
+    reactive: Sequence[float],
     power: float,
     offset: float,
 ) -> List[float]:
+    """``reactive``: the layer's reaction at each sample (height drive x travelling swell)."""
     out: List[float] = [0.0] * sample_count
     amp_idle = 0.018 * idle_motion
-    amp_reactive = 0.135 * reactive * power
+    amp_reactive = 0.135 * power
     # Authored spline Y maps directly to runtime Y at idle (0.0->bottom,
     # 1.0->top in authored space). The old devcurve_growth card-height
     # control is deliberately absent from this authored field solver.
@@ -334,7 +497,7 @@ def _build_curve(
         ar1 = math.sin((x * 1.35 + reactive_phase * 0.23) * math.tau + _phase_rand(seed, 4))
         ar2 = math.sin((x * 2.75 + reactive_phase * 0.18) * math.tau + _phase_rand(seed, 5))
         reactive_wave = ar1 * 0.64 + ar2 * 0.36
-        y = base + idle_wave * amp_idle + reactive_wave * amp_reactive * (0.55 + p * 0.45)
+        y = base + idle_wave * amp_idle + reactive_wave * amp_reactive * reactive[i] * (0.55 + p * 0.45)
         if y > top_soft:
             y = top_soft + (y - top_soft) * 0.34
         out[i] = _clamp(y, 0.04, 0.96)
@@ -364,9 +527,15 @@ def solve_devcurve_frame(
     smoothness: float,
     layer_settings: Dict[str, Dict[str, float | bool]],
     passage_intensity: float,
+    loudness: float = 0.0,
+    swell_strength: float = 1.0,
+    swell_speed: float = 1.2,
 ) -> Dict[str, object]:
     """``passage_intensity`` is where the music sits in the track's own range
-    (``BeatEngine.get_musical_intensity``); it is eased into the slow passage drive."""
+    (``BeatEngine.get_musical_intensity``); it is eased into the slow passage drive.
+    ``loudness`` is the bus loudness on the fixed real-music scale (``get_musical_level()[0]``):
+    with the control lanes' band shares it gives each layer a real level (0 when not ready).
+    ``swell_strength`` / ``swell_speed`` are the travelling swell's controls."""
     dt = _clamp(float(dt), 0.001, 0.1)
     state.phase += dt
     passage_target = (
@@ -383,12 +552,27 @@ def solve_devcurve_frame(
         state.reactive_phase = float(now_ts)
     state.reactive_phase += dt * _passage_lerp(DEVCURVE_PASSAGE_PHASE_SPEED, state.passage_drive)
     swing = _passage_lerp(DEVCURVE_PASSAGE_SWING, state.passage_drive)
-    energies = _layer_energy_map(energy_bands, transient_bus, playing)
+    attack, release = DEVCURVE_SWING_STAGE_S
+    if playing:
+        targets = _layer_levels(energy_bands, transient_bus, loudness)
+    else:
+        # Paused: the authored idle lanes, below any gain (silence is never amplified).
+        targets = _layer_energy_map(energy_bands, transient_bus, playing)
     for key in _LAYER_ORDER:
-        target = energies[key]
-        current = state.smooth_energy[key]
-        tau = DEVCURVE_SWING_ATTACK_S if playing and target > current else DEVCURVE_SWING_RELEASE_S
-        state.smooth_energy[key] = current + (target - current) * (1.0 - math.exp(-dt / tau))
+        stage = _follow(state.level_stage[key], targets[key], dt, attack, release)
+        state.level_stage[key] = stage
+        if playing:
+            peak = max(DEVCURVE_RESPONSE_FLOOR[key], _follow(
+                state.response_peak[key], stage, dt, DEVCURVE_RESPONSE_REACH_S, DEVCURVE_RESPONSE_MEMORY_S))
+            state.response_peak[key] = peak
+            gained = _response(stage / peak)
+        else:
+            gained = stage
+        state.drive[key] = _follow(state.drive[key], gained, dt, attack, release)
+        state.smooth_energy[key] = state.drive[key]
+    travel = _passage_lerp(DEVCURVE_PASSAGE_TRAVEL, state.passage_drive)
+    swell_speed = _clamp(float(swell_speed), 0.0, 3.0) * travel
+    swell_strength = _clamp(float(swell_strength), 0.0, 2.0)
     layers_out: Dict[str, List[float]] = {}
     aggregate_energy = (
         state.smooth_energy["bass"] * 0.34
@@ -398,13 +582,20 @@ def solve_devcurve_frame(
     )
     aggregate_energy = _clamp(aggregate_energy, 0.0, 2.0)
     follow = 1.0 - math.exp(-dt / DEVCURVE_CURVE_FOLLOW_S[0 if playing else 1])
+    swell_peaks: Dict[str, float] = {}
 
     for idx, key in enumerate(_LAYER_ORDER):
         ls = layer_settings[key]
         enabled = bool(ls["enabled"])
         power = float(ls["power"])
         offset = float(ls["offset"])
-        reactive = state.smooth_energy[key] if enabled else 0.0
+        sources = DEVCURVE_SWELL_SOURCES[key]
+        accent = sum(_lane(transient_bus, lane) for lane in sources) / len(sources) if playing and enabled else 0.0
+        envelope = _advance_swell(state, key, dt=dt, accent=accent, speed=swell_speed, strength=swell_strength)
+        gain = np.interp(_SAMPLE_XS, DEVCURVE_SWELL_GRID, envelope)
+        swell_peaks[key] = float(gain.max() - 1.0)
+        drive = state.drive[key] if enabled else 0.0
+        reactive = [_reaction_top(drive * g) for g in gain.tolist()]
         nodes = layer_shape_nodes[key]
         if len(nodes) < 2:
             raise ValueError(f"DevCurve layer {key!r} requires resolved shape nodes")
@@ -483,4 +674,8 @@ def solve_devcurve_frame(
         "specular_travel_rate": state.specular_travel_rate,
         "passage_drive": state.passage_drive,
         "energies": dict(state.smooth_energy),
+        "drives": {
+            **{f"height_{key}": state.drive[key] for key in _LAYER_ORDER},
+            **{f"swell_{key}": swell_peaks.get(key, 0.0) for key in _LAYER_ORDER},
+        },
     }

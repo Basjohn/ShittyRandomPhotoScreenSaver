@@ -139,6 +139,8 @@ def _devcurve_parameter_snapshot(widget: Any) -> dict[str, object]:
             "devcurve_idle_motion",
             "devcurve_idle_speed",
             "devcurve_smoothness",
+            "devcurve_swell_strength",
+            "devcurve_swell_speed",
             "devcurve_ghosting_enabled",
             "devcurve_ghost_alpha",
             "devcurve_ghost_decay",
