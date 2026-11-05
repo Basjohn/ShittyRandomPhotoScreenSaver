@@ -52,12 +52,20 @@ data locations, product builds (including from Windows) and the Linux test route
 ### Phase 3: test suite on Linux
 
 - [x] Collection error fixed (live-check harness); `test_s_hotkey_workflow.py` abort was a stale stub on every OS (fixed).
-- [ ] Run the chunked suite through `tools/linux_pytest.py`; classify every failure (Linux bug / Windows-contract
-  test needing `windows_platform` or a skip / pre-existing). Known Windows-contract groups so far:
-  `test_visualizer_plain_orbit.py` native-capture stubs (5), `test_account_setup_controllers.py` Steam DPAPI
-  save (2), `test_widget_theme_no_material_contract` and `test_settings_theme_lifetime_contract` (1 each).
-  Software-GL pixel bounds: `test_waveform_floor_fidelity.py` (3) also fail on pure `main` under llvmpipe;
-  judge them on a real GPU, do not loosen them.
+- [x] Whole suite run on Linux (841 files): 765 pass; the 76 failing files all fail on pure `main` under Linux too.
+  Fixed from the triage: Extruded Bubble vertex shaders used fragment-only `fwidth` (real cross-driver bug,
+  66 tests), custom combo popups showed Fusion scroller strips, raw threads in sidecar readers, and
+  Windows-only test assumptions (Steam storage, Task Scheduler harness, ClipCursor, Ctrl+Y redo, QFontInfo
+  weight reporting).
+- [ ] Remaining Linux failures, all also failing on `main` under Linux, none a known product defect:
+  - software GL (llvmpipe) pixel bounds / missing GL functions (~30 tests: Waveform floor and infinite floor,
+    Scene3D reflection/target/trails/stream/compute, Neon Lake, native image lifetime, burn, shockwave):
+    judge on a real GPU, never loosen;
+  - container environment: proxy variables and no IPv6 (`test_network_*`, `test_feed_dns_stall`), PID 1 does
+    not reap zombies (`test_worker_parent_death`);
+  - a failed real-window test followed by another real window can segfault under llvmpipe
+    (`test_visualizer_plain_orbit.py`, `test_extruded_bubble_tiny_temporal.py`; reproduces on `main`).
+  Full per-test table: rerun the suite (`tools/linux_pytest.py --chunked --isolated`) and diff against `main`.
 
 ### Phase 4: Linux backends
 
@@ -127,6 +135,14 @@ unchanged; media widget, app volume slider, mute/OSD and visualizer audio unchan
 ## 7. Unrelated findings (not Linux work)
 
 - `tests/test_visualizer_presets.py`: 3 failures on HEAD (Waveform preset JSON lacks `mode`; Sine pill disabled).
+- Stale tests failing on every OS (seen in the Linux suite, not Linux work): authored preset/content drift
+  (`test_visualizer_preset_completeness` 13, `test_defaults_schema_authority`, `test_onboarding_selection` missing
+  `visualizer_waveform_ribbon.png`, Sine-disabled dormancy/enable/technical-sync tests, Waveform/Shockwave pose and
+  range tests, missing frozen-settings fixture for newer modes in `test_qt611_shader_admission`); stale stubs
+  (`test_input_gain`, `test_monitor_replay_admission`, `test_transition_distribution` 3,
+  `test_startup_source_onboarding_resume`, `test_settings_theme_lifetime_contract`,
+  `test_qtquick_custom_layout_owner` 8 raw musical replay); source-text assertions (`test_feed_f2_contract`,
+  `test_frame_trace`, `test_bubble_ambient_glow_contract`, `test_test_suite_durability`, `test_release_media`).
 - `tests/test_build_runner.py::test_preflight_passes_a_complete_release_tree`: missing Waveform floor textures.
 - `SRPSS_FORCE_LOG_DIR` (logger) is an environment-variable hook used by harnesses; a CLI/sidecar equivalent
   would match the no-env-var preference.
