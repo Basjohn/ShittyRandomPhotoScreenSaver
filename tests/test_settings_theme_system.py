@@ -138,7 +138,7 @@ def test_missing_persisted_file_falls_back_without_destroying_user_selection(tmp
     assert store.set_calls == []
 
 
-def test_theme_directory_resolution_precedence(monkeypatch, tmp_path):
+def test_theme_directory_resolution_precedence(monkeypatch, tmp_path, windows_paths):
     explicit = tmp_path / "explicit"
 
     # Explicit injection always wins, independent of frozen/installed state.

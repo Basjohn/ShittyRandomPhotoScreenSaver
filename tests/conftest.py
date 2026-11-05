@@ -235,6 +235,16 @@ except Exception:  # pragma: no cover
 
 
 @pytest.fixture
+def windows_paths(monkeypatch):
+    """Select the Windows branch of ``core.platform_paths`` on any OS.
+
+    For tests that pin the Windows ``%APPDATA%``/``%PROGRAMDATA%``/``%LOCALAPPDATA%``
+    contract by setting those variables; Linux resolution ignores them by design.
+    """
+    monkeypatch.setattr("core.platform_paths.IS_WINDOWS", True)
+
+
+@pytest.fixture
 def settings_manager(tmp_path):
     """Create SettingsManager instance for testing."""
     from core.settings import SettingsManager

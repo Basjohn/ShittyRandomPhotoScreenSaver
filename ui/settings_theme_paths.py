@@ -13,7 +13,6 @@ catalogue layer rather than by silently merging another filesystem root.
 from __future__ import annotations
 
 import builtins
-import os
 from os import PathLike, fspath
 from pathlib import Path
 import sys
@@ -47,8 +46,9 @@ def _is_frozen_runtime() -> bool:
 def _installed_themes_directory() -> Path:
     """Return the curated machine-wide theme root used beside preset assets."""
 
-    program_data = os.getenv("PROGRAMDATA", r"C:\ProgramData")
-    return Path(program_data) / "SRPSS" / "themes"
+    from core.platform_paths import machine_shared_root
+
+    return machine_shared_root() / "SRPSS" / "themes"
 
 
 def _source_themes_directory() -> Path:
