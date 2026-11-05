@@ -109,3 +109,27 @@ def test_camera_body_disc_fades_only_when_the_eye_gets_too_close():
     assert basin_body_camera_coverage(0.8, 0.4) == 0.0
     assert 0.0 < basin_body_camera_coverage(2.0, 0.4) < 1.0
     assert basin_body_camera_coverage(3.5, 0.4) == 1.0
+
+
+def test_near_band_subdivision_keeps_every_mark_and_leaves_no_crack():
+    """The finer near band splits lattice cells for smooth ridge lines; marks stay vertices and the coarse rows
+    either side fan to its extra vertices (every interior edge is shared by exactly two triangles)."""
+    from collections import Counter
+    cells, extent, band = (10, 7), (0.2, 0.2, 0.5, 0.0), (-0.5, 0.3)
+    triangles = basin_mesh_vertices(cells, extent, 2, band)
+    coarse = basin_mesh_vertices(cells, extent)
+    tri = [tuple(zip(triangles[i:i + 6:2], triangles[i + 1:i + 6:2])) for i in range(0, len(triangles), 6)]
+    vertices = {p for t in tri for p in t}
+    marks = basin_mesh_points(cells, extent)
+    assert set(zip(marks[::2], marks[1::2])) <= vertices
+    assert len(triangles) > len(coarse)
+    xs, ys = basin_lattice(cells, extent)
+    edges = Counter(frozenset((t[i], t[(i + 1) % 3])) for t in tri for i in range(3))
+    rim = lambda p: p[0] in (xs[0], xs[-1]) or p[1] in (ys[0], ys[-1])
+    assert max(edges.values()) == 2
+    assert all(all(rim(p) for p in edge) for edge, uses in edges.items() if uses == 1)
+    # Area is preserved (no overlaps or holes).
+    area = lambda t: abs((t[1][0]-t[0][0])*(t[2][1]-t[0][1])-(t[2][0]-t[0][0])*(t[1][1]-t[0][1])) / 2
+    assert math.isclose(sum(map(area, tri)), (xs[-1]-xs[0])*(ys[-1]-ys[0]), rel_tol=1e-9)
+    # Outside the band nothing changes: subdivision 1 is the plain lattice.
+    assert basin_mesh_vertices(cells, extent, 1, band) == coarse

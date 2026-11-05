@@ -593,6 +593,34 @@ gently (they flashed in busy patches). Preset 1: four large meandering dunes (`t
 ridge colour softened, shore glow 1.0; Preset 2 follows it (`scripts/sync_p2.py`); Preset 3: contour 0.8,
 reflection 1.0, dimmer horizon, gentler reaction (0.12), waves 0.03, detail 0.06.
 
+**Fifth pass (2026-11-05; operator: "a far cry, especially on stars, nebulas, the moon, line smoothness").** Shared:
+- *Stars*: most fine stars sit near the threshold of sight (magnitude 0.035 + 0.965 r^6) and take only 30% of the
+  nebula's tint (the mocks' blue-white dusting); a fainter fine layer; the bright layer gathers each star from the
+  3x3 coarse cells (grid/16) round the pixel and ends its glow within one cell's reach, so no glow is cut square at a
+  cell edge; about 5% of coarse cells hold one, a little wider and brighter. Beat stars glow a few pixels wide
+  (halo 2 + 40 size^2) instead of a white blob.
+- *Nebula*: the gas's fill gathers round its filaments (rope = 0.25 + 0.75 strand^4) with dark lanes between them;
+  fainter veil; the hot core follows the ropes.
+- *Moon*: the shaded side is a lavender grey (earthshine 0.15..0.19 of the face, still under a quarter of the lit
+  face) and the halo pass adds a phase-free **limb light** inside the silhouette, rising toward the edge and ending
+  in a fine rim line, screen-blended into the body colour so the face never clips (the mock's luminous crescent);
+  the corona falls off exponentially over a quarter radius and saturates softly (1 - exp); the wide bloom is a
+  third as strong; the lit inner rim a quarter; the silhouette is antialiased over 1.5 px (the sphere's own limb
+  feather is far under a pixel and stair-stepped once the glow no longer hid it); softer terminator.
+- *Line smoothness*: the surface triangles in front of the basin (basin v -0.8..0, `BASIN_MESH_FINE_ROWS`) split
+  each mark-lattice cell 2x2 (`BASIN_MESH_SUBDIVISION`); the coarse rows either side fan to the extra vertices (no
+  T-junction cracks) and every mark stays a vertex, so the marks are unchanged. Near dune lines no longer kink at
+  lattice vertices. The mesh lattice is the Scene3D tier's (not the authored grid), so a finer authored terrain does
+  not help. A whole-mesh split cost +0.5 ms at 1300x750 (vertex-bound); the band costs about +0.13 ms there.
+- *Water*: short broken horizontal glints in the ridges' colours across the whole mirror, drifting slowly, brighter
+  toward grazing angles and with the music, fading before their rows come under ~5 px apart (the mock's violet
+  ripple strokes); two longer ripple trains survive at the lake's distance; the mirror leans more with the ripples
+  on detailed water only (Water Detail above ~0.15); a passing crest lifts the body far more gently (0.18).
+Preset 1: nebula turned into the upper sky (position 0.97), smaller Moon (0.175) set lower behind the hills
+(y 0.88); Preset 2 follows. GPU (RTX 4090, PairedBench median): Preset 1 0.69 -> 0.83 ms at 1300x750 and
+1.45 -> 1.66 ms at 2560x1440; Preset 3 0.86 -> 0.91 and 1.75 -> 1.91 ms (mostly the near band's vertices).
+Motion on real music (4 s from 30 s): Preset 1 1.17 -> 1.30 /255 per frame (the glints drift), Preset 3 0.29 -> 0.28.
+
 ## Operator-authorized future water improvements (2026-10-18; deferred, baseline accepted)
 
 These are three **new capabilities**, not permission to reopen the accepted Neon Lake graphics, change authored
