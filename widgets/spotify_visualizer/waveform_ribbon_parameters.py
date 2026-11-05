@@ -85,7 +85,8 @@ class CompiledWaveformSettings:
             column=(pair('floor_column',passage),*self.base.floor.column[1:]),
             glow_limit=float(read('floor_glow_limit')),hue=float(read('floor_colour')),
             hot=(float(read('floor_contrast')),*self.base.floor.hot[1:]),
-            light_reach=float(read('floor_light_reach')),light_far=float(read('floor_light_far')))
+            light_reach=float(read('floor_light_reach')),light_far=float(read('floor_light_far')),
+            give=float(read('floor_give')))
         sparks=None
         if read('sparks_enabled'):
             size=pair('spark_size',sparkle)
