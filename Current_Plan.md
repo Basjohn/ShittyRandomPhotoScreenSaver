@@ -204,6 +204,8 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   read pastel). All presets darker far surface (.2) and brightness (1.2); P3 stronger, wider-smeared reflection
   masses (lit saturation .60 vs reference .59, current .54). Consecutive frames smooth (flicker .0068 -> .0105, from
   brighter moving masses, no column popping); evidence `studio_20261105/floor4/`.
+  Floor collision (operator, 5 Nov): troughs no longer meet the floor — a per-ribbon lower-half depth scale keeps them
+  round above it (centre contact 51-67% -> 0%, visible hot envelope -4 to -8%, tick +0.13 ms); verify on hardware.
 - [ ] **Dense highlights, moving colour and rim glow:** playback still lacks rewarded high-energy density and glow.
   Verify local crest/high-power colour, bright tunable rim/glow and denser highlights against actual music, including
   quiet/loud differences. Consumer reachability does not establish visible strength. Keep both range handles effective.
