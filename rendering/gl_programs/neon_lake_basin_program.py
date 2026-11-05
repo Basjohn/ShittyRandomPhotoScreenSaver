@@ -1008,13 +1008,19 @@ void main() {
         // Analytic screen-angular corona OUTSIDE the sphere. It never creates
         // a second mesh or changes orbital body/light/reflection ownership.
         float normalizedAngle=length(cross(ray,forward))/max(facing*radius,1e-5);
+        // The silhouette is antialiased over a pixel and a half inside the limb: the sphere's own limb feather is
+        // far thinner than a pixel and stepped into a staircase once the glow no longer covered it.
+        float limbPixel=max(fwidth(normalizedAngle),1e-4);
+        body.a*=1.0-smoothstep(1.0-1.5*limbPixel,1.0,normalizedAngle);
         // Outer corona around the sphere silhouette. The Moon also gets a very
         // small same-colour lift just inside the illuminated rim, so the glow
         // reads as originating from the body rather than a detached tube.
         // A soft corona hugging the limb (it starts just inside the edge and fades over a fifth of the radius,
         // no hard ring) ...
-        float halo=smoothstep(0.94,1.02,normalizedAngle)
-                   *exp(-pow(max(0.0,normalizedAngle-1.0)/0.2,2.0));
+        // Pass 5: it falls off exponentially over about a quarter of the radius (the mock's moon glow), so the
+        // light hugs the limb instead of standing as a bright tube round it.
+        float halo=smoothstep(0.96,1.01,normalizedAngle)
+                   *exp(-max(0.0,normalizedAngle-1.0)/0.26);
         halo*=step(0.0,facing)*cameraCoverage;
         vec4 bodyColour=(uBodyKind==0 ? uSunColor : uMoonColor);
         float haloGain=basinCelestialHaloGain(uCelestialGlow,uMidband,uBeatPulse);
@@ -1026,7 +1032,7 @@ void main() {
         // falling off over about its own diameter; land in front hides it (this pass is depth-tested).
         // ... and a wide bloom spreading over about a radius and a half.
         float wide=smoothstep(0.95,1.03,normalizedAngle)*exp(-max(0.0,normalizedAngle-1.0)/0.8);
-        haloAlpha+=0.12*bodyColour.a*haloGain*wide*step(0.0,facing)*cameraCoverage;
+        haloAlpha+=0.04*bodyColour.a*haloGain*wide*step(0.0,facing)*cameraCoverage;
         float rimMarks=0.0;
         if (uCelestialRimVertices!=0 && uCelestialGlow.x>0.0 && facing>0.0) {
             rimMarks=basinCelestialRimMarks(eye,ray,normalizedAngle)*cameraCoverage;
@@ -1034,12 +1040,22 @@ void main() {
         }
         // Intensity and optional rim rewards may overlap; alpha remains a
         // coverage value even at maximum settings, never extrapolated blending.
-        haloAlpha=min(haloAlpha,0.98);
+        // Loud passages saturate softly (1-exp), so the corona never flattens into an opaque ring.
+        haloAlpha=min(1.0-exp(-haloAlpha),0.98);
         float litInnerRim=0.0;
         float innerHaloAlpha=0.0;
         if (uBodyKind==1 && body.a>0.0001 && uCelestialGlow.x>0.0) {
             litInnerRim=basinMoonInnerRimEmission(eye,bodyPoint);
-            innerHaloAlpha=0.115*bodyColour.a*haloGain*litInnerRim*body.a;
+            innerHaloAlpha=0.03*bodyColour.a*haloGain*litInnerRim*body.a;
+        }
+        // The Moon's limb light (phase-free, part of the halo): the glow rising inside the whole silhouette toward
+        // its edge, lifting the shaded side to a luminous grey and ending in a fine bright rim line, as the mock's
+        // crescent does. Screen-blended into the body's own colour, so the bright face cannot clip to white.
+        float limbLight=0.0;
+        if (uBodyKind==1 && body.a>0.0001 && uCelestialGlow.x>0.0) {
+            float a=clamp(normalizedAngle,0.0,1.0);
+            float rimLine=exp(-pow((normalizedAngle-0.975)/0.022,2.0));
+            limbLight=(1.0-exp(-haloGain))*body.a*(0.42*pow(smoothstep(0.45,1.0,a),2.0)+0.55*rimLine);
         }
         float alpha=body.a+haloAlpha*(1.0-body.a);
         if (alpha<0.0001) discard;
@@ -1047,7 +1063,9 @@ void main() {
                     +bodyColour.rgb*(innerHaloAlpha+haloAlpha*(1.0-body.a)
                                      +0.16*haloGain*rimMarks*body.a*bodyColour.a);
         vec3 colour=premult/max(alpha,1e-5);
-        FragColor=vec4(min(colour,vec3(1.0)),alpha);
+        colour=min(colour,vec3(1.0));
+        colour+=(vec3(1.0)-colour)*clamp(bodyColour.rgb,0.0,1.0)*min(limbLight,1.0);
+        FragColor=vec4(colour,alpha);
         // The whole lunar surface emits softly, following its lit/shaded
         // albedo. A rim-only emitter read as a detached glowing tube. Keep
         // the boundary subordinate to this broad source and preserve texture.
