@@ -366,14 +366,14 @@ def test_bubble_quick_geometry_keeps_round_pixels_at_each_exercised_aspect() -> 
     assert tall["outer_pixel_size"][0] == canonical["outer_pixel_size"][0]
     assert tall["outer_pixel_size"][1] > canonical["outer_pixel_size"][1]
 
-    # A taller viewport must turn the same payload radius into a meaningfully
-    # larger *round* physical bubble (height-aware, not width-locked at the
-    # canonical size). Bubble viewport response is hand-tuned at each extreme
-    # rather than a linear fraction of card height, so assert the real invariant
-    # -- a substantial round increase -- not the pre-tuning ~1.35x magnitude.
-    canonical_diameter = canonical["lit_bounds"][3] - canonical["lit_bounds"][1] + 1
-    tall_diameter = tall["lit_bounds"][3] - tall["lit_bounds"][1] + 1
-    assert tall_diameter >= canonical_diameter + 6
+    # R-170 (operator-accepted, 5 Nov): Bubble's world is in canonical-card units on every card, so at equal
+    # uniform scale the same payload radius draws the same round bubble on a tall or wide card as on the
+    # canonical one (the former height-aware growth was the units bug). Only a capacity-bound card zooms, and
+    # this one-bubble payload never is.
+    def diameter(capture):
+        return capture["lit_bounds"][3] - capture["lit_bounds"][1] + 1
+    assert diameter(tall) == pytest.approx(diameter(canonical), abs=2)
+    assert diameter(wide) == pytest.approx(diameter(canonical), abs=2)
 
 
 def test_bubble_ghost_trail_pop_and_idle_are_real_quick_pixels() -> None:
