@@ -88,15 +88,18 @@ _WORKSPACES = (
 _ROW_ICONS = {"height": "height", "width": "width", "rate": "wave", "phase": "clock", "light": "sun", "band": "bars",
               "count": "ribbons", "fog_density": "cloud", "floor_brightness": "floor", "floor_reflection": "drop",
               "exposure": "sun", "bloom": "sparkle", "reaction_mode": "bolt", "camera_fov": "lens",
-              "sparks_enabled": "dots", "strands_enabled": "strand", "mist_enabled": "cloud"}
+              "sparks_enabled": "dots", "strands_enabled": "strand", "mist_enabled": "cloud",
+              "pulse_direction": "flow", "travel_direction": "flow"}
 _CAMERA_FIELDS = ("turn", "tilt", "scene_scale", "scene_pan_x", "scene_pan_y")
 # Headline controls lead their group (operator, 5 Nov): mist density and the floor controls tuned most
 # (surface, far surface, reflection, its contrast / ceiling / colour) come first; the reaction mode is the
 # first decision in Reactivity. Everything else keeps registry order.
 HEADLINE_FLOOR = ("floor_brightness", "floor_light_far", "floor_reflection", "floor_contrast",
                   "floor_glow_limit", "floor_colour")
+# Direction is a basic need (operator, 5 Nov): Pulse Direction sits right under Reaction Mode and Travel Direction
+# (when the registry has it) heads Flow, both visible without scrolling.
 _PRIORITY = {PREFIX + key: rank for rank, key in enumerate((
-    "reaction_mode", "bend", "pulse_direction", "mist_enabled", "fog_density") + HEADLINE_FLOOR)}
+    "reaction_mode", "pulse_direction", "travel_direction", "bend", "mist_enabled", "fog_density") + HEADLINE_FLOOR)}
 # Material starting points (mock: Sheen / Glass / Satin / Crystal): scale the OPENING material values
 # (both quiet and peak endpoints), clamped by the canonical ranges. Applying one replaces the previous
 # one (always from the opening values) and is a single undoable edit; "Original" restores them.
