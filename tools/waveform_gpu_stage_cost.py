@@ -118,7 +118,7 @@ def _variants(extra: int):
                               oit=True, hdr=None if flat or not recipe.bloom else recipe.exposure):
             gl.glViewport(0, 0, *self.size)
             gl.glClearBufferfv(gl.GL_COLOR, 0, (0., 0., 0., 1.))
-            with self.scene.transparent_writes(card, self.resources, restore=False):
+            with self.scene.transparent_writes(card, self.resources):
                 pass
 
     removed = {
