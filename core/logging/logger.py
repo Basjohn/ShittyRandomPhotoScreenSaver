@@ -2625,18 +2625,22 @@ def clear_logs_for_fresh_start(*, diagnostic_build: bool = False) -> tuple[Path,
 
 
 def _candidate_programdata_dir() -> Path | None:
-    program_data = os.getenv("PROGRAMDATA")
-    if not program_data:
+    from core.platform_paths import configured_machine_shared_root
+
+    program_data = configured_machine_shared_root()
+    if program_data is None:
         return None
-    return Path(program_data) / "SRPSS" / "logs"
+    return program_data / "SRPSS" / "logs"
 
 
 def _candidate_localappdata_diagnostic_dir() -> Path | None:
     """Return the dedicated readable per-user diagnostic log location."""
 
-    local_app_data = os.getenv("LOCALAPPDATA")
-    if local_app_data:
-        return Path(local_app_data) / "SRPSS" / "Diagnostic" / "logs"
+    from core.platform_paths import user_local_root
+
+    local_app_data = user_local_root()
+    if local_app_data is not None:
+        return local_app_data / "SRPSS" / "Diagnostic" / "logs"
     return None
 
 

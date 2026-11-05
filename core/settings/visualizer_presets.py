@@ -20,7 +20,6 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 import builtins
 import json
-import os
 import re
 from pathlib import Path
 import sys
@@ -478,7 +477,9 @@ def _bundled_snapshot_overrides_root() -> Path:
 
 
 def _shared_presets_base_dir() -> Path:
-    return Path(os.getenv("PROGRAMDATA", r"C:\ProgramData")) / "SRPSS" / "presets"
+    from core.platform_paths import machine_shared_root
+
+    return machine_shared_root() / "SRPSS" / "presets"
 
 
 def _shared_presets_root() -> Path:
