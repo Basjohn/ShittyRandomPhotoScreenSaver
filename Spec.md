@@ -78,7 +78,11 @@ The Standard job compiles once and publishes the same binary twice: `release/scr
 name selects the diagnostic flavour at startup (`core/build_profile.py`: exactly `SRPSS_Diagnostic`, read from the
 launched binary's long path), so there is no Diagnostic job or second compile (operator direction, 2026-10-10).
 Builds compile without a console; the diagnostic flavour opens a terminal only with `--debug`, so installing it from
-Explorer or running a soak never pops one. Only Standard and Media Center have installers. Build concurrency remains script-owned. Operator builds and installed acceptance do not block source work.
+Explorer or running a soak never pops one. Only Standard and Media Center have installers. Build concurrency remains script-owned.
+The optional **Linux (GitHub runner)** job (not selected by default; unavailable without the GitHub CLI) runs
+`scripts/linux/build_from_windows.ps1`, which builds on a GitHub Ubuntu runner and downloads
+`release/linux/SRPSS-<version>-linux-x86_64.tar.gz`; nothing Linux is built or virtualised locally
+(`Docs/Guides/Linux_Guide.md` §7). Operator builds and installed acceptance do not block source work.
 The canonical runtime dependency probe reads the four exact Qt pins from `requirements.txt` and checks both
 distribution metadata and loaded PySide/Qt/shiboken versions before compilation, in Normal and Venv modes.
 Build Runner owns the QRC prerequisite before any selected runtime-product jobs. It delegates deterministic
