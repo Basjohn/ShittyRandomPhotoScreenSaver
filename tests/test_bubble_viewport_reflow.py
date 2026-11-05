@@ -1,19 +1,14 @@
-"""G4.3 - Bubble logical viewport reflow.
+"""G4.3 - Bubble logical viewport reflow (R-170 shape invariance).
 
-Bubble runs in a baseline-relative logical domain: canonical (420x280) is a
-strict 1x1 no-op that leaves the legacy unit-square path and render arrays
-exactly unchanged; a wide/tall committed extent expands the logical world while
-authored population and Bubble personality stay unchanged through ordinary
-wide/tall cards. A cached geometry gradient adds at most +1 big / +3 small and
-+20% stream baseline/cap at extreme width, while extreme vertical geometry removes
-at most one big / one small and lowers only the stream cap by 30%. The render seam
-normalizes positions/trails back to
-[0,1], retains historical card-height-normalized radius, maps that radius back
-into expanded-world collision units, and lets the shader keep circles round.
-Stream/drift movement projects onto expanded domain axes once so its normalized
-content travel and trail remain stable at canonical, wide and tall extents.
-These bars prove that contract deterministically; H5c B9 remains the operator
-physical-acceptance gate.
+Bubble's world is in canonical-card units on every card: canonical (420x280)
+is the 1x1 world and stays byte-identical; any other committed extent is simply
+``extent / canonical`` units wide and tall. Every authored speed, drift, swirl,
+margin, entry depth, collision gap and radius is a literal in those units, so a
+wide, tall, small or huge card moves and sizes exactly like the canonical card
+at equal uniform scale. Only the population follows the card's area, and only
+the renderer's 110-hero capacity can zoom the whole world (``world_scale``).
+The render seam divides positions/trails by the world size; radius stays in
+canonical units. There are no aspect/shape speed or count modifiers.
 """
 
 from __future__ import annotations
@@ -32,7 +27,8 @@ from widgets.spotify_visualizer.bubble_simulation import (
 )
 from tests._visualizer_presentation import neutral_bubble_settings
 from widgets.spotify_visualizer.bubble_viewport_profile import (
-    resolve_bubble_viewport_profile,
+    BUBBLE_LIVE_CAPACITY,
+    resolve_bubble_world,
 )
 
 
@@ -108,61 +104,67 @@ def test_tall_extent_expands_logical_y_and_normalizes_output() -> None:
         assert pos[idx * 4 + 1] == pytest.approx(b.y / 2.0)
 
 
-def test_population_is_unchanged_until_extreme_wide_tail() -> None:
-    baseline = _run(_NO_KEY)
-    ordinary_wide = _run((840.0, 280.0))
-    tall = _run((420.0, 560.0))
-    measured_extreme_wide = _run((1174.0, 187.0))
-
-    def _counts(sim):
-        big = sum(1 for b in sim._bubbles if b.is_big)
-        small = sum(1 for b in sim._bubbles if not b.is_big)
-        return big, small
-
-    assert _counts(baseline) == (6, 20)
-    assert _counts(ordinary_wide) == _counts(baseline)
-    assert _counts(tall) == _counts(baseline)
-    assert _counts(measured_extreme_wide) == (7, 23)
+def _counts(sim):
+    big = sum(1 for b in sim._bubbles if b.is_big)
+    small = sum(1 for b in sim._bubbles if not b.is_big)
+    return big, small
 
 
-def test_viewport_gradient_is_bounded_and_cached_by_simulation_domain() -> None:
-    canonical = resolve_bubble_viewport_profile((420.0, 280.0))
-    ordinary_wide = resolve_bubble_viewport_profile((840.0, 280.0))
-    measured_extreme_wide = resolve_bubble_viewport_profile((1174.0, 187.0))
-    measured_extreme_tall = resolve_bubble_viewport_profile((187.0, 1174.0))
+@pytest.mark.parametrize(
+    ("extent", "expected"),
+    (
+        ((420.0, 280.0), (6, 20)),
+        ((840.0, 280.0), (12, 40)),        # twice the area, either way round
+        ((420.0, 560.0), (12, 40)),
+        ((1174.0, 187.0), (11, 37)),       # extreme wide: area only, no aspect bonus
+        ((187.0, 1174.0), (11, 37)),       # extreme tall: area only, no aspect penalty
+        ((210.0, 140.0), (2, 5)),          # a quarter card
+    ),
+)
+def test_population_follows_card_area_only(extent, expected) -> None:
+    assert _counts(_run(extent)) == expected
 
-    assert canonical.wide_tail == pytest.approx(0.0)
-    assert canonical.tall_tail == pytest.approx(0.0)
-    assert ordinary_wide.wide_tail > 0.0
-    assert ordinary_wide.wide_tail < 0.5  # speed begins gently before counts change
-    assert measured_extreme_wide.wide_tail == pytest.approx(1.0)
-    assert measured_extreme_wide.wide_stream_scale == pytest.approx(1.20)
-    assert measured_extreme_tall.tall_tail == pytest.approx(1.0)
-    assert measured_extreme_tall.tall_stream_cap_scale == pytest.approx(0.70)
+
+def test_world_is_cached_and_zooms_only_past_render_capacity() -> None:
+    canonical = resolve_bubble_world((420.0, 280.0), authored_population=110)
+    assert (canonical.domain_w, canonical.domain_h, canonical.world_scale) == (1.0, 1.0, 1.0)
+    assert canonical.population_scale == 1.0
+    for extent in ((840.0, 280.0), (280.0, 1200.0), (2400.0, 300.0)):
+        world = resolve_bubble_world(extent, authored_population=10)
+        assert world.world_scale == 1.0
+        assert (world.domain_w, world.domain_h) == pytest.approx((extent[0] / 420.0, extent[1] / 280.0))
+    # The operator's TV card: 47.8 canonical cards of a 49-hero preset need 2340 heroes. The world zooms
+    # so the live capacity (room left for draining trails) keeps the canonical density, isotropically.
+    tv = resolve_bubble_world((3874.710133891547, 1449.5065990010949), authored_population=49)
+    assert tv.world_scale > 1.0
+    assert tv.population_scale * 49 == pytest.approx(BUBBLE_LIVE_CAPACITY)
+    assert tv.domain_w / tv.domain_h == pytest.approx(3874.710133891547 / 420.0 / (1449.5065990010949 / 280.0))
 
     sim = BubbleSimulation()
-    first_profile = sim._viewport_profile
-    sim._apply_viewport_domain((420.0, 280.0))
-    assert sim._viewport_profile is first_profile
-    sim._apply_viewport_domain((1174.0, 187.0))
-    changed_profile = sim._viewport_profile
-    assert changed_profile is not first_profile
-    sim._apply_viewport_domain((1174.0, 187.0))
-    assert sim._viewport_profile is changed_profile
+    first = sim._world
+    sim._apply_viewport_domain(None)
+    assert sim._world is first
+    sim._apply_viewport_domain((1174.0, 187.0), 26)
+    changed = sim._world
+    assert changed is not first
+    sim._apply_viewport_domain((1174.0, 187.0), 26)
+    assert sim._world is changed
+
+
+def test_capacity_zoom_keeps_live_bubbles_in_place_on_the_card() -> None:
+    sim = BubbleSimulation()
+    sim._apply_viewport_domain((840.0, 560.0), 15)
+    assert sim._world_scale == 1.0
+    sim._bubbles = [BubbleState(x=1.5, y=1.2, trail_tail_x=1.4, trail_tail_y=1.3)]
+    before = sim.snapshot()[0][:2]
+    sim._apply_viewport_domain((840.0, 560.0), 49)   # an authored count edit past capacity
+    assert sim._world_scale > 1.0
+    assert sim.snapshot()[0][:2] == pytest.approx(before, abs=1e-12)
 
 
 def test_extreme_wide_zero_big_population_stays_zero() -> None:
     sim = _run((1174.0, 187.0), bubble_big_count=0, bubble_small_count=20)
-    big = sum(1 for bubble in sim._bubbles if bubble.is_big)
-    small = sum(1 for bubble in sim._bubbles if not bubble.is_big)
-    assert (big, small) == (0, 23)
-
-
-def test_extreme_vertical_reduces_population_by_one() -> None:
-    sim = _run((187.0, 1174.0), bubble_big_count=6, bubble_small_count=20)
-    big = sum(1 for bubble in sim._bubbles if bubble.is_big)
-    small = sum(1 for bubble in sim._bubbles if not bubble.is_big)
-    assert (big, small) == (5, 19)
+    assert _counts(sim) == (0, 37)
 
 
 class _OneShotSnareScheduler:
@@ -188,29 +190,14 @@ def _run_viewport_transient_motion(
     start=(0.5, 0.5),
     group_drift=False,
 ):
-    # These tests pin the reflow *normalization* contract: the logical world
-    # expands with the committed extent while motion still covers the same visible
-    # fraction per authored step. That is a distinct layer from the wide/tall
-    # speed/count *gradient* (resolve_bubble_viewport_profile), which deliberately
-    # scales the shared stream baseline/cap -- and therefore base_vel-driven swirl
-    # travel -- at extreme aspects (covered by the gradient/count tests above).
-    # Hold the gradient at canonical here so the normalization layer is measured in
-    # isolation; otherwise the intended wide travel-assist would mask it.
-    _orig_profile = _bubble_sim_module.resolve_bubble_viewport_profile
-    _bubble_sim_module.resolve_bubble_viewport_profile = (
-        lambda *_a, **_k: _orig_profile((420.0, 280.0))
+    return _run_viewport_transient_motion_impl(
+        extent,
+        stream_direction=stream_direction,
+        drift_direction=drift_direction,
+        diag_key=diag_key,
+        start=start,
+        group_drift=group_drift,
     )
-    try:
-        return _run_viewport_transient_motion_impl(
-            extent,
-            stream_direction=stream_direction,
-            drift_direction=drift_direction,
-            diag_key=diag_key,
-            start=start,
-            group_drift=group_drift,
-        )
-    finally:
-        _bubble_sim_module.resolve_bubble_viewport_profile = _orig_profile
 
 
 def _run_viewport_transient_motion_impl(
@@ -225,12 +212,15 @@ def _run_viewport_transient_motion_impl(
     random.seed(20260831)
     domain_w = float(extent[0]) / 420.0
     domain_h = float(extent[1]) / 280.0
+    # The same canonical-unit offset from the world centre on every shape.
+    start_x = 0.5 * domain_w + (start[0] - 0.5)
+    start_y = 0.5 * domain_h + (start[1] - 0.5)
     sim = BubbleSimulation()
     sim._apply_viewport_domain(extent)
     sim._bubbles = [
         BubbleState(
-            x=start[0] * domain_w,
-            y=start[1] * domain_h,
+            x=start_x,
+            y=start_y,
             radius=0.03,
             is_big=True,
             reaches_surface=False,
@@ -238,8 +228,8 @@ def _run_viewport_transient_motion_impl(
             drift_bias=0.35,
             speed_mult=1.0,
             display_radius=0.03,
-            trail_tail_x=start[0] * domain_w,
-            trail_tail_y=start[1] * domain_h,
+            trail_tail_x=start_x,
+            trail_tail_y=start_y,
         )
     ]
     scheduler = _OneShotSnareScheduler()
@@ -270,7 +260,7 @@ def _run_viewport_transient_motion_impl(
         "smooth_high": 0.09,
         "crest": 0.0,
     }
-    previous = start
+    previous = (start_x - 0.5 * domain_w, start_y - 0.5 * domain_h)
     path = 0.0
     radii = []
     diag_steps = []
@@ -279,18 +269,19 @@ def _run_viewport_transient_motion_impl(
     for _frame in range(10):
         sim.tick(1.0 / 90.0, body, settings)
         position_data, _extra_data, trail_data = sim.snapshot()
-        current = (position_data[0], position_data[1])
+        # Card coordinates back to canonical-card units from the world centre.
+        current = ((position_data[0] - 0.5) * domain_w, (position_data[1] - 0.5) * domain_h)
         path += math.hypot(current[0] - previous[0], current[1] - previous[1])
         previous = current
-        positions.append(current)
+        positions.extend(current)
         radii.append(position_data[2])
         diag_steps.append(sim.get_big_lane_diagnostics()[diag_key])
         trails.append(tuple(trail_data))
 
     final_trail = trails[-1]
     trail_vector = (
-        final_trail[6] - final_trail[0],
-        final_trail[7] - final_trail[1],
+        (final_trail[6] - final_trail[0]) * domain_w,
+        (final_trail[7] - final_trail[1]) * domain_h,
     )
     return {
         "delivery_count": scheduler.snare_delivery_count,
@@ -312,19 +303,18 @@ def _run_viewport_transient_motion_impl(
         ("none", "swish_vertical", "drift_step_mean", (420.0, 560.0)),
     ),
 )
-def test_transient_stream_and_drift_preserve_content_space_motion_across_viewports(
+def test_transient_stream_and_drift_move_alike_in_pixels_on_every_shape(
     stream_direction,
     drift_direction,
     diag_key,
     expanded_extent,
 ) -> None:
-    """The same edge must remain equally visible at every viewport extent.
+    """The same edge moves a bubble the same pixels on every card shape.
 
-    Bubble's world expands with the committed viewport, but the renderer consumes
-    normalized head/trail coordinates. Stream and drift therefore need to cover
-    the same fraction of the chosen viewport per authored step; fixed raw-world
-    deltas silently halve visible motion in a doubled axis. Radius/BTF authority
-    stays independent from this spatial projection.
+    Stream and drift are authored in canonical-card units, the world's units on
+    every card, so a wider or taller card neither speeds up nor slows down the
+    travel (the retired content-fraction projection made a tall card's vertical
+    stream faster and a wide card's slower). Radius/BTF authority is unchanged.
     """
 
     canonical = _run_viewport_transient_motion(
@@ -343,13 +333,13 @@ def test_transient_stream_and_drift_preserve_content_space_motion_across_viewpor
     assert canonical["delivery_count"] == expanded["delivery_count"] == 1
     assert canonical["path"] > 0.0
     assert canonical["trail_length"] > 0.0
-    assert expanded["positions"] == pytest.approx(canonical["positions"], abs=1e-12)
-    assert expanded["path"] == pytest.approx(canonical["path"], abs=1e-12)
+    assert expanded["positions"] == pytest.approx(canonical["positions"], abs=1e-9)
+    assert expanded["path"] == pytest.approx(canonical["path"], abs=1e-9)
     assert expanded["trail_vector"] == pytest.approx(
-        canonical["trail_vector"], abs=1e-12
+        canonical["trail_vector"], abs=1e-9
     )
     assert expanded["trail_length"] == pytest.approx(
-        canonical["trail_length"], abs=1e-12
+        canonical["trail_length"], abs=1e-9
     )
     assert expanded["diag_steps"] == pytest.approx(
         canonical["diag_steps"], abs=1e-12
@@ -358,7 +348,7 @@ def test_transient_stream_and_drift_preserve_content_space_motion_across_viewpor
 
 
 @pytest.mark.parametrize("expanded_extent", ((840.0, 280.0), (420.0, 560.0)))
-def test_swirl_orbit_uses_content_space_geometry_across_viewports(
+def test_swirl_orbit_is_the_canonical_geometry_on_every_shape(
     expanded_extent,
 ) -> None:
     """Swirl tangent/radial geometry must not change with domain aspect."""
@@ -373,10 +363,10 @@ def test_swirl_orbit_uses_content_space_geometry_across_viewports(
     expanded = _run_viewport_transient_motion(expanded_extent, **kwargs)
 
     assert canonical["delivery_count"] == expanded["delivery_count"] == 1
-    assert expanded["positions"] == pytest.approx(canonical["positions"], abs=1e-12)
-    assert expanded["path"] == pytest.approx(canonical["path"], abs=1e-12)
+    assert expanded["positions"] == pytest.approx(canonical["positions"], abs=1e-9)
+    assert expanded["path"] == pytest.approx(canonical["path"], abs=1e-9)
     assert expanded["trail_vector"] == pytest.approx(
-        canonical["trail_vector"], abs=1e-12
+        canonical["trail_vector"], abs=1e-9
     )
     assert expanded["diag_steps"] == pytest.approx(
         canonical["diag_steps"], abs=1e-12
@@ -385,7 +375,7 @@ def test_swirl_orbit_uses_content_space_geometry_across_viewports(
 
 
 @pytest.mark.parametrize("expanded_extent", ((840.0, 280.0), (420.0, 560.0)))
-def test_swirl_spawn_radius_is_content_relative(expanded_extent) -> None:
+def test_swirl_spawn_radius_is_canonical_units(expanded_extent) -> None:
     def _spawn(extent):
         random.seed(20260831)
         sim = BubbleSimulation()
@@ -393,8 +383,8 @@ def test_swirl_spawn_radius_is_content_relative(expanded_extent) -> None:
         sim._spawn_bubble(False, "none", 0.6, "swirl_cw")
         bubble = sim._bubbles[0]
         return (
-            bubble.x / sim._domain_w - 0.5,
-            bubble.y / sim._domain_h - 0.5,
+            bubble.x - 0.5 * sim._domain_w,
+            bubble.y - 0.5 * sim._domain_h,
         )
 
     canonical_offset = _spawn((420.0, 280.0))
@@ -406,7 +396,7 @@ def test_swirl_spawn_radius_is_content_relative(expanded_extent) -> None:
 
 @pytest.mark.parametrize("drift_direction", ("diagonal", "random"))
 @pytest.mark.parametrize("expanded_extent", ((840.0, 280.0), (420.0, 560.0)))
-def test_group_drift_inherits_content_space_projection(
+def test_group_drift_moves_alike_in_pixels_on_every_shape(
     drift_direction,
     expanded_extent,
 ) -> None:
@@ -420,10 +410,10 @@ def test_group_drift_inherits_content_space_projection(
     expanded = _run_viewport_transient_motion(expanded_extent, **kwargs)
 
     assert canonical["delivery_count"] == expanded["delivery_count"] == 1
-    assert expanded["positions"] == pytest.approx(canonical["positions"], abs=1e-12)
-    assert expanded["path"] == pytest.approx(canonical["path"], abs=1e-12)
+    assert expanded["positions"] == pytest.approx(canonical["positions"], abs=1e-9)
+    assert expanded["path"] == pytest.approx(canonical["path"], abs=1e-9)
     assert expanded["trail_vector"] == pytest.approx(
-        canonical["trail_vector"], abs=1e-12
+        canonical["trail_vector"], abs=1e-9
     )
     assert expanded["diag_steps"] == pytest.approx(
         canonical["diag_steps"], abs=1e-12
@@ -433,26 +423,28 @@ def test_group_drift_inherits_content_space_projection(
 
 @pytest.mark.parametrize("stream_direction", ("up", "left", "top_right"))
 @pytest.mark.parametrize("expanded_extent", ((840.0, 280.0), (420.0, 560.0)))
-def test_directional_refill_entry_is_content_relative(
+def test_directional_refill_entry_depth_is_canonical_units(
     stream_direction,
     expanded_extent,
 ) -> None:
+    """The entry lane spans the whole world edge; how far off-card a bubble is born is canonical."""
+
     def _spawn(extent):
         random.seed(20260831)
         sim = BubbleSimulation()
         sim._apply_viewport_domain(extent)
         sim._spawn_bubble(False, stream_direction, 0.6, "none")
         bubble = sim._bubbles[0]
-        return (bubble.x / sim._domain_w, bubble.y / sim._domain_h)
+        # Distance from the nearest world edge (entry margin plus randomized depth).
+        return min(abs(bubble.x), abs(bubble.x - sim._domain_w), abs(bubble.y), abs(bubble.y - sim._domain_h))
 
-    canonical_position = _spawn((420.0, 280.0))
-    expanded_position = _spawn(expanded_extent)
-
-    assert expanded_position == pytest.approx(canonical_position, abs=1e-12)
+    canonical_depth = _spawn((420.0, 280.0))
+    assert canonical_depth > 0.0
+    assert _spawn(expanded_extent) == pytest.approx(canonical_depth, abs=1e-12)
 
 
 @pytest.mark.parametrize("expanded_extent", ((840.0, 280.0), (420.0, 560.0)))
-def test_refill_cluster_spread_is_content_relative(expanded_extent) -> None:
+def test_refill_cluster_spread_is_canonical_units(expanded_extent) -> None:
     def _record_spawn_positions(extent):
         random.seed(1)  # first refill chooses the authored cluster branch
         sim = BubbleSimulation()
@@ -461,7 +453,7 @@ def test_refill_cluster_spread_is_content_relative(expanded_extent) -> None:
         recorded = []
 
         def _record(_is_big, x, y, *_args, **_kwargs):
-            recorded.append((x / sim._domain_w, y / sim._domain_h))
+            recorded.append((x, y))
 
         sim._spawn_bubble_at = _record  # type: ignore[method-assign]
         sim.tick(
@@ -480,7 +472,13 @@ def test_refill_cluster_spread_is_content_relative(expanded_extent) -> None:
     expanded_positions = _record_spawn_positions(expanded_extent)
 
     assert len(canonical_positions) == len(expanded_positions) == 3
-    assert expanded_positions == pytest.approx(canonical_positions, abs=1e-12)
+
+    def _spread(positions):
+        # The first cluster's second member relative to its base (a later record may start a new,
+        # randomly placed base anywhere along the world).
+        return [positions[1][0] - positions[0][0], positions[1][1] - positions[0][1]]
+
+    assert _spread(expanded_positions) == pytest.approx(_spread(canonical_positions), abs=1e-12)
 
 
 @pytest.mark.parametrize(
@@ -488,20 +486,20 @@ def test_refill_cluster_spread_is_content_relative(expanded_extent) -> None:
     (("x", (840.0, 280.0)), ("y", (420.0, 560.0))),
 )
 @pytest.mark.parametrize(
-    ("normalized_position", "expected_exiting"),
-    ((1.075, False), (1.125, True)),
+    ("beyond_edge", "expected_exiting"),
+    ((0.075, False), (0.125, True)),
 )
-def test_surface_exit_margin_is_content_relative(
+def test_surface_exit_margin_is_canonical_units(
     axis,
     expanded_extent,
-    normalized_position,
+    beyond_edge,
     expected_exiting,
 ) -> None:
     def _exit_state(extent):
         sim = BubbleSimulation()
         sim._apply_viewport_domain(extent)
-        x = normalized_position * sim._domain_w if axis == "x" else 0.5 * sim._domain_w
-        y = normalized_position * sim._domain_h if axis == "y" else 0.5 * sim._domain_h
+        x = sim._domain_w + beyond_edge if axis == "x" else 0.5 * sim._domain_w
+        y = sim._domain_h + beyond_edge if axis == "y" else 0.5 * sim._domain_h
         bubble = BubbleState(
             x=x,
             y=y,
@@ -536,7 +534,7 @@ def test_surface_exit_margin_is_content_relative(
     ("stream_direction", "expanded_extent"),
     (("right", (840.0, 280.0)), ("up", (420.0, 560.0))),
 )
-def test_pre_entry_prediction_distance_is_content_relative(
+def test_pre_entry_prediction_distance_is_canonical_units(
     stream_direction,
     expanded_extent,
 ) -> None:
@@ -548,7 +546,7 @@ def test_pre_entry_prediction_distance_is_content_relative(
             0.5 * sim._domain_h,
             stream_direction,
         )
-        return (x / sim._domain_w, y / sim._domain_h)
+        return (x - 0.5 * sim._domain_w, y - 0.5 * sim._domain_h)
 
     canonical = _prediction((420.0, 280.0))
     expanded = _prediction(expanded_extent)
@@ -667,13 +665,13 @@ def test_card_relative_radius_stays_authored_in_expanded_collision_world() -> No
         )
         assert actual == pytest.approx(baseline_radius)
 
-    # The same normalized candidate has the same overlap decision at canonical,
-    # tall and wide extents; there is no hidden radius*domain transfer.
+    # The same canonical-unit candidate offset has the same overlap decision at
+    # canonical, tall and wide extents; there is no hidden radius*domain transfer.
     decisions = []
     for sim in (baseline, tall, wide):
         decisions.append(
             sim._overlaps_existing(
-                0.555 * sim._domain_w,
+                0.50 * sim._domain_w + 0.055,
                 0.50 * sim._domain_h,
                 radius,
                 candidate_is_big=True,
@@ -683,10 +681,8 @@ def test_card_relative_radius_stays_authored_in_expanded_collision_world() -> No
 
 def test_overlap_retry_clamp_uses_actual_logical_domain() -> None:
     # The overlap-retry jitter clamp must bound to the actual logical world plus
-    # the same off-world allowance, not the legacy unit box. Starting far past
-    # the ceiling makes the clamp bind exactly, so baseline stays [-0.25,1.25]
-    # while the off-world allowance preserves that same content fraction on an
-    # expanded axis.
+    # the canonical 0.25-unit off-world allowance, not the legacy unit box.
+    # Starting far past the ceiling makes the clamp bind exactly.
     def _forced_overlap_spawn(domain_w, domain_h):
         random.seed(3)
         sim = BubbleSimulation()
@@ -707,12 +703,12 @@ def test_overlap_retry_clamp_uses_actual_logical_domain() -> None:
     assert baseline.y == pytest.approx(1.25)
 
     wide = _forced_overlap_spawn(1.5, 1.0)
-    assert wide.x == pytest.approx(1.875)  # domain_w + 0.25 * domain_w
+    assert wide.x == pytest.approx(1.75)  # domain_w + 0.25
     assert wide.y == pytest.approx(1.25)  # y untouched
 
     tall = _forced_overlap_spawn(1.0, 1.5)
     assert tall.x == pytest.approx(1.25)  # x untouched
-    assert tall.y == pytest.approx(1.875)  # domain_h + 0.25 * domain_h
+    assert tall.y == pytest.approx(1.75)  # domain_h + 0.25
 
 
 _ZERO_ENERGY = {"bass": 0.0, "mid": 0.0, "high": 0.0, "overall": 0.0}
@@ -800,22 +796,22 @@ def test_contraction_retire_pops_only_non_surface_off_domain_bubbles() -> None:
     (("x", 2.0, 1.0), ("y", 1.0, 2.0)),
 )
 @pytest.mark.parametrize(
-    ("normalized_position", "expected_popping"),
-    ((1.075, False), (1.125, True)),
+    ("beyond_edge", "expected_popping"),
+    ((0.075, False), (0.125, True)),
 )
-def test_contraction_retire_margin_is_content_relative(
+def test_contraction_retire_margin_is_canonical_units(
     axis,
     domain_w,
     domain_h,
-    normalized_position,
+    beyond_edge,
     expected_popping,
 ) -> None:
     sim = BubbleSimulation()
     sim._domain_w = domain_w
     sim._domain_h = domain_h
     bubble = BubbleState(
-        x=normalized_position * domain_w if axis == "x" else 0.5 * domain_w,
-        y=normalized_position * domain_h if axis == "y" else 0.5 * domain_h,
+        x=domain_w + beyond_edge if axis == "x" else 0.5 * domain_w,
+        y=domain_h + beyond_edge if axis == "y" else 0.5 * domain_h,
         radius=0.02,
         reaches_surface=False,
         max_age=999.0,
@@ -865,7 +861,7 @@ def test_growth_or_stable_domain_never_retires_bubbles() -> None:
 
 def test_contracted_population_replenishes_to_authored_targets() -> None:
     # Fill a wide world, then contract and let it settle. Off-domain bubbles
-    # retire and spawns refill to the authored counts (never scaled by area).
+    # retire and spawns refill to the canonical card's authored counts.
     sim = _run((760.0, 280.0), ticks=1, seed=99)
     for _ in range(120):
         sim.tick(0.016, dict(_ENERGY), _settings((420.0, 280.0)))
@@ -873,7 +869,7 @@ def test_contracted_population_replenishes_to_authored_targets() -> None:
     big = sum(1 for b in sim._bubbles if b.is_big and not b.exiting and not b.popping)
     small = sum(1 for b in sim._bubbles if not b.is_big and not b.exiting and not b.popping)
     # Replenished back to (near) the authored targets - not permanently depleted
-    # by stranded off-domain bubbles, and never scaled up by viewport area.
+    # by stranded off-domain bubbles.
     assert 5 <= big <= 6
     assert 18 <= small <= 20
     # No non-surface bubble is left stranded materially outside the shrunk world.
