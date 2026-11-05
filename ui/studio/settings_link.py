@@ -4,7 +4,9 @@
 Visualizers Settings owner: it hydrates from the same resolved mode config the
 mode body loads, and commits by loading the values into that body and running the
 body's own Custom transition and save (``_force_visualizer_preset_to_custom`` then
-``_save_settings_now``). No preset JSON or settings map is written directly.
+``_save_settings_now``). No settings map is written directly; the one preset-file write is the
+explicit, confirmed Save To <Preset> (:meth:`VisualizerSettingsStore.save_to_preset`) through the
+shape-preserving preset-file owner (``core.settings.visualizer_preset_file``).
 """
 from __future__ import annotations
 
@@ -79,6 +81,25 @@ class VisualizerSettingsStore:
     def __init__(self, tab, mode_id: str) -> None:
         self._tab = tab
         self._mode = mode_id
+        # Save To <Preset>: the curated slot this session's Custom values came from (opened on it, a
+        # Studio edit or Move To Custom from it), and the keys edited since. Opened on Custom: unknown.
+        self._origin: int | None = None
+        self._edited: set[str] = set()
+        self._set_origin(self._curated_index())
+
+    def _curated_index(self) -> int | None:
+        lookup = getattr(self._tab, "_get_visualizer_preset_slider", None)
+        slider = lookup(self._mode) if callable(lookup) else None
+        if slider is None:
+            return None
+        index = int(slider.preset_index())
+        return index if 0 <= index < slider.custom_index() else None
+
+    def _set_origin(self, index: int | None) -> None:
+        """A curated slot becomes the new origin (edits start afresh); None keeps the current one."""
+        if index is not None:
+            self._origin = index
+            self._edited = set()
 
     def _spec(self):
         from core.settings.visualizer_mode_settings import require_mode_settings
@@ -114,6 +135,8 @@ class VisualizerSettingsStore:
         from core.settings.framed_camera import spec_for_mode
         tab = self._tab
         tab.flush_pending_changes()
+        self._set_origin(self._curated_index())   # an edit on a curated preset moves its values into Custom
+        self._edited |= set(changed)
         config = dict(values)
         previous = tab._loading
         tab._loading = True
@@ -195,6 +218,8 @@ class VisualizerSettingsStore:
         self._tab.flush_pending_changes()
         slider._slider.setValue(int(index))       # the user path: valueChanged -> preset_changed -> tab handler
         self._tab._save_settings_now()
+        # Viewing a curated preset is a new starting point; returning to Custom keeps where it came from.
+        self._set_origin(self._curated_index())
 
     def preset_label(self) -> str:
         slider = self._tab._get_visualizer_preset_slider(self._mode)
@@ -267,20 +292,88 @@ class VisualizerSettingsStore:
         """Settings' Move To Custom: copy the current curated preset into Custom and switch to it."""
         slider = self._tab._get_visualizer_preset_slider(self._mode)
         if slider is not None and slider.preset_index() != slider.custom_index():
+            self._set_origin(self._curated_index())
             slider._move_to_custom()
             self._tab._save_settings_now()
 
-    def preset_file_editable(self) -> bool:
-        """Settings' Edit Preset availability (a curated preset whose JSON exists on disk)."""
-        button = getattr(self._tab._get_visualizer_preset_slider(self._mode), "_edit_btn", None)
-        return bool(button is not None and button.isEnabled())
-
-    def edit_preset_file(self) -> None:
-        """Settings' Edit Preset: open the curated preset's JSON in the default editor."""
+    def save_target_label(self) -> str:
+        """The curated preset Save To <Preset> writes into ("": not offered). Offered on Custom when this
+        session's Custom values came from a curated preset whose file exists."""
+        from core.settings.visualizer_presets import get_preset_file_path, get_preset_names
         slider = self._tab._get_visualizer_preset_slider(self._mode)
-        action = getattr(slider, "_open_preset_json", None)
-        if callable(action):
-            action()
+        if slider is None or self._origin is None or slider.preset_index() != slider.custom_index():
+            return ""
+        names = get_preset_names(self._mode)
+        if not 0 <= self._origin < len(names) - 1 or get_preset_file_path(self._mode, self._origin) is None:
+            return ""
+        return names[self._origin]
+
+    def save_to_preset(self) -> str:
+        """Save To <Preset>: after an explicit confirmation, write the settings edited in this session that
+        differ from the origin curated preset into that preset's own file (shape preserved, nothing else
+        touched), then reload the presets. Returns a notice for the Studio ("" when nothing was done)."""
+        from core.settings import visualizer_preset_file as preset_file
+        from core.settings.visualizer_presets import get_preset_file_path, get_presets
+        name = self.save_target_label()
+        if not name:
+            return ""
+        index = self._origin
+        tab = self._tab
+        tab.flush_pending_changes()
+        payload = tab.build_visualizer_preset_payload(self._mode)
+        changes = preset_file.preset_setting_changes(self._mode, index, payload, self._edited)
+        starting_view = None
+        if self.include_view() and "starting_view" in payload:
+            from core.settings.visualizer_view_orbit import get_visualizer_view_pose_keys
+            if self._edited & set(get_visualizer_view_pose_keys(self._mode)) \
+                    and payload["starting_view"] != get_presets(self._mode)[index].starting_view:
+                starting_view = payload["starting_view"]
+        if not changes and starting_view is None:
+            return f"{name} already holds these settings"
+        path = get_preset_file_path(self._mode, index)
+        if path is None:
+            return ""
+        if not preset_file.preset_file_writable(path):
+            self._popup("Preset Is Read-Only", self._read_only_text(path), "error")
+            return ""
+        count = len(changes) + (starting_view is not None)
+        plural = "s" if count != 1 else ""
+        answer = self._popup(
+            f"Save To {name}",
+            f"Write {count} changed setting{plural} into {name}'s preset file?\n{path}\n"
+            "Everything else in the file stays exactly as it is.",
+            "question", buttons=[("Save", "save"), ("Cancel", "cancel")], default_button_index=1)
+        if answer != "save":
+            return ""
+        try:
+            result = preset_file.save_changes_to_preset(self._mode, index, changes, starting_view=starting_view)
+        except preset_file.PresetFileReadOnly as exc:
+            self._popup("Preset Is Read-Only", self._read_only_text(exc.path), "error")
+            return ""
+        except Exception as exc:
+            logger.exception("[STUDIO] Save To %s failed", name)
+            self._popup("Save Failed", f"Could not save into {name}.\n{exc}", "error")
+            return ""
+        logger.info("[STUDIO] saved to preset mode=%s index=%d path=%s keys=%s",
+                    self._mode, index, result.path, ",".join(result.changed))
+        slider = tab._get_visualizer_preset_slider(self._mode)
+        if slider is not None:
+            slider.refresh_preset_catalog(reload=False)    # the owner reloaded it; Custom stays as it is
+        return f"Saved {count} setting{plural} into {name}"
+
+    @staticmethod
+    def _read_only_text(path) -> str:
+        return (f"This preset's file cannot be changed here:\n{path}\n"
+                "Use Save Preset As… to keep these settings as a new preset.")
+
+    def _popup(self, title: str, message: str, icon: str, *, buttons=(("OK", "ok"),),
+               default_button_index: int = 0) -> str | None:
+        """Settings' own prompt (it stays on top of the Studio); returns the chosen button's value."""
+        from ui.styled_popup import StyledPopup
+        popup = StyledPopup(self._tab, title, message, icon_type=icon, buttons=list(buttons),
+                            default_button_index=default_button_index)
+        popup.exec()
+        return popup.result_value
 
     def save_preset_as(self) -> None:
         slider = self._tab._get_visualizer_preset_slider(self._mode)

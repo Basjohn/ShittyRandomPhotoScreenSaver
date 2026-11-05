@@ -787,6 +787,12 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   sidecar and main log receiving the lifecycle.
 - `tests/test_settings_percent_slider_round_trip.py` — Settings sliders reload stored hundredths exactly (no `int`
   truncation in any Settings tab), through the real widgets and a Studio commit.
+- `tests/test_studio_preset_row_and_save_to_preset.py` — on the real SettingsDialog: every registered Studio mode
+  offers Open Studio in its preset row on a curated slot and on Custom with no Edit Preset (modes without a Studio
+  keep Edit Preset, no launcher); the launcher opens the Studio on the slot shown; Save To <Preset> asks first
+  (Cancel writes nothing), writes only the edited key into a tmp copy of a real curated preset in the file's own
+  shape (LF and CRLF), reloads presets, and a read-only file gives the message and writes nothing (negative
+  control: writable prompts); opened on Custom it is not offered; the shared patcher touches nothing else.
 
 Cost: `tools/visualizer_cost_probe.py` (one mode) and `tools/overhead_baseline.py` (everything): offscreen, production host, control-relative GPU/CPU, GL and Python call counts and recorded system conditions; how to run and read them and the expected results are in `Docs/Reference/Benchmarks.md`.
 

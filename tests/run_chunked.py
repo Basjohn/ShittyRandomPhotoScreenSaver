@@ -461,6 +461,11 @@ def _run_isolated(targets: list[Path], *, jobs: int, timeout_seconds: float | No
     if failed:
         print(f"\n=== Rerunning {len(failed)} failed files alone ===", flush=True)
         for target, first in sorted(failed):
+            # Keep the parallel-run failure: the rerun rewrites <stem>.log, and a load-sensitive file's only
+            # evidence is the run that failed.
+            first_log = log_dir / f"{target.stem}.log"
+            if first_log.exists():
+                first_log.replace(log_dir / f"{target.stem}.under_load.log")
             _target, rc, elapsed, summary = _run_isolated_file(target, timeout_seconds=timeout_seconds,
                                                                extra=extra, log_dir=log_dir)
             (load_sensitive if rc == 0 else real).append((target, first if rc == 0 else summary))
@@ -473,7 +478,8 @@ def _run_isolated(targets: list[Path], *, jobs: int, timeout_seconds: float | No
     print(f"  Files: {len(targets)}   passed: {len(targets) - len(real) - len(load_sensitive)}   "
           f"load-sensitive: {len(load_sensitive)}   failed: {len(real)}   wall {wall:.0f}s")
     for target, summary in load_sensitive:
-        print(f"    load-sensitive (passed alone): {target.name}: {summary}")
+        print(f"    load-sensitive (passed alone): {target.name}: {summary}   "
+              f"(failing log: {log_dir / (target.stem + '.under_load.log')})")
     for target, summary in real:
         print(f"    FAILED: {target.name}: {summary}   (log: {log_dir / (target.stem + '.log')})")
     print(f"  Result: {'ALL PASSED' if not real else 'FAILURES'}"

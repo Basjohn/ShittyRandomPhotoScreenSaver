@@ -44,6 +44,14 @@ def _stable_pixel_boundary(value: float, uncertainty: float):
     return integer if abs(value-integer) <= uncertainty else value
 
 
+# item_pixel_rect is a pure function of (matrix, logical size, viewport), which change only when the
+# item or window does; renderers ask for it every frame. Remembering the last few answers by exact
+# input keeps the uncertainty arithmetic off every frame at rest (identical output by construction).
+# A few entries cover several displays' render threads and a renderer's reach frame beside its item.
+_RECT_MEMO: dict = {}
+_RECT_MEMO_LIMIT = 16
+
+
 def item_pixel_rect(frame: SceneFrame) -> tuple[int, int, int, int]:
     """Outward pixel coverage, with integer boundaries stable under Qt's float32 transform.
 
@@ -51,9 +59,22 @@ def item_pixel_rect(frame: SceneFrame) -> tuple[int, int, int, int]:
     is snapped to an integer. Actual fractional edges still round outward, and
     viewport clipping remains the final authority.
     """
-    matrix = frame.matrix_values
-    width, height = frame.logical_size
-    vx, vy, vw, vh = frame.viewport
+    key = (frame.matrix_values, frame.logical_size, frame.viewport)
+    try:
+        rect = _RECT_MEMO.get(key)
+    except TypeError:                     # a caller-built frame holding lists: not memoised
+        return _item_pixel_rect(*key)
+    if rect is None:
+        rect = _item_pixel_rect(*key)
+        if len(_RECT_MEMO) >= _RECT_MEMO_LIMIT:
+            _RECT_MEMO.clear()
+        _RECT_MEMO[key] = rect
+    return rect
+
+
+def _item_pixel_rect(matrix, logical_size, viewport) -> tuple[int, int, int, int]:
+    width, height = logical_size
+    vx, vy, vw, vh = viewport
     xs, ys = [], []
     for x, y in ((0.0, 0.0), (width, 0.0), (0.0, height), (width, height)):
         clip = [matrix[row] * x + matrix[4 + row] * y + matrix[12 + row] for row in range(4)]

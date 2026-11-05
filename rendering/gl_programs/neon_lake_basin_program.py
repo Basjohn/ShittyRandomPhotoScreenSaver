@@ -516,11 +516,15 @@ float basinRipple(vec2 xz,float perPixel,out vec2 slope) {
     vec2 heading=normalize(vec2(-uBack.x,-uBack.z)+vec2(1e-5,0.0));
     vec2 side=vec2(-heading.y,heading.x);
     vec2 w=vec2(dot(xz,side),dot(xz,heading));
-    const vec4 K[4]=vec4[4](vec4(3.0,38.0,1.10,0.40),vec4(-5.0,52.0,-0.90,0.30),
-                            vec4(8.0,29.0,0.70,0.45),vec4(-2.0,71.0,1.30,0.22));
+    // Pass 5: two longer trains (crests a world unit or so wide across the view, a few tenths apart along it)
+    // survive at the lake's distance, where the short ones fade before they alias: the mock's far water is
+    // broken into short horizontal glints right across the lake.
+    const vec4 K[6]=vec4[6](vec4(3.0,38.0,1.10,0.40),vec4(-5.0,52.0,-0.90,0.30),
+                            vec4(8.0,29.0,0.70,0.45),vec4(-2.0,71.0,1.30,0.22),
+                            vec4(2.6,12.0,0.55,0.38),vec4(-4.1,16.5,-0.45,0.32));
     float height=0.0,total=0.0;
     vec2 g=vec2(0.0);
-    for (int i=0;i<4;++i) {
+    for (int i=0;i<6;++i) {
         float fade=clamp(2.0-length(K[i].xy)*perPixel*2.2,0.0,1.0);   // gone below ~3 pixels a wave
         float phase=dot(K[i].xy,w)+0.15*K[i].z*uTime+float(i)*1.7;
         height+=K[i].w*fade*sin(phase);
@@ -784,7 +788,7 @@ void main() {
         // The mirror leans only partly with the mesh's facets: their flat triangles, tilting as waves pass,
         // made the reflection jump in blotches from triangle to triangle (busy motion on a calm lake).
         vec3 calm=normalize(mix(vec3(0.0,1.0,0.0),n,0.15));
-        vec3 wn=normalize(calm+0.04*uWaterDetail*ripple+vec3(-rippleSlope.x,0.0,-rippleSlope.y)*8.0*uWaterDetail);
+        vec3 wn=normalize(calm+0.04*uWaterDetail*ripple+vec3(-rippleSlope.x,0.0,-rippleSlope.y)*mix(8.0,18.0,smoothstep(0.15,0.4,uWaterDetail))*uWaterDetail);
         vec3 mirror=reflect(-view,wn);
         mirror.y=abs(mirror.y);                       // the mirror shows the sky above the water
         vec3 sky=basinVisibleSkyRadiance(vWorld,mirror);
@@ -803,15 +807,27 @@ void main() {
         float mirrorWeight=clamp((0.22+0.78*fresnel)*(0.35+0.65*uWaterShine),0.0,1.0);
         vec3 surface=mix(depthTint,sky*1.25,mirrorWeight);
         // A passing wave lifts the body itself, not only its crest lines, so music moves the water.
-        surface+=palette*smoothstep(0.15,1.6,crest)*0.45;
+        surface+=palette*smoothstep(0.15,1.6,crest)*0.18;
         // Ripple highlights: each crest catches the bright band above the far horizon, in the water's own
         // line/crest colours, so the lake shimmers in short horizontal strokes (brighter with the music).
         vec2 heading=normalize(vec2(-uBack.x,-uBack.z)+vec2(1e-5,0.0));
         vec3 glowDirection=normalize(vec3(heading.x,0.10,heading.y));
-        float highlight=pow(clamp(dot(mirror,glowDirection),0.0,1.0),28.0)*smoothstep(0.72,0.98,rippleHeight);
+        float highlight=pow(clamp(dot(mirror,glowDirection),0.0,1.0),16.0)*smoothstep(0.55,0.95,rippleHeight);
         vec3 shimmer=mix(uLineColor.rgb,uCrestColor.rgb,0.5+0.5*sin(vWorld.x*2.3+vWorld.z*1.7));
         surface+=shimmer*highlight*(0.3+0.3*min(crest,1.5)+0.25*vEnergy)*uWaterDetail*0.9;
+        // Pass 5: the mock's lake is a dark mirror broken everywhere into short horizontal glints (its ripples'
+        // crests catching the glowing ridges and sky), not a smooth sheet: every ripple crest takes a faint
+        // stroke of the water's colours, brightening toward grazing angles and with the music.
+        vec2 gq=vec2(dot(vWorld.xz,vec2(-heading.y,heading.x)),dot(vWorld.xz,heading));
+        float glintRows=sin(gq.y*85.0+gq.x*4.0+0.35*uTime+1.6*sin(gq.x*9.0+gq.y*7.0));
+        float glintBreaks=sin(gq.x*31.0-gq.y*11.0-0.25*uTime+2.2*sin(gq.x*7.3+gq.y*5.1)+1.3*sin(gq.y*17.0))
+                         *(0.6+0.4*sin(gq.x*3.1+gq.y*13.7+0.15*uTime));
+        float glintFade=clamp(2.0-85.0*depthPerPixel*0.9,0.0,1.0);   // gone before its rows are under ~5 px apart
+        float glints=smoothstep(0.5,0.95,glintRows)*smoothstep(-0.1,0.5,glintBreaks)*glintFade*(0.5+0.5*fresnel);
         fill=mix(fill,surface,uWaterShine*wetness);
+        // The glints sit on top of the mirror in the ridges' colours (the mock's violet-magenta strokes).
+        vec3 glintColour=mix(uLineColor.rgb,uCrestColor.rgb,0.7);
+        fill+=glintColour*glints*(1.3+0.6*min(crest,1.5)+0.5*vEnergy)*min(2.0*uWaterDetail,1.0)*uWaterShine*wetness;
         fillAlpha=max(fillAlpha,uWaterShine*wetness*(0.6+0.4*fresnel));
         shineEmission=sky*fresnel*uWaterShine*wetness*0.35;
     }
@@ -1008,11 +1024,19 @@ void main() {
         // Analytic screen-angular corona OUTSIDE the sphere. It never creates
         // a second mesh or changes orbital body/light/reflection ownership.
         float normalizedAngle=length(cross(ray,forward))/max(facing*radius,1e-5);
+        // The silhouette is antialiased over a pixel and a half inside the limb: the sphere's own limb feather is
+        // far thinner than a pixel and stepped into a staircase once the glow no longer covered it.
+        float limbPixel=max(fwidth(normalizedAngle),1e-4);
+        body.a*=1.0-smoothstep(1.0-1.5*limbPixel,1.0,normalizedAngle);
         // Outer corona around the sphere silhouette. The Moon also gets a very
         // small same-colour lift just inside the illuminated rim, so the glow
         // reads as originating from the body rather than a detached tube.
-        float halo=smoothstep(0.965,1.015,normalizedAngle)
-                   *exp(-pow(max(0.0,normalizedAngle-1.005)/0.115,2.0));
+        // A soft corona hugging the limb (it starts just inside the edge and fades over a fifth of the radius,
+        // no hard ring) ...
+        // Pass 5: it falls off exponentially over about a quarter of the radius (the mock's moon glow), so the
+        // light hugs the limb instead of standing as a bright tube round it.
+        float halo=smoothstep(0.96,1.01,normalizedAngle)
+                   *exp(-max(0.0,normalizedAngle-1.0)/0.26);
         halo*=step(0.0,facing)*cameraCoverage;
         vec4 bodyColour=(uBodyKind==0 ? uSunColor : uMoonColor);
         float haloGain=basinCelestialHaloGain(uCelestialGlow,uMidband,uBeatPulse);
@@ -1022,8 +1046,9 @@ void main() {
         float haloAlpha=(uBodyKind==1 ? 0.26 : 0.23)*bodyColour.a*haloGain*halo;
         // A wide soft glow spreading far past the corona (the bright body lighting the night air round it),
         // falling off over about its own diameter; land in front hides it (this pass is depth-tested).
-        float wide=smoothstep(0.97,1.03,normalizedAngle)*exp(-max(0.0,normalizedAngle-1.0)/0.7);
-        haloAlpha+=0.08*bodyColour.a*haloGain*wide*step(0.0,facing)*cameraCoverage;
+        // ... and a wide bloom spreading over about a radius and a half.
+        float wide=smoothstep(0.95,1.03,normalizedAngle)*exp(-max(0.0,normalizedAngle-1.0)/0.8);
+        haloAlpha+=0.04*bodyColour.a*haloGain*wide*step(0.0,facing)*cameraCoverage;
         float rimMarks=0.0;
         if (uCelestialRimVertices!=0 && uCelestialGlow.x>0.0 && facing>0.0) {
             rimMarks=basinCelestialRimMarks(eye,ray,normalizedAngle)*cameraCoverage;
@@ -1031,12 +1056,22 @@ void main() {
         }
         // Intensity and optional rim rewards may overlap; alpha remains a
         // coverage value even at maximum settings, never extrapolated blending.
-        haloAlpha=min(haloAlpha,0.98);
+        // Loud passages saturate softly (1-exp), so the corona never flattens into an opaque ring.
+        haloAlpha=min(1.0-exp(-haloAlpha),0.98);
         float litInnerRim=0.0;
         float innerHaloAlpha=0.0;
         if (uBodyKind==1 && body.a>0.0001 && uCelestialGlow.x>0.0) {
             litInnerRim=basinMoonInnerRimEmission(eye,bodyPoint);
-            innerHaloAlpha=0.115*bodyColour.a*haloGain*litInnerRim*body.a;
+            innerHaloAlpha=0.03*bodyColour.a*haloGain*litInnerRim*body.a;
+        }
+        // The Moon's limb light (phase-free, part of the halo): the glow rising inside the whole silhouette toward
+        // its edge, lifting the shaded side to a luminous grey and ending in a fine bright rim line, as the mock's
+        // crescent does. Screen-blended into the body's own colour, so the bright face cannot clip to white.
+        float limbLight=0.0;
+        if (uBodyKind==1 && body.a>0.0001 && uCelestialGlow.x>0.0) {
+            float a=clamp(normalizedAngle,0.0,1.0);
+            float rimLine=exp(-pow((normalizedAngle-0.975)/0.022,2.0));
+            limbLight=(1.0-exp(-haloGain))*body.a*(0.42*pow(smoothstep(0.45,1.0,a),2.0)+0.55*rimLine);
         }
         float alpha=body.a+haloAlpha*(1.0-body.a);
         if (alpha<0.0001) discard;
@@ -1044,7 +1079,9 @@ void main() {
                     +bodyColour.rgb*(innerHaloAlpha+haloAlpha*(1.0-body.a)
                                      +0.16*haloGain*rimMarks*body.a*bodyColour.a);
         vec3 colour=premult/max(alpha,1e-5);
-        FragColor=vec4(min(colour,vec3(1.0)),alpha);
+        colour=min(colour,vec3(1.0));
+        colour+=(vec3(1.0)-colour)*clamp(bodyColour.rgb,0.0,1.0)*min(limbLight,1.0);
+        FragColor=vec4(colour,alpha);
         // The whole lunar surface emits softly, following its lit/shaded
         // albedo. A rim-only emitter read as a detached glowing tube. Keep
         // the boundary subordinate to this broad source and preserve texture.

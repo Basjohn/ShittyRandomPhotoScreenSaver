@@ -8,8 +8,8 @@ source now; open acceptance work (mock parity, hardware window checks, further a
 
 ## 1. What it is
 
-A Studio is a top-level Qt Quick window (`ui/studio/qml/StudioShell.qml`) opened from a Visualizer mode's Custom
-body in Settings. It shows a live preview drawn by the mode's **production** renderer from the mode's **production**
+A Studio is a top-level Qt Quick window (`ui/studio/qml/StudioShell.qml`) opened from a Visualizer mode's preset
+row in Settings (Open Studio, on every preset slot). It shows a live preview drawn by the mode's **production** renderer from the mode's **production**
 logical owner, plus an inspector that edits the mode's canonical settings and saves them through Settings' own
 Custom save path. It is the only sanctioned Qt Quick window opened from Settings; Settings itself stays Qt Widgets.
 
@@ -30,7 +30,8 @@ and must not be copied per mode.
 | `ui/studio/viewport.py` | Inline `QSGRenderNode` that draws the adapter's renderer straight into the window framebuffer on the render thread (no readback, no per-frame texture copy). It applies the viewport slot's scene-graph clip (scissor), so a frameless mode that overflows its card in production (Extruded Spectrum, Sphere: up to the window) reaches the slot's edge, never the Studio chrome. Renderer created lazily and released on the render thread on `sceneGraphInvalidated` / node release. Snapshots (tiles, rendered cards, Copy Frame) use a second renderer instance, at most one per frame and only on request. |
 | `ui/studio/transport.py` | Play/pause/scrub/loop on the Studio's own time. No timer: it advances on the surface's `afterAnimating` frame start and requests another frame only while playing. |
 | `ui/studio/surface.py` | `StudioWindowSurface` (visible window) and `OffscreenStudioSurface` (hidden `QQuickRenderControl` host used by tests and the capture tool). Same shell, same signals (`frameStarted`, `presented`, `closeRequested`, `lost`, `failed`). |
-| `ui/studio/settings_link.py` | `open_mode_studio` and `VisualizerSettingsStore`, the canonical store over the Visualizers tab (see §4). |
+| `ui/studio/settings_link.py` | `open_mode_studio` and `VisualizerSettingsStore`, the canonical store over the Visualizers tab (see §4), including Save To <Preset>. |
+| `core/settings/visualizer_preset_file.py` | Shape-preserving edits of an authored preset file (section merge, in-place patching, source-like formatting, `save_changes_to_preset`), shared by the preset repair tool and the Studio's Save To <Preset>. |
 | `ui/studio/presence.py` | `WindowPresence`: conceal/reveal the *same* Settings dialog without ending its `QDialog.exec()` loop (native `SW_HIDE` on Windows; zero opacity plus off-screen move elsewhere). |
 | `ui/studio/framed.py` | Shared pieces for 3D (and card-presented) adapters: production presentation resolver and uniform aperture scale, `card_framings` / `live_card_framings`, `camera_navigation` over the shared framed camera, `orbit_navigation` for a free-orbit mode (the descriptor's `view_orbit_settings` only), `QuickModeRenderer` wrapping a production Quick renderer and `ContractModeRenderer` handing it the production render-frame contract (pixel ratio from the item mapping, so a letterboxed live card presents at the true DPR). |
 | `ui/studio/engine_answers.py` | The Spectrum family's recorded engine answers, mode-neutral (`EngineAnswerMode(mode_id)`): synthetic audio, the out-of-process `extract`, recorded inputs, the per-mode answer cache, `start_clip_load` and `EngineAnswerEvaluator` (the production step in process, rewinds, checkpoints, frame budget). The engine-owned / mode-owned split follows from the production source projection (`source_config_applier`). |
@@ -117,16 +118,35 @@ current values do not hold (an unused optional element, such as a curve-node slo
 
 ## 4. Settings link and the restore guarantee
 
-- **Entry.** `ui/tabs/media/spec_mode_builder.py` adds an "Open <title> Studio" launcher to any spec-built mode with a
-  registered adapter. A mode whose every control is Studio-edited uses `build_studio_owned_mode_ui`: the Custom body
-  is only the preset row, one sentence and the launcher. Its values live in the section-lazy cache with nothing ever
+- **Entry.** `ui/tabs/media/spec_mode_builder.py` gives any spec-built mode with a registered adapter an **Open Studio**
+  button in its preset row (`VisualizerPresetSlider.set_studio_launcher`, where Edit Preset was), so it is offered on
+  every curated preset and on Custom alike; there is no second launcher in the Custom body. Opened on a curated preset,
+  the Studio shows that preset. A mode whose every control is Studio-edited uses `build_studio_owned_mode_ui`: its
+  body is only the preset row and one sentence. Its values live in the section-lazy cache with nothing ever
   built, and the technical (audio-analysis) controls keep their canonical widgets as value owners in a never-shown
   holder, so load/collect/save, preset switching and Custom snapshots run through unchanged owners.
 - **Canonical save.** `VisualizerSettingsStore.commit` loads the values into the mode body with signals blocked, then
   runs the tab's own `_force_visualizer_preset_to_custom` and `_save_settings_now`. The mode's shared families that
   Settings keeps outside the mode body (bar Fill / Border / Border Opacity, the per-mode rainbow toggle and speed)
   are loaded into their owning Settings widgets first, so the tab's own save collects them. The Studio never writes
-  preset JSON or the settings map directly. Camera turn/tilt go through the framed camera editor's pose authority.
+  the settings map directly. Camera turn/tilt go through the framed camera editor's pose authority.
+- **Preset menu.** The header's preset picker offers Settings' own preset-row actions: Move To Custom (on a curated
+  preset), Save Preset As… (on Custom, Settings' own file dialog) and, for authoring the curated presets themselves,
+  **Save To <Preset>**. This replaces Settings' retired Edit Preset (the preset file opened in the OS editor), which
+  remains only for modes that have no Studio yet (`Current_Plan.md` §9).
+- **Save To <Preset>.** The store remembers the curated preset this session's Custom values came from (the preset the
+  Studio opened on, a Studio edit made on a curated preset, which moves it into Custom, or Move To Custom from it;
+  choosing another curated preset starts afresh, returning to Custom keeps it) and the keys edited since. On Custom
+  with such an origin the menu offers Save To <that preset>: it writes only the edited keys whose value differs from
+  what selecting that preset resolves (its own settings over the canonical defaults), plus the starting view when the
+  view was edited and Include Camera View is on. It always asks first (Settings' `StyledPopup`; Cancel writes
+  nothing), then patches the preset's own file through `core.settings.visualizer_preset_file.save_changes_to_preset`:
+  the path comes from `get_preset_file_path`, every section the loader reads is patched in place (existing keys keep
+  order and value, a new key goes in by the repair's ordering rule, inert keys and metadata stay), the file keeps its
+  indentation, escaping, line endings and final newline, the result must load the written values, and
+  `reload_presets` follows. A read-only location (an installed build) gives a clear message pointing to Save Preset
+  As… and writes nothing. Custom stays selected with its values; the release mirror is not refreshed (an explicit
+  release step). Opened on Custom, the origin is unknown and only Save Preset As… is offered.
 - **Mode switcher.** Switching modes selects that mode's Settings page (as its pill would) and hands the Studio a new
   canonical store; only enabled modes with an adapter are offered.
 - **Lifecycle.** One Studio at a time (`StudioController.active()`; a second open raises the first). Settings stays

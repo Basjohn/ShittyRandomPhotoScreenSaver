@@ -125,7 +125,7 @@ class VisualizerPresetSlider(QWidget):
         layout.setContentsMargins(0, 2, 0, 2)
         layout.setSpacing(2)
 
-        # Single row: "Preset:" label | preset name | slider | Edit button
+        # Single row: "Preset:" label | preset name | slider | Open Studio (or Edit Preset) | Custom action
         row = QHBoxLayout()
         row.setSpacing(6)
         row.setContentsMargins(0, 0, 0, 0)
@@ -165,11 +165,18 @@ class VisualizerPresetSlider(QWidget):
         row.addLayout(slider_column, 1)
 
         from ui.widgets.outlined_button import OutlinedButton
-        self._edit_btn = OutlinedButton("Edit Preset", role="secondary")
-        self._edit_btn.setToolTip("Open this preset's JSON file in your default editor.")
-        self._edit_btn.setFixedWidth(100)
-        self._edit_btn.clicked.connect(self._open_preset_json)
-        row.addWidget(self._edit_btn)
+        from ui.studio.registry import has_studio
+        self._row = row
+        self._studio_launcher: Optional[QWidget] = None
+        # A mode with a Studio edits (and saves into) its presets there; the launcher takes this
+        # place (set_studio_launcher). Modes without a Studio keep Edit Preset until theirs lands.
+        self._edit_btn: Optional[QPushButton] = None
+        if not has_studio(self._mode):
+            self._edit_btn = OutlinedButton("Edit Preset", role="secondary")
+            self._edit_btn.setToolTip("Open this preset's JSON file in your default editor.")
+            self._edit_btn.setFixedWidth(100)
+            self._edit_btn.clicked.connect(self._open_preset_json)
+            row.addWidget(self._edit_btn)
 
         self._custom_action_btn = OutlinedButton("Move To Custom", role="secondary")
         self._custom_action_btn.setFixedWidth(140)
@@ -192,6 +199,15 @@ class VisualizerPresetSlider(QWidget):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def set_studio_launcher(self, button: QWidget) -> None:
+        """Place the mode's Studio launcher in the preset row, before the Custom action, so it is
+        offered on every preset slot (the Studio opens on the slot shown)."""
+        if self._studio_launcher is not None:
+            raise RuntimeError(f"{self._mode} already has a Studio launcher")
+        self._studio_launcher = button
+        button.setFixedWidth(self._custom_action_btn.width())       # one button size across the row
+        self._row.insertWidget(self._row.indexOf(self._custom_action_btn), button)
 
     def set_advanced_container(self, container: QWidget) -> None:
         """Register the widget that should show/hide based on preset."""
@@ -280,17 +296,18 @@ class VisualizerPresetSlider(QWidget):
             self._advanced_container.setVisible(is_custom)
         if self._technical_container is not None:
             self._technical_container.setVisible(is_custom)
-        # Keep Edit button footprint stable to avoid slider flicker. Disable
-        # it when Custom is selected or when no backing file exists.
-        path = get_preset_file_path(self._mode, idx)
-        has_file = path is not None
-        self._edit_btn.setEnabled((not is_custom) and has_file)
-        if not has_file:
-            self._edit_btn.setToolTip("Preset JSON not found on disk.")
-        elif is_custom:
-            self._edit_btn.setToolTip("Switch to a curated preset to edit its JSON.")
-        else:
-            self._edit_btn.setToolTip("Open this preset's JSON file in your default editor.")
+        if self._edit_btn is not None:
+            # Keep Edit button footprint stable to avoid slider flicker. Disable
+            # it when Custom is selected or when no backing file exists.
+            path = get_preset_file_path(self._mode, idx)
+            has_file = path is not None
+            self._edit_btn.setEnabled((not is_custom) and has_file)
+            if not has_file:
+                self._edit_btn.setToolTip("Preset JSON not found on disk.")
+            elif is_custom:
+                self._edit_btn.setToolTip("Switch to a curated preset to edit its JSON.")
+            else:
+                self._edit_btn.setToolTip("Open this preset's JSON file in your default editor.")
         # Move To Custom: only enabled when on a non-custom preset
         if self._custom_action_btn is not None:
             if is_custom:
@@ -452,7 +469,7 @@ class VisualizerPresetSlider(QWidget):
             payload["name"] = path.stem.replace("_", " ").title()
 
     def _open_preset_json(self) -> None:
-        """Open the current preset's JSON file in the OS default editor."""
+        """Open the current preset's JSON file in the OS default editor (modes without a Studio only)."""
         idx = self._slider.value()
         path = get_preset_file_path(self._mode, idx)
         if path is None or not path.is_file():
@@ -474,11 +491,14 @@ class VisualizerPresetSlider(QWidget):
         if popup.exec() == QDialog.DialogCode.Accepted:
             self._reload_and_reapply_current_preset(idx)
 
-    def _reload_and_reapply_current_preset(self, desired_index: int, *, force_custom: bool = False) -> None:
-        """Reload preset definitions from disk and reapply the current slot."""
-
+    def refresh_preset_catalog(self, desired_index: int | None = None, *, force_custom: bool = False,
+                               reload: bool = True) -> int | None:
+        """Re-read the mode's preset catalogue (reloading it from disk unless ``reload`` is False) and
+        show it, keeping the slot (or ``desired_index`` / Custom) without applying any preset. Returns
+        the slot shown, or None when the reload failed."""
         try:
-            reload_presets(self._mode)
+            if reload:
+                reload_presets(self._mode)
             self._preset_names = get_preset_names(self._mode)
             self._preset_count = get_preset_count(self._mode)
             self._custom_index = get_custom_preset_index(self._mode)
@@ -486,8 +506,10 @@ class VisualizerPresetSlider(QWidget):
             logger.debug(
                 "[VIS_PRESETS] Failed to reload presets for %s", self._mode, exc_info=True
             )
-            return
+            return None
 
+        if desired_index is None:
+            desired_index = self._slider.value()
         self._slider.blockSignals(True)
         self._slider.setMaximum(max(0, self._preset_count - 1))
         if force_custom:
@@ -499,6 +521,13 @@ class VisualizerPresetSlider(QWidget):
         self._value_label.setText(self._preset_names[target_index])
         self._notch_bar.set_notch_count(self._preset_count)
         self._update_advanced_visibility()
+        return target_index
+
+    def _reload_and_reapply_current_preset(self, desired_index: int, *, force_custom: bool = False) -> None:
+        """Reload preset definitions from disk and reapply the current slot."""
+        target_index = self.refresh_preset_catalog(desired_index, force_custom=force_custom)
+        if target_index is None:
+            return
 
         tab = self._find_tab()
         if tab is not None and hasattr(tab, "_on_visualizer_preset_changed"):
