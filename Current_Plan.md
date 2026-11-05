@@ -207,6 +207,17 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   the ribbons' contact), so troughs stay round and dip in instead of flattening. Perspective only. In the visible
   frame P2 reaches the floor only in the ragdoll loud end (about 49.5-52 s); P3 never does, so it is unchanged there.
   Evidence `.artifacts/evidence/waveform_ribbon/floor_deform/`; design in the Migration Plan's Floor bucket.
+- [~] **Pulse Rim (operator, 5 Nov: "where the pulse is that section of the ribbon's rim can be even brighter with
+  falloff") — awaiting operator eyes:** Reaction-bucket slider (0 = today's rims, pixel-identical). The rims (line and
+  rim glow) brighten by the square of the published pulse field over a reference level, softly capped, sampled at
+  each fragment's history x (direct and reflected light), so every Reaction Mode and both Travel Directions put it
+  exactly on the pulse; the field's own smooth shape is the falloff. Evidence
+  `.artifacts/evidence/waveform_ribbon/pulse_rim/`; design in the Migration Plan's Reaction bucket.
+- [ ] **Swells reach the Preset camera already faded (side defect, 5 Nov, found by Pulse Rim):** the Preset 1 camera
+  sees history x in about [-5, 5], but `PULSE_ORIGIN` (44) still assumes a ~±30 view; a swell travels ~3 s before it
+  is visible, so on recorded music the in-view appearance field is a faint plateau (human_heavy1: in-view max p50
+  .11, peak/median 1.6) and the fresh-led band has already settled. Re-derive the origin (and the fresh fade) from the
+  framed camera's visible span; then recheck Pulse Rim's REFERENCE level.
 - [ ] **`tools/visualizer_preset_repair.py --repair-all` rewrites curated presets (side defect, 5 Nov):** on the
   Waveform presets it re-sorted every key and dropped the `starting_view` and `visualizer_preset_mode` metadata
   (values unchanged). Floor Give was authored by a one-key insert instead. Make the repair fill keep metadata and order.

@@ -328,6 +328,7 @@ class HybridSnapshot:
     strand_origin: float = 0.
     zoom: float = 1.
     direction: float = 1.           # published Travel Direction (Flow.direction): history axis -> world x sign
+    pulse: bytes = b''              # published pulse appearance field (pulse_at) on PULSE_GRID, float32, history x
 
 
 class WaveformDynamics:
@@ -1025,5 +1026,6 @@ class WaveformDynamics:
         packet = RibbonPacket(data.tobytes(),raw.instances,raw.vertices,(raw.world_origin[0],2.,0.),raw.coordinate_origin)
         self._snapshot = HybridSnapshot(packet,self.time,self.travel,self.angle,self.angular_speed,self.twist_phase,
             tuple(self.drive.items()),tuple(values.items()),self.ready,passage=self.passage,
-            head_x=self.controls.scene.flow.head_x,zoom=self.zoom,direction=self.direction)
+            head_x=self.controls.scene.flow.head_x,zoom=self.zoom,direction=self.direction,
+            pulse=self._level.astype(np.float32).tobytes())
         return self._snapshot
