@@ -209,8 +209,12 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
 
 # -- parent: profile, load, guard, report -------------------------------------------------------------------------
 
-_user32 = ctypes.WinDLL("user32", use_last_error=True)
-_EnumWindowsProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+# Windows-only harness; the module still imports elsewhere so its portable helpers stay testable.
+if sys.platform == "win32":
+    _user32 = ctypes.WinDLL("user32", use_last_error=True)
+    _EnumWindowsProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+else:
+    _user32 = _EnumWindowsProc = None
 
 
 def _visible_window_violations(pids: set[int]) -> list[str]:
