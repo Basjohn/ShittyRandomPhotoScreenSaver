@@ -920,7 +920,8 @@
         "waveform_ribbon_strand_fade": [
           0.85,
           0.9
-        ]
+        ],
+        "mode": "waveform_ribbon"
       }
     }
   }

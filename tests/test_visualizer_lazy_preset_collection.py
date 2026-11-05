@@ -61,11 +61,11 @@ def test_absent_slider_does_not_overwrite_persisted_index():
 
 
 def test_built_sliders_write_their_index():
-    tab = _tab_with_built_modes({"spectrum": 0, "bubble": 2, "sine_wave": 1})
+    tab = _tab_with_built_modes({"spectrum": 0, "bubble": 2, "waveform_ribbon": 1})
     config: dict = {}
     collect_visualizer_preset_indices(tab, config)
     assert config == {
         get_preset_key("spectrum"): 0,
         get_preset_key("bubble"): 2,
-        get_preset_key("sine_wave"): 1,
+        get_preset_key("waveform_ribbon"): 1,
     }
