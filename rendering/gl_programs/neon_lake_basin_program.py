@@ -939,9 +939,11 @@ void main() {
     float vary=0.5+0.5*sin(world.x*2.3+world.z*1.1+1.7*sin(world.z*0.9-world.x*0.6));
     vary=0.65*vary+0.35*(0.5+0.5*sin(world.x*5.3-world.z*3.1+0.8));
     float inside=1.0-smoothstep(0.0,0.25,basinOutside(aUv));
-    width*=mix(1.0,mix(0.45,1.45,vary),inside);
+    // Near ridges (marks grown with Depth Scale) swell wider still: the mocks' foreground crests are broad glows.
+    float nearRidge=smoothstep(1.05,1.6,growth);
+    width*=mix(1.0,mix(0.45,1.45+0.9*nearRidge,vary),inside);
     vRidgeVary=mix(1.0,vary,inside);
-    vRidgeNear=inside*smoothstep(1.05,1.6,growth);
+    vRidgeNear=inside*nearRidge;
     clip.y+=uOutlineLiftNdc*width*clip.w;
     // Farther than the same real surface, never internal paint: a fixed NDC offset, or 2% of the view
     // distance where that is more (near land, whose NDC depth changes fast, otherwise let the lifted copy
