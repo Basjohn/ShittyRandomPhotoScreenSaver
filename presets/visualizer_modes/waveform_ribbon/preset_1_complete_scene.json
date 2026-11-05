@@ -43,6 +43,11 @@
         "waveform_ribbon_count": 3,
         "waveform_ribbon_damping": 0.6,
         "waveform_ribbon_dynamic_zoom": false,
+        "waveform_ribbon_pulse_colour": 0.6,
+        "waveform_ribbon_pulse_direction": "Head To Tail",
+        "waveform_ribbon_pulse_fade": 2.0,
+        "waveform_ribbon_pulse_speed": 9.0,
+        "waveform_ribbon_pulse_width": 3.5,
         "waveform_ribbon_depth": [
           0.2,
           2.0
@@ -753,24 +758,24 @@
         },
         "waveform_ribbon_sensitivity": 0.4,
         "waveform_ribbon_spark_drift": [
-          1.2,
-          1.2
+          1.0,
+          1.8
         ],
         "waveform_ribbon_spark_lifetime": [
-          4.5,
-          4.5
+          2.0,
+          7.0
         ],
         "waveform_ribbon_spark_light": [
           20.0,
           60.0
         ],
         "waveform_ribbon_spark_rise": [
-          0.4,
-          0.4
+          0.3,
+          0.6
         ],
         "waveform_ribbon_spark_size": [
-          2.0,
-          4.5
+          1.2,
+          2.4
         ],
         "waveform_ribbon_spark_glow": [
           1.0,
@@ -854,7 +859,7 @@
         ],
         "preset_waveform_ribbon": 0,
         "waveform_ribbon_spark_count": [
-          40.0,
+          0.0,
           64.0
         ],
         "waveform_ribbon_strand_pulse_growth": [

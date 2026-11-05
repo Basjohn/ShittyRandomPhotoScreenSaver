@@ -5,7 +5,7 @@ from types import MappingProxyType
 from collections.abc import Mapping
 from core.ribbon_style import RibbonMaterial, RibbonSparks, RibbonStrays
 from core.waveform_ribbon_scene import Recipe, Flow
-from core.waveform_ribbon_dynamics import HybridControls
+from core.waveform_ribbon_dynamics import HybridControls, PulseControls
 from core.waveform_ribbon_authoring import TARGETS, admit_routing, admit_ribbons, admit_palette
 from core.ribbon_bursts import RibbonAccentControls
 from core.ribbon_strand_cohorts import RibbonStrandControls
@@ -46,7 +46,9 @@ class CompiledWaveformSettings:
                 if read('sparks_enabled') else None,idle_motion=float(read('idle_motion')),
             strands=RibbonStrandControls(MappingProxyType({key:tuple(read(key)) for key in
                 ('strand_count','strand_chance','strand_span','strand_length','strand_reach',
-                 'strand_width','strand_light','strand_beads','strand_peel','strand_halo','strand_glow','strand_eol','strand_fade')})) if read('strands_enabled') else None)
+                 'strand_width','strand_light','strand_beads','strand_peel','strand_halo','strand_glow','strand_eol','strand_fade')})) if read('strands_enabled') else None,
+            pulse=PulseControls(str(read('pulse_direction')),float(read('pulse_width')),float(read('pulse_speed')),
+                                float(read('pulse_colour')),float(read('pulse_fade'))))
 
     def scene(self,snapshot):
         p=self.values

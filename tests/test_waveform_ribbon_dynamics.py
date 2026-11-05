@@ -155,8 +155,9 @@ def test_independent_low_and_peak_geometry_handles_reach_the_projected_body():
             ranges = dict(baseline.ranges)
             pair = list(ranges[key]);pair[endpoint]+=.1;ranges[key]=tuple(pair)
             models.append(primed(replace(baseline,ranges=ranges)))
-        for _ in range(90):
-            for model in models:model.advance(1/90,bands=(.4,.4,.4),intensity=.4,presence=1.)
+        # One beat launches a travelling swell, so Pulse Strength (bend) has a body to act on.
+        for tick in range(90):
+            for model in models:model.advance(1/90,bands=(.4,.4,.4),intensity=.4,presence=1.,hit=float(tick==20 and key=='bend'))
         reference = data(models[0].snapshot())
         for model in models[1:]:
             assert np.max(np.abs(data(model.snapshot())-reference))>.001,key
