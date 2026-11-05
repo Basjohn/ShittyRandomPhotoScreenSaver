@@ -8,6 +8,10 @@
 * ``PulseAppVolumeController`` has the ``SpotifyVolumeController`` contract for the
   media widget's app slider: the provider's process identities (``spotify.exe`` ->
   ``spotify``) select a sink input by ``application.process.binary``.
+* ``PulseSessionVolumeListener`` has the ``SessionVolumeListener`` contract: one
+  ``pactl subscribe`` sidecar watches only the selected sink input and hands
+  volume/mute changes (or its removal) to the GUI thread through the same Qt
+  mailbox bridge.
 
 All ``pactl`` children run with ``LC_ALL=C`` so their text output is parseable
 (a child-process locale, not SRPSS configuration). Requires ``pulseaudio-utils``
@@ -187,8 +191,8 @@ class PulseSystemVolumeProbe:
             reader.join(timeout=3)
 
 
-def _sink_inputs() -> list[tuple[int, str, Optional[float]]]:
-    """Return (index, process binary, volume fraction) for each playing stream."""
+def _sink_input_details() -> list[tuple[int, str, Optional[float], bool]]:
+    """Return (index, process binary, volume fraction, muted) for each playing stream."""
 
     text = pactl("list", "sink-inputs") or ""
     inputs = []
@@ -196,9 +200,25 @@ def _sink_inputs() -> list[tuple[int, str, Optional[float]]]:
         index = int(block.split(None, 1)[0])
         binary = re.search(r'application\.process\.binary = "([^"]*)"', block)
         volume_line = re.search(r"^\s*Volume:(.*)$", block, re.MULTILINE)
+        mute = re.search(r"^\s*Mute:\s*(\w+)", block, re.MULTILINE)
         inputs.append((index, (binary.group(1) if binary else "").casefold(),
-                       parse_volume_fraction(volume_line.group(1)) if volume_line else None))
+                       parse_volume_fraction(volume_line.group(1)) if volume_line else None,
+                       bool(mute and mute.group(1).casefold() == "yes")))
     return inputs
+
+
+def _sink_inputs() -> list[tuple[int, str, Optional[float]]]:
+    """Return (index, process binary, volume fraction) for each playing stream."""
+
+    return [entry[:3] for entry in _sink_input_details()]
+
+
+def _select_input(targets: tuple[str, ...], inputs) -> Optional[tuple]:
+    for target in targets:  # target priority is authoritative
+        for entry in inputs:
+            if entry[1] == target:
+                return entry
+    return None
 
 
 class PulseAppVolumeController:
@@ -239,12 +259,8 @@ class PulseAppVolumeController:
     def _target_input(self) -> Optional[tuple[int, Optional[float]]]:
         if not self._available or not self._process_targets:
             return None
-        inputs = _sink_inputs()
-        for target in self._process_targets:  # target priority is authoritative
-            for index, binary, volume in inputs:
-                if binary == target:
-                    return index, volume
-        return None
+        entry = _select_input(self._process_targets, _sink_inputs())
+        return None if entry is None else (entry[0], entry[2])
 
     def get_volume(self) -> Optional[float]:
         found = self._target_input()
@@ -258,4 +274,111 @@ class PulseAppVolumeController:
         return pactl("set-sink-input-volume", str(found[0]), str(round(clamped * PA_VOLUME_NORM))) is not None
 
 
-__all__ = ["PulseAppVolumeController", "PulseSystemVolumeProbe", "pactl", "parse_volume_fraction"]
+class PulseSessionVolumeListener:
+    """``SessionVolumeListener`` contract for the selected app stream (sink input)."""
+
+    def __init__(self, *, on_volume: Callable[[float, bool], None], on_disconnected: Callable[[], None],
+                 bridge_factory: Callable[..., object] | None = None) -> None:
+        self._thread = threading.get_ident()
+        self._on_volume = on_volume
+        self._on_disconnected = on_disconnected
+        if bridge_factory is None:
+            from core.media.audio_qt_wake import AudioEventQtBridge
+            bridge_factory = AudioEventQtBridge
+        self._bridge_factory = bridge_factory
+        self._bridge = None
+        self._index: Optional[int] = None
+        self._process: subprocess.Popen | None = None
+        self._reader: threading.Thread | None = None
+        self._closed = False
+
+    def _require_owner(self) -> None:
+        if threading.get_ident() != self._thread:
+            raise RuntimeError("audio-session lifecycle requires the owning GUI thread")
+
+    @property
+    def active(self) -> bool:
+        return self._index is not None and not self._closed
+
+    def start(self, process_targets: tuple[str, ...]) -> bool:
+        self._require_owner()
+        if self._closed or self._index is not None:
+            return self.active
+        targets = tuple(dict.fromkeys(str(name).strip().casefold() for name in process_targets if name))
+        if not targets or not pactl_available():
+            return False
+        selected = _select_input(targets, _sink_input_details())
+        if selected is None:
+            return False
+        index = int(selected[0])
+        bridge = self._bridge_factory(self._consume)
+        token, mailbox = bridge.mailbox.endpoint_token, bridge.mailbox
+        try:
+            process = subprocess.Popen(["pactl", "subscribe"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                       text=True, env=_child_env())
+        except Exception:
+            bridge.close()
+            return False
+        marker_change, marker_remove = f"'change' on sink-input #{index}\n", f"'remove' on sink-input #{index}\n"
+
+        def _read() -> None:
+            for line in process.stdout or ():
+                if line.endswith(marker_remove):
+                    mailbox.push_device_change()
+                    break
+                if line.endswith(marker_change):
+                    entry = next((item for item in _sink_input_details() if item[0] == index), None)
+                    if entry is None:
+                        mailbox.push_device_change()
+                        break
+                    if entry[2] is not None:
+                        mailbox.push_volume(token, float(entry[2]), bool(entry[3]))
+
+        self._bridge, self._index, self._process = bridge, index, process
+        self._reader = threading.Thread(target=_read, name="srpss-pactl-session", daemon=True)
+        self._reader.start()
+        return True
+
+    def _consume(self, event) -> None:
+        self._require_owner()
+        if self._closed:
+            return
+        if event.kind == "volume" and self._index is not None:
+            self._on_volume(float(event.volume), bool(event.muted))
+        elif event.kind == "device":
+            self.stop()
+            self._on_disconnected()
+
+    def stop(self) -> None:
+        self._require_owner()
+        bridge, process, reader = self._bridge, self._process, self._reader
+        self._bridge = self._process = self._reader = None
+        self._index = None
+        if bridge is not None:
+            bridge.close()  # fence late reader deliveries first
+        if process is not None:
+            process.terminate()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+            if process.stdout is not None:
+                process.stdout.close()
+        if reader is not None and reader is not threading.current_thread():
+            reader.join(timeout=3)
+
+    def close(self) -> None:
+        self._require_owner()
+        if self._closed:
+            return
+        self._closed = True
+        self.stop()
+
+
+__all__ = [
+    "PulseAppVolumeController",
+    "PulseSessionVolumeListener",
+    "PulseSystemVolumeProbe",
+    "pactl",
+    "parse_volume_fraction",
+]
