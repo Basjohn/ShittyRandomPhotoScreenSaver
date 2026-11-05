@@ -1,13 +1,23 @@
 """Selected event stars must inhabit the camera's actual visible sky."""
 from pathlib import Path
 
-from rendering.gl_programs.neon_starscape import _star_hash, starscape_beat_cells
+import pytest
+
+from rendering.gl_programs.neon_starscape import _star_hash, reset_beat_star_choices, starscape_beat_cells
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 FIELD = (0.0, 0.0, 1800.0, 1000.0)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_beat_choices():
+    """Each test is a new scene: no beat's stars were chosen yet."""
+    reset_beat_star_choices()
+    yield
+    reset_beat_star_choices()
 
 
 def _view(turn=.016, tilt=.05, **pose):
@@ -51,9 +61,34 @@ def test_three_beat_stars_cover_upper_middle_lower_framed_sky_and_stay_spaced():
     assert any(.10<=y<.24 for x,y in positions)
     hit=(.06,.3,-.4,.87)
     stars=starscape_beat_cells((hit,),view)
-    # The panorama is at infinity: moving the physical eye keeps the same sky; turning changes it.
+    # The panorama is at infinity and a beat's stars are fixed sky directions: neither moving the physical eye
+    # nor turning the camera moves them (turning brings other sky into view instead).
     assert starscape_beat_cells((hit,),_view(scale=1.25,pan=(-.15,-.02)))==stars
-    assert starscape_beat_cells((hit,),_view(turn=.1,scale=1.25,pan=(.06,-.02)))!=stars
+    assert starscape_beat_cells((hit,),_view(turn=.1,scale=1.25,pan=(.06,-.02)))==stars
+
+
+def _cell_direction(cell):
+    import math
+    lon,lat=(cell[0]+.5)/420.,(cell[1]+.5)/420.
+    return (math.sin(lon)*math.cos(lat),math.sin(lat),-math.cos(lon)*math.cos(lat))
+
+
+@pytest.mark.parametrize("turn,tilt", [(.12, .05), (-.15, .05), (.016, .2), (.08, -.04)])
+def test_a_reactive_star_keeps_its_world_direction_when_the_camera_turns_or_tilts(turn, tilt):
+    """Operator bug (2026-11-05): beat stars travelled with the camera. Once lit, a beat star is a fixed direction
+    on the sky dome under any later turn/tilt. Negative control: choosing again from the new view (the old
+    camera-space placement) lands the same beat on different sky."""
+    first=_view()
+    beat=(.3,.2,-.5,1.)
+    lit=starscape_beat_cells((beat,),first)
+    directions=[_cell_direction(star) for star in lit]
+    later=_view(turn=turn,tilt=tilt)
+    for age in (.5,1.,2.):
+        moved=starscape_beat_cells(((age,)+beat[1:],),later)
+        assert [_cell_direction(star) for star in moved]==directions
+    reset_beat_star_choices()        # camera-space placement: chosen from whatever view is current
+    camera_space=starscape_beat_cells((beat,),later)
+    assert [_cell_direction(star) for star in camera_space]!=directions
 
 
 def test_selection_tries_clear_candidates_around_the_body_and_caches_terrain_checks():
@@ -66,6 +101,7 @@ def test_selection_tries_clear_candidates_around_the_body_and_caches_terrain_che
     ray=_star_ray(plain[0])
     body=tuple(eye[i]+ray[i]*8 for i in range(3))+(.18,)
     assert not _body_clear(plain[0],eye,body)
+    reset_beat_star_choices()        # a new scene with the body in it
     chosen=starscape_beat_cells(event,view,body=body)
     assert len(chosen)==3 and chosen[0][:2]!=plain[0][:2]
     assert all(_body_clear(cell,eye,body) for cell in chosen)
