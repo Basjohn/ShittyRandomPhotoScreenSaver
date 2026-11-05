@@ -5,9 +5,10 @@ production replay patches process clocks/RNG deterministically and builds its ow
 runtime controller and ``ReplayBeatEngine`` (inert, no audio capture). Doing that
 inside the running app could disturb a live visualizer, so the Studio never does.
 
-The production logical mode is driven exactly as ``tools/visualizer_replay/
-waveform_ribbon_motion_audit.py`` drives it (``ReplayBeatEngine`` + ``PcmReanalysis``
-+ ``logical_tick``); every keyword input the mode's capture passes to
+The production logical mode is driven through the production-owned offline replay
+(``widgets.spotify_visualizer.feature_replay``: ``ReplayBeatEngine`` + ``PcmReanalysis``
++ ``logical_tick``, as ``tools/visualizer_replay/waveform_ribbon_motion_audit.py`` drives
+it; production never imports ``tools``); every keyword input the mode's capture passes to
 ``WaveformRibbonFrameRuntime.advance`` is recorded, together with the packet hash
 the production path produced, so the Studio's own evaluator can be proven to
 reproduce it byte for byte.
@@ -37,12 +38,11 @@ def has_native_history(path: str | Path) -> bool:
 
 
 def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: float | None = None) -> dict:
-    from unittest.mock import patch
     from PySide6.QtGui import QGuiApplication
-    from tools.visualizer_replay.driver import _configure, deterministic_clock
-    from tools.visualizer_replay.engine import ReplayBeatEngine
-    from tools.visualizer_replay.pcm_reanalysis import PcmReanalysis
     from widgets.spotify_visualizer.feature_frame import load_jsonl
+    from widgets.spotify_visualizer.feature_replay import (
+        PcmReanalysis, ReplayBeatEngine, configure_offline_controller, deterministic_clock,
+    )
     from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
     from widgets.spotify_visualizer.tick_pipeline import logical_tick
     from widgets.spotify_visualizer.waveform_ribbon_frame_runtime import WaveformRibbonFrameRuntime
@@ -72,23 +72,28 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
 
     resolved = dict(settings)
     resolved["mode"] = "waveform_ribbon"
-    with deterministic_clock() as clock, patch.object(WaveformRibbonFrameRuntime, "advance", recording):
-        engine = ReplayBeatEngine(32)
-        controller = VisualizerRuntimeController(runtime_generation=0, initial_mode="waveform_ribbon",
-                                                 engine_factory=lambda _: engine)
-        controller.engine = engine
-        _configure(controller, "waveform_ribbon", settings=resolved)
-        reanalysis = PcmReanalysis()
-        try:
-            for feature in frames:
-                clock[0] = feature.timestamp_us / 1e6
-                controller.playing = feature.playing
-                engine.set_playback_state(feature.playing)
-                engine.accept_feature_frame(feature)
-                reanalysis.accept(engine, feature)
-                logical_tick(controller.logical_tick_state)
-        finally:
-            engine.force_stop()
+    # The analysis worker process records every advance (restored afterwards; nothing else runs here).
+    WaveformRibbonFrameRuntime.advance = recording
+    try:
+        with deterministic_clock() as clock:
+            engine = ReplayBeatEngine(32)
+            controller = VisualizerRuntimeController(runtime_generation=0, initial_mode="waveform_ribbon",
+                                                     engine_factory=lambda _: engine)
+            controller.engine = engine
+            configure_offline_controller(controller, "waveform_ribbon", settings=resolved)
+            reanalysis = PcmReanalysis()
+            try:
+                for feature in frames:
+                    clock[0] = feature.timestamp_us / 1e6
+                    controller.playing = feature.playing
+                    engine.set_playback_state(feature.playing)
+                    engine.accept_feature_frame(feature)
+                    reanalysis.accept(engine, feature)
+                    logical_tick(controller.logical_tick_state)
+            finally:
+                engine.force_stop()
+    finally:
+        WaveformRibbonFrameRuntime.advance = original
     ready = [r for r in records if r["ready"]]
     if not ready:
         raise RuntimeError("The clip never produced a primed waveform frame")

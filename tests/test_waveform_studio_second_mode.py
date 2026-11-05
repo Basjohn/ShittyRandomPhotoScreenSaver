@@ -1,7 +1,9 @@
 """The Studio framework without Waveform: a tiny test-only mode drives shell, session, transport and save.
 
-Proves the reuse contract for future framed 3D modes (e.g. Extruded Bubble): a mode supplies only a
-schema, evaluator, fixtures, scene objects and a renderer; nothing in the shell is copied.
+Proves the reuse contract for every visualizer (framed 3D like Extruded Bubble and flat 2D like Spectrum,
+Oscilloscope or Bubble): a mode supplies only a schema, evaluator, fixtures, scene objects and a renderer,
+and declares what its viewport supports. The toy mode is a flat 2D, camera-less adapter: no navigation,
+no scene handles, no inspector extras. Nothing in the shell is copied.
 """
 from __future__ import annotations
 
@@ -10,7 +12,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from ui.studio.adapter import REFERENCE, SYNTHETIC, StudioFixture, StudioFraming, StudioModeAdapter
+from ui.studio.adapter import (NavAxis, REFERENCE, SYNTHETIC, StudioCapabilities, StudioFixture, StudioFraming,
+                               StudioModeAdapter, StudioNavigation)
 from ui.studio.schema import (QUIET_PEAK, SCALAR, SWITCH, ResponseCell, ResponseSource, ResponseTarget,
                               SceneObject, StudioProperty, StudioResponse, StudioSchema, Workspace)
 
@@ -64,8 +67,23 @@ class ToyRenderer:
 
 
 class ToyAdapter(StudioModeAdapter):
+    """A flat 2D mode: a live preview, but no camera and no scene handles."""
     mode_id = "toy_mode"
     title = "Toy Studio"
+    navigation_calls = 0
+    handle_calls = 0
+
+    def capabilities(self):
+        return StudioCapabilities(viewport=True, camera=False, handles=False)
+
+    # A careless 2D adapter that still answers these must never be consulted.
+    def navigation(self):
+        type(self).navigation_calls += 1
+        return StudioNavigation(zoom=NavAxis("toy_gain", (0., 2.)))
+
+    def scene_handles(self, *args, **kwargs):
+        type(self).handle_calls += 1
+        return {"outline": [[0, 0], [1, 1]], "handles": [{"id": "x"}]}
 
     def schema(self):
         def admit(key, candidate, previous):
@@ -179,6 +197,77 @@ def test_a_non_waveform_mode_runs_the_whole_shell(toy_studio):
     controller.close()
     assert not presence.concealed and presence.reveals == 1 and surfaces[0].retired
     assert ToyRenderer.released == 1 and controller.evaluator.released and controller.transport.stopped
+
+
+def _walk(item):
+    for child in item.childItems():
+        yield child
+        yield from _walk(child)
+
+
+def test_a_flat_2d_mode_gets_no_camera_navigation_or_handles(toy_studio):
+    controller, store, presence, surfaces = toy_studio
+    ToyAdapter.navigation_calls = ToyAdapter.handle_calls = 0
+    assert controller.open()
+    surface = surfaces[0]
+    surface.pump(3)
+    bridge = controller.bridge
+    assert bridge.capabilities == {"viewport": True, "camera": False, "handles": False}
+    named = {i.objectName(): i for i in _walk(surface.host.root) if i.objectName()}
+    for chrome in ("keepViewButton", "resetViewButton", "orbitArea", "handleLayer"):
+        assert not named[chrome].isVisible(), chrome
+    assert not named["noPreviewNote"].isVisible()
+    # Gestures a 3D mode would map are inert: no pose, no saves, no readout.
+    before = dict(store.values)
+    bridge.orbitBy(40.0, 20.0)
+    bridge.zoomBy(2.0, False)
+    bridge.panBy(10.0, 10.0, 300.0, 300.0)
+    bridge.keepView()
+    bridge.endOrbit()
+    surface.pump(2)
+    assert store.values == before and store.commits == [] and not bridge.viewModified
+    assert bridge.viewReadout == [] and bridge.handles["handles"] == []
+    assert ToyAdapter.navigation_calls == 0 and ToyAdapter.handle_calls == 0
+    # The 2D preview still renders through the mode's renderer, letterboxed by its framing.
+    assert ToyRenderer.drawn and surfaces[0].viewport.extent == (300., 300.)
+    # The help overlay lists only the gestures a 2D mode has (no camera or handle gestures).
+    overlay = named["helpOverlay"]
+    gestures = overlay.property("gestures").toVariant()
+    assert gestures and not any(g[0] in ("view", "lens", "move") for g in gestures)
+    # No inspector extras declared: none are offered.
+    assert all(not g["presets"] and not g["lifecycle"] and not g["card"] for g in bridge.inspector)
+    controller.close()
+
+
+def test_an_inspector_only_mode_creates_no_renderer(qt_app):
+    from ui.studio.controller import StudioController
+    from ui.studio.surface import OffscreenStudioSurface
+
+    class InspectorOnly(ToyAdapter):
+        def capabilities(self):
+            return StudioCapabilities(viewport=False)
+
+        def create_renderer(self):
+            raise AssertionError("no viewport declared: the renderer must never be created")
+
+    surfaces = []
+
+    def factory(controller):
+        surfaces.append(OffscreenStudioSurface(controller, size=(800, 500), present_on_show=False))
+        return surfaces[-1]
+    store, presence = ToyStore(), Presence()
+    controller = StudioController(InspectorOnly(), store, presence, factory)
+    assert controller.open()
+    surfaces[0].pump(4)
+    bridge = controller.bridge
+    assert bridge.capabilities == {"viewport": False, "camera": False, "handles": False}
+    assert bridge.viewportStatus == "none" and not surfaces[0].viewport.isVisible()
+    named = {i.objectName(): i for i in _walk(surfaces[0].host.root) if i.objectName()}
+    assert named["noPreviewNote"].isVisible()
+    bridge.commitValue("toy_gain", 0, 0.5)
+    assert store.commits == [frozenset({"toy_gain"})]
+    controller.close()
+    assert presence.reveals == 1 and StudioController.active() is None
 
 
 def test_the_registry_and_mode_switch_rebuild_the_session_without_revealing_settings(qt_app, monkeypatch):

@@ -145,6 +145,11 @@ class StudioBridge(QObject):
     def _modes(self) -> list:
         return [{"id": mode_id, "title": title} for mode_id, title in self._c.modes()]
 
+    def _capabilities(self) -> dict:
+        return self._c.capabilities.as_map()
+
+    capabilities = Property("QVariantMap", _capabilities, constant=True)
+
     def _mode_id(self) -> str:
         return self._c.adapter.mode_id
 
@@ -163,7 +168,7 @@ class StudioBridge(QObject):
 
     # -------------------------------------------------------- workspaces
     def _workspaces(self) -> list:
-        return [{"id": w.id, "title": w.title, "icon": w.icon} for w in self._schema.workspaces]
+        return [{"id": w.id, "title": w.title, "icon": w.icon, "help": w.help} for w in self._schema.workspaces]
 
     def _current_workspace(self) -> str:
         return self._workspace
@@ -179,6 +184,7 @@ class StudioBridge(QObject):
         self._rebuild_inspector()
         self.workspaceChanged.emit()
         self._c.refresh_handles()
+        self._c.refresh_preset_previews()
 
     # ----------------------------------------------------------- objects
     def _rebuild_objects(self) -> None:
@@ -359,6 +365,19 @@ class StudioBridge(QObject):
 
     handlesChanged = Signal()
     handles = Property("QVariantMap", _handles, notify=handlesChanged)
+
+    previewsChanged = Signal()
+
+    def _previews(self) -> dict:
+        return getattr(self, "_preview_urls", {})
+
+    presetPreviews = Property("QVariantMap", _previews, notify=previewsChanged)
+
+    def set_preview(self, key: str, url: str) -> None:
+        urls = dict(self._previews())
+        urls[key] = url
+        self._preview_urls = urls
+        self.previewsChanged.emit()
 
     def set_handles(self, state: Mapping[str, Any]) -> None:
         self._handle_state = dict(state)
@@ -807,6 +826,10 @@ class StudioController(QObject):
         self.evaluations = 0
         self.last_frame = None
         self.framings: tuple = ()
+        self.capabilities = adapter.capabilities()
+        self._preview_jobs: list = []
+        self._preview_sent: dict = {}
+        self._preview_done: dict = {}
         self._auto_clip: str | None = None
 
     # ---------------------------------------------------------------- open
@@ -821,6 +844,7 @@ class StudioController(QObject):
         StudioController._active = self
         self.state = "opening"
         try:
+            self.capabilities = self.adapter.capabilities()
             self.session = StudioEditSession(self.adapter.schema(), self.store)
             self.evaluator = self.adapter.create_evaluator()
             self.transport.set_duration(self.evaluator.fixture.duration)
@@ -834,16 +858,28 @@ class StudioController(QObject):
             self.viewport.rendered.connect(self._on_rendered, Qt.ConnectionType.QueuedConnection)
             self.viewport.renderError.connect(self._on_render_error, Qt.ConnectionType.QueuedConnection)
             self.viewport.preparing.connect(self._on_preparing, Qt.ConnectionType.QueuedConnection)
+            self.viewport.snapshotReady.connect(self._on_snapshot, Qt.ConnectionType.QueuedConnection)
+            self.viewport.snapshotFailed.connect(self._on_snapshot_failed, Qt.ConnectionType.QueuedConnection)
+            self.viewport.snapshotPending.connect(self._on_snapshot_pending, Qt.ConnectionType.QueuedConnection)
+            self._preview_jobs = []
+            self._preview_sent = {}
+            self._preview_done = {}
             self.surface.frameStarted.connect(self.on_frame)
             self.surface.presented.connect(self._on_presented)
             self.surface.closeRequested.connect(self.close)
             self.surface.lost.connect(self._on_surface_lost)
             self.surface.failed.connect(self._fail)
-            card_extent = getattr(self.store, "card_extent", lambda: None)()
-            card_style = getattr(self.store, "card_style", lambda: None)()
-            self.framings = tuple(self.adapter.framings(card_extent, card_style))
-            if self.framings:
-                self.select_framing(self.framings[0].id)
+            if self.capabilities.viewport:
+                card_extent = getattr(self.store, "card_extent", lambda: None)()
+                card_style = getattr(self.store, "card_style", lambda: None)()
+                self.framings = tuple(self.adapter.framings(card_extent, card_style))
+                if self.framings:
+                    self.select_framing(self.framings[0].id)
+            else:
+                # Inspector-only Studio: the item never gets a scene-graph node, so no renderer exists.
+                self.viewport.setVisible(False)
+                self.framings = ()
+                self.bridge.set_viewport("none")
             self._choose_default_source()
             self.surface.show()
         except Exception as exc:
@@ -909,6 +945,89 @@ class StudioController(QObject):
         if self.bridge is not None:
             self.bridge.on_session_changed(reason)
         self._invalidate()
+        if not self.session.gesture_active:
+            self.refresh_preset_previews()
+
+    # ------------------------------------------------------- preset tile previews
+    def refresh_preset_previews(self) -> None:
+        """Queue tile previews for the starting points on screen whose inputs changed (commits only).
+        Served one per frame by ``on_frame``; nothing runs while idle."""
+        if self.bridge is None or self.viewport is None or not self.capabilities.viewport:
+            return
+        workspace = next((w for w in self.session.schema.workspaces if w.id == self.bridge.workspace), None)
+        if workspace is None:
+            return
+        import hashlib
+        from ui.studio.session import write_path
+        values = self.session.values
+        baseline = self.session.baseline_values
+        queued = False
+        for group, presets in self.session.schema.group_presets:
+            if group not in workspace.groups:
+                continue
+            for preset in presets:
+                key = f"{group}/{preset.id}"
+                variant = dict(values)
+                for path, value in self.adapter.apply_preset(group, preset.id, baseline, values).items():
+                    variant[path[0]] = write_path(variant[path[0]], tuple(path[1:]), value)
+                signature = hashlib.sha1(repr(sorted(variant.items())).encode()).hexdigest()
+                if self._preview_done.get(key) == signature or self._preview_sent.get(key) == signature:
+                    continue
+                self._preview_jobs = [job for job in self._preview_jobs if job[0] != key]
+                self._preview_jobs.append((key, group, preset.id, signature, variant))
+                queued = True
+        if queued and self.surface is not None:
+            self.surface.request_frame()
+
+    @property
+    def previews_pending(self) -> bool:
+        return bool(self._preview_jobs) or any(self._preview_done.get(k) != s for k, s in self._preview_sent.items())
+
+    def _serve_preview(self) -> None:
+        if not getattr(self, "_preview_jobs", None) or self.viewport.snapshot_queue:
+            return
+        if any(key not in self._preview_done or self._preview_done[key] != sig
+               for key, sig in self._preview_sent.items()):
+            return                                    # one in flight at a time
+        key, group, preset_id, signature, variant = self._preview_jobs.pop(0)
+        try:
+            spec = self.adapter.preset_preview(group, preset_id, variant)
+        except Exception:
+            logger.exception("[STUDIO] Preset preview evaluation failed")
+            spec = None
+        if spec is None:
+            self._preview_done[key] = signature
+            return
+        frame, extent, style = spec
+        self._preview_sent[key] = signature
+        logical = (96.0, 64.0)
+        self.viewport.request_snapshot(f"{key}|{signature}", frame, (192, 128), logical, extent, style)
+
+    def _on_snapshot(self, key: str, width: int, height: int, pixels: bytes) -> None:
+        from PySide6.QtCore import QBuffer, QByteArray, QIODevice
+        from PySide6.QtGui import QImage
+        name, _sep, signature = key.partition("|")
+        image = QImage(pixels, width, height, width * 4, QImage.Format.Format_RGBA8888).flipped(Qt.Orientation.Vertical)
+        data = QByteArray()
+        buffer = QBuffer(data)
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        image.save(buffer, "PNG")
+        buffer.close()
+        self._preview_done[name] = signature
+        if self.bridge is not None:
+            self.bridge.set_preview(name, "data:image/png;base64," + bytes(data.toBase64()).decode("ascii"))
+        if self._preview_jobs and self.surface is not None:
+            self.surface.request_frame()
+
+    def _on_snapshot_failed(self, key: str, signature_text: str) -> None:
+        name, _sep, signature = key.partition("|")
+        self._preview_done[name] = signature           # keep the swatch; never retry in a loop
+        if self._preview_jobs and self.surface is not None:
+            self.surface.request_frame()
+
+    def _on_snapshot_pending(self) -> None:
+        if self.surface is not None:
+            self.surface.request_frame()
 
     def _invalidate(self) -> None:
         self._eval_dirty = True
@@ -949,6 +1068,8 @@ class StudioController(QObject):
             if callable(measure) and self.bridge is not None:
                 self.bridge.push_measurements(measure())
             self.refresh_handles()
+        if getattr(self, "_preview_jobs", None):
+            self._serve_preview()
         if self.transport.wants_frames:
             self.surface.request_frame()
 
@@ -970,6 +1091,8 @@ class StudioController(QObject):
     def refresh_handles(self) -> None:
         """Project the selected object's handles through the mode's camera (direct manipulation)."""
         if self.bridge is None or self.viewport is None or self.last_frame is None:
+            return
+        if not self.capabilities.as_map()["handles"]:
             return
         if self.bridge.workspace != self.session.schema.workspaces[0].id:
             if self.bridge.handles.get("handles"):
@@ -1082,6 +1205,13 @@ class StudioController(QObject):
         self.bridge.transportChanged.emit()
 
     # --------------------------------------------------------------- camera
+    def navigation(self):
+        """The mode's camera navigation, or None when the mode declares no camera (2D / camera-less)."""
+        caps = getattr(self, "capabilities", None)
+        if caps is None or not (caps.camera and caps.viewport):
+            return None
+        return self.adapter.navigation()
+
     def _nudge(self, axis, delta: float) -> None:
         if axis is None:
             return
@@ -1089,7 +1219,7 @@ class StudioController(QObject):
         self.set_pose(axis.key, min(axis.bounds[1], max(axis.bounds[0], value)))
 
     def orbit_by(self, dx: float, dy: float) -> None:
-        nav = self.adapter.navigation()
+        nav = self.navigation()
         if nav is None:
             return
         span_h = (nav.orbit_h.bounds[1] - nav.orbit_h.bounds[0]) if nav.orbit_h else 0.
@@ -1098,7 +1228,7 @@ class StudioController(QObject):
         self._nudge(nav.orbit_v, float(dy) * span_v / 600.0)
 
     def pan_by(self, dx: float, dy: float, width: float, height: float) -> None:
-        nav = self.adapter.navigation()
+        nav = self.navigation()
         if nav is None:
             return
         self._nudge(nav.pan_x, -float(dx) / max(1.0, float(width)))
@@ -1106,7 +1236,7 @@ class StudioController(QObject):
 
     def zoom_by(self, steps: float, *, dolly: bool = False) -> None:
         """Wheel: ``steps`` > 0 zooms in. Multiplicative, bounded by the mode's camera range."""
-        nav = self.adapter.navigation()
+        nav = self.navigation()
         if nav is None:
             return
         axis = nav.dolly if dolly else nav.zoom
@@ -1119,7 +1249,7 @@ class StudioController(QObject):
         self.set_pose(axis.key, min(axis.bounds[1], max(axis.bounds[0], value)))
 
     def view_readout(self) -> list:
-        nav = self.adapter.navigation()
+        nav = self.navigation()
         if nav is None:
             return []
         values = self.evaluation_values()
@@ -1134,7 +1264,7 @@ class StudioController(QObject):
     def keep_view(self) -> None:
         """Save what may be saved of the previewed view: ordinary lens settings always (undoable),
         the orbit only when the store's camera policy allows; dolly and pan stay preview views."""
-        nav = self.adapter.navigation()
+        nav = self.navigation()
         if nav is None or not self._pose:
             return
         allowed = getattr(self.store, "camera_commit_allowed", lambda: False)()
@@ -1165,7 +1295,7 @@ class StudioController(QObject):
         allows it; every other view-pose value stays a preview view."""
         if not self._pose:
             return
-        nav = self.adapter.navigation()
+        nav = self.navigation()
         orbit_keys = set(nav.saved_with_camera_policy) if nav is not None else set()
         allowed = getattr(self.store, "camera_commit_allowed", lambda: False)()
         saved = {key: value for key, value in self._pose.items() if key in orbit_keys} if allowed else {}
@@ -1245,6 +1375,11 @@ class StudioController(QObject):
         step("surface")
         if self.evaluator is not None:
             self.evaluator.release()
+        try:
+            self.adapter.release()
+        except Exception:
+            logger.exception("[STUDIO] Adapter release failed")
+        self._preview_jobs, self._preview_sent, self._preview_done = [], {}, {}
         if StudioController._active is self:
             StudioController._active = None
         step("evaluator")

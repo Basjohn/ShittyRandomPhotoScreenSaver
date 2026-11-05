@@ -11,6 +11,8 @@ Rectangle {
     focus: true
 
     readonly property var t: studio.theme
+    // What the active mode's viewport supports (adapter-declared): viewport / camera / handles.
+    readonly property var caps: studio.capabilities
     function endpointValue(id, endpoint) {
         var v = studio.values[id]
         if (v === undefined) return 0
@@ -50,6 +52,10 @@ Rectangle {
             studio.redo(); event.accepted = true
         } else if (event.key === Qt.Key_Space && !(event.modifiers & Qt.ControlModifier)) {
             studio.togglePlay(); event.accepted = true
+        } else if (event.key === Qt.Key_F1 || event.key === Qt.Key_Question) {
+            helpOverlay.open = !helpOverlay.open; event.accepted = true
+        } else if (event.key === Qt.Key_Escape && helpOverlay.open) {
+            helpOverlay.open = false; event.accepted = true
         }
     }
 
@@ -263,6 +269,21 @@ Rectangle {
         }
     }
 
+    // One line that never overflows: elided to its width, the full text on hover when it is cut.
+    component HintText: Text {
+        id: hint
+        objectName: "hintText"
+        property string full: text
+        elide: Text.ElideRight
+        maximumLineCount: 1
+        color: shell.cDim
+        font.pixelSize: shell.fontBase - 3
+        MouseArea { id: hintArea; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+        C.ToolTip.visible: hintArea.containsMouse && hint.truncated
+        C.ToolTip.text: hint.full
+        C.ToolTip.delay: 300
+    }
+
     component RowLabel: Text {
         property string tip: ""
         color: shell.cDim
@@ -273,8 +294,9 @@ Rectangle {
         MouseArea { id: tipArea; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.RightButton
                     onClicked: studio.resetProperty(parent.propId) }
         property string propId: ""
-        C.ToolTip.visible: tipArea.containsMouse && tip !== ""
-        C.ToolTip.text: tip + (tip !== "" ? "\nRight-click: reset to the value the Studio opened with." : "")
+        C.ToolTip.visible: tipArea.containsMouse && (tip !== "" || truncated)
+        C.ToolTip.text: (truncated ? text + (tip !== "" ? "\n" : "") : "") + tip
+                        + (tip !== "" ? "\nRight-click: reset to the value the Studio opened with." : "")
         C.ToolTip.delay: 600
     }
 
@@ -528,11 +550,10 @@ Rectangle {
                 }
             }
         }
-        Text {
+        HintText {
             visible: gr.selected < 0
             text: "Click a node to colour it · drag to move · double-click the strip to add"
-            color: shell.cDim; font.pixelSize: shell.fontBase - 3
-            width: gr.width; elide: Text.ElideRight
+            width: gr.width
         }
         Column {
             visible: gr.selected >= 0 && gr.selected < gr.nodes.length
@@ -565,14 +586,16 @@ Rectangle {
         id: tiles
         property var presets: []
         property string group: ""
+        // Tiles keep the preview's 3:2 shape: at most three per row in a narrow inspector.
+        readonly property int perRow: Math.max(1, Math.min(tiles.presets.length, Math.floor((tiles.width + spacing) / 96)))
         spacing: 8
         Repeater {
             model: tiles.presets
             delegate: Rectangle {
                 id: tile
                 readonly property bool active: studio.activePresets[tiles.group] === modelData.id
-                width: Math.max(58, Math.floor((tiles.width - tiles.spacing * (tiles.presets.length - 1)) / Math.max(1, tiles.presets.length)))
-                height: 70; radius: 6
+                width: Math.floor((tiles.width - tiles.spacing * (tiles.perRow - 1)) / tiles.perRow)
+                height: swatch.height + 32; radius: 6
                 color: tileMouse.containsMouse ? shell.cRaised : shell.cPanel
                 border.width: active ? 2 : 1
                 border.color: active ? shell.cAccent : shell.cOutlineSoft
@@ -580,24 +603,35 @@ Rectangle {
                 Accessible.role: Accessible.Button
                 Accessible.name: modelData.label
                 Rectangle {
-                    x: 6; y: 6; width: parent.width - 12; height: 40; radius: 4
+                    id: swatch
+                    x: 6; y: 6; width: parent.width - 12; height: Math.round(width / 1.5); radius: 4
+                    clip: true
+                    readonly property string preview: studio.presetPreviews[tiles.group + "/" + modelData.id] || ""
                     gradient: Gradient {
                         orientation: Gradient.Horizontal
                         GradientStop { position: 0; color: modelData.swatch[0] || shell.cTrack }
                         GradientStop { position: 1; color: modelData.swatch[1] || shell.cTrack }
                     }
-                    Rectangle { anchors.fill: parent; radius: 4
+                    Rectangle { anchors.fill: parent; radius: 4; visible: swatch.preview === ""
                                 gradient: Gradient { GradientStop { position: 0; color: "#55ffffff" }
                                                      GradientStop { position: .5; color: "#00ffffff" } } }
+                    Image {          // the mode's own renderer, drawn once per starting point (cached)
+                        objectName: "presetPreview"
+                        anchors.fill: parent
+                        visible: swatch.preview !== ""
+                        source: swatch.preview
+                        fillMode: Image.PreserveAspectCrop
+                        smooth: true; mipmap: true
+                    }
                 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; y: 50; text: modelData.label
+                Text { anchors.horizontalCenter: parent.horizontalCenter; y: swatch.height + 10; text: modelData.label
                        color: shell.cText; font.pixelSize: shell.fontBase - 2; font.bold: tile.active }
                 MouseArea { id: tileMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                             onClicked: studio.applyPreset(tiles.group, modelData.id) }
                 Keys.onSpacePressed: studio.applyPreset(tiles.group, modelData.id)
                 FocusRing { visible: tile.activeFocus }
                 C.ToolTip.visible: tileMouse.containsMouse
-                C.ToolTip.text: modelData.description + "\nApplies to the real material values; Undo reverts it."
+                C.ToolTip.text: modelData.description + "\nApplies to the real values as one edit; Undo reverts it."
                 C.ToolTip.delay: 400
             }
         }
@@ -624,9 +658,10 @@ Rectangle {
                 model: ["Quiet", "Peak"]
                 delegate: Chip { text: modelData; selected: life.endpoint === index; onPicked: life.endpoint = index }
             }
-            Text { anchors.verticalCenter: parent.verticalCenter; color: shell.cDim; font.pixelSize: shell.fontBase - 2
-                   text: life.t.toFixed(2) + " s" + (life.fade ? " · fade " + Math.round(life.f * 100) + "%" : "")
-                         + (life.peel ? " · peel " + life.pl.toFixed(2) + " s" : "") }
+            HintText { anchors.verticalCenter: parent.verticalCenter; font.pixelSize: shell.fontBase - 2
+                       width: Math.max(40, life.width - x)
+                       text: life.t.toFixed(2) + " s" + (life.fade ? " · fade " + Math.round(life.f * 100) + "%" : "")
+                             + (life.peel ? " · peel " + life.pl.toFixed(2) + " s" : "") }
         }
         Item {
             id: lane
@@ -721,6 +756,21 @@ Rectangle {
             if (typeof x === "object" && x !== null && x.length !== undefined) return Number(x[idx === undefined ? 1 : idx])
             return x
         }
+        function paletteRgb(t) {
+            var id = spec.roles ? spec.roles["palette"] : undefined
+            var nodes = id ? studio.values[id] : undefined
+            if (!nodes || nodes.length === undefined || nodes.length === 0) return shell.hexToRgb(shell.cAccent.toString())
+            var lo = nodes[0], hi = nodes[nodes.length - 1]
+            for (var i = 0; i < nodes.length; ++i) {
+                if (nodes[i].pos <= t) lo = nodes[i]
+                if (nodes[i].pos >= t) { hi = nodes[i]; break }
+            }
+            var a = shell.hexToRgb(lo.hex), b = shell.hexToRgb(hi.hex)
+            var f = hi.pos > lo.pos ? (t - lo.pos) / (hi.pos - lo.pos) : 0
+            return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f]
+        }
+        function paletteAt(t, alpha) { var c = paletteRgb(t); return Qt.rgba(c[0], c[1], c[2], alpha) }
+        function mixWhite(c, k) { k = Math.max(0, Math.min(1, k)); return [c[0] + (1 - c[0]) * k, c[1] + (1 - c[1]) * k, c[2] + (1 - c[2]) * k] }
         function caption(roles) {
             var out = []
             for (var i = 0; i < roles.length; ++i) {
@@ -796,6 +846,72 @@ Rectangle {
                     ctx.stroke()
                     ctx.fillStyle = shell.cDim; ctx.font = "10px sans-serif"
                     ctx.fillText(card.caption(["brightness", "reflection", "streak"]), 4, h - 1)
+                } else if (card.spec.kind === "particles" || card.spec.kind === "strands") {
+                    var floorP = h - 12
+                    var back = ctx.createLinearGradient(0, 0, 0, floorP)
+                    back.addColorStop(0, "#03040a"); back.addColorStop(1, "#0a0c16")
+                    ctx.fillStyle = back; ctx.fillRect(0, 0, w, floorP)
+                    function waveY(x) { return floorP * 0.66 + Math.sin(x / w * 9.42) * floorP * 0.12 }
+                    // the carrier the emitters sit on, in the palette's own colours
+                    ctx.lineWidth = 2
+                    for (var xw = 0; xw < w; xw += 3) {
+                        ctx.strokeStyle = card.paletteAt(xw / w, 0.55)
+                        ctx.beginPath(); ctx.moveTo(xw, waveY(xw)); ctx.lineTo(xw + 3, waveY(xw + 3)); ctx.stroke()
+                    }
+                    var seedP = 11
+                    function rndP() { seedP = (seedP * 16807) % 2147483647; return seedP / 2147483647 }
+                    if (card.v("enabled") !== false && card.spec.kind === "particles") {
+                        var n = Math.min(160, Math.round(card.v("count") * 2.5))
+                        var lifeP = Math.max(0.2, card.v("lifetime")), drift = card.v("drift"), rise = card.v("rise")
+                        var size = card.v("size"), glowP = card.v("glow"), whiteP = card.v("white")
+                        var spanF = Math.max(0.1, Math.min(1, card.v("span") / 128))
+                        for (var k = 0; k < n; ++k) {
+                            var ex = w * (0.5 + (rndP() - 0.5) * spanF), age = rndP(), tt = age * lifeP
+                            var ppx = ex + (rndP() - 0.5) * 2 * drift * tt * 6
+                            var ppy = waveY(ex) - rise * tt * 14 - rndP() * 4
+                            var fade = Math.pow(1 - age, 1.5)
+                            var rad = 0.6 + size * 0.3
+                            var col = card.mixWhite(card.paletteRgb(ex / w), whiteP)
+                            var halo = ctx.createRadialGradient(ppx, ppy, 0, ppx, ppy, rad * (2 + glowP * 3))
+                            halo.addColorStop(0, Qt.rgba(col[0], col[1], col[2], 0.35 * fade))
+                            halo.addColorStop(1, Qt.rgba(col[0], col[1], col[2], 0))
+                            ctx.fillStyle = halo
+                            ctx.fillRect(ppx - rad * 5 - glowP * 3 * rad, ppy - rad * 5 - glowP * 3 * rad,
+                                         2 * (rad * 5 + glowP * 3 * rad), 2 * (rad * 5 + glowP * 3 * rad))
+                            ctx.fillStyle = Qt.rgba(col[0], col[1], col[2], fade)
+                            ctx.beginPath(); ctx.arc(ppx, ppy, rad, 0, 6.283); ctx.fill()
+                        }
+                    } else if (card.v("enabled") !== false) {
+                        var strands = Math.max(1, Math.round(card.v("count") * 3))
+                        var len = card.v("length"), reach = card.v("reach"), widthS = card.v("width")
+                        var beads = Math.round(card.v("beads")), glowS = card.v("glow")
+                        for (var j = 0; j < strands; ++j) {
+                            var sx = w * (0.12 + 0.76 * (j + 0.5) / strands), sy = waveY(sx)
+                            var tall = floorP * Math.min(0.62, 0.05 * len) * (0.7 + 0.3 * rndP())
+                            var side = (rndP() - 0.5) * reach * w * 0.06
+                            var colS = card.paletteRgb(sx / w)
+                            ctx.save()
+                            ctx.shadowColor = Qt.rgba(colS[0], colS[1], colS[2], 0.8)
+                            ctx.shadowBlur = 2 + glowS * 4
+                            ctx.strokeStyle = Qt.rgba(colS[0], colS[1], colS[2], 0.9)
+                            ctx.lineWidth = Math.max(0.6, widthS * 1.1)
+                            ctx.beginPath(); ctx.moveTo(sx, sy)
+                            ctx.bezierCurveTo(sx + side * 0.2, sy - tall * 0.4, sx + side, sy - tall * 0.7, sx + side * 1.4, sy - tall)
+                            ctx.stroke()
+                            ctx.restore()
+                            for (var b2 = 1; b2 <= beads; ++b2) {
+                                var f2 = b2 / (beads + 1)
+                                var bx = sx + side * 1.4 * f2 * f2, by = sy - tall * f2
+                                ctx.fillStyle = Qt.rgba(1, 1, 1, 0.85)
+                                ctx.beginPath(); ctx.arc(bx, by, 1.2 + widthS * 0.4, 0, 6.283); ctx.fill()
+                            }
+                        }
+                    }
+                    ctx.fillStyle = "#1a1c24"; ctx.fillRect(0, floorP, w, h - floorP)
+                    ctx.fillStyle = shell.cDim; ctx.font = "10px sans-serif"
+                    ctx.fillText(card.v("enabled") === false ? "off"
+                                 : card.caption(card.spec.kind === "particles" ? ["count", "lifetime", "size"]
+                                                                              : ["count", "length", "reach"]), 4, h - 1)
                 } else if (card.spec.kind === "exposure") {
                     var e = card.v("exposure"), bq = card.v("bloom", 0), bp = card.v("bloom", 1)
                     ctx.strokeStyle = shell.cOutlineSoft; ctx.strokeRect(0.5, 0.5, w - 1, h - 12)
@@ -1081,6 +1197,10 @@ Rectangle {
                 StudioButton { text: "Revert"; icon: "reset"; iconSize: 16; enabledState: studio.dirty
                                tip: "Restore everything to the state the Studio opened with (undoable)"
                                onClicked: studio.revertAll() }
+                StudioButton { objectName: "helpButton"; icon: "help"; iconSize: 18; width: 34
+                               checked: helpOverlay.open
+                               tip: "How the Studio works: workspaces and gestures (F1)"
+                               onClicked: helpOverlay.open = !helpOverlay.open }
                 StudioButton { text: "Save Preset As…"; tip: "Save the current Custom settings as a preset file"
                                onClicked: studio.savePresetAs() }
                 StudioButton { text: "Close"; primary: true
@@ -1289,10 +1409,12 @@ Rectangle {
                             }
                         }
                         StudioButton { icon: "check"; iconSize: 20; width: 36; enabledState: studio.viewModified
+                                       objectName: "keepViewButton"; visible: shell.caps.camera === true
                                        tip: "Keep View: save the previewed lens (FOV); the orbit saves only when the "
                                             + "preset's camera checkbox is on; dolly and pan stay previews"
                                        onClicked: studio.keepView() }
                         StudioButton { icon: "reset"; iconSize: 20; width: 36; enabledState: studio.viewModified
+                                       objectName: "resetViewButton"; visible: shell.caps.camera === true
                                        tip: "Reset View: back to the saved camera (or double-click the scene)"
                                        onClicked: studio.resetCamera() }
                     }
@@ -1323,6 +1445,10 @@ Rectangle {
                         // Shift+wheel = dolly, double-click = back to the saved camera.
                         MouseArea {
                             id: orbitArea
+                            objectName: "orbitArea"
+                            // Only a mode that declares a camera navigates; 2D modes have no orbit/zoom/pan.
+                            enabled: shell.caps.camera === true
+                            visible: enabled
                             anchors.fill: parent
                             acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                             property real lastX: 0
@@ -1351,6 +1477,7 @@ Rectangle {
                         Item {
                             id: handleLayer
                             objectName: "handleLayer"
+                            visible: shell.caps.handles === true
                             x: viewportSlot.frameX; y: viewportSlot.frameY
                             width: viewportSlot.frameWidth; height: viewportSlot.frameHeight
                             readonly property var outline: studio.handles.outline || []
@@ -1383,9 +1510,26 @@ Rectangle {
                                     x: modelData.x - 13; y: modelData.y - 13
                                     width: 26; height: 26
                                     property bool dragging: false
-                                    // Width bracket: a bar across the span, drawn around the anchor.
+                                    readonly property bool combined: modelData.axis === "xy"
+                                    z: combined ? 2 : 1
+                                    Item {          // combined move gizmo: a crosshair with four arrowheads
+                                        visible: handle.combined
+                                        anchors.centerIn: parent
+                                        width: 104; height: 104
+                                        opacity: hMouse.containsMouse || handle.dragging ? 1 : .85
+                                        Rectangle { anchors.centerIn: parent; width: parent.width - 10; height: 2; color: "#f0ffffff" }
+                                        Rectangle { anchors.centerIn: parent; width: 2; height: parent.height - 10; color: "#f0ffffff" }
+                                        Repeater {
+                                            model: [[-1, 0, 180], [1, 0, 0], [0, -1, -90], [0, 1, 90]]
+                                            delegate: StudioIcon {
+                                                width: 16; height: 16; stroke: 2.6; color: "#f0ffffff"; name: "chevron-right"
+                                                rotation: modelData[2]
+                                                x: 52 - 8 + modelData[0] * 46; y: 52 - 8 + modelData[1] * 46
+                                            }
+                                        }
+                                    }
                                     Item {          // drag-axis guide with arrowheads (like a gizmo)
-                                        visible: modelData.span === undefined
+                                        visible: modelData.span === undefined && !handle.combined
                                         anchors.centerIn: parent
                                         width: modelData.axis === "x" ? 84 : 14
                                         height: modelData.axis === "x" ? 14 : 84
@@ -1411,7 +1555,7 @@ Rectangle {
                                     }
                                     Rectangle {
                                         anchors.centerIn: parent
-                                        width: handle.dragging || hMouse.containsMouse ? 22 : 18
+                                        width: (handle.combined ? 6 : 0) + (handle.dragging || hMouse.containsMouse ? 22 : 18)
                                         height: width
                                         radius: modelData.shape === "diamond" ? 2 : width / 2
                                         rotation: modelData.shape === "diamond" ? 45 : 0
@@ -1420,39 +1564,55 @@ Rectangle {
                                     }
                                     StudioIcon {
                                         anchors.centerIn: parent; width: 12; height: 12; stroke: 2.6
-                                        name: modelData.axis === "x" ? "flow" : "height"
+                                        name: handle.combined ? "move" : (modelData.axis === "x" ? "flow" : "height")
                                         color: handle.dragging ? "white" : shell.cAccent
                                         rotation: 0
                                     }
                                     Rectangle {      // label (live value while hovered / dragged)
-                                        x: modelData.id === "width" ? -width - 4 : (modelData.axis === "x" ? 50 : 26)
-                                        y: modelData.axis === "x" ? 2 : -10
+                                        x: modelData.id === "width" ? -width - 4 : (modelData.axis === "x" ? 50 : (handle.combined ? 30 : 26))
+                                        y: modelData.axis === "x" ? 2 : (handle.combined ? 22 : -10)
                                         opacity: hMouse.containsMouse || handle.dragging ? 1 : .8
                                         width: hText.implicitWidth + 12; height: 22; radius: 4
                                         color: "#cc000000"
                                         Text { id: hText; anchors.centerIn: parent; color: "white"; font.pixelSize: shell.fontBase - 2
                                                text: modelData.label + (hMouse.containsMouse || handle.dragging
-                                                     ? "  " + Number(shell.endpointValue(modelData.property, modelData.endpoint)).toFixed(3) : "") }
+                                                     ? (handle.combined
+                                                        ? "  ↔ " + Number(shell.endpointValue(modelData.property, modelData.endpoint)).toFixed(2)
+                                                          + "  ↕ " + Number(shell.endpointValue(modelData.propertyY, modelData.endpoint)).toFixed(2)
+                                                        : "  " + Number(shell.endpointValue(modelData.property, modelData.endpoint)).toFixed(3))
+                                                     : "") }
                                     }
                                     MouseArea {
                                         id: hMouse
                                         anchors.fill: parent
+                                        anchors.margins: handle.combined ? -6 : 0
                                         hoverEnabled: true
                                         preventStealing: true
-                                        cursorShape: modelData.axis === "x" ? Qt.SizeHorCursor : Qt.SizeVerCursor
+                                        cursorShape: handle.combined ? Qt.SizeAllCursor
+                                                     : (modelData.axis === "x" ? Qt.SizeHorCursor : Qt.SizeVerCursor)
                                         property real startValue: 0
+                                        property real startValueY: 0
                                         property real startX: 0
                                         property real startY: 0
                                         onPressed: function(m) {
                                             var p = mapToItem(handleLayer, m.x, m.y)
                                             startX = p.x; startY = p.y
                                             startValue = shell.endpointValue(modelData.property, modelData.endpoint)
+                                            if (handle.combined)
+                                                startValueY = shell.endpointValue(modelData.propertyY, modelData.endpoint)
                                             handle.dragging = true
                                             studio.beginEdit(modelData.property, modelData.label)
                                         }
                                         onPositionChanged: function(m) {
                                             if (!pressed) return
                                             var p = mapToItem(handleLayer, m.x, m.y)
+                                            if (handle.combined) {      // one gesture: x -> property, y -> propertyY
+                                                studio.previewValue(modelData.property, modelData.endpoint,
+                                                                    startValue + (p.x - startX) * modelData.perPixel)
+                                                studio.previewValue(modelData.propertyY, modelData.endpoint,
+                                                                    startValueY + (p.y - startY) * modelData.perPixelY)
+                                                return
+                                            }
                                             var delta = modelData.axis === "x" ? p.x - startX : p.y - startY     // screen pixels (perPixel is per screen px)
                                             studio.previewValue(modelData.property, modelData.endpoint,
                                                                 startValue + delta * modelData.perPixel)
@@ -1461,7 +1621,9 @@ Rectangle {
                                         onDoubleClicked: studio.revealProperty(modelData.property, modelData.endpoint)
                                     }
                                     C.ToolTip.visible: hMouse.containsMouse && !handle.dragging
-                                    C.ToolTip.text: modelData.label + " — drag to edit (Undo reverts); double-click to type an exact value"
+                                    C.ToolTip.text: handle.combined
+                                                    ? "Move: drag left/right to slide the wave, up/down to change its height (one edit; Undo reverts)"
+                                                    : modelData.label + " — drag to edit (Undo reverts); double-click to type an exact value"
                                     C.ToolTip.delay: 600
                                 }
                             }
@@ -1473,7 +1635,7 @@ Rectangle {
                             y: viewportSlot.frameY + viewportSlot.frameHeight - height - 8
                             width: readout.implicitWidth + 16; height: 24; radius: 4
                             color: "#99000000"
-                            visible: studio.viewReadout.length > 0
+                            visible: shell.caps.camera === true && studio.viewReadout.length > 0
                             Row {
                                 id: readout
                                 anchors.centerIn: parent
@@ -1492,7 +1654,7 @@ Rectangle {
                             }
                         }
                         Rectangle {
-                            visible: studio.viewportStatus !== "live"
+                            visible: studio.viewportStatus !== "live" && studio.viewportStatus !== "none"
                             anchors.centerIn: parent
                             width: Math.min(parent.width - 40, statusText.implicitWidth + 40)
                             height: statusText.implicitHeight + 24
@@ -1513,6 +1675,18 @@ Rectangle {
                                       : "Preparing the production scene…"
                             }
                         }
+                    }
+
+                    Text {           // inspector-only modes (no live preview declared)
+                        objectName: "noPreviewNote"
+                        visible: shell.caps.viewport !== true
+                        x: viewportSlot.x + (viewportSlot.width - width) / 2
+                        y: viewportSlot.y + (viewportSlot.height - height) / 2
+                        width: Math.min(420, viewportSlot.width - 40)
+                        wrapMode: Text.Wrap; horizontalAlignment: Text.AlignHCenter
+                        color: shell.cDim; font.pixelSize: shell.fontBase
+                        text: "This mode has no live preview here. Edits still save to the visualizer; "
+                              + "the signal traces show how the preview input drives it."
                     }
 
                     // Scrub / time bar
@@ -1619,8 +1793,9 @@ Rectangle {
                         StudioIcon { name: "bolt"; width: 16; height: 16; color: shell.cAccent; anchors.verticalCenter: parent.verticalCenter }
                         Text { text: "Response Editor"; color: shell.cText; font.bold: true; font.pixelSize: shell.fontBase
                                anchors.verticalCenter: parent.verticalCenter }
-                        Text { text: responseDock.target ? "· " + responseDock.target.label + " — source mix, curve and range" : ""
-                               color: shell.cDim; font.pixelSize: shell.fontBase - 1; anchors.verticalCenter: parent.verticalCenter }
+                        HintText { text: responseDock.target ? "· " + responseDock.target.label + " — source mix, curve and range" : ""
+                                   font.pixelSize: shell.fontBase - 1; anchors.verticalCenter: parent.verticalCenter
+                                   width: Math.max(60, responseDock.width - x - 40) }
                     }
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: responseDock.expanded = true }
                     Keys.onSpacePressed: responseDock.expanded = true
@@ -1707,8 +1882,8 @@ Rectangle {
                         spacing: 6
                         Text { text: responseDock.target ? responseDock.target.label + " — Source Mix" : ""
                                color: shell.cText; font.pixelSize: shell.fontBase + 1; font.bold: true }
-                        Text { text: responseDock.target ? responseDock.target.description : ""
-                               color: shell.cDim; font.pixelSize: shell.fontBase - 2; width: parent.width; elide: Text.ElideRight }
+                        HintText { text: responseDock.target ? responseDock.target.description : ""
+                                   font.pixelSize: shell.fontBase - 2; width: parent.width }
                         Repeater {
                             model: responseDock.target ? responseDock.target.cells : []
                             delegate: Row {
@@ -1950,6 +2125,99 @@ Rectangle {
                     }
                 }
             }
+        }
+    }
+
+    // Help overlay: what each workspace is for and the gestures this mode supports (from its capabilities).
+    Rectangle {
+        id: helpOverlay
+        objectName: "helpOverlay"
+        property bool open: false
+        anchors.fill: parent
+        visible: open
+        z: 100
+        color: "#b3000000"
+        MouseArea { anchors.fill: parent; onClicked: helpOverlay.open = false; onWheel: function(w) { w.accepted = true } }
+        readonly property var gestures: {
+            var out = []
+            if (shell.caps.camera === true) {
+                out.push(["view", "Drag the preview", "Orbit the camera (saved only with the preset's camera checkbox)"])
+                out.push(["lens", "Mouse wheel", "Zoom the lens; Shift+wheel moves the camera closer or further"])
+                out.push(["flow", "Middle or right drag", "Pan the view (a preview only)"])
+                out.push(["reset", "Double-click the preview", "Back to the saved camera; the tick button keeps the view"])
+            }
+            if (shell.caps.handles === true)
+                out.push(["move", "Handles (Composition)", "Drag the crosshair or a handle to edit the selected "
+                          + studio.objectNoun.toLowerCase() + " in place; double-click a handle to type a value"])
+            out.push(["bars", "Quiet / Peak", "Most values have a quiet and a peak end: the music moves between them"])
+            out.push(["height", "Sliders and fields", "Drag, use arrow keys, or type an exact value; right-click a "
+                      + "label to reset it"])
+            out.push(["undo", "Undo / Redo", "Every change is one named step (Ctrl+Z / Ctrl+Y); edits save to Custom"])
+            out.push(["play", "Space", "Play or pause the preview input; drag the waveform bar to scrub"])
+            return out
+        }
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 48, 680)
+            height: Math.min(parent.height - 48, helpColumn.implicitHeight + 48)
+            radius: 10
+            color: shell.cPanel
+            border.width: 1; border.color: shell.cOutline
+            MouseArea { anchors.fill: parent }       // clicks inside do not close
+            C.ScrollView {
+                id: helpScroll
+                anchors.fill: parent; anchors.margins: 24
+                clip: true
+                contentWidth: availableWidth
+                Column {
+                    id: helpColumn
+                    width: helpScroll.availableWidth
+                    spacing: 10
+                    Row {
+                        spacing: 10
+                        StudioIcon { name: "help"; width: 22; height: 22; color: shell.cAccent }
+                        Text { text: "How the " + studio.title + " Works"; color: shell.cText
+                               font.pixelSize: shell.fontBase + 4; font.bold: true }
+                    }
+                    Text { width: parent.width; wrapMode: Text.Wrap; color: shell.cDim; font.pixelSize: shell.fontBase
+                           text: "Pick a workspace, select an object on the left and shape it on the right. The preview "
+                                 + "is the real visualizer, driven by the input chosen above it." }
+                    Text { text: "Workspaces"; color: shell.cText; font.bold: true; font.pixelSize: shell.fontBase + 1
+                           topPadding: 6 }
+                    Repeater {
+                        model: studio.workspaces
+                        delegate: Row {
+                            spacing: 12
+                            width: helpColumn.width
+                            StudioIcon { name: modelData.icon || ""; width: 18; height: 18; color: shell.cAccent }
+                            Text { text: modelData.title; width: 110; color: shell.cText; font.bold: true
+                                   font.pixelSize: shell.fontBase }
+                            Text { width: parent.width - 150; wrapMode: Text.Wrap; color: shell.cDim
+                                   font.pixelSize: shell.fontBase; text: modelData.help || "" }
+                        }
+                    }
+                    Text { text: "Gestures"; color: shell.cText; font.bold: true; font.pixelSize: shell.fontBase + 1
+                           topPadding: 6 }
+                    Repeater {
+                        model: helpOverlay.gestures
+                        delegate: Row {
+                            objectName: "helpGesture"
+                            spacing: 12
+                            width: helpColumn.width
+                            StudioIcon { name: modelData[0]; width: 18; height: 18; color: shell.cAccent }
+                            Text { text: modelData[1]; width: 160; color: shell.cText; font.pixelSize: shell.fontBase
+                                   wrapMode: Text.Wrap }
+                            Text { width: parent.width - 200; wrapMode: Text.Wrap; color: shell.cDim
+                                   font.pixelSize: shell.fontBase; text: modelData[2] }
+                        }
+                    }
+                    Text { text: "Hover any control for its explanation. Esc or F1 closes this help."
+                           color: shell.cDim; font.pixelSize: shell.fontBase - 1; topPadding: 6 }
+                }
+            }
+            StudioButton { anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 10
+                           icon: "close"; iconSize: 16; width: 30; height: 28; tip: "Close help (Esc)"
+                           onClicked: helpOverlay.open = false }
         }
     }
 

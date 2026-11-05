@@ -67,6 +67,9 @@ def _apply_shell_state(surface, args) -> None:
     if args.pick_node >= 0:
         for row in named("gradientRow")[:1]:
             row.setProperty("selected", args.pick_node)
+    if args.help_open:
+        for overlay in named("helpOverlay"):
+            overlay.setProperty("open", True)
     if args.dock_open:
         for dock in named("responseDock"):
             dock.setProperty("expanded", True)
@@ -100,6 +103,7 @@ def main() -> int:
                         help="Open the colour picker on this gradient node (Appearance)")
     parser.add_argument("--scroll", type=float, default=0.0, help="Inspector scroll offset (px; negative = bottom)")
     parser.add_argument("--dock-open", action="store_true", help="Expand the Reactivity response editor")
+    parser.add_argument("--help-open", action="store_true", help="Show the help overlay")
     args = parser.parse_args()
     width, height = (int(v) for v in args.size.split("x"))
 
@@ -222,6 +226,10 @@ def main() -> int:
                     for w in bridge._schema.workspaces))
                 bridge._rebuild_inspector()
             surface.pump(3)
+            for _ in range(240):           # starting-point tile previews (served one per frame)
+                if not controller.previews_pending:
+                    break
+                surface.pump()
             _apply_shell_state(surface, args)
             surface.pump(3)
             name = args.output / f"studio_{workspace}{suffix}.png"
