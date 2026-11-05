@@ -32,11 +32,6 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
-- [ ] **Authored preset completeness debt (2 Nov focused gate):** 18 existing Bubble presets omit
-  `bubble_gradient_endpoints`; EB presets 2–8 omit camera projection and eight drift/ray fields.
-  Their parsed payloads and pre-existing spec keys match HEAD. Preserve operator-authored values; reconcile this
-  separately before treating the cross-mode completeness check as green. Waveform's two new presets are complete.
-
 - [ ] **Display Settings capacity (physical hotplug):** on a real monitor disconnect/return or explicit reauthoring,
   Settings' current-screen rows and selections/bindings stay coherent (focused checks pass; hidden form evidence
   `tmp/pytest_ux30_display/test_display_ui_rows_follow_to0/six_display_rows.png`).
@@ -60,22 +55,6 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
   The next MC run (19:47) and an invisible live check on current code were normal. On recurrence the sampler now
   logs `[USAGE] topology added ... name= parent= threads=` for every process entering the tree: identify them, then
   decide whether the sampler must exclude/outsource them. Not the Extruded Bubble chain fix (no processes, tick unchanged).
-- [ ] **Suite reds since the 24 Oct 737/737 baseline (5 Nov isolated full run, identical at a74dfaa0, i.e. before
-  the 5 Nov work):** 40 files, all reproducible alone. Largest: `test_visualizer_preset_completeness` (13: Bubble and
-  Extruded Bubble presets miss the 5.1.3 microbubble/gradient/drift/projection controls — repair-fill them),
-  `test_waveform_infinite_floor` (9: orthographic depth/actor-clip/floor-reflection expectations vs the camera
-  helper), `test_qtquick_custom_layout_owner` (8: its Waveform cases replay without PCM reanalysis, which raw musical replay now requires), `test_framed_viewport_aperture` (4: EB/Shockwave custom-side
-  gestures), `test_qtquick_visualizer_all_modes` (4), `test_visualizer_logical_hook_dormancy` (4),
-  `test_visualizer_plain_orbit` (native crash), `test_visualizer_view_orbit` (Shockwave planar vs freeform; Waveform
-  full-circle turn), `test_defaults_schema_authority` (Waveform presets carry `mode` only at top level), plus 1-3
-  failures in bubble_ambient_glow, build_runner, feed_f2 (RSS log redaction), frame_trace, framed_scene_input,
-  input_gain, monitor_replay_admission, neon_scene_materials,
-  qt611_shader_admission, qtquick_build_packaging/ordinary_widget_host/visualizer_bubble/all_five_owner_chain/
-  fade_authority/technical_sync_contract, release_media, run_matrix_harness, settings_theme_lifetime_contract,
-  startup_source_onboarding_resume, transition_distribution, visualizer_custom_geometry_profiles,
-  lazy_preset_collection, mode_dormancy, mode_enable_resolver, presets, settings_plumbing,
-  widget_theme_no_material_contract. Reconcile per assertion (current architecture authoritative; never bless
-  unexplained drift); fix product defects found on the way.
 - [ ] **Cross-display Media shortcuts** delivered once on the other display, when exercised.
 - [ ] **Music recorder** 60-second clip, signal/history, cancel and mixed-DPR UI, when recording is needed.
 - [ ] **Helper breadcrumb diagnostics unavailable:** current native MC evidence logs no access to
@@ -359,9 +338,13 @@ design pack's control policy (quiet/peak A/B, real ranges only where a true inte
 serialized data unless a migration is justified. Accepted looks/behaviour (BTF, presets, timings) must not change.
 
 - [ ] Finish Waveform Studio acceptance first (§7.1), then extract any remaining Waveform-shaped assumptions.
-- [ ] Adapters in order of authoring pain (Extruded Bubble built; Bubble in progress): Sphere, Spectrum/Rainbow Ghost,
+- [ ] Adapters in order of authoring pain (Extruded Bubble and Bubble built; Sphere in progress): Spectrum/Rainbow Ghost,
   Extruded Spectrum, Shockwave Grid, DevCurve, Oscilloscope. Each: full registry coverage test, production-parity preview test, theme,
   Settings Custom launcher replacing that builder body once the operator accepts it.
+- [ ] Flaky render test: `tests/test_waveform_studio_editors.py::test_preview_layer_omission_changes_only_flagged_renders`
+  failed once (`plain_a != plain_b`, two snapshot requests of one frame) in a 282-test Studio + build run, then
+  passed alone twice and in the next full Studio gate (5 Nov). Identical requests should be byte-equal: find the
+  render state that leaks between snapshots.
 
 ## Operator execution and evidence rules
 

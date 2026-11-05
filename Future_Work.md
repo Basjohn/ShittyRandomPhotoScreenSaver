@@ -20,18 +20,9 @@ For any deferred feature that becomes active:
 Transition and Visualizer membership is deliberately **count-neutral** here. Source registries own the current catalog; future
 docs should not encode a cardinality that becomes stale when another effect is registered.
 
-## 2. Graphics API horizon after OpenGL 4.6
+## 2. Graphics API horizon.
 
-Do not begin a backend program while modern OpenGL satisfies measured product needs. Reopen only for a concrete ceiling such as:
-
-- hardware ray tracing/path-traced lighting that materially improves an admitted feature;
-- a proven need for explicit asynchronous compute/transfer queues;
-- a platform/driver compatibility blocker;
-- submission or GPU-memory control still bottlenecking after the existing DSA/persistent-buffer/SSBO/compute/indirect path;
-- a target platform where OpenGL support itself is the blocker.
-
-If that gate opens, investigate one QRhi-based renderer substrate first. Native D3D/Vulkan escape hatches require a capability
-QRhi cannot expose and must remain isolated rather than becoming parallel permanent engines.
+Audit, plan and advise when best to build a custom Vulkan backend with intentional support for FSR <=3 and DLSS <=4.5 where applicable.
 
 ## 3. Visual concepts
 
@@ -58,35 +49,6 @@ combining (no physics engine, no extra animation clock):
 - **S25:** the shared shadows of `Current_Plan.md` §6 (S3D-6). **S27 → S26:** prove world-view projection distinct from
   the photo-plane camera, then seeded sphere/crater/stars and logical travel. Bordered consumers use the shared framed
   camera input/persistence; unframed world travel may differ in projection, never duplicate framed-camera authority.
-
-### Settings live preview (aspiration, not scheduled)
-
-A small styled box in the Settings sidebar may lazily show a slow-fading preview only while relevant controls are
-being edited. Investigate the existing offscreen Quick render path, production Visualizer host and a bundled short
-recorded clip. Settings runs standalone: one preview renderer, no second live saver Visualizer, low resolution/rate,
-render-thread resource retirement and zero idle polling/work. No implementation is admitted by this description.
-
-## Rejected Extruded cast shadows (deferred)
-
-R128 hard-disables cast shadows after three successive physically rejected treatments (R125–R127). The existing Settings controls are greyed out, saved values are retained for compatibility, and the renderer never draws the rejected pass or expands Edit bounds for it. Reopen only when there is a new, operator-approved visual target and a renderer design consistent with the canvas and global shadow direction. Do **not** silently re-enable the old GLSL projection. The failed approaches and visual evidence are in `Docs/Historical_Bugs/R-125_to_R-128_Extruded_Cast_Shadow_Failure.md`.
-
-
-
-## Neon Lake water extension (operator-requested, deferred 2026-10-18)
-
-Neon Lake is already accepted: extend it **without** changing the current art, existing Water Line Glow semantics,
-card/camera ownership, land classification or operator-authored presets. The governing requirements and source
-constraints are in `Docs/Reference/Neon_Lake_Basin.md` ("Operator-authorized future water improvements").
-
-- [ ] Higher physically displaced water cap, with coherent water splash/spray on tall crests, a real 3D
-  silhouette and bounded reflection/scene-depth cost (current `tanh` caps surface displacement near 0.18).
-- [ ] Falloff-aware Water brush that can sculpt **raised water** (including volcano/fountain shapes), preserving
-  wet/dry distinction, deterministic stroke semantics, versioned canonical authoring and safe existing saves.
-- [ ] Separate water/shore **edge glow colour and strength**, alongside but not replacing existing Water Line Glow
-  for ripples. Follow the real contour, including newly raised water, and retain Surface Glow ownership.
-
-Admit only with the operator's approval of implementation sequencing and per-feature physical/GL evidence;
-none is a blocker on the accepted Neon Lake baseline or current Extruded Bubble work.
 
 ## 4. Deferred maintenance / product work
 
@@ -121,19 +83,15 @@ Keep these deferred unless new evidence or an explicit request promotes them:
   compatibility mappings, goldens, geometry/state oracles, architecture-negative bars and wording contracts; do not turn the
   advisory queues into a standing release blocker or a project-wide rewrite campaign.
 
-### EB composition-lab recipe refresh (deferred)
+### EB composition-lab clean. Clean up scratch and no longer needed files related to labs unless they explicitly help a future visualizer lab implementation.
 
-The current composition lab resolves all renamed targets by verified historical byte identity and compiles against
-shared shaders. A 480x270 all-recipe run still shows old recipe appearance diverging substantially from targets
-(`tmp/eb30_references.png`); this is not a production EB regression or parity acceptance. Audit recipe parameters
-against current shared shader semantics only if a later EB lab/visual comparison is explicitly reopened. Do not
-retune accepted production presets or expand the closed EB work to match these stale recipes.
+
+### 2.5 SMP & Full Display 
+
+Details can be found in "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Future_Work\SRPSS_Expanded_Visualizer_and_SMP_Implementation_Plans_2026-11-05.zip". Decide on this or the Vulkan back end as the next series of large tasks after Waveform and Studios land cleanly.
 
 ### Remaining non-code organization
 
-- [ ] Consolidate new generated evidence/scratch under the existing ignored `.artifacts/` using explicit CLI
-  output paths, updating current producers/consumers as each subject is touched. Keep live logs, canonical music
-  recordings, product assets, themes/presets and generated release outputs at their established owners.
 - [ ] Review dated `Docs/Audits` individually: durable rules into existing owners, significant forensic lessons
   into Historical Bugs, ordinary completed chronology into Git. Do not create another historical index/archive.
   Preserve operator source/reference assets and recovery backups; bulk scratch pruning is not a continuing
