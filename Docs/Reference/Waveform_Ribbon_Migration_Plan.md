@@ -63,6 +63,14 @@ constants); all state integrates on the sole logical clock and the projection on
 - **Appearance band.** A narrower Pulse Width band carries light, Pulse Colour Shift and Pulse Saturation (never
   inventing a hue on neutral colours). It is led by fresh energy, so each beat's band is brightest while it travels;
   geometry follows the fresh field too, so overlapping swells do not inflate the whole view.
+- **Pulse Rim.** The rims (crisp line and rim glow), already brighter than the sheet by design, brighten further
+  where the pulse is. The logical owner publishes its appearance field (`pulse_at` on `PULSE_GRID`, history-axis x)
+  in every snapshot; the scene uploads it once per frame (one small R32F texture, only while Pulse Rim > 0) and the
+  light pass alone reads it at the fragment's history x (direct and reflected), so Travel Direction and every
+  Reaction Mode place it exactly on the published field. The response is the square of the field over a reference
+  level (a passing swell's in-view level on recorded music), softly capped, so the plateau of older swells keeps its
+  rims near their own light while a passing swell's rims light up with the field's own smooth falloff. 0 is
+  pixel-identical to the light pass without it (`tests/test_waveform_pulse_rim.py`).
 - **Coupled accents.** Pulse Particles buys births once per injection, released over the swell's first journey and
   only into the headroom left after the authored Spark Count; Pulse Strands gives a restrained lean/chance/glow
   near the swell.
