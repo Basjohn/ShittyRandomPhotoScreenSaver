@@ -697,7 +697,9 @@ def test_spectrum_body_uses_authored_bucket_order_and_render_mode_buttons(
             "Bar Appearance",
             "Rainbow",
         ]
-        assert _bucket_titles(tab._spectrum_advanced) == ["Render", "Audio", "Ghost"]
+        from core.settings.visualizer_mode_settings import require_mode_settings
+        assert _bucket_titles(tab._spectrum_advanced) == [          # the spec's own advanced order
+            bucket.title for bucket in require_mode_settings("spectrum").buckets if bucket.advanced]
         assert set(tab.spectrum_render_mode_buttons.keys()) == {"segment", "bars"}
         assert tab._spectrum_render_mode in {"bars", "segment"}
     finally:
