@@ -15,6 +15,15 @@ from tests.test_ribbon_strand_cohorts import controls as strand_controls, packet
 from tests.test_waveform_energy_pulse import beat, pulsed
 from tests.test_waveform_ribbon_dynamics import controls, primed, data
 
+
+@pytest.fixture(autouse=True)
+def _swell_mechanics_on_test_paths(monkeypatch):
+    """These tests examine swell mechanics on short test paths near the centre: launch the swell inside them and keep
+    the fixed end taper short (production births swells beyond the ~±30 view and tapers the slide over 20 units)."""
+    import core.waveform_ribbon_dynamics as dyn
+    monkeypatch.setattr(dyn, 'PULSE_ORIGIN', 3.5)
+    monkeypatch.setattr(dyn, 'SURGE_TAPER', 2.)
+
 QUIET = {'bands': (.3, .3, .3), 'intensity': .5, 'presence': 1.}
 
 

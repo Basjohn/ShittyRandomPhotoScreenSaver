@@ -59,13 +59,14 @@ _WORKSPACES = (
               columns=(WorkspaceColumn("Ribbon Shape", ("{object}",), "wave", "Selected ribbon", 1.2),
                        WorkspaceColumn("Global", ("Ribbons", "Flow"), "ribbons", "Every ribbon"))),
     Workspace("reactivity", "Reactivity", ("Energy Pulse", "Shape Response", "Roll & Twist", "Timing",
-                                           "Routing Details", "Advanced (Retired)"),
+                                           "Routing Details", "Audio Analysis", "Advanced (Retired)"),
               open_groups=("Energy Pulse", "Shape Response", "Timing"), icon="bars",
               help="Decide how the music moves the scene: the travelling pulse, what each target listens to "
                    "(the Response Editor panel) and how quickly it reacts.",
               columns=(WorkspaceColumn("Reactivity", (RESPONSE_PANEL,), "bars", "Response Editor", 2.0),
                        WorkspaceColumn("Energy & Timing", ("Energy Pulse", "Shape Response", "Roll & Twist", "Timing",
-                                                           "Routing Details", "Advanced (Retired)"), "bolt",
+                                                           "Routing Details", "Audio Analysis", "Advanced (Retired)"),
+                                       "bolt",
                                        "Pulse, shape and timing"))),
     Workspace("appearance", "Appearance", ("Gradient Nodes", "Sheet & Highlights", "{object} Colours", "Colour",
                                            "Particles", "Free Strands"),
@@ -164,6 +165,20 @@ def _card_limits() -> dict[str, tuple[float, float]]:
 from ui.studio.colour import display_hex, linear_from_hex  # noqa: E402  (re-exported for callers)
 
 
+from ui.studio.technical import TECHNICAL_GROUP  # noqa: E402
+
+
+def _technical_properties() -> dict:
+    """The mode's technical (audio analysis) controls exactly as Settings' Technical group builds them."""
+    from ui.studio.technical import technical_properties
+    return technical_properties(MODE, workspace="reactivity")
+
+
+def _condition(control) -> tuple:
+    from ui.studio.adapter import control_condition
+    return control_condition(control)
+
+
 def build_schema() -> StudioSchema:
     spec = require_mode_settings(MODE)
     from core.waveform_ribbon_authoring import RIBBON_CAPACITY, SOURCES
@@ -189,7 +204,7 @@ def build_schema() -> StudioSchema:
         label = _label(control.label) or _label(getattr(control, "text", "")) or control.key
         tooltip = getattr(control, "tooltip", "")
         common = dict(id=control.key, path=(control.key,), label=label, workspace=workspace, group=group,
-                      tooltip=tooltip, priority=_PRIORITY.get(control.key, 100))
+                      tooltip=tooltip, priority=_PRIORITY.get(control.key, 100), when=_condition(control))
         if isinstance(control, Range):
             props.append(StudioProperty(instrument=QUIET_PEAK, minimum=control.low, maximum=control.high,
                                         decimals=0 if control.integer else control.decimals,
@@ -260,9 +275,14 @@ def build_schema() -> StudioSchema:
     props = [dataclasses.replace(p, icon=_ROW_ICONS.get(p.id.rsplit(".", 1)[-1] if "[" in p.id
                                                         else p.id[len(PREFIX):], ""))
              if not p.icon else p for p in props]
+    technical = _technical_properties()
+    props.extend(prop for prop, _defn in technical.values())
     controls = {control.key: control for control in spec.controls}
 
     def admit(key: str, candidate: Any, previous: Any) -> Any:
+        if key in technical:
+            from ui.studio.technical import admit_technical
+            return admit_technical(technical[key], candidate, previous)
         return controls[key].admit(candidate, previous)
 
     response = _response_model(spec, props)
@@ -742,19 +762,8 @@ def studio_presentation(logical_size, extent, style):
 
     Same resolver and uniform-scale rule as the display owner, so ``framed_aperture_scale`` (lens aperture,
     edge-resize reveal/crop) is production's. Shared by the renderer and the handle projection."""
-    from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
-    from widgets.spotify_visualizer.presentation_geometry import (
-        CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE, resolve_visualizer_presentation)
-    width, height = logical_size
-    extent = extent or CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
-    style = dict(style or ())
-    return resolve_visualizer_presentation(
-        policy=get_visualizer_presentation_policy(MODE), display_size=(width, height),
-        viewport_extent=extent, uniform_visual_scale=width / extent[0],
-        border_width=float(style.get("border_width", 0.0)), corner_radius=0.0,
-        content_inset=float(style.get("content_inset", 0.0)), background_color=(0, 0, 0, 0),
-        border_color=(0, 0, 0, 0), shadow_enabled=False, shadow_color=(0, 0, 0, 0), shadow_blur=0.0,
-        shadow_offset=(0.0, 0.0), shadow_spread=0.0, shadow_extensions=(0.0, 0.0, 0.0, 0.0))
+    from ui.studio.framed import presentation
+    return presentation(MODE, logical_size, extent, style)
 
 
 def frame_camera(frame, size, extent, style):
@@ -1104,36 +1113,19 @@ class WaveformStudioAdapter(StudioModeAdapter):
                                 saved_on_keep=frozenset({PREFIX + "camera_fov"}))
 
     def framings(self, card_extent, card_style=None):
-        from ui.studio.adapter import StudioFraming
-        from widgets.spotify_visualizer.presentation_geometry import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
-        base_w, base_h = CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
-        card = card_extent or (base_w, base_h)
-        label = f"Live Card {card[0] / card[1]:.2f}:1"
-        # Wider frames follow production's edge-resize rule: the live card's height, more world revealed at the
-        # sides (exactly what a wider card of that height shows).
-        height = float(card[1])
-        style = tuple(sorted((card_style or {}).items()))
-        return (StudioFraming("card", label, tuple(card),
-                              "The visualizer card as it is laid out (CUSTOM extent, else the card baseline).", style),
-                StudioFraming("wide", "16:9", (height * 16 / 9, height),
-                              "A 16:9 card at the live card's height: more of the world at the sides.", style),
-                StudioFraming("cinema", "21:9", (height * 21 / 9, height),
-                              "A 21:9 card at the live card's height.", style))
+        from ui.studio.framed import card_framings
+        return card_framings(card_extent, card_style)
 
     def default_framing(self) -> str:
-        return "wide"           # the dashboard's wide viewport; Live Card shows the true card, letterboxed
+        return "fill"           # the live card's world and scale, filling the viewport; Live Card is exact
 
     def default_fixture(self, evaluator) -> str | None:
         return "mid"
 
     def recorded_clips(self) -> tuple[StudioFixture, ...]:
-        from ui.studio.waveform_recorded_inputs import frozen_build, has_native_history
-        directory = recordings_directory()
-        if frozen_build() or not directory.is_dir():
-            return ()     # the replay analysis tools ship only with the source tree
-        return tuple(StudioFixture("clip:" + path.stem, path.stem.replace("_", " ").title(), RECORDED, 0.0,
-                                   str(path)) for path in sorted(directory.glob("*.jsonl"))
-                     if has_native_history(path))
+        """The shipped clips (Rag Doll, Human, Growing Pains), then a checkout's native-PCM recordings."""
+        from ui.studio.waveform_recorded_inputs import studio_clips
+        return studio_clips(recordings_directory())
 
     # Analysed clips for this process, keyed by clip and the analysis (non-authored) settings: the inputs do
     # not depend on authored Waveform controls, so reopening the Studio does not re-run a 30 s analysis.

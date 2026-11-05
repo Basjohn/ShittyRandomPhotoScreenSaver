@@ -16,6 +16,15 @@ from core.waveform_ribbon_dynamics import (GEOM_SLOPE, GROUP_SURGE, PULSE_GRID, 
                                            REACTION_MODES, SURGE_RATE, PulseControls, carrier_wavelength)
 from tests.test_waveform_ribbon_dynamics import controls, primed, data
 
+
+@pytest.fixture(autouse=True)
+def _swell_mechanics_on_test_paths(monkeypatch):
+    """These tests examine swell mechanics on short test paths near the centre: launch the swell inside them and keep
+    the fixed end taper short (production births swells beyond the ~±30 view and tapers the slide over 20 units)."""
+    import core.waveform_ribbon_dynamics as dyn
+    monkeypatch.setattr(dyn, 'PULSE_ORIGIN', 3.5)
+    monkeypatch.setattr(dyn, 'SURGE_TAPER', 2.)
+
 QUIET = {'bands': (.5, .4, .3), 'intensity': .6, 'presence': 1.}
 SILENT = {'bands': (0., 0., 0.), 'intensity': 0., 'presence': 0.}
 STRONG_BEND = (2., 3.)

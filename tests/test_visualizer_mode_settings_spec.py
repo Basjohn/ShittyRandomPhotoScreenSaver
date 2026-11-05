@@ -102,6 +102,18 @@ def _different(control, value):
     return [255 - value[0], 255 - value[1], 255 - value[2], 200 if control.alpha else 255]
 
 
+def _studio_owned(tab, spec) -> bool:
+    """A body whose controls are all edited in the mode's Studio (no buckets are built in Settings).
+    Its save/reload/condition parity is proven through the Studio in tests/test_waveform_studio_parity.py."""
+    from PySide6.QtWidgets import QWidget
+    container = getattr(tab, f"_{spec.prefix}_settings_container")
+    owned = container.findChild(QWidget, f"{spec.mode_id}_studio_owned_values") is not None
+    if owned:
+        assert container.findChildren(QWidget, f"{spec.mode_id}_bucket_") == []
+        assert all(container.findChild(QWidget, f"{spec.mode_id}_bucket_{b.key}") is None for b in spec.buckets)
+    return owned
+
+
 def _open_control_bucket(tab, spec, control):
     """Hydrate through the user's disclosure, preserving sectional lazy ownership."""
     if not control.bucket:
@@ -291,6 +303,8 @@ def test_the_settings_body_builds_saves_and_reloads_every_control(qt_app, settin
     tab = VisualizersTab(settings_manager)
     try:
         tab._select_mode_page(mode)
+        if _studio_owned(tab, spec):
+            return
         wanted = {}
         for control in spec.controls:
             if not control.bucket:
@@ -437,6 +451,8 @@ def test_conditional_controls_follow_their_condition_live_and_on_load(qt_app, se
     tab = VisualizersTab(settings_manager)
     try:
         tab._select_mode_page(mode)
+        if _studio_owned(tab, spec):
+            return
         rows = getattr(tab, f"_{spec.prefix}_rows")
         def set_condition(condition, value):
             _open_control_bucket(tab, spec, condition)

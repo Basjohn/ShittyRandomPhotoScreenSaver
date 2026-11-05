@@ -1,7 +1,8 @@
 # Project Overview
 
 SRPSS is a Windows screensaver/media runtime with multi-display image presentation, accelerated transitions, a
-high-fidelity multi-mode visualizer, configurable runtime overlays and durable settings.
+high-fidelity multi-mode visualizer, configurable runtime overlays and durable settings. Linux runs the same source
+(`Spec.md` → Platforms; `Linux_Plan.md`).
 
 ## Accepted architecture
 
@@ -50,6 +51,10 @@ top/bottom    -> viewport height
 Bubble is included and its capability policy is no longer an accepted place to hide a reflow defect. Committed runtime viewport truth is distinct from the temporary CUSTOM working override. Viewport changes reconfigure the spatial domain while preserving BTF; they never stretch finished pixels or redefine simulation cadence.
 
 **Visualizer preservation rule:** wide/tall adaptation may not globally compress Bubble renderer-facing head radius, already-normalized Ghost/history displacement, or another mode's authored musical response/freshness. If an extreme full-expansion visual tail is too large, fix only that proven tail. Audio analysis remains one persistent newest-source serial lane with retained DSP state; performance work may not lower authored cadence or increase visible staleness.
+
+Visualizer modes with a registered Studio adapter are authored in the reusable in-process Qt Quick Studio opened from
+their Settings Custom body; it previews the production path and saves through Settings
+(`Docs/Reference/Visualizer_Studio.md`).
 
 ## Ordinary widget pattern
 

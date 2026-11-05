@@ -4,8 +4,18 @@ Test-owned controls only (never presets). The field is logical state on the sole
 """
 from dataclasses import replace
 import numpy as np
-from core.waveform_ribbon_dynamics import PULSE_GRID, PULSE_ORIGIN, TROUGH_RAISE, PulseControls
+from core.waveform_ribbon_dynamics import PULSE_GRID, PULSE_ORIGIN, PulseControls
 from tests.test_waveform_ribbon_dynamics import controls, primed, data
+
+import pytest
+
+@pytest.fixture(autouse=True)
+def _swell_mechanics_on_test_paths(monkeypatch):
+    """These tests examine swell mechanics on short test paths near the centre: launch the swell inside them and keep
+    the fixed end taper short (production births swells beyond the ~±30 view and tapers the slide over 20 units)."""
+    import core.waveform_ribbon_dynamics as dyn
+    monkeypatch.setattr(dyn, 'PULSE_ORIGIN', 3.5)
+    monkeypatch.setattr(dyn, 'SURGE_TAPER', 2.)
 
 
 def pulsed(**pulse):
@@ -45,7 +55,9 @@ def test_centre_out_sends_two_swells_and_width_is_honoured():
     assert half_width(6.) > 2.*half_width(2.)
 
 
-def test_the_swell_amplifies_the_waveform_with_its_shape_never_against_it():
+def test_the_swell_amplifies_the_waveform_with_its_shape_never_against_it(monkeypatch):
+    import core.waveform_ribbon_dynamics as dyn
+    monkeypatch.setattr(dyn, 'TROUGH_LIFT_MAX', 0.)  # the floor rule is a separate owner (test_waveform_trough_clearance)
     still = pulsed(direction='Centre Out', speed=0., width=8., fade=20.)
     moved = pulsed(direction='Centre Out', speed=0., width=8., fade=20.)
     quiet = {'bands': (.3, .3, .3), 'intensity': .5, 'presence': 1.}
@@ -55,7 +67,7 @@ def test_the_swell_amplifies_the_waveform_with_its_shape_never_against_it():
         a, b = moved.advance(1/90, **quiet), still.advance(1/90, **quiet)
     ya, yb = data(a)[0, 4::5, 1], data(b)[0, 4::5, 1]
     count = int(data(a)[0, 0, 0])
-    rest = dict(b.realized)['lift']+TROUGH_RAISE  # the rest line the waveform swings about
+    rest = dict(b.realized)['lift']  # the rest line the waveform swings about
     da, db = (ya[:count]-rest), (yb[:count]-rest)
     moved_part = np.abs(da-db) > 1e-3
     assert moved_part.any()

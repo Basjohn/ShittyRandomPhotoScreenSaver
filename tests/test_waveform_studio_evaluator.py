@@ -124,16 +124,16 @@ def test_live_gesture_path_republishes_the_instant_without_moving_time():
 
 
 def _native_clip():
-    from ui.studio.waveform_recorded_inputs import has_native_history
-    directory = Path(__file__).resolve().parents[1] / "logs" / "visualizer_recordings"
-    clips = sorted(directory.glob("*.jsonl"), key=lambda p: p.stat().st_size) if directory.is_dir() else []
-    return next((clip for clip in clips if has_native_history(clip)), None)
+    """The first shipped Studio clip (always present; the Studios' default recorded source)."""
+    from ui.studio.waveform_recorded_inputs import shipped_clips
+    clips = shipped_clips()
+    return Path(clips[0].description) if clips else None
 
 
 def test_recorded_clip_replay_matches_production_logical_capture_byte_for_byte(qt_app):
     clip = _native_clip()
     if clip is None:
-        pytest.skip("No native-PCM visualizer recording in logs/visualizer_recordings")
+        pytest.skip("No shipped Studio clip (assets/production/studio_clips)")
     from ui.studio.adapter import RECORDED, StudioFixture
     from ui.studio.waveform_recorded_inputs import extract, to_inputs
     values = canonical_section()
@@ -237,10 +237,11 @@ def test_studio_view_and_projection_equal_production_for_the_same_card(extent):
     border = 4.0
     width = 900.0
     height = width * extent[1] / extent[0]
-    # Production display owner (planar card): uniform scale = committed width / extent width, card chrome.
+    # Production display owner (planar card): the live card committed at its CUSTOM extent (uniform scale 1),
+    # card chrome in display pixels. The Studio shows that card scaled down to its frame, chrome included.
     production = resolve_visualizer_presentation(
         policy=get_visualizer_presentation_policy("waveform_ribbon"), display_size=(4000.0, 4000.0),
-        viewport_extent=extent, uniform_visual_scale=width / extent[0], border_width=border, corner_radius=8.0,
+        viewport_extent=extent, uniform_visual_scale=1.0, border_width=border, corner_radius=8.0,
         content_inset=0.0, background_color=(0, 0, 0, 0), border_color=(0, 0, 0, 0), shadow_enabled=False,
         shadow_color=(0, 0, 0, 0), shadow_blur=0.0, shadow_offset=(0.0, 0.0), shadow_spread=0.0,
         shadow_extensions=(0.0, 0.0, 0.0, 0.0))

@@ -61,6 +61,11 @@ class StudioProperty:
     choice_notes: tuple[str, ...] = ()
     # A small glyph name (StudioIcon) shown before the row label where a canonical icon exists.
     icon: str = ""
+    # CHOICE only: the stored value of each choice when it is not the label itself (e.g. 256 for "256 samples").
+    choice_values: tuple = ()
+    # Shown only while every term holds: ((property id, (accepted stored values...)), ...) - the canonical
+    # Settings condition ("Field of View" only for a Perspective projection).
+    when: tuple = ()
 
     def __post_init__(self) -> None:
         if self.instrument not in INSTRUMENTS:
