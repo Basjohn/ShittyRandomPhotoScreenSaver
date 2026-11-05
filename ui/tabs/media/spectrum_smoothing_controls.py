@@ -26,7 +26,7 @@ def build_spectrum_smoothing_controls(tab, layout, *, mode_key: str) -> None:
     container, row, _ = add_aligned_row_widget(layout, "Smoothing Strength:", label_width=150)
     strength = NoWheelSlider(Qt.Orientation.Horizontal)
     strength.setRange(0, 100)
-    default = max(0, min(100, int(tab._default_float("spotify_visualizer", strength_key) * 100)))
+    default = max(0, min(100, int(round(tab._default_float("spotify_visualizer", strength_key) * 100))))
     strength.setValue(default)
     strength.setTickPosition(QSlider.TickPosition.TicksBelow)
     strength.setTickInterval(10)

@@ -17,6 +17,10 @@ NOMINAL_HALF_WIDTH = 2.1
 # terrain/sky tangency remains as the horizon line while land reaches tens of units out.
 FAR_HILLS = (0.10, 0.05, 0.9, 0.6, 0.7, 0.5)
 DISTANT_FLAT = 0.20
+# The grid's edge continuation leaves the boundary for rolling ground over this basin-uv distance. A long
+# descent extruded every edge ridge into a straight band running out of the grid (drawn as a long straight
+# skyline streak wherever the camera looks along an edge), so it settles within about a third of the basin.
+CONTINUATION_DESCENT = (0.02, 0.30)
 DISTANT_CURVATURE = 0.22
 # How far the overscan mesh reaches past the basin (left, right, front, back) in basin uv.
 FAR_OVERSCAN = (12.0, 12.0, 8.0, 20.0)   # the eye box reaches about 5.3 basin uv in front

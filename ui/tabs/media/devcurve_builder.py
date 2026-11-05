@@ -161,7 +161,7 @@ def build_devcurve_layers(tab: "VisualizerSettingsContextMixin", shaper_bucket: 
     tab.devcurve_active_layer_outline_width.setMinimum(1)
     tab.devcurve_active_layer_outline_width.setMaximum(20)
     tab.devcurve_active_layer_outline_width.setValue(
-        max(1, min(20, int(tab._default_float('spotify_visualizer', 'devcurve_layer_bass_outline_width') * 1000.0)))
+        max(1, min(20, int(round(tab._default_float('spotify_visualizer', 'devcurve_layer_bass_outline_width') * 1000.0))))
     )
     tab.devcurve_active_layer_outline_width.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.devcurve_active_layer_outline_width.setTickInterval(1)
@@ -193,7 +193,7 @@ def build_devcurve_layers(tab: "VisualizerSettingsContextMixin", shaper_bucket: 
     for src in _LAYER_ORDER:
         order_default = int(tab._default_float("spotify_visualizer", f"devcurve_layer_{src}_order"))
         setattr(tab, f"_devcurve_layer_{src}_order", max(1, min(4, order_default)))
-        outline_width_default = int(tab._default_float("spotify_visualizer", f"devcurve_layer_{src}_outline_width") * 1000.0)
+        outline_width_default = int(round(tab._default_float("spotify_visualizer", f"devcurve_layer_{src}_outline_width") * 1000.0))
         setattr(tab, f"_devcurve_layer_{src}_outline_width", max(1, min(20, outline_width_default)))
         oc = tab._color_from_default(
             "spotify_visualizer",
@@ -354,7 +354,7 @@ def build_devcurve_layers(tab: "VisualizerSettingsContextMixin", shaper_bucket: 
             label=f"{title} Alpha:",
             min_v=0,
             max_v=100,
-            value=int(tab._default_float("spotify_visualizer", f"devcurve_layer_{src}_alpha") * 100),
+            value=int(round(tab._default_float("spotify_visualizer", f"devcurve_layer_{src}_alpha") * 100)),
             fmt=lambda v: f"{v}%",
             auto_switch=True,
         )
@@ -366,7 +366,7 @@ def build_devcurve_layers(tab: "VisualizerSettingsContextMixin", shaper_bucket: 
             label=f"{title} Offset:",
             min_v=-45,
             max_v=45,
-            value=int(tab._default_float("spotify_visualizer", f"devcurve_layer_{src}_offset") * 100),
+            value=int(round(tab._default_float("spotify_visualizer", f"devcurve_layer_{src}_offset") * 100)),
             fmt=lambda v: f"{v / 100.0:+.2f}",
             auto_switch=True,
         )
