@@ -48,8 +48,8 @@
         "shockwave_grid_dynamic_floor": false,
         "shockwave_grid_dynamic_range_enabled": true,
         "shockwave_grid_floor": 0.6,
-        "shockwave_grid_glass_roughness": 0.1,
-        "shockwave_grid_glass_strength": 0.71,
+        "shockwave_grid_glass_roughness": 0.06,
+        "shockwave_grid_glass_strength": 0.95,
         "shockwave_grid_glass_tint": [
           235,
           150,
@@ -227,7 +227,7 @@
         "shockwave_grid_sun_rays_enabled": true,
         "shockwave_grid_sun_rays_length": 0.65,
         "shockwave_grid_sun_rays_spread": 0.4,
-        "shockwave_grid_sun_rays_strength": 0.5,
+        "shockwave_grid_sun_rays_strength": 0.6,
         "shockwave_grid_sun_size": 0.17,
         "shockwave_grid_sun_x": -0.5701,
         "shockwave_grid_sun_y": 1.0369,
@@ -4503,9 +4503,9 @@
         "shockwave_grid_visual_smoothing_enabled": false,
         "shockwave_grid_volumetric_clouds": false,
         "shockwave_grid_water_color": [
-          30,
-          15,
-          2,
+          80,
+          45,
+          6,
           255
         ],
         "shockwave_grid_water_detail": 0.1,
