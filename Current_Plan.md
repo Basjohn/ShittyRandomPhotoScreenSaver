@@ -258,6 +258,10 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   reaction strength to conceal cost. Preset 2 with persistent strands currently exceeds the render budget (~14 ms
   median under game60); reduce repeated submission/preparation and prove tails without weakening the approved strands.
   Requested CLI settings can be overwritten by curated activation.
+  5 Nov: the logical tick (Waveform dynamics) was 2.2-3.2 ms median offline (live ~1.4x, budget 2.5 ms) after the
+  reaction work; the along-curve surge and per-card colouring now run as rows (byte-identical packets proven per tick
+  on real replays; paired -0.33 and -0.18 ms), quiet-machine median 1.32-1.35 ms all presets. Offline GPU at the
+  live card size: P2 7.2-7.6 ms with strands, 6.0-6.6 without (strands ~1.1 ms). Next: the game60 live check.
 
 Chosen first: the smallest contained scene and the first consumer of S3D-1/S3D-2/S3D-5. Brief and hard gates:
 `Docs/Future_Work/Waveform_Ribbon.md`. The detailed working checklist and visual target custody live in
