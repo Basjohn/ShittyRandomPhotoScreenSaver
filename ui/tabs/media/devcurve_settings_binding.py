@@ -90,12 +90,12 @@ def _load_devcurve_layers(tab, config) -> None:
         enabled = bool(config.get(f"devcurve_layer_{src}_enabled", defaults["enabled"]))
         getattr(tab, f"devcurve_layer_{src}_enabled").setChecked(enabled)
 
-        alpha = int(float(config.get(f"devcurve_layer_{src}_alpha", defaults["alpha"])) * 100.0)
+        alpha = int(round(float(config.get(f"devcurve_layer_{src}_alpha", defaults["alpha"])) * 100.0))
         alpha = max(0, min(100, alpha))
         getattr(tab, f"devcurve_layer_{src}_alpha").setValue(alpha)
         getattr(tab, f"devcurve_layer_{src}_alpha_label").setText(f"{alpha}%")
 
-        offset = int(float(config.get(f"devcurve_layer_{src}_offset", defaults["offset"])) * 100.0)
+        offset = int(round(float(config.get(f"devcurve_layer_{src}_offset", defaults["offset"])) * 100.0))
         offset = max(-45, min(45, offset))
         getattr(tab, f"devcurve_layer_{src}_offset").setValue(offset)
         getattr(tab, f"devcurve_layer_{src}_offset_label").setText(f"{offset / 100.0:+.2f}")
@@ -114,7 +114,7 @@ def _load_devcurve_layers(tab, config) -> None:
             setattr(tab, f"_devcurve_layer_{src}_color", QColor(*color_data))
         except Exception:
             setattr(tab, f"_devcurve_layer_{src}_color", QColor(*defaults["color"]))
-        outline_width = int(float(config.get(f"devcurve_layer_{src}_outline_width", defaults["outline_width"])) * 1000.0)
+        outline_width = int(round(float(config.get(f"devcurve_layer_{src}_outline_width", defaults["outline_width"])) * 1000.0))
         setattr(tab, f"_devcurve_layer_{src}_outline_width", max(1, min(20, outline_width)))
         outline_color_data = config.get(f"devcurve_layer_{src}_outline_color", defaults["outline_color"])
         try:
@@ -187,7 +187,7 @@ def collect_devcurve_layers(tab) -> dict[str, Any]:
         payload[f"devcurve_layer_{src}_outline_color"] = outline_color_list
         payload[f"devcurve_layer_{src}_outline_width"] = max(
             0.001,
-            min(0.020, float(getattr(tab, f"_devcurve_layer_{src}_outline_width", int(float(defaults["outline_width"]) * 1000))) / 1000.0),
+            min(0.020, float(getattr(tab, f"_devcurve_layer_{src}_outline_width", int(round(float(defaults["outline_width"]) * 1000)))) / 1000.0),
         )
         layer_nodes = layer_nodes_map.get(src)
         canonical_nodes = tab._widget_default("spotify_visualizer", f"devcurve_layer_{src}_shape_nodes")

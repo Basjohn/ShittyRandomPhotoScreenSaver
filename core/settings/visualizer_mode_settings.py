@@ -84,7 +84,8 @@ class Slider:
     ``signed`` shows a plus sign for nonnegative values. ``source`` delegates consumption to the
     existing descriptor source-profile projection; it creates no private logical/renderer value.
     ``availability`` optionally names an import-safe capability flag and its disabled tooltip.
-    ``truncate`` retains a body's existing position and integer conversion. Admission bounds
+    ``truncate`` retains a body's existing integer admission (a stored integer value is truncated, not rounded);
+    a slider position is always the nearest one (``position``), so a stored value reloads exactly. Admission bounds
     preserve a wider stored domain than the slider; runtime bounds independently retain existing
     consumer caps. ``display_multiplier`` changes only the label's units."""
 
@@ -117,8 +118,9 @@ class Slider:
     display_multiplier: float = 1.0
 
     def position(self, value: object) -> int:
-        number = float(value) * self.scale
-        return int(number) if self.truncate else round(number)
+        # The nearest position: a value the slider stored (position / scale) maps back to that same position. A
+        # truncating conversion moved a stored 0.29 (28.999... positions) to 0.28 on every reload.
+        return round(float(value) * self.scale)
 
     def _admit_bounds(self, value: object, default: object, low: float, high: float) -> float | int:
         number = _finite(value)
