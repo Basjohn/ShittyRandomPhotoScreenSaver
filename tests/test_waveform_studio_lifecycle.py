@@ -348,13 +348,21 @@ def test_viewport_presents_the_card_extent_letterboxed_and_framings_switch(qt_ap
     surfaces[0].pump(2)
     viewport, slot = surfaces[0].viewport, surfaces[0].host.slot
     assert controller.bridge.framingId == (controller.adapter.default_framing() or controller.framings[0].id)
+    card = next(f for f in controller.framings if f.id == "card").extent
     for framing in controller.framings:
         controller.select_framing(framing.id)
         surfaces[0].pump()
-        aspect = framing.extent[0] / framing.extent[1]
-        assert viewport.width() / viewport.height() == pytest.approx(aspect, rel=1e-3)
         assert viewport.width() <= slot.width() + 1e-6 and viewport.height() <= slot.height() + 1e-6
-        assert viewport.extent == framing.extent
+        # No framing ever shows less of the world than the live card does.
+        assert viewport.extent[0] >= card[0] - 1e-6 and viewport.extent[1] >= card[1] - 1e-6
+        if framing.fill:
+            # Fills the slot: no letterbox on either axis, the card grown to the slot's shape.
+            assert (viewport.width(), viewport.height()) == pytest.approx((slot.width(), slot.height()))
+            assert min(viewport.extent[0] / card[0], viewport.extent[1] / card[1]) == pytest.approx(1.0)
+        else:
+            aspect = framing.extent[0] / framing.extent[1]
+            assert viewport.width() / viewport.height() == pytest.approx(aspect, rel=1e-3)
+            assert viewport.extent == framing.extent
     controller.close()
 
 
@@ -560,7 +568,7 @@ def test_dashboard_panels_tile_under_the_viewport_without_overlap(qt_app, dialog
     def rect(item):
         top_left = item.mapToScene(QPointF(0, 0))
         return QRectF(top_left.x(), top_left.y(), item.width(), item.height())
-    assert controller.bridge.framingId == controller.adapter.default_framing() == "wide"
+    assert controller.bridge.framingId == controller.adapter.default_framing()
     root = surface.host.root
     window = QRectF(0, 0, size[0], size[1])
     for workspace in ("composition", "reactivity", "appearance", "world"):

@@ -237,10 +237,11 @@ def test_studio_view_and_projection_equal_production_for_the_same_card(extent):
     border = 4.0
     width = 900.0
     height = width * extent[1] / extent[0]
-    # Production display owner (planar card): uniform scale = committed width / extent width, card chrome.
+    # Production display owner (planar card): the live card committed at its CUSTOM extent (uniform scale 1),
+    # card chrome in display pixels. The Studio shows that card scaled down to its frame, chrome included.
     production = resolve_visualizer_presentation(
         policy=get_visualizer_presentation_policy("waveform_ribbon"), display_size=(4000.0, 4000.0),
-        viewport_extent=extent, uniform_visual_scale=width / extent[0], border_width=border, corner_radius=8.0,
+        viewport_extent=extent, uniform_visual_scale=1.0, border_width=border, corner_radius=8.0,
         content_inset=0.0, background_color=(0, 0, 0, 0), border_color=(0, 0, 0, 0), shadow_enabled=False,
         shadow_color=(0, 0, 0, 0), shadow_blur=0.0, shadow_offset=(0.0, 0.0), shadow_spread=0.0,
         shadow_extensions=(0.0, 0.0, 0.0, 0.0))

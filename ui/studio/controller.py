@@ -283,6 +283,23 @@ class StudioBridge(QObject):
         self._c.refresh_handles()
         self._c.refresh_preset_previews()
 
+    @Slot(int)
+    def stepObject(self, step: int) -> None:
+        """Select the previous / next scene object (the per-object panel's header arrows), wrapping."""
+        ids = [o["id"] for o in self._objects]
+        if not ids:
+            return
+        index = ids.index(self._selected) if self._selected in ids else 0
+        self.selectObject(ids[(index + int(step)) % len(ids)])
+
+    # ----------------------------------------------------------- frame copy
+    frameCopied = Signal(str)
+
+    @Slot()
+    def copyFrame(self) -> None:
+        """Copy the presented frame (production render, no overlays) to the clipboard as an image."""
+        self._c.copy_frame()
+
     # --------------------------------------------------------- inspector
     def _rebuild_inspector(self) -> None:
         workspace = next(w for w in self._schema.workspaces if w.id == self._workspace)
@@ -329,7 +346,7 @@ class StudioBridge(QObject):
                                          "rendered": card.rendered, "group": card.group,
                                          "labels": {role: self._schema.find(pid).label for role, pid in card.roles}}
                                         if card is not None else {}),
-                               "group": group})
+                               "group": group, "objectScoped": "{object}" in group})
         self._inspector = groups
         self._columns = self._dashboard_columns(workspace, groups)
         self.inspectorChanged.emit()
@@ -1016,6 +1033,10 @@ class StudioController(QObject):
             self.viewport.snapshotReady.connect(self._on_snapshot, Qt.ConnectionType.QueuedConnection)
             self.viewport.snapshotFailed.connect(self._on_snapshot_failed, Qt.ConnectionType.QueuedConnection)
             self.viewport.snapshotPending.connect(self._on_snapshot_pending, Qt.ConnectionType.QueuedConnection)
+            # Handles are projected in presented-frame pixels: a resized frame (window, expanded viewport,
+            # a filling framing) re-projects them.
+            self.viewport.widthChanged.connect(self._on_viewport_resized, Qt.ConnectionType.QueuedConnection)
+            self.viewport.heightChanged.connect(self._on_viewport_resized, Qt.ConnectionType.QueuedConnection)
             self._preview_jobs = []
             self._preview_sent = {}
             self._preview_done = {}
@@ -1222,6 +1243,10 @@ class StudioController(QObject):
     def _on_snapshot(self, key: str, width: int, height: int, pixels: bytes) -> None:
         from PySide6.QtCore import QBuffer, QByteArray, QIODevice
         from PySide6.QtGui import QImage
+        if key == getattr(self, "_copy_key", None):
+            self._copy_key = None
+            self._deliver_copied_frame(width, height, pixels)
+            return
         name, _sep, signature = key.partition("|")
         image = QImage(pixels, width, height, width * 4, QImage.Format.Format_RGBA8888).flipped(Qt.Orientation.Vertical)
         cx, cy, cw, ch = self._preview_crops.get(name, (0.0, 0.0, 1.0, 1.0))
@@ -1240,6 +1265,11 @@ class StudioController(QObject):
             self.surface.request_frame()
 
     def _on_snapshot_failed(self, key: str, signature_text: str) -> None:
+        if key == getattr(self, "_copy_key", None):
+            self._copy_key = None
+            if self.bridge is not None:
+                self.bridge.notify("Could not copy the frame")
+            return
         name, _sep, signature = key.partition("|")
         self._preview_done[name] = signature           # keep the swatch; never retry in a loop
         if self._preview_jobs and self.surface is not None:
@@ -1274,6 +1304,11 @@ class StudioController(QObject):
                 # A live gesture re-publishes the current instant; anything else is the exact replay.
                 live = self.session.gesture_active or bool(self._pose)
                 revision = (self.session.revision, tuple(sorted(self._pose.items())))
+                spatial = getattr(self.evaluator, "set_viewport_extent", None)
+                if callable(spatial):
+                    # A mode whose logical step reads the card's world extent (Bubble's domain) is evaluated at
+                    # the extent actually presented.
+                    spatial(self.presented_extent())
                 frame = self.evaluator.evaluate(self.transport.time, self.evaluation_values(), exact=not live,
                                                 revision=revision)
             except Exception as exc:
@@ -1322,7 +1357,7 @@ class StudioController(QObject):
         try:
             state = self.adapter.scene_handles(self.last_frame, self.evaluation_values(), self.bridge.selectedObject,
                                                (self.viewport.width(), self.viewport.height()),
-                                               framing.extent if framing else None,
+                                               self.presented_extent(),
                                                framing.style if framing else ())
         except Exception:
             logger.exception("[STUDIO] Handle projection failed")
@@ -1330,11 +1365,55 @@ class StudioController(QObject):
         self.bridge.set_handles(state)
 
     # -------------------------------------------------------------- framing
+    def _on_viewport_resized(self, *_args) -> None:
+        if self.viewport is not None and self.state == "presented":
+            self.refresh_handles()
+            if callable(getattr(self.evaluator, "set_viewport_extent", None)):
+                self._invalidate()          # a filling framing's extent followed the new size
+
+    def copy_frame(self) -> None:
+        """Render the current frame once more, off screen at the presented size, and put it on the clipboard."""
+        if self.viewport is None or self.last_frame is None:
+            return
+        width, height = int(round(self.viewport.width())), int(round(self.viewport.height()))
+        if width <= 0 or height <= 0:
+            return
+        framing = next((f for f in self.framings if f.id == self.bridge.framingId), None)
+        self._copy_key = f"copy-frame/{id(self.last_frame)}"
+        try:
+            ratio = float(self.viewport.window().effectiveDevicePixelRatio()) if self.viewport.window() else 1.0
+        except Exception:
+            ratio = 1.0
+        self.viewport.request_snapshot(self._copy_key, self.last_frame,
+                                       (max(1, int(width * ratio)), max(1, int(height * ratio))),
+                                       (float(width), float(height)), self.presented_extent(),
+                                       framing.style if framing else ())
+        if self.surface is not None:
+            self.surface.request_frame()
+
+    def _deliver_copied_frame(self, width: int, height: int, pixels: bytes) -> None:
+        from PySide6.QtGui import QGuiApplication, QImage
+        image = QImage(pixels, width, height, width * 4, QImage.Format.Format_RGBA8888).flipped(Qt.Orientation.Vertical)
+        clipboard = QGuiApplication.clipboard()
+        if clipboard is not None:
+            clipboard.setImage(image)
+        self.copied_frame = image
+        if self.bridge is not None:
+            self.bridge.notify(f"Frame copied ({width} x {height})")
+            self.bridge.frameCopied.emit(f"{width}x{height}")
+
+    def presented_extent(self) -> tuple[float, float] | None:
+        """The world extent the viewport presents now (a filling framing follows the viewport's shape)."""
+        if self.viewport is not None and self.viewport.extent is not None:
+            return self.viewport.extent
+        framing = next((f for f in self.framings if f.id == getattr(self.bridge, "framingId", "")), None)
+        return framing.extent if framing else None
+
     def select_framing(self, framing_id: str) -> None:
         framing = next((f for f in self.framings if f.id == framing_id), None)
         if framing is None or self.viewport is None:
             return
-        self.viewport.set_extent(framing.extent, framing.style)
+        self.viewport.set_extent(framing.extent, framing.style, fill=framing.fill)
         if self.bridge is not None:
             self.bridge.set_framing(framing.id)
         self._invalidate()

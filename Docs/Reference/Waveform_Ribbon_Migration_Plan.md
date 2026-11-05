@@ -7,9 +7,11 @@ candidate now connects canonical Settings, the original two authored presets, ca
 retained scene. A finite user-triggered quiet/middle/peak preview renders that same production body/scene without
 a second clock or audio engine. Complete endpoint/framing audits and loaded live admission remain open in
 `Current_Plan.md`; existence of the candidate is not acceptance. Core geometry/motion evidence and timing belong to
-the lab plan §5.1. The selected grammar is
-**C elastic dynamics as primary, with A's accumulated twisting**. Values quoted are the lab
-recipes' current values, recorded for orientation: presets are operator-authored and never test oracles.
+the lab plan §5.1. The 2 November selection of **C elastic dynamics as primary** is superseded (5 November) by the
+travelling energy pulse described in [Current reaction model](#current-reaction-model-5-november); A's accumulated
+twisting and the axial roll remain. Passages below that still describe C elastic bending as the primary response are
+historical design context. Values quoted are the lab recipes' current values, recorded for orientation: presets are
+operator-authored and never test oracles.
 
 **Operator direction (1 November):**
 - The migration is a **full Visualizer migration**: full controls, Settings and the preset/control systems, designed
@@ -36,6 +38,55 @@ colour tint and brightness become settings rather than blocking visual polish. R
 The single live operator-rejection checklist is `Current_Plan.md` section 7.1. It covers missing punch/shape response,
 weak particles, strand flicker, highlights/colour, idle/first-play blackout, floor/viewport, grounded near-flat navigation,
 rejected mist and deferred rejected UX. Working inputs or range tests do not constitute visual acceptance.
+
+## Current reaction model (5 November)
+
+Operator direction: reactions feel like water waves, gentle but strong, always **with** the waveform's own shape.
+This supersedes the R1/R2 elastic body (standing bends and the retired axial stretch read as sideways bursts and
+twitch). Owner: `core/waveform_ribbon_dynamics.py` (`WaveformDynamics`, `PulseControls`, the named module
+constants); all state integrates on the sole logical clock and the projection only samples it. Decision record:
+`Docs/Audits/Waveform_Studio_and_Reactivity_Audit_2026-11-05.md` §5 item 7. Visual/musical acceptance stays in
+`Current_Plan.md` §7.1.
+
+- **Travelling energy pulse.** Typed hits and body-energy rises inject energy at an origin set by Pulse Direction
+  (Head To Tail, Tail To Head, Centre Out); edge origins sit just beyond the view, so a swell slides in already
+  formed. Energy travels at Pulse Speed, spreads gently and fades over Pulse Fade on one bounded 1D field per travel
+  direction. There is no steady baseline injection. The Bend range is presented as **Pulse Strength**.
+- **Flow rule.** Geometry multiplies the waveform's own displacement about its axis by a broad envelope (sign never
+  flips) whose slope and curvature are bounded relative to the carrier wavenumber, so a swell may deepen existing
+  curvature but never reverse it, add an inflection or dent a curve inward. The bounding share relaxes upward
+  smoothly and is computed in closed form each tick. Horizontally, an **along-curve surge** slides knots along their
+  own curve (exact resampling of the unsurged body) with bounded local compression, a rate limit and a fixed end
+  taper; it moves the cloth's material with the swell without changing the curve.
+- **Appearance band.** A narrower Pulse Width band carries light, Pulse Colour Shift and Pulse Saturation (never
+  inventing a hue on neutral colours). It is led by fresh energy, so each beat's band is brightest while it travels;
+  geometry follows the fresh field too, so overlapping swells do not inflate the whole view.
+- **Coupled accents.** Pulse Particles buys births once per injection, released over the swell's first journey and
+  only into the headroom left after the authored Spark Count; Pulse Strands gives a restrained lean/chance/glow
+  near the swell.
+- **Reaction Modes** (`REACTION_MODES`, Settings "Reaction Mode"): **Travelling Pulse** (default); **Frozen Past**
+  (a per-cell passage peak held on the cloth and advected with it, so shaped parts keep their size/colour until the
+  next swell, decaying slowly in silence and never vanishing); **Whole Swell** (one global level, ignores direction,
+  width and speed); **Group Wave** (each swell arrives as a set spanning several carrier wavelengths, leaning toward
+  its leading edge with a stronger surge). Every mode obeys the flow rule and the no-twitch rules.
+- **Adaptive response gain.** Geometry drives are divided by a memory of their own recent peak (fast reach, slow
+  relaxation, a floor), so each song uses the whole authored Quiet→Peak ramp while a quiet passage after a loud one
+  stays quiet; the remembered peak lands below Peak, keeping headroom for accents. Light, colour and sparkle keep the
+  fixed calibrated anchors. The whole body's size (height, lift, width) follows the passage, not each beat; beats
+  belong to the pulse.
+- **No twitch.** Geometry drives pass through two cascaded followers with a minimum attack (velocity-continuous);
+  hit kicks to the sway/torsion springs are spread over a short window; the rim's hit glow rises and settles like the
+  pulse instead of flashing with the raw hit decay; swells land with a short rise, never a one-tick pop.
+- **Whole-ribbon floor lift.** When a ribbon's lower edge (its sheet hang, width × |cos twist|) would come within the
+  floor clearance inside the view, that ribbon lifts as a whole, bounded, through two cascaded followers (quick up,
+  slow down). Shape is never changed; per-knot trough limits were rejected as boxy.
+- **Dynamic Zoom** (opt-in, off by default): a sustained-level follower widens or narrows only the lens extents,
+  frozen while the user operates the camera.
+
+Gates: `tests/test_waveform_energy_pulse.py`, `tests/test_waveform_reaction_modes.py`,
+`tests/test_waveform_pulse_coupling.py`, `tests/test_waveform_no_twitch.py`, `tests/test_waveform_trough_clearance.py`,
+`tests/test_waveform_dynamic_zoom.py` and `tests/test_waveform_ribbon_dynamics.py` (test-owned controls; structure,
+never authored values).
 
 ## Latest target authority (2 November)
 
@@ -96,9 +147,10 @@ not full-song loud-section evidence. Remaining native acceptance and rejected UX
 - Typed logical state and render snapshot on `VisualizerLogicalRuntime` dt and `QuickVisualizerRenderHost`
   resource ownership; generation fences; warm/reveal and inactive disposal. The ring of immutable knots (`RibbonRing`)
   is the logical history; rendering reads packets and never writes history.
-- Settings through the shared spec builder (`core/settings/visualizer_mode_settings.py`,
-  `ui/tabs/media/spec_mode_builder.py`): the shared preset/advanced/technical scaffold, then closed-by-default
-  buckets, one open per level, one-sentence intros, details in tooltips (Settings UX rules).
+- Settings: the canonical spec (`core/settings/visualizer_mode_settings.py`) owns every control; the Custom body is
+  Studio-owned (`ui/tabs/media/waveform_ribbon_builder.py` → `build_studio_owned_mode_ui`: preset row, one sentence,
+  Open Waveform Studio). The former builder buckets are retired; `tests/test_waveform_studio_parity.py` proves the
+  Studio covers everything they built. Editing UX lives in the Studio (`Docs/Reference/Visualizer_Studio.md`).
 - Shared framed camera (`core/settings/framed_camera.py`) with a Waveform spec. **Long-lens Perspective is the default
   projection**; Orthographic remains optional. The candidate uses an 80-unit home radius, 64-104 physical dolly,
   stable 4.5-unit eye height and a 3-degree lens; both projections share reference framing. Turn, tilt, Scene Scale and pan come from in-scene
@@ -128,7 +180,8 @@ worker and captures the real logical/frame/retained-render path; audio is not sh
 `core/waveform_ribbon_authoring.py` strictly admits matrix, ribbon cards and gradient nodes. Configuration is compiled
 once into detached immutable inputs (`waveform_ribbon_parameters.py`); camera-only edits do not recompile body inputs.
 `WaveformRibbonFrameRuntime` fences activation/source identity and consumes each typed onset serial once. Its neutral
-`WaveformDynamics` integrates C elastic response per ribbon, A twist and axial speed/angle; history stays fixed at 6 Hz.
+`WaveformDynamics` integrates the travelling pulse field (see Current reaction model), depth-sway/torsion springs per
+ribbon, A twist and axial speed/angle; history stays fixed at 6 Hz.
 The travelling carrier's audio amplitude/twist uses the existing two-stage `Flow.shape_tau` contract; raw six-Hz
 audio writes produced the rejected small dents. Whole-body elastic impulses and light/colour/accents retain their
 immediate inputs. Every logical publication projects the existing body and supplies immutable bytes to the renderer. A
@@ -147,7 +200,11 @@ axial roll, highlight packing) rather than retaining the discarded generic lab d
 ## 3. Controls by bucket
 
 Each bucket lists its controls and the editor that shows them. "Existing" editors are already in the codebase;
-"New" editors are built in this migration and shared by later modes where they fit.
+"New" editors are built in this migration and shared by later modes where they fit. This is the 1 November control
+design: the canonical control list is the Waveform spec in `core/settings/visualizer_mode_settings.py` (the pulse
+controls sit in its Reaction bucket, elastic/attack/decay timing in the advanced Response bucket), and editing
+happens in the Studio, whose instrument choice follows the design pack's control policy (audit §5 item 4) with
+serialized `[low, high]` data unchanged.
 
 **Range sliders (operator, 1 November).** Every control that can be a range is one: the existing `Range` control
 (`core/settings/visualizer_mode_settings.py`, the shared range slider in `ui/widgets/visual_controls.py`), persisted
@@ -195,8 +252,8 @@ The Shape Tuner's per-target quiet/loud values are these same ranges, edited on 
   a live close-up of one sheet (Glow Preview, New).
 
 ### Shape and Reactivity (Shape Tuner, New)
-- The editor/control scope is required: elastic C is primary, with separately tunable A rolling twist and whole-body
-rotation. Source routing/curves and quiet→peak ranges must reach these realized targets rather than dead head controls.
+- The editor/control scope is required: the travelling pulse is primary (superseding elastic C; see Current reaction
+model), with separately tunable A rolling twist and whole-body rotation. Source routing/curves and quiet→peak ranges must reach these realized targets rather than dead head controls.
 - **Matrix editor:** rows are energy sources, columns are ribbon properties; each cell has a gain and a response
   curve with draggable handles.
   - **Sources:** Bass, Mids, Highs, Loudness, Onsets, and the Head Wave (the authored oscillator that draws the waves,
@@ -393,7 +450,8 @@ occlusion and retained vertex IDs remain independent regression bars.
 
 Binding guide: `Docs/Guides/Visualizer_Reactivity_Authoring.md` (signal jobs §1-2, real-music scales §2A, loud
 passages §3, timescales §5, anti-patterns §11, new-mode workflow §12, passage ranges §13C). Waveform Ribbon is a
-flowing history plus the selected immediate elastic projection: new detail is written at the head and travels,
+flowing history plus an immediate projection (now the travelling pulse of the Current reaction model; the C-elastic
+wording in §4.1-4.2 is superseded there): new detail is written at the head and travels,
 while current bands, passage and typed accents deform the body already in view. Head travel must never delay
 visible musical force. Light, sparks and strands also need immediate responses.
 

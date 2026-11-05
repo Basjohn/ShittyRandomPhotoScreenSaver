@@ -113,7 +113,7 @@ def test_headline_controls_lead_and_paths_belong_to_their_scene_objects():
     schema = adapter.schema()
     first = schema.workspaces[0]
     assert first.groups[0] == PATH_GROUP and set(first.open_groups) == set(first.groups)
-    assert adapter.capabilities().as_map() == {"viewport": True, "camera": True, "handles": True}
+    assert adapter.capabilities().as_map() == {"viewport": True, "camera": True, "handles": True, "objects": True}
 
     def first_row(group):
         rows = sorted((p for p in schema.properties if p.group == group), key=lambda p: p.priority)

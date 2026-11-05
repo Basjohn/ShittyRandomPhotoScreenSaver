@@ -165,43 +165,18 @@ def _card_limits() -> dict[str, tuple[float, float]]:
 from ui.studio.colour import display_hex, linear_from_hex  # noqa: E402  (re-exported for callers)
 
 
-TECHNICAL_GROUP = "Audio Analysis"
+from ui.studio.technical import TECHNICAL_GROUP  # noqa: E402
 
 
 def _technical_properties() -> dict:
-    """The mode's technical (audio analysis) controls exactly as Settings' Technical group builds them
-    (``ui.tabs.media.technical_controls``): same storage keys, ranges, choices and labels."""
-    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
-    out = {}
-    note = ("Live audio analysis for this mode (Settings' Technical controls). The synthetic previews bypass "
-            "analysis; recorded clips are re-analysed with these values.")
-    for defn in _control_defs_for_mode(MODE):
-        key = _storage_key(MODE, defn)
-        label = _label((defn.label_text or defn.checkbox_text or key).replace("\n", " "))
-        tooltip = (defn.tooltip or "") + ("\n" if defn.tooltip else "") + note
-        common = dict(id=key, path=(key,), label=label, workspace="reactivity", group=TECHNICAL_GROUP,
-                      tooltip=tooltip)
-        if defn.widget_kind == "checkbox":
-            prop = StudioProperty(instrument=SWITCH, **common)
-        elif defn.widget_kind == "combo":
-            prop = StudioProperty(instrument=CHOICE, choices=tuple(label for label, _v in defn.options),
-                                  choice_values=tuple(value for _l, value in defn.options), **common)
-        else:
-            integer = defn.default_type == "int"
-            prop = StudioProperty(instrument=SCALAR, minimum=float(defn.minimum), maximum=float(defn.maximum),
-                                  decimals=0 if integer else 2, integer=integer, units=f" {defn.suffix_text}"
-                                  if getattr(defn, "suffix_text", "") else "", **common)
-        out[key] = (prop, defn)
-    return out
+    """The mode's technical (audio analysis) controls exactly as Settings' Technical group builds them."""
+    from ui.studio.technical import technical_properties
+    return technical_properties(MODE, workspace="reactivity")
 
 
 def _condition(control) -> tuple:
-    """The spec control's ``when`` as Studio terms: ((key, (accepted values...)), ...)."""
-    when = getattr(control, "when", None)
-    if not when:
-        return ()
-    terms = (when,) if isinstance(when[0], str) else when
-    return tuple((key, tuple(value) if isinstance(value, tuple) else (value,)) for key, value in terms)
+    from ui.studio.adapter import control_condition
+    return control_condition(control)
 
 
 def build_schema() -> StudioSchema:
@@ -306,10 +281,8 @@ def build_schema() -> StudioSchema:
 
     def admit(key: str, candidate: Any, previous: Any) -> Any:
         if key in technical:
-            from ui.tabs.media.technical_controls import _clamp_numeric, _coerce_value
-            prop, defn = technical[key]
-            value = _coerce_value(candidate, defn, previous)
-            return _clamp_numeric(value, defn) if prop.instrument == SCALAR else value
+            from ui.studio.technical import admit_technical
+            return admit_technical(technical[key], candidate, previous)
         return controls[key].admit(candidate, previous)
 
     response = _response_model(spec, props)
@@ -789,19 +762,8 @@ def studio_presentation(logical_size, extent, style):
 
     Same resolver and uniform-scale rule as the display owner, so ``framed_aperture_scale`` (lens aperture,
     edge-resize reveal/crop) is production's. Shared by the renderer and the handle projection."""
-    from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
-    from widgets.spotify_visualizer.presentation_geometry import (
-        CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE, resolve_visualizer_presentation)
-    width, height = logical_size
-    extent = extent or CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
-    style = dict(style or ())
-    return resolve_visualizer_presentation(
-        policy=get_visualizer_presentation_policy(MODE), display_size=(width, height),
-        viewport_extent=extent, uniform_visual_scale=width / extent[0],
-        border_width=float(style.get("border_width", 0.0)), corner_radius=0.0,
-        content_inset=float(style.get("content_inset", 0.0)), background_color=(0, 0, 0, 0),
-        border_color=(0, 0, 0, 0), shadow_enabled=False, shadow_color=(0, 0, 0, 0), shadow_blur=0.0,
-        shadow_offset=(0.0, 0.0), shadow_spread=0.0, shadow_extensions=(0.0, 0.0, 0.0, 0.0))
+    from ui.studio.framed import presentation
+    return presentation(MODE, logical_size, extent, style)
 
 
 def frame_camera(frame, size, extent, style):
@@ -1151,24 +1113,11 @@ class WaveformStudioAdapter(StudioModeAdapter):
                                 saved_on_keep=frozenset({PREFIX + "camera_fov"}))
 
     def framings(self, card_extent, card_style=None):
-        from ui.studio.adapter import StudioFraming
-        from widgets.spotify_visualizer.presentation_geometry import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
-        base_w, base_h = CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
-        card = card_extent or (base_w, base_h)
-        label = f"Live Card {card[0] / card[1]:.2f}:1"
-        # Wider frames follow production's edge-resize rule: the live card's height, more world revealed at the
-        # sides (exactly what a wider card of that height shows).
-        height = float(card[1])
-        style = tuple(sorted((card_style or {}).items()))
-        return (StudioFraming("card", label, tuple(card),
-                              "The visualizer card as it is laid out (CUSTOM extent, else the card baseline).", style),
-                StudioFraming("wide", "16:9", (height * 16 / 9, height),
-                              "A 16:9 card at the live card's height: more of the world at the sides.", style),
-                StudioFraming("cinema", "21:9", (height * 21 / 9, height),
-                              "A 21:9 card at the live card's height.", style))
+        from ui.studio.framed import card_framings
+        return card_framings(card_extent, card_style)
 
     def default_framing(self) -> str:
-        return "wide"           # the dashboard's wide viewport; Live Card shows the true card, letterboxed
+        return "fill"           # the live card's world and scale, filling the viewport; Live Card is exact
 
     def default_fixture(self, evaluator) -> str | None:
         return "mid"
