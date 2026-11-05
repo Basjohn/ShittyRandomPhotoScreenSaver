@@ -53,7 +53,7 @@ PULSE_SATURATION = 1.2       # soft bound of the sampled swell
 PULSE_SURGE = .6             # world units of along-curve travel per unit of Pulse Strength x swell
 # Injection calibrated on recorded PCM (5 Nov probe): typed hits reach ~0.2-0.4, body-energy rises ~0.15-0.25
 # for ~0.15 s on beats; these gains give a beat a swell near 1 at its origin and leave quiet passages nearly flat.
-PULSE_HIT_GAIN, PULSE_RISE_GAIN, PULSE_RISE_FLOOR = 2., 45., .08
+PULSE_HIT_GAIN, PULSE_RISE_GAIN, PULSE_RISE_FLOOR = 2., 45., .14
 # Swell-carried particles (operator, 5 Nov: the pulse should increase saturation, particle density and strands).
 # Injected energy buys births once; they are released over the swell's first journey and placed on it.
 PULSE_BIRTHS = 20.          # births per unit of injected energy at Pulse Particles 1 (a full beat injects 2)
@@ -65,7 +65,7 @@ PULSE_GLOW = 2.5           # light a full swell adds where it is (the narrow aut
 # whole real range (1-exp(-raw/APP_SCALE)) and is led by FRESH energy: a copy of the field that fades over
 # FRESH_FADE marks the swells launched in the last moments, so each beat's band is brightest as it travels and the
 # older pile settles to APP_BASE of that look. Geometry never uses this (it stays broad and bounded).
-APP_SCALE, APP_BASE, FRESH_FADE = 1.5, .45, .7
+APP_SCALE, APP_BASE, FRESH_FADE = 1.5, .85, .7
 # Twitch (operator, 5 Nov: "just twitching"): the rim light used to flash with the raw 120 ms hit decay, the
 # strongest beat-rate flicker in the trace. It now swells like the pulse: quick rise, gentle settle.
 HIT_GLOW, HIT_GLOW_RISE, HIT_GLOW_SETTLE = 3., .04, .65
@@ -112,8 +112,8 @@ def pulse_sources(direction):
 @dataclass(frozen=True)
 class PulseControls:
     direction: str = 'Head To Tail'
-    width: float = 10.           # full width at half height, world units: a broad swell, not a sideways jab
-    speed: float = 3.            # world units per second along the scene axis (about twice the history flow)
+    width: float = 2.5           # full width at half height of the travelling light/colour band (geometry uses its own broad envelope)
+    speed: float = 6.            # world units per second along the scene axis: successive beats stay separate bands
     colour: float = .6           # share of the peak colour the pulse carries
     fade: float = 4.             # seconds for the travelling energy to fall to 1/e
     saturation: float = 0.       # share of the remaining saturation a full swell adds (hue and value unchanged)

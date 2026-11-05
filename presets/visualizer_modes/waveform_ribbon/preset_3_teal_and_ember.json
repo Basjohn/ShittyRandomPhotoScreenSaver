@@ -49,9 +49,9 @@
         "waveform_ribbon_pulse_fade": 4.0,
         "waveform_ribbon_pulse_particles": 1.0,
         "waveform_ribbon_pulse_saturation": 0.6,
-        "waveform_ribbon_pulse_speed": 3.0,
+        "waveform_ribbon_pulse_speed": 6.0,
         "waveform_ribbon_pulse_strands": 0.4,
-        "waveform_ribbon_pulse_width": 10.0,
+        "waveform_ribbon_pulse_width": 2.5,
         "waveform_ribbon_depth": [
           0.15,
           2.0
