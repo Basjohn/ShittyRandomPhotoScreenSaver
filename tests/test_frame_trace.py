@@ -870,7 +870,8 @@ def test_chk26_clipped_gl_state_is_captured_once_and_carried_through_mode() -> N
         if "glColorMask" not in source:
             continue
         assert path.name == "bubble_ambient_gl.py", path.name
-        assert "color_mask = tuple(bool(v) for v in gl.glGetBooleanv(gl.GL_COLOR_WRITEMASK))" in source
+        # Captured through the shared direct GL reader (gl_state.py), as the Quick fence does.
+        assert "color_mask = _bool_states(gl.GL_COLOR_WRITEMASK, 4)" in source
         restore_tail = source.split("finally:", 1)[1]
         assert "gl.glColorMask(*color_mask)" in restore_tail
         assert source.count("glColorMask(") == 2
