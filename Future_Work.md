@@ -29,7 +29,8 @@ Audit, plan and advise when best to build a custom Vulkan backend with intention
 Accepted transition membership belongs to the canonical registry and `Docs/Reference/Transitions.md`.
 
 The remaining Visualizer modes are **queued in `Current_Plan.md` §7** (Waveform Ribbon → Reactive Liquid / Melt Pool →
-Concrete Rain → Usu Moonscape), built on the shared 3D primitives of `Current_Plan.md` §6. Their contracts:
+Concrete Rain → Usu Moonscape), built on the shared 3D primitives of `Current_Plan.md` §6, and only after the Vulkan-vs-SMP/Full Display backend decision
+(`Current_Plan.md` §0 step 4; operator, 5 Nov: the earlier a Vulkan port starts, the less 3D surface needs parity). Their contracts:
 `Docs/Future_Work/Waveform_Ribbon.md`, `Docs/Future_Work/Melt_Pool.md`, `Docs/Future_Work/Concrete_Rain.md`,
 `Docs/Future_Work/Usu_Moonscape.md` (with `Usu_Blender_Work.md`). Other mode concepts were dropped on 2026-10-25; the
 architecture they called for is the shared step in `Current_Plan.md` §6.
