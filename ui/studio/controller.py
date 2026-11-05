@@ -135,7 +135,7 @@ class StudioBridge(QObject):
 
     # -------------------------------------------------------- workspaces
     def _workspaces(self) -> list:
-        return [{"id": w.id, "title": w.title} for w in self._schema.workspaces]
+        return [{"id": w.id, "title": w.title, "icon": w.icon} for w in self._schema.workspaces]
 
     def _current_workspace(self) -> str:
         return self._workspace
@@ -154,8 +154,8 @@ class StudioBridge(QObject):
     # ----------------------------------------------------------- objects
     def _rebuild_objects(self) -> None:
         objects = self._c.adapter.scene_objects(self._c.session.values)
-        self._objects = [{"id": o.id, "label": o.label, "swatch": o.swatch, "visible": o.visible}
-                         for o in objects]
+        self._objects = [{"id": o.id, "label": o.label, "swatch": o.swatch, "visible": o.visible,
+                          "toggleable": o.toggleable, "note": o.hidden_note} for o in objects]
         if self._selected not in {o["id"] for o in self._objects} and self._objects:
             self._selected = self._objects[0]["id"]
 
@@ -167,6 +167,28 @@ class StudioBridge(QObject):
 
     objects = Property("QVariantList", _object_list, notify=objectsChanged)
     selectedObject = Property(str, _selected_object, notify=objectsChanged)
+
+    def _noun(self) -> str:
+        return self._schema.object_noun
+
+    def _can_add(self) -> bool:
+        return self._c.adapter.add_object(self._c.session.values) is not None
+
+    objectNoun = Property(str, _noun, constant=True)
+    canAddObject = Property(bool, _can_add, notify=objectsChanged)
+
+    @Slot(str, bool)
+    def setObjectVisible(self, object_id: str, visible: bool) -> None:
+        edit = self._c.adapter.set_object_visible(self._c.session.values, object_id, bool(visible))
+        if edit is not None:
+            self._guard(lambda: self._c.session.set(edit[0], edit[1], ("Show " if visible else "Hide ")
+                                                    + self._schema.object_noun))
+
+    @Slot()
+    def addObject(self) -> None:
+        edit = self._c.adapter.add_object(self._c.session.values)
+        if edit is not None:
+            self._guard(lambda: self._c.session.set(edit[0], edit[1], "Add " + self._schema.object_noun))
 
     @Slot(str)
     def selectObject(self, object_id: str) -> None:
@@ -202,7 +224,9 @@ class StudioBridge(QObject):
                     title = group.replace("{object}", label or "Selected")
                 traces = dict(self._schema.group_traces).get(group, ())
                 is_open = group in workspace.open_groups if workspace.open_groups else position < 2
-                groups.append({"title": title, "rows": rows, "traces": list(traces), "open": is_open})
+                icon = dict(self._schema.group_icons).get(group, "")
+                groups.append({"title": title, "rows": rows, "traces": list(traces), "open": is_open,
+                               "icon": icon})
         self._inspector = groups
         self.inspectorChanged.emit()
 
@@ -250,6 +274,9 @@ class StudioBridge(QObject):
     # ------------------------------------------------------------ edits
     def _prop_path(self, property_id: str, endpoint: int):
         prop = self._schema.find(property_id)
+        if not prop.view_pose:
+            # An explicit edit of a value the viewport is previewing replaces that preview.
+            self._c._pose.pop(prop.path[0], None)
         if prop.instrument == QUIET_PEAK:
             return prop, (*prop.path, 1 if int(endpoint) else 0)
         return prop, prop.path
@@ -393,6 +420,17 @@ class StudioBridge(QObject):
     duration = Property(float, _duration, notify=transportChanged)
     fixtureId = Property(str, _fixture_id, notify=transportChanged)
     fixtures = Property("QVariantList", _fixtures, notify=transportChanged)
+
+    def _timeline(self) -> list:
+        shape = getattr(self._c.evaluator, "timeline", None)
+        if not callable(shape):
+            return []
+        key = self._c.evaluator.fixture.id
+        if getattr(self, "_timeline_key", None) != key:
+            self._timeline_key, self._timeline_cache = key, shape()
+        return self._timeline_cache
+
+    timeline = Property("QVariantList", _timeline, notify=transportChanged)
     time = Property(float, _time, notify=timeChanged)
 
     @Slot()
@@ -438,6 +476,27 @@ class StudioBridge(QObject):
     @Slot()
     def resetCamera(self) -> None:
         self._c.reset_camera()
+
+    @Slot(float, bool)
+    def zoomBy(self, steps: float, dolly: bool) -> None:
+        self._c.zoom_by(steps, dolly=dolly)
+
+    @Slot(float, float, float, float)
+    def panBy(self, dx: float, dy: float, width: float, height: float) -> None:
+        self._c.pan_by(dx, dy, width, height)
+
+    @Slot()
+    def keepView(self) -> None:
+        self._guard(self._c.keep_view)
+
+    def _view_readout(self) -> list:
+        return self._c.view_readout()
+
+    def _view_modified(self) -> bool:
+        return bool(self._c._pose)
+
+    viewReadout = Property("QVariantList", _view_readout, notify=valuesChanged)
+    viewModified = Property(bool, _view_modified, notify=valuesChanged)
 
     # ------------------------------------------------------------- framing
     def _framings(self) -> list:
@@ -651,7 +710,8 @@ class StudioController(QObject):
             self.surface.lost.connect(self._on_surface_lost)
             self.surface.failed.connect(self._fail)
             card_extent = getattr(self.store, "card_extent", lambda: None)()
-            self.framings = tuple(self.adapter.framings(card_extent))
+            card_style = getattr(self.store, "card_style", lambda: None)()
+            self.framings = tuple(self.adapter.framings(card_extent, card_style))
             if self.framings:
                 self.select_framing(self.framings[0].id)
             self._choose_default_source()
@@ -780,7 +840,7 @@ class StudioController(QObject):
         framing = next((f for f in self.framings if f.id == framing_id), None)
         if framing is None or self.viewport is None:
             return
-        self.viewport.set_extent(framing.extent)
+        self.viewport.set_extent(framing.extent, framing.style)
         if self.bridge is not None:
             self.bridge.set_framing(framing.id)
         self._invalidate()
@@ -871,16 +931,76 @@ class StudioController(QObject):
         self.bridge.transportChanged.emit()
 
     # --------------------------------------------------------------- camera
-    def orbit_by(self, dx: float, dy: float) -> None:
-        paths = self.adapter.orbit_paths()
-        if paths is None:
+    def _nudge(self, axis, delta: float) -> None:
+        if axis is None:
             return
-        (h_key,), (v_key,), h_bounds, v_bounds = paths
+        value = float(self.evaluation_values()[axis.key]) + float(delta)
+        self.set_pose(axis.key, min(axis.bounds[1], max(axis.bounds[0], value)))
+
+    def orbit_by(self, dx: float, dy: float) -> None:
+        nav = self.adapter.navigation()
+        if nav is None:
+            return
+        span_h = (nav.orbit_h.bounds[1] - nav.orbit_h.bounds[0]) if nav.orbit_h else 0.
+        span_v = (nav.orbit_v.bounds[1] - nav.orbit_v.bounds[0]) if nav.orbit_v else 0.
+        self._nudge(nav.orbit_h, float(dx) * span_h / 900.0)
+        self._nudge(nav.orbit_v, float(dy) * span_v / 600.0)
+
+    def pan_by(self, dx: float, dy: float, width: float, height: float) -> None:
+        nav = self.adapter.navigation()
+        if nav is None:
+            return
+        self._nudge(nav.pan_x, -float(dx) / max(1.0, float(width)))
+        self._nudge(nav.pan_y, float(dy) / max(1.0, float(height)))
+
+    def zoom_by(self, steps: float, *, dolly: bool = False) -> None:
+        """Wheel: ``steps`` > 0 zooms in. Multiplicative, bounded by the mode's camera range."""
+        nav = self.adapter.navigation()
+        if nav is None:
+            return
+        axis = nav.dolly if dolly else nav.zoom
+        if axis is None:
+            return
+        factor = 1.12 ** float(steps)
+        if not dolly and nav.zoom_inverts:
+            factor = 1.0 / factor
+        value = float(self.evaluation_values()[axis.key]) * factor
+        self.set_pose(axis.key, min(axis.bounds[1], max(axis.bounds[0], value)))
+
+    def view_readout(self) -> list:
+        nav = self.adapter.navigation()
+        if nav is None:
+            return []
         values = self.evaluation_values()
-        turn = min(h_bounds[1], max(h_bounds[0], float(values[h_key]) + float(dx) * 0.004))
-        tilt = min(v_bounds[1], max(v_bounds[0], float(values[v_key]) + float(dy) * 0.002))
-        self.set_pose(h_key, turn)
-        self.set_pose(v_key, tilt)
+        out = []
+        for axis in (nav.zoom, nav.dolly, nav.orbit_h, nav.orbit_v):
+            if axis is not None:
+                value = float(values[axis.key])
+                out.append({"label": axis.label, "value": value, "units": axis.units,
+                            "changed": axis.key in self._pose})
+        return out
+
+    def keep_view(self) -> None:
+        """Save what may be saved of the previewed view: ordinary lens settings always (undoable),
+        the orbit only when the store's camera policy allows; dolly and pan stay preview views."""
+        nav = self.adapter.navigation()
+        if nav is None or not self._pose:
+            return
+        allowed = getattr(self.store, "camera_commit_allowed", lambda: False)()
+        saving = {key: value for key, value in self._pose.items()
+                  if key in nav.saved_on_keep or (allowed and key in nav.saved_with_camera_policy)}
+        if saving:
+            for key in saving:
+                self._pose.pop(key)
+            self.session.begin_gesture("Keep View")
+            for key, value in saving.items():
+                self.session.preview((key,), value)
+            self.session.end_gesture()
+        if self.bridge is not None:
+            kept = ", ".join(sorted(k.rsplit("_", 1)[-1] for k in saving)) or "nothing"
+            rest = "; dolly/pan stay preview views" if self._pose else ""
+            policy = "" if allowed else " (orbit saves only with the preset's camera checkbox)"
+            self.bridge.notify(f"Kept: {kept}{rest}{policy}")
 
     def set_pose(self, key: str, value: float) -> None:
         """A live view-pose value (navigation): rendered at once, never an ordinary committed edit."""
@@ -894,8 +1014,8 @@ class StudioController(QObject):
         allows it; every other view-pose value stays a preview view."""
         if not self._pose:
             return
-        paths = self.adapter.orbit_paths()
-        orbit_keys = {paths[0][0], paths[1][0]} if paths else set()
+        nav = self.adapter.navigation()
+        orbit_keys = set(nav.saved_with_camera_policy) if nav is not None else set()
         allowed = getattr(self.store, "camera_commit_allowed", lambda: False)()
         saved = {key: value for key, value in self._pose.items() if key in orbit_keys} if allowed else {}
         if saved:
@@ -905,10 +1025,9 @@ class StudioController(QObject):
             for key, value in saved.items():
                 self.session.preview((key,), value)
             self.session.end_gesture()
-        if self._pose and self.bridge is not None:
-            self.bridge.notify("Preview view: enable the preset's camera checkbox to save the orbit; "
-                               "zoom and pan stay preview views" if not allowed else
-                               "Zoom and pan are preview views; the orbit was saved")
+        if self._pose and self.bridge is not None and not allowed:
+            self.bridge.notify("Preview view: Keep View saves the lens; the orbit saves only with the "
+                               "preset's camera checkbox")
 
     def reset_camera(self) -> None:
         self._pose = {}
@@ -932,10 +1051,23 @@ class StudioController(QObject):
             self.close()
 
     def _retire(self, *, reveal: bool) -> None:
+        """Retire in a fixed order and record each step's cost (``close_timings``, milliseconds)."""
+        import time
+        timings: dict[str, float] = {}
+        mark = time.perf_counter()
+
+        def step(name: str) -> None:
+            nonlocal mark
+            now = time.perf_counter()
+            timings[name] = round((now - mark) * 1000.0, 2)
+            mark = now
+
         session = self.session
         if session is not None:
             session.cancel_gesture()          # an unaccepted drag is not a saved edit
+        step("gesture")
         self.transport.stop()
+        step("transport")
         for job in tuple(self._clip_jobs.values()):
             cancel = getattr(job, "cancel", None)
             if callable(cancel):
@@ -944,6 +1076,7 @@ class StudioController(QObject):
         if self._unsubscribe is not None:
             self._unsubscribe()
             self._unsubscribe = None
+        step("jobs")
         surface, self.surface = self.surface, None
         if surface is not None:
             for signal, slot in ((surface.frameStarted, self.on_frame), (surface.presented, self._on_presented),
@@ -958,15 +1091,21 @@ class StudioController(QObject):
             except Exception:
                 logger.exception("[STUDIO] Studio surface retirement failed")
         self.viewport = None
+        step("surface")
         if self.evaluator is not None:
             self.evaluator.release()
         if StudioController._active is self:
             StudioController._active = None
+        step("evaluator")
         if reveal:
             try:
                 self.presence.reveal()
             except Exception:
                 logger.exception("[STUDIO] Settings reveal failed")
+        step("settings")
+        timings["total"] = round(sum(timings.values()), 2)
+        self.close_timings = timings
+        logger.info("[STUDIO] retire %s", " ".join(f"{k}={v}ms" for k, v in timings.items()))
 
 
 __all__ = ["StudioBridge", "StudioController"]

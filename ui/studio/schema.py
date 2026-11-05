@@ -80,6 +80,9 @@ class SceneObject:
     visible: bool = True
     # Path of a boolean-ish value that hides it, if the mode has one; None = not hideable.
     visibility_path: Path | None = None
+    # A short note shown when it is hidden (e.g. why), and whether the eye toggle may change it.
+    hidden_note: str = ""
+    toggleable: bool = False
 
 
 @dataclass(frozen=True)
@@ -89,6 +92,7 @@ class Workspace:
     groups: tuple[str, ...]
     # Groups open when the workspace is shown (default: the first two).
     open_groups: tuple[str, ...] = ()
+    icon: str = ""             # a short glyph for the workspace tab
 
 
 @dataclass(frozen=True)
@@ -140,6 +144,8 @@ class StudioSchema:
     response: StudioResponse | None = None
     # Live signal channels (names the evaluator measures) to trace beside an inspector group.
     group_traces: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    group_icons: tuple[tuple[str, str], ...] = ()      # (group, glyph) for inspector section headers
+    object_noun: str = "Object"                         # e.g. "Add <noun>" in the scene list
 
     def __post_init__(self) -> None:
         ids = [prop.id for prop in self.properties]

@@ -83,6 +83,7 @@ class StudioRenderNode(QSGRenderNode):
         self._frame_serial = 0
         self._logical_size = (0.0, 0.0)
         self._extent: tuple[float, float] | None = None
+        self._style: tuple = ()
         self._prepared = False
         self._last_error = ""
         self._released = False
@@ -90,8 +91,9 @@ class StudioRenderNode(QSGRenderNode):
 
     # Sync phase (GUI blocked) -------------------------------------------------
     def synchronize(self, frame: Any, serial: int, logical_size: tuple[float, float],
-                    extent: tuple[float, float] | None = None) -> None:
+                    extent: tuple[float, float] | None = None, style: tuple = ()) -> None:
         self._extent = extent
+        self._style = style
         self._frame = frame
         self._frame_serial = serial
         self._logical_size = (max(0.0, float(logical_size[0])), max(0.0, float(logical_size[1])))
@@ -126,7 +128,7 @@ class StudioRenderNode(QSGRenderNode):
                 self._renderer = self._factory()
             card = RenderCard(viewport=viewport, logical_size=self._logical_size,
                               matrix_values=tuple(float(v) for v in matrix.data()),
-                              quad_vao=self._quad.ensure(), extent=self._extent)
+                              quad_vao=self._quad.ensure(), extent=self._extent, style=self._style)
             inherited = InheritedGlState.capture_render_host()
             try:
                 gl.glEnable(gl.GL_BLEND)
@@ -192,6 +194,7 @@ class StudioViewportItem(QQuickItem):
         self._frame: Any = None
         self._serial = 0
         self._extent: tuple[float, float] | None = None
+        self._style: tuple = ()
         self._bound_window: QQuickWindow | None = None
         super().__init__(parent)
         self.setFlag(QQuickItem.Flag.ItemHasContents, True)
@@ -215,12 +218,13 @@ class StudioViewportItem(QQuickItem):
     def extent(self) -> tuple[float, float] | None:
         return self._extent
 
-    def set_extent(self, extent: tuple[float, float] | None) -> None:
+    def set_extent(self, extent: tuple[float, float] | None, style: tuple = ()) -> None:
         """Present this world extent letterboxed inside the slot (None: fill the slot)."""
         extent = None if extent is None else (float(extent[0]), float(extent[1]))
-        if extent == self._extent:
+        if extent == self._extent and tuple(style) == self._style:
             return
         self._extent = extent
+        self._style = tuple(style)
         self.extentChanged.emit()
         self.update()
 
@@ -251,7 +255,7 @@ class StudioViewportItem(QQuickItem):
 
     def updatePaintNode(self, old_node: QSGNode | None, _data: QQuickItem.UpdatePaintNodeData) -> QSGNode:
         node = old_node if isinstance(old_node, StudioRenderNode) else StudioRenderNode(self._factory, self)
-        node.synchronize(self._frame, self._serial, (self.width(), self.height()), self._extent)
+        node.synchronize(self._frame, self._serial, (self.width(), self.height()), self._extent, self._style)
         with self._lock:
             self._node = node
         return node

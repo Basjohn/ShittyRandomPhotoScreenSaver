@@ -93,7 +93,7 @@ class ToyAdapter(StudioModeAdapter):
     def create_renderer(self):
         return ToyRenderer()
 
-    def framings(self, card_extent):
+    def framings(self, card_extent, card_style=None):
         return (StudioFraming("square", "Square", (300., 300.)),)
 
 

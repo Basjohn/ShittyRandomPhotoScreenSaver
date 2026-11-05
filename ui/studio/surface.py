@@ -149,6 +149,12 @@ class StudioWindowSurface(QObject):
         # authoring surface while open.
         window.setModality(Qt.WindowModality.ApplicationModal)
         window.setMinimumSize(QSize(960, 600))
+        # Closing must not stall the Settings window it returns to: with non-persistent graphics the
+        # scene graph, the Studio's GL resources and its context are released inside hide(), i.e.
+        # before Settings is revealed, instead of in a later deferred window destruction that would
+        # block the Settings event loop right after it reappears.
+        window.setPersistentSceneGraph(False)
+        window.setPersistentGraphics(False)
         self.window = window
         self._anchor = anchor
         self._presented = False
@@ -202,9 +208,14 @@ class StudioWindowSurface(QObject):
                 signal.disconnect(slot)
             except (RuntimeError, TypeError):
                 pass
+        import time
         self.host.retire()
+        started = time.perf_counter()
         window.hide()
+        self.hide_ms = round((time.perf_counter() - started) * 1000.0, 2)
         _keep_until_destroyed(window)
+        window.destroyed.connect(lambda *_a, t=time.perf_counter(): logger.info(
+            "[STUDIO] window destroyed %.1f ms after retirement", (time.perf_counter() - t) * 1000.0))
         window.deleteLater()
         self.host.release_engine()
 
