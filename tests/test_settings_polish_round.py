@@ -4,12 +4,20 @@ Widgets are rendered with ``grab()`` and never shown on screen.
 """
 from __future__ import annotations
 
+import sys
+
 import pytest
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from core.sources.folder_paths import contains_folder, display_folder_path, same_folder, without_folder
 
 
+_WINDOWS_SPELLING = pytest.mark.skipif(
+    sys.platform != "win32", reason="Windows path spelling: backslash separators, case-insensitive"
+)
+
+
+@_WINDOWS_SPELLING
 def test_one_folder_is_one_folder_whatever_its_separators() -> None:
     forward, native = "C:/Users/Me/Wallpapers/", r"c:\Users\Me\Wallpapers"
     assert same_folder(forward, native)
@@ -19,6 +27,15 @@ def test_one_folder_is_one_folder_whatever_its_separators() -> None:
     assert not same_folder("", "")
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX path spelling")
+def test_posix_folder_spelling_ignores_trailing_separators_but_keeps_case() -> None:
+    assert same_folder("/home/me/Wallpapers/", "/home/me/Wallpapers")
+    assert display_folder_path("/home/me/Wallpapers/") == "/home/me/Wallpapers"
+    assert not same_folder("/home/me/wallpapers", "/home/me/Wallpapers")
+    assert without_folder(["/home/me/Wallpapers/", "/srv/Other"], "/home/me/Wallpapers") == ["/srv/Other"]
+
+
+@_WINDOWS_SPELLING
 def test_wizard_sources_never_add_a_second_spelling(qt_app, monkeypatch) -> None:
     from ui.onboarding import basic_pages
     from ui.onboarding.draft import SettingsDraft
