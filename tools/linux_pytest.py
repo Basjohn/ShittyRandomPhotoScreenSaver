@@ -8,6 +8,7 @@ pytest unchanged::
 
     python tools/linux_pytest.py -q tests/test_platform_paths.py
     python tools/linux_pytest.py --display :95 -- -q -k quick tests/test_quick_bootstrap.py
+    python tools/linux_pytest.py --chunked --isolated --jobs 3     # the whole-suite gate (tests/run_chunked.py)
 
 Software rendering: results prove correctness, never performance.
 """
@@ -28,13 +29,18 @@ def main(argv: list[str]) -> int:
     display = ":96"
     if argv[:1] == ["--display"]:
         display, argv = argv[1], argv[2:]
+    chunked = argv[:1] == ["--chunked"]
+    if chunked:
+        argv = argv[1:]
     if argv[:1] == ["--"]:
         argv = argv[1:]
     env = {**os.environ, "DISPLAY": display, **lh.MESA_GL46_OVERRIDE}
     env.pop("QT_QPA_PLATFORM", None)
     xvfb = lh.start_xvfb(display)
     try:
-        return subprocess.call([sys.executable, "-m", "pytest", "-p", "no:cacheprovider", *argv], cwd=lh.REPO, env=env)
+        command = ([sys.executable, str(lh.REPO / "tests" / "run_chunked.py"), *argv] if chunked
+                   else [sys.executable, "-m", "pytest", "-p", "no:cacheprovider", *argv])
+        return subprocess.call(command, cwd=lh.REPO, env=env)
     finally:
         xvfb.terminate()
 
