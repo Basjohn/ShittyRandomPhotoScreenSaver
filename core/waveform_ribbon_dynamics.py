@@ -118,6 +118,10 @@ TROUGH_ATTACK, TROUGH_RELEASE, TROUGH_VIEW = .15, 1.2, 32.  # the authored long 
 # Tilt Shift: while the lift moves, the side the history travels toward leads by TILT_LEAD seconds of lift velocity
 # (bounded softly to TILT_MAX world units each side), so it rises first and settles first. History travels toward -x.
 HEIGHT_MODES = ('Dynamic Height Shift', 'Static Height')
+# A Travel Direction change fades every ribbon, spark and strand out over DIRECTION_FADE seconds (smoothstep, as a count
+# change shrinks and dims a ribbon), swaps the published direction while they are gone, then fades them back in over
+# the same time: never a mirrored pop. The history itself is untouched (it lives on its own axis).
+DIRECTION_FADE = .6
 TILT_LEAD, TILT_MAX, TILT_SIDE, TILT_EASE = .35, .6, -1., .3   # the lead eases over TILT_EASE seconds (no tick steps)
 
 # Selectable reaction modes (operator, 5 Nov). All share the injection and the couplings above.
@@ -323,6 +327,7 @@ class HybridSnapshot:
     strands: bytes = b''
     strand_origin: float = 0.
     zoom: float = 1.
+    direction: float = 1.           # published Travel Direction (Flow.direction): history axis -> world x sign
 
 
 class WaveformDynamics:
@@ -361,6 +366,8 @@ class WaveformDynamics:
         self._drive_stage = {key:0. for key in SMOOTH_TARGETS}
         self._response_peak = {key:RESPONSE_PEAK_FLOOR for key in RESPONSE_TARGETS}  # recent peak per drive (gain)  # first stage of the geometry drives' smoothing
         self.count_share = [1. if index < controls.count else 0. for index in range(RIBBON_CAPACITY)]
+        self.direction = controls.scene.flow.direction
+        self._direction_phase = self.direction_share = 1.   # linear fade phase and its smoothstep share
         self._primed = 0
         self._next_knot = 1./controls.scene.flow.knot_hz
         self._snapshot = None
@@ -506,6 +513,13 @@ class WaveformDynamics:
             self.count_share[index] = follower(self.count_share[index],float(index<c.count),dt,.5,.5)
             if abs(self.count_share[index]-float(index<c.count)) < 1e-4:
                 self.count_share[index] = float(index<c.count)
+        if c.scene.flow.direction != self.direction or self._direction_phase < 1.:
+            out = c.scene.flow.direction != self.direction
+            self._direction_phase = min(1.,max(0.,self._direction_phase+(-dt if out else dt)/DIRECTION_FADE))
+            if out and self._direction_phase == 0.:
+                self.direction = c.scene.flow.direction
+            phase = self._direction_phase
+            self.direction_share = phase*phase*(3.-2.*phase)
         if self.ready:
             # The bounded logical step crosses at most one six-Hz knot; render delivery never owns admission.
             if self._next_knot <= self.time+1e-9:
@@ -532,7 +546,25 @@ class WaveformDynamics:
             payload=self._strand_cohorts.update(snapshot,c.strands,accent,history=self._base_packet,knot_hz=c.scene.flow.knot_hz,
                                                 swell=self.pulse_focus,gather=c.pulse.strands)
             self._snapshot=replace(self._snapshot,strands=payload,strand_origin=self._strand_cohorts.origin)
+        if self.direction_share < 1.:
+            self._snapshot = self._direction_faded(self._snapshot,self.direction_share)
         return self._snapshot
+
+    @staticmethod
+    def _direction_faded(snapshot,share):
+        """Sparks and strands dim with their ribbons through a Travel Direction change (light only; their births,
+        lifetimes and identities are untouched, so they reappear where they are)."""
+        particles,strands = snapshot.particles,snapshot.strands
+        if particles:
+            births = np.frombuffer(particles,np.float32).reshape(-1,16).copy()
+            births[:,12] *= share                                   # spark light
+            particles = births.tobytes()
+        if strands:
+            from core.ribbon_strand_cohorts import COHORT_ROWS
+            records = np.frombuffer(strands,np.float32).reshape(-1,COHORT_ROWS,4).copy()
+            records[:,1,3] *= share                                 # strand light
+            strands = records.tobytes()
+        return replace(snapshot,particles=particles,strands=strands)
 
     def _advance_pulse(self,dt,hit,energy):
         """Inject, carry, spread and fade the travelling energy. Silence injects nothing; energy already
@@ -963,6 +995,7 @@ class WaveformDynamics:
             alpha = np.clip(share/.1,0.,1.)
             tint[:,:,3] = alpha*alpha*(3.-2.*alpha)
         for index,share in enumerate(self.count_share):
+            share = share*self.direction_share
             data[index,2,:3] = self.controls.cards[index]['quiet'][0]
             data[index,3,:3] = self.controls.cards[index]['quiet'][1]
             rows[index,:,1:3] *= share
@@ -973,5 +1006,5 @@ class WaveformDynamics:
         packet = RibbonPacket(data.tobytes(),raw.instances,raw.vertices,(raw.world_origin[0],2.,0.),raw.coordinate_origin)
         self._snapshot = HybridSnapshot(packet,self.time,self.travel,self.angle,self.angular_speed,self.twist_phase,
             tuple(self.drive.items()),tuple(values.items()),self.ready,passage=self.passage,
-            head_x=self.controls.scene.flow.head_x,zoom=self.zoom)
+            head_x=self.controls.scene.flow.head_x,zoom=self.zoom,direction=self.direction)
         return self._snapshot

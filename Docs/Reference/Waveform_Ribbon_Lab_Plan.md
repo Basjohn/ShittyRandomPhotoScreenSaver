@@ -1,5 +1,7 @@
 # Waveform Ribbon: lab execution and visual evidence plan
 
+> **Orthographic removed 5 Nov 2026 (operator):** Perspective is the only camera projection in the whole project. Orthographic, its Projection control, raster-slab fit and parallel-ray paths are deleted; any Orthographic passage below is historical and superseded.
+
 This is the detailed execution/evidence owner for **Waveform Ribbon**, subordinate to
 [`Current_Plan.md`](../../Current_Plan.md) §6 (S3D shared prerequisites) and §7.0–7.1 (lab first, then production).
 The operator's [concept brief](../Future_Work/Waveform_Ribbon.md) owns intent and hard gates A–H. This document
@@ -122,7 +124,8 @@ and admissions are historical evidence, not instructions to restore a rejected l
 
 ### Camera contract for all following slices
 
-Design Waveform Ribbon for **Orthographic by default**, with Perspective as a separately exercised optional choice.
+Design Waveform Ribbon for **Perspective only** (Orthographic removed 5 Nov 2026; the earlier "Orthographic by
+default" contract is superseded).
 Use the shared admitted physical eye, pivot and world; record projection kind, physical half-extents/magnification,
 clip range and actual inner viewport aspect in the scene signature. Low/high never changes these values. Widening
 reveals additional fixed world at preserved scale; no actor stretch or audio-driven lens/pose/population changes. Sole exception (operator, 5 November): the opt-in

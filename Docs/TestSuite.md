@@ -631,6 +631,16 @@ snapshot targets. `test_bubble_fidelity_report.py` protects identity-preserving 
 delay/pixel-bound/representation/simulation-change detection and unchanged production logical/Quick output while observing.
 The replay report uses supplied projection pixels; first radius movement in a moving musical window is not causal latency.
 
+Bubble shape invariance (R-170): `test_bubble_shape_invariance.py` runs the real simulation and Quick layout on tall,
+wide, square, tiny and TV-card extents and requires canonical-card stream speed, |velocity|, radius and density per
+area (sampling-noise tolerance), with a negative control that restores the retired content-fraction motion and must
+fail by more than 50%; it also pins the canonical-extent renderer projection to the pre-R-170 arithmetic exactly.
+`test_bubble_viewport_reflow.py` and `test_visualizer_viewport_scaling_contracts.py` pin the per-bubble laws
+(impulse, swirl, trail, collision, overlap, entry depth, margins) in canonical-unit pixels at 1e-9, area-only
+population and the capacity zoom. Measure on recorded music with
+`python -m tools.visualizer_replay.bubble_shape_invariance --report <path>` and review frames with
+`python -m tools.visualizer_replay.bubble_shape_strip --out-dir <dir>` (offscreen, no window).
+
 Voxel Sphere is a standard selectable Visualizer while retaining lazy mode-owned behavior on the shared low-level Scene3D substrate. Its behavioural/state contract remains private and golden-protected; standard product admission does not make its reaction/material schema a shared family. `Docs/Reference/Sphere_Visualizer.md` owns the current contract; current Voxel Sphere tests supersede the retired smooth/material Sphere family.
 
 User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runtime compacts selectable positions without renaming/deleting authored files or treating shipped manifests as catalogue authority.

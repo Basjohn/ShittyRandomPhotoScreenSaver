@@ -51,8 +51,8 @@ from rendering.quick.scene3d.waveform import (WaveformScene, gradient_at, colour
 from tools.labs.render_target import OffscreenRenderTarget
 from tools.labs.waveform_ribbon_targets import ENVELOPE
 
-# Lab poses author inputs only. The production grounded camera and geometry-fitted
-# Orthographic raster slab are shared; the older WR-00 camera is historical evidence.
+# Lab poses author inputs only. The production grounded Perspective camera is shared;
+# the older WR-00 camera is historical evidence.
 
 
 @dataclass(frozen=True)
@@ -62,12 +62,11 @@ class Pose:
     scale: float = 1.
     pan_x: float = 0.
     pan_y: float = 0.
-    projection: str = 'Orthographic'
-    fov: float = 45.
+    fov: float = 5.
 
 
 POSES = {'mock': Pose(), 'turned': Pose(turn=.14), 'raised': Pose(tilt=-.12), 'dolly': Pose(scale=1.6, pan_x=.12),
-         'perspective': Pose(projection='Perspective', fov=40.)}
+         'wide': Pose(fov=35.)}
 
 
 STATES = {'low': dict(react=0.), 'high': dict(react=1.)}  # labelled synthetic reactivity, not music
@@ -131,21 +130,20 @@ ALTERNATE = Recipe(
 RECIPES = {'complete': Recipe(), 'alternate': ALTERNATE, 'range': PRESET_RANGE}
 
 
-def camera(pose: Pose, aspect: float, *, geometry_bounds=None):
+def camera(pose: Pose, aspect: float):
     """(world->view 4x4, projection 4x4, eye) from the shared framed camera; the world never moves."""
     from rendering.quick.visualizer.implementations.waveform_ribbon import physical_view
-    view,projection,eye,_=physical_view(_pose_parameters(pose),aspect,geometry_bounds=geometry_bounds)
+    view,projection,eye,_=physical_view(_pose_parameters(pose),aspect)
     return view,projection,eye
 
 
 def _pose_parameters(pose):
     return {'waveform_ribbon_'+key:value for key,value in dict(turn=pose.turn,tilt=pose.tilt,scene_scale=pose.scale,
-        scene_pan_x=pose.pan_x,scene_pan_y=pose.pan_y,camera_fov=pose.fov,camera_position=(0.,0.,0.),
-        camera_projection=pose.projection).items()}
+        scene_pan_x=pose.pan_x,scene_pan_y=pose.pan_y,camera_fov=pose.fov,camera_position=(0.,0.,0.)).items()}
 
 
-def lens(pose: Pose, aspect: float) -> tuple[float, float, bool]:
-    """The fog volume's lens for a pose: Orthographic half-extents, or Perspective tangents."""
+def lens(pose: Pose, aspect: float) -> tuple[float, float]:
+    """The fog volume's lens for a pose: Perspective tangents."""
     from rendering.quick.visualizer.implementations.waveform_ribbon import physical_view
     return physical_view(_pose_parameters(pose),aspect)[3]
 
@@ -230,11 +228,8 @@ class Lab(WaveformScene):
 
     def _capture(self, ring, now, *, flat=False, pose='mock', react=0.):
         width, height = self.size
-        from core.settings.waveform_ribbon_camera import scene_raster_support
         packet=ring.packet()
-        support=(scene_raster_support(packet,self.recipe,self.recipe.flow.speed*now,now=now,viewport=self.size)
-                 if POSES[pose].projection=='Orthographic' else None)
-        view, projection, eye = camera(POSES[pose], width/height,geometry_bounds=support)
+        view, projection, eye = camera(POSES[pose], width/height)
         card = SimpleNamespace(viewport=(0,0,width,height),logical_size=(float(width),float(height)),
             matrix_values=(2/width,0,0,0,0,-2/height,0,0,0,0,1,0,-1,1,0,1),quad_vao=self.target.vao)
         self.target.bind(clear=(0.,0.,0.,0.))

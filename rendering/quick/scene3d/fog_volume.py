@@ -118,15 +118,15 @@ class FogVolume:
 
     def update(self, inject_program: int, *, view, lens, depth_range, grid, medium=None, focus_depth=0.) -> None:
         """Evaluate and integrate the medium for one camera. ``view``: world->view (4x4, numpy row-major);
-        ``lens``: (half-extent or tangent x, y, orthographic); ``depth_range``: (near, far) view depth."""
+        ``lens``: Perspective (tangent x, y); ``depth_range``: positive (near, far) view depth."""
         self._check_context(admit=True)
         grid = self._admit_grid(grid)
         view = np.asarray(view, float)
         near, far = (float(v) for v in depth_range)
         if (view.shape != (4, 4) or not np.isfinite(view).all() or not near < far
-                or not all(math.isfinite(v) for v in (near,far)) or (near<=0 and not bool(lens[2]))):
-            raise ValueError('Fog update needs a finite ordered range; signed depths require Orthographic')
-        ext_x, ext_y, orthographic = float(lens[0]), float(lens[1]), bool(lens[2])
+                or not all(math.isfinite(v) for v in (near,far)) or near<=0):
+            raise ValueError('Fog update needs a finite ordered positive depth range')
+        ext_x, ext_y = float(lens[0]), float(lens[1])
         if not (ext_x > 0 and ext_y > 0 and math.isfinite(ext_x) and math.isfinite(ext_y)):
             raise ValueError('Fog lens extents must be finite and positive')
         if self._grid != grid or not self._integrated:
@@ -136,7 +136,7 @@ class FogVolume:
         focus=float(focus_depth)
         if not math.isfinite(focus) or (focus!=0. and not near<focus<far):
             raise ValueError('Fog focus must lie inside the admitted depth interval')
-        lens4 = (ext_x, ext_y, 1. if orthographic else 0., 4. if near<=0 or focus else 0.)
+        lens4 = (ext_x, ext_y, 0., 4. if focus else 0.)  # .z unused (was the retired Orthographic flag)
         range4 = (near, far, float(grid[2]), 1.+focus)
         program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
         try:

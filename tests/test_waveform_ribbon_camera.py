@@ -19,13 +19,13 @@ from widgets.spotify_visualizer.view_orbit import FramedFlightMotion, framed_fli
 
 def camera(**changes):
     values = dict(turn=0., tilt=0., scene_scale=1., scene_pan_x=0., scene_pan_y=0., camera_fov=3.,
-                  camera_position=(0., 0., 0.), camera_projection='Orthographic')
+                  camera_position=(0., 0., 0.))
     values.update(changes)
     return {SPEC.key(key): value for key, value in values.items()}
 
 
 def test_perspective_projection_retains_positive_near_and_behind_eye_rejection():
-    values = camera(camera_projection='Perspective')
+    values = camera()
     view, projection, eye, lens = physical_view(values, 1.5)
     inverse = np.linalg.inv(view)
     for depth, expected in ((NEAR, -1.), (FAR, 1.)):
@@ -39,8 +39,7 @@ def test_perspective_projection_retains_positive_near_and_behind_eye_rejection()
         assert not (-clip[3] <= clip[2] <= clip[3] and clip[3] > 0.)
 
 
-@pytest.mark.parametrize('projection', ('Orthographic', 'Perspective'))
-def test_saved_pose_admission_and_render_use_one_above_floor_eye(projection):
+def test_saved_pose_admission_and_render_use_one_above_floor_eye():
     assert fc.spec_for_mode('waveform_ribbon') is SPEC
     floor = SPEC.floor(camera())
     assert floor is not None
@@ -48,7 +47,7 @@ def test_saved_pose_admission_and_render_use_one_above_floor_eye(projection):
             (-1., -.5, 0., .5, 1.), (-.5, 0., .5), (.25, 1., 4.), (-1., 1.),
             ((-1., -1., -1.), (1., 1., 1.))):
         values = camera(turn=turn, tilt=tilt, scene_scale=scale, scene_pan_x=pan, scene_pan_y=pan,
-                        camera_position=position, camera_projection=projection)
+                        camera_position=position)
         eye, offset = fc.resolve_from_values(SPEC, values)
         admitted = {**values, SPEC.key('camera_position'): offset}
         view, matrix, rendered_eye, _ = physical_view(admitted, 1.5)

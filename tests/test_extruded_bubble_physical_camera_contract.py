@@ -95,8 +95,7 @@ def test_all_render_pass_world_positions_use_same_physical_eye():
     assert 'uWorldToView * (centre - uEye)' in shader
     assert 'toView * (aPoint.xyz - uEye)' in shader
     assert 'uWorldToView * (p - uEye)' in shader
-    # Full-screen passes march from the physical eye; orthographic framing offsets
-    # each pixel's origin on the view plane, it never relocates the eye.
+    # Full-screen passes march from the physical eye.
     eye_origin = 'vec3 rayOrigin = uEye + uViewToWorld * framedRayOrigin(vNdc, uTan);'
     assert shader.count(eye_origin) >= 2  # water and shaft mains
     assert 'vec3 p = rayOrigin + ray * s;' in shader

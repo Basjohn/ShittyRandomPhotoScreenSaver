@@ -61,7 +61,7 @@ def test_zoom_scales_the_visible_extent_only():
     parameters = {key: value for key, value in (
         ('waveform_ribbon_turn', 0.), ('waveform_ribbon_tilt', 0.), ('waveform_ribbon_scene_scale', 1.),
         ('waveform_ribbon_scene_pan_x', 0.), ('waveform_ribbon_scene_pan_y', 0.), ('waveform_ribbon_camera_fov', 5),
-        ('waveform_ribbon_camera_projection', 'Perspective'), ('waveform_ribbon_camera_position', [0., 0., 0.]))}
+        ('waveform_ribbon_camera_position', [0., 0., 0.]))}
     view, _, eye, lens = physical_view(parameters, 2.)
     zoomed_view, _, zoomed_eye, zoomed_lens = physical_view(parameters, 2., zoom=1.2)
     np.testing.assert_array_equal(view, zoomed_view)

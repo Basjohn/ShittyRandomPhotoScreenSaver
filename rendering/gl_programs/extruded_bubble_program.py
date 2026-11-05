@@ -233,7 +233,7 @@ void main() {
         float strands = 0.0;
         for (int i = 0; i < 3; ++i) {
             float d = 6.0 + 7.0 * float(i);
-            vec3 at = ray * d + (uOrthographic > 0.5 ? rayOrigin - uEye : vec3(0.0));
+            vec3 at = ray * d;
             strands += waterWisps(vec2(at.x + at.z * 0.3, at.y) * (0.9 - 0.15 * float(i)) + vec2(float(i) * 7.3), uTime)
                      * exp(-d * 0.06);
         }
@@ -245,7 +245,7 @@ void main() {
         float web = 0.0;
         for (int i = 0; i < 3; ++i) {
             float d = 5.0 + 6.0 * float(i);
-            vec3 at = ray * d + (uOrthographic > 0.5 ? rayOrigin - uEye : vec3(0.0));
+            vec3 at = ray * d;
             vec2 q = vec2(at.x + at.z * 0.35, at.y * 1.3 + at.z * 0.2) * (0.55 - 0.08 * float(i)) + vec2(float(i) * 4.1, 1.7);
             // Drawn out along the stream (the filaments trail with the water), fine across it.
             vec2 along = normalize(uStreak + vec2(1e-4));
@@ -715,7 +715,7 @@ uniform float uFrameShare;       // what is seen through: the frame (1) or the p
 // scene holds.
 // One shading ray through the bubble (premultiplied light, owned alpha).
 vec4 shadeBubbleRay(vec3 rayOrigin, vec3 rayView, vec4 sphere, float pixels, float soft, float blur) {
-    vec3 relative = uOrthographic > 0.5 ? sphere.xyz - rayOrigin : sphere.xyz;
+    vec3 relative = sphere.xyz;
     float eyeDistance = length(relative);
     bool inside = eyeDistance < sphere.w;
     vec3 axis = eyeDistance > 1e-6 ? relative / eyeDistance : rayView;
@@ -723,13 +723,12 @@ vec4 shadeBubbleRay(vec3 rayOrigin, vec3 rayView, vec4 sphere, float pixels, flo
     vec3 offAxis = rayView - axis * along;
     float maxSin = (sphere.w / max(eyeDistance,1e-6)) * (1.0 - 0.6 / max(pixels, 2.0));
     float sinNow = length(offAxis);
-    if (uOrthographic < 0.5 && !inside && sinNow > maxSin)
+    if (!inside && sinNow > maxSin)
         rayView = normalize(axis * sqrt(max(1.0 - maxSin * maxSin, 0.0)) + offAxis / max(sinNow, 1e-6) * maxSin);
     float tN, tF;
     if (!sceneSphereRay(rayView, relative, sphere.w, tN, tF)) return vec4(0.0);
     float minT = 0.05 / max(-rayView.z,1e-4);
     vec3 frontView = rayView * (tN >= minT ? tN : tF);
-    if (uOrthographic > 0.5) frontView += rayOrigin;
     vec3 facingNormal = normalize(frontView - sphere.xyz) * (inside ? -1.0 : 1.0);
     // A mirror on a sphere turns the view by twice the normal's turn: one pixel spans ~2 / (radius px x facing) rad.
     float facingHere = max(dot(-rayView, facingNormal), 0.15);
@@ -858,11 +857,8 @@ vec4 shadeBubble(vec3 rayOrigin, vec3 rayView, vec4 sphere, float pixels, float 
         int rays = pixels < kRimRaysFull ? 4 : 8;
         for (int i = 0; i < rays; ++i) {
             vec2 o = vec2(fract(float(i) * 0.618034 + 0.5 / float(rays)), (float(i) + 0.5) / float(rays)) - 0.5;
-            if (uOrthographic > 0.5)
-                sum += shadeBubbleRay(rayOrigin + dx * o.x + dy * o.y, rayView, sphere, pixels, soft, blur) / float(rays);
-            else
-                sum += shadeBubbleRay(rayOrigin, normalize(rayView + dx * o.x + dy * o.y), sphere, pixels, soft, blur)
-                     / float(rays);
+            sum += shadeBubbleRay(rayOrigin, normalize(rayView + dx * o.x + dy * o.y), sphere, pixels, soft, blur)
+                 / float(rays);
         }
     }
     if (uDiag > 0) return vec4(sum.rgb / max(sum.a, 1e-4), 1.0);
@@ -885,15 +881,14 @@ void main() {
     vec2 ndc = gl_FragCoord.xy / uFrameSize * 2.0 - 1.0 - uLensShift;
     vec3 ray = framedRayDirection(ndc, uTan);
     vec3 rayOrigin = framedRayOrigin(ndc, uTan);
-    vec3 relative = uOrthographic > 0.5 ? vSphere.xyz - rayOrigin : vSphere.xyz;
-    float coverage = sceneSphereCoverage(ray, relative, vSphere.w, vBlur, uPixelSize, uOrthographic > 0.5);
+    vec3 relative = vSphere.xyz;
+    float coverage = sceneSphereCoverage(ray, relative, vSphere.w, vBlur, uPixelSize);
     if (coverage <= 0.0) discard;
     float tNear, tFar;
     bool hit = sceneSphereRay(ray, relative, vSphere.w, tNear, tFar);
     float minT = 0.05 / max(-ray.z, 1e-4);
     if ((hit && tFar < minT) || (!hit && dot(relative, ray) < minT)) discard;
     vec3 front = hit ? ray * (tNear >= minT ? tNear : tFar) : ray * dot(relative, ray);
-    if (uOrthographic > 0.5) front += rayOrigin;
     vec3 rayW = uViewToWorld * ray;
     float soft = clamp(vBlur / max(vSphere.w, 1e-3), 0.0, 1.0);
     float pixels = vSphere.w / (uPixelSize * framedPixelDepth(max(-front.z, 0.1)));
@@ -1049,8 +1044,7 @@ void main() {
                        vec4(vSpheres[2].xyz - rayOrigin, vSpheres[2].w), vec4(0.0));
     float minT = 0.05 / max(-ray.z, 1e-4);
     if (tFar < minT) discard;
-    bool hit = sceneClusterRay(ray, s, int(vInfo.x), vInfo.y, max(tNear, minT), tFar, t, normal, closest,
-                               uOrthographic > 0.5);
+    bool hit = sceneClusterRay(ray, s, int(vInfo.x), vInfo.y, max(tNear, minT), tFar, t, normal, closest);
     // Antialias the joined silhouette from how closely the ray passed.
     float pixelAngle = uPixelSize;
     float coverage = hit ? 1.0 : clamp(0.5 - closest / pixelAngle, 0.0, 1.0);
@@ -1139,7 +1133,7 @@ void main() {
         vec3 delta = uLightSource - aPoint.xyz;
         lightDirection = delta / max(length(delta), 1e-6);
     }
-    vec3 sight = uOrthographic > 0.5 ? transpose(toView) * vec3(0.0, 0.0, -1.0) : normalize(aPoint.xyz - uEye);
+    vec3 sight = normalize(aPoint.xyz - uEye);
     float phase = 0.3 + 2.2 * pow(max(dot(sight, lightDirection), 0.0), 4.0)
                             * mix(1.0, uLightStrength, uParticleLighting);
     vec3 tint = aLook.y > 0.5 ? uSpeckWarm : mix(uWater * 6.0, vec3(0.75, 0.82, 0.86), 0.5);
@@ -1685,16 +1679,14 @@ void main() {
     vec3 previous = uWorldToView * (trailWater(owner, max(c - dc, 0.0)) - uEye);
     vec3 tangent = next - previous;
     tangent = dot(tangent, tangent) > 1e-12 ? normalize(tangent) : vec3(0.0, -1.0, 0.0);
-    vec3 acrossVector = cross(tangent, uOrthographic > 0.5 ? vec3(0.0, 0.0, 1.0) : normalize(-here));
-    vec3 across = uOrthographic > 0.5 && dot(acrossVector, acrossVector) < 1e-12
-                ? vec3(1.0, 0.0, 0.0) : normalize(acrossVector);
+    vec3 across = normalize(cross(tangent, normalize(-here)));
     // A sheet of disturbed water hanging from the bubble: its edges leave the bubble's widest point (its full width,
     // at its centre plane) and curve inward under it, then run on as a long, slowly narrowing sheet.
     float d = c * spacing / max(r, 1e-4);                           // distance down, in bubble radii (real)
     // At the bubble the edges meet its true outline: a sphere's perspective silhouette is wider than a sheet through
     // its centre by 1 / sqrt(1 - (r / D)^2) (a visible pixel gap on nearer bubbles otherwise).
     vec3 bubble_ = uWorldToView * (vec3(ebWake[base], ebWake[base + 1], ebWake[base + 2]) - uEye);
-    float outline = uOrthographic > 0.5 ? 1.0 : inversesqrt(max(1.0 - r * r / max(dot(bubble_, bubble_), 1e-6), 0.05));
+    float outline = inversesqrt(max(1.0 - r * r / max(dot(bubble_, bubble_), 1e-6), 0.05));
     // The root follows the bubble as it swells with the music; the body its size followed slowly.
     float body = mix(r, wakeField(owner, WAKE_RADIUS), smoothstep(0.5, 2.0, d));
     float width = body * (0.72 + 0.28 * exp(-0.6 * d * d)) * (1.0 - 0.45 * pow(s, 1.6))

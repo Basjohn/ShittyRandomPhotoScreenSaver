@@ -526,7 +526,7 @@ def test_quick_bubble_payload_bounds_oversized_arrays_without_mutating_source() 
     assert len(frame.positions) == 444 and len(frame.trails) == 999
 
 
-def _layout(presentation):
+def _layout(presentation, *, world_scale: float = 1.0):
     outer_x, outer_y, _width, _height = presentation.outer_rect
     content_x, content_y, content_width, content_height = (
         presentation.content_rect
@@ -541,6 +541,7 @@ def _layout(presentation):
         visual_scale=presentation.uniform_visual_scale,
         viewport_extent=presentation.viewport_extent,
         baseline_viewport_size=presentation.baseline_viewport_size,
+        world_scale=world_scale,
     )
 
 
@@ -576,24 +577,28 @@ def test_bubble_layout_scales_uniformly_and_keeps_circle_radii_isotropic() -> No
         y_radius_px = radius * layout.content_rect[3]
         assert x_radius_px == pytest.approx(y_radius_px)
 
-    # R-69 golden contract: CUSTOM aspect/extent may compact the historical
-    # ripple wake, but it must never introduce a second head-radius transfer.
+    # R-69 golden contract: no second head-radius transfer. Every shape draws a
+    # radius unit, wake rings and outline at the canonical card's pixel size for
+    # the same uniform scale (Bubble's world is in canonical-card units).
     assert not hasattr(canonical, "head_radial_scale")
-    assert not hasattr(wide, "head_radial_scale")
-    assert not hasattr(tall, "head_radial_scale")
-    assert wide.trail_axis_scale[0] < 1.0
-    assert wide.trail_axis_scale[1] == pytest.approx(1.0)
-    assert tall.trail_axis_scale[0] == pytest.approx(1.0)
-    assert tall.trail_axis_scale[1] < 1.0
-    assert tall.trail_radial_scale < 1.0
+    assert not hasattr(canonical, "trail_axis_scale")
+    for layout in (wide, tall):
+        assert layout.response_radius_scale * layout.content_rect[3] == pytest.approx(
+            canonical.response_radius_scale * canonical.content_rect[3], rel=0.02)
+        assert layout.trail_radial_scale * layout.content_rect[3] == pytest.approx(
+            canonical.trail_radial_scale * canonical.content_rect[3], rel=0.02)
+        assert layout.viewport_stroke_extra_half_px == pytest.approx(0.0)
+    assert canonical.trail_radial_scale == 1.0
     assert canonical.viewport_stroke_extra_half_px == pytest.approx(0.0)
-    moderate_wide = _layout(_presentation(extent=(840.0, 280.0)))
+    # Only the capacity zoom grows heroes past canonical size; their outline firms with it, bounded.
     extreme_wide = _layout(_presentation(extent=(1174.0, 187.0)))
     extreme_tall = _layout(_presentation(extent=(187.0, 1174.0)))
-    assert 0.0 < moderate_wide.viewport_stroke_extra_half_px < 1.25
-    assert moderate_wide.viewport_stroke_extra_half_px < extreme_wide.viewport_stroke_extra_half_px
-    assert extreme_tall.viewport_stroke_extra_half_px > 0.0
-    assert extreme_wide.viewport_stroke_extra_half_px <= 1.25
+    assert extreme_wide.viewport_stroke_extra_half_px == extreme_tall.viewport_stroke_extra_half_px == 0.0
+    zoomed = [_layout(_presentation(), world_scale=zoom) for zoom in (1.0, 1.5, 2.5, 4.0)]
+    extras = [layout.viewport_stroke_extra_half_px for layout in zoomed]
+    assert extras == sorted(extras) and extras[0] == 0.0 < extras[1] and extras[-1] <= 1.25
+    for zoom, layout in zip((1.0, 1.5, 2.5, 4.0), zoomed):
+        assert layout.response_radius_scale == pytest.approx(canonical.response_radius_scale * zoom)
 
     shader = Path("widgets/spotify_visualizer/shaders/bubble.frag").read_text(
         encoding="utf-8"

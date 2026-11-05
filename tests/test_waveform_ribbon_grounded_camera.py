@@ -32,34 +32,31 @@ def focused(values):
     return np.asarray(eye),radius,lens
 
 
-@pytest.mark.parametrize('kind',('Orthographic','Perspective'))
-def test_all_pose_authoring_paths_keep_height_focus_and_front_annulus(kind):
+def test_all_pose_authoring_paths_keep_height_focus_and_front_annulus():
     for turn,tilt,scale,pan,position in itertools.product(
             (-1.,0.,1.),(-.5,.5),(.25,1.,4.),(-.5,.5),((-1.,-1.,-1.),(1.,1.,1.))):
-        values=camera(camera_projection=kind,turn=turn,tilt=tilt,scene_scale=scale,
+        values=camera(turn=turn,tilt=tilt,scene_scale=scale,
                       scene_pan_x=pan,scene_pan_y=-pan,camera_position=position)
         eye,radius,lens=focused(values)
         offset=fc.admit_camera_parameters(SPEC,values)
         focused({**values,SPEC.key('camera_position'):offset})
 
 
-@pytest.mark.parametrize('kind',('Orthographic','Perspective'))
-def test_forward_approaches_visibly_in_both_projections_and_reverse_has_no_boundary_debt(kind):
-    values=camera(camera_projection=kind);host=SimpleNamespace()
+def test_forward_approaches_visibly_and_reverse_has_no_boundary_debt():
+    values=camera();host=SimpleNamespace()
     apply_presentation_vis_mode_kwargs(host,values)
     before,radius,lens=focused(values)
     set_framed_flight_rates(host,'waveform_ribbon',0.,0.,0.,1.,0.)
     approached={**values,**apply_view_orbit_motion(host,'waveform_ribbon',values,.5)}
     after,new_radius,new_lens=focused(approached)
     assert new_radius==pytest.approx(radius-8.)
-    # A fixed world landmark grows through the admitted physical dolly/orthographic fit.
+    # A fixed world landmark grows through the admitted physical dolly.
     def projected_x(pose):
         view,projection,_,_=physical_view(pose,1.5)
         clip=projection@view@np.array((1.,2.,0.,1.))
         return abs(clip[0]/clip[3])
     assert projected_x(approached)>projected_x(values)*1.1
     assert approached[SPEC.key('camera_fov')]==values[SPEC.key('camera_fov')]
-    if kind=='Orthographic':assert new_lens[0]<lens[0]
     at_boundary={**values,**apply_view_orbit_motion(host,'waveform_ribbon',values,10000.)}
     assert focused(at_boundary)[1]==pytest.approx(64.)
     set_framed_flight_rates(host,'waveform_ribbon',0.,0.,0.,-1.,10000.)
@@ -134,8 +131,7 @@ def test_near_level_tilt_is_half_a_degree_down_at_every_admitted_radius_with_sha
 
 
 @pytest.mark.qt
-@pytest.mark.parametrize('kind',('Orthographic','Perspective'))
-def test_near_level_native_ground_coverage_and_approach_grows_real_geometry(qt_app,kind):
+def test_near_level_native_ground_coverage_and_approach_grows_real_geometry(qt_app):
     """Use production floor vertices/camera with a solid test material, independent of fog/material tuning."""
     from rendering.gl_error_policy import disable_per_call_gl_error_checking
     disable_per_call_gl_error_checking()
@@ -165,18 +161,15 @@ gl_FragDepth=depth;FragColor=vec4(1,0,0,1);}
             gl.glUniformMatrix4fv(gl.glGetUniformLocation(program,'uFloorInverseMvp'),1,gl.GL_FALSE,
                                   np.asarray(np.linalg.inv(projection@view).flatten(order='F'),np.float32))
             gl.glUniform3f(gl.glGetUniformLocation(program,'uEye'),*eye)
-            gl.glUniform1i(gl.glGetUniformLocation(program,'uOrthographic'),int(kind=='Orthographic'))
             gl.glDrawArrays(gl.GL_TRIANGLES,0,count)
             return view,projection
         for turn,scale in itertools.product((-1.,0.,1.),(.25,1.,4.)):
-            values=camera(camera_projection=kind,tilt=.5,turn=turn,scene_scale=scale)
+            values=camera(tilt=.5,turn=turn,scene_scale=scale)
             v,p=draw_floor(values);pixels=target.read_rgba();yy,xx=np.where(pixels[:,:,0]>200)
             assert len(xx)>240*160*.03
-            if kind=='Orthographic':assert len(xx)==240*160
-            else:
-                horizon=160*.5*(1.-v[2,1]/(v[1,1]*(1./p[1,1])))
-                assert yy.min()==math.ceil(horizon-.5) and yy.max()==159
-        values=camera(camera_projection=kind,tilt=.5);host=SimpleNamespace()
+            horizon=160*.5*(1.-v[2,1]/(v[1,1]*(1./p[1,1])))
+            assert yy.min()==math.ceil(horizon-.5) and yy.max()==159
+        values=camera(tilt=.5);host=SimpleNamespace()
         apply_presentation_vis_mode_kwargs(host,values)
         set_framed_flight_rates(host,'waveform_ribbon',0.,0.,0.,1.,0.)
         approached={**values,**apply_view_orbit_motion(host,'waveform_ribbon',values,.5)}

@@ -34,6 +34,11 @@ class MemoryStore:
     def card_style(self):
         return None if self._border is None else {"border_width": self._border, "content_inset": 0.0}
 
+    def environment_image(self):
+        """What a reflecting mode mirrors: the saver's first source image (read-only settings), else neutral."""
+        from ui.studio.environment import environment_image
+        return environment_image(getattr(self, "folders", ()) or ())
+
     def snapshot(self):
         return dict(self.values)
 
@@ -170,6 +175,10 @@ def main() -> int:
         # The Settings store's canonical admission (legacy direction pairs -> six-coordinate paths, ...).
         values.update({c.key: c.admit(values[c.key], values[c.key]) for c in spec.controls if c.key in values})
     store = MemoryStore(values, get_preset_names(mode)[args.preset - 1], extent, args.border)
+    if args.card_extent == "live":
+        from core.settings.settings_manager import SettingsManager
+        folders = SettingsManager().get("sources.folders") or []       # read only
+        store.folders = folders if isinstance(folders, (list, tuple)) else [folders]
     surfaces = []
 
     def factory(controller):

@@ -9,7 +9,7 @@ from tools import visualizer_preset_repair as repair
 
 MODE='extruded_bubble'
 NEW_KEYS=tuple('extruded_bubble_drift_'+name for name in ('large','small','fused','chains','snow','specks'))+(
-    'extruded_bubble_ray_modulation','extruded_bubble_ray_shimmer','extruded_bubble_camera_projection')
+    'extruded_bubble_ray_modulation','extruded_bubble_ray_shimmer')
 
 
 def payload(values,layout='snapshot'):
@@ -37,7 +37,7 @@ def test_repair_keeps_all_new_authored_values_layout_metadata_and_backup(tmp_pat
     monkeypatch.setattr(repair,'_BACKUP_ROOT',tmp_path/'backups')
     values={key:[-.42,1.71] for key in NEW_KEYS if '_drift_' in key}
     values.update(extruded_bubble_ray_modulation=.41,extruded_bubble_ray_shimmer=.73,
-                  extruded_bubble_camera_projection='Orthographic',extruded_bubble_camera_fov=53)
+                  extruded_bubble_camera_fov=53)
     original=payload(values,layout);before=deepcopy(original)
     path=tmp_path/'preset_1_authored.json';path.write_text(json.dumps(original),encoding='utf-8');raw=path.read_bytes()
     backup,_=repair.repair_file(path,MODE,sync_shipped_artifacts=False)
@@ -148,8 +148,7 @@ def test_reindex_and_swap_preserve_all_new_eb_fields_and_starting_metadata(tmp_p
     authored={}
     for slot,suffix in ((1,'alpha'),(4,'beta')):
         values={key:[-.42,1.71] for key in NEW_KEYS if '_drift_' in key}
-        values.update(extruded_bubble_ray_modulation=.41,extruded_bubble_ray_shimmer=.73,
-                      extruded_bubble_camera_projection='Orthographic')
+        values.update(extruded_bubble_ray_modulation=.41,extruded_bubble_ray_shimmer=.73)
         data=payload(values);data['name']=f'Preset {slot} ({suffix})';data['preset_index']=slot-1
         authored[suffix]=deepcopy(data)
         (folder/f'preset_{slot}_{suffix}.json').write_text(json.dumps(data),encoding='utf-8')

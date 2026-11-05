@@ -526,11 +526,18 @@ class BubbleFrame:
     simulation_timestamp: float = 0.0
     parameters: FrozenFields = FrozenFields()
     geometry_diagnostics: FrozenFields = FrozenFields()
+    # The simulation's capacity zoom for this card (bubble_viewport_profile): 1 unless the card's area
+    # needs more heroes than the renderer holds. The renderer projects radius and pixel-like sizes with it.
+    world_scale: float = 1.0
 
     def __post_init__(self) -> None:
         count = int(self.bubble_count)
         if count < 0:
             raise ValueError("bubble count must be non-negative")
+        world_scale = _finite(self.world_scale, name="bubble world scale")
+        if world_scale <= 0.0:
+            raise ValueError("bubble world scale must be positive")
+        object.__setattr__(self, "world_scale", world_scale)
         object.__setattr__(self, "bubble_count", count)
         from widgets.spotify_visualizer.bubble_hero_occlusion import admit_big_class_bits
         object.__setattr__(self, "big_class_bits", admit_big_class_bits(self.big_class_bits, count))

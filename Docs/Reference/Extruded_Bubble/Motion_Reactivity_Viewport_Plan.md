@@ -1,5 +1,7 @@
 # Extruded Bubble: drift, flow, framing and reliable musical response
 
+> **Orthographic removed 5 Nov 2026 (operator):** Perspective is the only camera projection in the whole project. Orthographic, its Projection control, raster-slab fit and parallel-ray paths are deleted; any Orthographic passage below is historical and superseded.
+
 Assessment and execution contract, 2026-10-28. **The operator approved implementation after reviewing the assessment.**
 `Current_Plan.md` owns admission and sequencing; this document owns the detailed assessment and proposed gates.
 The operator requires checkpointed slices audited by one Sol 6.1 High agent. Resizing must retain the authored lens,

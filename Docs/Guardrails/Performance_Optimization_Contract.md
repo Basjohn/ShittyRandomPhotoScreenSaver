@@ -307,7 +307,7 @@ Stable CPU/GPU/cache/thread/handle numbers and small distributed driver/GL costs
 - Production must never import/execute operator analysis tools (`R-72`).
 - Tool output cannot authorize any change forbidden by the reactivity/freshness/latency-tail checklist above.
 
-The operator-authorized Bubble equal-area response correction is documented in `Docs/Reference/Visualizer_Reference.md` and protected by BTF/R-69. It supersedes height-only product mapping; it does not authorize viewport-dependent performance caps, DSP attenuation, temporal smoothing changes or compression of already projected Ghost/history.
+The operator-authorized Bubble equal-area response correction is documented in `Docs/Reference/Visualizer_Reference.md` and protected by BTF/R-69; since R-170 it sizes the canonical card's radius unit, which every card shape uses (times the capacity zoom `world_scale`). It does not authorize viewport-dependent performance caps, aspect speed/count modifiers, DSP attenuation, temporal smoothing changes or compression of already projected Ghost/history.
 
 ### Refresh families versus whole-display image transition admission (R161–R163)
 

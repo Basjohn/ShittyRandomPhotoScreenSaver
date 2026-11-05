@@ -1,4 +1,4 @@
-"""S3D-7 fog volume and detail march: exact slab integration in both projections, world anchoring, the steady
+"""S3D-7 fog volume and detail march: exact Perspective slab integration, world anchoring, the steady
 (never eroded) share, the ground stop and ownership (offscreen)."""
 import math
 
@@ -49,13 +49,13 @@ def gl_context(qt_app):
     target.close()
 
 
-def update(parts, *, eye=(0., 0., 0.), orthographic=True, sphere=(0., 0., 0., 0.), steady=0.):
+def update(parts, *, eye=(0., 0., 0.), sphere=(0., 0., 0., 0.), steady=0.):
     program = parts['program']
 
     def medium(program):
         gl.glUniform4f(gl.glGetUniformLocation(program, 'uSphere'), *sphere)
         gl.glUniform1f(gl.glGetUniformLocation(program, 'uSteady'), steady)
-    parts['volume'].update(program, view=view_at(eye), lens=(2., 2., orthographic) if orthographic else (.5, .5, False),
+    parts['volume'].update(program, view=view_at(eye), lens=(.5, .5),
                            depth_range=DEPTHS, grid=GRID, medium=medium)
 
 
@@ -70,13 +70,12 @@ def boundary_depth(k):
     return near*(far/near)**((k + 1)/GRID[2])
 
 
-@pytest.mark.parametrize('orthographic', (True, False))
-def test_a_slab_integrates_exactly_in_front_and_behind(gl_context, orthographic):
-    update(gl_context, orthographic=orthographic)
+def test_a_slab_integrates_exactly_in_front_and_behind(gl_context):
+    update(gl_context)
     values = integrated(gl_context['volume'])
     column = values[:, GRID[1]//2, GRID[0]//2]
     ndc = (GRID[0]//2 + .5)/GRID[0]*2 - 1
-    stretch = 1. if orthographic else math.sqrt(2*(ndc*.5)**2 + 1)
+    stretch = math.sqrt(2*(ndc*.5)**2 + 1)
     for k in range(GRID[2]):
         depth = boundary_depth(k)
         # Cell centres decide membership: the analytic path through the slab is the sum of member slice lengths.
@@ -112,7 +111,10 @@ def test_march_keeps_the_steady_share_and_stops_at_the_ground(gl_context):
         return values[..., 3]
     update(gl_context, steady=1.)
     steady = transmittance()
-    assert np.allclose(steady, math.exp(-SIGMA*2.), atol=.03)  # full erosion cannot touch the steady share
+    # Each Perspective pixel ray crosses the 2-unit slab obliquely: its path is 2 x |(ndc * lens, 1)|.
+    ndc = (np.arange(8) + .5)/8*2 - 1
+    stretch = np.sqrt((ndc[None, :]*.5)**2 + (ndc[:, None]*.5)**2 + 1)
+    assert np.allclose(steady, np.exp(-SIGMA*2.*stretch), atol=.03)  # full erosion cannot touch the steady share
     update(gl_context, steady=0.)
     assert transmittance().mean() > steady.mean() + .1  # the erodible share is eroded
     # The eye looks along -z, so a ground plane only stops rays that descend; a level view keeps its slab.
