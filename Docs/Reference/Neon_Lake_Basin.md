@@ -557,6 +557,31 @@ Presets 1 and 3 were re-authored toward their mocks (Preset 1: new extended-grid
 above the far hills, dark navy ground with small pale marks and Depth Scale 0, opaque sky, band nebula; Preset 3:
 nebula turned into the upper right, gentler waves 0.15). Remaining gaps are listed in `Current_Plan.md`.
 
+**Third pass (2026-11-05; operator: only Presets 1-3 matter, Preset 2 is Preset 1 with less lattice and more
+glass, goal parity is the bar).** Shared:
+- **Contour Lines** (Surface, 0..1, default 0): level lines (`LAND_CONTOUR_SPACING` 0.035 world height apart) over
+  the high land's real slopes, fading where they would crowd, in the palette leaning slightly to the ridge colour
+  and brightening with the spectrum. Crests themselves are the skyline pass's silhouettes, whose glow now swells
+  with the midband.
+- **Lake**: rings lapping out from every shore (concentric round islands) from the cached bank distance; the
+  wave-line network is drawn down to about 5 px apart and runs on its own slow clock (not carried by Scroll);
+  water clocks run at about a third of their old pace; the mirror leans only 15% with the mesh's facets (their
+  tilting triangles made the reflection jump in blotches); the Sun/Moon path is narrower and brighter and only
+  mildly pulsed by the halo's music drive.
+- **Horizon glow** rises from the land's real horizon (`basinHorizonElevation`, a short march over the distant
+  land; programs without the land keep the old fixed horizon): with terrain reaching the horizon the old band
+  sat entirely under the land.
+- **Halo**: a wide soft glow spreading about a body diameter past the corona (depth-tested, scaled by Halo
+  Intensity).
+- **Continuation**: the grid edge settles into rolling ground within `CONTINUATION_DESCENT` (0.02..0.30 basin uv;
+  it was 0.04..0.68), so edge ridges no longer extrude into long straight bands. All mirrors share the constant.
+- **Beat stars** are chosen once per beat (in the view that first sees it) and stay fixed sky directions; before,
+  they were re-chosen from every frame's view and so travelled with the camera.
+- Glass takes its four rough environment taps only above roughness 0.12.
+Motion: per moving pixel, water and land change no more per frame than the accepted baseline (Preset 3 3.2 vs
+3.35/255, Preset 1 4.2 vs 4.6); Preset 1's frame mean is at the baseline (1.08 vs 1.11), Preset 3's is higher only
+because its lake now covers about five times the screen.
+
 ## Operator-authorized future water improvements (2026-10-18; deferred, baseline accepted)
 
 These are three **new capabilities**, not permission to reopen the accepted Neon Lake graphics, change authored
