@@ -307,6 +307,9 @@ class StudioViewportItem(QQuickItem):
         self._frame: Any = None
         self._serial = 0
         self._extent: tuple[float, float] | None = None
+        self._base_extent: tuple[float, float] | None = None
+        self._fill = False
+        self._slot_size = (0.0, 0.0)
         self._style: tuple = ()
         self._bound_window: QQuickWindow | None = None
         self._snapshot_jobs: list = []
@@ -351,15 +354,33 @@ class StudioViewportItem(QQuickItem):
     def extent(self) -> tuple[float, float] | None:
         return self._extent
 
-    def set_extent(self, extent: tuple[float, float] | None, style: tuple = ()) -> None:
-        """Present this world extent letterboxed inside the slot (None: fill the slot)."""
-        extent = None if extent is None else (float(extent[0]), float(extent[1]))
-        if extent == self._extent and tuple(style) == self._style:
+    def set_extent(self, extent: tuple[float, float] | None, style: tuple = (), *, fill: bool = False) -> None:
+        """Present this world extent letterboxed inside the slot (None: fill the slot). With ``fill`` the
+        extent grows to the slot's shape (more world on one axis, never less), so nothing is letterboxed."""
+        base = None if extent is None else (float(extent[0]), float(extent[1]))
+        if base == self._base_extent and bool(fill) == self._fill and tuple(style) == self._style:
             return
-        self._extent = extent
-        self._style = tuple(style)
+        self._base_extent, self._fill, self._style = base, bool(fill), tuple(style)
+        self._extent = self._presented_extent()
         self.extentChanged.emit()
         self.update()
+
+    def _presented_extent(self) -> tuple[float, float] | None:
+        base = self._base_extent
+        width, height = self._slot_size
+        if base is None or not self._fill or width <= 0.0 or height <= 0.0:
+            return base
+        from ui.studio.adapter import fill_extent
+        return fill_extent(base, width / height)
+
+    def fit_slot(self, width: float, height: float) -> tuple[float, float] | None:
+        """The slot's size changed: the extent to present in it (a filling framing follows the slot)."""
+        self._slot_size = (float(width), float(height))
+        extent = self._presented_extent()
+        if extent != self._extent:
+            self._extent = extent
+            self.update()
+        return self._extent
 
     @Slot(QQuickWindow)
     def _bind_window(self, window: QQuickWindow | None) -> None:

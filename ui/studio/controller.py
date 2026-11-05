@@ -125,6 +125,53 @@ class StudioBridge(QObject):
     def _preset(self) -> str:
         return self._c.session.preset_label
 
+    def _presets(self) -> list:
+        """The preset slots the header's dropdown offers (empty: the store cannot switch presets)."""
+        store = self._c.store
+        names = getattr(store, "presets", None)
+        if not callable(names):
+            return []
+        current = getattr(store, "preset_index", lambda: -1)()
+        listed = list(names())
+        return [{"index": i, "label": name, "current": i == current, "custom": i == len(listed) - 1}
+                for i, name in enumerate(listed)]
+
+    def _preset_file_editable(self) -> bool:
+        reader = getattr(self._c.store, "preset_file_editable", None)
+        return bool(callable(reader) and reader())
+
+    presetFileEditable = Property(bool, _preset_file_editable, notify=headerChanged)
+
+    @Slot(int)
+    def selectPreset(self, index: int) -> None:
+        self._c.select_preset(int(index))
+
+    def _include_view(self):
+        reader = getattr(self._c.store, "include_view", None)
+        value = reader() if callable(reader) else None
+        return -1 if value is None else int(bool(value))
+
+    includeView = Property(int, _include_view, notify=headerChanged)      # -1: not offered
+
+    @Slot(bool)
+    def setIncludeView(self, include: bool) -> None:
+        setter = getattr(self._c.store, "set_include_view", None)
+        if callable(setter):
+            setter(bool(include))
+            self.headerChanged.emit()
+
+    @Slot()
+    def moveToCustom(self) -> None:
+        action = getattr(self._c.store, "move_to_custom", None)
+        if callable(action):
+            self._c.store_switched(action)
+
+    @Slot()
+    def editPresetFile(self) -> None:
+        action = getattr(self._c.store, "edit_preset_file", None)
+        if callable(action):
+            action()
+
     def _dirty(self) -> bool:
         return self._c.session.dirty
 
@@ -160,6 +207,7 @@ class StudioBridge(QObject):
     def switchMode(self, mode_id: str) -> None:
         self._c.request_mode_switch(mode_id)
     presetLabel = Property(str, _preset, notify=headerChanged)
+    presets = Property("QVariantList", _presets, notify=headerChanged)
     dirty = Property(bool, _dirty, notify=headerChanged)
     canUndo = Property(bool, _can_undo, notify=headerChanged)
     canRedo = Property(bool, _can_redo, notify=headerChanged)
@@ -235,6 +283,23 @@ class StudioBridge(QObject):
         self._c.refresh_handles()
         self._c.refresh_preset_previews()
 
+    @Slot(int)
+    def stepObject(self, step: int) -> None:
+        """Select the previous / next scene object (the per-object panel's header arrows), wrapping."""
+        ids = [o["id"] for o in self._objects]
+        if not ids:
+            return
+        index = ids.index(self._selected) if self._selected in ids else 0
+        self.selectObject(ids[(index + int(step)) % len(ids)])
+
+    # ----------------------------------------------------------- frame copy
+    frameCopied = Signal(str)
+
+    @Slot()
+    def copyFrame(self) -> None:
+        """Copy the presented frame (production render, no overlays) to the clipboard as an image."""
+        self._c.copy_frame()
+
     # --------------------------------------------------------- inspector
     def _rebuild_inspector(self) -> None:
         workspace = next(w for w in self._schema.workspaces if w.id == self._workspace)
@@ -281,7 +346,7 @@ class StudioBridge(QObject):
                                          "rendered": card.rendered, "group": card.group,
                                          "labels": {role: self._schema.find(pid).label for role, pid in card.roles}}
                                         if card is not None else {}),
-                               "group": group})
+                               "group": group, "objectScoped": "{object}" in group})
         self._inspector = groups
         self._columns = self._dashboard_columns(workspace, groups)
         self.inspectorChanged.emit()
@@ -346,17 +411,36 @@ class StudioBridge(QObject):
             elif prop.instrument == SWITCH:
                 out[prop.id] = bool(value)
             elif prop.instrument == CHOICE:
-                out[prop.id] = str(value)
+                if prop.choice_values:
+                    label = next((c for c, v in zip(prop.choices, prop.choice_values) if v == value), str(value))
+                    out[prop.id] = label
+                else:
+                    out[prop.id] = str(value)
             elif prop.instrument == COLOUR:
                 out[prop.id] = _colour_hex(prop, value)
             elif prop.instrument == GRADIENT:
                 out[prop.id] = _gradient_display(prop, value)
         self._values = out
+        hidden = {}
+        for prop in self._schema.properties:
+            for key, accepted in prop.when:
+                try:
+                    if read_path(values, (key,)) not in accepted:
+                        hidden[prop.id] = True
+                        break
+                except (KeyError, IndexError, TypeError):
+                    continue
+        self._condition_hidden = hidden
         self._active_presets = self._preset_state(values)
         self.valuesChanged.emit()
 
     def _value_map(self) -> dict:
         return self._values
+
+    def _hidden_by_condition(self) -> dict:
+        return getattr(self, "_condition_hidden", {})
+
+    conditionHidden = Property("QVariantMap", _hidden_by_condition, notify=valuesChanged)
 
     def _preset_state(self, values) -> dict:
         """group -> id of the preset the current values equal (none when edited away from all)."""
@@ -490,6 +574,10 @@ class StudioBridge(QObject):
             return bool(value)
         if prop.instrument == COLOUR:
             return _colour_value(prop, value, read_path(self._c.session.values, prop.path))
+        if prop.instrument == CHOICE and prop.choice_values:
+            if value in prop.choices:
+                return prop.choice_values[prop.choices.index(value)]
+            raise ValueError(f"{prop.label} has no choice {value!r}")
         return value
 
     def _guard(self, action: Callable[[], Any]) -> None:
@@ -945,6 +1033,10 @@ class StudioController(QObject):
             self.viewport.snapshotReady.connect(self._on_snapshot, Qt.ConnectionType.QueuedConnection)
             self.viewport.snapshotFailed.connect(self._on_snapshot_failed, Qt.ConnectionType.QueuedConnection)
             self.viewport.snapshotPending.connect(self._on_snapshot_pending, Qt.ConnectionType.QueuedConnection)
+            # Handles are projected in presented-frame pixels: a resized frame (window, expanded viewport,
+            # a filling framing) re-projects them.
+            self.viewport.widthChanged.connect(self._on_viewport_resized, Qt.ConnectionType.QueuedConnection)
+            self.viewport.heightChanged.connect(self._on_viewport_resized, Qt.ConnectionType.QueuedConnection)
             self._preview_jobs = []
             self._preview_sent = {}
             self._preview_done = {}
@@ -972,6 +1064,47 @@ class StudioController(QObject):
             self._fail(f"{type(exc).__name__}: {exc}")
             return False
         return True
+
+    def store_switched(self, action: Callable[[], Any]) -> None:
+        """Run a store action that changes the preset slot, then re-open the session on the result."""
+        self.session.cancel_gesture()
+        try:
+            action()
+        except Exception as exc:
+            logger.exception("[STUDIO] Preset action failed")
+            if self.bridge is not None:
+                self.bridge.notify(f"Could not change preset: {exc}")
+            return
+        self._pose = {}
+        self.session.hydrate()
+        if self.bridge is not None:
+            self.bridge.notify(f"Preset: {self.session.preset_label}")
+        self._invalidate()
+
+    def select_preset(self, index: int) -> None:
+        """Switch the edited preset through the store (Settings' own preset authority), then re-open the
+        session on it. Studio edits are always already saved to Custom (and Custom is snapshotted before a
+        curated preset is applied), so a switch never loses work and needs no Apply/Discard prompt; only an
+        unfinished drag is dropped."""
+        select = getattr(self.store, "select_preset", None)
+        if not callable(select) or self.session is None:
+            return
+        current = getattr(self.store, "preset_index", lambda: -1)()
+        if int(index) == int(current):
+            return
+        self.session.cancel_gesture()
+        try:
+            select(int(index))
+        except Exception as exc:
+            logger.exception("[STUDIO] Preset switch failed")
+            if self.bridge is not None:
+                self.bridge.notify(f"Could not switch preset: {exc}")
+            return
+        self._pose = {}
+        self.session.hydrate()
+        if self.bridge is not None:
+            self.bridge.notify(f"Preset: {self.session.preset_label}")
+        self._invalidate()
 
     def modes(self) -> tuple:
         """(mode_id, title) of every mode the Studio can switch to (the active one included)."""
@@ -1021,9 +1154,13 @@ class StudioController(QObject):
 
     def _fail(self, message: str) -> None:
         """Opening or presenting failed: retire everything, keep/restore Settings, report."""
-        self._retire(reveal=self.state == "presented" or bool(getattr(self.presence, "concealed", False)))
-        self.state = "closed"
-        self.failed.emit(str(message))
+        try:
+            self._retire(reveal=self.state == "presented" or bool(getattr(self.presence, "concealed", False)))
+        finally:
+            self.state = "closed"
+            if StudioController._active is self:
+                StudioController._active = None
+            self.failed.emit(str(message))
 
     # --------------------------------------------------------------- frames
     def _on_session_changed(self, reason: str) -> None:
@@ -1106,6 +1243,10 @@ class StudioController(QObject):
     def _on_snapshot(self, key: str, width: int, height: int, pixels: bytes) -> None:
         from PySide6.QtCore import QBuffer, QByteArray, QIODevice
         from PySide6.QtGui import QImage
+        if key == getattr(self, "_copy_key", None):
+            self._copy_key = None
+            self._deliver_copied_frame(width, height, pixels)
+            return
         name, _sep, signature = key.partition("|")
         image = QImage(pixels, width, height, width * 4, QImage.Format.Format_RGBA8888).flipped(Qt.Orientation.Vertical)
         cx, cy, cw, ch = self._preview_crops.get(name, (0.0, 0.0, 1.0, 1.0))
@@ -1124,6 +1265,11 @@ class StudioController(QObject):
             self.surface.request_frame()
 
     def _on_snapshot_failed(self, key: str, signature_text: str) -> None:
+        if key == getattr(self, "_copy_key", None):
+            self._copy_key = None
+            if self.bridge is not None:
+                self.bridge.notify("Could not copy the frame")
+            return
         name, _sep, signature = key.partition("|")
         self._preview_done[name] = signature           # keep the swatch; never retry in a loop
         if self._preview_jobs and self.surface is not None:
@@ -1158,6 +1304,11 @@ class StudioController(QObject):
                 # A live gesture re-publishes the current instant; anything else is the exact replay.
                 live = self.session.gesture_active or bool(self._pose)
                 revision = (self.session.revision, tuple(sorted(self._pose.items())))
+                spatial = getattr(self.evaluator, "set_viewport_extent", None)
+                if callable(spatial):
+                    # A mode whose logical step reads the card's world extent (Bubble's domain) is evaluated at
+                    # the extent actually presented.
+                    spatial(self.presented_extent())
                 frame = self.evaluator.evaluate(self.transport.time, self.evaluation_values(), exact=not live,
                                                 revision=revision)
             except Exception as exc:
@@ -1199,14 +1350,14 @@ class StudioController(QObject):
         if not self.capabilities.as_map()["handles"]:
             return
         if self.bridge.workspace != self.session.schema.workspaces[0].id:
-            if self.bridge.handles.get("handles"):
-                self.bridge.set_handles({"outline": [], "handles": []})
+            if self.bridge.handles.get("handles") or self.bridge.handles.get("outline"):
+                self.bridge.set_handles({"outline": [], "handles": []})    # an outline may stand alone
             return
         framing = next((f for f in self.framings if f.id == self.bridge.framingId), None)
         try:
             state = self.adapter.scene_handles(self.last_frame, self.evaluation_values(), self.bridge.selectedObject,
                                                (self.viewport.width(), self.viewport.height()),
-                                               framing.extent if framing else None,
+                                               self.presented_extent(),
                                                framing.style if framing else ())
         except Exception:
             logger.exception("[STUDIO] Handle projection failed")
@@ -1214,11 +1365,55 @@ class StudioController(QObject):
         self.bridge.set_handles(state)
 
     # -------------------------------------------------------------- framing
+    def _on_viewport_resized(self, *_args) -> None:
+        if self.viewport is not None and self.state == "presented":
+            self.refresh_handles()
+            if callable(getattr(self.evaluator, "set_viewport_extent", None)):
+                self._invalidate()          # a filling framing's extent followed the new size
+
+    def copy_frame(self) -> None:
+        """Render the current frame once more, off screen at the presented size, and put it on the clipboard."""
+        if self.viewport is None or self.last_frame is None:
+            return
+        width, height = int(round(self.viewport.width())), int(round(self.viewport.height()))
+        if width <= 0 or height <= 0:
+            return
+        framing = next((f for f in self.framings if f.id == self.bridge.framingId), None)
+        self._copy_key = f"copy-frame/{id(self.last_frame)}"
+        try:
+            ratio = float(self.viewport.window().effectiveDevicePixelRatio()) if self.viewport.window() else 1.0
+        except Exception:
+            ratio = 1.0
+        self.viewport.request_snapshot(self._copy_key, self.last_frame,
+                                       (max(1, int(width * ratio)), max(1, int(height * ratio))),
+                                       (float(width), float(height)), self.presented_extent(),
+                                       framing.style if framing else ())
+        if self.surface is not None:
+            self.surface.request_frame()
+
+    def _deliver_copied_frame(self, width: int, height: int, pixels: bytes) -> None:
+        from PySide6.QtGui import QGuiApplication, QImage
+        image = QImage(pixels, width, height, width * 4, QImage.Format.Format_RGBA8888).flipped(Qt.Orientation.Vertical)
+        clipboard = QGuiApplication.clipboard()
+        if clipboard is not None:
+            clipboard.setImage(image)
+        self.copied_frame = image
+        if self.bridge is not None:
+            self.bridge.notify(f"Frame copied ({width} x {height})")
+            self.bridge.frameCopied.emit(f"{width}x{height}")
+
+    def presented_extent(self) -> tuple[float, float] | None:
+        """The world extent the viewport presents now (a filling framing follows the viewport's shape)."""
+        if self.viewport is not None and self.viewport.extent is not None:
+            return self.viewport.extent
+        framing = next((f for f in self.framings if f.id == getattr(self.bridge, "framingId", "")), None)
+        return framing.extent if framing else None
+
     def select_framing(self, framing_id: str) -> None:
         framing = next((f for f in self.framings if f.id == framing_id), None)
         if framing is None or self.viewport is None:
             return
-        self.viewport.set_extent(framing.extent, framing.style)
+        self.viewport.set_extent(framing.extent, framing.style, fill=framing.fill)
         if self.bridge is not None:
             self.bridge.set_framing(framing.id)
         self._invalidate()
@@ -1425,12 +1620,21 @@ class StudioController(QObject):
 
     # ---------------------------------------------------------------- close
     def close(self) -> None:
+        """Every exit path (Close, Esc, window X / Alt+F4, a lost window, app quit, Settings going away) ends
+        here. Settings is restored whatever happens during teardown, and the controller always ends closed."""
         if self.state not in ("opening", "presented"):
             return
         reveal = self.state == "presented" or bool(getattr(self.presence, "concealed", False))
-        self._retire(reveal=reveal)
-        self.state = "closed"
-        self.closed.emit()
+        try:
+            self._retire(reveal=reveal)
+        finally:
+            self.state = "closed"
+            if StudioController._active is self:
+                StudioController._active = None
+            try:
+                self.closed.emit()
+            except Exception:
+                logger.exception("[STUDIO] closed notification failed")
 
     def _on_surface_lost(self) -> None:
         """The window disappeared without our close (crash/destroy): recover Settings."""
@@ -1439,34 +1643,46 @@ class StudioController(QObject):
             self.close()
 
     def _retire(self, *, reveal: bool) -> None:
-        """Retire in a fixed order and record each step's cost (``close_timings``, milliseconds)."""
+        """Retire in a fixed order and record each step's cost (``close_timings``, milliseconds).
+
+        Each step is isolated: a failing step is logged and the next one still runs, and the Settings
+        reveal is in ``finally`` so no teardown failure can leave Settings concealed."""
         import time
         timings: dict[str, float] = {}
+        failures: list[str] = []
         mark = time.perf_counter()
 
-        def step(name: str) -> None:
+        def step(name: str, action: Callable[[], Any] | None = None) -> None:
             nonlocal mark
+            if action is not None:
+                try:
+                    action()
+                except Exception:
+                    failures.append(name)
+                    logger.exception("[STUDIO] retire step %s failed", name)
             now = time.perf_counter()
             timings[name] = round((now - mark) * 1000.0, 2)
             mark = now
 
-        session = self.session
-        if session is not None:
-            session.cancel_gesture()          # an unaccepted drag is not a saved edit
-        step("gesture")
-        self.transport.stop()
-        step("transport")
-        for job in tuple(self._clip_jobs.values()):
-            cancel = getattr(job, "cancel", None)
-            if callable(cancel):
-                cancel()
-        self._clip_jobs.clear()
-        if self._unsubscribe is not None:
-            self._unsubscribe()
-            self._unsubscribe = None
-        step("jobs")
-        surface, self.surface = self.surface, None
-        if surface is not None:
+        def cancel_jobs() -> None:
+            jobs, self._clip_jobs = tuple(self._clip_jobs.values()), {}
+            for job in jobs:
+                cancel = getattr(job, "cancel", None)
+                if callable(cancel):
+                    try:
+                        cancel()
+                    except Exception:
+                        failures.append("jobs")
+                        logger.exception("[STUDIO] clip job cancel failed")
+            unsubscribe, self._unsubscribe = self._unsubscribe, None
+            if unsubscribe is not None:
+                unsubscribe()
+
+        def retire_surface() -> None:
+            surface, self.surface = self.surface, None
+            self.viewport = None
+            if surface is None:
+                return
             for signal, slot in ((surface.frameStarted, self.on_frame), (surface.presented, self._on_presented),
                                  (surface.closeRequested, self.close), (surface.lost, self._on_surface_lost),
                                  (surface.failed, self._fail)):
@@ -1474,31 +1690,39 @@ class StudioController(QObject):
                     signal.disconnect(slot)
                 except (RuntimeError, TypeError):
                     pass
+            surface.retire()
+
+        def release_models() -> None:
+            evaluator = self.evaluator
             try:
-                surface.retire()
-            except Exception:
-                logger.exception("[STUDIO] Studio surface retirement failed")
-        self.viewport = None
-        step("surface")
-        if self.evaluator is not None:
-            self.evaluator.release()
+                if evaluator is not None:
+                    evaluator.release()
+            finally:
+                try:
+                    self.adapter.release()
+                finally:
+                    self._preview_jobs, self._preview_sent, self._preview_done = [], {}, {}
+
         try:
-            self.adapter.release()
-        except Exception:
-            logger.exception("[STUDIO] Adapter release failed")
-        self._preview_jobs, self._preview_sent, self._preview_done = [], {}, {}
-        if StudioController._active is self:
-            StudioController._active = None
-        step("evaluator")
-        if reveal:
-            try:
-                self.presence.reveal()
-            except Exception:
-                logger.exception("[STUDIO] Settings reveal failed")
-        step("settings")
-        timings["total"] = round(sum(timings.values()), 2)
-        self.close_timings = timings
-        logger.info("[STUDIO] retire %s", " ".join(f"{k}={v}ms" for k, v in timings.items()))
+            session = self.session
+            step("gesture", session.cancel_gesture if session is not None else None)   # a drag is not a save
+            step("transport", self.transport.stop)
+            step("jobs", cancel_jobs)
+            step("surface", retire_surface)
+            step("evaluator", release_models)
+        finally:
+            if StudioController._active is self:
+                StudioController._active = None
+            if reveal:
+                step("settings", self.presence.reveal)
+            else:
+                step("settings")
+            timings["total"] = round(sum(timings.values()), 2)
+            self.close_timings = timings
+            self.close_failures = tuple(failures)
+            logger.info("[STUDIO] retire reveal=%s %s%s", reveal,
+                        " ".join(f"{k}={v}ms" for k, v in timings.items()),
+                        f" failed={','.join(failures)}" if failures else "")
 
 
 __all__ = ["StudioBridge", "StudioController"]

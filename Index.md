@@ -5,7 +5,7 @@
 - **Settings editing-path persistence:** [durable ownership contract](Docs/Architecture/Settings_Bucket_Persistence_Contract.md).
   [Current Plan](Current_Plan.md) owns remaining work; accepted Settings-window, connector and Visualizer checks live in source control.
 
-- **23 October 102 archived pytest failures (32 file groups):** [source-oriented test triage and exact selectors](Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md); native visual/runtime regressions remain open.
+- **Test suite:** [Test Suite Guide](Docs/TestSuite.md) owns commands and gates (`tests/run_chunked.py --isolated [--changed]` at milestones, focused files per slice). The [23 October archived-failure triage](Docs/Audits/Archived_Test_Failure_Triage_2026-10-23.md) is historical; its stale-test reconciliation is closed.
 
 ```text
 exact current source
@@ -34,6 +34,8 @@ Local-repo transition concept mock references currently used by the plan live un
 | `Docs/Guides/` | maintained authoring/change procedures |
 | `Docs/Reference/` | current lookup/reference material and harness routing |
 | `Docs/Historical_Bugs/` | permanent regression/root-cause/failed-method evidence |
+| `Docs/Audits/` | dated audit/decision snapshots and design packs; evidence only, never current authority (durable rules move to their owner) |
+| `Docs/Future_Work/` | deferred concept briefs and packages routed from `Future_Work.md` |
 
 Keep the small routing authorities at `Docs/` root: project overview, current owner map, guardrail router, Historical Bugs router and TestSuite.
 
@@ -95,12 +97,14 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Waveform operator-selected recovery image, brightness constraints and reproducible material settings | `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` §6; `Docs/Reference/Images/Waveform_Ribbon_Material_Baseline_20261103.png`; companion `.capture.json` |
 | Waveform Ribbon recorded-audio motion bake-off and full Visualizer controls/migration | `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` §5.1; `tools/labs/waveform_ribbon_music_bakeoff.py`; `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` |
 | Shared retained Waveform scene, neutral appearance inputs and shaders | `rendering/quick/scene3d/waveform.py`; `core/waveform_ribbon_scene.py`; `core/ribbon_style.py`; `rendering/gl_programs/waveform_ribbon.py` |
+| Waveform reaction model: travelling energy pulse, Reaction Modes, flow rule, adaptive response gain, whole-ribbon floor lift, no-twitch rules, Dynamic Zoom | `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` → Current reaction model; `core/waveform_ribbon_dynamics.py`; `Docs/TestSuite.md` → Waveform reaction gates |
+| Visualizer Studio: adapter contract, registry, framings (Fill), Settings launcher, canonical save and restore guarantee | `Docs/Reference/Visualizer_Studio.md`; `ui/studio/registry.py`; `ui/studio/adapter.py` |
 | Waveform production mode, canonical controls/editors, event sparks and recorded PCM capture | `core/waveform_ribbon_dynamics.py`; `core/ribbon_bursts.py`; `core/ribbon_strand_cohorts.py`; `widgets/spotify_visualizer/waveform_ribbon_parameters.py`; `ui/widgets/waveform_ribbon_editors.py`; `tools/waveform_ribbon_capture.py` |
 | Visualizer current reference | `Docs/Reference/Visualizer_Reference.md` |
 | Visualizer Previous/Next preset glyphs and default selection | `Docs/Reference/Visualizer_Reference.md` → Preset navigation glyphs |
 | Visualizer hover display transfer, native glyph admission and existing CUSTOM transaction | `Docs/Reference/Visualizer_Reference.md` → Preset navigation glyphs; `Current_Plan.md` → R38 |
 | Visualizer Settings declarations, consumer/authoring boundaries, validation, availability and bespoke editors | `core/settings/visualizer_mode_settings.py`; `Docs/Reference/Visualizer_Reference.md` → Settings declarations; `Docs/Guides/Visualizer_Change_Checklist.md` |
-| Future Visualizer concepts, feasibility notes and low/high-react mocks | `Docs/Future_Work/Additional_Future_Transitions_Package.zip` (concept catalogue; only promoted work enters `Current_Plan.md`) |
+| Future Visualizer concepts, SMP/full-display and expanded Visualizer implementation plans | `Docs/Future_Work/SRPSS_Expanded_Visualizer_and_SMP_Implementation_Plans_2026-11-05.zip`; `Future_Work.md` (only promoted work enters `Current_Plan.md`; the older concept package left the tree on 5 Nov and stays in source control) |
 | Neon Lake Basin framing, terrain authoring, editable experiments, Custom selection migration and renderer | `Docs/Reference/Neon_Lake_Basin.md`; concrete recurrences only enter `Current_Plan.md` §5 |
 | transitions and material surfaces (accepted work; new graphics decomposition) | `Docs/Reference/Transitions.md`; `Docs/Guides/Transition_Change_Checklist.md` |
 | Accepted original Bubble Settings/replay and musical response reference | `Docs/Reference/Visualizer_Reference.md` → Settings declarations; `Docs/Reference/Harness_Index.md`; `Spec.md` |
@@ -126,7 +130,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | runtime audit 2026-09-22 outcomes and rejected ideas (closed) | `Docs/Guardrails/Performance_Optimization_Contract.md` |
 | FEEDS architecture, terminal failure/queued settlement, bundle admission and open physical acceptance | `Docs/Reference/Feeds.md`; `Docs/TestSuite.md` → FEEDS |
 | defaults | `Docs/Guides/Defaults_Guide.md` |
-| Guided Setup / Quick Start / Settings Layout (Arrange, layout slots) | `Docs/Reference/Guided_Setup.md` (open physical acceptance at its end) |
+| Guided Setup / Quick Start / Settings Layout tab (Arrange, Layout Slots, Reset Widget Layouts) | `Docs/Reference/Guided_Setup.md` (open physical acceptance at its end) |
 | logging / bounded MC CLI capture / Qt-QML observability | `Docs/Guides/Logging_Guide.md` + `Docs/Guides/Qt_QML_Observability.md` |
 | documentation maintenance | `Docs/Guides/Documentation_Maintenance.md` |
 | test inventory / acceptance authority | `Docs/TestSuite.md` |

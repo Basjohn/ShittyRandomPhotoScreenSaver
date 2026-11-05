@@ -11,6 +11,15 @@ from core.ribbon_ring import RibbonRing
 from widgets.spotify_visualizer.waveform_ribbon_frame_runtime import WaveformRibbonFrameRuntime
 
 
+@pytest.fixture(autouse=True)
+def _swell_mechanics_on_test_paths(monkeypatch):
+    """These tests examine swell mechanics on short test paths near the centre: launch the swell inside them and keep
+    the fixed end taper short (production births swells beyond the ~±30 view and tapers the slide over 20 units)."""
+    import core.waveform_ribbon_dynamics as dyn
+    monkeypatch.setattr(dyn, 'PULSE_ORIGIN', 3.5)
+    monkeypatch.setattr(dyn, 'SURGE_TAPER', 2.)
+
+
 def controls():
     routing = {key:[[0.,1.] for _ in range(6)] for key in TARGETS}
     for key,source in (('height',3),('width',0),('bend',0),('torsion',1),('twist',1),('stretch',0),
@@ -170,12 +179,15 @@ def test_runtime_consumes_onsets_once_fences_sources_and_is_terminal_after_retir
     onset = SimpleNamespace(serial=10,strength=1.,magnitude=2.,kind='kick',loudness=.8,presence=1.)
     args['onsets'] = (onset,)
     first = runtime.advance(now_ts=65/90,**args)
+    first_stage = runtime._model._drive_stage['height']
     again = runtime.advance(now_ts=65/90,**args)
     assert again.packet.payload==first.packet.payload and runtime.onset_serial==10
     args['source_identity']=(9,9)
     silent = runtime.advance(now_ts=66/90,**args)
     assert silent.ready and silent.time>first.time
-    assert dict(silent.drives)['height']<=dict(first.drives)['height']
+    # Silence adds no energy: the geometry drives are velocity-continuous (two stages), so height may carry on a
+    # hair for a tick, but the stage that takes the input does not rise.
+    assert runtime._model._drive_stage['height']<=first_stage+1e-12
     runtime.retire()
     assert runtime.advance(now_ts=67/90,**args) is None
 
@@ -376,3 +388,38 @@ def test_count_transition_changes_actual_geometry_and_returns_to_exact_hidden_st
     np.testing.assert_allclose(partial[2,4::5,1:3],before[2,4::5,1:3]*partial[2,2,3],atol=1e-6)
     for _ in range(50):model.advance(.1,bands=(0.,0.,0.),intensity=0.,presence=0.)
     assert data(model.snapshot())[2,2,3]==0.
+
+
+def test_flow_rule_share_is_the_largest_share_meeting_both_bounds():
+    """The owner's flow-rule share (closed form) is the largest share in [0, 1] whose gain keeps |g'|/g and |g''|/g
+    within their bounds: it matches a fine bisection of the bound itself, and a share just above it breaks a bound."""
+    import core.waveform_ribbon_dynamics as dyn
+    model = primed()
+    k = 2.*math.pi/dyn.carrier_wavelength(model.controls)
+    def excess(share,swell):
+        g = 1.+share*swell
+        first = np.gradient(g,dyn.PULSE_DX)
+        second = np.gradient(first,dyn.PULSE_DX)
+        return max(np.abs(first/g).max()/(dyn.GEOM_SLOPE*k),np.abs(second/g).max()/(dyn.GEOM_CURVE*k*k))
+    rng = np.random.default_rng(7)
+    bound_cases = 0
+    for case in range(40):
+        centre,width,height = rng.uniform(-30.,30.),rng.uniform(.4,2.5),rng.uniform(.3,1.2)
+        model._geom = dyn.soft(height*np.exp(-((dyn.PULSE_GRID-centre)/width)**2))
+        model._geom_share = (1.,None)                   # no rate limit: the instantaneous bound alone
+        strength = rng.uniform(.4,1.)
+        swell = .7*strength*model._geom
+        peak = int(np.argmax(swell))
+        share = float((model.geometric_gain(strength)[peak]-1.)/swell[peak])
+        low,high = 0.,1.
+        if excess(1.,swell)>1.:
+            bound_cases += 1
+            for _ in range(40):
+                mid = .5*(low+high)
+                low,high = (mid,high) if excess(mid,swell)<=1. else (low,mid)
+            assert share == pytest.approx(low,abs=1e-9)
+            assert excess(min(1.,share*1.001),swell) > 1.
+        else:
+            assert share == pytest.approx(1.)
+        assert excess(share,swell) <= 1.+1e-9
+    assert bound_cases >= 10

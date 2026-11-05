@@ -795,8 +795,13 @@ calibration and source reachability through production Settings, presets and aud
 The current lab comparison uses recorded audio and distinct model-specific body projections over normalized immutable
 history, with head-written moving colour, dense highlights and particles. A shared global scale/pulse is not a valid
 substitute for the planned flow, rolling twist, traveling packets, elastic torsion and waveform-envelope detail.
-The selected production grammar combines C's primary elastic body with A's twisting, localized high-power colour,
-particles/strands and independently reactive axial roll about the waveform's length (separate from camera orbit).
+The production reaction (operator, 5 November; supersedes the 2 November "C primary elastic body" selection) is a
+**travelling energy pulse**: beats launch swells that travel along the waveform and amplify its own crests and troughs
+under a flow rule (a swell never reverses curvature or bends a curve inward), with selectable Reaction Modes, A's
+twisting, localized high-power colour, particles/strands and independently reactive axial roll about the waveform's
+length (separate from camera orbit). The C springs remain only for depth sway/torsion. The Migration Plan's
+"Current reaction model" section owns the details, including adaptive response gain, the whole-ribbon floor lift and
+the no-twitch rules.
 The Migration Plan owns full visual editors/ranges, endpoint audits, the original two presets and the new Preset 3/four-ribbon migration.
 Free strand admission/base look belongs to immutable logical root cohorts, not live renderer thresholds. The latest
 operator policy supersedes endless life: configurable end of life with a very gentle tip-to-root fade. Reactivation
@@ -812,8 +817,8 @@ floor haze. Orthographic raster depth fits the admitted direct/reflected world s
 physical eye and XY projection; Perspective retains positive depth. Source proof and artistic/cost acceptance
 remain separate gates in Current_Plan.
 The registered production candidate uses descriptor-owned capture/runtime/renderer and canonical spec-driven Settings.
-Configuration and published packets are detached immutable values. C springs respond per ribbon's selected band;
-A twist and axial speed integrate on the sole logical clock. Existing body geometry responds before new head history
+Configuration and published packets are detached immutable values. The pulse field, depth-sway/torsion springs,
+A twist and axial speed integrate on the sole logical clock; the projection only samples them. Existing body geometry responds before new head history
 travels into view. Event-owned sparks are admitted once, bounded by lifetime/refractory/capacity, and fly analytically
 on published time. Camera navigation does not move populations or reauthor the world fog. Complete native endpoint,
 framing, editor and loaded-live gates remain in Current_Plan; candidate registration does not imply acceptance.
@@ -841,6 +846,16 @@ Bubble's Appearance group offers a shared two-node Custom Gradient editor. Its s
 for Custom; existing directional/radial recipes retain their literal inputs and appearance. A node gesture selects
 Custom, while session undo restores recipe and nodes together. `Docs/Reference/Bubble_Gradient.md` owns the endpoint,
 aspect, import and native compatibility contract. This changes no Bubble audio or motion input.
+
+## Visualizer Studio
+
+A Visualizer mode with a registered Studio adapter (`ui/studio/registry.py`) is edited in the reusable in-process
+Qt Quick Studio opened from its Custom body. The Studio previews the mode's production logical owner through its
+production renderer (own instances, never the live visualizer's), edits canonical settings through one typed session
+and saves only through Settings' own Custom save path. Settings stays alive and is concealed only after the Studio's
+first frame; every exit path reveals and refreshes the same Settings window. The framework is mode-neutral; a mode
+contributes only an adapter. A mode whose controls are all Studio-edited shows only its preset row and the Studio
+launcher in Settings. `Docs/Reference/Visualizer_Studio.md` owns the contract.
 
 ## Visualizer preset catalogue ownership
 

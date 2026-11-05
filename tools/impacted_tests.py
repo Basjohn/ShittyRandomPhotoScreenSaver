@@ -36,7 +36,7 @@ def runs_on_this_platform(path: Path) -> bool:
     from fnmatch import fnmatch
 
     return sys.platform.startswith("linux") or not fnmatch(Path(path).name, LINUX_ONLY_TEST_GLOB)
-_SKIP_DIRS = {".venv", ".venv-linux", "venv", ".git", "__pycache__", "build", "dist", "logs", "tests_tmp_appdata",
+_SKIP_DIRS = {".claude", ".venv", ".venv-linux", "venv", ".git", "__pycache__", "build", "dist", "logs", "tests_tmp_appdata",
               "tests_tmp_localappdata", "tests_tmp_shareddata", "node_modules", ".pytest_cache"}
 
 

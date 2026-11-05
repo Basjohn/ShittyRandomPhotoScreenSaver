@@ -46,10 +46,10 @@
         "waveform_ribbon_pulse_colour": 0.6,
         "waveform_ribbon_pulse_direction": "Head To Tail",
         "waveform_ribbon_reaction_mode": "Travelling Pulse",
-        "waveform_ribbon_pulse_fade": 4.0,
+        "waveform_ribbon_pulse_fade": 2.5,
         "waveform_ribbon_pulse_particles": 1.0,
         "waveform_ribbon_pulse_saturation": 0.6,
-        "waveform_ribbon_pulse_speed": 6.0,
+        "waveform_ribbon_pulse_speed": 12.0,
         "waveform_ribbon_pulse_strands": 0.4,
         "waveform_ribbon_pulse_width": 2.5,
         "waveform_ribbon_depth": [
@@ -85,7 +85,7 @@
         "waveform_ribbon_gradient_share": 0.08,
         "waveform_ribbon_height": [
           0.35,
-          3.0
+          2.34
         ],
         "waveform_ribbon_height_swell": 0.12,
         "waveform_ribbon_highlights": [

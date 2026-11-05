@@ -25,6 +25,54 @@ def has_mode_studio(mode_id: str) -> bool:
     return has_studio(mode_id)
 
 
+def live_card_extent(widgets, mode_id: str, screens=()) -> tuple[float, float] | None:
+    """The live card's CUSTOM world extent, resolved with production's own resolver.
+
+    The card lives on the display the visualizer is routed to, which is usually NOT the screen
+    Settings is on (5 Nov: a Settings-screen-only lookup missed the operator's TV card, so the
+    Studio fell back to the 420x280 baseline: aperture 1 instead of ~3.6, a 3.6x magnification).
+    ``screens`` are tried first, then every connected screen; when no connected screen matches
+    (the card's display is off), a single saved display bucket for this mode is still the card."""
+    try:
+        from PySide6.QtGui import QGuiApplication
+        from rendering.custom_layout_contract import (get_screen_signature_aliases, get_widget_layout_variant_payload,
+                                                      load_custom_layout_map)
+        from rendering.custom_layout_session import normalize_viewport_extent
+        from rendering.quick.custom_layout_hydration import resolve_visualizer_custom_entry_for_aliases
+        from core.settings.visualizer_mode_registry import get_visualizer_layout_profile
+        if not isinstance(widgets, dict):
+            return None
+        seen = set()
+        for candidate in [*screens, *QGuiApplication.screens()]:
+            if candidate is None or id(candidate) in seen:
+                continue
+            seen.add(id(candidate))
+            entry = resolve_visualizer_custom_entry_for_aliases(widgets, get_screen_signature_aliases(candidate),
+                                                                mode_id)
+            if entry is not None:
+                extent = normalize_viewport_extent(entry.size_payload.get("viewport_extent"))
+                if extent is not None:
+                    return extent
+        section = widgets.get("spotify_visualizer", {})
+        if not isinstance(section, dict) or str(section.get("position", "")).lower() != "custom":
+            return None
+        profile = get_visualizer_layout_profile(mode_id)
+        displays = load_custom_layout_map(widgets).get("displays", {})
+        extents = []
+        for bucket in displays.values() if isinstance(displays, dict) else ():
+            payload = (get_widget_layout_variant_payload(bucket, "spotify_visualizer", profile)
+                           if isinstance(bucket, dict) else None)
+            if payload is not None:
+                size = payload.get("size_payload", {})
+                extent = normalize_viewport_extent(size.get("viewport_extent")) if isinstance(size, dict) else None
+                if extent is not None:
+                    extents.append(extent)
+        return extents[0] if len(extents) == 1 else None
+    except Exception:
+        logger.debug("[STUDIO] No live card extent", exc_info=True)
+        return None
+
+
 class VisualizerSettingsStore:
     """CanonicalStore over a VisualizersTab-like Settings owner for one mode."""
 
@@ -45,7 +93,20 @@ class VisualizerSettingsStore:
         for control in self._spec().controls:
             default = tab._widget_default("spotify_visualizer", control.key)
             config[control.key] = control.admit(read_control_value(control, config.get, default), default)
+        # The mode's technical (audio analysis) values, as Settings' technical controls hold them.
+        from ui.tabs.media.technical_controls import collect_per_mode_technical_controls
+        collect_per_mode_technical_controls(tab, config, current_mode=self._mode)
+        config["scene3d_detail"] = self._scene3d_detail()
         return config
+
+    def _scene3d_detail(self) -> str:
+        """The 3D Detail tier the stored 3D Settings resolve for this mode, exactly as the display manager hands it
+        to the visualizer's presentation (renderers never read Settings). Not an edited value: a render context."""
+        from core.settings.scene3d_quality import read_scene3d_section, resolve_visualizer_tier
+        from rendering.quick.bootstrap import last_validated_gpu
+        manager = getattr(self._tab, "_settings", None)
+        section = read_scene3d_section(manager.get) if manager is not None and hasattr(manager, "get") else None
+        return resolve_visualizer_tier(section, self._mode, gpu=last_validated_gpu())
 
     def commit(self, values: Mapping[str, Any], changed: frozenset[str]) -> dict[str, Any]:
         from ui.tabs.media import framed_camera_editor as fce
@@ -58,6 +119,8 @@ class VisualizerSettingsStore:
         tab._loading = True
         try:
             load_spec_mode_settings(tab, self._mode, config)   # blocked signals: loading saves nothing
+            from ui.tabs.media.technical_controls import load_per_mode_technical_controls
+            load_per_mode_technical_controls(tab, config, only_mode=self._mode)
         finally:
             tab._loading = previous
         camera = spec_for_mode(self._mode)
@@ -73,6 +136,25 @@ class VisualizerSettingsStore:
         tab._save_settings_now()
         return self.snapshot()
 
+    def presets(self) -> list[str]:
+        """Every preset slot of the mode, curated first and Custom last (Settings' own order)."""
+        from core.settings.visualizer_presets import get_preset_names
+        return list(get_preset_names(self._mode))
+
+    def preset_index(self) -> int:
+        slider = self._tab._get_visualizer_preset_slider(self._mode)
+        return -1 if slider is None else int(slider.preset_index())
+
+    def select_preset(self, index: int) -> None:
+        """Switch exactly as Settings' preset slider does when the user moves it: the same handler applies
+        the curated values (snapshotting Custom first) or restores Custom, then saves."""
+        slider = self._tab._get_visualizer_preset_slider(self._mode)
+        if slider is None:
+            raise RuntimeError("This mode has no preset slider")
+        self._tab.flush_pending_changes()
+        slider._slider.setValue(int(index))       # the user path: valueChanged -> preset_changed -> tab handler
+        self._tab._save_settings_now()
+
     def preset_label(self) -> str:
         slider = self._tab._get_visualizer_preset_slider(self._mode)
         if slider is None:
@@ -83,54 +165,17 @@ class VisualizerSettingsStore:
         return names[index] if 0 <= index < len(names) else "Custom"
 
     def card_extent(self, screen=None) -> tuple[float, float] | None:
-        """The live card's CUSTOM world extent, resolved with production's own resolver.
-
-        The card lives on the display the visualizer is routed to, which is usually NOT the screen
-        Settings is on (5 Nov: a Settings-screen-only lookup missed the operator's TV card, so the
-        Studio fell back to the 420x280 baseline: aperture 1 instead of ~3.6, a 3.6x magnification).
-        Every connected screen is tried, the Settings screen first; when no connected screen matches
-        (the card's display is off), a single saved display bucket for this mode is still the card."""
+        """The live card's CUSTOM world extent (see :func:`live_card_extent`)."""
         try:
-            from PySide6.QtGui import QGuiApplication
-            from rendering.custom_layout_contract import (get_screen_signature_aliases, get_widget_layout_variant_payload,
-                                                          load_custom_layout_map)
-            from rendering.custom_layout_session import normalize_viewport_extent
-            from rendering.quick.custom_layout_hydration import resolve_visualizer_custom_entry_for_aliases
-            from core.settings.visualizer_mode_registry import get_visualizer_layout_profile
             widgets = self._tab._settings.get("widgets")
-            if not isinstance(widgets, dict):
-                return None
-            screens = [screen] if screen is not None else []
-            screens += [self._tab.window().screen(), *QGuiApplication.screens()]
-            seen = set()
-            for candidate in screens:
-                if candidate is None or id(candidate) in seen:
-                    continue
-                seen.add(id(candidate))
-                entry = resolve_visualizer_custom_entry_for_aliases(widgets, get_screen_signature_aliases(candidate),
-                                                                    self._mode)
-                if entry is not None:
-                    extent = normalize_viewport_extent(entry.size_payload.get("viewport_extent"))
-                    if extent is not None:
-                        return extent
-            section = widgets.get("spotify_visualizer", {})
-            if not isinstance(section, dict) or str(section.get("position", "")).lower() != "custom":
-                return None
-            profile = get_visualizer_layout_profile(self._mode)
-            displays = load_custom_layout_map(widgets).get("displays", {})
-            extents = []
-            for bucket in displays.values() if isinstance(displays, dict) else ():
-                payload = get_widget_layout_variant_payload(bucket, "spotify_visualizer", profile) \
-                    if isinstance(bucket, dict) else None
-                if payload is not None:
-                    size = payload.get("size_payload", {})
-                    extent = normalize_viewport_extent(size.get("viewport_extent")) if isinstance(size, dict) else None
-                    if extent is not None:
-                        extents.append(extent)
-            return extents[0] if len(extents) == 1 else None
         except Exception:
-            logger.debug("[STUDIO] No live card extent", exc_info=True)
             return None
+        screens = [screen] if screen is not None else []
+        try:
+            screens.append(self._tab.window().screen())
+        except Exception:
+            pass
+        return live_card_extent(widgets, self._mode, screens)
 
     def card_style(self) -> dict | None:
         """The live card chrome production presents with (the display manager's card border rule)."""
@@ -157,6 +202,35 @@ class VisualizerSettingsStore:
         slider = self._tab._get_visualizer_preset_slider(self._mode)
         checkbox = getattr(slider, "_include_starting_view", None)
         return bool(checkbox is not None and checkbox.isChecked())
+
+    def include_view(self) -> bool | None:
+        """Settings' "Include current camera view when saving" choice (None: the mode has no camera view)."""
+        checkbox = getattr(self._tab._get_visualizer_preset_slider(self._mode), "_include_starting_view", None)
+        return None if checkbox is None else bool(checkbox.isChecked())
+
+    def set_include_view(self, include: bool) -> None:
+        checkbox = getattr(self._tab._get_visualizer_preset_slider(self._mode), "_include_starting_view", None)
+        if checkbox is not None:
+            checkbox.setChecked(bool(include))
+
+    def move_to_custom(self) -> None:
+        """Settings' Move To Custom: copy the current curated preset into Custom and switch to it."""
+        slider = self._tab._get_visualizer_preset_slider(self._mode)
+        if slider is not None and slider.preset_index() != slider.custom_index():
+            slider._move_to_custom()
+            self._tab._save_settings_now()
+
+    def preset_file_editable(self) -> bool:
+        """Settings' Edit Preset availability (a curated preset whose JSON exists on disk)."""
+        button = getattr(self._tab._get_visualizer_preset_slider(self._mode), "_edit_btn", None)
+        return bool(button is not None and button.isEnabled())
+
+    def edit_preset_file(self) -> None:
+        """Settings' Edit Preset: open the curated preset's JSON in the default editor."""
+        slider = self._tab._get_visualizer_preset_slider(self._mode)
+        action = getattr(slider, "_open_preset_json", None)
+        if callable(action):
+            action()
 
     def save_preset_as(self) -> None:
         slider = self._tab._get_visualizer_preset_slider(self._mode)
@@ -227,6 +301,10 @@ def open_mode_studio(tab, mode_id: str, *, adapter=None, surface_factory=None, p
 
     def finished(*_args) -> None:
         unsubscribe()
+        try:
+            dialog.destroyed.disconnect(controller.close)
+        except (RuntimeError, TypeError, AttributeError):
+            pass
         if app is not None:
             try:
                 app.aboutToQuit.disconnect(controller.close)
@@ -247,6 +325,10 @@ def open_mode_studio(tab, mode_id: str, *, adapter=None, surface_factory=None, p
 
     controller.closed.connect(finished)
     controller.failed.connect(report)
+    try:
+        dialog.destroyed.connect(controller.close)
+    except (RuntimeError, TypeError, AttributeError):
+        pass
     tab._studio_controller = controller
     if app is not None:
         app.aboutToQuit.connect(controller.close)

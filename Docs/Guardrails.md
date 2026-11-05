@@ -6,7 +6,7 @@ This is the **short preflight**, not a second documentation authority. Use the f
 
 - Work from the operator-provided tree; never reset or overwrite unrelated changes, authored presets, themes or mutable Settings.
 - **Mutable authored content is never a test golden.** Test functionality, code-owned contracts, schema, SSOT, test-owned inputs and round-trips, never current authored values; code-owned geometry may warrant exact checks. No routine GUI/style tests for subjective side tools.
-- Physical display owns one standalone `QQuickWindow` and retained Qt Quick scene; **Settings is Qt Widgets**. No retired presenter fallback, duplicated scene authority or new presentation polling loop.
+- Physical display owns one standalone `QQuickWindow` and retained Qt Quick scene; **Settings is Qt Widgets**. The only Qt Quick window opened from Settings is the Visualizer Studio, which saves through Settings' own Custom path and always restores the same Settings window ([Visualizer Studio](Reference/Visualizer_Studio.md)). No retired presenter fallback, duplicated scene authority or new presentation polling loop.
 - Qt Quick owns scheduling; preserve latest-wins state, transition admission, render-thread safety and bounded lifetime. No unnecessary dormant work or GUI blocking.
 - Keep visualizers musically faithful and geometrically correct. Performance changes cannot reduce authored fidelity.
 - Settings remembers only the active tab/pill editing path and necessary ancestors. Inactive buckets close; Settings values and presets remain freely editable.

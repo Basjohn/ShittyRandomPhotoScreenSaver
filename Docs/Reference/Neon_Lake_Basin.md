@@ -7,7 +7,8 @@ Neon Lake Basin replaces the flat Shockwave Grid picture. The stable mode ID and
 profile used by framed 2D modes. The operator accepted the existing mode and its existing graphics/behavior baseline;
 it is an accepted baseline in `Current_Plan.md` §0 with no live tasks. Its future water/brush/glow extensions below are **not**
 retroactive acceptance failures. The supplied low/high mock in
-`Docs/Future_Work/Additional_Future_Transitions_Package.zip` is concept provenance, **not** the
+`Docs/Future_Work/Additional_Future_Transitions_Package.zip` (removed from the tree on 5 November; source control
+keeps it) is concept provenance, **not** the
 accepted artistic reference. The **operator's current** Preset 1 is the working visual comparison,
 not a frozen baseline; the operator may change it whenever desired.
 

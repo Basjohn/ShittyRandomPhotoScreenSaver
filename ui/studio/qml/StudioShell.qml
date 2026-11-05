@@ -40,6 +40,9 @@ Rectangle {
     readonly property color cTrace2: tc("trace2", "#b8b8c0")
     readonly property color cTrace3: tc("trace3", "#6aa9d9")
     readonly property int unit: 8
+    // Viewport toolbar state (preview only, never saved): overlays hidden; viewport expanded over the panels.
+    property bool overlaysHidden: false
+    property bool viewportExpanded: false
     readonly property int fontBase: 13
     // Glow semantics (mock): every highlight is the theme accent at a few strengths, never a fixed colour.
     function accentA(alpha) { return Qt.rgba(cAccent.r, cAccent.g, cAccent.b, alpha) }
@@ -62,10 +65,15 @@ Rectangle {
             studio.redo(); event.accepted = true
         } else if (event.key === Qt.Key_Space && !(event.modifiers & Qt.ControlModifier)) {
             studio.togglePlay(); event.accepted = true
+        } else if (event.key === Qt.Key_F11) {
+            viewportExpanded = !viewportExpanded; event.accepted = true
         } else if (event.key === Qt.Key_F1 || event.key === Qt.Key_Question) {
             helpOverlay.open = !helpOverlay.open; event.accepted = true
         } else if (event.key === Qt.Key_Escape && helpOverlay.open) {
             helpOverlay.open = false; event.accepted = true
+        } else if (event.key === Qt.Key_Escape) {
+            // Esc leaves the Studio (every edit is already saved); open popups and drags take Esc first.
+            Qt.callLater(studio.requestClose); event.accepted = true   // never tear down inside the handler
         }
     }
 
@@ -891,7 +899,8 @@ Rectangle {
             x: 8; anchors.bottom: parent.bottom; anchors.bottomMargin: 4; width: parent.width - 16
             text: (card.endpoint ? "Peak" : "Quiet") + " lane · rendered by the visualizer · "
                   + (card.spec.kind === "falloff" ? card.caption(["density", "height", "clearance"])
-                                                  : card.caption(["brightness", "reflection"]))
+                     : card.spec.kind === "reflection" ? card.caption(["brightness", "reflection"])
+                     : card.caption(Object.keys(card.spec.roles || {})))     // a render-only card: its own roles
         }
         Canvas {
             id: diagram
@@ -1093,6 +1102,16 @@ Rectangle {
             }
             MouseArea { id: groupMouse; anchors.fill: parent; hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor; onClicked: group.open = !group.open }
+            Row {               // a per-object group steps through the scene objects (mock: "Ribbon 1  < >")
+                objectName: "objectStepper"
+                visible: group.groupData.objectScoped === true && studio.objects.length > 1
+                anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter
+                spacing: 4
+                StudioButton { objectName: "previousObject"; icon: "chevron-left"; iconSize: 14; width: 24; height: 22
+                               tip: "Previous " + (studio.objectNoun || "object"); onClicked: studio.stepObject(-1) }
+                StudioButton { objectName: "nextObject"; icon: "chevron-right"; iconSize: 14; width: 24; height: 22
+                               tip: "Next " + (studio.objectNoun || "object"); onClicked: studio.stepObject(1) }
+            }
             Keys.onSpacePressed: group.open = !group.open
             FocusRing { visible: parent.activeFocus }
         }
@@ -1127,7 +1146,9 @@ Rectangle {
                 delegate: Loader {
                     objectName: "inspectorRow"
                     width: parent.width
-                    height: item ? item.implicitHeight || item.height : 0
+                    // A row whose Settings condition does not hold is hidden, as in Settings.
+                    visible: studio.conditionHidden[modelData.id] !== true
+                    height: visible && item ? item.implicitHeight || item.height : 0
                     property var rowData: modelData
                     sourceComponent: {
                         switch (modelData.instrument) {
@@ -1396,16 +1417,151 @@ Rectangle {
                 anchors.right: parent.right; anchors.rightMargin: 14
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 8
+                // Preset picker: opens a list of the mode's presets; only an explicit pick switches.
                 Rectangle {
+                    id: presetPill
+                    objectName: "presetPill"
+                    readonly property bool interactive: studio.presets.length > 0
                     height: 34; width: presetText.implicitWidth + 52; radius: 6
-                    color: shell.cRaised; border.width: 1; border.color: shell.cOutline
-                    Accessible.name: "Preset being edited"
+                    color: pillMouse.containsMouse && interactive ? Qt.lighter(shell.cRaised, 1.15) : shell.cRaised
+                    border.width: presetMenu.opened ? 2 : 1
+                    border.color: presetMenu.opened ? shell.cAccent : shell.cOutline
+                    activeFocusOnTab: interactive
+                    Accessible.role: Accessible.ComboBox
+                    Accessible.name: "Preset: " + studio.presetLabel
                     Row {
                         anchors.centerIn: parent; spacing: 10
                         Text { id: presetText; text: studio.presetLabel; color: shell.cText; font.pixelSize: shell.fontBase + 1
                                anchors.verticalCenter: parent.verticalCenter }
-                        StudioIcon { name: "chevron-down"; width: 14; height: 14; color: shell.cDim
+                        StudioIcon { name: "chevron-down"; width: 14; height: 14; color: shell.cDim; visible: presetPill.interactive
                                      anchors.verticalCenter: parent.verticalCenter }
+                    }
+                    MouseArea { id: pillMouse; anchors.fill: parent; hoverEnabled: true
+                                cursorShape: presetPill.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                onClicked: if (presetPill.interactive) presetMenu.open() }
+                    Keys.onSpacePressed: if (interactive) presetMenu.open()
+                    Keys.onReturnPressed: if (interactive) presetMenu.open()
+                    Keys.onDownPressed: if (interactive) presetMenu.open()
+                    FocusRing { visible: presetPill.activeFocus }
+                    C.ToolTip.visible: pillMouse.containsMouse && !presetMenu.opened
+                    C.ToolTip.text: "Choose the preset to edit. Studio edits are always saved to Custom; switching "
+                                    + "to a curated preset keeps your Custom settings."
+                    C.ToolTip.delay: 600
+                    C.Popup {
+                        id: presetMenu
+                        objectName: "presetMenu"
+                        y: presetPill.height + 6
+                        x: presetPill.width - width
+                        width: Math.max(presetPill.width, 280)
+                        padding: 6
+                        modal: false
+                        focus: true
+                        closePolicy: C.Popup.CloseOnEscape | C.Popup.CloseOnPressOutside
+                        background: Rectangle { radius: 8; color: shell.cRaised; border.width: 1; border.color: shell.cOutline
+                                                SelectionGlow { spread: 2 } }
+                        onOpened: presetList.forceActiveFocus()
+                        readonly property bool onCustom: {
+                            for (var i = 0; i < studio.presets.length; ++i)
+                                if (studio.presets[i].current) return studio.presets[i].custom
+                            return true
+                        }
+                        contentItem: Column {
+                          spacing: 4
+                          ListView {
+                            id: presetList
+                            objectName: "presetList"
+                            width: presetMenu.availableWidth
+                            implicitHeight: Math.min(contentHeight, 420)
+                            height: implicitHeight
+                            clip: true
+                            model: studio.presets
+                            currentIndex: {
+                                for (var i = 0; i < studio.presets.length; ++i) if (studio.presets[i].current) return i
+                                return 0
+                            }
+                            keyNavigationEnabled: true
+                            Keys.onReturnPressed: { presetMenu.close(); Qt.callLater(studio.selectPreset, studio.presets[currentIndex].index) }
+                            Keys.onSpacePressed: { presetMenu.close(); Qt.callLater(studio.selectPreset, studio.presets[currentIndex].index) }
+                            delegate: Rectangle {
+                                objectName: "presetItem"
+                                width: presetList.width; height: 32; radius: 6
+                                color: ListView.isCurrentItem || itemMouse.containsMouse ? shell.cAccentSoft : "transparent"
+                                Row {
+                                    x: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 10
+                                    StudioIcon { name: "check"; width: 14; height: 14; color: shell.cAccent
+                                                 opacity: modelData.current ? 1 : 0; anchors.verticalCenter: parent.verticalCenter }
+                                    Text { text: modelData.label; color: shell.cText; font.pixelSize: shell.fontBase
+                                           font.bold: modelData.current; anchors.verticalCenter: parent.verticalCenter }
+                                }
+                                MouseArea { id: itemMouse; anchors.fill: parent; hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: { presetMenu.close(); Qt.callLater(studio.selectPreset, modelData.index) } }
+                            }
+                          }
+                          // The rest of Settings' preset row: the same actions, offered where they apply.
+                          Rectangle { width: presetMenu.availableWidth; height: 1; color: shell.cOutline }
+                          Repeater {
+                            model: [
+                              { key: "move", label: "Move To Custom", icon: "copy", shown: !presetMenu.onCustom,
+                                tip: "Copy this curated preset into Custom and edit it there." },
+                              { key: "file", label: "Edit Preset File", icon: "edit", shown: !presetMenu.onCustom,
+                                tip: studio.presetFileEditable ? "Open this preset's JSON file in your default editor."
+                                                               : "Preset JSON not found on disk." },
+                              { key: "save", label: "Save Preset As…", icon: "save", shown: presetMenu.onCustom,
+                                tip: "Save the current Custom settings as a preset file." }
+                            ]
+                            delegate: Rectangle {
+                                objectName: "presetAction"
+                                property string actionKey: modelData.key
+                                readonly property bool live: modelData.key !== "file" || studio.presetFileEditable
+                                visible: modelData.shown
+                                width: presetMenu.availableWidth; height: visible ? 30 : 0; radius: 6
+                                color: actionMouse.containsMouse && live ? shell.cAccentSoft : "transparent"
+                                opacity: live ? 1 : 0.45
+                                Row {
+                                    x: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 10
+                                    StudioIcon { name: modelData.icon; width: 14; height: 14; color: shell.cDim
+                                                 anchors.verticalCenter: parent.verticalCenter }
+                                    Text { text: modelData.label; color: shell.cText; font.pixelSize: shell.fontBase - 1
+                                           anchors.verticalCenter: parent.verticalCenter }
+                                }
+                                MouseArea {
+                                    id: actionMouse; anchors.fill: parent; hoverEnabled: true
+                                    cursorShape: parent.live ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    onClicked: {
+                                        if (!parent.live) return
+                                        presetMenu.close()
+                                        if (modelData.key === "move") Qt.callLater(studio.moveToCustom)
+                                        else if (modelData.key === "file") Qt.callLater(studio.editPresetFile)
+                                        else Qt.callLater(studio.savePresetAs)
+                                    }
+                                }
+                                C.ToolTip.visible: actionMouse.containsMouse
+                                C.ToolTip.text: modelData.tip
+                                C.ToolTip.delay: 500
+                            }
+                          }
+                          Rectangle {
+                            objectName: "includeViewRow"
+                            visible: studio.includeView >= 0 && presetMenu.onCustom
+                            width: presetMenu.availableWidth; height: visible ? 30 : 0; radius: 6
+                            color: viewMouse.containsMouse ? shell.cAccentSoft : "transparent"
+                            Row {
+                                x: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 10
+                                StudioIcon { name: "check"; width: 14; height: 14; color: shell.cAccent
+                                             opacity: studio.includeView > 0 ? 1 : 0.15
+                                             anchors.verticalCenter: parent.verticalCenter }
+                                Text { text: "Include Camera View When Saving"; color: shell.cText
+                                       font.pixelSize: shell.fontBase - 1; anchors.verticalCenter: parent.verticalCenter }
+                            }
+                            MouseArea { id: viewMouse; anchors.fill: parent; hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: studio.setIncludeView(!(studio.includeView > 0)) }
+                            C.ToolTip.visible: viewMouse.containsMouse
+                            C.ToolTip.text: "Save the current camera view into the preset (Settings' own choice)."
+                            C.ToolTip.delay: 500
+                          }
+                        }
                     }
                 }
                 Text {
@@ -1432,7 +1588,7 @@ Rectangle {
                                onClicked: studio.savePresetAs() }
                 StudioButton { text: "Close"; primary: true
                                tip: "Close the Studio and return to Settings (edits are already saved to Custom)"
-                               onClicked: studio.requestClose() }
+                               onClicked: Qt.callLater(studio.requestClose) }
             }
         }
 
@@ -1487,13 +1643,17 @@ Rectangle {
             width: parent.width
             height: parent.height - header.height - 52
             // Dashboard (mock): ribbon list | wide viewport across the top, the workspace's panels underneath.
-            readonly property int leftW: Math.max(160, Math.min(240, width * 0.15))
-            readonly property int topH: Math.max(200, Math.round(height * 0.56))
+            // A mode without scene objects has no list: the viewport takes its width.
+            readonly property bool objectsShown: !shell.viewportExpanded && shell.caps.objects !== false
+            readonly property int leftW: objectsShown ? Math.max(160, Math.min(240, width * 0.15)) : 0
+            readonly property int topH: shell.viewportExpanded ? height - 10 : Math.max(200, Math.round(height * 0.56))
 
             // Scene objects -------------------------------------------------------------------
             Rectangle {
                 id: objectsPanel
+                objectName: "objectsPanel"
                 x: 10; y: 0
+                visible: mainRow.objectsShown
                 width: mainRow.leftW; height: mainRow.topH
                 radius: 10; color: shell.cPanel
                 clip: true
@@ -1568,8 +1728,8 @@ Rectangle {
             // Viewport column ----------------------------------------------------------------
             Item {
                 id: viewportColumn
-                x: objectsPanel.x + objectsPanel.width + 10
-                width: parent.width - mainRow.leftW - 30
+                x: mainRow.objectsShown ? objectsPanel.x + objectsPanel.width + 10 : 10
+                width: mainRow.objectsShown ? parent.width - mainRow.leftW - 30 : parent.width - 20
                 height: mainRow.topH
 
                 Rectangle {
@@ -1656,10 +1816,26 @@ Rectangle {
                                        tip: "Keep View: save the previewed lens (FOV); the orbit saves only when the "
                                             + "preset's camera checkbox is on; dolly and pan stay previews"
                                        onClicked: studio.keepView() }
-                        StudioButton { icon: "reset"; iconSize: 20; width: 36; enabledState: studio.viewModified
+                        Rectangle { width: 1; height: 24; color: shell.cOutlineSoft; anchors.verticalCenter: parent.verticalCenter }
+                        StudioButton { icon: shell.overlaysHidden ? "eye-off" : "eye"; iconSize: 20; width: 36
+                                       objectName: "overlaysButton"; visible: shell.caps.handles === true
+                                       checked: !shell.overlaysHidden
+                                       tip: shell.overlaysHidden ? "Show the handles and outline over the scene"
+                                                                 : "Hide the handles and outline: see the scene alone"
+                                       onClicked: shell.overlaysHidden = !shell.overlaysHidden }
+                        StudioButton { icon: "camera"; iconSize: 20; width: 36; objectName: "copyFrameButton"
+                                       tip: "Copy Frame: the scene as rendered (no handles) to the clipboard"
+                                       onClicked: studio.copyFrame() }
+                        StudioButton { icon: "frame"; iconSize: 20; width: 36; enabledState: studio.viewModified
                                        objectName: "resetViewButton"; visible: shell.caps.camera === true
-                                       tip: "Reset View: back to the saved camera (or double-click the scene)"
+                                       tip: "Frame The Card: back to the saved camera, as the live card shows it "
+                                            + "(or double-click the scene)"
                                        onClicked: studio.resetCamera() }
+                        StudioButton { icon: shell.viewportExpanded ? "collapse" : "expand"; iconSize: 20; width: 36
+                                       objectName: "expandViewportButton"; checked: shell.viewportExpanded
+                                       tip: shell.viewportExpanded ? "Show the panels again (F11)"
+                                                                   : "Expand the viewport over the panels (F11)"
+                                       onClicked: shell.viewportExpanded = !shell.viewportExpanded }
                     }
 
                     // The production scene is drawn under this slot by the Studio viewport item.
@@ -1720,7 +1896,7 @@ Rectangle {
                         Item {
                             id: handleLayer
                             objectName: "handleLayer"
-                            visible: shell.caps.handles === true
+                            visible: shell.caps.handles === true && !shell.overlaysHidden
                             x: viewportSlot.frameX; y: viewportSlot.frameY
                             width: viewportSlot.frameWidth; height: viewportSlot.frameHeight
                             readonly property var outline: studio.handles.outline || []
@@ -1864,7 +2040,9 @@ Rectangle {
                                         onDoubleClicked: studio.revealProperty(modelData.property, modelData.endpoint)
                                     }
                                     C.ToolTip.visible: hMouse.containsMouse && !handle.dragging
-                                    C.ToolTip.text: handle.combined
+                                    // A handle may carry its own words (the mode knows what it moves).
+                                    C.ToolTip.text: modelData.tooltip !== undefined ? modelData.tooltip
+                                                    : handle.combined
                                                     ? "Move: drag left/right to slide the wave, up/down to change its height (one edit; Undo reverts)"
                                                     : modelData.label + " — drag to edit (Undo reverts); double-click to type an exact value"
                                     C.ToolTip.delay: 600
@@ -2248,10 +2426,49 @@ Rectangle {
                             spacing: 6
                             Repeater {
                                 model: studio.response.presets || []
-                                delegate: Chip {
-                                    text: modelData.label
-                                    selected: curveBox.cell !== null && Math.abs(curveBox.power - modelData.power) < 1e-3
-                                    onPicked: if (curveBox.cell) studio.commitValue(curveBox.cell.power, 0, modelData.power)
+                                delegate: Rectangle {
+                                    id: shapeTile
+                                    objectName: "curveShapeTile"
+                                    readonly property bool selected: curveBox.cell !== null
+                                                                     && Math.abs(curveBox.power - modelData.power) < 1e-3
+                                    width: 54; height: 50; radius: 6
+                                    color: selected ? shell.cAccentSoft : (shapeMouse.containsMouse ? shell.cRaised : "transparent")
+                                    border.width: selected ? 2 : 1
+                                    border.color: selected ? shell.cAccent : shell.cOutlineSoft
+                                    activeFocusOnTab: true
+                                    Accessible.role: Accessible.RadioButton
+                                    Accessible.name: modelData.label
+                                    Accessible.checked: selected
+                                    Canvas {         // the curve this shape applies: output = input ^ power
+                                        x: 9; y: 5; width: parent.width - 18; height: 26
+                                        property real power: modelData.power
+                                        property color ink: shapeTile.selected ? shell.cAccent : shell.cDim
+                                        onInkChanged: requestPaint()
+                                        onPaint: {
+                                            var ctx = getContext("2d"); ctx.reset()
+                                            ctx.strokeStyle = ink; ctx.lineWidth = 1.6; ctx.lineCap = "round"
+                                            ctx.beginPath()
+                                            for (var i = 0; i <= 24; ++i) {
+                                                var t = i / 24, v = Math.pow(t, power)
+                                                var px = t * width, py = height - 1 - v * (height - 2)
+                                                if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py)
+                                            }
+                                            ctx.stroke()
+                                        }
+                                    }
+                                    Text { anchors.horizontalCenter: parent.horizontalCenter; y: 33
+                                           text: modelData.label; color: shell.cText; font.pixelSize: shell.fontBase - 3
+                                           font.bold: shapeTile.selected }
+                                    MouseArea { id: shapeMouse; anchors.fill: parent; hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: { shapeTile.forceActiveFocus()
+                                                             if (curveBox.cell) studio.commitValue(curveBox.cell.power, 0, modelData.power) } }
+                                    Keys.onSpacePressed: if (curveBox.cell) studio.commitValue(curveBox.cell.power, 0, modelData.power)
+                                    Keys.onReturnPressed: if (curveBox.cell) studio.commitValue(curveBox.cell.power, 0, modelData.power)
+                                    FocusRing { visible: shapeTile.activeFocus }
+                                    C.ToolTip.visible: shapeMouse.containsMouse
+                                    C.ToolTip.text: modelData.label + ": response curve " + modelData.power.toFixed(2)
+                                    C.ToolTip.delay: 500
                                 }
                             }
                             NumberField { propId: curveBox.cell ? curveBox.cell.power : ""; implicitWidth: 54
@@ -2275,6 +2492,7 @@ Rectangle {
             Item {
                 id: bottomArea
                 objectName: "dashboardPanels"
+                visible: !shell.viewportExpanded
                 x: 10; y: mainRow.topH + 10
                 width: parent.width - 20; height: parent.height - mainRow.topH - 20
                 readonly property var columns: studio.inspectorColumns
