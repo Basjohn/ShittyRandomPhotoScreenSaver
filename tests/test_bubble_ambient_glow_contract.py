@@ -75,6 +75,13 @@ def test_shader_light_and_coverage_are_independent_and_physical_core_ratio_is_us
     main = Path('widgets/spotify_visualizer/shaders/bubble.frag').read_text()
     assert 'vCoreRatio = min(1.0, coreDiameterPx / gl_PointSize);' in ambient
     assert 'alpha = core * uParticleColor.a;' in ambient
-    assert 'emission = uParticleColor.rgb * response * falloff * coreShield' in ambient
+    # 5.1.3 shipped a hollow-centre emitter: light rises outside the core
+    # (scaled by the same core ratio) instead of a coreShield multiplier, and
+    # stays independent of the core's alpha coverage.
+    assert 'float rise = smoothstep(0.95 * vCoreRatio, 3.0 * vCoreRatio, d);' in ambient
+    emission_line = next(line for line in ambient.splitlines()
+                         if line.strip().startswith('emission = uParticleColor.rgb'))
+    assert 'response * falloff' in emission_line
+    assert 'core' not in emission_line and 'alpha' not in emission_line
     assert 'a > 0.00001 || light > 0.00001' in main
     assert 'if (a > 0.00001) {' not in main

@@ -399,7 +399,9 @@ def test_bubble_retirement_waits_for_inflight_step_then_clears_state() -> None:
 
     def _retire() -> None:
         try:
-            controller.set_mode("sine_wave")
+            # Any other selectable mode retires Bubble (Sine, the old target,
+            # is soft-retired since 5.1.3 and is coerced back to Bubble).
+            controller.set_mode("spectrum")
         except BaseException as exc:  # pragma: no cover - assertion reports it
             errors.append(exc)
         finally:
@@ -424,7 +426,7 @@ def test_bubble_retirement_waits_for_inflight_step_then_clears_state() -> None:
     assert isinstance(simulation, _BlockingSimulation)
     assert simulation.reset_calls == 1
     assert runtime.latest.positions == ()
-    assert controller.mode_id == "sine_wave"
+    assert controller.mode_id == "spectrum"
     assert controller.peek_logical_mode_state("bubble") is None
     assert runtime.advance(
         dt=0.016,
@@ -510,11 +512,16 @@ def test_quick_bubble_payload_still_rejects_short_active_arrays(fields) -> None:
 
 
 def test_quick_bubble_payload_bounds_oversized_arrays_without_mutating_source() -> None:
+    # Since 5.1.3 (f9f09679) the frame itself admits at most 110 heroes (its class
+    # bits are validated at construction), so a count above the shader loop cannot
+    # exist; arrays longer than the admitted count are still bounded by the payload.
+    with pytest.raises(ValueError, match="110-hero limit"):
+        BubbleFrame(positions=(0.5, 0.5, 0.04, 1.0) * 111, bubble_count=111)
     frame = BubbleFrame(
         positions=(0.5, 0.5, 0.04, 1.0) * 111,
         extras=(0.8, 0.0, 0.0, 0.0) * 111,
         trails=(0.2, 0.4, 0.8) * 333,
-        bubble_count=111,
+        bubble_count=110,
     )
     snapshot = SimpleNamespace(logical=SimpleNamespace(mode_state=frame))
     payload = resolve_quick_bubble_payload(snapshot)
@@ -648,6 +655,8 @@ def test_quick_bubble_bulk_uniforms_use_reused_float32_transport(monkeypatch) ->
         "glUniform1f",
         "glUniform1i",
         "glUniform4f",
+        # 5.1.3 (f9f09679): the hero big/small class words ride a uvec4 uniform.
+        "glUniform4ui",
         "glBindVertexArray",
         "glDrawArrays",
     ):

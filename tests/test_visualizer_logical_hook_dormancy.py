@@ -45,51 +45,8 @@ def test_inactive_sine_heartbeat_never_queries_audio_even_with_a_saved_value():
     assert engine.scheduler_queries == 0
 
 
-def test_active_sine_heartbeat_queries_audio_through_the_retained_hook(monkeypatch):
-    """The active Sine owner still receives the one permitted audio query."""
-    from widgets.spotify_visualizer import tick_pipeline
-    from widgets.spotify_visualizer.logical_tick_state import (
-        install_default_logical_tick_state,
-    )
-    from widgets.spotify_visualizer.runtime_controller import (
-        VisualizerRuntimeController,
-    )
-
-    class Engine:
-        energy_queries = 0
-        scheduler_queries = 0
-
-        def get_energy_bands(self):
-            self.energy_queries += 1
-            return None
-
-        def get_event_scheduler(self):
-            self.scheduler_queries += 1
-            return None
-
-    controller = VisualizerRuntimeController(
-        runtime_generation=0, initial_mode="sine_wave"
-    )
-    state = controller.logical_tick_state
-    install_default_logical_tick_state(state, bar_count=32)
-    state._sine_heartbeat = 1.0
-    engine = Engine()
-    controller.engine = engine
-    controller.enabled = True
-    controller.playing = True
-
-    monkeypatch.setattr(
-        tick_pipeline, "consume_engine_bars", lambda _state, _now: (True, True)
-    )
-    monkeypatch.setattr(tick_pipeline, "record_tick_perf", lambda _state, _now: None)
-    monkeypatch.setattr(
-        tick_pipeline, "_publish_logical_state", lambda *_args, **_kwargs: None
-    )
-
-    tick_pipeline.logical_tick(state)
-
-    assert engine.energy_queries == 1
-    assert engine.scheduler_queries == 1
+# Sine is soft-retired (5.1.3, f9f09679): the controller never admits it as the current mode, so
+# its heartbeat hook has no active owner left to exercise. The inactive fence above still binds.
 
 
 def test_controller_resolves_only_the_active_mode_hook_at_activation():
@@ -99,7 +56,6 @@ def test_controller_resolves_only_the_active_mode_hook_at_activation():
     from widgets.spotify_visualizer.tick_pipeline import (
         dispatch_bubble_simulation,
         dispatch_devcurve_field,
-        process_heartbeat,
     )
 
     controller = VisualizerRuntimeController(
@@ -107,8 +63,6 @@ def test_controller_resolves_only_the_active_mode_hook_at_activation():
     )
     assert controller.active_logical_tick_hook is None
 
-    controller.set_mode("sine_wave")
-    assert controller.active_logical_tick_hook is process_heartbeat
     controller.set_mode("bubble")
     assert controller.active_logical_tick_hook is dispatch_bubble_simulation
     controller.set_mode("devcurve")
@@ -165,7 +119,8 @@ def test_repeated_registry_switches_advance_only_the_active_hook(monkeypatch):
     # Include two complete passes through the descriptor owners and ordinary
     # no-hook modes.  A newly selected owner must be the only one advanced;
     # returning to a no-hook mode must advance none.
-    sequence = registry.VISUALIZER_MODE_IDS * 2
+    # Only selectable modes: a soft-retired one (Sine) is coerced to another owner on activation.
+    sequence = tuple(mode for mode in registry.VISUALIZER_MODE_IDS if registry.is_mode_active(mode)) * 2
     for mode_id in sequence:
         controller.set_mode(mode_id)
         tick_pipeline.logical_tick(state)
@@ -199,16 +154,18 @@ def test_incomplete_hook_wiring_rejects_activation_without_mutating_identity(mon
         registry.VISUALIZER_MODE_IDS + (malformed.mode_id,),
     )
 
+    # An admitted mode that owns a hook (Sine, the old owner here, is soft-retired).
     controller = VisualizerRuntimeController(
-        runtime_generation=0, initial_mode="sine_wave"
+        runtime_generation=0, initial_mode="devcurve"
     )
     active_hook = controller.active_logical_tick_hook
+    assert active_hook is not None
     policy = controller.presentation_policy
 
     with pytest.raises(ValueError, match="incomplete logical hook wiring"):
         controller.set_mode(malformed.mode_id)
 
-    assert controller.mode_id == "sine_wave"
+    assert controller.mode_id == "devcurve"
     assert controller.presentation_policy is policy
     assert controller.active_logical_tick_hook is active_hook
 

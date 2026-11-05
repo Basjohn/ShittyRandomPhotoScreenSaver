@@ -1058,6 +1058,12 @@ class _LiveCommitEngine(ReplayBeatEngine):
     def get_bubble_energy_bands(self): return self.get_energy_bands()
 
     get_extruded_bubble_body_bands = get_bubble_energy_bands
+    # Waveform enables raw musical lanes, which ReplayBeatEngine serves only from PCM
+    # reanalysis (feature_replay.py). This layout test has no PCM: fixed lanes, like the rest.
+    get_waveform_ribbon_body_bands = get_bubble_energy_bands
+    def get_onset_events(self, after_serial=0): return ()
+    def get_musical_level(self): return (0.0, 0.0)
+    def get_musical_intensity(self): return 0.0
     def get_transient_energy_bands(self): return SimpleNamespace(bass_transient=0., mid_transient=0., high_transient=0., onset_detected=False, onset_type="", onset_strength=0.)
     def get_event_scheduler(self): return None
     def get_floor_snapshot(self): return None

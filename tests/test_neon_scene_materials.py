@@ -100,7 +100,16 @@ def test_disabled_moon_has_no_sun_or_body_when_sky_is_disabled(target):
     moon = capture.render(host, snapshot)
     disabled = capture.render(host, _change(snapshot, shockwave_grid_sun_enabled=False))
     _different(moon, disabled)
-    assert np.count_nonzero(disabled[..., 3]) == 0
+    # The terrain reaches the horizon (494d3723), and since the shared framed camera
+    # / aperture changes this level view can frame a near-transparent black horizon
+    # fringe (alpha 1/255 at the left edge, identical in Sun and Moon modes). That
+    # is terrain, not a body: a disabled body leaves nothing where the Moon drew,
+    # and the disabled frame is independent of which body mode is selected.
+    body = np.max(np.abs(moon - disabled), axis=2) > 3
+    assert np.count_nonzero(disabled[..., 3][body]) == 0
+    disabled_sun = capture.render(host, _change(snapshot, shockwave_grid_sun_mode='Sun',
+                                                shockwave_grid_sun_enabled=False))
+    assert np.array_equal(disabled, disabled_sun)
 
 
 def test_orbit_reuses_target_and_disabled_orbit_is_time_invariant(target):

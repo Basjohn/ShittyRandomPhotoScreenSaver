@@ -63,7 +63,10 @@ def test_work_in_progress_usu_assets_stay_out_of_resource_packs_and_frozen_build
     for script in scripts:
         source = script.read_text(encoding="utf-8").replace("\\", "/").lower()
         assert "usu" not in re.findall(r"[a-z_]+", source), script
-        assert not re.search(r"include-data-dir=assets(/|=)", source), script
+        # ``assets`` wholesale is forbidden; a named product subdirectory is not
+        # (548ccdab ships assets/textures/waveform_floor for Waveform's floor).
+        assert not re.search(r"include-data-dir=assets/?=", source), script
+        assert "include-data-dir=assets/usu" not in source, script
         assert not re.search(r'source:\s*"?[^"\n]*assets/?(\*|")', source), script
     tracked = subprocess.run(["git", "grep", "-l", "-E", r"(from|import) assets\.usu", "--", "*.py"],
                              cwd=ROOT, capture_output=True, text=True).stdout.split()

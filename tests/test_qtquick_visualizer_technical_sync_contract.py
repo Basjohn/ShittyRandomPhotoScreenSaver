@@ -213,14 +213,8 @@ def test_quick_owner_applies_cached_technical_config_to_shared_engine() -> None:
                 "_bubble_transient_mix_vocal": 0.29,
             },
         ),
-        (
-            "sine_wave",
-            {
-                "_transient_pulse_gain": 1.41,
-                "_transient_clamp": 1.66,
-                "_sine_wave_transient_width_mix": 0.73,
-            },
-        ),
+        # Sine was soft-retired in 5.1.3 (f9f09679): registered, never offered or
+        # selectable, so it is no longer an authored consumer to sync.
     ),
 )
 def test_technical_values_consumed_by_authored_runtime_reach_logical_state(

@@ -19,6 +19,8 @@ def _admission_engine_stub(engine: SimpleNamespace) -> SimpleNamespace:
     image admission silently optional merely to support these lightweight tests.
     """
     engine._display_selection_suspended = lambda: False
+    # Startup RSS IO gate (7bc62183): no source IO is pending in these stubs.
+    engine._rss_startup_image_pending = lambda: False
     engine._runtime_generation = 16
     engine._terminal_shutdown_requested = False
     engine._refresh_transition_gate = RefreshTransitionGate(16)
@@ -489,6 +491,7 @@ def test_show_next_image_does_not_prepare_random_choice_without_runtime_targets(
         image_queue=None,
         display_manager=None,
         _display_selection_suspended=lambda: False,
+        _rss_startup_image_pending=lambda: False,
         _prepare_random_transition_if_needed=lambda: calls.__setitem__("prepare", calls["prepare"] + 1),
     )
 

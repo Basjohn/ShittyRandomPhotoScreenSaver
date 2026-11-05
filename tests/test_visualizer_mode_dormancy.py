@@ -27,9 +27,13 @@ from core.settings.visualizer_mode_registry import (
     get_visualizer_mode_descriptor,
     resolve_effective_enabled_modes,
     resolve_effective_mode,
+    is_mode_active,
 )
 
 REPO = Path(__file__).resolve().parents[1]
+# Sine is soft-retired (5.1.3, f9f09679): registered, never selectable, so it can be
+# neither the sole enabled mode nor an activated runtime.
+_SELECTABLE_MODE_IDS = tuple(mode_id for mode_id in VISUALIZER_MODE_IDS if is_mode_active(mode_id))
 
 _FRAME_RUNTIME_MODULES = {
     mode_id: get_visualizer_mode_descriptor(mode_id).frame_runtime_module
@@ -130,7 +134,7 @@ def test_each_mode_can_be_the_sole_enabled_mode():
         next_visualizer_mode_id,
     )
 
-    for mode_id in VISUALIZER_MODE_IDS:
+    for mode_id in _SELECTABLE_MODE_IDS:
         activation = build_visualizer_mode_activation((mode_id,))
         assert resolve_effective_enabled_modes(activation) == (mode_id,)
         # Cycling stays on the sole enabled mode from any current id.
@@ -270,7 +274,7 @@ print(repr({m: (mod in sys.modules) for m, mod in runtimes.items()}))
 """
 
 
-@pytest.mark.parametrize("mode", VISUALIZER_MODE_IDS)
+@pytest.mark.parametrize("mode", _SELECTABLE_MODE_IDS)
 def test_real_sole_enabled_tick_imports_only_active_frame_runtime(mode):
     out = _run_fresh(_REAL_RUNTIME_BODY.replace("__MODE__", repr(mode)))
     loaded = ast.literal_eval(out)
