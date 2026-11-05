@@ -618,7 +618,11 @@ def solve_devcurve_frame(
                 lanes = DEVCURVE_SWELL_SOURCES[key]
                 lane_level = sum(_lane(transient_bus, lane) for lane in lanes) / len(lanes)
                 flux = lane_level - state.accent_mean[key] - DEVCURVE_SWELL_ACCENT_FLOOR
-            strength = _accent_strength(0.0, DEVCURVE_ACCENT_REF[key], flux)
+            if key in _BODY_LAYERS:
+                strength = _accent_strength(0.0, DEVCURVE_ACCENT_REF[key], flux)
+            else:
+                # The transients layer's level already is its flux lane: its spike above the body is the accent.
+                strength = _accent_strength(targets[key] - body, DEVCURVE_ACCENT_REF[key])
         state.accent_hold[key] = max(strength, state.accent_hold[key] * math.exp(-dt / DEVCURVE_ACCENT_HOLD_S))
         state.accent_stage[key] = _follow(accent, state.accent_hold[key], dt, attack, release)
         state.level_stage[key] = _follow(stage, targets[key], dt, attack, release)
@@ -631,7 +635,7 @@ def solve_devcurve_frame(
             # The level above the body arrives through the fast stage (per-frame loudness is noisy: a held
             # capture of it would sit at its maxima); the flux spike through its held capture.
             gained = _body_response(body / peak) + _accent_response(
-                _accent_strength(stage - body, DEVCURVE_ACCENT_REF[key]) + accent)
+                (_accent_strength(stage - body, DEVCURVE_ACCENT_REF[key]) if key in _BODY_LAYERS else 0.0) + accent)
         else:
             gained = stage
         state.drive[key] = _follow(state.drive[key], gained, dt, attack, release)
