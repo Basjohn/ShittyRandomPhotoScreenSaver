@@ -1127,7 +1127,7 @@ def main(*, entrypoint: str = "main"):
     from core.native_threads import retain_qt_gui_pool_threads
     if retain_qt_gui_pool_threads():
         logger.info("[THREADS] Qt image pool threads retained (no idle expiry)")
-    elif sys.platform == "win32":
+    else:
         logger.warning("[THREADS] Qt image pool not reachable; its threads keep the default 30 s expiry")
 
     logger.info("Qt Application created: %s", app.applicationName())
