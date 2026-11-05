@@ -69,6 +69,11 @@ lead as reviewer/orchestrator.
   frame-to-frame change is 0.28/255 (target 0.25, ideally 0.165). Evidence:
   `.artifacts/evidence/neon_lake/fidelity_20261105/pass5/` (triptych/, motion/*.webp, gpu_final.txt).
 
+- [ ] **Neon render tests load-sensitive under parallel runs (5-6 Nov):** `test_neon_lake_renderer.py` (once, pass-5
+  merge gate) and `test_neon_scene_materials.py` (once, pass-5 branch) failed under parallel load and passed alone; the
+  re-run overwrote each log, so the failing test is unknown (most likely a QSG clip probe timing out). Next time, keep
+  the failing log and fix the probe's timeout or synchronisation rather than rerunning.
+
 - [ ] **4x MSAA repeat-render noise (driver, 5 Nov; was "Floor Give run-to-run noise"):** the same frame rendered
   again through a 4x scene target differs by 1 level (rarely 2-3) on a pixel or two in Waveform (more often with Floor
   Give and mist) and on ~0.7% of pixels in Neon Lake. Not renderer state: packet, uniforms, every vertex position,
