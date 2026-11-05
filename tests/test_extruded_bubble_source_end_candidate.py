@@ -23,8 +23,10 @@ from tools.visualizer_replay.eb_simulation_support import simulation_module
 def test_legacy_eb_preset_angles_migrate_without_clobbering_presets():
     import hashlib
     spec = require_mode_settings('extruded_bubble')
-    for number in range(1, 8):
-        path = next((ROOT / 'presets/visualizer_modes/extruded_bubble').glob(f'preset_{number}_*.json'))
+    # Every curated file, whatever the operator currently ships (count/slots are authored).
+    paths = sorted((ROOT / 'presets/visualizer_modes/extruded_bubble').glob('preset_*.json'))
+    assert paths
+    for path in paths:
         old = path.read_bytes()
         values = json.loads(old)['snapshot']['widgets']['spotify_visualizer']
         for key in ('extruded_bubble_light_direction', 'extruded_bubble_stream_direction'):

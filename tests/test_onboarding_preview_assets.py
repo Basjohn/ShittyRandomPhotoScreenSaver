@@ -155,23 +155,53 @@ def test_guard_install_does_not_eagerly_import_credential_owners(tmp_path) -> No
     assert not audit.exists()
 
 
-def test_spectrum_preview_uses_canonical_preset_and_logical_capture(monkeypatch) -> None:
-    """The onboarding still must cross the real Spectrum frame-capture seam."""
+def test_spectrum_preview_resolves_its_curated_preset_through_activation(monkeypatch) -> None:
+    """With no explicit settings the foundry reads the curated preset through the production activation.
+
+    Which preset ships first, and its values, are authored content: only the route is asserted.
+    """
+
+    from core.settings import visualizer_presets
+    from core.settings.models import SpotifyVisualizerSettings
+    from tools import onboarding_preview_foundry
+
+    activations = []
+    production_activation = visualizer_presets.resolve_visualizer_activation_payload
+
+    def recording_activation(*args, **kwargs):
+        activation = production_activation(*args, **kwargs)
+        activations.append(activation)
+        return activation
+
+    monkeypatch.setattr(visualizer_presets, "resolve_visualizer_activation_payload", recording_activation)
+    snapshot = onboarding_preview_foundry._build_spectrum_preview_snapshot(width=680, height=360)
+
+    assert len(activations) == 1 and activations[0].mode == "spectrum"
+    assert not visualizer_presets.get_presets("spectrum")[activations[0].preset_index].is_custom
+    model = SpotifyVisualizerSettings.from_mapping(activations[0].resolved_config, apply_preset_overlay=False)
+    assert snapshot.logical.mode_id == "spectrum"
+    assert snapshot.logical.common.bar_count == model.resolve_bar_count("spectrum")
+
+
+def test_spectrum_preview_crosses_the_logical_capture_seam_with_its_settings(monkeypatch) -> None:
+    """The onboarding still must cross the real Spectrum frame-capture seam.
+
+    Test-owned frozen settings (never the mutable curated preset) decide the expected styling.
+    """
 
     from core.settings.models import SpotifyVisualizerSettings
-    from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+    from tests._visualizer_frozen_settings import frozen_visualizer_settings
     from tools import onboarding_preview_foundry
     from widgets.spotify_visualizer import logical_frame_capture
 
-    activation = resolve_visualizer_activation_payload(
-        {"mode": "spectrum", "preset_spectrum": 0}, mode="spectrum"
-    )
-    model = SpotifyVisualizerSettings.from_mapping(
-        activation.resolved_config, apply_preset_overlay=False
-    )
+    # Test-owned rainbow switches (fill off, border on) so each one is seen to travel independently.
+    settings = {**frozen_visualizer_settings("spectrum"), "spectrum_rainbow_enabled": True,
+                "spectrum_unique_colors": True, "spectrum_rainbow_fill": False, "spectrum_rainbow_border": True}
+    model = SpotifyVisualizerSettings.from_mapping(settings, apply_preset_overlay=False)
     expected_count = model.resolve_bar_count("spectrum")
     expected_fill = tuple(model.resolve_bar_fill_color("spectrum"))
     expected_border = tuple(model.resolve_bar_border_color("spectrum"))
+    assert model.resolve_bar_border_opacity("spectrum") == 1.0  # the frozen copy keeps the colour's own alpha
     calls = []
     production_capture = logical_frame_capture.capture_visualizer_logical_frame
 
@@ -186,7 +216,7 @@ def test_spectrum_preview_uses_canonical_preset_and_logical_capture(monkeypatch)
         recording_capture,
     )
     snapshot = onboarding_preview_foundry._build_spectrum_preview_snapshot(
-        width=680, height=360
+        width=680, height=360, settings=settings
     )
 
     assert len(calls) == 2
@@ -194,10 +224,11 @@ def test_spectrum_preview_uses_canonical_preset_and_logical_capture(monkeypatch)
     assert snapshot.logical.common.bar_count == expected_count
     assert snapshot.logical.common.style["fill_color"] == expected_fill
     assert snapshot.logical.common.style["border_color"] == expected_border
-    assert snapshot.logical.mode_state.parameters["rainbow_enabled"] is True
-    assert snapshot.logical.mode_state.parameters["rainbow_per_bar"] is True
-    assert snapshot.logical.mode_state.parameters["spectrum_rainbow_fill"] is False
-    assert snapshot.logical.mode_state.parameters["spectrum_rainbow_border"] is True
+    parameters = snapshot.logical.mode_state.parameters
+    assert parameters["rainbow_enabled"] is True
+    assert parameters["rainbow_per_bar"] is True
+    assert parameters["spectrum_rainbow_fill"] is False
+    assert parameters["spectrum_rainbow_border"] is True
 
 
 def test_regeneration_keeps_an_asset_whose_pixels_only_drift(tmp_path: Path) -> None:
