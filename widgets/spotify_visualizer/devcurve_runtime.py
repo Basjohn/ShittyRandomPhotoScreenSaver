@@ -36,24 +36,34 @@ DEVCURVE_PASSAGE_TAU_S = 1.2
 # gain between them, so the height's velocity is continuous (a single 45 ms first-order attack
 # jumped the velocity on every transient: acceleration spikes > 4x the median on ~19% of the
 # transients layer's ticks on recorded music).
-DEVCURVE_SWING_STAGE_S = (0.04, 0.3)
+DEVCURVE_SWING_STAGE_S = (0.04, 0.15)
 # Real contrast (operator 2026-11-05: "its smoothness is great but it has almost no
 # reactivity"). The shared control lanes are each band over a fast-adapting norm of the loudest
 # band: the dominant band sits at 1.0 whatever the music does (bass/mids drives were above 0.9
 # on 95-98% of playing ticks on three recordings). They are the band's SHARE; the band's level is
-# that share times the bus loudness on the fixed real-music scale (3-17 in music). Adaptive
-# response gain (guide 13D): each layer's level is divided by a memory of its own recent peak
-# (reached in DEVCURVE_RESPONSE_REACH_S, relaxing over DEVCURVE_RESPONSE_MEMORY_S, never below
-# its floor), landing the remembered peak at DEVCURVE_RESPONSE_TOP: every song uses the whole
-# height range, a sustained loud passage keeps headroom for its accents and a quiet passage after
-# a loud one stays quiet. Gain only, no offset window. The floors are fixed anchors: bass, vocals
-# and mids in loudness units (usual music 8.5; their eased levels sit ~5-14 on real music), the
+# that share times the bus loudness on the fixed real-music scale (3-17 in music).
+#
+# The height is a slow BODY plus fast ACCENTS (operator 2026-11-05: an adaptive gain that also
+# normalised the beats muted kicks in sustained passages; the first cut here measured a kick 40-60 s
+# into a sustained passage at 0.66 of the same kick near its start, and kicks in sustained loud
+# passages moved the drive by only ~0.01-0.02). Only the body is normalised: adaptive response gain
+# (guide 13D) divides the body (two slow stages, DEVCURVE_BODY_STAGE_S) by a memory of its own recent
+# peak (reached in DEVCURVE_RESPONSE_REACH_S, relaxing over DEVCURVE_RESPONSE_MEMORY_S, never below
+# its floor), so every song uses the whole body range, a quiet passage after a loud one stays quiet
+# and the remembered peak lands at DEVCURVE_BODY_TOP. Accents are the fast level above the body, read
+# on the fixed scale against DEVCURVE_ACCENT_REF (never against a memory) and eased into the reserved
+# headroom DEVCURVE_ACCENT_ROOM above the body: a kick lifts the curves as much 60 s into a passage as
+# at its start. Floors and references are fixed anchors: bass, vocals and mids in loudness units
+# (usual music 8.5; eased levels sit ~5-14 on real music, beats stand ~3-6 above the body), the
 # transients layer in units of its gated flux lane (its passage ramp keeps quiet passages small).
-DEVCURVE_RESPONSE_REACH_S = 0.5
+DEVCURVE_BODY_STAGE_S = (0.6, 0.8)
+DEVCURVE_RESPONSE_REACH_S = 1.0
 DEVCURVE_RESPONSE_MEMORY_S = 20.0
-DEVCURVE_RESPONSE_TOP = 0.75
 DEVCURVE_RESPONSE_GAMMA = 1.6
-DEVCURVE_RESPONSE_FLOOR = {"bass": 7.0, "vocals": 7.0, "mids": 7.0, "transients": 0.5}
+DEVCURVE_RESPONSE_FLOOR = {"bass": 6.0, "vocals": 6.0, "mids": 6.0, "transients": 0.25}
+DEVCURVE_BODY_TOP, DEVCURVE_BODY_OVER = 0.55, 0.08
+DEVCURVE_ACCENT_ROOM = 0.45
+DEVCURVE_ACCENT_REF = {"bass": 4.0, "vocals": 4.0, "mids": 4.0, "transients": 0.35}
 # Travelling swell (guide 13D: energy moves with the shape). Each layer's accents (its flux lane
 # above that lane's own recent mean) inject energy just beyond the right edge; it travels left
 # with the material at Swell Speed x the passage travel factor, fades over
@@ -69,7 +79,7 @@ DEVCURVE_SWELL_STAGE_S = 0.05
 DEVCURVE_SWELL_ACCENT_S = 0.6         # the lane's recent mean an accent must stand above
 DEVCURVE_SWELL_ACCENT_FLOOR = 0.04
 DEVCURVE_SWELL_GAIN = 70.0            # injected energy per (lane excess x second): a strong hit ~1
-DEVCURVE_SWELL_DEPTH = 1.0            # envelope gain of a full swell at Swell Strength 1
+DEVCURVE_SWELL_DEPTH = 0.6            # envelope gain of a full swell at Swell Strength 1
 DEVCURVE_SWELL_SATURATION = 1.2
 _SWELL_BIRTH = np.exp(-0.5 * ((DEVCURVE_SWELL_GRID - DEVCURVE_SWELL_ORIGIN) / DEVCURVE_SWELL_SIGMA) ** 2)
 DEVCURVE_SWELL_SOURCES = {"bass": ("bass",), "vocals": ("mid", "high"), "mids": ("mid",), "transients": ("bass",)}
@@ -82,7 +92,7 @@ DEVCURVE_FLOW_SLOPE, DEVCURVE_FLOW_CURVE = 0.2, 0.3
 DEVCURVE_FLOW_SHARE_RISE = 1.5
 # Height x swell eases toward a ceiling above 1 (the old pinned height): a swell over a loud
 # passage still crests, smoothly bounded, never clipped.
-DEVCURVE_REACTION_KNEE, DEVCURVE_REACTION_ROOM = 0.9, 0.35
+DEVCURVE_REACTION_KNEE, DEVCURVE_REACTION_ROOM = 1.0, 0.4
 # The drawn curves follow the solved shape within a few frames (playing, paused).
 DEVCURVE_CURVE_FOLLOW_S = (0.03, 0.06)
 _LAYER_ORDER = ("bass", "vocals", "mids", "transients")
@@ -116,15 +126,19 @@ def _follow(value: float, target: float, dt: float, attack: float, release: floa
     return target + (value - target) * math.exp(-dt / tau)
 
 
-def _response(ratio: float) -> float:
-    """Level over its remembered peak -> height drive: TOP x ratio^GAMMA (gamma > 1 keeps the
-    middle of the range for ordinary music), easing exponentially toward 1 above TOP (never
-    flat, so a hot accent still moves)."""
-    value = DEVCURVE_RESPONSE_TOP * max(0.0, ratio) ** DEVCURVE_RESPONSE_GAMMA
-    if value <= DEVCURVE_RESPONSE_TOP:
-        return value
-    room = 1.0 - DEVCURVE_RESPONSE_TOP
-    return DEVCURVE_RESPONSE_TOP + room * (1.0 - math.exp(-(value - DEVCURVE_RESPONSE_TOP) / room))
+def _body_response(ratio: float) -> float:
+    """Body over its remembered peak -> body drive: BODY_TOP x ratio^GAMMA (gamma > 1 keeps the
+    middle of the range for ordinary music), easing exponentially above BODY_TOP by at most
+    BODY_OVER (never flat, never into the accents' reserved room)."""
+    value = max(0.0, ratio) ** DEVCURVE_RESPONSE_GAMMA
+    if value > 1.0:
+        value = 1.0 + DEVCURVE_BODY_OVER * (1.0 - math.exp(-(value - 1.0) / DEVCURVE_BODY_OVER))
+    return DEVCURVE_BODY_TOP * value
+
+
+def _accent_response(excess: float, reference: float) -> float:
+    """Fast level above the body, on the fixed scale -> share of the reserved accent room."""
+    return DEVCURVE_ACCENT_ROOM * (1.0 - math.exp(-max(0.0, excess) / reference))
 
 
 def _reaction_top(value: float) -> float:
@@ -384,6 +398,8 @@ class DevCurveRuntimeState:
     # stage, the remembered peak, the drive (second stage), the accent mean, the two injection
     # stages, the travelling field and the rate-limited flow-rule share.
     level_stage: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
+    body_stage: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
+    body: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
     response_peak: Dict[str, float] = field(default_factory=lambda: dict(DEVCURVE_RESPONSE_FLOOR))
     drive: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
     accent_mean: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
@@ -571,16 +587,19 @@ def solve_devcurve_frame(
     else:
         # Paused: the authored idle lanes, below any gain (silence is never amplified).
         targets = _layer_energy_map(energy_bands, transient_bus, playing)
+    body_attack, body_release = DEVCURVE_BODY_STAGE_S
     for key in _LAYER_ORDER:
-        # The second stage follows the first as it stood at the start of this tick, so a hit's first
-        # tick moves the drive by (almost) nothing: the velocity is continuous on the logical clock.
-        stage = state.level_stage[key]
+        # Every second stage follows its first stage as it stood at the start of this tick, so a hit's
+        # first tick moves the drive by (almost) nothing: the velocity is continuous on the logical clock.
+        stage, body_stage, body = state.level_stage[key], state.body_stage[key], state.body[key]
         state.level_stage[key] = _follow(stage, targets[key], dt, attack, release)
+        state.body_stage[key] = _follow(body_stage, targets[key], dt, body_attack, body_release)
+        state.body[key] = _follow(body, body_stage, dt, body_attack, body_release)
         if playing:
             peak = max(DEVCURVE_RESPONSE_FLOOR[key], _follow(
-                state.response_peak[key], stage, dt, DEVCURVE_RESPONSE_REACH_S, DEVCURVE_RESPONSE_MEMORY_S))
+                state.response_peak[key], body, dt, DEVCURVE_RESPONSE_REACH_S, DEVCURVE_RESPONSE_MEMORY_S))
             state.response_peak[key] = peak
-            gained = _response(stage / peak)
+            gained = _body_response(body / peak) + _accent_response(stage - body, DEVCURVE_ACCENT_REF[key])
         else:
             gained = stage
         state.drive[key] = _follow(state.drive[key], gained, dt, attack, release)
@@ -598,6 +617,7 @@ def solve_devcurve_frame(
     aggregate_energy = _clamp(aggregate_energy, 0.0, 2.0)
     follow = 1.0 - math.exp(-dt / DEVCURVE_CURVE_FOLLOW_S[0 if playing else 1])
     swell_peaks: Dict[str, float] = {}
+    reactions: Dict[str, float] = {}
 
     for idx, key in enumerate(_LAYER_ORDER):
         ls = layer_settings[key]
@@ -615,6 +635,8 @@ def solve_devcurve_frame(
             gain = np.interp(_SAMPLE_XS, DEVCURVE_SWELL_GRID, envelope)
             swell_peaks[key] = float(gain.max() - 1.0)
             reactive = _reaction_top_array(drive * gain).tolist()
+        # The visible reaction: the mean multiplier the music puts on this layer's undulation.
+        reactions[key] = sum(reactive) / DEVCURVE_SAMPLE_COUNT
         nodes = layer_shape_nodes[key]
         if len(nodes) < 2:
             raise ValueError(f"DevCurve layer {key!r} requires resolved shape nodes")
@@ -696,5 +718,6 @@ def solve_devcurve_frame(
         "drives": {
             **{f"height_{key}": state.drive[key] for key in _LAYER_ORDER},
             **{f"swell_{key}": swell_peaks.get(key, 0.0) for key in _LAYER_ORDER},
+            **{f"reaction_{key}": reactions.get(key, 0.0) for key in _LAYER_ORDER},
         },
     }
