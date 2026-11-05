@@ -32,16 +32,15 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
-- [ ] **Neon Lake goal mocks (Presets 1-3, 5 Nov third pass, awaiting operator look):** shared contour lines, glowing
-  lake (shore rings, network), horizon glow at the real horizon, wide halo, world-fixed beat stars, calmer water
-  (`Docs/Reference/Neon_Lake_Basin.md`, "Third pass"). Not yet at parity with `references/NeonLakeGoalPreset1.png` /
-  `NeonLakeGoalPreset3.png`: Preset 1's dunes read as parallel stripes where the mock has rounded dotted volumes
-  with a few long sweeping ridges, its mountains are dotted where the mock is a dense contour wireframe, its low
-  react is nearer the mock's high (brighter lines and lake), and it reads more magenta (hue match 0.56); Preset 3's
-  dunes still lack the mock's gold specular sheen and dense rim ridges, and its water lacks the mock's dense glossy
-  reflections. Preset 3's frame-to-frame change is above the baseline (0.28-0.32 vs 0.165/255) only because its
-  lake is about five times larger; per moving pixel it is at the baseline. GPU at 1300x750 (baseline -> now):
-  Preset 1 1.01 -> 0.68 ms, Preset 3 0.44 -> 0.60 ms. Evidence: `.artifacts/evidence/neon_lake/fidelity_20261105/pass3/`.
+- [ ] **Neon Lake goal mocks (Presets 1-3, 5 Nov fourth pass, awaiting operator look):** range drawn as a contour
+  wireframe, glossy glass rims, calmer water, four large meandering dunes on Preset 1 (`Docs/Reference/Neon_Lake_Basin.md`,
+  "Third pass" / "Fourth pass"). Still short of `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`:
+  Preset 1's lake lacks the mock's vivid line mesh and island glow, its colour is slightly more magenta than the mock
+  (hue match ~0.62), the foothills nearest the lake are still dotted; Preset 3's dunes catch rims only where the Sun
+  sees them (the mock's dense gold dune lines are partly covered by the contour rows on the hills), its sky is
+  warmer than the mock's. Preset 3's frame-to-frame change is 0.25/255 against the baseline's 0.165 (its lake
+  covers about five times the screen; with every water feature off the scene's own floor is about 0.2).
+  Evidence: `.artifacts/evidence/neon_lake/fidelity_20261105/pass4/`.
 
 - [ ] **Display Settings capacity (physical hotplug):** on a real monitor disconnect/return or explicit reauthoring,
   Settings' current-screen rows and selections/bindings stay coherent (focused checks pass; hidden form evidence
