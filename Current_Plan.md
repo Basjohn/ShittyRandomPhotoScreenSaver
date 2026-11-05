@@ -58,9 +58,29 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
   The next MC run (19:47) and an invisible live check on current code were normal. On recurrence the sampler now
   logs `[USAGE] topology added ... name= parent= threads=` for every process entering the tree: identify them, then
   decide whether the sampler must exclude/outsource them. Not the Extruded Bubble chain fix (no processes, tick unchanged).
-- [ ] **Stale red: `tests/test_waveform_infinite_floor.py` (9 failures, present at a74dfaa0, before 5 Nov work):**
-  Orthographic bottom-row depth, actor-clip and production-floor reflection expectations no longer match the camera
-  helper. Decide per assertion whether the test or the camera/floor contract is stale; do not bless drift blindly.
+- [ ] **Suite reds since the 24 Oct 737/737 baseline (5 Nov isolated full run, identical at a74dfaa0, i.e. before
+  the 5 Nov work):** 40 files, all reproducible alone. Largest: `test_visualizer_preset_completeness` (13: Bubble and
+  Extruded Bubble presets miss the 5.1.3 microbubble/gradient/drift/projection controls — repair-fill them),
+  `test_waveform_infinite_floor` (9: orthographic depth/actor-clip/floor-reflection expectations vs the camera
+  helper), `test_qtquick_custom_layout_owner` (8), `test_framed_viewport_aperture` (4: EB/Shockwave custom-side
+  gestures), `test_qtquick_visualizer_all_modes` (4), `test_visualizer_logical_hook_dormancy` (4),
+  `test_bubble_reactivity` (3: swish group drift sign/activity — Bubble is BTF-binding, never retune to pass),
+  `test_visualizer_plain_orbit` (native crash), `test_visualizer_view_orbit` (Shockwave planar vs freeform; Waveform
+  full-circle turn), `test_defaults_schema_authority` (Waveform presets carry `mode` only at top level), plus 1-3
+  failures in bubble_ambient_glow, build_runner, feed_f2 (RSS log redaction), frame_trace, framed_scene_input,
+  input_gain, monitor_replay_admission, neon_scene_materials, onboarding_preview_assets/selection,
+  qt611_shader_admission, qtquick_build_packaging/ordinary_widget_host/visualizer_bubble/all_five_owner_chain/
+  fade_authority/technical_sync_contract, release_media, run_matrix_harness, settings_theme_lifetime_contract,
+  startup_source_onboarding_resume, test_suite_durability, transition_distribution, visualizer_custom_geometry_profiles,
+  lazy_preset_collection, mode_dormancy, mode_enable_resolver, presets, settings_plumbing,
+  widget_theme_no_material_contract. Reconcile per assertion (current architecture authoritative; never bless
+  unexplained drift); fix product defects found on the way.
+- [ ] **Linux branch `claude/eager-carson-5da6ge` — held, not merged (5 Nov):** merges cleanly and leaves Windows
+  unchanged (804/848 files green, every other red pre-existing), but it is unfinished: `core/media/pulse_volume.py`
+  starts raw `threading.Thread`s (`tests/unit/test_policy_compliance.py` fails on every OS), and its own docs promise
+  that `tests/test_linux_*.py` are never collected off Linux with `tests/test_platform_selection.py` pinning Windows
+  owners, while Linux-only cases still sit in shared files that fail on Windows (`test_mpris_controller` x2,
+  `test_platform_paths` x1) and neither the exclusion nor that test exists. Merge once those land on the branch.
 - [ ] **Cross-display Media shortcuts** delivered once on the other display, when exercised.
 - [ ] **Music recorder** 60-second clip, signal/history, cancel and mixed-DPR UI, when recording is needed.
 - [ ] **Helper breadcrumb diagnostics unavailable:** current native MC evidence logs no access to
