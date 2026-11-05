@@ -146,3 +146,64 @@ def test_capped_reflection_prepass_matches_the_inline_column(harness, kind):
     capped, _ = harness.render(reflection_only(specular_max_height=HEIGHT//2), kind=kind, source=source)
     a, b = inline[mask].mean(), capped[mask].mean()
     assert a > 1. and .8 < b/a < 1.2, (a, b)
+
+
+def _flicker(frames, mask):
+    """Back-and-forth change of each floor pixel over consecutive frames (consecutive deltas of opposite sign,
+    the smaller magnitude), relative to the floor's mean light. Monotone change (a column brightening as its
+    source arrives, fading as it leaves) scores zero; a pixel that pops up and down between frames scores."""
+    light = np.stack([np.where(mask, frame.sum(axis=2), 0.) for frame in frames])
+    a, b = light[1:-1] - light[:-2], light[2:] - light[1:-1]
+    alternation = np.where(a*b < 0, np.minimum(np.abs(a), np.abs(b)), 0.)
+    return float(alternation[:, mask].mean()/max(light[:, mask].mean(), 1e-6))
+
+
+def test_a_slowly_moving_source_changes_the_floor_smoothly_without_flicker(harness):
+    """A thin sheet drifting one reflection texel per frame through the column's taps: the floor follows it as
+    smooth coloured mass. Sparse or winner-take-all taps made the column pop as the sheet crossed between them."""
+    from core.waveform_ribbon_scene import Floor
+    floor = replace(Floor(), albedo_gain=0., f0=1., reflection=1., column=(1e6, 1., 0.))
+    texel = 1./(HEIGHT//2)
+    frames = []
+    for step in range(12):
+        y = .12 + step*texel
+        sx = .40 + step*texel*.5  # and drifting sideways, slower
+        frames.append(harness.render(floor, kind='Perspective',
+                                     source=((sx, y, sx+.12, y+texel), (1., 3., 2.5), .2))[0])
+    mask = harness.render(floor, kind='Perspective')[1]
+    lit = np.stack([frame.sum(axis=2) for frame in frames])[:, mask]
+    assert lit.max() > 30., 'the moving sheet must light the floor'
+    assert _flicker(frames, mask) < .0095  # the previous sparse, steep, narrow column scored .012
+
+
+def test_columns_carry_their_sources_saturated_hue_through_a_grey_haze(harness):
+    """Teal and orange sheets side by side, inside a broad grey reflected haze (the mirrored mist): each column
+    keeps its own sheet's hue and saturation as coloured mass, never the haze's grey or a pastel mix."""
+    import colorsys
+    from core.waveform_ribbon_scene import Floor
+    floor = replace(Floor(), albedo_gain=0., f0=1., reflection=1., column=(1e6, 1., 0.), breakup=0.)
+    teal, orange = (.15, 1.6, 1.3), (2.2, .8, .12)
+    gl, scene = harness.gl, harness.scene
+    size = (WIDTH//2, HEIGHT//2)
+    original_end = scene.reflection.end
+    def with_sources():
+        # grey haze everywhere, then the two sheets, before the target is finalised (mips)
+        gl.glEnable(gl.GL_SCISSOR_TEST)
+        for (x0, x1), rgb in (((.20, .34), teal), ((.66, .80), orange)):
+            gl.glScissor(int(x0*size[0]), int(.14*size[1]), int((x1-x0)*size[0]), max(1, int(.05*size[1])))
+            gl.glClearBufferfv(gl.GL_COLOR, 0, (*rgb, float(np.dot(rgb, (.2126, .7152, .0722)))*.2))
+        gl.glDisable(gl.GL_SCISSOR_TEST)
+        original_end()
+    scene.reflection.end = with_sources
+    try:
+        pixels, mask = harness.render(floor, kind='Perspective', source=((0., 0., 1., 1.), (.25, .25, .25), 1.))
+    finally:
+        scene.reflection.end = original_end
+    for (x0, x1), rgb in (((.20, .34), teal), ((.66, .80), orange)):
+        band = pixels[:, int(x0*WIDTH):int(x1*WIDTH)][mask[:, int(x0*WIDTH):int(x1*WIDTH)]]
+        bright = band[band.sum(axis=1) > np.percentile(band.sum(axis=1), 75)]
+        mean = bright.mean(axis=0)/255.
+        hue, saturation, _ = colorsys.rgb_to_hsv(*mean)
+        source_hue, source_saturation, _ = colorsys.rgb_to_hsv(*(np.asarray(rgb)/max(rgb)))
+        assert abs((hue - source_hue + .5) % 1. - .5) < 20/360, (rgb, mean)
+        assert saturation > .8*source_saturation, (rgb, mean, saturation, source_saturation)

@@ -72,7 +72,9 @@ class Floor:
     # roughness footprint), never per-pixel offsets, which aliased into horizontal scanlines. Streak half-length
     # (canonical aperture share; projected from a fixed world length) and the roughness range across the surface (from the broad relief's slope).
     streak: tuple = (.5, .8, 1.)
-    lod: tuple = (2., 2.)           # column width: reflection mip across the column (min/max over roughness)
+    # Column width: reflection mip across the column (min/max over roughness). Broad on purpose: a column a few
+    # reflection texels wide flickered at its edges as the sheets moved; a wide one is smooth smeared colour mass.
+    lod: tuple = (3.5, 3.5)
     resolution: float = .5          # reflection target scale
     resolution_max_height: int = 360  # reflection target height cap (pixels)
     specular_max_height: int = 1080  # the reflection term is evaluated at most this tall, then read back
@@ -80,7 +82,11 @@ class Floor:
     # it read as the mottled wet/dry floor).
     column: tuple = (6., .6, 0.)
     pool: float = 2.5              # restrained source light, so the ground is not a continuous blown-white strip
-    hot: tuple = (2., .7, 1.5)       # full strength at this multiple of the mean reflected light; wet-film breakup; power
+    # Full strength at this multiple of the mean reflected light; wet-film breakup (0: none, a smooth column; the
+    # film is sub-pixel grain at this grazing view and shimmered as light moved under it); power.
+    hot: tuple = (2., 0., 1.5)
+    # Reflected chroma about its luminance (1 as reflected): the sheets' own hue as coloured mass, not pastel.
+    hue: float = 2.4
     # Material legibility at the grazing camera (reflection Off included): albedo variation around its exact mean,
     # and zero-mean shading by the broad relief, so the concrete reads without changing the floor's level.
     contrast: float = 3.
@@ -89,7 +95,7 @@ class Floor:
     relief_bias: float = .5        # mip bias of the relief read by shading and breakup: broad facets, no hairlines
     # Reflection breakup by the same relief (0 off): facets tilted along the view send the column's light toward or
     # away from the eye, the long horizontal breaks of a grazing wet floor; zero-mean, so the mass keeps its strength.
-    breakup: float = .6
+    breakup: float = .2            # restrained: smooth coloured mass over crisp bands that flicker as light moves
     streak_length: float = 150.     # optical streak half-length (world units) at Streak Length 1
     column_height: float = 10.       # reflected light this high (world) keeps a quarter of its column's strength
     # The sheets' local light on the ground, with its depth falloff spread this many times and its peak lowered by
