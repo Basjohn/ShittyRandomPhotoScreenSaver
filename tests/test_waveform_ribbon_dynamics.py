@@ -68,7 +68,9 @@ def test_short_audio_pulses_do_not_write_small_amplitude_dents_into_travelling_h
     assert recorded_steps(negative)>max(.3,4*recorded_steps(smooth))
 
 
-def test_axial_roll_keeps_the_axis_and_history_motion_and_rotates_the_width_basis():
+def test_axial_roll_keeps_the_axis_and_history_motion_and_rotates_the_width_basis(monkeypatch):
+    # The roll alone: the along-curve surge legitimately moves x with the (rolled) slope; it has its own test.
+    monkeypatch.setattr('core.waveform_ribbon_dynamics.PULSE_SURGE',0.)
     c = controls()
     a = primed(c)
     b = primed(replace(c,rotation_enabled=False))
@@ -108,19 +110,14 @@ def test_vertical_lift_keeps_the_skewer_axis_at_the_same_world_height_at_every_r
         np.testing.assert_array_equal(high[:,4::5,2],low[:,4::5,2])
 
 
-def test_elastic_stretch_extends_the_actual_axis_without_amplifying_transverse_bumps():
+def test_stretch_no_longer_scales_the_axis_so_kicks_cannot_burst_sideways():
+    # Operator, 5 Nov: horizontal bursts are rejected; only the steady flow (and the along-curve surge) moves x.
     model=primed()
-    for _ in range(60):model.advance(1/90,bands=(.8,.5,.3),intensity=.8,presence=1.)
+    for _ in range(60):model.advance(1/90,bands=(.8,.5,.3),intensity=.8,presence=1.,hit=1.)
     c=model.controls;model.controls=replace(c,ranges={**c.ranges,'stretch':(0.,0.)});model._snapshot=None
     straight=data(model.snapshot()).copy()
     model.controls=replace(c,ranges={**c.ranges,'stretch':(1.,1.)});model._snapshot=None
-    stretched=data(model.snapshot())
-    np.testing.assert_array_equal(stretched[:,4::5,1:3],straight[:,4::5,1:3])
-    for path in stretched:
-        count,start,capacity=int(path[0,0]),int(path[1,1]),int(path[1,2])
-        x=path[4::5,0][(start+np.arange(count))%capacity]
-        assert (np.diff(x)>0.).all()
-    assert np.ptp(stretched[0,4::5,0])>np.ptp(straight[0,4::5,0])*1.1
+    np.testing.assert_array_equal(data(model.snapshot()),straight)
 
 
 def test_ribbon_card_band_selects_its_own_elastic_body_response():
@@ -148,7 +145,8 @@ def test_rotation_attacks_quickly_decays_slowly_and_angle_never_jumps_on_speed_c
 
 
 def test_independent_low_and_peak_geometry_handles_reach_the_projected_body():
-    for key in ('height','width','bend','torsion','twist','stretch','lift','spread','depth'):
+    # 'stretch' is retired from geometry: no time-varying axial scaling (sideways bursts, 5 Nov).
+    for key in ('height','width','bend','torsion','twist','lift','spread','depth'):
         baseline = controls()
         models = [primed(baseline)]
         for endpoint in (0,1):

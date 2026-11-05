@@ -45,9 +45,13 @@ PULSE_GRID = np.linspace(-48., 48., 385)
 PULSE_DX = float(PULSE_GRID[1]-PULSE_GRID[0])
 PULSE_DIRECTIONS = ('Head To Tail', 'Tail To Head', 'Centre Out')
 PULSE_ORIGIN = 7.            # world x of the edge origins, inside the authored view so a hit is seen at once
-PULSE_RISE = .09             # seconds: an injected hit swells smoothly instead of popping in one tick
+PULSE_RISE = .3              # seconds: an injected beat swells like a sea swell rising, never a pop
 PULSE_DIFFUSION = .35        # world units^2 per second: packets widen gently as they travel
 PULSE_SATURATION = 1.2       # soft bound of the sampled swell
+# Surge along the curve (operator, 5 Nov): where a swell passes, each point moves along its OWN local direction,
+# toward the swell's travel: up-left on a curve rising to the left, down-left on one falling, left on a crest.
+PULSE_SURGE = .6             # world units of along-curve travel per unit of Pulse Strength x swell
+PULSE_MAX_COMPRESSION = .7   # the surge may compress the axis by at most 70% locally: the ribbon never folds back
 # Injection calibrated on recorded PCM (5 Nov probe): typed hits reach ~0.2-0.4, body-energy rises ~0.15-0.25
 # for ~0.15 s on beats; these gains give a beat a swell near 1 at its origin and leave quiet passages nearly flat.
 PULSE_HIT_GAIN, PULSE_RISE_GAIN, PULSE_RISE_FLOOR = 2., 45., .08
@@ -63,10 +67,10 @@ def pulse_sources(direction):
 @dataclass(frozen=True)
 class PulseControls:
     direction: str = 'Head To Tail'
-    width: float = 3.5           # full width at half height, world units
-    speed: float = 9.            # world units per second along the scene axis
+    width: float = 10.           # full width at half height, world units: a broad swell, not a sideways jab
+    speed: float = 3.            # world units per second along the scene axis (about twice the history flow)
     colour: float = .6           # share of the peak colour the pulse carries
-    fade: float = 2.             # seconds for the travelling energy to fall to 1/e
+    fade: float = 4.             # seconds for the travelling energy to fall to 1/e
 
     def __post_init__(self):
         pulse_sources(self.direction)
@@ -356,6 +360,36 @@ class WaveformDynamics:
         value = np.interp(x,PULSE_GRID,self._pulse[0],left=0.,right=0.)+np.interp(x,PULSE_GRID,self._pulse[1],left=0.,right=0.)
         return PULSE_SATURATION*np.tanh(value/PULSE_SATURATION)
 
+    def pulse_drift(self,x):
+        """Signed swell: positive where energy travels toward +x, negative toward -x (pure)."""
+        def sample(field):
+            value = np.interp(x,PULSE_GRID,field,left=0.,right=0.)
+            return PULSE_SATURATION*np.tanh(value/PULSE_SATURATION)
+        return sample(self._pulse[1])-sample(self._pulse[0])
+
+    def _surge(self,data,x,y,amount):
+        """Move each knot along its own front-view tangent by the signed swell (with the shape, never across it)."""
+        drift = self.pulse_drift(x)*amount
+        if not np.any(drift):
+            return x,y
+        x,y = x.copy(),y.copy()
+        for index,path in enumerate(data):
+            count,start,capacity = int(path[0,0]),int(path[1,1]),int(path[1,2])
+            if count<3:
+                continue
+            order = (start+np.arange(count))%capacity
+            xs,ys,ds = x[index,order],y[index,order],drift[index,order]
+            if not np.any(ds):
+                continue
+            slope = np.gradient(ys,xs)
+            along = ds/np.sqrt(1.+slope*slope)
+            squeeze = np.diff(along)/np.diff(xs)
+            if squeeze.min() < -PULSE_MAX_COMPRESSION:
+                along *= PULSE_MAX_COMPRESSION/-squeeze.min()
+            x[index,order] = xs+along
+            y[index,order] = ys+along*slope
+        return x,y
+
     def _advance_zoom(self,dt,enabled,hold):
         self._sustain = follower(self._sustain,self.passage,dt,ZOOM_SUSTAIN_ATTACK,ZOOM_SUSTAIN_RELEASE)
         if hold:
@@ -399,15 +433,15 @@ class WaveformDynamics:
         b,m,h = (3.*np.tanh(np.asarray(self.spring)/3.)).T[:,:,None]
         values = {key:self._value(key) for key in TARGETS}
         carrier = rows[:,:,1]+raw.world_origin[1]-2.
-        axial_scale=np.exp(.6*values['stretch']*np.tanh(np.asarray(self.spring)[:,0,None]))
-        rows[:,:,0]=x*axial_scale-raw.world_origin[0]-self.controls.scene.flow.head_x+self.travel
+        # No time-varying axial scaling: horizontal motion is only the steady flow (DevCurve's rule). The former
+        # elastic stretch scaled x about the centre on every kick and read as sideways bursts (operator, 5 Nov).
         # The axial roll turns the carrier (its helix and the bundle's separation) like a skewer. Height scales
         # both transverse carrier components, so a turn changes the visible phase, never the visible amplitude.
         separation = .65*(owner-1.)
         depth_wave = rows[:,:,2]+raw.world_origin[2]-separation
         # The travelling pulse swells the carrier's own crests and troughs where it is: always WITH the shape.
         swell = self.pulse_at(x)
-        gain = 1.+.4*values['bend']*swell
+        gain = 1.+.7*values['bend']*swell
         cy = carrier*values['height']*gain
         cz = depth_wave*values['height']*gain+separation*values['spread']
         cosine,sine = math.cos(self.angle),math.sin(self.angle)
@@ -418,6 +452,8 @@ class WaveformDynamics:
         idle=self.controls.idle_motion*(1.-self.passage)
         y+=idle*.08*np.sin(.45*self.time+.6*u+owner)
         z+=idle*.05*np.cos(.33*self.time+.4*u-owner)
+        x,y = self._surge(data,x,y,PULSE_SURGE*values['bend'])
+        rows[:,:,0] = x-raw.world_origin[0]-self.controls.scene.flow.head_x+self.travel
         # One common smooth bounding domain prevents floor-crossing/clamp kinks at extreme editor values. Peaks
         # are meant to rise high: the framing makes room for them, the body is never capped to fit a frame.
         rows[:,:,1] = 5.*np.tanh(y/5.)+values['lift']
