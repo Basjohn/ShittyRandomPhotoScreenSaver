@@ -52,18 +52,32 @@ lead as reviewer/orchestrator.
   by the power plan, then check Task Manager CPU/GPU for the saver while dark, that wake input reaches the saver, and
   the first seconds after wake (no stale frame, jump or hitch; run with `--frame-trace --usage`). Per-monitor power is
   not observable on Windows: an HDMI panel switched off at its own button that stays enumerated keeps running.
+- [ ] **Per-frame call-count rises since the 18 Oct overhead baseline (6 Nov run, `tools/overhead_baseline.py`;
+  call counts are load-independent):** every GL-heavy transition +72 Python calls per frame (block_spins 572 -> 644,
+  cube_turn, jigsaw, membrane, ...), Sphere +144 (1473 -> 1617), Extruded Spectrum +144 (1221 -> 1365, already at
+  5a42e9fb), Oscilloscope +67 (1584 -> 1651), Shockwave/Neon +14 GL calls (339 -> 353; likely pass 5's near-band
+  split, intended). Bisect each to its commit, remove anything that is work at rest or a per-frame re-resolve of
+  unchanged inputs (as Spectrum's look options were: 919 -> 770, 2ef22700), keep intended feature work and say so.
+  Evidence `.artifacts/evidence/overhead/`. Re-take the stored baseline on a quiet machine afterwards.
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
-- [ ] **Neon Lake goal mocks (Presets 1-3, 5 Nov fourth pass, awaiting operator look):** range drawn as a contour
-  wireframe, glossy glass rims, calmer water, four large meandering dunes on Preset 1 (`Docs/Reference/Neon_Lake_Basin.md`,
-  "Third pass" / "Fourth pass"). Still short of `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`:
-  Preset 1's lake lacks the mock's vivid line mesh and island glow, its colour is slightly more magenta than the mock
-  (hue match ~0.62), the foothills nearest the lake are still dotted; Preset 3's dunes catch rims only where the Sun
-  sees them (the mock's dense gold dune lines are partly covered by the contour rows on the hills), its sky is
-  warmer than the mock's. Preset 3's frame-to-frame change is 0.25/255 against the baseline's 0.165 (its lake
-  covers about five times the screen; with every water feature off the scene's own floor is about 0.2).
-  Evidence: `.artifacts/evidence/neon_lake/fidelity_20261105/pass4/`.
+- [ ] **Neon Lake goal mocks (Presets 1-3, 5 Nov fifth pass, awaiting operator look):** sparser blue-white stars
+  with round glows, ropy nebula, luminous Moon limb with a grey crescent, smooth near dune lines, glinting water
+  (`Docs/Reference/Neon_Lake_Basin.md`, "Third" to "Fifth pass"). Still short of
+  `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`: Preset 1's sky still purpler than the mock's navy
+  near the Moon, no blue cloud in the upper left, the nebula band steeper than the mock's; the mid-distance dune
+  crest just before the lake still kinks (beyond the fine band; extending the band costs ~+0.3 ms); the lake is
+  brighter and smoother than the mock's dark mirror and swells still wash it; the high-react look (vivid line mesh,
+  glowing island) is not reached; Preset 3's sky is warmer and its wisps fainter than the mock's, and its
+  frame-to-frame change is 0.28/255 (target 0.25, ideally 0.165). Evidence:
+  `.artifacts/evidence/neon_lake/fidelity_20261105/pass5/` (triptych/, motion/*.webp, gpu_final.txt).
+
+- [ ] **Neon render tests load-sensitive under parallel runs (5-6 Nov):** `test_neon_lake_renderer.py` (once, pass-5
+  merge gate) and `test_neon_scene_materials.py` (once, pass-5 branch) failed under parallel load and passed alone; the
+  re-run overwrote each log, so the failing test is unknown (most likely a QSG clip probe timing out). The isolated
+  runner now keeps the parallel-run failure as `logs/pytest_isolated/<file>.under_load.log`; next time, read it and
+  fix the probe's timeout or synchronisation rather than rerunning.
 
 - [ ] **4x MSAA repeat-render noise (driver, 5 Nov; was "Floor Give run-to-run noise"):** the same frame rendered
   again through a 4x scene target differs by 1 level (rarely 2-3) on a pixel or two in Waveform (more often with Floor
