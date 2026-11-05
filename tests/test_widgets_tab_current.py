@@ -489,6 +489,10 @@ class TestWidgetsTab:
         qt_app,
         settings_manager,
     ):
+        from core.settings.visualizer_presets import get_custom_preset_index
+
+        # A non-default index every catalogue has (the curated count is authored).
+        selected = get_custom_preset_index("bubble")
         settings_manager.set("widgets", {
             "media": {
                 "enabled": True,
@@ -499,7 +503,7 @@ class TestWidgetsTab:
                 "enabled": True,
                 "visualizers_enabled": True,
                 "mode": "bubble",
-                "preset_bubble": 3,
+                "preset_bubble": selected,
                 "bubble_big_count": 7,
                 "bubble_small_count": 38,
             },
@@ -523,7 +527,7 @@ class TestWidgetsTab:
             vis_cfg = widgets_cfg.get("spotify_visualizer", {})
             assert vis_cfg.get("enabled") is True
             assert vis_cfg.get("mode") == "bubble"
-            assert vis_cfg.get("preset_bubble") == 3
+            assert vis_cfg.get("preset_bubble") == selected
             assert vis_cfg.get("bubble_big_count") == 7
             assert vis_cfg.get("bubble_small_count") == 38
         finally:
