@@ -33,7 +33,7 @@ class CompiledWaveformSettings:
         # Unexposed values are primitive/world policy, not guessed missing product settings.
         flow=Flow(speed=float(read('flow_speed')),head_hz=float(read('wave_rate')),
                   phase_swell=float(read('wave_swell')),amplitude_swell=float(read('height_swell')),
-                  fade_in=.1,fade_out=.5)
+                  fade_in=.1,fade_out=.5,direction=-1. if read('travel_direction')=='Left To Right' else 1.)
         self.base=detached(Recipe(flow=flow,palette=palette,
             ribbon_colours={'low':tuple(card['quiet'] for card in cards),'high':tuple(card['peak'] for card in cards)},
             grade_share=(float(read('gradient_share')),float(read('mist_gradient_share')))))
@@ -50,7 +50,8 @@ class CompiledWaveformSettings:
             pulse=PulseControls(str(read('pulse_direction')),float(read('pulse_width')),float(read('pulse_speed')),
                                 float(read('pulse_colour')),float(read('pulse_fade')),float(read('pulse_saturation')),
                                 float(read('pulse_particles')),float(read('pulse_strands')),
-                                mode=str(read('reaction_mode'))))
+                                mode=str(read('reaction_mode'))),
+            height_mode=str(read('height_mode')),tilt_shift=bool(read('tilt_shift')))
 
     def scene(self,snapshot):
         p=self.values
@@ -85,7 +86,8 @@ class CompiledWaveformSettings:
             column=(pair('floor_column',passage),*self.base.floor.column[1:]),
             glow_limit=float(read('floor_glow_limit')),hue=float(read('floor_colour')),
             hot=(float(read('floor_contrast')),*self.base.floor.hot[1:]),
-            light_reach=float(read('floor_light_reach')),light_far=float(read('floor_light_far')))
+            light_reach=float(read('floor_light_reach')),light_far=float(read('floor_light_far')),
+            give=float(read('floor_give')))
         sparks=None
         if read('sparks_enabled'):
             size=pair('spark_size',sparkle)
@@ -100,6 +102,9 @@ class CompiledWaveformSettings:
                 beads=pair('strand_beads',sparkle),peel_time=pair('strand_peel',sparkle),
                 halo=pair('strand_halo',sparkle),glow=pair('strand_glow',sparkle),admission_softness=.15,
                 pulse_growth=pair('strand_pulse_growth',sparkle),pulse_glow=pair('strand_pulse_glow',sparkle))
-        return replace(self.base,material=RibbonMaterial(**material),fog=fog,floor=floor,
+        # The PUBLISHED direction (the logical owner swaps it only while the ribbons are faded out), not the request.
+        direction=float(getattr(snapshot,'direction',self.base.flow.direction))
+        flow=self.base.flow if direction==self.base.flow.direction else replace(self.base.flow,direction=direction)
+        return replace(self.base,flow=flow,material=RibbonMaterial(**material),fog=fog,floor=floor,
             sparks=sparks,strays=strays,
             bloom=pair('bloom',passage),exposure=float(read('exposure')))

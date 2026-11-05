@@ -147,15 +147,10 @@ def test_spectrum_frame_capture_advances_rainbow_from_presentation_owner() -> No
         _spectrum_single_piece=False,
         _spectrum_ghosting_enabled=False,
         _spectrum_ghost_decay=0.4,
-        # Shared cross-mode ghosting/heartbeat extras are copied for every mode.
+        # Shared cross-mode ghosting extras are copied for every mode.
         _osc_ghosting_enabled=False,
         _osc_ghost_intensity=0.5,
         _osc_ghost_decay=0.4,
-        _sine_ghosting_enabled=False,
-        _sine_ghost_alpha=0.5,
-        _sine_ghost_decay=0.4,
-        _sine_heartbeat=False,
-        _heartbeat_intensity=0.0,
     )
 
     first = capture_visualizer_logical_frame(
@@ -620,10 +615,6 @@ def test_quick_spectrum_registry_is_static_and_lazy() -> None:
     assert oscilloscope is not None
     assert oscilloscope.mode_id == "oscilloscope"
     assert oscilloscope.has_resources is False
-    sine = resolve_quick_visualizer_renderer("sine_wave")
-    assert sine is not None
-    assert sine.mode_id == "sine_wave"
-    assert sine.has_resources is False
     bubble = resolve_quick_visualizer_renderer("bubble")
     assert bubble is not None
     assert bubble.mode_id == "bubble"
@@ -790,8 +781,6 @@ def test_real_gl_rainbow_ghost_is_visible_without_border_color_or_border_alpha(
         _spectrum_ghosting_enabled=True,
         _spectrum_ghost_decay=0.18,
         _osc_ghosting_enabled=False, _osc_ghost_intensity=0.0, _osc_ghost_decay=0.5,
-        _sine_ghosting_enabled=False, _sine_ghost_alpha=0.0, _sine_ghost_decay=0.5,
-        _sine_heartbeat=0.0, _heartbeat_intensity=0.0,
     )
     parameters = {}
     _populate_shared_visualizer_extras(parameters, fake)
@@ -869,11 +858,6 @@ def test_real_gl_organs_preset_keeps_dark_fill_when_screen_fit_shrinks_glow(
         _osc_ghosting_enabled=False,
         _osc_ghost_intensity=0.4,
         _osc_ghost_decay=0.4,
-        _sine_ghosting_enabled=False,
-        _sine_ghost_alpha=0.0,
-        _sine_ghost_decay=0.4,
-        _sine_heartbeat=0.0,
-        _heartbeat_intensity=0.0,
     )
     parameters: dict[str, object] = {}
     _populate_shared_visualizer_extras(parameters, capture_host)
@@ -976,8 +960,6 @@ def test_real_gl_solid_bar_top_border_never_loses_pixel_coverage_during_motion(
         presentation_config_host=controller.presentation_state,
         _spectrum_ghosting_enabled=False, _spectrum_ghost_decay=0.18,
         _osc_ghosting_enabled=False, _osc_ghost_intensity=0.4, _osc_ghost_decay=0.4,
-        _sine_ghosting_enabled=False, _sine_ghost_alpha=0.0, _sine_ghost_decay=0.4,
-        _sine_heartbeat=0.0, _heartbeat_intensity=0.0,
     )
     parameters: dict[str, object] = {}
     _populate_shared_visualizer_extras(parameters, capture_host)

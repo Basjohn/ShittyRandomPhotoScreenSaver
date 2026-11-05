@@ -82,6 +82,8 @@ class BubbleResolvedFrame:
     protected_edges: tuple[VisualizerProtectedEdge, ...] = ()
     perf_diagnostics: tuple[tuple[str, float], ...] = ()
     geometry_diagnostics: tuple[tuple[str, float], ...] = ()
+    # Capacity zoom of the simulation's world on this step (bubble_viewport_profile).
+    world_scale: float = 1.0
 
 
 class BubbleFrameRuntime:
@@ -225,8 +227,8 @@ class BubbleFrameRuntime:
         pulse_payload = dict(pulse)
         settings_payload = dict(settings)
         # Latest spatial configuration for this authored step. The simulation
-        # treats a canonical/None extent as a strict baseline no-op; a non-baseline
-        # extent expands its logical domain. This is state, not a clock.
+        # resolves its world from it (canonical/None is the 1x1 canonical card);
+        # this is state, not a clock.
         settings_payload["_bubble_viewport_extent"] = viewport_extent
         event_recorder: _EventRecorder | None = None
         scheduler = settings_payload.get("_event_scheduler")
@@ -262,6 +264,7 @@ class BubbleFrameRuntime:
                 ),
                 small_bubble_breathing=breathing,
                 resolved_group_motion=getattr(simulation, "_ambient_group_motion", (0.0, 0.0, 0.0)),
+                world=getattr(simulation, "_world", None),
             )
         else:
             self._ambient = None
@@ -279,6 +282,7 @@ class BubbleFrameRuntime:
         frozen_extras = tuple(float(value) for value in extras)
         frozen_trails = tuple(float(value) for value in trails)
         bubble_count = int(getattr(simulation, "count", 0) or 0)
+        world_scale = float(getattr(simulation, "_world_scale", 1.0) or 1.0)
         from widgets.spotify_visualizer.bubble_hero_occlusion import pack_big_class_bits
         big_class_bits = pack_big_class_bits(getattr(simulation, "_bubbles", ()))
         ambient_occluders: tuple[float, ...] = ()
@@ -461,6 +465,7 @@ class BubbleFrameRuntime:
             protected_edges=protected_edges,
             perf_diagnostics=tuple(sorted(perf.items())),
             geometry_diagnostics=tuple(sorted(geometry_diag.items())),
+            world_scale=world_scale,
         )
         return self._latest
 

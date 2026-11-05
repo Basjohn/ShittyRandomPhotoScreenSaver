@@ -1,5 +1,7 @@
 # Waveform Ribbon: migration plan (WR-08 controls, reactivity and production port)
 
+> **Orthographic removed 5 Nov 2026 (operator):** Perspective is the only camera projection in the whole project. Orthographic, its Projection control, raster-slab fit and parallel-ray paths are deleted; any Orthographic passage below is historical and superseded.
+
 Planning owner for **WR-08**, subordinate to [`Current_Plan.md`](../../Current_Plan.md) §7.1 and the lab plan's
 WR-08 gates ([`Waveform_Ribbon_Lab_Plan.md`](Waveform_Ribbon_Lab_Plan.md)). The lab owns the look; this document
 owns the full production control design, production calibration and the order of the port. A registered production
@@ -151,9 +153,9 @@ not full-song loud-section evidence. Remaining native acceptance and rejected UX
   Studio-owned (`ui/tabs/media/waveform_ribbon_builder.py` → `build_studio_owned_mode_ui`: preset row, one sentence,
   Open Waveform Studio). The former builder buckets are retired; `tests/test_waveform_studio_parity.py` proves the
   Studio covers everything they built. Editing UX lives in the Studio (`Docs/Reference/Visualizer_Studio.md`).
-- Shared framed camera (`core/settings/framed_camera.py`) with a Waveform spec. **Long-lens Perspective is the default
-  projection**; Orthographic remains optional. The candidate uses an 80-unit home radius, 64-104 physical dolly,
-  stable 4.5-unit eye height and a 3-degree lens; both projections share reference framing. Turn, tilt, Scene Scale and pan come from in-scene
+- Shared framed camera (`core/settings/framed_camera.py`) with a Waveform spec. **Long-lens Perspective is the only
+  projection** (Orthographic removed 5 Nov 2026). The candidate uses an 80-unit home radius, 64-104 physical dolly,
+  stable 4.5-unit eye height and a 3-degree lens. Turn, tilt, Scene Scale and pan come from in-scene
   navigation as in EB (hidden sliders), with Camera Position as the scene editor.
 - Every new control is authored into every preset (preset repair fill plus the completeness guard). Presets stay
   freely operator-authored.
@@ -233,9 +235,8 @@ The Shape Tuner's per-target quiet/loud values are these same ranges, edited on 
   smoothly onto the floor. The night medium uses broader height diffusion and thinner camera-side foreground air
   within its SAME world-density function, keeping the long viewing path readable while distant fog thickens gently.
 - The operator delegates the visual route: use restrained long-lens Perspective as the primary candidate, with a farther
-  physical eye and narrow field of view calibrated together. Orthographic remains optional, using the same reference
-  framing. The shared edge-resize aperture contract is unchanged; changing projection cannot excuse colour, material,
-  fog or reaction defects. Defaults and native camera receipts own the concrete calibration.
+  physical eye and narrow field of view calibrated together. The shared edge-resize aperture contract is unchanged;
+  the camera cannot excuse colour, material, fog or reaction defects. Defaults and native camera receipts own the concrete calibration.
   Production uses the scene's canonical fixed history head, not a second narrower head that exposes regular endpoint
   continuation inside the baseline view. Full-scene reference likeness and small/extreme aperture behavior remain open.
 - Grounded camera calibration must show floor material and depth: use a stable above-floor eye, allow a near-flat
@@ -271,6 +272,13 @@ model), with separately tunable A rolling twist and whole-body rotation. Source 
 - **Flow Speed:** the history's drift across the hall. A fixed scene constant while running: music never changes it
   (gate A), but the user authors it.
 - **Wave Rate:** the head wave's frequency (long sweeps to tight ripples).
+- **Travel Direction** (Right To Left default, Left To Right): `Flow.direction` is the history's one sign. All history
+  computation stays on the history axis (head at +head_x, travelling toward -axis), so packets are identical either
+  way; `WaveformScene` alone maps the axis into the world (x mirror on the history-bound view, the bursts' clip matrix,
+  the frustum continuation spans and the mist volume lookup), the reduced fields (mist cloth, floor give) are built in
+  world x (`uFieldSide`), and the colour grade is mirrored into history x so it stays put in the world. The Studio's
+  projection applies the same sign. The logical owner publishes the direction: a change fades ribbons, sparks and
+  strands out (`DIRECTION_FADE`, smoothstep), swaps while hidden, and fades back.
 - **Wave Swell, Height Swell, Depth Sway:** the head wave's slow variation.
 - **Waveform Rotation:** enabled, quiet→peak axial angular speed, reaction strength, attack and decay.
   Speed changes integrate into continuous angle; this does not move the camera or modulate history flow speed.
@@ -322,8 +330,8 @@ model), with separately tunable A rolling twist and whole-body rotation. Source 
   floor-colliding cross-section clearance and local source light. The old envelope band, side walls, bake, detail march,
   fringe/crackle and independent analytic floor haze are removed. New controls: Density, Ground Diffusion,
   Displacement, Displacement Softness, Local Light, Soft Variation and Atmosphere Drift, with quiet/peak ranges.
-- Signed Orthographic fog slices use an ordered asinh depth mapping, covering the camera-owned raster slab and
-  exact signed floor intersections. Perspective and existing positive-depth consumers retain their original mapping.
+- Fog slices use an ordered asinh depth mapping about the camera pivot (positive Perspective depth; the signed
+  Orthographic slab was removed 5 Nov 2026).
   Floor samples integrated light/transmittance once to its hit; sky samples to far depth; additive actors sample
   transmittance; reflected rays use the same above-floor world medium. Off leaves no independent floor haze.
 - The long lens puts the subject far from the eye: ordinary logarithmic froxels were several world units thick
@@ -343,6 +351,17 @@ model), with separately tunable A rolling twist and whole-body rotation. Source 
 - Wetness, Streak Length and Column Fade. The unified atmosphere's reflected light follows the same floor reflectivity.
 - **Floor Colour/Tint and Brightness:** independently editable surface tint and brightness alongside reflection strength.
 - Floor contact (sheets deform onto the floor) is a rule, not a control.
+- **Floor Give** (opt-in, 0 = the rigid floor, drawn exactly as before): where a lower edge comes down onto the floor
+  the wet floor yields in a soft dent and the ribbon dips in instead of being flattened along the plane. Owner:
+  `rendering/quick/scene3d/floor_give.py` reduces the published packet once per frame on GPU (two small compute
+  passes, `rendering/gl_programs/waveform_floor_give.py`) to a bounded field: per world x and ribbon the dent depth (the
+  Give share of the edge's softplus reach below floor + gap), its z centre and z radius (reach-weighted over the exact
+  cambered section, so the dent follows a turning sheet continuously), blurred along x. `FLOOR_GIVE_GLSL` sums the
+  Gaussian dents and soft-caps them (`Floor.give_depth`): no crease, no hole. The floor's ray marches then bisects to
+  the first crossing (same coverage, the dented point's depth), its normal drives Fresnel, shading and a reflection
+  bent through the dent; ribbons, strands and sparks ease their contact onto the same surface. Stateless and a smooth
+  function of the cloth, so it moves as smoothly as the ribbons. Perspective only. Not consumed by the mist's cloth
+  field (its plane-contact approximation is well inside its displacement softness).
 - Floor material must stay readable away from core reflections. The candidate uses the existing concrete albedo and
   roughness maps with restrained neutral ambient light, without the rejected artificial dark-blue patch modulation;
   reflection OFF and atmosphere OFF must
@@ -361,10 +380,14 @@ the shared audio controls (sensitivity, input gain, block size) stay at their sh
 These sit beside the Shape Tuner, which says *what* each source moves; these say *how* the music arrives.
 
 ### Camera (advanced, shared framed camera)
-- Camera Position (Existing: `SceneCameraPosition`), Projection (Perspective default, Orthographic), FOV (Perspective
-  only), Auto Rotate with After and Speed.
+- Camera Position (Existing: `SceneCameraPosition`), FOV, Auto Rotate with After and Speed. (The Projection
+  control was removed with Orthographic on 5 Nov 2026; Perspective is the only projection.)
 
-#### Orthographic raster depth and continuous world coverage
+#### Orthographic raster depth and continuous world coverage (historical; removed 5 Nov 2026)
+
+> Superseded: Orthographic and `orthographic_raster_projection`/`orthographic_depth_interval` were deleted on
+> 5 Nov 2026 (operator). The infinite-floor Perspective ray intersection below still applies; the Orthographic slab
+> analysis is kept only as history.
 
 The physical eye, grounded admission, focus, editor inverse and persistence remain owned by
 `core/settings/framed_camera.py` and the Waveform policy in `core/settings/waveform_ribbon_camera.py`.
@@ -429,7 +452,8 @@ occlusion and retained vertex IDs remain independent regression bars.
 ### Rules, never controls
 - **Smoothing:** every history-carried control passes two smoothing stages with an enforced minimum time (features
   at least about half a wavelength long); no sharp bends, spikes or jagged plateaus.
-- **Floor contact:** sheets ease onto the floor (smooth, monotone, no creases), never through it.
+- **Floor contact:** sheets ease onto the floor (smooth, monotone, no creases), never through it; with Floor Give
+  the floor they ease onto is the yielding surface.
 - **Mist clearance:** a minimum the slider cannot go below; distant haze never pure black.
 - **Fade, never vanish:** anything that appears or disappears fades (count changes included).
 - **Flow speed:** never driven by music.

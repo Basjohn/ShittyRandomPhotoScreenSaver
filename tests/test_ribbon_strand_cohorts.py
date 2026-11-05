@@ -129,11 +129,11 @@ def test_actual_strand_shader_holds_birth_look_before_its_authored_gentle_eol(qt
     from OpenGL import GL as gl
     from rendering.quick.offscreen_target import OffscreenRenderTarget
     from rendering.quick.scene3d.ribbon import RibbonPrimitive,RibbonStrays,RibbonMaterial
-    from core.settings.framed_camera import orthographic_matrix
+    from tests.test_ribbon_gpu import parallel_mvp
     target=OffscreenRenderTarget(240,160);primitive=RibbonPrimitive();p=packet()
     births=np.zeros((1,256,COHORT_ROWS,4),np.float32);births[:,:,0,0]=1.;births[:,:,0,2]=2.
     births[:,:,1]=[4.,1.,2.,4.];births[:,:,2]=[5.,.3,.2,1.];births[:,:,3]=[30.,12.,1.,0.]
-    view=tuple(np.identity(4).flatten(order='F'));mvp=orthographic_matrix((6.,4.),.1,100.)
+    view=tuple(np.identity(4).flatten(order='F'));mvp=parallel_mvp((6.,4.),.1,100.)
     # Put the test sheet in front of the eye without changing its stable knot IDs.
     mvp=np.asarray(mvp).reshape(4,4,order='F');mvp=mvp@np.array(((1,0,0,0),(0,1,0,-2),(0,0,1,-5),(0,0,0,1)))
     images=[]
@@ -193,12 +193,12 @@ def test_repeat_pulse_temporarily_extends_actual_strands_and_adds_glow(qt_app):
     from OpenGL import GL as gl
     from rendering.quick.offscreen_target import OffscreenRenderTarget
     from rendering.quick.scene3d.ribbon import RibbonPrimitive,RibbonStrays,RibbonMaterial
-    from core.settings.framed_camera import orthographic_matrix
+    from tests.test_ribbon_gpu import parallel_mvp
     p=packet();target=OffscreenRenderTarget(360,200);primitive=RibbonPrimitive()
     births=np.zeros((1,256,COHORT_ROWS,4),np.float32)
     births[0,100,0]=[1.,0.,1.,0.]
     births[0,100,1]=[8.,1.,2.,4.];births[0,100,2]=[5.,.3,.2,1.];births[0,100,3]=[30.,12.,1.,0.]
-    projection=np.asarray(orthographic_matrix((6.,10/3),.1,100.)).reshape(4,4,order='F')
+    projection=np.asarray(parallel_mvp((6.,10/3),.1,100.)).reshape(4,4,order='F')
     matrix=projection@np.array(((1,0,0,0),(0,1,0,-2),(0,0,1,-5),(0,0,0,1)))
     view=tuple(np.identity(4).flatten(order='F'))
     images=[]

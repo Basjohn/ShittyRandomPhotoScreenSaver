@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import math
 from core.ribbon_style import RibbonMaterial, RibbonSparks, RibbonStrays
 from core.settings import framed_camera as fc
-from core.settings.waveform_ribbon_camera import GROUNDED_ORBIT, YAW_SPAN, FOV_RANGE, ORTHO_REFERENCE_FOV
+from core.settings.waveform_ribbon_camera import GROUNDED_ORBIT, YAW_SPAN, FOV_RANGE
 from rendering.gl_programs.mist import mist_uniforms
 
 SPEC = fc.FramedCameraSpec(
@@ -40,8 +40,6 @@ class Fog:
     noise_scale: float = .16
     drift: float = .1
     field_span: tuple = (-80., 80., 1024)
-    # Signed Orthographic rays require the same ordered world line as the infinite floor.
-    signed_depth_range: tuple = (-2048., 2048.)
     depth_range: tuple = (.3, 300.)
     cell: int = 24
     slices: int = 128
@@ -111,6 +109,21 @@ class Floor:
     # away: dark wet ground in a wide view, legible concrete under the light.
     light_reach: float = 35.
     light_far: float = .5
+    # Floor give (0 off: the rigid plane, drawn exactly as before). Where a ribbon's lower edge comes down onto the
+    # floor, the wet floor yields in a soft dent instead of the floor-contact map flattening the sheet along a plane:
+    # this share of the edge's reach below the contact level is taken by the floor, never deeper than give_depth
+    # (soft-capped, all dents together). The dent is reduced once per frame from the published cloth: per world x
+    # (give_span) and per ribbon, a Gaussian across z centred under the contact (give_radius plus the contact's own
+    # spread), blurred along x (give_blur, Gaussian sigma), so it is as smooth in time as the ribbons themselves.
+    give: float = 0.
+    give_depth: float = .9
+    give_radius: float = .9
+    give_blur: float = .7
+    give_softness: float = .08      # the reach below the contact level eases in over this (softplus): no threshold
+    give_span: tuple = (-80., 80., 1024)
+    # Reflection through the dent: reflected light is sought this far (world) along the ray mirrored by the dented
+    # surface, so the wet film bends the reflected column into the dent instead of drawing a flat mirror over it.
+    give_reach: float = 3.
 
 
 @dataclass(frozen=True)
@@ -126,6 +139,11 @@ class Flow:  # Lab Plan section 4A: history enters at the head (world +x) and dr
     head_x: float = 34.
     fade_in: float = 2.5            # seconds of age over which the head fades in
     fade_out: float = 5.            # seconds of age over which the tail fades out
+    # Travel direction, the history's one sign: +1 travels toward -x (enters at the right), -1 is its mirror image
+    # (enters at the left). Every history computation works on the history axis (head at +head_x, travelling toward
+    # -axis), so packets are identical either way; the axis -> world map (world x = direction * axis) is applied once,
+    # at the world boundary of the history's consumers (WaveformScene and the Studio's projection).
+    direction: float = 1.
 
 
 def hue_between(a, b) -> tuple:

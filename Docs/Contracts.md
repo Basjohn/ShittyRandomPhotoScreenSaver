@@ -24,7 +24,11 @@
 `QuickCursorController.close()` runs. Loss of admission and controller retirement must restore
 `ArrowCursor` on the still-live Quick window, stop the Halo fade timer, and fence late auxiliary
 publications. Repeated close is harmless. No global Windows cursor counter, extra timer, or
-retained-QML cursor may take ownership of this cleanup.
+retained-QML cursor may take ownership of this cleanup. `QuickDisplayWindow.queue_close()` then
+relinquishes the pointer synchronously (window mouse grab off, which also drops Qt's implicit
+press `SetCapture` from an exit click; arrow cursor) and, until the HWND is gone, consumes pointer
+motion and reverts any non-arrow `CursorChange`, so retained hover cannot re-install a link's
+pointing hand that would outlive the saver on screen (`tests/test_qtquick_exit_pointer_release.py`).
 
 `QQuickWidget`, selectable old-presenter fallback and a second accelerated runtime surface are prohibited.
 Ordinary-widget glyph capabilities are resolved by the scene factory and supplied as immutable presentation
@@ -528,7 +532,7 @@ renderer-content stream/drift head/trail travel for the same consume-once transi
 Bubble presentation now uses `sqrt(content_width * content_height / 1.5)` as its response-height reference,
 following the operator rejection of height-only aspect coupling. The full logical radius waveform remains
 unchanged; same-area reshaping preserves pixel response and large views continue to grow.
-Sine/Oscilloscope Gaussian halo distance is measured normal to the curve in logical pixels; its width follows
+Line-visualizer Gaussian halo distance is measured normal to the curve in logical pixels; its width follows
 the visible content area's square-root scale against 420x280. DPR and whole-widget scaling remain physical
 projection concerns. Authored-world encoding must not compress the halo; line-core AA and musical amplitude
 remain separate contracts.
@@ -746,4 +750,4 @@ release their payload synchronously before queuing deletion; any new timer/callb
 
 **System-audio dormancy.** The retired `core/media/system_mute.py` process-global poller must not return. Current endpoint ownership is the event-driven shared Core Audio source in `core/media/audio_shared_source.py`, leased by admitted consumers such as Media system-mute UI and the optional `system_audio_osd`. Keep one GUI-apartment callback owner across overlapping generations; when the final live consumer retires, unregister/release it on the owning apartment. Do not create per-display endpoint registrations, a background poll, or keep the endpoint alive merely because Settings/registry metadata is imported. Keyboard volume/mute actions remain action ingress and do not justify an always-live presentation consumer. Obtain COM interfaces with `QueryInterface`, never `ctypes.cast`: cast shares the raw pointer without `AddRef` and ties the source into a ctypes reference cycle, so retiring the endpoint freed it and a later garbage collection released it again (native access violation during runtime replacement, found 2026-09-23).
 
-The operator-authorized Bubble equal-area response correction is documented in `Docs/Reference/Visualizer_Reference.md` and protected by BTF/R-69. It supersedes height-only product mapping; it does not authorize viewport-dependent performance caps, DSP attenuation, temporal smoothing changes or compression of already projected Ghost/history.
+The operator-authorized Bubble equal-area response correction is documented in `Docs/Reference/Visualizer_Reference.md` and protected by BTF/R-69; since R-170 it sizes the canonical card's radius unit, which every card shape uses (times the capacity zoom `world_scale`). It does not authorize viewport-dependent performance caps, aspect speed/count modifiers, DSP attenuation, temporal smoothing changes or compression of already projected Ghost/history.

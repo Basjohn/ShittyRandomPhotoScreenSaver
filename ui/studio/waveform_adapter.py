@@ -88,15 +88,18 @@ _WORKSPACES = (
 _ROW_ICONS = {"height": "height", "width": "width", "rate": "wave", "phase": "clock", "light": "sun", "band": "bars",
               "count": "ribbons", "fog_density": "cloud", "floor_brightness": "floor", "floor_reflection": "drop",
               "exposure": "sun", "bloom": "sparkle", "reaction_mode": "bolt", "camera_fov": "lens",
-              "sparks_enabled": "dots", "strands_enabled": "strand", "mist_enabled": "cloud"}
+              "sparks_enabled": "dots", "strands_enabled": "strand", "mist_enabled": "cloud",
+              "pulse_direction": "flow", "travel_direction": "flow"}
 _CAMERA_FIELDS = ("turn", "tilt", "scene_scale", "scene_pan_x", "scene_pan_y")
 # Headline controls lead their group (operator, 5 Nov): mist density and the floor controls tuned most
 # (surface, far surface, reflection, its contrast / ceiling / colour) come first; the reaction mode is the
 # first decision in Reactivity. Everything else keeps registry order.
 HEADLINE_FLOOR = ("floor_brightness", "floor_light_far", "floor_reflection", "floor_contrast",
                   "floor_glow_limit", "floor_colour")
+# Direction is a basic need (operator, 5 Nov): Pulse Direction sits right under Reaction Mode and Travel Direction
+# (when the registry has it) heads Flow, both visible without scrolling.
 _PRIORITY = {PREFIX + key: rank for rank, key in enumerate((
-    "reaction_mode", "bend", "pulse_direction", "mist_enabled", "fog_density") + HEADLINE_FLOOR)}
+    "reaction_mode", "pulse_direction", "travel_direction", "bend", "mist_enabled", "fog_density") + HEADLINE_FLOOR)}
 # Material starting points (mock: Sheen / Glass / Satin / Crystal): scale the OPENING material values
 # (both quiet and peak endpoints), clamped by the canonical ranges. Applying one replaces the previous
 # one (always from the opening values) and is a single undoable edit; "Original" restores them.
@@ -126,6 +129,9 @@ _CHOICE_NOTES = {PREFIX + "reaction_mode": {
     "Frozen Past": "Each passage leaves its peak swell held on the cloth, carried along with the history.",
     "Whole Swell": "The whole waveform rises and settles together; direction, width and speed do not apply.",
     "Group Wave": "Each swell arrives as a set: several crests lift together, leaning toward the front.",
+}, PREFIX + "travel_direction": {
+    "Right To Left": "New history enters at the right and flows to the left.",
+    "Left To Right": "New history enters at the left and flows to the right (the mirror image).",
 }}
 # Targets kept in data but no longer moving geometry (operator, 5 Nov): Advanced only, never in the tuner.
 _RETIRED_TARGETS = frozenset({"stretch"})
@@ -769,17 +775,12 @@ def studio_presentation(logical_size, extent, style):
 def frame_camera(frame, size, extent, style):
     """(clip-from-world matrix, aperture) exactly as the production renderer would draw ``frame``."""
     import numpy as np
-    from core.settings.waveform_ribbon_camera import scene_raster_support
     from rendering.quick.visualizer.implementations.waveform_ribbon import physical_view
     from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
     width, height = size
     aperture = framed_aperture_scale(studio_presentation(size, extent, style), content=True)
     parameters = frame.parameters
-    support = (scene_raster_support(frame.packet, frame.scene, frame.travel, now=frame.time,
-                                    viewport=(width, height), burst_payload=frame.particles,
-                                    burst_origin=frame.particle_origin, strand_payload=frame.strands)
-               if parameters[PREFIX + "camera_projection"] == "Orthographic" else None)
-    view, projection, _eye, _lens = physical_view(parameters, width / height, aperture, geometry_bounds=support,
+    view, projection, _eye, _lens = physical_view(parameters, width / height, aperture,
                                                   zoom=float(getattr(frame, "zoom", 1.0)))
     return np.asarray(projection) @ np.asarray(view), aperture
 
@@ -799,7 +800,8 @@ def ribbon_world_points(frame, index):
         return np.empty((0, 4))
     knots = path[4:].reshape(-1, KNOT_ROWS, 4)[(start + np.arange(count)) % capacity]
     origin = packet.world_origin
-    x = knots[:, 0, 0] + origin[0] + frame.scene.flow.head_x - frame.travel
+    # History axis -> world: Travel Direction mirrors x (Flow.direction, the renderer's one sign).
+    x = (knots[:, 0, 0] + origin[0] + frame.scene.flow.head_x - frame.travel)*frame.scene.flow.direction
     return np.stack((x, knots[:, 0, 1] + origin[1], knots[:, 0, 2] + origin[2], knots[:, 0, 3]), axis=1)
 
 

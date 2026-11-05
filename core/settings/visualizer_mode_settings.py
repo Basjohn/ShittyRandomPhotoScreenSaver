@@ -935,104 +935,6 @@ _SHOCKWAVE_GRID = ModeSettings(
 )
 
 
-# ---- Sine Waves --------------------------------------------------------------------------------
-
-_LINE_KEYS = tuple(
-    f"sine_{name}"
-    for line in range(2, 7)
-    for name in (f"line{line}_color", f"line{line}_glow_color", f"travel_line{line}", f"ghost_line{line}_enabled",
-                 f"line{line}_shift")
-)
-_GLOW = ("sine_glow_enabled", True)
-_GHOST = ("sine_ghosting_enabled", True)
-
-_SINE_WAVE = ModeSettings(
-    "sine_wave",
-    buckets=(
-        Bucket("appearance", "Appearance", "Line color, glow, and ghosting controls still apply when hidden."),
-        Bucket("motion", "Motion", "Speed, travel, crawl, and wave-motion controls still apply when hidden."),
-        Bucket("response", "Response", "Energy response and width behavior still apply when hidden."),
-        Bucket("multi_line", "Multi-Line",
-               "Extra line colors, travel, ghosting, and line offsets still apply when hidden.",
-               advanced=True),
-        Bucket("layout", "Layout", "Density, spacing, and card-height controls still apply when hidden.",
-               advanced=True),
-    ),
-    entries=(
-        Toggle("sine_glow_enabled", "", "Enable Glow", bucket="appearance"),
-        Slider("sine_glow_intensity", "Glow Intensity:", 0.0, 1.0, bucket="appearance", percent=True, tick=10,
-               when=_GLOW),
-        Slider("sine_glow_reactivity", "Glow Reactivity:", 0.0, 2.0, bucket="appearance", percent=True, tick=20,
-               when=_GLOW),
-        Colour("sine_line_color", "Line Color:", "Choose Sine Wave Line Color", bucket="appearance"),
-        Colour("sine_glow_color", "Glow Color:", "Choose Sine Wave Glow Color", bucket="appearance", when=_GLOW),
-        Toggle("sine_reactive_glow", "", "Reactive Glow (Energy-Driven)", bucket="appearance", when=_GLOW),
-        Toggle("sine_ghosting_enabled", "", "Enable Ghosting",
-               "When enabled, a faded afterimage of the previous waveform trails behind the current one.",
-               bucket="appearance", logical=True),
-        Slider("sine_ghost_alpha", "Ghost Opacity:", 0.0, 1.0, bucket="appearance", logical=True, percent=True,
-               tick=5, when=_GHOST),
-        Slider("sine_ghost_decay", "Ghost Decay:", 0.1, 1.0, bucket="appearance", logical=True, suffix="x", tick=5,
-               when=_GHOST),
-        Slider("sine_speed", "Speed:", 0.1, 1.0, "Wave animation speed multiplier.", bucket="motion",
-               logical=True, suffix="x", tick=10),
-        Choice("sine_wave_travel", "Travel:", ("None", "Scroll Left", "Scroll Right"),
-               "Direction the sine wave scrolls.", bucket="motion", logical=True, indexed=True),
-        Slider("sine_wave_effect", "Wave Effect:", 0.0, 1.0,
-               "Adds a wave-like positional undulation along the sine lines. Higher = more movement.",
-               bucket="motion", percent=True, tick=10),
-        Slider("sine_micro_wobble", "Micro Wobble:", 0.0, 1.0,
-               "Legacy jagged wobble effect (energy-reactive dents). Leave at 0% if using Crawl.",
-               bucket="motion", percent=True, tick=10),
-        Slider("sine_crawl_amount", "Crawl:", 0.0, 1.0,
-               "Gentle horizontal dents that crawl across the lines in response to vocals. Higher = more visible "
-               "crawl.", bucket="motion", percent=True, tick=10),
-        Slider("sine_sensitivity", "Line Response:", 0.1, 5.0,
-               "Renderer-side sine line response multiplier.\n"
-               "Lower = calmer amplitude reaction after the shared FFT signal is already computed.\n"
-               "Higher = larger visible swings. This is separate from Technical sensitivity.",
-               bucket="response", logical=True, suffix="x", tick=50),
-        Slider("sine_smoothing", "Smoothing:", 0.0, 1.0,
-               "Temporal smoothing for sine-line motion. Higher = steadier, slower response.",
-               bucket="response", percent=True, tick=10),
-        Slider("sine_width_reaction", "Width Reaction:", 0.0, 1.0,
-               "Bass-driven line width stretching. All lines stretch wider in reaction to bass. "
-               "0 = off (2px lines), higher = thicker lines on bass hits (up to ~8px). "
-               "Lines still resemble a sine wave at maximum.", bucket="response", logical=True, percent=True,
-               tick=10),
-        Slider("sine_heartbeat", "Heartbeat:", 0.0, 1.0,
-               "Bass-transient amplitude swell. Higher = more sensitive triggers, "
-               "bigger swells. CPU detects bass transients and the shader briefly "
-               "amplifies all sine lines.", bucket="response", logical=True, percent=True, tick=10),
-        Slider("sine_displacement", "Displacement:", 0.0, 1.0,
-               "Bass-reactive XY displacement of sine waves. "
-               "Higher = larger transient shoves when bass hits. "
-               "Applies to every enabled line, including single-line mode.", bucket="motion", percent=True, tick=10),
-        # Lines 2-6 sit side by side (colour, glow, travel) and appear with the line count.
-        Custom("lines", "multi_line", build="ui.tabs.media.sine_wave_builder:build_lines_section",
-               load="ui.tabs.media.sine_wave_settings_binding:load_lines_section",
-               collect="ui.tabs.media.sine_wave_settings_binding:collect_lines_section",
-               keys=("sine_line_count", *_LINE_KEYS)),
-        Slider("sine_density", "Density:", 0.25, 3.0,
-               "Number of sine cycles across the card. Low = wide gentle waves, "
-               "high = tightly packed oscillation. Default 1.0× ≈ 3 cycles.",
-               bucket="layout", suffix="×", tick=25),
-        Slider("sine_vertical_shift", "Vertical Shift:", -50, 200,
-               "Controls vertical spread between lines. 0 = all aligned, 100 = default spread, 200 = max spread, "
-               "negative = lines cross. Multi-line only.", bucket="layout", scale=1, decimals=0, integer=True,
-               tick=25),
-        Slider("sine_line1_shift", "Line 1 Horizontal Shift:", -1.0, 1.0,
-               "Phase offset for the primary sine line. Negative values lead, positive values lag.",
-               bucket="layout", logical=True, suffix=" cycles", tick=10),
-        Slider("sine_line_offset_bias", "Line Offset Bias:", 0.0, 1.0,
-               "Vertical spread between lines in multi-line mode.", bucket="layout", percent=True, tick=10),
-        Slider("sine_card_adaptation", "Card Adaptation:", 0.05, 1.0,
-               "How much of the card height the wave uses. Higher = taller waves.", bucket="layout",
-               percent=True, tick=10),
-    ),
-)
-
-
 # ---- Oscilloscope ------------------------------------------------------------------------------
 
 def _oscilloscope() -> ModeSettings:
@@ -1748,12 +1650,8 @@ _EXTRUDED_BUBBLE = ModeSettings(
                tooltip='Choose which ordinary bubbles can participate in collision behavior: All, Big, Small, or Off.'),
         SceneCameraPosition("extruded_bubble_camera_position", "Camera Position:", bucket="camera",
                tooltip='Move the real camera eye inside the populated tank without changing FOV. The same water-clearance bounds apply here and during travel. WASD travels relative to view; Shift+WASD rotates; Q/E yaw; R resets. [NEEDS AUDIT] Confirm native drag feel and compositor presentation.'),
-        Choice("extruded_bubble_camera_projection", "Projection:", ("Perspective", "Orthographic"), bucket="camera",
-               unavailable_choices=(("Orthographic", "Unavailable for Extruded Bubble: its perspective-built lighting and optical appearance need a separate parity pass. Deferred until after the current future-work backlog."),),
-               tooltip='Perspective keeps the existing lens and depth scaling. Orthographic uses parallel viewing rays and equal magnification at every depth; Scene Scale adjusts its magnification.'),
         Slider("extruded_bubble_camera_fov", "Camera Field of View:", 35.0, 62.0,
                scale=1, integer=True, suffix="°", decimals=0, bucket="camera",
-               when=("extruded_bubble_camera_projection", "Perspective"),
                tooltip='Change the vertical viewing angle independently of camera travel and zoom/dolly. Narrower angles usually reduce peripheral perspective stretch.'),
         Toggle("extruded_bubble_auto_rotate", "", "Auto Rotate", bucket="camera",
                tooltip='Allow the camera to rotate by itself after the configured period without manual camera input.'),
@@ -1878,6 +1776,12 @@ def _waveform_ribbon() -> ModeSettings:
         bucket='pulse',logical=True,tooltip='Travelling Pulse: swells travel along the waveform. Frozen Past: the parts a '
         'swell shaped keep that look until the next swell reaches them. Whole Swell: the whole waveform swells at once '
         '(ignores direction, width and speed). Group Wave: swells travel as groups that rise toward their leading edge.'))
+    entries.append(Choice(prefix+'height_mode','Floor Clearance:',('Dynamic Height Shift','Static Height'),
+        bucket='shape',logical=True,tooltip='Dynamic Height Shift: a ribbon whose lower edge nears the floor rises as a '
+        'whole, then settles back down. Static Height: every ribbon holds the highest safe point all the time.'))
+    entries.append(Toggle(prefix+'tilt_shift','','Tilt Shift',bucket='shape',logical=True,
+        when=(prefix+'height_mode','Dynamic Height Shift'),tooltip='While a ribbon shifts height, the side it travels '
+        'toward moves first: it lifts earlier when rising and dips earlier when settling.'))
     entries.append(Choice(prefix+'pulse_direction','Pulse Direction:',('Head To Tail','Tail To Head','Centre Out'),
         bucket='pulse',logical=True,tooltip='Where musical swells start and which way they travel.'))
     for key,label,low,high,tip in (
@@ -1893,6 +1797,10 @@ def _waveform_ribbon() -> ModeSettings:
          'chance and glow there. Never adds strands of its own. Needs Free Strands on.')):
         entries.append(Slider(prefix+key,label+':',low,high,bucket='pulse',logical=True,tooltip=tip,
                               suffix=' s' if key=='pulse_fade' else ''))
+    entries.append(Choice(prefix+'travel_direction','Travel Direction:',('Right To Left','Left To Right'),
+        bucket='flow',logical=True,tooltip='Which way the waveform history travels across the view: new history '
+        'enters on one side and flows to the other. Pulse Direction, held swells, sparks, strands and the floor all '
+        'follow it. Changing it fades the ribbons out and back in.'))
     entries.extend((Toggle(prefix+'rotation_enabled','','Axial Roll',bucket='flow',logical=True),
                     Range(prefix+'twist_speed','Twist Rate:',0.,5.,bucket='flow',logical=True,
                           tooltip='Quiet → peak local rolling twist rate in radians per second.')))
@@ -1952,6 +1860,9 @@ def _waveform_ribbon() -> ModeSettings:
                            tooltip='How strongly reflections keep the ribbons\' own hue (1 as reflected).'),
                     Slider(prefix+'floor_light_reach','Light Reach:',2.,200.,bucket='floor',scale=1,decimals=0,
                            tooltip='How far the ribbons light the concrete before it falls into darkness.'),
+                    Slider(prefix+'floor_give','Floor Give:',0.,1.,bucket='floor',
+                           tooltip='Lets the wet floor yield in a soft dent where a ribbon comes down onto it, so the '
+                                   'ribbon dips in instead of flattening along the surface. 0 is a rigid floor.'),
                     Slider(prefix+'floor_light_far','Far Surface Level:',0.,1.,bucket='floor',
                            tooltip='Concrete brightness far from the ribbons, as a share of its lit level.'),
                     Slider(prefix+'exposure','Exposure:',.2,2.,bucket='lens'),
@@ -1959,9 +1870,8 @@ def _waveform_ribbon() -> ModeSettings:
                     Slider(prefix+'mist_gradient_share','Mist Gradient:',0.,1.,bucket='colour'),
                     Choice(prefix+'quality','Quality:',('Low','Medium','High'),bucket='lens'),
                     SceneCameraPosition(prefix+'camera_position','Camera Position:',bucket='camera'),
-                    Choice(prefix+'camera_projection','Projection:',('Orthographic','Perspective'),bucket='camera'),
                     Slider(prefix+'camera_fov','Field of View:',*FOV_RANGE,bucket='camera',scale=1,integer=True,
-                           suffix='°',when=(prefix+'camera_projection','Perspective')),
+                           suffix='°'),
                     Toggle(prefix+'auto_rotate','','Auto Orbit',bucket='camera'),
                     Toggle(prefix+'dynamic_zoom','','Dynamic Zoom',bucket='camera',
                            tooltip='Zoom out up to 20% in heavy sustained passages and back in slowly when soft or idle; paused while you move the camera.'),
@@ -1975,7 +1885,7 @@ def _waveform_ribbon() -> ModeSettings:
 
 _WAVEFORM_RIBBON = _waveform_ribbon()
 
-_SPECS: tuple[ModeSettings, ...] = (_SINE_WAVE, _oscilloscope(), _SHOCKWAVE_GRID, _DEVCURVE, _EXTRUDED_SPECTRUM, _SPECTRUM, _SPHERE, _BUBBLE,
+_SPECS: tuple[ModeSettings, ...] = (_oscilloscope(), _SHOCKWAVE_GRID, _DEVCURVE, _EXTRUDED_SPECTRUM, _SPECTRUM, _SPHERE, _BUBBLE,
                                     _EXTRUDED_BUBBLE, _WAVEFORM_RIBBON)
 _BY_MODE: Mapping[str, ModeSettings] = MappingProxyType({spec.mode_id: spec for spec in _SPECS})
 _CONTROLS = tuple(control for spec in _SPECS for control in spec.controls)

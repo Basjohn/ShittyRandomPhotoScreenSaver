@@ -2,7 +2,7 @@
 
 Not the Waveform Ribbon lab and not a scene: no hall, floor or particles. Three ribbons on one RibbonRing, fed by a
 labelled synthetic head (no music), drawn with the production scope configuration (overlay, bloom, OIT, HDR)
-and the WR-00 proposed Orthographic camera. Writes reference-aspect cards beside the mock's low/high crops plus a
+and a Perspective camera matching the WR-00 framing at the pivot. Writes reference-aspect cards beside the mock's low/high crops plus a
 wide card, and the material passes' warm GPU cost.
 
     .venv\\Scripts\\python.exe tools/labs/ribbon_material_probe.py --output .artifacts/evidence/ribbon_material/<new-run>
@@ -34,7 +34,7 @@ import numpy as np
 from PIL import Image
 
 from core.ribbon_ring import RibbonRing
-from core.settings.framed_camera import orthographic_matrix
+from core.settings.framed_camera import perspective_matrix
 from rendering.quick.scene3d.resources import MeshResources
 from rendering.quick.scene3d.ribbon import RibbonMaterial, RibbonPrimitive
 from rendering.quick.scene3d.target import SceneTarget
@@ -104,7 +104,8 @@ def render(primitive, target, resources, scene, card, size, state, material, que
     model[0, 3] = head - FLOW_SPEED*now
     eye = PIVOT + 30*np.array((0., math.sin(PITCH), math.cos(PITCH)))
     view = look_at(eye, PIVOT) @ model
-    projection = np.asarray(orthographic_matrix((HALF_HEIGHT*aspect, HALF_HEIGHT), .1, 80.)).reshape(4, 4, order='F')
+    # The WR-00 half-height fills the frame at the pivot, 30 units from the eye.
+    projection = np.asarray(perspective_matrix((HALF_HEIGHT*aspect/30., HALF_HEIGHT/30.), .1, 80.)).reshape(4, 4, order='F')
     mvp = tuple((projection @ view).flatten(order='F'))
     view_values = tuple(view.flatten(order='F'))
     packet = ring.packet()

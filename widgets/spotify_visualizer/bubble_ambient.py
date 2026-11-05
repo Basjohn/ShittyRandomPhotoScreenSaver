@@ -5,6 +5,10 @@ hero positions, random globals, reactivity ingress or clock: it advances only
 when the authoritative BubbleFrameRuntime advances. Stream velocity comes from
 the existing Bubble solver, and particle *glow*, never size, follows the
 already-resolved small-bubble breathing response.
+
+Positions are card fractions, but every authored distance and speed is in the
+hero world's canonical-card units (``BubbleWorld``), so decor moves alike on
+every card shape; only its count follows the card's area.
 """
 from __future__ import annotations
 
@@ -77,6 +81,7 @@ class BubbleAmbientSimulation:
     def _populate(
         pool: list[_Dot], rng: random.Random, count: int, *,
         chained: bool, columnarity: float = 0.0,
+        domain: tuple[float, float] = (1.0, 1.0),
     ) -> None:
         if len(pool) > count:
             del pool[count:]
@@ -96,8 +101,8 @@ class BubbleAmbientSimulation:
                 vertical_column = -0.052 + vertical_seed * 0.0565
                 column_dx = previous.column_dx - horizontal_step * 0.825
                 column_dy = previous.column_dy + vertical_column - vertical_clump
-                x = previous.x + horizontal_step * (1.0 - 0.825 * columnarity)
-                y = previous.y + _lerp(vertical_clump, vertical_column, columnarity)
+                x = previous.x + horizontal_step * (1.0 - 0.825 * columnarity) / domain[0]
+                y = previous.y + _lerp(vertical_clump, vertical_column, columnarity) / domain[1]
             else:
                 x = rng.uniform(0.07, 0.93)
                 y = rng.uniform(0.07, 0.93)
@@ -119,6 +124,7 @@ class BubbleAmbientSimulation:
         drift_direction: str, drift_amount: float, drift_speed: float,
         drift_frequency: float, time_s: float, direction_mode: str,
         group_motion: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        domain: tuple[float, float] = (1.0, 1.0),
     ) -> None:
         if not (stream or drift) or dt <= 0.0:
             return
@@ -128,6 +134,7 @@ class BubbleAmbientSimulation:
         # visible motion. Correct that as the "same" default and preserve the
         # old accidental look as the explicit "reversed" stylistic option.
         motion_sign = -1.0 if direction_mode == "same" else 1.0
+        domain_w, domain_h = domain
         for dot in pool:
             vx, vy = vector
             if stream_direction == "random":
@@ -157,7 +164,7 @@ class BubbleAmbientSimulation:
                     # CW/CCW winding; REVERSED remains its deliberate inverse.
                     sign = -1.0 if drift_direction == "swirl_cw" else 1.0
                     orbit = sign * drift_amount * (0.12 + drift_speed * 0.8) * dt
-                    cx, cy = dot.x - 0.5, dot.y - 0.5
+                    cx, cy = (dot.x - 0.5) * domain_w, (dot.y - 0.5) * domain_h
                     dx += -cy * orbit + lateral * 0.3
                     dy += cx * orbit + lateral * 0.3
                 elif drift_direction == "swish_horizontal":
@@ -177,13 +184,14 @@ class BubbleAmbientSimulation:
                     dx += lateral
             dx *= motion_sign
             dy *= motion_sign
-            dot.x = (dot.x + dx) % 1.0
-            dot.y = (dot.y + dy) % 1.0
+            dot.x = (dot.x + dx / domain_w) % 1.0
+            dot.y = (dot.y + dy / domain_h) % 1.0
 
     def advance(
         self, dt: float, settings: Mapping[str, object], *,
         resolved_stream_velocity: float, small_bubble_breathing: float,
         resolved_group_motion: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        world=None,
     ) -> tuple[float, ...]:
         """Return immutable-ready packed points. Empty, without RNG work, if off."""
         if not self.enabled(settings):
@@ -197,16 +205,19 @@ class BubbleAmbientSimulation:
         particle_stream = bool(settings.get("bubble_particle_stream", False))
         particle_drift = bool(settings.get("bubble_particle_drift", False))
         particle_glow = bool(settings.get("bubble_particle_glow", False))
-        micro_count = (round(MAX_MICROBUBBLES * _unit(settings["bubble_microbubble_density"]))
+        # The hero world (BubbleWorld): its canonical-card units and its area in canonical cards.
+        domain = (1.0, 1.0) if world is None else (float(world.domain_w), float(world.domain_h))
+        area = 1.0 if world is None else float(world.population_scale)
+        micro_count = (min(MAX_MICROBUBBLES, round(MAX_MICROBUBBLES * _unit(settings["bubble_microbubble_density"]) * area))
                        if micro_stream or micro_drift else 0)
-        particle_count = (round(MAX_PARTICLES * _unit(settings["bubble_particle_density"]))
+        particle_count = (min(MAX_PARTICLES, round(MAX_PARTICLES * _unit(settings["bubble_particle_density"]) * area))
                           if particle_stream or particle_drift or particle_glow else 0)
         next_columnarity = _unit(settings.get("bubble_microbubble_columnarity", 0.0))
         change = next_columnarity - self._micro_columnarity
         if change:
             for dot in self._micro:
-                dot.x = (dot.x + change * dot.column_dx) % 1.0
-                dot.y = (dot.y + change * dot.column_dy) % 1.0
+                dot.x = (dot.x + change * dot.column_dx / domain[0]) % 1.0
+                dot.y = (dot.y + change * dot.column_dy / domain[1]) % 1.0
             self._micro_columnarity = next_columnarity
         self._populate(
             self._micro,
@@ -214,8 +225,9 @@ class BubbleAmbientSimulation:
             micro_count,
             chained=True,
             columnarity=next_columnarity,
+            domain=domain,
         )
-        self._populate(self._particles, self._particle_rng, particle_count, chained=False)
+        self._populate(self._particles, self._particle_rng, particle_count, chained=False, domain=domain)
         # Glow smoothing is light-only. Hero Bubble pulse-energy decay is
         # intentionally longer, and must never be changed for decoration.
         if particle_glow:
@@ -235,6 +247,7 @@ class BubbleAmbientSimulation:
             drift_speed=_unit(settings["bubble_drift_speed"]),
             drift_frequency=_unit(settings["bubble_drift_frequency"]),
             time_s=self._time,
+            domain=domain,
         )
         self._advance_pool(
             self._micro,
@@ -262,7 +275,7 @@ class BubbleAmbientSimulation:
         glow_intensity = max(0.0, float(settings["bubble_particle_glow_intensity"]))
         for dot in self._micro:
             # Fade before an independent edge-wrap; never flash/teleport at card boundaries.
-            edge = min(dot.x, dot.y, 1.0-dot.x, 1.0-dot.y)
+            edge = min(dot.x * domain[0], dot.y * domain[1], (1.0-dot.x) * domain[0], (1.0-dot.y) * domain[1])
             alpha = dot.opacity * min(1.0, max(0.0, edge / 0.055))
             result.extend((dot.x, dot.y, micro_size * dot.size_factor,
                            alpha, 0.0, 0.0))
@@ -273,7 +286,7 @@ class BubbleAmbientSimulation:
                 glow = glow_intensity * (0.10 + glow_reactivity * breathing * 0.95)
             else:
                 glow = 0.0
-            edge = min(dot.x, dot.y, 1.0-dot.x, 1.0-dot.y)
+            edge = min(dot.x * domain[0], dot.y * domain[1], (1.0-dot.x) * domain[0], (1.0-dot.y) * domain[1])
             alpha = dot.opacity * min(1.0, max(0.0, edge / 0.055))
             result.extend((dot.x, dot.y, particle_size * dot.size_factor,
                            alpha, min(6.0, glow), 1.0))

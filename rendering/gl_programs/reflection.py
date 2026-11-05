@@ -2,7 +2,7 @@
 
 A flat reflector at height ``h`` is rendered by drawing the scene through the camera mirrored in the plane
 (``mirror_view``) into ``rendering.quick.scene3d.reflection.PlanarReflection``. For a flat mirror the reflected image
-then lines up with the receiver pixel for pixel, from any pose and in Orthographic or Perspective, so the receiver
+then lines up with the receiver pixel for pixel from any pose, so the receiver
 samples it at its own screen position (``PLANAR_REFLECTION_GLSL``). Preconditions: everything drawn into the
 reflection lies above the plane (no clip plane is applied), and the receiver itself is not drawn into it.
 """

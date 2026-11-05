@@ -92,7 +92,7 @@ def continuation_bounds(packet, translation, camber):
     return (0.,float(high[0]+.5)),(float(low[1]),float(high[1]))
 
 
-def frustum_axial_span(mvp, transverse, *, depth_clip=True):
+def frustum_axial_span(mvp, transverse):
     """Conservative x interval of a clipped view intersecting a fixed y/z slab.
 
     Only culling/tessellation depends on the view. Surface values never do.
@@ -102,9 +102,7 @@ def frustum_axial_span(mvp, transverse, *, depth_clip=True):
     matrix=np.asarray(mvp,float).reshape(4,4)
     corners=np.array([(y,z,1.) for y in transverse[0] for z in transverse[1]])
     low,high=-np.inf,np.inf
-    # Orthographic raster fitting starts with XY only; fitting from its old
-    # depth-clipped slab would circularly preserve the very cut being removed.
-    for axis in range(3 if depth_clip else 2):
+    for axis in range(3):
         for sign in (-1,1):
             plane=matrix[3]+sign*matrix[axis]
             if abs(plane[0])<1e-12:continue

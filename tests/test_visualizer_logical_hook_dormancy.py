@@ -6,49 +6,6 @@ from dataclasses import replace
 import pytest
 
 
-def test_inactive_sine_heartbeat_never_queries_audio_even_with_a_saved_value():
-    from widgets.spotify_visualizer.logical_tick_state import (
-        install_default_logical_tick_state,
-    )
-    from widgets.spotify_visualizer.runtime_controller import (
-        VisualizerRuntimeController,
-    )
-    from widgets.spotify_visualizer.tick_pipeline import process_heartbeat
-
-    class Engine:
-        energy_queries = 0
-        scheduler_queries = 0
-
-        def get_energy_bands(self):
-            self.energy_queries += 1
-            return None
-
-        def get_event_scheduler(self):
-            self.scheduler_queries += 1
-            return None
-
-    controller = VisualizerRuntimeController(
-        runtime_generation=0, initial_mode="spectrum"
-    )
-    state = controller.logical_tick_state
-    install_default_logical_tick_state(state, bar_count=32)
-    state._sine_heartbeat = 1.0
-    engine = Engine()
-    controller.engine = engine
-
-    assert controller.active_logical_tick_hook is None
-    # This is also the replacement-race fence: even an accidentally retained
-    # callable must exit before touching the shared engine or event scheduler.
-    process_heartbeat(state, now_ts=1.0)
-
-    assert engine.energy_queries == 0
-    assert engine.scheduler_queries == 0
-
-
-# Sine is soft-retired (5.1.3, f9f09679): the controller never admits it as the current mode, so
-# its heartbeat hook has no active owner left to exercise. The inactive fence above still binds.
-
-
 def test_controller_resolves_only_the_active_mode_hook_at_activation():
     from widgets.spotify_visualizer.runtime_controller import (
         VisualizerRuntimeController,
@@ -119,7 +76,7 @@ def test_repeated_registry_switches_advance_only_the_active_hook(monkeypatch):
     # Include two complete passes through the descriptor owners and ordinary
     # no-hook modes.  A newly selected owner must be the only one advanced;
     # returning to a no-hook mode must advance none.
-    # Only selectable modes: a soft-retired one (Sine) is coerced to another owner on activation.
+    # Only selectable modes: a closed-gate mode is coerced to another owner on activation.
     sequence = tuple(mode for mode in registry.VISUALIZER_MODE_IDS if registry.is_mode_active(mode)) * 2
     for mode_id in sequence:
         controller.set_mode(mode_id)
@@ -154,7 +111,7 @@ def test_incomplete_hook_wiring_rejects_activation_without_mutating_identity(mon
         registry.VISUALIZER_MODE_IDS + (malformed.mode_id,),
     )
 
-    # An admitted mode that owns a hook (Sine, the old owner here, is soft-retired).
+    # An admitted mode that owns a hook.
     controller = VisualizerRuntimeController(
         runtime_generation=0, initial_mode="devcurve"
     )

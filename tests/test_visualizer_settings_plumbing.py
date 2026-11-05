@@ -57,7 +57,7 @@ class TestRainbowGreyscaleFix:
     """Regression: rainbow hue shift invisible on white/grey because saturation=0."""
 
     SHADER_FILES = [
-        "spectrum.frag", "oscilloscope.frag", "sine_wave.frag",
+        "spectrum.frag", "oscilloscope.frag",
         "bubble.frag",
     ]
 
@@ -98,9 +98,6 @@ class TestSettingsModelPlumbing:
     """Verify key settings survive real model round-trips."""
 
     CRITICAL_SETTINGS = {
-        "sine_width_reaction": 0.42,
-        "sine_micro_wobble": 0.15,
-        "sine_heartbeat": 0.33,
         "rainbow_enabled": True,
         "rainbow_speed": 0.8,
         # Oscilloscope owns the spec-driven display/beam/reaction controls;
@@ -215,8 +212,8 @@ class TestSettingsModelPlumbing:
             def get(self, key, default=None):
                 return self._data.get(key, default)
 
-        # Active mode bubble; only spectrum+bubble enabled -> oscilloscope,
-        # sine_wave and devcurve are disabled. devcurve carries authored local
+        # Active mode bubble; only spectrum+bubble enabled -> oscilloscope
+        # and devcurve are disabled. devcurve carries authored local
         # state that must not be lost merely because it is disabled.
         payload = {
             "mode": "bubble",
@@ -600,22 +597,6 @@ class TestPresetOverlayRuntimeOverrides:
         assert "widgets.spotify_visualizer.osc_line_count" not in serialized
         assert "widgets.spotify_visualizer.osc_sensitivity" not in serialized
 
-        sine_baseline = SpotifyVisualizerSettings.from_mapping(
-            {
-                "mode": "sine_wave",
-                "preset_sine_wave": 0,
-            }
-        )
-        sine_model = SpotifyVisualizerSettings.from_mapping(
-            {
-                "mode": "sine_wave",
-                "preset_sine_wave": 0,
-                "sine_ghost_line2_enabled": False,
-                "sine_ghost_line3_enabled": True,
-            }
-        )
-        assert sine_model.sine_ghost_line2_enabled == sine_baseline.sine_ghost_line2_enabled
-        assert sine_model.sine_ghost_line3_enabled == sine_baseline.sine_ghost_line3_enabled
 
 
 # ===========================================================================
@@ -879,23 +860,6 @@ class TestPerModeTechnicalRoundTrip:
         ):
             assert f"widgets.spotify_visualizer.{legacy_key}" not in serialized
 
-    def test_from_mapping_prefers_canonical_sine_wave_technical_key_over_visual_sine_alias(self):
-        from core.settings.models import SpotifyVisualizerSettings
-
-        payload = {
-            "widgets.spotify_visualizer.mode": "sine_wave",
-            "widgets.spotify_visualizer.sine_sensitivity": 1.0,
-            "widgets.spotify_visualizer.sine_wave_sensitivity": 0.73,
-            "widgets.spotify_visualizer.sine_wave_adaptive_sensitivity": False,
-        }
-
-        model = SpotifyVisualizerSettings.from_mapping(payload, apply_preset_overlay=False)
-
-        assert model.resolve_sensitivity("sine_wave") == pytest.approx(0.73)
-        assert model.sine_sensitivity == pytest.approx(1.0)
-        assert model.resolve_adaptive_sensitivity("sine_wave") is False
-
-
 # ===========================================================================
 # 9a-ii. Per-mode technical UI collection (new controls)
 # ===========================================================================
@@ -972,7 +936,7 @@ class TestPerModeTechnicalControlsCollection:
         tab = _DummyTab()
         tc.register_per_mode_technical_controls(
             tab,
-            "sine_wave",
+            "bubble",
             controls={
                 "input_gain_slider": _StubSlider(130),
                 "block_size": _StubCombo(128),
@@ -990,8 +954,8 @@ class TestPerModeTechnicalControlsCollection:
         config: dict[str, float | int | bool] = {}
         tc.collect_per_mode_technical_controls(tab, config)
 
-        assert config["sine_wave_audio_block_size"] == 128
-        assert config["sine_wave_input_gain"] == pytest.approx(1.30)
+        assert config["bubble_audio_block_size"] == 128
+        assert config["bubble_input_gain"] == pytest.approx(1.30)
 
 
 class TestPerModeTechnicalControlPresentation:
@@ -1099,7 +1063,6 @@ class TestPerModeTechnicalControlPresentation:
             "spectrum",
             "extruded_spectrum",
             "bubble",
-            "sine_wave",
         ],
     )
     def test_agc_slider_uses_mode_specific_recommended_marker(self, qt_app, mode_key):
@@ -1188,7 +1151,7 @@ class TestPerModeTechnicalControlPresentation:
         tab = _DummyTab()
         tc.register_per_mode_technical_controls(
             tab,
-            "sine_wave",
+            "oscilloscope",
             controls={
                 "block_size": _StubCombo(0),
             },
@@ -1199,11 +1162,11 @@ class TestPerModeTechnicalControlPresentation:
         tc.load_per_mode_technical_controls(
             tab,
             {
-                "sine_wave_audio_block_size": block_size,
+                "oscilloscope_audio_block_size": block_size,
             },
         )
 
-        controls = tc.get_per_mode_controls_for_mode(tab, "sine_wave")
+        controls = tc.get_per_mode_controls_for_mode(tab, "oscilloscope")
         assert controls is not None
         assert controls["block_size"].currentData() == block_size
 
@@ -1213,11 +1176,11 @@ class TestVisualizerPresetDefaultResolution:
         from core.settings.models import SpotifyVisualizerSettings
         from core.settings.visualizer_presets import get_missing_preset_fallback_index
 
-        model = SpotifyVisualizerSettings.from_mapping({"mode": "sine_wave"})
+        model = SpotifyVisualizerSettings.from_mapping({"mode": "oscilloscope"})
 
         # A missing selection repairs to the canonical per-mode selector, not a
         # generic first slot or a test-owned literal.
-        assert model.preset_sine_wave == get_missing_preset_fallback_index("sine_wave")
+        assert model.preset_oscilloscope == get_missing_preset_fallback_index("oscilloscope")
 
     def test_from_settings_uses_canonical_fallback_for_missing_mode_preset(self):
         from core.settings.models import SpotifyVisualizerSettings
@@ -1251,7 +1214,7 @@ class TestVisualizerPresetDefaultResolution:
         settings = _DummySettings()
 
         # No persisted selection -> canonical per-mode selector.
-        assert get_active_preset_index(settings, "sine_wave") == get_missing_preset_fallback_index("sine_wave")
+        assert get_active_preset_index(settings, "oscilloscope") == get_missing_preset_fallback_index("oscilloscope")
         assert get_active_preset_index(settings, "bubble") == get_missing_preset_fallback_index("bubble")
 
 
@@ -1331,18 +1294,21 @@ class TestVisualizerModeRegistryContract:
     def test_resolve_all_preset_indices_from_mapping_uses_registry_for_sparse_input(self):
         from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
         from core.settings.visualizer_presets import (
+            get_custom_preset_index,
             get_missing_preset_fallback_index,
             resolve_all_preset_indices_from_mapping,
         )
 
+        # Custom is the one non-zero index every catalogue has (curated counts are authored).
+        selected = get_custom_preset_index("bubble")
         resolved = resolve_all_preset_indices_from_mapping(
-            {"mode": "bubble", "preset_bubble": 2}
+            {"mode": "bubble", "preset_bubble": selected}
         )
 
         for mode in VISUALIZER_MODE_IDS:
             key = f"preset_{mode}"
             if key == "preset_bubble":
-                assert resolved[key] == 2
+                assert resolved[key] == selected
                 continue
             # Unspecified modes resolve to their shipped canonical fallback.
             assert resolved[key] == get_missing_preset_fallback_index(mode)
@@ -1350,11 +1316,13 @@ class TestVisualizerModeRegistryContract:
     def test_resolve_all_preset_indices_from_getter_uses_shared_prefixed_contract(self):
         from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
         from core.settings.visualizer_presets import (
+            get_custom_preset_index,
             get_missing_preset_fallback_index,
             resolve_all_preset_indices_from_getter,
         )
 
-        data = {"widgets.spotify_visualizer.preset_bubble": 2}
+        selected = get_custom_preset_index("bubble")
+        data = {"widgets.spotify_visualizer.preset_bubble": selected}
 
         resolved = resolve_all_preset_indices_from_getter(
             lambda key, default=None: data.get(key, default)
@@ -1363,7 +1331,7 @@ class TestVisualizerModeRegistryContract:
         for mode in VISUALIZER_MODE_IDS:
             key = f"preset_{mode}"
             if key == "preset_bubble":
-                assert resolved[key] == 2
+                assert resolved[key] == selected
                 continue
             # Unspecified modes resolve to their shipped canonical fallback.
             assert resolved[key] == get_missing_preset_fallback_index(mode)
@@ -1428,7 +1396,6 @@ class TestVisualizerSettingsContract:
             ("bubble", "adaptive_sensitivity"): True,
             ("bubble", "audio_block_size"): 512,
             ("spectrum", "lane_transient_mix"): 0.72,
-            ("sine_wave", "rainbow_enabled"): True,
         }
 
         kwargs = build_visualizer_mode_kwargs(
@@ -1457,11 +1424,6 @@ class TestVisualizerSettingsContract:
                 "widgets.spotify_visualizer.bubble_transient_mix_vocal"
             )
         )
-        assert kwargs["sine_wave_transient_width_mix"] == pytest.approx(
-            require_canonical_default(
-                "widgets.spotify_visualizer.sine_wave_transient_width_mix"
-            )
-        )
         assert kwargs["oscilloscope_audio_block_size"] == 384
         assert "bubble_use_raw_energy" not in kwargs
 
@@ -1471,15 +1433,15 @@ class TestVisualizerSettingsSnapshotNormalization:
 
         normalized = normalize_visualizer_section_mapping(
             {
-                "mode": "sine_wave",
-                "sine_rainbow_enabled": True,
-                "sine_rainbow_speed": 0.41,
+                "mode": "devcurve",
+                "devcurve_rainbow_enabled": True,
+                "devcurve_rainbow_speed": 0.41,
             },
             apply_preset_overlay=False,
         )
 
-        assert normalized["sine_wave_rainbow_enabled"] is True
-        assert normalized["sine_wave_rainbow_speed"] == pytest.approx(0.41)
+        assert normalized["devcurve_rainbow_enabled"] is True
+        assert normalized["devcurve_rainbow_speed"] == pytest.approx(0.41)
         assert normalized["bubble_rainbow_enabled"] is False
 
     def test_mode_payload_normalizer_drops_shared_technical_keys_without_poisoning_mode_defaults(self):
@@ -1741,6 +1703,9 @@ class TestVisualizerModeBinding:
 
     def test_collect_and_load_visualizer_preset_indices_use_shared_descriptor_contract(self):
         from core.settings.visualizer_preset_indices import resolve_preset_index_from_mapping
+        from core.settings.visualizer_presets import get_custom_preset_index
+
+        osc_custom = get_custom_preset_index("oscilloscope")  # exists whatever the curated count
 
         from ui.tabs.media.visualizer_mode_binding import (
             collect_visualizer_preset_indices,
@@ -1760,7 +1725,6 @@ class TestVisualizerModeBinding:
         class _Tab:
             _spectrum_preset_slider = _Slider(1)
             _osc_preset_slider = _Slider(0)
-            _sine_preset_slider = _Slider(2)
             _bubble_preset_slider = _Slider(1)
             _devcurve_preset_slider = _Slider(4)
 
@@ -1780,17 +1744,13 @@ class TestVisualizerModeBinding:
                 tab,
                 {
                     "preset_spectrum": 0,
-                    "preset_oscilloscope": 2,
-                    "preset_sine_wave": 1,
+                    "preset_oscilloscope": osc_custom,
                     "preset_bubble": 3,
                 },
             )
 
             assert tab._spectrum_preset_slider.preset_index() == 0
-            assert tab._osc_preset_slider.preset_index() == 2
-            # Sine is soft-retired (5.1.3, f9f09679): no longer an offered descriptor,
-            # so its slider is neither collected nor loaded.
-            assert tab._sine_preset_slider.preset_index() == 2
+            assert tab._osc_preset_slider.preset_index() == osc_custom
             assert tab._bubble_preset_slider.preset_index() == resolve_preset_index_from_mapping(
                 "bubble",
                 {"preset_bubble": 3},
@@ -1909,342 +1869,6 @@ class TestOscilloscopeSettingsBinding:
 
         payload = collect_oscilloscope_mode_settings(tab)
         assert payload == expected
-
-
-class TestSineWaveSettingsBinding:
-    def test_load_sine_wave_mode_settings_updates_sine_owned_controls(self):
-        from ui.tabs.media.sine_wave_settings_binding import load_sine_wave_mode_settings
-
-        class _Check:
-            def __init__(self):
-                self.checked = None
-
-            def setChecked(self, checked):
-                self.checked = checked
-
-            def isChecked(self):
-                return self.checked
-
-            def blockSignals(self, _blocked):
-                return None
-
-        class _Slider:
-            def __init__(self):
-                self._value = None
-
-            def setValue(self, value):
-                self._value = value
-
-            def value(self):
-                return self._value
-
-            def blockSignals(self, _blocked):
-                return None
-
-        class _Label:
-            def __init__(self):
-                self.text = None
-
-            def setText(self, text):
-                self.text = text
-
-        class _Combo:
-            def __init__(self):
-                self._index = None
-
-            def setCurrentIndex(self, index):
-                self._index = index
-
-            def currentIndex(self):
-                return self._index
-
-            def blockSignals(self, _blocked):
-                return None
-
-        class _ColorButton:
-            def __init__(self):
-                self.color = None
-
-            def set_color(self, color):
-                self.color = color
-
-        class _Tab(CanonicalWidgetDefaultsStub):
-            def __init__(self):
-                super().__init__()
-                self.sine_glow_enabled = _Check()
-                self.sine_glow_intensity = _Slider()
-                self.sine_glow_intensity_label = _Label()
-                self.sine_glow_reactivity = _Slider()
-                self.sine_glow_reactivity_label = _Label()
-                self.sine_reactive_glow = _Check()
-                self.sine_sensitivity = _Slider()
-                self.sine_sensitivity_label = _Label()
-                self.sine_smoothing = _Slider()
-                self.sine_smoothing_label = _Label()
-                self.sine_speed = _Slider()
-                self.sine_speed_label = _Label()
-                self.sine_wave_effect = _Slider()
-                self.sine_wave_effect_label = _Label()
-                self.sine_micro_wobble = _Slider()
-                self.sine_micro_wobble_label = _Label()
-                self.sine_crawl_amount = _Slider()
-                self.sine_crawl_amount_label = _Label()
-                self.sine_width_reaction = _Slider()
-                self.sine_width_reaction_label = _Label()
-                self.sine_density = _Slider()
-                self.sine_density_label = _Label()
-                self.sine_heartbeat = _Slider()
-                self.sine_heartbeat_label = _Label()
-                self.sine_displacement = _Slider()
-                self.sine_displacement_label = _Label()
-                self.sine_vertical_shift = _Slider()
-                self.sine_vertical_shift_label = _Label()
-                self.sine_line1_shift = _Slider()
-                self.sine_line1_shift_label = _Label()
-                self.sine_wave_travel = _Combo()
-                self.sine_multi_line = _Check()
-                self.sine_line_count_slider = _Slider()
-                self.sine_line_count_label = _Label()
-                self.sine_line_offset_bias = _Slider()
-                self.sine_line_offset_bias_label = _Label()
-                self.sine_card_adaptation = _Slider()
-                self.sine_card_adaptation_label = _Label()
-                self.sine_ghosting_enabled = _Check()
-                self.sine_ghost_alpha = _Slider()
-                self.sine_ghost_alpha_label = _Label()
-                self.sine_ghost_decay = _Slider()
-                self.sine_ghost_decay_label = _Label()
-                for line in range(2, 7):
-                    setattr(self, f"sine_travel_line{line}", _Combo())
-                    setattr(self, f"sine_ghost_line{line}_enabled", _Check())
-                    setattr(self, f"sine_line{line}_shift", _Slider())
-                    setattr(self, f"sine_line{line}_shift_label", _Label())
-                    setattr(self, f"sine_line{line}_color_btn", _ColorButton())
-                    setattr(self, f"sine_line{line}_glow_btn", _ColorButton())
-                self.sine_glow_color_btn = _ColorButton()
-                self.sine_line_color_btn = _ColorButton()
-
-        tab = _Tab()
-
-        load_sine_wave_mode_settings(
-            tab,
-            {
-                "sine_glow_enabled": False,
-                "sine_glow_intensity": 0.61,
-                "sine_glow_reactivity": 1.32,
-                "sine_glow_color": [1, 2, 3, 4],
-                "sine_line_color": [5, 6, 7, 8],
-                "sine_reactive_glow": False,
-                "sine_sensitivity": 1.8,
-                "sine_smoothing": 0.64,
-                "sine_speed": 0.73,
-                "sine_wave_effect": 0.22,
-                "sine_micro_wobble": 0.16,
-                "sine_crawl_amount": 0.44,
-                "sine_width_reaction": 0.31,
-                "sine_density": 1.25,
-                "sine_heartbeat": 0.53,
-                "sine_displacement": 0.19,
-                "sine_vertical_shift": 14,
-                "sine_line1_shift": 0.25,
-                "sine_wave_travel": 2,
-                "sine_travel_line2": 1,
-                "sine_travel_line3": 2,
-                "sine_line_count": 3,
-                "sine_line2_color": [9, 10, 11, 12],
-                "sine_line2_glow_color": [13, 14, 15, 16],
-                "sine_line3_color": [17, 18, 19, 20],
-                "sine_line3_glow_color": [21, 22, 23, 24],
-                "sine_line2_shift": -0.34,
-                "sine_line3_shift": 0.42,
-                "sine_line_offset_bias": 0.29,
-                "sine_card_adaptation": 0.41,
-                "sine_ghosting_enabled": False,
-                "sine_ghost_alpha": 0.36,
-                "sine_ghost_decay": 0.47,
-                "sine_ghost_line2_enabled": True,
-                "sine_ghost_line3_enabled": False,
-            },
-        )
-
-        assert tab.sine_glow_enabled.checked is False
-        assert tab.sine_glow_intensity.value() == 61
-        assert tab.sine_glow_reactivity.value() == 132
-        assert tab.sine_reactive_glow.checked is False
-        assert tab.sine_sensitivity.value() == 180
-        assert tab.sine_smoothing.value() == 64
-        assert tab.sine_speed.value() == 73
-        assert tab.sine_wave_effect.value() == 22
-        assert tab.sine_micro_wobble.value() == 16
-        assert tab.sine_crawl_amount.value() == 44
-        assert tab.sine_width_reaction.value() == 31
-        assert tab.sine_density.value() == 125
-        assert tab.sine_heartbeat.value() == 53
-        assert tab.sine_displacement.value() == 19
-        assert tab.sine_vertical_shift.value() == 14
-        assert tab.sine_line1_shift.value() == 25
-        assert tab.sine_wave_travel.currentIndex() == 2
-        assert tab.sine_travel_line2.currentIndex() == 1
-        assert tab.sine_travel_line3.currentIndex() == 2
-        assert tab.sine_multi_line.checked is True
-        assert tab.sine_line_count_slider.value() == 3
-        assert tab.sine_line2_shift.value() == -34
-        assert tab.sine_line3_shift.value() == 42
-        assert tab.sine_line_offset_bias.value() == 29
-        assert tab.sine_card_adaptation.value() == 41
-        assert tab.sine_ghosting_enabled.checked is False
-        assert tab.sine_ghost_alpha.value() == 36
-        assert tab.sine_ghost_decay.value() == 47
-        assert tab.sine_ghost_line2_enabled.checked is True
-        assert tab.sine_ghost_line3_enabled.checked is False
-        from core.settings.visualizer_mode_settings import require_mode_settings
-
-        spec = require_mode_settings("sine_wave")
-        assert tab.sine_sensitivity_label.text == spec.control("sine_sensitivity").text(
-            tab.sine_sensitivity.value()
-        )
-        assert tab.sine_smoothing_label.text == spec.control("sine_smoothing").text(
-            tab.sine_smoothing.value()
-        )
-        assert tab.sine_density_label.text == spec.control("sine_density").text(
-            tab.sine_density.value()
-        )
-        assert (tab._sine_glow_color.red(), tab._sine_glow_color.green(), tab._sine_glow_color.blue(), tab._sine_glow_color.alpha()) == (1, 2, 3, 4)
-        assert (tab._sine_line3_glow_color.red(), tab._sine_line3_glow_color.green(), tab._sine_line3_glow_color.blue(), tab._sine_line3_glow_color.alpha()) == (21, 22, 23, 24)
-        assert tab.sine_line4_color_btn.color.getRgb() == tab._sine_line4_color.getRgb()
-        assert tab.sine_line4_glow_btn.color.getRgb() == tab._sine_line4_glow_color.getRgb()
-
-    def test_collect_sine_wave_mode_settings_serializes_sine_owned_state(self):
-        from ui.tabs.media.sine_wave_settings_binding import collect_sine_wave_mode_settings
-
-        class _Check:
-            def __init__(self, checked):
-                self._checked = checked
-
-            def isChecked(self):
-                return self._checked
-
-        class _Slider:
-            def __init__(self, value):
-                self._value = value
-
-            def value(self):
-                return self._value
-
-        class _Combo:
-            def __init__(self, index):
-                self._index = index
-
-            def currentIndex(self):
-                return self._index
-
-        class _Tab(CanonicalWidgetDefaultsStub):
-            def __init__(self):
-                super().__init__()
-                for line in range(2, 7):
-                    for kind in ("color", "glow_color"):
-                        key = f"_sine_line{line}_{kind}"
-                        if not hasattr(self, key):
-                            setting_key = key[1:]
-                            setattr(
-                                self,
-                                key,
-                                QColor(*self._widget_default("spotify_visualizer", setting_key)),
-                            )
-                    travel_key = f"sine_travel_line{line}"
-                    if not hasattr(self, travel_key):
-                        setattr(
-                            self,
-                            travel_key,
-                            _Combo(self._widget_default("spotify_visualizer", travel_key)),
-                        )
-                    ghost_key = f"sine_ghost_line{line}_enabled"
-                    if not hasattr(self, ghost_key):
-                        setattr(
-                            self,
-                            ghost_key,
-                            _Check(self._widget_default("spotify_visualizer", ghost_key)),
-                        )
-                    shift_key = f"sine_line{line}_shift"
-                    if not hasattr(self, shift_key):
-                        setattr(
-                            self,
-                            shift_key,
-                            _Slider(round(float(self._widget_default("spotify_visualizer", shift_key)) * 100)),
-                        )
-
-            sine_glow_enabled = _Check(True)
-            sine_glow_intensity = _Slider(64)
-            sine_glow_reactivity = _Slider(145)
-            _sine_glow_color = QColor(1, 2, 3, 4)
-            _sine_line_color = QColor(5, 6, 7, 8)
-            sine_reactive_glow = _Check(False)
-            sine_sensitivity = _Slider(175)
-            sine_smoothing = _Slider(63)
-            sine_speed = _Slider(82)
-            sine_wave_effect = _Slider(17)
-            sine_crawl_amount = _Slider(46)
-            sine_micro_wobble = _Slider(23)
-            sine_width_reaction = _Slider(31)
-            sine_density = _Slider(135)
-            sine_heartbeat = _Slider(28)
-            sine_displacement = _Slider(19)
-            sine_vertical_shift = _Slider(22)
-            sine_line1_shift = _Slider(-14)
-            sine_wave_travel = _Combo(2)
-            sine_travel_line2 = _Combo(1)
-            sine_travel_line3 = _Combo(0)
-            sine_multi_line = _Check(True)
-            sine_line_count_slider = _Slider(3)
-            sine_line_offset_bias = _Slider(26)
-            sine_card_adaptation = _Slider(37)
-            _sine_line2_color = QColor(9, 10, 11, 12)
-            _sine_line2_glow_color = QColor(13, 14, 15, 16)
-            _sine_line3_color = QColor(17, 18, 19, 20)
-            _sine_line3_glow_color = QColor(21, 22, 23, 24)
-            sine_line2_shift = _Slider(18)
-            sine_line3_shift = _Slider(-27)
-            sine_ghosting_enabled = _Check(False)
-            sine_ghost_alpha = _Slider(42)
-            sine_ghost_decay = _Slider(39)
-            sine_ghost_line2_enabled = _Check(True)
-            sine_ghost_line3_enabled = _Check(False)
-
-        payload = collect_sine_wave_mode_settings(_Tab())
-
-        assert payload["sine_glow_enabled"] is True
-        assert payload["sine_glow_intensity"] == pytest.approx(0.64)
-        assert payload["sine_glow_reactivity"] == pytest.approx(1.45)
-        assert payload["sine_glow_color"] == [1, 2, 3, 4]
-        assert payload["sine_line_color"] == [5, 6, 7, 8]
-        assert payload["sine_reactive_glow"] is False
-        assert payload["sine_sensitivity"] == pytest.approx(1.75)
-        assert payload["sine_smoothing"] == pytest.approx(0.63)
-        assert payload["sine_speed"] == pytest.approx(0.82)
-        assert payload["sine_wave_effect"] == pytest.approx(0.17)
-        assert payload["sine_crawl_amount"] == pytest.approx(0.46)
-        assert payload["sine_micro_wobble"] == pytest.approx(0.23)
-        assert payload["sine_width_reaction"] == pytest.approx(0.31)
-        assert payload["sine_density"] == pytest.approx(1.35)
-        assert payload["sine_heartbeat"] == pytest.approx(0.28)
-        assert payload["sine_displacement"] == pytest.approx(0.19)
-        assert payload["sine_vertical_shift"] == 22
-        assert payload["sine_line1_shift"] == pytest.approx(-0.14)
-        assert payload["sine_wave_travel"] == 2
-        assert payload["sine_travel_line2"] == 1
-        assert payload["sine_travel_line3"] == 0
-        assert payload["sine_line_count"] == 3
-        assert payload["sine_line_offset_bias"] == pytest.approx(0.26)
-        assert payload["sine_card_adaptation"] == pytest.approx(0.37)
-        assert payload["sine_line2_color"] == [9, 10, 11, 12]
-        assert payload["sine_line3_glow_color"] == [21, 22, 23, 24]
-        assert payload["sine_line2_shift"] == pytest.approx(0.18)
-        assert payload["sine_line3_shift"] == pytest.approx(-0.27)
-        assert payload["sine_ghosting_enabled"] is False
-        assert payload["sine_ghost_alpha"] == pytest.approx(0.42)
-        assert payload["sine_ghost_decay"] == pytest.approx(0.39)
-        assert payload["sine_ghost_line2_enabled"] is True
-        assert payload["sine_ghost_line3_enabled"] is False
 
 
 @pytest.fixture
@@ -2634,39 +2258,9 @@ class TestVisualizerModeEnum:
 class TestVisualizerPresetRepair:
     """Validate the preset repair helper normalizes legacy payloads."""
 
-    def test_repair_file_derives_sine_card_adaptation(self, tmp_path):
-        import json
-        from tools.visualizer_preset_repair import repair_file
-
-        payload = {
-            "snapshot": {
-                "widgets": {
-                    "spotify_visualizer": {
-                        "mode": "sine_wave",
-                        "sine_min_height": 0.12,
-                        "rainbow_enabled": True,
-                        "rainbow_speed": 0.4,
-                    }
-                }
-            }
-        }
-        preset_path = tmp_path / "sine_preset.json"
-        preset_path.write_text(json.dumps(payload), encoding="utf-8")
-
-        _, stats = repair_file(preset_path, "sine_wave")
-        assert "sine_min_height" in stats["removed"]
-
-        repaired = json.loads(preset_path.read_text(encoding="utf-8"))
-        sv = repaired["snapshot"]["widgets"]["spotify_visualizer"]
-        assert sv.get("mode") == "sine_wave"
-        assert "sine_min_height" not in sv
-        assert "rainbow_enabled" not in sv  # migrated to per-mode key
-        assert "rainbow_speed" not in sv
-
     @pytest.mark.parametrize(
         "mode",
         [
-            "sine_wave",
             "bubble",
             "spectrum",
             "oscilloscope",

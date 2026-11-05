@@ -46,7 +46,7 @@ Manual (operator drives the interaction; the driver is not used)::
          python tools/visualizer_switch_abc_harness.py contention --workers 4 --seconds 400
     3. perform the condition's interactions from the SAME saved-layout Bubble
        baseline (A: hold Bubble; B: exactly five Sphere->Spectrum->Oscilloscope->
-       Sine->Bubble cycles then hold; C: same exposure, hold, reload the same
+       Bubble cycles then hold; C: same exposure, hold, reload the same
        slot, hold again). Emit the steady-window markers by hand only if not
        using the driver — otherwise prefer ``auto``.
     4. score the produced log::

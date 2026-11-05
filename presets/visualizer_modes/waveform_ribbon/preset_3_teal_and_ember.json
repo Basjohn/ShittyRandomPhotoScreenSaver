@@ -34,7 +34,6 @@
           0.0,
           0.0
         ],
-        "waveform_ribbon_camera_projection": "Perspective",
         "waveform_ribbon_colour": [
           0.0,
           1.0
@@ -45,7 +44,10 @@
         "waveform_ribbon_dynamic_zoom": false,
         "waveform_ribbon_pulse_colour": 0.6,
         "waveform_ribbon_pulse_direction": "Head To Tail",
+        "waveform_ribbon_travel_direction": "Right To Left",
         "waveform_ribbon_reaction_mode": "Travelling Pulse",
+        "waveform_ribbon_height_mode": "Dynamic Height Shift",
+        "waveform_ribbon_tilt_shift": false,
         "waveform_ribbon_pulse_fade": 2.5,
         "waveform_ribbon_pulse_particles": 1.0,
         "waveform_ribbon_pulse_saturation": 0.6,
@@ -895,6 +897,7 @@
           6.0
         ],
         "waveform_ribbon_floor_contrast": 2.5,
+        "waveform_ribbon_floor_give": 0.0,
         "waveform_ribbon_floor_light_far": 0.2,
         "waveform_ribbon_floor_light_reach": 35.0,
         "waveform_ribbon_floor_colour": 2.4,

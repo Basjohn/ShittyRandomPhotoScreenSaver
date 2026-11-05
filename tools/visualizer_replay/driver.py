@@ -42,7 +42,7 @@ from .metrics import calculate_metrics
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests/fixtures/visualizer_replay/v1"
-MODES = ("spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve")
+MODES = ("spectrum", "oscilloscope", "bubble", "devcurve")
 # Modes that replay from schema 2 clips only (their inputs are the real-scale lanes).
 REAL_SCALE_MODES = ("sphere", "shockwave_grid")
 
@@ -78,13 +78,6 @@ def mode_output(frame):
         # Actual resolved range values and rate, excluding the independently flowing idle carrier.
         # Native packet/pixel comparisons remain the geometry proof.
         return (*(value for _key,value in state.realized),state.rotation_speed)
-    if frame.mode_id == "sine_wave":
-        # What the lines' amplitude reads: each band's reactive energy scaled by the resolved
-        # sensitivity, and the heartbeat pulse.
-        sensitivity = float(state.parameters["resolved_sensitivity"])
-        energy = frame.common.energy
-        return (energy.bass * sensitivity, energy.mid * sensitivity, energy.high * sensitivity,
-                float(state.heartbeat_intensity))
     if frame.mode_id == "oscilloscope":
         # The live trace's vertical swing (its points' y, the drawn audio), then the beam's
         # reactions: its drive and flare.
@@ -144,10 +137,12 @@ def _with_drift_history(snapshot, history: list[bytes]):
 
 
 def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset: int = 0, overrides=None,
-                snapshots_at=(), settings=None):
+                snapshots_at=(), settings=None, viewport_extent=None):
     """Replay ``clip`` through ``mode`` (curated ``preset``, or ``settings``: frozen complete settings, a mapping
     or ``mode -> mapping``; with optional Settings-model ``overrides``). ``snapshots_at``: frame indices whose published Quick snapshot is returned
-    (``result["snapshots"]``, index -> snapshot) for renderer captures."""
+    (``result["snapshots"]``, index -> snapshot) for renderer captures. ``viewport_extent``: a committed CUSTOM
+    world (width, height) hydrated exactly as a persisted card is, presented at uniform scale 1; ``None`` keeps
+    the canonical baseline."""
     if mode not in (*(descriptor.mode_id for descriptor in iter_all_visualizer_mode_descriptors()), "control") or present_every < 1:
         raise ValueError("invalid replay mode or presentation interval")
     if mode in REAL_SCALE_MODES and any(frame.real is None for frame in clip.frames):
@@ -164,6 +159,11 @@ def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset:
         )
         controller.engine = engine
         _configure(controller, controller.mode_id, preset, overrides, settings)
+        extent = None if viewport_extent is None else (float(viewport_extent[0]), float(viewport_extent[1]))
+        if extent is not None:
+            controller.hydrate_committed_layout_metrics(extent, 0)
+        # A display at least as large as the world keeps the uniform scale at 1, so replayed pixels are world units.
+        display = (1920.0, 1080.0) if extent is None else (max(1920.0, extent[0]), max(1080.0, extent[1]))
         snapshots = {}
         wanted = frozenset(snapshots_at)
         drift_history: list[bytes] = []   # EB drift steps since the last returned snapshot
@@ -171,7 +171,7 @@ def replay_clip(clip: FeatureClip, mode: str, *, present_every: int = 1, preset:
             controller,
             resolve_presentation=lambda: resolve_visualizer_presentation(
                 policy=get_visualizer_presentation_policy(controller.mode_id),
-                display_size=(1920.0, 1080.0), outer_origin=(0.0, 0.0),
+                display_size=display, outer_origin=(0.0, 0.0), viewport_extent=extent,
                 border_width=0.0, corner_radius=0.0, content_inset=0.0,
                 background_color=(0, 0, 0, 0), border_color=(0, 0, 0, 0),
                 shadow_enabled=False, shadow_color=(0, 0, 0, 0), shadow_blur=0.0,

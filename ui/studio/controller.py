@@ -1019,6 +1019,14 @@ class StudioController(QObject):
             self.capabilities = self.adapter.capabilities()
             self.session = StudioEditSession(self.adapter.schema(), self.store)
             self.evaluator = self.adapter.create_evaluator()
+            environment = getattr(self.evaluator, "set_environment", None)
+            source = getattr(self.store, "environment_image", None)
+            if callable(environment) and callable(source):
+                # A reflecting mode mirrors what the saver would show (production reflects the photograph).
+                try:
+                    environment(source())
+                except Exception:
+                    logger.exception("[STUDIO] No reflection environment")
             self.transport.set_duration(self.evaluator.fixture.duration)
             self.bridge = StudioBridge(self)
             if self._theme_provider is not None:

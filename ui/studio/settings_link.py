@@ -177,6 +177,15 @@ class VisualizerSettingsStore:
             pass
         return live_card_extent(widgets, self._mode, screens)
 
+    def environment_image(self):
+        """What a reflecting mode mirrors: the saver's first source image (``ui.studio.environment``)."""
+        from ui.studio.environment import environment_image
+        try:
+            folders = self._tab._settings.get("sources.folders") or []
+        except Exception:
+            folders = []
+        return environment_image(folders if isinstance(folders, (list, tuple)) else [folders])
+
     def card_style(self) -> dict | None:
         """The live card chrome production presents with (the display manager's card border rule)."""
         try:

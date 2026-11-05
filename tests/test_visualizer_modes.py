@@ -39,10 +39,10 @@ class TestVisualizerModeEnum:
         # product catalogue: newer Scene3D modes are registered with separate
         # frame runtimes without adding legacy worker enum members.
         worker_ids = tuple(mode.name.lower() for mode in modes)
-        # EXACT-VALUE INVARIANT: frozen five-member audio-worker protocol, not
-        # the extensible Visualizer catalogue (Scene3D modes do not join it).
+        # EXACT-VALUE INVARIANT: frozen audio-worker protocol, not the extensible
+        # Visualizer catalogue (Scene3D modes do not join it; Sine retired 2026-11-05).
         assert worker_ids == (
-            "spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve"
+            "spectrum", "oscilloscope", "bubble", "devcurve"
         )
         assert all(mode_id in VISUALIZER_MODE_IDS for mode_id in worker_ids)
         assert modes[0] == VisualizerMode.SPECTRUM

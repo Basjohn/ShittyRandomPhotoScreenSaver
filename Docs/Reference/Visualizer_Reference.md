@@ -77,9 +77,6 @@ Oscilloscope's Phase Delay row appears only in Phase display, while Graticule Co
 Signal-blocked loads apply the same conditions, and hidden values remain authored and round-trip unchanged.
 Conditional signal bookkeeping and row-capturing predicates belong to the current body generation: retirement drops
 them, and reconstruction binds the new widgets afresh. Section-lazy expansion reuses only that generation's connections.
-Sine's Displacement belongs to Motion because it affects every enabled line, including single-line mode; the
-Multi-Line editor controls the additional lines and no longer claims a three-line limit.
-
 Spline Curve's scalar controls are logical-owned, including ghost and foreground styling, because its logical frame
 snapshot consumes them. Its four-layer spline editor remains Custom with independent nodes, power, enabled/alpha/offset,
 opaque outlines and ranked stacking. The shared builder preserves paired FX toggles, signed offsets, conditional rows
@@ -226,7 +223,7 @@ Durable accepted flow:
 ```text
 source / engine
     -> sole VisualizerLogicalRuntime
-    -> mode-owned logical frame runtime / capture (spectrum/oscilloscope/sine/bubble/devcurve/sphere)
+    -> mode-owned logical frame runtime / capture (spectrum/oscilloscope/bubble/devcurve/sphere)
     -> immutable latest logical publication
     -> GUI/Quick synchronization owner
         -> current resolved presentation state
@@ -436,7 +433,6 @@ Quick deliberately retires the pre-Quick per-mode preferred-height/growth custom
 ```text
 spectrum_growth
 osc_growth
-sine_wave_growth
 bubble_growth
 devcurve_growth
 ```
@@ -494,9 +490,8 @@ top/bottom edge -> viewport height only
 Expected adaptation at constant scale:
 
 - Spectrum reflows/redistributes bars across available width/height;
-- Bubble expands/reflows its position, trail and motion world without stretching circles; stream/drift deltas project once per expanded axis, nonbaseline trail smear is solved in renderer-content coordinates, and swirl orbit/birth geometry removes the independent domain axes so visible travel does not fall by `1 / domain_axis` or distort with aspect; its authored radius projects through the equal-area canonical height described below; collision/spawn policy remains canonical normalized content-space separation, with unchanged BTF event behavior;
-- Bubble lifecycle distances (entry depth/margin, cluster spread, exit/drain and contraction grace, overlap retry and pre-entry prediction) are likewise renderer-content values projected once per expanded axis; canonical literals and random draw order remain exact;
-- Oscilloscope/Sine/DevCurve adapt domain while keeping stroke scale;
+- Bubble's world grows in canonical-card units (R-170): stream, drift, swirl, trails, collision/spawn policy and lifecycle distances (entry depth/margin, cluster spread, exit/drain and contraction grace, overlap retry, pre-entry prediction) are canonical literals on every shape, so each card moves and sizes like the canonical card at equal uniform scale; only the population follows area (with an isotropic `world_scale` zoom past the 110-hero render capacity); canonical output and random draw order are exact;
+- Oscilloscope/DevCurve adapt domain while keeping stroke scale;
 - Sphere uses aspect-correct projection and stays round.
 
 Every registered mode is viewport-resize-capable through its declared presentation policy; carded and frameless policies adapt their authored domain through their own geometry contract. The core Bubble capability/reflow path is landed. Do not reintroduce a Bubble false gate to conceal an implementation defect. Committed viewport truth remains separate from temporary CUSTOM working geometry; any newly reproduced spatial defect must preserve authored Bubble response and the binding BTF contract rather than reviving phase-specific gates.
@@ -509,18 +504,18 @@ Bubble is a canary for shared timing and must not receive mode-specific cadence 
 presentation defects.
 
 Viewport geometry changes are spatial configuration, not logical cadence authority.
-Bubble radius and response project through `sqrt(content_width * content_height / 1.5)`. This explicit
-operator correction preserves complete radius excursions across equal-area shapes rather than making wide
-views weak and tall views oversized. The same actual-area metric sizes outlines, with a framebuffer-pixel
-coverage footprint independent of saved logical extent/uniform-scale encoding. Bubble-local specular offsets and
+Bubble radius and response project through the canonical card's equal-area response height
+`sqrt(w * h / 1.5)` at the current uniform scale and inset, times the world's capacity zoom `world_scale` (R-170), so
+every card shape draws the canonical card's bubbles and a larger card gains density, not size. Outlines firm only with
+`world_scale`, with a framebuffer-pixel coverage footprint. Bubble-local specular offsets and
 ellipse orientation retain the canonical content aspect at the same scale/inset. The Quick payload
 retains the already validated immutable BubbleFrame tuples; native uploads still use persistent
 render-thread float32 buffers.
 
 Consume-once kick/snare/vocal events forward-carry a bounded motion accent through Bubble's existing stream-burst state.
 This affects stream/drift displacement, not authored motion settings, pulse/radius authority, cadence, or clock ownership.
-Canonical/wide/tall runs of the same event must retain equal content-space head/trail travel, one event delivery and an
-identical radius sequence. Raw expanded-world displacement is not a valid cross-viewport reactivity comparison.
+Canonical/wide/tall runs of the same event must retain equal canonical-unit (pixel, at equal uniform scale) head/trail
+travel, one event delivery and an identical radius sequence.
 
 ## 13. Playback
 
@@ -648,11 +643,10 @@ framed mode; a spec may add scene guides through `editor_references_hook`.
 Waveform opts into the optional `GroundedOrbitSpec`: one fixed-height admitted eye, a bounded front annulus and
 focus-preserving left/right orbit. W/S changes physical radius; A/D orbits rather than strafing out of the scene.
 Tilt changes the physical focus within the body; its near-level endpoint uses the admitted radius and retains visible
-floor. Both projections, editor marker/aim inverse and persisted offsets consume `resolve_camera_frame` and the same
+floor. The Perspective camera, editor marker/aim inverse and persisted offsets consume `resolve_camera_frame` and the same
 policy in `core/settings/waveform_ribbon_camera.py`. Other modes retain their ordinary physical-flight policy.
-Waveform's Orthographic raster depth fits its XY-visible body/accent support while preserving that physical eye,
-basis and projection XY; Perspective and non-opted modes keep their existing clipping. The bounds, negative control
-and validation gates live in `Waveform_Ribbon_Migration_Plan.md` → Camera → Orthographic raster depth.
+Perspective is the only projection (Orthographic and its fitted raster slab were removed 5 Nov 2026); every mode
+keeps its positive clipping.
 
 - **GLSL:** include `SCENE3D_GLSL` from `rendering/gl_programs/scene3d.py` (camera with a real near plane, lighting,
   planar shadows, streaks, integer hash, impulse and departure helpers). Every function has a CPU mirror in the same

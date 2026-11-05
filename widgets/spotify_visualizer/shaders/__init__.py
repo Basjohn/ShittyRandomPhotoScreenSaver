@@ -31,7 +31,6 @@ void main() {
 _ALL_SHADER_FILES: Dict[str, str] = {
     "spectrum": "spectrum.frag",
     "oscilloscope": "oscilloscope.frag",
-    "sine_wave": "sine_wave.frag",
     "bubble": "bubble.frag",
     "devcurve": "devcurve.frag",
 }

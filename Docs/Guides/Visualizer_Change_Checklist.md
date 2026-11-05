@@ -123,7 +123,7 @@ Render-thread state is detached, generation/activation fenced and latest-state o
 ## 4A. Consumer-driven configuration ownership
 
 - [ ] For every changed setting, identify its actual consumer.
-- [ ] Anything read by authored logical evolution or a mode-owned Spectrum/Oscilloscope/Sine/Bubble/DevCurve frame runtime is
+- [ ] Anything read by authored logical evolution or a mode-owned Spectrum/Oscilloscope/Bubble/DevCurve frame runtime is
       available without `SpotifyVisualizerWidget`.
 - [ ] Pure renderer/style/chrome values remain presentation-owned.
 - [ ] A resolved "technical" value is routed by actual consumer rather than treated as one monolithic technical bucket:
@@ -159,7 +159,6 @@ For reactivity regressions, use the durable Bubble/Visualizer contracts and Hist
 - [ ] Preserve historical renderer-side numerical transfers when they are part of visible semantics; keep canonical logical state unmolested.
 - [ ] Spectrum changes remain Spectrum-specific unless shared source evidence proves a common cause.
 - [ ] Bubble physics/sensitivity are not tuned until source/configuration/publication parity is proven.
-- [ ] Sine paused idle must continue through authored state/snapshot/presentation; no QML timer workaround.
 - [ ] Play/Pause timing distinguishes historical cold-start shaping from newly introduced warm/source/publication/presentation delay.
 - [ ] Retired `*_growth` sizing controls stay retired.
 
@@ -205,7 +204,7 @@ committed extent. Inactive CUSTOM is not an implicit reset to canonical.
 Expected adaptation:
 
 - Spectrum redistributes/reflows bars;
-- Oscilloscope/Sine/DevCurve adapt domains while stroke scale stays coherent;
+- Oscilloscope/DevCurve adapt domains while stroke scale stays coherent;
 - Bubble changes spatial bounds while circles stay circles and velocity/radius/collision/BTF semantics remain coherent.
 
 Persist and restore uniform scale and viewport extent separately through Save/Cancel, geometry variants and layout slots.
@@ -286,7 +285,6 @@ GPU resources retire on the legal render owner.
 
 - [ ] Visible Play/Pause edge can be decomposed Media truth -> owner -> BeatEngine -> first current source -> mode readiness -> logical publication -> Quick snapshot -> retained draw.
 - [ ] Historical BeatEngine cold ramp is not changed to hide a new delay; warm resumes are tested separately.
-- [ ] Paused Sine continues authored idle evolution and retained publication without another clock.
 
 ## 11. Required proof for geometry changes
 

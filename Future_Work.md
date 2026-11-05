@@ -124,11 +124,8 @@ it needs behavioural proof that reactivity, population, fusion and pop rates are
 `tools/visualizer_live_check.py --load game60` evidence. The operator chose not to risk it now; reopen only on an
 explicit request.
 
-### Beyond the entire current backlog — optional EB Orthographic appearance parity
+### Orthographic camera projection — removed 5 Nov 2026 (operator), not deferred
 
-Explicitly deferred by the operator until **after everything currently listed in Current_Plan.md and this file**,
-and only on a later explicit reopening. Orthographic projection itself passes geometry/depth/refraction checks;
-EB's perspective-built water, lighting, near-field and composition need a separate visual target/parity effort.
-Its Camera option stays visible but disabled. Preserve experimental authored values without rewriting presets.
-Do not reopen this while wrapping EB, optimizing it, or building the queued modes. New 3D modes should be designed
-for Orthographic by default with optional Perspective, using the shared camera primitives from the start.
+The former "optional EB Orthographic appearance parity" entry is withdrawn: Orthographic was removed from the whole
+project ("its awful everywhere"). Perspective is the only projection for EB, Waveform and all future 3D modes;
+there is nothing to reopen here.

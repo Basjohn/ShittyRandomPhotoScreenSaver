@@ -145,7 +145,6 @@ DESTINATION_PROFILE = (
     "test_qtquick_visualizer_all_modes.py",
     "test_qtquick_visualizer_spectrum.py",
     "test_qtquick_visualizer_oscilloscope.py",
-    "test_qtquick_visualizer_sine.py",
     "test_qtquick_visualizer_bubble.py",
     "test_qtquick_visualizer_devcurve.py",
     "test_qtquick_visualizer_geometry.py",
