@@ -66,6 +66,12 @@ that stay true.
 
 ## 7. Tests
 
+- Tests of a Linux branch or Linux-only backend live in `tests/test_linux_*.py`. Off Linux they are never
+  run: `tools/impacted_tests.all_test_files()` (whole-suite and `--changed` selection) leaves them out and
+  `tests/conftest.py` neither collects nor runs them (directory or explicit file). Never put a Linux-branch test
+  in a shared file.
+- Each Windows owner's platform selection ("Windows still constructs the Windows owner") is pinned in
+  `tests/test_platform_selection.py`, which runs everywhere.
 - Tests that pin a Windows contract select it explicitly: the `windows_platform`
   fixture for path roots, or `pytest.mark.skipif(sys.platform != "win32", ...)`
   when the test needs a real Windows API. Never delete or loosen the assertion to

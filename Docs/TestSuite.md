@@ -434,7 +434,9 @@ Then widen to the maintained profile and installed/physical gates only when the 
 ### 3.5.1 Linux
 
 The same tests run on Linux through `tools/linux_pytest.py` (private Xvfb display and the OpenGL 4.6 floor
-confined to the child; `--chunked …` drives `tests/run_chunked.py`). A test that pins a Windows contract opts
+confined to the child; `--chunked …` drives `tests/run_chunked.py`). Linux-only tests are `tests/test_linux_*.py`
+and are never selected, collected or run off Linux; Windows-branch owner selection is pinned in
+`tests/test_platform_selection.py`. A test that pins a Windows contract opts
 into it with the `windows_platform` fixture or skips off Windows with a stated reason; rules in
 `Docs/Guardrails/Linux_Compatibility.md` §7, current triage in `Linux_Plan.md` §2 Phase 3.
 
