@@ -84,6 +84,8 @@ Existing sidecars remain the first destinations for their domains:
 - `--cache` → `screensaver_cache.log`
 - `--steam` → `screensaver_steam.log`
 - `--feeds` → `screensaver_feeds.log`
+- `--studio` → `screensaver_studio.log` (Visualizer Studio lifecycle: open, present, commits, close request and
+  its path, retirement steps, Settings conceal/reveal; the INFO `[STUDIO]` lines stay in the main log too)
 
 Do not create a new sidecar merely because one logger is noisy. Add a family only when a
 distinct high-volume domain has a coherent correlation workflow.
