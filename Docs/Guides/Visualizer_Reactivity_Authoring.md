@@ -596,6 +596,15 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` â†
   feature's median/max over the visible span on dense real music, and that successive beats stay separate bands.
 - **Selectable reaction styles must be measurably distinct.** Review each style on long strips; a variant that looks
   the same as another is machinery without a gain. Every style still obeys the flow rule and the no-twitch probes.
+- **A fix to one style is a check on every style.** The fresh-field fix reached Travelling Pulse only; Group Wave kept
+  building its wide set envelope from the long-fade field with a peak-keeping blur (x7.4 on Preset 7), so on dense
+  music its swell sat at the soft bound over two thirds of the view (median/max .98). The whole body then inflated at
+  once with the strength drive: no decay in soft passages, flat sustained passages, and a full-size swell whenever that
+  drive's band rose (Preset 7 on Rag Doll, 5 Nov). For every style, measure on recorded continuous play: median/max of the swell over the
+  visible span, the share of it at the soft bound, and its rise and fall within 3 s windows.
+- **Measure over what the camera actually shows.** The visible span is the production aperture times the authored
+  lens (Waveform: about +-14 scene units at the capture aperture, not the lens' +-4 nor the +-30 the constants assume).
+  Metrics over a wider span hide a pinned field; metrics over a narrower one miss swells arriving from the edge.
 
 **The full reaction range**
 - **Measure drive distributions, not one song:** p05/p50/p95 and time above 0.9 of every geometry drive, as a
@@ -605,6 +614,17 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` â†
   relaxation, a floor so silence is not amplified) and land that peak below the top of the Range so sustained loud
   passages keep headroom for accents. Gain only: an offset window re-expands a quiet intro to full size. Apply it to
   geometry; light, colour and sparkle keep their fixed calibrated anchors (Â§13A).
+- **Hold the gain's memory through a quieter PASSAGE, never through beat gaps.** A 30 s relaxation re-normalises a
+  quieter passage back up to loud reach within one verse (a passage at 70% of the loud input reached Pulse Strength .88
+  against the loud passage's .87 after 25 s): "it swelled up to full power when the song went quieter". Keying a
+  longer memory to the drive being below its peak is wrong: a drive sits below its peak between almost every pair of
+  beats, so that held ALL music (a global retune; Preset 1's late kicks fell .58 -> .45). Key it to a slow level that
+  never dips between beats (Waveform: the published passage held over seconds, against the loud level the peaks were
+  set at; held only below .8 of it, fully at .7). On five recorded songs back to back it engaged on 15% of music ticks,
+  sustained-loud kicks stayed identical to no hold at every time in song, and quieter-section kicks moved 1-4%. The 60 s
+  clips hold little long-form contrast (the memory sat near its floor on them): prove the benefit with a long synthetic
+  quieter passage after loud phrases, with a negative control, and the no-mute side on the recorded clips. Also keep
+  the gain itself honest: with it off (fixed calibrated targets) every kick on the same clips was 30-50% smaller.
 - **Judge reactivity in continuous play, not in a song's first seconds.** Replay whole songs back to back without a
   reset and tabulate each onset's response by time in song and by passage. Two stacked adaptations (an onset already
   measured against an adaptive threshold, then judged again against a running mean of its own kind) muted every

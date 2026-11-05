@@ -1531,20 +1531,19 @@ Rectangle {
                             model: [
                               { key: "move", label: "Move To Custom", icon: "copy", shown: !presetMenu.onCustom,
                                 tip: "Copy this curated preset into Custom and edit it there." },
-                              { key: "file", label: "Edit Preset File", icon: "edit", shown: !presetMenu.onCustom,
-                                tip: studio.presetFileEditable ? "Open this preset's JSON file in your default editor."
-                                                               : "Preset JSON not found on disk." },
+                              { key: "into", label: "Save To " + studio.savePresetTarget, icon: "save",
+                                shown: presetMenu.onCustom && studio.savePresetTarget !== "",
+                                tip: "Write the settings you changed into " + studio.savePresetTarget
+                                     + "'s own preset file (asks first; nothing else in the file changes)." },
                               { key: "save", label: "Save Preset As…", icon: "save", shown: presetMenu.onCustom,
                                 tip: "Save the current Custom settings as a preset file." }
                             ]
                             delegate: Rectangle {
                                 objectName: "presetAction"
                                 property string actionKey: modelData.key
-                                readonly property bool live: modelData.key !== "file" || studio.presetFileEditable
                                 visible: modelData.shown
                                 width: presetMenu.availableWidth; height: visible ? 30 : 0; radius: 6
-                                color: actionMouse.containsMouse && live ? shell.cAccentSoft : "transparent"
-                                opacity: live ? 1 : 0.45
+                                color: actionMouse.containsMouse ? shell.cAccentSoft : "transparent"
                                 Row {
                                     x: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 10
                                     StudioIcon { name: modelData.icon; width: 14; height: 14; color: shell.cDim
@@ -1554,12 +1553,11 @@ Rectangle {
                                 }
                                 MouseArea {
                                     id: actionMouse; anchors.fill: parent; hoverEnabled: true
-                                    cursorShape: parent.live ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        if (!parent.live) return
                                         presetMenu.close()
                                         if (modelData.key === "move") Qt.callLater(studio.moveToCustom)
-                                        else if (modelData.key === "file") Qt.callLater(studio.editPresetFile)
+                                        else if (modelData.key === "into") Qt.callLater(studio.saveToPreset)
                                         else Qt.callLater(studio.savePresetAs)
                                     }
                                 }
