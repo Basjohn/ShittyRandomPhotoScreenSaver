@@ -739,34 +739,48 @@ class WaveformDynamics:
         data[:,1,0] = 0.
         # Strong local musical regions change colour immediately, even before new head history enters view.
         # The crest mask is carried by immutable carrier geometry, so coloured regions travel with the waveform.
-        for index,card in enumerate(self.controls.cards):
-            local = max(self.power,*self.bands) if card['band']=='All' else self.bands[('Bass','Mids','Highs').index(card['band'])]
-            crest = np.clip(np.abs(carrier[index])/max(1.5*card['height'],1e-5),0.,1.)
+        # All cards at once as rows; each card's Python scalars become a column in exactly the dtype NumPy would
+        # have cast them to against that operand (``column``), so the packet is byte-identical to a per-card loop.
+        n = len(self.controls.cards)
+        if n:
+            cards = self.controls.cards
+            def column(values,like):
+                return np.asarray(values,dtype=np.result_type(like.dtype,np.float32))[:,None]
+            locals_ = [max(self.power,*self.bands) if card['band']=='All' else
+                       self.bands[('Bass','Mids','Highs').index(card['band'])] for card in cards]
+            magnitude = np.abs(carrier[:n])
+            crest = np.clip(magnitude/column([max(1.5*card['height'],1e-5) for card in cards],magnitude),0.,1.)
             # Existing visible rim slots respond immediately; this eased source creates no simulation in the draw.
-            data[index,6::KNOT_ROWS,3] = np.maximum(data[index,6::KNOT_ROWS,3],
+            data[:n,6::KNOT_ROWS,3] = np.maximum(data[:n,6::KNOT_ROWS,3],
                 values['sparkle']*max(self._hit,.4*self.bands[2])*crest)
-            data[index,7::KNOT_ROWS,3] *= (1.+HIT_GLOW*self._glow*(.25+.75*crest))*(1.+PULSE_GLOW*swell[index])
-            power = local*(.25+.75*crest)
+            data[:n,7::KNOT_ROWS,3] *= (1.+HIT_GLOW*self._glow*(.25+.75*crest))*(1.+PULSE_GLOW*swell[:n])
+            weight = .25+.75*crest
+            power = column(locals_,weight)*weight
             threshold = self.controls.colour_threshold
             share = np.clip((power-threshold)/max(1e-5,1.-threshold),0.,1.)
             share = share*share*(3.-2.*share)*values['colour']
-            tint = data[index,8::KNOT_ROWS]
-            share = np.maximum(np.maximum(share,tint[:,3]),self.controls.pulse.colour*np.clip(swell[index],0.,1.))
-            quiet = tuple((a+b)*.5 for a,b in zip(*card['quiet']))
-            peak = tuple((a+b)*.5 for a,b in zip(*card['peak']))
-            a,b = colorsys.rgb_to_hsv(*quiet),colorsys.rgb_to_hsv(*peak)
-            hue = (a[0]+((b[0]-a[0]+.5)%1.-.5)*share)%1.
-            saturation = a[1]+(b[1]-a[1])*share
-            value = a[2]+(b[2]-a[2])*share
+            tint = data[:n,8::KNOT_ROWS]
+            swelling = np.clip(swell[:n],0.,1.)
+            share = np.maximum(np.maximum(share,tint[:,:,3]),self.controls.pulse.colour*swelling)
+            hsv = []
+            for card in cards:
+                quiet = tuple((a+b)*.5 for a,b in zip(*card['quiet']))
+                peak = tuple((a+b)*.5 for a,b in zip(*card['peak']))
+                a,b = colorsys.rgb_to_hsv(*quiet),colorsys.rgb_to_hsv(*peak)
+                hsv.append((a[0],(b[0]-a[0]+.5)%1.-.5,a[1],b[1]-a[1],a[2],b[2]-a[2]))
+            hue_a,hue_d,sat_a,sat_d,val_a,val_d = (column(field,share) for field in zip(*hsv))
+            hue = (hue_a+hue_d*share)%1.
+            saturation = sat_a+sat_d*share
+            value = val_a+val_d*share
             # The swell deepens colour where it is: saturation rises toward 1 (never toward white), hue and value
             # keep their own logic, and a neutral colour stays neutral rather than gaining an invented hue.
-            vivid = self.controls.pulse.saturation*np.clip(swell[index],0.,1.)*np.clip(saturation/PULSE_GREY,0.,1.)
+            vivid = self.controls.pulse.saturation*swelling*np.clip(saturation/PULSE_GREY,0.,1.)
             saturation = saturation+(1.-saturation)*vivid
             share = np.maximum(share,vivid)
-            k = (np.array((5.,3.,1.))[None,:]+hue[:,None]*6.)%6.
-            tint[:,:3] = value[:,None]*(1.-saturation[:,None]*np.clip(np.minimum(k,4.-k),0.,1.))
+            k = (np.array((5.,3.,1.))+hue[:,:,None]*6.)%6.
+            tint[:,:,:3] = value[:,:,None]*(1.-saturation[:,:,None]*np.clip(np.minimum(k,4.-k),0.,1.))
             alpha = np.clip(share/.1,0.,1.)
-            tint[:,3] = alpha*alpha*(3.-2.*alpha)
+            tint[:,:,3] = alpha*alpha*(3.-2.*alpha)
         for index,share in enumerate(self.count_share):
             data[index,2,:3] = self.controls.cards[index]['quiet'][0]
             data[index,3,:3] = self.controls.cards[index]['quiet'][1]
