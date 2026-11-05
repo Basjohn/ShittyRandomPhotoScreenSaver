@@ -3,44 +3,46 @@ TripleBuffer: Lock-free latest-value exchange for SPSC scenarios.
 
 - Producer publishes values via publish(value) without blocking consumer.
 - Consumer reads the most recent complete value via consume_latest().
-- Uses three slots with atomic index swaps (under GIL) to avoid locks.
+- One atomic reference store (under the GIL) carries the newest value together
+  with its publication sequence, so no lock is needed.
+
+Freshness is the publication sequence, never a slot identity. The former
+three-slot round-robin compared the ready slot index with the last-read index,
+so exactly 3 (or 6, ...) publishes between two consumes wrapped back to the
+same index and a brand-new value was reported as "nothing new" (R-171: 128-sample
+WASAPI callbacks arrive 3-4 per 10 ms burst, which hid ~23% of Spectrum ticks'
+fresh audio and made bars stutter).
 
 Assumptions:
 - Exactly one producer thread and one consumer thread.
 - Values are immutable or ownership is transferred (no shared mutation).
 """
 from __future__ import annotations
-from typing import Generic, Optional, TypeVar, List
+from typing import Generic, Optional, Tuple, TypeVar
 
 T = TypeVar("T")
 
 
 class TripleBuffer(Generic[T]):
     def __init__(self):
-        # Three slots
-        self._slots: List[Optional[T]] = [None, None, None]
-        self._write = 0
-        self._ready = -1
-        self._read = -1
+        # (sequence, value) of the newest publication; replaced as one reference.
+        self._latest: Optional[Tuple[int, T]] = None
+        # Sequence of the publication the consumer last took (0: none yet).
+        self._consumed = 0
 
     def publish(self, value: T) -> None:
-        i = self._write
-        self._slots[i] = value
-        # Mark this slot as ready
-        self._ready = i
-        # Advance write to a different slot
-        nxt = (i + 1) % 3
-        self._write = nxt
+        latest = self._latest
+        sequence = 1 if latest is None else latest[0] + 1
+        self._latest = (sequence, value)
 
     def consume_latest(self) -> Optional[T]:
-        r = self._ready
-        if r < 0 or r == self._read:
+        latest = self._latest
+        if latest is None or latest[0] == self._consumed:
             return None
-        val = self._slots[r]
-        self._read = r
-        return val
+        self._consumed = latest[0]
+        return latest[1]
 
     def has_pending(self) -> bool:
         """Check if there's new data that hasn't been consumed yet."""
-        r = self._ready
-        return r >= 0 and r != self._read
+        latest = self._latest
+        return latest is not None and latest[0] != self._consumed

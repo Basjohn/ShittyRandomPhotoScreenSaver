@@ -766,7 +766,19 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   byte-identical to the production replay at every tick (synthetic audio and a shipped clip, both variants), the
   engine-owned / Spectrum-owned split proven both ways on the production replay, engine edits re-running the worker
   (in process, out of process and through `main.py --studio-clip-worker`), identical production-renderer pixels,
-  Rainbow Ghost recolouring only ghost pixels, families and Custom rows saved through Settings, every exit restoring it.
+  Rainbow Ghost recolouring only ghost pixels, families and Custom rows saved through Settings, every exit restoring it,
+  analysis failures shown with Retry, Save Preset As writing a valid curated preset.
+- `tests/test_spectrum_studio_shape_editor.py` — each capability of Settings' shape editor driven on the real widget
+  and reached exactly by the Studio's own edits (node add/remove, lane reorder), with a negative control.
+- `tests/test_spectrum_studio_replay_budget.py` — exact replays rewind (pristine / checkpoints) instead of
+  re-configuring, equal production for every Spectrum-owned key, and spread over frames under the Studio's budget.
+- `tests/test_studio_background_sources.py` — a landing background load never takes the user's source choice;
+  failed analyses are shown with Retry.
+- `tests/test_studio_exit_every_mode.py` — every registered Studio, after a commit, through the shell's Close button:
+  Settings revealed before teardown, forced retire failures, the window never hidden from Python, the `--studio`
+  sidecar and main log receiving the lifecycle.
+- `tests/test_settings_percent_slider_round_trip.py` — Settings sliders reload stored hundredths exactly (no `int`
+  truncation in any Settings tab), through the real widgets and a Studio commit.
 
 Cost: `tools/visualizer_cost_probe.py` (one mode) and `tools/overhead_baseline.py` (everything): offscreen, production host, control-relative GPU/CPU, GL and Python call counts and recorded system conditions; how to run and read them and the expected results are in `Docs/Reference/Benchmarks.md`.
 

@@ -50,6 +50,7 @@
         "waveform_ribbon_tilt_shift": false,
         "waveform_ribbon_pulse_fade": 2.5,
         "waveform_ribbon_pulse_particles": 0.6,
+        "waveform_ribbon_pulse_rim": 2.0,
         "waveform_ribbon_pulse_saturation": 0.4,
         "waveform_ribbon_pulse_speed": 12.0,
         "waveform_ribbon_pulse_strands": 0.3,

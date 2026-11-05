@@ -253,19 +253,22 @@ def test_fast_band_articulation_does_not_hold_quiet_passages_at_the_peak_handle(
     assert values[2]>4*values[0]
 
 
-def test_repeated_routine_onsets_leave_room_for_a_distinct_accent():
+def test_a_steady_beat_keeps_its_force_and_a_bigger_hit_still_lands_bigger():
+    # Operator, 5 Nov: kicks felt muted in the middle of a song, never at its start. The body's force of a routine
+    # kick 40 s into a steady beat must stay that of the same kick near the start; accents (sparks/strands) may still
+    # ask whether an onset stands out from the routine. Before the fix the 40th identical kick earned < 1%.
     runtime=WaveformRibbonFrameRuntime()
     args=dict(onsets=(),playing=True,identity=(1,2,3),source_identity=(2,3),controls=controls(),
               body_bands=(.5,.5,.5),intensity=.65,loudness=8.5,presence=1.)
     for index in range(80):runtime.advance(now_ts=index/90,**args)
     def onset(serial,magnitude):
         args['onsets']=(SimpleNamespace(serial=serial,kind='kick',strength=1.,magnitude=magnitude,loudness=8.5,presence=1.),)
-        runtime.advance(now_ts=1.+serial*.1,**args)
+        runtime.advance(now_ts=1.+serial*.5,**args)
         return runtime._model._hit
-    first=onset(1,.4)
-    for serial in range(2,40):routine=onset(serial,.4)
-    assert routine < first*.01
-    assert onset(40,1.5)>first
+    near_start=[onset(serial,.4) for serial in range(1,6)][-1]
+    for serial in range(6,100):routine=onset(serial,.4)
+    assert routine >= .85*near_start > 0.
+    assert onset(100,1.5) > routine
 
 
 def test_supported_quiet_accent_is_admitted_independently_of_its_small_deformation_force():
