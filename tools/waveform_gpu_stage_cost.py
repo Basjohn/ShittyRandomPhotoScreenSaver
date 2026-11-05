@@ -112,10 +112,23 @@ def _variants(extra: int):
         "emission resolve": [(target.SceneTarget, "_resolve_emission", repeated(target.SceneTarget._resolve_emission))],
         "bloom chain": [(post.BloomChain, "apply", repeated(post.BloomChain.apply))],
     }
+    def target_only(self, flat, packet, draw, mvp, eye, view, ribbon_mvp, card, now, fogged):
+        recipe = self.recipe
+        with self.scene.scope(card, 4, self.resources, overlay=self._overlay, bloom=0. if flat else recipe.bloom,
+                              oit=True, hdr=None if flat or not recipe.bloom else recipe.exposure):
+            gl.glViewport(0, 0, *self.size)
+            gl.glClearBufferfv(gl.GL_COLOR, 0, (0., 0., 0., 1.))
+            with self.scene.transparent_writes(card, self.resources, restore=False):
+                pass
+
     removed = {
         # The yielding floor as a whole: its compute and every consumer's march/normal (the field reads as flat).
         "floor give (all, removed)": [(floor_give.FloorGiveField, "update", lambda *a, **k: None),
                                       (floor_give.FloorGiveField, "uniforms", flat_give)],
+        # The scene's draws but not its target (MSAA clears, OIT clear/resolve, emission resolve, bloom, composite):
+        # the scene target's own cost is "scene draws and target" minus this.
+        "scene draws (target kept)": [(Scene, "_draw_scene", target_only)],
+        "scene draws and target": [(Scene, "_draw_scene", lambda *a, **k: None)],
     }
     return {**{key: (1, patches) for key, patches in amplified.items()},
             **{key: (-1, patches) for key, patches in removed.items()}}

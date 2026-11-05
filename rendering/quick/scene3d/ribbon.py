@@ -206,6 +206,7 @@ class RibbonPrimitive:
         # same ones, so they are found once per packet payload.
         self._ranges_payload=None
         self._ranges={}
+        self._material_cache=None
 
     @property
     def has_resources(self):
@@ -332,7 +333,7 @@ class RibbonPrimitive:
             frame=origin+np.asarray(mist_frame,float)
             ranges=self._draw_ranges(packet,continuation,float(frame[0]),cross_divisions)
         if shading != 'diagnostic':
-            shaded = self._material_uniforms(view, translate, material)
+            shaded = self._material(view, translate, material)
             shaded['uAge'] = (0., 0., 0., 0.)
             shaded.update({'uMist': (0., 0., 1., 1.), 'uMistShape': (0., 0., 0., 0.), **FOG_OFF, **GRADE_OFF, **(grade or {})})
             if mist is not None:
@@ -519,6 +520,14 @@ class RibbonPrimitive:
             if restore:
                 gl.glBindVertexArray(vao_before)
                 gl.glUseProgram(program_before)
+
+    def _material(self, view, translate, material):
+        """``_material_uniforms``, once per (view, origin, material): a frame's body and light passes share them."""
+        key = (tuple(view) if view is not None else None, tuple(translate), material)
+        cached = self._material_cache
+        if cached is None or cached[0] != key:
+            cached = self._material_cache = (key, self._material_uniforms(view, translate, material))
+        return dict(cached[1])
 
     @staticmethod
     def _material_uniforms(view, translate, material):
