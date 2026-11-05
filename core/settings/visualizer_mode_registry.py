@@ -224,23 +224,6 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         prepared_reveal=True,
     ),
     VisualizerModeDescriptor(
-        "sine_wave",
-        "Sine Waves",
-        "_sine_preset_slider",
-        ("sine_", "sine_wave_", "sinewave_"),
-        _REFLOWING_CARDED_POLICY,
-        frame_runtime_module="widgets.spotify_visualizer.sine_frame_runtime",
-        frame_runtime_class="SineFrameRuntime",
-        renderer_module="rendering.quick.visualizer.implementations.sine_wave",
-        settings_builder_module="ui.tabs.media.sine_wave_builder",
-        settings_builder_factory="build_sine_wave_ui",
-        logical_tick_hook_module="widgets.spotify_visualizer.tick_pipeline",
-        logical_tick_hook_factory="process_heartbeat",
-        # SINE has been rejected for current product quality. Kept registered
-        # for saved presets/schema compatibility; not offered or runnable.
-        guided_setup_offered=False,
-    ),
-    VisualizerModeDescriptor(
         "bubble",
         "Bubble",
         "_bubble_preset_slider",
@@ -441,10 +424,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
 
 # Registered modes not yet offered: never selectable, cycled, shown in Guided Setup or the 3D Quality tab, and given no
 # runtime work. A gate opens in code at its acceptance, never through an environment flag.
-# SINE is intentionally disabled pending eventual retirement (not deletion).
-# Keep its implementation, settings keys and presets available for migration;
-# never offer it for rendering, cycling, new selection or Guided Setup.
-_GATED_MODES: dict[str, callable] = {"sine_wave": lambda: False}
+# (Retired modes are not gated here: they leave the registry and their saved state migrates through
+# ``core.settings.visualizer_retired_modes``.)
+_GATED_MODES: dict[str, callable] = {}
 
 def _active_descriptors() -> tuple[VisualizerModeDescriptor, ...]:
     return tuple(d for d in _ALL_DESCRIPTORS if d.mode_id not in _GATED_MODES or _GATED_MODES[d.mode_id]())
@@ -940,9 +922,9 @@ def resolve_admissible_enabled_modes(mode_activation: object) -> tuple[str, ...]
     )
     if admitted:
         return admitted
-    # An old configuration can have only SINE enabled. Preserve that stored
-    # selection for migration, but never strand the live visualizer with a
-    # closed-gate mode. The default live Bubble mode is the safe substitute.
+    # A configuration could enable only closed-gate modes. Preserve that stored
+    # selection, but never strand the live visualizer with a closed-gate mode:
+    # the first default-enabled live mode is the safe substitute.
     return tuple(
         mode_id for mode_id in resolve_effective_enabled_modes(None)
         if is_mode_active(mode_id)

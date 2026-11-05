@@ -145,6 +145,21 @@ without the safe path below.
   (`tests/test_spectrum_link_state_retired.py`).
   *Blocked:* re-adding the leaf to defaults/model, or linking Fill and Border
   to give it a consumer.
+  **Sine Waves** (retired 2026-11-05) uses the same seam: `sine_wave` is in
+  `RETIRED_VISUALIZER_MODE_IDS`, so a saved Sine `mode` becomes the canonical
+  default mode, its `mode_activation` leaf and `preset_sine_wave` are dropped,
+  and every `sine_`/`sinewave_` leaf leaves the section. A Sine Custom snapshot
+  (nested `sine_wave` or flat `sine_wave.*`) is dropped from
+  `visualizer_custom_presets` by `strip_retired_visualizer_custom_cache`
+  (called first in `normalize_visualizer_custom_snapshot_cache`); unknown
+  non-retired cache entries still fail loudly. Visualizer schema 14 re-runs the
+  section and Custom-cache normalization once so the drop reaches disk. Loose
+  Sine preset imports fail as an unknown mode (no silent remap); the installer
+  clean-replaces the shipped preset tree. Tests:
+  `tests/test_visualizer_sine_retirement_bridge.py` (old-input fixture,
+  idempotence, negative controls, SettingsManager reload).
+  *Blocked:* re-registering Sine (or keeping a gated stub) to read old state,
+  or remapping a Sine selection to anything but the canonical default.
 
 - **MC Feeds snapshot adoption** (`core/feeds/mc_snapshot_bridge.py`, run once per
   process by `FeedCacheStore` on the canonical shared root). Before the
