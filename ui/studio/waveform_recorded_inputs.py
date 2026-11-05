@@ -121,9 +121,13 @@ _CANCELLED: set = set()
 
 
 class ClipLoadJob:
-    """One out-of-process extraction, event driven (QProcess.finished); ``cancel`` kills it."""
+    """One out-of-process extraction, event driven (QProcess.finished); ``cancel`` kills it.
 
-    def __init__(self, clip, settings: Mapping[str, Any], finished: Callable[..., None]) -> None:
+    Mode-neutral: ``module`` is the worker (``python -m <module> clip settings output seconds``) and ``convert``
+    turns its JSON into the mode's recorded inputs (default: this module's Waveform worker and ``to_inputs``)."""
+
+    def __init__(self, clip, settings: Mapping[str, Any], finished: Callable[..., None], *,
+                 module: str = __name__, convert: Callable[..., Any] | None = None) -> None:
         import tempfile
         from PySide6.QtCore import QProcess
         from dataclasses import replace
@@ -141,7 +145,8 @@ class ClipLoadJob:
         process.finished.connect(self._on_finished)
         process.errorOccurred.connect(self._on_error)
         self._process = process
-        process.start(sys.executable, ["-m", "ui.studio.waveform_recorded_inputs", clip.description,
+        self._convert = convert or to_inputs
+        process.start(sys.executable, ["-m", module, clip.description,
                                        str(self._settings_path), str(self._output_path), str(CLIP_SECONDS)])
         self._replace = replace
 
@@ -175,7 +180,7 @@ class ClipLoadJob:
         try:
             data = json.loads(self._output_path.read_text(encoding="utf-8"))
             fixture = self._replace(self._clip, duration=float(data["duration"]))
-            self._complete(to_inputs(data, fixture))
+            self._complete(self._convert(data, fixture))
         except Exception as exc:
             self._complete(None, f"{type(exc).__name__}: {exc}")
 

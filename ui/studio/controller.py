@@ -1199,8 +1199,8 @@ class StudioController(QObject):
         if not self.capabilities.as_map()["handles"]:
             return
         if self.bridge.workspace != self.session.schema.workspaces[0].id:
-            if self.bridge.handles.get("handles"):
-                self.bridge.set_handles({"outline": [], "handles": []})
+            if self.bridge.handles.get("handles") or self.bridge.handles.get("outline"):
+                self.bridge.set_handles({"outline": [], "handles": []})    # an outline may stand alone
             return
         framing = next((f for f in self.framings if f.id == self.bridge.framingId), None)
         try:
