@@ -1782,6 +1782,9 @@ def _waveform_ribbon() -> ModeSettings:
     entries.append(Toggle(prefix+'tilt_shift','','Tilt Shift',bucket='shape',logical=True,
         when=(prefix+'height_mode','Dynamic Height Shift'),tooltip='While a ribbon shifts height, the side it travels '
         'toward moves first: it lifts earlier when rising and dips earlier when settling.'))
+    entries.append(Slider(prefix+'breathing','Breathing:',0.,1.,bucket='pulse',logical=True,tooltip='How much soft '
+        'passages let go between their swells: the body releases faster the softer the music, so quiet phrases rise '
+        'and fall instead of holding. Loud passages keep the Decay set in Response.'))
     entries.append(Choice(prefix+'pulse_direction','Pulse Direction:',('Head To Tail','Tail To Head','Centre Out'),
         bucket='pulse',logical=True,tooltip='Where musical swells start and which way they travel.'))
     for key,label,low,high,tip in (

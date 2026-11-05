@@ -958,6 +958,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'preset_waveform_ribbon': 2,
                                     'waveform_ribbon_adaptive_sensitivity': True,
                                     'waveform_ribbon_attack': 0.045,
+                                    'waveform_ribbon_breathing': 0.7,
                                     'waveform_ribbon_audio_block_size': 256,
                                     'waveform_ribbon_auto_rotate': False,
                                     'waveform_ribbon_auto_rotate_after': 20.0,
