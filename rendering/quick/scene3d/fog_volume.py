@@ -39,10 +39,19 @@ class FogVolume:
         self._integrate_program = 0
         self._uniforms = None
         self._context_ref = None
+        self._locations: dict[tuple[int, str], int] = {}
 
     @property
     def has_resources(self) -> bool:
         return bool(self._inject or self._integrated or self._steady or self._integrate_program)
+
+    def _location(self, program: int, name: str) -> int:
+        """A uniform location, looked up once per program (each lookup is a driver round trip per frame)."""
+        key = (program, name)
+        location = self._locations.get(key)
+        if location is None:
+            location = self._locations[key] = int(gl.glGetUniformLocation(program, name))
+        return location
 
     @property
     def grid(self) -> tuple[int, int, int]:
@@ -116,9 +125,11 @@ class FogVolume:
         self._integrate_program=compile_compute_program(FOG_INTEGRATE_COMPUTE,label=f'{self.label} integrate')
         return False
 
-    def update(self, inject_program: int, *, view, lens, depth_range, grid, medium=None, focus_depth=0.) -> None:
+    def update(self, inject_program: int, *, view, lens, depth_range, grid, medium=None, focus_depth=0.,
+               restore: bool = True) -> None:
         """Evaluate and integrate the medium for one camera. ``view``: world->view (4x4, numpy row-major);
-        ``lens``: Perspective (tangent x, y); ``depth_range``: positive (near, far) view depth."""
+        ``lens``: Perspective (tangent x, y); ``depth_range``: positive (near, far) view depth. ``restore=False``: the
+        caller owns the program and image units for its frame (nothing read back; units left unbound)."""
         self._check_context(admit=True)
         grid = self._admit_grid(grid)
         view = np.asarray(view, float)
@@ -138,41 +149,45 @@ class FogVolume:
             raise ValueError('Fog focus must lie inside the admitted depth interval')
         lens4 = (ext_x, ext_y, 0., 4. if focus else 0.)  # .z unused (was the retired Orthographic flag)
         range4 = (near, far, float(grid[2]), 1.+focus)
-        program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
+        program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM) if restore else None
         try:
             gl.glUseProgram(inject_program)
-            location = gl.glGetUniformLocation
+            location = self._location
             gl.glUniformMatrix4fv(location(inject_program, 'uFogInvView'), 1, gl.GL_TRUE,
                                   np.linalg.inv(view).astype(np.float32))
             gl.glUniform4f(location(inject_program, 'uFogLens'), *lens4)
             gl.glUniform4f(location(inject_program, 'uFogRange'), *range4)
             if medium is not None:
                 medium(inject_program)
-            with bound_image(0, self._inject, gl.GL_WRITE_ONLY, gl.GL_RGBA16F, layered=True), \
-                    bound_image(1, self._steady, gl.GL_WRITE_ONLY, gl.GL_R16F, layered=True):
+            with bound_image(0, self._inject, gl.GL_WRITE_ONLY, gl.GL_RGBA16F, layered=True, restore=restore), \
+                    bound_image(1, self._steady, gl.GL_WRITE_ONLY, gl.GL_R16F, layered=True, restore=restore):
                 dispatch(tuple(-(-n//4) for n in grid),
                          gl.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | gl.GL_TEXTURE_FETCH_BARRIER_BIT)
             gl.glUseProgram(self._integrate_program)
             gl.glUniform4f(location(self._integrate_program, 'uFogLens'), *lens4)
             gl.glUniform4f(location(self._integrate_program, 'uFogRange'), *range4)
-            with bound_image(0, self._inject, gl.GL_READ_ONLY, gl.GL_RGBA16F, layered=True), \
-                    bound_image(1, self._integrated, gl.GL_WRITE_ONLY, gl.GL_RGBA16F, layered=True):
+            with bound_image(0, self._inject, gl.GL_READ_ONLY, gl.GL_RGBA16F, layered=True, restore=restore), \
+                    bound_image(1, self._integrated, gl.GL_WRITE_ONLY, gl.GL_RGBA16F, layered=True, restore=restore):
                 dispatch((-(-grid[0]//8), -(-grid[1]//8), 1), gl.GL_TEXTURE_FETCH_BARRIER_BIT)
         finally:
-            gl.glUseProgram(program_before)
+            if program_before is not None:
+                gl.glUseProgram(program_before)
         self._uniforms = dict(uFogVolume=FOG_TEXTURE_UNIT, uFogView=tuple(view.flatten(order='F')),
                               uFogLens=lens4, uFogRange=range4)
 
     @contextmanager
-    def bound(self):
-        """Bind the integrated volume on ``FOG_TEXTURE_UNIT`` for the scope, then restore the unit."""
+    def bound(self, *, restore: bool = True):
+        """Bind the integrated volume on ``FOG_TEXTURE_UNIT`` for the scope, then restore the unit (``restore=False``:
+        the caller owns the unit for its frame, so nothing is read back and the unit is left unbound)."""
         self._check_context()
         if not self._integrated or self._uniforms is None:
             raise RuntimeError(f"{self.label}: fog volume bound before its first update")
-        active = gl_query.get_int(gl.GL_ACTIVE_TEXTURE)
-        gl.glActiveTexture(gl.GL_TEXTURE0 + FOG_TEXTURE_UNIT)
-        previous = gl_query.get_int(gl.GL_TEXTURE_BINDING_3D)
-        gl.glActiveTexture(active)
+        previous = 0
+        if restore:
+            active = gl_query.get_int(gl.GL_ACTIVE_TEXTURE)
+            gl.glActiveTexture(gl.GL_TEXTURE0 + FOG_TEXTURE_UNIT)
+            previous = gl_query.get_int(gl.GL_TEXTURE_BINDING_3D)
+            gl.glActiveTexture(active)
         gl.glBindTextureUnit(FOG_TEXTURE_UNIT, self._integrated)
         try:
             yield self.uniforms
@@ -195,6 +210,7 @@ class FogVolume:
         self._integrate_program = 0
         self._uniforms = None
         self._context_ref = None
+        self._locations = {}    # program names may be reused once deleted
 
 
 class FogMarch:

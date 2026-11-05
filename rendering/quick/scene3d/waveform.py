@@ -27,6 +27,13 @@ from rendering.quick.scene3d.target import SceneTarget
 ROOT=Path(__file__).resolve().parents[3]
 
 
+# The scene owns the GL state of its whole frame: the render host's fence hands the inherited state back afterwards,
+# and every pass here sets what it draws with. So the shared primitives are asked not to read state back and restore
+# it (``restore=False``): each read is a round trip to the driver thread, which on a loaded machine waits for a time
+# slice; a frame used to make about 170 of them. Pixels are unchanged.
+OWNED = dict(restore=False)
+
+
 @contextmanager
 def unclipped_prepasses():
     """World targets have local viewports; the host's item scissor applies only to the final composition."""
@@ -139,6 +146,7 @@ class WaveformScene:
         self.fog, self.reflected_fog = FogVolume('waveform scene mist'), FogVolume('waveform scene reflected mist')
         self._specular, self._specular_size = None, None
         self.textures = {}
+        self._locations = {}  # (program, uniform) -> location, for the programs set by name below
         # Studio preview-only layer omission (a Python attribute, never a setting): 'actors' skips the direct
         # ribbon/particle/strand draws, 'reflected_actors' their mirrored draws. The mist field, sky, floor and
         # everything else are unchanged. Production never sets it, so it stays empty there.
@@ -186,6 +194,7 @@ class WaveformScene:
             del self.textures[key]
 
     def _release_fog(self):
+        self._locations = {}  # program names may be reused once deleted
         self._retire((self.fog.release,self.reflected_fog.release,
                       self.fog_resources.release_resources,self.field.release))
 
@@ -198,12 +207,21 @@ class WaveformScene:
                       self.resources.release_resources, self.fog_resources.release_resources, self.bursts.release,
                       self.field.release, self.floor_give.release, self.pulse_rim.release))
         self._context = None
+        self._locations = {}
+
+    def _location(self, program, name):
+        """A uniform location, looked up once per program (each lookup is a driver round trip on the render thread)."""
+        key = (program, name)
+        location = self._locations.get(key)
+        if location is None:
+            location = self._locations[key] = int(gl.glGetUniformLocation(program, name))
+        return location
 
 
     def render(self,packet,**parameters):
         self._check_context(admit=True)
         if parameters.get('flat',False):return self._render_packet(packet,**parameters)
-        with self.ribbons.packet_scope(packet):
+        with self.ribbons.packet_scope(packet, **OWNED):
             return self._render_packet(packet,**parameters)
 
     def _render_packet(self, packet, *, capacity, now, travel, recipe, size, view, projection, eye, camera_lens, card,
@@ -254,20 +272,21 @@ class WaveformScene:
                     age_fade=(now, 0., (capacity - 1)/flow.knot_hz, 0.),continuation=(*span,2048),
                     mist=environment.mist, mist_frame=(scroll[0, 3], 0., 0.),
                     grade=ribbon_grade(*self._history_grade(colour_grade(recipe, react)[:3])),
-                    pulse_rim=self.pulse_rim.update(pulse, recipe.pulse_rim) if rim else None)
+                    pulse_rim=self.pulse_rim.update(pulse, recipe.pulse_rim) if rim else None,
+                    viewport=(width, height), **OWNED)
         with unclipped_prepasses():
             # First inside the packet scope: the reduction reads the packet bound by it (the same knots every pass
             # draws), and the floor, the reflection and the ribbons then read one yielding surface.
             if giving:
                 self.floor_give.update(packet, translation=scroll[:3, 3], floor=recipe.floor, contact=FLOOR_CONTACT,
-                                       camber=recipe.material.cross_curve, side=side)
+                                       camber=recipe.material.cross_curve, side=side, **OWNED)
             self._floor_give = (self.floor_give.texture, self.floor_give.uniforms) if giving else None
             draw['floor_give'] = self._floor_give if not giving or mirror is None else (*self._floor_give, side)
             fogged = not flat and recipe.fog is not None
             if fogged:
                 self._field_grade=colour_grade(recipe,react)
                 self.field.update(packet,translation=scroll[:3,3],span=recipe.fog.field_span,
-                                  grade=colour_grade(recipe,react),side=side)
+                                  grade=colour_grade(recipe,react),side=side,**OWNED)
                 self._update_fog(self.fog,view,camera_lens,size,recipe.fog.cell,recipe.fog.slices)
                 self._update_fog(self.reflected_fog,mirror_view(view,0.),camera_lens,size,
                                  recipe.fog.reflection_cell,recipe.fog.reflection_slices)
@@ -304,7 +323,7 @@ class WaveformScene:
     def _fog_bound(self, volume):
         """The volume bound for its passes, or a no-op scope with the analytic-mist uniforms."""
         from contextlib import nullcontext
-        return volume.bound() if volume is not None else nullcontext(dict(FOG_OFF))
+        return volume.bound(**OWNED) if volume is not None else nullcontext(dict(FOG_OFF))
 
 
     def _update_fog(self,volume,view,camera_lens,size,cell,slices):
@@ -313,11 +332,11 @@ class WaveformScene:
         program=self.fog_resources.compute_program('fog medium',fog_inject_source(MEDIUM_GLSL))
         volume.update(program,view=view,lens=camera_lens,depth_range=fog.depth_range,
                       grid=grid,medium=self._fog_uniforms,
-                      focus_depth=-float((view@np.array((*SPEC.pivot,1.)))[2]))
+                      focus_depth=-float((view@np.array((*SPEC.pivot,1.)))[2]),**OWNED)
 
     def _field_uniforms(self,program):
         fog=self.recipe.fog;first,last,samples=fog.field_span;step=(last-first)/(samples-1)
-        location=lambda name:gl.glGetUniformLocation(program,name)
+        location=lambda name:self._location(program,name)
         gl.glBindTextureUnit(14,self.field.texture)
         gl.glUniform1i(location('uBodyField'),14)
         gl.glUniform4f(location('uFieldOrigin'),*self._continuation_origin,float(self._continuation_count))
@@ -332,7 +351,7 @@ class WaveformScene:
 
     def _fog_uniforms(self,program):
         fog=self.recipe.fog;self._field_uniforms(program)
-        location=lambda name:gl.glGetUniformLocation(program,name)
+        location=lambda name:self._location(program,name)
         gl.glUniform4f(location('uAtmosphere'),fog.density,fog.height,fog.softness,fog.light)
         gl.glUniform4f(location('uAtmosphereMotion'),self._now,fog.drift,fog.noise,fog.noise_scale)
         gl.glUniform3f(location('uAtmosphereAmbient'),*fog.ambient)
@@ -342,7 +361,7 @@ class WaveformScene:
         program=self.fog_resources.program('sky',SKY_VERTEX,SKY_FRAGMENT)
         vao,_=self.fog_resources.mesh('sky',bytes(36),(3,))
         gl.glUseProgram(program)
-        location=lambda name:gl.glGetUniformLocation(program,name)
+        location=lambda name:self._location(program,name)
         for name,value in volume.uniforms.items():
             if name=='uFogView':gl.glUniformMatrix4fv(location(name),1,gl.GL_FALSE,np.asarray(value,np.float32))
             elif isinstance(value,int):gl.glUniform1i(location(name),value)
@@ -368,11 +387,11 @@ class WaveformScene:
                     gl.glDisable(gl.GL_DEPTH_TEST);gl.glDepthMask(gl.GL_FALSE)
                     self._sky(self.fog)
                     gl.glEnable(gl.GL_DEPTH_TEST);gl.glDepthMask(gl.GL_TRUE)
-                self._floor(mvp, eye, view, (width, height), flat=flat)
+                self._floor(mvp, eye, view, (width, height), flat=flat, drawing_to=self.scene.framebuffer)
                 if flat:
                     self._flat_ribbons(packet, ribbon_mvp)
             if not flat and 'actors' not in self.preview_hidden:
-                with self.scene.transparent_writes(card, self.resources):
+                with self.scene.transparent_writes(card, self.resources, **OWNED):
                     self.ribbons.draw(packet, ribbon_mvp, shading='body', **draw)
                 with self.scene.emission_writes():
                     gl.glEnablei(gl.GL_BLEND, 0)
@@ -384,17 +403,18 @@ class WaveformScene:
                         self.ribbons.draw(packet, ribbon_mvp, shading='sparks', sparks=recipe.sparks, now=now,
                                           mist=draw['mist'], mist_frame=draw['mist_frame'], material=recipe.material,
                                           sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'],
-                                          floor_give=draw['floor_give'])
+                                          floor_give=draw['floor_give'], viewport=draw['viewport'], **OWNED)
                     if recipe.strays is not None:
                         self.ribbons.draw(packet, ribbon_mvp, shading='strays', strays=recipe.strays, now=now,
                                           mist=draw['mist'], mist_frame=draw['mist_frame'], material=recipe.material,
                                           sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'],
                                           strand_births=self._strand_payload,strand_origin=self._strand_origin,
-                                          continuation=draw['continuation'],floor_give=draw['floor_give'])
+                                          continuation=draw['continuation'],floor_give=draw['floor_give'],
+                                          viewport=draw['viewport'], **OWNED)
                     if recipe.sparks is not None and self._burst_payload:
                         self.bursts.draw(self._burst_payload,now=now-self._burst_origin,
                                          mvp=tuple(self._history_mvp(np.asarray(mvp,float).reshape(4,4,order='F')).flatten(order='F')),
-                                         viewport=(width,height),mist=draw['mist'],grade=draw['grade'])
+                                         viewport=(width,height),mist=draw['mist'],grade=draw['grade'],**OWNED)
                     gl.glDepthMask(gl.GL_TRUE)
                     gl.glDisablei(gl.GL_BLEND, 0)
 
@@ -417,28 +437,32 @@ class WaveformScene:
                 return                    # Studio preview only: the mirrored mist without its emitters
             reflected_view = (mirrored if self._history_mirror is None else mirrored @ self._history_mirror) @ scroll
             reflected_mvp = tuple((projection @ reflected_view).flatten(order='F'))
-            self.ribbons.draw(packet, reflected_mvp, shading='light', **{**draw, 'view': tuple(reflected_view.flatten(order='F'))})
+            self.ribbons.draw(packet, reflected_mvp, shading='light', **{**draw, 'view': tuple(reflected_view.flatten(order='F')),
+                                                                          'viewport': self.reflection.size})
             if self.recipe.sparks is not None and self._burst_payload is None:
                 self.ribbons.draw(packet, reflected_mvp, shading='sparks', sparks=self.recipe.sparks, now=draw['age_fade'][0],
                                   mist=draw['mist'], mist_frame=draw['mist_frame'], material=self.recipe.material,
                                   sweep_axis=draw['sweep_axis'], grade=draw['grade'], floor=draw['floor'],
-                                          floor_give=draw['floor_give'])
+                                  floor_give=draw['floor_give'], viewport=self.reflection.size, **OWNED)
             if self.recipe.strays is not None:
                 self.ribbons.draw(packet, reflected_mvp, shading='strays', strays=self.recipe.strays,
                                   now=draw['age_fade'][0], mist=draw['mist'], mist_frame=draw['mist_frame'],
                                   material=self.recipe.material, sweep_axis=draw['sweep_axis'], grade=draw['grade'],
                                   floor=draw['floor'],strand_births=self._strand_payload,strand_origin=self._strand_origin,
-                                  continuation=draw['continuation'],floor_give=draw['floor_give'])
+                                  continuation=draw['continuation'],floor_give=draw['floor_give'],
+                                  viewport=self.reflection.size, **OWNED)
             if self.recipe.sparks is not None and self._burst_payload:
                 self.bursts.draw(self._burst_payload,mvp=tuple(self._history_mvp(projection @ mirrored).flatten(order='F')),
                     now=draw['age_fade'][0]-self._burst_origin,
-                    viewport=self.reflection.size,mist=draw['mist'],grade=draw['grade'])
+                    viewport=self.reflection.size,mist=draw['mist'],grade=draw['grade'],**OWNED)
         finally:
             gl.glDisablei(gl.GL_BLEND, 0)
             self.reflection.end()
 
 
-    def _floor(self, mvp, eye, view, size, *, flat=False, mist_off=False):
+    def _floor(self, mvp, eye, view, size, *, flat=False, mist_off=False, drawing_to=None):
+        """``drawing_to``: the bound framebuffer when the caller knows it (the scene's, at viewport ``size`` with depth
+        testing on), so nothing is read back; otherwise the bound state is read and restored."""
         recipe = self.recipe
         floor, environment = recipe.floor, recipe.environment
         if 'albedo' not in self.textures:
@@ -507,9 +531,12 @@ class WaveformScene:
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, count)
         else:
             texture, target = self._specular_target((int(size[0]*factor), int(size[1]*factor)))
-            framebuffer = int(gl.glGetIntegerv(gl.GL_DRAW_FRAMEBUFFER_BINDING))
-            viewport = [int(v) for v in np.asarray(gl.glGetIntegerv(gl.GL_VIEWPORT)).reshape(-1)[:4]]
-            depth_test = gl.glIsEnabled(gl.GL_DEPTH_TEST)
+            if drawing_to is None:
+                framebuffer = int(gl.glGetIntegerv(gl.GL_DRAW_FRAMEBUFFER_BINDING))
+                viewport = [int(v) for v in np.asarray(gl.glGetIntegerv(gl.GL_VIEWPORT)).reshape(-1)[:4]]
+                depth_test = gl.glIsEnabled(gl.GL_DEPTH_TEST)
+            else:
+                framebuffer, viewport, depth_test = drawing_to, [0, 0, *size], True
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, target)
             gl.glViewport(0, 0, *self._specular_size)
             gl.glDisable(gl.GL_DEPTH_TEST)
