@@ -1946,6 +1946,9 @@ def _waveform_ribbon() -> ModeSettings:
                            tooltip='How strongly reflections keep the ribbons\' own hue (1 as reflected).'),
                     Slider(prefix+'floor_light_reach','Light Reach:',2.,200.,bucket='floor',scale=1,decimals=0,
                            tooltip='How far the ribbons light the concrete before it falls into darkness.'),
+                    Slider(prefix+'floor_give','Floor Give:',0.,1.,bucket='floor',
+                           tooltip='Lets the wet floor yield in a soft dent where a ribbon comes down onto it, so the '
+                                   'ribbon dips in instead of flattening along the surface. 0 is a rigid floor.'),
                     Slider(prefix+'floor_light_far','Far Surface Level:',0.,1.,bucket='floor',
                            tooltip='Concrete brightness far from the ribbons, as a share of its lit level.'),
                     Slider(prefix+'exposure','Exposure:',.2,2.,bucket='lens'),
