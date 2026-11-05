@@ -78,7 +78,9 @@ class SettingsManager(QObject):
     _WIDGET_CAPABILITY_SCHEMA_METADATA_KEY = "widget_capability_schema_version"
     _WIDGET_CAPABILITY_SCHEMA_VERSION = 1
     _VISUALIZER_SCHEMA_METADATA_KEY = "visualizer_schema_version"
-    _VISUALIZER_SCHEMA_VERSION = 13
+    # 14: Sine Waves retired; the schema pass re-normalizes the section and Custom cache once so the
+    # retired-mode bridge (core.settings.visualizer_retired_modes) drops Sine state on disk.
+    _VISUALIZER_SCHEMA_VERSION = 14
     _MISSING = object()
     _MANUAL_FLOOR_MIN = 0.0
     _MANUAL_FLOOR_MAX = 1.0
