@@ -91,12 +91,14 @@ Visual: `tools/visualizer_replay/bubble_shape_strip.py` renders the production r
 `after_preset0_window.png` (canonical-size windows of baseline/tall/wide, same bubble size and per-step travel) and
 `*_cards.png`; `before_preset0_*` the same frames from the previous build.
 
-## Remaining limit (operator decision)
+## Remaining limit (operator decision: accepted, 5 Nov)
 
 Density can grow only to the renderer's 110-hero capacity (72 live). On the operator's TV card (world 47.8 canonical
 cards at uniform scale 0.285) a 49-hero preset now aims at 72 live heroes drawn ~1.6x the canonical size instead of 49 at ~2.0x;
 growing density further needs a renderer that is not a per-fragment loop over uniform arrays (instanced/binned
-heroes) and its own performance evidence. Recorded in `Current_Plan.md`.
+heroes) and its own performance evidence. **Decision (operator, 5 Nov 2026):** after reviewing Preset 1 rendered on the
+TV card at the cap, the capped density is "easily enough": keep the 72-live cap and uniform zoom; no instanced/binned
+hero renderer.
 
 ## Binding lessons
 

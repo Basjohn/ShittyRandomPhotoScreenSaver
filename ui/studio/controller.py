@@ -346,7 +346,8 @@ class StudioBridge(QObject):
                                          "rendered": card.rendered, "group": card.group,
                                          "labels": {role: self._schema.find(pid).label for role, pid in card.roles}}
                                         if card is not None else {}),
-                               "group": group, "objectScoped": "{object}" in group})
+                               "group": group, "objectScoped": "{object}" in group,
+                               "actions": self._actions(dict(self._schema.group_actions).get(group, ()))})
         self._inspector = groups
         self._columns = self._dashboard_columns(workspace, groups)
         self.inspectorChanged.emit()
@@ -709,6 +710,12 @@ class StudioBridge(QObject):
 
     @Slot()
     def requestClose(self) -> None:
+        self.requestCloseFrom("close request")
+
+    @Slot(str)
+    def requestCloseFrom(self, source: str) -> None:
+        """A close asked for by the shell; ``source`` names the path (the Close button, Esc) for the log."""
+        self.close_source = str(source) or "close request"
         self.closeRequested.emit()
 
     # --------------------------------------------------------- transport
@@ -868,11 +875,34 @@ class StudioBridge(QObject):
 
     # ------------------------------------------------------------- response
     def _row(self, prop: StudioProperty) -> dict:
-        return {"id": prop.id, "label": prop.label, "instrument": prop.instrument,
+        label = prop.label
+        if self._schema.row_label is not None:
+            try:
+                label = self._schema.row_label(prop, self._c.session.values) or prop.label
+            except (KeyError, IndexError, TypeError, ValueError):
+                label = prop.label
+        return {"id": prop.id, "label": label, "instrument": prop.instrument,
                 "min": float(prop.minimum), "max": float(prop.maximum), "decimals": int(prop.decimals),
                 "units": prop.units, "choices": list(prop.choices), "tooltip": prop.tooltip,
                 "quietMeaning": prop.quiet_meaning, "peakMeaning": prop.peak_meaning, "integer": bool(prop.integer),
-                "notes": list(prop.choice_notes), "icon": prop.icon}
+                "notes": list(prop.choice_notes), "icon": prop.icon, "actions": self._actions(prop.actions)}
+
+    # ------------------------------------------------------------ structural actions
+    def _actions(self, actions) -> list:
+        """Action buttons, each enabled only while the adapter can admit it under the current values."""
+        values = self._c.session.values
+        return [{"id": a.id, "label": a.label, "icon": a.icon, "tooltip": a.tooltip,
+                 "enabled": self._c.adapter.structure_edit(a.id, values) is not None} for a in actions]
+
+    @Slot(str)
+    def runAction(self, action_id: str) -> None:
+        """Run a structural edit (add / remove / reorder) as ONE undoable edit through the session."""
+        edit = self._c.adapter.structure_edit(str(action_id), self._c.session.values)
+        if edit is None:
+            self.notify("Not available now")
+            return
+        label, changes = edit
+        self._guard(lambda: self._c.session.set_many(dict(changes), label))
 
     def _response_model(self) -> dict:
         response = self._schema.response
@@ -941,9 +971,23 @@ class StudioBridge(QObject):
 
     message = Property(str, _message_text, notify=messageChanged)
 
-    def notify(self, text: str) -> None:
+    def _message_action_label(self) -> str:
+        return getattr(self, "_message_action", ("", None))[0]
+
+    messageAction = Property(str, _message_action_label, notify=messageChanged)     # "" : the notice has no action
+
+    def notify(self, text: str, action: str = "", callback: Callable[[], Any] | None = None) -> None:
+        """Show a notice; with ``action`` the notice offers one button that runs ``callback`` (e.g. Retry)."""
         self._message = str(text)
+        self._message_action = (str(action), callback) if action and callback is not None else ("", None)
         self.messageChanged.emit()
+
+    @Slot()
+    def runMessageAction(self) -> None:
+        _label, callback = getattr(self, "_message_action", ("", None))
+        self.notify("")
+        if callback is not None:
+            callback()
 
     @Slot()
     def dismissMessage(self) -> None:
@@ -967,6 +1011,8 @@ class StudioController(QObject):
     failed = Signal(str)
 
     _active: ClassVar["StudioController | None"] = None
+    # GUI-thread time one evaluation may spend on an exact replay (the rest of a ~16 ms frame stays free).
+    EVALUATION_BUDGET_S: ClassVar[float] = 0.008
 
     @classmethod
     def active(cls) -> "StudioController | None":
@@ -1007,6 +1053,8 @@ class StudioController(QObject):
         self._preview_done: dict = {}
         self._preview_crops: dict = {}
         self._auto_clip: str | None = None
+        self._wanted_source: str | None = None
+        self._failure_shown = ""
 
     # ---------------------------------------------------------------- open
     def open(self) -> bool:
@@ -1019,10 +1067,17 @@ class StudioController(QObject):
             return False
         StudioController._active = self
         self.state = "opening"
+        import time
+        self._opened_at = time.perf_counter()
+        logger.info("[STUDIO] open mode=%s", self.adapter.mode_id)
         try:
             self.capabilities = self.adapter.capabilities()
             self.session = StudioEditSession(self.adapter.schema(), self.store)
             self.evaluator = self.adapter.create_evaluator()
+            budget = getattr(self.evaluator, "set_frame_budget", None)
+            if callable(budget):
+                # An evaluator whose exact replay can outgrow a frame spreads it over frames within this budget.
+                budget(self.EVALUATION_BUDGET_S)
             notify = getattr(self.evaluator, "set_invalidate", None)
             if callable(notify):
                 # An evaluator that analyses in the background asks for a fresh evaluation when its result lands.
@@ -1040,7 +1095,7 @@ class StudioController(QObject):
             if self._theme_provider is not None:
                 self.bridge.set_theme(self._theme_provider())
             self._unsubscribe = self.session.subscribe(self._on_session_changed)
-            self.bridge.closeRequested.connect(self.close)
+            self.bridge.closeRequested.connect(self._on_bridge_close)
             self.surface = self._surface_factory(self)
             self.viewport = self.surface.viewport
             self.viewport.rendered.connect(self._on_rendered, Qt.ConnectionType.QueuedConnection)
@@ -1058,7 +1113,7 @@ class StudioController(QObject):
             self._preview_done = {}
             self.surface.frameStarted.connect(self.on_frame)
             self.surface.presented.connect(self._on_presented)
-            self.surface.closeRequested.connect(self.close)
+            self.surface.closeRequested.connect(self._on_window_close)
             self.surface.lost.connect(self._on_surface_lost)
             self.surface.failed.connect(self._fail)
             if self.capabilities.viewport:
@@ -1075,6 +1130,7 @@ class StudioController(QObject):
                 self.bridge.set_viewport("none")
             self._choose_default_source()
             self.surface.show()
+            logger.info("[STUDIO] shown mode=%s preset=%s", self.adapter.mode_id, self.session.preset_label)
         except Exception as exc:
             logger.exception("[STUDIO] Studio failed to open")
             self._fail(f"{type(exc).__name__}: {exc}")
@@ -1145,11 +1201,13 @@ class StudioController(QObject):
             if self.bridge is not None:
                 self.bridge.notify(f"Could not switch mode: {exc}")
             return
+        logger.info("[STUDIO] mode switch %s -> %s", self.adapter.mode_id, mode_id)
         self._retire(reveal=False)          # Settings stays concealed for the next session
         self.adapter, self.store = adapter, store
         self.transport = StudioTransport()
         self._pose = {}
         self._clip_errors.clear()
+        self._failure_shown = ""
         self.state = "idle"
         self.modeSwitched.emit(mode_id)
         self.open()
@@ -1162,6 +1220,9 @@ class StudioController(QObject):
         if self.state != "opening":
             return
         self.state = "presented"
+        import time
+        logger.info("[STUDIO] presented mode=%s first frame %.0f ms after open", self.adapter.mode_id,
+                    (time.perf_counter() - getattr(self, "_opened_at", time.perf_counter())) * 1000.0)
         try:
             self.presence.conceal()          # no-op when a mode switch kept Settings concealed
         except Exception:
@@ -1170,6 +1231,7 @@ class StudioController(QObject):
 
     def _fail(self, message: str) -> None:
         """Opening or presenting failed: retire everything, keep/restore Settings, report."""
+        logger.error("[STUDIO] failed mode=%s state=%s: %s", self.adapter.mode_id, self.state, message)
         try:
             self._retire(reveal=self.state == "presented" or bool(getattr(self.presence, "concealed", False)))
         finally:
@@ -1180,6 +1242,11 @@ class StudioController(QObject):
 
     # --------------------------------------------------------------- frames
     def _on_session_changed(self, reason: str) -> None:
+        if reason in ("commit", "undo", "redo"):
+            session = self.session
+            label = session.redo_label if reason == "undo" else session.undo_label
+            logger.info("[STUDIO] %s mode=%s edit=%r saves=%d preset=%s", reason, self.adapter.mode_id, label,
+                        session.commit_count, session.preset_label)
         if self.bridge is not None:
             self.bridge.on_session_changed(reason)
         self._invalidate()
@@ -1342,6 +1409,10 @@ class StudioController(QObject):
             self.evaluations += 1
             self.last_frame = frame
             self.viewport.set_frame(frame)
+            self._check_analysis_failure()
+            if getattr(self.evaluator, "converging", False):
+                self._eval_dirty = True          # the exact replay continues on the next frame
+                self.surface.request_frame()
             measure = getattr(self.evaluator, "measurements", None)
             if callable(measure) and self.bridge is not None:
                 self.bridge.push_measurements(measure())
@@ -1450,7 +1521,7 @@ class StudioController(QObject):
             self.transport.set_duration(self.evaluator.fixture.duration)
         clips = self.adapter.recorded_clips()
         if clips:
-            self._auto_clip = clips[0].id
+            self._auto_clip = self._wanted_source = clips[0].id
             self._load_clip(clips[0].id)
 
     # ------------------------------------------------------------ transport
@@ -1473,6 +1544,9 @@ class StudioController(QObject):
     def select_fixture(self, fixture_id: str, *, user: bool = True) -> None:
         if user:
             self._auto_clip = None          # the user's choice wins over the background default
+        # The selection the user (or, before any user choice, the default) asked for last: a background clip
+        # load landing later selects itself only while it is still this one.
+        self._wanted_source = fixture_id
         if fixture_id.startswith("clip:") and fixture_id not in {f.id for f in self.evaluator.fixtures()}:
             self._load_clip(fixture_id)
             return
@@ -1507,11 +1581,13 @@ class StudioController(QObject):
                 return
             if error:
                 self._clip_errors[clip_id] = error
-                self.bridge.notify(f"Clip analysis failed: {error}")
+                self.bridge.notify(f"Clip analysis failed: {error}", "Retry", lambda: self.retry_clip(clip_id))
             else:
                 self._clip_errors.pop(clip_id, None)
                 self.evaluator.add_recorded(result)
-                if self._auto_clip in (None, clip_id):
+                # Only the source last asked for (by the user, or the default while the user has asked for
+                # nothing) is selected when its analysis lands; any other landing load only becomes available.
+                if self._wanted_source == clip_id:
                     automatic = self._auto_clip == clip_id
                     self.select_fixture(clip_id, user=not automatic)
                     if automatic:
@@ -1524,8 +1600,34 @@ class StudioController(QObject):
                 self._clip_jobs[clip_id] = job
         except Exception as exc:
             self._clip_errors[clip_id] = str(exc)
-            self.bridge.notify(f"Clip analysis could not start: {exc}")
+            self.bridge.notify(f"Clip analysis could not start: {exc}", "Retry", lambda: self.retry_clip(clip_id))
         self.bridge.transportChanged.emit()
+
+    def retry_clip(self, clip_id: str) -> None:
+        """Analyse a clip whose analysis failed again; it is selected when it lands (the user asked for it)."""
+        if self.state not in ("opening", "presented"):
+            return
+        self._clip_errors.pop(clip_id, None)
+        self.select_fixture(clip_id)
+
+    # ---------------------------------------------------- background analysis failures
+    def _check_analysis_failure(self) -> None:
+        """An evaluator analysis that failed is reported once (with Retry); the previous answers stay on screen."""
+        failure = str(getattr(self.evaluator, "analysis_failure", "") or "")
+        if failure and failure != self._failure_shown and self.bridge is not None:
+            self.bridge.notify(f"Analysis failed: {failure}. The previous preview stays on screen.", "Retry",
+                               self.retry_analysis)
+        self._failure_shown = failure
+
+    def retry_analysis(self) -> None:
+        retry = getattr(self.evaluator, "retry_analysis", None)
+        if self.state not in ("opening", "presented") or not callable(retry):
+            return
+        self._failure_shown = ""
+        retry()
+        self._invalidate()
+        if self.bridge is not None:
+            self.bridge.transportChanged.emit()
 
     # --------------------------------------------------------------- camera
     def navigation(self):
@@ -1643,11 +1745,35 @@ class StudioController(QObject):
 
     # ---------------------------------------------------------------- close
     def close(self) -> None:
+        self.close_from("close()")
+
+    def _on_bridge_close(self) -> None:
+        self.close_from(getattr(self.bridge, "close_source", "") or "close request")
+
+    def _on_window_close(self) -> None:
+        self.close_from("window close (X / Alt+F4)")
+
+    def close_for_quit(self, *_args) -> None:
+        self.close_from("application quit")
+
+    def close_for_settings_gone(self, *_args) -> None:
+        self.close_from("Settings destroyed")
+
+    def close_from(self, source: str) -> None:
         """Every exit path (Close, Esc, window X / Alt+F4, a lost window, app quit, Settings going away) ends
-        here. Settings is restored whatever happens during teardown, and the controller always ends closed."""
+        here. Settings is revealed *before* anything is torn down, so no teardown failure or hang can keep it
+        hidden, and the controller always ends closed."""
         if self.state not in ("opening", "presented"):
             return
         reveal = self.state == "presented" or bool(getattr(self.presence, "concealed", False))
+        logger.info("[STUDIO] close requested mode=%s via %s (state=%s, reveal=%s)", self.adapter.mode_id,
+                    source, self.state, reveal)
+        try:
+            # The request is on disk before any teardown runs (a native fault or hang leaves this trace).
+            from core.logging.logger import flush_logging
+            flush_logging(0.25)
+        except Exception:
+            pass
         try:
             self._retire(reveal=reveal)
         finally:
@@ -1663,13 +1789,15 @@ class StudioController(QObject):
         """The window disappeared without our close (crash/destroy): recover Settings."""
         if self.state in ("opening", "presented"):
             self.surface = None
-            self.close()
+            self.close_from("window lost")
 
     def _retire(self, *, reveal: bool) -> None:
         """Retire in a fixed order and record each step's cost (``close_timings``, milliseconds).
 
-        Each step is isolated: a failing step is logged and the next one still runs, and the Settings
-        reveal is in ``finally`` so no teardown failure can leave Settings concealed."""
+        Each step is isolated: a failing step is logged and the next one still runs. Settings is revealed
+        right after the edit and playback stop, *before* the clip jobs, the window and the models are retired,
+        and again (idempotently) in ``finally``, so neither a failing nor a hanging teardown step can leave
+        Settings concealed."""
         import time
         timings: dict[str, float] = {}
         failures: list[str] = []
@@ -1686,6 +1814,8 @@ class StudioController(QObject):
             now = time.perf_counter()
             timings[name] = round((now - mark) * 1000.0, 2)
             mark = now
+            logger.info("[STUDIO] retire step %s %s %.1f ms", name, "failed" if name in failures else "done",
+                        timings[name])
 
         def cancel_jobs() -> None:
             jobs, self._clip_jobs = tuple(self._clip_jobs.values()), {}
@@ -1707,7 +1837,7 @@ class StudioController(QObject):
             if surface is None:
                 return
             for signal, slot in ((surface.frameStarted, self.on_frame), (surface.presented, self._on_presented),
-                                 (surface.closeRequested, self.close), (surface.lost, self._on_surface_lost),
+                                 (surface.closeRequested, self._on_window_close), (surface.lost, self._on_surface_lost),
                                  (surface.failed, self._fail)):
                 try:
                     signal.disconnect(slot)
@@ -1730,16 +1860,15 @@ class StudioController(QObject):
             session = self.session
             step("gesture", session.cancel_gesture if session is not None else None)   # a drag is not a save
             step("transport", self.transport.stop)
+            step("settings", self.presence.reveal if reveal else None)                  # Settings back first
             step("jobs", cancel_jobs)
             step("surface", retire_surface)
             step("evaluator", release_models)
         finally:
             if StudioController._active is self:
                 StudioController._active = None
-            if reveal:
-                step("settings", self.presence.reveal)
-            else:
-                step("settings")
+            if reveal and getattr(self.presence, "concealed", False):
+                step("settings_retry", self.presence.reveal)   # the first reveal raised before un-concealing
             timings["total"] = round(sum(timings.values()), 2)
             self.close_timings = timings
             self.close_failures = tuple(failures)

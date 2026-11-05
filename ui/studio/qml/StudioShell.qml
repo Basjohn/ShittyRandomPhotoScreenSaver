@@ -73,7 +73,7 @@ Rectangle {
             helpOverlay.open = false; event.accepted = true
         } else if (event.key === Qt.Key_Escape) {
             // Esc leaves the Studio (every edit is already saved); open popups and drags take Esc first.
-            Qt.callLater(studio.requestClose); event.accepted = true   // never tear down inside the handler
+            Qt.callLater(studio.requestCloseFrom, "escape"); event.accepted = true   // never tear down inside the handler
         }
     }
 
@@ -1167,21 +1167,45 @@ Rectangle {
                 }
             }
         }
+        Flow {              // structural edits of the group's list values (e.g. Add Node)
+            visible: group.open && (group.groupData.actions || []).length > 0
+            width: parent.width
+            spacing: 6
+            Repeater {
+                model: group.groupData.actions || []
+                delegate: StudioButton { objectName: "groupAction"; text: modelData.label; icon: modelData.icon
+                                         iconSize: 14; height: 26; textSize: shell.fontBase - 1
+                                         enabledState: modelData.enabled; tip: modelData.tooltip
+                                         onClicked: studio.runAction(modelData.id) }
+            }
+        }
     }
 
     // ------------------------------------------------------------------- rows
     component ScalarRow: Row {
+        id: scalarRow
         property var row
+        readonly property var rowActions: row.actions || []
         spacing: 8
         height: 28
         RowLabel { text: row.label; icon: row.icon || ""; tip: row.tooltip; propId: row.id; height: parent.height }
         ValueSlider {
-            width: parent.width - 118 - 72 - 16; anchors.verticalCenter: parent.verticalCenter
+            width: parent.width - 118 - 72 - 16 - scalarRow.rowActions.length * 30
+            anchors.verticalCenter: parent.verticalCenter
             propId: row.id; label: row.label; from: row.min; to: row.max; integer: row.integer
             value: studio.values[row.id] !== undefined ? studio.values[row.id] : row.min
         }
         NumberField { propId: row.id; anchors.verticalCenter: parent.verticalCenter
                       display: shell.fmt(studio.values[row.id], row.decimals, "") }
+        Repeater {          // structural edits of this element (remove a node, reorder a lane)
+            model: scalarRow.rowActions
+            delegate: StudioButton { objectName: "rowAction"; icon: modelData.icon; iconSize: 14; width: 22
+                                     height: 22; anchors.verticalCenter: parent.verticalCenter
+                                     enabledState: modelData.enabled; tip: modelData.label
+                                     + (modelData.tooltip !== "" ? "
+" + modelData.tooltip : "")
+                                     onClicked: studio.runAction(modelData.id) }
+        }
     }
 
     // Two response endpoints of ONE quantity: pick Quiet or Peak, edit that one, see the other as a ghost.
@@ -1589,9 +1613,9 @@ Rectangle {
                                onClicked: helpOverlay.open = !helpOverlay.open }
                 StudioButton { text: "Save Preset As…"; tip: "Save the current Custom settings as a preset file"
                                onClicked: studio.savePresetAs() }
-                StudioButton { text: "Close"; primary: true
+                StudioButton { objectName: "closeButton"; text: "Close"; primary: true
                                tip: "Close the Studio and return to Settings (edits are already saved to Custom)"
-                               onClicked: Qt.callLater(studio.requestClose) }
+                               onClicked: Qt.callLater(studio.requestCloseFrom, "close button") }
             }
         }
 
@@ -2201,11 +2225,21 @@ Rectangle {
                         visible: studio.message !== ""
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.bottom: scrubBar.top; anchors.bottomMargin: 10
-                        width: Math.min(parent.width - 40, noticeText.implicitWidth + 60); height: 32; radius: 6
+                        width: Math.min(parent.width - 40, noticeText.implicitWidth + 60
+                                        + (noticeAction.visible ? noticeAction.implicitWidth + 10 : 0)); height: 32; radius: 6
                         color: shell.cRaised; border.width: 1; border.color: shell.cOutline
                         z: 3
                         Text { id: noticeText; anchors.verticalCenter: parent.verticalCenter; x: 12
+                               width: Math.min(implicitWidth, parent.width - 60
+                                               - (noticeAction.visible ? noticeAction.implicitWidth + 10 : 0))
+                               elide: Text.ElideRight
                                text: studio.message; color: shell.cText; font.pixelSize: shell.fontBase - 1 }
+                        // A notice may offer one action (e.g. Retry a failed analysis).
+                        StudioButton { id: noticeAction; objectName: "noticeAction"; visible: studio.messageAction !== ""
+                                       text: studio.messageAction; height: 24; textSize: shell.fontBase - 1
+                                       anchors.verticalCenter: parent.verticalCenter
+                                       anchors.left: noticeText.right; anchors.leftMargin: 10
+                                       onClicked: studio.runMessageAction() }
                         Text { anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
                                text: "✕"; color: shell.cDim
                                MouseArea { anchors.fill: parent; anchors.margins: -6; onClicked: studio.dismissMessage() } }

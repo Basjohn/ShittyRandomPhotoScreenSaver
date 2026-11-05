@@ -57,13 +57,13 @@ class SliderBinding:
         if isinstance(raw, bool):
             raw = (1.0 if raw else 0.0)
         try:
-            val = int(float(raw) * self.scale)
+            val = int(round(float(raw) * self.scale))
         except (TypeError, ValueError):
-            val = int(float(self.default) * self.scale)
+            val = int(round(float(self.default) * self.scale))
         if self.min_val is not None:
-            val = max(int(self.min_val * self.scale), val)
+            val = max(int(round(self.min_val * self.scale)), val)
         if self.max_val is not None:
-            val = min(int(self.max_val * self.scale), val)
+            val = min(int(round(self.max_val * self.scale)), val)
         widget.setValue(val)
         if self.label_fmt:
             lbl_name = wname + self.label_suffix

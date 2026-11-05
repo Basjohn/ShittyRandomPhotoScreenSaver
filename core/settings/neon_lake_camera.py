@@ -12,7 +12,7 @@ import struct
 from functools import lru_cache
 from collections.abc import Mapping
 
-from core.constants.neon_lake_world import DEPTH, NOMINAL_HALF_WIDTH, TILT_RANGE, WATER_PEAK
+from core.constants.neon_lake_world import CONTINUATION_DESCENT, DEPTH, NOMINAL_HALF_WIDTH, TILT_RANGE, WATER_PEAK
 from core.settings import framed_camera as fc
 
 PIVOT = (0.0, 0.0, -0.5 * DEPTH)
@@ -23,7 +23,7 @@ _DETAIL = 1.16          # the land's fixed static detail adds up to 16%
 _REACTION_HEIGHT = 0.32  # Terrain Reaction's largest reshaping per unit of each lane, in Terrain Height units
 _RIPPLE = WATER_PEAK + 0.01   # the lake's highest wave crest above its surface
 _CONTINUATION = 0.23    # the rolling ground beyond the authored basin, in heightfield units
-_DESCENT = (0.04, 0.68)  # the continuation leaves the basin edge for the rolling ground over this uv distance
+_DESCENT = CONTINUATION_DESCENT  # the continuation leaves the basin edge for the rolling ground over this uv distance
 
 SPEC = fc.FramedCameraSpec(
     prefix='shockwave_grid_', pivot=PIVOT, orbit_distance=3.6,

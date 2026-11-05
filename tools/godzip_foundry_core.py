@@ -121,6 +121,7 @@ RUN_FLAG_DESCRIPTIONS = {
     "--cache": "Image-cache/prefetch/cache-authority diagnostics",
     "--steam": "Steam widget-family diagnostics",
     "--feeds": "FEEDS source/artwork/runtime diagnostics",
+    "--studio": "Visualizer Studio lifecycle (open, commits, close, Settings reveal)",
     "--noupdates": "Disable automatic Gmail/Reddit/Weather retrievals",
     "--fresh": "Clear current logs before starting",
     "--devsteam": "Show the unfinished Steam Journey scaffold",

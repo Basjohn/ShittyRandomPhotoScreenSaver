@@ -84,7 +84,8 @@ class Slider:
     ``signed`` shows a plus sign for nonnegative values. ``source`` delegates consumption to the
     existing descriptor source-profile projection; it creates no private logical/renderer value.
     ``availability`` optionally names an import-safe capability flag and its disabled tooltip.
-    ``truncate`` retains a body's existing position and integer conversion. Admission bounds
+    ``truncate`` retains a body's existing integer admission (a stored integer value is truncated, not rounded);
+    a slider position is always the nearest one (``position``), so a stored value reloads exactly. Admission bounds
     preserve a wider stored domain than the slider; runtime bounds independently retain existing
     consumer caps. ``display_multiplier`` changes only the label's units."""
 
@@ -117,8 +118,9 @@ class Slider:
     display_multiplier: float = 1.0
 
     def position(self, value: object) -> int:
-        number = float(value) * self.scale
-        return int(number) if self.truncate else round(number)
+        # The nearest position: a value the slider stored (position / scale) maps back to that same position. A
+        # truncating conversion moved a stored 0.29 (28.999... positions) to 0.28 on every reload.
+        return round(float(value) * self.scale)
 
     def _admit_bounds(self, value: object, default: object, low: float, high: float) -> float | int:
         number = _finite(value)
@@ -747,6 +749,9 @@ _SHOCKWAVE_GRID = ModeSettings(
         Slider("shockwave_grid_depth_scale", "Depth Scale:", 0.0, 1.0,
                "Vertices and ridge lines grow toward the camera, as if drawn on the land itself (up to three "
                "times their size). 0 keeps them one size on screen.", bucket="render"),
+        Slider("shockwave_grid_contour_lines", "Contour Lines:", 0.0, 1.0,
+               "Level lines over the land's slopes, like a contour map, fading where they would crowd. 0 draws none.",
+               bucket="render"),
         Slider("shockwave_grid_floor", "Base Opacity:", 0.0, 1.0,
                "Shared base visibility of land and water before their independent colour alpha.", bucket="render"),
         Slider("shockwave_grid_horizon_thickness", "Horizon Thickness:", 0.0, 4.0,
@@ -1797,7 +1802,9 @@ def _waveform_ribbon() -> ModeSettings:
         ('pulse_particles','Pulse Particles',0.,2.,'Extra sparks a swell carries, born on the swell as it travels; '
          'ordinary sparks also gather toward it. Needs Sparks on.'),
         ('pulse_strands','Pulse Strands',0.,1.,'Gently leans free strands toward a passing swell and lifts their '
-         'chance and glow there. Never adds strands of its own. Needs Free Strands on.')):
+         'chance and glow there. Never adds strands of its own. Needs Free Strands on.'),
+        ('pulse_rim','Pulse Rim',0.,4.,'Makes the ribbon edges brighter still where a swell is, fading softly along '
+         'the edge on either side, so the eye can follow the pulse. 0 leaves the edges as they are.')):
         entries.append(Slider(prefix+key,label+':',low,high,bucket='pulse',logical=True,tooltip=tip,
                               suffix=' s' if key=='pulse_fade' else ''))
     entries.append(Choice(prefix+'travel_direction','Travel Direction:',('Right To Left','Left To Right'),
