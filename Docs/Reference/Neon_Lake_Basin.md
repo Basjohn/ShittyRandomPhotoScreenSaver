@@ -496,6 +496,35 @@ beats a second, three held beats displaced every star within about a second. The
 floor at the admission strength to full at strength 1.2, so a big hit stands out. The admission threshold (operator-
 tuned easier twice) is unchanged. Strength stays volume-dependent by design (the fixed loudness scale).
 
+## Goal-mock fidelity pass (2026-11-05; Presets 1 and 3, not yet operator-accepted)
+
+The operator's goal mocks `references/NeonLakeGoalPreset1.png` (portrait, low/high react) and
+`references/NeonLakeGoalPreset3.png` (landscape, low/high react) are the targets for Presets 1 and 3. Compare with
+`tools/neon_lake_capture.py` at the mock's panel size (722x1086 for Preset 1, 1419x548 for Preset 3; the
+capture's framed aperture grows with card height, so compare at the same size). Three controls were added, each
+off at 0 (the earlier picture, at the renderer's run-to-run noise floor):
+
+- **Depth Scale** (Surface, 0..1): vertex marks and ridge (skyline) lines grow toward the camera, from their
+  authored physical-pixel size at `BASIN_DEPTH_REFERENCE` (2.4) scene units to at most `BASIN_DEPTH_GROWTH_MAX` (3x)
+  nearer. Farther marks keep their size; lattice membership never changes.
+- **Shore Glow** + **Shore Glow Colour** (Glow): item 3 below, the water-edge glow. Light along the visible
+  shoreline in screen pixels (bilinear cached bank distance over open water, the .018 contour on land), a short
+  lip up the bank, swelling with ridge energy; colour mixes in by alpha over the shoreline palette; its bloom
+  follows Surface Glow. Tall/raised water does not exist yet, so only flat water is covered.
+- **Sun / Moon Path** (Water, 0..1): an artistic glitter column on the water under the body on screen (it does not
+  need the mirror angle), fading toward the viewer, streaks antialiased by their own derivative, brightened by
+  the halo's existing musical drive (`basinCelestialHaloGain`). Water only, nothing without a body.
+
+Shared fixes made on the way: Water Shine and the path cover the **wet fringe** below the visible shoreline and
+vertex marks fade there as on water (a shining lake stopped in a staircase of square control cells; Presets 2/3
+lakes now reach their shorelines); the skyline copy lies at least 2% of the view distance behind its surface and
+fades within one unit of the eye (near land painted a ridge bar over its own face); the GPU heightfield texture
+admits every canonical grid (`HEIGHTFIELD_MAX_SIZE` 257: one Extend on a 65-cell basin raised mid-frame); the
+camera floor unpacks the frozen terrain payload once per payload (1.57 ms a frame on a 121-cell grid).
+Preset 1's terrain is an extended grid (basin `[28, 56, 64]` of 121) whose front rows are authored dunes: the
+camera stands over authored land, so its foreground crests are real silhouettes. Contracts:
+`tests/test_neon_fidelity_controls.py`.
+
 ## Operator-authorized future water improvements (2026-10-18; deferred, baseline accepted)
 
 These are three **new capabilities**, not permission to reopen the accepted Neon Lake graphics, change authored

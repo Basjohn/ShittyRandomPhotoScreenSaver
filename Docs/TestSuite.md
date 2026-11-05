@@ -83,6 +83,9 @@ so a finite MRT value alone cannot conceal a white-clipped Moon after bloom.
 round-trip and real-GL bounded halo response, zero-reactivity stability and phase-limited marks.
 Its production exterior-annulus check requires source emission in all four quadrants
 at New, thin crescents, quarters and Full, separately from illuminated-only rim marks.
+`tests/test_neon_fidelity_controls.py` checks Depth Scale (near marks grow, far keep size), Shore Glow (stays
+on the shoreline, colour by alpha), Sun / Moon Path (water only, none without a body) and the wet fringe
+shining as water, through the production renderer.
 `tests/test_neon_lake_reaction.py` checks nearby water attack/release against the same
 untapered production wave at each quality/style, with unchanged authored membership/interior
 response, moving concave water junctions and continuity through the shallow fringe to the
