@@ -194,6 +194,15 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
 - [ ] **`tools/visualizer_preset_repair.py --repair-all` rewrites curated presets (side defect, 5 Nov):** on the
   Waveform presets it re-sorted every key and dropped the `starting_view` and `visualizer_preset_mode` metadata
   (values unchanged). Floor Give was authored by a one-key insert instead. Make the repair fill keep metadata and order.
+- [~] **Travel Direction (operator, 5 Nov: "Travel Direction ... chosen in the studio ... an important basic need") —
+  awaiting operator eyes:** Flow-bucket Choice, Right To Left (default, unchanged) or Left To Right (the mirror image:
+  history enters at the left; pulses, held swells, Tilt Shift, sparks, strands and floor give follow; the world colour
+  grade stays put). A live change fades out, swaps while hidden and fades back (0.6 s each way). Leads the Studio's
+  Composition / Flow group. Evidence `.artifacts/evidence/waveform_ribbon/travel_direction/`; design in the Migration
+  Plan's Flow bucket.
+- [ ] **Floor Give run-to-run noise (side defect, 5 Nov):** with Floor Give on, the same frame rendered repeatedly in one
+  process differs by one level on about one pixel (the first frame against later ones, and sometimes between fresh
+  renderers); give 0 is exact. Find the unsynchronised read (field compute -> floor/ribbon sampling) or state.
 - [ ] **Dense highlights, moving colour and rim glow:** playback still lacks rewarded high-energy density and glow.
   Verify local crest/high-power colour, bright tunable rim/glow and denser highlights against actual music, including
   quiet/loud differences. Consumer reachability does not establish visible strength. Keep both range handles effective.
