@@ -11,7 +11,7 @@ from core.settings.visualizer_mode_registry import (
     get_profile_lender_modes,
     get_visualizer_mode_descriptor,
 )
-from core.settings.visualizer_presets import apply_preset_to_config
+from core.settings.visualizer_presets import apply_preset_to_config, get_custom_preset_index
 from core.settings.visualizer_settings_contract import migrate_profile_lender_owned_settings
 from widgets.spotify_visualizer.source_config_applier import resolve_mode_source_config
 from widgets.spotify_visualizer.technical_config import build_technical_cache, resolve_technical_config
@@ -44,7 +44,9 @@ def test_3d_modes_own_profiles_and_keep_only_spheres_preserved_raw_reference() -
 
 @pytest.mark.parametrize("mode", ("extruded_spectrum", "shockwave_grid"))
 def test_missing_3d_profile_keys_copy_the_selected_spectrum_preset_once(mode: str) -> None:
-    source_index = 1
+    # The last curated Spectrum preset (not the first, whenever the operator ships more than one):
+    # the selected preset is copied, whichever it is and whatever it holds.
+    source_index = get_custom_preset_index("spectrum") - 1
     input_config = {"preset_spectrum": source_index, "mode": mode}
     migrated = migrate_profile_lender_owned_settings(input_config)
     source = apply_preset_to_config("spectrum", source_index, dict(input_config))
