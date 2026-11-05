@@ -102,7 +102,9 @@ class RibbonBursts:
             if local.max()>SWELL_FLOOR:gathered=weight*local*local
         if gathered is None:extra=0
         else:gathered=gathered/gathered.sum()
-        count=min(MAX_BURST,count+extra);extra=min(extra,count)
+        # The authored Spark Count is honoured first; pulse births only fill the cohort's remaining headroom, so a
+        # strong Pulse Particles setting can never mask the Spark Count range.
+        extra=min(extra,MAX_BURST-count);count+=extra
         if count==0:return 0
         weight=weight/weight.sum()
         free=np.flatnonzero((self.records[:,7]<=0.)|(now-self.origin-self.records[:,3]>=self.records[:,7]))
