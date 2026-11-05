@@ -468,14 +468,14 @@ float basinWaterGlint(vec3 world,float depthPerPixel) {
     float radius=uBodySize/max(length(uBodyPosition-uEye),1e-3)/uTan.y;
     float below=b.y-h.y;
     if (below<=0.0) return 0.0;
-    float width=radius*(0.75+1.6*below);
+    float width=radius*(0.8+0.8*below);
     float column=exp(-pow((h.x-b.x)/max(width,1e-4),2.0));
-    float reach=exp(-below/0.9);
-    float phase=world.z*70.0+2.6*sin(world.x*9.0+uTime*0.7)-uTime*1.1;
+    float reach=exp(-below/1.4);
+    float phase=world.z*70.0+0.9*sin(world.x*7.0+uTime*0.7)-uTime*1.1;
     float second=world.z*29.0-world.x*6.0+uTime*0.8;
     float detail=clamp(1.5-35.0*depthPerPixel,0.0,1.0);
     float glitter=mix(0.45,smoothstep(0.15,0.9,0.62*sin(phase)+0.38*sin(second)),detail);
-    return column*reach*glitter;
+    return min(1.6*column*reach*glitter,1.0);
 }
 void main() {
     float detailFade=basinDetailFade(vUv);
@@ -673,7 +673,7 @@ void main() {
     }
     // Sun/Moon path: glittering streaks on the water under the body, brightening with the halo's music.
     float glintLight=0.0;
-    vec3 glintColour=mix(bodyColour.rgb,vec3(1.0),0.35);
+    vec3 glintColour=mix(bodyColour.rgb,vec3(1.0),0.15);
     if (wetness>0.0 && uWaterGlint>0.0 && uSunEnabled==1) {
         float gain=uGlintLight.x>0.0 ? basinCelestialHaloGain(uGlintLight.xy,uGlintLight.z,uGlintLight.w) : 1.0;
         glintLight=uWaterGlint*wetness*basinWaterGlint(vWorld,depthPerPixel)*(0.55+0.45*gain)*bodyColour.a;
@@ -686,7 +686,7 @@ void main() {
     vec3 lineGlow=mix(wire,uWaterLineGlowColor.rgb*(0.65+0.55*crest),uWaterLineGlowColor.a)*uWaterLineGlow;
     Emission=sceneEmission((lineGlow*lineAlpha + palette*ringAlpha*0.45+shoreColour*shoreAlpha
                            +fill*fillAlpha*glassWeight*0.12+shineEmission*fillAlpha
-                           +edgeColour*edgeGlow*1.2+glintColour*glintLight*0.8)*uGlow*distanceFade*detailFade);
+                           +edgeColour*edgeGlow*1.2+glintColour*glintLight*1.4)*uGlow*distanceFade*detailFade);
 }
 """
 )
