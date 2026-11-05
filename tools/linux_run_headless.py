@@ -78,14 +78,13 @@ def main() -> int:
             if stale.is_file():
                 stale.unlink()
     env = lh.child_env(args.display, profile, logs)
-    if not args.no_seed:
-        lh.generate_images(images, args.images)
-        lh.seed_profile(env, images, args.interval, () if args.keep_widgets else lh.DEFAULT_DISABLED_WIDGETS)
-
     shot_times = sorted(int(value) for value in args.shots.split(",") if value.strip())
     xvfb = lh.start_xvfb(args.display, args.geometry)
     app = None
     try:
+        if not args.no_seed:
+            lh.generate_images(images, args.images)
+            lh.seed_profile(env, images, args.interval, () if args.keep_widgets else lh.DEFAULT_DISABLED_WIDGETS)
         command = [sys.executable, "main.py", args.mode, "--exit-after", str(args.seconds), *args.main_args]
         with (logs / "stdout.txt").open("w") as stdout:
             app = subprocess.Popen(command, cwd=lh.REPO, env=env, stdout=stdout, stderr=subprocess.STDOUT)
