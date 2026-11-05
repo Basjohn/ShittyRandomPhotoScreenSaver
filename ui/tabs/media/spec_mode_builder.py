@@ -249,12 +249,12 @@ def _add_studio_launcher(tab, layout, mode_id: str, *, always: bool = False) -> 
     """Custom's entry to the mode's Studio (modes with a Studio adapter only).
 
     The preset's camera-save checkbox stays with the preset slider, unchanged."""
-    from ui.studio.registry import has_studio
+    from ui.studio.registry import has_studio, studio_modes
     if not has_studio(mode_id):
         return
     from PySide6.QtWidgets import QHBoxLayout
     from ui.widgets.outlined_button import OutlinedButton
-    title = get_visualizer_mode_descriptor(mode_id).display_name.split()[0]
+    title = next(entry.title for entry in studio_modes() if entry.mode_id == mode_id)    # the Studio's own name
     button = OutlinedButton(f"Open {title} Studio", role="standard")
     button.setObjectName(f"{mode_id}_open_studio")
     button.setMinimumHeight(40)

@@ -1,10 +1,12 @@
-"""Hidden capture of the real Waveform Studio shell rendering the real production scene.
+"""Hidden capture of a real mode Studio shell rendering the real production scene (Waveform by default;
+``--mode`` picks any registered Studio, e.g. ``extruded_bubble``).
 
 No window is shown: the Studio shell renders through QQuickRenderControl into a GL
 texture (Windows QPA). The store is in-memory (a resolved preset copy), so nothing is
 saved. Writes one PNG per workspace plus a JSON record of frame/evaluation timings.
 
     .venv\\Scripts\\python.exe tools\\waveform_studio_capture.py --output .artifacts\\evidence\\...\\studio
+    .venv\\Scripts\\python.exe tools\\waveform_studio_capture.py --mode extruded_bubble --preset 1 --output ...
 """
 from __future__ import annotations
 
@@ -96,6 +98,7 @@ def _apply_shell_state(surface, args) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--mode", default="waveform_ribbon", help="A registered Studio mode id")
     parser.add_argument("--preset", type=int, default=3)
     parser.add_argument("--size", default="1600x900")
     parser.add_argument("--fixture", default="peak")
@@ -110,7 +113,8 @@ def main() -> int:
     parser.add_argument("--tag", default="", help="Suffix for output names")
     parser.add_argument("--card-extent", default="", help="Live card world extent WxH (CUSTOM viewport_extent)")
     parser.add_argument("--border", type=float, default=None, help="Live card border width (px)")
-    parser.add_argument("--workspaces", default="composition,reactivity,appearance,world")
+    parser.add_argument("--workspaces", default="", help="Comma list (default: every workspace of the mode)")
+    parser.add_argument("--object", default="", help="Scene object to select for the first workspace")
     parser.add_argument("--expand", default="", help="Inspector groups to open (comma list, or 'all')")
     parser.add_argument("--pick-node", type=int, default=-1,
                         help="Open the colour picker on this gradient node (Appearance)")
@@ -133,16 +137,22 @@ def main() -> int:
     from ui.studio.controller import StudioController
     from ui.studio.surface import OffscreenStudioSurface
     from ui.studio.theme import studio_theme
-    from ui.studio.waveform_adapter import WaveformStudioAdapter
+    from core.settings.visualizer_mode_settings import mode_settings
+    from ui.studio.registry import create_adapter
 
     if args.theme is not None:
         from ui.settings_theme_io import load_settings_theme_file
         from ui.settings_theme_runtime import set_active_settings_theme
         set_active_settings_theme(load_settings_theme_file(args.theme))
-    mode = "waveform_ribbon"
+    mode = args.mode
     activation = resolve_visualizer_activation_payload({"mode": mode, f"preset_{mode}": args.preset - 1}, mode=mode)
     extent = tuple(float(v) for v in args.card_extent.split("x")) if args.card_extent else None
-    store = MemoryStore(activation.resolved_config, get_preset_names(mode)[args.preset - 1], extent, args.border)
+    values = dict(activation.resolved_config)
+    spec = mode_settings(mode)
+    if mode != "waveform_ribbon" and spec is not None:
+        # The Settings store's canonical admission (legacy direction pairs -> six-coordinate paths, ...).
+        values.update({c.key: c.admit(values[c.key], values[c.key]) for c in spec.controls if c.key in values})
+    store = MemoryStore(values, get_preset_names(mode)[args.preset - 1], extent, args.border)
     surfaces = []
 
     def factory(controller):
@@ -150,12 +160,13 @@ def main() -> int:
         surfaces.append(surface)
         return surface
 
-    controller = StudioController(WaveformStudioAdapter(), store, NoPresence(), factory, theme_provider=studio_theme)
+    controller = StudioController(create_adapter(mode), store, NoPresence(), factory, theme_provider=studio_theme)
     if not controller.open():
         raise SystemExit("Studio did not open")
     surface = surfaces[0]
     bridge = controller.bridge
-    record = {"preset": store.label, "size": [width, height], "fixture": args.fixture, "time": args.time}
+    record = {"mode": mode, "preset": store.label, "size": [width, height], "fixture": args.fixture,
+              "time": args.time}
     try:
         def settle():
             for _ in range(240):
@@ -165,6 +176,8 @@ def main() -> int:
             if bridge.viewportStatus != "live":
                 raise SystemExit(f"Viewport did not go live: {bridge.viewportStatus} {bridge.viewportError}")
 
+        if args.object:
+            bridge.selectObject(args.object)
         if args.clip:
             clip = next(c for c in controller.adapter.recorded_clips() if c.id == "clip:" + args.clip)
             from ui.studio.waveform_recorded_inputs import extract, to_inputs
@@ -228,9 +241,11 @@ def main() -> int:
             compare_path = args.output / f"compare_{args.framing}{suffix}.png"
             sheet.save(compare_path)
             record["compare"] = str(compare_path)
-        for workspace in args.workspaces.split(","):
+        workspaces = args.workspaces.split(",") if args.workspaces else [
+            w.id for w in controller.session.schema.workspaces]
+        for workspace in workspaces:
             bridge.setWorkspace(workspace)
-            if workspace == "appearance":
+            if mode == "waveform_ribbon" and workspace == "appearance":
                 bridge.selectObject("ribbon1")
             if args.expand:
                 groups = {g for w in controller.session.schema.workspaces for g in w.groups} \
@@ -251,7 +266,9 @@ def main() -> int:
             name = args.output / f"studio_{workspace}{suffix}.png"
             Image.fromarray(surface.grab()).save(name)
             record.setdefault("images", []).append(str(name))
-        (args.output / f"studio_capture{'_' + args.clip if args.clip else ''}.json").write_text(
+            if bridge.handles.get("handles"):
+                record.setdefault("handles", {})[workspace] = [h["id"] for h in bridge.handles["handles"]]
+        (args.output / f"studio_capture{suffix}.json").write_text(
             json.dumps(record, indent=1), encoding="utf-8")
         print(json.dumps(record, indent=1))
     finally:
