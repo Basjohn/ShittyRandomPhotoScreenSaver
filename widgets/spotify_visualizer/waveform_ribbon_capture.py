@@ -43,7 +43,7 @@ def capture_waveform_ribbon(widget,engine,context):
         snapshot.rotation_angle,snapshot.rotation_speed,snapshot.drives,snapshot.realized,
         ready=snapshot.ready,particles=snapshot.particles,particle_origin=snapshot.particle_origin,
         particle_serial=snapshot.particle_serial,passage=snapshot.passage,parameters=freeze_render_fields(camera),
-        strands=snapshot.strands,strand_origin=snapshot.strand_origin,zoom=snapshot.zoom)
+        strands=snapshot.strands,strand_origin=snapshot.strand_origin,zoom=snapshot.zoom,pulse=snapshot.pulse)
     extra=_base_extras(widget,MODE,engine)
     extra['_quick_mode_changed']=True
     extra['_quick_mode_reveal_ready']=snapshot.ready
