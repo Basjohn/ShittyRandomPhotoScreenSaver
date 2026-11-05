@@ -24,7 +24,7 @@ from ui.studio.adapter import (
 )
 from ui.studio.schema import (
     CHOICE, COLOUR, COUNT, GRADIENT, QUIET_PEAK, SCALAR, SWITCH, CardSpec, LifecycleSpec, SceneObject,
-    StudioPreset, StudioProperty, StudioSchema, Workspace,
+    RESPONSE_PANEL, StudioPreset, StudioProperty, StudioSchema, Workspace, WorkspaceColumn,
 )
 
 MODE = "waveform_ribbon"
@@ -51,22 +51,43 @@ _BUCKET_PLACEMENT = {
 # Flow-bucket values that describe musical roll/twist response rather than resting composition.
 _ROLL_KEYS = frozenset(PREFIX + k for k in ("rotation_enabled", "rotation", "twist_speed",
                                             "rotation_attack", "rotation_release"))
+# The dashboard (mock): each workspace's groups as side-by-side panels under the wide viewport.
 _WORKSPACES = (
     Workspace("composition", "Composition", ("Ribbons", "{object}", "Flow"), icon="wave",
-              help="Lay out the ribbons: how many, how tall and wide, their spacing and phase, and how the waves flow."),
+              open_groups=("Ribbons", "{object}", "Flow"),
+              help="Lay out the ribbons: how many, how tall and wide, their spacing and phase, and how the waves flow.",
+              columns=(WorkspaceColumn("Ribbon Shape", ("{object}",), "wave", "Selected ribbon", 1.2),
+                       WorkspaceColumn("Global", ("Ribbons", "Flow"), "ribbons", "Every ribbon"))),
     Workspace("reactivity", "Reactivity", ("Energy Pulse", "Shape Response", "Roll & Twist", "Timing",
                                            "Routing Details", "Advanced (Retired)"),
-              open_groups=("Energy Pulse", "Shape Response"), icon="bars",
+              open_groups=("Energy Pulse", "Shape Response", "Timing"), icon="bars",
               help="Decide how the music moves the scene: the travelling pulse, what each target listens to "
-                   "(Response Editor below the preview) and how quickly it reacts."),
+                   "(the Response Editor panel) and how quickly it reacts.",
+              columns=(WorkspaceColumn("Reactivity", (RESPONSE_PANEL,), "bars", "Response Editor", 2.0),
+                       WorkspaceColumn("Energy & Timing", ("Energy Pulse", "Shape Response", "Roll & Twist", "Timing",
+                                                           "Routing Details", "Advanced (Retired)"), "bolt",
+                                       "Pulse, shape and timing"))),
     Workspace("appearance", "Appearance", ("Gradient Nodes", "Sheet & Highlights", "{object} Colours", "Colour",
                                            "Particles", "Free Strands"),
-              open_groups=("Gradient Nodes", "Sheet & Highlights"), icon="palette",
-              help="Colour and material: the quiet and peak palettes, sheet and highlight looks, particles and strands."),
+              open_groups=("Gradient Nodes", "Sheet & Highlights", "{object} Colours", "Particles", "Free Strands"),
+              icon="palette",
+              help="Colour and material: the quiet and peak palettes, sheet and highlight looks, particles and strands.",
+              columns=(WorkspaceColumn("Ribbon Colours", ("Gradient Nodes", "{object} Colours", "Colour"), "palette",
+                                       "Colours"),
+                       WorkspaceColumn("Material", ("Sheet & Highlights",), "material", "Sheet & highlights"),
+                       WorkspaceColumn("Particles & Strands", ("Particles", "Free Strands"), "dots", "Emitters"))),
     Workspace("world", "World", ("Mist", "Floor", "Lens & Quality", "Camera", "View"),
-              open_groups=("Mist", "Floor"), icon="cube",
-              help="The world around the ribbons: mist, the reflective floor, lens and lighting, and the camera."),
+              open_groups=("Mist", "Floor", "Lens & Quality"), icon="cube",
+              help="The world around the ribbons: mist, the reflective floor, lens and lighting, and the camera.",
+              columns=(WorkspaceColumn("Mist", ("Mist",), "cloud", "Atmosphere"),
+                       WorkspaceColumn("Floor", ("Floor",), "floor", "Floor & reflections"),
+                       WorkspaceColumn("Lighting", ("Lens & Quality", "Camera", "View"), "sun", "Lens & camera"))),
 )
+# Row glyphs where a canonical icon exists (mock: an icon before each shape control).
+_ROW_ICONS = {"height": "height", "width": "width", "rate": "wave", "phase": "clock", "light": "sun", "band": "bars",
+              "count": "ribbons", "fog_density": "cloud", "floor_brightness": "floor", "floor_reflection": "drop",
+              "exposure": "sun", "bloom": "sparkle", "reaction_mode": "bolt", "camera_fov": "lens",
+              "sparks_enabled": "dots", "strands_enabled": "strand", "mist_enabled": "cloud"}
 _CAMERA_FIELDS = ("turn", "tilt", "scene_scale", "scene_pan_x", "scene_pan_y")
 # Headline controls lead their group (operator, 5 Nov): mist density and the floor controls tuned most
 # (surface, far surface, reflection, its contrast / ceiling / colour) come first; the reaction mode is the
@@ -236,6 +257,9 @@ def build_schema() -> StudioSchema:
                     instrument=COLOUR, object_scope=scope, targets=(scope,), colour_format="linear01",
                     tooltip="Linear-light ribbon colour, shown and entered as a display colour."))
 
+    props = [dataclasses.replace(p, icon=_ROW_ICONS.get(p.id.rsplit(".", 1)[-1] if "[" in p.id
+                                                        else p.id[len(PREFIX):], ""))
+             if not p.icon else p for p in props]
     controls = {control.key: control for control in spec.controls}
 
     def admit(key: str, candidate: Any, previous: Any) -> Any:
@@ -1085,13 +1109,19 @@ class WaveformStudioAdapter(StudioModeAdapter):
         base_w, base_h = CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
         card = card_extent or (base_w, base_h)
         label = f"Live Card {card[0] / card[1]:.2f}:1"
-        # Wider frames follow production's edge-resize rule: same height, more world revealed.
+        # Wider frames follow production's edge-resize rule: the live card's height, more world revealed at the
+        # sides (exactly what a wider card of that height shows).
+        height = float(card[1])
         style = tuple(sorted((card_style or {}).items()))
         return (StudioFraming("card", label, tuple(card),
                               "The visualizer card as it is laid out (CUSTOM extent, else the card baseline).", style),
-                StudioFraming("wide", "16:9", (base_h * 16 / 9, base_h), "A wide card at the baseline height.", style),
-                StudioFraming("cinema", "21:9", (base_h * 21 / 9, base_h), "An ultrawide card at the baseline height.",
-                              style))
+                StudioFraming("wide", "16:9", (height * 16 / 9, height),
+                              "A 16:9 card at the live card's height: more of the world at the sides.", style),
+                StudioFraming("cinema", "21:9", (height * 21 / 9, height),
+                              "A 21:9 card at the live card's height.", style))
+
+    def default_framing(self) -> str:
+        return "wide"           # the dashboard's wide viewport; Live Card shows the true card, letterboxed
 
     def default_fixture(self, evaluator) -> str | None:
         return "mid"

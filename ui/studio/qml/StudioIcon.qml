@@ -52,16 +52,21 @@ Item {
         "redo": "M15 14 L20 9 L15 4 M20 9 L9 9 A5 5 0 0 0 9 19 L13 19",
         "save": "M5 3 L16 3 L21 8 L21 21 L5 21 Z M8 3 L8 9 L15 9 L15 3 M8 21 L8 14 L16 14 L16 21",
         "lens": "M12 3 A9 9 0 1 0 12.01 3 M12 8 A4 4 0 1 0 12.01 8",
+        "width": "M3 12 L21 12 M7 8 L3 12 L7 16 M17 8 L21 12 L17 16",
         "move": "M12 3 L12 21 M3 12 L21 12 M9 6 L12 3 L15 6 M9 18 L12 21 L15 18 M6 9 L3 12 L6 15 M18 9 L21 12 L18 15",
         "help": "M12 3 A9 9 0 1 0 12.01 3 M9.5 9.5 A2.5 2.5 0 1 1 12 12 L12 14 M12 17 L12 17.2"
     })
 
+    // The path is authored on a 24x24 grid and scaled by the ShapePath, so the item's geometry is the icon's
+    // own size (layouts and overlap checks see exactly what is drawn).
     Shape {
-        anchors.centerIn: parent
-        width: 24; height: 24
-        scale: Math.min(icon.width, icon.height) / 24
+        id: shape
+        readonly property real unit: Math.min(icon.width, icon.height) / 24
+        x: (icon.width - 24 * unit) / 2; y: (icon.height - 24 * unit) / 2
+        width: 24 * unit; height: 24 * unit
         preferredRendererType: Shape.CurveRenderer
         ShapePath {
+            scale: Qt.size(shape.unit, shape.unit)
             strokeColor: icon.color
             strokeWidth: icon.stroke
             fillColor: icon.filled ? icon.color : "transparent"

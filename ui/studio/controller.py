@@ -283,7 +283,48 @@ class StudioBridge(QObject):
                                         if card is not None else {}),
                                "group": group})
         self._inspector = groups
+        self._columns = self._dashboard_columns(workspace, groups)
         self.inspectorChanged.emit()
+
+    def _dashboard_columns(self, workspace, groups: list) -> list:
+        """The workspace's panels under the viewport. Every shown group lands in exactly one panel: groups a
+        column spec does not name join the last group panel (nothing silently disappears)."""
+        from ui.studio.schema import RESPONSE_PANEL
+        has_response = self._schema.response is not None
+        specs = list(workspace.columns)
+        if not specs:
+            keys = [g["group"] for g in groups]
+            count = max(1, min(3, len(keys)))
+            size = -(-len(keys) // count) if keys else 0
+            specs = [type("Auto", (), {"title": workspace.title, "groups": tuple(keys[i:i + size]), "icon": workspace.icon,
+                                       "subtitle": "", "weight": 1.0})() for i in range(0, max(1, len(keys)), max(1, size))]
+        by_key = {g["group"]: g for g in groups}
+        placed: set = set()
+        columns = []
+        for spec in specs:
+            if RESPONSE_PANEL in spec.groups:
+                if has_response:
+                    columns.append({"kind": "response", "title": spec.title, "subtitle": spec.subtitle,
+                                    "icon": spec.icon, "weight": float(spec.weight), "groups": []})
+                continue
+            chosen = [by_key[key] for key in spec.groups if key in by_key]
+            placed.update(g["group"] for g in chosen)
+            columns.append({"kind": "groups", "title": spec.title, "subtitle": spec.subtitle, "icon": spec.icon,
+                            "weight": float(spec.weight), "groups": chosen})
+        leftover = [g for g in groups if g["group"] not in placed]
+        if leftover:
+            target = next((c for c in reversed(columns) if c["kind"] == "groups"), None)
+            if target is None:
+                target = {"kind": "groups", "title": workspace.title, "subtitle": "", "icon": workspace.icon,
+                          "weight": 1.0, "groups": []}
+                columns.append(target)
+            target["groups"] = target["groups"] + leftover
+        return [c for c in columns if c["kind"] == "response" or c["groups"]]
+
+    def _inspector_columns(self) -> list:
+        return getattr(self, "_columns", [])
+
+    inspectorColumns = Property("QVariantList", _inspector_columns, notify=inspectorChanged)
 
     def _inspector_groups(self) -> list:
         return self._inspector
@@ -739,7 +780,7 @@ class StudioBridge(QObject):
                 "min": float(prop.minimum), "max": float(prop.maximum), "decimals": int(prop.decimals),
                 "units": prop.units, "choices": list(prop.choices), "tooltip": prop.tooltip,
                 "quietMeaning": prop.quiet_meaning, "peakMeaning": prop.peak_meaning, "integer": bool(prop.integer),
-                "notes": list(prop.choice_notes)}
+                "notes": list(prop.choice_notes), "icon": prop.icon}
 
     def _response_model(self) -> dict:
         response = self._schema.response
@@ -917,7 +958,8 @@ class StudioController(QObject):
                 card_style = getattr(self.store, "card_style", lambda: None)()
                 self.framings = tuple(self.adapter.framings(card_extent, card_style))
                 if self.framings:
-                    self.select_framing(self.framings[0].id)
+                    wanted = self.adapter.default_framing()
+                    self.select_framing(next((f.id for f in self.framings if f.id == wanted), self.framings[0].id))
             else:
                 # Inspector-only Studio: the item never gets a scene-graph node, so no renderer exists.
                 self.viewport.setVisible(False)

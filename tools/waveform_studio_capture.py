@@ -92,7 +92,7 @@ def main() -> int:
                         help="With --clip: seconds from the recording's first frame (as tools/waveform_ribbon_capture --start)")
     parser.add_argument("--compare", type=Path, default=None,
                         help="A production capture PNG to place beside the Studio's presented frame")
-    parser.add_argument("--framing", default="card")
+    parser.add_argument("--framing", default="", help="Viewport framing id (default: the mode's own default)")
     parser.add_argument("--theme", type=Path, default=None, help="A .srtheme to activate for this capture")
     parser.add_argument("--tag", default="", help="Suffix for output names")
     parser.add_argument("--card-extent", default="", help="Live card world extent WxH (CUSTOM viewport_extent)")
@@ -185,7 +185,9 @@ def main() -> int:
         evals.sort()
         record["playing_frame_ms"] = {"p50": samples[len(samples) // 2], "p90": samples[int(len(samples) * .9)]}
         record["evaluate_one_step_ms"] = {"p50": evals[len(evals) // 2], "p90": evals[int(len(evals) * .9)]}
-        controller.select_framing(args.framing)
+        if args.framing:
+            controller.select_framing(args.framing)
+        args.framing = controller.bridge.framingId
         controller.seek(args.time)
         settle()
         args.output.mkdir(parents=True, exist_ok=True)

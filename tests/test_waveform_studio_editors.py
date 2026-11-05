@@ -263,21 +263,23 @@ def test_lifecycle_timelines_cards_and_tiles_render_in_their_groups(studio):
     assert seen["lifecycleGrip"] >= len(schema.lifecycles)
 
 
-def test_response_editor_collapses_to_keep_the_viewport_large(studio):
+def test_response_editor_fills_its_own_dashboard_panel_beside_the_viewport(studio):
+    """Dashboard (mock): the response editor is a panel under the wide viewport, never over it."""
+    from PySide6.QtCore import QPointF
     controller, surface = studio
     controller.bridge.setWorkspace("reactivity")
     surface.pump(3)
     dock = next(i for i in _walk(surface.host.root) if i.objectName() == "responseDock")
     slot = surface.host.slot
-    assert dock.isVisible() and dock.property("expanded") is False
-    collapsed = slot.height()
-    dock.setProperty("expanded", True)
-    surface.pump(3)
-    assert dock.height() > 120 and slot.height() < collapsed - 100
-    dock.setProperty("expanded", False)
-    surface.pump(3)
-    assert slot.height() == pytest.approx(collapsed)
-
+    assert dock.isVisible() and dock.height() > 120
+    dock_top = dock.mapToScene(QPointF(0, 0)).y()
+    slot_bottom = slot.mapToScene(QPointF(0, slot.height())).y()
+    assert dock_top >= slot_bottom
+    kinds = [c["kind"] for c in controller.bridge.inspectorColumns]
+    assert kinds.count("response") == 1 and "groups" in kinds
+    controller.bridge.setWorkspace("composition")
+    surface.pump(2)
+    assert not dock.isVisible()
 
 def test_preset_tiles_render_once_per_starting_point_and_stay_idle(studio, monkeypatch):
     controller, surface = studio

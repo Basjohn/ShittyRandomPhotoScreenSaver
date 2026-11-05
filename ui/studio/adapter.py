@@ -200,6 +200,10 @@ class StudioModeAdapter(ABC):
         """Drop anything the adapter itself holds (e.g. a private preview evaluator) when the Studio
         closes or switches mode."""
 
+    def default_framing(self) -> str:
+        """The framing id the viewport opens on ("" = the first of ``framings``)."""
+        return ""
+
     def default_fixture(self, evaluator) -> str | None:
         """The preview input the transport starts on (None: the evaluator's own default)."""
         return None

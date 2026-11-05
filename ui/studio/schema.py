@@ -59,6 +59,8 @@ class StudioProperty:
     priority: int = 100
     # CHOICE only: one plain-language line per choice, shown for the current choice and as chip tooltips.
     choice_notes: tuple[str, ...] = ()
+    # A small glyph name (StudioIcon) shown before the row label where a canonical icon exists.
+    icon: str = ""
 
     def __post_init__(self) -> None:
         if self.instrument not in INSTRUMENTS:
@@ -87,6 +89,22 @@ class SceneObject:
 
 
 @dataclass(frozen=True)
+class WorkspaceColumn:
+    """One dashboard panel under the viewport: a titled column of the workspace's groups.
+
+    ``groups`` lists group keys in order; the reserved key ``"@response"`` places the response editor (the
+    schema's ``StudioResponse``) in this panel. ``weight`` is the panel's share of the width."""
+    title: str
+    groups: tuple[str, ...]
+    icon: str = ""
+    subtitle: str = ""
+    weight: float = 1.0
+
+
+RESPONSE_PANEL = "@response"
+
+
+@dataclass(frozen=True)
 class Workspace:
     id: str
     title: str
@@ -95,6 +113,8 @@ class Workspace:
     open_groups: tuple[str, ...] = ()
     icon: str = ""             # a short glyph for the workspace tab
     help: str = ""             # one sentence for the help overlay: what this workspace is for
+    # Dashboard panels under the viewport; empty: the groups split evenly into up to three panels.
+    columns: tuple["WorkspaceColumn", ...] = ()
 
 
 @dataclass(frozen=True)
@@ -209,6 +229,7 @@ class StudioSchema:
 
 
 __all__ = [
+    "RESPONSE_PANEL", "WorkspaceColumn",
     "CardSpec", "GRADIENT", "LifecycleSpec", "StudioPreset",
     "ResponseCell", "ResponseSource", "ResponseTarget", "StudioResponse",
     "CHOICE", "COLOUR", "COUNT", "INSTRUMENTS", "QUIET_PEAK", "SCALAR", "SWITCH",

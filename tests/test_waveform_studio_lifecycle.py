@@ -346,7 +346,7 @@ def test_viewport_presents_the_card_extent_letterboxed_and_framings_switch(qt_ap
                                   surface_factory=_surfaces(surfaces, size=(1400, 820)))
     surfaces[0].pump(2)
     viewport, slot = surfaces[0].viewport, surfaces[0].host.slot
-    assert controller.bridge.framingId == controller.framings[0].id
+    assert controller.bridge.framingId == (controller.adapter.default_framing() or controller.framings[0].id)
     for framing in controller.framings:
         controller.select_framing(framing.id)
         surfaces[0].pump()
@@ -406,6 +406,7 @@ def test_measured_signals_feed_traces_and_the_response_tuner(qt_app, dialog_tab,
 @pytest.mark.parametrize("size", [(1100, 700), (1600, 900)])
 def test_inspector_rows_never_overlap_at_any_inspector_width(qt_app, dialog_tab, no_gl_checks, size):
     """Offscreen layout check: every inspector row contains its own content and rows stack without overlap."""
+    import shiboken6
     from PySide6.QtCore import QPointF
     from PySide6.QtQuick import QQuickItem
     from ui.studio.settings_link import open_mode_studio
@@ -436,7 +437,8 @@ def test_inspector_rows_never_overlap_at_any_inspector_width(qt_app, dialog_tab,
                 and r.height() > 0]
         by_parent: dict = {}
         for row in rows:
-            by_parent.setdefault(id(row.parentItem()), []).append(row)
+            # Keyed by the C++ parent (Python wrapper ids can be reused across distinct parents).
+            by_parent.setdefault(shiboken6.getCppPointer(row.parentItem())[0], []).append(row)
         for siblings in by_parent.values():
             spans = sorted(scene_span(r) for r in siblings)
             for (_top, bottom), (next_top, _b) in zip(spans, spans[1:]):
@@ -535,3 +537,68 @@ def test_clip_job_cancel_does_not_block(qt_app):
     started = time.perf_counter()
     job.cancel()
     assert (time.perf_counter() - started) < 0.25
+
+
+@pytest.mark.parametrize("size", [(960, 600), (1672, 941)])
+def test_dashboard_panels_tile_under_the_viewport_without_overlap(qt_app, dialog_tab, no_gl_checks, size):
+    """Dashboard (mock): ribbon list | wide viewport on top, the workspace's panels side by side underneath, at
+    the window's minimum size and at full size: panels never overlap each other or the viewport, stay inside
+    the window, and every shown group sits in exactly one panel."""
+    from PySide6.QtCore import QPointF, QRectF
+    from ui.studio.settings_link import open_mode_studio
+    _dialog, tab = dialog_tab()
+    surfaces = []
+    controller = open_mode_studio(tab, MODE, adapter=LightAdapter(), surface_factory=_surfaces(surfaces, size=size))
+    surface = surfaces[0]
+
+    def walk(item):
+        for child in item.childItems():
+            yield child
+            yield from walk(child)
+
+    def rect(item):
+        top_left = item.mapToScene(QPointF(0, 0))
+        return QRectF(top_left.x(), top_left.y(), item.width(), item.height())
+    assert controller.bridge.framingId == controller.adapter.default_framing() == "wide"
+    root = surface.host.root
+    window = QRectF(0, 0, size[0], size[1])
+    for workspace in ("composition", "reactivity", "appearance", "world"):
+        controller.bridge.setWorkspace(workspace)
+        surface.pump(3)
+        panels = [rect(i) for i in walk(root) if i.isVisible()
+                  and i.objectName() in ("dashboardPanel", "responseDock")]
+        viewport = rect(next(i for i in walk(root) if i.objectName() == "viewportSlot"))
+        assert panels, workspace
+        for index, panel in enumerate(panels):
+            assert window.adjusted(-0.5, -0.5, 0.5, 0.5).contains(panel), (workspace, panel)
+            assert panel.top() >= viewport.bottom(), (workspace, panel, viewport)
+            assert panel.width() > 150 and panel.height() > 120, (workspace, panel)
+            for other in panels[index + 1:]:
+                assert not panel.adjusted(0.5, 0.5, -0.5, -0.5).intersects(other), (workspace, panel, other)
+        shown = [g["group"] for g in controller.bridge.inspector]
+        placed = [g["group"] for c in controller.bridge.inspectorColumns for g in c["groups"]]
+        assert sorted(placed) == sorted(shown), workspace
+    controller.close()
+
+
+def test_switch_rows_are_checkboxes_that_commit(qt_app, dialog_tab, no_gl_checks):
+    from ui.studio.settings_link import open_mode_studio
+    _dialog, tab = dialog_tab()
+    surfaces = []
+    controller = open_mode_studio(tab, MODE, adapter=LightAdapter(), surface_factory=_surfaces(surfaces, size=(1400, 820)))
+    surface = surfaces[0]
+    controller.bridge.setWorkspace("appearance")
+    surface.pump(3)
+
+    def walk(item):
+        for child in item.childItems():
+            yield child
+            yield from walk(child)
+    boxes = [i for i in walk(surface.host.root) if i.objectName() == "checkBox" and i.isVisible()]
+    assert boxes
+    prop = next(p for p in controller.session.schema.properties
+                if p.instrument == "switch" and p.workspace == "appearance")
+    before = controller.session.get(prop.path)
+    controller.bridge.commitValue(prop.id, 0, not before)
+    assert controller.session.get(prop.path) is (not before)
+    controller.close()
