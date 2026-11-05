@@ -52,5 +52,7 @@ def test_fourth_visible_sheet_reaches_native_direct_and_reflected_scene(qt_app):
         target.bind();renderer.render(frame);three=target.read_rgba().astype(float)
         # The added orange sheet and its reflected light must alter actual output, not just a count setting.
         assert (np.abs(four[:230,:,:3]-three[:230,:,:3]).max(2)>8.).sum()>100
-        assert (np.abs(four[230:,:,:3]-three[230:,:,:3]).max(2)>8.).sum()>100
+        # Its reflection: the sheet now rests above the floor (troughs clear it, 5 Nov), and the floor deliberately
+        # fades reflected light with height, so the reflected contribution is real but fainter than the sheet's own.
+        assert (np.abs(four[230:,:,:3]-three[230:,:,:3]).max(2)>4.).sum()>100
     finally:renderer.release_resources();target.close()

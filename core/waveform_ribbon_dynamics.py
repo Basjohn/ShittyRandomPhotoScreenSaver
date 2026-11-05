@@ -85,6 +85,14 @@ GEOM_MAX_WAVELENGTH = 48.   # a stationary carrier (rate 0) bounds the envelope 
 SURGE_MAX_COMPRESSION = .3  # knot spacing may shrink by at most 30% locally
 SURGE_RATE = 1.             # swell units per second: the surge can never lurch on a beat's fast rise
 
+# Floor clearance (operator, 5 Nov; see WaveformDynamics._trough_depth): the packet origin sits PACKET_FLOOR_HEIGHT
+# above the world floor and the rest line TROUGH_RAISE higher still; troughs keep their lower edge TROUGH_CLEARANCE
+# above the floor. Scale floor (monotone above ~.31), the unscaled zone around the rest line, follow times on the
+# logical clock, the visible half-span watched (world units) and the share of the sheet's hang that counts.
+PACKET_FLOOR_HEIGHT, TROUGH_RAISE, TROUGH_CLEARANCE, TROUGH_ROOM_MIN = 2., .35, .3, .4
+TROUGH_SCALE_MIN, TROUGH_SOFT, TROUGH_ATTACK, TROUGH_RELEASE, TROUGH_VIEW, TROUGH_HANG = .35, 1.2, .08, 1.2, 12., .5
+TROUGH_SAFETY_KNEE, TROUGH_SAFETY_SLOPE = .7, .04  # transient safety for swell-deepened troughs (see _trough_depth)
+
 # Selectable reaction modes (operator, 5 Nov). All share the injection and the couplings above.
 REACTION_MODES = ('Travelling Pulse', 'Frozen Past', 'Whole Swell', 'Group Wave')
 # Frozen Past: per-cell passage peak held on the cloth (the grid is advected with the history flow, so the memory
@@ -271,6 +279,7 @@ class WaveformDynamics:
         self._pulse = np.zeros((2,PULSE_GRID.size))  # travelling toward -x, toward +x
         self._fresh = np.zeros((2,PULSE_GRID.size))  # the same transport with a short fade: recently launched swells
         self._pulse_pending = 0.
+        self._trough_scale,self._trough_time = np.ones((RIBBON_CAPACITY,1)),None  # lower-half depth scale per ribbon
         self._held = np.zeros((4,PULSE_GRID.size))  # Frozen Past on the cloth: memory, peak, previous swell, rising
         self._whole = self._whole_fresh = 0.         # Whole Swell global raw level and its short-fade copy
         self._drift = np.zeros(PULSE_GRID.size)      # rate-limited signed surge field (swell units)
@@ -658,6 +667,38 @@ class WaveformDynamics:
             x[rows,order] = target
         return x,y,z
 
+    def _trough_depth(self,centre,plain,hang,room,visible):
+        """Scale each ribbon's lower half so its lower edge stays above the floor (operator, 5 Nov: "perhaps how far
+        the bottom half can go down could be clamped"). Proportional, so a deep trough stays a round trough, never a
+        flat run; the scale is exactly 1 near the rest line (phi = s + (1-s)*exp(-(h/TROUGH_SOFT)^2), C2 there and
+        monotone for s >= TROUGH_SCALE_MIN); it follows the deepest visible need quickly (TROUGH_ATTACK) and relaxes
+        slowly (TROUGH_RELEASE), on the logical clock. Crests are untouched. The need is measured on ``plain`` (the
+        waveform without the travelling swell): the scale never reacts to a swell, so a swell only deepens."""
+        plain_near = np.exp(-(plain/TROUGH_SOFT)**2)
+        below = (plain<0.)&visible&(hang-plain>room)
+        with np.errstate(divide='ignore',invalid='ignore'):
+            allowed = ((room-hang)/np.where(below,-plain,1.)-plain_near)/np.maximum(1.-plain_near,1e-6)
+        near = np.exp(-(centre/TROUGH_SOFT)**2)
+        target = np.clip(np.where(below,allowed,1.).min(axis=1,keepdims=True),TROUGH_SCALE_MIN,1.)
+        if self._trough_time is None:
+            self._trough_scale = target
+        elif self.time>self._trough_time:
+            dt = self.time-self._trough_time
+            tau = np.where(target<self._trough_scale,TROUGH_ATTACK,TROUGH_RELEASE)
+            self._trough_scale = self._trough_scale+(target-self._trough_scale)*(1.-np.exp(-dt/tau))
+        self._trough_time = self.time
+        scale = self._trough_scale
+        centre = np.where(centre<0.,centre*(scale+(1.-scale)*near),centre)
+        # A strong swell may deepen a trough beyond what the swell-free scale planned. Past TROUGH_SAFETY_KNEE of the
+        # room the lower edge eases with a small residual slope: one swell-free hang per ribbon (its widest visible),
+        # so this stays a monotone function of height alone (a swell still only deepens; surge stays on the curve).
+        widest = np.where(visible,hang,0.).max(axis=1,keepdims=True)
+        knee = TROUGH_SAFETY_KNEE*room
+        ease = room-knee
+        deep = np.maximum(0.,widest-centre-knee)
+        settled = widest-knee-TROUGH_SAFETY_SLOPE*deep-(1.-TROUGH_SAFETY_SLOPE)*ease*np.tanh(deep/ease)
+        return np.where(deep>0.,settled,centre)
+
     def _advance_zoom(self,dt,enabled,hold):
         self._sustain = follower(self._sustain,self.passage,dt,ZOOM_SUSTAIN_ATTACK,ZOOM_SUSTAIN_RELEASE)
         if hold:
@@ -719,24 +760,40 @@ class WaveformDynamics:
         cz = depth_wave*values['height']*gain+separation*values['spread']
         cosine,sine = math.cos(self.angle),math.sin(self.angle)
         y,z = cosine*cy-sine*cz,sine*cy+cosine*cz
+        # The trough depth scale is sized on the waveform WITHOUT the travelling swell, so a swell only ever deepens
+        # its own troughs (flow rule) instead of making the rest of the ribbon shallower.
+        plain = cosine*carrier*values['height']-sine*(depth_wave*values['height']+separation*values['spread'])
         # Depth sway acts in world space after the roll and travels with the cloth. The former standing bend
         # (a fixed spatial sine the ribbon slid through) is replaced by the travelling pulse above.
         z = z+.4*values['depth']*m*np.cos(.65*u+owner)
         idle=self.controls.idle_motion*(1.-self.passage)
         y+=idle*.08*np.sin(.45*self.time+.6*u+owner)
         z+=idle*.05*np.cos(.33*self.time+.4*u-owner)
+        visible = np.abs(x)<TROUGH_VIEW  # before the surge: the trough scale never reacts to a swell
         x,y,z = self._surge(data,x,y,z,PULSE_SURGE*values['bend'])
         rows[:,:,0] = x-raw.world_origin[0]-self.controls.scene.flow.head_x+self.travel
         # One common smooth bounding domain prevents floor-crossing/clamp kinks at extreme editor values. Peaks
         # are meant to rise high: the framing makes room for them, the body is never capped to fit a frame.
-        rows[:,:,1] = 5.*np.tanh(y/5.)+values['lift']
-        rows[:,:,2] = 5.*np.tanh(z/5.)
+        plain_width = 3.5*np.tanh(rows[:,:,3]*values['width']/3.5)  # without the swell's widening
         rows[:,:,3] = 3.5*np.tanh(rows[:,:,3]*values['width']*(1.+.35*geometric)/3.5)
+        rows[:,:,2] = 5.*np.tanh(z/5.)
         origin_twist = (data[:,1,0,None]+math.pi)%(2*math.pi)-math.pi
         twist = data[:,5::KNOT_ROWS,1]+origin_twist
         twist = twist*values['twist']+values['torsion']*(1.6*m*np.sin(.45*u+owner)+.12*h*np.sin(.7*u-owner))
         data[:,5::KNOT_ROWS,1] = twist+self.twist_phase+self.angle+idle*.18*np.sin(.28*self.time+.3*u+owner)
         data[:,1,0] = 0.
+        # Troughs stay round above the floor instead of being eased flat along it (operator, 5 Nov: "we collide
+        # with the floor a lot ... the flat collision looks poor ... perhaps how far the bottom half can go down could
+        # be clamped"). Each ribbon's lower half is scaled so its lower edge (the cloth sweep's side is
+        # cos(twist)*Y + sin(twist)*Z, so the sheet hangs width*|cos(twist)| below its centre; TROUGH_HANG of that
+        # counts) stays TROUGH_CLEARANCE above the floor: proportional, so a deep trough is a smaller round trough,
+        # never a flat run (saturating per-knot limits made plateaus and broke the flow rule). The rest line sits
+        # TROUGH_RAISE higher to give the troughs room; crests are untouched. The symmetric 5*tanh(y/5) bound shapes
+        # crests only: on troughs it saturated deep ones into flat runs. The floor contact map is a last resort.
+        centre = np.where(y>=0.,5.*np.tanh(y/5.),y)
+        hang = TROUGH_HANG*np.abs(plain_width*np.cos(data[:,5::KNOT_ROWS,1]))
+        room = max(TROUGH_ROOM_MIN,PACKET_FLOOR_HEIGHT+values['lift']+TROUGH_RAISE-TROUGH_CLEARANCE)
+        rows[:,:,1] = self._trough_depth(centre,plain,hang,room,visible)+values['lift']+TROUGH_RAISE
         # Strong local musical regions change colour immediately, even before new head history enters view.
         # The crest mask is carried by immutable carrier geometry, so coloured regions travel with the waveform.
         # All cards at once as rows; each card's Python scalars become a column in exactly the dtype NumPy would
