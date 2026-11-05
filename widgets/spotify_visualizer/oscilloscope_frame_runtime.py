@@ -73,6 +73,11 @@ class OscilloscopeFrameRuntime(RetirableFrameRuntime):
         super().__init__()
         self.reset()
 
+    @retirement_fenced
+    def rebase_clock(self) -> None:
+        """Display power resumed after a park: the next step integrates no parked gap (state stays warm)."""
+        self._last_timestamp = 0.0
+
     def reset(self) -> None:
         self._live: bytes = b""
         self._live_display = ""

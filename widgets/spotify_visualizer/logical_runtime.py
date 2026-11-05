@@ -316,6 +316,7 @@ class VisualizerLogicalRuntime:
         interval_s: float,
         generation: int,
         name: str = "srpss-visualizer-logical",
+        parked: bool = False,
     ) -> None:
         self._step = step
         self._interval_s = max(0.001, float(interval_s))
@@ -326,6 +327,16 @@ class VisualizerLogicalRuntime:
         self._stop_event = threading.Event()
         self._wake_event = threading.Event()
         self._state_lock = threading.RLock()
+        # Display-power parking (core.display_power): set = run, clear = park.
+        # A parked loop blocks on this event with no timeout - no wake cadence -
+        # and `_parked_ack` tells the parking thread no step is in flight.
+        self._park_requested = bool(parked)
+        self._run_event = threading.Event()
+        if not self._park_requested:
+            self._run_event.set()
+        self._parked_ack = threading.Event()
+        self._parks = 0
+        self._parked_seconds = 0.0
 
         self._started_ts = 0.0
         self._steps = 0
@@ -362,6 +373,12 @@ class VisualizerLogicalRuntime:
             return False
         self._stop_event.clear()
         self._wake_event.clear()
+        with self._state_lock:
+            self._parked_ack.clear()
+            if self._park_requested:
+                self._run_event.clear()
+            else:
+                self._run_event.set()
         self._started_ts = _clock()
         # Explicitly not a daemon: this runtime must be joined by its owning
         # generation rather than silently outliving it at interpreter exit.
@@ -381,6 +398,9 @@ class VisualizerLogicalRuntime:
         thread = self._thread
         self._stop_event.set()
         self._wake_event.set()
+        # Release a parked loop so it can observe stop. `_park_requested` is
+        # kept: a later start() of this runtime starts parked again.
+        self._run_event.set()
         if thread is None:
             return True
         thread.join(timeout=max(0.0, float(timeout_s)))
@@ -421,6 +441,55 @@ class VisualizerLogicalRuntime:
 
         self._wake_event.set()
 
+    # -- display-power parking -------------------------------------------
+    @property
+    def park_requested(self) -> bool:
+        return self._park_requested
+
+    def is_parked(self) -> bool:
+        """True once the loop is blocked in its park wait (no step in flight)."""
+
+        return bool(self._park_requested and self._parked_ack.is_set() and self.is_running())
+
+    def park(self, *, timeout_s: float = _DEFAULT_JOIN_TIMEOUT_S) -> bool:
+        """Stop stepping until `unpark()`, keeping the thread and all state warm.
+
+        Returns once the loop is blocked in its park wait (so the caller may
+        safely rebase logical clocks), or False if it did not get there within
+        `timeout_s`. A not-yet-started runtime records the request and starts
+        parked.
+        """
+
+        with self._state_lock:
+            if not self._park_requested:
+                self._park_requested = True
+                self._parked_ack.clear()
+                self._run_event.clear()
+        self._wake_event.set()
+        thread = self._thread
+        if thread is None or not thread.is_alive():
+            return True
+        if thread is threading.current_thread():
+            raise RuntimeError("the logical runtime cannot park itself from its own step")
+        parked = self._parked_ack.wait(max(0.0, float(timeout_s)))
+        if not parked:
+            logger.error(
+                "[SPOTIFY_VIS][LOGICAL] Runtime did not park within %.2fs (generation=%s)",
+                timeout_s,
+                self._generation,
+            )
+        return parked
+
+    def unpark(self) -> bool:
+        """Resume stepping on a fresh deadline sequence. Returns whether it was parked."""
+
+        with self._state_lock:
+            if not self._park_requested:
+                return False
+            self._park_requested = False
+            self._run_event.set()
+        return True
+
     # -- loop ----------------------------------------------------------
     def _wait_until(self, deadline: float) -> None:
         """Sleep until `deadline`, interruptibly, without a coarse wait.
@@ -447,9 +516,39 @@ class VisualizerLogicalRuntime:
                 return
             time.sleep(min(remaining, _MAX_SLEEP_SLICE_S))
 
+    def _park_wait(self) -> float:
+        """Block until unparked or stopped; returns the fresh deadline to resume on."""
+
+        parked_at = _clock()
+        self._parked_ack.set()
+        logger.info(
+            "[SPOTIFY_VIS][LOGICAL] Runtime parked (generation=%s steps=%d)",
+            self._generation,
+            self._steps,
+        )
+        # Deliberately no timeout: a parked runtime has no cadence at all.
+        self._run_event.wait()
+        self._parked_ack.clear()
+        resumed_at = _clock()
+        self._parks += 1
+        self._parked_seconds += resumed_at - parked_at
+        self._wake_event.clear()
+        if not self._stop_event.is_set():
+            logger.info(
+                "[SPOTIFY_VIS][LOGICAL] Runtime unparked (generation=%s parked_s=%.1f)",
+                self._generation,
+                resumed_at - parked_at,
+            )
+        # The parked interval is not a run of missed deadlines: start a new
+        # sequence now instead of counting hours of skipped ticks.
+        return resumed_at
+
     def _run(self) -> None:
         next_deadline = _clock()
         while not self._stop_event.is_set():
+            if not self._run_event.is_set():
+                next_deadline = self._park_wait()
+                continue
             interval = self.interval_s
             now = _clock()
 
@@ -497,4 +596,7 @@ class VisualizerLogicalRuntime:
             "skipped_deadlines": self._skipped_deadlines,
             "slow_steps": self._slow_steps,
             "step_failures": self._step_failures,
+            "parked": self.is_parked(),
+            "parks": self._parks,
+            "parked_seconds": round(self._parked_seconds, 3),
         }

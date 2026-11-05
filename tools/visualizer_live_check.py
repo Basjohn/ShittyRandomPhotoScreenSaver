@@ -76,7 +76,7 @@ def _stats(values):
 
 # -- analysis -----------------------------------------------------------------------------------------------------
 
-def analyse_trace(path: Path) -> dict:
+def analyse_trace(path: Path, *, steady_stop_ns: int | None = None) -> dict:
     sys.path.insert(0, str(ROOT))
     from tools.frame_trace_report import HEADER, RECORD, _read_trace_chain
 
@@ -91,6 +91,8 @@ def analyse_trace(path: Path) -> dict:
     startup_end = ends[0] if ends else events[0][0]
     teardown = next((ts for ts in begins if ts > startup_end), events[-1][0])
     start, stop = startup_end + STEADY_AFTER_STARTUP_NS, teardown
+    if steady_stop_ns is not None:
+        stop = min(stop, int(steady_stop_ns))   # --display-off: the steady window ends at the first off edge
     published = {r: ts for ts, e, r in events if e == 1}
     pub_times = sorted((ts, r) for ts, e, r in events if e == 1)
     pub_ts = [t for t, _ in pub_times]
@@ -144,9 +146,178 @@ def hud_ages(perf_log: Path, mode: str) -> dict | None:
     return _stats(ages[3:-2]) if len(ages) > 6 else None
 
 
+# -- display power (--display-off) ---------------------------------------------------------------------------------
+# The real Windows notification is injected through the production seam: the saver's own display-power window
+# procedure receives WM_POWERBROADCAST / PBT_POWERSETTINGCHANGE with a GUID_CONSOLE_DISPLAY_STATE payload, exactly as
+# Windows sends it. The panels are never powered off and no power setting changes.
+
+POWER_SETTLE_S = 3.0          # seconds after each edge left out of a window's figures
+RESUME_WINDOW_NS = 2_000_000_000
+
+
+def parse_display_off(text: str) -> list[tuple[float, float]]:
+    """``AT:FOR[,AT:FOR...]`` seconds after the runner starts -> sorted (off_at, on_at) pairs."""
+    pairs = []
+    for part in str(text).split(","):
+        at, _, duration = part.partition(":")
+        off_at, length = float(at), float(duration)
+        if off_at <= 0.0 or length <= 0.0:
+            raise ValueError(f"--display-off needs positive AT:FOR seconds, got {part!r}")
+        pairs.append((off_at, off_at + length))
+    pairs.sort()
+    for (_, on_at), (next_off, _) in zip(pairs, pairs[1:]):
+        if next_off < on_at:
+            raise ValueError("--display-off windows overlap")
+    return pairs
+
+
+def _inject_display_power(out: Path, schedule: list[tuple[float, float]]) -> None:
+    """Child side: send the console display state to the saver's own power window at the scheduled times."""
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    user32.FindWindowExW.restype = wintypes.HWND
+    user32.FindWindowExW.argtypes = [wintypes.HWND, wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR]
+    user32.SendMessageTimeoutW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
+                                           wintypes.UINT, wintypes.UINT, ctypes.POINTER(ctypes.c_size_t)]
+    try:
+        from core.windows.display_power_notifier import (
+            PBT_POWERSETTINGCHANGE, WINDOW_CLASS_PREFIX, WM_POWERBROADCAST, display_state_payload,
+        )
+    except ImportError:          # code before the display-power authority: nothing listens, edges are recorded only
+        WINDOW_CLASS_PREFIX, WM_POWERBROADCAST, PBT_POWERSETTINGCHANGE = None, 0x0218, 0x8013
+        display_state_payload = lambda state: ctypes.c_uint32(state)
+
+    def power_window():
+        if WINDOW_CLASS_PREFIX is None:
+            return None
+        own, child = os.getpid(), None
+        while True:
+            child = user32.FindWindowExW(wintypes.HWND(-3), child, None, None)    # HWND_MESSAGE children
+            if not child:
+                return None
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(child, ctypes.byref(pid))
+            name = ctypes.create_unicode_buffer(256)
+            user32.GetClassNameW(child, name, 256)
+            if pid.value == own and name.value.startswith(WINDOW_CLASS_PREFIX):
+                return child
+
+    began, log = time.monotonic(), (out / "power_edges.jsonl").open("a", encoding="utf-8")
+
+    def send(state: int) -> None:
+        hwnd, payload, result = power_window(), display_state_payload(state), ctypes.c_size_t()
+        delivered = bool(hwnd) and bool(user32.SendMessageTimeoutW(
+            hwnd, WM_POWERBROADCAST, PBT_POWERSETTINGCHANGE, ctypes.addressof(payload), 0x2, 5000,
+            ctypes.byref(result)))
+        log.write(json.dumps({"state": state, "perf_ns": time.perf_counter_ns(), "wall": time.time(),
+                              "listener": bool(hwnd), "delivered": delivered}) + "\n")
+        log.flush()
+
+    def run() -> None:
+        for off_at, on_at in schedule:
+            for at, state in ((off_at, 0), (on_at, 1)):
+                time.sleep(max(0.0, began + at - time.monotonic()))
+                send(state)
+
+    threading.Thread(target=run, name="srpss-live-check-display-power", daemon=True).start()
+
+
+class _ProcessGpu:
+    """Per-process GPU engine utilisation (Windows ``GPU Engine`` counters, summed over a process tree)."""
+
+    def __init__(self) -> None:
+        self._pdh = ctypes.WinDLL("pdh")
+        self._query, self._counter = ctypes.c_void_p(), ctypes.c_void_p()
+        ok = (self._pdh.PdhOpenQueryW(None, None, ctypes.byref(self._query)) == 0
+              and self._pdh.PdhAddEnglishCounterW(self._query, r"\GPU Engine(*)\Utilization Percentage", None,
+                                                 ctypes.byref(self._counter)) == 0)
+        self.available = ok and self._pdh.PdhCollectQueryData(self._query) == 0
+
+    def sample(self, pids: set[int]) -> float | None:
+        if not self.available or self._pdh.PdhCollectQueryData(self._query) != 0:
+            return None
+
+        class Item(ctypes.Structure):
+            _fields_ = [("name", ctypes.c_wchar_p), ("status", wintypes.DWORD), ("value", ctypes.c_double)]
+
+        size, count = wintypes.DWORD(0), wintypes.DWORD(0)
+        self._pdh.PdhGetFormattedCounterArrayW(self._counter, 0x200, ctypes.byref(size), ctypes.byref(count), None)
+        buffer = ctypes.create_string_buffer(size.value)
+        if self._pdh.PdhGetFormattedCounterArrayW(self._counter, 0x200, ctypes.byref(size), ctypes.byref(count),
+                                                   buffer) != 0:
+            return None
+        items = ctypes.cast(buffer, ctypes.POINTER(Item))
+        prefixes = tuple(f"pid_{pid}_" for pid in pids)
+        return round(sum(items[i].value for i in range(count.value)
+                         if items[i].name and items[i].name.startswith(prefixes)), 2)
+
+
+def _tree_cpu_seconds(pids: set[int]) -> float:
+    import psutil
+    total = 0.0
+    for pid in pids:
+        try:
+            times = psutil.Process(pid).cpu_times()
+            total += times.user + times.system
+        except psutil.Error:
+            continue
+    return total
+
+
+def analyse_display_power(trace: Path, edges: list[dict], samples: list[dict]) -> dict:
+    """Off-state cost and resume shape, per edge pair, from the frame trace and per-second process samples."""
+    sys.path.insert(0, str(ROOT))
+    from tools.frame_trace_report import HEADER, RECORD, _read_trace_chain
+
+    raw, _segments = _read_trace_chain(trace)
+    events = sorted(RECORD.unpack_from(raw, HEADER.size + i * RECORD.size)[:2]
+                    for i in range((len(raw) - HEADER.size) // RECORD.size))
+    settle = int(POWER_SETTLE_S * 1e9)
+
+    def window(begin_ns: int, end_ns: int) -> dict:
+        seconds = max((end_ns - begin_ns) / 1e9, 1e-9)
+        chosen = [s for s in samples if begin_ns <= s["perf_ns"] < end_ns]
+        cpu = [s["cpu_core_pct"] for s in chosen if s.get("cpu_core_pct") is not None]
+        gpu = [s["gpu_pct"] for s in chosen if s.get("gpu_pct") is not None]
+        others = [s["cpu_others"] for s in chosen if "cpu_others" in s]
+        count = lambda kind: sum(1 for ts, e in events if e == kind and begin_ns <= ts < end_ns)
+        return {"seconds": round(seconds, 1), "swaps_per_s": round(count(6) / seconds, 2),
+                "publishes_per_s": round(count(1) / seconds, 2), "saver_cpu_core_pct": _stats(cpu),
+                "saver_gpu_pct": _stats(gpu), "others_cpu_pct": _stats(others), "samples": len(chosen)}
+
+    pairs, offs = [], [e for e in edges if e["state"] == 0]
+    for off in offs:
+        on = next((e for e in edges if e["state"] == 1 and e["perf_ns"] > off["perf_ns"]), None)
+        if on is None:
+            continue
+        before_start = max(off["perf_ns"] - (on["perf_ns"] - off["perf_ns"]), off["perf_ns"] - 30_000_000_000)
+        after_end = on["perf_ns"] + (off["perf_ns"] - before_start)
+        swaps_after = [ts for ts, e in events if e == 6 and ts >= on["perf_ns"]]
+        resume = [ts for ts in swaps_after if ts < on["perf_ns"] + RESUME_WINDOW_NS]
+        gaps = [(b - a) / 1e6 for a, b in zip(resume, resume[1:])]
+        # The logical side of resume: a hole here (rather than in swaps) is a time-gap / cadence failure.
+        published = [ts for ts, e in events if e == 1 and on["perf_ns"] <= ts < on["perf_ns"] + RESUME_WINDOW_NS]
+        publish_gaps = [(b - a) / 1e6 for a, b in zip(published, published[1:])]
+        pairs.append({
+            "listener": bool(off.get("listener")), "delivered": bool(off.get("delivered") and on.get("delivered")),
+            "on_before": window(before_start + settle, off["perf_ns"]),
+            "off": window(off["perf_ns"] + settle, on["perf_ns"]),
+            "on_after": window(on["perf_ns"] + settle, after_end),
+            "first_swap_after_on_ms": round((swaps_after[0] - on["perf_ns"]) / 1e6, 1) if swaps_after else None,
+            "resume_2s": {"frames": len(resume), "swap_gap_ms": _stats(gaps),
+                          "late_pct": round(100.0 * sum(g > LATE_MS for g in gaps) / max(len(gaps), 1), 1),
+                          "max_gap_ms": round(max(gaps), 1) if gaps else None,
+                          "publishes": len(published), "publish_gap_ms": _stats(publish_gaps),
+                          "max_publish_gap_ms": round(max(publish_gaps), 1) if publish_gaps else None,
+                          "first_publish_after_on_ms": (round((published[0] - on["perf_ns"]) / 1e6, 1)
+                                                        if published else None)},
+        })
+    return {"edges": edges, "pairs": pairs}
+
+
 # -- the invisible runner (child process) -------------------------------------------------------------------------
 
-def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_start: float, mode: str) -> None:
+def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_start: float, mode: str,
+            display_off: list[tuple[float, float]] | None = None) -> None:
     sys.path.insert(0, str(ROOT))
     os.chdir(ROOT)
     from tools import eb_live_phases as phases
@@ -202,6 +373,8 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
             lambda self, _playing, *, observed_ts=None: set_playing(self, True, observed_ts=observed_ts))
     phases._install()
     if mode=='waveform_ribbon':phases._install_waveform()
+    if display_off:
+        _inject_display_power(out, display_off)
     atexit.register(lambda: (out / "phases.json").write_text(json.dumps(phases._summary(), indent=1), encoding="utf-8"))
     import runpy
     runpy.run_path(str(ROOT / "main_mc.py"), run_name="__main__")
@@ -351,12 +524,16 @@ def main() -> int:
                         help="recorded-music JSONL replayed as the loopback, or 'none' for the machine's own audio")
     parser.add_argument("--clip-start", type=float, default=0.0, help="seconds into the recording")
     parser.add_argument("--out", type=Path, help="output folder (default logs/live_check/<mode>_<time>)")
+    parser.add_argument("--display-off", metavar="AT:FOR[,AT:FOR]",
+                        help="inject the console display OFF at AT s after the runner starts and ON again FOR s later, "
+                             "through the saver's own WM_POWERBROADCAST window procedure (panels are never touched)")
     parser.add_argument("--runner", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     out = args.out or ROOT / "logs" / "live_check" / f"{args.mode}_{time.strftime('%Y%m%d_%H%M%S')}"
     clip = None if args.clip == "none" else Path(args.clip).resolve()
     if args.runner:
-        _runner(out, args.seconds, args.visible, clip, args.clip_start,args.mode)
+        _runner(out, args.seconds, args.visible, clip, args.clip_start, args.mode,
+                parse_display_off(args.display_off) if args.display_off else None)
         return 0
     if clip is not None and not clip.exists():
         raise SystemExit(f"recording not found: {clip}")
@@ -369,8 +546,12 @@ def main() -> int:
     load = None if args.load == "none" else _start_load(args.load, args.seconds + 60, out)
     command = [sys.executable, str(Path(__file__).resolve()), "--runner", "--mode", args.mode, "--seconds",
                str(args.seconds), "--out", str(out), "--clip", str(clip or "none"), "--clip-start",
-               str(args.clip_start)] + (["--visible"] if args.visible else [])
+               str(args.clip_start)] + (["--visible"] if args.visible else []) + (
+               ["--display-off", args.display_off] if args.display_off else [])
+    if args.display_off:
+        parse_display_off(args.display_off)
     sampler, conditions = SystemSampler(), []
+    gpu, power_samples, cpu_previous = (_ProcessGpu() if args.display_off else None), [], None
     runner = subprocess.Popen(command, cwd=ROOT, stdout=(out / "runner.txt").open("w"),
                               stderr=subprocess.STDOUT)
     violation, tree, started = None, None, time.monotonic()
@@ -378,6 +559,15 @@ def main() -> int:
         while runner.poll() is None:
             time.sleep(1.0)
             conditions.append(sampler.sample())
+            if gpu is not None:
+                pids = _process_tree(runner.pid)
+                now_ns, cpu_now = time.perf_counter_ns(), _tree_cpu_seconds(pids)
+                row = {"perf_ns": now_ns, "gpu_pct": gpu.sample(pids), "cpu_others": conditions[-1]["cpu_others"]}
+                if cpu_previous is not None:
+                    row["cpu_core_pct"] = round(100.0 * (cpu_now - cpu_previous[1])
+                                                / max((now_ns - cpu_previous[0]) / 1e9, 1e-9), 1)
+                cpu_previous = (now_ns, cpu_now)
+                power_samples.append(row)
             if tree is None and time.monotonic() - started > min(30.0, args.seconds / 2):
                 tree = _tree_snapshot(runner.pid)
             if not args.visible:
@@ -402,7 +592,13 @@ def main() -> int:
         return 1
     summary = {"mode": args.mode, "preset": args.preset, "overrides": overrides, "load": args.load,
                "clip": clip.name if clip else None, "clip_start": args.clip_start,
-               "visible": args.visible, "conditions": summarise_environment(conditions), **analyse_trace(trace)}
+               "visible": args.visible, "conditions": summarise_environment(conditions)}
+    edges_path = out / "power_edges.jsonl"
+    edges = ([json.loads(line) for line in edges_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+             if edges_path.exists() else [])
+    summary.update(analyse_trace(trace, steady_stop_ns=edges[0]["perf_ns"] if edges else None))
+    if args.display_off:
+        summary["display_power"] = analyse_display_power(trace, edges, power_samples)
     summary["hud_age_ms"] = hud_ages(out / "logs" / "screensaver_perf.log", args.mode)
     usage = usage_summary(out / "logs" / "screensaver_usage.log")
     summary["usage"] = usage
@@ -435,13 +631,18 @@ def main() -> int:
                                        if isinstance(v, dict) and k != "logical_publish"}
     (out / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
     for key, value in summary.items():
-        if key not in ("render_stages_ms", "process_tree", "actual_waveform_configuration"):
+        if key not in ("render_stages_ms", "process_tree", "actual_waveform_configuration", "display_power"):
             print(f"{key:28s} {value}")
     for key, limit, message in _FLAGS:
         value = summary.get(key)
         value = value["median"] if isinstance(value, dict) else value
         if value is not None and value > limit:
             print(f"FLAG {key} = {value}: {message}")
+    for index, pair in enumerate((summary.get("display_power") or {}).get("pairs", ())):
+        print(f"display power pair {index}: listener={pair['listener']} delivered={pair['delivered']} "
+              f"first_swap_after_on_ms={pair['first_swap_after_on_ms']} resume_2s={pair['resume_2s']}")
+        for name in ("on_before", "off", "on_after"):
+            print(f"  {name:9s} {pair[name]}")
     print(f"written {out / 'summary.json'}")
     return 0
 

@@ -118,6 +118,11 @@ class DevCurveFrameRuntime:
         with self._lock:
             self._reset_locked()
 
+    def rebase_clock(self) -> None:
+        """Display power resumed after a park: the next step integrates no parked gap (state stays warm)."""
+        with self._lock:
+            self._last_timestamp = 0.0
+
     def retire(self) -> None:
         """Permanently quiesce this generation-scoped mode state."""
 

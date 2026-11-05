@@ -10,6 +10,26 @@ from dataclasses import replace
 import pytest
 
 
+def test_display_power_selects_the_console_display_notifier(monkeypatch) -> None:
+    import sys
+
+    from core import display_power
+    from core.windows import display_power_notifier
+
+    built = []
+
+    class FakeNotifier:
+        def __init__(self, deliver):
+            built.append(deliver)
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(display_power_notifier, "WindowsDisplayPowerNotifier", FakeNotifier)
+    monkeypatch.setattr(display_power, "LinuxMutterDisplayPowerWatcher", lambda *_: pytest.fail("Mutter on Windows"))
+    deliver = lambda _state: None  # noqa: E731
+    assert isinstance(display_power.create_display_power_backend(deliver, lambda _on: None), FakeNotifier)
+    assert built == [deliver]
+
+
 def test_media_factory_builds_gsmtc_and_never_mpris(monkeypatch, windows_platform) -> None:
     from core.media import media_controller, mpris_controller
 
