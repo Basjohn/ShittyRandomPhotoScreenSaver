@@ -51,7 +51,7 @@ vec2 surface=fieldSection(shape,0.5);results[at+2]=vec4(bodyField(vec3(x,surface
         for owner,path in enumerate(paths):
             n,start,cap=int(path[0,0]),int(path[1,1]),int(path[1,2])
             knots=path[4:].reshape(-1,5,4)[(start+np.arange(n))%cap].astype(float)
-            expected=cloth_values(knots,xs-packet.world_origin[0]);expected[:,:2]+=packet.world_origin[1:]
+            expected=cloth_values(knots,xs-packet.world_origin[0],phase=float(path[1,3]));expected[:,:2]+=packet.world_origin[1:]
             expected[:,3]+=path[1,0]
             np.testing.assert_allclose(output[:,owner,0],expected,atol=.002,rtol=1e-4)
             emission=np.interp(xs,knots[:,0,0]+packet.world_origin[0],knots[:,3,3])
