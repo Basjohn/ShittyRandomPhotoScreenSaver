@@ -43,6 +43,15 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
   lake is about five times larger; per moving pixel it is at the baseline. GPU at 1300x750 (baseline -> now):
   Preset 1 1.01 -> 0.68 ms, Preset 3 0.44 -> 0.60 ms. Evidence: `.artifacts/evidence/neon_lake/fidelity_20261105/pass3/`.
 
+- [ ] **4x MSAA repeat-render noise (driver, 5 Nov; was "Floor Give run-to-run noise"):** the same frame rendered
+  again through a 4x scene target differs by 1 level (rarely 2-3) on a pixel or two in Waveform (more often with Floor
+  Give and mist) and on ~0.7% of pixels in Neon Lake. Not renderer state: packet, uniforms, every vertex position,
+  fields, fog volumes, reflection and all four depth samples are bit-identical, single-sample renders are exact
+  (`test_floor_give_repeat_renders_are_renderer_deterministic`), and no barrier/finish/stream pinning changes it; the
+  multisampled colour itself flips up to 3/255 per sample. Per-sample Waveform floor shading removes it there but costs
+  +1.2 ms (give off) / +2.0 ms (give on) at 1080p, so it was not taken. Tests compare such renders with
+  `tests/_msaa_render_noise.py`. Reopen if a driver update or another GPU shows it gone or larger.
+
 - [ ] **Display Settings capacity (physical hotplug):** on a real monitor disconnect/return or explicit reauthoring,
   Settings' current-screen rows and selections/bindings stay coherent (focused checks pass; hidden form evidence
   `tmp/pytest_ux30_display/test_display_ui_rows_follow_to0/six_display_rows.png`).
@@ -208,9 +217,6 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   grade stays put). A live change fades out, swaps while hidden and fades back (0.6 s each way). Leads the Studio's
   Composition / Flow group. Evidence `.artifacts/evidence/waveform_ribbon/travel_direction/`; design in the Migration
   Plan's Flow bucket.
-- [ ] **Floor Give run-to-run noise (side defect, 5 Nov):** with Floor Give on, the same frame rendered repeatedly in one
-  process differs by one level on about one pixel (the first frame against later ones, and sometimes between fresh
-  renderers); give 0 is exact. Find the unsynchronised read (field compute -> floor/ribbon sampling) or state.
 - [ ] **Dense highlights, moving colour and rim glow:** playback still lacks rewarded high-energy density and glow.
   Verify local crest/high-power colour, bright tunable rim/glow and denser highlights against actual music, including
   quiet/loud differences. Consumer reachability does not establish visible strength. Keep both range handles effective.
@@ -379,10 +385,6 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   `.artifacts/evidence/spectrum/studio_20261105/`); its Studio edits existing shape nodes but cannot add or remove one
   (Settings' shape editor still does), so its builder stays until that is decided. Each: full registry coverage test, production-parity preview test, theme,
   Settings Custom launcher replacing that builder body once the operator accepts it.
-- [ ] Flaky render test: `tests/test_waveform_studio_editors.py::test_preview_layer_omission_changes_only_flagged_renders`
-  failed once (`plain_a != plain_b`, two snapshot requests of one frame) in a 282-test Studio + build run, then
-  passed alone twice and in the next full Studio gate (5 Nov). Identical requests should be byte-equal: find the
-  render state that leaks between snapshots.
 
 ## Operator execution and evidence rules
 

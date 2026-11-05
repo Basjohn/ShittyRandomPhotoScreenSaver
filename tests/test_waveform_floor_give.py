@@ -337,3 +337,29 @@ def test_floor_give_is_one_canonical_setting_resolved_into_the_scene():
     for give in (0., .5, 1.):
         values['waveform_ribbon_floor_give'] = give
         assert CompiledWaveformSettings(values).scene(snapshot).floor.give == give
+
+
+def test_floor_give_repeat_renders_are_renderer_deterministic(qt_app, monkeypatch):
+    """With Floor Give on, the same frame drawn again is the same image once the driver's 4x MSAA noise is out of the
+    way (tests/_msaa_render_noise.py): single-sample, repeat renders are bit-identical, so no renderer state (field
+    reduction, fog, reflection, packet stream) leaks from one frame into the next. A different frame is not."""
+    gl = _gl()
+    from rendering.quick.offscreen_target import OffscreenRenderTarget
+    from rendering.quick.scene3d import target as scene_target
+    from rendering.quick.visualizer.implementations.waveform_ribbon import QuickWaveformRibbonRenderer
+    scope = scene_target.SceneTarget.scope
+    monkeypatch.setattr(scene_target.SceneTarget, 'scope',
+                        lambda self, frame, samples, *args, **kwargs: scope(self, frame, 1, *args, **kwargs))
+    target = OffscreenRenderTarget(240, 160); renderer = QuickWaveformRibbonRenderer()
+    try:
+        first, later = lowered_states(target, ticks=(64, 70), lower=2.5)
+        frame = frame_of(target, first)
+        images = [_render(renderer, target, frame, first, 1.) for _ in range(12)]
+        assert renderer._scene.floor_give.has_resources
+        for image in images[1:]:
+            np.testing.assert_array_equal(image, images[0])
+        other = _render(renderer, target, frame, later, 1.)
+        assert np.abs(other.astype(int)-images[0]).max() > 8       # negative control: another frame differs
+    finally:
+        with target.current(): renderer.release_resources(); gl.glUseProgram(0)
+        target.close()
