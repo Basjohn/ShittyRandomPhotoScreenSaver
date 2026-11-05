@@ -975,7 +975,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'waveform_ribbon_bar_count': 32,
                                     'waveform_ribbon_bend': [0.4, 2.4],
                                     'waveform_ribbon_bloom': [0.14, 0.14],
-                                    'waveform_ribbon_camera_fov': 3,
+                                    'waveform_ribbon_camera_fov': 5,
                                     'waveform_ribbon_camera_position': [0.0, 0.0, 0.0],
                                     'waveform_ribbon_camera_projection': 'Perspective',
                                     'waveform_ribbon_colour': [0.0, 1.0],

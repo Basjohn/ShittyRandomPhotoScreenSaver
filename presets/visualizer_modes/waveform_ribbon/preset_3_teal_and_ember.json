@@ -28,7 +28,7 @@
           0.08,
           0.16
         ],
-        "waveform_ribbon_camera_fov": 3,
+        "waveform_ribbon_camera_fov": 5,
         "waveform_ribbon_camera_position": [
           0.0,
           0.0,

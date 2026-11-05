@@ -64,7 +64,8 @@ def test_short_audio_pulses_do_not_write_small_amplitude_dents_into_travelling_h
         y=path[4::5,1][(start+np.arange(count))%capacity][-30:]
         return np.abs(np.diff(y)).max()
     assert recorded_steps(smooth)<.1
-    assert recorded_steps(negative)>.7
+    # Unsmoothed admission writes the pulse train as dents several times the smoothed step.
+    assert recorded_steps(negative)>max(.3,4*recorded_steps(smooth))
 
 
 def test_axial_roll_keeps_the_axis_and_history_motion_and_rotates_the_width_basis():
@@ -76,12 +77,24 @@ def test_axial_roll_keeps_the_axis_and_history_motion_and_rotates_the_width_basi
         sb = b.advance(1/90,bands=(.6,.5,.3),intensity=.8,presence=1.,hit=1.)
     aa,bb = data(sa),data(sb)
     np.testing.assert_array_equal(aa[:,4::5,0],bb[:,4::5,0])
-    ar,br=aa[:,4::5,1:3].copy(),bb[:,4::5,1:3].copy()
-    ar[:,:,0]-=dict(sa.realized)['lift']*np.array(a.count_share)[:,None]
-    br[:,:,0]-=dict(sb.realized)['lift']*np.array(b.count_share)[:,None]
-    np.testing.assert_allclose(np.sum(ar**2,axis=2),np.sum(br**2,axis=2),atol=2e-6)
     np.testing.assert_allclose(aa[:,5::5,1]-bb[:,5::5,1],sa.rotation_angle,atol=1e-6)
     assert sa.travel==sb.travel and abs(sa.rotation_angle)>.5
+
+
+def test_axial_roll_never_rotates_the_musical_vertical_excursion_out_of_view():
+    # The roll turns the carrier like a skewer; the louder passage must not hide its own height in depth.
+    # Under the former projection order a quarter turn collapsed the visible excursion to the unscaled depth wave.
+    c = replace(controls(),rotation_enabled=False)
+    model = primed(c)
+    for _ in range(180):model.advance(1/90,bands=(.9,.8,.6),intensity=.95,presence=1.,hit=0.)
+    def vertical_extent(angle):
+        model.angle=angle;model._snapshot=None
+        y=data(model.snapshot())[:3,4::5,1]
+        count=int(data(model.snapshot())[0,0,0])
+        return float(np.mean([np.ptp(row[:count]) for row in y]))
+    level=vertical_extent(0.)
+    for angle in (math.pi/4,math.pi/2,math.pi):
+        assert vertical_extent(angle)>.8*level
 
 
 def test_vertical_lift_keeps_the_skewer_axis_at_the_same_world_height_at_every_roll_angle():
@@ -218,12 +231,15 @@ def test_typed_events_have_distinct_impulses_and_unclipped_magnitude_preserves_h
 
 
 def test_fast_band_articulation_does_not_hold_quiet_passages_at_the_peak_handle():
+    # Quiet, ordinary and hot passages on the fixed real-music scale: articulation stays ordered, a quiet
+    # passage sits well below the peak handle and a hot one keeps headroom instead of pinning.
     values=[]
-    for intensity in (.05,.4,.9):
+    for bands,intensity in (((.3,.2,.1),.05),((.55,.45,.35),.6),((.85,.8,.7),.95)):
         model=primed()
-        for _ in range(180):snapshot=model.advance(1/90,bands=(.8,.8,.8),intensity=intensity,presence=1.)
+        for _ in range(270):snapshot=model.advance(1/90,bands=bands,intensity=intensity,presence=1.)
         values.append(dict(snapshot.drives)['bend'])
-    assert 0.<values[0]<.1 and values[0]<values[1]<values[2]<.85
+    assert 0.<values[0]<.15 and values[0]<values[1]<values[2]<.97
+    assert values[2]>4*values[0]
 
 
 def test_repeated_routine_onsets_leave_room_for_a_distinct_accent():

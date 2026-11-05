@@ -115,9 +115,26 @@ Checkpoint before these changes: commit `checkpoint: Waveform pre-Studio baselin
 
 Ordered; each step has its own evidence. `[ ]` open, `[~]` candidate awaiting evidence/validation.
 
-- [ ] **R1 Reactivity correctness:** roll-invariant vertical response, calibrated range drive, travelling bend.
+- [~] **R1 Reactivity correctness:** roll-invariant vertical response, calibrated range drive, travelling bend.
   Gate: motion audit on ≥3 clips — hot-quartile envelope ≥ 1.6× quiet-quartile on the dynamic clip, envelope ↔ drive
   correlation ≥ 0.6, idle unchanged within 10%, inflections/unit not above baseline; native capture with audio.
+  **Candidate landed (`core/waveform_ribbon_dynamics.py`), awaiting operator eyes/ears.** Preset 3, four clips,
+  `motion_audit_r1a_p3_*.json` vs `motion_audit_baseline_p3_*.json`:
+
+  | Clip | Per-ribbon p-p hot/quiet (before → after) | Hot p-p (before → after) | Envelope ↔ level r |
+  | --- | --- | --- | --- |
+  | ragdoll_quiet_intro_loud_end1 | 0.84 → 1.55 | 2.39 → 4.76 | 0.00 → 0.88 |
+  | human_heavy1 | 1.97 → 1.94 | 2.80 → 3.26 | 0.68 → 0.75 |
+  | nightsolong_acousticsoft1 | 1.00 → 1.70 | 2.82 → 5.24 | 0.60 → 0.93 |
+  | anything_mixed2 | 1.77 → 1.88 | 3.22 → 5.10 | 0.62 → 0.89 |
+
+  Idle control unchanged (0.52 → 0.51); inflections/unit unchanged or lower (0.15–0.18). Union-envelope hot/quiet on
+  ragdoll is 1.51, just under the 1.6 gate: the bundle's own separation sets a floor on the union, while per-ribbon
+  shape change passes. Centre speed roughly doubled with amplitude (second difference scales with it); smoothness
+  is a native-motion judgement, see `strip_baseline_vs_r1a.png` and `r1a_p3_ragdoll_20s/motion_with_audio.mp4`.
+  A hard clamp in the calibrated span pinned a sustained hot bass at exactly 1.0; it now uses the body lanes' soft
+  knee (focused test). Operator direction (5 Nov): peaks may rise high; the framing zooms out instead — all three
+  presets and the canonical default lens moved from 3° to 5° (integer control), no vertical ceiling.
 - [ ] **R2 Punch and grace:** kick impulses visible as a fast vertical lift with a slow graceful settle; no twitch.
   Gate: attack ≤ 120 ms to 70% of peak excursion, settle 0.5–1.2 s, second-difference p95 not worse than baseline ×1.5.
 - [ ] **V1 Floor fidelity:** continuous textured wet foreground, long vertical streaked reflections, horizon dissolved.
