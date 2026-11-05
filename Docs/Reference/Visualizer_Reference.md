@@ -128,6 +128,29 @@ subject to Bubble Temporal Fidelity.
 
 Spectrum and Extruded Spectrum expose separate **Rainbow Ghost** controls in their existing Ghost settings. Each setting persists under its own mode (`spectrum_rainbow_ghost`, `extruded_spectrum_rainbow_ghost`) and colours **only existing falling-peak geometry**, not the bars, faces, edges or reflection. A ghost uses its own enabled/opacity/decay ownership and remains visible when the authored bar border is black or transparent. Spectrum's segmented and solid paths use the same spectral ghost rule; a ghost must never be recoloured a second time by Rainbow Borders. Extruded uses its existing Scene3D ghost-column pass and hue, not a second texture, draw loop, clock or BeatEngine. Both advance colours on their existing Spectrum logical animation time; dormant/disabled modes create no extra work. User-authored presets are editable and are not golden-value test fixtures. Real GL tests must verify visible peak-only pixels with dark borders and bar-fill independence.
 
+### Spectrum optional decoration
+
+Spectrum (2D) carries optional, default-off decoration, declared in its spec and read only by Spectrum's own capture
+and Quick shader (`widgets/spotify_visualizer/spectrum_decor.py`, `widgets/spotify_visualizer/shaders/spectrum.frag`):
+**Ghost Colour** (Bar Colour / Custom; Rainbow Ghost, when on, still colours the ghosts), **Ghost Gradient** (toward a
+tip colour at the peak), the **Finish** bucket (Gloss, Fill Gradient toward a tip colour at the top of the field, Peak
+Caps resting on the existing decaying peaks) and the **Pattern** bucket (a second-colour pattern over the bar fill:
+Horizontal Bands, Scanlines, Dots, Diagonal Stripes, Grid, Chevrons; Pattern Anchor Per Bar or Shared; Colour, Scale,
+Strength). Rules:
+
+- Every option at its default draws byte-identically to the decoration-free renderer; the shader takes no decoration
+  branch at rest and the renderer uploads the decoration uniforms only when they change.
+- Patterns change fill pixels only, are box-filtered (a pattern finer than a pixel settles to its mean coverage) and
+  are anchored to the bar baseline and each bar's own width (Diagonal Stripes to the field; Pattern Anchor Shared
+  frames every pattern by the whole field: one sheet through bars and gaps), so moving bars reveal
+  more or less of a fixed pattern and never shimmer.
+- Peak caps reuse Spectrum's existing peak decay (Ghost Decay Speed); they add no logical state.
+- Toggling fades (`SpectrumDecorFade`, `FADE_SECONDS`): one envelope per option on the presentation owner, advanced
+  only on the capture timestamp (no timer, thread or second clock); a pattern switched to another dips through zero.
+  A fresh owner starts settled, so exact Studio replays and new activations show the settings directly.
+- The Spectrum Studio edits them instantly (Spectrum-owned) in its Pattern & Finish workspace and Colour & Ghosts.
+- Evidence and cost: `tools/spectrum_decor_evidence.py` (pixel identity, showcase stills/strips, GPU cost).
+
 ## 1A. Registered modes vs enabled modes
 
 Per-mode admission/dormancy is implemented. `core/settings/visualizer_mode_registry.py` owns all registered descriptors and lazy wiring; persisted `mode_activation` owns user mode admission; the top-level Visualizers Settings tab builds mode bodies lazily and keeps disabled/unselected bodies dormant. The ownership distinction is:

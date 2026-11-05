@@ -768,6 +768,14 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   (in process, out of process and through `main.py --studio-clip-worker`), identical production-renderer pixels,
   Rainbow Ghost recolouring only ghost pixels, families and Custom rows saved through Settings, every exit restoring it,
   analysis failures shown with Retry, Save Preset As writing a valid curated preset.
+- `tests/test_extruded_spectrum_studio.py` — Extruded Spectrum (Rainbow Ghost included) on the shared recorded
+  engine answers: full logical frames byte-identical to the production replay at every tick (synthetic audio and a
+  shipped clip, canonical and a turned / Bar Colours / no-overflow variant; Mirror Faces reflecting the environment
+  photograph), the derived split proven both ways, the worker in and out of process and through `main.py
+  --studio-clip-worker`, identical production-renderer pixels, Rainbow Ghost recolouring only ghost pixels, registry
+  coverage (Settings-unavailable controls excluded by their flag), the free orbit as a preview view, Settings round
+  trip and every exit restoring it, theme; framework pieces it relies on: overflow clipped to the viewport slot and the
+  presentation pixel ratio from the item mapping, each with a negative control.
 - `tests/test_spectrum_studio_shape_editor.py` — each capability of Settings' shape editor driven on the real widget
   and reached exactly by the Studio's own edits (node add/remove, lane reorder), with a negative control.
 - `tests/test_spectrum_studio_replay_budget.py` — exact replays rewind (pristine / checkpoints) instead of

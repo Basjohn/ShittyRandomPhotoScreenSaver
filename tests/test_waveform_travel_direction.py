@@ -142,8 +142,8 @@ def test_default_draws_exactly_the_unmirrored_programs(qt_app, monkeypatch):
                     with target.current():
                         renderer.release_resources(); gl.glUseProgram(0)
         np.testing.assert_array_equal(images[False][0], images[True][0])      # rigid floor: exact
-        # The yielding-floor path itself varies by one level on about one pixel from run to run (Current_Plan side
-        # defect), so with Floor Give on the bound is that measured noise, not identity.
+        # With Floor Give on, repeat renders through the 4x target vary by a level on a pixel or two (driver MSAA noise,
+        # tests/_msaa_render_noise.py), so the bound is that measured noise, not identity.
         difference = np.abs(images[False][1].astype(int)-images[True][1])
         assert difference.max() <= 1 and (difference.max(-1) > 0).sum() <= 4
     finally:

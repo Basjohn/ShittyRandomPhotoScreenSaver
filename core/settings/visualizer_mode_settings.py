@@ -47,6 +47,9 @@ from types import MappingProxyType
 from typing import Union
 
 from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
+from rendering.gl_programs.spectrum_options import (
+    SPECTRUM_GHOST_COLOUR_SOURCES, SPECTRUM_PATTERN_ANCHORS, SPECTRUM_PATTERNS,
+)
 from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
 from core.constants.neon_lake_world import TILT_RANGE as NEON_TILT_RANGE, TURN_RANGE as NEON_TURN_RANGE
 from core.settings.visualizer_settings_contract import SPHERE_FINISH_VALUES
@@ -1178,6 +1181,8 @@ _SPECTRUM = ModeSettings(
         Bucket("render", "Render", "Render-style controls still apply when hidden.", advanced=True),
         Bucket("audio", "Audio", "Creative motion controls live here. Technical noise-floor and signal tuning live in Technical.", advanced=True),
         Bucket("ghost", "Ghost", "Ghost controls still apply when hidden.", advanced=True),
+        Bucket("finish", "Finish", "Optional fill gradient, gloss and peak caps.", advanced=True),
+        Bucket("pattern", "Pattern", "An optional second-colour pattern over the bar fill.", advanced=True),
     ),
     entries=(
         Toggle('spectrum_glow_enabled', " ", 'Enable Rim Glow',
@@ -1224,7 +1229,53 @@ _SPECTRUM = ModeSettings(
         Slider('spectrum_ghost_alpha', 'Ghost Opacity:', 0.0, 1.0,
                '', bucket='ghost', truncate=True, percent=True, tick=5, when=('spectrum_ghosting_enabled', True)),
         Slider('spectrum_ghost_decay', 'Ghost Decay Speed:', 0.1, 1.0,
-               '', bucket='ghost', truncate=True, logical=True, suffix='x', tick=5, when=('spectrum_ghosting_enabled', True), bottom_padding=12),
+               '', bucket='ghost', truncate=True, logical=True, suffix='x', tick=5, when=('spectrum_ghosting_enabled', True)),
+        Choice('spectrum_ghost_color_source', 'Ghost Colour:', SPECTRUM_GHOST_COLOUR_SOURCES,
+               'Bar Colour: ghosts take the bar border colour. Custom: their own colour (and opacity).\n'
+               'Rainbow Ghost, when on, colours them instead.', bucket='ghost',
+               when=('spectrum_ghosting_enabled', True), enabled_when=('spectrum_rainbow_ghost', False)),
+        Colour('spectrum_ghost_color', 'Custom Ghost Colour:', 'Choose Spectrum Ghost Colour',
+               "The ghosts' own colour; its alpha scales Ghost Opacity.", bucket='ghost',
+               when=(('spectrum_ghosting_enabled', True), ('spectrum_ghost_color_source', 'Custom')),
+               enabled_when=('spectrum_rainbow_ghost', False), swatch_row=False),
+        Toggle('spectrum_ghost_gradient', ' ', 'Ghost Gradient',
+               'Shade each ghost from its colour at the bar top to a tip colour at the peak.', bucket='ghost',
+               when=('spectrum_ghosting_enabled', True)),
+        Colour('spectrum_ghost_tip_color', 'Ghost Tip Colour:', 'Choose Spectrum Ghost Tip Colour',
+               "The colour ghosts reach at the peak; its alpha sets how far they turn to it.", bucket='ghost',
+               when=(('spectrum_ghosting_enabled', True), ('spectrum_ghost_gradient', True)), swatch_row=False),
+        Slider('spectrum_gloss', 'Gloss:', 0.0, 1.0,
+               'A soft glassy highlight down each bar, shaded toward its sides (0 = flat).', bucket='finish',
+               truncate=True, percent=True, tick=10),
+        Toggle('spectrum_fill_gradient', ' ', 'Fill Gradient',
+               'Shade the fill from the fill colour at the base to a tip colour at the top of the field, '
+               'so taller bars reach further into it.', bucket='finish'),
+        Colour('spectrum_fill_tip_color', 'Fill Tip Colour:', 'Choose Spectrum Fill Tip Colour',
+               'The fill colour at the top of the field.', bucket='finish', when=('spectrum_fill_gradient', True),
+               swatch_row=False),
+        Toggle('spectrum_peak_caps', ' ', 'Peak Caps',
+               "A thin line resting on each bar's recent peak that falls back at the Ghost Decay Speed.",
+               bucket='finish'),
+        Colour('spectrum_peak_cap_color', 'Cap Colour:', 'Choose Spectrum Peak Cap Colour', '', bucket='finish',
+               when=('spectrum_peak_caps', True), swatch_row=False),
+        Slider('spectrum_peak_cap_thickness', 'Cap Thickness:', 1.0, 6.0,
+               'Cap height in Bars mode (Segments mode lights one whole segment).', bucket='finish',
+               scale=1, decimals=0, suffix='px', integer=True, when=('spectrum_peak_caps', True)),
+        Choice('spectrum_pattern', 'Pattern:', SPECTRUM_PATTERNS,
+               'A pattern drawn over the bar fill in its own colour. It stays fixed in place while the bars move.',
+               bucket='pattern'),
+        Choice('spectrum_pattern_anchor', 'Pattern Anchor:', SPECTRUM_PATTERN_ANCHORS,
+               'Per Bar: each bar carries its own copy of the pattern. Shared: one sheet laid over the whole field, '
+               'running through every bar and seen only inside the bar fills.', bucket='pattern',
+               when=('spectrum_pattern', SPECTRUM_PATTERNS[1:])),
+        Colour('spectrum_pattern_color', 'Pattern Colour:', 'Choose Spectrum Pattern Colour',
+               "The pattern's colour; its alpha and Strength set how strongly it shows.", bucket='pattern',
+               when=('spectrum_pattern', SPECTRUM_PATTERNS[1:]), swatch_row=False),
+        Slider('spectrum_pattern_scale', 'Pattern Scale:', 0.5, 3.0,
+               'Size of the pattern (1.00x = the standard size).', bucket='pattern', suffix='x', tick=25,
+               when=('spectrum_pattern', SPECTRUM_PATTERNS[1:])),
+        Slider('spectrum_pattern_strength', 'Pattern Strength:', 0.0, 1.0, '', bucket='pattern', truncate=True,
+               percent=True, tick=10, when=('spectrum_pattern', SPECTRUM_PATTERNS[1:]), bottom_padding=12),
     ),
 )
 
