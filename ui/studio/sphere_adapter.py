@@ -503,8 +503,8 @@ class SphereStudioRenderer(framed.ContractModeRenderer):
 
     Mirror Cubes fade a newly displayed wallpaper in over the renderer's blend time from when it first sees it
     (``BackdropEnvironment.textures``). In the saver the photograph has been on screen for a while; a Studio frame
-    is one instant of a fixture, so the environment is introduced to the renderer's own backdrop *before* the frame's
-    logical time (a settled reflection), exactly as if the saver had already shown it. Nothing else changes."""
+    is one instant of a fixture, so the renderer's public ``settle_backdrop`` seam introduces the environment as
+    already faded in at the frame's logical time, exactly as if the saver had already shown it. Nothing else changes."""
 
     def __init__(self) -> None:
         from rendering.quick.visualizer.implementations.sphere_voxel import create_visualizer_renderer
@@ -523,9 +523,8 @@ class SphereStudioRenderer(framed.ContractModeRenderer):
         identity = str(backdrop["identity"])
         if identity == self._settled:
             return
-        environment = self._impl._backdrop
         now = float(getattr(logical, "logical_timestamp", 0.0))
-        environment.textures(backdrop, now - environment.BLEND_S - 1.0, parameter(parameters, "backdrop_blend_s"))
+        self._impl.settle_backdrop(backdrop, now, parameter(parameters, "backdrop_blend_s"))
         self._settled = identity
 
     def prepare(self, card, frame) -> bool:

@@ -14,6 +14,7 @@ from core.settings.visualizer_mode_registry import build_visualizer_mode_activat
 from core.settings.visualizer_presets import get_custom_preset_index
 from ui.studio.colour import display_hex, linear_from_hex
 from ui.studio.waveform_adapter import WaveformStudioAdapter, build_schema
+from tests._msaa_render_noise import assert_same_msaa_render
 
 MODE = "waveform_ribbon"
 
@@ -669,7 +670,12 @@ def test_preview_layer_omission_changes_only_flagged_renders(qt_app):
             if len(shots) == 3:
                 break
         assert set(shots) == {"plain_a", "plain_b", "haze"}
-        assert np.array_equal(shots["plain_a"], shots["plain_b"])
+        # Two requests of one frame: equal up to the driver's 4x MSAA quantization noise (tests/_msaa_render_noise.py:
+        # with every input identical the multisampled colour still flips a level on a pixel or two, so exact equality
+        # flaked); the flagged render is a real change the same check rejects.
+        assert_same_msaa_render(shots["plain_a"], shots["plain_b"])
+        with pytest.raises(AssertionError):
+            assert_same_msaa_render(shots["haze"], shots["plain_a"])
         assert shots["plain_a"].mean() > 8.0
         assert np.abs(shots["haze"] - shots["plain_a"]).mean() > 2.0
         # The live viewport kept drawing with the actors (its style never carries the flag).
