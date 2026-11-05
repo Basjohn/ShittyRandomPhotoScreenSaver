@@ -234,6 +234,7 @@ def measure(clip: Path, *, preset: int, size: tuple[int, int], frames: int, roun
     results: dict[str, list[list[float]]] = {key: [[] for _ in snapshots] for key in variants}
     control: list[float] = []
     cpu_ms: list[float] = []
+    interval_ms: list[float] = []
     calls: list[int] = []
     queries: list[int] = []
     sampler = SystemSampler()
@@ -304,6 +305,24 @@ def measure(clip: Path, *, preset: int, size: tuple[int, int], frames: int, roun
                     render(snapshot)
                     cpu_ms.append((time.perf_counter() - begun) * 1e3)
                 gl.glFinish()
+                # Sustained frame interval with at most two frames in flight (a swap chain's queue), no per-frame
+                # finish: what the render loop can hold, CPU and GPU overlapping as they do live.
+                fences, last = [], time.perf_counter()
+                for ordinal, snapshot in enumerate(snapshots * 2):
+                    render(snapshot)
+                    fences.append(gl.glFenceSync(gl.GL_SYNC_GPU_COMMANDS_COMPLETE, 0))
+                    gl.glFlush()
+                    if len(fences) > 2:
+                        fence = fences.pop(0)
+                        gl.glClientWaitSync(fence, gl.GL_SYNC_FLUSH_COMMANDS_BIT, 1_000_000_000)
+                        gl.glDeleteSync(fence)
+                    now = time.perf_counter()
+                    if ordinal >= 3:
+                        interval_ms.append((now - last) * 1e3)
+                    last = now
+                for fence in fences:
+                    gl.glClientWaitSync(fence, gl.GL_SYNC_FLUSH_COMMANDS_BIT, 1_000_000_000)
+                    gl.glDeleteSync(fence)
                 conditions.append(sampler.sample())
         finally:
             host.release_resources()
@@ -327,6 +346,8 @@ def measure(clip: Path, *, preset: int, size: tuple[int, int], frames: int, roun
                                                 for a, b in zip(least["full"], values))
                          for key, values in least.items() if key != "full"}, "amplify_extra": extra,
             "cpu_submit_ms_median": statistics.median(cpu_ms), "cpu_submit_ms_p90": sorted(cpu_ms)[int(.9*len(cpu_ms))],
+            "interval_ms_median": statistics.median(interval_ms),
+            "interval_ms_p90": sorted(interval_ms)[int(.9 * len(interval_ms))],
             "gl_calls_per_frame": statistics.median(calls), "gl_calls_top": top,
             "gl_queries_per_frame": statistics.median(queries), "gl_queries": query_top,
             "conditions": summarise_environment(conditions)}
@@ -356,6 +377,8 @@ def main() -> int:
           f"frame/control {result['full_per_control']:.2f}")
     for key, ms in sorted(result["stage_ms"].items(), key=lambda kv: -kv[1]):
         print(f"  {key:24s} {ms:6.2f} ms")
+    print(f"sustained frame interval (two in flight) median {result['interval_ms_median']:.2f} ms "
+          f"(p90 {result['interval_ms_p90']:.2f})")
     print(f"render-thread CPU submit median {result['cpu_submit_ms_median']:.2f} ms (p90 {result['cpu_submit_ms_p90']:.2f}); "
           f"GL calls/frame {result['gl_calls_per_frame']} of which state queries {result['gl_queries_per_frame']}")
     print(f"  top calls {result['gl_calls_top']}")
