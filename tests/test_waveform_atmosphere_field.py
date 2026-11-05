@@ -63,3 +63,66 @@ vec2 surface=fieldSection(shape,0.5);results[at+2]=vec4(bodyField(vec3(x,surface
         gl.glUseProgram(0);gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,2,0)
         if buffer:gl.glDeleteBuffers(1,[buffer])
         field.release();primitive.release();target.close()
+
+
+def _atmosphere_light(qt_app,locals_,ambient,ceiling,share):
+    """The medium's own local-light response, evaluated on GPU for each linear source radiance."""
+    from rendering.gl_programs.waveform_atmosphere import ATMOSPHERE_LIGHT_GLSL
+    target=OffscreenRenderTarget(16,16);field=WaveformField();buffer=0
+    locals_=np.asarray(locals_,np.float32);count=len(locals_)
+    try:
+        shader='#version 460 core\n'+ATMOSPHERE_LIGHT_GLSL+'''
+layout(local_size_x=1) in;
+layout(std430,binding=2) buffer Io {vec4 io[];};
+uniform vec3 uAmbient;
+void main(){uint i=gl_GlobalInvocationID.x;io[i]=vec4(atmosphereLight(io[i].rgb,uAmbient),0);}
+'''
+        program=field.resources.compute_program('atmosphere light',shader)
+        data=np.zeros((count,4),np.float32);data[:,:3]=locals_
+        buffer=int(np.asarray(gl.glGenBuffers(1)).reshape(-1)[0]);gl.glBindBuffer(gl.GL_SHADER_STORAGE_BUFFER,buffer)
+        gl.glBufferData(gl.GL_SHADER_STORAGE_BUFFER,data.nbytes,data,gl.GL_STREAM_READ)
+        gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,2,buffer)
+        gl.glUseProgram(program);location=lambda name:gl.glGetUniformLocation(program,name)
+        gl.glUniform2f(location('uAtmosphereLight'),ceiling,share);gl.glUniform3f(location('uAmbient'),*ambient)
+        gl.glDispatchCompute(count,1,1);gl.glMemoryBarrier(gl.GL_BUFFER_UPDATE_BARRIER_BIT)
+        out=np.frombuffer(gl.glGetBufferSubData(gl.GL_SHADER_STORAGE_BUFFER,0,data.nbytes),np.float32).reshape(count,4)
+        return out[:,:3].astype(float)
+    finally:
+        gl.glUseProgram(0);gl.glBindBufferBase(gl.GL_SHADER_STORAGE_BUFFER,2,0)
+        if buffer:gl.glDeleteBuffers(1,[buffer])
+        field.release();target.close()
+
+
+LUMA=np.array((.2126,.7152,.0722))
+
+
+def test_strong_local_light_compresses_below_a_bounded_wash(qt_app):
+    """However bright the ribbons (or Local Light), the medium's lit radiance never passes its ceiling."""
+    ceiling=.2;strengths=np.geomspace(1e-3,1e4,40)
+    hues=((1.,.1,.9),(0.,.8,1.),(1.,.55,.1),(1.,1.,1.))
+    for hue in hues:
+        locals_=np.outer(strengths,hue)
+        lit=_atmosphere_light(qt_app,locals_,(.035,.05,.085),ceiling,.5)@LUMA
+        assert np.all(np.diff(lit)>=-1e-6), 'brighter light never darkens the haze'
+        assert lit.max()<=ceiling*1.0001
+        assert lit[-1]>ceiling*.99, 'strong light saturates at the ceiling rather than vanishing'
+        assert abs(lit[0]-1e-3*max(hue))<1e-4, 'faint light passes through unchanged'
+    assert np.allclose(_atmosphere_light(qt_app,[(0.,0.,0.)],(.035,.05,.085),ceiling,.5),0.)
+
+
+def test_tint_keeps_a_capped_share_of_the_local_source_hue(qt_app):
+    """The haze leans toward each ribbon's own hue by exactly the share, over the medium's own hue."""
+    ambient=np.array((.035,.05,.085));own=ambient/ambient.max()
+    warm,cool=np.array((1.,.55,.1)),np.array((0.,.8,1.))
+    for share in (0.,.3,1.):
+        lit=_atmosphere_light(qt_app,[warm*50.,cool*50.],ambient,.2,share)
+        for colour,source in zip(lit,(warm,cool)):
+            expected=own+share*(source/source.max()-own)
+            np.testing.assert_allclose(colour/colour.max(),expected/expected.max(),atol=2e-3)
+        warmth=(lit[:,0]-lit[:,2])/lit.sum(1)
+        if share==0.:assert abs(warmth[0]-warmth[1])<1e-4, 'no share: the medium keeps its own colour'
+        else:assert warmth[0]>warmth[1], 'haze near the warm ribbon is warmer than near the cool one'
+    # A partial share never reaches the saturated source colour.
+    partial=_atmosphere_light(qt_app,[warm*50.],ambient,.2,.3)[0]
+    full=_atmosphere_light(qt_app,[warm*50.],ambient,.2,1.)[0]
+    assert (partial[0]-partial[2])/partial.sum()<(full[0]-full[2])/full.sum()

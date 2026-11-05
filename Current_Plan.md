@@ -12,8 +12,8 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 1. **§6 Shared 3D architecture**: build reusable 3D primitives, each proven on its own harness.
 2. **§7 Visualizer modes**, one at a time: **Waveform Ribbon → Reactive Liquid / Melt Pool → Concrete Rain →
    Usu Moonscape**. Each is built lab-first (§7.0).
-3. **§8 Accepted-mode follow-ups**: the brief Bubble performance-parity check is operator-admitted now; the
-   scalar-to-range Builder audit remains deferred until explicitly prioritized.
+3. **§8 Accepted-mode follow-ups**: the brief Bubble performance-parity check is operator-admitted now.
+4. **§9 Studio for every visualizer** (operator, 5 Nov): replaces the deferred Bubble scalar-to-range/UX sweep.
 
 **Accepted baseline (not live work):** original Bubble, Extruded Bubble, Neon Lake, Oscilloscope,
 Spectrum/Rainbow Ghost, Sphere, source routing, transitions and Foundry launch buttons. Reopen an accepted
@@ -60,9 +60,29 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
   The next MC run (19:47) and an invisible live check on current code were normal. On recurrence the sampler now
   logs `[USAGE] topology added ... name= parent= threads=` for every process entering the tree: identify them, then
   decide whether the sampler must exclude/outsource them. Not the Extruded Bubble chain fix (no processes, tick unchanged).
-- [ ] **Stale red: `tests/test_waveform_infinite_floor.py` (9 failures, present at a74dfaa0, before 5 Nov work):**
-  Orthographic bottom-row depth, actor-clip and production-floor reflection expectations no longer match the camera
-  helper. Decide per assertion whether the test or the camera/floor contract is stale; do not bless drift blindly.
+- [ ] **Suite reds since the 24 Oct 737/737 baseline (5 Nov isolated full run, identical at a74dfaa0, i.e. before
+  the 5 Nov work):** 40 files, all reproducible alone. Largest: `test_visualizer_preset_completeness` (13: Bubble and
+  Extruded Bubble presets miss the 5.1.3 microbubble/gradient/drift/projection controls — repair-fill them),
+  `test_waveform_infinite_floor` (9: orthographic depth/actor-clip/floor-reflection expectations vs the camera
+  helper), `test_qtquick_custom_layout_owner` (8: its Waveform cases replay without PCM reanalysis, which raw musical replay now requires), `test_framed_viewport_aperture` (4: EB/Shockwave custom-side
+  gestures), `test_qtquick_visualizer_all_modes` (4), `test_visualizer_logical_hook_dormancy` (4),
+  `test_bubble_reactivity` (3: swish group drift sign/activity — Bubble is BTF-binding, never retune to pass),
+  `test_visualizer_plain_orbit` (native crash), `test_visualizer_view_orbit` (Shockwave planar vs freeform; Waveform
+  full-circle turn), `test_defaults_schema_authority` (Waveform presets carry `mode` only at top level), plus 1-3
+  failures in bubble_ambient_glow, build_runner, feed_f2 (RSS log redaction), frame_trace, framed_scene_input,
+  input_gain, monitor_replay_admission, neon_scene_materials, onboarding_preview_assets/selection,
+  qt611_shader_admission, qtquick_build_packaging/ordinary_widget_host/visualizer_bubble/all_five_owner_chain/
+  fade_authority/technical_sync_contract, release_media, run_matrix_harness, settings_theme_lifetime_contract,
+  startup_source_onboarding_resume, test_suite_durability, transition_distribution, visualizer_custom_geometry_profiles,
+  lazy_preset_collection, mode_dormancy, mode_enable_resolver, presets, settings_plumbing,
+  widget_theme_no_material_contract. Reconcile per assertion (current architecture authoritative; never bless
+  unexplained drift); fix product defects found on the way.
+- [ ] **Linux branch `claude/eager-carson-5da6ge` — held, not merged (5 Nov):** merges cleanly and leaves Windows
+  unchanged (804/848 files green, every other red pre-existing), but it is unfinished: `core/media/pulse_volume.py`
+  starts raw `threading.Thread`s (`tests/unit/test_policy_compliance.py` fails on every OS), and its own docs promise
+  that `tests/test_linux_*.py` are never collected off Linux with `tests/test_platform_selection.py` pinning Windows
+  owners, while Linux-only cases still sit in shared files that fail on Windows (`test_mpris_controller` x2,
+  `test_platform_paths` x1) and neither the exclusion nor that test exists. Merge once those land on the branch.
 - [ ] **Cross-display Media shortcuts** delivered once on the other display, when exercised.
 - [ ] **Music recorder** 60-second clip, signal/history, cancel and mixed-DPR UI, when recording is needed.
 - [ ] **Helper breadcrumb diagnostics unavailable:** current native MC evidence logs no access to
@@ -166,34 +186,32 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   and count in old state. The recorded draft still needs visual correction: white/rope-like overlaps, repeated
   continuation, weak/dark atmosphere and a poor floor/contact strip remain rejected. Do not equate source tests,
   particle/root counts or larger amplitude with reference fidelity.
-- [~] **Travelling energy pulse (5 Nov), awaiting operator eyes/ears:** operator rejected the R1/R2 elastic motion
-  as fundamentally wrong; reactions must feel like water waves WITH the shape. Beats launch swells that travel along the
-  waveform and amplify its own crests/troughs, width, light and colour (Energy Pulse bucket: direction, width, speed,
-  colour shift, fade; Bend range = Pulse Strength). Audit doc decision 7. Optional next: Frozen past; selectable
-  reaction modes only if another model matches fidelity.
-- [~] **Musical shape response, punch and grace — candidate (R1/R2, 5 Nov), superseded in part by the pulse:** root
-  causes measured, not guessed: the axial roll rotated the louder passage's vertical excursion into invisible depth
-  (envelope uncorrelated with its own drive) and real music traversed ~1/5 of every quiet->peak range. Now: roll turns
-  only the carrier, Height/Bend/Depth act in world space after it, bends travel with the cloth, fixed real-music spans
-  plus phrase-scale body energy place the level (soft knee, no pin), springs 0.85 Hz/0.6 (attack 67 ms to 70%, settle
-  0.63 s), lens 3->5 degrees so peaks rise high without a ceiling. Evidence and per-clip table: audit doc §6 R1/R2;
-  native captures `.artifacts/evidence/waveform_ribbon/studio_20261105/r1a_*`, `r2_*`. Judge motion with audio; the
-  still-open operator asks: twisting must read as musical rather than
-  busy, sweeps long and smooth with actual axial stretch, and floor contact a smooth collision, never a crop.
-- [ ] **Particles weak, sparse and localized:** the operator sees pathetic specks in one spot even with fog off.
-  Verify distributed actual-rim births, clearly visible independent glow/size/light and musical density changes.
-  Candidate improvements are fixed-world emitter span and authored halos, with count/lifetime bounded at birth.
-  Inspect native motion and fog-off subtraction; a cohort serial, byte count, halo test or isolated still cannot close
-  this. Audit both handles of every particle range in actual quiet/peak consumers.
+- [~] **Reaction: travelling energy pulse + four Reaction Modes (5 Nov) — awaiting operator eyes/ears:** the R1/R2
+  elastic motion was rejected as fundamentally wrong (sideways bursts from the retired axial stretch; standing bends).
+  Beats launch swells that travel along the waveform and amplify its OWN crests/troughs through a broad envelope
+  whose slope is capped so a swell never bends a curve inward; points slide along their own curve (shape-preserving,
+  rate-limited); a narrower travelling light/colour/saturation band and gathered particles show where the energy is.
+  Modes: Travelling Pulse (default), Frozen Past, Whole Swell, Group Wave; flow-rule and twitch tests for every mode.
+  Dense music (5 Nov probe, ragdoll loud end): the light reads as one coherent front travelling at the authored speed
+  with no standing glow at the emitter; a packetised release was measured (emitter share .41 -> .40) and rejected as
+  machinery without a visible gain. 8 s strips (5 Nov, `modes_long/`): Frozen Past is distinct (held crests stay
+  raised when the passage quiets); Group Wave was indistinguishable, so a swell now arrives as a SET (envelope 3.5
+  carrier wavelengths, light across the set, stronger forward lean) and reviewed frame by frame. Audit doc decisions 7+; evidence `.artifacts/evidence/waveform_ribbon/
+  studio_20261105/modes/`.
+- [~] **Particles (5 Nov candidate):** crest-weighted, distributed births in each ribbon's colour, visible
+  >=1 px cores with soft halos, gentle fade; swells gather particles (Pulse Particles). Hot passages hold ~3.4x quiet.
+  Pulse births only fill the cohort headroom left after the authored Spark Count, so they never mask it.
+  Open: still sparser than the high-react reference (admission-limited).
 - [~] **Strands: rare, 3-5 seconds TOTAL life.** Latest operator correction supersedes the proposed 30-second fade.
   Preserve the approved non-flickering look, make appearances much rarer, and use most of a configurable 3-5 second
   lifetime for a gentle tip-first fade. Reactivation restores them smoothly,
   with glow and movement/growth (retain the approximate 20% repeat extension), without abrupt respawn or pulse reset.
   Prove quiet/peak lifetime handles, tip/root fade ordering, slow decay, partial-fade reactivation and direct/reflected
   appearance. Retain birth look during travel; finite history eviction must not cut off a visible unfinished fade.
-- [ ] **Latest explicit visual rejections:** colours remain off across the scene; particles remain lacking; mist is
-  nowhere near the target. The floor's dark-blue patch pattern is rejected. Remove artificial patch modulation,
-  retain a readable restrained neutral wet surface, and validate colour/atmosphere against the supplied references.
+- [~] **Colour, floor and mist (5 Nov candidates):** lattice sheets (V3); wet concrete with stable soft coloured
+  reflection mass (no horizon line, no flicker-prone streaks; operator prefers smeared colour to streaks); one bounded
+  night medium with a slight local ribbon tint (strong Local Light can no longer wash the frame). Open: floor reflection
+  saturation still below the references; Presets 1/2 floor pool glow being bounded.
 - [ ] **Dense highlights, moving colour and rim glow:** playback still lacks rewarded high-energy density and glow.
   Verify local crest/high-power colour, bright tunable rim/glow and denser highlights against actual music, including
   quiet/loud differences. Consumer reachability does not establish visible strength. Keep both range handles effective.
@@ -228,24 +246,16 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   **Additional explicit rejection:** material outside the core reflection is practically invisible. Validate readable
   dim texture across the foreground with reflection and atmosphere both OFF, then under the unified night medium;
   increasing reflection alone cannot satisfy this. Current candidate restores filtered concrete/roughness and ambient light.
-- [ ] **Current mist/fringe entirely rejected - implement replacement after strands/floor:** stop polishing the shaped banks,
-  noisy fringe, side-sheet conflicts, remote shelves and skyward mass. Preserved image, failure analysis, cost caveats
-  and three proposals: `Docs/Reference/Waveform_Ribbon_Mist_Failure_and_Replacement.md`. Replace with full-scene
-  night fog ("Silent Hill At Night") displaced by the actual 3D waveform, with smooth world-anchored density and local
-  reactive light/wake; no visible ceiling/stripe/box. `references/Mist Goal.png` is now the primary mist/floor target.
-  The operator explicitly supersedes ALL older mist/fog mechanisms: remove the old banks/fringe AND old separate
-  distance/floor fog when migrating. One coherent atmosphere must serve scene/floor/actors/reflection; no stacked
-  legacy layer or hidden fallback. Old Waveform banks/fringe, shape bake/detail march and analytic floor haze are
-  removed from the candidate source and settings. Validate the new integrated world medium's look, signed/mirrored
-  optical paths and cost across all three curated candidates, which now enable the replacement medium. Keep true 3D clearance around steep bends and a
-  retained motion wake open: current cross-section clearance/local light and background drift do not prove those.
-  Latest loaded candidate remains over budget (P2/game60: render median 22.59 ms, CPU others 93%); obtain a matched
-  quiet-system fog OFF/ON comparison and reduce cost. Scoped source/optical/raster tests do not close that gate.
-- [ ] **Waveform Studio (replaces the rejected builder UI):** in-process Qt Quick Studio per the operator's design pack
-  (`Docs/Audits/SRPSS_Waveform_Studio_Design_Pack_2026-11-03.zip`); architecture decisions and stage gates A-E in
-  `Docs/Audits/Waveform_Studio_and_Reactivity_Audit_2026-11-05.md` §4-6. Settings Custom becomes a launcher plus the
-  camera-save checkbox; the old builder stays only until the Studio's Advanced coverage gate passes. Plumbing tests
-  never establish usability; operator acceptance of the running Studio is required.
+- [~] **Unified atmosphere (5 Nov candidate):** replacement medium in place (old banks/fringe/floor haze removed);
+  darker bounded haze with capped local tint; P3 density 0.06-0.09, P1/P2 0.055-0.075. Open: retained moving-body
+  wake and the loaded fog cost gate (P2/game60 render median was over budget) still need measurement.
+- [ ] **Waveform Studio (replaces the rejected builder UI):** in-process, reusable (mode registry + switcher;
+  test-only second mode) Qt Quick Studio per the operator's design pack; Settings > Custom opens it; production
+  framing on the real card; camera navigation; theme-token chrome; full registry coverage; Energy Pulse/Reaction Mode
+  first in Reactivity; target-first response tuner. Open: Stage C/D instruments (scene handles, gradient strips,
+  lifecycle timelines, mist/floor cards), icon polish and mock parity; real-window checks on hardware (visible window,
+  native Settings hide/restore, exit timing via `[STUDIO] retire` logs, per-monitor DPI). Remove the old builder body
+  once the Studio passes operator acceptance.
 - [ ] **Live performance and truthful evidence:** run all three presets under matched recorded PCM/game60 and admitted
   camera extremes. Verify ACTUAL applied configuration, audible input and rendered features before interpreting
   timings. Profile logical preparation, birth admission, render stages and whole-frame tails; do not reduce artistic
@@ -262,11 +272,10 @@ The scene is world-first through the shared framed camera (Orthographic default)
 waveform and full-scene night fog, with no visible horizon/sky/floor edge. The waveform clears and softly lights
 the mist. Preset/control migration and recorded-audio calibration come only after the lab look is credible.
 
-- [~] **WR-07/08 production candidate — finish admission:** C elastic bending/torsion is primary; combine A's accumulated
-  twisting, localized highest-power colour shifts and independently controllable reactive whole-waveform rotation
-  (axial roll like a skewer; fast strong attack, slow decay; integrate speed into continuous angle). Preserve constant history flow, smooth
-  curves, particles/free strands and fog repelled by the actual deformed/rotated waveform. Use the shared scene,
-  sole logical clock, immutable publication and lazy retained renderer; Terra audits each slice.
+- [~] **WR-07/08 production candidate — finish admission:** the reaction is the travelling energy pulse with
+  selectable modes (the C elastic body remains only for depth sway/torsion); A's accumulated twist and the reactive
+  axial roll stay, with musical vertical response applied after the roll (roll-invariant). Preserve constant history
+  flow, no time-varying axial scaling, smooth curves, particles/free strands and fog clearance by the actual body.
 - [~] **Full controls/editors, four-ribbon capacity and three presets — finish admission:** primary/alternate examples now have
   candidate Preset 1/2 with the
   selected hybrid, shared framed 3D camera/navigation, technical profile, preset/Custom and Edit/Arrange feature set.
@@ -337,14 +346,20 @@ scalar-to-range audit remains deferred until explicitly reprioritized.
   - [ ] If cost is material, optimize only the measured offender and repeat the parity + native performance gate;
     preserve visual quality, all approved sinking/reversed-flow presets, reactivity/latency, BTF and mutable presets.
     If no material cost is measured, **close the item without redesigning Bubble**. No generic "lean out" campaign.
-- [ ] **Original Bubble scalar-to-range control audit:** inventory Bubble sliders whose authored value is really a
-  low-react/high-react envelope and convert only semantically appropriate controls to range sliders. Wire the low and
-  high handles to the canonical reactivity signal rather than treating the range as cosmetic UI. For authored presets
-  **1-8 only**, seed both ends of every migrated range from that preset's existing scalar value so the migration is
-  byte-identical to its current output before the operator widens a range; presets beyond 8 are experimental and do not
-  constrain migration. Capture the pre-change P1-P8 effective values and fixture frames as the regression oracle, then
-  prove Save/Cancel/Restore, preset switching, CUSTOM editing and low/high interpolation without changing unrelated
-  Bubble reactivity semantics.
+## 9. Studio for every visualizer (replaces the builders)
+
+Operator (5 Nov): instead of a Bubble UX sweep, every visualizer except Sine (retiring) gets a version of the reusable
+Studio (`ui/studio`, mode registry + adapters) that replaces its builder. The Waveform Studio is the first adapter and
+the framework bar; each mode contributes only an adapter (typed schema from the canonical registry, truthful evaluator
+on its production logical/render path, fixtures, scene objects, workspaces and instruments), never a copied shell.
+The former Bubble scalar-to-range idea is folded in: each adapter picks the right instrument per control under the
+design pack's control policy (quiet/peak A/B, real ranges only where a true interval exists), with unchanged
+serialized data unless a migration is justified. Accepted looks/behaviour (BTF, presets, timings) must not change.
+
+- [ ] Finish Waveform Studio acceptance first (§7.1), then extract any remaining Waveform-shaped assumptions.
+- [ ] Adapters in order of authoring pain: Extruded Bubble, Bubble, Sphere, Spectrum/Rainbow Ghost, Extruded Spectrum,
+  Shockwave Grid, DevCurve, Oscilloscope. Each: full registry coverage test, production-parity preview test, theme,
+  Settings Custom launcher replacing that builder body once the operator accepts it.
 
 ## Operator execution and evidence rules
 

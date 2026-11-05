@@ -49,7 +49,8 @@ class CompiledWaveformSettings:
                  'strand_width','strand_light','strand_beads','strand_peel','strand_halo','strand_glow','strand_eol','strand_fade')})) if read('strands_enabled') else None,
             pulse=PulseControls(str(read('pulse_direction')),float(read('pulse_width')),float(read('pulse_speed')),
                                 float(read('pulse_colour')),float(read('pulse_fade')),float(read('pulse_saturation')),
-                                float(read('pulse_particles')),float(read('pulse_strands'))))
+                                float(read('pulse_particles')),float(read('pulse_strands')),
+                                mode=str(read('reaction_mode'))))
 
     def scene(self,snapshot):
         p=self.values
@@ -81,7 +82,10 @@ class CompiledWaveformSettings:
         floor=replace(self.base.floor,reflection=pair('floor_reflection',passage),
             albedo_gain=pair('floor_brightness',passage),tint=tint,f0=pair('floor_wetness',passage),
             streak=(pair('floor_streak',passage),*self.base.floor.streak[1:]),
-            column=(pair('floor_column',passage),*self.base.floor.column[1:]))
+            column=(pair('floor_column',passage),*self.base.floor.column[1:]),
+            glow_limit=float(read('floor_glow_limit')),hue=float(read('floor_colour')),
+            hot=(float(read('floor_contrast')),*self.base.floor.hot[1:]),
+            light_reach=float(read('floor_light_reach')),light_far=float(read('floor_light_far')))
         sparks=None
         if read('sparks_enabled'):
             size=pair('spark_size',sparkle)

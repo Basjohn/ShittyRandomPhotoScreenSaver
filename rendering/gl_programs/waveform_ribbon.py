@@ -59,6 +59,7 @@ uniform float uPool;
 uniform float uPoolZ;       // the sheets' depth (world z)
 uniform vec3 uColumn;       // fade length toward the camera, far sparkle strength, sparkle threshold
 uniform float uReflectionHue; // reflected chroma about its luminance (1 as reflected)
+uniform vec3 uBound;        // reflected-light ceiling (linear luminance), surface-light reach (world), far surface level
 uniform int uSpecMode;      // reflection term: 0 inline, 1 write it alone (pre-pass), 2 read it from uSpecular
 uniform sampler2D uSpecular;
 uniform vec3 uForward;
@@ -197,6 +198,12 @@ void main() {
     float sparkle=uColumn.z>0.0?smoothstep(uColumn.z,1.0,film):1.0;
     reflected*=mix(sparkle*uColumn.y,1.0,near);
     specular=reflected*fresnel*uFloor.z;
+    // Bounded at its owner: the reflected light compresses smoothly toward a ceiling (saturating, never clipped,
+    // hue kept), so strong preset lighting gives coloured mass under the sheets, never a flooded plane. Below the
+    // ceiling the response is nearly linear, so restrained reflections keep their look.
+    float level=dot(specular,vec3(0.2126,0.7152,0.0722));
+    float ceiling=max(uBound.x,1e-4);
+    if(level>1e-6) specular*=ceiling*(1.0-exp(-level/ceiling))/level;
     }
     if(uSpecMode==1) { FragColor=vec4(specular,1.0); Emission=vec4(0.0); return; }
     // Local source light uses the same physical cloth field as the atmosphere, never a projected envelope. A grazing
@@ -209,7 +216,12 @@ void main() {
     // Relief shading: light arrives from beyond the sheets, so faces falling away from the eye catch it. Zero-mean
     // over the relief: the concrete reads at every reflection strength without changing its level.
     float shade=clamp(1.0-uMaterial.y*rise,0.25,2.0);
-    vec3 colour=albedo*uFloorTint*(uAmbient+pool)*shade+specular;
+    // The night's light is the sheets': concrete is lit near them and falls off toward the camera to a dark far
+    // level, so a wide view shows dark wet ground in front rather than an evenly lit grey plane (beyond the sheets
+    // the mist already takes the ground into the dark). Smooth and world-fixed: no seam, no motion.
+    float reach=exp(-max(vWorldPos.z-uPoolZ,0.0)/max(uBound.y,1e-3));
+    vec3 ambient=uAmbient*mix(uBound.z,1.0,reach);
+    vec3 colour=albedo*uFloorTint*(ambient+pool)*shade+specular;
     float clear=mistTransmittance(vWorldPos);
     colour=mistOver(colour,uBackdrop,vWorldPos);
     FragColor=vec4(colour,1.0);

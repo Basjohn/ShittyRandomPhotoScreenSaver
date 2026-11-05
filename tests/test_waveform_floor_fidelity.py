@@ -29,12 +29,12 @@ class FloorHarness:
         self.scene = WaveformScene()
         self.scene.admit_preparation()
 
-    def render(self, floor, *, kind, source=None):
+    def render(self, floor, *, kind, source=None, **view_changes):
         """Floor pixels (float RGB) and the floor mask. ``source``: (x0, y0, x1, y1) uv rectangle, rgb, height."""
         from core.waveform_ribbon_scene import Recipe
         gl, scene = self.gl, self.scene
         scene.recipe, scene.size = Recipe(fog=None, floor=floor), (WIDTH, HEIGHT)
-        view, projection, eye, lens = physical_view(camera(camera_projection=kind, tilt=.5), WIDTH/HEIGHT)
+        view, projection, eye, lens = physical_view(camera(**{'camera_projection': kind, 'tilt': .5, **view_changes}), WIDTH/HEIGHT)
         mvp = tuple((projection @ view).flatten(order='F'))
         size = (WIDTH//2, HEIGHT//2)
         scene.reflection.begin(*size)
@@ -48,9 +48,10 @@ class FloorHarness:
         scene.reflection.end()
         self.target.bind()
         gl.glViewport(0, 0, WIDTH, HEIGHT)
+        gl.glDepthMask(gl.GL_TRUE)  # clears honour the write mask; set it before clearing depth
         gl.glClearBufferfv(gl.GL_COLOR, 0, SENTINEL)
         gl.glClearBufferfv(gl.GL_DEPTH, 0, (1.,))
-        gl.glEnable(gl.GL_DEPTH_TEST); gl.glDepthFunc(gl.GL_LESS); gl.glDepthMask(gl.GL_TRUE)
+        gl.glEnable(gl.GL_DEPTH_TEST); gl.glDepthFunc(gl.GL_LESS)
         scene._floor(mvp, eye, view, lens[2], (WIDTH, HEIGHT))
         pixels = self.target.read_rgba()[:, :, :3].astype(float)
         floor_mask = ~((pixels[:, :, 0] > 250) & (pixels[:, :, 1] < 5) & (pixels[:, :, 2] > 250))
@@ -146,6 +147,42 @@ def test_capped_reflection_prepass_matches_the_inline_column(harness, kind):
     capped, _ = harness.render(reflection_only(specular_max_height=HEIGHT//2), kind=kind, source=source)
     a, b = inline[mask].mean(), capped[mask].mean()
     assert a > 1. and .8 < b/a < 1.2, (a, b)
+
+
+def test_reflected_light_is_bounded_smoothly_without_changing_restrained_light(harness):
+    """Strong reflected light compresses toward the ceiling (bounded, monotone, hue kept); restrained light below
+    it keeps nearly its linear level."""
+    def column(rgb, limit):
+        pixels, mask = harness.render(reflection_only(glow_limit=limit), kind='Perspective',
+                                      source=((.45, .15, .55, .19), rgb, .2))
+        return pixels[mask]
+    unbounded = lambda rgb: column(rgb, 1e4)
+    # Restrained: within 10% of the unbounded column
+    weak, weak_free = column((.2, .08, .3), 5.), unbounded((.2, .08, .3))
+    assert weak_free.max() > 20.
+    assert abs(weak.mean() - weak_free.mean())/weak_free.mean() < .1
+    # Strong: the column is held well below its unbounded level, but brighter sources still read brighter
+    strong, strong_free = column((9., 3., .5), .1), unbounded((9., 3., .5))
+    stronger = column((18., 6., 1.), .1)
+    assert strong.mean() < .6*strong_free.mean()
+    assert stronger.mean() >= strong.mean() - 1.
+    # and keeps its hue (orange: red over green over blue)
+    bright = strong[strong.sum(axis=1) > np.percentile(strong.sum(axis=1), 90)].mean(axis=0)
+    assert bright[0] > bright[1] > bright[2]
+
+
+def test_surface_light_falls_off_toward_the_camera_into_darkness(harness):
+    """The concrete is lit near the sheets and darker toward the camera (dark wet ground in a wide view), smoothly
+    and to its far level, never black."""
+    reach, _ = harness.render(replace(material_only(light_reach=5., light_far=.4), albedo_gain=1.), kind='Perspective',
+                         camera_fov=20.)
+    even, mask = harness.render(replace(material_only(light_reach=1e6, light_far=1.), albedo_gain=1.), kind='Perspective',
+                              camera_fov=20.)
+    rows = [r for r in range(HEIGHT) if mask[r].mean() > .9]
+    near, far = rows[-max(4, len(rows)//6):], rows[:max(4, len(rows)//6)]  # bottom rows are nearest the camera
+    ratio = lambda band: reach[band][mask[band]].mean()/even[band][mask[band]].mean()
+    assert ratio(near) < .8*ratio(far)
+    assert reach[mask].min() > 0. and ratio(near) > .3
 
 
 def _flicker(frames, mask):
