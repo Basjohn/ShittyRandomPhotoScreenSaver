@@ -23,10 +23,11 @@ from core.windows.reddit_helper_storage import (
     write_json_atomic_bounded,
 )
 
+from core.platform_paths import machine_shared_root
+
 logger = get_logger(__name__)
 
-_PROGRAM_DATA = os.getenv("PROGRAMDATA", r"C:\ProgramData")
-_BASE_DIR = Path(_PROGRAM_DATA) / "SRPSS"
+_BASE_DIR = machine_shared_root() / "SRPSS"
 _QUEUE_DIR = _BASE_DIR / "url_queue"
 _SIGNAL_DIR = _BASE_DIR / "helper_signals"
 _SPOOL_READY = False

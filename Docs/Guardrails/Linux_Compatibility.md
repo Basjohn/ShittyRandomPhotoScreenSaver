@@ -65,7 +65,7 @@ This file holds only rules that stay true.
 
 ## 7. Tests
 
-- Tests that pin a Windows contract select it explicitly: the `windows_paths`
+- Tests that pin a Windows contract select it explicitly: the `windows_platform`
   fixture for path roots, or `pytest.mark.skipif(sys.platform != "win32", ...)`
   when the test needs a real Windows API. Never delete or loosen the assertion to
   make Linux pass.

@@ -16,7 +16,7 @@ from core.settings.storage_paths import StorageRoot
 
 
 @pytest.fixture
-def real_profile(tmp_path, monkeypatch, windows_paths) -> Path:
+def real_profile(tmp_path, monkeypatch, windows_platform) -> Path:
     real = tmp_path / "real_appdata"
     real.mkdir()
     monkeypatch.setenv("APPDATA", str(real))

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 
-def test_default_notification_sound_prefers_programdata(monkeypatch, tmp_path, windows_paths):
+def test_default_notification_sound_prefers_programdata(monkeypatch, tmp_path, windows_platform):
     from core.audio.sound_paths import (
         DEFAULT_NOTIFICATION_SOUND_NAME,
         default_notification_sound_path,
@@ -31,7 +31,7 @@ def test_default_notification_sound_falls_back_to_repo_resource(monkeypatch, tmp
     assert default_notification_sound_path(root=tmp_path) == str(repo_sound)
 
 
-def test_relative_default_sound_resolves_to_programdata(monkeypatch, tmp_path, windows_paths):
+def test_relative_default_sound_resolves_to_programdata(monkeypatch, tmp_path, windows_platform):
     from core.audio.sound_paths import (
         DEFAULT_NOTIFICATION_SOUND_RELATIVE,
         DEFAULT_NOTIFICATION_SOUND_NAME,

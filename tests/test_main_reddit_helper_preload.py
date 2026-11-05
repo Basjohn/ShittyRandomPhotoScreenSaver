@@ -1,4 +1,11 @@
+from pathlib import Path
+
+import pytest
+
 import main
+
+# Session-helper scheduling is the Windows SCR contract; Linux has its own test below.
+pytestmark = pytest.mark.usefixtures("windows_platform")
 
 
 def test_schedule_runtime_reddit_helper_session_starts_keepalive(monkeypatch):
@@ -82,7 +89,8 @@ def test_schedule_runtime_reddit_helper_session_skips_script_mode(monkeypatch):
         lambda msg: breadcrumb_calls.append(msg),
     )
     monkeypatch.setattr(main.sys, "argv", ["main.py"])
-    monkeypatch.setattr(main.sys, "executable", r"C:\Python311\python.exe")
+    # Native separators so the basename assertion holds on Windows and Linux.
+    monkeypatch.setattr(main.sys, "executable", str(Path("Python311") / "python.exe"))
 
     class _FakeEngine:
         _reddit_helper_session_timer = None
@@ -147,3 +155,18 @@ def test_schedule_runtime_reddit_helper_session_skips_without_thread_manager(mon
 
     assert main._schedule_runtime_reddit_helper_session(engine) is False
     assert breadcrumb_calls[-1] == "session helper skipped no-thread-manager"
+
+
+def test_linux_never_schedules_the_windows_helper_or_writes_its_breadcrumb(monkeypatch):
+    import core.windows.reddit_helper_installer as installer
+
+    monkeypatch.setattr("core.platform_paths.IS_WINDOWS", False)
+    events: list[str] = []
+    monkeypatch.setattr(installer, "_log_helper_event", events.append)
+
+    class _Engine:
+        thread_manager = object()
+
+    assert main._schedule_runtime_reddit_helper_session(_Engine()) is False
+    assert events == []
+    assert getattr(_Engine, "_reddit_helper_session_timer", None) is None
