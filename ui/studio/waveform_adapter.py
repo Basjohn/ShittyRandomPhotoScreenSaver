@@ -935,8 +935,10 @@ class WaveformStudioAdapter(StudioModeAdapter):
             pair = [min(control.high, max(control.low, float(v) * factor)) for v in baseline[control.key]]
             if control.integer:
                 pair = [int(round(v)) for v in pair]
-            # The canonical store may quantise what it saves: equal within its precision is "already applied".
-            if any(abs(float(a) - float(b)) > 1e-4 * max(1.0, abs(float(a)))
+            # The canonical store keeps the control's displayed precision: equal within half its step is
+            # "already applied" (stronger material scales produce values the store rounds).
+            step = .5 * 10.0 ** -int(getattr(control, "decimals", 4) or 4) + 1e-9
+            if any(abs(float(a) - float(b)) > max(step, 1e-4 * abs(float(a)))
                    for a, b in zip(pair, values[control.key])):
                 changes[(control.key,)] = pair
         return changes
