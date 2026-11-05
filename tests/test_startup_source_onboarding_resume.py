@@ -75,8 +75,10 @@ def test_onboarding_reuses_settings_and_restores_quit_policy() -> None:
         def __init__(self) -> None:
             self.values = {"sources.folders": [], "sources.rss_feeds": []}
 
-        def get(self, key: str):
-            return self.values[key]
+        def get(self, key: str, default=None):
+            # SettingsManager.get(key, default) shape: source readiness also
+            # reads the wallpaper pool selection with defaults (7bc62183).
+            return self.values.get(key, default)
 
     settings = Settings()
 

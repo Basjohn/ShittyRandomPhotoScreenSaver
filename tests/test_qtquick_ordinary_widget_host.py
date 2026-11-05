@@ -328,8 +328,15 @@ def test_shell_primitives_carry_no_per_frame_or_business_logic() -> None:
     # MultiEffect, no layer capture, no blur property, no Effects import. Scan
     # code only so explanatory comments naming what is avoided do not trip it.
     shadowed_text_code = _qml_code_without_comments(QML_ROOT / "ShadowedText.qml")
-    for banned in ("MultiEffect", "layer.effect", "layer.enabled", "shadowBlur", "QtQuick.Effects"):
+    for banned in ("MultiEffect", "shadowBlur", "QtQuick.Effects"):
         assert banned not in shadowed_text_code, banned
+    # Since 8c5490a0 (Contracts: Shadow authority) the explicit light-theme Soft
+    # Text Shadows modifier filters ONLY the shadow glyph through the shared
+    # SoftShadowEffect; the hard path keeps no layer. Every layer line is gated.
+    assert "layer.enabled: shadowedText.shadowEnabled && shadowedText.shadowSoft" in shadowed_text_code
+    assert "layer.effect: shadowedText.shadowSoft ? softShadowEffect : null" in shadowed_text_code
+    assert shadowed_text_code.count("layer.enabled") == 1
+    assert shadowed_text_code.count("layer.effect") == 1
     # It keeps the retained duplicate shadow glyph at a signed offset.
     assert "shadowedTextShadow" in shadowed_text_code
     assert "shadowOffsetX" in shadowed_text_code and "shadowOffsetY" in shadowed_text_code

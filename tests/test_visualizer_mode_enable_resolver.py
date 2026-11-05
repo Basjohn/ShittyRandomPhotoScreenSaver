@@ -76,7 +76,9 @@ def test_disabled_canonical_mode_substitutes_next_enabled_in_canonical_order():
         "oscilloscope",
         _activation("spectrum", "sine_wave", "bubble", "devcurve"),
     )
-    assert (mode, substituted) == ("sine_wave", True)
+    # Sine is soft-retired (5.1.3, f9f09679): even when a stored activation still
+    # enables it, it is never selectable, so substitution continues past it.
+    assert (mode, substituted) == ("bubble", True)
 
 
 def test_disabled_canonical_mode_wraps_once_when_needed():

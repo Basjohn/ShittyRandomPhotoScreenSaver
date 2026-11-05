@@ -566,7 +566,14 @@ def test_runtime_edit_save_touches_only_active_profile_and_preserves_all_sibling
     from widgets.spotify_visualizer.quick_display_visualizer_owner import QuickDisplayVisualizerOwner
 
     screen = qt_app.primaryScreen(); signature = get_screen_signature(screen); profile = MODE_PROFILE[mode]
-    variants = _canonical_variants(); baseline_payload = deepcopy(variants[profile])
+    variants = _canonical_variants()
+    # Since 477a1cf9 the freeform cases hot-swap into the PLANAR sibling, whose Edit activation
+    # requires one pixels-per-world scale. Give that sibling a world consistent with its screen
+    # fraction on THIS screen (the shared fixture's 960x320 is only a token world).
+    planar_rect = variants[PLANAR]["rect"]; geometry = screen.geometry()
+    variants[PLANAR]["size_payload"]["viewport_extent"] = [
+        planar_rect["width"] * geometry.width(), planar_rect["height"] * geometry.height()]
+    baseline_payload = deepcopy(variants[profile])
     widgets = {"spotify_visualizer": {"enabled": True, "position": "Custom", "mode": mode, "monitor": "1"},
         "custom_layout": {"version": 2, "displays": {signature: {"spotify_visualizer": deepcopy(variants)}}}}
     factory = QuickSceneFactory()
@@ -807,8 +814,10 @@ def test_in_edit_profile_with_missing_legacy_world_gets_canonical_viewport_not_o
     original.current_viewport_extent = (729.0, 321.0)
     session = CustomLayoutSession()
     session.add_item(original)
+    # Shockwave (the old target) shares the planar slot since 477a1cf9; Sphere is the remaining
+    # distinct freeform 3D slot whose historic saves may omit their world.
     variants = {EXTRUDED: _entry(.1, .1, .3, .2)}
-    variants[SHOCKWAVE] = {
+    variants[SPHERE] = {
         "rect": {"x": .2, "y": .1, "width": .5, "height": .3},
         "size_payload": {}, "resize_mode": "visualizer_rect",
     }
@@ -828,9 +837,9 @@ def test_in_edit_profile_with_missing_legacy_world_gets_canonical_viewport_not_o
     owner._undo_pending = None
     owner._undo_history = []
     owner._settings_manager = SimpleNamespace(get_widgets_map=lambda: widgets)
-    assert owner.activate_edit_visualizer_profile("shockwave_grid")
+    assert owner.activate_edit_visualizer_profile("sphere")
     active = next(item for item in session.active_items() if item.model_identity == "spotify_visualizer")
-    assert active.source_key.geometry_variant == SHOCKWAVE
+    assert active.source_key.geometry_variant == SPHERE
     assert active.current_viewport_extent == tuple(float(n) for n in CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE)
     assert active.current_viewport_extent != original.current_viewport_extent
     assert len(updates) == 1

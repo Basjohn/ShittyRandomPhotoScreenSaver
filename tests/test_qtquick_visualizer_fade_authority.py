@@ -44,6 +44,13 @@ def test_each_mode_renderer_feeds_u_fade_from_the_shared_content_fade(mode_id):
         # A scene drawn through its SceneTarget (Oscilloscope, Neon Lake, Extruded Bubble): the target's overlay
         # applies the same content fade to the complete composed pass.
         assert "overlay=presentation.content_fade" in source
+    elif "self._scene.render(" in source:
+        # A retained scene owner (Waveform: rendering/quick/scene3d/waveform.py) composes
+        # through its SceneTarget scope with the overlay it is handed: that overlay is
+        # the shared content fade and nothing else.
+        assert "opacity=frame.snapshot.presentation.content_fade" in source
+        assert "overlay=opacity" in source
+        assert "self._draw(frame,opacity=opacity)" in source
     else:
         assert '"u_fade"' in source, f"{mode_id} renderer no longer sets u_fade"
         assert "presentation.content_fade" in source, (

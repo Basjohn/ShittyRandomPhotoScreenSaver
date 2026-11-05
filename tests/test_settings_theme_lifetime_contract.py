@@ -47,6 +47,13 @@ def _load_settings_theme_module(monkeypatch):
     qss.render_qss_rgba255 = lambda _value: "rgba(255,255,255,255)"
     monkeypatch.setitem(sys.modules, "ui.settings_theme_qss", qss)
 
+    # Since 116e1fc4 a root also receives the shared typography projection after
+    # its stylesheet; that is Qt-bound and orthogonal to wrapper lifetime here.
+    typography = types.ModuleType("ui.theme_typography")
+    typography.apply_settings_typography = lambda _widget, _theme: None
+    typography.apply_settings_tooltip_typography = lambda _theme: None
+    monkeypatch.setitem(sys.modules, "ui.theme_typography", typography)
+
     path = ROOT / "ui" / "settings_theme.py"
     spec = importlib.util.spec_from_file_location("_srpss_settings_theme_lifetime_test", path)
     assert spec is not None and spec.loader is not None

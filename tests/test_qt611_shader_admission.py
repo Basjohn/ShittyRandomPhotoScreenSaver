@@ -65,7 +65,16 @@ try:
                 matrix = (2/64,0,0,0, 0,-2/64,0,0, 0,0,1,0, -1,1,0,1)
                 gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
                 gl.glViewport(0,0,64,64)
-                renderer.render(QuickVisualizerRenderFrame(snapshot,(0,0,64,64),(64.,64.),matrix,capture.vao))
+                frame = QuickVisualizerRenderFrame(snapshot,(0,0,64,64),(64.,64.),matrix,capture.vao)
+                if not getattr(snapshot.logical.mode_state, "ready", True):
+                    # A mode whose frame is not ready without live PCM (Waveform) draws
+                    # nothing; it admits its shaders through its production warm-up
+                    # steps, which compile every program before readiness is checked.
+                    # Bounded: once every program is warm a step returns at the
+                    # readiness check without further GL work.
+                    for _step in range(256):
+                        renderer.prepare_step(frame)
+                renderer.render(frame)
             assert renderer.has_resources, descriptor.mode_id
             visualizers.append(descriptor.mode_id)
         finally:

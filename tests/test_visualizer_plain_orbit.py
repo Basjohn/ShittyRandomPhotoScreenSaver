@@ -697,20 +697,26 @@ def test_retained_ordinary_overlap_uses_actual_parent_stacking(orbit_card):
 def test_actual_framed_camera_route_keeps_layout_and_persists_once(production_card, monkeypatch):
     from tests.test_framed_scene_input import point, mouse, pose, NONE
     card = production_card
+    presentation = card.scene.visualizer_item.presentation
+    acquired = []
     class Capture:
+        # Record only: an assertion raised inside native gesture delivery leaves the
+        # capture half-acquired and crashed the process in teardown.
         def acquire(self, rect):
-            assert rect.width() == 480 and rect.height() == 210
+            acquired.append((rect.width(), rect.height()))
         def release(self):
             pass
     monkeypatch.setattr(card.window, '_new_plain_orbit_capture', Capture)
     p = point(card)
     before = pose(card)
-    presentation = card.scene.visualizer_item.presentation
     mouse(card, QEvent.Type.MouseButtonPress, p, Qt.MouseButton.LeftButton, NONE)
     assert card.window._plain_orbit_pending is not None
     mouse(card, QEvent.Type.MouseMove, p + QPointF(40, 20), Qt.MouseButton.LeftButton, NONE)
     assert pose(card) != before and card.writes == []
     mouse(card, QEvent.Type.MouseButtonRelease, p + QPointF(40, 20), Qt.MouseButton.LeftButton, NONE)
+    # The pointer clip is the card itself. Since 477a1cf9 the framed card uses the planar
+    # presentation, so the fixture's 480x210 stage presents at its 160x90 world's aspect.
+    assert acquired == [tuple(round(v) for v in presentation.outer_rect[2:])]
     assert len(card.writes) == 1
     assert card.scene.visualizer_item.presentation == presentation
     assert {key: card.settings.get('widgets.spotify_visualizer')[key] for key in pose(card)} == pytest.approx(pose(card))
