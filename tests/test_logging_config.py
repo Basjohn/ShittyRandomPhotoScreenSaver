@@ -318,6 +318,7 @@ def test_diagnostic_build_enables_every_family_beside_frozen_executable(
         "screensaver_cache.log": 5,
         "screensaver_steam.log": 5,
         "screensaver_feeds.log": 5,
+        "screensaver_studio.log": 5,
     }
     rotating_by_name = {
         Path(handler.baseFilename).name: handler
@@ -342,6 +343,7 @@ def test_diagnostic_build_enables_every_family_beside_frozen_executable(
     assert logger_mod.is_cache_logging_enabled() is True
     assert logger_mod.is_steam_logging_enabled() is True
     assert logger_mod.is_feeds_logging_enabled() is True
+    assert logger_mod.is_studio_logging_enabled() is True
     assert {
         "screensaver.log",
         "screensaver_verbose.log",
@@ -356,6 +358,7 @@ def test_diagnostic_build_enables_every_family_beside_frozen_executable(
         "screensaver_cache.log",
         "screensaver_steam.log",
         "screensaver_feeds.log",
+        "screensaver_studio.log",
     } <= {Path(handler.baseFilename).name for handler in rotating}
 
     logger_mod.flush_and_close_logging()
