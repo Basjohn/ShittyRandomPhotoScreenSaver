@@ -226,6 +226,21 @@ Trails; CPU submit median 1.19-1.26 -> 1.23-1.27 ms by default (neutral), 1.80-1
 2.09-2.15 -> 1.94 ms with trails and motion blur (p90 2.79-2.97 -> 2.33-2.38 ms). The removed work is the per-frame
 buffer re-specification, the generic-binding query/restore and three sub-data writes per trail ghost.
 
+### Owned frames: `restore=False` (5 Nov 2026)
+
+Every save/restore fence above reads GL state back, and each read is a round trip to the driver thread: ~20-25 us on a
+quiet machine, up to milliseconds when the CPU is saturated, and a GPU bubble either way. A scene that owns the GL state
+of its whole frame (the visualizer render host's fence hands Quick's state back afterwards, and every pass sets what it
+draws with) opts out per call: `StreamRing.bound(..., restore=False)` and `bound_image(..., restore=False)` read nothing
+and leave the point/unit unbound; `SceneTarget.transparent_writes(..., restore=False)` reads nothing and leaves a fixed
+state (blending off on its draw buffers, depth test on, depth writes off, buffer 0 written and the others masked as
+`begin` masks them); `FogVolume.update/bound`, `RibbonPrimitive.draw/packet_scope`, `RibbonBurstRenderer.draw`,
+`WaveformField.update` and `FloorGiveField.update` take the same flag, and the ribbon draws also take the known
+`viewport`. Uniform locations are looked up once per program. Defaults are unchanged for every other caller. The
+Waveform scene uses it throughout (`OWNED` in `waveform.py`): 169 -> 31 reads per frame (the rest is the host fence and
+the scene target's and reflection's fences of the caller's state); `tests/test_waveform_render_thread_queries.py` keeps
+a steady frame free of uniform lookups and within its read budget.
+
 ## Compute seam and first consumer (S15)
 
 `compute.py` is the whole seam: `dispatch(groups, barriers)` takes explicit workgroup counts and the barrier bits its

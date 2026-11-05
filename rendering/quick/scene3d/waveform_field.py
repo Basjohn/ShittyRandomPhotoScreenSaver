@@ -26,7 +26,8 @@ class WaveformField:
         self._check()
         return warm_programs(((self.resources,'field',FIELD_COMPUTE),))
 
-    def update(self,packet,*,translation,span,grade,side=1.):
+    def update(self,packet,*,translation,span,grade,side=1.,restore=True):
+        """``restore=False``: the caller owns the program and image unit for its frame (nothing read back)."""
         self._check();first,last,samples=span;samples=int(samples)
         if not 4<=samples<=2048 or packet.instances>FIELD_RIBBONS or not first<last:
             raise ValueError('Waveform world field exceeds its bounded domain')
@@ -38,7 +39,7 @@ class WaveformField:
                     (gl.GL_TEXTURE_WRAP_S,gl.GL_CLAMP_TO_EDGE),(gl.GL_TEXTURE_WRAP_T,gl.GL_CLAMP_TO_EDGE)):
                 gl.glTextureParameteri(self.texture,key,value)
             self._samples=samples
-        before=gl_query.get_int(gl.GL_CURRENT_PROGRAM)
+        before=gl_query.get_int(gl.GL_CURRENT_PROGRAM) if restore else None
         try:
             program=self.resources.compute_program('field',FIELD_COMPUTE);gl.glUseProgram(program)
             locations=self.resources.uniforms('field',('uFieldSpan','uFieldOrigin','uGrade','uGradeStops','uFieldSide'),required=False)
@@ -48,9 +49,10 @@ class WaveformField:
             values=ribbon_grade(grade[0],grade[1],grade[3])
             gl.glUniform4f(locations['uGrade'],*values['uGrade'])
             gl.glUniform4fv(locations['uGradeStops'],6,np.asarray(values['uGradeStops'],np.float32))
-            with bound_image(0,self.texture,gl.GL_WRITE_ONLY,gl.GL_RGBA32F):
+            with bound_image(0,self.texture,gl.GL_WRITE_ONLY,gl.GL_RGBA32F,restore=restore):
                 dispatch((-(-samples//64),1,1),gl.GL_TEXTURE_FETCH_BARRIER_BIT)
-        finally:gl.glUseProgram(before)
+        finally:
+            if before is not None:gl.glUseProgram(before)
 
     def release(self):
         if self.has_resources:self._check()
