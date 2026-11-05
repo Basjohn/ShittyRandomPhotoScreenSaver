@@ -11,17 +11,21 @@ import math
 import struct
 
 _FLOAT32_MIN_NORMAL = 2.0 ** -126
+# The largest admitted grid side. Every consumer (the GPU texture included) takes this one limit: an editor
+# extension toward the horizon grows a 65-cell basin past 65, and a narrower texture bound rejected it mid-frame.
+HEIGHTFIELD_MAX_SIZE = 257
+_SIZE_ERROR = f"heightfield size must be a whole number within 2..{HEIGHTFIELD_MAX_SIZE}"
 
 
 def _size(value: object) -> int:
     if isinstance(value, bool):
-        raise ValueError("heightfield size must be a whole number within 2..257")
+        raise ValueError(_SIZE_ERROR)
     try:
         number = float(value)
     except (TypeError, ValueError, OverflowError) as exc:
-        raise ValueError("heightfield size must be a whole number within 2..257") from exc
-    if not math.isfinite(number) or number != int(number) or not 2 <= number <= 257:
-        raise ValueError("heightfield size must be a whole number within 2..257")
+        raise ValueError(_SIZE_ERROR) from exc
+    if not math.isfinite(number) or number != int(number) or not 2 <= number <= HEIGHTFIELD_MAX_SIZE:
+        raise ValueError(_SIZE_ERROR)
     return int(number)
 
 
