@@ -65,14 +65,17 @@ lead as reviewer/orchestrator.
 - [ ] **Neon Lake goal mocks (Presets 1-3, 6 Nov sixth pass, awaiting operator look):** darker mirror lake with a
   longer Moon/Sun column and no swell wash, Preset 3's mid-lake blob fixed (mirror counted swell troughs as land),
   navy Preset 1 sky with a shallower band and a soft blue stream upper left, even luminous Moon face, near ridges
-  that swell and fade along their length, Preset 3 cooler sky with stronger wisps and motion 0.239/255
+  that swell and fade along their length, Preset 3 cooler sky with stronger wisps and motion 0.232/255
   (`Docs/Reference/Neon_Lake_Basin.md`, "Third" to "Sixth pass"). Still short of
   `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`: the high-react look (vivid line mesh over the
   lake, glowing island) is not reached on loud real music (1985_loud1: the lake barely changes; a squared
   spectrum-energy term on the ripple network was tried and did nothing visible, reverted); Preset 1's lake is still
   lighter than the mock's (p35 [28,30,65] vs [16,22,61]: bloom of the pink shore crest beside it) and its near dot
   field is coarser than the mock's; the far-shore sawtooth and the crest before the lake are mesh silhouette (a
-  fine band to v 0.25 measured no gain); Preset 3 motion ideally toward 0.165. Evidence:
+  fine band to v 0.25 measured no gain); Preset 3 motion ideally toward 0.165. Side defect (pre-existing, found
+  6 Nov): at Depth Scale 1 + Horizon Thickness 3 over dunes seen grazing, the skyline's lifted copy shows over the
+  near land's own face as a broad translucent sheet (its 2% depth offset is less than the ground's recession over
+  the lift); fix in the skyline vertex depth, then tighten `tests/test_neon_ridge_shape.py` to those settings. Evidence:
   `.artifacts/evidence/neon_lake/fidelity_20261105/pass6/` (triptych/, clips/*.webp, gpu_*.txt, overhead_*).
 
 - [ ] **Neon render tests load-sensitive under parallel runs (5-6 Nov):** `test_neon_lake_renderer.py` (once, pass-5
