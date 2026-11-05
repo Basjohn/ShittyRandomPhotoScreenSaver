@@ -1866,6 +1866,12 @@ def _waveform_ribbon() -> ModeSettings:
         bucket='pulse',logical=True,tooltip='Travelling Pulse: swells travel along the waveform. Frozen Past: the parts a '
         'swell shaped keep that look until the next swell reaches them. Whole Swell: the whole waveform swells at once '
         '(ignores direction, width and speed). Group Wave: swells travel as groups that rise toward their leading edge.'))
+    entries.append(Choice(prefix+'height_mode','Floor Clearance:',('Dynamic Height Shift','Static Height'),
+        bucket='shape',logical=True,tooltip='Dynamic Height Shift: a ribbon whose lower edge nears the floor rises as a '
+        'whole, then settles back down. Static Height: every ribbon holds the highest safe point all the time.'))
+    entries.append(Toggle(prefix+'tilt_shift','','Tilt Shift',bucket='shape',logical=True,
+        when=(prefix+'height_mode','Dynamic Height Shift'),tooltip='While a ribbon shifts height, the side it travels '
+        'toward moves first: it lifts earlier when rising and dips earlier when settling.'))
     entries.append(Choice(prefix+'pulse_direction','Pulse Direction:',('Head To Tail','Tail To Head','Centre Out'),
         bucket='pulse',logical=True,tooltip='Where musical swells start and which way they travel.'))
     for key,label,low,high,tip in (
