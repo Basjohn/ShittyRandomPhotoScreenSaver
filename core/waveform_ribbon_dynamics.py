@@ -46,6 +46,15 @@ PULSE_GRID = np.linspace(-48., 48., 385)
 PULSE_DX = float(PULSE_GRID[1]-PULSE_GRID[0])
 PULSE_DIRECTIONS = ('Head To Tail', 'Tail To Head', 'Centre Out')
 PULSE_ORIGIN = 44.          # world x of the edge origins: just beyond the view (~±30), so a swell slides in already formed (born at 3.5, mid-view, it popped into existence)
+# Born where the camera sees it (Travelling Pulse, Head To Tail / Tail To Head; operator, 6 Nov). The capture supplies the
+# scene-axis span the framed camera really shows (about +-16 at a 1282x1005 card: the edge-resize aperture times the
+# long lens, not the +-30 PULSE_ORIGIN assumed). An edge swell is then born VIEW_MARGIN geometric-envelope sigmas beyond
+# that edge (its tail there is a few percent, so it slides in already formed; never farther out than PULSE_ORIGIN) and
+# ages only once seen: both fields keep their strength until they reach the edge (the fade ramps in over one envelope
+# sigma), then fade over Pulse Fade / FRESH_FADE while they cross, as a Centre Out swell does from its birth. Born at
+# 44 a swell reached a +-16 view ~2 s after its beat with 5% of its fresh strength. Centre Out (born in view) and the
+# other modes (wider envelopes that already reach the view) are untouched; without a supplied span nothing changes.
+VIEW_MARGIN = 2.5
 PULSE_RISE = .08             # seconds: a beat lands quickly (DevCurve: fast rise, gentle settle), never a one-tick pop
 PULSE_DIFFUSION = .35        # world units^2 per second: packets widen gently as they travel
 PULSE_SATURATION = 1.2       # soft bound of the sampled swell
@@ -363,6 +372,8 @@ class WaveformDynamics:
         self._pulse = np.zeros((2,PULSE_GRID.size))  # travelling toward -x, toward +x
         self._fresh = np.zeros((2,PULSE_GRID.size))  # the same transport with a short fade: recently launched swells
         self._pulse_pending = 0.
+        self._view_world = None  # (low, high) world x of the scene axis the framed camera shows (capture-supplied)
+        self._seen = (None,None)  # cached (key, per-direction seen weights) for the age-once-seen fade
         self._trough_stage,self._trough_lift,self._trough_time = np.zeros((RIBBON_CAPACITY,1)),np.zeros((RIBBON_CAPACITY,1)),None
         self._tilt_lead,self._tilt_time = np.zeros((RIBBON_CAPACITY,1)),None
         # Frozen Past on the cloth: memory, peak, previous swell, rising, and the Pulse Strength the passage was shaped with
@@ -432,9 +443,16 @@ class WaveformDynamics:
         self.ring.append(when,positions,widths,twists,lights,sparkle=sparkle,tint=tints)
 
     def advance(self, dt, *, bands, intensity, presence, hit=0., hit_components=None, accent=None, controls=None,
-                dynamic_zoom=False, zoom_hold=False):
+                dynamic_zoom=False, zoom_hold=False, view_span=None):
+        """``view_span``: (low, high) world x of the scene axis the framed camera shows (configuration from the
+        capture; ``core.waveform_ribbon_view.visible_span``). None keeps the last one supplied (initially none)."""
         if not math.isfinite(dt) or not 0. <= dt <= .1:
             raise ValueError('Ribbon logical dt must be finite in 0..0.1 seconds')
+        if view_span is not None:
+            low,high = (float(v) for v in view_span)
+            if not (math.isfinite(low) and math.isfinite(high) and high > low):
+                raise ValueError('Waveform view span must be a finite (low, high) interval')
+            self._view_world = (low,high)
         if controls is not None:
             self.controls = controls
         c = self.controls
@@ -616,10 +634,13 @@ class WaveformDynamics:
         release = self._pulse_pending*(1.-math.exp(-dt/PULSE_RISE))
         self._pulse_pending -= release
         sigma = p.width/2.3548
-        sources = pulse_sources(p.direction)
+        sources,seen = self._view_sources(p)
         shift = p.speed*dt
         blur = min(.24,PULSE_DIFFUSION*dt/(PULSE_DX*PULSE_DX))
-        decays = (math.exp(-dt/p.fade),math.exp(-dt/min(p.fade,FRESH_FADE)))
+        fades = (p.fade,min(p.fade,FRESH_FADE))
+        decays = tuple(math.exp(-dt/fade) for fade in fades)
+        if seen is not None:
+            decays = tuple(np.exp((-dt/fade)*seen) for fade in fades)  # per direction: ages only once seen
         travelling = p.mode!='Whole Swell'
         for fields,decay in zip((self._pulse,self._fresh),decays):
             for index,sign in enumerate((-1.,1.)):
@@ -630,7 +651,7 @@ class WaveformDynamics:
                     field[:] = np.interp(PULSE_GRID-sign*shift,PULSE_GRID,field,left=0.,right=0.)
                 if blur:
                     field[1:-1] += blur*(field[:-2]-2.*field[1:-1]+field[2:])
-                field *= decay
+                field *= decay if seen is None else decay[index]
                 for origin,direction in sources:
                     if travelling and direction==sign and release:
                         field += release/len(sources)*np.exp(-.5*((PULSE_GRID-origin)/sigma)**2)
@@ -642,6 +663,25 @@ class WaveformDynamics:
         self._advance_frozen(dt,p.mode=='Frozen Past',self._value('bend'))
         self._publish_fields(dt)
         return release
+
+    def _view_sources(self,p):
+        """Pulse sources and, when the camera's span is known and Travelling Pulse travels in from an edge, the
+        per-direction seen weights (0 beyond the entry edge, 1 inside it; see VIEW_MARGIN). Otherwise (sources, None)."""
+        if self._view_world is None or p.mode!='Travelling Pulse' or p.direction=='Centre Out':
+            return pulse_sources(p.direction),None
+        low,high = self._view_world
+        if self.direction < 0.:   # the history axis is mirrored into the world (Travel Direction)
+            low,high = -high,-low
+        ramp = self._blur_kernel(GEOM_WAVES)[1]
+        key = (low,high,ramp,p.direction)
+        if self._seen[0]!=key:
+            entering = np.clip((high+ramp-PULSE_GRID)/ramp,0.,1.), np.clip((PULSE_GRID-low+ramp)/ramp,0.,1.)
+            weights = np.stack([w*w*(3.-2.*w) for w in entering])   # toward -x enters at high, toward +x at low
+            margin = VIEW_MARGIN*ramp
+            origin = (min(PULSE_ORIGIN,high+margin),-1.) if p.direction=='Head To Tail' else (max(-PULSE_ORIGIN,low-margin),1.)
+            self._seen = (key,(weights,(origin,)))
+        weights,sources = self._seen[1]
+        return sources,weights
 
     def _advance_frozen(self,dt,active,strength=0.):
         """Per-cell passage peak held on the cloth; bounded fixed grid advected with the history flow."""

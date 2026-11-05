@@ -591,8 +591,9 @@ def build_frame(configuration, snapshot, values: Mapping[str, Any]):
     return WaveformRibbonFrame(**kwargs)
 
 
-def advance_options(runtime, values: Mapping[str, Any]) -> dict[str, Any]:
-    """Optional production advance inputs derived from settings, when this runtime accepts them."""
+def advance_options(runtime, values: Mapping[str, Any], extent=None) -> dict[str, Any]:
+    """Optional production advance inputs derived from settings (and the presented card ``extent``), when this
+    runtime accepts them."""
     import inspect
     accepted = inspect.signature(runtime.advance).parameters
     options = {}
@@ -600,6 +601,13 @@ def advance_options(runtime, values: Mapping[str, Any]) -> dict[str, Any]:
         options["dynamic_zoom"] = bool(values.get(PREFIX + "dynamic_zoom", False))
     if "zoom_hold" in accepted:
         options["zoom_hold"] = False     # the Studio's preview orbit is not a live camera operation
+    if "view_span" in accepted:
+        # As the production capture: the scene-axis span the presented card's camera shows (pulse birth edge); with
+        # no extent, the canonical card production uses until a CUSTOM edge drag commits one.
+        from core.waveform_ribbon_view import card_span
+        from widgets.spotify_visualizer.presentation_geometry import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+        options["view_span"] = card_span(camera_parameters(values), extent or CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
+                                         CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1])
     return options
 
 
@@ -618,7 +626,22 @@ class WaveformStudioEvaluator:
         self._last = None
         self._last_step = None
         self._configuration = None
+        # Production always has a card extent (the canonical baseline until a CUSTOM edge drag commits one).
+        from widgets.spotify_visualizer.presentation_geometry import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+        self._extent = tuple(float(v) for v in CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE)
         self.steps_run = 0
+
+    def set_viewport_extent(self, extent) -> None:
+        """The card world extent the frame is presented at: the pulse is born at that camera's visible edge (as the
+        production capture reads the card's committed extent), so a new extent replays the history at it."""
+        if extent is None:
+            from widgets.spotify_visualizer.presentation_geometry import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+            extent = CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+        extent = (float(extent[0]), float(extent[1]))
+        if extent != self._extent:
+            self._extent = extent
+            self._revision = None
+            self._restart()
 
     def fixtures(self) -> tuple[StudioFixture, ...]:
         return self._builtin + tuple(item.fixture for item in self._recorded.values())
@@ -669,7 +692,7 @@ class WaveformStudioEvaluator:
             configuration, options = self._configuration, self._options
         else:
             configuration = self._runtime.configure(_logical_values(values))
-            options = advance_options(self._runtime, values)
+            options = advance_options(self._runtime, values, self._extent)
         self._revision, self._options = revision, options
         changed = self._configuration is not None and configuration is not self._configuration
         if exact and (changed or self._approximate):
