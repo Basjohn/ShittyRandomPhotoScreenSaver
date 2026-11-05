@@ -301,72 +301,8 @@ class RecordedInputs:
 
 
 # ----------------------------------------------------------------------- engine side
-def _clocked_scheduler():
-    """The production event scheduler with its clock set to fixture time (consume-once, ages as live)."""
-    from widgets.spotify_visualizer.transient_bus import OnsetEvent, TransientEventScheduler
-
-    class ClockedEventScheduler(TransientEventScheduler):
-        now = 0.0
-
-        def consume_next(self, event_type: str, max_age_s: float = 0.5):
-            # TransientEventScheduler.consume_next with ``time.time()`` replaced by the fixture clock.
-            cutoff = self.now - max_age_s
-            best = None
-            for entry in self._ring:
-                if (not entry.consumed and entry.event.event_type == event_type
-                        and entry.event.timestamp > cutoff):
-                    if best is None or entry.event.timestamp < best.event.timestamp:
-                        best = entry
-            if best is not None:
-                best.consumed = True
-                return OnsetEvent(timestamp=best.event.timestamp, event_type=best.event.event_type,
-                                  strength=best.event.strength)
-            return None
-    return ClockedEventScheduler()
-
-
-def _fixture_engine_type():
-    from widgets.spotify_visualizer.energy_bands import EnergyBands
-    from widgets.spotify_visualizer.feature_replay import ReplayBeatEngine
-    from widgets.spotify_visualizer.transient_bus import OnsetEvent, TransientEnergyBands
-
-    class FixtureBeatEngine(ReplayBeatEngine):
-        """The production replay engine (no capture, no worker thread) serving one fixture tick."""
-
-        def __init__(self, bar_count: int) -> None:
-            super().__init__(bar_count)
-            self._tick: TickInput | None = None
-            self._fixture_scheduler = _clocked_scheduler()
-
-        def serve(self, tick: TickInput) -> None:
-            self._tick = tick
-            self._fixture_scheduler.now = float(tick.now)
-            for timestamp, kind, strength in tick.events:
-                self._fixture_scheduler.feed(OnsetEvent(timestamp=float(timestamp), event_type=str(kind),
-                                                        strength=float(strength)))
-
-        def get_bubble_energy_bands(self):
-            return EnergyBands(*self._tick.bubble) if self._tick is not None else EnergyBands()
-
-        def get_transient_energy_bands(self):
-            if self._tick is None:
-                return TransientEnergyBands()
-            bass, mid, high, detected, kind, strength = self._tick.transient
-            return TransientEnergyBands(bass_transient=float(bass), mid_transient=float(mid),
-                                        high_transient=float(high), onset_detected=bool(detected),
-                                        onset_type=str(kind), onset_strength=float(strength))
-
-        def get_event_scheduler(self):
-            return self._fixture_scheduler if self._tick is not None and self._tick.scheduler else None
-
-        def get_latest_authoritative_frame(self):
-            tick = self._tick
-            if tick is None or tick.authoritative <= 0.0:
-                return 0.0, -1, -1
-            if not tick.fresh:
-                return float(tick.authoritative), -1, -1
-            return float(tick.authoritative), self.get_generation_id(), self.get_activation_id()
-    return FixtureBeatEngine
+# The production replay engine serving one tick, and the production scheduler on fixture time (shared, mode-neutral).
+from ui.studio.replay_engine import fixture_engine_type as _fixture_engine_type  # noqa: E402
 
 
 def resolved_settings(values: Mapping[str, Any]) -> dict:
@@ -464,8 +400,7 @@ class BubbleStudioEvaluator:
         if self._engine is None:
             self._engine = _fixture_engine_type()(32)
         engine = self._engine
-        engine._tick = None
-        engine._fixture_scheduler = _clocked_scheduler()
+        engine.reset_ticks()
         controller = VisualizerRuntimeController(runtime_generation=0, initial_mode=MODE,
                                                  engine_factory=lambda _bars: engine)
         controller.engine = engine
@@ -600,32 +535,13 @@ class BubbleStudioEvaluator:
 
 
 # ------------------------------------------------------------------------- renderer
-class BubbleStudioRenderer(framed.QuickModeRenderer):
+class BubbleStudioRenderer(framed.ContractModeRenderer):
     """The production ``QuickBubbleRenderer`` handed the production render-frame contract
     (``QuickVisualizerRenderFrame``): mode frame + the live card's resolved presentation + item mapping."""
 
     def __init__(self) -> None:
         from rendering.quick.visualizer.implementations.bubble import QuickBubbleRenderer
         super().__init__(MODE, QuickBubbleRenderer)
-
-    def _resolved(self, card):
-        dpr = card.viewport[2] / max(1e-6, card.logical_size[0])
-        key = (card.logical_size, card.extent, card.style, round(dpr, 4))
-        if key != self._key:
-            self._presentation = framed.presentation(MODE, card.logical_size, card.extent, card.style, dpr=dpr)
-            self._key = key
-        return self._presentation
-
-    def _frame(self, card, state):
-        from types import SimpleNamespace
-        from rendering.quick.visualizer.render_contract import QuickVisualizerRenderFrame
-        snapshot = SimpleNamespace(logical=SimpleNamespace(mode_state=state), presentation=self._resolved(card))
-        return QuickVisualizerRenderFrame(snapshot=snapshot, viewport=tuple(int(v) for v in card.viewport),
-                                          logical_size=tuple(float(v) for v in card.logical_size),
-                                          matrix_values=tuple(card.matrix_values), quad_vao=int(card.quad_vao))
-
-    def prepare(self, card, frame) -> bool:
-        return True                      # Bubble compiles on its first draw (no prepared reveal)
 
 
 # --------------------------------------------------------------------------- adapter
