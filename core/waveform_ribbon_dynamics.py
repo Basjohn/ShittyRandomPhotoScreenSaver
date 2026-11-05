@@ -1,4 +1,5 @@
-"""C-primary elastic ribbon with A rolling twist and independently integrated axial roll.
+"""Waveform ribbon body: a travelling energy pulse (four Reaction Modes) that swells the carrier's own crests and
+troughs under the flow rule, with A's rolling twist and an independently integrated axial roll.
 
 The caller supplies logical dt, already-admitted source evidence and configuration. One retained ring records
 head history; one vectorized pure projection publishes the complete body for every scene consumer. No Qt/GL/clock.
@@ -682,18 +683,18 @@ class WaveformDynamics:
             self._geom_share = (1.,self.time)
             return np.ones(PULSE_GRID.size)
         k = 2.*math.pi/carrier_wavelength(self.controls)
-        def excess(share):
-            g = 1.+share*swell
-            first = np.gradient(g,PULSE_DX)
-            second = np.gradient(first,PULSE_DX)
-            return max(np.abs(first/g).max()/(GEOM_SLOPE*k),np.abs(second/g).max()/(GEOM_CURVE*k*k))
+        # The largest share in [0, 1] with |g'|/g <= GEOM_SLOPE*k and |g''|/g <= GEOM_CURVE*k^2 for g = 1 + share*swell.
+        # The gradient is linear, so g' = share*swell' and g'' = share*swell''; each ratio share*a/(1 + share*swell)
+        # rises monotonically with share, so the bound share*(a - limit*swell) <= limit is exact per grid point.
+        # (Formerly a 20-step bisection with two np.gradient calls per step: ~40 gradients a tick.)
+        first = np.gradient(swell,PULSE_DX)
+        second = np.gradient(first,PULSE_DX)
         share = 1.
-        if excess(1.)>1.:
-            low,high = 0.,1.
-            for _ in range(20):
-                share = .5*(low+high)
-                low,high = (share,high) if excess(share)<=1. else (low,share)
-            share = low
+        for slope,limit in ((np.abs(first),GEOM_SLOPE*k),(np.abs(second),GEOM_CURVE*k*k)):
+            over = slope-limit*swell
+            binding = over>0.
+            if binding.any():
+                share = min(share,float((limit/over[binding]).min()))
         # One share bounds the whole field, so when the binding constraint somewhere lets go every swell on screen grew
         # at once (5 Nov: the gain jumped 2.39 -> 2.89 in one tick, a vertical pop). The share may fall at once (that
         # is the flow-rule safety) but rises at most GEOM_SHARE_RISE per second; a smaller share is always safe.
@@ -857,10 +858,9 @@ class WaveformDynamics:
         # The floor is never hit and the shape never changes (operator, 5 Nov: "we collide with the floor a lot";
         # then: per-knot trough limits made boxy flat-bottomed troughs "instead of FLOWING"). When a ribbon's lower
         # edge (the cloth sweep's side is cos(twist)*Y + sin(twist)*Z, so the sheet hangs width*|cos(twist)| below its
-        # centre) would come within TROUGH_CLEARANCE of the floor, the ribbon first rises a little (up to
-        # TROUGH_LIFT_MAX) and then its WHOLE wave scales uniformly, crests and troughs alike: a uniform scale is the
-        # only bound that preserves the shape exactly (a strong swell may ease its whole ribbon down a little; it never
-        # bends anything against its shape). Both ease slowly on the logical clock.
+        # centre) would come within TROUGH_CLEARANCE of the floor, the WHOLE ribbon rises (up to TROUGH_LIFT_MAX): an
+        # offset is the only bound that preserves the shape exactly, so nothing is ever bent against its shape. The lift
+        # eases through two stages on the logical clock (see _floor_room); a deeper trough than the cap may still graze.
         hang = np.abs(rows[:,:,3]*np.cos(data[:,5::KNOT_ROWS,1]))
         room = max(TROUGH_ROOM_MIN,PACKET_FLOOR_HEIGHT+values['lift']-TROUGH_CLEARANCE)
         rise = self._floor_room(y,hang,room,np.abs(x)<TROUGH_VIEW)
