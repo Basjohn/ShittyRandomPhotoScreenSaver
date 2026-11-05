@@ -885,8 +885,7 @@ values during unrelated work.
   During playback, both normal and Group Drift use **100%** of their accepted musical movement, including
   low-level passages. These reductions do not attenuate the original hero stream, collision, radius, pulse,
   ghost/wake, event or logical-clock paths.
-- Implementation authority: `widgets/spotify_visualizer/bubble_idle_motion.py`,
-  `bubble_simulation.py`, and `bubble_frame_runtime.py`. The policy factors are distinct from user controls;
+- Implementation authority: `widgets/spotify_visualizer/bubble_simulation.py` and `bubble_frame_runtime.py`. The policy factors are distinct from user controls;
   do not invent a competing timer, envelope, random seed or independent audio feed.
 
 ### 23.2 Opt-in underwater décor and authoring

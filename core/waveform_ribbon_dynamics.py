@@ -1,4 +1,5 @@
-"""C-primary elastic ribbon with A rolling twist and independently integrated axial roll.
+"""Waveform ribbon body: a travelling energy pulse (four Reaction Modes) that swells the carrier's own crests and
+troughs under the flow rule, with A's rolling twist and an independently integrated axial roll.
 
 The caller supplies logical dt, already-admitted source evidence and configuration. One retained ring records
 head history; one vectorized pure projection publishes the complete body for every scene consumer. No Qt/GL/clock.
@@ -857,10 +858,9 @@ class WaveformDynamics:
         # The floor is never hit and the shape never changes (operator, 5 Nov: "we collide with the floor a lot";
         # then: per-knot trough limits made boxy flat-bottomed troughs "instead of FLOWING"). When a ribbon's lower
         # edge (the cloth sweep's side is cos(twist)*Y + sin(twist)*Z, so the sheet hangs width*|cos(twist)| below its
-        # centre) would come within TROUGH_CLEARANCE of the floor, the ribbon first rises a little (up to
-        # TROUGH_LIFT_MAX) and then its WHOLE wave scales uniformly, crests and troughs alike: a uniform scale is the
-        # only bound that preserves the shape exactly (a strong swell may ease its whole ribbon down a little; it never
-        # bends anything against its shape). Both ease slowly on the logical clock.
+        # centre) would come within TROUGH_CLEARANCE of the floor, the WHOLE ribbon rises (up to TROUGH_LIFT_MAX): an
+        # offset is the only bound that preserves the shape exactly, so nothing is ever bent against its shape. The lift
+        # eases through two stages on the logical clock (see _floor_room); a deeper trough than the cap may still graze.
         hang = np.abs(rows[:,:,3]*np.cos(data[:,5::KNOT_ROWS,1]))
         room = max(TROUGH_ROOM_MIN,PACKET_FLOOR_HEIGHT+values['lift']-TROUGH_CLEARANCE)
         rise = self._floor_room(y,hang,room,np.abs(x)<TROUGH_VIEW)

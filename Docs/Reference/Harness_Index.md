@@ -476,6 +476,30 @@ shared DSP from that evidence alone. Settings receipts from ZIPs prove authoring
 retained rotations overlap and are not independent runs. The inventory evaluates only selected literal settings,
 never arbitrary logged code or complete user widget payloads.
 
+### Waveform Ribbon and Studio tools
+
+Sidecars only; production never imports them. Recorded PCM is reanalysed through the production worker and never
+shifted to hide latency. Pixels are evidence, not visual or listening acceptance (`Current_Plan.md` §7.1).
+
+```powershell
+# Native capture of the real logical/frame/retained-render path (Preset numbers are displayed 1-based)
+.\.venv\Scripts\python.exe tools\waveform_ribbon_capture.py --clip logs\visualizer_recordings\anything_mixed2.jsonl --preset 3 --start 20 --duration 4 --fps 24 --output <new dir>
+# Realised body motion against a same-clip paused control (no renderer)
+.\.venv\Scripts\python.exe tools\visualizer_replay\waveform_ribbon_motion_audit.py --clip logs\visualizer_recordings\anything_mixed2.jsonl --preset 3 --output <new dir>
+# Native-PCM floor A/B and pooled raw/music statistics; --mode-output also hashes every body/birth publication
+.\.venv\Scripts\python.exe tools\visualizer_replay\waveform_ribbon_signal_audit.py --clips <clip.jsonl> [...] --output <new dir> --mode-output
+# Side-by-side time strip from capture MP4s (motion review aid)
+.\.venv\Scripts\python.exe tools\visualizer_replay\capture_time_strip.py --ffmpeg <ffmpeg.exe> --output strip.png --start 5 --step .125 --count 8 <run dir> [<run dir> ...]
+# Hidden Studio capture (no window, in-memory store): one PNG per workspace plus timings; --mode picks any registered Studio
+.\.venv\Scripts\python.exe tools\waveform_studio_capture.py --output <new dir> [--mode extruded_bubble] [--preset 1] [--framing fill]
+```
+
+Lab tools live under `tools/labs/` (`waveform_ribbon_lab.py`, `waveform_ribbon_targets.py`,
+`waveform_ribbon_music_bakeoff.py`, `waveform_ribbon_reactivity.py`, `waveform_ribbon_recorded_input.py`,
+`ribbon_lighting.py`, `ribbon_material_probe.py`); their gates are in `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`.
+`tools/qml_import_contract.py` exposes the frozen build's QML import allowlist (owned by `tools/build_layout.ps1`) so
+tests fail on an unreviewed QML import before a release build does.
+
 ### Logical-runtime contract checks
 
 Search current tests by contract rather than stale test names when needed:
