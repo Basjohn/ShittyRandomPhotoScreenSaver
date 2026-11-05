@@ -1868,7 +1868,13 @@ def _waveform_ribbon() -> ModeSettings:
         ('pulse_width','Pulse Width',.5,24.,'Length of each travelling swell along the waveform (world units).'),
         ('pulse_speed','Pulse Speed',0.,30.,'How fast swells travel along the waveform (world units per second).'),
         ('pulse_colour','Pulse Colour Shift',0.,1.,'How far a passing swell shifts the ribbon toward its peak colour.'),
-        ('pulse_fade','Pulse Fade',.2,20.,'Seconds a travelling swell takes to fade to about a third.')):
+        ('pulse_fade','Pulse Fade',.2,20.,'Seconds a travelling swell takes to fade to about a third.'),
+        ('pulse_saturation','Pulse Saturation',0.,1.,'How much a passing swell deepens the ribbon colour where it is. '
+         'Hue and brightness are kept; neutral colours stay neutral.'),
+        ('pulse_particles','Pulse Particles',0.,2.,'Extra sparks a swell carries, born on the swell as it travels; '
+         'ordinary sparks also gather toward it. Needs Sparks on.'),
+        ('pulse_strands','Pulse Strands',0.,1.,'Gently leans free strands toward a passing swell and lifts their '
+         'chance and glow there. Never adds strands of its own. Needs Free Strands on.')):
         entries.append(Slider(prefix+key,label+':',low,high,bucket='pulse',logical=True,tooltip=tip,
                               suffix=' s' if key=='pulse_fade' else ''))
     entries.extend((Toggle(prefix+'rotation_enabled','','Axial Roll',bucket='flow',logical=True),

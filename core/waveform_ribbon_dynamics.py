@@ -13,7 +13,7 @@ from core.ribbon_packet import KNOT_ROWS, RibbonPacket
 from core.ribbon_ring import RibbonRing
 from core.waveform_ribbon_authoring import TARGETS, route, RIBBON_CAPACITY
 from core.waveform_ribbon_scene import Recipe
-from core.ribbon_bursts import RibbonAccentControls, RibbonBursts
+from core.ribbon_bursts import MAX_BURST, RibbonAccentControls, RibbonBursts
 from core.ribbon_strand_cohorts import RibbonStrandControls,RibbonStrandCohorts
 
 
@@ -55,6 +55,11 @@ PULSE_MAX_COMPRESSION = .7   # the surge may compress the axis by at most 70% lo
 # Injection calibrated on recorded PCM (5 Nov probe): typed hits reach ~0.2-0.4, body-energy rises ~0.15-0.25
 # for ~0.15 s on beats; these gains give a beat a swell near 1 at its origin and leave quiet passages nearly flat.
 PULSE_HIT_GAIN, PULSE_RISE_GAIN, PULSE_RISE_FLOOR = 2., 45., .08
+# Swell-carried particles (operator, 5 Nov: the pulse should increase saturation, particle density and strands).
+# Injected energy buys births once; they are released over the swell's first journey and placed on it.
+PULSE_BIRTHS = 20.          # births per unit of injected energy at Pulse Particles 1 (a full beat injects 2)
+PULSE_BIRTH_TAU = .8        # seconds over which a swell's births are released while it travels
+PULSE_GREY = .12            # colours below this saturation are treated as neutral: the swell never invents a hue
 
 
 def pulse_sources(direction):
@@ -71,12 +76,18 @@ class PulseControls:
     speed: float = 3.            # world units per second along the scene axis (about twice the history flow)
     colour: float = .6           # share of the peak colour the pulse carries
     fade: float = 4.             # seconds for the travelling energy to fall to 1/e
+    saturation: float = 0.       # share of the remaining saturation a full swell adds (hue and value unchanged)
+    particles: float = 0.        # swell-carried births and the lean of accent births toward the swell
+    strands: float = 0.          # restrained lean/chance/glow of accent strands near the swell
 
     def __post_init__(self):
         pulse_sources(self.direction)
         if not (math.isfinite(self.width) and .5<=self.width<=24. and math.isfinite(self.speed) and 0.<=self.speed<=30.
                 and math.isfinite(self.colour) and 0.<=self.colour<=1. and math.isfinite(self.fade) and .2<=self.fade<=20.):
             raise ValueError('Waveform pulse needs width 0.5..24, speed 0..30, colour 0..1 and fade 0.2..20')
+        if not (math.isfinite(self.saturation) and 0.<=self.saturation<=1. and math.isfinite(self.particles)
+                and 0.<=self.particles<=2. and math.isfinite(self.strands) and 0.<=self.strands<=1.):
+            raise ValueError('Waveform pulse needs saturation 0..1, particles 0..2 and strands 0..1')
 
 
 def span(value, low, high):
@@ -178,6 +189,7 @@ class WaveformDynamics:
         self.zoom, self._sustain = 1., 0.
         self._pulse = np.zeros((2,PULSE_GRID.size))  # travelling toward -x, toward +x
         self._pulse_pending = 0.
+        self._pulse_credit = self._pulse_births = 0.  # births bought by injected energy / released and due
         self._flux_fast = self._flux_slow = 0.
         self._shape_input = np.zeros((2,5),np.float64)  # two stages: bass/mid/high, power, hit
         self.spring = [[0.,0.,0.] for _ in range(RIBBON_CAPACITY)]
@@ -284,7 +296,8 @@ class WaveformDynamics:
         for key in TARGETS:
             target = route(c.routing[key],sources,passage=gate)
             self.drive[key] = follower(self.drive[key],target,dt,c.attack,c.release)
-        self._advance_pulse(dt,hit,energy_shaped)
+        released = self._advance_pulse(dt,hit,energy_shaped)
+        self._advance_pulse_births(dt,released)
         for owner,card in enumerate(c.cards):
             support = 1. if card['band']=='All' else bands[('Bass','Mids','Highs').index(card['band'])]
             for index,target in enumerate((self.drive['bend'],self.drive['torsion'],self.drive['depth'])):
@@ -313,16 +326,19 @@ class WaveformDynamics:
         snapshot=self.snapshot()
         if c.accents is None:
             self._bursts=None
-        elif accent>=.08 or self._bursts is not None:
+        elif accent>=.08 or self._pulse_births>=1. or self._bursts is not None:
             if self._bursts is None:self._bursts=RibbonBursts()
-            self._bursts.admit(snapshot,c.accents,accent)
+            self._bursts.admit(snapshot,c.accents,accent,swell=self.pulse_at,density=c.pulse.particles,
+                               extra=int(self._pulse_births))
+            self._pulse_births -= self._bursts.consumed
             self._snapshot=replace(snapshot,particles=self._bursts.visible_payload(snapshot.time),particle_origin=self._bursts.origin,
                                    particle_serial=self._bursts.serial)
         if c.strands is None:
             self._strand_cohorts=None
         else:
             if self._strand_cohorts is None:self._strand_cohorts=RibbonStrandCohorts(snapshot.packet.instances)
-            payload=self._strand_cohorts.update(snapshot,c.strands,accent,history=self._base_packet,knot_hz=c.scene.flow.knot_hz)
+            payload=self._strand_cohorts.update(snapshot,c.strands,accent,history=self._base_packet,knot_hz=c.scene.flow.knot_hz,
+                                                swell=self.pulse_at,gather=c.pulse.strands)
             self._snapshot=replace(self._snapshot,strands=payload,strand_origin=self._strand_cohorts.origin)
         return self._snapshot
 
@@ -354,6 +370,19 @@ class WaveformDynamics:
             for origin,direction in sources:
                 if direction==sign and release:
                     field += release/len(sources)*np.exp(-.5*((PULSE_GRID-origin)/sigma)**2)
+        return release
+
+    def _advance_pulse_births(self,dt,released):
+        """Injected energy buys a bounded number of swell-carried births, released over the swell's journey and
+        consumed once by burst admission. Silence buys none; without sparks or the control nothing is banked."""
+        c = self.controls
+        if c.accents is None or c.pulse.particles<=0.:
+            self._pulse_credit = self._pulse_births = 0.
+            return
+        self._pulse_credit = min(4.*MAX_BURST,self._pulse_credit+PULSE_BIRTHS*c.pulse.particles*released)
+        moved = self._pulse_credit*(1.-math.exp(-dt/PULSE_BIRTH_TAU))
+        self._pulse_credit -= moved
+        self._pulse_births = min(float(MAX_BURST),self._pulse_births+moved)
 
     def pulse_at(self,x):
         """Soft-bounded travelling swell sampled at scene x (pure; no state change)."""
@@ -485,6 +514,11 @@ class WaveformDynamics:
             hue = (a[0]+((b[0]-a[0]+.5)%1.-.5)*share)%1.
             saturation = a[1]+(b[1]-a[1])*share
             value = a[2]+(b[2]-a[2])*share
+            # The swell deepens colour where it is: saturation rises toward 1 (never toward white), hue and value
+            # keep their own logic, and a neutral colour stays neutral rather than gaining an invented hue.
+            vivid = self.controls.pulse.saturation*np.clip(swell[index],0.,1.)*np.clip(saturation/PULSE_GREY,0.,1.)
+            saturation = saturation+(1.-saturation)*vivid
+            share = np.maximum(share,vivid)
             k = (np.array((5.,3.,1.))[None,:]+hue[:,None]*6.)%6.
             tint[:,:3] = value[:,None]*(1.-saturation[:,None]*np.clip(np.minimum(k,4.-k),0.,1.))
             alpha = np.clip(share/.1,0.,1.)
