@@ -462,13 +462,37 @@ float basinShaftSource(vec3 eye, vec3 ray) {
 // transparent when disabled; the Sun/Moon remains a separate body pass.
 // detail: the clouds' and nebula's octaves are full for the visible sky (1) and two for reflections (0),
 // which glass samples five times per fragment and roughness blurs anyway.
+// The land's horizon in this heading: the steepest sight line from the eye to the distant ground (far hills
+// falling away with the world's curvature), as a ray's y. The horizon glow rises from it, so it stays at the
+// visible horizon whatever the eye's height (terrain reaching the horizon hides the sky below it).
+#ifdef BASIN_HAS_DISTANT_LAND
+float basinHorizonElevation(vec3 eye, vec3 ray) {
+    vec2 heading = normalize(ray.xz + vec2(1e-6, 0.0));
+    float best = -1.0;
+    float reach = 0.6;
+    for (int i = 0; i < 14; ++i) {
+        vec2 p = eye.xz + heading * reach;
+        vec2 uv = vec2(p.x / (2.0 * uHalfWidth) + 0.5, -p.y / SHOCKWAVE_DEPTH);
+        float ground = basinFarHills(uv) * uLand.x - basinDistantDrop(uv);
+        best = max(best, (ground - eye.y) / reach);
+        reach *= 1.35;
+    }
+    return best * inversesqrt(1.0 + best * best);
+}
+#else
+// Without the land (standalone sky programs and probes): the old fixed horizon.
+float basinHorizonElevation(vec3 eye, vec3 ray) { return -0.5; }
+#endif
 vec4 basinSkyBackground(vec3 eye,vec3 worldRay,float starVisibility,int detail) {
     if (uSkyEnabled == 0 || uSkyStrength <= 0.0) return vec4(0.0);
     float rayLength = length(worldRay);
     if (rayLength <= 1e-8) return vec4(0.0);
     vec3 ray = worldRay / rayLength;
     float latitude = asin(clamp(ray.y, -1.0, 1.0));
-    float dusk = exp(-pow((ray.y + 0.50) / 0.16, 2.0));
+    // The horizon glow rises well above the land's horizon line (terrain to the horizon hides everything below
+    // it), so the haze stands behind the ranges as atmosphere rather than a thin line at their feet.
+    float horizonDip = basinHorizonElevation(eye, ray);
+    float dusk = exp(-pow((ray.y - horizonDip) / (ray.y > horizonDip ? 0.22 : 0.16), 2.0));
     vec3 colour = max(uSkyColor.rgb, vec3(0.0)) * (0.65 + 0.35 * dusk);
     colour += max(uHorizonColor.rgb, vec3(0.0)) *
               clamp(uHorizonColor.a, 0.0, 1.0) * dusk;

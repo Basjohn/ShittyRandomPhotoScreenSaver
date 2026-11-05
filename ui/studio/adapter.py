@@ -168,6 +168,12 @@ class StudioModeAdapter(ABC):
         """(path, value) edit that adds one scene object, or None at capacity / unsupported."""
         return None
 
+    def structure_edit(self, action_id: str, values: Mapping[str, Any]):
+        """(undo label, {path: value}) for a schema ``StudioAction`` (add / remove / reorder a list element) under
+        ``values``, or None while it is not admissible (e.g. a node list at its maximum). Applied as ONE undoable
+        edit through the session, so the schema's ``admit`` and the canonical save path see it like any edit."""
+        return None
+
     def apply_preset(self, group: str, preset_id: str, baseline: Mapping[str, Any],
                      values: Mapping[str, Any]) -> dict:
         """{path: value} changes for a group preset (relative to ``baseline``: reversible)."""

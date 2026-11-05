@@ -35,6 +35,7 @@
         "shockwave_grid_cloud_opacity": 0.8,
         "shockwave_grid_cloud_scale": 0.5,
         "shockwave_grid_cloud_softness": 0.55,
+        "shockwave_grid_contour_lines": 0.0,
         "shockwave_grid_crest_color": [
           150,
           255,

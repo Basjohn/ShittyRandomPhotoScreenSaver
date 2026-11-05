@@ -742,3 +742,173 @@ def test_scene_colours_never_follow_the_studio_theme(qt_app, dialog_tab, no_gl_c
         renders.append(_snapshots(surface, {"frame": frame}, controller.presented_extent())["frame"])
     assert np.array_equal(renders[0], renders[1])
     controller.close()
+
+
+# ------------------------------------------------------------------------------------ analysis failures
+class FlakyLoader(InlineLoader):
+    """The inline worker, failing (as a crashed worker reports) while ``fail`` is set."""
+
+    fail = False
+
+    def __call__(self, fixture, values, finished):
+        if self.fail:
+            self.calls.append((fixture.id, engine_key(values)))
+            finished(None, "worker exited with code 1")
+            return None
+        return super().__call__(fixture, values, finished)
+
+
+class FlakyAdapter(LightAdapter):
+    def __init__(self):
+        super().__init__()
+        self.loader = FlakyLoader(seconds=None)
+
+    def create_evaluator(self):
+        return SpectrumStudioEvaluator(loader=self.loader)
+
+
+def test_a_failed_out_of_process_worker_is_reported_by_the_evaluator(qt_app):
+    """A forced failure of the real worker process (a clip that does not exist): the job reports it, the evaluator
+    keeps it as the current values' failure, and a retry clears it so the next evaluation runs the worker again."""
+    from PySide6.QtCore import QCoreApplication, QElapsedTimer, QEventLoop
+    from ui.studio.adapter import RECORDED, StudioFixture
+    values = canonical_section()
+    evaluator = SpectrumStudioEvaluator()
+    missing = StudioFixture("clip:missing", "Missing", RECORDED, 3.0, str(ROOT / "no_such_clip.srclip"))
+    evaluator._clips[missing.id] = missing
+    evaluator.select(missing.id)
+    landed = []
+    evaluator.set_invalidate(lambda: landed.append(True))
+    frame = evaluator.evaluate(0.0, values)
+    assert evaluator.analysing and evaluator.analysis_failure == ""
+    timer = QElapsedTimer()
+    timer.start()
+    while not landed and timer.elapsed() < 120_000:
+        QCoreApplication.processEvents(QEventLoop.ProcessEventsFlag.AllEvents, 50)
+    assert landed and not evaluator.analysing and evaluator.analysis_failure
+    assert frame_digest(evaluator.evaluate(0.0, values)) == frame_digest(frame)       # nothing replaced
+    assert not evaluator.analysing                                                     # no retry loop
+    evaluator.retry_analysis()
+    assert evaluator.analysis_failure == ""
+    evaluator.evaluate(0.0, values)
+    assert evaluator.analysing                                                         # retried
+    evaluator.release()
+
+
+def _pump_until(surface, condition, frames=400):
+    for _ in range(frames):
+        surface.pump()
+        if condition():
+            return True
+    return condition()
+
+
+def test_a_failed_reanalysis_shows_a_notice_keeps_the_preview_and_retry_lands(qt_app, dialog_tab, no_gl_checks):
+    from ui.studio.settings_link import open_mode_studio
+    _dialog, tab = dialog_tab()
+    surfaces = []
+    adapter = FlakyAdapter()
+    controller = open_mode_studio(tab, MODE, adapter=adapter, surface_factory=_surfaces(surfaces))
+    surface = surfaces[0]
+    assert _pump_until(surface, lambda: controller.last_frame is not None and not controller.evaluator.analysing)
+    surface.pump(2)
+    before = frame_digest(controller.last_frame)
+    bridge = controller.bridge
+    adapter.loader.fail = True
+    nodes = controller.session.values[SHAPE_NODES]
+    bridge.commitValue(f"{SHAPE_NODES}.0.1", 0, 0.0 if nodes[0][1] > 0.5 else 1.0)    # engine-owned: re-analyse
+    assert _pump_until(surface, lambda: bridge.messageAction == "Retry")
+    assert "worker exited" in bridge.message
+    from PySide6.QtCore import QObject
+    button = surface.host.root.findChild(QObject, "noticeAction")
+    assert button is not None and button.property("visible") and button.property("text") == "Retry"
+    assert frame_digest(controller.last_frame) == before            # the previous answers stay on screen
+    calls = len(adapter.loader.calls)
+    surface.pump(5)
+    assert len(adapter.loader.calls) == calls and bridge.messageAction == "Retry"     # no retry loop, one notice
+    adapter.loader.fail = False
+    bridge.runMessageAction()
+    assert _pump_until(surface, lambda: frame_digest(controller.last_frame) != before)
+    assert controller.evaluator.analysis_failure == "" and bridge.message == ""
+    controller.close()
+
+
+def test_a_failure_without_the_evaluator_report_stays_silent_negative_control(qt_app, dialog_tab, no_gl_checks,
+                                                                              monkeypatch):
+    """Without the evaluator's ``analysis_failure`` the shell has nothing to show (the original defect: logged only)."""
+    from ui.studio.settings_link import open_mode_studio
+    monkeypatch.setattr(SpectrumStudioEvaluator, "analysis_failure", property(lambda self: ""))
+    _dialog, tab = dialog_tab()
+    surfaces = []
+    adapter = FlakyAdapter()
+    controller = open_mode_studio(tab, MODE, adapter=adapter, surface_factory=_surfaces(surfaces))
+    surface = surfaces[0]
+    assert _pump_until(surface, lambda: controller.last_frame is not None and not controller.evaluator.analysing)
+    adapter.loader.fail = True
+    nodes = controller.session.values[SHAPE_NODES]
+    bridge = controller.bridge
+    bridge.commitValue(f"{SHAPE_NODES}.0.1", 0, 0.0 if nodes[0][1] > 0.5 else 1.0)
+    surface.pump(10)
+    assert controller.evaluator.errors and bridge.messageAction == ""
+    controller.close()
+
+
+# ------------------------------------------------------------------------------------ Save Preset As
+@pytest.fixture
+def preset_catalog(tmp_path, monkeypatch):
+    """A temporary curated catalog holding copies of the shipped Spectrum presets (none is ever written to)."""
+    import shutil
+    from core.settings import visualizer_presets as vp
+    root = tmp_path / "catalog"
+    shutil.copytree(vp.get_visualizer_presets_dir(MODE), root / MODE)
+    for name in ("_PRESETS", "_PRESET_SOURCE_PATHS", "_PRESET_SOURCE_SLOTS", "_LOADED_SOURCE_PATHS"):
+        monkeypatch.setattr(vp, name, dict(getattr(vp, name)))
+    monkeypatch.setattr(vp, "_presets_root", lambda: root)
+    monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: tmp_path / "overrides")
+    vp.reload_presets(MODE)
+    yield root / MODE
+    vp.reload_presets(MODE)
+
+
+def test_save_preset_as_from_the_studio_writes_a_valid_curated_preset(qt_app, dialog_tab, settings_manager,
+                                                                      no_gl_checks, preset_catalog, monkeypatch):
+    """Studio edits (a structural shape edit, an awkward hundredth, a choice) then the shell's Save Preset As: the
+    Settings preset owner writes the file, the canonical loader lists it with the Studio's values, the repair
+    tool's sanitizer accepts it unchanged for those values, and it authors every Spectrum artwork key."""
+    from PySide6.QtWidgets import QDialog
+    from core.settings import visualizer_presets as vp
+    from tools import visualizer_preset_repair as repair
+    from ui.studio.settings_link import open_mode_studio
+    from ui.studio.spectrum_adapter import ADD_NODE
+    from ui.tabs.media import preset_slider as module
+    path = preset_catalog / "studio_authored.json"
+    monkeypatch.setattr(module.QFileDialog, "getSaveFileName", lambda *a, **k: (str(path), ""))
+    monkeypatch.setattr(module.StyledPopup, "exec", lambda *a: QDialog.DialogCode.Accepted)
+    before = {p.name for p in vp.get_presets(MODE)}
+    _dialog, tab = dialog_tab()
+    surfaces = []
+    controller = open_mode_studio(tab, MODE, adapter=LightAdapter(), surface_factory=_surfaces(surfaces))
+    surfaces[0].pump(2)
+    bridge, session = controller.bridge, controller.session
+    bridge.setWorkspace("shape")
+    bridge.runAction(ADD_NODE)
+    bridge.commitValue(PREFIX + "ghost_decay", 0, 0.29)
+    schema = build_schema()
+    render = schema.find(PREFIX + "render_mode")
+    other = next(v for v in render.choice_values if v != session.values[PREFIX + "render_mode"])
+    bridge.commitValue(PREFIX + "render_mode", 0, render.choices[render.choice_values.index(other)])
+    authored = {key: session.values[key] for key in (SHAPE_NODES, PREFIX + "ghost_decay", PREFIX + "render_mode")}
+    bridge.savePresetAs()
+    assert path.exists()
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    saved = next(p for p in vp.get_presets(MODE) if p.name not in before)
+    for key, value in authored.items():
+        assert saved.settings[key] == value, key
+    assert set(vp.preset_artwork_keys(MODE)) <= set(saved.settings)
+    cleaned, _changes = repair._sanitize_settings(MODE, payload)
+    for key, value in authored.items():
+        assert cleaned[key] == value, key
+    assert controller.state == "presented"                     # the Studio session carries on
+    bridge.commitValue(PREFIX + "ghost_decay", 0, 0.57)
+    assert settings_manager.get("widgets")["spotify_visualizer"][PREFIX + "ghost_decay"] == pytest.approx(0.57)
+    controller.close()

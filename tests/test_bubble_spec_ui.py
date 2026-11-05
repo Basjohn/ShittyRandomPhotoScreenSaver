@@ -136,19 +136,25 @@ def test_ghost_conditions_follow_toggle_without_erasing_values(body):
         assert values["bubble_ghost_decay"] == pytest.approx(0.64)
 
 
-def test_hydration_retains_truncation_and_ghost_decay_rounding(body):
+def test_hydration_loads_the_nearest_slider_position(body):
+    """An off-grid stored value loads at the nearest position (superseded 2026-11-05: the former truncating load
+    moved a stored 0.29 to 0.28 on every reload), and an on-grid one loads exactly."""
     tab, _manager, config = body
     load_bubble_mode_settings(tab, {**config, "bubble_big_bass_pulse": 0.619,
                                    "bubble_stream_reactivity": 1.237,
                                    "bubble_big_size_max": 0.0379,
                                    "bubble_ghost_alpha": 0.379, "bubble_ghost_decay": 0.376})
     values = collect_bubble_mode_settings(tab)
-    assert values["bubble_big_bass_pulse"] == pytest.approx(0.61)
-    assert values["bubble_stream_reactivity"] == pytest.approx(1.23)
-    assert values["bubble_big_size_max"] == pytest.approx(0.037)
-    assert tab.bubble_big_size_max_label.text() == "37"
-    assert values["bubble_ghost_alpha"] == pytest.approx(0.37)
+    assert values["bubble_big_bass_pulse"] == pytest.approx(0.62)
+    assert values["bubble_stream_reactivity"] == pytest.approx(1.24)
+    assert values["bubble_big_size_max"] == pytest.approx(0.038)
+    assert tab.bubble_big_size_max_label.text() == "38"
+    assert values["bubble_ghost_alpha"] == pytest.approx(0.38)
     assert values["bubble_ghost_decay"] == pytest.approx(0.38)
+    load_bubble_mode_settings(tab, {**config, "bubble_big_bass_pulse": 0.29, "bubble_ghost_alpha": 0.57})
+    values = collect_bubble_mode_settings(tab)
+    assert values["bubble_big_bass_pulse"] == pytest.approx(0.29)
+    assert values["bubble_ghost_alpha"] == pytest.approx(0.57)
 
 
 def test_bucket_order_empty_layout_and_external_owners_are_preserved(body):

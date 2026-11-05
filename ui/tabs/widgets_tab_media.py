@@ -479,7 +479,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.media_bg_opacity.setMinimum(0)
     tab.media_bg_opacity.setMaximum(100)
-    media_bg_opacity_pct = int(tab._default_float('media', 'bg_opacity') * 100)
+    media_bg_opacity_pct = int(round(tab._default_float('media', 'bg_opacity') * 100))
     tab.media_bg_opacity.setValue(media_bg_opacity_pct)
     tab.media_bg_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.media_bg_opacity.setTickInterval(10)
@@ -514,7 +514,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.media_border_opacity.setMinimum(0)
     tab.media_border_opacity.setMaximum(100)
-    media_border_opacity_pct = int(tab._default_float('media', 'border_opacity') * 100)
+    media_border_opacity_pct = int(round(tab._default_float('media', 'border_opacity') * 100))
     tab.media_border_opacity.setValue(media_border_opacity_pct)
     tab.media_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.media_border_opacity.setTickInterval(10)
@@ -976,7 +976,7 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     tab.media_font_size.setValue(tab._config_int('media', media_config, 'font_size'))
     tab.media_margin.setValue(tab._config_int('media', media_config, 'margin'))
     tab.media_show_background.setChecked(tab._config_bool('media', media_config, 'show_background'))
-    media_opacity_pct = int(tab._config_float('media', media_config, 'bg_opacity') * 100)
+    media_opacity_pct = int(round(tab._config_float('media', media_config, 'bg_opacity') * 100))
     tab.media_bg_opacity.setValue(media_opacity_pct)
     tab.media_bg_opacity_label.setText(f"{media_opacity_pct}%")
 
@@ -1024,7 +1024,7 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set media border_color=%s", media_border_color_data, exc_info=True)
         tab._media_border_color = tab._color_from_default('media', 'border_color')
-    media_border_opacity_pct = int(tab._config_float('media', media_config, 'border_opacity') * 100)
+    media_border_opacity_pct = int(round(tab._config_float('media', media_config, 'border_opacity') * 100))
     tab.media_border_opacity.setValue(media_border_opacity_pct)
     tab.media_border_opacity_label.setText(f"{media_border_opacity_pct}%")
 
@@ -1180,8 +1180,8 @@ def load_shared_visualizer_appearance_settings(
     _apply_vis_color_to_button(tab, 'vis_border_color_btn', '_spotify_vis_border_color')
 
     border_opacity_pct = int(
-        tab._config_float(
-            'spotify_visualizer', spotify_vis_config, border_opacity_key) * 100
+        round(tab._config_float(
+            'spotify_visualizer', spotify_vis_config, border_opacity_key) * 100)
     )
     tab.vis_border_opacity.setValue(border_opacity_pct)
     tab.vis_border_opacity_label.setText(f"{border_opacity_pct}%")

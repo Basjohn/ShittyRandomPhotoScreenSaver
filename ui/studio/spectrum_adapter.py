@@ -32,7 +32,7 @@ from ui.studio.adapter import (
     RECORDED, REFERENCE, SYNTHETIC, StudioCapabilities, StudioFixture, StudioModeAdapter, control_condition,
 )
 from ui.studio.schema import (
-    CHOICE, COLOUR, SCALAR, SWITCH, StudioProperty, StudioSchema, Workspace, WorkspaceColumn,
+    CHOICE, COLOUR, SCALAR, SWITCH, StudioAction, StudioProperty, StudioSchema, Workspace, WorkspaceColumn,
 )
 from ui.studio.technical import TECHNICAL_GROUP, admit_technical, technical_properties
 
@@ -150,8 +150,10 @@ def _admit_nodes(candidate: Any, previous: Any) -> list:
 
 
 def _admit_notches(candidate: Any, previous: Any) -> list:
-    """Frequency boundaries [[x, label], ...]: the count and labels never change (Settings keeps both); a moved
-    boundary stops at its neighbours, then the list stays in x order."""
+    """Frequency boundaries [[x, label], ...]: the count and the set of lanes never change (Settings keeps both).
+    The lanes' order may change, as Settings' boundary drag past a neighbour reorders them (the Studio reorders
+    with its lane swap actions); a candidate naming other lanes keeps the previous ones. A moved boundary stops
+    at its neighbours, then the list stays in x order."""
     try:
         old = [[float(x), str(label)] for x, label in previous]
         new = [[_unit(x, 0.0), str(label)] for x, label in candidate]
@@ -159,8 +161,10 @@ def _admit_notches(candidate: Any, previous: Any) -> list:
         return [list(n) for n in previous]
     if len(new) != len(old):
         return old
+    reordered = sorted(label for _x, label in new) == sorted(label for _x, label in old)
     for index, (node, before) in enumerate(zip(new, old)):
-        node[1] = before[1]
+        if not reordered:
+            node[1] = before[1]
         if abs(node[0] - before[0]) > 1e-12:
             low = new[index - 1][0] if index > 0 else 0.0
             high = new[index + 1][0] if index + 1 < len(new) else 1.0
@@ -185,6 +189,67 @@ def _admit_colour(candidate: Any, previous: Any) -> list:
     if len(values) != 4:
         return list(previous)
     return [max(0, min(255, v)) for v in values]
+
+
+# -------------------------------------------------------------------------- structural edits
+ADD_NODE = "shape.add_node"
+REMOVE_NODE = "shape.remove_node."          # + node index
+LANE_PREVIOUS = "shape.lane_previous."      # + "1." (mirrored) / "0." (linear) + boundary index
+LANE_NEXT = "shape.lane_next."
+
+
+def _node_limits() -> tuple[int, int]:
+    from ui.tabs.media.spectrum_shape_editor import _MAX_NODES, _MIN_NODES
+    return _MIN_NODES, _MAX_NODES
+
+
+def added_node(nodes) -> list:
+    """Settings adds a node where the user clicks; the Studio adds one at the middle of the widest gap along the
+    bars (the ends included), on the current silhouette (``interpolate_nodes``, the curve the engine samples), so
+    adding a node barely changes the shape until it is moved."""
+    from ui.tabs.media.spectrum_shape_editor import interpolate_nodes
+    current = [[float(x), float(y)] for x, y in nodes]
+    xs = [0.0] + [x for x, _y in current] + [1.0]
+    width, left = max((xs[i + 1] - xs[i], xs[i]) for i in range(len(xs) - 1))
+    x = left + width / 2.0
+    samples = 1001
+    y = interpolate_nodes(current, samples)[int(round(x * (samples - 1)))]
+    return sorted(current + [[x, max(0.0, min(1.0, float(y)))]], key=lambda n: n[0])
+
+
+def structure_edit(action_id: str, values: Mapping[str, Any]):
+    """(undo label, {path: value}) for one of Spectrum's shape-editor structural edits, or None while it is not
+    admissible: Add Node below the maximum, Remove Node above the minimum (Settings' click / right-click rules),
+    and swapping a frequency lane with its neighbour (what Settings' boundary drag past a neighbour does)."""
+    low, high = _node_limits()
+    nodes = [[float(x), float(y)] for x, y in values.get(SHAPE_NODES, ())]
+    if action_id == ADD_NODE:
+        return ("Add Shape Node", {(SHAPE_NODES,): added_node(nodes)}) if len(nodes) < high else None
+    if action_id.startswith(REMOVE_NODE):
+        index = int(action_id[len(REMOVE_NODE):])
+        if len(nodes) <= low or not 0 <= index < len(nodes):
+            return None
+        return f"Remove Shape Node {index + 1}", {(SHAPE_NODES,): nodes[:index] + nodes[index + 1:]}
+    for prefix, step in ((LANE_PREVIOUS, -1), (LANE_NEXT, 1)):
+        if action_id.startswith(prefix):
+            layout, _dot, index_text = action_id[len(prefix):].partition(".")
+            key, index = NOTCHES[layout == "1"], int(index_text)
+            notches = [list(n) for n in values.get(key, ())]
+            other = index + step
+            if not (0 <= index < len(notches) and 0 <= other < len(notches)):
+                return None
+            notches[index][1], notches[other][1] = notches[other][1], notches[index][1]
+            return f"Swap {notches[other][1]} And {notches[index][1]} Lanes", {(key,): notches}
+    return None
+
+
+def row_label(prop: StudioProperty, values: Mapping[str, Any]) -> str:
+    """A boundary row is titled by the lane it currently bounds (lanes can be reordered)."""
+    key = prop.path[0]
+    if key in NOTCHES.values() and len(prop.path) == 3:
+        layout = "Mirrored" if key == NOTCHES[True] else "Linear"
+        return f"{values[key][prop.path[1]][1]} Boundary ({layout})"
+    return prop.label
 
 
 def _percent(value: Any, previous: Any, low: float = 0.0) -> float:
@@ -277,16 +342,25 @@ def build_schema() -> StudioSchema:
         tooltip="On: the shape is mirrored around the centre (centre <-> edge). Off: a left-to-right profile.")
     for index in range(_MAX_NODES):
         for axis, word in ((0, "Position"), (1, "Height")):
+            remove = (StudioAction(f"{REMOVE_NODE}{index}", f"Remove Node {index + 1}", "minus",
+                                   "Remove this node (the shape keeps at least one)."),) if axis == 0 else ()
             add(f"{SHAPE_NODES}.{index}.{axis}", (SHAPE_NODES, index, axis), f"Node {index + 1} {word}", workspace,
                 shape, SCALAR, minimum=0.0, maximum=1.0, decimals=3, priority=200 + 2 * index + axis,
+                actions=remove,
                 tooltip="A control node of the authored silhouette (across the bars, then its height). A node "
-                        "stops at its neighbours; add or remove nodes in Settings' shape editor.")
+                        "stops at its neighbours; Add Node adds one in the widest gap.")
     for mirrored in (True, False):
         layout = "Mirrored" if mirrored else "Linear"
         notches, lanes = NOTCHES[mirrored], LANES[mirrored]
+        flag = "1" if mirrored else "0"
         for index, (_x, lane) in enumerate(_canonical(notches)):
+            swaps = (StudioAction(f"{LANE_PREVIOUS}{flag}.{index}", "Swap With Previous Lane", "chevron-left",
+                                  "Exchange this lane with the one before it (the boundaries stay)."),
+                     StudioAction(f"{LANE_NEXT}{flag}.{index}", "Swap With Next Lane", "chevron-right",
+                                  "Exchange this lane with the one after it (the boundaries stay)."))
             add(f"{notches}.{index}", (notches, index, 0), f"{lane} Boundary ({layout})", workspace, shape, SCALAR,
                 minimum=0.0, maximum=1.0, decimals=3, priority=300 + index, when=((MIRRORED, (mirrored,)),),
+                actions=swaps,
                 tooltip="Where this frequency lane sits across the bars. A boundary stops at its neighbours.")
         for index, lane in enumerate(_canonical(lanes)):
             add(f"{lanes}.{lane}", (lanes, lane), f"{lane} Strength ({layout})", workspace, shape, SCALAR,
@@ -344,10 +418,13 @@ def build_schema() -> StudioSchema:
 
     group_icons = {titles[key]: glyph for key, (glyph, _sub) in _GROUP_PANEL.items() if key in titles}
     group_icons.update({TECHNICAL_GROUP: "bars", BAR_COLOUR_GROUP: "colour", RAINBOW_GROUP: "gradient"})
+    add_node = StudioAction(ADD_NODE, "Add Node", "plus",
+                            f"Add a node to the silhouette in its widest gap (at most {_MAX_NODES}).")
     return StudioSchema(MODE, "Spectrum Studio", tuple(workspaces), tuple(props), admit,
                         group_traces=((titles["audio"], ("Level", "Peak")), (titles["ghost"], ("Ghost",)),
                                       (titles["render"], ("Level",))),
-                        group_icons=tuple(group_icons.items()), object_noun="Bar")
+                        group_icons=tuple(group_icons.items()), object_noun="Bar",
+                        group_actions=((shape, (add_node,)),), row_label=row_label)
 
 
 # -------------------------------------------------------------------------------- inputs
@@ -526,6 +603,16 @@ class SpectrumStudioEvaluator:
     @property
     def analysing(self) -> bool:
         return self._job is not None
+
+    @property
+    def analysis_failure(self) -> str:
+        """Why the analysis the current values need failed ("" when it did not); the previous answers stay on
+        screen meanwhile (``_choose_inputs``) and nothing re-runs it until ``retry_analysis``."""
+        return str(self.errors.get(self._last_wanted, "")) if self._last_wanted is not None else ""
+
+    def retry_analysis(self) -> None:
+        """Forget the failure of the analysis the current values need: the next evaluation starts it again."""
+        self.errors.pop(self._last_wanted, None)
 
     # analysis ----------------------------------------------------------------
     def _wanted(self, values: Mapping[str, Any]):
@@ -770,6 +857,9 @@ class SpectrumStudioAdapter(StudioModeAdapter):
 
     def scene_objects(self, values: Mapping[str, Any]):
         return ()
+
+    def structure_edit(self, action_id: str, values: Mapping[str, Any]):
+        return structure_edit(action_id, values)
 
     def create_evaluator(self) -> SpectrumStudioEvaluator:
         return SpectrumStudioEvaluator()
