@@ -48,6 +48,7 @@ def _snapshot(
     count: int = 1,
     extras: tuple[float, float, float, float] = (0.8, 0.0, 0.0, 0.0),
     overrides: dict[str, object] | None = None,
+    world_scale: float = 1.0,
 ):
     values = {
             "bubble_trail_strength": 0.0,
@@ -95,6 +96,7 @@ def _snapshot(
             source_timestamp=1.0,
             simulation_timestamp=1.0,
             parameters=parameters,
+            world_scale=world_scale,
         ),
     )
     return compose_visualizer_render_snapshot(
@@ -357,39 +359,35 @@ def test_real_gl_bubble_specular_crop_is_constant_across_equal_area_shapes(_real
 
 
 @pytest.mark.qt
-def test_real_gl_bubble_outline_tracks_visible_size_and_not_extent_encoding(_real_gl):
+def test_real_gl_bubble_outline_tracks_drawn_hero_size_not_card_shape(_real_gl):
+    """At equal uniform scale every card shape and area draws the canonical hero and outline;
+    only the world's capacity zoom (heroes drawn larger) firms the outline, bounded."""
     _, render = _real_gl
     style = {"bubble_specular_color": (0, 0, 0, 255)}
-    widths = []
-    for width, height in ((210, 140), (420, 280), (1260, 840)):
-        image = render(_snapshot(_presentation(width, height), radius=0.08, overrides=style), width, height)
+
+    def outline(width, height, world_scale=1.0, presentation=None):
+        presentation = presentation or _presentation(width, height)
+        image = render(_snapshot(presentation, radius=0.08, overrides=style, world_scale=world_scale),
+                       width, height)
         # Integrated luminance across one outline is its effective pixel width;
         # this also catches bright single-pixel needles masquerading as coverage.
         row = height // 2
-        widths.append(sum(image[(row * width + x) * 4] / 255 for x in range(width // 2, width)))
-    # Operator-blessed real-GL outline widths: the visible stroke is bounded at
-    # small sizes (the two smaller viewports sit near the floor ~1.5-1.7 px) and
-    # grows materially at the largest visible size. It tracks visible size, not
-    # the extent encoding, so it is not strictly monotonic across the floor band.
-    assert widths[2] > widths[0] and widths[2] > widths[1], widths
-    assert 1.40 <= widths[0] <= 1.95, widths
-    assert 1.35 <= widths[1] <= 1.80, widths
-    assert 4.30 <= widths[2] <= 5.00, widths
-    assert widths[2] > widths[1] * 2.5, widths
+        return sum(image[(row * width + x) * 4] / 255 for x in range(width // 2, width))
 
-    # The extra one-pixel thinning follows visible area through wide and tall
-    # edits, rather than whichever edge happens to have grown the most.
+    canonical = outline(420, 280)
+    assert 1.35 <= canonical <= 1.80, canonical
+    for width, height in ((210, 140), (1260, 840), *_LARGE_OUTLINE_SHAPES):
+        assert abs(outline(width, height) - canonical) < 0.1, (width, height)
+    # Heroes three times the canonical size (a capacity-bound card) get the firm outline, the same on
+    # every shape, and the bounded ceiling holds.
+    zoomed = outline(1260, 840, world_scale=3.0)
+    assert 4.30 <= zoomed <= 5.00, zoomed
     for width, height in _LARGE_OUTLINE_SHAPES:
-        image = render(_snapshot(_presentation(width, height), radius=0.08, overrides=style), width, height)
-        row = height // 2
-        outline_width = sum(image[(row * width + x) * 4] / 255 for x in range(width // 2, width))
-        assert abs(outline_width - widths[2]) < 0.1
+        assert abs(outline(width, height, world_scale=3.0) - zoomed) < 0.1, (width, height)
 
-    # A huge viewport extent at a matching low uniform scale resolves to the same
-    # content rect but a different committed visual scale (1.0 vs 0.1). The
-    # operator-blessed visible stroke is scale-aware, so the two do NOT render
-    # byte-identically: extent alone does not corrupt the geometry, but the
-    # resolved scale legitimately drives the visible outline.
+    # A huge extent at a matching low uniform scale resolves to the same content
+    # rect but a 0.1 visual scale: Bubble's world is the extent, so it draws
+    # bubbles at one tenth of the canonical size there, never a corrupt geometry.
     ordinary = _presentation(420, 280)
     huge_extent = resolve_visualizer_presentation(
         policy=get_visualizer_presentation_policy("bubble"),
@@ -399,6 +397,15 @@ def test_real_gl_bubble_outline_tracks_visible_size_and_not_extent_encoding(_rea
     )
     assert huge_extent.content_rect == ordinary.content_rect
     assert huge_extent.uniform_visual_scale == pytest.approx(0.1)
-    assert ordinary.uniform_visual_scale == pytest.approx(1.0)
-    huge_render = render(_snapshot(huge_extent, radius=0.08, overrides=style), 420, 280)
+    huge_render = render(_snapshot(huge_extent, radius=0.08, overrides=style, world_scale=10.0), 420, 280)
     assert max(huge_render) > 0, "huge-extent bubble outline render is empty"
+    # With the world's capacity zoom of 10 (what the simulation resolves for 100 canonical cards of a
+    # full population) the hero is the ordinary card's size again, with the zoom's firmer outline.
+    ordinary_render = render(_snapshot(ordinary, radius=0.08, overrides=style), 420, 280)
+    huge_diameter = _diameter(_bounds(huge_render, render(_snapshot(huge_extent, radius=0.08, count=0), 420, 280),
+                                      420, 280))
+    ordinary_diameter = _diameter(_bounds(ordinary_render, render(_snapshot(ordinary, radius=0.08, count=0), 420, 280),
+                                          420, 280))
+    # Bounds include the outline: the firmer stroke adds at most ~1.25 px per side.
+    assert all(0 <= huge - plain <= 3 for huge, plain in zip(huge_diameter, ordinary_diameter)), (
+        huge_diameter, ordinary_diameter)

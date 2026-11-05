@@ -23,11 +23,10 @@ from core.logging.logger import (
     is_viz_diagnostics_enabled,
 )
 from widgets.spotify_visualizer.bubble_viewport_profile import (
-    BubbleViewportProfile,
-    resolve_bubble_viewport_profile,
-)
-from widgets.spotify_visualizer.render_state import (
-    CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
+    BUBBLE_RENDER_CAPACITY,
+    BubbleWorld,
+    resolve_bubble_world,
+    scale_bubble_population,
 )
 from widgets.spotify_visualizer.signal_contract import burst_authority, soft_ceiling
 
@@ -35,7 +34,7 @@ _SWIRL_DIRECTIONS = {"swirl_cw", "swirl_ccw"}
 
 logger = get_logger(__name__)
 
-MAX_BUBBLES = 110
+MAX_BUBBLES = BUBBLE_RENDER_CAPACITY
 
 
 TRAIL_STEPS = 3  # uniform layout still reserves 3 vec3 slots per bubble
@@ -147,21 +146,6 @@ def _smoothstep01(value: float) -> float:
     return x * x * (3.0 - 2.0 * x)
 
 
-def _content_axis_distance(value: float, domain_axis: float) -> float:
-    """Project one renderer-content distance into Bubble's logical axis.
-
-    The explicit baseline branch preserves historical arithmetic exactly. A
-    nonbaseline domain stores centers in expanded-world units, so margins,
-    offsets and prediction distances must use the same one-axis projection as
-    authored movement before snapshot normalizes them again.
-    """
-
-    if domain_axis == 1.0:
-        return value
-    return value * domain_axis
-
-
-
 def _shape_authored_bubble_control(
     value: float,
     *,
@@ -198,14 +182,13 @@ def _spawn_position(
 ) -> Tuple[float, float]:
     """Spawn at the opposite edge of the stream direction.
 
-    ``domain_w``/``domain_h`` are the baseline-relative logical bounds (1x1 at
-    the canonical viewport). All spatial constants scale with them, so the entry
-    lane spans the full logical world; at 1x1 every value is the legacy literal
-    and the random draw sequence is byte-identical.
+    ``domain_w``/``domain_h`` are the world's size in canonical-card units (1x1
+    on the canonical card). The entry lane spans the whole world; margins are
+    authored canonical-card distances, so they are the same on every shape.
     """
     margin = 0.05 if is_big else 0.02
-    margin_x = _content_axis_distance(margin, domain_w)
-    margin_y = _content_axis_distance(margin, domain_h)
+    margin_x = margin
+    margin_y = margin
     if direction == "up":
         return (random.uniform(margin_x, domain_w - margin_x), domain_h + margin_y)
     elif direction == "down":
@@ -274,8 +257,8 @@ def _directional_entry_position(
     else:
         extra_depth = random.uniform(0.01, 0.06)
     return (
-        x + dx * _content_axis_distance(extra_depth, domain_w),
-        y - dy * _content_axis_distance(extra_depth, domain_h),
+        x + dx * extra_depth,
+        y - dy * extra_depth,
     )
 
 
@@ -291,19 +274,18 @@ class BubbleSimulation:
         self._time: float = 0.0
         self._last_tick_dt: float = 0.016
         self._runtime_spawn_fade_seconds: float = RUNTIME_SPAWN_FADE_ACTIVE_S
-        # Baseline-relative logical domain. 1x1 is the canonical 420x280 world
-        # and is a strict no-op path: every spatial site reduces to the exact
-        # legacy unit-square values and the render arrays are emitted unchanged.
-        # A non-baseline committed viewport extent widens/heightens this domain.
-        # Bubble personality remains authored; only the separately cached
-        # geometry profile may apply the bounded extreme-wide/tall population
-        # and stream modifiers documented in Spec. The render seam normalizes
-        # positions/trails back to [0,1];
-        # authored render radius stays card-height-normalized and the shader's
-        # aspect correction keeps circles round.
+        # The world in canonical-card units (bubble_viewport_profile): 1x1 on the
+        # canonical 420x280 card, larger or smaller on others, never a fraction of
+        # the current card. Every authored speed, distance and radius is a literal
+        # in these units, so each shape moves and sizes like the canonical card;
+        # only the population follows the world's area. The render seam divides
+        # positions/trails by the world size; radius stays in canonical units and
+        # the renderer projects it once (with ``world_scale``).
+        self._world: BubbleWorld = resolve_bubble_world(None, authored_population=0)
+        self._world_key: tuple[object, int] = (None, 0)
         self._domain_w: float = 1.0
         self._domain_h: float = 1.0
-        self._viewport_profile: BubbleViewportProfile = resolve_bubble_viewport_profile(None)
+        self._world_scale: float = 1.0
         self._big_size_max: float = 0.038
         self._small_size_max: float = 0.018
         self._diag_tick_count: int = 0
@@ -357,9 +339,11 @@ class BubbleSimulation:
         self._time = 0.0
         self._last_tick_dt = 0.016
         self._runtime_spawn_fade_seconds = RUNTIME_SPAWN_FADE_ACTIVE_S
+        self._world = resolve_bubble_world(None, authored_population=0)
+        self._world_key = (None, 0)
         self._domain_w = 1.0
         self._domain_h = 1.0
-        self._viewport_profile = resolve_bubble_viewport_profile(None)
+        self._world_scale = 1.0
         self._diag_tick_count = 0
         self._smoothed_speed_energy = 0.0
         self._sustained_loud_energy = 0.0
@@ -417,46 +401,35 @@ class BubbleSimulation:
         """Return the latest Bubble-owned perf breakdown for audit logging."""
         return dict(self._last_perf_diag)
 
-    def _apply_viewport_domain(self, extent: object) -> None:
-        """Commit Bubble's logical domain and cached shape profile.
+    def _apply_viewport_domain(self, extent: object, authored_population: int = 0) -> None:
+        """Commit Bubble's world for the committed extent and authored population.
 
-        The geometry gradients are resolved only when the committed extent
-        actually changes.  Normal ticks therefore consume cached scalars rather
-        than reclassifying area/aspect at audio cadence.
+        Resolved only when either changes; ordinary ticks consume the cached
+        world. When the capacity zoom changes (a capacity-bound card resized, or
+        its authored population edited) live bubbles keep their place on the
+        card: their world coordinates rescale by the zoom ratio.
         """
 
-        baseline_w, baseline_h = CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
-        if extent is None:
-            extent_w, extent_h = baseline_w, baseline_h
-        else:
-            try:
-                extent_w = float(extent[0])
-                extent_h = float(extent[1])
-            except (TypeError, ValueError, IndexError):
-                extent_w, extent_h = baseline_w, baseline_h
-            if (
-                not math.isfinite(extent_w)
-                or not math.isfinite(extent_h)
-                or extent_w <= 0.0
-                or extent_h <= 0.0
-            ):
-                extent_w, extent_h = baseline_w, baseline_h
-
-        domain_w = extent_w / baseline_w if baseline_w > 0.0 else 1.0
-        domain_h = extent_h / baseline_h if baseline_h > 0.0 else 1.0
-        domain_w = domain_w if (math.isfinite(domain_w) and domain_w > 0.0) else 1.0
-        domain_h = domain_h if (math.isfinite(domain_h) and domain_h > 0.0) else 1.0
-        if self._domain_w == domain_w and self._domain_h == domain_h:
+        key = (
+            None if extent is None else tuple(extent) if isinstance(extent, (tuple, list)) else extent,
+            int(authored_population),
+        )
+        if key == self._world_key:
             return
-
-        self._domain_w = domain_w
-        self._domain_h = domain_h
-        self._viewport_profile = resolve_bubble_viewport_profile((extent_w, extent_h))
-
-    def _is_baseline_domain(self) -> bool:
-        """True on the canonical 1x1 world - the strict legacy no-op path."""
-
-        return self._domain_w == 1.0 and self._domain_h == 1.0
+        self._world_key = key
+        world = resolve_bubble_world(extent, authored_population=authored_population)
+        previous_scale = self._world_scale
+        self._world = world
+        self._domain_w = world.domain_w
+        self._domain_h = world.domain_h
+        self._world_scale = world.world_scale
+        if world.world_scale != previous_scale and self._bubbles:
+            ratio = previous_scale / world.world_scale
+            for bubble in self._bubbles:
+                bubble.x *= ratio
+                bubble.y *= ratio
+                bubble.trail_tail_x *= ratio
+                bubble.trail_tail_y *= ratio
 
     def _retire_non_surface_bubbles_outside_domain(self) -> None:
         """Pop non-surface bubbles left materially outside a contracted domain.
@@ -471,8 +444,8 @@ class BubbleSimulation:
         """
 
         margin = 0.1
-        margin_x = _content_axis_distance(margin, self._domain_w)
-        margin_y = _content_axis_distance(margin, self._domain_h)
+        margin_x = margin
+        margin_y = margin
         for bubble in self._bubbles:
             if bubble.reaches_surface or bubble.popping or bubble.exiting:
                 continue
@@ -492,10 +465,17 @@ class BubbleSimulation:
         self._last_tick_dt = dt
         tick_start = time.perf_counter()
 
+        big_target = int(settings["bubble_big_count"])
+        small_target = int(settings["bubble_small_count"])
+        big_target = max(0, big_target)
+        small_target = max(0, small_target)
+
         # Latest committed CUSTOM viewport extent (spatial config, not a clock).
         prev_domain_w = self._domain_w
         prev_domain_h = self._domain_h
-        self._apply_viewport_domain(settings.get("_bubble_viewport_extent"))
+        self._apply_viewport_domain(
+            settings.get("_bubble_viewport_extent"), big_target + small_target,
+        )
         if (
             self._domain_w < prev_domain_w - 1e-9
             or self._domain_h < prev_domain_h - 1e-9
@@ -510,46 +490,16 @@ class BubbleSimulation:
         self._time += dt
 
         # Read settings
-        big_target = int(settings["bubble_big_count"])
-        small_target = int(settings["bubble_small_count"])
         surface_reach = float(settings["bubble_surface_reach"])
         stream_dir = str(settings["bubble_stream_direction"])
         stream_const = float(settings["bubble_stream_constant_speed"])
         stream_cap = float(settings["bubble_stream_speed_cap"])
 
-        # Consume the cached viewport gradient.  Geometry classification happens
-        # only when the committed extent changes; normal audio ticks perform only
-        # these bounded scalar/count adjustments.  Wide keeps the accepted density
-        # + travel assist, while extreme verticals gently reduce density and cap
-        # travel.  An authored zero big-Bubble population stays zero.
-        big_target = max(0, big_target)
-        small_target = max(0, small_target)
-        profile = self._viewport_profile
-        wide_tail = profile.wide_tail
-        if wide_tail > 0.0:
-            extra_big = (
-                int(math.floor(wide_tail + 0.5))
-                if big_target > 0
-                else 0
-            )
-            extra_small = int(math.floor(wide_tail * 3.0 + 0.5))
-            authored_total = big_target + small_target
-            remaining_slots = max(0, MAX_BUBBLES - authored_total)
-            extra_big = min(extra_big, remaining_slots)
-            remaining_slots -= extra_big
-            extra_small = min(extra_small, remaining_slots)
-            big_target += extra_big
-            small_target += extra_small
-            stream_const *= profile.wide_stream_scale
-            stream_cap *= profile.wide_stream_scale
-
-        tall_tail = profile.tall_tail
-        if tall_tail > 0.0:
-            remove_big = int(math.floor(tall_tail + 0.5))
-            remove_small = int(math.floor(tall_tail + 0.5))
-            big_target = max(0, big_target - remove_big)
-            small_target = max(0, small_target - remove_small)
-            stream_cap *= profile.tall_stream_cap_scale
+        # Density is the only thing a card's size changes: the authored counts
+        # describe one canonical card's area. Speeds are never shape-modified.
+        big_target, small_target = scale_bubble_population(
+            big_target, small_target, self._world.population_scale,
+        )
         stream_reactivity = float(settings["bubble_stream_reactivity"])
         rotation_amount = float(settings["bubble_rotation_amount"])
         drift_amount_authored = float(settings["bubble_drift_amount"])
@@ -1083,7 +1033,6 @@ class BubbleSimulation:
         motion_sample_count = 0
         stream_step_total = 0.0
         drift_step_total = 0.0
-        baseline_motion_domain = self._is_baseline_domain()
         for i, b in enumerate(self._bubbles):
             b.age += dt
             if b.bounce_glide > 0.0:
@@ -1236,44 +1185,20 @@ class BubbleSimulation:
                     move_x += drift_offset * dt
 
             motion_sample_count += 1
-            # Diagnostics retain renderer-normalised displacement. On an
-            # expanded Bubble world these values are projected onto the domain
-            # axes immediately below, then divided by the same axes at the
-            # snapshot seam. Logging the pre-projection values therefore keeps
-            # canonical/wide/tall comparisons physically meaningful.
+            # Canonical-card units on every shape, so these compare directly
+            # across card shapes.
             stream_step_total += math.hypot(stream_move_x, stream_move_y)
             drift_step_total += math.hypot(
                 move_x - stream_move_x,
                 move_y - stream_move_y,
             )
 
-            if not baseline_motion_domain:
-                # Bubble centers live in a baseline-relative world that widens
-                # and heightens with viewport extent. Preserve the authored
-                # fraction-of-viewport stream/drift travel by projecting each
-                # movement axis into that world before the snapshot divides it
-                # back into renderer content coordinates. The canonical path is
-                # intentionally untouched for byte-exact BTF replay.
-                move_x *= self._domain_w
-                move_y *= self._domain_h
-
             b.x += move_x
             b.y -= move_y  # Y is inverted in UV space (0=top, 1=bottom)
             if b.impulse_vx != 0.0 or b.impulse_vy != 0.0:
-                # Collision response stores rebound velocity in authored
-                # renderer-content units. Bubble centres live in an expanded
-                # baseline-relative world on non-canonical viewports, so apply
-                # the same one-axis projection used by stream/drift motion
-                # before snapshot normalizes positions again. Keep the strict
-                # 1x1 path arithmetic unchanged. Collision geometry is resolved
-                # independently below in canonical renderer-content space.
-                impulse_dx = b.impulse_vx * dt
-                impulse_dy = b.impulse_vy * dt
-                if not baseline_motion_domain:
-                    impulse_dx *= self._domain_w
-                    impulse_dy *= self._domain_h
-                b.x += impulse_dx
-                b.y -= impulse_dy
+                # Collision rebound velocity, in the same world units.
+                b.x += b.impulse_vx * dt
+                b.y -= b.impulse_vy * dt
                 damp = max(0.0, 1.0 - dt * IMPULSE_DAMPING_PER_SEC)
                 b.impulse_vx *= damp
                 b.impulse_vy *= damp
@@ -1465,8 +1390,8 @@ class BubbleSimulation:
 
             # Check if bubble exited the card
             margin = 0.1
-            margin_x = _content_axis_distance(margin, self._domain_w)
-            margin_y = _content_axis_distance(margin, self._domain_h)
+            margin_x = margin
+            margin_y = margin
             head_outside = (b.x < -margin_x or b.x > self._domain_w + margin_x or
                             b.y < -margin_y or b.y > self._domain_h + margin_y)
 
@@ -1599,9 +1524,6 @@ class BubbleSimulation:
                 _spawn_r = random.uniform(0.02, 0.10)
                 _spawn_dx = math.cos(_angle) * _spawn_r
                 _spawn_dy = math.sin(_angle) * _spawn_r
-                if not baseline_motion_domain:
-                    _spawn_dx *= self._domain_w
-                    _spawn_dy *= self._domain_h
                 base_x = self._domain_w / 2.0 + _spawn_dx
                 base_y = self._domain_h / 2.0 + _spawn_dy
             else:
@@ -1621,8 +1543,8 @@ class BubbleSimulation:
                     break
                 cluster_dx = random.uniform(-0.07, 0.07) if c > 0 else 0.0
                 cluster_dy = random.uniform(-0.07, 0.07) if c > 0 else 0.0
-                cx = base_x + _content_axis_distance(cluster_dx, self._domain_w)
-                cy = base_y + _content_axis_distance(cluster_dy, self._domain_h)
+                cx = base_x + cluster_dx
+                cy = base_y + cluster_dy
                 self._spawn_bubble_at(False, cx, cy, stream_dir, surface_reach, drift_dir,
                                       initial_fill=is_initial)
                 small_count += 1
@@ -1651,9 +1573,6 @@ class BubbleSimulation:
             spawn_r = random.uniform(0.02, 0.10)
             spawn_dx = math.cos(angle) * spawn_r
             spawn_dy = math.sin(angle) * spawn_r
-            if not self._is_baseline_domain():
-                spawn_dx *= self._domain_w
-                spawn_dy *= self._domain_h
             x = self._domain_w / 2.0 + spawn_dx
             y = self._domain_h / 2.0 + spawn_dy
         else:
@@ -1682,8 +1601,8 @@ class BubbleSimulation:
         else:
             dx, dy = _get_stream_vector(stream_dir)
         return (
-            x + dx * _content_axis_distance(distance, self._domain_w),
-            y - dy * _content_axis_distance(distance, self._domain_h),
+            x + dx * distance,
+            y - dy * distance,
         )
 
     @staticmethod
@@ -1746,21 +1665,12 @@ class BubbleSimulation:
         dt_scale = min(1.0, dt * 60.0)
         max_speed_norm = max(0.0, min(1.0, max_bounce_speed / 2.0))
         smooth_mode = max_speed_norm < 0.45
-        # Collision policy is authored in canonical renderer-content units.
-        # Non-canonical Bubble storage expands X/Y independently; do not scale
-        # the policy by viewport height and then compare it to anisotropic world
-        # coordinates. Pair geometry below is evaluated in renderer-content
-        # space and corrections are projected back onto the world axes.
+        # Collision policy is authored in canonical-card units, which are the
+        # world's units on every card shape: no per-shape projection.
         collision_scale = 1.0
         view_margin = 0.02
-        baseline_collision_domain = self._is_baseline_domain()
-        # Keep viewport normalization out of the hot pair loop as much as
-        # possible. Expanded domains only need two precomputed reciprocal
-        # multiplies per candidate pair; the canonical path retains raw deltas.
-        inv_domain_w = 1.0 if baseline_collision_domain else (1.0 / self._domain_w)
-        inv_domain_h = 1.0 if baseline_collision_domain else (1.0 / self._domain_h)
-        margin_x = view_margin if baseline_collision_domain else view_margin * self._domain_w
-        margin_y = view_margin if baseline_collision_domain else view_margin * self._domain_h
+        margin_x = view_margin
+        margin_y = view_margin
         if collision_pop_mode not in {"off", "one", "all"}:
             raise ValueError(f"invalid resolved bubble collision pop mode: {collision_pop_mode!r}")
 
@@ -1868,9 +1778,6 @@ class BubbleSimulation:
                     b = active[j]
                     dx = b.x - a.x
                     dy = b.y - a.y
-                    if not baseline_collision_domain:
-                        dx *= inv_domain_w
-                        dy *= inv_domain_h
                     if dx > max_possible_gap:
                         break
                     pair_checks += 1
@@ -1977,16 +1884,10 @@ class BubbleSimulation:
                         pending_dx[j] += bx
                         pending_dy[j] += by
                     else:
-                        if baseline_collision_domain:
-                            a.x += ax
-                            a.y += ay
-                            b.x += bx
-                            b.y += by
-                        else:
-                            a.x += ax * self._domain_w
-                            a.y += ay * self._domain_h
-                            b.x += bx * self._domain_w
-                            b.y += by * self._domain_h
+                        a.x += ax
+                        a.y += ay
+                        b.x += bx
+                        b.y += by
 
                     if collision_pop_mode == "all":
                         self._trigger_collision_pop(a)
@@ -2069,12 +1970,8 @@ class BubbleSimulation:
                         scale = max_disp / mag
                         dx *= scale
                         dy *= scale
-                    if baseline_collision_domain:
-                        bubble.x += dx
-                        bubble.y += dy
-                    else:
-                        bubble.x += dx * self._domain_w
-                        bubble.y += dy * self._domain_h
+                    bubble.x += dx
+                    bubble.y += dy
 
         if self._pair_bounce_cooldowns:
             now = self._time
@@ -2549,14 +2446,9 @@ class BubbleSimulation:
         candidate_vy: float = 0.0,
     ) -> bool:
         """Return True if (x, y, radius) overlaps any existing bubble."""
-        # Spawn overlap is the same canonical content-space policy used by the
-        # live collision resolver. Bubble storage may be wider/taller, but a
-        # given normalized spawn layout must not become more or less permissive
-        # merely because CUSTOM changed viewport extent.
+        # Spawn overlap uses the live collision resolver's canonical-card
+        # policy, in the world's units on every card shape.
         candidate_radius_content = max(0.0, float(radius))
-        baseline_domain = self._is_baseline_domain()
-        inv_domain_w = 1.0 if baseline_domain else (1.0 / self._domain_w)
-        inv_domain_h = 1.0 if baseline_domain else (1.0 / self._domain_h)
         for b in self._bubbles:
             existing_radius_content = max(0.0, float(b.radius))
             existing_big = _bubble_behaves_big(b)
@@ -2583,9 +2475,6 @@ class BubbleSimulation:
                 )
             dx = b.x - x
             dy = b.y - y
-            if not baseline_domain:
-                dx *= inv_domain_w
-                dy *= inv_domain_h
             dist = math.hypot(dx, dy)
             if (
                 dist
@@ -2616,9 +2505,6 @@ class BubbleSimulation:
                 )
                 future_dx = existing_px - cand_px
                 future_dy = existing_py - cand_py
-                if not baseline_domain:
-                    future_dx *= inv_domain_w
-                    future_dy *= inv_domain_h
                 if math.hypot(future_dx, future_dy) < (
                     existing_radius_content + candidate_radius_content + future_gap
                 ):
@@ -2669,13 +2555,11 @@ class BubbleSimulation:
             spread = 0.08 + _attempt * 0.015
             jitter_x = random.uniform(-spread, spread)
             jitter_y = random.uniform(-spread, spread)
-            x = x + _content_axis_distance(jitter_x, self._domain_w)
-            y = y + _content_axis_distance(jitter_y, self._domain_h)
-            # Off-world retry allowance is a content-space fraction projected
-            # onto each logical axis. At baseline these bounds remain exactly
-            # [-0.25, 1.25].
-            allowance_x = _content_axis_distance(0.25, self._domain_w)
-            allowance_y = _content_axis_distance(0.25, self._domain_h)
+            x = x + jitter_x
+            y = y + jitter_y
+            # Off-world retry allowance, in canonical-card units.
+            allowance_x = 0.25
+            allowance_y = 0.25
             x = max(-allowance_x, min(self._domain_w + allowance_x, x))
             y = max(-allowance_y, min(self._domain_h + allowance_y, y))
         # If still overlapping after 15 attempts, skip spawn entirely
@@ -2766,18 +2650,10 @@ class BubbleSimulation:
         computed by the main tick loop.  It drives both angular velocity and
         radial push so the Stream Reactivity slider works in swirl mode.
         """
-        # Vector from the logical-world centre in screen space (0,0 = top-left).
-        # Swirl direction and force are authored in renderer-content space; if
-        # the expanded world vector is normalized directly, a wide/tall domain
-        # changes its tangent and radial geometry before the outer movement
-        # projection even runs. Preserve the exact canonical arithmetic and
-        # remove independent domain axes only on the nonbaseline path.
-        if self._is_baseline_domain():
-            sx = bubble.x - 0.5
-            sy = bubble.y - 0.5
-        else:
-            sx = bubble.x / self._domain_w - 0.5
-            sy = bubble.y / self._domain_h - 0.5
+        # Vector from the world's centre in screen space (0,0 = top-left), in
+        # canonical-card units like everything else.
+        sx = bubble.x - self._domain_w * 0.5
+        sy = bubble.y - self._domain_h * 0.5
 
         # Flip to math-Y-up for rotation math.
         mx =  sx
@@ -2853,10 +2729,6 @@ class BubbleSimulation:
             self._bleed_trail_smear(b, dt)
             return
 
-        if not self._is_baseline_domain():
-            self._update_trail_smear_in_content_space(b, dt, move_dx, move_dy)
-            return
-
         if not b.trail_ready:
             init_len = min(TRAIL_SMEAR_MAX_LENGTH,
                            math.hypot(move_dx, move_dy) * 22.0)
@@ -2891,75 +2763,6 @@ class BubbleSimulation:
         dx = b.x - b.trail_tail_x
         dy = b.y - b.trail_tail_y
         dist = math.hypot(dx, dy)
-
-        target_strength = min(1.0, dist * TRAIL_SMEAR_STRENGTH_FROM_DISTANCE)
-        if target_strength > b.trail_strength:
-            attack = min(1.0, dt * 9.0)
-            b.trail_strength += (target_strength - b.trail_strength) * attack
-        else:
-            decay = TRAIL_SMEAR_DECAY_PER_SEC * dt
-            b.trail_strength = max(0.0, b.trail_strength - decay)
-
-    def _update_trail_smear_in_content_space(
-        self,
-        b: BubbleState,
-        dt: float,
-        move_dx: float,
-        move_dy: float,
-    ) -> None:
-        """Update a nonbaseline trail in renderer-normalised coordinates.
-
-        Head/tail storage remains in Bubble's expanded logical world. Trail
-        length, direction and strength are visual contracts, however, so their
-        Euclidean calculations must run after removing the independent domain
-        axes. Mapping the resulting tail back to world storage lets snapshot()
-        keep one projection seam and avoids wide/tall anisotropy.
-        """
-
-        inv_domain_w = 1.0 / self._domain_w
-        inv_domain_h = 1.0 / self._domain_h
-        head_x = b.x * inv_domain_w
-        head_y = b.y * inv_domain_h
-        tail_x = b.trail_tail_x * inv_domain_w
-        tail_y = b.trail_tail_y * inv_domain_h
-        content_move_dx = move_dx * inv_domain_w
-        content_move_dy = move_dy * inv_domain_h
-
-        if not b.trail_ready:
-            move_length = math.hypot(content_move_dx, content_move_dy)
-            init_len = min(TRAIL_SMEAR_MAX_LENGTH, move_length * 22.0)
-            if init_len > 1e-4:
-                inv_move = 1.0 / move_length if move_length > 1e-4 else 0.0
-                dir_x = content_move_dx * inv_move
-                dir_y = content_move_dy * inv_move
-                tail_x = head_x - dir_x * init_len
-                tail_y = head_y - dir_y * init_len
-            else:
-                tail_x = head_x
-                tail_y = head_y
-            b.trail_ready = True
-
-        dx = head_x - tail_x
-        dy = head_y - tail_y
-        dist = math.hypot(dx, dy)
-        if dist > TRAIL_SMEAR_MAX_LENGTH and dist > 1e-4:
-            excess = dist - TRAIL_SMEAR_MAX_LENGTH
-            shrink = excess / dist
-            tail_x += dx * shrink
-            tail_y += dy * shrink
-            dx = head_x - tail_x
-            dy = head_y - tail_y
-            dist = TRAIL_SMEAR_MAX_LENGTH
-
-        follow = min(TRAIL_SMEAR_FOLLOW_MAX, TRAIL_SMEAR_FOLLOW_RATE * dt)
-        tail_x += dx * follow
-        tail_y += dy * follow
-
-        dx = head_x - tail_x
-        dy = head_y - tail_y
-        dist = math.hypot(dx, dy)
-        b.trail_tail_x = tail_x * self._domain_w
-        b.trail_tail_y = tail_y * self._domain_h
 
         target_strength = min(1.0, dist * TRAIL_SMEAR_STRENGTH_FROM_DISTANCE)
         if target_strength > b.trail_strength:
@@ -3036,14 +2839,10 @@ class BubbleSimulation:
             "tracked_big_smoothing_mix": 0.0,
         }
 
-        # Render-result projection: positions/trails belong to the expanded
-        # baseline-relative world and normalize back to [0,1]. Radius does not:
-        # the historical shader contract defines it directly as a fraction of
-        # the actual card height. Dividing radius by domain_h made a restored
-        # 773px-high viewport about 2.76x less reactive than the historical
-        # 280px-baseline renderer. Keep the authored card-height-normalized
-        # radius unchanged; the shader's aspect correction keeps circles round.
-        baseline_domain = self._is_baseline_domain()
+        # Render-result projection: positions/trails divide by the world size
+        # into [0,1] card coordinates (exact on the canonical 1x1 world). Radius
+        # stays in canonical-card units: the renderer projects it once, through
+        # the canonical response height and this world's ``world_scale``.
         inv_domain_w = 1.0 / self._domain_w
         inv_domain_h = 1.0 / self._domain_h
 
@@ -3148,12 +2947,8 @@ class BubbleSimulation:
             spec_factor = min(spec_factor, spec_cap)
 
             pos_base = idx * 4
-            if baseline_domain:
-                pos_data[pos_base] = b.x
-                pos_data[pos_base + 1] = b.y
-            else:
-                pos_data[pos_base] = b.x * inv_domain_w
-                pos_data[pos_base + 1] = b.y * inv_domain_h
+            pos_data[pos_base] = b.x * inv_domain_w
+            pos_data[pos_base + 1] = b.y * inv_domain_h
             pos_data[pos_base + 2] = r
             pos_data[pos_base + 3] = b.alpha
             if b.is_big:
@@ -3165,7 +2960,7 @@ class BubbleSimulation:
             extra_data[pos_base + 1] = b.rotation
             # spec_ox/spec_oy are dimensionless LOCAL bubble-space offsets: the
             # shader applies them as `spec_ox * r` / `spec_oy * r` relative to the
-            # (already domain-projected) radius, so they are intentionally NOT
+            # projected radius, so they are intentionally NOT
             # domain-normalized here. Projecting them would double-apply the
             # domain and stretch the highlight. Specular size/offset mutation
             # stays separate from the position/radius authority above.
@@ -3186,14 +2981,9 @@ class BubbleSimulation:
                     sample_y = b.trail_tail_y + dy * seg_t
                     falloff = 0.45 + 0.55 * seg_t
                     step_base = trail_base + step * 3
-                    # Trails follow the same domain projection as heads so the
-                    # smear stays attached and correctly scaled.
-                    if baseline_domain:
-                        trail_data[step_base] = sample_x
-                        trail_data[step_base + 1] = sample_y
-                    else:
-                        trail_data[step_base] = sample_x * inv_domain_w
-                        trail_data[step_base + 1] = sample_y * inv_domain_h
+                    # Trails follow the same projection as heads.
+                    trail_data[step_base] = sample_x * inv_domain_w
+                    trail_data[step_base + 1] = sample_y * inv_domain_h
                     trail_data[step_base + 2] = b.trail_strength * falloff
 
         if big_render_diag["big_render_count"] > 0.0:
