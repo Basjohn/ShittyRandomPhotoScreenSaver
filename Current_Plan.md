@@ -35,6 +35,25 @@ chunked suite only at milestones; no build/installer unless requested. Visual wo
 its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed" needs the failure reproduced first.
 
 **Linux compatibility** runs as a separate operator-requested plan, `Linux_Plan.md`; it does not reorder this plan.
+New platform-facing work (power, display, input) still ships a basic Linux path or an explicit inert one alongside
+the Windows path, so it never needs its own Linux audit later (operator, 5 Nov).
+
+**Agents (operator, 5 Nov):** at most three subagents at once (two medium and one high, or three medium), with the
+lead as reviewer/orchestrator.
+
+## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
+
+- [ ] **Displays off -> presentation pauses entirely, resumes clean:** no code listens for the console display power
+  state (`GUID_CONSOLE_DISPLAY_STATE` / `WM_POWERBROADCAST`); a runtime pauses only when its window hides or loses its
+  QScreen binding (`rendering/quick/runtime.py`), and the Visualizer's logical thread keeps its own clock. So a
+  power-plan display-off (or an HDMI display that stays enumerated) keeps the logical tick, render thread and
+  transitions running all night (operator: heavier presets cost real GPU/CPU while nothing is shown). One event-driven
+  power authority (no polling) pauses Visualizer logic + render and transitions/rotation while off, and resumes with no
+  integrated time gap and no first-frame poison (BTF). Linux: a basic path (e.g. logind/DPMS where available) or an
+  explicit inert one. Measured off-state cost before/after; physical overnight check by the operator.
+- [ ] **Retire Custom's "Edit Preset" Notepad machinery** (button + pop-up) now that the Studios exist, with Studio
+  parity proven for each mode that still offered it; and show **Open Studio** on every preset, not only Custom (it
+  opens the Studio on that preset).
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
@@ -161,6 +180,17 @@ Work first on body/audio/accents, then grounded camera/viewport and replacement 
 `Docs/Guides/Visualizer_Reactivity_Authoring.md` sections 13A-13C; control/design ownership in
 `Docs/Reference/Waveform_Ribbon_Migration_Plan.md`; motion targets and recorded bake-off in
 `Docs/Reference/Waveform_Ribbon_Lab_Plan.md` section 5.1. Keep C-primary elastic response and A's accumulated twisting.
+
+**Reactivity milestone baseline (operator, 5 Nov): tag `waveform-baseline-2026-11-05` (= `e7a84d33`).** Pulse and
+Centre Out "like night and day"; logical cadence survives heavy game load; **Preset 4 is the reference** ("let us not
+lose this"). Every later dynamics change shows, on the recorded clips, that Preset 4 is unchanged against this tag
+(or names the improvement for operator sign-off). Preset 4 keeps Breathing 0 (exactly the baseline dynamics).
+
+- [ ] **Preset 7 and the other reaction modes (operator log `logse7a84d332e.zip`, Rag Doll, 5 Nov):** no
+  decay/breathing in soft passages, sustained passages with changes inside them read as almost flat, and once it swelled
+  to full power as the song got QUIETER (normalisation lifting a quiet passage; see the continuous-play rule). Fix per
+  mode at the owner, judged over whole songs in continuous play, with Preset 4 held to the baseline. Pulse-visibility
+  WIP (span-sized reactions, branch `worktree-agent-a470c20ffe5fe8b02`) is parked: the operator accepted the pulse as is.
 
 **Operator-selected recovery baseline (3 Nov):**
 `Docs/Reference/Images/Waveform_Ribbon_Material_Baseline_20261103.png` and its `.capture.json` preserve the exact
@@ -402,6 +432,18 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
 
 ## Operator execution and evidence rules
 
-Use direct-copy, single-line PowerShell commands with explicit `.venv\Scripts\python.exe` for the operator. Keep
-details and evidence at their focused owner, this checklist actionable, and `Index.md` / `Spec.md` navigation current.
+Keep details and evidence at their focused owner, this checklist actionable, and `Index.md` / `Spec.md` navigation current.
 No memory updates without an explicit request.
+
+####################
+ADDITION & SIDE QUEST BOX
+Never Remove This Box. Restore It If Removed. Only Remove Contents As you place them in the active plan as real live checklist targets.
+####################
+- When implementing SMP aim for quality, compatible and adjustable audio as on par or beyond with apps like Music Bee as possible. Do not shy away from custom work when it will improve quality/performance/ux. Gate SMP/Library/Playlist behind --smp until production ready and feature rich.
+- When SMP is available (Library Widget ON) a new SMP Tab should exist in settings allowing for well organised adjustments to items related to SMP and audio processing. Use Pills and maintain high quality thematic UX. We should already have in the plans for what to hide when running an SMP only build and how to do it. 
+
+
+
+
+
+###################
