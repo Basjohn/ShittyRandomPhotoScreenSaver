@@ -551,7 +551,9 @@ def test_persisted_startup_promotes_missing_owned_temporal_and_profile_keys_befo
     app = "Owned3DProfile"
     path = determine_storage_path(app, base_dir=tmp_path)
     path.parent.mkdir(parents=True)
-    source_index = 1
+    # The last curated Spectrum preset (not the first, whenever the operator ships more than one):
+    # the selected preset is copied, whichever it is and whatever it holds.
+    source_index = get_custom_preset_index("spectrum") - 1
     legacy = {"mode": mode, "preset_spectrum": source_index,
               f"preset_{mode}": get_custom_preset_index(mode),
               f"{mode}_visual_smoothing": 0.23}

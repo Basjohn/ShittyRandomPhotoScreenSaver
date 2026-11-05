@@ -327,6 +327,12 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
     monkeypatch,
 ) -> None:
     """Production orchestration resolves settings once and owns one destination."""
+    from core.settings.visualizer_presets import get_preset_count
+
+    # Start on the first curated Bubble preset; one middle-click advances to the next runtime slot
+    # (another curated preset or Custom; the curated count is authored, never pinned here).
+    start_preset = 0
+    next_preset = (start_preset + 1) % get_preset_count("bubble")
 
     class _Settings:
         def __init__(self) -> None:
@@ -351,7 +357,7 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
                         mode_id: mode_id in {"bubble", "devcurve", "spectrum"}
                         for mode_id in VISUALIZER_MODE_IDS
                     },
-                    "preset_bubble": 3,
+                    "preset_bubble": start_preset,
                     "bubble_bar_count": 32,
                     "bubble_big_count": 7,
                     "bubble_small_count": 19,
@@ -502,7 +508,7 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
         assert preset_admission.handles_semantic_middle_click_at(object()) is True
         assert owner._mode_transition_phase == "fading_out"
         assert engine.begin_count == 0
-        assert settings.get("widgets.spotify_visualizer.preset_bubble") == 3
+        assert settings.get("widgets.spotify_visualizer.preset_bubble") == start_preset
         assert settings.save_calls == 0
 
         preset_outgoing_runtime = owner_runtime
@@ -533,7 +539,7 @@ def test_display_manager_admits_exactly_one_configured_quick_visualizer_owner(
         assert owner.sync_present() is True
         assert owner._mode_transition_phase == "idle"
         assert owner.controller.mode_id == "bubble"
-        assert settings.get("widgets.spotify_visualizer.preset_bubble") == 4
+        assert settings.get("widgets.spotify_visualizer.preset_bubble") == next_preset
         assert settings.custom_presets["bubble"]["bubble_big_count"] == 7
         assert settings.widgets["media"] == media_before
         assert settings.save_calls == 1
