@@ -175,8 +175,8 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   studio_20261105/modes/`.
 - [~] **Particles (5 Nov candidate):** crest-weighted, distributed births in each ribbon's colour, visible
   >=1 px cores with soft halos, gentle fade; swells gather particles (Pulse Particles). Hot passages hold ~3.4x quiet.
-  Open: still sparser than the high-react reference (admission-limited); with Pulse Particles high the 64-per-event
-  cap can mask the Spark Count range handles — resolve the interaction rather than hide it.
+  Pulse births only fill the cohort headroom left after the authored Spark Count, so they never mask it.
+  Open: still sparser than the high-react reference (admission-limited).
 - [~] **Strands: rare, 3-5 seconds TOTAL life.** Latest operator correction supersedes the proposed 30-second fade.
   Preserve the approved non-flickering look, make appearances much rarer, and use most of a configurable 3-5 second
   lifetime for a gentle tip-first fade. Reactivation restores them smoothly,

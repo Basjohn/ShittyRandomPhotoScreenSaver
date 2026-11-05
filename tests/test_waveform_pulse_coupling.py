@@ -72,6 +72,18 @@ def test_pulse_births_are_placed_on_the_swell_and_share_the_cohort_cap():
     assert field.consumed == 0
 
 
+def test_pulse_births_fill_headroom_and_never_mask_the_spark_count():
+    def far_from_swell(spark_count):
+        field = RibbonBursts()
+        count = field.admit(waved(), controls_with(spark_count=(spark_count, spark_count)), 1., swell=swell_at(6.),
+                            density=0., extra=MAX_BURST)
+        assert count == MAX_BURST and field.consumed == MAX_BURST
+        born = field.records[field.records[:, 7] > 0]
+        return int((np.abs(born[:, 0]-6.) > 9.).sum())
+    # Every authored accent survives a full pulse offer, so Spark Count still changes what is born away from it.
+    assert far_from_swell(48.) > far_from_swell(4.)+8
+
+
 def test_pulse_births_without_a_visible_swell_are_consumed_not_banked():
     field = RibbonBursts()
     assert field.admit(waved(), controls_with(), 0., swell=lambda x: np.zeros_like(x), density=1., extra=20) == 0
