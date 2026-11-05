@@ -54,6 +54,7 @@ def capture(args):
     indices=sorted({bisect_left(times,args.start+i/args.fps) for i in range(math.ceil(args.duration*args.fps))})
     frames=clip.frames[:indices[-1]+1]
     activation=resolve_visualizer_activation_payload({'mode':'waveform_ribbon','preset_waveform_ribbon':args.preset-1},mode='waveform_ribbon')
+    if activation.is_custom or activation.preset_index!=args.preset-1:raise ValueError(f'No curated Waveform preset {args.preset}')
     overrides=dict(item.split('=',1) for item in args.set)
     overrides={key:json.loads(value) for key,value in overrides.items()}
     settings={**activation.resolved_config,**overrides}
@@ -152,7 +153,7 @@ def capture(args):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--clip',type=Path,required=True);parser.add_argument('--output',type=Path,required=True)
-    parser.add_argument('--preset',type=int,choices=(1,2,3),default=1);parser.add_argument('--start',type=float,default=20.)
+    parser.add_argument('--preset',type=int,default=1,help='Curated preset number (1-based)');parser.add_argument('--start',type=float,default=20.)
     parser.add_argument('--duration',type=float,default=4.);parser.add_argument('--fps',type=int,default=12)
     parser.add_argument('--size',default='820x718');parser.add_argument('--ffmpeg',type=Path)
     parser.add_argument('--edge-viewport',action='store_true',help='Use actual CUSTOM edge-resize world aperture at --size')
@@ -160,6 +161,7 @@ def main():
     parser.add_argument('--set',action='append',default=[]);parser.add_argument('--png-all',action='store_true')
     parser.add_argument('--worker',action='store_true',help=argparse.SUPPRESS)
     args=parser.parse_args()
+    if args.preset<1:parser.error('Preset numbers start at 1')
     if not (math.isfinite(args.start) and args.start>=1. and math.isfinite(args.duration) and 0<args.duration<=30. and 1<=args.fps<=60):
         parser.error('Use start >=1, duration in (0,30] and fps in 1..60')
     try:
