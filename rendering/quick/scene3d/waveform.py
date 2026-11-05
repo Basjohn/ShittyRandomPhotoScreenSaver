@@ -291,6 +291,7 @@ class WaveformScene:
         gl.glUniform4f(location('uAtmosphere'),fog.density,fog.height,fog.softness,fog.light)
         gl.glUniform4f(location('uAtmosphereMotion'),self._now,fog.drift,fog.noise,fog.noise_scale)
         gl.glUniform3f(location('uAtmosphereAmbient'),*fog.ambient)
+        gl.glUniform2f(location('uAtmosphereLight'),fog.light_ceiling,fog.light_tint)
 
     def _sky(self,volume,*,reflection=False):
         program=self.fog_resources.program('sky',SKY_VERTEX,SKY_FRAGMENT)
