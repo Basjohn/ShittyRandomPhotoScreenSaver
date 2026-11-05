@@ -493,6 +493,9 @@ shifted to hide latency. Pixels are evidence, not visual or listening acceptance
 .\.venv\Scripts\python.exe -m tools.visualizer_replay.devcurve_reactivity_audit --clip logs\visualizer_recordings\human_heavy1.jsonl --preset 1 --output <new dir>
 # DevCurve offscreen GL capture (uniform cadence dividing the 90 Hz clock, PNG frames + strip + stills; no window)
 .\.venv\Scripts\python.exe -m tools.visualizer_replay.devcurve_capture --clip logs\visualizer_recordings\human_heavy1.jsonl --preset 1 --start 26 --duration 2 --fps 45 --png-all --output <new dir>
+# DevCurve kicks in continuous play (recordings back to back, never reset; the same clip twice pairs identical kicks):
+# drive / visible-reaction jump within 150 ms vs the 300 ms before, by time in play and passage
+.\.venv\Scripts\python.exe -m tools.visualizer_replay.devcurve_continuous_kicks --preset 1 --output <new dir> --clip logs\visualizer_recordings\human_heavy1.jsonl --clip logs\visualizer_recordings\human_heavy1.jsonl
 # Side-by-side time strip from capture MP4s (motion review aid)
 .\.venv\Scripts\python.exe tools\visualizer_replay\capture_time_strip.py --ffmpeg <ffmpeg.exe> --output strip.png --start 5 --step .125 --count 8 <run dir> [<run dir> ...]
 # Hidden Studio capture (no window, in-memory store): one PNG per workspace plus timings; --mode picks any registered Studio,
