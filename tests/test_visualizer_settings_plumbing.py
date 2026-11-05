@@ -1294,18 +1294,21 @@ class TestVisualizerModeRegistryContract:
     def test_resolve_all_preset_indices_from_mapping_uses_registry_for_sparse_input(self):
         from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
         from core.settings.visualizer_presets import (
+            get_custom_preset_index,
             get_missing_preset_fallback_index,
             resolve_all_preset_indices_from_mapping,
         )
 
+        # Custom is the one non-zero index every catalogue has (curated counts are authored).
+        selected = get_custom_preset_index("bubble")
         resolved = resolve_all_preset_indices_from_mapping(
-            {"mode": "bubble", "preset_bubble": 2}
+            {"mode": "bubble", "preset_bubble": selected}
         )
 
         for mode in VISUALIZER_MODE_IDS:
             key = f"preset_{mode}"
             if key == "preset_bubble":
-                assert resolved[key] == 2
+                assert resolved[key] == selected
                 continue
             # Unspecified modes resolve to their shipped canonical fallback.
             assert resolved[key] == get_missing_preset_fallback_index(mode)
@@ -1313,11 +1316,13 @@ class TestVisualizerModeRegistryContract:
     def test_resolve_all_preset_indices_from_getter_uses_shared_prefixed_contract(self):
         from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
         from core.settings.visualizer_presets import (
+            get_custom_preset_index,
             get_missing_preset_fallback_index,
             resolve_all_preset_indices_from_getter,
         )
 
-        data = {"widgets.spotify_visualizer.preset_bubble": 2}
+        selected = get_custom_preset_index("bubble")
+        data = {"widgets.spotify_visualizer.preset_bubble": selected}
 
         resolved = resolve_all_preset_indices_from_getter(
             lambda key, default=None: data.get(key, default)
@@ -1326,7 +1331,7 @@ class TestVisualizerModeRegistryContract:
         for mode in VISUALIZER_MODE_IDS:
             key = f"preset_{mode}"
             if key == "preset_bubble":
-                assert resolved[key] == 2
+                assert resolved[key] == selected
                 continue
             # Unspecified modes resolve to their shipped canonical fallback.
             assert resolved[key] == get_missing_preset_fallback_index(mode)
@@ -1698,6 +1703,9 @@ class TestVisualizerModeBinding:
 
     def test_collect_and_load_visualizer_preset_indices_use_shared_descriptor_contract(self):
         from core.settings.visualizer_preset_indices import resolve_preset_index_from_mapping
+        from core.settings.visualizer_presets import get_custom_preset_index
+
+        osc_custom = get_custom_preset_index("oscilloscope")  # exists whatever the curated count
 
         from ui.tabs.media.visualizer_mode_binding import (
             collect_visualizer_preset_indices,
@@ -1736,13 +1744,13 @@ class TestVisualizerModeBinding:
                 tab,
                 {
                     "preset_spectrum": 0,
-                    "preset_oscilloscope": 2,
+                    "preset_oscilloscope": osc_custom,
                     "preset_bubble": 3,
                 },
             )
 
             assert tab._spectrum_preset_slider.preset_index() == 0
-            assert tab._osc_preset_slider.preset_index() == 2
+            assert tab._osc_preset_slider.preset_index() == osc_custom
             assert tab._bubble_preset_slider.preset_index() == resolve_preset_index_from_mapping(
                 "bubble",
                 {"preset_bubble": 3},
