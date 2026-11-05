@@ -367,7 +367,7 @@ def test_diagnostic_build_enables_every_family_beside_frozen_executable(
     )
 
 
-def test_diagnostic_log_dir_falls_back_localappdata_then_temp(tmp_path, monkeypatch, windows_paths):
+def test_diagnostic_log_dir_falls_back_localappdata_then_temp(tmp_path, monkeypatch, windows_platform):
     executable = tmp_path / "install" / "SRPSS_Diagnostic.scr"
     executable.parent.mkdir()
     executable.write_bytes(b"fixture")

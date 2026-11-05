@@ -3,7 +3,12 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 from core.steam.links import friend_message_target, store_target
+
+# These tests pin the Windows SCR secure-desktop contract; Linux has its own test below.
+pytestmark = pytest.mark.usefixtures("windows_platform")
 
 
 @patch("core.windows.secure_url_launcher.reddit_helper_runtime.ensure_helper_runtime", return_value=True)
@@ -303,3 +308,26 @@ def test_steam_launch_failure_log_does_not_repeat_private_target(
     assert secure_url_launcher.open_steam_target(target) is False
     assert target.steam_url not in caplog.text
     assert "76561198000000001" not in caplog.text
+
+
+@patch("core.windows.secure_url_launcher.reddit_helper_runtime.ensure_helper_runtime")
+@patch("core.windows.secure_url_launcher.reddit_helper_bridge")
+@patch("core.windows.secure_url_launcher.QDesktopServices.openUrl", return_value=True)
+def test_linux_saver_opens_links_directly_and_never_touches_the_windows_helper(
+    mock_open,
+    mock_bridge,
+    mock_ensure_helper,
+    monkeypatch,
+) -> None:
+    from core.windows import secure_url_launcher
+
+    monkeypatch.setattr("core.platform_paths.IS_WINDOWS", False)
+    monkeypatch.setenv("SESSIONNAME", "Winlogon")  # meaningless on Linux
+
+    assert secure_url_launcher.open_url("https://example.com", source="reddit") is True
+    assert secure_url_launcher.open_steam_target(store_target(570), source="steam") is True
+    assert mock_open.call_count == 2
+    assert mock_open.call_args_list[1].args[0].toString().startswith("steam://")
+    mock_bridge.is_bridge_available.assert_not_called()
+    mock_bridge.enqueue_url.assert_not_called()
+    mock_ensure_helper.assert_not_called()

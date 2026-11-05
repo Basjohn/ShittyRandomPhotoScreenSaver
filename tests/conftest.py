@@ -243,11 +243,12 @@ except Exception:  # pragma: no cover
 
 
 @pytest.fixture
-def windows_paths(monkeypatch):
-    """Select the Windows branch of ``core.platform_paths`` on any OS.
+def windows_platform(monkeypatch):
+    """Select the Windows branch of every ``core.platform_paths.IS_WINDOWS`` decision on any OS.
 
-    For tests that pin the Windows ``%APPDATA%``/``%PROGRAMDATA%``/``%LOCALAPPDATA%``
-    contract by setting those variables; Linux resolution ignores them by design.
+    For tests that pin a Windows contract: the ``%APPDATA%``/``%PROGRAMDATA%``/
+    ``%LOCALAPPDATA%`` roots (Linux ignores those variables by design) or the
+    Windows-only secure-desktop URL handoff.
     """
     monkeypatch.setattr("core.platform_paths.IS_WINDOWS", True)
 

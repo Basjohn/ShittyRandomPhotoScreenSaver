@@ -404,6 +404,13 @@ def _schedule_runtime_reddit_helper_session(engine) -> bool:
     benign ProgramData ticket and asks Windows Task Scheduler to start the
     already-registered interactive helper task when needed.
     """
+    from core import platform_paths
+
+    if not platform_paths.IS_WINDOWS:
+        logger.info(
+            "[PLATFORM] Reddit secure-desktop helper is Windows-only; session helper not scheduled"
+        )
+        return False
     if is_diagnostic_build():
         logger.info(
             "[REDDIT-HELPER] Session helper skipped for isolated diagnostic runtime"
