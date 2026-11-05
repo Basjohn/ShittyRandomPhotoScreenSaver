@@ -11,7 +11,9 @@
     and the branch pushed to GitHub. Nothing is built or virtualised locally.
 
     Trigger modes:
-      Dispatch (default) - `gh workflow run`; GitHub allows this only once the
+      Auto (default)     - Dispatch when GitHub already knows the workflow (its file is
+                           on the default branch), otherwise Tag; the choice is printed.
+      Dispatch           - `gh workflow run`; GitHub allows this only once the
                            workflow file is on the default branch.
       Tag                - pushes a temporary tag linux-build/<timestamp> at the
                            branch's pushed commit (works before the workflow is
@@ -25,7 +27,7 @@
 [CmdletBinding()]
 param(
     [string]$Branch = '',
-    [ValidateSet('Dispatch', 'Tag')][string]$Mode = 'Dispatch',
+    [ValidateSet('Auto', 'Dispatch', 'Tag')][string]$Mode = 'Auto',
     [string]$OutDir = ''
 )
 
@@ -55,6 +57,16 @@ try {
     $currentBranch = (Invoke-Checked git @('rev-parse', '--abbrev-ref', 'HEAD')).Trim()
     if ($currentBranch -eq $Branch -and $localSha -ne $remoteSha) {
         Write-Warning "Local $Branch ($localSha) differs from origin/$Branch ($remoteSha); GitHub builds the pushed commit."
+    }
+
+    if ($Mode -eq 'Auto') {
+        & gh workflow view $Workflow *> $null
+        if ($LASTEXITCODE -eq 0) {
+            $Mode = 'Dispatch'
+        } else {
+            Write-Warning "[LINUX-BUILD] $Workflow is not on the default branch yet; using a temporary linux-build/* tag instead of dispatch."
+            $Mode = 'Tag'
+        }
     }
 
     $started = (Get-Date).ToUniversalTime().AddSeconds(-5)
