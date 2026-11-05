@@ -110,6 +110,7 @@ def _ink_runs(image) -> list[tuple[int, int]]:
     return runs
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="oracle is the Windows platform style's native arrow metrics")
 @pytest.mark.parametrize("large", [False, True])
 def test_bucket_arrow_keeps_clear_of_its_title_and_the_title_never_clips(qt_app, large) -> None:
     from PySide6.QtCore import QSize, Qt
