@@ -38,16 +38,15 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
-- [ ] **Neon Lake goal mocks (Presets 1-3, 5 Nov third pass, awaiting operator look):** shared contour lines, glowing
-  lake (shore rings, network), horizon glow at the real horizon, wide halo, world-fixed beat stars, calmer water
-  (`Docs/Reference/Neon_Lake_Basin.md`, "Third pass"). Not yet at parity with `references/NeonLakeGoalPreset1.png` /
-  `NeonLakeGoalPreset3.png`: Preset 1's dunes read as parallel stripes where the mock has rounded dotted volumes
-  with a few long sweeping ridges, its mountains are dotted where the mock is a dense contour wireframe, its low
-  react is nearer the mock's high (brighter lines and lake), and it reads more magenta (hue match 0.56); Preset 3's
-  dunes still lack the mock's gold specular sheen and dense rim ridges, and its water lacks the mock's dense glossy
-  reflections. Preset 3's frame-to-frame change is above the baseline (0.28-0.32 vs 0.165/255) only because its
-  lake is about five times larger; per moving pixel it is at the baseline. GPU at 1300x750 (baseline -> now):
-  Preset 1 1.01 -> 0.68 ms, Preset 3 0.44 -> 0.60 ms. Evidence: `.artifacts/evidence/neon_lake/fidelity_20261105/pass3/`.
+- [ ] **Neon Lake goal mocks (Presets 1-3, 5 Nov fourth pass, awaiting operator look):** range drawn as a contour
+  wireframe, glossy glass rims, calmer water, four large meandering dunes on Preset 1 (`Docs/Reference/Neon_Lake_Basin.md`,
+  "Third pass" / "Fourth pass"). Still short of `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`:
+  Preset 1's lake lacks the mock's vivid line mesh and island glow, its colour is slightly more magenta than the mock
+  (hue match ~0.62), the foothills nearest the lake are still dotted; Preset 3's dunes catch rims only where the Sun
+  sees them (the mock's dense gold dune lines are partly covered by the contour rows on the hills), its sky is
+  warmer than the mock's. Preset 3's frame-to-frame change is 0.25/255 against the baseline's 0.165 (its lake
+  covers about five times the screen; with every water feature off the scene's own floor is about 0.2).
+  Evidence: `.artifacts/evidence/neon_lake/fidelity_20261105/pass4/`.
 
 - [ ] **Display Settings capacity (physical hotplug):** on a real monitor disconnect/return or explicit reauthoring,
   Settings' current-screen rows and selections/bindings stay coherent (focused checks pass; hidden form evidence
@@ -208,6 +207,17 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   the ribbons' contact), so troughs stay round and dip in instead of flattening. Perspective only. In the visible
   frame P2 reaches the floor only in the ragdoll loud end (about 49.5-52 s); P3 never does, so it is unchanged there.
   Evidence `.artifacts/evidence/waveform_ribbon/floor_deform/`; design in the Migration Plan's Floor bucket.
+- [~] **Pulse Rim (operator, 5 Nov: "where the pulse is that section of the ribbon's rim can be even brighter with
+  falloff") — awaiting operator eyes:** Reaction-bucket slider (0 = today's rims, pixel-identical). The rims (line and
+  rim glow) brighten by the square of the published pulse field over a reference level, softly capped, sampled at
+  each fragment's history x (direct and reflected light), so every Reaction Mode and both Travel Directions put it
+  exactly on the pulse; the field's own smooth shape is the falloff. Evidence
+  `.artifacts/evidence/waveform_ribbon/pulse_rim/`; design in the Migration Plan's Reaction bucket.
+- [ ] **Swells reach the Preset camera already faded (side defect, 5 Nov, found by Pulse Rim):** the Preset 1 camera
+  sees history x in about [-5, 5], but `PULSE_ORIGIN` (44) still assumes a ~±30 view; a swell travels ~3 s before it
+  is visible, so on recorded music the in-view appearance field is a faint plateau (human_heavy1: in-view max p50
+  .11, peak/median 1.6) and the fresh-led band has already settled. Re-derive the origin (and the fresh fade) from the
+  framed camera's visible span; then recheck Pulse Rim's REFERENCE level.
 - [ ] **`tools/visualizer_preset_repair.py --repair-all` rewrites curated presets (side defect, 5 Nov):** on the
   Waveform presets it re-sorted every key and dropped the `starting_view` and `visualizer_preset_mode` metadata
   (values unchanged). Floor Give was authored by a one-key insert instead. Make the repair fill keep metadata and order.
