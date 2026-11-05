@@ -164,7 +164,7 @@ float basinMoonIllumination(vec3 normal,vec3 eye) {
     // optional illuminated rim marks. The ordinary exterior halo is phase-free.
     // Keep crescents thin, but soften the transition so the phase does not read
     // as a hard mechanical cut.
-    return smoothstep(0.0,0.055,dot(normal,basinMoonLightDirection(eye)));
+    return smoothstep(-0.02,0.09,dot(normal,basinMoonLightDirection(eye)));
 }
 
 float basinMoonSurfaceBrightness(vec3 normal,vec3 eye) {
@@ -354,7 +354,9 @@ vec4 basinCelestial(vec3 eye, vec3 worldRay, out vec3 hitPoint) {
 
     float illumination=basinMoonIllumination(normal,eye);
     float lunarRock=basinMoonAlbedo(normal);
-    float earthshine=0.018+0.020*pow(max(dot(normal,-ray),0.0),0.7);
+    // A luminous body: the shaded side is a soft lavender grey (lit by the bright face's glow and earthshine),
+    // never a black hole in the sky, yet still well below the lit face.
+    float earthshine=0.15+0.04*pow(max(dot(normal,-ray),0.0),0.7);
     float brightness=mix(earthshine,basinMoonSurfaceBrightness(normal,eye)*lunarRock,illumination);
     vec3 moon=max(uMoonColor.rgb,vec3(0.0))*brightness;
     return vec4(moon,clamp(uMoonColor.a,0.0,1.0)*limb);
@@ -369,29 +371,55 @@ float basinStarField(vec3 ray, float crowd, out float tone) {
     vec2 grid = vec2(atan(ray.x, -ray.z), asin(clamp(ray.y, -1.0, 1.0))) * 420.0;
     vec2 cell = floor(grid);
     vec2 pixelDistance = (fract(grid) - 0.5) / max(fwidth(grid), vec2(1e-4));
-    float pixelAlpha = 1.0 - smoothstep(0.15, 0.65, length(pixelDistance));
+    // Each star a soft glowing core (a pixel-wide Gaussian with a faint skirt), not a hard dot.
+    float r2 = dot(pixelDistance, pixelDistance);
+    float pixelAlpha = exp(-r2 / 0.45) + 0.12 * exp(-r2 / 3.0);
     float aboveHorizon = smoothstep(-0.45, -0.25, ray.y);
     float hash = basinStarHash(cell);
     tone = fract(hash * 37.0);
     // Magnitudes: most stars are faint, a few bright (the same star cells as ever, so beat stars still sit on
     // visible stars).
-    float magnitude = 0.28 + 0.72 * pow(fract(hash * 211.0), 2.2);
-    float field = step(0.985 - 0.03 * crowd, hash) * pixelAlpha * magnitude;
+    // Steep: most are barely there, a scattered few clearly visible (the mocks' sparse sky).
+    // Pass 5: about two thirds of the cells sit near the threshold of sight (the mocks' sparse sky: a dusting of
+    // tiny points, few clearly visible).
+    float magnitude = 0.035 + 0.965 * pow(fract(hash * 211.0), 6.0);
+    float field = step(0.99 - 0.03 * crowd, hash) * pixelAlpha * magnitude;
+    // A dense field of faint stars on a finer lattice (the mocks' dusting of tiny points between the bright ones),
+    // dimmer still, crowding inside the nebula.
+    vec2 fineGrid = grid * 1.7 + vec2(0.37, 0.71);
+    float fineHash = basinStarHash(floor(fineGrid) + vec2(311.0, 97.0));
+    vec2 fineDistance = (fract(fineGrid) - 0.5) / max(fwidth(fineGrid), vec2(1e-4));
+    float faint = step(0.996 - 0.03 * crowd, fineHash) * exp(-dot(fineDistance, fineDistance) / 0.35)
+                * (0.04 + 0.10 * fract(fineHash * 173.0));
+    field += faint;
     // A sparse layer of brighter stars, each a sharp core in a soft glow a few pixels wide, placed anywhere in
-    // its coarse cell: the sky's few prominent stars.
-    vec2 coarse = grid / 6.0;
+    // its coarse cell: the sky's few prominent stars. Each star's light is gathered from the 3x3 cells round this
+    // one and its glow ends within one cell of its centre, so no glow is ever cut at a cell edge (a square halo).
+    vec2 coarse = grid / 16.0;
     vec2 coarseScale = max(fwidth(coarse), vec2(1e-4));
     vec2 bigCell = floor(coarse);
-    float bigHash = basinStarHash(bigCell + vec2(17.0, 53.0));
     float bright = 0.0;
-    if (bigHash > 0.955) {
-        vec2 centre = vec2(0.32) + 0.36 * vec2(fract(bigHash * 97.0), fract(bigHash * 389.0));
-        vec2 offset = (fract(coarse) - centre) / coarseScale;
-        float r2 = dot(offset, offset);
-        float strength = 0.25 + 0.75 * pow(fract(bigHash * 53.0), 2.0);
-        bright = strength * (exp(-r2 / 0.9) + 0.35 * exp(-r2 / 6.0));
-        if (bright > 0.02) tone = fract(bigHash * 61.0);
+    float brightTone = 0.0;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            vec2 c = bigCell + vec2(float(x), float(y));
+            float bigHash = basinStarHash(c + vec2(17.0, 53.0));
+            if (bigHash <= 0.92) continue;
+            vec2 centre = c + vec2(0.2) + 0.6 * vec2(fract(bigHash * 97.0), fract(bigHash * 389.0));
+            vec2 cellOffset = coarse - centre;
+            vec2 offset = cellOffset / coarseScale;
+            float r2 = dot(offset, offset);
+            float strength = 1.3 * (0.30 + 0.70 * pow(fract(bigHash * 53.0), 2.0));
+            // A soft bright core in a gentle glow, no spikes (the mocks' bright stars have no diffraction cross),
+            // the glow reaching a few pixels and ending inside a cell's reach.
+            float reach = 1.0 - smoothstep(0.55, 0.95, length(cellOffset));
+            float light = strength * (exp(-r2 / 1.1) + 0.32 * exp(-r2 / 5.0)
+                                      + 0.06 * strength * exp(-r2 / 22.0) * reach);
+            if (light > bright) brightTone = fract(bigHash * 61.0);
+            bright += light;
+        }
     }
+    if (bright > 0.02) tone = brightTone;
     return min(field + bright, 1.6) * aboveHorizon;
 }
 
@@ -416,7 +444,8 @@ float basinBeatStarLight(vec3 eye,vec3 ray,vec3 glow,float visibility) {
         vec2 delta=difference/pixelScale;
         vec2 span=abs(delta);
         float diamond=1.0-smoothstep(0.0,1.0+0.8*size,span.x+span.y);
-        float halo=exp(-dot(delta,delta)/(3.0+40.0*size*fade));
+        // A glow a few pixels wide at the largest size (a wider one read as a white blob, not a star).
+        float halo=exp(-dot(delta,delta)/(2.0+40.0*size*size*fade));
         // Each spike: a thin bright line inside a softer sheath of glow, both tapering to nothing.
         vec2 along=vec2(pow(max(0.0,1.0-span.x/reach),1.3),pow(max(0.0,1.0-span.y/reach),1.3));
         float spikes=along.x*(exp(-span.y*span.y/0.45)+0.15*exp(-span.y*span.y/2.0))
@@ -430,7 +459,9 @@ float basinBeatStarLight(vec3 eye,vec3 ray,vec3 glow,float visibility) {
         float hidden=basinCelestialSkyMask(eye,vec3(sin(centre.x)*cos(centre.y),sin(centre.y),
                                                     -cos(centre.x)*cos(centre.y)));
         float gain=glow.x*(0.62+0.78*clamp(glow.y*fade*2.2,0.0,1.0))*min(1.0-hidden,visibility);
-        light+=gain*fade*(1.4*diamond+0.3*halo+1.0*spikes+0.8*diagonals);
+        // Soft: a glowing core in a wide gentle halo; the spikes are only a faint hint (the mocks' stars have no
+        // hard four-point cross).
+        light+=gain*fade*(1.0*diamond+0.45*halo+0.18*spikes+0.08*diagonals);
     }
     return light;
 }
@@ -537,7 +568,7 @@ vec4 basinSkyBackground(vec3 eye,vec3 worldRay,float starVisibility,int detail) 
     float stars = detail == 1 ? basinStarField(ray, region, tone) * clamp(uStarColor.a, 0.0, 1.0) * starVisibility
                               : 0.0;
     vec3 starColour = max(uStarColor.rgb, vec3(0.0));
-    colour += mix(starColour, starColour * (0.55 + 0.9 * mix(rim, core, tone)), region * 0.7) * stars;
+    colour += mix(starColour, starColour * (0.55 + 0.9 * mix(rim, core, tone)), region * 0.3) * stars;
     colour = colour * (1.0 - nebula.a) + nebula.rgb;
     colour += max(basinBeatStarColour(), vec3(0.0)) * basinBeatStarLight(eye,ray,uStarGlow,starVisibility);
     if (uClouds.w > 0.0) {
