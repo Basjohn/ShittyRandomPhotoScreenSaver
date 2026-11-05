@@ -2,33 +2,16 @@
 
 Live, ordered Linux compatibility work, kept separate from `Current_Plan.md` at the operator's request.
 `[ ]` open, `[~]` candidate awaiting validation, `[x]` landed (one line, pruned once validated).
-Durable rules: [`Docs/Guardrails/Linux_Compatibility.md`](Docs/Guardrails/Linux_Compatibility.md). Not a changelog.
+Durable rules: [`Docs/Guardrails/Linux_Compatibility.md`](Docs/Guardrails/Linux_Compatibility.md); how-to:
+[`Docs/Guides/Linux_Guide.md`](Docs/Guides/Linux_Guide.md). Not a changelog.
 
 **Goal:** the same codebase runs on Linux wherever the feature can exist there, while Windows stays the
 unchanged reference product. Branch: `claude/eager-carson-5da6ge` (see §6 Merge / rebase).
 
-## 0. Quick start
+## 0. How to run, use and build
 
-```bash
-scripts/linux/setup.sh --system-deps          # .venv-linux, pinned requirements, rcc packs
-.venv-linux/bin/python main.py /c             # Settings
-.venv-linux/bin/python main.py /s             # Saver (needs an image source)
-.venv-linux/bin/python tools/linux_run_headless.py --shots 8,15   # Xvfb run, real artwork, screenshots, log findings
-.venv-linux/bin/python tools/linux_pytest.py -q tests/test_platform_paths.py
-scripts/linux/build.sh                        # product: release/linux/SRPSS-<ver>-linux-x86_64(.tar.gz)
-```
-
-From Windows (no WSL, Hyper-V or Docker; needs only the GitHub CLI): `scripts\linux\build_from_windows.ps1`
-runs `.github/workflows/linux-build.yml` on a GitHub Ubuntu runner and downloads the tarball. Until the workflow
-is on the default branch use `-Mode Tag` (temporary `linux-build/<timestamp>` tag, removed afterwards).
-
-Using it as a screensaver: Linux has no common screensaver API, so an idle daemon launches the saver and
-SRPSS exits on input as on Windows (verified headless). X11: `xset s 600` plus `xss-lock -- srpss /s &` in the
-session autostart. Wayland (sway, Hyprland, niri): `swayidle -w timeout 600 'srpss /s'` (or `hypridle`).
-GNOME and KDE lock screens are separate and unaffected.
-
-Linux data roots: settings/data/cache `~/.config/SRPSS`, curated presets/themes/sounds `~/.local/share/SRPSS`
-(installed by the product's `install.sh`), diagnostic logs `~/.local/state/SRPSS` (`core/platform_paths.py`).
+[`Docs/Guides/Linux_Guide.md`](Docs/Guides/Linux_Guide.md) owns setup, installation, screensaver activation,
+data locations, product builds (including from Windows) and the Linux test route. This plan keeps only live work.
 
 ## 1. Status by area
 
@@ -85,7 +68,7 @@ Linux data roots: settings/data/cache `~/.config/SRPSS`, curated presets/themes/
 - [x] `tools/linux_build.py` / `scripts/linux/build.sh` product + `install.sh`; local build and `tools/linux_smoke_dist.py` pass.
 - [~] `.github/workflows/linux-build.yml`: awaiting its first GitHub run (operator: `-Mode Tag` or after merge).
 - [~] `scripts/linux/build_from_windows.ps1` (parses; guards verified). Awaiting a first operator run.
-- [x] Idle activation documented (§0: `xss-lock` / `swayidle`); exit-on-input verified on Linux.
+- [x] Idle activation documented (guide §3); exit-on-input verified on Linux.
 
 ### Phase 6: keep up with the default branch
 

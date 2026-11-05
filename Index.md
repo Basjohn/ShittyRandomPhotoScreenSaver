@@ -44,7 +44,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Need | Read |
 | --- | --- |
 | current work / next sequence | `Current_Plan.md` |
-| Linux compatibility: live checklist, gaps, merge notes / durable rules | `Linux_Plan.md` / `Docs/Guardrails/Linux_Compatibility.md`; `core/platform_paths.py` |
+| Linux: run/install/build/test how-to / live checklist and gaps / durable rules | `Docs/Guides/Linux_Guide.md` / `Linux_Plan.md` / `Docs/Guardrails/Linux_Compatibility.md`; `core/platform_paths.py` |
 | R151 Steam cache publication and Settings UTC: **106 focused Windows tests accepted**, full rerun not requested | `Docs/Historical_Bugs/R-151_Steam_Cache_Windows_Publication_Race_And_Python314_Timestamps.md` |
 | R149 Python 3.14 full-test failures, Steam cache WinError 32, NumPy BLAS introspection and 35-minute runtime review | `Docs/Contracts.md` |
 | R134–R145 dual-display collapse, reboot-dependent recovery and pre/post performance/cache/handles investigation | `Docs/Historical_Bugs/R-134_to_R-145_Dual_Display_Reboot_Recovery.md` |

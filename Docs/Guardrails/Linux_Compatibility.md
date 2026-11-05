@@ -1,8 +1,9 @@
 # Linux Compatibility Guardrail
 
 Binding rules that keep one SRPSS codebase working on Windows (the primary, accepted
-product) and Linux. Live Linux work, gaps and merge notes are in [`Linux_Plan.md`](../../Linux_Plan.md).
-This file holds only rules that stay true.
+product) and Linux. Live Linux work, gaps and merge notes are in [`Linux_Plan.md`](../../Linux_Plan.md);
+how to run, build and test on Linux is in [Linux Guide](../Guides/Linux_Guide.md). This file holds only rules
+that stay true.
 
 ## 1. Windows behaviour is the reference
 
