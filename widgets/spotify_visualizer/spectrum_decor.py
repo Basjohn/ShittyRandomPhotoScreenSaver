@@ -30,6 +30,7 @@ DECOR_KEYS = (
     "spectrum_peak_cap_color", "spectrum_peak_cap_thickness", "spectrum_pattern", "spectrum_pattern_color",
     "spectrum_pattern_scale", "spectrum_pattern_strength",
 )
+_ATTRS = tuple((key, "_" + key) for key in DECOR_KEYS)
 _TOGGLES = {
     "ghost_custom": lambda pres: pres._spectrum_ghost_color_source == "Custom",
     "ghost_gradient": lambda pres: bool(pres._spectrum_ghost_gradient),
@@ -50,6 +51,7 @@ class SpectrumDecorFade:
         self._pattern = str(pres._spectrum_pattern)
         self._pattern_level = 0.0 if self._pattern == SPECTRUM_PATTERNS[0] else 1.0
         self._last_ts: float | None = None
+        self._mixes: dict[str, object] | None = None      # rebuilt only when a level moves
 
     def advance(self, pres: Any, now_ts: float) -> bool:
         """Move every envelope toward the current settings; True while any is still moving."""
@@ -64,8 +66,11 @@ class SpectrumDecorFade:
             if level != target:
                 level = _toward(level, target, step)
                 self._levels[name] = level
+                self._mixes = None
                 moving = moving or level != target
         target_pattern = str(pres._spectrum_pattern)
+        if target_pattern != self._pattern or (self._pattern != SPECTRUM_PATTERNS[0] and self._pattern_level < 1.0):
+            self._mixes = None
         if target_pattern != self._pattern:
             # Fade the shown pattern out; then show the new one (Off shows nothing) and fade it in.
             self._pattern_level = _toward(self._pattern_level, 0.0, step)
@@ -77,11 +82,14 @@ class SpectrumDecorFade:
             self._pattern != SPECTRUM_PATTERNS[0] and self._pattern_level < 1.0)
         return moving
 
-    def mixes(self) -> dict[str, float]:
-        out = {f"spectrum_{name}_mix": _smooth(level) for name, level in self._levels.items()}
-        out["spectrum_pattern_shown"] = self._pattern
-        out["spectrum_pattern_mix"] = 0.0 if self._pattern == SPECTRUM_PATTERNS[0] else _smooth(self._pattern_level)
-        return out
+    def mixes(self) -> dict[str, object]:
+        if self._mixes is None:
+            out: dict[str, object] = {f"spectrum_{name}_mix": _smooth(level) for name, level in self._levels.items()}
+            out["spectrum_pattern_shown"] = self._pattern
+            out["spectrum_pattern_mix"] = (0.0 if self._pattern == SPECTRUM_PATTERNS[0]
+                                           else _smooth(self._pattern_level))
+            self._mixes = out
+        return dict(self._mixes)
 
 
 def decor_fade(pres: Any) -> SpectrumDecorFade:
@@ -99,11 +107,10 @@ def advance_decor_fade(pres: Any, now_ts: float) -> bool:
 
 def spectrum_decor_parameters(pres: Any) -> dict[str, object]:
     """The decoration controls (colours as tuples) and their current fade levels, for Spectrum's renderer."""
-    values: dict[str, object] = {}
-    for key in DECOR_KEYS:
-        value = getattr(pres, "_" + key)
+    values = decor_fade(pres).mixes()
+    for key, attr in _ATTRS:
+        value = getattr(pres, attr)
         values[key] = tuple(value) if isinstance(value, list) else value
-    values.update(decor_fade(pres).mixes())
     return values
 
 
