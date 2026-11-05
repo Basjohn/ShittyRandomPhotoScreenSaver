@@ -93,11 +93,24 @@ def test_actual_plane_covers_complete_ground_and_reports_true_world_xz(qt_app,ki
         world=origin+distance[:,:,None]*direction
         observed=pixels[:,:,0]>200
         np.testing.assert_array_equal(observed,valid)
-        np.testing.assert_allclose(hits[valid,:3],world[valid],atol=.03,rtol=3e-4)
         assert np.nanmax(np.abs(hits[:,:,1]))==0.
+        # Since the grounded long-lens orbit (2e201069: eye radius 64-104, 4.5 high, pitch at most a
+        # few degrees, 3 degree lens) the visible ground runs 10^2-10^5 world units out at grazing
+        # incidence, where a float32 inverse-MVP ray loses ~1e-3 of its range ALONG the view. The
+        # accuracy that matters is that each hit lies on its own pixel's ray: reproject it.
+        clip=np.einsum('ij,hwj->hwi',projection@view,np.concatenate((hits[:,:,:3],np.ones((height,width,1))),axis=-1))
+        reprojected=clip[:,:,:2]/clip[:,:,3:4]
+        pixel_error=np.abs(reprojected[valid]-ndc[valid])*np.array((width,height))/2.
+        assert pixel_error.max()<.05,pixel_error.max()
+        # The analytic world point agrees with the ray/plane solution where float32 range is not the limit.
+        near=distance<=200.
+        np.testing.assert_allclose(hits[valid&near,:3],world[valid&near],atol=.03,rtol=3e-4)
         if lens[2]:
             assert observed.all()  # Foreground AND far background, not just the old middle band.
-            assert (hits[-1,:,3]==0.).all()
+            # Farther ground sits higher in the frame: raster depth never decreases upward, and the
+            # horizon-side row reaches the far bound. (With the long-lens orbit the whole visible ground
+            # lies beyond the fitted scene slab, so the old "foreground row at the near plane" is gone.)
+            assert (np.diff(hits[::-1,:,3],axis=0)>=-1e-6).all()
             assert (hits[0,:,3]>0.9999).all()
         else:
             assert not observed[0].any() and observed[-1].all()
@@ -106,12 +119,36 @@ def test_actual_plane_covers_complete_ground_and_reports_true_world_xz(qt_app,ki
 
 @pytest.mark.parametrize('kind',('Orthographic','Perspective'))
 def test_ground_occlusion_and_perspective_positive_actor_clip(qt_app,kind):
-    probe=GroundProbe(144,96);values=camera(camera_projection=kind,tilt=.5)
+    # Steepest grounded pose. Actors are placed on one real pixel ray (bottom-centre) relative to
+    # that ray's own ground hit, not at fixed world points framed by the pre-2e201069 close orbit.
+    probe=GroundProbe(144,96);values=camera(camera_projection=kind,tilt=-1.)
     try:
         view,projection,eye,lens,baseline,hits=probe.draw(values)
-        pixels=probe.actor(np.array((0.,-1.,0.)),name='underfloor')
-        np.testing.assert_array_equal(pixels,baseline)
-        pixels=probe.actor(np.array((0.,1.,0.)),name='abovefloor')
+        basis=(view[0,:3],view[1,:3]);right,up,back=view[:3,:3]
+        row,column=88,72
+        ndc=((column+.5)/144*2.-1.,1.-(row+.5)/96*2.)
+        if lens[2]:
+            origin=eye+ndc[0]*lens[0]*right+ndc[1]*lens[1]*up;direction=-back
+            # Raster depth is the fitted signed slab about the scene (orthographic_raster_projection).
+            near,far=(projection[2,3]+1.)/projection[2,2],(projection[2,3]-1.)/projection[2,2]
+        else:
+            origin=eye;direction=ndc[0]*lens[0]*right+ndc[1]*lens[1]*up-back
+            direction=direction/np.linalg.norm(direction);near,far=.3,200.
+        ground=-origin[1]/direction[1]
+        along=lambda point:float(np.dot(point-eye,-back))
+        assert np.allclose(hits[row,column,:3],origin+ground*direction,atol=1e-2*max(1.,ground))
+        if along(origin+1.2*ground*direction)<far:
+            # A body beneath the ground on the same ray is hidden by the ground in front of it.
+            pixels=probe.actor(origin+1.2*ground*direction,name='underfloor',basis=basis)
+            np.testing.assert_array_equal(pixels,baseline)
+        else:
+            # Ortho: the whole visible ground lies beyond the scene slab, so no under-floor point is
+            # both rasterised and in frame: nothing can leak through it.
+            assert lens[2] and along(origin+ground*direction)>far
+        cosine=float(np.dot(direction,-back))
+        above=.5*(near/cosine+min(ground,far/cosine))  # rasterised, and in front of the ground
+        assert (origin+above*direction)[1]>0.
+        pixels=probe.actor(origin+above*direction,name='abovefloor',basis=basis)
         assert (pixels[:,:,1]>200).any()
         if kind=='Perspective':
             view,projection,eye,lens,baseline,hits=probe.draw(values)
@@ -134,15 +171,22 @@ def test_negative_control_larger_plane_and_disabled_depth_test_cannot_remove_act
         vao,count=probe.resources.mesh('huge finite plane',np.asarray(corners,np.float32).tobytes(),(3,))
         gl.glUseProgram(program);gl.glBindVertexArray(vao)
         from core.settings.framed_camera import orthographic_matrix
-        old=np.asarray(orthographic_matrix(lens[:2],.3,200.)).reshape(4,4,order='F')@view
+        # A finite clip interval inside the ground's real depth range (taken from the analytic hits,
+        # since the long-lens orbit of 2e201069 puts the visible ground far beyond a fixed .3-200).
+        depth=np.dot(hits[:,:,:3]-eye,-view[2,:3])
+        clip_near,clip_far=np.percentile(depth,(25.,75.))
+        old=np.asarray(orthographic_matrix(lens[:2],clip_near,clip_far)).reshape(4,4,order='F')@view
         gl.glUniformMatrix4fv(gl.glGetUniformLocation(program,'uMvp'),1,gl.GL_FALSE,np.asarray(old.flatten(order='F'),np.float32))
         gl.glDrawArrays(gl.GL_TRIANGLES,0,count);pixels=probe.target.read_rgba()
         assert not pixels[0,:,0].any() and not pixels[-1,:,0].any()
-        assert pixels[60:72,:,0].max()>200  # Same bounded band despite ample world coverage.
+        assert pixels[30:66,:,0].max()>200  # Same bounded band despite ample world coverage.
     finally:probe.close()
 
 
-@pytest.mark.parametrize('kind',('Orthographic','Perspective'))
+# Perspective only, at the steepest grounded pose. Under the long-lens grounded orbit (2e201069) the
+# scene's mirror image lies below every framed Orthographic ray at any authored tilt/scale, and below
+# the near-level (tilt .5) Perspective frame, so the floor's reflection is physically out of view there.
+@pytest.mark.parametrize('kind',('Perspective',))
 def test_production_floor_material_and_specular_cap_share_coverage_and_reflection(qt_app,kind):
     from rendering.gl_error_policy import disable_per_call_gl_error_checking
     disable_per_call_gl_error_checking()
@@ -153,7 +197,9 @@ def test_production_floor_material_and_specular_cap_share_coverage_and_reflectio
     target=OffscreenRenderTarget(240,160);renderer=QuickWaveformRibbonRenderer()
     try:
         frame=frame_for(target);state=frame.snapshot.logical.mode_state
-        values={**dict(state.parameters),'waveform_ribbon_camera_projection':kind,'waveform_ribbon_tilt':.5}
+        # Slightly zoomed out: at the authored framing the mirror image sits at the very edge of this steepest pose,
+        # so any small rise of the sheets would push the measured reflection out of frame.
+        values={**dict(state.parameters),'waveform_ribbon_camera_projection':kind,'waveform_ribbon_tilt':-1.,'waveform_ribbon_scene_scale':.8}
         # Isolate receiver/cap behavior from the rejected finite old haze: a near-level
         # Ortho reflection meets the world floor far in the foreground, outside that haze's clear ellipse.
         environment=replace(state.scene.environment,mist={**state.scene.environment.mist,'uMistShape':(0.,0.,0.,0.)})
