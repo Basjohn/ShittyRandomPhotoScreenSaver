@@ -59,7 +59,9 @@ def test_culled_draws_keep_exact_old_pixels_and_vertex_ids(qt_app,monkeypatch,as
         for v in (view,reflected):
             actual,culled=render(v)
             with monkeypatch.context() as change:
-                change.setattr(owner,'_continuation_draw_ranges',unculled)
+                # The primitive caches each packet's culled ranges (one query per frame for every pass), so the
+                # unculled baseline replaces the primitive's own range lookup, not the module function behind it.
+                change.setattr(primitive,'_draw_ranges',unculled)
                 expected,baseline=render(v)
             np.testing.assert_array_equal(actual,expected)
             new_vertices=sum(count*instances for first,count,instances in culled)
