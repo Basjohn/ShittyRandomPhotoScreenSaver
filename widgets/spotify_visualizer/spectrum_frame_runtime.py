@@ -83,6 +83,13 @@ class SpectrumFrameRuntime(RetirableFrameRuntime):
         self._activation_identity: tuple[int, int, int] | None = None
         reset_spectrum_solid_hysteresis_state(self)
 
+    @retirement_fenced
+    def rebase_clock(self) -> None:
+        """Display power resumed after a park: the next step integrates no parked gap (state stays warm)."""
+        self._presentation_last_ts = 0.0
+        self._last_peak_ts = 0.0
+        self._last_animation_ts = 0.0
+
     def reset(self) -> None:
         self._presentation_bars = []
         self._presentation_last_ts = 0.0

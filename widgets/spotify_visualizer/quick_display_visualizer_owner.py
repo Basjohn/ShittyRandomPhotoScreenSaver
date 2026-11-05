@@ -70,6 +70,10 @@ def _mode_runtime_factory(mode_id: str) -> Callable[[], Any]:
 class QuickDisplayVisualizerOwner:
     """Own + bind one visualizer controller for one Quick display generation."""
 
+    # Console display power defaults (on); __init__ and set_display_power own the instance values.
+    _display_power_on = True
+    _engine_released_for_display_power = False
+
     def __init__(
         self,
         runtime: Any,
@@ -160,10 +164,81 @@ class QuickDisplayVisualizerOwner:
         self._engine_acquired = False
         self._retired = False
         self._render_identity: Any = None
+        # Console display power (core.display_power), applied by DisplayManager.
+        self._display_power_on = True
+        self._engine_released_for_display_power = False
 
     @property
     def controller(self) -> Any:
         return self._controller
+
+    @property
+    def display_power_on(self) -> bool:
+        return self._display_power_on
+
+    def set_display_power(self, on: bool) -> bool:
+        """Park the Visualizer while the console displays are off; resume it warm.
+
+        Off: the sole logical runtime parks (its thread blocks with no cadence,
+        all simulation state stays warm), the unread publication is dropped so
+        it cannot be shown hours later, and this owner's engine reference is
+        released, which stops audio capture and analysis when it was the last.
+        On: the engine reference and capture come back, the fresh-frame fence
+        is armed (no retained pre-off audio frame is admitted as the first
+        reactive result), every logical last-step clock is rebased (the first
+        resumed step integrates no parked gap) and the runtime resumes on a new
+        deadline sequence. Ordinary Play/Pause and mode/preset activation keep
+        their own owners; an activation that lands while off starts parked.
+        Returns whether the state changed.
+        """
+
+        if self._retired:
+            return False
+        on = bool(on)
+        if on == self._display_power_on:
+            return False
+        controller = self._controller
+        self._display_power_on = on
+        if not on:
+            if not controller.set_logical_parked(True):
+                logger.error("[SPOTIFY_VIS][DISPLAY_POWER] Logical runtime did not park; it stays requested")
+            controller.logical_mailbox.clear()
+            if self._engine_acquired:
+                release = getattr(controller.engine, "release", None)
+                if callable(release):
+                    release()
+                self._engine_acquired = False
+                self._engine_released_for_display_power = True
+            logger.info("[SPOTIFY_VIS][DISPLAY_POWER] Visualizer parked mode=%s", controller.mode_id)
+            return True
+        engine = controller.ensure_engine() if self._started else None
+        if engine is not None:
+            if self._engine_released_for_display_power:
+                acquire = getattr(engine, "acquire", None)
+                if callable(acquire):
+                    acquire()
+                self._engine_acquired = True
+                self._engine_released_for_display_power = False
+                if controller.playing:
+                    ensure_started = getattr(engine, "ensure_started", None)
+                    if callable(ensure_started):
+                        ensure_started()
+            from widgets.spotify_visualizer.tick_pipeline import (
+                arm_reentry_fresh_frame_fence,
+                rebase_logical_clocks_after_park,
+            )
+
+            state = controller.logical_tick_state
+            arm_reentry_fresh_frame_fence(state, engine)
+            runtime = controller.logical_runtime
+            if runtime is None or not runtime.is_running() or runtime.is_parked():
+                rebase_logical_clocks_after_park(state, controller.logical_mode_states_snapshot())
+            else:
+                logger.error("[SPOTIFY_VIS][DISPLAY_POWER] Resume found the logical runtime unparked; "
+                             "clocks not rebased")
+        controller.set_logical_parked(False)
+        logger.info("[SPOTIFY_VIS][DISPLAY_POWER] Visualizer resumed mode=%s", controller.mode_id)
+        return True
 
     @property
     def render_identity(self) -> Any:
@@ -1457,6 +1532,14 @@ class QuickDisplayVisualizerOwner:
             self._activation_fade_started_at = float(self._transition_clock())
             self._started = True
             self._start_logical_runtime(interval_s=interval_s)
+            if not self._display_power_on and self._engine_acquired:
+                # Started while the displays are off: the runtime started parked;
+                # hold no capture reference until they come back.
+                release = getattr(engine, "release", None)
+                if callable(release):
+                    release()
+                self._engine_acquired = False
+                self._engine_released_for_display_power = True
         except Exception:
             self._started = False
             controller.stop_logical_runtime()

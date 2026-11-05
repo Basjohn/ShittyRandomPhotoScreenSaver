@@ -202,6 +202,11 @@ class RibbonPrimitive:
         self.strand_resources = self.strand_stream = None
         self._strand_bounds_payload=None
         self._strand_bounds=(0.,0.)
+        # Culled draw intervals of the bound packet: every pass of a frame (body, light, reflected light) asks for the
+        # same ones, so they are found once per packet payload.
+        self._ranges_payload=None
+        self._ranges={}
+        self._material_cache=None
 
     @property
     def has_resources(self):
@@ -235,21 +240,33 @@ class RibbonPrimitive:
         if self.stream is None:
             alignment=gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT)
             hold=MAX_PACKET_BYTES+alignment
-            self.stream=StreamRing('ribbon knots',slots=3,slot_bytes=hold,hold_bytes=hold)
+            # Four frames' packets per slot: a fence (and its later wait) every fourth frame, not every frame.
+            self.stream=StreamRing('ribbon knots',slots=3,slot_bytes=4*hold,hold_bytes=hold)
         return self.stream
 
     @contextmanager
-    def packet_scope(self,packet):
-        """Upload once for a whole scene; every pass rebinds this fenced range after intervening consumers."""
+    def packet_scope(self,packet,*,restore=True):
+        """Upload once for a whole scene; every pass rebinds this fenced range after intervening consumers.
+        ``restore=False``: the scene owns storage binding 0 for its frame (nothing read back; left unbound)."""
         if self._held_packet is not None:raise RuntimeError('Ribbon packet scope cannot nest')
         self._check_context(admit=True)
         if not packet.payload:
             yield
             return
-        with self._stream().bound(gl.GL_SHADER_STORAGE_BUFFER,0,packet.payload,reuse=True) as lease:
+        with self._stream().bound(gl.GL_SHADER_STORAGE_BUFFER,0,packet.payload,reuse=True,restore=restore) as lease:
             self._held_packet,self._lease=packet,lease
             try:yield
             finally:self._held_packet=self._lease=None
+
+    def _draw_ranges(self,packet,continuation,frame_x,cross_divisions):
+        """``_continuation_draw_ranges`` of this packet, computed once per payload and query."""
+        if packet.payload is not self._ranges_payload:
+            self._ranges_payload,self._ranges=packet.payload,{}
+        key=(tuple(continuation),frame_x,cross_divisions)
+        ranges=self._ranges.get(key)
+        if ranges is None:
+            ranges=self._ranges[key]=_continuation_draw_ranges(packet,continuation,frame_x,cross_divisions)
+        return ranges
 
     @contextmanager
     def _packet_bound(self,packet):
@@ -264,8 +281,12 @@ class RibbonPrimitive:
              view=None, material: RibbonMaterial | None = None, age_fade=None,
              mist=None, mist_frame=(0., 0., 0.), sparks: RibbonSparks | None = None, now=None, sweep_axis=None,
              grade=None, floor=None, strays: RibbonStrays | None = None, continuation=None,
-             strand_births=None,strand_origin=0.,floor_give=None,pulse_rim=None):
+             strand_births=None,strand_origin=0.,floor_give=None,pulse_rim=None,viewport=None,restore=True):
         """``age_fade`` = (absolute now, fade-in s, maximum age s, fade-out s) fades the head and tail by age.
+
+        ``viewport`` (width, height) is the bound target's viewport when the caller knows it; otherwise it is read
+        back. ``restore=False`` is for a caller that owns the GL state of its whole frame (a scene): the program, vertex
+        array and storage binding are neither read back nor restored (each read is a driver round trip).
 
         ``pulse_rim`` = (field texture, ``uPulseRim``) brightens the light pass's rims where the pulse is; other
         shadings ignore it.
@@ -282,7 +303,7 @@ class RibbonPrimitive:
             return self._draw_sparks(packet, mvp, sparks or RibbonSparks(), now, mist, mist_frame, grade,
                                      material or RibbonMaterial(), _sweep_axis(sweep_axis), floor,
                                      (strays or RibbonStrays()) if shading == 'strays' else None,
-                                     strand_births,strand_origin,continuation,floor_give)
+                                     strand_births,strand_origin,continuation,floor_give,viewport,restore)
         if shading not in _FRAGMENTS:
             raise ValueError(f'Unknown ribbon shading: {shading}')
         if packet.instances == 0:
@@ -311,9 +332,9 @@ class RibbonPrimitive:
         ranges=None
         if continuation is not None:
             frame=origin+np.asarray(mist_frame,float)
-            ranges=_continuation_draw_ranges(packet,continuation,float(frame[0]),cross_divisions)
+            ranges=self._draw_ranges(packet,continuation,float(frame[0]),cross_divisions)
         if shading != 'diagnostic':
-            shaded = self._material_uniforms(view, translate, material)
+            shaded = self._material(view, translate, material)
             shaded['uAge'] = (0., 0., 0., 0.)
             shaded.update({'uMist': (0., 0., 1., 1.), 'uMistShape': (0., 0., 0., 0.), **FOG_OFF, **GRADE_OFF, **(grade or {})})
             if mist is not None:
@@ -331,9 +352,10 @@ class RibbonPrimitive:
         self._check_context(admit=True)
         if shaded is not None:
             # Edge-on widening works in pixels: the caller's current viewport is the scene target's.
-            shaded['uViewport'] = tuple(float(v) for v in np.asarray(gl.glGetIntegerv(gl.GL_VIEWPORT)).reshape(-1)[2:4])
-        program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
-        vao_before = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING)
+            shaded['uViewport'] = (tuple(float(v) for v in viewport) if viewport is not None else
+                                   tuple(float(v) for v in np.asarray(gl.glGetIntegerv(gl.GL_VIEWPORT)).reshape(-1)[2:4]))
+        program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM) if restore else None
+        vao_before = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING) if restore else None
         rim_bound = False
         try:
             key=shading+('_continuous' if continuation is not None else '')
@@ -385,13 +407,15 @@ class RibbonPrimitive:
                         gl.glEndQuery(gl.GL_TIME_ELAPSED)
         finally:
             if rim_bound:gl.glBindTextureUnit(PULSE_RIM_UNIT, 0)
-            gl.glBindVertexArray(vao_before)
-            gl.glUseProgram(program_before)
+            if restore:
+                gl.glBindVertexArray(vao_before)
+                gl.glUseProgram(program_before)
 
     def _draw_sparks(self, packet, mvp, sparks, now, mist, mist_frame, grade, material, sweep_axis, floor=None,
-                     strays=None,strand_births=None,strand_origin=0.,continuation=None,floor_give=None):
+                     strays=None,strand_births=None,strand_origin=0.,continuation=None,floor_give=None,viewport=None,
+                     restore=True):
         """Additive point sprites, or with ``strays`` free strands, on the bound target (the caller sets blending,
-        as for the light pass)."""
+        as for the light pass). Strands are triangles: program point size is left alone for them."""
         if packet.instances == 0:
             return
         cohorts=strays is not None and strand_births is not None
@@ -410,9 +434,10 @@ class RibbonPrimitive:
         matrix[:, 3] = matrix @ np.array((*origin, 1.))
         frame = origin + np.asarray(mist_frame, float)
         self._check_context(admit=True)
-        program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
-        vao_before = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING)
-        point_size_before = gl_query.is_enabled(gl.GL_PROGRAM_POINT_SIZE)
+        program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM) if restore else None
+        vao_before = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING) if restore else None
+        points = strays is None
+        point_size_before = gl_query.is_enabled(gl.GL_PROGRAM_POINT_SIZE) if points else None
         try:
             kind = 'sparks' if strays is None else 'strays'
             resources=self._strand_resources() if cohorts else self.resources
@@ -426,7 +451,7 @@ class RibbonPrimitive:
             self._stream()
             gl.glUseProgram(program)
             gl.glBindVertexArray(vao)
-            gl.glEnable(gl.GL_PROGRAM_POINT_SIZE)
+            if points:gl.glEnable(gl.GL_PROGRAM_POINT_SIZE)
             gl.glUniformMatrix4fv(u['uMvp'], 1, gl.GL_FALSE, matrix.astype(np.float32).flatten(order='F'))
             gl.glUniform3f(u['uSweepAxis'],*sweep_axis)
             gl.glUniform2f(u['uSurface'],material.cross_curve,1.)
@@ -445,8 +470,8 @@ class RibbonPrimitive:
                 if cohorts:
                     gl.glUniform1f(u['uStrayBirthNow'],float(now)-float(strand_origin))
                     gl.glUniform2f(u['uStrayPulse'],strays.pulse_growth,strays.pulse_glow)
-                gl.glUniform2f(u['uViewport'], *(float(v) for v in
-                                                 np.asarray(gl.glGetIntegerv(gl.GL_VIEWPORT)).reshape(-1)[2:4]))
+                gl.glUniform2f(u['uViewport'], *(float(v) for v in viewport) if viewport is not None else
+                               (float(v) for v in np.asarray(gl.glGetIntegerv(gl.GL_VIEWPORT)).reshape(-1)[2:4]))
             mist_values = {'uMist': (0., 0., 1., 1.), 'uMistShape': (0., 0., 0., 0.), **FOG_OFF, **(mist or {})}
             gl.glUniform4f(u['uMist'], *mist_values['uMist'])
             gl.glUniform4f(u['uMistShape'], *mist_values['uMistShape'])
@@ -476,7 +501,7 @@ class RibbonPrimitive:
                         length*=1.+strays.pulse_growth
                         span=(continuation[0]-length*step-1.25*reach,
                               continuation[1]+1.25*reach,continuation[2])
-                        body,_,_=_continuation_draw_ranges(packet,span,float(frame[0]),1)
+                        body,_,_=self._draw_ranges(packet,span,float(frame[0]),1)
                         subdivisions=int(rows[0,0,1])
                         first=body[0]//(6*subdivisions)
                         count=min(MAX_PATH_SAMPLES-first,body[1]//(6*subdivisions)+1) if body[1] else 0
@@ -485,14 +510,25 @@ class RibbonPrimitive:
                         if self.strand_stream is None:
                             alignment=gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT)
                             size=MAX_RIBBONS*COHORT_BYTES+alignment
-                            self.strand_stream=StreamRing('ribbon strand cohorts',slots=3,slot_bytes=size,hold_bytes=size)
-                        with self.strand_stream.bound(gl.GL_SHADER_STORAGE_BUFFER,1,strand_births):
+                            # Two binds a frame (direct and reflected), four per slot: a fence every second frame,
+                            # and a reused slot was last read four frames ago, so no wait ties a frame to the last.
+                            self.strand_stream=StreamRing('ribbon strand cohorts',slots=3,slot_bytes=4*size,hold_bytes=size)
+                        with self.strand_stream.bound(gl.GL_SHADER_STORAGE_BUFFER,1,strand_births,restore=restore):
                             gl.glDrawArraysInstanced(gl.GL_TRIANGLES,first*stride,count*stride,packet.instances)
                     else:gl.glDrawArraysInstanced(gl.GL_TRIANGLES,first*stride,count*stride,packet.instances)
         finally:
-            (gl.glEnable if point_size_before else gl.glDisable)(gl.GL_PROGRAM_POINT_SIZE)
-            gl.glBindVertexArray(vao_before)
-            gl.glUseProgram(program_before)
+            if points:(gl.glEnable if point_size_before else gl.glDisable)(gl.GL_PROGRAM_POINT_SIZE)
+            if restore:
+                gl.glBindVertexArray(vao_before)
+                gl.glUseProgram(program_before)
+
+    def _material(self, view, translate, material):
+        """``_material_uniforms``, once per (view, origin, material): a frame's body and light passes share them."""
+        key = (tuple(view) if view is not None else None, tuple(translate), material)
+        cached = self._material_cache
+        if cached is None or cached[0] != key:
+            cached = self._material_cache = (key, self._material_uniforms(view, translate, material))
+        return dict(cached[1])
 
     @staticmethod
     def _material_uniforms(view, translate, material):

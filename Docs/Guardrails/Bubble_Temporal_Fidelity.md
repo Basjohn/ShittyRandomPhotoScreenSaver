@@ -926,6 +926,18 @@ values during unrelated work.
   **Glow Intensity, Reactivity, Spread and Release**. The particle core must never breathe, and an emissive
   halo is not permission to inflate the solid opaque disc. Do not substitute a second audio analysis path,
   hide meaningful parameters, or mark visual quality accepted merely because glow mathematics/tests pass.
+- **Particle glow is emitted light (5 Nov 2026).** Light accumulates additively in *linear* light in its own
+  glow-only float attachment: an energy-true hot core plus one halo that falls monotonically from the core
+  (tight bloom + soft tail) in the particle's hue (chroma deepened, neutral stays neutral). The Bubble shader
+  adds it over the water in linear light and lets it fill the remaining headroom in its own hue (no clip, no
+  wash to white; zero light leaves the pixel unchanged). Rejected and not to return: the hollow-centre ring
+  (a dark moat around every core: halo peak 5% of the core, gone by 5 px), light added in gamma space into
+  the 8-bit coverage target, and cores sampled at pixel centres (sub-pixel cores twinkled and vanished:
+  16-offset total-light CoV up to 136%, real-music frame-to-frame change p95 139%). Cores keep the accepted
+  edge; a core too small to sample is spread to a 1.1-texel radius with its area share of the light, so a
+  drifting particle's light stays steady. Gates: `tests/test_bubble_ambient_glow_contract.py`; measure with
+  `python -m tools.visualizer_replay.bubble_particle_glow {profile,flicker,shimmer,perf}` (the flicker metric
+  must keep failing its `--variant aliased` negative control).
 - Keep conditional Builder controls and canonical preset save/load/restore round trips; do not scatter
   unrelated sliders or redesign the Builder without a demonstrated defect.
 
@@ -939,7 +951,8 @@ values during unrelated work.
   same-snapshot rendered radii. Invisible/zero-alpha heroes do not need a mask. Preserve rounded/stencilled
   content clipping, quarter-turn rotation, and canonical/extreme-wide/extreme-tall/expanded viewports.
 - The optional ambient renderer is a **bounded, content-local transparent GPU target**, with at most 2048
-  pixels on its longest edge; aspect remains uniform. No decor renderer resources or extra ambient texture,
+  pixels on its longest edge; aspect remains uniform. Its glow light is a second same-size R11F_G11F_B10F
+  attachment that exists only while some particle glows. No decor renderer resources or extra ambient texture,
   sprite/mask draw work should persist for a never-enabled or subsequently disabled scene.
 - **Performance caveat:** big-over-small hero foreground composition changes the *shared* Bubble shader,
   so it can have cost even when decorations are OFF. At maximum ambient density and Glow Spread, sprite
