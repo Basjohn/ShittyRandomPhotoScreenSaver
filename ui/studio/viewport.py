@@ -166,6 +166,16 @@ class StudioRenderNode(QSGRenderNode):
                 | QSGRenderNode.StateFlag.ViewportState | QSGRenderNode.StateFlag.ScissorState)
 
     # Render thread -------------------------------------------------------------
+    @staticmethod
+    def apply_clip(state) -> None:
+        """The viewport slot clips (the scene graph hands its clip as the scissor): a frameless mode that may overflow
+        its card (Extruded Spectrum, Sphere) reaches the slot's edge, never the Studio chrome. A renderer's own
+        offscreen passes restore the inherited scissor test before they composite; ``render`` disables it after."""
+        if state is not None and bool(state.scissorEnabled()):
+            rect = state.scissorRect()
+            gl.glEnable(gl.GL_SCISSOR_TEST)
+            gl.glScissor(int(rect.x()), int(rect.y()), int(rect.width()), int(rect.height()))
+
     def render(self, state: QSGRenderNode.RenderState) -> None:
         frame = self._frame
         if frame is None or min(self._logical_size) <= 0.0 or self._released:
@@ -195,6 +205,7 @@ class StudioRenderNode(QSGRenderNode):
                 gl.glDisable(gl.GL_DEPTH_TEST)
                 gl.glDepthMask(gl.GL_FALSE)
                 gl.glViewport(*viewport)
+                self.apply_clip(state)
                 if not self._prepared:
                     self._prepared = bool(self._renderer.prepare(card, frame))
                     if not self._prepared:
@@ -203,6 +214,7 @@ class StudioRenderNode(QSGRenderNode):
                 self._renderer.render(card, frame)
             finally:
                 inherited.restore_render_host()
+                gl.glDisable(gl.GL_SCISSOR_TEST)
             from rendering.gl_error_policy import raise_pending_gl_error
             raise_pending_gl_error(gl, "Studio viewport")
             if self._last_error:

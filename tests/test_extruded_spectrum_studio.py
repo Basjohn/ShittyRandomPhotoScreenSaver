@@ -871,3 +871,54 @@ def test_scene_colours_never_follow_the_studio_theme(qt_app, dialog_tab, no_gl_c
         renders.append(_snapshots(surface, {"frame": frame}, controller.presented_extent())["frame"])
     assert np.array_equal(renders[0], renders[1])
     controller.close()
+
+
+# ---------------------------------------------------------------- framework pieces a frameless 3D mode relies on
+def _overflowing_grab(tab, adapter):
+    """The Studio at Live Card framing with a steep turned view (the bars overflow their card): the window grab
+    and the viewport slot's top edge in window pixels."""
+    from PySide6.QtCore import QPointF
+    from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+    controller, surface = _open_live(tab, adapter)
+    controller.bridge.selectFraming("card")
+    turn_key, tilt_key = get_visualizer_mode_descriptor(MODE).view_orbit_settings
+    controller.set_pose(turn_key, spec().control(turn_key).high * 0.6)
+    controller.set_pose(tilt_key, spec().control(tilt_key).high * 0.8)
+    controller.seek(controller.evaluator.fixture.duration * 0.6)
+    surface.pump(20)
+    top = int(surface.host.slot.mapToScene(QPointF(0.0, 0.0)).y())
+    image = surface.grab()
+    controller.close()
+    return image, top
+
+
+def test_overflow_stays_inside_the_viewport_slot(qt_app, dialog_tab, no_gl_checks, monkeypatch):
+    """A frameless mode may overflow its card up to the window in production; in the Studio the viewport slot is
+    that window: the chrome above it is drawn exactly as with no scene at all. Without the slot's clip the same
+    view paints over the chrome (negative control)."""
+    import numpy as np
+    from ui.studio.viewport import StudioRenderNode
+    _dialog, tab = dialog_tab()
+    reference, top = _overflowing_grab(tab, LightAdapter())
+    clipped, top_clipped = _overflowing_grab(tab, InlineAdapter())
+    assert top == top_clipped and top > 20
+    assert np.array_equal(clipped[:top - 1], reference[:top - 1])
+    monkeypatch.setattr(StudioRenderNode, "apply_clip", staticmethod(lambda state: None))
+    unclipped, _top = _overflowing_grab(tab, InlineAdapter())
+    assert not np.array_equal(unclipped[:top - 1], reference[:top - 1])
+
+
+def test_the_presentation_pixel_ratio_comes_from_the_item_mapping():
+    """The live viewport draws into the whole window target (wider than a letterboxed item), a snapshot into a target
+    of the item's own pixel size: both give the true target pixels per item unit."""
+    from ui.studio.adapter import RenderCard
+    from ui.studio.framed import ContractModeRenderer
+
+    def card(viewport, logical, window_logical_width):
+        matrix = (2.0 / window_logical_width,) + (0.0,) * 15
+        return RenderCard(viewport=viewport, logical_size=logical, matrix_values=matrix, quad_vao=0)
+    live = card((0, 0, 3200, 1800), (590.0, 393.0), 1600.0)            # a 2x window, a letterboxed item
+    snapshot = card((0, 0, 960, 640), (480.0, 320.0), 480.0)
+    assert ContractModeRenderer.pixel_ratio(live) == pytest.approx(2.0)
+    assert ContractModeRenderer.pixel_ratio(snapshot) == pytest.approx(2.0)
+    assert live.viewport[2] / live.logical_size[0] != pytest.approx(2.0)   # the target/item ratio would not be
