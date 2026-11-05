@@ -879,6 +879,7 @@
           6.0
         ],
         "waveform_ribbon_floor_contrast": 3.5,
+        "waveform_ribbon_floor_give": 1.0,
         "waveform_ribbon_floor_light_far": 0.2,
         "waveform_ribbon_floor_light_reach": 35.0,
         "waveform_ribbon_floor_colour": 1.8,
