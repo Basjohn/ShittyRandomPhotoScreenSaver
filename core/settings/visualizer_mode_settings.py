@@ -48,6 +48,7 @@ from typing import Union
 
 from rendering.gl_programs.extruded_spectrum_options import EXTRUDED_COLOURINGS
 from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, BASIN_BODY_MODES
+from core.constants.neon_lake_world import TILT_RANGE as NEON_TILT_RANGE, TURN_RANGE as NEON_TURN_RANGE
 from core.settings.visualizer_settings_contract import SPHERE_FINISH_VALUES
 
 
@@ -921,8 +922,8 @@ _SHOCKWAVE_GRID = ModeSettings(
         # The shared framed camera (core.settings.framed_camera), moved live: W/A/S/D flight, Q/E yaw,
         # Shift+W/S pitch, held-left orbit, Alt+right pan, Alt+wheel dolly and R home. Tilt 0 is a level
         # horizon; the eye itself never enters the land or water.
-        Slider("shockwave_grid_tilt", "", -0.10, 0.58, bucket=""),
-        Slider("shockwave_grid_turn", "", -0.50, 0.50, bucket=""),
+        Slider("shockwave_grid_tilt", "", NEON_TILT_RANGE[0], NEON_TILT_RANGE[1], bucket=""),
+        Slider("shockwave_grid_turn", "", NEON_TURN_RANGE[0], NEON_TURN_RANGE[1], bucket=""),
         SceneCameraPosition("shockwave_grid_camera_position", "Camera Position:", bucket="camera",
                tooltip="Move the real camera eye over the landscape without changing the lens. It stays above the "
                        "land and water. Drag the diamond to move, Shift+drag for depth, drag the Aim point to turn; "

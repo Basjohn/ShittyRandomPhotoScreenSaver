@@ -23,7 +23,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from core.constants.neon_lake_world import DEPTH, NOMINAL_HALF_WIDTH
+from core.constants.neon_lake_world import DEPTH, DISTANT_CURVATURE, DISTANT_FLAT, FAR_HILLS, NOMINAL_HALF_WIDTH
 from rendering.gl_programs.neon_celestial import CELESTIAL_REFERENCE
 
 MAX_PREVIEW_QUADS = 64        # per side over the authored grid (the scene's smooth surface, sampled)
@@ -127,17 +127,20 @@ def scene_surface(grid, basin, gu, gv):
     background = (0.12 + 0.065 * np.sin(2.7 * bu + 1.7 * bv) * np.cos(2.4 * bv - 0.8 * bu)
                   + 0.040 * np.sin(1.1 * bv - 2.3 * bu))
     rolling = np.maximum(0.025, (boundary + near_slope) * (1.0 - descent) + background * descent)
-    continued = rolling * (1.0 - _smoothstep(1.1, 2.2, outside)) + 0.065 * _smoothstep(1.1, 2.2, outside)
+    base_far, amplitude, a, b, c, d = FAR_HILLS
+    far_hills = base_far + amplitude * np.sin(a * bu + b * bv) * np.cos(c * bv - d * bu)
+    continued = rolling * (1.0 - _smoothstep(1.1, 2.2, outside)) + far_hills * _smoothstep(1.1, 2.2, outside)
     continued = np.where(boundary == 0.0, 0.0, continued)
     inside = outside < 1e-9
     base = np.where(inside, boundary, continued)
     edge_curve = _cubic(grid, eu, ev)
     curve = np.where(inside, edge_curve, np.maximum(0.0, edge_curve + continued - boundary))
-    curve = np.where(inside, curve, curve * (1.0 - _smoothstep(1.1, 2.2, outside)) + 0.065 * _smoothstep(1.1, 2.2, outside))
+    curve = np.where(inside, curve,
+                     curve * (1.0 - _smoothstep(1.1, 2.2, outside)) + far_hills * _smoothstep(1.1, 2.2, outside))
     water = base == 0.0
     land = curve * _smoothstep(0.0, 0.015, base)
     # The scene's shallow convex distant world: land and water alike fall away toward a real horizon.
-    drop = 0.38 * np.maximum(0.0, outside - 0.20) ** 2
+    drop = DISTANT_CURVATURE * np.maximum(0.0, outside - DISTANT_FLAT) ** 2
     return np.where(water, -drop, land - drop), water
 
 

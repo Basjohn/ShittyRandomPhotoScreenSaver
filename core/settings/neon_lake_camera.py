@@ -12,10 +12,13 @@ import struct
 from functools import lru_cache
 from collections.abc import Mapping
 
-from core.constants.neon_lake_world import DEPTH, NOMINAL_HALF_WIDTH, WATER_PEAK
+from core.constants.neon_lake_world import DEPTH, NOMINAL_HALF_WIDTH, TILT_RANGE, WATER_PEAK
 from core.settings import framed_camera as fc
 
 PIVOT = (0.0, 0.0, -0.5 * DEPTH)
+# The eye clears the highest land within this world distance around it, not only the cell beneath it, so the
+# near plane (0.04) never reaches into a slope beside the eye.
+_COLLISION_RADIUS = 0.08
 _DETAIL = 1.16          # the land's fixed static detail adds up to 16%
 _REACTION_HEIGHT = 0.32  # Terrain Reaction's largest reshaping per unit of each lane, in Terrain Height units
 _RIPPLE = WATER_PEAK + 0.01   # the lake's highest wave crest above its surface
@@ -25,8 +28,8 @@ _DESCENT = (0.04, 0.68)  # the continuation leaves the basin edge for the rollin
 SPEC = fc.FramedCameraSpec(
     prefix='shockwave_grid_', pivot=PIVOT, orbit_distance=3.6,
     # Tilt 0 looks level across the lake; positive tilt looks down (eye above the pivot).
-    pitch_base_degrees=0.0, pitch_span_degrees=-90.0, yaw_span=-math.pi, tilt_range=(-0.10, 0.58),
-    eye_center=(0.0, 2.0, PIVOT[2]), eye_half=(7.0, 2.0, 7.0), clearance=0.05, offset_scale=(7.0, 2.0, 7.0),
+    pitch_base_degrees=0.0, pitch_span_degrees=-90.0, yaw_span=-math.pi, tilt_range=TILT_RANGE,
+    eye_center=(0.0, 3.0, PIVOT[2]), eye_half=(14.0, 3.0, 14.0), clearance=0.05, offset_scale=(7.0, 2.0, 7.0),
     travel_speed=1.2, fov_range=(20.0, 62.0),
     floor_hook='core.settings.neon_lake_camera:floor',
     editor_references_hook='core.settings.neon_lake_camera:editor_references',
@@ -75,6 +78,10 @@ def terrain_floor(terrain: Mapping, terrain_height: float, half_width: float = N
         return max(heights[r * size + c] for r in (r0, min(size - 1, r0 + 1)) for c in (c0, min(size - 1, c0 + 1)))
 
     def floor(x: float, z: float) -> float:
+        r = _COLLISION_RADIUS
+        return max(floor_at(x + dx, z + dz) for dx, dz in ((0.0, 0.0), (r, r), (r, -r), (-r, r), (-r, -r)))
+
+    def floor_at(x: float, z: float) -> float:
         # Basin uv, then the authored grid's uv (it may reach past the basin toward the horizon).
         u, v = ((x / half_width + 1.0) * 0.5 + grid_left) * grid_scale, (-z / DEPTH + grid_front) * grid_scale
         local = cell_max(u, v)
