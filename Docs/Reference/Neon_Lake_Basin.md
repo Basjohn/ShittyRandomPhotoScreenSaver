@@ -631,10 +631,14 @@ Motion on real music (4 s from 30 s): Preset 1 1.17 -> 1.30 /255 per frame (the 
   glow a third; the ripple network faint at rest (0.06, still lit by crests and energy); the mirror leans 0.08 (was
   0.15) with the mesh's facets and a passing crest lifts the body 0.07 (was 0.18), so swells no longer wash it; the
   Sun/Moon column is broader and reaches farther toward the viewer; the glints are thinner and drift slower.
-- *Ridges*: on the authored land each skyline ridge swells and thins along its length (width 0.45..1.45, up to 2.35
-  for near ridges grown by Depth Scale; alpha 0.3..1 where it thins), a smooth function of land position so it
-  stays on the ground; near ridges are a 35% softer core whose bloom carries them and breathe half as much with the
-  midband. The distant horizon keeps its authored thickness.
+- *Ridges*: on the authored land each skyline ridge swells and thins along its length (width 0.45..1.45;
+  alpha 0.3..1 where it thins), a smooth function of land position so it stays on the ground; near ridges are a
+  35% softer core whose bloom carries them and breathe half as much with the midband. The distant horizon keeps its
+  authored thickness. **The lift is never more than 1.45x:** it is a screen shift of the whole land, and an extra
+  near-ridge widening (to 2.35x) exposed the lifted copy over a near dune's own face as a solid molten lobe in
+  Preset 3's foreground (lead review); `tests/test_neon_ridge_shape.py` bounds every column's ridge band (the
+  widening fails it at 42 px). At extreme settings (Depth Scale 1, thickness 3, a grazing view over dunes) the
+  same exposure exists from before this pass; see `Current_Plan.md`.
 - *Nebula*: streams drawn out along (0.84, 0.54) (was 45 degrees) and the band's great circle flatter, so the band
   rises at about the mocks' diagonal.
 - *Moon*: an even luminous face (0.90 + 0.10 lambert, was 0.82 + 0.18); phase, emission headroom, halo and limb
@@ -647,8 +651,8 @@ Preset 1: navy sky [5,7,34] and horizon [14,18,66], bluer nebula core (the soft 
 cooler sky/horizon, smaller halo (1.1) and rays (0.45), stronger and softer wisps, darker water, calmer water lights
 (path 0.85, shore glow 0.45, halo reactivity 1.5, waves 0.025). GPU (RTX 4090, PairedBench, control-relative
 unchanged: P1 293.6 -> 293.5 cf at 1300x750, 192.2 -> 191.7 at 2560x1440; P3 323.1 -> 322.5, 219.8 -> 220.3).
-Per-frame calls unchanged (353 GL). Motion (4 s from 30 s, 60 fps): Preset 1 1.30 -> 1.10 /255, Preset 3 0.28 ->
-0.239. Evidence `.artifacts/evidence/neon_lake/fidelity_20261105/pass6/`.
+Per-frame calls unchanged (353 GL). Motion (4 s from 30 s, 60 fps): Preset 1 1.30 -> 1.095 /255, Preset 3 0.28 ->
+0.232. Evidence `.artifacts/evidence/neon_lake/fidelity_20261105/pass6/`.
 
 ## Operator-authorized future water improvements (2026-10-18; deferred, baseline accepted)
 
