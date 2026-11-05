@@ -192,8 +192,9 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   Modes: Travelling Pulse (default), Frozen Past, Whole Swell, Group Wave; flow-rule and twitch tests for every mode.
   Dense music (5 Nov probe, ragdoll loud end): the light reads as one coherent front travelling at the authored speed
   with no standing glow at the emitter; a packetised release was measured (emitter share .41 -> .40) and rejected as
-  machinery without a visible gain. Open: Frozen Past/Group Wave differ from Travelling Pulse mainly over longer
-  windows. Audit doc decisions 7+; evidence `.artifacts/evidence/waveform_ribbon/
+  machinery without a visible gain. 8 s strips (5 Nov, `modes_long/`): Frozen Past is distinct (held crests stay
+  raised when the passage quiets); Group Wave was indistinguishable, so a swell now arrives as a SET (envelope 3.5
+  carrier wavelengths, light across the set, stronger forward lean) and reviewed frame by frame. Audit doc decisions 7+; evidence `.artifacts/evidence/waveform_ribbon/
   studio_20261105/modes/`.
 - [~] **Particles (5 Nov candidate):** crest-weighted, distributed births in each ribbon's colour, visible
   >=1 px cores with soft halos, gentle fade; swells gather particles (Pulse Particles). Hot passages hold ~3.4x quiet.
