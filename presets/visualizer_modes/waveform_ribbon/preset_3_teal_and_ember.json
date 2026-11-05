@@ -42,6 +42,7 @@
         "waveform_ribbon_colour_threshold": 0.6,
         "waveform_ribbon_count": 4,
         "waveform_ribbon_damping": 0.6,
+        "waveform_ribbon_dynamic_zoom": false,
         "waveform_ribbon_depth": [
           0.15,
           2.0

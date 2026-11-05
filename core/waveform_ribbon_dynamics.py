@@ -30,6 +30,12 @@ ENERGY_SPAN = (.25, .75)
 ENERGY_WEIGHTS = (.5, .35, .15)
 # Phrase-scale body energy: rises within a bar, settles over a phrase. Beats articulate through the band sources.
 PHRASE_ATTACK, PHRASE_RELEASE = .35, 1.5
+# Optional Dynamic Zoom (operator, 5 Nov): the view extent widens up to 20% quickly in heavy sustained passages and
+# narrows up to 20% slowly in soft or idle ones. Sustain is the published level held over seconds, so single hits
+# never pump the camera; the zoom itself is a smooth logical state, frozen while the user operates the camera.
+ZOOM_SPAN = .2
+ZOOM_SUSTAIN_ATTACK, ZOOM_SUSTAIN_RELEASE = 2.5, 4.
+ZOOM_OUT_SECONDS, ZOOM_IN_SECONDS = 1.2, 7.
 
 
 def span(value, low, high):
@@ -115,6 +121,7 @@ class HybridSnapshot:
     particle_serial: int = 0
     strands: bytes = b''
     strand_origin: float = 0.
+    zoom: float = 1.
 
 
 class WaveformDynamics:
@@ -126,6 +133,7 @@ class WaveformDynamics:
         self.phase = controls.scene.flow.phase
         self.bands, self.power = (0.,0.,0.),0.
         self.passage = self.phrase = 0.
+        self.zoom, self._sustain = 1., 0.
         self._shape_input = np.zeros((2,5),np.float64)  # two stages: bass/mid/high, power, hit
         self.spring = [[0.,0.,0.] for _ in range(RIBBON_CAPACITY)]
         self.velocity = [[0.,0.,0.] for _ in range(RIBBON_CAPACITY)]
@@ -171,7 +179,8 @@ class WaveformDynamics:
             sparkle.append(unit(self._value('sparkle')*max(hit,.4*bands[2])))
         self.ring.append(when,positions,widths,twists,lights,sparkle=sparkle,tint=tints)
 
-    def advance(self, dt, *, bands, intensity, presence, hit=0., hit_components=None, accent=None, controls=None):
+    def advance(self, dt, *, bands, intensity, presence, hit=0., hit_components=None, accent=None, controls=None,
+                dynamic_zoom=False, zoom_hold=False):
         if not math.isfinite(dt) or not 0. <= dt <= .1:
             raise ValueError('Ribbon logical dt must be finite in 0..0.1 seconds')
         if controls is not None:
@@ -219,6 +228,7 @@ class WaveformDynamics:
         old_first=self._shape_input[0].copy()
         self._shape_input[1]=shape_target+shape_decay*(self._shape_input[1]-shape_target+(old_first-shape_target)*shape_step)
         self._shape_input[0]=shape_target+(old_first-shape_target)*shape_decay
+        self._advance_zoom(dt,bool(dynamic_zoom),bool(zoom_hold))
         self.time += dt
         self.travel += c.scene.flow.speed*dt
         self.phase += 2*math.pi*c.scene.flow.head_hz*dt
@@ -268,6 +278,17 @@ class WaveformDynamics:
             payload=self._strand_cohorts.update(snapshot,c.strands,accent,history=self._base_packet,knot_hz=c.scene.flow.knot_hz)
             self._snapshot=replace(self._snapshot,strands=payload,strand_origin=self._strand_cohorts.origin)
         return self._snapshot
+
+    def _advance_zoom(self,dt,enabled,hold):
+        self._sustain = follower(self._sustain,self.passage,dt,ZOOM_SUSTAIN_ATTACK,ZOOM_SUSTAIN_RELEASE)
+        if hold:
+            return
+        if enabled:
+            share = unit((self._sustain-.25)/.5)
+            target = 1.+ZOOM_SPAN*(2.*share*share*(3.-2.*share)-1.)
+        else:
+            target = 1.  # switching off eases back to the authored framing; it never jumps
+        self.zoom = follower(self.zoom,target,dt,ZOOM_OUT_SECONDS,ZOOM_IN_SECONDS)
 
     def _value(self,key):
         low,high = self.controls.ranges[key]
@@ -364,5 +385,5 @@ class WaveformDynamics:
         packet = RibbonPacket(data.tobytes(),raw.instances,raw.vertices,(raw.world_origin[0],2.,0.),raw.coordinate_origin)
         self._snapshot = HybridSnapshot(packet,self.time,self.travel,self.angle,self.angular_speed,self.twist_phase,
             tuple(self.drive.items()),tuple(values.items()),self.ready,passage=self.passage,
-            head_x=self.controls.scene.flow.head_x)
+            head_x=self.controls.scene.flow.head_x,zoom=self.zoom)
         return self._snapshot

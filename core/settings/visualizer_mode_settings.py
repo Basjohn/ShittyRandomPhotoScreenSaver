@@ -1919,6 +1919,8 @@ def _waveform_ribbon() -> ModeSettings:
                     Slider(prefix+'camera_fov','Field of View:',*FOV_RANGE,bucket='camera',scale=1,integer=True,
                            suffix='°',when=(prefix+'camera_projection','Perspective')),
                     Toggle(prefix+'auto_rotate','','Auto Orbit',bucket='camera'),
+                    Toggle(prefix+'dynamic_zoom','','Dynamic Zoom',bucket='camera',
+                           tooltip='Zoom out up to 20% in heavy sustained passages and back in slowly when soft or idle; paused while you move the camera.'),
                     Slider(prefix+'auto_rotate_after','Orbit After:',0.,120.,bucket='camera',suffix=' s'),
                     Slider(prefix+'auto_rotate_speed','Orbit Speed:',0.,30.,bucket='camera',suffix='°/s'),
                     Slider(prefix+'turn','',-1.,1.),Slider(prefix+'tilt','',-.5,.5),

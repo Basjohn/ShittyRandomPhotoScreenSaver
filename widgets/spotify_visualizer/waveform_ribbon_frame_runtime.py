@@ -47,7 +47,7 @@ class WaveformRibbonFrameRuntime(RetirableFrameRuntime):
 
     @retirement_fenced
     def advance(self, *, onsets, now_ts, playing, identity, source_identity, controls: HybridControls,
-                body_bands, intensity, loudness, presence):
+                body_bands, intensity, loudness, presence, dynamic_zoom=False, zoom_hold=False):
         now = float(now_ts)
         if not math.isfinite(now):
             raise ValueError('Waveform capture time must be finite')
@@ -91,7 +91,8 @@ class WaveformRibbonFrameRuntime(RetirableFrameRuntime):
                 components=[max(value,reward*share) for value,share in zip(components,_IMPULSES[onset.kind])]
         snapshot=self._model.advance(dt,bands=body_bands if live else (0.,0.,0.),
                                    intensity=intensity if live else 0.,presence=weight,hit=hit,
-                                   hit_components=tuple(components),accent=accent,controls=controls)
+                                   hit_components=tuple(components),accent=accent,controls=controls,
+                                   dynamic_zoom=dynamic_zoom,zoom_hold=zoom_hold)
         if is_viz_diagnostics_enabled() and now-self._diagnostic_ts>=1.:
             self._diagnostic_ts=now
             drives=dict(snapshot.drives)
