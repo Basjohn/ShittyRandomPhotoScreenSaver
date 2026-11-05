@@ -12,7 +12,9 @@ from contextlib import contextmanager
 from OpenGL import GL as gl
 
 from rendering.gl_programs.scene3d import scene3d_detail, scene3d_grid_vertices
-from rendering.gl_programs.neon_lake_basin_mesh import NO_EXTENT, basin_mesh_vertices, basin_mesh_points
+from rendering.gl_programs.neon_lake_basin_mesh import (
+    BASIN_MESH_FINE_ROWS, BASIN_MESH_SUBDIVISION, NO_EXTENT, basin_mesh_vertices, basin_mesh_points,
+)
 from rendering.gl_programs.neon_starscape import starscape_beat_cells
 from rendering.quick import gl_query
 from rendering.gl_programs.neon_lake_basin_program import (
@@ -104,7 +106,8 @@ class QuickShockwaveGridRenderer:
         if cells != self._mesh_cells:
             if self._mesh_cells is not None:
                 self._resources.drop_mesh(_mesh_key(self._mesh_cells))
-            self._mesh_data = self._resources.mesh(_mesh_key(cells),basin_mesh_vertices(*cells),(2,))
+            self._mesh_data = self._resources.mesh(
+                _mesh_key(cells), basin_mesh_vertices(*cells, BASIN_MESH_SUBDIVISION, BASIN_MESH_FINE_ROWS), (2,))
             self._mesh_cells = cells
         return self._mesh_data
 
