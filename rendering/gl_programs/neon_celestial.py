@@ -373,7 +373,26 @@ float basinStarField(vec3 ray, float crowd, out float tone) {
     float aboveHorizon = smoothstep(-0.45, -0.25, ray.y);
     float hash = basinStarHash(cell);
     tone = fract(hash * 37.0);
-    return step(0.985 - 0.03 * crowd, hash) * pixelAlpha * aboveHorizon;
+    // Magnitudes: most stars are faint, a few bright (the same star cells as ever, so beat stars still sit on
+    // visible stars).
+    float magnitude = 0.28 + 0.72 * pow(fract(hash * 211.0), 2.2);
+    float field = step(0.985 - 0.03 * crowd, hash) * pixelAlpha * magnitude;
+    // A sparse layer of brighter stars, each a sharp core in a soft glow a few pixels wide, placed anywhere in
+    // its coarse cell: the sky's few prominent stars.
+    vec2 coarse = grid / 6.0;
+    vec2 coarseScale = max(fwidth(coarse), vec2(1e-4));
+    vec2 bigCell = floor(coarse);
+    float bigHash = basinStarHash(bigCell + vec2(17.0, 53.0));
+    float bright = 0.0;
+    if (bigHash > 0.955) {
+        vec2 centre = vec2(0.32) + 0.36 * vec2(fract(bigHash * 97.0), fract(bigHash * 389.0));
+        vec2 offset = (fract(coarse) - centre) / coarseScale;
+        float r2 = dot(offset, offset);
+        float strength = 0.25 + 0.75 * pow(fract(bigHash * 53.0), 2.0);
+        bright = strength * (exp(-r2 / 0.9) + 0.35 * exp(-r2 / 6.0));
+        if (bright > 0.02) tone = fract(bigHash * 61.0);
+    }
+    return min(field + bright, 1.6) * aboveHorizon;
 }
 
 // Beat stars peak as diamond starbursts: a sharp diamond point, four spikes that taper to nothing and, toward the
@@ -488,8 +507,11 @@ vec4 basinSkyBackground(vec3 eye,vec3 worldRay,float starVisibility,int detail) 
                             region);
 
     // Inside a nebula the field crowds and takes on its colours; its dust swallows stars and sky alike.
-    float tone;
-    float stars = basinStarField(ray, region, tone) * clamp(uStarColor.a, 0.0, 1.0) * starVisibility;
+    float tone = 0.0;
+    // Reflections (detail 0) leave the stars out: rippled water and glass smear them into a scatter of
+    // single-pixel sparks across the whole surface.
+    float stars = detail == 1 ? basinStarField(ray, region, tone) * clamp(uStarColor.a, 0.0, 1.0) * starVisibility
+                              : 0.0;
     vec3 starColour = max(uStarColor.rgb, vec3(0.0));
     colour += mix(starColour, starColour * (0.55 + 0.9 * mix(rim, core, tone)), region * 0.7) * stars;
     colour = colour * (1.0 - nebula.a) + nebula.rgb;
