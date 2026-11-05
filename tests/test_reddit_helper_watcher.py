@@ -7,18 +7,45 @@ polling loop added in the Reddit Helper Refactor.
 from __future__ import annotations
 
 import json
+import sys
 import time
+import uuid
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
+import helpers.reddit_helper_worker as _worker
 from helpers.reddit_helper_worker import (
     HEARTBEAT_FILE_NAME,
     SESSION_HELPER_SHUTDOWN_PREFIX,
+    WATCHER_MUTEX_NAME,
     _evaluate_owner_idle_exit,
     iter_queue_files,
     process_queue,
     _run_watcher,
 )
+
+
+@pytest.fixture(autouse=True)
+def _isolated_watcher_singleton(monkeypatch):
+    """Give every test its own watcher mutex name.
+
+    ``_run_watcher`` takes the per-session ``Local\\SRPSS_RedditHelper_Watcher``
+    mutex. On a Windows machine where SRPSS is installed, the real
+    ``SRPSS_RedditHelper.exe --watch`` usually holds it, so a test using the
+    production name exits as a "duplicate watcher" without processing anything.
+    The real Win32 mutex semantics are kept; only the name is per-test. Tests
+    that patch ``_acquire_watcher_singleton`` themselves override this.
+    """
+
+    real_acquire = _worker._acquire_watcher_singleton
+    test_name = rf"Local\SRPSS_RedditHelper_Watcher_test_{uuid.uuid4().hex}"
+    monkeypatch.setattr(
+        _worker,
+        "_acquire_watcher_singleton",
+        lambda name=test_name: real_acquire(test_name),
+    )
 
 
 class TestQueueProcessing:
@@ -330,6 +357,58 @@ class TestWatcherMode:
         assert opened == ["https://example.com/watch"]
         assert not (tmp_path / "watch.json").exists()
         assert (signal_dir / HEARTBEAT_FILE_NAME).exists()
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="Win32 named mutex")
+    def test_watcher_runs_while_installed_helper_holds_production_mutex(self, tmp_path: Path):
+        """A live installed helper owning the production mutex must not stall tests.
+
+        Holds ``WATCHER_MUTEX_NAME`` here (as the installed watcher does) and
+        proves the watcher under test still processes its own queue.
+        """
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        held = kernel32.CreateMutexW(None, False, WATCHER_MUTEX_NAME)
+        assert held
+        entry = {"action": "open_url", "url": "https://example.com/held"}
+        (tmp_path / "held.json").write_text(json.dumps(entry), encoding="utf-8")
+        signal_dir = tmp_path / "signals"
+        signal_dir.mkdir()
+        opened: list[str] = []
+
+        def fake_open_url(url: str) -> bool:
+            opened.append(url)
+            _worker._watcher_running = False
+            return True
+
+        original_running = _worker._watcher_running
+        try:
+            _worker._watcher_running = True
+            with patch("helpers.reddit_helper_worker.open_url", side_effect=fake_open_url), \
+                 patch("helpers.reddit_helper_worker.bring_browser_foreground", return_value=False):
+                rc = _run_watcher(tmp_path, max_batch=10, signal_dir=signal_dir, poll_interval=0.5)
+        finally:
+            _worker._watcher_running = original_running
+            kernel32.CloseHandle(held)
+
+        assert rc == 0
+        assert opened == ["https://example.com/held"]
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="Win32 named mutex")
+    def test_isolated_singleton_still_rejects_a_duplicate_watcher(self, tmp_path: Path):
+        """The per-test name keeps real duplicate-watcher rejection."""
+        handle, acquired = _worker._acquire_watcher_singleton()
+        assert acquired and handle
+        try:
+            signal_dir = tmp_path / "signals"
+            signal_dir.mkdir()
+            with patch("helpers.reddit_helper_worker.process_queue") as mock_process:
+                rc = _run_watcher(tmp_path, max_batch=10, signal_dir=signal_dir, poll_interval=0.5)
+        finally:
+            _worker._release_watcher_singleton(handle)
+
+        assert rc == 0
+        mock_process.assert_not_called()
 
     def test_owner_idle_exit_starts_only_when_queue_is_empty(self, tmp_path: Path):
         (tmp_path / "queued.json").write_text("{}", encoding="utf-8")
