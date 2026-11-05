@@ -101,6 +101,9 @@ these traps from the first slice, not after:
 - [ ] **Freshness is infrastructure:** the Quick sync admits the newest logical revision itself
       (`QuickVisualizerPresentationSync.admit_latest_at_sync`). Never shrink frame age with a shorter GIL switch
       interval (R-87 CHK18), thread priority, a pacer, a timer or polling.
+- [ ] **Source freshness before smoothing:** `[AUDIO_LANE]` published/s should track the logical tick rate (~86–90 at
+      90 Hz). A regular 11/22 ms analysis gap means ticks without new audio (R-171: the capture TripleBuffer lost
+      every third callback at block 128); measure it before blaming or retuning any temporal filter.
 - [ ] **Measurement hygiene:** a tool that runs the saver must apply `main.py`'s preamble before importing OpenGL
       (`tools/eb_live_phases.production_startup`), or PyOpenGL's per-call error checking inflates every render timing.
       Record conditions with every result and change one variable per A/B.

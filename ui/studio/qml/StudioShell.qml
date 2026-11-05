@@ -73,7 +73,7 @@ Rectangle {
             helpOverlay.open = false; event.accepted = true
         } else if (event.key === Qt.Key_Escape) {
             // Esc leaves the Studio (every edit is already saved); open popups and drags take Esc first.
-            Qt.callLater(studio.requestClose); event.accepted = true   // never tear down inside the handler
+            Qt.callLater(studio.requestCloseFrom, "escape"); event.accepted = true   // never tear down inside the handler
         }
     }
 
@@ -1613,9 +1613,9 @@ Rectangle {
                                onClicked: helpOverlay.open = !helpOverlay.open }
                 StudioButton { text: "Save Preset As…"; tip: "Save the current Custom settings as a preset file"
                                onClicked: studio.savePresetAs() }
-                StudioButton { text: "Close"; primary: true
+                StudioButton { objectName: "closeButton"; text: "Close"; primary: true
                                tip: "Close the Studio and return to Settings (edits are already saved to Custom)"
-                               onClicked: Qt.callLater(studio.requestClose) }
+                               onClicked: Qt.callLater(studio.requestCloseFrom, "close button") }
             }
         }
 

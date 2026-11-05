@@ -209,15 +209,21 @@ class StudioWindowSurface(QObject):
             except (RuntimeError, TypeError):
                 pass
         import time
+        from PySide6.QtCore import QMetaObject
         self.host.retire()
-        started = time.perf_counter()
-        window.hide()
-        self.hide_ms = round((time.perf_counter() - started) * 1000.0, 2)
+        # Never ``window.hide()`` from Python: PySide holds the GIL through that call, and Qt's threaded
+        # render loop waits inside it for the render thread, which must run this viewport's Python (the render
+        # node's release, ``sceneGraphInvalidated``) to invalidate the scene graph: a deadlock that froze the
+        # app with Settings still concealed. The event loop runs the hide and the destruction in C++ with the
+        # GIL released (Settings is already revealed by then).
+        QMetaObject.invokeMethod(window, "hide", Qt.ConnectionType.QueuedConnection)
+        self.hide_deferred = True
         _keep_until_destroyed(window)
         window.destroyed.connect(lambda *_a, t=time.perf_counter(): logger.info(
             "[STUDIO] window destroyed %.1f ms after retirement", (time.perf_counter() - t) * 1000.0))
         window.deleteLater()
         self.host.release_engine()
+        logger.info("[STUDIO] window hide and destruction queued to the event loop")
 
 
 class OffscreenStudioSurface(QObject):
