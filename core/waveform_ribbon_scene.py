@@ -33,6 +33,9 @@ class Fog:
     softness: float = .9
     ambient: tuple = (.035, .05, .085)
     light: float = .6
+    # Local light compresses toward this radiance (linear, luminance) and keeps this share of the source hue.
+    light_ceiling: float = .25
+    light_tint: float = .5
     noise: float = .2
     noise_scale: float = .16
     drift: float = .1
