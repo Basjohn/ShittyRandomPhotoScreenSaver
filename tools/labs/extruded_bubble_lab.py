@@ -22,7 +22,7 @@ from PIL import Image
 from rendering.gl_programs.scene3d_optics import SCENE3D_OPTICS_GLSL
 from rendering.quick.scene3d.defocus import SCENE_DEFOCUS_GLSL, DefocusLayer
 from rendering.quick.scene3d.probe import SCENE3D_PROBE_GLSL, SceneProbe
-from rendering.gl_programs.scene3d_spheres import SCENE3D_SPHERES_GLSL
+from rendering.gl_programs.scene3d_spheres import SCENE3D_SPHERES_GLSL, SCENE3D_SPHERES_VERTEX_GLSL
 from rendering.gl_programs.scene3d_water import SCENE3D_WATER_GLSL, water_sun_below
 from rendering.quick.render.gl_resources import compile_program
 from rendering.quick.scene3d.resources import MeshResources
@@ -278,7 +278,7 @@ flat out vec3 vColour;
 out vec2 vDelta;
 flat out float vReach;
 flat out float vStrength;
-""" + SCENE3D_SPHERES_GLSL + """
+""" + SCENE3D_SPHERES_VERTEX_GLSL + """
 void main() {
     vec2 corner = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1)) * 2.0 - 1.0;
     int which = gl_InstanceID & 1;

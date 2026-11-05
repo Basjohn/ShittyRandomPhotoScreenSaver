@@ -118,6 +118,9 @@ bool sceneSphereRay(vec3 ray, vec3 centre, float radius, out float tNear, out fl
     tFar = b + h;
     return tFar > 0.0;
 }
+#ifndef SCENE3D_NO_DERIVATIVES
+// Fragment stage only: fwidth is a derivative. Strict GLSL compilers (Mesa) reject it even unused in a vertex
+// shader, so vertex stages include SCENE3D_SPHERES_VERTEX_GLSL, which compiles this overload out.
 float sceneSphereCoverage(vec3 ray, vec3 centre, float radius, float blur) {
     // The ray's distance from the centre, against the radius: one pixel of antialiasing, or the blur's width.
     float along = dot(centre, ray);
@@ -128,6 +131,7 @@ float sceneSphereCoverage(vec3 ray, vec3 centre, float radius, float blur) {
     float width = max(derivative, max(blur, 0.0) * 2.0);
     return clamp((radius + max(blur, 0.0) - miss) / max(width, 1e-6) + 0.5 * step(blur, 0.0), 0.0, 1.0);
 }
+#endif
 // The same coverage with the pixel's width known (``pixelAngle``: view units per pixel at unit distance) instead of
 // read from fwidth. On a sphere a few pixels across the 2x2 neighbours straddle its centre and edge and fwidth comes
 // back far too small: the edge turned hard and the sphere's total light jumped 20% as it moved by sub-pixels.
@@ -287,5 +291,8 @@ def scene3d_cluster_distance(p: Vec3, spheres, blend: float) -> float:
     return d
 
 
-__all__ = ["SCENE3D_SPHERES_GLSL", "scene3d_cluster_distance", "scene3d_smooth_min", "scene3d_sphere_corner",
+# The same declarations for vertex stages: without the fragment-only fwidth coverage overload.
+SCENE3D_SPHERES_VERTEX_GLSL = "#define SCENE3D_NO_DERIVATIVES\n" + SCENE3D_SPHERES_GLSL
+
+__all__ = ["SCENE3D_SPHERES_GLSL", "SCENE3D_SPHERES_VERTEX_GLSL", "scene3d_cluster_distance", "scene3d_smooth_min", "scene3d_sphere_corner",
            "scene3d_sphere_facing_ray", "scene3d_sphere_ray"]

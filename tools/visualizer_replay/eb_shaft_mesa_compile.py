@@ -83,11 +83,6 @@ print('OFFSCREEN_SPECK_GL46_LINK_PASS; not native rendering or GPU timing')
 bead_program=glCreateProgram()
 for shader_type,source in [(0x8B31,mod.BEAD_VERTEX),
                            (0x8B30,'#version 460 core\nout vec4 colour;\nvoid main(){colour=vec4(0.0);}')]:
-    if shader_type == 0x8B31:
-        # The shared sphere GLSL embeds sceneSphereCoverage(), fragment-only
-        # fwidth code unused by the vertex stage. Mesa eagerly rejects the
-        # unreachable definition, while the production binary is untouched.
-        source=source.replace('float derivative = fwidth(miss);', 'float derivative = 0.0;')
     shader=glCreateShader(shader_type)
     b=source.encode();p=C.c_char_p(b)
     glShaderSource(shader,1,C.byref(p),None);glCompileShader(shader)
