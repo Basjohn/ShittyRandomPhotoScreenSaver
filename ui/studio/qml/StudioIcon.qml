@@ -45,6 +45,8 @@ Item {
         "flow": "M3 12 L19 12 M14 7 L19 12 L14 17",
         "colour": "M12 3 A9 9 0 1 0 12.01 3 M12 3 L12 21",
         "material": "M4 6 L20 6 L20 18 L4 18 Z M4 6 L20 18",
+        "copy": "M8 8 L20 8 L20 20 L8 20 Z M4 16 L4 4 L16 4",
+        "edit": "M4 20 L4 16 L15 5 L19 9 L8 20 Z M13 7 L17 11",
         "chevron-down": "M6 9 L12 15 L18 9",
         "chevron-right": "M9 6 L15 12 L9 18",
         "close": "M6 6 L18 18 M18 6 L6 18",

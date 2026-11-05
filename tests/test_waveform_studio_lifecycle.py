@@ -180,7 +180,8 @@ def test_open_hides_only_after_first_frame_edits_save_once_and_close_restores_sa
     assert surface.retired and controller.transport.stopped
     assert CountingRenderer.released == CountingRenderer.created
     # Settings was refreshed from the new canonical state, not stale widgets.
-    assert getattr(tab, f"{MODE}_ribbons").value()[1]["height"] == pytest.approx(1.3)
+    from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings
+    assert collect_spec_mode_settings(tab, MODE)[f"{MODE}_ribbons"][1]["height"] == pytest.approx(1.3)
     # No hidden work after close: frame callbacks and pumps do nothing.
     controller.on_frame()
     surface.pump(3)
@@ -602,3 +603,168 @@ def test_switch_rows_are_checkboxes_that_commit(qt_app, dialog_tab, no_gl_checks
     controller.bridge.commitValue(prop.id, 0, not before)
     assert controller.session.get(prop.path) is (not before)
     controller.close()
+
+
+# ------------------------------------------------------------------ every exit path restores Settings
+def _assert_settings_restored(controller, dialog):
+    """Settings is back exactly once, usable, and the Studio is fully gone (no in-between state)."""
+    from ui.studio.controller import StudioController
+    presence = controller.presence
+    assert not presence.concealed, "Settings is still concealed"
+    assert presence.reveal_count == 1, f"revealed {presence.reveal_count} times"
+    assert presence.widget is dialog and dialog.isEnabled()
+    assert controller.state == "closed" and StudioController.active() is None
+    assert controller.surface is None and controller.transport.stopped
+
+
+def _open_presented(tab, **kwargs):
+    from ui.studio.settings_link import open_mode_studio
+    surfaces = []
+    controller = open_mode_studio(tab, MODE, adapter=kwargs.pop("adapter", LightAdapter()),
+                                  surface_factory=_surfaces(surfaces), **kwargs)
+    surfaces[0].pump()
+    assert controller.state == "presented" and controller.presence.concealed
+    return controller, surfaces[0]
+
+
+def _press_escape(surface):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeyEvent
+    from PySide6.QtCore import QEvent, QCoreApplication
+    root = surface.host.root
+    root.forceActiveFocus()
+    for kind in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
+        QCoreApplication.sendEvent(surface.window, QKeyEvent(kind, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier))
+    QCoreApplication.processEvents()        # the shell defers the close out of its key handler
+
+
+@pytest.mark.parametrize("path", ["close_button", "escape", "window_x", "window_lost", "app_quit"])
+def test_every_exit_path_restores_settings(qt_app, dialog_tab, no_gl_checks, path):
+    dialog, tab = dialog_tab()
+    controller, surface = _open_presented(tab)
+    if path == "close_button":
+        controller.bridge.requestClose()
+    elif path == "escape":
+        _press_escape(surface)
+    elif path == "window_x":
+        surface.closeRequested.emit()            # the window's close event (X, Alt+F4) emits this
+    elif path == "window_lost":
+        surface.lost.emit()
+    elif path == "app_quit":
+        qt_app.aboutToQuit.emit()                # the saver/engine retiring the application
+    _assert_settings_restored(controller, dialog)
+
+
+@pytest.mark.parametrize("failing", ["evaluator", "surface", "adapter", "jobs", "gesture", "refresh"])
+def test_teardown_failures_never_leave_settings_concealed(qt_app, dialog_tab, no_gl_checks, monkeypatch, failing):
+    dialog, tab = dialog_tab()
+    controller, surface = _open_presented(tab)
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError(f"{failing} exploded")
+    if failing == "evaluator":
+        monkeypatch.setattr(controller.evaluator, "release", boom)
+    elif failing == "surface":
+        monkeypatch.setattr(surface, "retire", boom)      # e.g. a failed or slow renderer release
+    elif failing == "adapter":
+        monkeypatch.setattr(controller.adapter, "release", boom)
+    elif failing == "jobs":
+        class Job:
+            def cancel(self):
+                raise RuntimeError("clip job cancel exploded")
+        controller._clip_jobs["clip:x"] = Job()
+    elif failing == "gesture":
+        monkeypatch.setattr(controller.session, "cancel_gesture", boom)
+    elif failing == "refresh":
+        monkeypatch.setattr(controller.presence, "_refresh", boom)
+    controller.close()
+    _assert_settings_restored(controller, dialog)
+    if failing != "refresh":
+        assert controller.close_failures, "the failing step is reported"
+
+
+def test_settings_going_away_closes_the_studio(qt_app, dialog_tab, no_gl_checks):
+    """The saver retiring Settings (dialog destroyed) while the Studio is open ends the Studio too."""
+    from ui.studio.controller import StudioController
+    dialog, tab = dialog_tab()
+    controller, _surface = _open_presented(tab)
+    dialog.destroyed.emit()
+    assert controller.state == "closed" and StudioController.active() is None
+
+
+def test_restoration_check_detects_a_concealed_settings_negative_control(qt_app, dialog_tab, no_gl_checks):
+    """Negative control: a retirement that skips the reveal (the mode-switch path) is caught by the check."""
+    dialog, tab = dialog_tab()
+    controller, _surface = _open_presented(tab)
+    controller._retire(reveal=False)
+    controller.state = "closed"
+    with pytest.raises(AssertionError, match="still concealed"):
+        _assert_settings_restored(controller, dialog)
+    controller.presence.reveal()
+
+
+# ------------------------------------------------------------------ header preset dropdown
+def _click(surface, item):
+    from PySide6.QtCore import QCoreApplication, QEvent, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+    centre = item.mapToScene(QPointF(item.width() / 2, item.height() / 2))
+    for kind in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease):
+        QCoreApplication.sendEvent(surface.window, QMouseEvent(kind, centre, centre, Qt.MouseButton.LeftButton,
+                                                               Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+    QCoreApplication.processEvents()
+    surface.pump()
+
+
+def test_preset_dropdown_lists_presets_and_switches_only_on_an_explicit_pick(
+        qt_app, dialog_tab, settings_manager, monkeypatch, no_gl_checks):
+    from core.settings.visualizer_presets import get_custom_preset_index, get_preset_names
+    from ui.studio.settings_link import open_mode_studio
+    dialog, tab = dialog_tab()
+    surfaces = []
+    controller = open_mode_studio(tab, MODE, adapter=LightAdapter(), surface_factory=_surfaces(surfaces, size=(1400, 820)))
+    surface = surfaces[0]
+    surface.pump(2)
+    bridge = controller.bridge
+    names = get_preset_names(MODE)
+    custom = get_custom_preset_index(MODE)
+    presets = bridge.presets
+    assert [p["label"] for p in presets] == list(names)
+    assert [p["index"] for p in presets if p["current"]] == [custom]
+    # A Custom edit that must survive switching away and back.
+    path = f"{MODE}_ribbons[0].width"
+    bridge.commitValue(path, 0, 0.77)
+    saves = _count_saves(monkeypatch, settings_manager)
+
+    def walk(item):
+        for child in item.childItems():
+            yield child
+            yield from walk(child)
+    root = surface.host.root
+    pill = next(i for i in walk(root) if i.objectName() == "presetPill")
+    menu_items = lambda: [i for i in walk(surface.window.contentItem()) if i.objectName() == "presetItem"]
+    # Clicking the pill opens the list; it does not change the preset (the reported bug).
+    _click(surface, pill)
+    assert len(menu_items()) == len(names)
+    assert [p["index"] for p in bridge.presets if p["current"]] == [custom] and saves == []
+    # Escape closes it without a pick: nothing changes.
+    from PySide6.QtCore import QCoreApplication, QEvent, Qt
+    from PySide6.QtGui import QKeyEvent
+    for kind in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
+        QCoreApplication.sendEvent(surface.window, QKeyEvent(kind, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier))
+    QCoreApplication.processEvents()
+    surface.pump()
+    assert not menu_items() and controller.state == "presented"      # Esc closed the list, not the Studio
+    assert saves == [] and controller.store.preset_index() == custom
+    # An explicit pick switches through Settings' own preset authority and re-opens the session on it.
+    _click(surface, pill)
+    _click(surface, menu_items()[0])
+    assert controller.store.preset_index() == 0 and bridge.presetLabel == names[0]
+    assert _stored(settings_manager)[f"preset_{MODE}"] == 0
+    assert controller.session.values == controller.store.snapshot()
+    assert not controller.session.dirty and not bridge.canUndo
+    # Back to Custom: the Custom edit is restored, never lost.
+    bridge.selectPreset(custom)
+    assert controller.store.preset_index() == custom
+    assert controller.session.get((f"{MODE}_ribbons", 0, "width")) == pytest.approx(0.77)
+    controller.close()
+    assert not controller.presence.concealed

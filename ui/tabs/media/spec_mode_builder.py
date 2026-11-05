@@ -190,7 +190,62 @@ def build_spec_mode_ui(tab, parent_layout, mode_id: str) -> None:
     _bind_conditions(tab, spec, rows)
 
 
-def _add_studio_launcher(tab, layout, mode_id: str) -> None:
+def build_studio_owned_mode_ui(tab, parent_layout, mode_id: str, intro: str) -> None:
+    """A mode whose controls are all edited in its Studio: the preset row, one sentence and the Studio
+    launcher. No bucket or control widget is built; the body's values live in the same section-lazy
+    cache EB's closed buckets use (``_<prefix>_lazy_values`` with nothing ever built), so loading,
+    collecting, saving, preset switching and Custom snapshots run through the unchanged owners.
+
+    The technical (audio analysis) controls keep their canonical widgets as the value owners, in a
+    never-shown holder: Settings' technical load/collect and save stay the single authority."""
+    from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
+    spec = require_mode_settings(mode_id)
+    for bucket in spec.buckets:
+        tab.get_visualizer_bucket_state(mode_id, bucket.key)
+    prefix = spec.prefix
+    retire_spec_mode_conditions(tab, mode_id)
+    setattr(tab, f"_{prefix}_condition_connected", set())
+    scaffold = build_mode_scaffold(
+        tab,
+        parent_layout,
+        mode_key=mode_id,
+        settings_container_attr=f"_{prefix}_settings_container",
+        preset_slider_attr=get_visualizer_mode_descriptor(mode_id).preset_slider_attr,
+        normal_attr=f"_{prefix}_normal",
+        advanced_host_attr=f"_{prefix}_advanced_host",
+        advanced_toggle_attr=f"_{prefix}_adv_toggle",
+        advanced_helper_attr=f"_{prefix}_adv_helper",
+        advanced_attr=f"_{prefix}_advanced",
+    )
+    # The scaffold's Custom-only regions hold nothing to show; park them (and the technical value
+    # owners inside) in a hidden holder, so the preset slider's Custom toggling can never show them.
+    holder = QWidget(scaffold.container)
+    holder.setObjectName(f"{mode_id}_studio_owned_values")
+    holder.hide()
+    holder_layout = QVBoxLayout(holder)
+    for region in (scaffold.normal_widget, scaffold.advanced_host):
+        scaffold.layout.removeWidget(region)
+        holder_layout.addWidget(region)
+    values = {entry.key: entry.admit(tab._widget_default("spotify_visualizer", entry.key),
+                                    tab._widget_default("spotify_visualizer", entry.key))
+              for entry in spec.entries if entry.bucket}
+    setattr(tab, f"_{prefix}_lazy_values", values)
+    setattr(tab, f"_{prefix}_lazy_built", set())        # nothing is ever built: the Studio edits it all
+    setattr(tab, f"_{prefix}_rows", {})
+    if spec_for_mode(mode_id) is not None:
+        setattr(tab, f"_{prefix}_camera_refresh", None)
+    text = QLabel(intro)
+    text.setObjectName(f"{mode_id}_studio_intro")
+    text.setWordWrap(True)
+    row = QHBoxLayout()
+    row.setContentsMargins(0, 4, 0, 4)
+    row.setSpacing(14)
+    _add_studio_launcher(tab, row, mode_id, always=True)
+    row.addWidget(text, 1)
+    scaffold.layout.addLayout(row)
+
+
+def _add_studio_launcher(tab, layout, mode_id: str, *, always: bool = False) -> None:
     """Custom's entry to the mode's Studio (modes with a Studio adapter only).
 
     The preset's camera-save checkbox stays with the preset slider, unchanged."""
@@ -211,12 +266,15 @@ def _add_studio_launcher(tab, layout, mode_id: str) -> None:
         open_mode_studio(tab, mode_id)
 
     button.clicked.connect(open_studio)
+    setattr(tab, f"_{require_mode_settings(mode_id).prefix}_studio_button", button)
+    if always:
+        layout.addWidget(button)
+        return
     row = QHBoxLayout()
     row.setContentsMargins(0, 4, 0, 4)
     row.addWidget(button)
     row.addStretch()
     layout.addLayout(row)
-    setattr(tab, f"_{require_mode_settings(mode_id).prefix}_studio_button", button)
 
 
 def retire_spec_mode_conditions(tab, mode_id: str) -> None:
@@ -510,7 +568,7 @@ def load_spec_mode_settings(tab, mode_id: str, config, *, only_buckets: frozense
     Real preset loads must continue to update ALL built and unbuilt buckets."""
     spec = require_mode_settings(mode_id)
     config = config if isinstance(config, dict) else {}
-    lazy_built = getattr(tab, f"_{spec.prefix}_lazy_built", None) if mode_id == "extruded_bubble" else None
+    lazy_built = getattr(tab, f"_{spec.prefix}_lazy_built", None)     # section-lazy or Studio-owned body
     if only_buckets is not None and lazy_built is None:
         raise ValueError("Partial bucket hydration is reserved for the lazy EB owner")
     if lazy_built is not None and only_buckets is None:
@@ -582,7 +640,7 @@ def collect_spec_mode_settings(tab, mode_id: str) -> dict[str, Any]:
     """The body's values as persisted (sliders unscaled, colours as RGBA lists)."""
     spec: ModeSettings = require_mode_settings(mode_id)
     values: dict[str, Any] = {}
-    lazy_built = getattr(tab, f"_{spec.prefix}_lazy_built", None) if mode_id == "extruded_bubble" else None
+    lazy_built = getattr(tab, f"_{spec.prefix}_lazy_built", None)     # section-lazy or Studio-owned body
     cache = getattr(tab, f"_{spec.prefix}_lazy_values", {}) if lazy_built is not None else {}
     for entry in spec.entries:
         if not entry.bucket:

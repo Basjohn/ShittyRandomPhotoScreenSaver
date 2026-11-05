@@ -45,6 +45,9 @@ class VisualizerSettingsStore:
         for control in self._spec().controls:
             default = tab._widget_default("spotify_visualizer", control.key)
             config[control.key] = control.admit(read_control_value(control, config.get, default), default)
+        # The mode's technical (audio analysis) values, as Settings' technical controls hold them.
+        from ui.tabs.media.technical_controls import collect_per_mode_technical_controls
+        collect_per_mode_technical_controls(tab, config, current_mode=self._mode)
         return config
 
     def commit(self, values: Mapping[str, Any], changed: frozenset[str]) -> dict[str, Any]:
@@ -58,6 +61,8 @@ class VisualizerSettingsStore:
         tab._loading = True
         try:
             load_spec_mode_settings(tab, self._mode, config)   # blocked signals: loading saves nothing
+            from ui.tabs.media.technical_controls import load_per_mode_technical_controls
+            load_per_mode_technical_controls(tab, config, only_mode=self._mode)
         finally:
             tab._loading = previous
         camera = spec_for_mode(self._mode)
@@ -72,6 +77,25 @@ class VisualizerSettingsStore:
         tab._force_visualizer_preset_to_custom(self._mode)
         tab._save_settings_now()
         return self.snapshot()
+
+    def presets(self) -> list[str]:
+        """Every preset slot of the mode, curated first and Custom last (Settings' own order)."""
+        from core.settings.visualizer_presets import get_preset_names
+        return list(get_preset_names(self._mode))
+
+    def preset_index(self) -> int:
+        slider = self._tab._get_visualizer_preset_slider(self._mode)
+        return -1 if slider is None else int(slider.preset_index())
+
+    def select_preset(self, index: int) -> None:
+        """Switch exactly as Settings' preset slider does when the user moves it: the same handler applies
+        the curated values (snapshotting Custom first) or restores Custom, then saves."""
+        slider = self._tab._get_visualizer_preset_slider(self._mode)
+        if slider is None:
+            raise RuntimeError("This mode has no preset slider")
+        self._tab.flush_pending_changes()
+        slider._slider.setValue(int(index))       # the user path: valueChanged -> preset_changed -> tab handler
+        self._tab._save_settings_now()
 
     def preset_label(self) -> str:
         slider = self._tab._get_visualizer_preset_slider(self._mode)
@@ -158,6 +182,35 @@ class VisualizerSettingsStore:
         checkbox = getattr(slider, "_include_starting_view", None)
         return bool(checkbox is not None and checkbox.isChecked())
 
+    def include_view(self) -> bool | None:
+        """Settings' "Include current camera view when saving" choice (None: the mode has no camera view)."""
+        checkbox = getattr(self._tab._get_visualizer_preset_slider(self._mode), "_include_starting_view", None)
+        return None if checkbox is None else bool(checkbox.isChecked())
+
+    def set_include_view(self, include: bool) -> None:
+        checkbox = getattr(self._tab._get_visualizer_preset_slider(self._mode), "_include_starting_view", None)
+        if checkbox is not None:
+            checkbox.setChecked(bool(include))
+
+    def move_to_custom(self) -> None:
+        """Settings' Move To Custom: copy the current curated preset into Custom and switch to it."""
+        slider = self._tab._get_visualizer_preset_slider(self._mode)
+        if slider is not None and slider.preset_index() != slider.custom_index():
+            slider._move_to_custom()
+            self._tab._save_settings_now()
+
+    def preset_file_editable(self) -> bool:
+        """Settings' Edit Preset availability (a curated preset whose JSON exists on disk)."""
+        button = getattr(self._tab._get_visualizer_preset_slider(self._mode), "_edit_btn", None)
+        return bool(button is not None and button.isEnabled())
+
+    def edit_preset_file(self) -> None:
+        """Settings' Edit Preset: open the curated preset's JSON in the default editor."""
+        slider = self._tab._get_visualizer_preset_slider(self._mode)
+        action = getattr(slider, "_open_preset_json", None)
+        if callable(action):
+            action()
+
     def save_preset_as(self) -> None:
         slider = self._tab._get_visualizer_preset_slider(self._mode)
         action = getattr(slider, "_save_custom_preset_as", None)
@@ -227,6 +280,10 @@ def open_mode_studio(tab, mode_id: str, *, adapter=None, surface_factory=None, p
 
     def finished(*_args) -> None:
         unsubscribe()
+        try:
+            dialog.destroyed.disconnect(controller.close)
+        except (RuntimeError, TypeError, AttributeError):
+            pass
         if app is not None:
             try:
                 app.aboutToQuit.disconnect(controller.close)
@@ -247,6 +304,10 @@ def open_mode_studio(tab, mode_id: str, *, adapter=None, surface_factory=None, p
 
     controller.closed.connect(finished)
     controller.failed.connect(report)
+    try:
+        dialog.destroyed.connect(controller.close)
+    except (RuntimeError, TypeError, AttributeError):
+        pass
     tab._studio_controller = controller
     if app is not None:
         app.aboutToQuit.connect(controller.close)
