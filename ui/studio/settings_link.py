@@ -352,12 +352,12 @@ def open_mode_studio(tab, mode_id: str, *, adapter=None, surface_factory=None, p
     def finished(*_args) -> None:
         unsubscribe()
         try:
-            dialog.destroyed.disconnect(controller.close)
+            dialog.destroyed.disconnect(controller.close_for_settings_gone)
         except (RuntimeError, TypeError, AttributeError):
             pass
         if app is not None:
             try:
-                app.aboutToQuit.disconnect(controller.close)
+                app.aboutToQuit.disconnect(controller.close_for_quit)
             except (RuntimeError, TypeError):
                 pass
         if getattr(tab, "_studio_controller", None) is controller:
@@ -376,12 +376,12 @@ def open_mode_studio(tab, mode_id: str, *, adapter=None, surface_factory=None, p
     controller.closed.connect(finished)
     controller.failed.connect(report)
     try:
-        dialog.destroyed.connect(controller.close)
+        dialog.destroyed.connect(controller.close_for_settings_gone)
     except (RuntimeError, TypeError, AttributeError):
         pass
     tab._studio_controller = controller
     if app is not None:
-        app.aboutToQuit.connect(controller.close)
+        app.aboutToQuit.connect(controller.close_for_quit)
     controller.open()
     return controller
 

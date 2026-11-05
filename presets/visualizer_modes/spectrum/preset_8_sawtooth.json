@@ -1,8 +1,8 @@
 {
-  "description": "Chunky rounded bars in a slowly drifting pastel rainbow with soft white peak trails.",
+  "description": "Steel-blue bars outlined in ivory, climbing in two long ramps that each drop off a sharp edge.",
   "mode": "spectrum",
-  "name": "Preset 11 (Candy)",
-  "preset_index": 10,
+  "name": "Preset 8 (Sawtooth)",
+  "preset_index": 7,
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
@@ -11,20 +11,20 @@
         "spectrum_agc_strength": 0.15,
         "spectrum_audio_block_size": 128,
         "spectrum_bar_border_color": [
-          255,
-          255,
-          255,
+          236,
+          230,
+          214,
           255
         ],
-        "spectrum_bar_border_opacity": 0.6,
-        "spectrum_bar_count": 25,
+        "spectrum_bar_border_opacity": 1.0,
+        "spectrum_bar_count": 48,
         "spectrum_bar_fill_color": [
-          255,
-          170,
-          200,
+          80,
+          100,
+          126,
           240
         ],
-        "spectrum_border_radius": 8.0,
+        "spectrum_border_radius": 0.0,
         "spectrum_drop_speed": 0.72,
         "spectrum_dynamic_floor": true,
         "spectrum_dynamic_range_enabled": true,
@@ -35,7 +35,7 @@
           255,
           230
         ],
-        "spectrum_ghost_alpha": 0.4,
+        "spectrum_ghost_alpha": 0.35,
         "spectrum_ghost_color": [
           255,
           190,
@@ -60,7 +60,7 @@
           235
         ],
         "spectrum_glow_enabled": false,
-        "spectrum_glow_intensity": 0.2,
+        "spectrum_glow_intensity": 0.08,
         "spectrum_input_gain": 1.1,
         "spectrum_kick_lane_gain": 1.75,
         "spectrum_lane_strengths_linear": {
@@ -78,7 +78,7 @@
         },
         "spectrum_lane_transient_mix": 0.94,
         "spectrum_manual_floor": 0.42,
-        "spectrum_mirrored": true,
+        "spectrum_mirrored": false,
         "spectrum_notch_positions_linear": [
           [
             0.0,
@@ -138,29 +138,37 @@
         "spectrum_peak_caps": false,
         "spectrum_profile_floor": 0.2,
         "spectrum_rainbow_border": false,
-        "spectrum_rainbow_enabled": true,
-        "spectrum_rainbow_fill": true,
+        "spectrum_rainbow_enabled": false,
+        "spectrum_rainbow_fill": false,
         "spectrum_rainbow_ghost": false,
-        "spectrum_rainbow_speed": 0.2,
+        "spectrum_rainbow_speed": 0.6,
         "spectrum_render_mode": "bars",
         "spectrum_sensitivity": 1.15,
         "spectrum_shape_nodes": [
           [
             0.0,
-            0.8
+            0.35
           ],
           [
-            0.5,
+            0.38,
             1.0
           ],
           [
-            1.0,
-            0.5
+            0.43,
+            0.28
+          ],
+          [
+            0.8,
+            0.85
+          ],
+          [
+            0.85,
+            0.25
           ]
         ],
         "spectrum_transient_clamp": 1.85,
         "spectrum_transient_pulse_gain": 1.0,
-        "spectrum_unique_colors": true,
+        "spectrum_unique_colors": false,
         "spectrum_visual_smoothing": 0.7,
         "spectrum_visual_smoothing_enabled": true,
         "spectrum_wave_amplitude": 0.15

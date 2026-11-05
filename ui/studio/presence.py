@@ -87,6 +87,7 @@ class WindowPresence:
             widget.setWindowOpacity(0.0)
             widget.move(_OFF_SCREEN, _OFF_SCREEN)
         self.concealed = True
+        logger.info("[STUDIO] Settings concealed (native=%s)", self._natively_hidden)
 
     def reveal(self) -> None:
         """Show the same window again, refreshed from canonical state, at its prior place and view.

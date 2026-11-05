@@ -1,8 +1,8 @@
 {
-  "description": "Dark indigo bars with hot magenta rims, a thin cyan inner line and magenta peak trails, in a twin-peak skyline.",
+  "description": "Sage bars with cream edges, rolling as five even ripples from the centre out to the edges.",
   "mode": "spectrum",
-  "name": "Preset 8 (Synthwave)",
-  "preset_index": 7,
+  "name": "Preset 7 (Ripple)",
+  "preset_index": 6,
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
@@ -11,20 +11,20 @@
         "spectrum_agc_strength": 0.15,
         "spectrum_audio_block_size": 128,
         "spectrum_bar_border_color": [
-          255,
-          50,
-          190,
+          240,
+          232,
+          206,
           255
         ],
         "spectrum_bar_border_opacity": 1.0,
-        "spectrum_bar_count": 29,
+        "spectrum_bar_count": 41,
         "spectrum_bar_fill_color": [
-          28,
-          6,
-          52,
-          235
+          118,
+          146,
+          116,
+          240
         ],
-        "spectrum_border_radius": 3.0,
+        "spectrum_border_radius": 4.0,
         "spectrum_drop_speed": 0.72,
         "spectrum_dynamic_floor": true,
         "spectrum_dynamic_range_enabled": true,
@@ -35,7 +35,7 @@
           255,
           230
         ],
-        "spectrum_ghost_alpha": 0.6,
+        "spectrum_ghost_alpha": 0.35,
         "spectrum_ghost_color": [
           255,
           190,
@@ -54,13 +54,13 @@
         "spectrum_ghosting_enabled": true,
         "spectrum_gloss": 0.0,
         "spectrum_glow_color": [
-          0,
-          240,
           255,
-          255
+          255,
+          255,
+          235
         ],
-        "spectrum_glow_enabled": true,
-        "spectrum_glow_intensity": 0.1,
+        "spectrum_glow_enabled": false,
+        "spectrum_glow_intensity": 0.08,
         "spectrum_input_gain": 1.1,
         "spectrum_kick_lane_gain": 1.75,
         "spectrum_lane_strengths_linear": {
@@ -147,19 +147,23 @@
         "spectrum_shape_nodes": [
           [
             0.0,
-            0.62
+            0.95
           ],
           [
-            0.42,
-            1.0
+            0.25,
+            0.3
+          ],
+          [
+            0.5,
+            0.9
           ],
           [
             0.75,
-            0.82
+            0.3
           ],
           [
             1.0,
-            0.3
+            0.75
           ]
         ],
         "spectrum_transient_clamp": 1.85,
