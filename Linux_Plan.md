@@ -35,12 +35,13 @@ Linux data roots: settings/data/cache `~/.config/SRPSS`, curated presets/themes/
 | Monitor hotplug (RandR add/remove) | generations reveal (churn harness) |
 | Media widget (now playing + transport + seek + artwork) | MPRIS controller (jeepney) |
 | Visualizer audio | default-sink monitor via `parec` sidecar |
-| System volume / mute / OSD, app volume slider | `pactl` probe + sink-input controller |
+| System volume / mute / OSD, app volume slider | `pactl` probe, sink-input controller and live listener |
 | Links, Gmail setup, Open App Data | direct `QDesktopServices`; Gmail desktop check passes |
 | Held-left orbit | Qt mouse grab (no cursor confinement) |
 | Credentials | IMAP password `plain::` 0600; OAuth tokens and Steam not persisted (see §2) |
 | `/p` preview, `.scr`, Reddit secure-desktop helper, Inno installer | Windows-only by nature |
-| Product build | Nuitka standalone + `install.sh` + tarball; GitHub Actions runner |
+| Product build | Nuitka standalone (≈480 MB folder, ≈190 MB tarball) + `install.sh`; local build + smoke pass; GitHub Actions runner |
+| Background texture adoption (PR-04), Qt image-pool retention (R-97) | bound on Linux (Itanium exports) |
 
 ## 2. Ordered checklist
 
@@ -57,23 +58,18 @@ Linux data roots: settings/data/cache `~/.config/SRPSS`, curated presets/themes/
 - [ ] **Operator decision: Linux credential encryption.** Secret Service via `secretstorage` (needs a keyring
   daemon; GNOME/KDE have one) would let Gmail OAuth tokens and Steam persist like DPAPI. Until decided,
   Gmail OAuth re-authorises each session and Steam stays unavailable on Linux.
-- [ ] Runtime warnings still emitted on Linux: `[QUICK] native texture adoption is bound for Windows only`
-  (slower background upload, loud); native thread-pool retention (R-97 mitigation) silently skipped
-  (`core/native_threads.py`): give it a `[PLATFORM]` line or a Linux equivalent.
-- [ ] App-volume external changes (another mixer moves Spotify's volume) reach the slider at the next source
-  sync only; a sink-input `pactl subscribe` listener would mirror `SessionVolumeListener`.
+- [x] Texture adoption and image-pool retention bound on Linux; app-volume live listener.
 - [ ] Optional: KWin/picom blur-behind for Glass on desktops that offer it (refines the opaque underlay).
 
 ### Phase 3: test suite on Linux
 
-- [ ] Fix the collection error (`tests/test_visualizer_live_check.py` uses `ctypes.windll` at import).
-- [ ] `tests/test_s_hotkey_workflow.py` aborts the process on Linux (real `QCoreApplication.exit(1)`); run it
-  isolated and find the destruction-barrier cause.
+- [x] Collection error fixed (live-check harness); `test_s_hotkey_workflow.py` abort was a stale stub on every OS (fixed).
 - [ ] Run the chunked suite through `tools/linux_pytest.py`; classify every failure (Linux bug / Windows-contract
   test needing `windows_platform` or a skip / pre-existing). Known Windows-contract groups so far:
   `test_visualizer_plain_orbit.py` native-capture stubs (5), `test_account_setup_controllers.py` Steam DPAPI
-  save (2), `test_settings_polish_round.py` bucket-arrow font metrics (2), `test_widget_theme_no_material_contract`
-  and `test_settings_theme_lifetime_contract` (1 each).
+  save (2), `test_widget_theme_no_material_contract` and `test_settings_theme_lifetime_contract` (1 each).
+  Software-GL pixel bounds: `test_waveform_floor_fidelity.py` (3) also fail on pure `main` under llvmpipe;
+  judge them on a real GPU, do not loosen them.
 
 ### Phase 4: Linux backends
 
@@ -81,15 +77,15 @@ Linux data roots: settings/data/cache `~/.config/SRPSS`, curated presets/themes/
 
 ### Phase 5: build and desktop integration
 
-- [~] `tools/linux_build.py` / `scripts/linux/build.sh` product + `install.sh`; `tools/linux_smoke_dist.py`.
-  Awaiting: first complete local build + smoke, then the first GitHub Actions run.
+- [x] `tools/linux_build.py` / `scripts/linux/build.sh` product + `install.sh`; local build and `tools/linux_smoke_dist.py` pass.
+- [~] `.github/workflows/linux-build.yml`: awaiting its first GitHub run (operator: `-Mode Tag` or after merge).
 - [~] `scripts/linux/build_from_windows.ps1` (parses; guards verified). Awaiting a first operator run.
 - [ ] Optional idle activation (xscreensaver/`xss-lock` hook) so `/s` starts as a real screensaver.
 
 ### Phase 6: keep up with the default branch
 
-- [ ] Rebase onto the latest default branch; port new Windows-only couplings (import sweep, headless run,
-  focused tests).
+- [ ] Each time the default branch moves: merge it in, then import sweep, headless run and its changed tests
+  on Linux; port new Windows-only couplings.
 
 ## 3. Awaiting validation (needs a real Linux machine)
 
@@ -128,7 +124,8 @@ unchanged; media widget, app volume slider, mute/OSD and visualizer audio unchan
 ## 6. Merge / rebase
 
 - Linux work lands on its branch in narrow `linux:` commits; Windows work continues on the default branch.
-- Rebase often: `git fetch origin main && git rebase origin/main`. Conflicts concentrate in docs
+- Bring the default branch in with a merge (`git fetch origin main && git merge origin/main`); the branch is
+  shared through pushes, so it is never rewritten or force-pushed. Conflicts concentrate in docs
   (`Current_Plan.md`, `Index.md`, `Spec.md`), `requirements.txt`, `tests/conftest.py` and the few shared
   owners listed in §4; the Linux side of each is small (a pointer line, markers, one guarded branch). Keep the
   operator's content and re-apply the Linux line.
