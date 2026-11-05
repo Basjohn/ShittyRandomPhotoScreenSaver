@@ -43,14 +43,15 @@ lead as reviewer/orchestrator.
 
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
 
-- [ ] **Displays off -> presentation pauses entirely, resumes clean:** no code listens for the console display power
-  state (`GUID_CONSOLE_DISPLAY_STATE` / `WM_POWERBROADCAST`); a runtime pauses only when its window hides or loses its
-  QScreen binding (`rendering/quick/runtime.py`), and the Visualizer's logical thread keeps its own clock. So a
-  power-plan display-off (or an HDMI display that stays enumerated) keeps the logical tick, render thread and
-  transitions running all night (operator: heavier presets cost real GPU/CPU while nothing is shown). One event-driven
-  power authority (no polling) pauses Visualizer logic + render and transitions/rotation while off, and resumes with no
-  integrated time gap and no first-frame poison (BTF). Linux: a basic path (e.g. logind/DPMS where available) or an
-  explicit inert one. Measured off-state cost before/after; physical overnight check by the operator.
+- [~] **Displays off -> presentation pauses entirely, resumes clean (built 5 Nov; awaiting the operator's physical
+  overnight check):** `core.display_power` pauses rotation, transitions, the Visualizer (parked, capture released) and
+  the clock while the console displays are off (`Docs/Architecture/Compositor_Architecture.md` → Display power).
+  Injected through the real window procedure, a heavy preset went from ~142% of a core / ~10% GPU / 51 swaps/s to ~4% /
+  ~0% / ~0.6 swaps/s while off, and resumed with no publish or swap hole (`.artifacts/evidence/display_power/`). Still
+  needs real hardware: leave a heavy preset (Waveform Preset 1 or Neon Lake) overnight with both displays turned off
+  by the power plan, then check Task Manager CPU/GPU for the saver while dark, that wake input reaches the saver, and
+  the first seconds after wake (no stale frame, jump or hitch; run with `--frame-trace --usage`). Per-monitor power is
+  not observable on Windows: an HDMI panel switched off at its own button that stays enumerated keeps running.
 - [ ] **Retire Custom's "Edit Preset" Notepad machinery** (button + pop-up) now that the Studios exist, with Studio
   parity proven for each mode that still offered it; and show **Open Studio** on every preset, not only Custom (it
   opens the Studio on that preset).

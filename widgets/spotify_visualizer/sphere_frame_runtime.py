@@ -487,6 +487,12 @@ class SphereFrameRuntime(RetirableFrameRuntime):
             False,
         )
 
+    @retirement_fenced
+    def rebase_clock(self) -> None:
+        """Display power resumed after a park: the next step integrates no parked gap (state stays warm)."""
+        if self._activation_identity is not None:
+            self._last_ts = None
+
     def reset(self) -> None:
         self.__init__()
 
@@ -952,7 +958,7 @@ class SphereFrameRuntime(RetirableFrameRuntime):
                 self._packet_sources_since_diag[key] = 0
             dt = 0.0
         else:
-            dt = max(0.0, min(_SPHERE_MAX_STEP_S, now - self._last_ts))
+            dt = 0.0 if self._last_ts is None else max(0.0, min(_SPHERE_MAX_STEP_S, now - self._last_ts))
             self._last_ts = now
 
         # Existing detached cohorts are presentation state and finish naturally
