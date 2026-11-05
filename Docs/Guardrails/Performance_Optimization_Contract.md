@@ -43,7 +43,7 @@ Before any performance patch, confirm every relevant box remains binding:
 - [ ] Newest-state semantics remain intact; do not add FIFO/catch-up queues or deliberately present stale history.
 - [ ] Source/snapshot age remains healthy; a prettier FPS/GC/CPU number with materially older visible state is not an optimization.
 - [ ] Bubble preserves R-69: no global viewport-dependent compression of head/radius response, motion, Ghost/history displacement or other authored reaction.
-- [ ] Spectrum/Oscilloscope/Sine/DevCurve geometry adaptation may reframe/reflow/smooth presentation but may not quietly weaken musical response.
+- [ ] Spectrum/Oscilloscope/DevCurve geometry adaptation may reframe/reflow/smooth presentation but may not quietly weaken musical response.
 - [ ] Bubble temporal fidelity/integration remains intact; do not skip authored logical steps to reduce work.
 - [ ] If Bubble itself is touched, idle traces are not acceptance: require an active-music physical lane proving source freshness, attack/settle, elasticity/breathing, loud-passage expansion, ghost/tail motion and operator feel.
 - [ ] The persistent `visualizer.audio_analysis` lane remains one-in-flight + newest-pending, with no per-frame generic Future/task fallback.
@@ -307,7 +307,7 @@ Stable CPU/GPU/cache/thread/handle numbers and small distributed driver/GL costs
 - Production must never import/execute operator analysis tools (`R-72`).
 - Tool output cannot authorize any change forbidden by the reactivity/freshness/latency-tail checklist above.
 
-The operator-authorized Bubble equal-area response correction is documented in `Docs/Reference/Visualizer_Reference.md` and protected by BTF/R-69. It supersedes height-only product mapping; it does not authorize viewport-dependent performance caps, DSP attenuation, temporal smoothing changes or compression of already projected Ghost/history.
+The operator-authorized Bubble equal-area response correction is documented in `Docs/Reference/Visualizer_Reference.md` and protected by BTF/R-69; since R-170 it sizes the canonical card's radius unit, which every card shape uses (times the capacity zoom `world_scale`). It does not authorize viewport-dependent performance caps, aspect speed/count modifiers, DSP attenuation, temporal smoothing changes or compression of already projected Ghost/history.
 
 ### Refresh families versus whole-display image transition admission (R161–R163)
 

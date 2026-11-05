@@ -1,5 +1,7 @@
 # Waveform Ribbon: rejected mist and replacement directions
 
+> **Orthographic removed 5 Nov 2026 (operator):** Perspective is the only camera projection in the whole project. Orthographic, its Projection control, raster-slab fit and parallel-ray paths are deleted; any Orthographic passage below is historical and superseded.
+
 Status: **the operator rejected the entire current mist treatment** on 2 November 2026. Do not treat smoothing its fringe or retaining its walls and band as the next solution. The requested direction is *Silent Hill at night*: fog fills the scene and the actual moving waveform displaces it, with reactive light and wake. The subsequent explicit replacement target is `references/Mist Goal.png`; all older fog/mist mechanisms, including
 the separate analytic floor haze, are superseded. The options below explain the investigation; they do not override
 the new image or constitute native acceptance.

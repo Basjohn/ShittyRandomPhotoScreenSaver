@@ -1,6 +1,6 @@
 """Source-only guardrails for the 2026-09-02 cross-mode viewport audit.
 
-This does not declare Oscilloscope/Sine/DevCurve physically accepted at every
+This does not declare Oscilloscope/DevCurve physically accepted at every
 extreme aspect. It pins the architecture we audited so a generic larger-axis
 compensator cannot quietly spread from Spectrum into every mode.
 """
@@ -27,26 +27,20 @@ def test_no_generic_larger_axis_temporal_compensator_in_visualizer_runtime() -> 
 
 
 def test_line_mode_pixel_thickness_is_uniform_scale_owned() -> None:
-    """The live renderers must use presentation scale, not authored viewport dimensions.
+    """The live renderer must use presentation scale, not authored viewport dimensions.
 
-    The two modes use different beam architectures: Sine has a layout width,
-    Oscilloscope takes a beam-width setting into a shader. Neither should
-    reintroduce an arbitrary larger-axis compensation or viewport-size pin.
+    Oscilloscope takes a beam-width setting into a shader; it must not reintroduce
+    an arbitrary larger-axis compensation or viewport-size pin.
     """
     osc = _read("rendering/quick/visualizer/implementations/oscilloscope.py")
-    sine = _read("rendering/quick/visualizer/implementations/sine_wave.py")
     assert "presentation.uniform_visual_scale" in osc
     assert 'parameter(parameters, "osc_beam_width")' in osc
     assert 'gl.glUniform1f(beam_uniforms["uCore"], core)' in osc
-    assert "visual_scale=presentation.uniform_visual_scale" in sine
-    assert "line_width=" in sine and "glow_sigma=" in sine
-    assert "* scale" in sine
 
 
 def test_line_mode_authored_frame_runtimes_do_not_read_viewport_geometry() -> None:
     for relative in (
         "widgets/spotify_visualizer/oscilloscope_frame_runtime.py",
-        "widgets/spotify_visualizer/sine_frame_runtime.py",
     ):
         source = _read(relative)
         assert "viewport_extent" not in source

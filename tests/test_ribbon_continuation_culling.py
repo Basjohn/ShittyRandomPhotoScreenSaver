@@ -21,15 +21,14 @@ def full_packet():
 
 
 @pytest.mark.qt
-@pytest.mark.parametrize('kind,aspect,turn,position', (
-    ('Orthographic',1.5,0.,(0.,0.,0.)),
-    ('Perspective',.3,0.,(0.,0.,0.)),
-    ('Orthographic',12.,.25,(1.,0.,1.)),
-    ('Perspective',1.5,-.5,(1.,0.,0.)),
-    ('Orthographic',1.5,-.5,(1.,0.,0.)),
-    ('Perspective',1.5,.5,(-1.,0.,0.)),
+@pytest.mark.parametrize('aspect,turn,position', (
+    (1.5,0.,(0.,0.,0.)),
+    (.3,0.,(0.,0.,0.)),
+    (12.,.25,(1.,0.,1.)),
+    (1.5,-.5,(1.,0.,0.)),
+    (1.5,.5,(-1.,0.,0.)),
 ))
-def test_culled_draws_keep_exact_old_pixels_and_vertex_ids(qt_app,monkeypatch,kind,aspect,turn,position):
+def test_culled_draws_keep_exact_old_pixels_and_vertex_ids(qt_app,monkeypatch,aspect,turn,position):
     from rendering.gl_error_policy import disable_per_call_gl_error_checking
     disable_per_call_gl_error_checking()
     from OpenGL import GL as gl
@@ -37,7 +36,7 @@ def test_culled_draws_keep_exact_old_pixels_and_vertex_ids(qt_app,monkeypatch,ki
     from rendering.quick.scene3d import ribbon as owner
     packet=full_packet();target=OffscreenRenderTarget(192,144);primitive=owner.RibbonPrimitive()
     material=RibbonMaterial(cross_curve=.7)
-    view,projection,_,_=physical_view(camera(camera_projection=kind,turn=turn,camera_position=position),aspect)
+    view,projection,_,_=physical_view(camera(turn=turn,camera_position=position),aspect)
     reflected=mirror_view(view,0.)
     transverse=continuation_bounds(packet,np.zeros(3),material.cross_curve)
     a,b=(frustum_axial_span(projection@v,transverse) for v in (view,reflected))
@@ -68,7 +67,7 @@ def test_culled_draws_keep_exact_old_pixels_and_vertex_ids(qt_app,monkeypatch,ki
             assert new_vertices<=old_vertices
             assert new_vertices<old_vertices or aspect==12.
             # Report actual submitted work, not an estimated replacement population.
-            print(f'{kind} aspect={aspect} turn={turn} mirror={v is reflected}: '
+            print(f'aspect={aspect} turn={turn} mirror={v is reflected}: '
                   f'{old_vertices}->{new_vertices} vertices; {baseline}->{culled}')
     finally:
         primitive.release();target.close()

@@ -120,7 +120,6 @@ def test_a_direct_gesture_moves_and_resizes_live_and_commits_once_through_edits_
     from widgets.spotify_visualizer.quick_display_visualizer_owner import QuickDisplayVisualizerOwner
 
     monkeypatch.setattr(tick_pipeline, "consume_engine_bars", lambda _o, _n: (True, True))
-    monkeypatch.setattr(tick_pipeline, "process_heartbeat", lambda _o, _n: None)
     monkeypatch.setattr(tick_pipeline, "record_tick_perf", lambda _o, _n: None)
     suppressions = []
     monkeypatch.setattr(runtime_input, "suppress_runtime_pointer_input",

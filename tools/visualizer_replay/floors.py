@@ -47,7 +47,7 @@ def calibrate(results):
             for key in keys:
                 if metrics[key] > 1e-7:
                     minimums[key] = metrics[key] * 0.5
-            # A sustained fixture may settle immediately (treble/Sine preset 0
+            # A sustained fixture may settle immediately (a treble preset
             # is constant). Pulsed fixtures separately guard mode output motion.
             if fixture.startswith("beats_") and not minimums.get("output_flux", 0):
                 raise ValueError(f"no measurable mode response for {case}")

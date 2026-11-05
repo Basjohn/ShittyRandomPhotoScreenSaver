@@ -62,7 +62,6 @@ _DEPRECATED_VISUALIZER_EXPORT_SUFFIXES = ("energy_boost", "use_raw_energy")
 _VISUALIZER_ADVANCED_ROOT_ATTRS = {
     "spectrum": ("_spectrum_advanced",),
     "oscilloscope": ("_osc_advanced",),
-    "sine_wave": ("_sine_wave_advanced", "_sine_wave_advanced_host"),
     "bubble": ("_bubble_advanced",),
     "devcurve": ("_devcurve_normal", "_devcurve_advanced", "_devcurve_advanced_host"),
     "sphere": ("_sphere_normal", "_sphere_advanced", "_sphere_advanced_host"),

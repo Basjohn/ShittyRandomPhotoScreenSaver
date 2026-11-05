@@ -376,19 +376,14 @@ No separate rendered eye, camera-following actors, count multiplication or artif
 boundary. Legal canonical home remains unchanged. Domain containment does not establish visual density or idle readability.
 Preset starting-view metadata owns pose; independently admitted Camera Field of View remains an authorable mode
 control in the normal preset snapshot. A reset's canonical lens policy does not prohibit that authored value.
-EB Camera lists **Perspective** (the existing/default projection) and **Orthographic** through the same typed
-mode settings and preset snapshot. Orthographic uses parallel rays with individual origins, retains fixed world
-identities and the admitted physical eye, and uses Scene Scale for magnification. Its reference span derives from
-the canonical lens at the camera's reference distance; the authored perspective FOV is retained while its row is
-hidden. Sphere size then stays constant with distance; lighting, fusion, depth, refraction and focus remain 3D.
-The main projection applies consistently to geometry, ray origins, footprints and optics; cubemap probes always
-remain perspective. Both choices use one shader source, with bounded lazy specialization of traced fragments to
-preserve existing Perspective arithmetic. No post-image warp, per-bubble roundness patch or separate camera cache.
-Orthographic is currently **disabled in EB's chooser**: its existing effects need a much later appearance-parity
-pass, deferred beyond the entire current backlog. Availability is typed authoring metadata; experimental stored
-values remain round-trippable through import/repair instead of being destroyed. The underlying projection is
-mathematically sound and should be the default for future 3D modes, with optional Perspective. Those modes must
-design ray origins, lighting and optics for parallel projection from the start; existing modes keep their defaults.
+**Perspective is the only camera projection** for every framed 3D mode (EB, Waveform, Neon Lake and future modes).
+Orthographic was removed outright on 5 Nov 2026 (operator: "you can kill it"): there is no Projection control, no
+per-mode `*_camera_projection` key and no parallel-ray code path. A saved or authored `Orthographic` value is
+forward-stripped on load as a retired key (`core/settings/visualizer_retired_modes.py`) and the scene renders through
+its own Perspective camera with every other authored camera value unchanged
+(`Docs/Architecture/Persisted_Input_Compatibility.md`). The Perspective camera applies consistently to geometry, ray
+origins, footprints and optics; cubemap probes are Perspective too. No post-image warp, per-bubble roundness patch or
+separate camera cache.
 
 EB lighting is subject to the physical-authority repair contract in `Docs/Reference/Extruded_Bubble/Lighting_Authority_Repair.md` (partially implemented, visually unaccepted): one directional Surface or positional Deep emitter governs medium light, core glow, bubble glints, world-space ray scattering and attenuation. Ray Source/End can author the illuminated region but not a contradictory second emitter. BEAM retains its accepted stylized footprint; SCENE scattering is bounded by the fixed physical tank. `Light Type` remains Surface/Deep. Independent `Lighting Coverage` BEAM/SCENE defaults to BEAM for existing presets; Beam Width defaults to1x and scales the BEAM light footprint. SCENE scattering uses the fixed tank, directional sunlight or actual Deep Light Source, ignoring the unused beam path/width. Motion `Emission Geometry` remains independent. No preset/Custom overwrite or automatic coverage migration is permitted. Physical lighting, broad-beam fidelity, native all-angle quality, SCENE grouping and surface retirement remain active visual acceptance work, not blanket spec compliance.
 
@@ -716,31 +711,26 @@ viewport_extent
 
 Viewport extent is world/layout playroom, not final-pixel X/Y stretch. Every registered mode must remain viewport-resize-capable through its descriptor policy and adapt its authored domain to wide/tall extents without anisotropic final-pixel stretch. Bubble's viewport bounds are spatial
 configuration to its logical side; changing them must preserve round geometry, motion/collision semantics and BTF and
-must not create another clock. Bubble position/trail coordinates normalize from that expanded world. Stream/drift deltas
-are renderer-content-relative: each nonbaseline movement axis projects once onto the corresponding expanded domain axis,
-and nonbaseline trail length/strength are solved in content coordinates before world storage. This preserves the same
-visible fraction-of-viewport motion at canonical, wide and tall extents rather than losing `1 / domain_axis`; canonical
-`1x1` takes the exact pre-projection path. Nonbaseline swirl tangent/radial geometry is likewise solved in content space and
-its birth offset projects once per axis, so viewport aspect does not distort the authored orbit. Authored render radius
-is projected through the equal-area canonical response height `sqrt(content_width * content_height / 1.5)`.
-This operator-authorized mapping replaces the rejected actual-height coupling, preserves the complete radius
-waveform across same-area shapes and grows naturally with visible area. Directional entry depth, refill-cluster spread,
-surface exit/drain grace, contraction retirement margin, overlap-retry allowance/jitter and pre-entry prediction distance
-are also renderer-content distances projected once per nonbaseline axis; otherwise lifecycle shape changes with viewport
-size. None of these spatial projections changes random-draw order or adds a tick. Radius is not divided by viewport-domain
-height. Collision/spawn policy remains in canonical normalized content coordinates and preserves exact canonical
-behavior; it is authored separation rather than literal pixel packing. Any contact change needs a dedicated
-rendered-overlap and event test under BTF. Bubble viewport presentation uses one **geometry-only cached gradient profile**:
-resolve it when committed viewport geometry changes, cache it in the logical simulation and retained Quick layout, and do
-not reclassify area/aspect every audio/render tick after Edit settles. The main-head outline uses a bounded physical-pixel
-curve (about **1.6 px total canonical floor**, earlier gentle area/shape firmness, about **4.7 px total ceiling**) rather than
-the retired late `bonus * effect_scale` acceleration or the retired -1px complete-outline subtraction. Extreme width eases
-from no-op at roughly **2.5:1** physical aspect to at most +1 authored big bubble, +3 authored small bubbles and +20% stream
-baseline/cap by roughly **5.0:1**; the +1 big modifier applies only when authored `bubble_big_count > 0`, and zero is a valid
-authored count. Extreme vertical geometry eases from roughly **1.5:1 to 3.0:1 height:width** to at most -1 big bubble,
--1 small bubble and -30% stream **cap** while leaving baseline stream speed unchanged. Integer population deltas are necessarily
-discrete; stroke and speed/cap factors are continuous. These profile adjustments may not alter drift, radius, Ghost/history
-displacement, reaction amplitude or cadence.
+must not create another clock. **Bubble's world is in canonical-card units on every card (R-170):** a committed extent
+makes it `extent / (420, 280)` units wide and tall, and every authored speed, drift, swirl, margin, entry depth, cluster
+spread, collision gap/push, overlap allowance and trail length is that literal unprojected, so at equal uniform visual
+scale a tall, wide, tiny or huge card moves and sizes exactly like the canonical card. Only the population follows the
+card's area (authored counts describe one canonical card). The renderer holds 110 heroes including trails still draining
+off-card, so a card larger than the canonical one grows its live population to 72 (or the authored population if larger)
+and past that the whole world zooms isotropically by `world_scale` (bubbles, speeds and distances together, like a larger
+uniform scale); the canonical card and anything no larger never zoom, and live bubbles keep their place when the zoom
+changes. Positions/trails normalize by the world size; radius stays in canonical units and the Quick layout projects it
+once through the canonical card's equal-area response height `sqrt(w * h / 1.5)` at the current uniform scale and inset,
+times `world_scale` (`BubbleFrame.world_scale`); on the canonical extent that is the operator's 2026-09-05 projection
+exactly. Wake ring constants project the same way; there is no per-axis history compression. Optional decor moves in
+the same units and its count follows area up to its own 96 caps. There are **no aspect or extent speed/count
+modifiers** (the retired 2026-09 `wide_tail`/`tall_tail` modifiers and the content-fraction motion projection they
+compensated are R-170 failed methods). None of this changes random-draw order or adds a tick; canonical output is
+byte-identical. Bubble viewport geometry is one cached world (`widgets/spotify_visualizer/bubble_viewport_profile.py`):
+resolved when the committed extent or authored population changes, never per audio/render tick. The main-head outline
+uses a bounded physical-pixel curve (about **1.6 px total canonical floor**, about **4.7 px total ceiling**) that firms only
+with `world_scale`, never with card aspect. These may not alter drift, radius, Ghost/history displacement, reaction
+amplitude or cadence.
 
 Bubble consume-once kick/snare/vocal events may accent stream and drift motion only through the existing decaying
 stream-burst state. They must not add a clock, mutate authored motion settings, replay an event, or leak into pulse/radius
@@ -766,7 +756,7 @@ move the logical runtime.
 During a live edit, the working rectangle also owns its preview scale. Normal logical-frame publications cannot
 restore the saved size at the new dragged origin; independently rounded axes must admit the same uniform scale.
 
-Sine/Oscilloscope glow spreads perpendicular to the curve and scales with visible content area relative to
+Line-visualizer glow spreads perpendicular to the curve and scales with visible content area relative to
 420x280. A huge saved world at a small uniform scale must not weaken a halo on the same visible footprint.
 Glow size/intensity and line-core antialiasing remain independent.
 
@@ -813,8 +803,8 @@ the actual waveform. `references/Mist Goal.png` now supersedes all older fog/mis
 floor/distance haze; smoothing or retaining the rejected layers does not satisfy that direction.
 The replacement candidate uses a single integrated world medium across ground, actors, sky and mirror. Its
 packet-derived physical field covers retained interior history and analytic continuation; Off leaves no separate
-floor haze. Orthographic raster depth fits the admitted direct/reflected world support while preserving the
-physical eye and XY projection; Perspective retains positive depth. Source proof and artistic/cost acceptance
+floor haze. The Perspective camera retains positive depth; the infinite floor intersects each pixel ray from the
+eye beyond the actor clip. Source proof and artistic/cost acceptance
 remain separate gates in Current_Plan.
 The registered production candidate uses descriptor-owned capture/runtime/renderer and canonical spec-driven Settings.
 Configuration and published packets are detached immutable values. The pulse field, depth-sway/torsion springs,
@@ -822,9 +812,9 @@ A twist and axial speed integrate on the sole logical clock; the projection only
 travels into view. Event-owned sparks are admitted once, bounded by lifetime/refractory/capacity, and fly analytically
 on published time. Camera navigation does not move populations or reauthor the world fog. Complete native endpoint,
 framing, editor and loaded-live gates remain in Current_Plan; candidate registration does not imply acceptance.
-New 3D labs/modes generally start Orthographic with optional Perspective; Waveform's latest operator-delegated
-visual route instead uses restrained long-lens Perspective as primary, retaining optional Orthographic. Both use the shared admitted eye/world and actual
-projection matrices/ray origins; camera math alone does not establish scene likeness or reflection parity.
+Waveform uses a restrained long-lens Perspective view (the only projection since 5 Nov 2026). It uses the shared
+admitted eye/world and actual projection matrix/ray origins; camera math alone does not establish scene likeness or
+reflection parity.
 The shared bounded CPU path/history and transported width-frame references are documented in
 `Docs/Reference/Ribbon_Path.md`; the incremental ring producer and oriented OIT/HDR strip are consumed by the Waveform
 lab and production Waveform mode. Remaining native surface/defocus and cost gates live there and in the Lab Plan.

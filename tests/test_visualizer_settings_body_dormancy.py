@@ -22,7 +22,7 @@ from core.settings.visualizer_mode_body_host import (
     visualizer_pill_model,
 )
 
-_DISABLED = ("oscilloscope", "sine_wave", "devcurve", "sphere")
+_DISABLED = ("oscilloscope", "devcurve", "sphere")
 
 
 class _Authority:

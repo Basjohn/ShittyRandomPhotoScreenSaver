@@ -4,7 +4,9 @@ from __future__ import annotations
 from typing import Any, Dict, Mapping
 
 
-RETIRED_VISUALIZER_MODE_IDS = frozenset({"blob"})
+# Sine Waves retired 2026-11-05: a saved Sine selection becomes the default mode, its activation
+# leaf and Custom snapshot are dropped, and every sine_* setting leaves the section.
+RETIRED_VISUALIZER_MODE_IDS = frozenset({"blob", "sine_wave"})
 _RETIRED_VISUALIZER_KEYS = frozenset({
     # Rejected Waveform bank/fringe and independent floor haze; one new atmosphere replaces them.
     'waveform_ribbon_fog_billows',
@@ -21,6 +23,7 @@ _RETIRED_VISUALIZER_KEYS = frozenset({
     "shockwave_grid_terrain_reactivity",  # Growth; superseded by the Terrain Reaction bucket (2026-10-16).
     "shockwave_grid_splashes",  # Droplets on heavy hits: rejected by the operator (2026-11-05) as out of place.
     "preset_blob",
+    "preset_sine_wave",
     # Rejected smooth-Sphere representation controls. The experimental mode
     # survives as Voxel Sphere, but these owned keys do not.
     "sphere_antialiasing",
@@ -59,8 +62,12 @@ _RETIRED_VISUALIZER_KEYS = frozenset({
     # Spectrum fill/border link state: serialized but never read by any UI or
     # renderer; Fill and Border stay independent controls (2026-10-24, SC3).
     "spectrum_link_fill_border",
+    # Orthographic camera projection retired 5 Nov 2026 (operator): Perspective is the only framed
+    # projection, so the per-mode choice is gone and a saved Orthographic resolves to Perspective.
+    "waveform_ribbon_camera_projection",
+    "extruded_bubble_camera_projection",
 })
-_RETIRED_VISUALIZER_PREFIXES = ("blob_",)
+_RETIRED_VISUALIZER_PREFIXES = ("blob_", "sine_", "sinewave_")
 
 
 def strip_retired_visualizer_settings(
@@ -88,5 +95,25 @@ def strip_retired_visualizer_settings(
 
             cleaned[key] = get_default_visualizer_mode_id()
             continue
+        if leaf == "mode_activation" and isinstance(value, Mapping):
+            cleaned[key] = {
+                mode_id: enabled for mode_id, enabled in value.items()
+                if not is_retired_visualizer_mode(mode_id)
+            }
+            continue
         cleaned[key] = value
     return cleaned
+
+
+def is_retired_visualizer_mode(mode_key: object) -> bool:
+    """Whether a mode id (or a flat ``mode.leaf`` Custom-cache key) names a retired mode."""
+    return str(mode_key or "").partition(".")[0].strip().lower() in RETIRED_VISUALIZER_MODE_IDS
+
+
+def strip_retired_visualizer_custom_cache(cache: Mapping[str, Any]) -> Dict[str, Any]:
+    """Drop retired modes' Custom snapshots (nested ``mode`` or flat ``mode.leaf`` entries).
+
+    A retired mode has no slot to restore into; its snapshot is discarded rather
+    than failing the whole user-owned cache as an unknown entry.
+    """
+    return {key: value for key, value in cache.items() if not is_retired_visualizer_mode(key)}

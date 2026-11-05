@@ -269,10 +269,13 @@ def test_repeated_routine_onsets_leave_room_for_a_distinct_accent():
 
 
 def test_supported_quiet_accent_is_admitted_independently_of_its_small_deformation_force():
-    from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+    from tests._visualizer_frozen_settings import frozen_visualizer_settings
     from widgets.spotify_visualizer.waveform_ribbon_parameters import CompiledWaveformSettings
-    config=resolve_visualizer_activation_payload({'mode':'waveform_ribbon','preset_waveform_ribbon':2},mode='waveform_ribbon')
-    c=CompiledWaveformSettings(config.resolved_config).controls
+    # Test-owned complete settings (never a curated preset, which the operator retunes) with sparks and
+    # strands on, so a quiet accent has both emitters to reach.
+    settings={**frozen_visualizer_settings('waveform_ribbon'),
+              'waveform_ribbon_sparks_enabled':True,'waveform_ribbon_strands_enabled':True}
+    c=CompiledWaveformSettings(settings).controls
     runtime=WaveformRibbonFrameRuntime()
     args=dict(onsets=(),playing=True,identity=(1,2,3),source_identity=(2,3),controls=c,
               body_bands=(.15,.1,.05),intensity=.1,loudness=1.,presence=1.)

@@ -22,7 +22,6 @@ from widgets.spotify_visualizer.render_state import (
     FrozenFields,
     OscilloscopeFrame,
     ResolvedVisualizerPresentation,
-    SineFrame,
     SpectrumFrame,
     VisualizerCommonState,
     VisualizerLogicalFrame,

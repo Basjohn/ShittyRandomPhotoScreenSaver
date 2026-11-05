@@ -8,9 +8,9 @@ as data descriptors. Each binding knows how to:
 
 Usage:
     BINDINGS = [
-        SliderBinding('sine_speed', scale=100, default=1.0, label_fmt='{}%'),
-        CheckBinding('sine_glow_enabled', default=False),
-        ColorBinding('sine_line_color', attr='_sine_line_color', default=[255, 255, 255, 255]),
+        SliderBinding('mode_speed', scale=100, default=1.0, label_fmt='{}%'),
+        CheckBinding('mode_glow_enabled', default=False),
+        ColorBinding('mode_line_color', attr='_mode_line_color', default=[255, 255, 255, 255]),
     ]
 
     # Load:
@@ -170,7 +170,7 @@ class ComboIndexBinding:
 class ColorBinding:
     """Bind a QColor attribute on the tab to a config key (as RGBA list)."""
     key: str
-    attr: str  # e.g. '_sine_line_color'
+    attr: str  # e.g. '_mode_line_color'
     default: list = field(default_factory=lambda: [255, 255, 255, 255])
 
     def load(self, tab: Any, config: dict) -> None:

@@ -307,7 +307,7 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
                 if low_resolution else bass_drop_ratio
             )
             # Bubble/Sphere/Oscilloscope consume raw FFT/zone/transients;
-            # Sine/DevCurve receive independent pre-AGC energy through the
+            # DevCurve receives independent pre-AGC energy through the
             # BeatEngine energy API. None consumes authored Spectrum bars.
             return get_zero_bars(worker)
 

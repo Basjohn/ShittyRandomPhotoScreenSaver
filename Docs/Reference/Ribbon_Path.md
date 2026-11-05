@@ -1,5 +1,7 @@
 # Shared ribbon path and width-frame CPU reference
 
+> **Orthographic removed 5 Nov 2026 (operator):** Perspective is the only camera projection in the whole project. Orthographic, its Projection control, raster-slab fit and parallel-ray paths are deleted; any Orthographic passage below is historical and superseded.
+
 `core/ribbon_geometry.py` owns the bounded CPU history/interpolation reference for future S3D-1 strips.
 `tools/labs/ribbon_path_probe.py` consumes it to produce CPU XY cards and traces. It is not a renderer or
 simulation and is not attached to any runtime mode. Existing EB wake code and shaders remain unchanged.

@@ -32,7 +32,7 @@ def test_audit_detects_large_extensible_catalog_copies(tmp_path: Path) -> None:
     copied = ", ".join(repr(name) for name in sorted(_TRANSITION_CATALOG_TOKENS)[:8])
     rules = _rules(
         tmp_path,
-        '''\ndef test_bad_catalogs():\n    modes = {\n        "spectrum": 1, "oscilloscope": 2, "sine_wave": 3,\n        "bubble": 4, "devcurve": 5,\n    }\n'''
+        '''\ndef test_bad_catalogs():\n    modes = {\n        "spectrum": 1, "oscilloscope": 2, "sphere": 3,\n        "bubble": 4, "devcurve": 5,\n    }\n'''
         f"    transitions = [{copied}]\n    assert modes and transitions\n",
     )
     assert "visualizer-catalog-literal" in rules
@@ -50,7 +50,7 @@ def test_audit_allows_semantic_subsets_and_fixture_literals(tmp_path: Path) -> N
 def test_exact_value_marker_documents_intentional_catalog_pin(tmp_path: Path) -> None:
     rules = _rules(
         tmp_path,
-        '''\ndef test_protocol_catalog():\n    # EXACT-VALUE INVARIANT: frozen compatibility protocol enumerates these legacy ids.\n    legacy = ("spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve")\n    assert legacy\n''',
+        '''\ndef test_protocol_catalog():\n    # EXACT-VALUE INVARIANT: frozen compatibility protocol enumerates these legacy ids.\n    legacy = ("spectrum", "oscilloscope", "sphere", "bubble", "devcurve")\n    assert legacy\n''',
     )
     assert "visualizer-catalog-literal" not in rules
 

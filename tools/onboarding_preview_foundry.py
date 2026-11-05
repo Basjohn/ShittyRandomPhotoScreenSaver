@@ -1259,7 +1259,7 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
     apply_logical_vis_mode_kwargs(state, resolved)
     apply_presentation_vis_mode_kwargs(controller.presentation_state, resolved)
     # The mode's resolved technical config, as the display owner applies it (bar count, transient
-    # widths, floors): without it Oscilloscope, Sine Wave and Dev Curve frames miss parameters.
+    # widths, floors): without it Oscilloscope and Dev Curve frames miss parameters.
     controller.technical_config_cache = build_technical_cache(None, model)
     apply_controller_technical_config(controller, resolve_technical_config(controller.technical_config_cache, mode),
                                       reason="onboarding_preview")

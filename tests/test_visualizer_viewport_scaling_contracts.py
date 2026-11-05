@@ -78,24 +78,40 @@ class BubbleViewportScalingTests(unittest.TestCase):
             else:
                 sys.modules[name] = original
 
+    # Bubble's world is in canonical-card units on every card shape, so a given
+    # authored motion, spawn, trail, collision or overlap is the same number of
+    # pixels (at equal uniform scale) on wide, tall and enlarged cards as on the
+    # canonical card. These bars place each fixture at the same canonical-unit
+    # offset from the world centre and compare pixel results.
+    _SHAPES = ((420.0, 280.0), (840.0, 280.0), (420.0, 560.0), (840.0, 560.0), (724.0, 816.0))
+
+    def _world(self, extent):
+        sim = self.bubble.BubbleSimulation()
+        sim._apply_viewport_domain(extent)
+        return sim, 0.5 * sim._domain_w, 0.5 * sim._domain_h
+
+    @staticmethod
+    def _px(sim, extent, x, y):
+        """Card pixels (uniform scale 1) of a world position."""
+        return (x / sim._domain_w * extent[0], y / sim._domain_h * extent[1])
+
     def _impulse_delta(self, extent: tuple[float, float]) -> tuple[float, float]:
         bs = self.bubble
-        sim = bs.BubbleSimulation()
-        sim._apply_viewport_domain(extent)
+        sim, cx, cy = self._world(extent)
         bubble = bs.BubbleState(
-            x=0.5 * sim._domain_w,
-            y=0.5 * sim._domain_h,
+            x=cx,
+            y=cy,
             radius=0.03,
             is_big=True,
             reaches_surface=False,
             max_age=999.0,
             impulse_vx=0.18,
             impulse_vy=0.12,
-            trail_tail_x=0.5 * sim._domain_w,
-            trail_tail_y=0.5 * sim._domain_h,
+            trail_tail_x=cx,
+            trail_tail_y=cy,
         )
         sim._bubbles = [bubble]
-        before = (bubble.x / sim._domain_w, bubble.y / sim._domain_h)
+        before = self._px(sim, extent, bubble.x, bubble.y)
         sim.tick(
             1.0 / 60.0,
             None,
@@ -117,7 +133,7 @@ class BubbleViewportScalingTests(unittest.TestCase):
                 "bubble_bounce_small_pct": 0.0,
                 # All non-impulse motion/size contributors are held neutral so the
                 # preloaded rebound impulse is the only thing that can move the
-                # bubble, keeping this a pure content-space invariance check.
+                # bubble, keeping this a pure pixel invariance check.
                 "bubble_bounce_big_speed": 0.0,
                 "bubble_bounce_small_speed": 0.0,
                 "bubble_bounce_same_only": True,
@@ -133,122 +149,82 @@ class BubbleViewportScalingTests(unittest.TestCase):
                 "bubble_ghosting_enabled": False,
             },
         )
-        after = (bubble.x / sim._domain_w, bubble.y / sim._domain_h)
+        after = self._px(sim, extent, bubble.x, bubble.y)
         return (after[0] - before[0], after[1] - before[1])
 
-    def test_preloaded_rebound_impulse_is_content_space_invariant(self):
+    def test_preloaded_rebound_impulse_is_pixel_invariant(self):
         expected = self._impulse_delta((420.0, 280.0))
-        for extent in (
-            (840.0, 280.0),
-            (420.0, 560.0),
-            (840.0, 560.0),
-        ):
+        self.assertGreater(abs(expected[0]), 0.1)
+        for extent in self._SHAPES[1:]:
             actual = self._impulse_delta(extent)
-            self.assertAlmostEqual(actual[0], expected[0], places=12)
-            self.assertAlmostEqual(actual[1], expected[1], places=12)
+            self.assertAlmostEqual(actual[0], expected[0], places=9)
+            self.assertAlmostEqual(actual[1], expected[1], places=9)
 
-    def test_swirl_vector_uses_equivalent_content_space_geometry(self):
+    def test_swirl_vector_is_the_canonical_geometry_on_every_shape(self):
         bs = self.bubble
         expected = None
-        for extent in (
-            (420.0, 280.0),
-            (840.0, 280.0),
-            (420.0, 560.0),
-            (840.0, 560.0),
-        ):
-            sim = bs.BubbleSimulation()
-            sim._apply_viewport_domain(extent)
-            bubble = bs.BubbleState(
-                x=0.68 * sim._domain_w,
-                y=0.37 * sim._domain_h,
-                drift_bias=0.42,
-            )
-            move = sim._swirl_motion(
-                bubble,
-                "swirl_cw",
-                0.63,
-                0.57,
-                1.0 / 90.0,
-                0.44,
-            )
+        for extent in self._SHAPES:
+            sim, cx, cy = self._world(extent)
+            bubble = bs.BubbleState(x=cx + 0.18, y=cy - 0.13, drift_bias=0.42)
+            move = sim._swirl_motion(bubble, "swirl_cw", 0.63, 0.57, 1.0 / 90.0, 0.44)
             if expected is None:
                 expected = move
             else:
                 self.assertAlmostEqual(move[0], expected[0], places=12)
                 self.assertAlmostEqual(move[1], expected[1], places=12)
 
-    def test_swirl_birth_offset_is_content_space_invariant(self):
-        bs = self.bubble
-        positions = []
-        for extent in (
-            (420.0, 280.0),
-            (840.0, 280.0),
-            (420.0, 560.0),
-            (840.0, 560.0),
-        ):
+    def test_swirl_birth_offset_is_pixel_invariant(self):
+        offsets = []
+        for extent in self._SHAPES:
             random.seed(1847)
-            sim = bs.BubbleSimulation()
-            sim._apply_viewport_domain(extent)
-            sim._spawn_bubble(
-                False,
-                "none",
-                1.0,
-                "swirl_ccw",
-            )
+            sim, cx, cy = self._world(extent)
+            sim._spawn_bubble(False, "none", 1.0, "swirl_ccw")
             bubble = sim._bubbles[0]
-            positions.append(
-                (bubble.x / sim._domain_w, bubble.y / sim._domain_h)
-            )
-        for actual in positions[1:]:
-            self.assertAlmostEqual(actual[0], positions[0][0], places=12)
-            self.assertAlmostEqual(actual[1], positions[0][1], places=12)
+            head = self._px(sim, extent, bubble.x, bubble.y)
+            centre = self._px(sim, extent, cx, cy)
+            offsets.append((head[0] - centre[0], head[1] - centre[1]))
+        for actual in offsets[1:]:
+            self.assertAlmostEqual(actual[0], offsets[0][0], places=9)
+            self.assertAlmostEqual(actual[1], offsets[0][1], places=9)
 
     def _trail_payload(self, extent: tuple[float, float]) -> tuple[float, ...]:
         bs = self.bubble
-        sim = bs.BubbleSimulation()
-        sim._apply_viewport_domain(extent)
-        domain_w = sim._domain_w
-        domain_h = sim._domain_h
+        sim, cx, cy = self._world(extent)
         bubble = bs.BubbleState(
-            x=0.52 * domain_w,
-            y=0.49 * domain_h,
+            x=cx + 0.02,
+            y=cy - 0.01,
             radius=0.03,
             is_big=True,
             reaches_surface=False,
             max_age=999.0,
-            trail_tail_x=0.50 * domain_w,
-            trail_tail_y=0.50 * domain_h,
+            trail_tail_x=cx,
+            trail_tail_y=cy,
         )
         sim._bubbles = [bubble]
-        sim._update_trail_smear(
-            bubble,
-            1.0 / 60.0,
-            0.02 * domain_w,
-            -0.01 * domain_h,
-        )
+        sim._update_trail_smear(bubble, 1.0 / 60.0, 0.02, -0.01)
         positions, _extras, trails = sim.snapshot()
-        return tuple(positions[:2]) + tuple(trails)
+        head = (positions[0] * extent[0], positions[1] * extent[1])
+        samples = []
+        for index in range(0, len(trails), 3):
+            samples += [trails[index] * extent[0] - head[0], trails[index + 1] * extent[1] - head[1],
+                        trails[index + 2]]
+        return (positions[2], *samples)
 
-    def test_motion_tail_geometry_and_strength_are_content_space_invariant(self):
+    def test_motion_tail_geometry_and_strength_are_pixel_invariant(self):
         expected = self._trail_payload((420.0, 280.0))
-        self.assertTrue(expected[2:])
-        for extent in (
-            (840.0, 280.0),
-            (420.0, 560.0),
-            (840.0, 560.0),
-            (724.0, 816.0),
-        ):
+        self.assertTrue(expected[1:])
+        for extent in self._SHAPES[1:]:
             actual = self._trail_payload(extent)
             self.assertEqual(len(actual), len(expected))
             for lhs, rhs in zip(actual, expected):
-                self.assertAlmostEqual(lhs, rhs, places=12)
-    def _collision_positions(self, extent: tuple[float, float]) -> tuple[float, ...]:
+                self.assertAlmostEqual(lhs, rhs, places=9)
+
+    def _collision_offsets(self, extent: tuple[float, float]) -> tuple[float, ...]:
         bs = self.bubble
-        sim = bs.BubbleSimulation()
-        sim._apply_viewport_domain(extent)
+        sim, cx, cy = self._world(extent)
         a = bs.BubbleState(
-            x=0.48 * sim._domain_w,
-            y=0.50 * sim._domain_h,
+            x=cx - 0.02,
+            y=cy,
             radius=0.050,
             is_big=True,
             reaches_surface=False,
@@ -257,8 +233,8 @@ class BubbleViewportScalingTests(unittest.TestCase):
             size_gate_energy=1.0,
         )
         b = bs.BubbleState(
-            x=0.56 * sim._domain_w,
-            y=0.53 * sim._domain_h,
+            x=cx + 0.06,
+            y=cy + 0.03,
             radius=0.050,
             is_big=True,
             reaches_surface=False,
@@ -273,8 +249,8 @@ class BubbleViewportScalingTests(unittest.TestCase):
             bounce_small_pct=0.0,
             bounce_big_speed=0.0,
             bounce_small_speed=0.0,
-            # This contract isolates content-space separation geometry, so keep
-            # the pop path off; big-big overlap still resolves under same-only.
+            # This contract isolates separation geometry, so keep the pop path
+            # off; big-big overlap still resolves under same-only.
             bounce_same_only=True,
             collision_pop_mode="off",
             big_bass_pulse=0.0,
@@ -282,93 +258,56 @@ class BubbleViewportScalingTests(unittest.TestCase):
             big_contraction_bias=1.0,
             big_size_clamp=0.0,
         )
-        return (
-            a.x / sim._domain_w,
-            a.y / sim._domain_h,
-            b.x / sim._domain_w,
-            b.y / sim._domain_h,
-        )
+        centre = self._px(sim, extent, cx, cy)
+        values = (*self._px(sim, extent, a.x, a.y), *self._px(sim, extent, b.x, b.y))
+        return tuple(value - centre[index % 2] for index, value in enumerate(values))
 
-    def test_collision_resolution_is_content_space_invariant(self):
-        expected = self._collision_positions((420.0, 280.0))
-        self.assertNotEqual(expected, (0.48, 0.50, 0.56, 0.53))
-        for extent in (
-            (840.0, 280.0),
-            (420.0, 560.0),
-            (840.0, 560.0),
-            (724.0, 816.0),
-        ):
-            actual = self._collision_positions(extent)
+    def test_collision_resolution_is_pixel_invariant(self):
+        expected = self._collision_offsets((420.0, 280.0))
+        self.assertNotAlmostEqual(expected[0], -0.02 * 420.0, places=6)  # the pair was actually separated
+        for extent in self._SHAPES[1:]:
+            actual = self._collision_offsets(extent)
             for lhs, rhs in zip(actual, expected):
-                self.assertAlmostEqual(lhs, rhs, places=12)
+                self.assertAlmostEqual(lhs, rhs, places=9)
 
+    def test_motion_tail_complete_presentation_footprint_is_canonical_pixels(self):
+        # Stored history is in canonical-card units, so its sample separation is
+        # already canonical pixels on every shape; the renderer only projects the
+        # ring constants (authored in canonical content heights) and the head
+        # radius once, through the canonical card's scale and the world zoom.
+        from rendering.quick.visualizer.implementations.bubble import compute_quick_bubble_layout
 
-    def test_motion_tail_complete_presentation_footprint_stays_authored_pixel_scaled(self):
-        # Stored trail history remains normalized/content-space invariant. R4
-        # corrected only the three source-centre offsets; the physically failed
-        # tall run proved that each source's ripple radius/ring spacing must use
-        # the same authored-pixel authority as well.
         baseline = (420.0, 280.0)
-        head = (0.62, 0.44)
-        sample = (0.52, 0.50)
-        expected_source_px = (
-            (sample[0] - head[0]) * baseline[0],
-            (sample[1] - head[1]) * baseline[1],
-        )
-        expected_cap_px = 0.12 * baseline[1]
-        expected_ring_spacing_px = (2.0 * math.pi / 220.0) * baseline[1]
-        brad = 0.04
-        age = 1.0
-        trail_strength = 1.0
-        expected_ripple_px = min(
-            brad * (2.0 + age * 6.0) * trail_strength,
-            0.12,
-        ) * baseline[1]
+        brad_units, age, trail_strength = 0.04, 1.0, 1.0
 
-        for extent in (
-            baseline,
-            (840.0, 280.0),
-            (420.0, 560.0),
-            (840.0, 560.0),
-            (724.0, 816.0),
-        ):
-            axis = (
-                min(1.0, baseline[0] / extent[0]),
-                min(1.0, baseline[1] / extent[1]),
-            )
-            radial = min(1.0, baseline[1] / extent[1])
-            rendered = (
-                head[0] + (sample[0] - head[0]) * axis[0],
-                head[1] + (sample[1] - head[1]) * axis[1],
-            )
-            actual_source_px = (
-                (rendered[0] - head[0]) * extent[0],
-                (rendered[1] - head[1]) * extent[1],
-            )
-            self.assertAlmostEqual(actual_source_px[0], expected_source_px[0], places=12)
-            self.assertAlmostEqual(actual_source_px[1], expected_source_px[1], places=12)
+        def footprint(extent, zoom=1.0):
+            layout = compute_quick_bubble_layout(
+                local_content_rect=(0.0, 0.0, *extent), visual_scale=1.0, viewport_extent=extent,
+                baseline_viewport_size=baseline, world_scale=zoom)
+            ring = layout.trail_radial_scale
+            brad = brad_units * layout.response_radius_scale
+            cap_px = 0.12 * ring * extent[1]
+            spacing_px = (2.0 * math.pi / (220.0 / ring)) * extent[1]
+            ripple_px = min(brad * (2.0 + age * 6.0) * trail_strength, 0.12 * ring) * extent[1]
+            return cap_px, spacing_px, ripple_px
 
-            cap_px = (0.12 * radial) * extent[1]
-            ring_spacing_px = (2.0 * math.pi / (220.0 / radial)) * extent[1]
-            ripple_px = min(
-                (brad * radial) * (2.0 + age * 6.0) * trail_strength,
-                0.12 * radial,
-            ) * extent[1]
-            self.assertAlmostEqual(cap_px, expected_cap_px, places=12)
-            self.assertAlmostEqual(ring_spacing_px, expected_ring_spacing_px, places=12)
-            self.assertAlmostEqual(ripple_px, expected_ripple_px, places=12)
+        expected = footprint(baseline)
+        self.assertAlmostEqual(expected[0], 0.12 * baseline[1], places=9)
+        for extent in self._SHAPES[1:] + ((2400.0, 300.0), (280.0, 1200.0)):
+            for actual, reference in zip(footprint(extent), expected):
+                self.assertAlmostEqual(actual, reference, places=9)
+            for actual, reference in zip(footprint(extent, 2.5), expected):
+                self.assertAlmostEqual(actual, reference * 2.5, places=9)
 
         quick = (ROOT / "rendering/quick/visualizer/implementations/bubble.py").read_text()
         shader = (ROOT / "widgets/spotify_visualizer/shaders/bubble.frag").read_text()
-        self.assertIn("trail_axis_scale", quick)
-        self.assertIn("trail_radial_scale", quick)
-        self.assertIn("u_trail_axis_scale", shader)
+        # The retired per-axis history compression must not return.
+        self.assertNotIn("trail_axis_scale", quick)
+        self.assertNotIn("trail_axis_scale", shader)
         self.assertIn("u_trail_radial_scale", shader)
-        self.assertIn("vec2 trail_axis_scale = (u_quick_item_coords == 1)", shader)
         self.assertIn("float trail_radial_scale = (u_quick_item_coords == 1)", shader)
-        self.assertIn("sample_data.xy - bpos.xy", shader)
         self.assertIn("float ring_freq = 220.0 / trail_radial_scale;", shader)
-        self.assertIn("float wake_brad = brad * trail_radial_scale;", shader)
+        self.assertIn("float wake_brad = brad;", shader)
         self.assertIn("float max_ripple_radius = 0.12 * trail_radial_scale;", shader)
         self.assertIn("ripple_bound", shader)
 
@@ -384,57 +323,28 @@ class BubbleViewportScalingTests(unittest.TestCase):
         self.assertNotIn("u_head_radial_scale", quick)
         self.assertNotIn("u_head_radial_scale", shader)
 
-        # Ripple wake is intentionally authored-pixel compact, but Ghost history
-        # is already renderer-normalized and must be consumed exactly once.
+        # Ghost history is consumed exactly once, never through the wake's ring projection.
         ghost = shader.split("// --- Ghost pass", 1)[1]
         self.assertIn("vec2 history_xy = history.xy;", ghost)
-        self.assertNotIn("trail_axis_scale", ghost)
         self.assertNotIn("trail_radial_scale", ghost)
         self.assertIn("u_ghost_decay", ghost)
         self.assertIn("ghost_decay_exponent", ghost)
 
-        # Extreme-size correction may strengthen only the presentation edge; it
-        # must not change authored radius or motion amplitude. The extreme-size
-        # stroke bonus is now resolved through the cached viewport profile as
-        # ``viewport_stroke_extra_half_px`` (formerly ``large_viewport_stroke_bonus_px``);
-        # it is still an edge-only half-pixel bonus, never a radius/motion compressor.
+        # The outline's zoom firmness is an edge-only half-pixel bonus, never a
+        # radius/motion compressor.
         self.assertIn("viewport_stroke_extra_half_px", quick)
         self.assertIn("viewport_stroke_extra_half_px", shader)
 
-    def test_spawn_overlap_policy_is_content_space_invariant(self):
+    def test_spawn_overlap_policy_is_pixel_invariant(self):
         bs = self.bubble
         decisions = []
-        for extent in (
-            (420.0, 280.0),
-            (840.0, 280.0),
-            (420.0, 560.0),
-            (840.0, 560.0),
-            (724.0, 816.0),
-        ):
-            sim = bs.BubbleSimulation()
-            sim._apply_viewport_domain(extent)
-            sim._bubbles = [
-                bs.BubbleState(
-                    x=0.50 * sim._domain_w,
-                    y=0.50 * sim._domain_h,
-                    radius=0.040,
-                    is_big=True,
-                )
-            ]
+        for extent in self._SHAPES:
+            sim, cx, cy = self._world(extent)
+            sim._bubbles = [bs.BubbleState(x=cx, y=cy, radius=0.040, is_big=True)]
             decisions.append(
                 (
-                    sim._overlaps_existing(
-                        0.57 * sim._domain_w,
-                        0.50 * sim._domain_h,
-                        0.040,
-                        candidate_is_big=True,
-                    ),
-                    sim._overlaps_existing(
-                        0.70 * sim._domain_w,
-                        0.50 * sim._domain_h,
-                        0.040,
-                        candidate_is_big=True,
-                    ),
+                    sim._overlaps_existing(cx + 0.07, cy, 0.040, candidate_is_big=True),
+                    sim._overlaps_existing(cx + 0.20, cy, 0.040, candidate_is_big=True),
                 )
             )
         self.assertEqual(decisions[0], (True, False))
@@ -480,10 +390,9 @@ class OtherModeViewportScalingTests(unittest.TestCase):
 
     def test_vertical_shift_default_spread_survives_tall_viewport(self):
         # Scale=1 card geometry: 4 px shell border each side. Osc then removes
-        # 1 px per side; Sine removes 2 px per side.
+        # 1 px per side.
         cases = (
             (270.0, 1.0, 550.0, 2.0),  # Oscilloscope
-            (268.0, 1.0, 548.0, 2.0),  # Sine
         )
         for canonical_h, canonical_scale, tall_h, tall_scale in cases:
             canonical = self._spread_fraction(canonical_h, canonical_scale)
@@ -492,8 +401,7 @@ class OtherModeViewportScalingTests(unittest.TestCase):
             self.assertAlmostEqual(tall, canonical, places=12)
 
         osc_shader = (ROOT / "widgets/spotify_visualizer/shaders/oscilloscope.frag").read_text()
-        sine_shader = (ROOT / "widgets/spotify_visualizer/shaders/sine_wave.frag").read_text()
-        for shader in (osc_shader, sine_shader):
+        for shader in (osc_shader,):
             self.assertIn("u_viewport_height_scale", shader)
             self.assertIn("20.0 * spacing_scale", shader)
             self.assertIn("80.0 * spacing_scale", shader)

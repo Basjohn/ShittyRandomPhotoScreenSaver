@@ -1085,7 +1085,6 @@ def test_live_visualizer_session_save_preserves_visible_projection_and_identity(
 ) -> None:
     """A real CUSTOM QRect edit promotes the retained projection before Save clears it."""
     monkeypatch.setattr(tick_pipeline, "consume_engine_bars", lambda _o, _n: (True, True))
-    monkeypatch.setattr(tick_pipeline, "process_heartbeat", lambda _o, _n: None)
     monkeypatch.setattr(tick_pipeline, "record_tick_perf", lambda _o, _n: None)
     screen = qt_app.primaryScreen()
     assert screen is not None

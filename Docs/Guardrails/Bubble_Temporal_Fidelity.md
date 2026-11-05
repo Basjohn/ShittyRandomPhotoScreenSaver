@@ -789,6 +789,21 @@ Use as a negative control for:
 
 Canonical, very wide and very tall CUSTOM shapes must preserve comparable authored response character. This is a BTF property, not optional visual polish.
 
+### R-170 Bubble shape-dependent speed and aspect modifiers
+
+`Docs/Historical_Bugs/R-170_Bubble_Shape_Dependent_Speed_And_Aspect_Modifiers.md`
+
+Bubble's world is in canonical-card units on every card shape: at equal uniform scale every shape moves (stream, drift,
+swish cadence, swirl, bounce, spawn/exit) and sizes exactly like the canonical card; only the population follows area,
+and past the 110-hero render capacity the whole world zooms isotropically (`world_scale`). Use as a negative control for:
+
+- motion expressed as a fraction of the current card (tall cards stream faster, wide ones slower);
+- aspect/extent "tail" modifiers on authored counts or stream speed;
+- a second size authority (the current card's area) beside the motion unit.
+
+`python -m tools.visualizer_replay.bubble_shape_invariance` measures it on recorded music;
+`tests/test_bubble_shape_invariance.py` is the production-seam bar (with a content-relative negative control).
+
 ### Bubble parity / reactivity evidence
 
 Current authority is the maintained Bubble reactivity/cadence/BTF/viewport test set plus temporal fixtures/goldens, live PERF evidence, and the CHK29 active-music acceptance reference recorded in R-87. `tests/test_visualizer_replay.py` and `tests/test_bubble_reactivity.py` remain useful logical/simulation evidence, but they are not sufficient viewport/domain/DPR/presentation-scaling oracles and therefore cannot catch R-69 by themselves.
@@ -893,7 +908,8 @@ values during unrelated work.
 - The `Particles` Builder bucket owns two **optional, separately seeded**, bounded populations:
   **microbubble stream/drift** and **particles stream/drift/glow**. Defaults are OFF; enabling them never
   enlarges the original 110-bubble collision/reactivity population or changes its RNG sequence.
-  Maximums are 96 microbubbles and 96 particles, independent of original Bubble counts.
+  Maximums are 96 microbubbles and 96 particles, independent of original Bubble counts; the authored density
+  describes one canonical card and the count follows card area up to those caps (R-170).
 - Each population has its own **Same / Reversed** transport choice. `Same` follows the effective original
   Bubble motion; `Reversed` is a first-class artistic choice, NOT a sign bug. Preserve both stream and spiral
   winding semantics, and do not share or reset the two settings during preset load/save.

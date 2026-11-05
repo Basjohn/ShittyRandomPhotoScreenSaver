@@ -246,13 +246,6 @@ def resolve_camera_frame(spec: FramedCameraSpec, values: Mapping[str, object]):
     return axes,eye,offset
 
 
-def projection_reference_distance(spec: FramedCameraSpec, scale: float, eye) -> float:
-    """Orthographic fit follows the admitted grounded dolly; ordinary modes retain their authored mapping."""
-    if spec.grounded_orbit is not None:
-        return math.hypot(eye[0]-spec.pivot[0],eye[2]-spec.pivot[2])
-    return spec.orbit_distance/float(scale)
-
-
 def viewport_tangents(fov_y_degrees: float, aspect: float, aperture_scale: float = 1.,
                       fov_range: tuple[float, float] = FOV_RANGE) -> tuple[float, float]:
     """Centred aperture through the authored lens; aspect always matches the real target."""
@@ -266,33 +259,6 @@ def perspective_matrix(tan: tuple[float, float], near: float, far: float):
     """Projection from the very same aperture used by ray, optical and landmark consumers."""
     return (1. / tan[0], 0., 0., 0., 0., 1. / tan[1], 0., 0., 0., 0.,
             (far + near) / (near - far), -1., 0., 0., 2. * far * near / (near - far), 0.)
-
-
-def orthographic_matrix(half_extent: tuple[float, float], near: float, far: float):
-    """Centred parallel projection, with physical half-width/height and forward clip distances.
-
-    Column-major OpenGL matrix, matching ``perspective_matrix``'s view convention:
-    negative view z is forward, near maps to -1 NDC and far to +1.
-    """
-    x, y = (float(v) for v in half_extent)
-    near, far = float(near), float(far)
-    if not all(math.isfinite(v) for v in (x, y, near, far)) or min(x, y) <= 0. or far <= near:
-        raise ValueError('Orthographic extents must be finite and positive with far greater than near')
-    return (1. / x, 0., 0., 0., 0., 1. / y, 0., 0., 0., 0.,
-            -2. / (far - near), 0., 0., 0., -(far + near) / (far - near), 1.)
-
-
-def orthographic_depth_interval(projection) -> tuple[float, float]:
-    """Recover the admitted raster interval from a row-major Orthographic matrix.
-
-    This reads projection metadata, never a second camera or physical eye.
-    """
-    scale,offset=float(projection[2][2]),float(projection[2][3])
-    if not math.isfinite(scale) or not math.isfinite(offset) or scale>=0. or float(projection[3][3])!=1.:
-        raise ValueError('Expected a finite Orthographic projection')
-    span=-2./scale
-    centre=-offset*span*.5
-    return centre-span*.5,centre+span*.5
 
 
 def view_matrices(spec: FramedCameraSpec, turn: float, tilt: float, aspect: float, fov_y_degrees: float,

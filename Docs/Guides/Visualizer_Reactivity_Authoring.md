@@ -546,6 +546,95 @@ These held across EB's input, breathing, flow, collision and drift work. Each co
 - **Handles that cannot cross must hold one ordered quantity.** A rest depth and a crest on one Range forced the
   crest to its maximum whenever the rest was deepest.
 
+## 13D. Motion, reach, texture and cost lessons (Waveform Ribbon, 2026-11-05)
+
+Mode-neutral lessons from making Waveform Ribbon's reaction and look acceptable. The Waveform-specific mechanism,
+constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` → Current reaction model; the owner is
+`core/waveform_ribbon_dynamics.py`.
+
+**Judge motion in time, not in stills**
+- **Capture at a rate that divides the logical clock** (for example 45 fps on a 90 Hz logical clock) so every frame is
+  the same number of ticks apart; a non-dividing rate adds aliasing judder that is not in the product. Review
+  consecutive frames and time strips (`tools/visualizer_replay/capture_time_strip.py`), plus space-time maps of the
+  reacting quantity along the object. Stills hid every defect below.
+- **Probe per logical tick, on the same material points:** second differences (acceleration) and their change (jerk)
+  of identical cloth points, split into bands along the object (centre, edges), under strong synthetic beats with the
+  production constants. Exclude ring/history slots that were reused for a new point between ticks, or the probe
+  measures recycling instead of motion. Run the old code as a negative control: the probe must fail on it.
+
+**No twitch**
+- **Geometry drives pass through two cascaded followers** (each with a minimum attack), so velocity is continuous. A
+  single fast first-order attack makes position continuous but velocity jump on every transient. Light, colour and
+  sparkle may keep a fast attack: a flash of light is not a twitch of the body.
+- **Spread impulses over a short window** (same momentum, normalised peak) instead of one-tick velocity kicks.
+- **A bound that lets go must relax at a limited rate.** A constraint may tighten at once, but when it releases (a
+  share, a compression limit, a clamp) the whole field otherwise jumps in one tick. Rate-limit the release.
+- **Fixed-length tapers, not drift- or data-sized ones.** An end taper sized by the current drift or head spacing
+  jitters the edge every time that size changes.
+- **Rim/hit light swells like the body** (quick rise, gentle settle); a raw hit decay was the strongest beat-rate
+  flicker even though the geometry was smooth.
+- **Whole-body size follows the passage, beats belong to the travelling feature.** When height/width/lift pump on
+  every beat, the whole view pulses in unison and drowns the local reaction.
+
+**Energy moves with the shape; it does not invent bumps**
+- **Swell the object's own features.** Multiply the existing displacement by a positive gain envelope instead of
+  adding a new wave: an added wavelet or height field brings its own crests and troughs, i.e. motion against the
+  shape.
+- **Flow rule:** for `y = c(x)·g(x)`, bound the envelope's slope and curvature relative to the carrier's own
+  wavenumber (and make the envelope span at least a carrier wavelength) so a swell can deepen curvature but never
+  reverse it, add an inflection or dent a curve inward. Size the envelope from the carrier (flow speed, wave rate),
+  never from a constant.
+- **Move material along the curve, never across it.** A sideways/axial scaling about the centre read as horizontal
+  bursts; sliding points along their own curve (exact resampling of the unswollen body, bounded compression, rate
+  limited) carries the energy without changing the curve. Horizontal position otherwise moves only with the steady
+  flow.
+- **Born outside the view.** Inject travelling energy just beyond the visible edge so it slides in already formed;
+  energy born inside the view pops into existence.
+- **Keep the travelling feature legible.** Geometry and look should follow the *fresh* energy (a short-fade copy of
+  the field), or overlapping old energy piles into a uniform inflation or a glow parked at the emitter. Check the
+  feature's median/max over the visible span on dense real music, and that successive beats stay separate bands.
+- **Selectable reaction styles must be measurably distinct.** Review each style on long strips; a variant that looks
+  the same as another is machinery without a gain. Every style still obeys the flow rule and the no-twitch probes.
+
+**The full reaction range**
+- **Measure drive distributions, not one song:** p05/p50/p95 and time above 0.9 of every geometry drive, as a
+  fraction of its authored Range, on several real recordings including sustained loud and soft passages. A drive
+  that never leaves the middle of its Range wastes the authoring.
+- **Adaptive response gain:** divide a geometry drive by a remembered recent peak of itself (fast reach, slow
+  relaxation, a floor so silence is not amplified) and land that peak below the top of the Range so sustained loud
+  passages keep headroom for accents. Gain only: an offset window re-expands a quiet intro to full size. Apply it to
+  geometry; light, colour and sparkle keep their fixed calibrated anchors (§13A).
+
+**Collisions with the world**
+- **Preserve the shape: lift the whole object.** Per-point clamps against a floor produce boxy, flat-bottomed troughs;
+  proportional trough scaling still changes the curve. A whole-object offset, sized from the visible part only and
+  eased in two cascaded stages (quick up, slow down), keeps the shape exact and the motion velocity-continuous.
+
+**Texture and colour**
+- **Detail lives in the object's own coordinates.** A lattice or weave defined in the sheet's own (warped) coordinates
+  travels and twists with it; fade it to an even glow when cells go sub-pixel (no crawl or moiré), and combine line
+  crossings so nodes never form white knots.
+- **A swell deepens saturation, not whiteness.** Raise saturation toward full with hue and value unchanged and let
+  colour carry the swell; additive light boosts wash crossings white. Never invent a hue on neutral colours.
+- **Smeared colour beats crisp streaks.** Reflection taps weighted by a steep luminance power make the winning tap
+  jump as objects move (column popping). Use gentler weights over overlapping taps, keep the hue, and ease reflected
+  light toward a ceiling so a bright source cannot flood the ground with one colour.
+- **Dark wet ground, bounded medium.** A grey floor came from the far surface level, not the reflections; surface light falls
+  off from the lit objects toward a dark far level, so wide views still read as dark wet ground. Atmosphere takes a saturating, capped share of the objects' light and hue
+  over its own tone, so strong local light cannot wash the frame. Check consecutive frames for flicker after any
+  floor or medium change.
+- **Particles:** at least a one-pixel core, a soft halo in the emitter's colour, fade in and out (never vanish);
+  swell-carried births fill only the headroom the authored count leaves.
+
+**Cost without changing a byte**
+- **Vectorise per-object loops as rows** and prove the result byte-identical (values and dtypes) on every call of
+  real-music replays across presets and modes before keeping it. Python scalars become columns in exactly the dtype
+  NumPy would have cast them to; helpers that replace library calls reproduce their arithmetic, branches included.
+- **Closed forms over iterative searches.** When the bounded quantity is linear in the parameter being searched
+  (here an envelope `1 + share·swell`), the admissible maximum is a per-point closed form; pin it with a test against
+  a fine search of the bound itself.
+- Report paired timings on the same machine and conditions; never trade reaction strength for cost.
+
 ## 14. Evidence / negative-control map
 
 Read these for the cases behind this guide rather than copying their old implementation literally:
@@ -556,5 +645,6 @@ Read these for the cases behind this guide rather than copying their old impleme
 - R-69 / Bubble viewport evidence — viewport adaptation may not globally damp authored reaction.
 - R-76 / tall Spectrum evidence — physical-pixel flicker caused by delivery/temporal scaling must not be “fixed” by reducing response.
 - `Docs/Reference/Extruded_Bubble/Investigation.md` §65 — floor-independent fixed-scale body feed, sustained-lane knee/timing and per-identity breathing measured against 2D with Dynamic Floor ON (§13A).
+- `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` → Current reaction model and `Docs/Audits/Waveform_Studio_and_Reactivity_Audit_2026-11-05.md` — travelling pulse, flow rule, adaptive gain, floor lift and no-twitch evidence (§13D); negative-control tests `tests/test_waveform_no_twitch.py`, `tests/test_waveform_reaction_modes.py`, `tests/test_waveform_trough_clearance.py`.
 
 Historical files are evidence and negative controls. Current source + `Spec.md` + current guardrails remain implementation authority.

@@ -138,7 +138,6 @@ _CORE_SETTINGS_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "mode_activation": normalize_visualizer_mode_activation,
     "rainbow_enabled": bool,
     "rainbow_speed": float,
-    "sine_line_dim": bool,
 }
 
 _TRANSIENT_MIX_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
@@ -146,7 +145,6 @@ _TRANSIENT_MIX_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "extruded_spectrum_lane_transient_mix": float,
     "bubble_transient_mix_bass": float,
     "bubble_transient_mix_vocal": float,
-    "sine_wave_transient_width_mix": float,
 }
 
 _SPECTRUM_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
@@ -160,42 +158,12 @@ _SPECTRUM_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "spectrum_lane_strengths_linear": dict,
 }
 
-_SINE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
-    "sine_ghost_line2_enabled": bool,
-    "sine_ghost_line3_enabled": bool,
-    "sine_ghost_line4_enabled": bool,
-    "sine_ghost_line5_enabled": bool,
-    "sine_ghost_line6_enabled": bool,
-    "sine_line_count": int,
-    "sine_line2_color": list,
-    "sine_line2_glow_color": list,
-    "sine_line3_color": list,
-    "sine_line3_glow_color": list,
-    "sine_line4_color": list,
-    "sine_line4_glow_color": list,
-    "sine_line5_color": list,
-    "sine_line5_glow_color": list,
-    "sine_line6_color": list,
-    "sine_line6_glow_color": list,
-    "sine_travel_line2": int,
-    "sine_travel_line3": int,
-    "sine_travel_line4": int,
-    "sine_travel_line5": int,
-    "sine_travel_line6": int,
-    "sine_line2_shift": float,
-    "sine_line3_shift": float,
-    "sine_line4_shift": float,
-    "sine_line5_shift": float,
-    "sine_line6_shift": float,
-}
-
 
 _CORE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'enabled': bool,
     'visualizers_enabled': bool,
     'monitor': str,
     'position': str,
-    'sine_line_dim': bool,
 }
 
 _SPECTRUM_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
@@ -206,35 +174,6 @@ _SPECTRUM_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'spectrum_notch_positions_mirrored': list,
 }
 
-
-_SINE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
-    'sine_ghost_line2_enabled': bool,
-    'sine_ghost_line3_enabled': bool,
-    'sine_ghost_line4_enabled': bool,
-    'sine_ghost_line5_enabled': bool,
-    'sine_ghost_line6_enabled': bool,
-    'sine_line_count': int,
-    'sine_line2_color': list,
-    'sine_line2_glow_color': list,
-    'sine_line3_color': list,
-    'sine_line3_glow_color': list,
-    'sine_line4_color': list,
-    'sine_line4_glow_color': list,
-    'sine_line5_color': list,
-    'sine_line5_glow_color': list,
-    'sine_line6_color': list,
-    'sine_line6_glow_color': list,
-    'sine_travel_line2': int,
-    'sine_travel_line3': int,
-    'sine_travel_line4': int,
-    'sine_travel_line5': int,
-    'sine_travel_line6': int,
-    'sine_line2_shift': float,
-    'sine_line3_shift': float,
-    'sine_line4_shift': float,
-    'sine_line5_shift': float,
-    'sine_line6_shift': float,
-}
 
 _DEVCURVE_BUILD_SPECS: Dict[str, Callable[[Any], Any]] = {
     'devcurve_active_layer': str,
@@ -441,7 +380,6 @@ def _build_visualizer_model_kwargs(
     return _extend_visualizer_kwargs(
         data,
         _build_visualizer_spectrum_kwargs(read_value),
-        _build_visualizer_sine_kwargs(read_value),
         _build_visualizer_devcurve_kwargs(read_value),
         _build_visualizer_sphere_kwargs(read_value),
         _build_read_value_map(read_value, _SPECTRUM_SOURCE_MODE_SERIALIZERS),
@@ -509,12 +447,6 @@ def _build_visualizer_spectrum_kwargs(
         _visualizer_default("spectrum_lane_strengths_linear"),
     )
     return data
-
-
-def _build_visualizer_sine_kwargs(
-    read_value: Callable[[str, Any], Any],
-) -> Dict[str, Any]:
-    return _build_read_value_map(read_value, _SINE_BUILD_SPECS)
 
 
 
@@ -765,9 +697,6 @@ class SpotifyVisualizerSettings:
     bubble_bar_fill_color: list | None = field(default_factory=lambda: _visualizer_default('bubble_bar_fill_color'))
     bubble_bar_border_color: list | None = field(default_factory=lambda: _visualizer_default('bubble_bar_border_color'))
     bubble_bar_border_opacity: float = field(default_factory=lambda: _visualizer_default('bubble_bar_border_opacity'))
-    sine_wave_bar_fill_color: list | None = field(default_factory=lambda: _visualizer_default('sine_wave_bar_fill_color'))
-    sine_wave_bar_border_color: list | None = field(default_factory=lambda: _visualizer_default('sine_wave_bar_border_color'))
-    sine_wave_bar_border_opacity: float = field(default_factory=lambda: _visualizer_default('sine_wave_bar_border_opacity'))
     devcurve_bar_fill_color: list | None = field(default_factory=lambda: _visualizer_default('devcurve_bar_fill_color'))
     devcurve_bar_border_color: list | None = field(default_factory=lambda: _visualizer_default('devcurve_bar_border_color'))
     devcurve_bar_border_opacity: float = field(default_factory=lambda: _visualizer_default('devcurve_bar_border_opacity'))
@@ -809,19 +738,6 @@ class SpotifyVisualizerSettings:
     bubble_adaptive_sensitivity: bool = field(default_factory=lambda: _visualizer_default('bubble_adaptive_sensitivity'))
     bubble_sensitivity: float = field(default_factory=lambda: _visualizer_default('bubble_sensitivity'))
     bubble_bar_count: int = field(default_factory=lambda: _visualizer_default('bubble_bar_count'))
-    sine_wave_dynamic_floor: bool = field(default_factory=lambda: _visualizer_default('sine_wave_dynamic_floor'))
-    sine_wave_manual_floor: float = field(default_factory=lambda: _visualizer_default('sine_wave_manual_floor'))
-    sine_wave_dynamic_range_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_wave_dynamic_range_enabled'))
-    sine_wave_agc_strength: float = field(default_factory=lambda: _visualizer_default('sine_wave_agc_strength'))
-    sine_wave_input_gain: float = field(default_factory=lambda: _visualizer_default('sine_wave_input_gain'))
-    sine_wave_kick_lane_gain: float = field(default_factory=lambda: _visualizer_default('sine_wave_kick_lane_gain'))
-    sine_wave_transient_pulse_gain: float = field(default_factory=lambda: _visualizer_default('sine_wave_transient_pulse_gain'))
-    sine_wave_transient_clamp: float = field(default_factory=lambda: _visualizer_default('sine_wave_transient_clamp'))
-    sine_wave_transient_width_mix: float = field(default_factory=lambda: _visualizer_default('sine_wave_transient_width_mix'))
-    sine_wave_audio_block_size: int = field(default_factory=lambda: _visualizer_default('sine_wave_audio_block_size'))
-    sine_wave_adaptive_sensitivity: bool = field(default_factory=lambda: _visualizer_default('sine_wave_adaptive_sensitivity'))
-    sine_wave_sensitivity: float = field(default_factory=lambda: _visualizer_default('sine_wave_sensitivity'))
-    sine_wave_bar_count: int = field(default_factory=lambda: _visualizer_default('sine_wave_bar_count'))
     oscilloscope_dynamic_floor: bool = field(default_factory=lambda: _visualizer_default('oscilloscope_dynamic_floor'))
     oscilloscope_manual_floor: float = field(default_factory=lambda: _visualizer_default('oscilloscope_manual_floor'))
     oscilloscope_input_gain: float = field(default_factory=lambda: _visualizer_default('oscilloscope_input_gain'))
@@ -919,35 +835,8 @@ class SpotifyVisualizerSettings:
     shockwave_grid_visual_smoothing_enabled: bool = field(default_factory=lambda: _visualizer_default('shockwave_grid_visual_smoothing_enabled'))
     shockwave_grid_visual_smoothing: float = field(default_factory=lambda: _visualizer_default('shockwave_grid_visual_smoothing'))
     shockwave_grid_solid_bar_hysteresis_enabled: bool = field(default_factory=lambda: _visualizer_default('shockwave_grid_solid_bar_hysteresis_enabled'))
-    sine_ghost_line2_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_ghost_line2_enabled'))
-    sine_ghost_line3_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_ghost_line3_enabled'))
-    sine_ghost_line4_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_ghost_line4_enabled'))
-    sine_ghost_line5_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_ghost_line5_enabled'))
-    sine_ghost_line6_enabled: bool = field(default_factory=lambda: _visualizer_default('sine_ghost_line6_enabled'))
-    sine_line_count: int = field(default_factory=lambda: _visualizer_default('sine_line_count'))
-    sine_line2_color: list = field(default_factory=lambda: _visualizer_default('sine_line2_color'))
-    sine_line2_glow_color: list = field(default_factory=lambda: _visualizer_default('sine_line2_glow_color'))
-    sine_line3_color: list = field(default_factory=lambda: _visualizer_default('sine_line3_color'))
-    sine_line3_glow_color: list = field(default_factory=lambda: _visualizer_default('sine_line3_glow_color'))
-    sine_line4_color: list = field(default_factory=lambda: _visualizer_default('sine_line4_color'))
-    sine_line4_glow_color: list = field(default_factory=lambda: _visualizer_default('sine_line4_glow_color'))
-    sine_line5_color: list = field(default_factory=lambda: _visualizer_default('sine_line5_color'))
-    sine_line5_glow_color: list = field(default_factory=lambda: _visualizer_default('sine_line5_glow_color'))
-    sine_line6_color: list = field(default_factory=lambda: _visualizer_default('sine_line6_color'))
-    sine_line6_glow_color: list = field(default_factory=lambda: _visualizer_default('sine_line6_glow_color'))
-    sine_travel_line2: int = field(default_factory=lambda: _visualizer_default('sine_travel_line2'))
-    sine_travel_line3: int = field(default_factory=lambda: _visualizer_default('sine_travel_line3'))
-    sine_travel_line4: int = field(default_factory=lambda: _visualizer_default('sine_travel_line4'))
-    sine_travel_line5: int = field(default_factory=lambda: _visualizer_default('sine_travel_line5'))
-    sine_travel_line6: int = field(default_factory=lambda: _visualizer_default('sine_travel_line6'))
-    sine_line2_shift: float = field(default_factory=lambda: _visualizer_default('sine_line2_shift'))
-    sine_line3_shift: float = field(default_factory=lambda: _visualizer_default('sine_line3_shift'))
-    sine_line4_shift: float = field(default_factory=lambda: _visualizer_default('sine_line4_shift'))
-    sine_line5_shift: float = field(default_factory=lambda: _visualizer_default('sine_line5_shift'))
-    sine_line6_shift: float = field(default_factory=lambda: _visualizer_default('sine_line6_shift'))  # legacy, hidden
     rainbow_enabled: bool = field(default_factory=lambda: _visualizer_default('rainbow_enabled'))
     rainbow_speed: float = field(default_factory=lambda: _visualizer_default('rainbow_speed'))
-    sine_line_dim: bool = field(default_factory=lambda: _visualizer_default('sine_line_dim'))
     # Dev Curve visualizer
     devcurve_active_layer: str = field(default_factory=lambda: _visualizer_default('devcurve_active_layer'))
     devcurve_layer_bass_shape_nodes: List[List[float]] = field(default_factory=lambda: _visualizer_default('devcurve_layer_bass_shape_nodes'))
@@ -998,7 +887,6 @@ class SpotifyVisualizerSettings:
     # Visualizer presets (0=Preset 1/Default, 1=Preset 2, 2=Preset 3, 3=Custom)
     preset_spectrum: int = field(default_factory=lambda: _visualizer_default('preset_spectrum'))
     preset_oscilloscope: int = field(default_factory=lambda: _visualizer_default('preset_oscilloscope'))
-    preset_sine_wave: int = field(default_factory=lambda: _visualizer_default('preset_sine_wave'))
     preset_bubble: int = field(default_factory=lambda: _visualizer_default('preset_bubble'))
     preset_devcurve: int = field(default_factory=lambda: _visualizer_default('preset_devcurve'))
     preset_sphere: int = field(default_factory=lambda: _visualizer_default('preset_sphere'))
@@ -1009,7 +897,6 @@ class SpotifyVisualizerSettings:
 
     def __post_init__(self):
         self._apply_core_visual_defaults()
-        self._apply_sine_defaults()
         self._apply_devcurve_defaults()
         self._apply_sphere_defaults()
         self.shockwave_grid_terrain = normalize_heightfield(self.shockwave_grid_terrain)
@@ -1054,9 +941,6 @@ class SpotifyVisualizerSettings:
                 mode_opacity = float(_visualizer_default(opacity_attr))
             setattr(self, opacity_attr, mode_opacity)
  
-    def _apply_sine_defaults(self) -> None:
-        _apply_canonical_list_defaults(self, _SINE_SERIALIZERS)
-
 
     def _apply_devcurve_defaults(self) -> None:
         _apply_canonical_list_defaults(self, _DEVCURVE_SERIALIZERS)
@@ -1253,7 +1137,6 @@ class SpotifyVisualizerSettings:
         return _merge_serialized_sections(
             self._serialize_core_settings(prefix),
             self._serialize_spectrum_settings(prefix),
-            self._serialize_sine_settings(prefix),
             self._serialize_bubble_settings(prefix),
             self._serialize_devcurve_settings(prefix),
             self._serialize_sphere_settings(prefix),
@@ -1271,9 +1154,6 @@ class SpotifyVisualizerSettings:
 
     def _serialize_spectrum_settings(self, prefix: str) -> Dict[str, Any]:
         return _serialize_prefixed_fields(self, prefix, _SPECTRUM_SERIALIZERS)
-
-    def _serialize_sine_settings(self, prefix: str) -> Dict[str, Any]:
-        return _serialize_prefixed_fields(self, prefix, _SINE_SERIALIZERS)
 
     def _serialize_bubble_settings(self, prefix: str) -> Dict[str, Any]:
         return {f"{prefix}.bubble_gradient_semantics_version": CURRENT_BUBBLE_GRADIENT_SEMANTICS_VERSION}
@@ -1412,5 +1292,3 @@ class SpotifyVisualizerSettings:
     def resolve_bubble_transient_mix_vocal(self) -> float:
         return float(self.bubble_transient_mix_vocal)
 
-    def resolve_sine_wave_transient_width_mix(self) -> float:
-        return float(self.sine_wave_transient_width_mix)

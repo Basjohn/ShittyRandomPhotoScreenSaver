@@ -31,8 +31,8 @@ from core.settings.visualizer_mode_registry import (
 )
 
 REPO = Path(__file__).resolve().parents[1]
-# Sine is soft-retired (5.1.3, f9f09679): registered, never selectable, so it can be
-# neither the sole enabled mode nor an activated runtime.
+# A closed-gate mode is registered but never selectable, so it can be neither the
+# sole enabled mode nor an activated runtime.
 _SELECTABLE_MODE_IDS = tuple(mode_id for mode_id in VISUALIZER_MODE_IDS if is_mode_active(mode_id))
 
 _FRAME_RUNTIME_MODULES = {
@@ -94,7 +94,7 @@ def test_logical_hook_import_waits_for_its_activated_mode():
             runtime_generation=0, initial_mode='spectrum'
         )
         print(hook_module in sys.modules)
-        controller.set_mode('sine_wave')
+        controller.set_mode('devcurve')
         print(hook_module in sys.modules)
         """
     )
@@ -248,10 +248,9 @@ state._mode_teardown_block_until_ready = False
 state._mode_transition_ready = True
 state._waiting_for_fresh_engine_frame = False
 
-# Keep the heavy real engine.tick / heartbeat / perf out of the way; the mode
+# Keep the heavy real engine.tick / perf out of the way; the mode
 # dispatch + capture (which own the frame-runtime resolution) still run.
 tick_pipeline.consume_engine_bars = lambda owner, now: (True, True)
-tick_pipeline.process_heartbeat = lambda owner, now: None
 tick_pipeline.record_tick_perf = lambda owner, now: None
 
 for _ in range(3):

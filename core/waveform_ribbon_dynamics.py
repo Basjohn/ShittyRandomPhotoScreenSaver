@@ -113,6 +113,16 @@ GLOBAL_ATTACK = .35
 # by up to TROUGH_LIFT_MAX, easing up over TROUGH_ATTACK and down over TROUGH_RELEASE per stage (two stages).
 PACKET_FLOOR_HEIGHT, TROUGH_CLEARANCE, TROUGH_ROOM_MIN, TROUGH_LIFT_MAX = 2., .3, .4, 1.5
 TROUGH_ATTACK, TROUGH_RELEASE, TROUGH_VIEW = .15, 1.2, 32.  # the authored long lens sees ~±30 world units
+# Height Shift options (operator, 5 Nov). Static Height holds every ribbon at the highest safe point: the top of the shift
+# (TROUGH_LIFT_MAX), constant through every passage.
+# Tilt Shift: while the lift moves, the side the history travels toward leads by TILT_LEAD seconds of lift velocity
+# (bounded softly to TILT_MAX world units each side), so it rises first and settles first. History travels toward -x.
+HEIGHT_MODES = ('Dynamic Height Shift', 'Static Height')
+# A Travel Direction change fades every ribbon, spark and strand out over DIRECTION_FADE seconds (smoothstep, as a count
+# change shrinks and dims a ribbon), swaps the published direction while they are gone, then fades them back in over
+# the same time: never a mirrored pop. The history itself is untouched (it lives on its own axis).
+DIRECTION_FADE = .6
+TILT_LEAD, TILT_MAX, TILT_SIDE, TILT_EASE = .35, .6, -1., .3   # the lead eases over TILT_EASE seconds (no tick steps)
 
 # Selectable reaction modes (operator, 5 Nov). All share the injection and the couplings above.
 REACTION_MODES = ('Travelling Pulse', 'Frozen Past', 'Whole Swell', 'Group Wave')
@@ -229,19 +239,36 @@ def carrier_wavelength(controls):
 def row_gradient(f,xs):
     """``np.gradient(f[i],xs[i])`` for every row i at once, with NumPy's exact arithmetic (edge order 1, and the
     uniform-spacing formula for a row whose spacing is exactly constant), so results are bit-identical."""
+    return apply_row_gradient(f,row_gradient_coefficients(xs))
+
+
+def row_gradient_coefficients(xs):
+    """The spacing-only part of ``row_gradient``: shared by every field sampled at the same rows of ``xs``."""
     dx = np.diff(xs,axis=1)
-    out = np.empty_like(f)
     dx1,dx2 = dx[:,:-1],dx[:,1:]
-    a = -(dx2)/(dx1*(dx1+dx2))
-    b = (dx2-dx1)/(dx1*dx2)
-    c = dx1/(dx2*(dx1+dx2))
-    interior = a*f[:,:-2]+b*f[:,1:-1]+c*f[:,2:]
-    uniform = (dx==dx[:,:1]).all(axis=1)
+    return (dx,-(dx2)/(dx1*(dx1+dx2)),(dx2-dx1)/(dx1*dx2),dx1/(dx2*(dx1+dx2)),(dx==dx[:,:1]).all(axis=1))
+
+
+def apply_row_gradient(f,coefficients):
+    """``f`` is (rows, knots), or (fields, rows, knots) for several fields sampled at the same rows."""
+    dx,a,b,c,uniform = coefficients
+    out = np.empty_like(f)
+    interior = a*f[...,:-2]+b*f[...,1:-1]+c*f[...,2:]
     if uniform.any():
-        interior[uniform] = ((f[:,2:]-f[:,:-2])/(2.*dx[:,:1]))[uniform]
-    out[:,1:-1] = interior
-    out[:,0] = (f[:,1]-f[:,0])/dx[:,0]
-    out[:,-1] = (f[:,-1]-f[:,-2])/dx[:,-1]
+        interior[...,uniform,:] = ((f[...,2:]-f[...,:-2])/(2.*dx[:,:1]))[...,uniform,:]
+    out[...,1:-1] = interior
+    out[...,0] = (f[...,1]-f[...,0])/dx[:,0]
+    out[...,-1] = (f[...,-1]-f[...,-2])/dx[:,-1]
+    return out
+
+
+def uniform_gradient(f,spacing):
+    """``np.gradient(f,spacing)`` for a 1D field and scalar spacing, with NumPy's exact arithmetic (edge order 1),
+    without its general-purpose setup (it ran twice a tick on the pulse grid)."""
+    out = np.empty_like(f)
+    out[1:-1] = (f[2:]-f[:-2])/(2.*spacing)
+    out[0] = (f[1]-f[0])/spacing
+    out[-1] = (f[-1]-f[-2])/spacing
     return out
 
 
@@ -277,6 +304,8 @@ class HybridControls:
     idle_motion: float = .35
     strands: RibbonStrandControls | None = None
     pulse: PulseControls = PulseControls()
+    height_mode: str = 'Dynamic Height Shift'
+    tilt_shift: bool = False
 
 
 @dataclass(frozen=True)
@@ -298,6 +327,7 @@ class HybridSnapshot:
     strands: bytes = b''
     strand_origin: float = 0.
     zoom: float = 1.
+    direction: float = 1.           # published Travel Direction (Flow.direction): history axis -> world x sign
 
 
 class WaveformDynamics:
@@ -315,6 +345,7 @@ class WaveformDynamics:
         self._fresh = np.zeros((2,PULSE_GRID.size))  # the same transport with a short fade: recently launched swells
         self._pulse_pending = 0.
         self._trough_stage,self._trough_lift,self._trough_time = np.zeros((RIBBON_CAPACITY,1)),np.zeros((RIBBON_CAPACITY,1)),None
+        self._tilt_lead,self._tilt_time = np.zeros((RIBBON_CAPACITY,1)),None
         self._held = np.zeros((4,PULSE_GRID.size))  # Frozen Past on the cloth: memory, peak, previous swell, rising
         self._whole = self._whole_fresh = 0.         # Whole Swell global raw level and its short-fade copy
         self._drift_stage = np.zeros(PULSE_GRID.size)  # first stage of the surge's easing
@@ -335,6 +366,8 @@ class WaveformDynamics:
         self._drive_stage = {key:0. for key in SMOOTH_TARGETS}
         self._response_peak = {key:RESPONSE_PEAK_FLOOR for key in RESPONSE_TARGETS}  # recent peak per drive (gain)  # first stage of the geometry drives' smoothing
         self.count_share = [1. if index < controls.count else 0. for index in range(RIBBON_CAPACITY)]
+        self.direction = controls.scene.flow.direction
+        self._direction_phase = self.direction_share = 1.   # linear fade phase and its smoothstep share
         self._primed = 0
         self._next_knot = 1./controls.scene.flow.knot_hz
         self._snapshot = None
@@ -480,6 +513,13 @@ class WaveformDynamics:
             self.count_share[index] = follower(self.count_share[index],float(index<c.count),dt,.5,.5)
             if abs(self.count_share[index]-float(index<c.count)) < 1e-4:
                 self.count_share[index] = float(index<c.count)
+        if c.scene.flow.direction != self.direction or self._direction_phase < 1.:
+            out = c.scene.flow.direction != self.direction
+            self._direction_phase = min(1.,max(0.,self._direction_phase+(-dt if out else dt)/DIRECTION_FADE))
+            if out and self._direction_phase == 0.:
+                self.direction = c.scene.flow.direction
+            phase = self._direction_phase
+            self.direction_share = phase*phase*(3.-2.*phase)
         if self.ready:
             # The bounded logical step crosses at most one six-Hz knot; render delivery never owns admission.
             if self._next_knot <= self.time+1e-9:
@@ -506,7 +546,25 @@ class WaveformDynamics:
             payload=self._strand_cohorts.update(snapshot,c.strands,accent,history=self._base_packet,knot_hz=c.scene.flow.knot_hz,
                                                 swell=self.pulse_focus,gather=c.pulse.strands)
             self._snapshot=replace(self._snapshot,strands=payload,strand_origin=self._strand_cohorts.origin)
+        if self.direction_share < 1.:
+            self._snapshot = self._direction_faded(self._snapshot,self.direction_share)
         return self._snapshot
+
+    @staticmethod
+    def _direction_faded(snapshot,share):
+        """Sparks and strands dim with their ribbons through a Travel Direction change (light only; their births,
+        lifetimes and identities are untouched, so they reappear where they are)."""
+        particles,strands = snapshot.particles,snapshot.strands
+        if particles:
+            births = np.frombuffer(particles,np.float32).reshape(-1,16).copy()
+            births[:,12] *= share                                   # spark light
+            particles = births.tobytes()
+        if strands:
+            from core.ribbon_strand_cohorts import COHORT_ROWS
+            records = np.frombuffer(strands,np.float32).reshape(-1,COHORT_ROWS,4).copy()
+            records[:,1,3] *= share                                 # strand light
+            strands = records.tobytes()
+        return replace(snapshot,particles=particles,strands=strands)
 
     def _advance_pulse(self,dt,hit,energy):
         """Inject, carry, spread and fade the travelling energy. Silence injects nothing; energy already
@@ -687,12 +745,12 @@ class WaveformDynamics:
         # The gradient is linear, so g' = share*swell' and g'' = share*swell''; each ratio share*a/(1 + share*swell)
         # rises monotonically with share, so the bound share*(a - limit*swell) <= limit is exact per grid point.
         # (Formerly a 20-step bisection with two np.gradient calls per step: ~40 gradients a tick.)
-        first = np.gradient(swell,PULSE_DX)
-        second = np.gradient(first,PULSE_DX)
+        first = uniform_gradient(swell,PULSE_DX)
+        second = uniform_gradient(first,PULSE_DX)
         share = 1.
         for slope,limit in ((np.abs(first),GEOM_SLOPE*k),(np.abs(second),GEOM_CURVE*k*k)):
             over = slope-limit*swell
-            binding = over>0.
+            binding = over>limit        # only these can bring the share below 1 (smaller ones would also overflow)
             if binding.any():
                 share = min(share,float((limit/over[binding]).min()))
         # One share bounds the whole field, so when the binding constraint somewhere lets go every swell on screen grew
@@ -749,22 +807,26 @@ class WaveformDynamics:
             left,right = np.take_along_axis(xs,cell,1),np.take_along_axis(xs,cell+1,1)
             h = right-left
             t = (target-left)/h
-            h00,h10,h01,h11 = 2*t**3-3*t*t+1,t**3-2*t*t+t,-2*t**3+3*t*t,t**3-t*t
-            for values in (y,z):
-                vs = values[rows,order]
-                slope = row_gradient(vs,xs)
-                pick = lambda field,at: np.take_along_axis(field,at,1)
-                values[rows,order] = (h00*pick(vs,cell)+h10*h*pick(slope,cell)+h01*pick(vs,cell+1)
-                                      +h11*h*pick(slope,cell+1))
+            cube = t**3
+            h00,h10,h01,h11 = 2*cube-3*t*t+1,cube-2*t*t+t,-2*cube+3*t*t,cube-t*t
+            # y and z resampled together as one (2, rows, knots) stack: the same element-wise arithmetic in one pass.
+            vs = np.stack((y[rows,order],z[rows,order]))
+            slope = apply_row_gradient(vs,row_gradient_coefficients(xs))
+            pick = lambda field,at: np.take_along_axis(field,at[None],2)
+            resampled = (h00*pick(vs,cell)+h10*h*pick(slope,cell)+h01*pick(vs,cell+1)+h11*h*pick(slope,cell+1))
+            y[rows,order],z[rows,order] = resampled[0],resampled[1]
             x[rows,order] = target
         return x,y,z
 
-    def _floor_room(self,height,hang,room,visible):
+    def _floor_room(self,height,hang,room,visible,static=None):
         """Per ribbon: how far to lift the whole ribbon so its lower edge stays TROUGH_CLEARANCE above the floor (see
         snapshot). Two cascaded followers (TROUGH_ATTACK up, TROUGH_RELEASE down, on the logical clock), so the lift's
         velocity is continuous: a one-stage follower jumped on every new trough, which was itself a twitch."""
-        sinking = np.where(visible,hang-height,-np.inf)                     # depth of the lower edge below rest
-        target = np.clip(sinking.max(axis=1,keepdims=True)-room,0.,TROUGH_LIFT_MAX)
+        if static is None:
+            sinking = np.where(visible,hang-height,-np.inf)                 # depth of the lower edge below rest
+            target = np.clip(sinking.max(axis=1,keepdims=True)-room,0.,TROUGH_LIFT_MAX)
+        else:
+            target = np.full((RIBBON_CAPACITY,1),static)                    # Static Height (a live switch eases)
         if self._trough_time is None:
             self._trough_stage = self._trough_lift = target
         elif self.time>self._trough_time:
@@ -776,6 +838,24 @@ class WaveformDynamics:
                 setattr(self,name,current+(goal-current)*(1.-np.exp(-dt/tau)))
         self._trough_time = self.time
         return self._trough_lift
+
+    def _height_shift(self,height,hang,room,x):
+        """Per ribbon (and, with Tilt Shift, per knot) vertical offset that keeps lower edges off the floor."""
+        static = TROUGH_LIFT_MAX if self.controls.height_mode=='Static Height' else None
+        lift = self._floor_room(height,hang,room,np.abs(x)<TROUGH_VIEW,static)
+        # Tilt Shift: the lift's velocity (its second stage follows the first, so it is continuous) sets a lead that
+        # eases once more, so the tilt is smooth in velocity too. Switched off (or Static Height) the lead eases back to
+        # zero rather than vanishing; a ribbon that never tilted keeps an exact zero lead (byte-identical body).
+        goal = 0.
+        if static is None and self.controls.tilt_shift:
+            gap = self._trough_stage-lift
+            goal = TILT_MAX*np.tanh(TILT_LEAD*gap/np.where(gap>0.,TROUGH_ATTACK,TROUGH_RELEASE)/TILT_MAX)
+        if self._tilt_time is not None and self.time>self._tilt_time:
+            self._tilt_lead = self._tilt_lead+(goal-self._tilt_lead)*(1.-math.exp(-(self.time-self._tilt_time)/TILT_EASE))
+        self._tilt_time = self.time
+        if not self._tilt_lead.any():
+            return lift
+        return lift+self._tilt_lead*np.clip(TILT_SIDE*x/TROUGH_VIEW,-1.,1.)
 
     def _advance_zoom(self,dt,enabled,hold):
         self._sustain = follower(self._sustain,self.passage,dt,ZOOM_SUSTAIN_ATTACK,ZOOM_SUSTAIN_RELEASE)
@@ -863,7 +943,7 @@ class WaveformDynamics:
         # eases through two stages on the logical clock (see _floor_room); a deeper trough than the cap may still graze.
         hang = np.abs(rows[:,:,3]*np.cos(data[:,5::KNOT_ROWS,1]))
         room = max(TROUGH_ROOM_MIN,PACKET_FLOOR_HEIGHT+values['lift']-TROUGH_CLEARANCE)
-        rise = self._floor_room(y,hang,room,np.abs(x)<TROUGH_VIEW)
+        rise = self._height_shift(y,hang,room,x)
         rows[:,:,1] = 5.*np.tanh(y/5.)+values['lift']+rise
         # Strong local musical regions change colour immediately, even before new head history enters view.
         # The crest mask is carried by immutable carrier geometry, so coloured regions travel with the waveform.
@@ -890,12 +970,17 @@ class WaveformDynamics:
             tint = data[:n,8::KNOT_ROWS]
             swelling = np.clip(swell[:n],0.,1.)
             share = np.maximum(np.maximum(share,tint[:,:,3]),self.controls.pulse.colour*swelling)
-            hsv = []
-            for card in cards:
-                quiet = tuple((a+b)*.5 for a,b in zip(*card['quiet']))
-                peak = tuple((a+b)*.5 for a,b in zip(*card['peak']))
-                a,b = colorsys.rgb_to_hsv(*quiet),colorsys.rgb_to_hsv(*peak)
-                hsv.append((a[0],(b[0]-a[0]+.5)%1.-.5,a[1],b[1]-a[1],a[2],b[2]-a[2]))
+            # The cards' quiet/peak HSV depends only on the cards: converted once per card set, not every tick.
+            cached = getattr(self,'_card_hsv',None)
+            if cached is None or cached[0] is not cards:
+                hsv = []
+                for card in cards:
+                    quiet = tuple((a+b)*.5 for a,b in zip(*card['quiet']))
+                    peak = tuple((a+b)*.5 for a,b in zip(*card['peak']))
+                    a,b = colorsys.rgb_to_hsv(*quiet),colorsys.rgb_to_hsv(*peak)
+                    hsv.append((a[0],(b[0]-a[0]+.5)%1.-.5,a[1],b[1]-a[1],a[2],b[2]-a[2]))
+                self._card_hsv = cached = (cards,hsv)
+            hsv = cached[1]
             hue_a,hue_d,sat_a,sat_d,val_a,val_d = (column(field,share) for field in zip(*hsv))
             hue = (hue_a+hue_d*share)%1.
             saturation = sat_a+sat_d*share
@@ -910,6 +995,7 @@ class WaveformDynamics:
             alpha = np.clip(share/.1,0.,1.)
             tint[:,:,3] = alpha*alpha*(3.-2.*alpha)
         for index,share in enumerate(self.count_share):
+            share = share*self.direction_share
             data[index,2,:3] = self.controls.cards[index]['quiet'][0]
             data[index,3,:3] = self.controls.cards[index]['quiet'][1]
             rows[index,:,1:3] *= share
@@ -920,5 +1006,5 @@ class WaveformDynamics:
         packet = RibbonPacket(data.tobytes(),raw.instances,raw.vertices,(raw.world_origin[0],2.,0.),raw.coordinate_origin)
         self._snapshot = HybridSnapshot(packet,self.time,self.travel,self.angle,self.angular_speed,self.twist_phase,
             tuple(self.drive.items()),tuple(values.items()),self.ready,passage=self.passage,
-            head_x=self.controls.scene.flow.head_x,zoom=self.zoom)
+            head_x=self.controls.scene.flow.head_x,zoom=self.zoom,direction=self.direction)
         return self._snapshot

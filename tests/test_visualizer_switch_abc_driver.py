@@ -8,8 +8,8 @@ contract:
   condition WAITS for that baseline to settle (no baseline slot-load) then proceeds
   (A really is Bubble);
 * A holds without switching or any recreation;
-* B/C perform the EXACT ``Sphere -> Spectrum -> Oscilloscope -> Sine -> Bubble``
-  sequence for exactly 5 cycles (25 switches, no DevCurve), each advancing only on
+* B/C perform the EXACT ``Sphere -> Spectrum -> Oscilloscope -> Bubble``
+  sequence for exactly 5 cycles (no DevCurve), each advancing only on
   a genuine completion edge, then settle on Bubble;
 * only condition C loads the slot, once, as its recreation intervention, producing
   both a pre-recreation and a post-recreation scored window;
@@ -175,9 +175,9 @@ def test_condition_b_drives_exact_five_cycles_then_settles_on_bubble(qt_app):
     world.ready_baseline()
     world.run_all_switches()
     world.advance_hold()  # steady_B
-    # Exactly 25 switches, exact order, DevCurve never touched, settled on Bubble.
+    # Exactly 5 full cycles, exact order, DevCurve never touched, settled on Bubble.
     assert world.requested == list(EXPOSURE_SEQUENCE) * 5
-    assert len(world.requested) == 25
+    assert len(world.requested) == 5 * len(EXPOSURE_SEQUENCE)
     assert "devcurve" not in world.requested
     assert world.mode == "bubble"
     assert world.load_calls == 0  # B never recreates the runtime
