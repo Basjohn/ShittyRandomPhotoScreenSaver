@@ -682,18 +682,18 @@ class WaveformDynamics:
             self._geom_share = (1.,self.time)
             return np.ones(PULSE_GRID.size)
         k = 2.*math.pi/carrier_wavelength(self.controls)
-        def excess(share):
-            g = 1.+share*swell
-            first = np.gradient(g,PULSE_DX)
-            second = np.gradient(first,PULSE_DX)
-            return max(np.abs(first/g).max()/(GEOM_SLOPE*k),np.abs(second/g).max()/(GEOM_CURVE*k*k))
+        # The largest share in [0, 1] with |g'|/g <= GEOM_SLOPE*k and |g''|/g <= GEOM_CURVE*k^2 for g = 1 + share*swell.
+        # The gradient is linear, so g' = share*swell' and g'' = share*swell''; each ratio share*a/(1 + share*swell)
+        # rises monotonically with share, so the bound share*(a - limit*swell) <= limit is exact per grid point.
+        # (Formerly a 20-step bisection with two np.gradient calls per step: ~40 gradients a tick.)
+        first = np.gradient(swell,PULSE_DX)
+        second = np.gradient(first,PULSE_DX)
         share = 1.
-        if excess(1.)>1.:
-            low,high = 0.,1.
-            for _ in range(20):
-                share = .5*(low+high)
-                low,high = (share,high) if excess(share)<=1. else (low,share)
-            share = low
+        for slope,limit in ((np.abs(first),GEOM_SLOPE*k),(np.abs(second),GEOM_CURVE*k*k)):
+            over = slope-limit*swell
+            binding = over>0.
+            if binding.any():
+                share = min(share,float((limit/over[binding]).min()))
         # One share bounds the whole field, so when the binding constraint somewhere lets go every swell on screen grew
         # at once (5 Nov: the gain jumped 2.39 -> 2.89 in one tick, a vertical pop). The share may fall at once (that
         # is the flow-rule safety) but rises at most GEOM_SHARE_RISE per second; a smaller share is always safe.
