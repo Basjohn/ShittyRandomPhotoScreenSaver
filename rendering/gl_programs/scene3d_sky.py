@@ -99,30 +99,46 @@ vec4 skyNebula(vec3 ray, vec3 rim, vec3 core, vec4 nebula, vec3 focus, uint seed
     region = 0.0;
     if (nebula.x <= 0.0) return vec4(0.0);
     vec3 p = ray * mix(0.9, 3.2, nebula.y);
-    // Bodies of gas with dark space between them, ragged at their edges, rather than a fill.
+    // Streams of gas with dark space between them, ragged at their edges, rather than a fill: the regions are
+    // drawn out along one flowing direction (detail a third as fast along it), so the gas lies in long bands.
+    vec3 flow = normalize(vec3(0.70, 0.71, 0.04));
+    vec3 a = p - flow * dot(p, flow) * 0.66;
     float gather = 0.3 * dot(ray, focus) - 0.12 * length(focus);
-    region = smoothstep(0.47, 0.76, skyFbm3(p * 0.5 + vec3(3.1, 7.7, 1.3), min(octaves, 3), seed + 40u) + gather);
+    // The gas crowds along one great circle (a galactic band rising diagonally from the horizon), meandering
+    // and ragged, with only sparse patches away from it, as a real night sky's nebulae lie along its plane.
+    vec3 bandNormal = normalize(cross(vec3(0.136, 0.238, -0.962), vec3(-0.100, 0.000, -0.995)));
+    float across = dot(ray, bandNormal) + 0.8 * (skyFbm3(a * 0.55 + vec3(2.3, 5.1, 0.7), octaves <= 2 ? 1 : 3, seed + 50u) - 0.5);
+    float band = exp(-across * across / 0.008);
+    region = smoothstep(0.50, 0.78, skyFbm3(a * 0.62 + vec3(3.1, 7.7, 1.3), min(octaves, 3), seed + 40u) + gather
+                                    + 0.45 * band - 0.12);
     if (region <= 0.0) return vec4(0.0);
     if (octaves <= 2) {
         float broad = smoothstep(0.32, 0.80, skyFbm3(p * 1.4, octaves, seed) * (0.35 + 0.85 * region));
         vec3 glow = mix(rim, core, smoothstep(0.30, 1.0, broad)) * broad * mix(0.85, 0.3, nebula.z);
         return vec4(glow / (1.0 + 0.6 * max(max(glow.r, glow.g), glow.b)) * nebula.x, 0.0);
     }
-    // Warped so the gas billows and folds instead of sitting on the lattice.
-    vec3 warp = vec3(skyNoise3(p * 1.2, seed + 3u), skyNoise3(p * 1.2 + vec3(5.2, 1.3, 2.8), seed + 4u),
-                     skyNoise3(p * 1.2 + vec3(9.1, 4.4, 7.6), seed + 5u)) - 0.5;
-    vec3 q = p + warp * 1.6;
+    // The same drawn-out space for the gas itself, so it streams in long wisps rather than round billows; a
+    // warp makes the streams meander and fold.
+    vec3 warp = vec3(skyNoise3(a * 1.2, seed + 3u), skyNoise3(a * 1.2 + vec3(5.2, 1.3, 2.8), seed + 4u),
+                     skyNoise3(a * 1.2 + vec3(9.1, 4.4, 7.6), seed + 5u)) - 0.5;
+    vec3 q = a + warp * 1.3;
     float body = smoothstep(0.32, 0.80, skyFbm3(q * 1.4, octaves, seed) * (0.35 + 0.85 * region));
-    // Filaments: thin bright ridges where a second sum crosses its middle, sharper as they rise.
+    // Filaments: thin bright ridges where a second sum crosses its middle, sharper as they rise, and a finer
+    // family of strands threading through them.
     float strand = 1.0 - abs(2.0 * skyFbm3(q * 2.2 + vec3(1.7), max(1, octaves - 1), seed + 7u) - 1.0);
-    strand = pow(strand, mix(3.0, 14.0, nebula.z)) * smoothstep(0.0, 0.5, region);
+    float fine = 1.0 - abs(2.0 * skyFbm3(q * 4.6 + vec3(6.3), max(1, octaves - 2), seed + 9u) - 1.0);
+    float edge = smoothstep(0.0, 0.5, region);
+    strand = (pow(strand, mix(3.0, 14.0, nebula.z)) + 0.45 * pow(fine, mix(6.0, 22.0, nebula.z)) * body) * edge;
     float dust = nebula.w <= 0.0 ? 0.0
                : smoothstep(0.46, 0.64, skyFbm3(q * 2.8 + vec3(4.3, 2.1, 8.8), 3, seed + 13u))
                  * nebula.w * smoothstep(0.0, 0.4, region);
     float heat = smoothstep(0.30, 1.0, body);
-    vec3 light = mix(rim, core, heat) * body * mix(0.85, 0.3, nebula.z)
-               + mix(rim, core, heat * 0.5) * strand * mix(0.25, 0.9, nebula.z)
-               + mix(core, vec3(1.0), 0.4) * heat * heat * heat * 0.6;
+    // The two colours sit in different streams rather than only ringing each cloud's core.
+    float hue = smoothstep(0.35, 0.65, skyNoise3(q * 0.55 + vec3(2.9), seed + 21u));
+    vec3 tint = mix(rim, core, clamp(0.65 * hue + 0.35 * heat, 0.0, 1.0));
+    vec3 light = tint * body * region * mix(0.45, 0.12, nebula.z)
+               + mix(tint, core, heat * 0.4) * strand * mix(0.35, 1.1, nebula.z)
+               + mix(core, vec3(1.0), 0.4) * heat * heat * heat * 0.45;
     // Highlights roll off instead of clipping into flat plateaus.
     light /= 1.0 + 0.6 * max(max(light.r, light.g), light.b);
     return vec4(light * (1.0 - dust * 0.95) * nebula.x, dust * 0.9 * min(1.0, nebula.x * 2.0));
