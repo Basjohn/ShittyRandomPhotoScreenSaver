@@ -204,8 +204,9 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   read pastel). All presets darker far surface (.2) and brightness (1.2); P3 stronger, wider-smeared reflection
   masses (lit saturation .60 vs reference .59, current .54). Consecutive frames smooth (flicker .0068 -> .0105, from
   brighter moving masses, no column popping); evidence `studio_20261105/floor4/`.
-  Floor collision (operator, 5 Nov): troughs no longer meet the floor — a per-ribbon lower-half depth scale keeps them
-  round above it (centre contact 51-67% -> 0%, visible hot envelope -4 to -8%, tick +0.13 ms); verify on hardware.
+  Floor collision (operator, 5 Nov): a ribbon whose lower edge nears the floor lifts as a WHOLE (shape-exact, two-stage
+  eased, up to 1.5 units); per-knot trough limits were rejected as boxy. Wide sheets (P2) still graze ~60% of ticks:
+  optional Floor Give (the wet floor dents under the ribbons) is in progress on an agent branch.
 - [ ] **Dense highlights, moving colour and rim glow:** playback still lacks rewarded high-energy density and glow.
   Verify local crest/high-power colour, bright tunable rim/glow and denser highlights against actual music, including
   quiet/loud differences. Consumer reachability does not establish visible strength. Keep both range handles effective.
@@ -246,8 +247,9 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
 - [ ] **Waveform Studio (replaces the rejected builder UI):** in-process, reusable (mode registry + switcher;
   test-only second mode) Qt Quick Studio per the operator's design pack; Settings > Custom opens it; production
   framing on the real card; camera navigation; theme-token chrome; full registry coverage; Energy Pulse/Reaction Mode
-  first in Reactivity; target-first response tuner. Open: Stage C/D instruments (scene handles, gradient strips,
-  lifecycle timelines, mist/floor cards), icon polish and mock parity; real-window checks on hardware (visible window,
+  first in Reactivity; target-first response tuner. Opens on the live card's world (Fill framing; 1493e246) with the
+  mock's viewport toolbar, ribbon arrows and curve tiles. Open: remaining mock parity; shipped audio (3 compact clips:
+  Rag Doll, Human, Growing Pains in a lazily read assets folder, never the .rcc; agent branch in progress); real-window checks on hardware (visible window,
   native Settings hide/restore, exit timing via `[STUDIO] retire` logs, per-monitor DPI). Remove the old builder body
   once the Studio passes operator acceptance.
 - [ ] **Live performance and truthful evidence:** run all three presets under matched recorded PCM/game60 and admitted
@@ -259,7 +261,9 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   5 Nov: the logical tick (Waveform dynamics) was 2.2-3.2 ms median offline (live ~1.4x, budget 2.5 ms) after the
   reaction work; the along-curve surge and per-card colouring now run as rows (byte-identical packets proven per tick
   on real replays; paired -0.33 and -0.18 ms), quiet-machine median 1.32-1.35 ms all presets. Offline GPU at the
-  live card size: P2 7.2-7.6 ms with strands, 6.0-6.6 without (strands ~1.1 ms). Next: the game60 live check.
+  live card size: P2 7.2-7.6 ms with strands, 6.0-6.6 without (strands ~1.1 ms). 5 Nov (late): the no-twitch/pulse
+  work added no tick cost vs a21a2b0c (same machine, human_heavy: advance median 2.45 ms both) and the closed-form
+  flow-rule share took it to 2.30 ms. Next: GPU re-measure once Floor Give lands, then the game60 live check.
 
 Chosen first: the smallest contained scene and the first consumer of S3D-1/S3D-2/S3D-5. Brief and hard gates:
 `Docs/Future_Work/Waveform_Ribbon.md`. The detailed working checklist and visual target custody live in
@@ -355,8 +359,8 @@ design pack's control policy (quiet/peak A/B, real ranges only where a true inte
 serialized data unless a migration is justified. Accepted looks/behaviour (BTF, presets, timings) must not change.
 
 - [ ] Finish Waveform Studio acceptance first (§7.1), then extract any remaining Waveform-shaped assumptions.
-- [ ] Adapters in order of authoring pain: Extruded Bubble, Bubble, Sphere, Spectrum/Rainbow Ghost, Extruded Spectrum,
-  Shockwave Grid, DevCurve, Oscilloscope. Each: full registry coverage test, production-parity preview test, theme,
+- [ ] Adapters in order of authoring pain (Extruded Bubble built; Bubble in progress): Sphere, Spectrum/Rainbow Ghost,
+  Extruded Spectrum, Shockwave Grid, DevCurve, Oscilloscope. Each: full registry coverage test, production-parity preview test, theme,
   Settings Custom launcher replacing that builder body once the operator accepts it.
 
 ## Operator execution and evidence rules
