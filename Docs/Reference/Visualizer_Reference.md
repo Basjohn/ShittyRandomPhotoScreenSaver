@@ -71,9 +71,6 @@ Oscilloscope's Phase Delay row appears only in Phase display, while Graticule Co
 Signal-blocked loads apply the same conditions, and hidden values remain authored and round-trip unchanged.
 Conditional signal bookkeeping and row-capturing predicates belong to the current body generation: retirement drops
 them, and reconstruction binds the new widgets afresh. Section-lazy expansion reuses only that generation's connections.
-Sine's Displacement belongs to Motion because it affects every enabled line, including single-line mode; the
-Multi-Line editor controls the additional lines and no longer claims a three-line limit.
-
 Spline Curve's scalar controls are logical-owned, including ghost and foreground styling, because its logical frame
 snapshot consumes them. Its four-layer spline editor remains Custom with independent nodes, power, enabled/alpha/offset,
 opaque outlines and ranked stacking. The shared builder preserves paired FX toggles, signed offsets, conditional rows
@@ -220,7 +217,7 @@ Durable accepted flow:
 ```text
 source / engine
     -> sole VisualizerLogicalRuntime
-    -> mode-owned logical frame runtime / capture (spectrum/oscilloscope/sine/bubble/devcurve/sphere)
+    -> mode-owned logical frame runtime / capture (spectrum/oscilloscope/bubble/devcurve/sphere)
     -> immutable latest logical publication
     -> GUI/Quick synchronization owner
         -> current resolved presentation state
@@ -430,7 +427,6 @@ Quick deliberately retires the pre-Quick per-mode preferred-height/growth custom
 ```text
 spectrum_growth
 osc_growth
-sine_wave_growth
 bubble_growth
 devcurve_growth
 ```
@@ -490,7 +486,7 @@ Expected adaptation at constant scale:
 - Spectrum reflows/redistributes bars across available width/height;
 - Bubble expands/reflows its position, trail and motion world without stretching circles; stream/drift deltas project once per expanded axis, nonbaseline trail smear is solved in renderer-content coordinates, and swirl orbit/birth geometry removes the independent domain axes so visible travel does not fall by `1 / domain_axis` or distort with aspect; its authored radius projects through the equal-area canonical height described below; collision/spawn policy remains canonical normalized content-space separation, with unchanged BTF event behavior;
 - Bubble lifecycle distances (entry depth/margin, cluster spread, exit/drain and contraction grace, overlap retry and pre-entry prediction) are likewise renderer-content values projected once per expanded axis; canonical literals and random draw order remain exact;
-- Oscilloscope/Sine/DevCurve adapt domain while keeping stroke scale;
+- Oscilloscope/DevCurve adapt domain while keeping stroke scale;
 - Sphere uses aspect-correct projection and stays round.
 
 Every registered mode is viewport-resize-capable through its declared presentation policy; carded and frameless policies adapt their authored domain through their own geometry contract. The core Bubble capability/reflow path is landed. Do not reintroduce a Bubble false gate to conceal an implementation defect. Committed viewport truth remains separate from temporary CUSTOM working geometry; any newly reproduced spatial defect must preserve authored Bubble response and the binding BTF contract rather than reviving phase-specific gates.

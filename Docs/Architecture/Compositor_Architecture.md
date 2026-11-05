@@ -212,7 +212,6 @@ The old per-mode card-height/growth controls are not current geometry:
 ```text
 spectrum_growth
 osc_growth
-sine_wave_growth
 bubble_growth
 devcurve_growth
 ```

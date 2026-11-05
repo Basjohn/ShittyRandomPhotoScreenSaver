@@ -622,7 +622,7 @@ Set-Location $root
 & '.\.venv\Scripts\python.exe' -m tools.visualizer_replay.bubble_judder --px-per-unit 300 --compare-release
 ```
 
-`mode_audit` reads the local recorded-music corpus and measures Spectrum, Oscilloscope, Sine, Dev Curve and Shockwave Grid; `sphere_ramp` exercises Voxel Sphere's real-scale response; `bubble_judder` measures Bubble's observed radius and movement in the same recordings, including the release-envelope comparison. Agents must report the actual recorded clip names, mode, measured quiet/usual/loud response or event coverage, and any replay limitations. These offline results are **logical/observation evidence, not native GPU pixels, physical musical feel, or measured end-to-end latency**. Recordings complement rather than replace committed synthetic fixtures/frozen-settings regression floors; `python -m tools.visualizer_replay` and `tests/test_visualizer_replay.py` run that **different synthetic suite**, not the operator's recordings. Do not automatically recalibrate a golden from local music, nor force Spectrum shaping into modes that lack the Spectrum shaper.
+`mode_audit` reads the local recorded-music corpus and measures Spectrum, Oscilloscope, Dev Curve and Shockwave Grid; `sphere_ramp` exercises Voxel Sphere's real-scale response; `bubble_judder` measures Bubble's observed radius and movement in the same recordings, including the release-envelope comparison. Agents must report the actual recorded clip names, mode, measured quiet/usual/loud response or event coverage, and any replay limitations. These offline results are **logical/observation evidence, not native GPU pixels, physical musical feel, or measured end-to-end latency**. Recordings complement rather than replace committed synthetic fixtures/frozen-settings regression floors; `python -m tools.visualizer_replay` and `tests/test_visualizer_replay.py` run that **different synthetic suite**, not the operator's recordings. Do not automatically recalibrate a golden from local music, nor force Spectrum shaping into modes that lack the Spectrum shaper.
 
 `test_bubble_render_judder.py` protects the accepted release-envelope negative control and exact authored small-radius
 snapshot targets. `test_bubble_fidelity_report.py` protects identity-preserving observation, truthful frame indices,
@@ -718,7 +718,7 @@ The frame-trace sidecar remains current diagnostic authority for Visualizer perf
 
 High-value permanent guards include:
 
-- `tests/test_visualizer_logical_hook_dormancy.py` — active-only Sine queries, activation-resolved hooks, registry-derived
+- `tests/test_visualizer_logical_hook_dormancy.py` — activation-resolved hooks, registry-derived
   repeated switching, lazy import, malformed-descriptor rejection and synthetic registry growth without common-tick work;
 - `tests/test_p2_audio_capture_lane.py` — backend create/open/restart/release are serial on the dedicated capture
   owner; blocked opens leave the GUI free, newest-state admission stays bounded, callback conversion cannot publish
