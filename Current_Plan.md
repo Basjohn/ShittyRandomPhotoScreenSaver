@@ -161,7 +161,12 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   and count in old state. The recorded draft still needs visual correction: white/rope-like overlaps, repeated
   continuation, weak/dark atmosphere and a poor floor/contact strip remain rejected. Do not equate source tests,
   particle/root counts or larger amplitude with reference fidelity.
-- [~] **Musical shape response, punch and grace — candidate (R1/R2, 5 Nov), awaiting operator eyes/ears:** root
+- [~] **Travelling energy pulse (5 Nov), awaiting operator eyes/ears:** operator rejected the R1/R2 elastic motion
+  as fundamentally wrong; reactions must feel like water waves WITH the shape. Beats launch swells that travel along the
+  waveform and amplify its own crests/troughs, width, light and colour (Energy Pulse bucket: direction, width, speed,
+  colour shift, fade; Bend range = Pulse Strength). Audit doc decision 7. Optional next: Frozen past; selectable
+  reaction modes only if another model matches fidelity.
+- [~] **Musical shape response, punch and grace — candidate (R1/R2, 5 Nov), superseded in part by the pulse:** root
   causes measured, not guessed: the axial roll rotated the louder passage's vertical excursion into invisible depth
   (envelope uncorrelated with its own drive) and real music traversed ~1/5 of every quiet->peak range. Now: roll turns
   only the carrier, Height/Bend/Depth act in world space after it, bends travel with the cloth, fixed real-music spans
