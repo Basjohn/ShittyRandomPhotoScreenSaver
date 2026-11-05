@@ -48,9 +48,23 @@ def near_circle(front_depth: float, focus: float, aperture: float, pixel_scale: 
     return pixel_scale * (aperture / 3.0) * max(focus-front_depth, 0.0) / max(front_depth, 2.5)
 
 
-def parameters(slot: int):
-    basename = {1: "preset_1_sunlit_surface.json", 7: "preset_7_ember_drift.json"}[slot]
-    p = ROOT / "presets/visualizer_modes/extruded_bubble" / basename
+# The authored presets this probe reads, by stable file-name identity (``preset_<n>_<name>.json``), never by slot:
+# a reindex or a new preset must not silently change which look is measured.
+PRESETS = ("sunlit_surface", "ember_drift")
+
+
+def preset_path(name: str) -> Path:
+    folder = ROOT / "presets/visualizer_modes/extruded_bubble"
+    matches = sorted(path for path in folder.glob(f"preset_*_{name}.json")
+                     if path.stem.split("_", 2)[1].isdigit() and path.stem.split("_", 2)[2] == name)
+    if len(matches) != 1:
+        found = ", ".join(sorted(path.name for path in folder.glob("preset_*.json")))
+        raise LookupError(f"expected one Extruded Bubble preset named {name!r}, found {len(matches)} ({found})")
+    return matches[0]
+
+
+def parameters(name: str):
+    p = preset_path(name)
     return json.loads(p.read_text(encoding="utf-8"))["snapshot"]["widgets"]["spotify_visualizer"]
 
 
@@ -67,10 +81,10 @@ def check_owners():
     assert 'shift = (0.0, 0.0)' in renderer
     assert "float sceneNearCircle(float frontDepth, float focus, float aperture, float pixelScale)" in spheres
     assert "sceneNearCircle(depth - sphere.w, focus, aperture, circleScale)" in shaders
-    assert "ebLens(vec4(centre, aSphere.w), uProjection, uFrameSize," in shaders
+    assert "ebLens(vec4(centre, aLensRadius), uProjection, uFrameSize," in shaders
     assert "bool near_ = aExtra.y < 0.5 && coc > 1.5;" in shaders
     assert "(coc > 1.5) != (uNearLayer > 0.5)" in shaders  # clusters too
-    assert '"uNearCoc": 22.0 * height / 941.0' in renderer
+    assert '"uNearCoc": 22.0 * optical_height / 941.0' in renderer
 
 
 def inspect():
@@ -88,8 +102,8 @@ def inspect():
                                             "off_axis_degrees": round(angle, 4),
                                             "width_to_height": result["width_to_height"]}
     gates = {}
-    for slot in (1, 7):
-        p = parameters(slot)
+    for name in PRESETS:
+        p = parameters(name)
         focus = 2.5+3*float(p['extruded_bubble_focus'])
         aperture = 0.3+2.7*float(p['extruded_bubble_aperture'])
         # 941px tall, scene camera scale=1; threshold invert when front depth >=2.5.
@@ -103,7 +117,7 @@ def inspect():
                    "circle_px": round(near_circle(depth-r, focus, aperture, scale), 4),
                    "focus_component_above_gate": near_circle(depth-r, focus, aperture, scale) > 1.5}
                   for r in (0.98, 1.0, 1.02)]
-        gates[f'P{slot}'] = {"focus": round(focus, 4), "aperture": round(aperture, 4),
+        gates[f'{preset_path(name).stem}'] = {"focus": round(focus, 4), "aperture": round(aperture, 4),
                             "critical_front_depth": round(critical, 5),
                             "held_centre_depth": round(depth, 5), "states": states}
     return {"claim_scope": "analytic geometry and focus component only; footprint protection can supersede this gate; not native pixels or judder causation",

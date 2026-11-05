@@ -27,12 +27,14 @@ and must not be copied per mode.
 | `ui/studio/schema.py` | Typed, mode-supplied property schema: instruments (`SCALAR`, `COUNT`, `SWITCH`, `CHOICE`, `QUIET_PEAK`, `COLOUR`, `GRADIENT`), workspaces/columns, scene objects, response tuner, starting-point presets, lifecycle timelines and rendered cards. `admit` is the mode's canonical validator; the framework stores no defaults. |
 | `ui/studio/session.py` | `StudioEditSession`: hydrate from the canonical store, preview vs committed values, one commit per gesture, undo/redo/dirty. The store answers each commit with its canonical post-save snapshot. No Qt, no mode knowledge. |
 | `ui/studio/controller.py` | `StudioController` (single active instance, open → present → retire lifecycle) and `StudioBridge`, the only object QML sees. Bridge slots are plain methods (no `result=`), per the QML signal → result-slot crash rule. |
-| `ui/studio/viewport.py` | Inline `QSGRenderNode` that draws the adapter's renderer straight into the window framebuffer on the render thread (no readback, no per-frame texture copy). Renderer created lazily and released on the render thread on `sceneGraphInvalidated` / node release. Snapshots (tiles, rendered cards, Copy Frame) use a second renderer instance, at most one per frame and only on request. |
+| `ui/studio/viewport.py` | Inline `QSGRenderNode` that draws the adapter's renderer straight into the window framebuffer on the render thread (no readback, no per-frame texture copy). It applies the viewport slot's scene-graph clip (scissor), so a frameless mode that overflows its card in production (Extruded Spectrum, Sphere: up to the window) reaches the slot's edge, never the Studio chrome. Renderer created lazily and released on the render thread on `sceneGraphInvalidated` / node release. Snapshots (tiles, rendered cards, Copy Frame) use a second renderer instance, at most one per frame and only on request. |
 | `ui/studio/transport.py` | Play/pause/scrub/loop on the Studio's own time. No timer: it advances on the surface's `afterAnimating` frame start and requests another frame only while playing. |
 | `ui/studio/surface.py` | `StudioWindowSurface` (visible window) and `OffscreenStudioSurface` (hidden `QQuickRenderControl` host used by tests and the capture tool). Same shell, same signals (`frameStarted`, `presented`, `closeRequested`, `lost`, `failed`). |
 | `ui/studio/settings_link.py` | `open_mode_studio` and `VisualizerSettingsStore`, the canonical store over the Visualizers tab (see §4). |
 | `ui/studio/presence.py` | `WindowPresence`: conceal/reveal the *same* Settings dialog without ending its `QDialog.exec()` loop (native `SW_HIDE` on Windows; zero opacity plus off-screen move elsewhere). |
-| `ui/studio/framed.py` | Shared pieces for framed 3D adapters: production presentation resolver and uniform aperture scale, `card_framings` / `live_card_framings`, `camera_navigation` over the shared framed camera, and `QuickModeRenderer` wrapping a production Quick renderer. |
+| `ui/studio/framed.py` | Shared pieces for 3D (and card-presented) adapters: production presentation resolver and uniform aperture scale, `card_framings` / `live_card_framings`, `camera_navigation` over the shared framed camera, `orbit_navigation` for a free-orbit mode (the descriptor's `view_orbit_settings` only), `QuickModeRenderer` wrapping a production Quick renderer and `ContractModeRenderer` handing it the production render-frame contract (pixel ratio from the item mapping, so a letterboxed live card presents at the true DPR). |
+| `ui/studio/engine_answers.py` | The Spectrum family's recorded engine answers, mode-neutral (`EngineAnswerMode(mode_id)`): synthetic audio, the out-of-process `extract`, recorded inputs, the per-mode answer cache, `start_clip_load` and `EngineAnswerEvaluator` (the production step in process, rewinds, checkpoints, frame budget). The engine-owned / mode-owned split follows from the production source projection (`source_config_applier`). |
+| `ui/studio/spectrum_shape.py` | The Spectrum family's shape editor as Studio rows, admission and structural edits (add / remove node, lane swap), by key prefix (`ShapeKeys`). |
 | `ui/studio/theme.py`, `colour.py` | Chrome tokens derived from the active Settings theme with enforced contrast; display ↔ linear colour conversion for instruments. Scene colours never pass through the theme. |
 | `ui/studio/<mode>_adapter.py`, `<mode>_recorded_inputs.py` | One adapter per registered mode plus its recorded-clip extractor. |
 
@@ -52,16 +54,21 @@ is optional and defaults to "not offered":
   visualizer is never disturbed; the finished job is released after its signal returns, never inside it. Every
   Studio lists the shipped clips (`assets/production/studio_clips`) first, then a checkout's own recordings.
 - **Recorded engine answers (engine-processed modes).** A mode whose step consumes the engine's *own processing*
-  (Spectrum: `consume_engine_bars` ticks the engine and reads its smoothed, shape-processed bars, all on the process
-  clock) cannot be served authored lanes and must not pin the clock in process. Its worker stands
+  (the Spectrum family, Spectrum and Extruded Spectrum: `consume_engine_bars` ticks the engine and reads its smoothed,
+  shape-processed bars, all on the process clock) cannot be served authored lanes and must not pin the clock in
+  process. Both use `ui/studio/engine_answers.py`; their worker modules and adapters only name the mode. Its worker stands
   `replay_engine.EngineAnswerRecorder` in for the engine during each production `logical_tick` and records every
   answer the engine gave the step (JSON via `encode_answer`, exact for floats; a getter answering twice differently
   in one tick raises). The Studio runs the mode's production step in process with `RecordedEngineAnswers` standing in
   for the engine (commands inert; a read the record lacks falls through and is counted, and the parity tests require
   zero). Settings split into **engine-owned** (they change the answers: a new key re-runs the worker, the previous
   answers and their own engine values staying on screen until it lands) and **mode-owned** (exact and instant). The
-  split is proven in both directions on the production replay. Synthetic fixtures of such a mode are generated
-  *audio* through the same worker, so engine-owned edits stay truthful for them too.
+  split is proven in both directions on the production replay; it is derived, not listed: engine-owned are the
+  mode's keys the production source projection hands the engine (the Spectrum source keys and the technical
+  analysis), mode-owned everything else the mode stores (spec controls, Custom rows, shared bar and rainbow families).
+  Synthetic fixtures of such a mode are generated *audio* through the same worker, so engine-owned edits stay
+  truthful for them too. The store's 3D Detail tier (`scene3d_detail`) and, for a reflecting mode, the environment
+  photograph reach the presentation as production hands them (both the worker's in-process replay and the Studio).
 - **Exact replay without a stall.** Such an evaluator never re-configures its controller for a mode-owned edit:
   `replay_engine.StepState` captures the production step state (controller, logical tick state, presentation state
   and the mode runtimes they hold; locks, QObjects and the engine view shared) right after configuration and at

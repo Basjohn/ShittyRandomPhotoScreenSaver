@@ -799,6 +799,17 @@ def _with_line_index_params(params: dict) -> dict:
     return params
 
 
+def _spectrum_default_decor() -> dict:
+    """Spectrum's decoration parameters (``spectrum_decor``) at the canonical defaults: all off."""
+    from types import SimpleNamespace
+    from core.settings.default_contract import require_canonical_default
+    from widgets.spotify_visualizer.spectrum_decor import DECOR_KEYS, spectrum_decor_parameters
+
+    owner = SimpleNamespace(**{"_" + key: require_canonical_default(f"widgets.spotify_visualizer.{key}")
+                               for key in DECOR_KEYS})
+    return spectrum_decor_parameters(owner)
+
+
 def _spectrum_snapshot(case: str, presentation):
     runtime = SpectrumFrameRuntime()
     if case == "idle":
@@ -893,6 +904,7 @@ def _spectrum_snapshot(case: str, presentation):
                     "spectrum_glow_enabled": True,
                     "spectrum_glow_intensity": 0.55,
                     "spectrum_glow_color": (120, 255, 180, 255),
+                    **_spectrum_default_decor(),
                 }
             ),
         ),

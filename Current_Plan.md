@@ -48,6 +48,15 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
   covers about five times the screen; with every water feature off the scene's own floor is about 0.2).
   Evidence: `.artifacts/evidence/neon_lake/fidelity_20261105/pass4/`.
 
+- [ ] **4x MSAA repeat-render noise (driver, 5 Nov; was "Floor Give run-to-run noise"):** the same frame rendered
+  again through a 4x scene target differs by 1 level (rarely 2-3) on a pixel or two in Waveform (more often with Floor
+  Give and mist) and on ~0.7% of pixels in Neon Lake. Not renderer state: packet, uniforms, every vertex position,
+  fields, fog volumes, reflection and all four depth samples are bit-identical, single-sample renders are exact
+  (`test_floor_give_repeat_renders_are_renderer_deterministic`), and no barrier/finish/stream pinning changes it; the
+  multisampled colour itself flips up to 3/255 per sample. Per-sample Waveform floor shading removes it there but costs
+  +1.2 ms (give off) / +2.0 ms (give on) at 1080p, so it was not taken. Tests compare such renders with
+  `tests/_msaa_render_noise.py`. Reopen if a driver update or another GPU shows it gone or larger.
+
 - [ ] **Display Settings capacity (physical hotplug):** on a real monitor disconnect/return or explicit reauthoring,
   Settings' current-screen rows and selections/bindings stay coherent (focused checks pass; hidden form evidence
   `tmp/pytest_ux30_display/test_display_ui_rows_follow_to0/six_display_rows.png`).
@@ -218,18 +227,12 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   is visible, so on recorded music the in-view appearance field is a faint plateau (human_heavy1: in-view max p50
   .11, peak/median 1.6) and the fresh-led band has already settled. Re-derive the origin (and the fresh fade) from the
   framed camera's visible span; then recheck Pulse Rim's REFERENCE level.
-- [ ] **`tools/visualizer_preset_repair.py --repair-all` rewrites curated presets (side defect, 5 Nov):** on the
-  Waveform presets it re-sorted every key and dropped the `starting_view` and `visualizer_preset_mode` metadata
-  (values unchanged). Floor Give was authored by a one-key insert instead. Make the repair fill keep metadata and order.
 - [~] **Travel Direction (operator, 5 Nov: "Travel Direction ... chosen in the studio ... an important basic need") —
   awaiting operator eyes:** Flow-bucket Choice, Right To Left (default, unchanged) or Left To Right (the mirror image:
   history enters at the left; pulses, held swells, Tilt Shift, sparks, strands and floor give follow; the world colour
   grade stays put). A live change fades out, swaps while hidden and fades back (0.6 s each way). Leads the Studio's
   Composition / Flow group. Evidence `.artifacts/evidence/waveform_ribbon/travel_direction/`; design in the Migration
   Plan's Flow bucket.
-- [ ] **Floor Give run-to-run noise (side defect, 5 Nov):** with Floor Give on, the same frame rendered repeatedly in one
-  process differs by one level on about one pixel (the first frame against later ones, and sometimes between fresh
-  renderers); give 0 is exact. Find the unsynchronised read (field compute -> floor/ribbon sampling) or state.
 - [ ] **Dense highlights, moving colour and rim glow:** playback still lacks rewarded high-energy density and glow.
   Verify local crest/high-power colour, bright tunable rim/glow and denser highlights against actual music, including
   quiet/loud differences. Consumer reachability does not establish visible strength. Keep both range handles effective.
@@ -389,15 +392,13 @@ design pack's control policy (quiet/peak A/B, real ranges only where a true inte
 serialized data unless a migration is justified. Accepted looks/behaviour (BTF, presets, timings) must not change.
 
 - [ ] Finish Waveform Studio acceptance first (§7.1), then extract any remaining Waveform-shaped assumptions.
-- [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble and Spectrum/Rainbow Ghost built; Sphere in
-  progress): Extruded Spectrum, Shockwave Grid, DevCurve, Oscilloscope. Spectrum awaits operator acceptance (evidence
+- [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost and Extruded Spectrum
+  built; Sphere in progress): Shockwave Grid, DevCurve, Oscilloscope. Extruded Spectrum awaits operator acceptance
+  (evidence `.artifacts/evidence/extruded_spectrum/studio/`); its cast-shadow rows stay out of the Studio while
+  Settings keeps them unavailable (`EXTRUDED_CAST_SHADOW_AVAILABLE`). Spectrum awaits operator acceptance (evidence
   `.artifacts/evidence/spectrum/studio_20261105/`); its Studio now reaches everything Settings' Spectrum builder saves
   (shape nodes added/removed, lanes reordered), so the builder body can be replaced on acceptance. Each: full registry coverage test, production-parity preview test, theme,
   Settings Custom launcher replacing that builder body once the operator accepts it.
-- [ ] Flaky render test: `tests/test_waveform_studio_editors.py::test_preview_layer_omission_changes_only_flagged_renders`
-  failed once (`plain_a != plain_b`, two snapshot requests of one frame) in a 282-test Studio + build run, then
-  passed alone twice and in the next full Studio gate (5 Nov). Identical requests should be byte-equal: find the
-  render state that leaks between snapshots.
 
 ## Operator execution and evidence rules
 

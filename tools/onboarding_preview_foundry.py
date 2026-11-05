@@ -1121,9 +1121,32 @@ class _PreviewOnsets:
     def get_latest_authoritative_frame(self) -> tuple[float, int, int]:
         return 1.0, 1, 1
 _RENDERED_PREVIEW_SIZE: Final = (684, 418)
-# The curated preset a rendered preview shows (0-based; the first one unless named): Extruded Bubble's Ember Drift
-# reads at preview size, its first preset's bead streams do not (operator 2026-10-18).
-_PREVIEW_PRESETS: Final = {"extruded_bubble": 6}
+# The curated preset a rendered preview shows, by its stable file-name identity (``preset_<n>_<name>.json``; the
+# first preset unless named), so a reindex or a new preset never silently swaps the look: Extruded Bubble's Ember
+# Drift reads at preview size, its first preset's bead streams do not (operator 2026-10-18).
+_PREVIEW_PRESETS: Final = {"extruded_bubble": "ember_drift"}
+
+
+def _preview_preset_index(mode: str) -> int:
+    """Runtime preset position of the operator's chosen preview look; loud when that preset is gone."""
+    wanted = _PREVIEW_PRESETS.get(mode)
+    if wanted is None:
+        return 0
+    from core.settings import visualizer_presets as vp
+
+    found: list[str] = []
+    for index in range(vp.get_custom_preset_index(mode)):
+        path = vp.get_preset_file_path(mode, index)
+        if path is None:
+            continue
+        suffix = (vp._infer_suffix_from_name(path.stem) or "").replace(" ", "_").lower()
+        if suffix == wanted.lower():
+            return index
+        found.append(path.name)
+    raise LookupError(
+        f"onboarding preview preset {wanted!r} for {mode} is not in the curated catalogue ({', '.join(found)}); "
+        "update _PREVIEW_PRESETS to the operator's chosen preset"
+    )
 _GLOW_ON_BACKDROP: Final = frozenset({"oscilloscope"})
 _PREVIEW_BACKDROP: Final = (24, 26, 34)       # the gradient backdrop's middle shade
 
@@ -1237,7 +1260,7 @@ def _build_spectrum_preview_snapshot(*, width: int, height: int, mode: str = "sp
     # copies, tests/_visualizer_frozen_settings.py, so authored presets never decide a test).
     if settings is None:
         activation = resolve_visualizer_activation_payload(
-            {"mode": mode, f"preset_{mode}": _PREVIEW_PRESETS.get(mode, 0)},
+            {"mode": mode, f"preset_{mode}": _preview_preset_index(mode)},
             mode=mode,
         )
         settings = activation.resolved_config

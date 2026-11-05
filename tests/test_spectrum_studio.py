@@ -53,6 +53,17 @@ def rainbow_ghost_section():
     return values
 
 
+def decorated_section():
+    """Canonical values with every optional decoration on (ghost colour and gradient, fill gradient, gloss, peak
+    caps and a pattern), from the registry's own choices."""
+    from rendering.gl_programs.spectrum_options import SPECTRUM_GHOST_COLOUR_SOURCES, SPECTRUM_PATTERNS
+    values = canonical_section()
+    values.update({PREFIX + "ghost_color_source": SPECTRUM_GHOST_COLOUR_SOURCES[-1], PREFIX + "ghost_gradient": True,
+                   PREFIX + "fill_gradient": True, PREFIX + "gloss": 0.5, PREFIX + "peak_caps": True,
+                   PREFIX + "pattern": SPECTRUM_PATTERNS[-1], PREFIX + "rainbow_ghost": False})
+    return values
+
+
 def technical_keys():
     from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
     return {_storage_key(MODE, d) for d in _control_defs_for_mode(MODE)}
@@ -266,6 +277,13 @@ def test_engine_owned_edits_change_the_engine_answers_negative_control(qt_app):
     assert set(engine_values(values)) | (spectrum_owned_keys() & every) == every       # a partition
 
 
+def test_decoration_controls_are_spectrum_owned_instant_edits():
+    """The decoration is read by Spectrum's own capture and renderer: editing it never re-runs the analysis."""
+    from widgets.spotify_visualizer.spectrum_decor import DECOR_KEYS
+    assert set(DECOR_KEYS) <= spectrum_owned_keys()
+    assert engine_key(decorated_section()) == engine_key(canonical_section())
+
+
 # --------------------------------------------------------------------------------- production parity
 def _assert_parity(evaluator, data, values) -> int:
     compared = 0
@@ -279,12 +297,13 @@ def _assert_parity(evaluator, data, values) -> int:
     return compared
 
 
-@pytest.mark.parametrize("variant", ["normal", "rainbow_ghost"])
+@pytest.mark.parametrize("variant", ["normal", "rainbow_ghost", "decorated"])
 @pytest.mark.parametrize("source", ["synthetic", "shipped_clip"])
 def test_studio_frames_equal_the_production_replay_tick_for_tick(qt_app, source, variant):
     """The Studio's in-process Spectrum step publishes the production replay's logical frame (common bars and
     style, peaks, ghosts, animation time, every renderer parameter, identities and flags) at every tick."""
-    values = canonical_section() if variant == "normal" else rainbow_ghost_section()
+    values = {"normal": canonical_section, "rainbow_ghost": rainbow_ghost_section,
+              "decorated": decorated_section}[variant]()
     if source == "synthetic":
         evaluator = SpectrumStudioEvaluator(loader=InlineLoader(seconds=None))
         evaluator.select("mid")
