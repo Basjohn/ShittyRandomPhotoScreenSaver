@@ -894,7 +894,8 @@ Rectangle {
             x: 8; anchors.bottom: parent.bottom; anchors.bottomMargin: 4; width: parent.width - 16
             text: (card.endpoint ? "Peak" : "Quiet") + " lane · rendered by the visualizer · "
                   + (card.spec.kind === "falloff" ? card.caption(["density", "height", "clearance"])
-                                                  : card.caption(["brightness", "reflection"]))
+                     : card.spec.kind === "reflection" ? card.caption(["brightness", "reflection"])
+                     : card.caption(Object.keys(card.spec.roles || {})))     // a render-only card: its own roles
         }
         Canvas {
             id: diagram
@@ -2004,7 +2005,9 @@ Rectangle {
                                         onDoubleClicked: studio.revealProperty(modelData.property, modelData.endpoint)
                                     }
                                     C.ToolTip.visible: hMouse.containsMouse && !handle.dragging
-                                    C.ToolTip.text: handle.combined
+                                    // A handle may carry its own words (the mode knows what it moves).
+                                    C.ToolTip.text: modelData.tooltip !== undefined ? modelData.tooltip
+                                                    : handle.combined
                                                     ? "Move: drag left/right to slide the wave, up/down to change its height (one edit; Undo reverts)"
                                                     : modelData.label + " — drag to edit (Undo reverts); double-click to type an exact value"
                                     C.ToolTip.delay: 600
