@@ -1,6 +1,8 @@
 """Held-left routing without acquiring desktop capture or changing native focus."""
 from types import SimpleNamespace
 
+import sys
+
 import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, QPointF, QRectF, Qt, QUrl
 from PySide6.QtGui import QMouseEvent
@@ -10,6 +12,11 @@ from rendering.quick.input_controller import QuickInputController
 from rendering.quick.window import QuickDisplayWindow
 from rendering.quick.state import QuickWindowPolicy
 from tests.test_framed_scene_input import card as production_card
+
+
+_WINDOWS_CLIP_CURSOR = pytest.mark.skipif(
+    sys.platform != "win32", reason="exercises the user32 ClipCursor wrapper (Windows-only native confinement)"
+)
 
 
 @pytest.fixture
@@ -391,6 +398,7 @@ def test_native_capture_does_not_release_replacement_owners(native_capture_stub)
     assert grabs == [True]
 
 
+@_WINDOWS_CLIP_CURSOR
 def test_native_capture_failed_clip_unwinds_capture_and_refuses_foreign_state(native_capture_stub):
     capture, api, grabs = native_capture_stub
     api.fail_clip = True
@@ -403,6 +411,7 @@ def test_native_capture_failed_clip_unwinds_capture_and_refuses_foreign_state(na
     assert grabs == [True, False]
 
 
+@_WINDOWS_CLIP_CURSOR
 @pytest.mark.parametrize('failure', ['fail_query', 'fail_clip'])
 def test_failed_native_unclip_preserves_token_until_later_success(native_capture_stub, failure):
     capture, api, grabs = native_capture_stub
@@ -459,6 +468,7 @@ def test_successful_qt_return_cannot_hide_retained_native_capture(native_capture
     assert capture.grabbed and api.capture == 17
 
 
+@_WINDOWS_CLIP_CURSOR
 def test_retry_after_failure_never_clears_replacement_foreign_clip(native_capture_stub):
     capture, api, grabs = native_capture_stub
     capture.acquire(QRectF(20, 10, 100, 80))
