@@ -20,9 +20,17 @@ if str(ROOT) not in sys.path:
 
 
 class MemoryStore:
-    def __init__(self, values, label):
+    def __init__(self, values, label, card_extent=None, border=None):
         self.values = dict(values)
         self.label = label
+        self._extent = card_extent
+        self._border = border
+
+    def card_extent(self):
+        return self._extent
+
+    def card_style(self):
+        return None if self._border is None else {"border_width": self._border, "content_inset": 0.0}
 
     def snapshot(self):
         return dict(self.values)
@@ -58,6 +66,8 @@ def main() -> int:
     parser.add_argument("--framing", default="card")
     parser.add_argument("--theme", type=Path, default=None, help="A .srtheme to activate for this capture")
     parser.add_argument("--tag", default="", help="Suffix for output names")
+    parser.add_argument("--card-extent", default="", help="Live card world extent WxH (CUSTOM viewport_extent)")
+    parser.add_argument("--border", type=float, default=None, help="Live card border width (px)")
     parser.add_argument("--workspaces", default="composition,reactivity,appearance,world")
     args = parser.parse_args()
     width, height = (int(v) for v in args.size.split("x"))
@@ -82,7 +92,8 @@ def main() -> int:
         set_active_settings_theme(load_settings_theme_file(args.theme))
     mode = "waveform_ribbon"
     activation = resolve_visualizer_activation_payload({"mode": mode, f"preset_{mode}": args.preset - 1}, mode=mode)
-    store = MemoryStore(activation.resolved_config, get_preset_names(mode)[args.preset - 1])
+    extent = tuple(float(v) for v in args.card_extent.split("x")) if args.card_extent else None
+    store = MemoryStore(activation.resolved_config, get_preset_names(mode)[args.preset - 1], extent, args.border)
     surfaces = []
 
     def factory(controller):

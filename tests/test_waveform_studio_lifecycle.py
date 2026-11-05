@@ -451,3 +451,87 @@ def test_inspector_rows_never_overlap_at_any_inspector_width(qt_app, dialog_tab,
             checked += 1
     assert checked > 20
     controller.close()
+
+
+def test_live_card_extent_resolves_on_the_visualizer_display_not_only_the_settings_screen(qt_app):
+    """5 Nov regression: the card lives on another display than Settings; the Studio must still find it."""
+    from types import SimpleNamespace
+    from core.settings.visualizer_mode_registry import get_visualizer_layout_profile
+    from ui.studio.settings_link import VisualizerSettingsStore
+    profile = get_visualizer_layout_profile(MODE)
+    widgets = {"spotify_visualizer": {"position": "Custom", "mode": MODE},
+               "custom_layout": {"version": 2, "displays": {"serial:999|model:Test TV|name:Test TV": {
+                   "spotify_visualizer": {profile: {"rect": {"x": .1, "y": .1, "width": .4, "height": .5},
+                                                    "resize_mode": "visualizer_rect",
+                                                    "size_payload": {"viewport_extent": [1282.5, 1005.0],
+                                                                     "width": 1026, "height": 804}}}}}}}
+    tab = SimpleNamespace(_settings=SimpleNamespace(get=lambda key: widgets if key == "widgets" else None),
+                          window=lambda: SimpleNamespace(screen=lambda: None))
+    store = VisualizerSettingsStore(tab, MODE)
+    assert store.card_extent() == (1282.5, 1005.0)
+    widgets["spotify_visualizer"]["position"] = "Top Left"        # not CUSTOM: production uses the baseline
+    assert store.card_extent() is None
+
+
+def test_navigation_zoom_dolly_pan_reset_and_keep_view(qt_app, dialog_tab, settings_manager, monkeypatch,
+                                                       no_gl_checks):
+    from ui.studio.settings_link import open_mode_studio
+    _dialog, tab = dialog_tab()
+    saves = _count_saves(monkeypatch, settings_manager)
+    tab._get_visualizer_preset_slider(MODE)._include_starting_view.setChecked(False)
+    surfaces = []
+    controller = open_mode_studio(tab, MODE, adapter=LightAdapter(), surface_factory=_surfaces(surfaces))
+    surfaces[0].pump()
+    nav = controller.adapter.navigation()
+    saved = controller.session.committed_values
+    fov0, dolly0 = saved[nav.zoom.key], saved[nav.dolly.key]
+    for _ in range(40):
+        controller.bridge.zoomBy(-1.0, False)                    # wheel out: wider lens, bounded
+    assert controller.evaluation_values()[nav.zoom.key] == pytest.approx(nav.zoom.bounds[1])
+    controller.bridge.zoomBy(2.0, True)                         # Shift+wheel: dolly in
+    assert controller.evaluation_values()[nav.dolly.key] > dolly0
+    controller.bridge.panBy(100.0, -50.0, 800.0, 600.0)
+    assert controller.evaluation_values()[nav.pan_x.key] != saved[nav.pan_x.key]
+    readout = {r["label"]: r for r in controller.bridge.viewReadout}
+    assert readout[nav.zoom.label]["changed"] and controller.bridge.viewModified
+    assert saves == []                                         # navigation alone never saves
+    controller.bridge.keepView()
+    assert len(saves) == 1 and controller.session.committed_values[nav.zoom.key] == pytest.approx(nav.zoom.bounds[1])
+    assert controller.evaluation_values()[nav.dolly.key] > dolly0     # dolly/pan stay preview views
+    controller.bridge.resetCamera()                             # (double-click does the same)
+    values = controller.evaluation_values()
+    assert values[nav.dolly.key] == pytest.approx(dolly0) and not controller.bridge.viewModified
+    assert fov0 != values[nav.zoom.key]                         # the kept lens is now the saved camera
+    controller.close()
+
+
+def test_close_records_step_timings_and_never_waits_on_background_jobs(qt_app, dialog_tab, no_gl_checks):
+    from ui.studio.settings_link import open_mode_studio
+    _dialog, tab = dialog_tab()
+    surfaces = []
+    controller = open_mode_studio(tab, MODE, adapter=LightAdapter(), surface_factory=_surfaces(surfaces))
+    surfaces[0].pump()
+
+    class SlowJob:
+        cancelled = False
+
+        def cancel(self):
+            type(self).cancelled = True          # a real job kills its worker without waiting
+
+    controller._clip_jobs["clip:x"] = SlowJob()
+    controller.close()
+    timings = controller.close_timings
+    assert SlowJob.cancelled
+    assert {"gesture", "transport", "jobs", "surface", "evaluator", "settings", "total"} <= set(timings)
+    assert timings["jobs"] < 50.0
+
+
+def test_clip_job_cancel_does_not_block(qt_app):
+    import time
+    from ui.studio.adapter import RECORDED, StudioFixture
+    from ui.studio.waveform_recorded_inputs import ClipLoadJob
+    clip = StudioFixture("clip:none", "None", RECORDED, 0.0, "does-not-exist.jsonl")
+    job = ClipLoadJob(clip, {}, lambda *_a: None)
+    started = time.perf_counter()
+    job.cancel()
+    assert (time.perf_counter() - started) < 0.25

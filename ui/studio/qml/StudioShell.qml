@@ -70,6 +70,7 @@ Rectangle {
         property bool primary: false
         property bool checked: false
         property bool enabledState: true
+        property int textSize: shell.fontBase
         signal clicked()
         implicitWidth: Math.max(34, label.implicitWidth + 22)
         implicitHeight: 30
@@ -86,7 +87,7 @@ Rectangle {
             anchors.centerIn: parent
             text: btn.text
             color: btn.checked ? shell.cText : (btn.primary ? shell.cAccent : shell.cText)
-            font.pixelSize: shell.fontBase
+            font.pixelSize: btn.textSize
             font.bold: btn.checked
         }
         MouseArea {
@@ -563,8 +564,14 @@ Rectangle {
                         activeFocusOnTab: true
                         Accessible.role: Accessible.PageTab
                         Accessible.name: modelData.title
-                        Text { anchors.centerIn: parent; text: modelData.title; color: shell.cText
-                               font.pixelSize: shell.fontBase + 1; font.bold: tab.current }
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 8
+                            Text { text: modelData.icon || ""; visible: text !== ""; color: tab.current ? shell.cAccent : shell.cDim
+                                   font.pixelSize: shell.fontBase + 5; anchors.verticalCenter: parent.verticalCenter }
+                            Text { text: modelData.title; color: shell.cText; anchors.verticalCenter: parent.verticalCenter
+                                   font.pixelSize: shell.fontBase + 1; font.bold: tab.current }
+                        }
                         MouseArea { id: tabMouse; anchors.fill: parent; hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor; onClicked: studio.setWorkspace(modelData.id) }
                         Keys.onSpacePressed: studio.setWorkspace(modelData.id)
@@ -593,7 +600,8 @@ Rectangle {
                 Column {
                     anchors.fill: parent; anchors.margins: 12
                     spacing: 8
-                    Text { text: "Scene"; color: shell.cText; font.pixelSize: shell.fontBase + 1; font.bold: true }
+                    Text { text: studio.objectNoun + "s"; color: shell.cText; font.pixelSize: shell.fontBase + 1
+                           font.bold: true }
                     Repeater {
                         model: studio.objects
                         delegate: Rectangle {
@@ -616,15 +624,36 @@ Rectangle {
                                 Text { text: modelData.label; color: shell.cText; font.pixelSize: shell.fontBase
                                        font.bold: obj.selected; anchors.verticalCenter: parent.verticalCenter }
                             }
-                            Text { anchors.right: parent.right; anchors.rightMargin: 10
-                                   anchors.verticalCenter: parent.verticalCenter
-                                   text: modelData.visible ? "" : "hidden"; color: shell.cDim
-                                   font.pixelSize: shell.fontBase - 2 }
                             MouseArea { id: objMouse; anchors.fill: parent; hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor; onClicked: studio.selectObject(modelData.id) }
+                            Rectangle {      // visibility eye
+                                id: eye
+                                visible: modelData.toggleable
+                                anchors.right: parent.right; anchors.rightMargin: 6
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 26; height: 22; radius: 4
+                                color: eyeMouse.containsMouse ? shell.cRaised : "transparent"
+                                Text { anchors.centerIn: parent; text: modelData.visible ? "◉" : "◌"
+                                       color: modelData.visible ? shell.cText : shell.cDim; font.pixelSize: shell.fontBase + 5 }
+                                MouseArea { id: eyeMouse; anchors.fill: parent; hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: studio.setObjectVisible(modelData.id, !modelData.visible) }
+                                C.ToolTip.visible: eyeMouse.containsMouse
+                                C.ToolTip.text: (modelData.visible ? "Hide" : "Show") + " (" + studio.objectNoun
+                                                + " Count shows the first N)" + (modelData.note ? " · " + modelData.note : "")
+                                C.ToolTip.delay: 400
+                            }
                             Keys.onSpacePressed: studio.selectObject(modelData.id)
                             FocusRing { visible: obj.activeFocus }
                         }
+                    }
+                    StudioButton {
+                        width: parent.width
+                        text: "+  Add " + studio.objectNoun
+                        enabledState: studio.canAddObject
+                        tip: studio.canAddObject ? "Show one more " + studio.objectNoun.toLowerCase()
+                                                 : "All " + studio.objectNoun.toLowerCase() + "s are shown"
+                        onClicked: studio.addObject()
                     }
                 }
             }
@@ -650,8 +679,9 @@ Rectangle {
                         x: 12; y: 10
                         spacing: 8
                         z: 2
-                        StudioButton { text: studio.playing ? "Pause" : "Play"; width: 70
-                                       tip: "Play or pause the preview (Space)"; onClicked: studio.togglePlay() }
+                        StudioButton { text: studio.playing ? "❚❚" : "▶"; width: 36; primary: true; textSize: 16
+                                       tip: (studio.playing ? "Pause" : "Play") + " the preview (Space)"
+                                       onClicked: studio.togglePlay() }
                         C.ComboBox {
                             id: fixtureBox
                             width: 230; height: 30
@@ -713,7 +743,12 @@ Rectangle {
                                 property bool hovered_: false
                             }
                         }
-                        StudioButton { text: "Reset View"; tip: "Return the preview camera to the saved view"
+                        StudioButton { text: "✓"; width: 34; textSize: 16; enabledState: studio.viewModified
+                                       tip: "Keep View: save the previewed lens (FOV); the orbit saves only when the "
+                                            + "preset's camera checkbox is on; dolly and pan stay previews"
+                                       onClicked: studio.keepView() }
+                        StudioButton { text: "⟲"; width: 34; textSize: 18; enabledState: studio.viewModified
+                                       tip: "Reset View: back to the saved camera (or double-click the scene)"
                                        onClicked: studio.resetCamera() }
                     }
 
@@ -739,19 +774,56 @@ Rectangle {
                                      || viewportSlot.frameHeight < viewportSlot.height - 2
                         }
 
+                        // Navigation: drag = orbit, middle/right drag = pan, wheel = zoom (lens),
+                        // Shift+wheel = dolly, double-click = back to the saved camera.
                         MouseArea {
                             id: orbitArea
                             anchors.fill: parent
+                            acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                             property real lastX: 0
                             property real lastY: 0
-                            cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-                            onPressed: function(m) { lastX = m.x; lastY = m.y; shell.forceActiveFocus() }
+                            property bool panning: false
+                            cursorShape: pressed ? (panning ? Qt.SizeAllCursor : Qt.ClosedHandCursor) : Qt.OpenHandCursor
+                            onPressed: function(m) {
+                                lastX = m.x; lastY = m.y; shell.forceActiveFocus()
+                                panning = m.button !== Qt.LeftButton
+                            }
                             onPositionChanged: function(m) {
                                 if (!pressed) return
-                                studio.orbitBy(m.x - lastX, m.y - lastY); lastX = m.x; lastY = m.y
+                                if (panning) studio.panBy(m.x - lastX, m.y - lastY, viewportSlot.frameWidth, viewportSlot.frameHeight)
+                                else studio.orbitBy(m.x - lastX, m.y - lastY)
+                                lastX = m.x; lastY = m.y
                             }
-                            onReleased: studio.endOrbit()
-                            C.ToolTip.visible: false
+                            onReleased: if (!panning) studio.endOrbit()
+                            onDoubleClicked: studio.resetCamera()
+                            onWheel: function(w) {
+                                studio.zoomBy(w.angleDelta.y / 120.0, (w.modifiers & Qt.ShiftModifier) !== 0)
+                                w.accepted = true
+                            }
+                        }
+                        // Live view readout (bottom-left of the presented frame)
+                        Rectangle {
+                            x: viewportSlot.frameX + 8
+                            y: viewportSlot.frameY + viewportSlot.frameHeight - height - 8
+                            width: readout.implicitWidth + 16; height: 24; radius: 4
+                            color: "#99000000"
+                            visible: studio.viewReadout.length > 0
+                            Row {
+                                id: readout
+                                anchors.centerIn: parent
+                                spacing: 10
+                                Repeater {
+                                    model: studio.viewReadout
+                                    delegate: Text {
+                                        text: modelData.label + " " + Number(modelData.value).toFixed(modelData.units === "°" ? 1 : 2)
+                                              + modelData.units
+                                        color: modelData.changed ? shell.cAccent : "#e8e8e8"
+                                        font.pixelSize: shell.fontBase - 3
+                                    }
+                                }
+                                Text { text: studio.viewModified ? "· preview" : "· saved camera"; color: "#bbbbbb"
+                                       font.pixelSize: shell.fontBase - 3 }
+                            }
                         }
                         Rectangle {
                             visible: studio.viewportStatus !== "live"
@@ -795,10 +867,26 @@ Rectangle {
                                 Accessible.role: Accessible.Slider
                                 Accessible.name: "Preview time"
                                 readonly property real frac: studio.duration > 0 ? studio.time / studio.duration : 0
-                                Rectangle { anchors.verticalCenter: parent.verticalCenter; width: parent.width
-                                            height: 4; radius: 2; color: shell.cTrack
-                                            Rectangle { width: parent.width * scrub.frac; height: 4; radius: 2
-                                                        color: shell.cAccent } }
+                                // Input energy over the whole preview input: a waveform scrub track.
+                                Canvas {
+                                    id: trackCanvas
+                                    anchors.fill: parent
+                                    onPaint: {
+                                        var ctx = getContext("2d"); ctx.reset()
+                                        var levels = studio.timeline, n = levels.length
+                                        if (!n) return
+                                        var mid = height / 2, w = width / n
+                                        for (var i = 0; i < n; ++i) {
+                                            var h = Math.max(1, levels[i] * (height - 6) / 2)
+                                            ctx.fillStyle = (i / n) <= scrub.frac ? shell.cAccent : shell.cTrack
+                                            ctx.fillRect(i * w, mid - h, Math.max(1, w - 1), 2 * h)
+                                        }
+                                    }
+                                    Connections { target: studio
+                                                  function onTransportChanged() { trackCanvas.requestPaint() }
+                                                  function onTimeChanged() { trackCanvas.requestPaint() } }
+                                    Component.onCompleted: requestPaint()
+                                }
                                 Rectangle { x: parent.width * scrub.frac - 1; anchors.verticalCenter: parent.verticalCenter
                                             width: 3; height: 18; color: scrub.activeFocus ? shell.cFocus : shell.cText }
                                 MouseArea {
@@ -1097,7 +1185,8 @@ Rectangle {
                                     Accessible.role: Accessible.Button
                                     Accessible.name: modelData.title
                                     Text { x: 10; anchors.verticalCenter: parent.verticalCenter
-                                           text: (group.open ? "▾  " : "▸  ") + modelData.title
+                                           text: (group.open ? "▾  " : "▸  ") + (modelData.icon ? modelData.icon + "  " : "")
+                                                 + modelData.title
                                            color: shell.cText; font.pixelSize: shell.fontBase; font.bold: true }
                                     MouseArea { id: groupMouse; anchors.fill: parent; hoverEnabled: true
                                                 cursorShape: Qt.PointingHandCursor; onClicked: group.open = !group.open }

@@ -51,14 +51,14 @@ _BUCKET_PLACEMENT = {
 _ROLL_KEYS = frozenset(PREFIX + k for k in ("rotation_enabled", "rotation", "twist_speed",
                                             "rotation_attack", "rotation_release"))
 _WORKSPACES = (
-    Workspace("composition", "Composition", ("Ribbons", "{object}", "Flow")),
+    Workspace("composition", "Composition", ("Ribbons", "{object}", "Flow"), icon="∿"),
     Workspace("reactivity", "Reactivity", ("Energy Pulse", "Shape Response", "Roll & Twist", "Timing",
                                            "Routing Details", "Advanced (Retired)"),
-              open_groups=("Energy Pulse", "Shape Response")),
+              open_groups=("Energy Pulse", "Shape Response"), icon="▮▮▮"),
     Workspace("appearance", "Appearance", ("{object} Colours", "Colour", "Gradient Nodes",
-                                           "Sheet & Highlights", "Particles", "Free Strands")),
+                                           "Sheet & Highlights", "Particles", "Free Strands"), icon="◐"),
     Workspace("world", "World", ("Mist", "Floor", "Lens & Quality", "Camera", "View"),
-              open_groups=("Mist", "Floor")),
+              open_groups=("Mist", "Floor"), icon="⬡"),
 )
 _CAMERA_FIELDS = ("turn", "tilt", "scene_scale", "scene_pan_x", "scene_pan_y")
 # Headline controls lead their group (operator, 5 Nov): mist density and floor look are tuned constantly;
@@ -214,11 +214,18 @@ def build_schema() -> StudioSchema:
         return controls[key].admit(candidate, previous)
 
     response = _response_model(spec, props)
-    workspaces = tuple(Workspace(w.id, w.title, w.groups + tuple(extra_groups), w.open_groups) if w.id == "world" else w
+    workspaces = tuple(Workspace(w.id, w.title, w.groups + tuple(extra_groups), w.open_groups, w.icon) if w.id == "world" else w
                        for w in _WORKSPACES)
     return StudioSchema(MODE, "Waveform Studio", workspaces, tuple(props), admit, response=response,
                         group_traces=(("Energy Pulse", ("Input Energy", "Travelling Pulse")),
-                                      ("Shape Response", ("Passage", "Height", "Pulse Strength"))))
+                                      ("Shape Response", ("Passage", "Height", "Pulse Strength"))),
+                        group_icons=(("Ribbons", "≋"), ("{object}", "∿"), ("Flow", "➝"), ("Energy Pulse", "⚡"),
+                                     ("Shape Response", "↕"), ("Roll & Twist", "⟳"), ("Timing", "◷"),
+                                     ("Routing Details", "▦"), ("{object} Colours", "◐"), ("Colour", "◑"),
+                                     ("Gradient Nodes", "▬"), ("Sheet & Highlights", "✦"), ("Particles", "∴"),
+                                     ("Free Strands", "⌇"), ("Mist", "☁"), ("Floor", "▁"),
+                                     ("Lens & Quality", "◎"), ("Camera", "⌖"), ("View", "⤢")),
+                        object_noun="Ribbon")
 
 
 # What each routed target does, in plain words (the tuner's subtitle).
@@ -582,6 +589,22 @@ class WaveformStudioEvaluator:
             raise RuntimeError("Waveform history is not primed at this time; extend the fixture pre-roll")
         return build_frame(configuration, self._last, values)
 
+    def timeline(self, samples: int = 240) -> list[float]:
+        """The selected input's energy over its duration (0..1), for the transport's scrub track."""
+        from core.waveform_ribbon_dynamics import ENERGY_WEIGHTS
+        duration = max(1e-6, self.fixture.duration)
+        origin = getattr(self._inputs, "_origin", 0.0)
+        levels = [0.0] * samples
+        for step in self._inputs.steps(duration):
+            t = step.now - origin
+            if t < 0.0:
+                continue
+            index = min(samples - 1, int(t / duration * samples))
+            energy = sum(w * b for w, b in zip(ENERGY_WEIGHTS, step.body_bands))
+            levels[index] = max(levels[index], energy + (.25 if step.onsets else 0.0))
+        peak = max(levels) or 1.0
+        return [round(v / peak, 4) for v in levels]
+
     def measurements(self) -> dict[str, dict[str, float]]:
         """Read-only live values of the evaluator's own model at the current instant.
 
@@ -626,17 +649,20 @@ class WaveformStudioRenderer:
 
         Same resolver the runtime uses, so ``framed_aperture_scale`` (lens aperture, edge-resize
         reveal/crop) is production's. Card chrome (border/inset) is not drawn by the Studio."""
-        key = (card.logical_size, card.extent)
+        key = (card.logical_size, card.extent, card.style)
         if key != self._presentation_key:
             from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
             from widgets.spotify_visualizer.presentation_geometry import (
                 CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE, resolve_visualizer_presentation)
             width, height = card.logical_size
             extent = card.extent or CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+            style = dict(card.style)
+            # Same uniform-scale rule as the display owner: outer = extent * (outer width / extent width).
             self._presentation = resolve_visualizer_presentation(
                 policy=get_visualizer_presentation_policy(MODE), display_size=(width, height),
-                viewport_extent=extent, uniform_visual_scale=max(width / extent[0], height / extent[1]),
-                border_width=0.0, corner_radius=0.0, content_inset=0.0, background_color=(0, 0, 0, 0),
+                viewport_extent=extent, uniform_visual_scale=width / extent[0],
+                border_width=float(style.get("border_width", 0.0)), corner_radius=0.0,
+                content_inset=float(style.get("content_inset", 0.0)), background_color=(0, 0, 0, 0),
                 border_color=(0, 0, 0, 0), shadow_enabled=False, shadow_color=(0, 0, 0, 0), shadow_blur=0.0,
                 shadow_offset=(0.0, 0.0), shadow_spread=0.0, shadow_extensions=(0.0, 0.0, 0.0, 0.0))
             self._presentation_key = key
@@ -680,9 +706,23 @@ class WaveformStudioAdapter(StudioModeAdapter):
     def scene_objects(self, values: Mapping[str, Any]) -> tuple[SceneObject, ...]:
         cards = values.get(PREFIX + "ribbons") or ()
         count = int(values.get(PREFIX + "count", len(cards)))
+        # Ribbon Count shows the first N ribbons: an eye toggles the count, so a ribbon is shown or
+        # hidden together with every ribbon after it (the data is a count, not per-ribbon flags).
         return tuple(SceneObject(id=f"ribbon{index}", label=f"Ribbon {index + 1}",
-                                 swatch=display_hex(card["quiet"][0]), visible=index < count)
+                                 swatch=display_hex(card["quiet"][0]), visible=index < count, toggleable=True,
+                                 hidden_note="" if index < count else "beyond Ribbon Count")
                      for index, card in enumerate(cards))
+
+    def set_object_visible(self, values, object_id, visible):
+        index = int(object_id.replace("ribbon", ""))
+        count = index + 1 if visible else index
+        spec = require_mode_settings(MODE).control(PREFIX + "count")
+        return (PREFIX + "count",), max(int(spec.low), min(int(spec.high), count))
+
+    def add_object(self, values):
+        spec = require_mode_settings(MODE).control(PREFIX + "count")
+        count = int(values.get(PREFIX + "count", 0))
+        return None if count >= int(spec.high) else ((PREFIX + "count",), count + 1)
 
     def create_evaluator(self) -> WaveformStudioEvaluator:
         return WaveformStudioEvaluator()
@@ -690,22 +730,35 @@ class WaveformStudioAdapter(StudioModeAdapter):
     def create_renderer(self) -> WaveformStudioRenderer:
         return WaveformStudioRenderer()
 
-    def orbit_paths(self):
+    def navigation(self):
+        """Orbit = turn/tilt; wheel zoom = the lens field of view (a saved Camera setting); Shift+wheel =
+        the framed camera's grounded dolly (scene_scale); pan = scene pan. Bounds are the registry's."""
+        from ui.studio.adapter import NavAxis, StudioNavigation
         spec = require_mode_settings(MODE)
-        turn, tilt = spec.control(PREFIX + "turn"), spec.control(PREFIX + "tilt")
-        return (turn.key,), (tilt.key,), (turn.low, turn.high), (tilt.low, tilt.high)
 
-    def framings(self, card_extent):
+        def axis(field, label, units=""):
+            control = spec.control(PREFIX + field)
+            return NavAxis(control.key, (float(control.low), float(control.high)), label, units)
+        orbit_h, orbit_v = axis("turn", "Turn"), axis("tilt", "Tilt")
+        return StudioNavigation(orbit_h=orbit_h, orbit_v=orbit_v, zoom=axis("camera_fov", "FOV", "°"),
+                                zoom_inverts=True, dolly=axis("scene_scale", "Dolly", "×"),
+                                pan_x=axis("scene_pan_x", "Pan X"), pan_y=axis("scene_pan_y", "Pan Y"),
+                                saved_with_camera_policy=frozenset({orbit_h.key, orbit_v.key}),
+                                saved_on_keep=frozenset({PREFIX + "camera_fov"}))
+
+    def framings(self, card_extent, card_style=None):
         from ui.studio.adapter import StudioFraming
         from widgets.spotify_visualizer.presentation_geometry import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
         base_w, base_h = CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
         card = card_extent or (base_w, base_h)
         label = f"Live Card {card[0] / card[1]:.2f}:1"
         # Wider frames follow production's edge-resize rule: same height, more world revealed.
+        style = tuple(sorted((card_style or {}).items()))
         return (StudioFraming("card", label, tuple(card),
-                              "The visualizer card as it is laid out (CUSTOM extent, else the card baseline)."),
-                StudioFraming("wide", "16:9", (base_h * 16 / 9, base_h), "A wide card at the baseline height."),
-                StudioFraming("cinema", "21:9", (base_h * 21 / 9, base_h), "An ultrawide card at the baseline height."))
+                              "The visualizer card as it is laid out (CUSTOM extent, else the card baseline).", style),
+                StudioFraming("wide", "16:9", (base_h * 16 / 9, base_h), "A wide card at the baseline height.", style),
+                StudioFraming("cinema", "21:9", (base_h * 21 / 9, base_h), "An ultrawide card at the baseline height.",
+                              style))
 
     def default_fixture(self, evaluator) -> str | None:
         return "mid"

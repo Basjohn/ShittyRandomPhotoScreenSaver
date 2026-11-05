@@ -112,6 +112,9 @@ def frozen_build() -> bool:
     return bool(getattr(sys, "frozen", False)) or "__compiled__" in globals()
 
 
+_CANCELLED: set = set()
+
+
 class ClipLoadJob:
     """One out-of-process extraction, event driven (QProcess.finished); ``cancel`` kills it."""
 
@@ -141,7 +144,11 @@ class ClipLoadJob:
         callback, self._finished = self._finished, None
         if callback is not None and not self._cancelled:
             callback(result, error)
-        self._directory.cleanup()
+        try:
+            self._directory.cleanup()
+        except OSError:
+            pass
+        _CANCELLED.discard(self)
 
     def _on_error(self, _error) -> None:
         if self._process.state() == self._process.ProcessState.NotRunning:
@@ -163,10 +170,14 @@ class ClipLoadJob:
             self._complete(None, f"{type(exc).__name__}: {exc}")
 
     def cancel(self) -> None:
+        """Kill without waiting: the GUI thread never blocks on the worker (QProcess.finished cleans up)."""
         self._cancelled = True
         if self._process.state() != self._process.ProcessState.NotRunning:
+            _CANCELLED.add(self)                 # keep the QProcess alive until its finished signal
             self._process.kill()
-            self._process.waitForFinished(2000)
+
+    def _forget(self) -> None:
+        _CANCELLED.discard(self)
 
 
 def main(argv: list[str]) -> int:

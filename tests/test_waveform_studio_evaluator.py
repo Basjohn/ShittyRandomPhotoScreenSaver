@@ -219,3 +219,40 @@ def test_world_and_reaction_headline_controls_lead_open_groups():
     assert reactivity.groups[0] == "Energy Pulse" and "Energy Pulse" in reactivity.open_groups
     assert first_rows("Energy Pulse", 1) == [mode.id]
     assert len(mode.choice_notes) == len(mode.choices) and all(mode.choice_notes)
+
+
+@pytest.mark.parametrize("extent", [(420.0, 280.0), (1282.5, 1005.0), (2284.7, 408.7)])
+def test_studio_view_and_projection_equal_production_for_the_same_card(extent):
+    """The Studio's lens is production's: same presentation rule, aperture and physical_view result."""
+    import numpy as np
+    from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+    from rendering.quick.visualizer.implementations.waveform_ribbon import physical_view
+    from ui.studio.adapter import RenderCard
+    from ui.studio.waveform_adapter import WaveformStudioRenderer, camera_parameters
+    from widgets.spotify_visualizer.presentation_geometry import (framed_aperture_scale,
+                                                                 resolve_visualizer_presentation)
+    values = canonical_section()
+    values["waveform_ribbon_camera_projection"] = "Perspective"
+    border = 4.0
+    width = 900.0
+    height = width * extent[1] / extent[0]
+    # Production display owner (planar card): uniform scale = committed width / extent width, card chrome.
+    production = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy("waveform_ribbon"), display_size=(4000.0, 4000.0),
+        viewport_extent=extent, uniform_visual_scale=width / extent[0], border_width=border, corner_radius=8.0,
+        content_inset=0.0, background_color=(0, 0, 0, 0), border_color=(0, 0, 0, 0), shadow_enabled=False,
+        shadow_color=(0, 0, 0, 0), shadow_blur=0.0, shadow_offset=(0.0, 0.0), shadow_spread=0.0,
+        shadow_extensions=(0.0, 0.0, 0.0, 0.0))
+    renderer = object.__new__(WaveformStudioRenderer)
+    renderer._presentation_key = None
+    card = RenderCard((0, 0, int(width), int(height)), (width, height), (0.0,) * 16, 1, extent,
+                      (("border_width", border), ("content_inset", 0.0)))
+    studio = renderer._resolved_presentation(card)
+    aperture_p = framed_aperture_scale(production, content=True)
+    aperture_s = framed_aperture_scale(studio, content=True)
+    assert aperture_s == pytest.approx(aperture_p, rel=1e-9)
+    camera = camera_parameters(values)
+    for a, b in zip(physical_view(camera, width / height, aperture_s), physical_view(camera, width / height, aperture_p)):
+        np.testing.assert_allclose(np.asarray(a, float), np.asarray(b, float), rtol=1e-9, atol=1e-12)
+    if extent[1] > 280.0:
+        assert aperture_s > 0.9 * extent[1] / 280.0   # a taller live card reveals more world (no magnification)
