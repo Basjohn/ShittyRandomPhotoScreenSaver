@@ -313,6 +313,9 @@ class StudioViewportItem(QQuickItem):
         super().__init__(parent)
         self.setFlag(QQuickItem.Flag.ItemHasContents, True)
         self.windowChanged.connect(self._bind_window)
+        # A finished snapshot hands the next queued one to the node at the next sync.
+        self.snapshotReady.connect(self._next_snapshot, Qt.ConnectionType.QueuedConnection)
+        self.snapshotFailed.connect(self._next_snapshot, Qt.ConnectionType.QueuedConnection)
         self._bind_window(self.window())       # constructed inside a window: windowChanged already fired
 
     # GUI thread ------------------------------------------------------------------
@@ -328,6 +331,11 @@ class StudioViewportItem(QQuickItem):
         the result arrives as ``snapshotReady``. Requests are served one per frame, in order."""
         self._snapshot_jobs.append((key, frame, int(size[0]), int(size[1]), logical, extent, tuple(style)))
         self.update()
+
+    @Slot()
+    def _next_snapshot(self, *_args) -> None:
+        if self._snapshot_jobs:
+            self.update()
 
     @property
     def snapshot_queue(self) -> int:

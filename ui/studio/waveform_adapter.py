@@ -880,10 +880,17 @@ class WaveformStudioRenderer:
                                viewport=card.viewport, logical_size=card.logical_size,
                                matrix_values=card.matrix_values, quad_vao=card.quad_vao)
 
+    def _preview_layers(self, card: RenderCard) -> None:
+        """Studio-only layer omission for rendered cards (``preview_hidden`` in the card style); the live
+        viewport's style never carries it, so the production scene draws everything there."""
+        self._impl._scene.preview_hidden = frozenset(dict(card.style or ()).get("preview_hidden", ()))
+
     def prepare(self, card: RenderCard, frame) -> bool:
+        self._preview_layers(card)
         return bool(self._impl.prepare_step(self._frame(card, frame)))
 
     def render(self, card: RenderCard, frame) -> None:
+        self._preview_layers(card)
         self._impl.render(self._frame(card, frame))
 
     def release(self) -> None:
@@ -965,8 +972,9 @@ class WaveformStudioAdapter(StudioModeAdapter):
         return evaluator.evaluate(min(3.0, evaluator.fixture.duration), dict(values), exact=False)
 
     # Tile close-up: the selected ribbon alone, nothing around it (no particles, strands, mist or floor);
-    # the lens factor frames one crest and one trough of it in a 3:2 tile (measured, 5 Nov).
-    TILE_LENS = 1.15
+    # the lens factor and pose frame one crest and one trough running across the 3:2 tile (measured, 5 Nov).
+    TILE_LENS = 1.1
+    TILE_POSE = {"turn": 0.25, "tilt": 0.15, "scene_pan_x": 0.0, "scene_pan_y": 0.0, "scene_scale": 1.0}
     _TILE_OFF = {"sparks_enabled": False, "strands_enabled": False, "mist_enabled": False}
     _TILE_ZERO = ("floor_brightness", "floor_reflection")
 
@@ -992,6 +1000,11 @@ class WaveformStudioAdapter(StudioModeAdapter):
             spec = require_mode_settings(MODE).control(PREFIX + "camera_fov")
             view[PREFIX + "camera_fov"] = min(float(spec.high), max(float(spec.low),
                                               float(view[PREFIX + "camera_fov"]) * self.TILE_LENS))
+        # A composed tile view (mock): the ribbon seen slightly from the side and above, so the curve runs
+        # diagonally across the tile; the pan centres it. Preview-only pose values, admitted by the camera.
+        for field, value in self.TILE_POSE.items():
+            if PREFIX + field in view:
+                view[PREFIX + field] = value
         return view
 
     def preset_preview(self, group, preset_id, values, object_id=""):
@@ -1001,10 +1014,11 @@ class WaveformStudioAdapter(StudioModeAdapter):
         frame = self._preview_frame(self.tile_values(values, object_id or "ribbon0"))
         return StudioPreview(frame, (base_h * 1.5, base_h), (), (96.0, 64.0))
 
-    # Rendered world cards: the live framing, the group's Quiet/Peak pairs held on one lane.
-    # Mist: the ribbons dimmed so the atmosphere's density, light and tint read; Floor: the floor band.
-    MIST_RIBBON_LIGHT = 0.1
-    CARD_CROPS = {"Mist": (0.0, 0.22, 1.0, 0.6), "Floor": (0.0, 0.52, 1.0, 0.48)}
+    # Rendered world cards: the live framing, the group's Quiet/Peak pairs held on one lane, drawn by the
+    # production scene with its actors omitted (Studio preview-only layers): Mist = the haze lit by the ribbons'
+    # light field with no ribbon/particle/strand geometry; Floor = the floor with its reflections, no direct actors.
+    CARD_HIDDEN = {"Mist": ("actors", "reflected_actors"), "Floor": ("actors",)}
+    CARD_CROPS = {"Mist": (0.0, 0.34, 1.0, 0.46), "Floor": (0.0, 0.52, 1.0, 0.48)}
 
     def card_preview(self, group, values, endpoint, framing, evaluator=None):
         from ui.studio.adapter import StudioPreview
@@ -1019,14 +1033,8 @@ class WaveformStudioAdapter(StudioModeAdapter):
         for key in ("sparks_enabled", "strands_enabled"):       # the card is about the world, not the emitters
             if PREFIX + key in view:
                 view[PREFIX + key] = False
-        if group == "Mist":
-            # Dim the ribbons through their material light (the scene's own levers) so the atmosphere reads.
-            for key in list(view):
-                field = key[len(PREFIX):] if key.startswith(PREFIX + "material_") else ""
-                if field and ("light" in field or "glow" in field):
-                    view[key] = [float(v) * self.MIST_RIBBON_LIGHT for v in view[key]]
         extent = framing.extent if framing is not None else None
-        style = framing.style if framing is not None else ()
+        style = (*(framing.style if framing is not None else ()), ("preview_hidden", self.CARD_HIDDEN[group]))
         aspect = (extent[0] / extent[1]) if extent else 1.5
         logical = (220.0, round(220.0 / aspect, 1))
         # The scene on screen (the Studio evaluator's current instant), re-presented with these values.
