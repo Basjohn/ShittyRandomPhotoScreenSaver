@@ -47,10 +47,24 @@ is optional and defaults to "not offered":
   and the gesture end replays exactly. Fixtures feed the exact keyword inputs the production capture passes to the
   mode's frame runtime. This is a sandbox timeline on the same code, not a second model or clock.
 - **Fixtures.** Held Quiet/Mid/Peak references, synthetic inputs and recorded clips. Recorded clips are analysed in a
-  separate process (`python -m ui.studio.<mode>_recorded_inputs`, via `QProcess`) through the production offline
-  replay, so the running app's live visualizer is never disturbed; the finished job is released after its signal
-  returns, never inside it. Clips are offered only from a source tree with `logs/visualizer_recordings/` (frozen
-  builds offer none until shipped clips land; see `Current_Plan.md` §7.1).
+  separate process (`python -m ui.studio.<mode>_recorded_inputs`, via `QProcess`; a frozen build runs its own
+  executable with `--studio-clip-worker`) through the production offline replay, so the running app's live
+  visualizer is never disturbed; the finished job is released after its signal returns, never inside it. Every
+  Studio lists the shipped clips (`assets/production/studio_clips`) first, then a checkout's own recordings.
+- **Recorded engine answers (engine-processed modes).** A mode whose step consumes the engine's *own processing*
+  (Spectrum: `consume_engine_bars` ticks the engine and reads its smoothed, shape-processed bars, all on the process
+  clock) cannot be served authored lanes and must not pin the clock in process. Its worker stands
+  `replay_engine.EngineAnswerRecorder` in for the engine during each production `logical_tick` and records every
+  answer the engine gave the step (JSON via `encode_answer`, exact for floats; a getter answering twice differently
+  in one tick raises). The Studio runs the mode's production step in process with `RecordedEngineAnswers` standing in
+  for the engine (commands inert; a read the record lacks falls through and is counted, and the parity tests require
+  zero). Settings split into **engine-owned** (they change the answers: a new key re-runs the worker, the previous
+  answers and their own engine values staying on screen until it lands) and **mode-owned** (exact and instant). The
+  split is proven in both directions on the production replay. Synthetic fixtures of such a mode are generated
+  *audio* through the same worker, so engine-owned edits stay truthful for them too.
+- **Background analysis hooks.** An evaluator that analyses in the background exposes `set_invalidate(callback)`
+  (the controller re-evaluates and refreshes the transport when a result lands), `analysing`, and
+  `timeline_revision` (the transport overview is recomputed when it changes).
 - **Capabilities.** `StudioCapabilities(viewport, camera, handles, objects)`; the default is a plain 2D live preview
   with a scene-object list. A flat mode declares no camera and no handles and the shell then shows no navigation,
   view readout, Keep View/Reset or handle overlay and never calls `navigation()` / `scene_handles()`.
@@ -73,7 +87,8 @@ is optional and defaults to "not offered":
   mapping for 2D); an `"xy"` handle is one undoable two-axis move.
 
 Every adapter carries a registry-derived full-coverage test (every canonical control reachable), a production-parity
-preview test and a Settings round-trip test; see `Docs/TestSuite.md` → Visualizer Studio.
+preview test and a Settings round-trip test; see `Docs/TestSuite.md` → Visualizer Studio. A property whose path the
+current values do not hold (an unused optional element, such as a curve-node slot) is hidden.
 
 ## 4. Settings link and the restore guarantee
 
@@ -83,8 +98,10 @@ preview test and a Settings round-trip test; see `Docs/TestSuite.md` → Visuali
   built, and the technical (audio-analysis) controls keep their canonical widgets as value owners in a never-shown
   holder, so load/collect/save, preset switching and Custom snapshots run through unchanged owners.
 - **Canonical save.** `VisualizerSettingsStore.commit` loads the values into the mode body with signals blocked, then
-  runs the tab's own `_force_visualizer_preset_to_custom` and `_save_settings_now`. The Studio never writes preset
-  JSON or the settings map directly. Camera turn/tilt go through the framed camera editor's pose authority.
+  runs the tab's own `_force_visualizer_preset_to_custom` and `_save_settings_now`. The mode's shared families that
+  Settings keeps outside the mode body (bar Fill / Border / Border Opacity, the per-mode rainbow toggle and speed)
+  are loaded into their owning Settings widgets first, so the tab's own save collects them. The Studio never writes
+  preset JSON or the settings map directly. Camera turn/tilt go through the framed camera editor's pose authority.
 - **Mode switcher.** Switching modes selects that mode's Settings page (as its pill would) and hands the Studio a new
   canonical store; only enabled modes with an adapter are offered.
 - **Lifecycle.** One Studio at a time (`StudioController.active()`; a second open raises the first). Settings stays

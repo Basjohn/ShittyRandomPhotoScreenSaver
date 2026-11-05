@@ -421,7 +421,9 @@ class StudioBridge(QObject):
             elif prop.instrument == GRADIENT:
                 out[prop.id] = _gradient_display(prop, value)
         self._values = out
-        hidden = {}
+        # A property whose value the current values do not hold (an absent optional element, such as a curve node
+        # slot the profile does not use) is not shown.
+        hidden = {prop.id: True for prop in self._schema.properties if prop.id not in out}
         for prop in self._schema.properties:
             for key, accepted in prop.when:
                 try:
@@ -745,7 +747,9 @@ class StudioBridge(QObject):
         shape = getattr(self._c.evaluator, "timeline", None)
         if not callable(shape):
             return []
-        key = self._c.evaluator.fixture.id
+        # An evaluator whose overview changes while a fixture stays selected (its analysis landed in the
+        # background) says so through ``timeline_revision``.
+        key = (self._c.evaluator.fixture.id, getattr(self._c.evaluator, "timeline_revision", 0))
         if getattr(self, "_timeline_key", None) != key:
             self._timeline_key, self._timeline_cache = key, shape()
         return self._timeline_cache
@@ -1019,6 +1023,10 @@ class StudioController(QObject):
             self.capabilities = self.adapter.capabilities()
             self.session = StudioEditSession(self.adapter.schema(), self.store)
             self.evaluator = self.adapter.create_evaluator()
+            notify = getattr(self.evaluator, "set_invalidate", None)
+            if callable(notify):
+                # An evaluator that analyses in the background asks for a fresh evaluation when its result lands.
+                notify(self._on_evaluator_changed)
             environment = getattr(self.evaluator, "set_environment", None)
             source = getattr(self.store, "environment_image", None)
             if callable(environment) and callable(source):
@@ -1286,6 +1294,13 @@ class StudioController(QObject):
     def _on_snapshot_pending(self) -> None:
         if self.surface is not None:
             self.surface.request_frame()
+
+    def _on_evaluator_changed(self) -> None:
+        if self.state not in ("opening", "presented"):
+            return
+        self._invalidate()
+        if self.bridge is not None:
+            self.bridge.transportChanged.emit()
 
     def _invalidate(self) -> None:
         self._eval_dirty = True

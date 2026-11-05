@@ -490,8 +490,10 @@ shifted to hide latency. Pixels are evidence, not visual or listening acceptance
 .\.venv\Scripts\python.exe tools\visualizer_replay\waveform_ribbon_signal_audit.py --clips <clip.jsonl> [...] --output <new dir> --mode-output
 # Side-by-side time strip from capture MP4s (motion review aid)
 .\.venv\Scripts\python.exe tools\visualizer_replay\capture_time_strip.py --ffmpeg <ffmpeg.exe> --output strip.png --start 5 --step .125 --count 8 <run dir> [<run dir> ...]
-# Hidden Studio capture (no window, in-memory store): one PNG per workspace plus timings; --mode picks any registered Studio
+# Hidden Studio capture (no window, in-memory store): one PNG per workspace plus timings; --mode picks any registered Studio,
+# --clip a shipped clip (analysed by the mode's own worker), --set KEY=JSON overrides one value (nothing is saved)
 .\.venv\Scripts\python.exe tools\waveform_studio_capture.py --output <new dir> [--mode extruded_bubble] [--preset 1] [--framing fill]
+.\.venv\Scripts\python.exe tools\waveform_studio_capture.py --mode spectrum --preset 3 --clip rag_doll --time 7 --set spectrum_rainbow_ghost=true --output <new dir>
 ```
 
 Lab tools live under `tools/labs/` (`waveform_ribbon_lab.py`, `waveform_ribbon_targets.py`,

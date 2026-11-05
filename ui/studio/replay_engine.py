@@ -7,11 +7,17 @@ events, the authoritative source frame). ``FixtureBeatEngine`` is the production
 worker thread) with those getters answered from the tick; its event scheduler is the production scheduler with the
 fixture's clock in place of the process clock (the offline replay pins the process clock instead; a Studio runs
 inside the app and must not).
+
+A mode whose step also *consumes the engine's own processing* (the Spectrum family: ``consume_engine_bars`` ticks the
+engine and reads its smoothed, shape-processed bars, all computed on the process clock) cannot be served from
+authored lanes. For those, the out-of-process worker records, per production tick, every answer the engine gave the
+step (``EngineAnswerRecorder``), and the Studio serves exactly those answers back to the same production step
+(``RecordedEngineAnswers``). Answers travel as JSON through ``encode_answer`` / ``decode_answer``.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, fields, is_dataclass
+from typing import Any, Mapping
 
 
 @dataclass(frozen=True)
@@ -169,4 +175,134 @@ def recorded_answers(engine, feature) -> dict:
     }
 
 
-__all__ = ["EngineTick", "clocked_scheduler", "fixture_engine_type", "offline_controller", "recorded_answers"]
+# ---------------------------------------------------------------------- recorded engine answers
+def _answer_types() -> dict[str, type]:
+    """The engine value types an answer may carry (anything else is refused when recorded)."""
+    from widgets.spotify_visualizer.energy_bands import EnergyBands
+    from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
+    return {"EnergyBands": EnergyBands, "TransientEnergyBands": TransientEnergyBands}
+
+
+def encode_answer(value: Any) -> Any:
+    """A JSON form of one engine answer that ``decode_answer`` turns back into an equal value of the same types
+    (floats round-trip exactly through JSON). Unknown types raise: an answer is never approximated."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, list):
+        return {"list": [encode_answer(v) for v in value]}
+    if isinstance(value, tuple):
+        return {"tuple": [encode_answer(v) for v in value]}
+    if isinstance(value, dict):
+        return {"dict": [[str(k), encode_answer(v)] for k, v in value.items()]}
+    name = type(value).__name__
+    if is_dataclass(value) and _answer_types().get(name) is type(value):
+        return {"data": name, "fields": {f.name: encode_answer(getattr(value, f.name)) for f in fields(value)}}
+    raise TypeError(f"Unrecordable engine answer of type {type(value).__qualname__}")
+
+
+def decode_answer(data: Any) -> Any:
+    if not isinstance(data, dict):
+        return data
+    if "list" in data:
+        return [decode_answer(v) for v in data["list"]]
+    if "tuple" in data:
+        return tuple(decode_answer(v) for v in data["tuple"])
+    if "dict" in data:
+        return {k: decode_answer(v) for k, v in data["dict"]}
+    return _answer_types()[data["data"]](**{k: decode_answer(v) for k, v in data["fields"].items()})
+
+
+def _answer_key(name: str, args: tuple, kwargs: Mapping[str, Any]) -> str:
+    if not args and not kwargs:
+        return name
+    import json
+    return name + json.dumps([list(args), sorted(kwargs.items())], default=repr)
+
+
+# Calls that change the engine (or ask it to do work) rather than read it; a served step never performs them.
+def _is_command(name: str) -> bool:
+    return name == "tick" or name.startswith(("set_", "reset_", "force_", "ensure_", "acquire", "release", "wake"))
+
+
+class EngineAnswerRecorder:
+    """Worker side: stands in for the engine during one production step and records every answer it gives.
+
+    Read-only getters are recorded once per tick by name (and arguments); a getter answering two different values
+    within one tick would make the served step ambiguous, so that raises. Commands (``tick``, ``set_*``, ...) run
+    on the real engine and are listed in call order."""
+
+    def __init__(self, engine) -> None:
+        object.__setattr__(self, "_engine", engine)
+        object.__setattr__(self, "answers", {})
+        object.__setattr__(self, "commands", [])
+
+    def begin(self) -> None:
+        object.__setattr__(self, "answers", {})
+        object.__setattr__(self, "commands", [])
+
+    def __getattr__(self, name: str):
+        value = getattr(self._engine, name)
+        if not callable(value):
+            raise AttributeError(f"A served step may not read engine attribute {name!r}")
+        if _is_command(name):
+            def command(*args, **kwargs):
+                self.commands.append(name)
+                return value(*args, **kwargs)
+            return command
+
+        def getter(*args, **kwargs):
+            result = value(*args, **kwargs)
+            key = _answer_key(name, args, kwargs)
+            encoded = encode_answer(result)
+            if key in self.answers and self.answers[key] != encoded:
+                raise RuntimeError(f"Engine answered {key} twice differently within one tick")
+            self.answers[key] = encoded
+            return result
+        return getter
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise AttributeError("The engine recorder is read-only")
+
+
+class RecordedEngineAnswers:
+    """Studio side: what the step's engine answers during one served tick (``serve``), from the worker's record.
+
+    Commands are inert (the analysis already ran in the worker). A getter the record lacks falls through to the
+    configured ``base`` engine and is counted in ``unrecorded``: a diagnostics-only read (``--viz`` latency
+    logging) still answers, and the parity tests require the count to stay zero."""
+
+    def __init__(self, base) -> None:
+        self._base = base
+        self._answers: Mapping[str, Any] = {}
+        self._cache: dict[str, Any] = {}
+        self.unrecorded = 0
+
+    def serve(self, answers: Mapping[str, Any]) -> None:
+        self._answers = answers
+        self._cache = {}
+
+    def __getattr__(self, name: str):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if _is_command(name):
+            if not callable(getattr(self._base, name, None)):
+                raise AttributeError(name)
+            return lambda *args, **kwargs: None
+
+        def getter(*args, **kwargs):
+            key = _answer_key(name, args, kwargs)
+            if key in self._answers:
+                if key not in self._cache:
+                    self._cache[key] = decode_answer(self._answers[key])
+                value = self._cache[key]
+                # A fresh copy of a mutable answer, as the engine hands out (callers may keep or edit it).
+                return list(value) if isinstance(value, list) else dict(value) if isinstance(value, dict) else value
+            self.unrecorded += 1
+            return getattr(self._base, name)(*args, **kwargs)
+        if not callable(getattr(self._base, name, None)):
+            raise AttributeError(name)
+        return getter
+
+
+__all__ = ["EngineAnswerRecorder", "EngineTick", "RecordedEngineAnswers", "clocked_scheduler", "decode_answer",
+           "encode_answer", "fixture_engine_type", "offline_controller", "recorded_answers"]
