@@ -23,7 +23,6 @@ def test_tiny_thin_shell_material_stays_continuous_during_subpixel_motion(qt_app
 
     width, height = 594, 383
     settings = {**frozen_visualizer_settings('extruded_bubble'),
-        'extruded_bubble_camera_projection': 'Perspective',
         'extruded_bubble_light_type': 'Sunlit Surface', 'extruded_bubble_lighting_coverage': 'SCENE',
         'extruded_bubble_camera_fov': 45, 'extruded_bubble_turn': 0., 'extruded_bubble_tilt': 0.,
         'extruded_bubble_scene_scale': 1., 'extruded_bubble_scene_pan_x': .04,

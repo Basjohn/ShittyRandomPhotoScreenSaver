@@ -140,7 +140,7 @@ hits[int(gl_FragCoord.y)*int(uTestWidth)+int(gl_FragCoord.x)]=vec4(world,depth);
             program = resources.program('ground', FLOOR_VERTEX, fragment)
             vao, count = resources.mesh('coverage', floor_vertices(), (3,))
             texture, give = synthetic_field(gl)
-        view, projection, eye, lens = physical_view(camera(camera_projection='Perspective', tilt=-1.), width/height)
+        view, projection, eye, lens = physical_view(camera(tilt=-1.), width/height)
         mvp = projection@view
 
         def draw(on):
@@ -153,7 +153,7 @@ hits[int(gl_FragCoord.y)*int(uTestWidth)+int(gl_FragCoord.x)]=vec4(world,depth);
                 location = lambda name: gl.glGetUniformLocation(program, name)
                 for name, matrix in (('uMvp', mvp), ('uFloorInverseMvp', np.linalg.inv(mvp))):
                     gl.glUniformMatrix4fv(location(name), 1, gl.GL_FALSE, np.asarray(matrix.flatten(order='F'), np.float32))
-                gl.glUniform3f(location('uEye'), *eye); gl.glUniform1i(location('uOrthographic'), 0)
+                gl.glUniform3f(location('uEye'), *eye)
                 gl.glUniform1f(location('uTestWidth'), width)
                 gl.glBindTextureUnit(13, texture); gl.glUniform1i(location('uFloorGiveField'), 13)
                 gl.glUniform4f(location('uFloorGive'), *(give if on else (0., 0., 1., 1.)))

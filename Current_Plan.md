@@ -206,21 +206,20 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   ear/eye against the guide's standard; raw parity alone does not establish musical response.
 - [ ] **Grounded camera, near-flat tilt and infinite view:** stable eye height above the floor, approach/retreat and
   bounded left/right orbit, waveform always in view and no escape into ugly areas. Admit a genuinely near-flat tilt
-  with visible floor in BOTH projections. Keep eye/basis, navigation, editor markers and saved pose under the shared
+  with visible floor. Keep eye/basis, navigation, editor markers and saved pose under the shared
   owner; preserve continuous/infinite body with no exposed ends and complete Edit scaffolding. Native geometry and
   persistence tests alone cannot establish feel or beauty across moving audio, view and viewport extremes. Reproduce
-  the new cut-to-black at one end and staggered entry at the opposite end; validate the camera-owned signed
-  Orthographic raster fit against recorded wide/angled playback. The old positive reference-plane slab cut visible
-  continuation before the card edge; Perspective and other modes retain their positive clip contract.
+  the new cut-to-black at one end and staggered entry at the opposite end against recorded wide/angled playback.
+  Perspective (the only projection; Orthographic removed 5 Nov 2026) retains its positive clip contract.
   **Current visual route:** operator delegates the choice; use a restrained long-lens Perspective primary view,
-  calibrated with a farther physical eye and narrow lens together. Keep Orthographic optional. Preserve stable height,
+  calibrated with a farther physical eye and narrow lens together. Preserve stable height,
   bounded orbit and actual camera movement; no camera-dependent actor density or audio compensation. Judge colours,
   restrained reactive twisting, floor material and full-scene mist together against the references before acceptance.
 - [ ] **Floor coverage, collision, reflection and viewport changes:** after the strand slice, draw ground all the
   way through the foreground and beyond the waveform into heavy dark mist that GENTLY thickens until no horizon
   line is visible. A strip of reflections over black is rejected. **Awaiting native visual validation:** the floor now
-  intersects the same physical camera's pixel lines with the infinite world plane; signed Orthographic intersections
-  cover foreground/far ground while actor clipping remains unchanged. Focused native tests cover complete coverage,
+  intersects the same physical camera's pixel rays with the infinite world plane, covering foreground/far ground
+  while actor clipping remains unchanged. Focused native tests cover complete coverage,
   world coordinates, floor occlusion and capped reflection. Finish the unified atmosphere before visual judgment. Keep actors and
   physical floor contact correct, with smooth waveform collision rather than clipping. Compare identical snapshots at
   canonical/wide/tall/large sizes and both projections; inspect reflection normalization/filtering separately. Preserve
@@ -258,7 +257,7 @@ Chosen first: the smallest contained scene and the first consumer of S3D-1/S3D-2
 `Docs/Reference/Waveform_Ribbon_Lab_Plan.md`; reference packages under `references/` are local/operator-owned and are
 intentionally absent from normal GODZIPs.
 
-The scene is world-first through the shared framed camera (Orthographic default): wet reflective concrete floor,
+The scene is world-first through the shared framed Perspective camera: wet reflective concrete floor,
 waveform and full-scene night fog, with no visible horizon/sky/floor edge. The waveform clears and softly lights
 the mist. Preset/control migration and recorded-audio calibration come only after the lab look is credible.
 

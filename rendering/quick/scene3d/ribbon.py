@@ -27,7 +27,7 @@ from rendering.quick.scene3d.resources import MeshResources, warm_programs
 from rendering.quick.scene3d.stream import StreamRing
 
 _FRAGMENTS = {'diagnostic': RIBBON_FRAGMENT, 'body': RIBBON_BODY_FRAGMENT, 'light': RIBBON_LIGHT_FRAGMENT}
-_MATERIAL_UNIFORMS = ('uViewZ', 'uEye', 'uForward', 'uOrthographic', 'uStrands', 'uRim', 'uBody', 'uFill', 'uGlint', 'uAge',
+_MATERIAL_UNIFORMS = ('uViewZ', 'uEye', 'uStrands', 'uRim', 'uBody', 'uFill', 'uGlint', 'uAge',
                       'uMist', 'uMistShape', 'uMistOrigin', 'uTone',
                       'uViewport', 'uFogVolume', 'uFogView', 'uFogLens', 'uFogRange', 'uGradeStops', 'uGrade', 'uFloorContact', 'uGlow',
                       'uLattice', 'uLatticeTone')
@@ -240,7 +240,7 @@ class RibbonPrimitive:
             with self._stream().bound(gl.GL_SHADER_STORAGE_BUFFER,0,packet.payload):yield
 
     def draw(self, packet: RibbonPacket, mvp, *, diagnostic=0, timing_query=None, shading='diagnostic',
-             view=None, orthographic=True, material: RibbonMaterial | None = None, age_fade=None,
+             view=None, material: RibbonMaterial | None = None, age_fade=None,
              mist=None, mist_frame=(0., 0., 0.), sparks: RibbonSparks | None = None, now=None, sweep_axis=None,
              grade=None, floor=None, strays: RibbonStrays | None = None, continuation=None,
              strand_births=None,strand_origin=0.,floor_give=None):
@@ -289,7 +289,7 @@ class RibbonPrimitive:
             frame=origin+np.asarray(mist_frame,float)
             ranges=_continuation_draw_ranges(packet,continuation,float(frame[0]),cross_divisions)
         if shading != 'diagnostic':
-            shaded = self._material_uniforms(view, translate, bool(orthographic), material)
+            shaded = self._material_uniforms(view, translate, material)
             shaded['uAge'] = (0., 0., 0., 0.)
             shaded.update({'uMist': (0., 0., 1., 1.), 'uMistShape': (0., 0., 0., 0.), **FOG_OFF, **GRADE_OFF, **(grade or {})})
             if mist is not None:
@@ -332,7 +332,7 @@ class RibbonPrimitive:
                 gl.glUniform3f(uniforms['uFloorContact'],*_floor_contact(floor,origin+np.asarray(mist_frame,float)))
             else:
                 for name, value in shaded.items():
-                    if name in ('uOrthographic', 'uFogVolume'):
+                    if name == 'uFogVolume':
                         gl.glUniform1i(uniforms[name], value)
                     elif len(value) == 16:
                         gl.glUniformMatrix4fv(uniforms[name], 1, gl.GL_FALSE, np.asarray(value, np.float32))
@@ -467,7 +467,7 @@ class RibbonPrimitive:
             gl.glUseProgram(program_before)
 
     @staticmethod
-    def _material_uniforms(view, translate, orthographic, material):
+    def _material_uniforms(view, translate, material):
         if view is None or len(view) != 16 or not all(math.isfinite(v) for v in view):
             raise ValueError('Material shading needs the finite world view matrix')
         rebased = np.asarray(view, dtype=float).reshape(4, 4, order='F').copy()
@@ -477,9 +477,8 @@ class RibbonPrimitive:
         if not length > 0:
             raise ValueError('View matrix has no forward axis')
         eye = np.linalg.inv(rebased) @ np.array((0., 0., 0., 1.))
-        values = dict(uViewZ=tuple(rebased[2]), uEye=tuple(eye[:3]/eye[3]), uForward=tuple(forward/length),
-                      uOrthographic=int(orthographic), **material.uniforms())
-        if not all(np.isfinite(v).all() for k, v in values.items() if k != 'uOrthographic'):
+        values = dict(uViewZ=tuple(rebased[2]), uEye=tuple(eye[:3]/eye[3]), **material.uniforms())
+        if not all(np.isfinite(v).all() for v in values.values()):
             raise ValueError('Rebased view exceeds finite range')
         return values
 

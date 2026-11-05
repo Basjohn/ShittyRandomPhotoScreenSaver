@@ -1,4 +1,4 @@
-"""S3D-5 planar reflection: registration under a moving eye in both projections, state and ownership (offscreen)."""
+"""S3D-5 planar reflection: registration under a moving Perspective eye, state and ownership (offscreen)."""
 import ctypes
 
 import numpy as np
@@ -7,7 +7,7 @@ import pytest
 from rendering.gl_error_policy import disable_per_call_gl_error_checking
 disable_per_call_gl_error_checking()
 from OpenGL import GL as gl
-from core.settings.framed_camera import orthographic_matrix, perspective_matrix
+from core.settings.framed_camera import perspective_matrix
 from rendering.gl_programs.reflection import PLANAR_REFLECTION_GLSL, mirror_view
 from rendering.quick import gl_query
 from rendering.quick.render.gl_resources import compile_program
@@ -75,13 +75,11 @@ def draw(program, vbo, vertices, mvp, colour=None):
     gl.glDrawArrays(gl.GL_TRIANGLES, 0, len(vertices))
 
 
-@pytest.mark.parametrize('projection,eye', [('orthographic', (0., 2., 6.)), ('orthographic', (3., 1.5, 5.)),
-                                            ('perspective', (0., 2., 6.)), ('perspective', (-2.5, 2.5, 5.))])
-def test_floor_shows_each_object_where_its_mirror_image_projects(gl_scene, projection, eye):
+@pytest.mark.parametrize('eye', [(0., 2., 6.), (-2.5, 2.5, 5.)])
+def test_floor_shows_each_object_where_its_mirror_image_projects(gl_scene, eye):
     target, flat, floor, vbo, reflection = gl_scene
     view = look_at(eye)
-    proj = (np.asarray(orthographic_matrix((2., 1.5), .1, 50.)) if projection == 'orthographic'
-            else np.asarray(perspective_matrix((.6, .45), .1, 50.))).reshape(4, 4, order='F')
+    proj = np.asarray(perspective_matrix((.6, .45), .1, 50.)).reshape(4, 4, order='F')
     target.bind(clear=(0., 0., 0., 1.))
     framebuffer = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING)
     reflection.begin(W//2, H//2)

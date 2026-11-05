@@ -16,24 +16,18 @@ def ndc(camera, point):
     return ((m[0]*x+m[12])/w, (m[5]*y+m[13])/w, (m[10]*z+m[14])/w)
 
 
-def test_orthographic_default_preserves_world_scale_and_clip_depth_under_resize():
+def test_perspective_fixture_preserves_vertical_coverage_and_clip_depth_under_resize():
     base = projection_fixture(640, 709)
     wide = projection_fixture(1280, 709)
-    assert base['projection'] == 'orthographic'
-    assert ndc(base, (1, 1, -5))[:2] == ndc(base, (1, 1, -20))[:2]
-    assert ndc(base, (1, 1, -5))[0] * 640 == pytest.approx(ndc(wide, (1, 1, -5))[0] * 1280)
-    assert ndc(base, (1, 1, -5))[1] == ndc(wide, (1, 1, -5))[1]
+    assert base['projection'] == 'perspective'
+    # At the reference depth the vertical half-height is world-fixed; widening reveals more world.
+    assert ndc(base, (0, 4, -10))[1] == pytest.approx(1.)
+    assert ndc(base, (1, 1, -10))[0] * 640 == pytest.approx(ndc(wide, (1, 1, -10))[0] * 1280)
+    assert ndc(base, (1, 1, -5))[0] == pytest.approx(2 * ndc(base, (1, 1, -10))[0])
     for depth, expected in ((base['near'], -1), (base['far'], 1)):
         assert ndc(base, (0, 0, -depth))[2] == pytest.approx(expected)
-
-
-def test_optional_perspective_matches_only_the_reference_plane():
-    ortho = projection_fixture(640, 709)
-    perspective = projection_fixture(640, 709, 'perspective')
-    assert ndc(ortho, (1, 1, -10))[:2] == pytest.approx(ndc(perspective, (1, 1, -10))[:2])
-    assert ndc(perspective, (1, 1, -5))[0] == pytest.approx(2 * ndc(perspective, (1, 1, -10))[0])
     with pytest.raises(ValueError):
-        projection_fixture(640, 709, 'unknown')
+        projection_fixture(0, 709)
 
 
 def test_source_bytes_and_panel_aspects_survive_custody_without_overwrite(tmp_path):

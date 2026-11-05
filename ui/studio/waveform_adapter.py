@@ -769,17 +769,12 @@ def studio_presentation(logical_size, extent, style):
 def frame_camera(frame, size, extent, style):
     """(clip-from-world matrix, aperture) exactly as the production renderer would draw ``frame``."""
     import numpy as np
-    from core.settings.waveform_ribbon_camera import scene_raster_support
     from rendering.quick.visualizer.implementations.waveform_ribbon import physical_view
     from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
     width, height = size
     aperture = framed_aperture_scale(studio_presentation(size, extent, style), content=True)
     parameters = frame.parameters
-    support = (scene_raster_support(frame.packet, frame.scene, frame.travel, now=frame.time,
-                                    viewport=(width, height), burst_payload=frame.particles,
-                                    burst_origin=frame.particle_origin, strand_payload=frame.strands)
-               if parameters[PREFIX + "camera_projection"] == "Orthographic" else None)
-    view, projection, _eye, _lens = physical_view(parameters, width / height, aperture, geometry_bounds=support,
+    view, projection, _eye, _lens = physical_view(parameters, width / height, aperture,
                                                   zoom=float(getattr(frame, "zoom", 1.0)))
     return np.asarray(projection) @ np.asarray(view), aperture
 

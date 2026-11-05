@@ -145,6 +145,16 @@ without the safe path below.
   (`tests/test_spectrum_link_state_retired.py`).
   *Blocked:* re-adding the leaf to defaults/model, or linking Fill and Border
   to give it a consumer.
+  Also includes `waveform_ribbon_camera_projection` and
+  `extruded_bubble_camera_projection` (Orthographic removed 5 Nov 2026, operator):
+  Perspective is the only projection, so the choice has no control, default or
+  typed field. A saved or authored `Orthographic` (or `Perspective`) leaf is
+  stripped on input and the scene renders through its own Perspective camera;
+  the rest of the authored camera (FOV, pose, position) is kept unchanged.
+  Curated presets were repaired to drop the leaf
+  (`tests/test_camera_projection_retired.py`).
+  *Blocked:* resurrecting a one-option Projection control, or mapping an old
+  Orthographic look onto a different FOV/pose.
 
 - **MC Feeds snapshot adoption** (`core/feeds/mc_snapshot_bridge.py`, run once per
   process by `FeedCacheStore` on the canonical shared root). Before the
