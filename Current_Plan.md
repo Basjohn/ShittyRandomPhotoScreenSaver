@@ -344,6 +344,17 @@ scalar-to-range audit remains deferred until explicitly reprioritized.
   - [ ] If cost is material, optimize only the measured offender and repeat the parity + native performance gate;
     preserve visual quality, all approved sinking/reversed-flow presets, reactivity/latency, BTF and mutable presets.
     If no material cost is measured, **close the item without redesigning Bubble**. No generic "lean out" campaign.
+  - [ ] Include the R-170 density growth: a card larger than the canonical one now draws up to 72 live heroes
+    (up to 110 with draining trails) instead of its authored ~31-68, and the hero loops are per fragment.
+- [ ] **R-170 operator eyes-on:** Bubble on a tall, a wide and the TV card should move and size like the canonical
+  card, denser on large cards. Evidence: `Docs/Historical_Bugs/R-170_Bubble_Shape_Dependent_Speed_And_Aspect_Modifiers.md`.
+- [ ] **Operator decision - Bubble density past the renderer capacity:** the shader's 110-hero uniform arrays and
+  per-fragment hero loops cap density growth at 72 live heroes; past that the world zooms (the TV card: 72 heroes at
+  ~1.6x canonical size). Truly area-proportional density on large cards needs an instanced/binned hero renderer with
+  its own native performance evidence. Not started.
+- [ ] **Side defect (found during R-170, not fixed):** `_apply_bubble_collision_response` smooth mode multiplies
+  `max_disp *= 0.72` inside the per-bubble loop, so the in-view correction cap compounds down the list (order-dependent).
+  Fixing it changes canonical Bubble output, so it needs an explicit BTF behaviour-change decision first.
 ## 9. Studio for every visualizer (replaces the builders)
 
 Operator (5 Nov): instead of a Bubble UX sweep, every visualizer except Sine (retiring) gets a version of the reusable

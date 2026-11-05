@@ -857,6 +857,7 @@ def _capture_bubble(
                     if not name.startswith("_quick_")
                 },
             ),
+            world_scale=resolved.world_scale,
         ),
         extra,
     )

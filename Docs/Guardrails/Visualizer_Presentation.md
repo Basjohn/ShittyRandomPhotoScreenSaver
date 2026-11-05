@@ -305,11 +305,11 @@ retired per-mode growth value as a hidden viewport-extent alias.
 Where a logical mode needs spatial bounds, viewport metrics enter the logical runtime as configuration. Ordinary committed
 extent is truth outside edit mode; an active CUSTOM working extent is a temporary higher-precedence override. Save commits
 the new extent, Cancel restores the old committed extent, and ending CUSTOM removes the override without assuming canonical
-`(420,280)`. Bubble is the strict case: positions/trails reflow through the expanded logical world, circles remain round,
-and authored render radius uses the operator-authorized equal-area response height
-`sqrt(content_width * content_height / 1.5)` rather than actual-height coupling or a baseline/current cap. Velocity,
-collision and BTF semantics stay coherent: collision/spawn radii and collision-only gap/correction distances multiply by
-`domain_h` when mapped back into the expanded world, with an exact canonical 1x1 no-op. Geometry never becomes a clock.
+`(420,280)`. Bubble is the strict case (R-170): its world is in canonical-card units on every card, so motion,
+collision, spawn and trail distances are canonical literals and each shape moves and sizes like the canonical card at
+equal uniform scale; only the population follows area, and only the 110-hero render capacity may zoom the whole world
+(`world_scale`). Circles remain round and the renderer projects radius once through the canonical card's equal-area
+response height at the current uniform scale and inset, times `world_scale`. Geometry never becomes a clock.
 
 ## 9A. Extreme viewport scaling contract — axis, amplitude and time are separate
 
@@ -338,7 +338,7 @@ Historical five-technical-mode audit (2026-09-02):
 | Mode | Edge-expanded geometry | Temporal/scaling status | Guardrail |
 | --- | --- | --- | --- |
 | **Spectrum** | Bars fill the current vertical field; width changes bar distribution/width, height changes bar travel distance and renderer segment density. | **R-76 proven/fixed:** live Quick visual smoothing scales from expanded vertical bar-field height only; continuous-bar hysteresis uses one canonical internal temporal segment domain. | Width alone must not slow bars. Do not also change BeatEngine, `0.55` transfer, height boost or peak lifetime without separate evidence. |
-| **Bubble** | Logical world expands independently on X/Y; positions/trails/collisions project through that world while heads stay circular and renderer head response remains authored. | R-69/BTF already cover viewport projection. No new temporal multiplier is admitted by this audit. | Never globally compress head/Ghost radius, motion or amplitude because the viewport is large. Ripple-wake correction is a narrowly separate presentation footprint contract. |
+| **Bubble** | World grows in canonical-card units; positions/trails/collisions are canonical literals, heads stay circular, population follows area (R-170). | R-170 fixed the shape-dependent speed at its unit; R-69/BTF cover the radius projection. | Never add aspect/extent speed or count modifiers, and never globally compress head/Ghost radius, motion or amplitude because the viewport is large. |
 | **Oscilloscope** | Waveform X spans the current width; waveform amplitude/line placement uses the current vertical field. Vertical line-spacing control scales with height; line/glow thickness follows uniform scale. | 60/120 ms energy filtering and waveform blend remain authored/viewport-neutral. Continuous antialiased curves naturally traverse more pixels in a taller card; no source-proven flicker seam was found. | Do not pre-emptively slow/attenuate the waveform for tall cards. If physical tall-only strobing is observed, trace Y displacement first and apply at most one height-local presentation correction. |
 | **Sine** | Wave/amplitude is normalized into current height; phase/travel spans current width; vertical line spacing scales with height; line/glow thickness follows uniform scale. | Reactivity/envelopes are viewport-neutral. Extreme width therefore increases physical X travel per normalized phase and extreme height increases physical Y displacement, but current source contains no discrete viewport-dependent rate switch analogous to Spectrum. | Treat extreme-wide X travel and extreme-tall Y motion as **watchpoints**, not bugs. Any future fix must target the implicated axis/channel, never generic source sensitivity. |
 | **DevCurve** | Four normalized curves fill the content rect. Quick explicitly rebases pixel-like outline/specular geometry with baseline/current normalized scales. | Solver energy smoothing/slope limits and foreground/specular travel are normalized-domain. Extreme width can increase physical X travel speed and extreme height can increase physical Y displacement, but no viewport-dependent temporal branch/reset was found. | Watch physical X travel/specular speed at very wide extents. Preserve the existing normalized-scale renderer correction; do not globally retune solver energy/amplitude to correct a viewport symptom. (The slow passage drive of 2026-10-04 that scales travel, phase speed and swing is a musical response, not a viewport correction.) |
@@ -436,18 +436,18 @@ edge survival, state-to-screen timing, and final continuity.
 Non-default viewport aspect must not be implemented by anisotropically stretching Bubble circles,
 line widths, or future 3D objects.
 
-Bubble stream/drift movement remains renderer-content-relative across viewport extents: project each nonbaseline axis once
-into the expanded logical world and solve trail smear in content coordinates. Do not compensate viewport loss with input
-gain, authored speed/control retuning, a new timer, or a second motion state.
+Bubble stream/drift movement is in canonical-card units on every card shape (R-170, superseding the 2026-09
+renderer-content-relative projection, which made a tall card stream faster and a wide one slower and was then faked
+with aspect modifiers). Do not compensate a viewport symptom with input gain, authored speed/control retuning, aspect or
+extent speed/count modifiers, a new timer, or a second motion state.
 
-Bubble wake history and Bubble-head magnitude are separate contracts. Stored trail history remains content-space invariant and
-head radius/reactivity follows the equal-area canonical-height projection, but the Quick ripple wake is an authored presentation effect: each
-trail source's **complete** visible footprint (source separation, ripple radius/cap and ring spacing) remains baseline-pixel
-authoritative under edge-resized wide/tall viewports. Correcting only the three trail-source centres is insufficient.
+Bubble wake history and Bubble-head magnitude are separate contracts. Stored trail history is canonical-unit, so its
+sample separation is already canonical pixels; the Quick ripple wake's ring constants and the head radius project once
+through the canonical card's response height (times `world_scale`). There is no per-axis history compression.
 
-**R-69 remains the golden optimization rule.** The operator-authorized equal-area response correction
-(2026-09-05) deliberately supersedes the rejected height-only aspect coupling; it preserves the full
-waveform at a shape-independent size reference and does not cap large views.
+**R-69 remains the golden optimization rule.** The operator-authorized equal-area response (2026-09-05) now
+defines the canonical card's radius unit; R-170 projects every shape through that unit (times the capacity zoom)
+rather than through the current card's area, so a larger card gains bubbles, not bigger ones.
  Bubble's renderer-facing head radius must not receive a global `baseline/current`, `1 / viewport_extent`, or equivalent large-viewport compressor. Ghost consumes already-normalized historical positions exactly once and must not inherit the ripple-wake axis/radial compression. The rejected global head compressor made extreme CUSTOM Bubble look nearly non-reactive while DSP/logical telemetry stayed healthy. If full expansion is aesthetically too large, target only a proven upper visual tail; do not flatten the full response curve. The same principle applies across Spectrum/Oscilloscope/Sine/DevCurve: geometry adaptation or smoothing may not silently weaken authored musical response or freshness.
 
 **R-76 Spectrum temporal-axis rule.** Spectrum bar motion is vertical. Viewport-shape temporal compensation may depend on expanded vertical bar-field height, but viewport width alone must not slow authored response. The live Quick `SpectrumFrameRuntime` owns this treatment; do not restore a QWidget/painter/present-loop smoothing owner. Continuous solid-bar hysteresis is an authored temporal helper and keeps a canonical internal segment domain rather than changing rate zones when viewport height changes. Renderer segment geometry remains independent. Never use this rule to attenuate BeatEngine/source magnitude, the historical `0.55` upload transfer, or `compute_spectrum_height_scale()`.
