@@ -400,3 +400,91 @@ def test_the_production_renderer_fills_the_viewport_and_draws_the_live_paths_fra
     assert np.array_equal(images["live"], images["studio"])
     evaluator.release()
     controller.close()
+
+
+# ------------------------------------------------------------------ Mirror Cubes environment
+def test_the_environment_is_the_savers_first_source_image_else_a_neutral_sky(qt_app, tmp_path):
+    from PySide6.QtGui import QColor, QImage
+    from ui.studio.environment import environment_image, first_source_image
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert first_source_image([str(empty)]) is None
+    assert environment_image([str(empty)]).identity.startswith("studio:neutral-sky")
+    photos = tmp_path / "photos"
+    (photos / "b").mkdir(parents=True)
+    (photos / "notes.txt").write_text("not an image")
+    image = QImage(64, 32, QImage.Format.Format_RGBA8888)
+    image.fill(QColor("#c04020"))
+    assert image.save(str(photos / "b" / "x.png"))
+    chosen = first_source_image([str(empty), str(photos)])
+    assert chosen == photos / "b" / "x.png"
+    assert environment_image([str(photos)]).pixel_size == (64, 32)
+
+
+def _mirror_values():
+    values = canonical_section()
+    values[PREFIX + "mirror"] = spec().control(PREFIX + "mirror").high          # Mirror Cubes on
+    return values
+
+
+def test_a_mirror_preview_equals_the_production_path_with_the_same_environment(qt_app):
+    from ui.studio.environment import environment_image, neutral_image
+    from rendering.quick.display_image_route import presentation_image_from_processed_qimage
+    environment = presentation_image_from_processed_qimage(neutral_image(), image_path="test:sky")
+    values = _mirror_values()
+    data, evaluator = None, SphereStudioEvaluator()
+    data = extract(REPLAY_FIXTURE, values, seconds=1.0, environment=environment)
+    from ui.studio.adapter import RECORDED, StudioFixture
+    evaluator.add_recorded(to_inputs(data, StudioFixture("clip:m", "M", RECORDED, data["duration"], "")))
+    evaluator.select("clip:m")
+    evaluator.set_environment(environment)
+    steps = [s for s in data["steps"] if "frame_sha256" in s]
+    for step in steps[:: max(1, len(steps) // 10)]:
+        frame = evaluator.evaluate(step["now_ts"] - data["origin"], values)
+        assert dict(frame.mode_state.parameters)["backdrop"] is not None
+        assert frame_digest(frame.mode_state) == step["frame_sha256"]
+    # Negative control: the production path without the environment is a different frame.
+    bare = extract(REPLAY_FIXTURE, values, seconds=1.0)
+    assert [s["frame_sha256"] for s in bare["steps"]][-1] != steps[-1]["frame_sha256"]
+    evaluator.release()
+
+
+def test_mirror_cubes_reflect_the_environment_in_the_studios_production_render(qt_app, dialog_tab, no_gl_checks):
+    import numpy as np
+    from PySide6.QtCore import QCoreApplication
+    from ui.studio.environment import neutral_image
+    from rendering.quick.display_image_route import presentation_image_from_processed_qimage
+    from ui.studio.settings_link import open_mode_studio
+    _dialog, tab = dialog_tab()
+    surfaces = []
+    controller = open_mode_studio(tab, MODE, adapter=NoClips(), surface_factory=_surfaces(surfaces))
+    surface = surfaces[0]
+    for _ in range(400):
+        surface.pump()
+        if controller.bridge.viewportStatus != "preparing":
+            break
+    environment = presentation_image_from_processed_qimage(neutral_image(), image_path="test:sky")
+    frames = {}
+    for mirror in (True, False):
+        values = _mirror_values() if mirror else canonical_section() | {PREFIX + "mirror": 0.0}
+        for name, env in (("env", environment), ("none", None)):
+            evaluator = SphereStudioEvaluator()
+            evaluator.set_environment(env)
+            frames[(mirror, name)] = evaluator.evaluate(2.0, values)
+            evaluator.release()
+    images = {}
+
+    def ready(key, width, height, raw):
+        images[key] = np.frombuffer(raw, dtype=np.uint8).reshape(height, width, 4).astype(int)
+    surface.viewport.snapshotReady.connect(ready)
+    for key, frame in frames.items():
+        surface.viewport.request_snapshot(repr(key), frame, (480, 320), (480.0, 320.0), controller.presented_extent(), ())
+    for _ in range(200):
+        surface.pump()
+        QCoreApplication.processEvents()
+        if len(images) == len(frames):
+            break
+    assert len(images) == len(frames)
+    assert np.abs(images[repr((True, "env"))] - images[repr((True, "none"))]).max() > 20     # reflected
+    assert np.array_equal(images[repr((False, "env"))], images[repr((False, "none"))])     # mirror off: no effect
+    controller.close()

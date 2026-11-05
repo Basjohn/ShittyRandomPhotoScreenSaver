@@ -25,22 +25,24 @@ MODE = "sphere"
 
 
 def frame_digest(frame) -> str:
-    """Every field of a ``SphereFrame`` (renderer parameters included, the backdrop by identity)."""
+    """Every field of a ``SphereFrame`` (renderer parameters included, the reflected backdrop by its identity)."""
     from widgets.spotify_visualizer.render_state import SphereFrame
     digest = hashlib.sha256()
     for field in fields(SphereFrame):
         value = getattr(frame, field.name)
         if field.name == "parameters":
-            value = sorted((k, repr(v)) for k, v in dict(value).items() if k != "backdrop")
+            value = sorted((k, repr(None if v is None else dict(v).get("identity")) if k == "backdrop" else repr(v))
+                           for k, v in dict(value).items())
         digest.update(field.name.encode())
         digest.update(repr(value).encode())
     return digest.hexdigest()
 
 
 def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: float | None = None,
-            frames_out: list | None = None, features=None) -> dict:
+            frames_out: list | None = None, features=None, environment=None) -> dict:
     """``features``: already-loaded feature frames instead of ``clip_path`` (tests). ``frames_out`` collects the
-    production capture's logical frames (in-process callers only)."""
+    production capture's logical frames (in-process callers only). ``environment``: the photograph the production
+    owner hands a reflecting mode (``PresentationImage``), applied by its reflection rule."""
     from unittest.mock import patch
     from PySide6.QtGui import QGuiApplication
     from widgets.spotify_visualizer import sphere_capture
@@ -75,6 +77,9 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
     with deterministic_clock() as clock, patch.object(sphere_capture, "capture_sphere", recording):
         engine = ReplayBeatEngine(32)
         controller = offline_controller(engine, MODE, resolved_settings(settings))
+        if environment is not None:
+            from ui.studio.environment import refresh_backdrop
+            refresh_backdrop(controller.presentation_state, MODE, environment)
         state = controller.logical_tick_state
         try:
             for feature in frames:

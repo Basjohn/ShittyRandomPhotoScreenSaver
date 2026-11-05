@@ -357,8 +357,14 @@ class SphereStudioEvaluator:
         self._controller = None
         self._engine = None
         self._values_key = None
+        self._environment = None
         self.steps_run = 0
         self._reset_history()
+
+    def set_environment(self, image) -> None:
+        """The photograph Mirror Cubes reflect (``ui.studio.environment``); a change replays."""
+        self._environment = image
+        self._retire()
 
     def fixtures(self) -> tuple[StudioFixture, ...]:
         return self._builtin + tuple(item.fixture for item in self._recorded.values())
@@ -398,6 +404,7 @@ class SphereStudioEvaluator:
             self._engine = fixture_engine_type()(32)
         self._engine.reset_ticks()
         self._controller = offline_controller(self._engine, MODE, resolved_settings(values))
+        self._reflect()
         self._iterator = iter(self._inputs.steps(self.fixture.duration))
         self._values_key = self._key(values)
 
@@ -409,6 +416,10 @@ class SphereStudioEvaluator:
         keys = ({c.key for c in spec.controls} | {NOTCH_KEY}
                 | {_storage_key(MODE, d) for d in _control_defs_for_mode(MODE)})
         return tuple(repr(values.get(key)) for key in sorted(keys))
+
+    def _reflect(self) -> None:
+        from ui.studio.environment import refresh_backdrop
+        refresh_backdrop(self._controller.presentation_state, MODE, self._environment)
 
     def _step(self, tick: EngineTick):
         from widgets.spotify_visualizer.logical_frame_capture import capture_visualizer_logical_frame
@@ -435,6 +446,7 @@ class SphereStudioEvaluator:
         elif key != self._values_key:
             from widgets.spotify_visualizer.feature_replay import configure_offline_controller
             configure_offline_controller(self._controller, MODE, settings=resolved_settings(values))
+            self._reflect()
             self._values_key = None             # the next exact evaluation replays
         origin = getattr(self._inputs, "_origin", 0.0)
         while True:
@@ -487,11 +499,42 @@ class SphereStudioEvaluator:
 
 # --------------------------------------------------------------------------- adapter
 class SphereStudioRenderer(framed.ContractModeRenderer):
-    """The production ``QuickSphereVoxelRenderer`` handed the production render-frame contract."""
+    """The production ``QuickSphereVoxelRenderer`` handed the production render-frame contract.
+
+    Mirror Cubes fade a newly displayed wallpaper in over the renderer's blend time from when it first sees it
+    (``BackdropEnvironment.textures``). In the saver the photograph has been on screen for a while; a Studio frame
+    is one instant of a fixture, so the environment is introduced to the renderer's own backdrop *before* the frame's
+    logical time (a settled reflection), exactly as if the saver had already shown it. Nothing else changes."""
 
     def __init__(self) -> None:
         from rendering.quick.visualizer.implementations.sphere_voxel import create_visualizer_renderer
         super().__init__(MODE, create_visualizer_renderer)
+        self._settled = None
+
+    def _settle_environment(self, frame) -> None:
+        from rendering.quick.visualizer.implementation_values import parameter
+        from rendering.quick.visualizer.implementations.sphere_voxel import sphere_mirror
+        logical = frame if hasattr(frame, "mode_state") else None
+        state = logical.mode_state if logical is not None else frame
+        parameters = state.parameters
+        if sphere_mirror(parameters) <= 0.0:
+            return
+        backdrop = parameter(parameters, "backdrop")
+        identity = str(backdrop["identity"])
+        if identity == self._settled:
+            return
+        environment = self._impl._backdrop
+        now = float(getattr(logical, "logical_timestamp", 0.0))
+        environment.textures(backdrop, now - environment.BLEND_S - 1.0, parameter(parameters, "backdrop_blend_s"))
+        self._settled = identity
+
+    def prepare(self, card, frame) -> bool:
+        self._settle_environment(frame)
+        return super().prepare(card, frame)
+
+    def render(self, card, frame) -> None:
+        self._settle_environment(frame)
+        super().render(card, frame)
 
 
 class SphereStudioAdapter(StudioModeAdapter):
