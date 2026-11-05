@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
+from core.constants.neon_lake_world import FAR_HILLS
 from rendering.gl_programs.heightfield import (
     HEIGHTFIELD_MAX_SIZE, heightfield_basin, heightfield_grid_transform, normalize_heightfield, sample_heightfield,
 )
@@ -52,7 +53,13 @@ def basin_continuation(data: Mapping, u: float, v: float) -> float:
                   + 0.040 * math.sin(1.1 * v - 2.3 * u))
     rolling = max(0.025, (boundary + near_slope) * (1.0 - descent) + background * descent)
     far = _smoothstep(1.1, 2.2, distance)
-    return rolling * (1.0 - far) + 0.065 * far
+    return rolling * (1.0 - far) + far_hills(u, v) * far
+
+
+def far_hills(u: float, v: float) -> float:
+    """Mirror of ``basinFarHills``: the broad hills the land settles into toward the horizon."""
+    base, amplitude, a, b, c, d = FAR_HILLS
+    return base + amplitude * math.sin(a * u + b * v) * math.cos(c * v - d * u)
 
 
 def extend_heightfield(data: Mapping, left: int, right: int, front: int, back: int) -> dict:
