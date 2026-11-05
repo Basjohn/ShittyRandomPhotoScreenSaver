@@ -12,8 +12,8 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 1. **§6 Shared 3D architecture**: build reusable 3D primitives, each proven on its own harness.
 2. **§7 Visualizer modes**, one at a time: **Waveform Ribbon → Reactive Liquid / Melt Pool → Concrete Rain →
    Usu Moonscape**. Each is built lab-first (§7.0).
-3. **§8 Accepted-mode follow-ups**: the brief Bubble performance-parity check is operator-admitted now; the
-   scalar-to-range Builder audit remains deferred until explicitly prioritized.
+3. **§8 Accepted-mode follow-ups**: the brief Bubble performance-parity check is operator-admitted now.
+4. **§9 Studio for every visualizer** (operator, 5 Nov): replaces the deferred Bubble scalar-to-range/UX sweep.
 
 **Accepted baseline (not live work):** original Bubble, Extruded Bubble, Neon Lake, Oscilloscope,
 Spectrum/Rainbow Ghost, Sphere, source routing, transitions and Foundry launch buttons. Reopen an accepted
@@ -321,14 +321,20 @@ scalar-to-range audit remains deferred until explicitly reprioritized.
   - [ ] If cost is material, optimize only the measured offender and repeat the parity + native performance gate;
     preserve visual quality, all approved sinking/reversed-flow presets, reactivity/latency, BTF and mutable presets.
     If no material cost is measured, **close the item without redesigning Bubble**. No generic "lean out" campaign.
-- [ ] **Original Bubble scalar-to-range control audit:** inventory Bubble sliders whose authored value is really a
-  low-react/high-react envelope and convert only semantically appropriate controls to range sliders. Wire the low and
-  high handles to the canonical reactivity signal rather than treating the range as cosmetic UI. For authored presets
-  **1-8 only**, seed both ends of every migrated range from that preset's existing scalar value so the migration is
-  byte-identical to its current output before the operator widens a range; presets beyond 8 are experimental and do not
-  constrain migration. Capture the pre-change P1-P8 effective values and fixture frames as the regression oracle, then
-  prove Save/Cancel/Restore, preset switching, CUSTOM editing and low/high interpolation without changing unrelated
-  Bubble reactivity semantics.
+## 9. Studio for every visualizer (replaces the builders)
+
+Operator (5 Nov): instead of a Bubble UX sweep, every visualizer except Sine (retiring) gets a version of the reusable
+Studio (`ui/studio`, mode registry + adapters) that replaces its builder. The Waveform Studio is the first adapter and
+the framework bar; each mode contributes only an adapter (typed schema from the canonical registry, truthful evaluator
+on its production logical/render path, fixtures, scene objects, workspaces and instruments), never a copied shell.
+The former Bubble scalar-to-range idea is folded in: each adapter picks the right instrument per control under the
+design pack's control policy (quiet/peak A/B, real ranges only where a true interval exists), with unchanged
+serialized data unless a migration is justified. Accepted looks/behaviour (BTF, presets, timings) must not change.
+
+- [ ] Finish Waveform Studio acceptance first (§7.1), then extract any remaining Waveform-shaped assumptions.
+- [ ] Adapters in order of authoring pain: Extruded Bubble, Bubble, Sphere, Spectrum/Rainbow Ghost, Extruded Spectrum,
+  Shockwave Grid, DevCurve, Oscilloscope. Each: full registry coverage test, production-parity preview test, theme,
+  Settings Custom launcher replacing that builder body once the operator accepts it.
 
 ## Operator execution and evidence rules
 
