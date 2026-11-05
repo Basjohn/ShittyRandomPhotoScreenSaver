@@ -85,6 +85,24 @@ def _apply_floor_give(locations, floor_give, frame):
 
 _FLOOR_GIVE_UNIFORMS = ('uFloorGive', 'uFloorGiveField', 'uFloorGiveFrame')
 
+# Texture unit of the Pulse Rim field (``rendering.quick.scene3d.pulse_rim``): clear of the floor's 0-4, the mist's 8-12
+# and 15, the yielding floor's 13 and the world field's 14. Bound for the light pass only and unbound after it.
+PULSE_RIM_UNIT = 7
+_PULSE_RIM_UNIFORMS = ('uPulseRim', 'uPulseRimField')
+
+
+def _apply_pulse_rim(locations, pulse_rim):
+    """``pulse_rim`` = (field texture, ``uPulseRim`` vec4) from the scene's Pulse Rim field, or None (off: the rims
+    exactly as without the option). Always written: program uniforms persist. Returns whether a texture was bound."""
+    if pulse_rim is None:
+        gl.glUniform4f(locations['uPulseRim'], 0., 0., 0., 0.)
+        return False
+    texture, values = pulse_rim
+    gl.glBindTextureUnit(PULSE_RIM_UNIT, int(texture))
+    gl.glUniform1i(locations['uPulseRimField'], PULSE_RIM_UNIT)
+    gl.glUniform4f(locations['uPulseRim'], *values)
+    return True
+
 
 def _upload(location, value):
     """A vec4 uniform, or the grade's vec4 array."""
@@ -244,8 +262,11 @@ class RibbonPrimitive:
              view=None, material: RibbonMaterial | None = None, age_fade=None,
              mist=None, mist_frame=(0., 0., 0.), sparks: RibbonSparks | None = None, now=None, sweep_axis=None,
              grade=None, floor=None, strays: RibbonStrays | None = None, continuation=None,
-             strand_births=None,strand_origin=0.,floor_give=None):
+             strand_births=None,strand_origin=0.,floor_give=None,pulse_rim=None):
         """``age_fade`` = (absolute now, fade-in s, maximum age s, fade-out s) fades the head and tail by age.
+
+        ``pulse_rim`` = (field texture, ``uPulseRim``) brightens the light pass's rims where the pulse is; other
+        shadings ignore it.
 
         ``mist`` (``rendering.gl_programs.mist.mist_uniforms``) dims light and coverage by the scene's world mist;
         ``mist_frame`` translates the packet's frame into the mist's world (a flowing consumer's scroll).
@@ -311,6 +332,7 @@ class RibbonPrimitive:
             shaded['uViewport'] = tuple(float(v) for v in np.asarray(gl.glGetIntegerv(gl.GL_VIEWPORT)).reshape(-1)[2:4])
         program_before = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
         vao_before = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING)
+        rim_bound = False
         try:
             key=shading+('_continuous' if continuation is not None else '')
             vertex=RIBBON_CONTINUOUS_VERTEX if continuation is not None else RIBBON_VERTEX
@@ -318,6 +340,7 @@ class RibbonPrimitive:
             vao, _ = self.resources.mesh('empty', (0., 0.), (2,))
             names = ('uMvp', 'uDiagnostic', 'uSurface', 'uSweepAxis', 'uFloorContact') if shaded is None else ('uMvp', 'uSurface', 'uSweepAxis', *_MATERIAL_UNIFORMS)
             if continuation is not None:names+=('uContinuation',)
+            if shading == 'light':names+=_PULSE_RIM_UNIFORMS
             # Each pass reads only part of the material, so its unused uniforms are compiled out (location -1).
             uniforms = self.resources.uniforms(key, names+_FLOOR_GIVE_UNIFORMS, required=shaded is None)
             self._stream()
@@ -327,6 +350,7 @@ class RibbonPrimitive:
             gl.glUniform2f(uniforms['uSurface'], material.cross_curve, float(cross_divisions))
             gl.glUniform3f(uniforms['uSweepAxis'], *axis)
             _apply_floor_give(uniforms, floor_give, origin+np.asarray(mist_frame, float))
+            if shading == 'light':rim_bound = _apply_pulse_rim(uniforms, pulse_rim)
             if continuation is not None:gl.glUniform4f(uniforms['uContinuation'],0.,0.,0.,0.)
             if shaded is None:
                 gl.glUniform1i(uniforms['uDiagnostic'], diagnostic)
@@ -358,6 +382,7 @@ class RibbonPrimitive:
                     if timing_query is not None:
                         gl.glEndQuery(gl.GL_TIME_ELAPSED)
         finally:
+            if rim_bound:gl.glBindTextureUnit(PULSE_RIM_UNIT, 0)
             gl.glBindVertexArray(vao_before)
             gl.glUseProgram(program_before)
 
