@@ -169,9 +169,9 @@ def test_bubble_quantified_consumed_signal_matches_old_spectrum_path(
 
 
 @pytest.mark.qt
-@pytest.mark.parametrize("mode", ["sine_wave", "devcurve"])
+@pytest.mark.parametrize("mode", ["devcurve"])
 def test_non_spectrum_energy_consumers_remain_reactive(qt_app, mode):
-    """Sine heartbeat/DevCurve layers must not be fed zero-energy bars."""
+    """DevCurve layers must not be fed zero-energy bars."""
     import numpy as np
     from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
 

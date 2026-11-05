@@ -480,10 +480,9 @@ class OtherModeViewportScalingTests(unittest.TestCase):
 
     def test_vertical_shift_default_spread_survives_tall_viewport(self):
         # Scale=1 card geometry: 4 px shell border each side. Osc then removes
-        # 1 px per side; Sine removes 2 px per side.
+        # 1 px per side.
         cases = (
             (270.0, 1.0, 550.0, 2.0),  # Oscilloscope
-            (268.0, 1.0, 548.0, 2.0),  # Sine
         )
         for canonical_h, canonical_scale, tall_h, tall_scale in cases:
             canonical = self._spread_fraction(canonical_h, canonical_scale)
@@ -492,8 +491,7 @@ class OtherModeViewportScalingTests(unittest.TestCase):
             self.assertAlmostEqual(tall, canonical, places=12)
 
         osc_shader = (ROOT / "widgets/spotify_visualizer/shaders/oscilloscope.frag").read_text()
-        sine_shader = (ROOT / "widgets/spotify_visualizer/shaders/sine_wave.frag").read_text()
-        for shader in (osc_shader, sine_shader):
+        for shader in (osc_shader,):
             self.assertIn("u_viewport_height_scale", shader)
             self.assertIn("20.0 * spacing_scale", shader)
             self.assertIn("80.0 * spacing_scale", shader)

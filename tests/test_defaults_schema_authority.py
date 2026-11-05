@@ -384,7 +384,6 @@ def test_retired_visualizer_growth_is_invalidated_once_not_preserved_as_schema()
     retired = {
         "spectrum_growth",
         "osc_growth",
-        "sine_wave_growth",
         "bubble_growth",
         "devcurve_growth",
     }
@@ -714,7 +713,7 @@ def test_fresh_reset_and_sst_replace_share_canonical_projection_and_custom_owner
         assert state_map_name not in replaced["ui"]
     assert replaced["visualizer_custom_presets"] == normalized_existing
 
-    incoming_custom = {"sine_wave": {"sine_wave_sensitivity": 1.5}}
+    incoming_custom = {"spectrum": {"spectrum_sensitivity": 1.5}}
     replaced_explicit = _project_import_state(
         mgr,
         {"visualizer_custom_presets": incoming_custom},
@@ -778,7 +777,6 @@ def test_quick_visualizer_renderer_inputs_are_strict_resolved_contracts() -> Non
         "rendering/quick/visualizer/implementations/bubble.py",
         "rendering/quick/visualizer/implementations/devcurve.py",
         "rendering/quick/visualizer/implementations/oscilloscope.py",
-        "rendering/quick/visualizer/implementations/sine_wave.py",
         "rendering/quick/visualizer/implementations/spectrum.py",
     ):
         tree = ast.parse(_text(relative))

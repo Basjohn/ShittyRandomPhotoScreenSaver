@@ -187,7 +187,6 @@ def _prime_state(state) -> None:
 
 def _quiet(monkeypatch) -> None:
     monkeypatch.setattr(tick_pipeline, "consume_engine_bars", lambda o, n: (True, True))
-    monkeypatch.setattr(tick_pipeline, "process_heartbeat", lambda o, n: None)
     monkeypatch.setattr(tick_pipeline, "record_tick_perf", lambda o, n: None)
 
 

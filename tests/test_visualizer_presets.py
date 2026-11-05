@@ -56,20 +56,20 @@ def test_snapshot_override_replaces_authored_slot_and_filters_settings(tmp_path,
     snapshots_root = tmp_path / "snapshots"
     snapshots_root.mkdir()
     curated_count = 5
-    _seed_curated_slots(curated_root, "sine_wave", curated_count)
+    _seed_curated_slots(curated_root, "spectrum", curated_count)
 
     monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
     monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
 
     payload = {
         "visualizer_preset_override": True,
-        "visualizer_preset_mode": "sine_wave",
+        "visualizer_preset_mode": "spectrum",
         "preset_index": 4,
         "snapshot": {
             "widgets": {
                 "spotify_visualizer": {
-                    "mode": "sine_wave",
-                    "sine_wave_effect": 0.42,
+                    "mode": "spectrum",
+                    "spectrum_wave_amplitude": 0.42,
                     "rainbow_enabled": True,
                 },
                 "clock": {"enabled": False},
@@ -78,20 +78,20 @@ def test_snapshot_override_replaces_authored_slot_and_filters_settings(tmp_path,
     }
     (snapshots_root / "preset_5_glow_burst.json").write_text(json.dumps(payload), encoding="utf-8")
 
-    presets = vp._build_presets_for_mode("sine_wave")
+    presets = vp._build_presets_for_mode("spectrum")
 
     assert len(presets) == curated_count + 1  # authored slots + trailing Custom
     overridden = presets[4]
     # Override replaces settings but keeps the authored curated slot name.
     assert overridden.name.startswith("Preset 5")
-    assert overridden.settings.get("sine_wave_effect") == 0.42
+    assert overridden.settings.get("spectrum_wave_amplitude") == 0.42
     # rainbow_enabled migrated to the canonical mode-id scoped key.
-    assert overridden.settings.get("sine_wave_rainbow_enabled") is True
+    assert overridden.settings.get("spectrum_rainbow_enabled") is True
     assert "rainbow_enabled" not in overridden.settings
 
     # Update global registry temporarily to validate helper behavior
-    monkeypatch.setitem(vp._PRESETS, "sine_wave", presets)
-    assert vp.get_custom_preset_index("sine_wave") == len(presets) - 1
+    monkeypatch.setitem(vp._PRESETS, "spectrum", presets)
+    assert vp.get_custom_preset_index("spectrum") == len(presets) - 1
 
 
 def test_get_visualizer_presets_dir_uses_shared_programdata_tree_for_frozen_builds(tmp_path, monkeypatch):
@@ -586,9 +586,9 @@ def test_all_curated_presets_have_unique_keys_and_filtered_settings():
 
 
 def test_repair_tool_payloads_are_marked_as_overrides(tmp_path):
-    mode = "sine_wave"
-    preset_path = tmp_path / "preset_5_sine.json"
-    cleaned = {"sine_glow_intensity": 0.75, "mode": mode}
+    mode = "spectrum"
+    preset_path = tmp_path / "preset_5_spectrum.json"
+    cleaned = {"spectrum_glow_intensity": 0.75, "mode": mode}
     payload = {"preset_index": 4, "snapshot": {}}
 
     lean, _ = repair._build_clean_payload(preset_path, payload, mode, cleaned)
@@ -1134,26 +1134,6 @@ def test_reindex_curated_presets_preserves_arbitrary_fields_and_devcurve_payload
 @pytest.mark.parametrize(
     ("mode", "owned_settings"),
     (
-        (
-            "sine_wave",
-            {
-                "sine_ghost_line4_enabled": True,
-                "sine_ghost_line5_enabled": False,
-                "sine_ghost_line6_enabled": True,
-                "sine_line4_color": [1, 2, 3, 4],
-                "sine_line4_glow_color": [5, 6, 7, 8],
-                "sine_line5_color": [9, 10, 11, 12],
-                "sine_line5_glow_color": [13, 14, 15, 16],
-                "sine_line6_color": [17, 18, 19, 20],
-                "sine_line6_glow_color": [21, 22, 23, 24],
-                "sine_travel_line4": 1,
-                "sine_travel_line5": 2,
-                "sine_travel_line6": 1,
-                "sine_line4_shift": 0.14,
-                "sine_line5_shift": 0.25,
-                "sine_line6_shift": 0.36,
-            },
-        ),
         (
             "oscilloscope",
             {

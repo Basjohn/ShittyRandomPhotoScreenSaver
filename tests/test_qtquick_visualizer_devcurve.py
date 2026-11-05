@@ -161,7 +161,7 @@ def test_devcurve_frame_capture_uses_presentation_owned_rainbow_state() -> None:
         _bar_count=4,
         _display_bars_source_generation=5,
         _display_bars_source_activation=7,
-        # Shared cross-mode ghosting/heartbeat extras are copied for every mode.
+        # Shared cross-mode ghosting extras are copied for every mode.
         _spectrum_single_piece=False,
         _spectrum_visual_smoothing_enabled=False,
         _spectrum_visual_smoothing=0.5,
@@ -170,11 +170,6 @@ def test_devcurve_frame_capture_uses_presentation_owned_rainbow_state() -> None:
         _osc_ghosting_enabled=False,
         _osc_ghost_intensity=0.5,
         _osc_ghost_decay=0.4,
-        _sine_ghosting_enabled=False,
-        _sine_ghost_alpha=0.5,
-        _sine_ghost_decay=0.4,
-        _sine_heartbeat=False,
-        _heartbeat_intensity=0.0,
     )
 
     frame = capture_visualizer_logical_frame(
