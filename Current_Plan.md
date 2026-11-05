@@ -66,7 +66,6 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
   `test_waveform_infinite_floor` (9: orthographic depth/actor-clip/floor-reflection expectations vs the camera
   helper), `test_qtquick_custom_layout_owner` (8: its Waveform cases replay without PCM reanalysis, which raw musical replay now requires), `test_framed_viewport_aperture` (4: EB/Shockwave custom-side
   gestures), `test_qtquick_visualizer_all_modes` (4), `test_visualizer_logical_hook_dormancy` (4),
-  `test_bubble_reactivity` (3: swish group drift sign/activity — Bubble is BTF-binding, never retune to pass),
   `test_visualizer_plain_orbit` (native crash), `test_visualizer_view_orbit` (Shockwave planar vs freeform; Waveform
   full-circle turn), `test_defaults_schema_authority` (Waveform presets carry `mode` only at top level), plus 1-3
   failures in bubble_ambient_glow, build_runner, feed_f2 (RSS log redaction), frame_trace, framed_scene_input,
@@ -245,13 +244,14 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   darker bounded haze with capped local tint; P3 density 0.06-0.09, P1/P2 0.055-0.075. Open: retained moving-body
   wake and the loaded fog cost gate (P2/game60 render median was over budget) still need measurement.
 - [ ] **Waveform Studio (replaces the rejected builder UI):** in-process, reusable (mode registry + switcher;
-  test-only second mode) Qt Quick Studio per the operator's design pack; Settings > Custom opens it; production
+  Extruded Bubble is a second real adapter) Qt Quick Studio per the operator's design pack; Settings > Custom opens it; production
   framing on the real card; camera navigation; theme-token chrome; full registry coverage; Energy Pulse/Reaction Mode
   first in Reactivity; target-first response tuner. Opens on the live card's world (Fill framing; 1493e246) with the
   mock's viewport toolbar, ribbon arrows and curve tiles. Open: remaining mock parity; shipped audio (3 compact clips:
   Rag Doll, Human, Growing Pains in a lazily read assets folder, never the .rcc; agent branch in progress); real-window checks on hardware (visible window,
-  native Settings hide/restore, exit timing via `[STUDIO] retire` logs, per-monitor DPI). Remove the old builder body
-  once the Studio passes operator acceptance.
+  native Settings hide/restore, exit timing via `[STUDIO] retire` logs, per-monitor DPI). The old builder buckets are
+  already retired (Custom shows only the preset row and the Studio launcher); contract in
+  `Docs/Reference/Visualizer_Studio.md`.
 - [ ] **Live performance and truthful evidence:** run all three presets under matched recorded PCM/game60 and admitted
   camera extremes. Verify ACTUAL applied configuration, audible input and rendered features before interpreting
   timings. Profile logical preparation, birth admission, render stages and whole-frame tails; do not reduce artistic
