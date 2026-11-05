@@ -1,0 +1,60 @@
+# SRPSS Linux product build on a GitHub-hosted Ubuntu runner.
+#
+# Lets a Windows-only machine (no WSL, Hyper-V or Docker) produce the Linux build:
+# scripts/linux/build_from_windows.ps1 triggers this workflow and downloads the artifact.
+#
+# Triggers (no build on ordinary pushes):
+#   * manual: Actions tab -> "Linux build" -> Run workflow, or `gh workflow run linux-build.yml --ref <branch>`
+#     (GitHub only offers manual runs once this file exists on the default branch);
+#   * a pushed tag named linux-build/<anything> (works for any commit, before merge; the Windows
+#     script creates and removes it). Ordinary pushes never start or list a run.
+#
+# Built on Ubuntu 22.04 so the binary runs on glibc >= 2.35 distributions.
+name: Linux build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "linux-build/*"
+
+concurrency:
+  group: linux-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Nuitka/ccache cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/Nuitka
+            ~/.cache/ccache
+          key: nuitka-${{ runner.os }}-${{ hashFiles('requirements.txt') }}-${{ github.sha }}
+          restore-keys: nuitka-${{ runner.os }}-${{ hashFiles('requirements.txt') }}-
+
+      - name: Set up Linux environment
+        run: scripts/linux/setup.sh --python "$(command -v python)" --build
+
+      - name: Build
+        run: .venv-linux/bin/python tools/linux_build.py --jobs 4 --output release/linux
+
+      - name: Smoke test (Xvfb, Settings + saver)
+        run: |
+          sudo apt-get install -y -q xvfb mesa-utils libgl1-mesa-dri
+          .venv-linux/bin/python tools/linux_smoke_dist.py release/linux/SRPSS-*-linux-x86_64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: srpss-linux
+          path: release/linux/*.tar.gz
+          retention-days: 14
