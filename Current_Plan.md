@@ -52,6 +52,14 @@ lead as reviewer/orchestrator.
   by the power plan, then check Task Manager CPU/GPU for the saver while dark, that wake input reaches the saver, and
   the first seconds after wake (no stale frame, jump or hitch; run with `--frame-trace --usage`). Per-monitor power is
   not observable on Windows: an HDMI panel switched off at its own button that stays enumerated keeps running.
+- [~] **DevCurve "more alive while keeping the flow" (branch built 6 Nov; awaiting lead review, then operator eyes):**
+  kicks ride fixed-scale flux accents with linear headroom in the drawn geometry (guide §13D → DevCurve). Sustained
+  loud kicks now beat pre-work main on bass and transients and the limiter cap is gone; evidence and before/after
+  WebPs in `.artifacts/evidence/devcurve/reactivity_20261105/` (`PROGRESS.md`). Open: (a) kicks in QUIET passages
+  respond less than on pre-work main for bass/vocals/mids (its share-follower height moved there; the flux lanes are
+  passage-ramped to ~20%); (b) the travelling swell saturates in dense passages, so the swell's share of a kick falls
+  ~17% 40-55 s into a synthetic chorus (the height's accent does not; `tests/test_devcurve_continuous_play.py` runs
+  with the swell off for that reason); (c) loud passages read calmer in amplitude than the old limiter-shaped peaks.
 - [ ] **Retire Custom's "Edit Preset" Notepad machinery** (button + pop-up) now that the Studios exist, with Studio
   parity proven for each mode that still offered it; and show **Open Studio** on every preset, not only Custom (it
   opens the Studio on that preset).
