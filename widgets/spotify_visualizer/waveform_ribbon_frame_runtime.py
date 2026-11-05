@@ -79,12 +79,16 @@ class WaveformRibbonFrameRuntime(RetirableFrameRuntime):
                 contrast=max(0.,magnitude-mean)
                 self._accent_mean[onset.kind]=mean+.18*(magnitude-mean)
                 self._accent_time=now
-                # Contrast survives the bus's clipped confidence. Reward follows the fixed real-music scale and
-                # shared passage ramp after admission; silence and serial identity remain separate permissions.
-                reward=min(1.,contrast/(1.+magnitude)*musical_emphasis(onset.loudness)
+                # The body's force follows the onset's own unclipped magnitude (already measured against the bus's
+                # adaptive flux threshold), the fixed real-music scale and the shared passage ramp; silence and
+                # serial identity remain separate permissions. It is never judged against this kind's running mean:
+                # that second adaptation zeroed every routine kick of a sustained passage (5 Nov, continuous play:
+                # 2/3 of kicks earned nothing and a steady beat faded to <1% of its first kick, so the start of a song
+                # looked reactive and its middle muted). A bigger hit still lands bigger (magnitude is unclipped).
+                reward=min(1.,magnitude/(1.+magnitude)*musical_emphasis(onset.loudness)
                            *passage_ramp(intensity,.35)*support)
-                # Admission asks whether this supported event stands out; visual force also follows loudness.
-                # Reusing the latter as a confidence threshold killed every accent in ordinary quiet playback.
+                # Accent admission (sparks, strands) still asks whether this supported event stands out from the
+                # routine. Reusing loudness as a confidence threshold killed every accent in ordinary quiet playback.
                 accent=max(accent,contrast/(1.+magnitude)*support)
                 if onset.kind not in _IMPULSES:raise ValueError('Unknown waveform onset kind: '+str(onset.kind))
                 hit=max(hit,reward)
