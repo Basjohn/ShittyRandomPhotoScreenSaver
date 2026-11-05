@@ -67,7 +67,12 @@ DEVCURVE_ACCENT_REF = {"bass": 4.0, "vocals": 4.0, "mids": 4.0, "transients": 0.
 # Typed beats reach the body layers through their own flux lanes too (the swell's sources, already
 # passage-ramped): on dense real music a kick barely lifts the loudness above its body, so the level
 # excess alone left sustained-passage kicks at ~0.01 of drive. Fixed scale (lane units), no memory.
-DEVCURVE_ACCENT_FLUX_REF = 0.8
+DEVCURVE_ACCENT_FLUX_REF = 1.0
+# A kick reaches the bus's flux lane as a 1-3 frame spike; smoothed directly it barely moved the drive
+# within 150 ms (sustained-passage kicks ~0.01-0.02 on the recordings). The flux accent is captured at
+# once and held, decaying over DEVCURVE_ACCENT_HOLD_S, and only then eased by two stages
+# (DEVCURVE_SWING_STAGE_S), so the hit lands fully yet velocity-continuously.
+DEVCURVE_ACCENT_HOLD_S = 0.12
 # Travelling swell (guide 13D: energy moves with the shape). Each layer's accents (its flux lane
 # above that lane's own recent mean) inject energy just beyond the right edge; it travels left
 # with the material at Swell Speed x the passage travel factor, fades over
@@ -141,11 +146,14 @@ def _body_response(ratio: float) -> float:
     return DEVCURVE_BODY_TOP * value
 
 
-def _accent_response(excess: float, reference: float, flux: float = 0.0) -> float:
-    """Fast level above the body and the layer's flux lane, on fixed scales -> share of the reserved
-    accent room."""
-    strength = max(0.0, excess) / reference + max(0.0, flux) / DEVCURVE_ACCENT_FLUX_REF
-    return DEVCURVE_ACCENT_ROOM * (1.0 - math.exp(-strength))
+def _accent_strength(excess: float, reference: float, flux: float = 0.0) -> float:
+    """Level above the body and the layer's flux above its recent mean, each on its fixed scale."""
+    return max(0.0, excess) / reference + max(0.0, flux) / DEVCURVE_ACCENT_FLUX_REF
+
+
+def _accent_response(strength: float) -> float:
+    """Accent strength -> share of the reserved accent room (eased, never past it)."""
+    return DEVCURVE_ACCENT_ROOM * (1.0 - math.exp(-max(0.0, strength)))
 
 
 def _reaction_top(value: float) -> float:
@@ -407,7 +415,8 @@ class DevCurveRuntimeState:
     level_stage: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
     body_stage: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
     body: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
-    flux_stage: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
+    accent_hold: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
+    accent_stage: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
     response_peak: Dict[str, float] = field(default_factory=lambda: dict(DEVCURVE_RESPONSE_FLOOR))
     drive: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
     accent_mean: Dict[str, float] = field(default_factory=lambda: dict.fromkeys(_LAYER_ORDER, 0.0))
@@ -600,14 +609,18 @@ def solve_devcurve_frame(
         # Every second stage follows its first stage as it stood at the start of this tick, so a hit's
         # first tick moves the drive by (almost) nothing: the velocity is continuous on the logical clock.
         stage, body_stage, body = state.level_stage[key], state.body_stage[key], state.body[key]
-        flux = state.flux_stage[key]
-        lanes = DEVCURVE_SWELL_SOURCES[key]
-        flux_target = 0.0
-        if playing and key in _BODY_LAYERS:
-            # An accent is the lane above its own recent mean (the swell's accent test), never a steady level.
-            lane_level = sum(_lane(transient_bus, lane) for lane in lanes) / len(lanes)
-            flux_target = max(0.0, lane_level - state.accent_mean[key] - DEVCURVE_SWELL_ACCENT_FLOOR)
-        state.flux_stage[key] = _follow(flux, flux_target, dt, attack, release)
+        accent = state.accent_stage[key]
+        strength = 0.0
+        if playing:
+            flux = 0.0
+            if key in _BODY_LAYERS:
+                # The flux lane above its own recent mean (the swell's accent test), never a steady level.
+                lanes = DEVCURVE_SWELL_SOURCES[key]
+                lane_level = sum(_lane(transient_bus, lane) for lane in lanes) / len(lanes)
+                flux = lane_level - state.accent_mean[key] - DEVCURVE_SWELL_ACCENT_FLOOR
+            strength = _accent_strength(0.0, DEVCURVE_ACCENT_REF[key], flux)
+        state.accent_hold[key] = max(strength, state.accent_hold[key] * math.exp(-dt / DEVCURVE_ACCENT_HOLD_S))
+        state.accent_stage[key] = _follow(accent, state.accent_hold[key], dt, attack, release)
         state.level_stage[key] = _follow(stage, targets[key], dt, attack, release)
         state.body_stage[key] = _follow(body_stage, targets[key], dt, body_attack, body_release)
         state.body[key] = _follow(body, body_stage, dt, body_attack, body_release)
@@ -615,7 +628,10 @@ def solve_devcurve_frame(
             peak = max(DEVCURVE_RESPONSE_FLOOR[key], _follow(
                 state.response_peak[key], body, dt, DEVCURVE_RESPONSE_REACH_S, DEVCURVE_RESPONSE_MEMORY_S))
             state.response_peak[key] = peak
-            gained = _body_response(body / peak) + _accent_response(stage - body, DEVCURVE_ACCENT_REF[key], flux)
+            # The level above the body arrives through the fast stage (per-frame loudness is noisy: a held
+            # capture of it would sit at its maxima); the flux spike through its held capture.
+            gained = _body_response(body / peak) + _accent_response(
+                _accent_strength(stage - body, DEVCURVE_ACCENT_REF[key]) + accent)
         else:
             gained = stage
         state.drive[key] = _follow(state.drive[key], gained, dt, attack, release)
