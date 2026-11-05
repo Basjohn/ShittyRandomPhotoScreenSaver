@@ -82,6 +82,29 @@ def start_xvfb(display: str, geometry: str = "1920x1080x24", *extra: str) -> sub
     return xvfb
 
 
+# Real repository artwork with authored detail and edges (transitions judged on these, not swatches).
+REPO_IMAGES = (
+    "ui/assets/onboarding/source/transition_source.png",
+    "ui/assets/onboarding/source/transition_destination.png",
+    "ui/assets/onboarding/source/SRPSSWitch.png",
+    "Docs/Reference/Extruded_Bubble/Targets/Originals/Preset1Goal.png",
+    "Docs/Reference/Extruded_Bubble/Targets/Originals/Preset5Goal.png",
+    "Docs/Reference/Images/Waveform_Ribbon_Material_Baseline_20261103.png",
+)
+
+
+def copy_repo_images(folder: Path) -> None:
+    """Fill *folder* with the real repository artwork listed in ``REPO_IMAGES``."""
+
+    import shutil
+
+    folder.mkdir(parents=True, exist_ok=True)
+    for relative in REPO_IMAGES:
+        source = REPO / relative
+        if source.is_file():
+            shutil.copy2(source, folder / source.name)
+
+
 def generate_images(folder: Path, count: int) -> None:
     import numpy as np
     from PIL import Image
