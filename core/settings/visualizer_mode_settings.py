@@ -1821,6 +1821,7 @@ def _waveform_ribbon() -> ModeSettings:
     buckets = tuple(Bucket(key,title,helper,advanced=advanced) for key,title,helper,advanced in (
         ('ribbons','Ribbons','Four retained ribbon identities, colours and character.',False),
         ('shape','Shape & Reactivity','Elastic body, local twisting and quiet to peak targets.',False),
+        ('pulse','Energy Pulse','Music sends swells travelling along the waveform, like waves on water.',False),
         ('flow','Flow & Axial Roll','History travels steadily; axial roll turns the waveform like a skewer.',False),
         ('colour','Colour','Colour nodes and shifts in the most powerful musical regions.',False),
         ('surface','Sheet & Highlights','Silk, fine strands, glowing rims and localized dense highlights.',False),
@@ -1842,7 +1843,7 @@ def _waveform_ribbon() -> ModeSettings:
     ]
     targets = (
         ('height','Carrier Height',0.,3.,'shape'),('width','Sheet Width',.05,2.,'shape'),
-        ('bend','Elastic Bending',0.,3.,'shape'),('torsion','Elastic Torsion',0.,4.,'shape'),
+        ('bend','Pulse Strength',0.,3.,'pulse'),('torsion','Elastic Torsion',0.,4.,'shape'),
         ('twist','Local Twisting',0.,4.,'shape'),('stretch','Elastic Stretch',0.,2.,'shape'),
         ('lift','Vertical Lift',-.8,2.,'shape'),('spread','Ribbon Separation',0.,3.,'shape'),
         ('depth','Depth Bending',0.,3.,'shape'),('rotation','Axial Speed',0.,360.,'flow'),
@@ -1861,6 +1862,15 @@ def _waveform_ribbon() -> ModeSettings:
         ('release','Decay',.1,4.,'reaction'),('rotation_attack','Roll Attack',.01,.5,'flow'),
         ('rotation_release','Roll Decay',.1,6.,'flow'),('colour_threshold','Power Threshold',0.,.95,'colour')):
         entries.append(Slider(prefix+key,label+':',low,high,bucket=bucket,logical=True))
+    entries.append(Choice(prefix+'pulse_direction','Pulse Direction:',('Head To Tail','Tail To Head','Centre Out'),
+        bucket='pulse',logical=True,tooltip='Where musical swells start and which way they travel.'))
+    for key,label,low,high,tip in (
+        ('pulse_width','Pulse Width',.5,24.,'Length of each travelling swell along the waveform (world units).'),
+        ('pulse_speed','Pulse Speed',0.,30.,'How fast swells travel along the waveform (world units per second).'),
+        ('pulse_colour','Pulse Colour Shift',0.,1.,'How far a passing swell shifts the ribbon toward its peak colour.'),
+        ('pulse_fade','Pulse Fade',.2,20.,'Seconds a travelling swell takes to fade to about a third.')):
+        entries.append(Slider(prefix+key,label+':',low,high,bucket='pulse',logical=True,tooltip=tip,
+                              suffix=' s' if key=='pulse_fade' else ''))
     entries.extend((Toggle(prefix+'rotation_enabled','','Axial Roll',bucket='flow',logical=True),
                     Range(prefix+'twist_speed','Twist Rate:',0.,5.,bucket='flow',logical=True,
                           tooltip='Quiet → peak local rolling twist rate in radians per second.')))
