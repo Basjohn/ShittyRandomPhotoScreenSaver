@@ -44,6 +44,7 @@
         "waveform_ribbon_dynamic_zoom": false,
         "waveform_ribbon_pulse_colour": 0.65,
         "waveform_ribbon_pulse_direction": "Head To Tail",
+        "waveform_ribbon_travel_direction": "Right To Left",
         "waveform_ribbon_reaction_mode": "Whole Swell",
         "waveform_ribbon_height_mode": "Dynamic Height Shift",
         "waveform_ribbon_tilt_shift": false,

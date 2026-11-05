@@ -139,6 +139,11 @@ class Flow:  # Lab Plan section 4A: history enters at the head (world +x) and dr
     head_x: float = 34.
     fade_in: float = 2.5            # seconds of age over which the head fades in
     fade_out: float = 5.            # seconds of age over which the tail fades out
+    # Travel direction, the history's one sign: +1 travels toward -x (enters at the right), -1 is its mirror image
+    # (enters at the left). Every history computation works on the history axis (head at +head_x, travelling toward
+    # -axis), so packets are identical either way; the axis -> world map (world x = direction * axis) is applied once,
+    # at the world boundary of the history's consumers (WaveformScene and the Studio's projection).
+    direction: float = 1.
 
 
 def hue_between(a, b) -> tuple:

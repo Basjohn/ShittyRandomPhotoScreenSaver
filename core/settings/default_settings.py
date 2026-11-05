@@ -1009,6 +1009,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'waveform_ribbon_floor_light_reach': 35.0,
                                     'waveform_ribbon_floor_light_far': 0.5,
                                     'waveform_ribbon_floor_give': 0.0,
+                                    'waveform_ribbon_travel_direction': 'Right To Left',
                                     'waveform_ribbon_spark_count': [0.0, 64.0],
                                     'waveform_ribbon_strand_count': [4.0, 4.0],
                                       'waveform_ribbon_strand_pulse_growth': [0.2, 0.2],

@@ -129,6 +129,9 @@ _CHOICE_NOTES = {PREFIX + "reaction_mode": {
     "Frozen Past": "Each passage leaves its peak swell held on the cloth, carried along with the history.",
     "Whole Swell": "The whole waveform rises and settles together; direction, width and speed do not apply.",
     "Group Wave": "Each swell arrives as a set: several crests lift together, leaning toward the front.",
+}, PREFIX + "travel_direction": {
+    "Right To Left": "New history enters at the right and flows to the left.",
+    "Left To Right": "New history enters at the left and flows to the right (the mirror image).",
 }}
 # Targets kept in data but no longer moving geometry (operator, 5 Nov): Advanced only, never in the tuner.
 _RETIRED_TARGETS = frozenset({"stretch"})
@@ -797,7 +800,8 @@ def ribbon_world_points(frame, index):
         return np.empty((0, 4))
     knots = path[4:].reshape(-1, KNOT_ROWS, 4)[(start + np.arange(count)) % capacity]
     origin = packet.world_origin
-    x = knots[:, 0, 0] + origin[0] + frame.scene.flow.head_x - frame.travel
+    # History axis -> world: Travel Direction mirrors x (Flow.direction, the renderer's one sign).
+    x = (knots[:, 0, 0] + origin[0] + frame.scene.flow.head_x - frame.travel)*frame.scene.flow.direction
     return np.stack((x, knots[:, 0, 1] + origin[1], knots[:, 0, 2] + origin[2], knots[:, 0, 3]), axis=1)
 
 

@@ -93,7 +93,7 @@ points[i]=vec4(floorContact(p),floorGiveSurface(p)); }'''
                 gl.glUniform3f(location('uFloorContact'), 0., .03, .15)
                 gl.glBindTextureUnit(13, texture); gl.glUniform1i(location('uFloorGiveField'), 13)
                 gl.glUniform4f(location('uFloorGive'), *(give if on else (0., 0., 1., 1.)))
-                gl.glUniform2f(location('uFloorGiveFrame'), 0., 0.)
+                gl.glUniform3f(location('uFloorGiveFrame'), 0., 0., 1.)
                 gl.glDispatchCompute(-(-len(points)//64), 1, 1)
                 result = _read(gl, buffer, points); gl.glDeleteBuffers(1, [buffer])
                 return result
@@ -238,16 +238,18 @@ def _stripped_sources(monkeypatch):
     """Every give branch removed from the production sources the scene compiles (constant false)."""
     import rendering.quick.scene3d.ribbon as ribbon_module
     import rendering.quick.scene3d.waveform as waveform_module
+    import rendering.quick.visualizer.implementations.waveform_ribbon as implementation_module
     branch = 'uFloorGive.y>0.0'
     replaced = 0
+    # The renderer's warm-up compiles the floor from its own import: patch that name too, or the reference reuses it.
     for module, names in ((ribbon_module, ('RIBBON_VERTEX', 'RIBBON_CONTINUOUS_VERTEX', 'RIBBON_SPARK_VERTEX',
                                            'RIBBON_STRAY_VERTEX', 'RIBBON_COHORT_STRAY_VERTEX')),
-                          (waveform_module, ('FLOOR_FRAGMENT',))):
+                          (waveform_module, ('FLOOR_FRAGMENT',)), (implementation_module, ('FLOOR_FRAGMENT',))):
         for name in names:
             source = getattr(module, name)
             replaced += source.count(branch)
             monkeypatch.setattr(module, name, source.replace(branch, 'false'))
-    assert replaced >= 10
+    assert replaced >= 12
 
 
 def test_floor_give_off_is_pixel_identical_to_the_rigid_floor(qt_app, monkeypatch):

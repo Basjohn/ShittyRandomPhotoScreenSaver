@@ -272,6 +272,13 @@ model), with separately tunable A rolling twist and whole-body rotation. Source 
 - **Flow Speed:** the history's drift across the hall. A fixed scene constant while running: music never changes it
   (gate A), but the user authors it.
 - **Wave Rate:** the head wave's frequency (long sweeps to tight ripples).
+- **Travel Direction** (Right To Left default, Left To Right): `Flow.direction` is the history's one sign. All history
+  computation stays on the history axis (head at +head_x, travelling toward -axis), so packets are identical either
+  way; `WaveformScene` alone maps the axis into the world (x mirror on the history-bound view, the bursts' clip matrix,
+  the frustum continuation spans and the mist volume lookup), the reduced fields (mist cloth, floor give) are built in
+  world x (`uFieldSide`), and the colour grade is mirrored into history x so it stays put in the world. The Studio's
+  projection applies the same sign. The logical owner publishes the direction: a change fades ribbons, sparks and
+  strands out (`DIRECTION_FADE`, smoothstep), swaps while hidden, and fades back.
 - **Wave Swell, Height Swell, Depth Sway:** the head wave's slow variation.
 - **Waveform Rotation:** enabled, quiet→peak axial angular speed, reaction strength, attack and decay.
   Speed changes integrate into continuous angle; this does not move the camera or modulate history flow speed.

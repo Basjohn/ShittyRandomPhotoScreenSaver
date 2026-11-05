@@ -49,7 +49,7 @@ class FloorGiveField:
         if names:gl.glDeleteTextures(len(names),names)
         self.texture=self._sections=0;self._samples=0
 
-    def update(self,packet,*,translation,floor,contact,camber):
+    def update(self,packet,*,translation,floor,contact,camber,side=1.):
         """``floor`` is the scene's ``Floor`` (give > 0); ``contact`` the ribbons' (floor height, gap, softness).
         Reads the packet bound at shader-storage binding 0 by the caller's packet scope."""
         self._check();first,last,samples=floor.give_span;samples=int(samples)
@@ -66,7 +66,8 @@ class FloorGiveField:
         before=gl_query.get_int(gl.GL_CURRENT_PROGRAM)
         try:
             program=self.resources.compute_program('sections',FLOOR_GIVE_SECTION_COMPUTE);gl.glUseProgram(program)
-            u=self.resources.uniforms('sections',('uGiveSpan','uGiveShape','uFieldOrigin'),required=False)
+            u=self.resources.uniforms('sections',('uGiveSpan','uGiveShape','uFieldOrigin','uFieldSide'),required=False)
+            gl.glUniform1f(u['uFieldSide'],float(side))
             gl.glUniform4f(u['uGiveSpan'],first,last,samples,EDGE_FADE)
             gl.glUniform4f(u['uGiveShape'],height+gap,floor.give_softness,float(camber),0.)
             gl.glUniform4f(u['uFieldOrigin'],*(float(a+b) for a,b in zip(packet.world_origin,translation)),packet.instances)
