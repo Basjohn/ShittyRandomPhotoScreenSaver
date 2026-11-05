@@ -58,15 +58,22 @@ lead as reviewer/orchestrator.
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
-- [ ] **Neon Lake goal mocks (Presets 1-3, 5 Nov fourth pass, awaiting operator look):** range drawn as a contour
-  wireframe, glossy glass rims, calmer water, four large meandering dunes on Preset 1 (`Docs/Reference/Neon_Lake_Basin.md`,
-  "Third pass" / "Fourth pass"). Still short of `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`:
-  Preset 1's lake lacks the mock's vivid line mesh and island glow, its colour is slightly more magenta than the mock
-  (hue match ~0.62), the foothills nearest the lake are still dotted; Preset 3's dunes catch rims only where the Sun
-  sees them (the mock's dense gold dune lines are partly covered by the contour rows on the hills), its sky is
-  warmer than the mock's. Preset 3's frame-to-frame change is 0.25/255 against the baseline's 0.165 (its lake
-  covers about five times the screen; with every water feature off the scene's own floor is about 0.2).
-  Evidence: `.artifacts/evidence/neon_lake/fidelity_20261105/pass4/`.
+- [ ] **Neon Lake goal mocks (Presets 1-3, 5 Nov fifth pass, awaiting operator look):** sparser blue-white stars
+  with round glows, ropy nebula, luminous Moon limb with a grey crescent, smooth near dune lines, glinting water
+  (`Docs/Reference/Neon_Lake_Basin.md`, "Third" to "Fifth pass"). Still short of
+  `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`: Preset 1's sky still purpler than the mock's navy
+  near the Moon, no blue cloud in the upper left, the nebula band steeper than the mock's; the mid-distance dune
+  crest just before the lake still kinks (beyond the fine band; extending the band costs ~+0.3 ms); the lake is
+  brighter and smoother than the mock's dark mirror and swells still wash it; the high-react look (vivid line mesh,
+  glowing island) is not reached; Preset 3's sky is warmer and its wisps fainter than the mock's, and its
+  frame-to-frame change is 0.28/255 (target 0.25, ideally 0.165). Evidence:
+  `.artifacts/evidence/neon_lake/fidelity_20261105/pass5/` (triptych/, motion/*.webp, gpu_final.txt).
+
+- [ ] **Neon render tests load-sensitive under parallel runs (5-6 Nov):** `test_neon_lake_renderer.py` (once, pass-5
+  merge gate) and `test_neon_scene_materials.py` (once, pass-5 branch) failed under parallel load and passed alone; the
+  re-run overwrote each log, so the failing test is unknown (most likely a QSG clip probe timing out). The isolated
+  runner now keeps the parallel-run failure as `logs/pytest_isolated/<file>.under_load.log`; next time, read it and
+  fix the probe's timeout or synchronisation rather than rerunning.
 
 - [ ] **4x MSAA repeat-render noise (driver, 5 Nov; was "Floor Give run-to-run noise"):** the same frame rendered
   again through a 4x scene target differs by 1 level (rarely 2-3) on a pixel or two in Waveform (more often with Floor
