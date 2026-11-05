@@ -119,6 +119,8 @@ def main() -> int:
     parser.add_argument("--framing", default="", help="Viewport framing id (default: the mode's own default)")
     parser.add_argument("--theme", type=Path, default=None, help="A .srtheme to activate for this capture")
     parser.add_argument("--tag", default="", help="Suffix for output names")
+    parser.add_argument("--set", action="append", default=[], metavar="KEY=JSON",
+                        help="Override one value of the in-memory store (evidence only; nothing is saved)")
     parser.add_argument("--card-extent", default="live",
                         help="Live card world extent: WxH (CUSTOM viewport_extent), 'live' (default: the card in "
                              "this machine's saved settings, read only) or 'baseline' (420x280)")
@@ -174,6 +176,9 @@ def main() -> int:
     if mode != "waveform_ribbon" and spec is not None:
         # The Settings store's canonical admission (legacy direction pairs -> six-coordinate paths, ...).
         values.update({c.key: c.admit(values[c.key], values[c.key]) for c in spec.controls if c.key in values})
+    for override in args.set:
+        key, _, text = override.partition("=")
+        values[key.strip()] = json.loads(text)
     store = MemoryStore(values, get_preset_names(mode)[args.preset - 1], extent, args.border)
     if args.card_extent == "live":
         from core.settings.settings_manager import SettingsManager
@@ -204,21 +209,53 @@ def main() -> int:
 
         if args.object:
             bridge.selectObject(args.object)
+        def analysed():
+            """An evaluator that analyses in the background (``analysing``) has landed its answers."""
+            for _ in range(6000):
+                if not getattr(controller.evaluator, "analysing", False):
+                    return
+                app.processEvents()
+                time.sleep(0.01)
+            raise SystemExit("Background analysis did not finish")
+
         if args.clip:
             clip = next(c for c in controller.adapter.recorded_clips() if c.id == "clip:" + args.clip)
-            from ui.studio.waveform_recorded_inputs import extract, to_inputs
             from dataclasses import replace
-            data = extract(clip.description, store.values, seconds=12.0)
-            controller.evaluator.add_recorded(to_inputs(data, replace(clip, duration=float(data["duration"]))))
+            if mode == "waveform_ribbon":
+                from ui.studio.waveform_recorded_inputs import extract, to_inputs
+                data = extract(clip.description, store.values, seconds=12.0)
+                inputs = to_inputs(data, replace(clip, duration=float(data["duration"])))
+            else:
+                # The mode's own clip loader (its out-of-process worker), waited for on the event loop.
+                landed = []
+                job = controller.adapter.start_clip_load(clip, store.values, lambda r, e="": landed.append((r, e)))
+                for _ in range(12000):
+                    if landed:
+                        break
+                    app.processEvents()
+                    time.sleep(0.01)
+                if not landed or landed[0][1]:
+                    raise SystemExit(f"Clip analysis failed: {landed[0][1] if landed else 'timeout'} ({job})")
+                inputs = landed[0][0]
+            controller.evaluator.add_recorded(inputs)
             controller.select_fixture(clip.id)
             if args.source_time is not None:
                 from widgets.spotify_visualizer.compact_clip import first_timestamp_us
                 first = first_timestamp_us(clip.description) / 1e6
-                args.time = args.source_time + first - float(data["origin"])
+                args.time = args.source_time + first - float(inputs._origin)
                 record["studio_time"] = args.time
         else:
             controller.select_fixture(args.fixture)
+            # The default recorded clip still analysing in the background would replace the chosen fixture when
+            # it lands; this capture asked for the fixture.
+            for job in tuple(controller._clip_jobs.values()):
+                job.cancel()
+            controller._clip_jobs.clear()
         controller.seek(args.time)
+        settle()
+        controller.evaluator.evaluate(controller.transport.time, controller.evaluation_values())
+        analysed()
+        controller._invalidate()
         settle()
         # Frame cost while playing: wall time of one Quick frame with glFinish, real scene vs evaluation.
         controller.set_playing(True)

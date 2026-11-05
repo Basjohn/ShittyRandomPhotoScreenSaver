@@ -121,6 +121,7 @@ class VisualizerSettingsStore:
             load_spec_mode_settings(tab, self._mode, config)   # blocked signals: loading saves nothing
             from ui.tabs.media.technical_controls import load_per_mode_technical_controls
             load_per_mode_technical_controls(tab, config, only_mode=self._mode)
+            self._load_families(config)
         finally:
             tab._loading = previous
         camera = spec_for_mode(self._mode)
@@ -135,6 +136,46 @@ class VisualizerSettingsStore:
         tab._force_visualizer_preset_to_custom(self._mode)
         tab._save_settings_now()
         return self.snapshot()
+
+    def _load_families(self, config: Mapping[str, Any]) -> None:
+        """The mode's shared setting families Settings keeps outside the mode body (shown on its page, stored per
+        mode): the bar Fill / Border / Border Opacity rows and the rainbow toggle and speed, loaded into their
+        owning Settings widgets so the tab's own save collects them. A mode owning neither is a no-op."""
+        from PySide6.QtCore import QSignalBlocker
+        from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
+        tab = self._tab
+        shared = get_owned_mode_setting_keys(self._mode, "shared_bar")
+        if shared and all(key in config for key in shared.values()) and hasattr(tab, "vis_border_opacity"):
+            from ui.tabs.widgets_tab_media import load_shared_visualizer_appearance_settings
+            blocker = QSignalBlocker(tab.vis_border_opacity)
+            try:
+                load_shared_visualizer_appearance_settings(tab, dict(config), self._mode)
+            finally:
+                del blocker
+        rainbow = get_owned_mode_setting_keys(self._mode, "rainbow")
+        enabled_key, speed_key = rainbow.get("rainbow_enabled"), rainbow.get("rainbow_speed")
+        if enabled_key in config and speed_key in config and hasattr(tab, "rainbow_enabled"):
+            enabled = bool(config[enabled_key])
+            speed = max(1, min(100, int(round(float(config[speed_key]) * 100.0))))
+            cache = dict(getattr(tab, "_rainbow_per_mode", {}) or {})
+            cache[self._mode] = (enabled, speed)
+            tab._rainbow_per_mode = cache
+            blockers = [QSignalBlocker(tab.rainbow_enabled)]
+            slider = getattr(tab, "rainbow_speed_slider", None)
+            if slider is not None:
+                blockers.append(QSignalBlocker(slider))
+            try:
+                tab.rainbow_enabled.setChecked(enabled)
+                if slider is not None:
+                    slider.setValue(speed)
+                label = getattr(tab, "rainbow_speed_label", None)
+                if label is not None:
+                    label.setText(f"{speed / 100.0:.2f}")
+            finally:
+                del blockers
+            refresh = getattr(tab, "_update_rainbow_visibility", None)
+            if callable(refresh):
+                refresh()
 
     def presets(self) -> list[str]:
         """Every preset slot of the mode, curated first and Custom last (Settings' own order)."""
