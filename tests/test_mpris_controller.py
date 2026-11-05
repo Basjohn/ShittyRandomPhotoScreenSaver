@@ -13,6 +13,7 @@ class FakeBus:
     def __init__(self, players: dict[str, dict]):
         self.players = players
         self.calls: list[tuple[str, str, str | None, tuple]] = []
+        self.interrupted = threading.Event()
 
     def available(self) -> bool:
         return True
@@ -29,7 +30,10 @@ class FakeBus:
 
     def listen_for_changes(self, on_change, stop: threading.Event) -> None:
         on_change("mpris_properties")
-        stop.wait(2.0)
+        self.interrupted.wait(2.0)
+
+    def interrupt_listen(self) -> None:
+        self.interrupted.set()
 
 
 def _player(status="Playing", title="Song", artists=("A", "B"), length=180_000_000, art=""):
@@ -153,3 +157,20 @@ def test_windows_factory_never_constructs_mpris(monkeypatch, windows_platform) -
     monkeypatch.setattr(media_controller, "WindowsGlobalMediaController", FakeWindowsController)
     assert isinstance(media_controller.create_media_controller(app_filter="spotify"), FakeWindowsController)
     assert built and built[0]["app_filter"] == "spotify"
+
+
+def test_observation_stop_interrupts_the_blocking_listener() -> None:
+    from core.threading.manager import ThreadManager
+
+    bus = FakeBus({"org.mpris.MediaPlayer2.spotify": _player()})
+    manager = ThreadManager()
+    try:
+        controller = LinuxMprisMediaController(thread_manager=manager, bus=bus)
+        dirty, established = [], threading.Event()
+        assert controller.start_event_observation(dirty.append, lambda ok, detail: established.set())
+        assert established.wait(2.0)
+        controller.stop_event_observation()
+        assert bus.interrupted.is_set() and not controller.is_event_observation_active()
+        assert dirty == ["mpris_properties"]
+    finally:
+        manager.shutdown()

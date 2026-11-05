@@ -13,8 +13,9 @@ same ``BaseMediaController`` contract as ``WindowsGlobalMediaController``:
   over one locked blocking connection; nothing here owns a cadence or poll.
 * **Commands** are fire-and-forget on the owner's media lane (or the IO pool),
   reporting ``MediaCommandResult`` like GSMTC, with the same inflight de-dup.
-* **Event observation** listens for ``PropertiesChanged`` on a dedicated
-  ThreadManager affinity worker and only hands a reason string to ``on_dirty``.
+* **Event observation** blocks on ``PropertiesChanged``/``NameOwnerChanged`` on a
+  dedicated ThreadManager affinity worker (no wake cadence; stop shuts the socket
+  down) and only hands a reason string to ``on_dirty``.
 * **Artwork** comes from ``mpris:artUrl``: ``file://`` read locally, ``http(s)``
   through ``core.network.bounded_request``; bounded size, reused by track identity.
 
@@ -88,6 +89,7 @@ class JeepneySessionBus:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._connection = None
+        self._listen_connection = None
 
     def _conn(self):
         if self._connection is None:
@@ -133,7 +135,11 @@ class JeepneySessionBus:
         return reply.header.message_type == MessageType.method_return
 
     def listen_for_changes(self, on_change: Callable[[str], None], stop: threading.Event) -> None:
-        """Block until *stop*, calling ``on_change(reason)`` for each player property change."""
+        """Block on the bus, calling ``on_change(reason)`` for each player change, until interrupted.
+
+        The receive blocks without a timeout (no wake cadence); ``interrupt_listen``
+        shuts the socket down to end it.
+        """
 
         from jeepney import MatchRule, message_bus, new_method_call
         from jeepney.io.blocking import open_dbus_connection
@@ -146,14 +152,19 @@ class JeepneySessionBus:
         )
         owners = MatchRule(type="signal", interface="org.freedesktop.DBus", member="NameOwnerChanged")
         with open_dbus_connection(bus="SESSION") as connection:
+            self._listen_connection = connection
+            if stop.is_set():
+                return
             for match in (rule, owners):
                 connection.send_and_get_reply(new_method_call(message_bus, "AddMatch", "s", (match.serialise(),)))
             with connection.filter(rule) as changes, connection.filter(owners) as names:
                 while not stop.is_set():
                     try:
-                        connection.recv_messages(timeout=0.25)
-                    except TimeoutError:
-                        continue
+                        connection.recv_messages()
+                    except (OSError, EOFError, ValueError):
+                        if stop.is_set():
+                            return
+                        raise
                     while changes:
                         message = changes.popleft()
                         if message.body and message.body[0] == PLAYER_INTERFACE:
@@ -162,6 +173,20 @@ class JeepneySessionBus:
                         message = names.popleft()
                         if message.body and str(message.body[0]).startswith(MPRIS_PREFIX):
                             on_change("mpris_players")
+
+
+    def interrupt_listen(self) -> None:
+        """Wake a blocked ``listen_for_changes`` by shutting its socket down."""
+
+        import socket
+
+        connection = self._listen_connection
+        self._listen_connection = None
+        if connection is not None:
+            try:
+                connection.sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
 
 
 class LinuxMprisMediaController(BaseMediaController):
@@ -430,6 +455,9 @@ class LinuxMprisMediaController(BaseMediaController):
         self._observation_lane = self._observation_stop = None
         if stop is not None:
             stop.set()
+            interrupt = getattr(self._bus, "interrupt_listen", None)
+            if callable(interrupt):
+                interrupt()
         if lane is not None:
             lane.stop(wait=True, timeout=2.0)
 
