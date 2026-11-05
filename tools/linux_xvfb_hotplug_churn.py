@@ -12,9 +12,8 @@ It is not evidence of Windows behaviour (native topology, drivers, DWM): it is
 the automated path for the engine/display lifecycle across real Qt screen
 add/remove edges.
 
-Prerequisites (Ubuntu): ``xvfb x11-xserver-utils libgl1-mesa-dri libegl1
-libxkbcommon-x11-0 libxcb-cursor0 libxcb-image0 libxcb-render-util0
-libxcb-xkb1`` plus ``requirements.txt`` Python packages.
+Environment, profile isolation and the Mesa OpenGL 4.6 override come from
+``tools/linux_headless.py``; prerequisites from ``scripts/linux/setup.sh --headless``.
 
 Example::
 
@@ -37,51 +36,18 @@ import sys
 import tempfile
 import time
 
-REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import linux_headless as lh  # noqa: E402
+
+REPO = lh.REPO
 FIRST = ("MSI", "2560/677x1440/381+0+0", "none")
 SECOND = ("LG", "2560/677x1440/381+2560+0", "none")
 REVEALED = r"Coordinated retained reveal complete generation={generation}\b"
 
-_PROFILE_SCRIPT = r"""
-import sys
-from PySide6.QtWidgets import QApplication
-app = QApplication([])
-from core.settings import SettingsManager
-settings = SettingsManager()
-settings.set("sources.folders", [sys.argv[1]])
-settings.set("timing.interval", int(sys.argv[2]))
-for widget in ("gmail", "reddit", "reddit2", "weather", "media", "system_audio_osd"):
-    settings.set(f"widgets.{widget}.enabled", False)
-"""
-
-
 def _xrandr(display: str, *args: str, check: bool = True) -> None:
     subprocess.run(["xrandr", *args], env={**os.environ, "DISPLAY": display},
                    capture_output=True, check=check)
-
-
-def _generate_images(folder: Path, count: int) -> None:
-    import numpy as np
-    from PIL import Image
-
-    folder.mkdir(parents=True, exist_ok=True)
-    if len(list(folder.iterdir())) >= count:
-        return
-    rng = np.random.default_rng(1)
-    sizes = [(3840, 2160), (2560, 1440), (5000, 3000), (1920, 1080), (2880, 1620), (4000, 4000)]
-    for index in range(count):
-        width, height = sizes[index % len(sizes)]
-        x = np.linspace(0, 1, width, dtype=np.float32)[None, :]
-        y = np.linspace(0, 1, height, dtype=np.float32)[:, None]
-        red = (np.sin(x * (3 + index) * 6.28) + 1) * 0.5 * np.ones_like(y)
-        green = (np.cos(y * (2 + index % 5) * 6.28) + 1) * 0.5 * np.ones_like(x)
-        pixels = np.stack([red, green, x * y], axis=-1)
-        pixels = (pixels * 200 + rng.integers(0, 55, (height, width, 3))).clip(0, 255).astype(np.uint8)
-        image = Image.fromarray(pixels)
-        if index % 3 == 0:
-            image.save(folder / f"img_{index:03d}.png")
-        else:
-            image.save(folder / f"img_{index:03d}.jpg", quality=88)
 
 
 def _memory(pid: int) -> str:
@@ -162,21 +128,11 @@ def main() -> int:
     images, profile, logs = work / "images", work / "profile", work / "logs"
     shutil.rmtree(logs, ignore_errors=True)
     logs.mkdir(parents=True)
-    _generate_images(images, args.images)
-    child_env = {
-        **os.environ,
-        "DISPLAY": args.display,
-        "APPDATA": str(profile / "appdata"),
-        "LOCALAPPDATA": str(profile / "local"),
-        "SRPSS_FORCE_LOG_DIR": str(logs),
-    }
-    xvfb = subprocess.Popen(
-        ["Xvfb", args.display, "-noreset", "-screen", "0", "5120x1440x24", "+extension", "GLX", "+extension", "RANDR"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
+    lh.generate_images(images, args.images)
+    child_env = lh.child_env(args.display, profile, logs)
+    xvfb = lh.start_xvfb(args.display, "5120x1440x24")
     app = None
     try:
-        time.sleep(1.0)
         # Qt reports RandR monitors as screens: one monitor over the left half
         # is the single-display start; the second is added/removed at runtime.
         _xrandr(args.display, "--setmonitor", *FIRST)
@@ -185,8 +141,7 @@ def main() -> int:
             # fails to shrink the framebuffer to 0x0 (BadValue); the output is
             # still off, which is all this step needs.
             _xrandr(args.display, "--output", "screen", "--off", check=False)
-        subprocess.run([sys.executable, "-c", _PROFILE_SCRIPT, str(images), str(args.interval)],
-                       cwd=REPO, env=child_env, capture_output=True, check=True)
+        lh.seed_profile(child_env, images, args.interval)
         entry = [str(args.entry)] if args.entry else ["main.py"]
         with (logs / "stdout.txt").open("w") as stdout:
             app = subprocess.Popen([sys.executable, *entry, "/s", "--debug"], cwd=REPO, env=child_env,
