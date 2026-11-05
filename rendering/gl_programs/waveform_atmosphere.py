@@ -13,9 +13,10 @@ struct Knot {vec4 p;vec4 q;vec4 tangent;vec4 side;vec4 tint;};
 struct Path {vec4 meta;vec4 extra;vec4 colourA;vec4 colourB;Knot knots[MAX_KNOTS];};
 layout(std430,binding=0) readonly buffer Paths {Path paths[];};
 uniform vec4 uFieldOrigin; // packet origin+scroll, ribbon count
+uniform float uFieldSide;   // Travel Direction: -1 maps world x to the history axis mirrored (0/unset: +1)
 '''+CONTINUATION_GLSL+RIBBON_GRADE_GLSL+'''
 void packetField(float x,int owner,out vec4 shape,out vec4 light) {
-    float local=x-uFieldOrigin.x;
+    float local=(uFieldSide<0.0?-x:x)-uFieldOrigin.x;
         shape=vec4(0);light=vec4(0);
         if(owner<int(uFieldOrigin.w) && min(paths[owner].colourA.a,paths[owner].colourB.a)>0.0) {
             int last=int(paths[owner].meta.x)-1;
