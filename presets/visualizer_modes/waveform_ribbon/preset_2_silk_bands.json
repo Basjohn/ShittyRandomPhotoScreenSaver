@@ -41,13 +41,13 @@
         ],
         "waveform_ribbon_colour_threshold": 0.55,
         "waveform_ribbon_count": 3,
-        "waveform_ribbon_damping": 0.65,
+        "waveform_ribbon_damping": 0.6,
         "waveform_ribbon_depth": [
           0.2,
           2.0
         ],
         "waveform_ribbon_dynamic_floor": false,
-        "waveform_ribbon_elastic_frequency": 1.3,
+        "waveform_ribbon_elastic_frequency": 0.85,
         "waveform_ribbon_exposure": 0.85,
         "waveform_ribbon_floor_brightness": [
           2.0,
