@@ -136,11 +136,11 @@ class StudioBridge(QObject):
         return [{"index": i, "label": name, "current": i == current, "custom": i == len(listed) - 1}
                 for i, name in enumerate(listed)]
 
-    def _preset_file_editable(self) -> bool:
-        reader = getattr(self._c.store, "preset_file_editable", None)
-        return bool(callable(reader) and reader())
+    def _save_preset_target(self) -> str:
+        reader = getattr(self._c.store, "save_target_label", None)
+        return str(reader()) if callable(reader) else ""
 
-    presetFileEditable = Property(bool, _preset_file_editable, notify=headerChanged)
+    savePresetTarget = Property(str, _save_preset_target, notify=headerChanged)      # "": not offered
 
     @Slot(int)
     def selectPreset(self, index: int) -> None:
@@ -167,10 +167,20 @@ class StudioBridge(QObject):
             self._c.store_switched(action)
 
     @Slot()
-    def editPresetFile(self) -> None:
-        action = getattr(self._c.store, "edit_preset_file", None)
-        if callable(action):
-            action()
+    def saveToPreset(self) -> None:
+        """Save To <Preset>: the store confirms, writes the curated preset's file and reloads presets."""
+        action = getattr(self._c.store, "save_to_preset", None)
+        if not callable(action):
+            return
+        self._c.session.cancel_gesture()
+        try:
+            notice = action()
+        except Exception as exc:
+            logger.exception("[STUDIO] Save To Preset failed")
+            notice = f"Could not save the preset: {exc}"
+        self.headerChanged.emit()
+        if notice:
+            self.notify(notice)
 
     def _dirty(self) -> bool:
         return self._c.session.dirty

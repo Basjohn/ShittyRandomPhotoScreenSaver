@@ -636,6 +636,25 @@ def _collect_visualizer_sections(payload: Mapping[str, Any]) -> List[Mapping[str
     return sections
 
 
+def resolve_preset_payload_settings(mode: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
+    """The mode settings a preset payload resolves to when it is loaded (empty: it holds none).
+
+    The curated loader's own admission: every visualizer section, forward migration, mode filtering
+    and canonical normalisation. The view pose is never part of the result (it is ``starting_view``)."""
+    combined: Dict[str, Any] = {}
+    for section in _collect_visualizer_sections(payload):
+        # Migrate first so legacy keys (e.g. rainbow_enabled) are converted
+        # to per-mode keys before the filter drops them.
+        migrated = _migrate_preset_settings(mode, dict(section))
+        filtered = _filter_settings_for_mode(mode, migrated)
+        if filtered:
+            combined.update(filtered)
+    if not combined:
+        return {}
+    combined["mode"] = mode
+    return normalize_visualizer_mode_payload(mode, combined) or {}
+
+
 def _parse_preset_payload(
     json_path: Path,
     payload: Mapping[str, Any],
@@ -645,24 +664,7 @@ def _parse_preset_payload(
     prefer_filename_name: bool = False,
 ) -> tuple[int, VisualizerPreset] | None:
     """Parse either curated JSON or SST snapshot payloads into presets."""
-    sections = _collect_visualizer_sections(payload)
-    if not sections:
-        return None
-
-    combined: Dict[str, Any] = {}
-    for section in sections:
-        # Migrate first so legacy keys (e.g. rainbow_enabled) are converted
-        # to per-mode keys before the filter drops them.
-        migrated = _migrate_preset_settings(mode, dict(section))
-        filtered = _filter_settings_for_mode(mode, migrated)
-        if filtered:
-            combined.update(filtered)
-
-    if not combined:
-        return None
-
-    combined["mode"] = mode
-    combined = normalize_visualizer_mode_payload(mode, combined)
+    combined = resolve_preset_payload_settings(mode, payload)
     if not combined:
         return None
 

@@ -142,7 +142,6 @@ def test_every_technical_audio_control_is_a_studio_property_with_the_same_range(
 # Each interactive part of Settings' preset row -> the Studio bridge slot doing the same job.
 PRESET_ROW = {
     "_slider": ("selectPreset",),
-    "_edit_btn": ("editPresetFile",),
     "_custom_action_btn": ("moveToCustom", "savePresetAs"),
     "_include_starting_view": ("setIncludeView",),
 }
