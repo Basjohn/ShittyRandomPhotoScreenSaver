@@ -727,6 +727,12 @@ class QuickSphereVoxelRenderer:
         return (self._resources.has_resources or self._target.has_resources or self._backdrop.has_resources
                 or self._stream.has_resources)
 
+    def settle_backdrop(self, backdrop, now: float, blend_s: float | None = None) -> None:
+        """Mirror Cubes' environment ``backdrop`` as already settled at logical time ``now`` (no fade-in): the
+        Studio draws one instant of a fixture whose wallpaper the saver would have been showing for a while.
+        Needs the render context current; the saver itself never calls it."""
+        self._backdrop.settle(backdrop, now, blend_s)
+
     def _target_frame(self, frame: QuickVisualizerRenderFrame, parameters):
         """The frame the scene target covers: the item, or with overflow everything Sphere can
         draw, up to the whole window (3D + frameless: not contained to its frame)."""

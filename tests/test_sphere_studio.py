@@ -488,3 +488,56 @@ def test_mirror_cubes_reflect_the_environment_in_the_studios_production_render(q
     assert np.abs(images[repr((True, "env"))] - images[repr((True, "none"))]).max() > 20     # reflected
     assert np.array_equal(images[repr((False, "env"))], images[repr((False, "none"))])     # mirror off: no effect
     controller.close()
+
+
+# ------------------------------------------------------------------ settled environment seam
+def _gl_free_environment():
+    from rendering.quick.scene3d.environment import BackdropEnvironment
+
+    class _Environment(BackdropEnvironment):          # the real fade bookkeeping; texture names stand in for GL
+        def _allocate(self, index, size):
+            self._slots[index] = [index + 1, size, None]
+
+        def _upload(self, index, rgba, size):
+            pass
+    return _Environment("test")
+
+
+def test_a_settled_environment_shows_fully_on_the_first_frame_whatever_the_blend_time():
+    backdrop = {"identity": "photo", "size": (4, 2), "rgba": bytes(32)}
+    for blend_s in (None, 0.5, 6.0):                  # 6 s: a transition longer than BLEND_S + 1
+        settled = _gl_free_environment()
+        settled.settle(backdrop, 10.0, blend_s)
+        texture, previous, blend = settled.textures(backdrop, 10.0, blend_s)
+        assert (bool(texture), previous, blend, settled.uploads) == (True, 0, 1.0, 1)
+        # Negative control: the same first frame without the seam is still fading in.
+        fresh = _gl_free_environment()
+        assert fresh.textures(backdrop, 10.0, blend_s)[2] == 0.0
+
+
+def test_the_studio_settles_mirror_cubes_through_the_renderers_public_seam():
+    """No private renderer state: the adapter hands the frame's wallpaper to ``settle_backdrop`` once per image."""
+    from types import SimpleNamespace
+    from rendering.quick.visualizer.implementations.sphere_voxel import QuickSphereVoxelRenderer
+    from ui.studio.sphere_adapter import SphereStudioRenderer
+
+    assert callable(getattr(QuickSphereVoxelRenderer, "settle_backdrop", None))
+    calls = []
+
+    class _Renderer:                                  # exposes only the public seam: a private reach would fail
+        __slots__ = ()
+
+        def settle_backdrop(self, backdrop, now, blend_s=None):
+            calls.append((backdrop["identity"], now, blend_s))
+    studio = SphereStudioRenderer.__new__(SphereStudioRenderer)
+    studio._impl, studio._settled = _Renderer(), None
+
+    def frame(identity, at, mirror=1.0):
+        parameters = {"scene3d_detail": "High", "sphere_mirror": mirror, "backdrop_blend_s": 0.0,
+                      "backdrop": {"identity": identity}}
+        return SimpleNamespace(mode_state=SimpleNamespace(parameters=parameters), logical_timestamp=at)
+    studio._settle_environment(frame("a", 3.0))
+    studio._settle_environment(frame("a", 4.0))       # same photograph: settled once
+    studio._settle_environment(frame("b", 5.0, mirror=0.0))   # Mirror Cubes off: nothing to settle
+    studio._settle_environment(frame("b", 6.0))
+    assert calls == [("a", 3.0, 0.0), ("b", 6.0, 0.0)]
