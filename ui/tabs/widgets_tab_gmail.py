@@ -424,8 +424,10 @@ def _on_gmail_authorize_clicked(tab: WidgetsTab) -> None:
 
 def _continue_gmail_authorize(tab: WidgetsTab, backend, mgr) -> None:
     if not mgr.client_id:
-        import subprocess
         import webbrowser
+
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
 
         app_data = backend.app_data_path
         popup = StyledPopup(
@@ -452,7 +454,7 @@ def _continue_gmail_authorize(tab: WidgetsTab, backend, mgr) -> None:
                 "https://console.cloud.google.com/apis/credentials", new=1
             )
         elif result == "folder":
-            subprocess.run(["explorer", str(app_data)], check=False)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(app_data)))
         elif result == "retry":
             _on_gmail_authorize_clicked(tab)
         else:

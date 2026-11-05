@@ -52,7 +52,14 @@ def is_interactive_user_desktop(win32: DesktopWin32 | None = None) -> bool:
 
     Unknown desktop state is intentionally denied.  This is independent of the
     process launch mode and never consults environment variables.
+
+    Linux sessions have no Winlogon/secure desktop: the process always runs on
+    its user's own desktop.
     """
+    from core import platform_paths
+
+    if win32 is None and not platform_paths.IS_WINDOWS:
+        return True
     api = win32 or _NativeDesktopWin32()
     try:
         return api.current_thread_desktop_name() == "Default"
