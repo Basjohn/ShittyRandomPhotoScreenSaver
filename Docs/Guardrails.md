@@ -24,4 +24,5 @@ This is the **short preflight**, not a second documentation authority. Use the f
 - [Documentation Maintenance](Guides/Documentation_Maintenance.md): source discipline, document roles and build delegation.
 - [Test Durability](Guides/Test_Durability.md) and [Test Suite](TestSuite.md): exact-value limits, prohibited tests and suite inventory.
 - [Logging Guide](Guides/Logging_Guide.md): diagnostic captures and evidence logging.
+- [Linux Compatibility](Guardrails/Linux_Compatibility.md): platform branching, the single path-root owner, marked dependencies, loud unavailability and Linux evidence limits.
 - [Settings Bucket Persistence](Architecture/Settings_Bucket_Persistence_Contract.md): active editing-path ownership.
