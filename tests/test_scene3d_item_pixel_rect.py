@@ -46,3 +46,36 @@ def test_subpixel_edge_outside_transform_uncertainty_is_not_snapped():
 def test_negative_fractional_edge_keeps_viewport_clipping():
     f=frame(630.,420.,1.,x=-.25,y=-.5)
     assert item_pixel_rect(f)==(0,0,630,420)
+
+
+# ------------------------------------------------------------------------------------------- cost at rest
+def test_an_unchanged_frame_is_not_resolved_again(monkeypatch):
+    """Renderers ask every frame; equal inputs (fresh frame objects, as production builds them) return the
+    remembered rect without the uncertainty arithmetic, and a changed matrix is resolved (negative control)."""
+    from rendering.quick.scene3d import frame as owner
+    calls = []
+    real = owner._item_pixel_rect
+
+    def counted(*args):
+        calls.append(args)
+        return real(*args)
+    monkeypatch.setattr(owner, "_item_pixel_rect", counted)
+    monkeypatch.setattr(owner, "_RECT_MEMO", {})
+    first = item_pixel_rect(frame(630., 420., 1.5))
+    assert len(calls) == 1
+    assert item_pixel_rect(frame(630., 420., 1.5)) == first
+    assert item_pixel_rect(frame(630., 420., 1.5)) == first
+    assert len(calls) == 1                                  # at rest: no resolve
+    assert item_pixel_rect(frame(630., 420., 1.5, x=20.)) != first
+    assert len(calls) == 2                                  # a change is seen
+
+
+def test_remembered_rects_are_bounded_and_unhashable_frames_still_resolve(monkeypatch):
+    from rendering.quick.scene3d import frame as owner
+    monkeypatch.setattr(owner, "_RECT_MEMO", {})
+    for step in range(3 * owner._RECT_MEMO_LIMIT):          # an item being resized every frame
+        item_pixel_rect(frame(630. + step, 420., 1.))
+        assert len(owner._RECT_MEMO) <= owner._RECT_MEMO_LIMIT
+    listed = frame(630., 420., 1.)
+    listed.matrix_values = list(listed.matrix_values)
+    assert item_pixel_rect(listed) == item_pixel_rect(frame(630., 420., 1.))

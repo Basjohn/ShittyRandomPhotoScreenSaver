@@ -52,13 +52,13 @@ lead as reviewer/orchestrator.
   by the power plan, then check Task Manager CPU/GPU for the saver while dark, that wake input reaches the saver, and
   the first seconds after wake (no stale frame, jump or hitch; run with `--frame-trace --usage`). Per-monitor power is
   not observable on Windows: an HDMI panel switched off at its own button that stays enumerated keeps running.
-- [ ] **Per-frame call-count rises since the 18 Oct overhead baseline (6 Nov run, `tools/overhead_baseline.py`;
-  call counts are load-independent):** every GL-heavy transition +72 Python calls per frame (block_spins 572 -> 644,
-  cube_turn, jigsaw, membrane, ...), Sphere +144 (1473 -> 1617), Extruded Spectrum +144 (1221 -> 1365, already at
-  5a42e9fb), Oscilloscope +67 (1584 -> 1651), Shockwave/Neon +14 GL calls (339 -> 353; likely pass 5's near-band
-  split, intended). Bisect each to its commit, remove anything that is work at rest or a per-frame re-resolve of
-  unchanged inputs (as Spectrum's look options were: 919 -> 770, 2ef22700), keep intended feature work and say so.
-  Evidence `.artifacts/evidence/overhead/`. Re-take the stored baseline on a quiet machine afterwards.
+- [ ] **Re-take the stored overhead baseline on a quiet machine** (`tools/overhead_baseline.py --size 2560x1440`,
+  commit it under `tools/baselines/overhead/`). The 6 Nov call-count rises against `2026-10-18_f4dbb4ab.json` are
+  resolved: the +72/+144 (scene3d transitions, Oscilloscope, Sphere, Extruded Spectrum; d91eb165's float32 raster
+  bounds re-derived every frame) is gone, with counts now below the 18 Oct figures, and Spectrum is 755. Three kept,
+  intended: Neon Lake +14 GL calls (339 -> 353, camera basis and pass 2-3 controls), Bubble +2 Python calls (custom
+  two-node gradient, e3b48138), Spectrum +1 (the whole-mapping comparison). The final run was taken on a loaded
+  machine, so it is not committed as the stored baseline: `.artifacts/evidence/overhead/2026-11-06_3a676343_vs_f4dbb4ab.txt`.
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
