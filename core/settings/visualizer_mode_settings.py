@@ -747,6 +747,9 @@ _SHOCKWAVE_GRID = ModeSettings(
         Slider("shockwave_grid_depth_scale", "Depth Scale:", 0.0, 1.0,
                "Vertices and ridge lines grow toward the camera, as if drawn on the land itself (up to three "
                "times their size). 0 keeps them one size on screen.", bucket="render"),
+        Slider("shockwave_grid_contour_lines", "Contour Lines:", 0.0, 1.0,
+               "Level lines over the land's slopes, like a contour map, fading where they would crowd. 0 draws none.",
+               bucket="render"),
         Slider("shockwave_grid_floor", "Base Opacity:", 0.0, 1.0,
                "Shared base visibility of land and water before their independent colour alpha.", bucket="render"),
         Slider("shockwave_grid_horizon_thickness", "Horizon Thickness:", 0.0, 4.0,

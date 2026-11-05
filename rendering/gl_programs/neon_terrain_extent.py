@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
-from core.constants.neon_lake_world import FAR_HILLS
+from core.constants.neon_lake_world import CONTINUATION_DESCENT, FAR_HILLS
 from rendering.gl_programs.heightfield import (
     HEIGHTFIELD_MAX_SIZE, heightfield_basin, heightfield_grid_transform, normalize_heightfield, sample_heightfield,
 )
@@ -48,7 +48,7 @@ def basin_continuation(data: Mapping, u: float, v: float) -> float:
     interior = sample_heightfield(data, _clamp01(eu - _sign(du) / (n - 1)), _clamp01(ev - _sign(dv) / (n - 1)))
     slope = max(-0.8, min(0.8, (boundary - interior) * (n - 1) * scale))
     near_slope = 0.20 * slope * min(distance, 0.16)
-    descent = _smoothstep(0.04, 0.68, distance)
+    descent = _smoothstep(*CONTINUATION_DESCENT, distance)
     background = (0.12 + 0.065 * math.sin(2.7 * u + 1.7 * v) * math.cos(2.4 * v - 0.8 * u)
                   + 0.040 * math.sin(1.1 * v - 2.3 * u))
     rolling = max(0.025, (boundary + near_slope) * (1.0 - descent) + background * descent)

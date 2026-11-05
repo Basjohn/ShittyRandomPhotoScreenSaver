@@ -18,7 +18,7 @@ def test_neon_buckets_group_existing_glow_wave_and_material_controls():
         "reaction": ("terrain_reaction_enabled", "terrain_reaction_strength", "terrain_pulses", "terrain_peaks",
                      "terrain_swell", "terrain_motion_speed", "terrain_growth_attack", "terrain_growth_release"),
         "render": ("wire_display", "glass_tint", "glass_strength", "glass_roughness",
-                   "vertex_color", "vertex_accent_color", "vertex_outline_color", "density", "depth_scale",
+                   "vertex_color", "vertex_accent_color", "vertex_outline_color", "density", "depth_scale", "contour_lines",
                    "floor", "horizon_thickness"),
     }
     for bucket, suffixes in expected.items():

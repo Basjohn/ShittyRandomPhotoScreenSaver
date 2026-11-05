@@ -23,7 +23,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from core.constants.neon_lake_world import DEPTH, DISTANT_CURVATURE, DISTANT_FLAT, FAR_HILLS, NOMINAL_HALF_WIDTH
+from core.constants.neon_lake_world import (
+    CONTINUATION_DESCENT, DEPTH, DISTANT_CURVATURE, DISTANT_FLAT, FAR_HILLS, NOMINAL_HALF_WIDTH,
+)
 from rendering.gl_programs.neon_celestial import CELESTIAL_REFERENCE
 
 MAX_PREVIEW_QUADS = 64        # per side over the authored grid (the scene's smooth surface, sampled)
@@ -122,7 +124,7 @@ def scene_surface(grid, basin, gu, gv):
     interior = _bilinear(grid, np.clip(eu - np.sign(du) / n1, 0.0, 1.0), np.clip(ev - np.sign(dv) / n1, 0.0, 1.0))
     slope = np.clip((boundary - interior) * n1 * scale, -0.8, 0.8)
     near_slope = 0.20 * slope * np.minimum(outside, 0.16)
-    descent = _smoothstep(0.04, 0.68, outside)
+    descent = _smoothstep(*CONTINUATION_DESCENT, outside)
     bu, bv = gu / scale - x0 / cells, gv / scale - y0 / cells          # basin uv
     background = (0.12 + 0.065 * np.sin(2.7 * bu + 1.7 * bv) * np.cos(2.4 * bv - 0.8 * bu)
                   + 0.040 * np.sin(1.1 * bv - 2.3 * bu))
