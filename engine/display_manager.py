@@ -137,6 +137,10 @@ class DisplayManager(QObject):
     clear_image_bans_requested = Signal()  # explicit maintenance action
     cycle_transition_requested = Signal()  # C key - cycle transition mode
     settings_requested = Signal()  # context menu - open settings
+    # Console display power defaults (on); __init__ and set_display_power own the instance values.
+    _display_power_on = True
+    _display_power_generation = 0
+
     settings_target_requested = Signal(str)  # runtime widget -> semantic Settings target
     # The exact DisplayManager identity is a pointer-width Python integer.
     custom_layout_reload_requested = Signal(str, int, object)
@@ -211,6 +215,10 @@ class DisplayManager(QObject):
         self._quick_ctrl_coordinator = SharedCtrlCoordinator()
         self._quick_readiness_by_screen: dict[int, QuickSceneReadiness] = {}
         self._quick_visualizer_owner: Any | None = None
+        # Console display power as last applied by the engine's process-scoped
+        # core.display_power authority; new units and owners inherit it.
+        self._display_power_on = True
+        self._display_power_generation = 0
         # A live W/A/S/D view orbit not yet saved: (mode id, {setting: value}).
         self._quick_view_orbit_pending: tuple[str, dict[str, float]] | None = None
         self._quick_view_pose_owner = None
@@ -2610,6 +2618,51 @@ class DisplayManager(QObject):
             )
         return started
     
+    @property
+    def display_power_on(self) -> bool:
+        return self._display_power_on
+
+    def set_display_power(self, on: bool, *, generation: int = 0) -> int:
+        """Apply the console display power edge to this generation's per-frame consumers.
+
+        The engine's ``core.display_power`` authority is the only caller. Each
+        live Quick runtime snaps an in-flight transition to its destination and
+        suspends transition frames; the Visualizer owner parks its logical
+        runtime and releases capture (and resumes both warm). Topology stays
+        with the monitor reconciler: this neither hides, rebinds nor rebuilds
+        anything, and a unit or owner built while off inherits the state.
+        Returns how many consumers changed.
+        """
+
+        on = bool(on)
+        generation = int(generation)
+        if generation < self._display_power_generation:
+            logger.info("[DISPLAY_POWER] Stale edge ignored on=%s generation=%d applied=%d",
+                        on, generation, self._display_power_generation)
+            return 0
+        self._display_power_generation = generation
+        self._display_power_on = on
+        if self._retired:
+            return 0
+        changed = 0
+        for unit in tuple(self.displays):
+            if not isinstance(unit, QuickDisplayUnit) or unit.is_retired:
+                continue
+            try:
+                changed += int(bool(unit.runtime.set_display_power(on)))
+            except Exception:
+                logger.exception("[DISPLAY_POWER] Display runtime power edge failed screen=%s",
+                                 unit.screen_index)
+        owner = self._quick_visualizer_owner
+        if owner is not None:
+            try:
+                changed += int(bool(owner.set_display_power(on)))
+            except Exception:
+                logger.exception("[DISPLAY_POWER] Visualizer power edge failed")
+        logger.info("[DISPLAY_POWER] Displays %s applied generation=%d consumers_changed=%d",
+                    "ON" if on else "OFF", generation, changed)
+        return changed
+
     def is_selection_suspended(self) -> bool:
         """No selected physical screen is present in this generation."""
         return self._selection_suspended
@@ -3439,6 +3492,9 @@ class DisplayManager(QObject):
                     str(getattr(media_model, "playbackState", "unknown")).lower()
                     == "playing"
                 )
+            if not self._display_power_on:
+                # Built while the displays are off: start parked, holding no capture.
+                owner.set_display_power(False)
             owner.start()
             self._quick_visualizer_owner = owner
             self._quick_visualizer_unit = chosen
@@ -4411,6 +4467,8 @@ class DisplayManager(QObject):
             )
             self._configure_quick_auxiliary(display)
             self._refresh_quick_context_menu(display)
+            if not self._display_power_on:
+                display.runtime.set_display_power(False)
             self.displays.append(display)
             self._refresh_quick_visualizer_transfer_glyphs()
             logger.info("Quick display unit created for screen %d" % screen_index)

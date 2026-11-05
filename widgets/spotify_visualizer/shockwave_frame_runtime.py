@@ -76,6 +76,13 @@ class ShockwaveGridFrameRuntime(SpectrumFrameRuntime):
         self._last_event_ts = float("-inf")
         self._reset_terrain_reaction()
 
+    def rebase_clock(self) -> None:
+        """Display power resumed after a park: the next step integrates no parked gap (state stays warm)."""
+        super().rebase_clock()
+        with self._retirement_lock:
+            if not self._retired:
+                self._terrain_last_ts = None
+
     def reset(self) -> None:
         super().reset()
         self._events = []
