@@ -164,34 +164,29 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   and count in old state. The recorded draft still needs visual correction: white/rope-like overlaps, repeated
   continuation, weak/dark atmosphere and a poor floor/contact strip remain rejected. Do not equate source tests,
   particle/root counts or larger amplitude with reference fidelity.
-- [~] **Travelling energy pulse (5 Nov), awaiting operator eyes/ears:** operator rejected the R1/R2 elastic motion
-  as fundamentally wrong; reactions must feel like water waves WITH the shape. Beats launch swells that travel along the
-  waveform and amplify its own crests/troughs, width, light and colour (Energy Pulse bucket: direction, width, speed,
-  colour shift, fade; Bend range = Pulse Strength). Audit doc decision 7. Optional next: Frozen past; selectable
-  reaction modes only if another model matches fidelity.
-- [~] **Musical shape response, punch and grace — candidate (R1/R2, 5 Nov), superseded in part by the pulse:** root
-  causes measured, not guessed: the axial roll rotated the louder passage's vertical excursion into invisible depth
-  (envelope uncorrelated with its own drive) and real music traversed ~1/5 of every quiet->peak range. Now: roll turns
-  only the carrier, Height/Bend/Depth act in world space after it, bends travel with the cloth, fixed real-music spans
-  plus phrase-scale body energy place the level (soft knee, no pin), springs 0.85 Hz/0.6 (attack 67 ms to 70%, settle
-  0.63 s), lens 3->5 degrees so peaks rise high without a ceiling. Evidence and per-clip table: audit doc §6 R1/R2;
-  native captures `.artifacts/evidence/waveform_ribbon/studio_20261105/r1a_*`, `r2_*`. Judge motion with audio; the
-  still-open operator asks: twisting must read as musical rather than
-  busy, sweeps long and smooth with actual axial stretch, and floor contact a smooth collision, never a crop.
-- [ ] **Particles weak, sparse and localized:** the operator sees pathetic specks in one spot even with fog off.
-  Verify distributed actual-rim births, clearly visible independent glow/size/light and musical density changes.
-  Candidate improvements are fixed-world emitter span and authored halos, with count/lifetime bounded at birth.
-  Inspect native motion and fog-off subtraction; a cohort serial, byte count, halo test or isolated still cannot close
-  this. Audit both handles of every particle range in actual quiet/peak consumers.
+- [~] **Reaction: travelling energy pulse + four Reaction Modes (5 Nov) — awaiting operator eyes/ears:** the R1/R2
+  elastic motion was rejected as fundamentally wrong (sideways bursts from the retired axial stretch; standing bends).
+  Beats launch swells that travel along the waveform and amplify its OWN crests/troughs through a broad envelope
+  whose slope is capped so a swell never bends a curve inward; points slide along their own curve (shape-preserving,
+  rate-limited); a narrower travelling light/colour/saturation band and gathered particles show where the energy is.
+  Modes: Travelling Pulse (default), Frozen Past, Whole Swell, Group Wave; flow-rule and twitch tests for every mode.
+  Open: on dense rhythms swells form a moving train rather than isolated bands; Frozen Past/Group Wave differ from
+  Travelling Pulse mainly over longer windows. Audit doc decisions 7+; evidence `.artifacts/evidence/waveform_ribbon/
+  studio_20261105/modes/`.
+- [~] **Particles (5 Nov candidate):** crest-weighted, distributed births in each ribbon's colour, visible
+  >=1 px cores with soft halos, gentle fade; swells gather particles (Pulse Particles). Hot passages hold ~3.4x quiet.
+  Open: still sparser than the high-react reference (admission-limited); with Pulse Particles high the 64-per-event
+  cap can mask the Spark Count range handles — resolve the interaction rather than hide it.
 - [~] **Strands: rare, 3-5 seconds TOTAL life.** Latest operator correction supersedes the proposed 30-second fade.
   Preserve the approved non-flickering look, make appearances much rarer, and use most of a configurable 3-5 second
   lifetime for a gentle tip-first fade. Reactivation restores them smoothly,
   with glow and movement/growth (retain the approximate 20% repeat extension), without abrupt respawn or pulse reset.
   Prove quiet/peak lifetime handles, tip/root fade ordering, slow decay, partial-fade reactivation and direct/reflected
   appearance. Retain birth look during travel; finite history eviction must not cut off a visible unfinished fade.
-- [ ] **Latest explicit visual rejections:** colours remain off across the scene; particles remain lacking; mist is
-  nowhere near the target. The floor's dark-blue patch pattern is rejected. Remove artificial patch modulation,
-  retain a readable restrained neutral wet surface, and validate colour/atmosphere against the supplied references.
+- [~] **Colour, floor and mist (5 Nov candidates):** lattice sheets (V3); wet concrete with stable soft coloured
+  reflection mass (no horizon line, no flicker-prone streaks; operator prefers smeared colour to streaks); one bounded
+  night medium with a slight local ribbon tint (strong Local Light can no longer wash the frame). Open: floor reflection
+  saturation still below the references; Presets 1/2 floor pool glow being bounded.
 - [ ] **Dense highlights, moving colour and rim glow:** playback still lacks rewarded high-energy density and glow.
   Verify local crest/high-power colour, bright tunable rim/glow and denser highlights against actual music, including
   quiet/loud differences. Consumer reachability does not establish visible strength. Keep both range handles effective.
@@ -226,24 +221,16 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   **Additional explicit rejection:** material outside the core reflection is practically invisible. Validate readable
   dim texture across the foreground with reflection and atmosphere both OFF, then under the unified night medium;
   increasing reflection alone cannot satisfy this. Current candidate restores filtered concrete/roughness and ambient light.
-- [ ] **Current mist/fringe entirely rejected - implement replacement after strands/floor:** stop polishing the shaped banks,
-  noisy fringe, side-sheet conflicts, remote shelves and skyward mass. Preserved image, failure analysis, cost caveats
-  and three proposals: `Docs/Reference/Waveform_Ribbon_Mist_Failure_and_Replacement.md`. Replace with full-scene
-  night fog ("Silent Hill At Night") displaced by the actual 3D waveform, with smooth world-anchored density and local
-  reactive light/wake; no visible ceiling/stripe/box. `references/Mist Goal.png` is now the primary mist/floor target.
-  The operator explicitly supersedes ALL older mist/fog mechanisms: remove the old banks/fringe AND old separate
-  distance/floor fog when migrating. One coherent atmosphere must serve scene/floor/actors/reflection; no stacked
-  legacy layer or hidden fallback. Old Waveform banks/fringe, shape bake/detail march and analytic floor haze are
-  removed from the candidate source and settings. Validate the new integrated world medium's look, signed/mirrored
-  optical paths and cost across all three curated candidates, which now enable the replacement medium. Keep true 3D clearance around steep bends and a
-  retained motion wake open: current cross-section clearance/local light and background drift do not prove those.
-  Latest loaded candidate remains over budget (P2/game60: render median 22.59 ms, CPU others 93%); obtain a matched
-  quiet-system fog OFF/ON comparison and reduce cost. Scoped source/optical/raster tests do not close that gate.
-- [ ] **Waveform Studio (replaces the rejected builder UI):** in-process Qt Quick Studio per the operator's design pack
-  (`Docs/Audits/SRPSS_Waveform_Studio_Design_Pack_2026-11-03.zip`); architecture decisions and stage gates A-E in
-  `Docs/Audits/Waveform_Studio_and_Reactivity_Audit_2026-11-05.md` §4-6. Settings Custom becomes a launcher plus the
-  camera-save checkbox; the old builder stays only until the Studio's Advanced coverage gate passes. Plumbing tests
-  never establish usability; operator acceptance of the running Studio is required.
+- [~] **Unified atmosphere (5 Nov candidate):** replacement medium in place (old banks/fringe/floor haze removed);
+  darker bounded haze with capped local tint; P3 density 0.06-0.09, P1/P2 0.055-0.075. Open: retained moving-body
+  wake and the loaded fog cost gate (P2/game60 render median was over budget) still need measurement.
+- [ ] **Waveform Studio (replaces the rejected builder UI):** in-process, reusable (mode registry + switcher;
+  test-only second mode) Qt Quick Studio per the operator's design pack; Settings > Custom opens it; production
+  framing on the real card; camera navigation; theme-token chrome; full registry coverage; Energy Pulse/Reaction Mode
+  first in Reactivity; target-first response tuner. Open: Stage C/D instruments (scene handles, gradient strips,
+  lifecycle timelines, mist/floor cards), icon polish and mock parity; real-window checks on hardware (visible window,
+  native Settings hide/restore, exit timing via `[STUDIO] retire` logs, per-monitor DPI). Remove the old builder body
+  once the Studio passes operator acceptance.
 - [ ] **Live performance and truthful evidence:** run all three presets under matched recorded PCM/game60 and admitted
   camera extremes. Verify ACTUAL applied configuration, audible input and rendered features before interpreting
   timings. Profile logical preparation, birth admission, render stages and whole-frame tails; do not reduce artistic
@@ -260,11 +247,10 @@ The scene is world-first through the shared framed camera (Orthographic default)
 waveform and full-scene night fog, with no visible horizon/sky/floor edge. The waveform clears and softly lights
 the mist. Preset/control migration and recorded-audio calibration come only after the lab look is credible.
 
-- [~] **WR-07/08 production candidate — finish admission:** C elastic bending/torsion is primary; combine A's accumulated
-  twisting, localized highest-power colour shifts and independently controllable reactive whole-waveform rotation
-  (axial roll like a skewer; fast strong attack, slow decay; integrate speed into continuous angle). Preserve constant history flow, smooth
-  curves, particles/free strands and fog repelled by the actual deformed/rotated waveform. Use the shared scene,
-  sole logical clock, immutable publication and lazy retained renderer; Terra audits each slice.
+- [~] **WR-07/08 production candidate — finish admission:** the reaction is the travelling energy pulse with
+  selectable modes (the C elastic body remains only for depth sway/torsion); A's accumulated twist and the reactive
+  axial roll stay, with musical vertical response applied after the roll (roll-invariant). Preserve constant history
+  flow, no time-varying axial scaling, smooth curves, particles/free strands and fog clearance by the actual body.
 - [~] **Full controls/editors, four-ribbon capacity and three presets — finish admission:** primary/alternate examples now have
   candidate Preset 1/2 with the
   selected hybrid, shared framed 3D camera/navigation, technical profile, preset/Custom and Edit/Arrange feature set.
