@@ -239,19 +239,36 @@ def carrier_wavelength(controls):
 def row_gradient(f,xs):
     """``np.gradient(f[i],xs[i])`` for every row i at once, with NumPy's exact arithmetic (edge order 1, and the
     uniform-spacing formula for a row whose spacing is exactly constant), so results are bit-identical."""
+    return apply_row_gradient(f,row_gradient_coefficients(xs))
+
+
+def row_gradient_coefficients(xs):
+    """The spacing-only part of ``row_gradient``: shared by every field sampled at the same rows of ``xs``."""
     dx = np.diff(xs,axis=1)
-    out = np.empty_like(f)
     dx1,dx2 = dx[:,:-1],dx[:,1:]
-    a = -(dx2)/(dx1*(dx1+dx2))
-    b = (dx2-dx1)/(dx1*dx2)
-    c = dx1/(dx2*(dx1+dx2))
-    interior = a*f[:,:-2]+b*f[:,1:-1]+c*f[:,2:]
-    uniform = (dx==dx[:,:1]).all(axis=1)
+    return (dx,-(dx2)/(dx1*(dx1+dx2)),(dx2-dx1)/(dx1*dx2),dx1/(dx2*(dx1+dx2)),(dx==dx[:,:1]).all(axis=1))
+
+
+def apply_row_gradient(f,coefficients):
+    """``f`` is (rows, knots), or (fields, rows, knots) for several fields sampled at the same rows."""
+    dx,a,b,c,uniform = coefficients
+    out = np.empty_like(f)
+    interior = a*f[...,:-2]+b*f[...,1:-1]+c*f[...,2:]
     if uniform.any():
-        interior[uniform] = ((f[:,2:]-f[:,:-2])/(2.*dx[:,:1]))[uniform]
-    out[:,1:-1] = interior
-    out[:,0] = (f[:,1]-f[:,0])/dx[:,0]
-    out[:,-1] = (f[:,-1]-f[:,-2])/dx[:,-1]
+        interior[...,uniform,:] = ((f[...,2:]-f[...,:-2])/(2.*dx[:,:1]))[...,uniform,:]
+    out[...,1:-1] = interior
+    out[...,0] = (f[...,1]-f[...,0])/dx[:,0]
+    out[...,-1] = (f[...,-1]-f[...,-2])/dx[:,-1]
+    return out
+
+
+def uniform_gradient(f,spacing):
+    """``np.gradient(f,spacing)`` for a 1D field and scalar spacing, with NumPy's exact arithmetic (edge order 1),
+    without its general-purpose setup (it ran twice a tick on the pulse grid)."""
+    out = np.empty_like(f)
+    out[1:-1] = (f[2:]-f[:-2])/(2.*spacing)
+    out[0] = (f[1]-f[0])/spacing
+    out[-1] = (f[-1]-f[-2])/spacing
     return out
 
 
@@ -728,12 +745,12 @@ class WaveformDynamics:
         # The gradient is linear, so g' = share*swell' and g'' = share*swell''; each ratio share*a/(1 + share*swell)
         # rises monotonically with share, so the bound share*(a - limit*swell) <= limit is exact per grid point.
         # (Formerly a 20-step bisection with two np.gradient calls per step: ~40 gradients a tick.)
-        first = np.gradient(swell,PULSE_DX)
-        second = np.gradient(first,PULSE_DX)
+        first = uniform_gradient(swell,PULSE_DX)
+        second = uniform_gradient(first,PULSE_DX)
         share = 1.
         for slope,limit in ((np.abs(first),GEOM_SLOPE*k),(np.abs(second),GEOM_CURVE*k*k)):
             over = slope-limit*swell
-            binding = over>0.
+            binding = over>limit        # only these can bring the share below 1 (smaller ones would also overflow)
             if binding.any():
                 share = min(share,float((limit/over[binding]).min()))
         # One share bounds the whole field, so when the binding constraint somewhere lets go every swell on screen grew
@@ -790,13 +807,14 @@ class WaveformDynamics:
             left,right = np.take_along_axis(xs,cell,1),np.take_along_axis(xs,cell+1,1)
             h = right-left
             t = (target-left)/h
-            h00,h10,h01,h11 = 2*t**3-3*t*t+1,t**3-2*t*t+t,-2*t**3+3*t*t,t**3-t*t
-            for values in (y,z):
-                vs = values[rows,order]
-                slope = row_gradient(vs,xs)
-                pick = lambda field,at: np.take_along_axis(field,at,1)
-                values[rows,order] = (h00*pick(vs,cell)+h10*h*pick(slope,cell)+h01*pick(vs,cell+1)
-                                      +h11*h*pick(slope,cell+1))
+            cube = t**3
+            h00,h10,h01,h11 = 2*cube-3*t*t+1,cube-2*t*t+t,-2*cube+3*t*t,cube-t*t
+            # y and z resampled together as one (2, rows, knots) stack: the same element-wise arithmetic in one pass.
+            vs = np.stack((y[rows,order],z[rows,order]))
+            slope = apply_row_gradient(vs,row_gradient_coefficients(xs))
+            pick = lambda field,at: np.take_along_axis(field,at[None],2)
+            resampled = (h00*pick(vs,cell)+h10*h*pick(slope,cell)+h01*pick(vs,cell+1)+h11*h*pick(slope,cell+1))
+            y[rows,order],z[rows,order] = resampled[0],resampled[1]
             x[rows,order] = target
         return x,y,z
 
@@ -952,12 +970,17 @@ class WaveformDynamics:
             tint = data[:n,8::KNOT_ROWS]
             swelling = np.clip(swell[:n],0.,1.)
             share = np.maximum(np.maximum(share,tint[:,:,3]),self.controls.pulse.colour*swelling)
-            hsv = []
-            for card in cards:
-                quiet = tuple((a+b)*.5 for a,b in zip(*card['quiet']))
-                peak = tuple((a+b)*.5 for a,b in zip(*card['peak']))
-                a,b = colorsys.rgb_to_hsv(*quiet),colorsys.rgb_to_hsv(*peak)
-                hsv.append((a[0],(b[0]-a[0]+.5)%1.-.5,a[1],b[1]-a[1],a[2],b[2]-a[2]))
+            # The cards' quiet/peak HSV depends only on the cards: converted once per card set, not every tick.
+            cached = getattr(self,'_card_hsv',None)
+            if cached is None or cached[0] is not cards:
+                hsv = []
+                for card in cards:
+                    quiet = tuple((a+b)*.5 for a,b in zip(*card['quiet']))
+                    peak = tuple((a+b)*.5 for a,b in zip(*card['peak']))
+                    a,b = colorsys.rgb_to_hsv(*quiet),colorsys.rgb_to_hsv(*peak)
+                    hsv.append((a[0],(b[0]-a[0]+.5)%1.-.5,a[1],b[1]-a[1],a[2],b[2]-a[2]))
+                self._card_hsv = cached = (cards,hsv)
+            hsv = cached[1]
             hue_a,hue_d,sat_a,sat_d,val_a,val_d = (column(field,share) for field in zip(*hsv))
             hue = (hue_a+hue_d*share)%1.
             saturation = sat_a+sat_d*share
