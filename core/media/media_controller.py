@@ -1648,6 +1648,13 @@ def create_media_controller(thread_manager=None, app_filter: str = "spotify") ->
         app_filter: Registered media-provider id.
     """
 
+    from core import platform_paths
+
+    if not platform_paths.IS_WINDOWS:
+        from core.media.mpris_controller import create_mpris_controller
+
+        return create_mpris_controller(thread_manager=thread_manager, app_filter=app_filter)
+
     try:
         controller = WindowsGlobalMediaController(thread_manager=thread_manager, app_filter=app_filter)
         if getattr(controller, "_available", False):
