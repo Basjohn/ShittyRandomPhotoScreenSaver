@@ -44,8 +44,8 @@ ZOOM_OUT_SECONDS, ZOOM_IN_SECONDS = 1.2, 7.
 PULSE_GRID = np.linspace(-48., 48., 385)
 PULSE_DX = float(PULSE_GRID[1]-PULSE_GRID[0])
 PULSE_DIRECTIONS = ('Head To Tail', 'Tail To Head', 'Centre Out')
-PULSE_ORIGIN = 7.            # world x of the edge origins, inside the authored view so a hit is seen at once
-PULSE_RISE = .3              # seconds: an injected beat swells like a sea swell rising, never a pop
+PULSE_ORIGIN = 3.5          # world x of the edge origins, well inside the authored view so a hit is seen at once
+PULSE_RISE = .08             # seconds: a beat lands quickly (DevCurve: fast rise, gentle settle), never a one-tick pop
 PULSE_DIFFUSION = .35        # world units^2 per second: packets widen gently as they travel
 PULSE_SATURATION = 1.2       # soft bound of the sampled swell
 # Surge along the curve (operator, 5 Nov): where a swell passes, each point moves along its OWN local direction,
