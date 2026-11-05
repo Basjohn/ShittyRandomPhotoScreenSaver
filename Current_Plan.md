@@ -77,14 +77,6 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
   lazy_preset_collection, mode_dormancy, mode_enable_resolver, presets, settings_plumbing,
   widget_theme_no_material_contract. Reconcile per assertion (current architecture authoritative; never bless
   unexplained drift); fix product defects found on the way.
-- [~] **Linux branch `claude/eager-carson-5da6ge` — both hold reasons resolved, awaiting merge:** the 5 Nov
-  Windows run (804/848 green, every other red pre-existing) held it for raw `threading.Thread`s in
-  `core/media/pulse_volume.py` and for Linux-only tests in shared files. Since then the sidecar readers run on
-  ThreadManager workers (`tests/unit/test_policy_compliance.py` passes), Linux-branch tests moved to
-  `tests/test_linux_*.py` (never selected, collected or run off Linux), and `tests/test_platform_selection.py`
-  pins every Windows owner. The branch also carries cross-platform fixes: Extruded Bubble vertex shaders no
-  longer contain fragment-only `fwidth` (Mesa rejected them), Studio clip-job QProcess release after its own
-  signal, and custom combo list popups. Before merging: rerun the Windows gate list in `Linux_Plan.md` §4.
 - [ ] **Cross-display Media shortcuts** delivered once on the other display, when exercised.
 - [ ] **Music recorder** 60-second clip, signal/history, cancel and mixed-DPR UI, when recording is needed.
 - [ ] **Helper breadcrumb diagnostics unavailable:** current native MC evidence logs no access to
