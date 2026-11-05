@@ -1,5 +1,7 @@
 # SRPSS camera authority | Perspective-only scene cameras | 3 November 2026
 
+> **Orthographic removed 5 Nov 2026 (operator):** Perspective is the only camera projection in the whole project. Orthographic, its Projection control, raster-slab fit and parallel-ray paths are deleted; any Orthographic passage below is historical and superseded.
+
 **Status:** Binding operator decision; documentation-only plan update, **not an already completed source migration**. Applies on top of `SRPSS_Waveform_Recovery_Studio_Replan_2026-11-03.zip` and original dirty GODZIP `cc4c390a9e`. Extract at repository root, replacing **only the listed documents**. Do not delete unlisted paths; do not treat missing private references/assets/presets as deletions. No source files, camera values, renderer, presets, settings, defaults, themes or operator-authored EB appearance have been edited by this ZIP.
 
 ## Decision and boundaries

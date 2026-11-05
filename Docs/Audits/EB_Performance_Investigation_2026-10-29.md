@@ -1,5 +1,7 @@
 # Extruded Bubble — performance and GPU-contention investigation
 
+> **Orthographic removed 5 Nov 2026 (operator):** Perspective is the only camera projection in the whole project. Orthographic, its Projection control, raster-slab fit and parallel-ray paths are deleted; any Orthographic passage below is historical and superseded.
+
 **Read-only source audit:** GODZIP `d2b0a73b06`, 2026-10-29 13:00 snapshot.  
 **Status: closed 2026-10-31 (operator).** Under the calibrated game-like load (`game60`, matched live to the
 operator's game) EB's median frame age went 38.8 → 22.4 ms, render-mode 9.1 → 5.0 ms and the logical tick

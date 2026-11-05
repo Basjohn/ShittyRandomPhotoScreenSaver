@@ -1,5 +1,7 @@
 # Extruded Bubble | Physical Reactivity, Bead/Wake and Optics Failure Ledger
 
+> **Orthographic removed 5 Nov 2026 (operator):** Perspective is the only camera projection in the whole project. Orthographic, its Projection control, raster-slab fit and parallel-ray paths are deleted; any Orthographic passage below is historical and superseded.
+
 **STRONG RETENTION VALUE DOCUMENT**  
 **Live, source-backed historical bug record.** All statuses below remain `[~]` until the operator expressly accepts a visual result.  
 **Owner of requirements/physical acceptance:** [`Target.md`](Target.md) §§7–11A; sequencing: [`../../../Current_Plan.md`](../../../Current_Plan.md) §4B. This file holds attempted mechanisms, rejected outcomes, and still-unverified repairs. It does **not** replace the target checklist, weaken `Spec.md`, or become a chronological changelog.
