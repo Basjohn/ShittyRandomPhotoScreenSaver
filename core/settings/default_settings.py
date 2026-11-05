@@ -1302,6 +1302,8 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'devcurve_rainbow_speed': 0.5,
                                     'devcurve_sensitivity': 1.0,
                                     'devcurve_smoothness': 0.55,
+                                    'devcurve_swell_speed': 1.2,
+                                    'devcurve_swell_strength': 1.0,
                                     'devcurve_transient_clamp': 1.5,
                                     'devcurve_transient_pulse_gain': 1.0,
                                     'enabled': True,
