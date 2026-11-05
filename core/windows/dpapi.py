@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -51,7 +52,7 @@ def is_protected(blob: bytes) -> bool:
 
 def protected_storage_available() -> bool:
     """Whether credentials can be protected here (DPAPI on Windows; a Secret Service keyring elsewhere)."""
-    if os.name == "nt":
+    if sys.platform == "win32":
         return True
     from core import secret_service_key
 
@@ -80,7 +81,7 @@ def encrypt_user_data(plaintext: bytes) -> bytes:
 
     Raises when no protection is available; there is no plaintext fallback.
     """
-    if os.name != "nt":
+    if sys.platform != "win32":
         return _keyring_encrypt(plaintext)
 
     try:
@@ -128,7 +129,7 @@ def encrypt_user_data(plaintext: bytes) -> bytes:
 def decrypt_user_data(ciphertext: bytes) -> bytes:
     """Recover a protected payload written by ``encrypt_user_data`` on this OS."""
     if ciphertext.startswith(KEYRING_PREFIX):
-        if os.name == "nt":
+        if sys.platform == "win32":
             raise OSError("Keyring-protected ciphertext cannot be decrypted on Windows")
         return _keyring_decrypt(ciphertext)
 
@@ -137,7 +138,7 @@ def decrypt_user_data(ciphertext: bytes) -> bytes:
 
     encrypted = base64.b64decode(ciphertext[len(b"dpapi::"):])
 
-    if os.name != "nt":
+    if sys.platform != "win32":
         raise OSError("DPAPI ciphertext cannot be decrypted on non-Windows platform")
 
     try:
@@ -189,7 +190,7 @@ def save_encrypted(path: Path, data: bytes) -> None:
     inheriting the umask.
     """
     payload = encrypt_user_data(data)
-    if os.name == "nt":
+    if sys.platform == "win32":
         path.write_bytes(payload)
     else:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
