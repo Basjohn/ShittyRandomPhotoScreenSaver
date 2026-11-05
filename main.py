@@ -883,8 +883,19 @@ def default_diagnostic_launch_to_run() -> None:
         sys.argv.insert(1, "/s")
 
 
+STUDIO_CLIP_WORKER_FLAG = "--studio-clip-worker"      # ui.studio.waveform_recorded_inputs.WORKER_FLAG
+
+
 def main(*, entrypoint: str = "main"):
     """Main entry point for the screensaver application."""
+    # A frozen build is its own Visualizer Studio clip-analysis worker (no ``python -m`` there): the Studio
+    # starts this executable with the worker flag, and nothing else in this function runs for it. Ordinary
+    # launches never import the Studio here.
+    if len(sys.argv) > 1 and sys.argv[1] == STUDIO_CLIP_WORKER_FLAG:
+        from ui.studio.waveform_recorded_inputs import run_frozen_worker
+
+        worker_exit = run_frozen_worker(sys.argv)
+        return 2 if worker_exit is None else worker_exit
     entrypoint_token = str(entrypoint).strip().lower()
     if entrypoint_token == "main_diagnostic":
         activate_diagnostic_build()

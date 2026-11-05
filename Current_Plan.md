@@ -184,7 +184,16 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   brighter moving masses, no column popping); evidence `studio_20261105/floor4/`.
   Floor collision (operator, 5 Nov): a ribbon whose lower edge nears the floor lifts as a WHOLE (shape-exact, two-stage
   eased, up to 1.5 units); per-knot trough limits were rejected as boxy. Wide sheets (P2) still graze ~60% of ticks:
-  optional Floor Give (the wet floor dents under the ribbons) is in progress on an agent branch.
+  optional Floor Give (below) lets the wet floor dent under them instead.
+- [~] **Floor Give (operator, 5 Nov: "the floor can deform inwards, allowing crests") — awaiting operator eyes:**
+  opt-in Floor slider (default 0 = the rigid floor, pixel-identical); P2 authored 1.0. Where a lower edge comes down
+  onto the floor the wet floor yields in a soft dent (one surface for the floor's ray hit, its shading/reflection and
+  the ribbons' contact), so troughs stay round and dip in instead of flattening. Perspective only. In the visible
+  frame P2 reaches the floor only in the ragdoll loud end (about 49.5-52 s); P3 never does, so it is unchanged there.
+  Evidence `.artifacts/evidence/waveform_ribbon/floor_deform/`; design in the Migration Plan's Floor bucket.
+- [ ] **`tools/visualizer_preset_repair.py --repair-all` rewrites curated presets (side defect, 5 Nov):** on the
+  Waveform presets it re-sorted every key and dropped the `starting_view` and `visualizer_preset_mode` metadata
+  (values unchanged). Floor Give was authored by a one-key insert instead. Make the repair fill keep metadata and order.
 - [ ] **Dense highlights, moving colour and rim glow:** playback still lacks rewarded high-energy density and glow.
   Verify local crest/high-power colour, bright tunable rim/glow and denser highlights against actual music, including
   quiet/loud differences. Consumer reachability does not establish visible strength. Keep both range handles effective.
@@ -352,6 +361,10 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
 - [ ] Adapters in order of authoring pain (Extruded Bubble and Bubble built; Sphere in progress): Spectrum/Rainbow Ghost,
   Extruded Spectrum, Shockwave Grid, DevCurve, Oscilloscope. Each: full registry coverage test, production-parity preview test, theme,
   Settings Custom launcher replacing that builder body once the operator accepts it.
+- [ ] Flaky render test: `tests/test_waveform_studio_editors.py::test_preview_layer_omission_changes_only_flagged_renders`
+  failed once (`plain_a != plain_b`, two snapshot requests of one frame) in a 282-test Studio + build run, then
+  passed alone twice and in the next full Studio gate (5 Nov). Identical requests should be byte-equal: find the
+  render state that leaks between snapshots.
 
 ## Operator execution and evidence rules
 
