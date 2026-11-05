@@ -1,8 +1,8 @@
 {
-  "description": "Every bar wears the same colour, which slowly cycles through the rainbow, under white peak trails.",
+  "description": "Arched plum bars with warm gold rims and gold trails, rising as twin towers around a low centre nave.",
   "mode": "spectrum",
-  "name": "Preset 15 (Chameleon)",
-  "preset_index": 14,
+  "name": "Preset 2 (Cathedral)",
+  "preset_index": 1,
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
@@ -11,20 +11,20 @@
         "spectrum_agc_strength": 0.15,
         "spectrum_audio_block_size": 128,
         "spectrum_bar_border_color": [
-          255,
-          255,
-          255,
+          224,
+          188,
+          116,
           255
         ],
         "spectrum_bar_border_opacity": 1.0,
-        "spectrum_bar_count": 33,
+        "spectrum_bar_count": 31,
         "spectrum_bar_fill_color": [
-          40,
-          40,
-          40,
-          235
+          104,
+          60,
+          108,
+          240
         ],
-        "spectrum_border_radius": 3.0,
+        "spectrum_border_radius": 6.0,
         "spectrum_drop_speed": 0.72,
         "spectrum_dynamic_floor": true,
         "spectrum_dynamic_range_enabled": true,
@@ -35,7 +35,7 @@
           255,
           230
         ],
-        "spectrum_ghost_alpha": 0.38,
+        "spectrum_ghost_alpha": 0.35,
         "spectrum_ghost_color": [
           255,
           190,
@@ -54,12 +54,12 @@
         "spectrum_ghosting_enabled": true,
         "spectrum_gloss": 0.0,
         "spectrum_glow_color": [
-          255,
-          255,
-          255,
-          235
+          224,
+          188,
+          116,
+          150
         ],
-        "spectrum_glow_enabled": false,
+        "spectrum_glow_enabled": true,
         "spectrum_glow_intensity": 0.2,
         "spectrum_input_gain": 1.1,
         "spectrum_kick_lane_gain": 1.75,
@@ -137,29 +137,33 @@
         "spectrum_peak_cap_thickness": 2,
         "spectrum_peak_caps": false,
         "spectrum_profile_floor": 0.2,
-        "spectrum_rainbow_border": true,
-        "spectrum_rainbow_enabled": true,
-        "spectrum_rainbow_fill": true,
+        "spectrum_rainbow_border": false,
+        "spectrum_rainbow_enabled": false,
+        "spectrum_rainbow_fill": false,
         "spectrum_rainbow_ghost": false,
-        "spectrum_rainbow_speed": 0.5,
+        "spectrum_rainbow_speed": 0.6,
         "spectrum_render_mode": "bars",
         "spectrum_sensitivity": 1.15,
         "spectrum_shape_nodes": [
           [
             0.0,
-            0.85
+            0.3
           ],
           [
-            0.5,
+            0.38,
             1.0
           ],
           [
-            0.85,
+            0.6,
+            0.55
+          ],
+          [
+            0.82,
             0.75
           ],
           [
             1.0,
-            0.35
+            0.2
           ]
         ],
         "spectrum_transient_clamp": 1.85,

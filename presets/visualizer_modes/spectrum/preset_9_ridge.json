@@ -1,8 +1,8 @@
 {
-  "description": "Deep forest bars with mint rims in a valley silhouette: the edges stand tall around a low centre.",
+  "description": "Charcoal bars with amber edges, forming a lopsided mountain ridge that peaks right of centre.",
   "mode": "spectrum",
-  "name": "Preset 13 (Evergreen)",
-  "preset_index": 12,
+  "name": "Preset 9 (Ridge)",
+  "preset_index": 8,
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
@@ -11,20 +11,20 @@
         "spectrum_agc_strength": 0.15,
         "spectrum_audio_block_size": 128,
         "spectrum_bar_border_color": [
-          110,
-          255,
-          160,
+          232,
+          166,
+          84,
           255
         ],
         "spectrum_bar_border_opacity": 1.0,
-        "spectrum_bar_count": 37,
+        "spectrum_bar_count": 34,
         "spectrum_bar_fill_color": [
-          6,
-          34,
-          20,
-          235
+          66,
+          68,
+          76,
+          240
         ],
-        "spectrum_border_radius": 4.0,
+        "spectrum_border_radius": 1.0,
         "spectrum_drop_speed": 0.72,
         "spectrum_dynamic_floor": true,
         "spectrum_dynamic_range_enabled": true,
@@ -35,7 +35,7 @@
           255,
           230
         ],
-        "spectrum_ghost_alpha": 0.55,
+        "spectrum_ghost_alpha": 0.35,
         "spectrum_ghost_color": [
           255,
           190,
@@ -54,12 +54,12 @@
         "spectrum_ghosting_enabled": true,
         "spectrum_gloss": 0.0,
         "spectrum_glow_color": [
-          30,
-          200,
-          110,
-          255
+          255,
+          255,
+          255,
+          235
         ],
-        "spectrum_glow_enabled": true,
+        "spectrum_glow_enabled": false,
         "spectrum_glow_intensity": 0.08,
         "spectrum_input_gain": 1.1,
         "spectrum_kick_lane_gain": 1.75,
@@ -78,7 +78,7 @@
         },
         "spectrum_lane_transient_mix": 0.94,
         "spectrum_manual_floor": 0.42,
-        "spectrum_mirrored": true,
+        "spectrum_mirrored": false,
         "spectrum_notch_positions_linear": [
           [
             0.0,
@@ -147,19 +147,23 @@
         "spectrum_shape_nodes": [
           [
             0.0,
-            0.5
+            0.25
           ],
           [
-            0.35,
-            0.7
+            0.4,
+            0.45
           ],
           [
-            0.75,
+            0.72,
             1.0
           ],
           [
+            0.88,
+            0.4
+          ],
+          [
             1.0,
-            0.85
+            0.25
           ]
         ],
         "spectrum_transient_clamp": 1.85,

@@ -34,6 +34,7 @@ LOG_FAMILY_LIFECYCLE = "lifecycle"
 LOG_FAMILY_CACHE = "cache"
 LOG_FAMILY_STEAM = "steam"
 LOG_FAMILY_FEEDS = "feeds"
+LOG_FAMILY_STUDIO = "studio"
 
 KNOWN_LOG_FAMILIES = frozenset(
     {
@@ -48,6 +49,7 @@ KNOWN_LOG_FAMILIES = frozenset(
         LOG_FAMILY_CACHE,
         LOG_FAMILY_STEAM,
         LOG_FAMILY_FEEDS,
+        LOG_FAMILY_STUDIO,
     }
 )
 
@@ -186,6 +188,7 @@ __all__ = [
     "LOG_FAMILY_CACHE",
     "LOG_FAMILY_STEAM",
     "LOG_FAMILY_FEEDS",
+    "LOG_FAMILY_STUDIO",
     "KNOWN_LOG_FAMILIES",
     "normalize_log_families",
     # Performance
