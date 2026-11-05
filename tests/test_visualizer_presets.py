@@ -264,8 +264,9 @@ def test_snapshot_presets_root_uses_shared_for_onefile_like_runtime(tmp_path, mo
 
 
 def test_preset_repair_defaults_loader_uses_canonical_defaults_entrypoint(monkeypatch):
-    previous_cache = repair._DEFAULTS_CACHE
-    repair._DEFAULTS_CACHE = None
+    from core.settings import visualizer_preset_file as preset_file
+    previous_cache = preset_file._DEFAULTS_CACHE
+    preset_file._DEFAULTS_CACHE = None
 
     def _fake_defaults():
         return {
@@ -283,7 +284,7 @@ def test_preset_repair_defaults_loader_uses_canonical_defaults_entrypoint(monkey
         loaded = repair._load_visualizer_defaults()
         assert loaded["bubble_manual_floor"] == pytest.approx(0.33)
     finally:
-        repair._DEFAULTS_CACHE = previous_cache
+        preset_file._DEFAULTS_CACHE = previous_cache
 
 
 def test_generic_sst_snapshot_does_not_override_curated_presets(tmp_path, monkeypatch):

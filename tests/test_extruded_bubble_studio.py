@@ -440,7 +440,7 @@ def test_custom_body_offers_the_studio_and_keeps_closed_buckets_unbuilt(qt_app, 
     _dialog, tab = dialog_tab()
     button = getattr(tab, f"_{MODE}_studio_button")
     assert getattr(tab, f"_{MODE}_settings_container").isAncestorOf(button)
-    assert "Extruded Bubble" in button.text()
+    assert tab._get_visualizer_preset_slider(MODE).isAncestorOf(button)     # in the preset row, every slot
     built = set(getattr(tab, f"_{MODE}_lazy_built"))
     calls = []
     monkeypatch.setattr(settings_link, "open_mode_studio", lambda t, m: calls.append((t, m)))
