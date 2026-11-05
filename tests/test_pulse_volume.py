@@ -60,7 +60,8 @@ class _Lines:
 
 def test_system_probe_reports_volume_and_default_device_changes_from_subscribe(monkeypatch) -> None:
     states = iter([("sink-b", 0.5, False), ("sink-b", 0.5, True), ("sink-c", 0.5, True)])
-    monkeypatch.setattr(pulse_volume, "_default_sink_state", lambda: next(states))
+    known_sinks = []
+    monkeypatch.setattr(pulse_volume, "_default_sink_state", lambda sink=None: known_sinks.append(sink) or next(states))
     volumes, devices = [], []
     probe = pulse_volume.PulseSystemVolumeProbe(on_volume=lambda v, m: volumes.append((v, m)),
                                                 on_default_device=lambda: devices.append(True))
@@ -73,6 +74,7 @@ def test_system_probe_reports_volume_and_default_device_changes_from_subscribe(m
     ]))
     assert volumes == [(0.5, False), (0.5, True)]
     assert devices == [True]
+    assert known_sinks == ["sink-b", "sink-b", None]  # only the server event re-resolves the default sink
     assert probe.snapshot() == (0.5, True)
     with pytest.raises(ValueError):
         probe.set_volume(1.5)

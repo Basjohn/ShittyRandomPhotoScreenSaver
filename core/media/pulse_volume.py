@@ -75,8 +75,10 @@ def pactl_available() -> bool:
     return shutil.which("pactl") is not None
 
 
-def _default_sink_state() -> Optional[tuple[str, float, bool]]:
-    sink = (pactl("get-default-sink") or "").strip()
+def _default_sink_state(sink: Optional[str] = None) -> Optional[tuple[str, float, bool]]:
+    """(default sink name, volume, muted); a known *sink* name skips re-reading it."""
+
+    sink = sink or (pactl("get-default-sink") or "").strip()
     volume = parse_volume_fraction(pactl("get-sink-volume", "@DEFAULT_SINK@") or "")
     mute = (pactl("get-sink-mute", "@DEFAULT_SINK@") or "").strip().casefold()
     if not sink or volume is None or not mute.startswith("mute:"):
@@ -127,9 +129,13 @@ class PulseSystemVolumeProbe:
         for line in process.stdout or ():
             if not self._active:
                 break
-            if " on sink #" not in line and " on server" not in line:
+            server_event = " on server" in line
+            if " on sink #" not in line and not server_event:
                 continue
-            state = _default_sink_state()
+            with self._lock:
+                known = None if server_event or self._state is None else self._state[0]
+            # Only a server event can change the default sink; sink events re-read its level.
+            state = _default_sink_state(known)
             if state is None or not self._active:
                 continue
             with self._lock:
