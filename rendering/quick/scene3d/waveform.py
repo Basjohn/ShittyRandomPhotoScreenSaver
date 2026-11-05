@@ -134,6 +134,10 @@ class WaveformScene:
         self.fog, self.reflected_fog = FogVolume('waveform scene mist'), FogVolume('waveform scene reflected mist')
         self._specular, self._specular_size = None, None
         self.textures = {}
+        # Studio preview-only layer omission (a Python attribute, never a setting): 'actors' skips the direct
+        # ribbon/particle/strand draws, 'reflected_actors' their mirrored draws. The mist field, sky, floor and
+        # everything else are unchanged. Production never sets it, so it stays empty there.
+        self.preview_hidden = frozenset()
 
     @property
     def has_resources(self):
@@ -326,7 +330,7 @@ class WaveformScene:
                 self._floor(mvp, eye, view, orthographic, (width, height), flat=flat)
                 if flat:
                     self._flat_ribbons(packet, ribbon_mvp)
-            if not flat:
+            if not flat and 'actors' not in self.preview_hidden:
                 with self.scene.transparent_writes(card, self.resources):
                     self.ribbons.draw(packet, ribbon_mvp, shading='body', **draw)
                 with self.scene.emission_writes():
@@ -366,6 +370,8 @@ class WaveformScene:
             if draw['mist'].get('uFogRange', (0., 0., 0., 0.))[3] > .5:
                 # The mist's own light, mirrored (additive); alpha stays the emitters' weighted height.
                 self._sky(self.reflected_fog,reflection=True)
+            if 'reflected_actors' in self.preview_hidden:
+                return                    # Studio preview only: the mirrored mist without its emitters
             reflected_view = mirrored @ scroll
             reflected_mvp = tuple((projection @ reflected_view).flatten(order='F'))
             self.ribbons.draw(packet, reflected_mvp, shading='light', **{**draw, 'view': tuple(reflected_view.flatten(order='F'))})
