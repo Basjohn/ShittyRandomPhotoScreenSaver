@@ -266,6 +266,12 @@ def test_preflight_passes_a_complete_release_tree(
         tmp_path / "assets" / "textures" / "waveform_floor" / "concrete_albedo.png",
         tmp_path / "assets" / "textures" / "waveform_floor" / "concrete_roughness.png",
         tmp_path / "assets" / "textures" / "waveform_floor" / "wet_surface_height.png",
+        # The Visualizer Studios' shipped audio clips and shell became release assets (5 Nov).
+        tmp_path / "assets" / "production" / "studio_clips" / "clips.json",
+        tmp_path / "assets" / "production" / "studio_clips" / "rag_doll.srclip",
+        tmp_path / "assets" / "production" / "studio_clips" / "human.srclip",
+        tmp_path / "assets" / "production" / "studio_clips" / "growing_pains.srclip",
+        tmp_path / "ui" / "studio" / "qml" / "StudioShell.qml",
         tmp_path / "rendering" / "quick" / "qml" / "DisplayScene.qml",
         tmp_path / "rendering" / "quick" / "qml" / "VisualizerPresentation.qml",
         tmp_path / "rendering" / "quick" / "qml" / "FriendPulsePresentation.qml",
