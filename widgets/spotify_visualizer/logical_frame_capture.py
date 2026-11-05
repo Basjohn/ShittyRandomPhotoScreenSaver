@@ -15,6 +15,7 @@ from typing import Any
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
 from widgets.spotify_visualizer import config_applier, mode_capabilities
 from widgets.spotify_visualizer.logical_runtime import coerce_identity
+from widgets.spotify_visualizer.spectrum_decor import advance_decor_fade, spectrum_decor_parameters
 from widgets.spotify_visualizer.transient_bus import musical_weight, passage_ramp
 from widgets.spotify_visualizer.reactivity_diagnostics import (
     maybe_log_reactivity_boundary,
@@ -297,7 +298,14 @@ def _capture_spectrum(
     engine: Any,
     context: _CaptureContext,
 ) -> tuple[ModeFrame, dict[str, Any]] | None:
-    return _capture_spectrum_family(widget, engine, context, mode_id="spectrum", frame_type=SpectrumFrame)
+    # The optional decorations' fade envelopes advance on this capture's own timestamp (no other clock).
+    pres = config_applier._presentation_source(widget)
+    fading = advance_decor_fade(pres, context.now_ts)
+    captured = _capture_spectrum_family(widget, engine, context, mode_id="spectrum", frame_type=SpectrumFrame,
+                                        extra_parameters=spectrum_decor_parameters(pres))
+    if captured is not None and fading:
+        captured[1]["_quick_mode_changed"] = True      # a fade in progress is a visible change
+    return captured
 
 
 def _capture_extruded_spectrum(

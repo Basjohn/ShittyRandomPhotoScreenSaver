@@ -643,8 +643,9 @@ def test_spectrum_shader_separates_fill_border_and_ghost_rainbow_participation()
     # In particular, no accidental second hue application and no border-alpha gate.
     assert "uniform int u_rainbow_ghost" in source
     assert "uniform float u_ghost_hue_offset" in source
-    assert "vec4 ghost_base = spectrum_ghost_colour(bar_index, u_fade)" in source
-    assert "vec4 ghost = spectrum_ghost_colour(bar_index, u_fade)" in source
+    # Ghost Gradient may shade the ghost colour toward its tip colour; nothing else recolours it.
+    assert "vec4 ghost_base = spectrum_ghost_tip(spectrum_ghost_colour(bar_index, u_fade), t)" in source
+    assert "vec4 ghost = spectrum_ghost_tip(spectrum_ghost_colour(bar_index, u_fade), ghost_t)" in source
     assert "!is_ghost &&" in source
     assert "!is_ghost_frag &&" in source
     assert "ghost_base = apply_spectrum_rainbow" not in source
@@ -671,6 +672,13 @@ def test_spectrum_rainbow_participation_contract_does_not_depend_on_curated_pres
     assert values["spectrum_rainbow_fill"] is False
     assert values["spectrum_rainbow_border"] is True
     assert values["spectrum_ghosting_enabled"] is True
+
+
+def _spectrum_capture_parameters(presentation_state) -> dict:
+    """The decoration parameters Spectrum's own capture adds (``_capture_spectrum``), from the same owner."""
+    from widgets.spotify_visualizer.spectrum_decor import spectrum_decor_parameters
+
+    return spectrum_decor_parameters(presentation_state)
 
 
 @pytest.fixture
@@ -784,6 +792,7 @@ def test_real_gl_rainbow_ghost_is_visible_without_border_color_or_border_alpha(
     )
     parameters = {}
     _populate_shared_visualizer_extras(parameters, fake)
+    parameters.update(_spectrum_capture_parameters(controller.presentation_state))
     parameters["spectrum_ghost_alpha"] = 0.9
     count = 12
     presentation = resolve_visualizer_presentation(
@@ -861,6 +870,7 @@ def test_real_gl_organs_preset_keeps_dark_fill_when_screen_fit_shrinks_glow(
     )
     parameters: dict[str, object] = {}
     _populate_shared_visualizer_extras(parameters, capture_host)
+    parameters.update(_spectrum_capture_parameters(controller.presentation_state))
     assert parameters["spectrum_rainbow_fill"] is False
     assert parameters["spectrum_rainbow_border"] is True
 
@@ -963,6 +973,7 @@ def test_real_gl_solid_bar_top_border_never_loses_pixel_coverage_during_motion(
     )
     parameters: dict[str, object] = {}
     _populate_shared_visualizer_extras(parameters, capture_host)
+    parameters.update(_spectrum_capture_parameters(controller.presentation_state))
     parameters.update(
         spectrum_ghosting_enabled=False, spectrum_glow_enabled=False,
         rainbow_enabled=False, rainbow_per_bar=False,

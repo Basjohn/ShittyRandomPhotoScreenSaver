@@ -46,26 +46,37 @@ LANES = {True: "spectrum_lane_strengths_mirrored", False: "spectrum_lane_strengt
 RAINBOW_GROUP = "Rainbow"
 BAR_COLOUR_GROUP = "Bar Colours"
 
-_BUCKET_WORKSPACE = {"render": "bars", "appearance": "colour", "ghost": "colour", "shape": "shape", "audio": "shape"}
+_BUCKET_WORKSPACE = {"render": "bars", "appearance": "colour", "ghost": "colour", "shape": "shape", "audio": "shape",
+                     "finish": "finish", "pattern": "finish"}
 _WORKSPACES = (
     ("bars", "Bars", "bars", "How the bars are drawn: segments or solid bars, their colours, corners and smoothing."),
-    ("colour", "Colour & Ghosts", "palette", "Rim glow, the rainbow and the falling peak ghosts (Rainbow Ghost)."),
+    ("colour", "Colour & Ghosts", "palette", "Rim glow, the rainbow and the falling peak ghosts (Rainbow Ghost "
+                                             "or their own colour and gradient)."),
+    ("finish", "Pattern & Finish", "material", "Optional extras on the bars: a second-colour pattern, a fill "
+                                               "gradient, gloss and peak caps."),
     ("shape", "Shape & Response", "wave", "The authored silhouette, its frequency lanes and how hard the music "
                                           "drives them, and the audio analysis feeding the bars."),
 )
 _GROUP_PANEL = {
     "render": ("bars", "Bars, corners and smoothing"), "appearance": ("sparkle", "Rim glow"),
     "ghost": ("sparkle", "Falling peak trails"), "shape": ("wave", "Silhouette and frequency lanes"),
-    "audio": ("bolt", "Reactivity and falloff"),
+    "audio": ("bolt", "Reactivity and falloff"), "finish": ("material", "Fill gradient, gloss and peak caps"),
+    "pattern": ("grid", "A second colour over the fill"),
 }
 _PRIORITY = {PREFIX + key: rank for rank, key in enumerate((
     "render_mode", "bar_fill_color", "bar_border_color", "bar_border_opacity", "border_radius",
     "visual_smoothing_enabled", "visual_smoothing", "rainbow_enabled", "rainbow_speed", "unique_colors",
     "rainbow_fill", "rainbow_border", "ghosting_enabled", "rainbow_ghost", "ghost_alpha", "ghost_decay",
-    "glow_enabled", "glow_color", "glow_intensity", "mirrored", "wave_amplitude", "profile_floor", "drop_speed"))}
+    "ghost_color_source", "ghost_color", "ghost_color.3", "ghost_gradient", "ghost_tip_color", "ghost_tip_color.3",
+    "pattern", "pattern_color", "pattern_color.3", "pattern_scale", "pattern_strength", "fill_gradient",
+    "fill_tip_color", "fill_tip_color.3", "gloss", "peak_caps", "peak_cap_color", "peak_cap_color.3",
+    "peak_cap_thickness", "glow_enabled", "glow_color", "glow_intensity", "mirrored", "wave_amplitude", "profile_floor", "drop_speed"))}
 _ROW_ICONS = {"render_mode": "bars", "bar_fill_color": "colour", "bar_border_color": "colour",
               "glow_color": "colour", "rainbow_ghost": "sparkle", "ghosting_enabled": "sparkle",
-              "rainbow_enabled": "gradient", "wave_amplitude": "bolt", "drop_speed": "height", "mirrored": "wave"}
+              "rainbow_enabled": "gradient", "wave_amplitude": "bolt", "drop_speed": "height", "mirrored": "wave",
+              "ghost_color": "colour", "ghost_tip_color": "colour", "pattern": "grid", "pattern_color": "colour",
+              "fill_tip_color": "colour", "fill_gradient": "gradient", "peak_cap_color": "colour",
+              "peak_caps": "height", "gloss": "sun"}
 _RENDER_LABELS = {"segment": "Segments", "bars": "Bars"}
 
 
@@ -372,7 +383,8 @@ def build_schema() -> StudioSchema:
     placed["shape"].append(TECHNICAL_GROUP)
 
     bucket_of = {title: key for key, title in titles.items()}
-    order = {key: rank for rank, key in enumerate(("render", "appearance", "ghost", "shape", "audio"))}
+    order = {key: rank for rank, key in enumerate(("render", "appearance", "ghost", "pattern", "finish", "shape",
+                                                   "audio"))}
     workspaces = []
     for workspace_id, title, icon, help_text in _WORKSPACES:
         groups = placed[workspace_id]

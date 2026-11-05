@@ -40,6 +40,27 @@ uniform float u_bars_left;
 uniform float u_bar_width_px;
 uniform float u_bar_gap_px;
 uniform float u_bar_span_px;
+// Optional decoration (all default off: every branch below is skipped at 0). Mixes are the presentation owner's
+// fade envelopes, so a toggled decoration fades instead of popping.
+uniform float u_ghost_custom_mix;   // 0 = ghosts in the border colour, 1 = the custom ghost colour
+uniform vec4 u_ghost_color;
+uniform float u_ghost_gradient_mix; // ghost shades toward the tip colour at the peak
+uniform vec4 u_ghost_tip_color;
+uniform float u_gloss;              // glassy highlight across each bar
+uniform float u_fill_gradient_mix;  // fill shades toward the tip colour at the top of the field
+uniform vec4 u_fill_tip_color;
+uniform float u_peak_cap_mix;
+uniform vec4 u_peak_cap_color;
+uniform float u_peak_cap_thickness; // item px
+uniform int u_pattern;              // SPECTRUM_PATTERNS index (0 = Off)
+uniform float u_pattern_mix;        // strength x fade
+uniform vec4 u_pattern_color;
+uniform float u_pattern_scale;
+
+// One framebuffer pixel in item coordinates, taken where control flow is still uniform (before any discard), so
+// the decoration's filters never see the derivative jumps at bar and segment boundaries.
+float g_px_x = 1.0;
+float g_px_y = 1.0;
 
 // Apply rainbow hue shift to a colour. Returns the shifted colour.
 // Called from both single-piece and segmented code paths.
@@ -80,12 +101,128 @@ vec4 apply_spectrum_rainbow(vec4 col, int bidx) {
 }
 
 vec4 spectrum_ghost_colour(int bidx, float alpha) {
-    if (u_rainbow_ghost != 1) return vec4(u_border_color.rgb, alpha);
+    if (u_rainbow_ghost != 1) {
+        if (u_ghost_custom_mix <= 0.0) return vec4(u_border_color.rgb, alpha);
+        // Custom ghost colour: its alpha scales Ghost Opacity.
+        float k = clamp(u_ghost_custom_mix, 0.0, 1.0);
+        return vec4(mix(u_border_color.rgb, u_ghost_color.rgb, k), alpha * mix(1.0, u_ghost_color.a, k));
+    }
     // Independent per-bar spectral hue, even when the authored fill/border are black
     // or global Rainbow is off. This does not alter ordinary bar colour/alpha.
     float hue = fract(float(bidx) / max(float(u_bar_count - 1), 1.0) + u_ghost_hue_offset);
     vec3 rgb = clamp(abs(mod(hue * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
     return vec4(rgb, alpha);
+}
+
+// Ghost Gradient: ``t`` runs 0 at the bar top to 1 at the peak; the tip colour's alpha sets how far it turns.
+vec4 spectrum_ghost_tip(vec4 ghost, float t) {
+    if (u_ghost_gradient_mix <= 0.0) return ghost;
+    // sqrt: the trail fades toward its top, so the tip colour takes over early enough to read.
+    float k = sqrt(clamp(t, 0.0, 1.0)) * clamp(u_ghost_gradient_mix, 0.0, 1.0)
+              * clamp(u_ghost_tip_color.a, 0.0, 1.0);
+    return vec4(mix(ghost.rgb, u_ghost_tip_color.rgb, k), ghost.a);
+}
+
+// Fill Gradient: ``h`` is the height in the bar field (0 base, 1 the tallest a bar reaches).
+vec4 spectrum_fill_gradient(vec4 fill, float h) {
+    if (u_fill_gradient_mix <= 0.0) return fill;
+    vec4 tip = u_fill_tip_color;
+    tip.a *= u_fade;
+    return mix(fill, tip, clamp(h, 0.0, 1.0) * clamp(u_fill_gradient_mix, 0.0, 1.0));
+}
+
+// Box-filtered periodic stripes: the share of the pixel footprint [t - w/2, t + w/2] (in periods) lying on the
+// 'on' part [0, d) of each period. Exact for any footprint, so a pattern finer than a pixel settles to its mean
+// coverage instead of shimmering.
+float spectrum_stripe_integral(float t, float d) {
+    return floor(t) * d + min(fract(t), d);
+}
+
+float spectrum_box_stripe(float t, float w, float d) {
+    w = max(w, 1e-4);
+    return (spectrum_stripe_integral(t + 0.5 * w, d) - spectrum_stripe_integral(t - 0.5 * w, d)) / w;
+}
+
+// Pattern coverage (0..1) at bar-local x ``lx`` of a bar ``bw`` wide, height ``y`` above the baseline and field x
+// ``fx``. Every pattern is fixed to the baseline (and to each bar's own width or the field), so moving bars only
+// reveal more or less of it; columns fit a whole number into each bar so it reads at every bar width.
+float spectrum_pattern_coverage(float lx, float bw, float y, float fx, float scale) {
+    float cell = 6.0 * scale * clamp(u_pattern_scale, 0.25, 4.0);
+    if (u_pattern == 1) {                       // Horizontal Bands
+        float period = 2.0 * cell;
+        return spectrum_box_stripe(y / period, g_px_y / period, 0.5);
+    }
+    if (u_pattern == 2) {                       // Scanlines
+        float period = 0.5 * cell;
+        return spectrum_box_stripe(y / period, g_px_y / period, 0.4);
+    }
+    if (u_pattern == 3) {                       // Dots
+        float columns = max(1.0, floor(bw / cell + 0.5));
+        float cw = bw / columns;
+        vec2 local = vec2((fract(lx / cw) - 0.5) * cw, (fract(y / cell) - 0.5) * cell);
+        float radius = 0.3 * min(cw, cell);
+        float px = max(g_px_x, g_px_y);
+        float edge = clamp((radius - length(local)) / px + 0.5, 0.0, 1.0);
+        float mean = 3.14159265 * radius * radius / (cw * cell);
+        return mix(edge, mean, smoothstep(0.5, 1.5, px / max(radius, 1e-4)));
+    }
+    if (u_pattern == 4) {                       // Diagonal Stripes (continuous across the field)
+        float period = 1.5 * cell * 1.41421356;
+        return spectrum_box_stripe((fx + y) / period, (g_px_x + g_px_y) / period, 0.5);
+    }
+    if (u_pattern == 5) {                       // Grid
+        float period = 1.5 * cell;
+        float d = 0.16;
+        float columns = max(2.0, floor(bw / period + 0.5));   // at least the centre line in a narrow bar
+        float cw = bw / columns;
+        float rows = spectrum_box_stripe(y / period - 0.5 * d, g_px_y / period, d);
+        float cols = spectrum_box_stripe(lx / cw - 0.5 * d, g_px_x / cw, d);
+        return rows + cols - rows * cols;
+    }
+    if (u_pattern == 6) {                       // Chevrons, pointing up, centred on each bar
+        float period = 1.5 * cell;
+        return spectrum_box_stripe((y + abs(lx - 0.5 * bw)) / period, (g_px_x + g_px_y) / period, 0.45);
+    }
+    return 0.0;
+}
+
+// Gloss: a soft specular stripe and side shading across the bar (bar-local, so it never moves). A bar only a few
+// pixels wide shows the profile's mean instead of an aliased highlight.
+vec3 spectrum_gloss(vec3 rgb, float lx, float bw) {
+    float g = clamp(u_gloss, 0.0, 1.0);
+    float width = max(bw, 1e-4);
+    float u = clamp(lx / width, 0.0, 1.0);
+    float detail = 1.0 - smoothstep(0.15, 0.5, g_px_x / width);
+    float spec = exp(-pow((u - 0.32) / 0.13, 2.0));
+    float side = pow(abs(u - 0.5) * 2.0, 2.5);
+    float lift = g * 0.6 * mix(0.23, spec, detail);
+    float shade = g * 0.45 * mix(0.286, side, detail);
+    rgb = rgb + (vec3(1.0) - rgb) * lift;
+    return rgb * (1.0 - shade);
+}
+
+// The bar body's surface (fill pixels only): the pattern composited over it, then gloss.
+vec4 spectrum_bar_surface(vec4 c, float lx, float bw, float y, float fx, float scale) {
+    if (u_pattern_mix > 0.0 && u_pattern > 0) {
+        float a = clamp(u_pattern_color.a * u_pattern_mix * u_fade
+                        * spectrum_pattern_coverage(lx, bw, y, fx, scale), 0.0, 1.0);
+        float out_a = a + c.a * (1.0 - a);
+        vec3 rgb = (u_pattern_color.rgb * a + c.rgb * c.a * (1.0 - a)) / max(out_a, 1e-5);
+        c = vec4(rgb, out_a);
+    }
+    if (u_gloss > 0.0) {
+        c.rgb = spectrum_gloss(c.rgb, lx, bw);
+    }
+    return c;
+}
+
+// Peak cap coverage: a band ``thickness`` tall a small gap above ``top``, box-filtered over the pixel so a
+// moving cap never loses its coverage at fractional heights.
+float spectrum_cap_coverage(float y, float top, float scale) {
+    float px = max(g_px_y, 1e-4);
+    float low = top + max(scale, px);
+    float high = low + max(u_peak_cap_thickness, px);
+    return clamp((min(y + 0.5 * px, high) - max(y - 0.5 * px, low)) / px, 0.0, 1.0);
 }
 
 float spectrum_rim_alpha(float side_dist_px, float top_dist_px) {
@@ -152,6 +289,8 @@ void main() {
         vec2 localFrag = gl_FragCoord.xy - u_viewport_origin_px;
         fragCoord = vec2(localFrag.x / dpr, (fb_height - localFrag.y) / dpr);
     }
+    g_px_x = max(abs(dFdx(fragCoord.x)) + abs(dFdy(fragCoord.x)), 1e-4);
+    g_px_y = max(abs(dFdx(fragCoord.y)) + abs(dFdy(fragCoord.y)), 1e-4);
 
     // ========== SPECTRUM MODE ==========
     float authored_scale = (u_quick_item_coords == 1)
@@ -265,6 +404,15 @@ void main() {
         bool is_ghost = (!is_bar && active_height >= authored_scale && peak_height > active_height && y_rel < peak_height);
 
         if (!is_bar && !is_ghost) {
+            if (u_peak_cap_mix > 0.0) {
+                float cap = spectrum_cap_coverage(y_rel, max(active_height, peak_height), authored_scale);
+                if (cap > 0.0) {
+                    vec4 cap_color = u_peak_cap_color;
+                    cap_color.a *= cap * clamp(u_peak_cap_mix, 0.0, 1.0) * u_fade;
+                    fragColor = cap_color;
+                    return;
+                }
+            }
             discard;
         }
 
@@ -333,6 +481,7 @@ void main() {
         vec4 border = u_border_color;
         fill.a *= u_fade;
         border.a *= u_fade;
+        fill = spectrum_fill_gradient(fill, y_rel / (0.95 * inner_height));
 
         float bw_px = floor(bar_width);
         float bx = floor(bar_local_x);
@@ -351,7 +500,7 @@ void main() {
             float ghost_factor = mix(1.0, 0.15, t);
             // Ghost visibility is owned by its opacity, not border alpha. An
             // author may deliberately use fully transparent or black borders.
-            vec4 ghost_base = spectrum_ghost_colour(bar_index, u_fade);
+            vec4 ghost_base = spectrum_ghost_tip(spectrum_ghost_colour(bar_index, u_fade), t);
             ghost_base.a *= ghost_alpha * ghost_factor;
             sp_color = ghost_base;
             sp_is_border = true;
@@ -387,6 +536,9 @@ void main() {
             ? (u_rainbow_border == 1)
             : (u_rainbow_fill == 1));
         fragColor = sp_apply_rainbow ? apply_spectrum_rainbow(sp_color, bar_index) : sp_color;
+        if (!is_ghost && !sp_is_border) {
+            fragColor = spectrum_bar_surface(fragColor, bar_local_x, bar_width, y_rel, x_rel, authored_scale);
+        }
         return;
     }
 
@@ -483,6 +635,13 @@ void main() {
 
     bool is_bar_frag = (active_segments > 0) && (seg_index < active_segments);
     if (!is_bar_frag && !is_ghost_frag) {
+        // Peak cap: the first free segment above the bar and its ghost lights in the cap colour.
+        if (u_peak_cap_mix > 0.0 && seg_index == peak_segments && peak_segments < u_segments) {
+            vec4 cap_color = u_peak_cap_color;
+            cap_color.a *= clamp(u_peak_cap_mix, 0.0, 1.0) * u_fade;
+            fragColor = cap_color;
+            return;
+        }
         discard;
     }
 
@@ -506,6 +665,8 @@ void main() {
     vec4 border = u_border_color;
     fill.a *= u_fade;
     border.a *= u_fade;
+    // LED-meter shading: each segment takes the gradient at its own centre.
+    fill = spectrum_fill_gradient(fill, (float(seg_index) * step_y + 0.5 * seg_height) / (0.95 * inner_height));
 
     vec4 out_color;
     bool seg_is_border = false;
@@ -516,6 +677,7 @@ void main() {
         }
 
         float ghost_factor = 1.0;
+        float ghost_t = 0.0;
         if (peak_segments > active_segments) {
             float ghost_idx = float(seg_index - active_segments);
             float ghost_len = float(max(1, peak_segments - active_segments));
@@ -526,9 +688,10 @@ void main() {
             float start = 1.0;
             float end = 0.25;
             ghost_factor = mix(start, end, t);
+            ghost_t = t;
         }
 
-        vec4 ghost = spectrum_ghost_colour(bar_index, u_fade);
+        vec4 ghost = spectrum_ghost_tip(spectrum_ghost_colour(bar_index, u_fade), ghost_t);
         ghost.a *= ghost_alpha * ghost_factor;
         out_color = ghost;
         seg_is_border = true;
@@ -548,4 +711,7 @@ void main() {
         ? (u_rainbow_border == 1)
         : (u_rainbow_fill == 1));
     fragColor = seg_apply_rainbow ? apply_spectrum_rainbow(out_color, bar_index) : out_color;
+    if (!is_ghost_frag && !seg_is_border) {
+        fragColor = spectrum_bar_surface(fragColor, bar_local_x, bar_width, y_rel, x_rel, authored_scale);
+    }
 }
