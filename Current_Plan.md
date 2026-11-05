@@ -206,6 +206,15 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   brighter moving masses, no column popping); evidence `studio_20261105/floor4/`.
   Floor collision (operator, 5 Nov): troughs no longer meet the floor — a per-ribbon lower-half depth scale keeps them
   round above it (centre contact 51-67% -> 0%, visible hot envelope -4 to -8%, tick +0.13 ms); verify on hardware.
+- [~] **Floor Give (operator, 5 Nov: "the floor can deform inwards, allowing crests") — awaiting operator eyes:**
+  opt-in Floor slider (default 0 = the rigid floor, pixel-identical); P2 authored 1.0. Where a lower edge comes down
+  onto the floor the wet floor yields in a soft dent (one surface for the floor's ray hit, its shading/reflection and
+  the ribbons' contact), so troughs stay round and dip in instead of flattening. Perspective only. In the visible
+  frame P2 reaches the floor only in the ragdoll loud end (about 49.5-52 s); P3 never does, so it is unchanged there.
+  Evidence `.artifacts/evidence/waveform_ribbon/floor_deform/`; design in the Migration Plan's Floor bucket.
+- [ ] **`tools/visualizer_preset_repair.py --repair-all` rewrites curated presets (side defect, 5 Nov):** on the
+  Waveform presets it re-sorted every key and dropped the `starting_view` and `visualizer_preset_mode` metadata
+  (values unchanged). Floor Give was authored by a one-key insert instead. Make the repair fill keep metadata and order.
 - [ ] **Dense highlights, moving colour and rim glow:** playback still lacks rewarded high-energy density and glow.
   Verify local crest/high-power colour, bright tunable rim/glow and denser highlights against actual music, including
   quiet/loud differences. Consumer reachability does not establish visible strength. Keep both range handles effective.
