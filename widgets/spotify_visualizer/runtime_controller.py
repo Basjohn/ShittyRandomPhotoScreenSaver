@@ -68,8 +68,8 @@ class VisualizerRuntimeController:
         self._bar_count = max(1, int(bar_count))
         self._mode_id = coerce_visualizer_mode_id(initial_mode)
         if not is_mode_active(self._mode_id):
-            # A stored pre-retirement SINE selection must never instantiate
-            # its logical runtime. Keep its saved presets, admit Bubble instead.
+            # A stored closed-gate selection must never instantiate its
+            # logical runtime; the canonical default mode is admitted instead.
             self._mode_id = get_default_visualizer_mode_id()
         self._presentation_policy = get_visualizer_presentation_policy(
             self._mode_id

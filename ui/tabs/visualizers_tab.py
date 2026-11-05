@@ -188,11 +188,6 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
 
         for descriptor in iter_all_visualizer_mode_descriptors():
             if not is_mode_active(descriptor.mode_id):
-                if descriptor.mode_id == "sine_wave":
-                    pill = self._make_mode_pill("Sine Waves (Retiring)")
-                    pill.setToolTip("SINE is disabled and intended for retirement; existing presets are preserved.")
-                    pill.setEnabled(False)
-                    self._nav_flow.addWidget(pill)
                 continue
             pill = self._make_mode_pill(descriptor.display_name)
             self._mode_pills[descriptor.mode_id] = pill
@@ -277,13 +272,6 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
 
         for descriptor in iter_all_visualizer_mode_descriptors():
             if not is_mode_active(descriptor.mode_id):
-                if descriptor.mode_id == "sine_wave":
-                    checkbox = QCheckBox("Sine Waves (Retiring)")
-                    checkbox.setProperty("circleIndicator", True)
-                    checkbox.setChecked(False)
-                    checkbox.setEnabled(False)
-                    checkbox.setToolTip("SINE is intentionally disabled. Its saved presets remain available for future migration.")
-                    behavior_layout.addWidget(checkbox)
                 continue
             checkbox = QCheckBox(descriptor.display_name)
             checkbox.setProperty("circleIndicator", True)

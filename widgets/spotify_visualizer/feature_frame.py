@@ -30,7 +30,7 @@ CAPTURE_HISTORY_MAX_SAMPLES = 4096
 CAPTURE_HISTORY_ENCODING = "float32-le-base64"
 
 SUPPORTED_MODES = frozenset(
-    {"spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve", "sphere", "shockwave_grid"}
+    {"spectrum", "oscilloscope", "bubble", "devcurve", "sphere", "shockwave_grid"}
 )
 # Modes whose inputs exist only in the real-scale lanes (schema 2).
 REAL_SCALE_MODES = frozenset({"sphere", "shockwave_grid"})

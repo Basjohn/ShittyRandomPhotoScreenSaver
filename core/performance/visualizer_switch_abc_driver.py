@@ -22,7 +22,7 @@ Determinism and matched control (this is the corrective contract):
 * condition **A** holds the verified Bubble baseline (control) — no switching, no
   further recreation;
 * conditions **B** and **C** perform the exact exposure ``Sphere -> Spectrum ->
-  Oscilloscope -> Sine -> Bubble`` repeated for exactly 5 full cycles (DevCurve is
+  Oscilloscope -> Bubble`` repeated for exactly 5 full cycles (DevCurve is
   deliberately excluded), each switch advancing only on a **genuine completion
   edge** (fully-presented target), then settle on Bubble;
 * condition **C** additionally, after its post-switch hold, loads the *same* slot
@@ -58,7 +58,6 @@ EXPOSURE_SEQUENCE: tuple[str, ...] = (
     "sphere",
     "spectrum",
     "oscilloscope",
-    "sine_wave",
     "bubble",
 )
 SETTLE_MODE = "bubble"

@@ -64,10 +64,6 @@ from ui.tabs.media.spectrum_settings_binding import (
     collect_spectrum_mode_settings,
     load_spectrum_mode_settings,
 )
-from ui.tabs.media.sine_wave_settings_binding import (
-    collect_sine_wave_mode_settings,
-    load_sine_wave_mode_settings,
-)
 from ui.tabs.media.extruded_bubble_settings_binding import (
     collect_extruded_bubble_mode_settings,
     load_extruded_bubble_mode_settings,
@@ -814,8 +810,6 @@ def _hydrate_visualizer_mode_body(tab, mode_id: str, config) -> None:
         load_spectrum_mode_settings(tab, cfg)
     elif mode_id == "oscilloscope":
         load_oscilloscope_mode_settings(tab, cfg)
-    elif mode_id == "sine_wave":
-        load_sine_wave_mode_settings(tab, cfg)
     elif mode_id == "bubble":
         load_bubble_mode_settings(tab, cfg)
     elif mode_id == "devcurve":
@@ -1408,8 +1402,6 @@ def save_visualizer_settings(tab: "VisualizerSettingsContextMixin") -> dict:
             spotify_vis_config.update(collect_spectrum_mode_settings(tab))
         elif _cur_mode == 'oscilloscope':
             spotify_vis_config.update(collect_oscilloscope_mode_settings(tab))
-        elif _cur_mode == 'sine_wave':
-            spotify_vis_config.update(collect_sine_wave_mode_settings(tab))
         elif _cur_mode == 'bubble':
             spotify_vis_config.update(collect_bubble_mode_settings(tab))
         elif _cur_mode == 'devcurve':

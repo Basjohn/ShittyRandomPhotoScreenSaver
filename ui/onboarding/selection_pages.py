@@ -201,8 +201,7 @@ class VisualizerPage(Page):
         if self._offered_modes is None:
             # Experimental modes can be retained/disabled here only if already admitted.
             offered = [d for d in iter_all_visualizer_mode_descriptors()
-                       if (is_mode_active(d.mode_id) and (d.guided_setup_offered or d.mode_id in active))
-                       or d.mode_id == "sine_wave"]
+                       if is_mode_active(d.mode_id) and (d.guided_setup_offered or d.mode_id in active)]
             priority = {"bubble": 0, "extruded_bubble": 1}
             self._offered_modes = sorted(
                 offered, key=lambda descriptor: priority.get(descriptor.mode_id, 2)
@@ -215,23 +214,14 @@ class VisualizerPage(Page):
         with QSignalBlocker(self.rows):
             self.rows.clear()
             for mode in self._offered_modes:
-                retired_sine = mode.mode_id == "sine_wave" and not is_mode_active(mode.mode_id)
-                item = QListWidgetItem(mode.display_name + (" (Retiring)" if retired_sine else ""))
+                item = QListWidgetItem(mode.display_name)
                 item.setData(Qt.ItemDataRole.UserRole, mode.mode_id)
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                item.setCheckState(Qt.CheckState.Checked if mode.mode_id in active and not retired_sine
+                item.setCheckState(Qt.CheckState.Checked if mode.mode_id in active
                                    else Qt.CheckState.Unchecked)
                 self.rows.addItem(item)
-                if retired_sine:
-                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled & ~Qt.ItemFlag.ItemIsUserCheckable)
-                    item.setToolTip("SINE is intentionally disabled pending retirement. Saved presets are preserved.")
-                    row_checkbox = self.rows.itemWidget(item)
-                    row_checkbox.setChecked(False)
-                    row_checkbox.setEnabled(False)
-                    row_checkbox.setToolTip(item.toolTip())
-                else:
-                    # Previews stay browsable even while the Visualizer family is off.
-                    self.rows.itemWidget(item).setEnabled(effective)
+                # Previews stay browsable even while the Visualizer family is off.
+                self.rows.itemWidget(item).setEnabled(effective)
             self.rows.setCurrentRow(max(0, min(selected, self.rows.count() - 1)))
         # Narrow, but never truncating a mode name: fit the longest row.
         widest = max((self.rows.itemWidget(self.rows.item(i)).sizeHint().width() for i in range(self.rows.count())), default=200)

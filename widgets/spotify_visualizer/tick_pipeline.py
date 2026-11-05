@@ -103,7 +103,7 @@ def arm_reentry_fresh_frame_fence(state: Any, engine: Any) -> bool:
 
 def _mode_requires_fresh_waveform(mode_str: str) -> bool:
     """Return True when a mode should wait for fresh waveform data after reset."""
-    return str(mode_str or "").lower() in {"oscilloscope", "sine_wave"}
+    return str(mode_str or "").lower() == "oscilloscope"
 
 
 # Mode capability answers come from one canonical owner; see
@@ -114,115 +114,6 @@ _mode_is_idle_self_animating = mode_capabilities.is_idle_self_animating
 _mode_requires_authoritative_first_source = (
     mode_capabilities.requires_authoritative_first_source
 )
-
-
-# ------------------------------------------------------------------
-# Heartbeat transient detection (CPU-side)
-# ------------------------------------------------------------------
-
-def _clamp(value: float, lo: float, hi: float) -> float:
-    return max(lo, min(hi, value))
-
-
-def process_heartbeat(widget: Any, now_ts: float) -> None:
-    """Detect bass energy spikes and produce a decay envelope for sine heartbeat."""
-    # The active controller resolves this hook only for Sine.  Keep this fence
-    # for a concurrent mode replacement: it must run before *any* engine/event
-    # query, so persisted Sine values cannot create background audio work.
-    if widget._vis_mode_str != "sine_wave":
-        return
-    if widget._sine_heartbeat <= 0.001 or widget._engine is None:
-        return
-
-    eb = widget._engine.get_energy_bands()
-    bass_now = getattr(eb, 'bass', 0.0) if eb else 0.0
-    mid_now = getattr(eb, 'mid', 0.0) if eb else 0.0
-    high_now = getattr(eb, 'high', 0.0) if eb else 0.0
-
-    prev_hb_ts = widget._heartbeat_last_ts
-    widget._heartbeat_last_ts = now_ts
-    dt_hb = max(0.001, min(0.05, now_ts - prev_hb_ts)) if prev_hb_ts > 0.0 else 0.016
-
-    slider = max(0.0, min(1.0, widget._sine_heartbeat))
-
-    # Fast EMA (~50ms) reacts to current beat, slow EMA (~400ms) is baseline.
-    alpha_fast = min(1.0, dt_hb / 0.05)
-    alpha_slow = min(1.0, dt_hb / 0.40)
-    widget._heartbeat_fast_bass += (bass_now - widget._heartbeat_fast_bass) * alpha_fast
-    widget._heartbeat_avg_bass += (bass_now - widget._heartbeat_avg_bass) * alpha_slow
-
-    fast = widget._heartbeat_fast_bass
-    slow = widget._heartbeat_avg_bass
-
-    # Spike ratio: how much fast exceeds slow (1.0 = equal, 2.0 = double).
-    spike_ratio = fast / max(0.02, slow)
-    # Gate: at slider=0.0 need 60% spike above average; at slider=1.0 need 15%.
-    trigger_gate = 1.0 + (0.60 - 0.45 * slider)
-    cooldown_elapsed = now_ts - widget._heartbeat_last_trigger_ts
-    energy_mix = _clamp(bass_now * 0.7 + mid_now * 0.2 + high_now * 0.1, 0.0, 1.0)
-
-    # Transient bus boost (Approach A §8): if transient bus detected a kick
-    # onset this frame, lower the trigger gate for immediate response.
-    _tb_onset = getattr(widget._engine, '_audio_worker', None)
-    _tb_kick = False
-    if _tb_onset is not None:
-        _tb_kick = (
-            getattr(_tb_onset, '_onset_detected', False)
-            and getattr(_tb_onset, '_onset_type', '') == 'kick'
-        )
-    if not _tb_kick and widget._engine is not None:
-        try:
-            scheduler = widget._engine.get_event_scheduler()
-        except Exception:
-            scheduler = None
-        if scheduler is not None:
-            try:
-                _tb_kick = bool(scheduler.has_recent('kick', max_age_s=0.16))
-            except Exception:
-                _tb_kick = False
-    if _tb_kick:
-        trigger_gate *= 0.6  # much easier to trigger on confirmed kick
-
-    triggered = False
-
-    if (
-        spike_ratio > trigger_gate
-        and energy_mix > 0.03
-        and cooldown_elapsed >= 0.10
-    ):
-        triggered = True
-        widget._heartbeat_last_trigger_ts = now_ts
-        # Punch scales with both how big the spike is and slider sensitivity.
-        punch = _clamp(0.5 + (spike_ratio - trigger_gate) * 1.0 + energy_mix * 0.4, 0.0, 1.0)
-        # Instant rise — set intensity directly to punch (or keep if already higher).
-        widget._heartbeat_intensity = max(widget._heartbeat_intensity, punch)
-    else:
-        # Decay only when NOT triggered this frame.  400ms full decay for punchy feel.
-        decay_rate = 1.0 / 0.40
-        widget._heartbeat_intensity = max(0.0, widget._heartbeat_intensity - dt_hb * decay_rate)
-
-    widget._heartbeat_fast_prev = fast
-
-    if is_viz_diagnostics_enabled() and (
-        triggered or (now_ts - widget._heartbeat_last_log_ts) >= 0.5
-    ):
-        logger.debug(
-            (
-                "[SPOTIFY_VIS][SINE][HB] dt=%.3f bass=%.3f fast=%.3f avg=%.3f "
-                "spike=%.3f gate=%.3f energy=%.3f slider=%.2f intensity=%.2f trigger=%s"
-            ),
-            dt_hb,
-            bass_now,
-            fast,
-            slow,
-            spike_ratio,
-            trigger_gate,
-            energy_mix,
-            slider,
-            widget._heartbeat_intensity,
-            triggered,
-        )
-        widget._heartbeat_last_log_ts = now_ts
 
 
 # ------------------------------------------------------------------
