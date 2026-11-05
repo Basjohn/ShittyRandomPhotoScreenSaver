@@ -436,7 +436,7 @@ class WaveformDynamics:
             # Existing visible rim slots respond immediately; this eased source creates no simulation in the draw.
             data[index,6::KNOT_ROWS,3] = np.maximum(data[index,6::KNOT_ROWS,3],
                 values['sparkle']*max(self._hit,.4*self.bands[2])*crest)
-            data[index,7::KNOT_ROWS,3] *= (1.+2.2*self._hit*(.25+.75*crest))*(1.+.9*swell[index])
+            data[index,7::KNOT_ROWS,3] *= (1.+2.2*self._hit*(.25+.75*crest))*(1.+.45*swell[index])
             power = local*(.25+.75*crest)
             threshold = self.controls.colour_threshold
             share = np.clip((power-threshold)/max(1e-5,1.-threshold),0.,1.)
