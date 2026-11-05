@@ -42,7 +42,7 @@ from .metrics import calculate_metrics
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests/fixtures/visualizer_replay/v1"
-MODES = ("spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve")
+MODES = ("spectrum", "oscilloscope", "bubble", "devcurve")
 # Modes that replay from schema 2 clips only (their inputs are the real-scale lanes).
 REAL_SCALE_MODES = ("sphere", "shockwave_grid")
 
@@ -78,13 +78,6 @@ def mode_output(frame):
         # Actual resolved range values and rate, excluding the independently flowing idle carrier.
         # Native packet/pixel comparisons remain the geometry proof.
         return (*(value for _key,value in state.realized),state.rotation_speed)
-    if frame.mode_id == "sine_wave":
-        # What the lines' amplitude reads: each band's reactive energy scaled by the resolved
-        # sensitivity, and the heartbeat pulse.
-        sensitivity = float(state.parameters["resolved_sensitivity"])
-        energy = frame.common.energy
-        return (energy.bass * sensitivity, energy.mid * sensitivity, energy.high * sensitivity,
-                float(state.heartbeat_intensity))
     if frame.mode_id == "oscilloscope":
         # The live trace's vertical swing (its points' y, the drawn audio), then the beam's
         # reactions: its drive and flare.

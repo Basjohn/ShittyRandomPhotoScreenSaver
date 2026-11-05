@@ -15,7 +15,7 @@ Design:
   engine generation/activation fencing, thread/process/settings seams) are
   exposed here as delegating properties to the controller, so this object is a
   single complete logical host.
-- The remaining authored per-tick logical fields (heartbeat, perf-tick,
+- The remaining authored per-tick logical fields (perf-tick,
   devcurve, bubble, mode-transition-readiness, source freshness, smoothing) live
   here as plain attributes, populated by the existing initialization/tick code.
 - The common tick invokes at most one descriptor-resolved mode hook, retained
@@ -278,21 +278,12 @@ def install_default_logical_tick_state(state: Any, *, bar_count: int) -> None:
     # Product configuration is seeded from the one canonical Settings authority.
     # The resolved preset/settings payload is applied immediately afterwards by
     # the Quick owner.  This state initializer therefore owns no second tuning
-    # table for Bubble/Spectrum/Oscilloscope/Sine/DevCurve/Sphere.
+    # table for Bubble/Spectrum/Oscilloscope/DevCurve/Sphere.
     from core.settings.default_contract import get_raw_default_settings
     from widgets.spotify_visualizer.config_applier import apply_logical_vis_mode_kwargs
 
     canonical_visualizer = get_raw_default_settings()["widgets"]["spotify_visualizer"]
     apply_logical_vis_mode_kwargs(state, canonical_visualizer)
-
-    # Heartbeat / pulse tracking.
-    state._heartbeat_intensity = 0.0
-    state._heartbeat_avg_bass = 0.0
-    state._heartbeat_fast_bass = 0.0
-    state._heartbeat_fast_prev = 0.0
-    state._heartbeat_last_ts = 0.0
-    state._heartbeat_last_trigger_ts = 0.0
-    state._heartbeat_last_log_ts = 0.0
 
     # Authored cadence + smoothing.
     state._smoothing = 0.18

@@ -1529,7 +1529,7 @@ class _SpotifyBeatEngine(QObject):
 
         Spectrum-family modes derive this from their authored shaped bars.
         Other modes consume the shared pre-AGC control lanes directly;
-        Sine heartbeat and Dev Curve must stay reactive without borrowing a
+        Dev Curve must stay reactive without borrowing a
         Spectrum shape-editor profile or a second audio engine.
         """
         if not self._audio_worker._spectrum_shaping_enabled:

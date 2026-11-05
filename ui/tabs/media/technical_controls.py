@@ -52,13 +52,6 @@ _TRANSIENT_MIX_META: Dict[str, tuple] = {
         "Higher = stronger kick punch.",
         0.0, 1.0,
     ),
-    "sine_wave": (
-        "sine_wave_transient_width_mix",
-        "Transient Width Mix:",
-        "How much transient energy widens the sine wave (0%–100%).\n"
-        "Higher = more width reaction on kicks.",
-        0.0, 1.0,
-    ),
 }
 
 _KICK_GAIN_TIP = (
@@ -77,7 +70,6 @@ _MODE_LABELS: Dict[str, str] = {
     "spectrum": "Spectrum",
     "extruded_spectrum": "Extruded Spectrum",
     "oscilloscope": "Oscilloscope",
-    "sine_wave": "Sine Wave",
     "bubble": "Bubble",
 }
 
@@ -85,14 +77,12 @@ _MODE_RECOMMENDED_BLOCK_SIZE: Dict[str, int] = {
     "spectrum": 128,
     "extruded_spectrum": 128,
     "oscilloscope": 128,
-    "sine_wave": 128,
     "bubble": 256,
 }
 
 _MODE_RECOMMENDED_AGC: Dict[str, float] = {
     "spectrum": 0.42,
     "extruded_spectrum": 0.34,
-    "sine_wave": 0.18,
     "bubble": 0.50,
 }
 
@@ -219,7 +209,6 @@ def _agc_tooltip(mode_key: str) -> str:
     recommendation_map = {
         "spectrum": "Recommended starting range: 35%–50%. Higher values trade punch for steadier loud/quiet balance.",
         "bubble": "Recommended starting range: 45%–60%. Useful when the stream feels too uneven between tracks.",
-        "sine_wave": "Recommended starting range: 0%–25%. Usually keep this low so heartbeat/width motion keeps its natural contrast.",
     }
     recommendation = recommendation_map.get(
         mode_key,
@@ -444,8 +433,8 @@ def _control_defs_for_mode(mode_key: str) -> tuple[_ControlDef, ...]:
                 control_key="mix_slider",
                 config_key=mix_key,
                 # Strip the full mode prefix, not just the first underscore token:
-                # a two-token prefix (sine_wave_) would otherwise leave "wave_..."
-                # and re-prefix to the doubled key sine_wave_wave_... at resolve.
+                # a two-token prefix (extruded_spectrum_) would otherwise leave "spectrum_..."
+                # and re-prefix to the doubled key extruded_spectrum_spectrum_... at resolve.
                 default_key=(
                     mix_key[len(mode_key) + 1:]
                     if mix_key.startswith(f"{mode_key}_")

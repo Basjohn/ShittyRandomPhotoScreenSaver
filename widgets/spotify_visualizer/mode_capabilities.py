@@ -6,7 +6,7 @@ three owners that disagreed with each other:
 - `startup_staging.mode_allows_idle_reveal()` decided whether the card may show;
 - `tick_pipeline` reused one set for both idle animation and source authority;
 - `media_bridge.seed_playback_state_from_anchor()` had a third hard-coded set
-  listing only bubble/sine_wave/devcurve, so a provisional paused media seed
+  listing only a few authored modes, so a provisional paused media seed
   could block an Oscilloscope or Spectrum startup that the other two owners
   considered perfectly legal.
 
@@ -15,7 +15,6 @@ Keeping them apart matters, because they are not the same question:
     mode          idle reveal   idle self-animation   presentation-owned    fresh source
                                                       idle scene            for playback
     bubble            yes              yes                  no                  no
-    sine_wave         yes              yes                  no                  no
     oscilloscope      yes              yes                  no                  no
     devcurve          yes              yes                  no                  no
     spectrum          yes              no                   yes                 yes
@@ -33,14 +32,14 @@ from typing import Any
 
 # Every authored mode may present while playback is idle.
 _IDLE_REVEAL = frozenset(
-    {"bubble", "spectrum", "sine_wave", "oscilloscope", "devcurve", "sphere", "extruded_spectrum",
+    {"bubble", "spectrum", "oscilloscope", "devcurve", "sphere", "extruded_spectrum",
      "shockwave_grid", "extruded_bubble", "waveform_ribbon"}
 )
 
 # Modes whose paused motion is generated from engine ticks, so a paused tick may
 # stop waiting for a fresh engine frame.
 _IDLE_SELF_ANIMATING = frozenset(
-    {"bubble", "sine_wave", "oscilloscope", "devcurve", "sphere", "extruded_bubble", "waveform_ribbon"}
+    {"bubble", "oscilloscope", "devcurve", "sphere", "extruded_bubble", "waveform_ribbon"}
 )
 
 # Modes whose idle scene is produced entirely by presentation and needs no
@@ -51,7 +50,7 @@ _SOURCE_INDEPENDENT_SCENE = frozenset({'waveform_ribbon'})
 # Modes whose renderer draws the waveform *samples*. Every other mode carries an
 # empty sample payload (no per-tick copy/validation) and no paused idle
 # synthesis. The waveform count and generation are separate authority: they
-# stay live for every mode (Sine/line-mode readiness keys on the generation).
+# stay live for every mode (waveform readiness keys on the generation).
 _WAVEFORM_SAMPLE_CONSUMERS = frozenset({"oscilloscope"})
 
 
