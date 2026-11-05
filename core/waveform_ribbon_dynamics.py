@@ -21,6 +21,26 @@ def unit(value):
     return max(0., min(1., float(value)))
 
 
+# Fixed musical anchors (never learned from the current song). Pooled p05..p95 of the fixed-reference body lanes,
+# published passage and weighted body energy over four recorded 50 s windows (ragdoll, human_heavy, nightsolong,
+# anything_mixed; 5 Nov audit). Real music otherwise uses about a fifth of every authored quiet->peak range.
+BAND_SPAN = ((.25, .85), (.10, .82), (.02, .80))
+PASSAGE_SPAN = (.45, .80)
+ENERGY_SPAN = (.25, .75)
+ENERGY_WEIGHTS = (.5, .35, .15)
+# Phrase-scale body energy: rises within a bar, settles over a phrase. Beats articulate through the band sources.
+PHRASE_ATTACK, PHRASE_RELEASE = .35, 1.5
+
+
+def span(value, low, high):
+    """Place a lane on its real-music span. Above 0.8 the approach to 1 is exponential and never flattens, so a hot
+    passage keeps moving instead of pinning its drivers (the body lanes' own knee, beat_engine._lane)."""
+    position = max(0., (float(value)-low)/(high-low))
+    if position > .8:
+        position = .8+.2*(1.-math.exp(-(position-.8)/.2))
+    return position
+
+
 def follower(value, target, dt, attack, release):
     tau = attack if target > value else release
     return target + (value-target)*math.exp(-dt/max(tau,1e-5))
@@ -105,7 +125,7 @@ class WaveformDynamics:
         self.time = self.travel = self.angle = self.angular_speed = self.twist_phase = self._hit = 0.
         self.phase = controls.scene.flow.phase
         self.bands, self.power = (0.,0.,0.),0.
-        self.passage = 0.
+        self.passage = self.phrase = 0.
         self._shape_input = np.zeros((2,5),np.float64)  # two stages: bass/mid/high, power, hit
         self.spring = [[0.,0.,0.] for _ in range(RIBBON_CAPACITY)]
         self.velocity = [[0.,0.,0.] for _ in range(RIBBON_CAPACITY)]
@@ -174,8 +194,14 @@ class WaveformDynamics:
             self._primed = stop
             self._snapshot = None
             return self.snapshot()
-        bands = tuple(unit(v)*unit(presence) for v in bands)
-        power = unit(intensity)*unit(presence)
+        raw = tuple(unit(v)*unit(presence) for v in bands)
+        # Calibrated sources: each fixed-scale lane spread over its real-music span, so authored quiet->peak ranges
+        # are actually traversed. The published level places every range; it blends the slow fixed-scale passage
+        # with phrase-scale body energy so a lift within a song is visible, not only a change of playback volume.
+        bands = tuple(span(value,*limits) for value,limits in zip(raw,BAND_SPAN))
+        energy = sum(weight*value for weight,value in zip(ENERGY_WEIGHTS,raw))
+        self.phrase = follower(self.phrase,energy,dt,PHRASE_ATTACK,PHRASE_RELEASE)
+        power = unit(.5*span(unit(intensity)*unit(presence),*PASSAGE_SPAN)+.5*span(self.phrase,*ENERGY_SPAN))
         self.bands, self.power = bands,power
         self.passage = follower(self.passage,power,dt,c.attack,c.release)
         # Event strength already has its own acoustic support at admission. Passage weight must not attenuate
@@ -197,8 +223,10 @@ class WaveformDynamics:
         self.travel += c.scene.flow.speed*dt
         self.phase += 2*math.pi*c.scene.flow.head_hz*dt
         sources = (*bands,power,self._hit,.5+.5*math.sin(self.phase))
+        # Fast bands articulate inside the level; a quiet passage still shows its beats, only smaller.
+        gate = .35+.65*self.passage
         for key in TARGETS:
-            target = route(c.routing[key],sources,passage=self.passage)
+            target = route(c.routing[key],sources,passage=gate)
             self.drive[key] = follower(self.drive[key],target,dt,c.attack,c.release)
         for owner,card in enumerate(c.cards):
             support = 1. if card['band']=='All' else bands[('Bass','Mids','Highs').index(card['band'])]
@@ -264,7 +292,10 @@ class WaveformDynamics:
             self._base_packet,self._base_array=raw,base
         data = self._base_array.copy()
         rows = data[:,4::KNOT_ROWS]
-        x = rows[:,:,0]+raw.world_origin[0]+self.controls.scene.flow.head_x-self.travel
+        # Cloth coordinate: fixed to the travelling history, so musical bends are sweeps carried by the ribbon
+        # rather than a stationary lump field the cloth slides through.
+        u = rows[:,:,0]+raw.world_origin[0]
+        x = u+self.controls.scene.flow.head_x-self.travel
         owner = np.arange(RIBBON_CAPACITY)[:,None]
         # Keep elastic excursions legible above ordinary sustained input; the old unit tanh compressed hits twice.
         b,m,h = (3.*np.tanh(np.asarray(self.spring)/3.)).T[:,:,None]
@@ -272,22 +303,30 @@ class WaveformDynamics:
         carrier = rows[:,:,1]+raw.world_origin[1]-2.
         axial_scale=np.exp(.6*values['stretch']*np.tanh(np.asarray(self.spring)[:,0,None]))
         rows[:,:,0]=x*axial_scale-raw.world_origin[0]-self.controls.scene.flow.head_x+self.travel
-        y = carrier*values['height']+values['bend']*(1.1*b*np.sin(.45*x+owner*.7)
-            +.1*m*np.sin(.7*x+owner))
-        z = (rows[:,:,2]+raw.world_origin[2])*values['spread']+.4*values['depth']*m*np.cos(.65*x+owner)
-        idle=self.controls.idle_motion*(1.-self.passage)
-        y+=idle*.08*np.sin(.45*self.time+.6*x+owner)
-        z+=idle*.05*np.cos(.33*self.time+.4*x-owner)
-        # One common smooth bounding domain prevents floor-crossing/clamp kinks at extreme editor values.
-        y = 5.*np.tanh(y/5.)
-        z = 5.*np.tanh(z/5.)
+        # The axial roll turns the carrier (its helix and the bundle's separation) like a skewer. Height scales
+        # both transverse carrier components, so a turn changes the visible phase, never the visible amplitude.
+        separation = .65*(owner-1.)
+        depth_wave = rows[:,:,2]+raw.world_origin[2]-separation
+        cy = carrier*values['height']
+        cz = depth_wave*values['height']+separation*values['spread']
         cosine,sine = math.cos(self.angle),math.sin(self.angle)
-        rows[:,:,1],rows[:,:,2] = cosine*y-sine*z+values['lift'],sine*y+cosine*z
+        y,z = cosine*cy-sine*cz,sine*cy+cosine*cz
+        # Musical bend and sway act in world space after the roll: the louder passage cannot rotate its own
+        # vertical excursion into the (invisible, long-lens) depth axis.
+        y = y+values['bend']*(1.1*b*np.sin(.45*u+owner*.7)+.1*m*np.sin(.7*u+owner))
+        z = z+.4*values['depth']*m*np.cos(.65*u+owner)
+        idle=self.controls.idle_motion*(1.-self.passage)
+        y+=idle*.08*np.sin(.45*self.time+.6*u+owner)
+        z+=idle*.05*np.cos(.33*self.time+.4*u-owner)
+        # One common smooth bounding domain prevents floor-crossing/clamp kinks at extreme editor values. Peaks
+        # are meant to rise high: the framing makes room for them, the body is never capped to fit a frame.
+        rows[:,:,1] = 5.*np.tanh(y/5.)+values['lift']
+        rows[:,:,2] = 5.*np.tanh(z/5.)
         rows[:,:,3] = 3.5*np.tanh(rows[:,:,3]*values['width']/3.5)
         origin_twist = (data[:,1,0,None]+math.pi)%(2*math.pi)-math.pi
         twist = data[:,5::KNOT_ROWS,1]+origin_twist
-        twist = twist*values['twist']+values['torsion']*(1.6*m*np.sin(.45*x+owner)+.12*h*np.sin(.7*x-owner))
-        data[:,5::KNOT_ROWS,1] = twist+self.twist_phase+self.angle+idle*.18*np.sin(.28*self.time+.3*x+owner)
+        twist = twist*values['twist']+values['torsion']*(1.6*m*np.sin(.45*u+owner)+.12*h*np.sin(.7*u-owner))
+        data[:,5::KNOT_ROWS,1] = twist+self.twist_phase+self.angle+idle*.18*np.sin(.28*self.time+.3*u+owner)
         data[:,1,0] = 0.
         # Strong local musical regions change colour immediately, even before new head history enters view.
         # The crest mask is carried by immutable carrier geometry, so coloured regions travel with the waveform.
