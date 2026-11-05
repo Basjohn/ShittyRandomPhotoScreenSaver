@@ -621,6 +621,35 @@ Preset 1: nebula turned into the upper sky (position 0.97), smaller Moon (0.175)
 1.45 -> 1.66 ms at 2560x1440; Preset 3 0.86 -> 0.91 and 1.75 -> 1.91 ms (mostly the near band's vertices).
 Motion on real music (4 s from 30 s): Preset 1 1.17 -> 1.30 /255 per frame (the glints drift), Preset 3 0.29 -> 0.28.
 
+**Sixth pass (2026-11-06; the gaps pass 5 left: lake, Preset 1 sky, Moon, near ridges, Preset 3).** Shared:
+- *Mirror land* (`basinMirrorLand`): water cells are skipped in the horizon-profile march. It counted the water's
+  rest level as land, so a fragment in a swell trough (below rest level) mirrored "land" all round it: Preset 3's
+  dark blob mid-lake (gone with Water Reflection 0, unchanged with Shine 0 or Glass off). GPU test with a negative
+  control in `tests/test_neon_water_layers.py`.
+- *Lake*: a dark mirror. Attribution showed the wash was mostly bloom from crest-coloured lines plus the water's own
+  glow (crest alpha 0 put the lake at the mock's navy). Mirror floor 0.22 -> 0.12 and a darker body; the water's own
+  glow a third; the ripple network faint at rest (0.06, still lit by crests and energy); the mirror leans 0.08 (was
+  0.15) with the mesh's facets and a passing crest lifts the body 0.07 (was 0.18), so swells no longer wash it; the
+  Sun/Moon column is broader and reaches farther toward the viewer; the glints are thinner and drift slower.
+- *Ridges*: on the authored land each skyline ridge swells and thins along its length (width 0.45..1.45, up to 2.35
+  for near ridges grown by Depth Scale; alpha 0.3..1 where it thins), a smooth function of land position so it
+  stays on the ground; near ridges are a 35% softer core whose bloom carries them and breathe half as much with the
+  midband. The distant horizon keeps its authored thickness.
+- *Nebula*: streams drawn out along (0.84, 0.54) (was 45 degrees) and the band's great circle flatter, so the band
+  rises at about the mocks' diagonal.
+- *Moon*: an even luminous face (0.90 + 0.10 lambert, was 0.82 + 0.18); phase, emission headroom, halo and limb
+  contracts unchanged.
+- *Fine band*: extending the 2x near band to basin v 0.25 changed 217 pixels and left the crest's curvature measure
+  unchanged (15.7 -> 15.5); not taken. The kink before the lake is where one dune's ridge ends, and the far shore's
+  sawtooth is the bank's own triangle silhouette (it survives Shore Glow 0 and a wider per-fragment contour).
+Preset 1: navy sky [5,7,34] and horizon [14,18,66], bluer nebula core (the soft blue stream upper left), whiter Moon
+[228,228,252] with a tighter halo (1.4), brighter column (0.8), gentler waves (0.06); Preset 2 follows. Preset 3:
+cooler sky/horizon, smaller halo (1.1) and rays (0.45), stronger and softer wisps, darker water, calmer water lights
+(path 0.85, shore glow 0.45, halo reactivity 1.5, waves 0.025). GPU (RTX 4090, PairedBench, control-relative
+unchanged: P1 293.6 -> 293.5 cf at 1300x750, 192.2 -> 191.7 at 2560x1440; P3 323.1 -> 322.5, 219.8 -> 220.3).
+Per-frame calls unchanged (353 GL). Motion (4 s from 30 s, 60 fps): Preset 1 1.30 -> 1.10 /255, Preset 3 0.28 ->
+0.239. Evidence `.artifacts/evidence/neon_lake/fidelity_20261105/pass6/`.
+
 ## Operator-authorized future water improvements (2026-10-18; deferred, baseline accepted)
 
 These are three **new capabilities**, not permission to reopen the accepted Neon Lake graphics, change authored

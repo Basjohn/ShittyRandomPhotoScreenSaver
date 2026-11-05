@@ -62,16 +62,18 @@ lead as reviewer/orchestrator.
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
-- [ ] **Neon Lake goal mocks (Presets 1-3, 5 Nov fifth pass, awaiting operator look):** sparser blue-white stars
-  with round glows, ropy nebula, luminous Moon limb with a grey crescent, smooth near dune lines, glinting water
-  (`Docs/Reference/Neon_Lake_Basin.md`, "Third" to "Fifth pass"). Still short of
-  `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`: Preset 1's sky still purpler than the mock's navy
-  near the Moon, no blue cloud in the upper left, the nebula band steeper than the mock's; the mid-distance dune
-  crest just before the lake still kinks (beyond the fine band; extending the band costs ~+0.3 ms); the lake is
-  brighter and smoother than the mock's dark mirror and swells still wash it; the high-react look (vivid line mesh,
-  glowing island) is not reached; Preset 3's sky is warmer and its wisps fainter than the mock's, and its
-  frame-to-frame change is 0.28/255 (target 0.25, ideally 0.165). Evidence:
-  `.artifacts/evidence/neon_lake/fidelity_20261105/pass5/` (triptych/, motion/*.webp, gpu_final.txt).
+- [ ] **Neon Lake goal mocks (Presets 1-3, 6 Nov sixth pass, awaiting operator look):** darker mirror lake with a
+  longer Moon/Sun column and no swell wash, Preset 3's mid-lake blob fixed (mirror counted swell troughs as land),
+  navy Preset 1 sky with a shallower band and a soft blue stream upper left, even luminous Moon face, near ridges
+  that swell and fade along their length, Preset 3 cooler sky with stronger wisps and motion 0.239/255
+  (`Docs/Reference/Neon_Lake_Basin.md`, "Third" to "Sixth pass"). Still short of
+  `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`: the high-react look (vivid line mesh over the
+  lake, glowing island) is not reached on loud real music (1985_loud1: the lake barely changes; a squared
+  spectrum-energy term on the ripple network was tried and did nothing visible, reverted); Preset 1's lake is still
+  lighter than the mock's (p35 [28,30,65] vs [16,22,61]: bloom of the pink shore crest beside it) and its near dot
+  field is coarser than the mock's; the far-shore sawtooth and the crest before the lake are mesh silhouette (a
+  fine band to v 0.25 measured no gain); Preset 3 motion ideally toward 0.165. Evidence:
+  `.artifacts/evidence/neon_lake/fidelity_20261105/pass6/` (triptych/, clips/*.webp, gpu_*.txt, overhead_*).
 
 - [ ] **Neon render tests load-sensitive under parallel runs (5-6 Nov):** `test_neon_lake_renderer.py` (once, pass-5
   merge gate) and `test_neon_scene_materials.py` (once, pass-5 branch) failed under parallel load and passed alone; the
