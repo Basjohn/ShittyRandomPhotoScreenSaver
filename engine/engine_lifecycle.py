@@ -264,6 +264,17 @@ def teardown_display_runtime(
 # Engine stop
 # ------------------------------------------------------------------
 
+def retire_display_power(engine: ScreensaverEngine) -> None:
+    """Retire the engine's process-scoped display-power authority (idempotent)."""
+    display_power = getattr(engine, "_display_power", None)
+    if display_power is None:
+        return
+    try:
+        display_power.retire()
+    except Exception as e:
+        logger.warning("Display power authority retirement failed: %s", e, exc_info=True)
+
+
 def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
     """Stop-sequence finalization (worker/process shutdown, housekeeping, quit).
 
@@ -297,6 +308,11 @@ def _run_stop_finalization(engine: ScreensaverEngine, exit_app: bool) -> None:
             except Exception as e:
                 logger.debug("[USAGE] Failed to stop usage telemetry: %s", e)
             engine._usage_telemetry = None
+
+    # Unregister the process-scoped display-power source before the
+    # ThreadManager (its Linux listener lane) shuts down.
+    if exit_app:
+        retire_display_power(engine)
 
     # Shutdown ProcessSupervisor and all workers
     if exit_app and engine._process_supervisor:
@@ -642,12 +658,7 @@ def cleanup(engine: ScreensaverEngine) -> None:
         teardown_display_runtime(engine, reason="engine_cleanup")
         # Unregister the process-scoped display-power source before its
         # ThreadManager (the Linux listener lane) shuts down.
-        display_power = getattr(engine, "_display_power", None)
-        if display_power is not None:
-            try:
-                display_power.retire()
-            except Exception as e:
-                logger.warning("Display power authority retirement failed: %s", e, exc_info=True)
+        retire_display_power(engine)
         # Cleanup thread manager
         if engine.thread_manager:
             try:

@@ -1003,8 +1003,9 @@ class ScreensaverEngine(QObject):
 
         Off stops the rotation schedule (nothing new is admitted to a dark panel);
         DisplayManager then snaps any in-flight transition to its destination,
-        suspends transition frames and parks the Visualizer. On re-applies the
-        manager first and restarts rotation from a full interval: a fresh hold,
+        suspends transition frames and parks the Visualizer, and the shared clock
+        ticker stops. On re-applies the manager first, ticks the clock at once and
+        restarts rotation from a full interval: a fresh hold,
         never a catch-up. A stale edge (an older generation reaching here after
         a newer one) is ignored.
         """
