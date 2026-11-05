@@ -68,11 +68,13 @@ _WORKSPACES = (
               help="The world around the ribbons: mist, the reflective floor, lens and lighting, and the camera."),
 )
 _CAMERA_FIELDS = ("turn", "tilt", "scene_scale", "scene_pan_x", "scene_pan_y")
-# Headline controls lead their group (operator, 5 Nov): mist density and floor look are tuned constantly;
-# the reaction mode is the first decision in Reactivity.
+# Headline controls lead their group (operator, 5 Nov): mist density and the floor controls tuned most
+# (surface, far surface, reflection, its contrast / ceiling / colour) come first; the reaction mode is the
+# first decision in Reactivity. Everything else keeps registry order.
+HEADLINE_FLOOR = ("floor_brightness", "floor_light_far", "floor_reflection", "floor_contrast",
+                  "floor_glow_limit", "floor_colour")
 _PRIORITY = {PREFIX + key: rank for rank, key in enumerate((
-    "reaction_mode", "bend", "pulse_direction", "mist_enabled", "fog_density", "floor_brightness",
-    "floor_reflection", "floor_tint"))}
+    "reaction_mode", "bend", "pulse_direction", "mist_enabled", "fog_density") + HEADLINE_FLOOR)}
 # Material starting points (mock: Sheen / Glass / Satin / Crystal): scale the OPENING material values
 # (both quiet and peak endpoints), clamped by the canonical ranges. Applying one replaces the previous
 # one (always from the opening values) and is a single undoable edit; "Original" restores them.
@@ -261,13 +263,13 @@ def build_schema() -> StudioSchema:
                                                             ("clearance", PREFIX + "fog_clearance"),
                                                             ("softness", PREFIX + "fog_softness"),
                                                             ("enabled", PREFIX + "mist_enabled")),
-                                        "Atmosphere cross-section"),
+                                        "Atmosphere", rendered=True),
                                CardSpec("Floor", "reflection", (("brightness", PREFIX + "floor_brightness"),
                                                                 ("reflection", PREFIX + "floor_reflection"),
                                                                 ("wetness", PREFIX + "floor_wetness"),
                                                                 ("streak", PREFIX + "floor_streak"),
                                                                 ("tint", PREFIX + "floor_tint")),
-                                        "Floor & reflections"),
+                                        "Floor & reflections", rendered=True),
                                CardSpec("Lens & Quality", "exposure", (("exposure", PREFIX + "exposure"),
                                                                        ("bloom", PREFIX + "bloom")),
                                         "Lighting"),
@@ -654,6 +656,15 @@ class WaveformStudioEvaluator:
             raise RuntimeError("Waveform history is not primed at this time; extend the fixture pre-roll")
         return build_frame(configuration, self._last, values)
 
+    def restyle(self, values: Mapping[str, Any]):
+        """The instant last evaluated, re-presented under other ``values`` without stepping or replaying:
+        the production scene construction (``CompiledWaveformSettings.scene``) applied to the same logical
+        snapshot. Truthful for render-side controls (world, material, colour); None before any evaluation."""
+        from widgets.spotify_visualizer.waveform_ribbon_parameters import CompiledWaveformSettings
+        if self._last is None or not self._last.ready:
+            return None
+        return build_frame(CompiledWaveformSettings(_logical_values(values)), self._last, values)
+
     def timeline(self, samples: int = 240) -> list[float]:
         """The selected input's energy over its duration (0..1), for the transport's scrub track."""
         from core.waveform_ribbon_dynamics import ENERGY_WEIGHTS
@@ -932,21 +943,93 @@ class WaveformStudioAdapter(StudioModeAdapter):
     # re-publishes that instant with its values (the live-edit path, no replay).
 
     def release(self) -> None:
-        evaluator, self._preview_evaluator = getattr(self, "_preview_evaluator", None), None
-        if evaluator is not None:
+        for evaluator in self.__dict__.pop("_preview_evaluators", {}).values():
             evaluator.release()
 
-    def preset_preview(self, group, preset_id, values):
-        from widgets.spotify_visualizer.presentation_geometry import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
-        if getattr(self, "_preview_evaluator", None) is None:
-            self._preview_evaluator = WaveformStudioEvaluator()
-            self._preview_evaluator.select("mid")
-        evaluator = self._preview_evaluator
+    def _preview_frame(self, values):
+        """One instant of the Mid reference under ``values``. A private evaluator per scene structure (the
+        ribbon count) replays once; later requests re-publish that instant with their values (the live-edit
+        path, no replay). Structure changes cannot be re-published, so they get their own evaluator."""
+        evaluators = self.__dict__.setdefault("_preview_evaluators", {})
+        structure = int(values.get(PREFIX + "count", 0))
+        evaluator = evaluators.get(structure)
+        if evaluator is None:
+            if len(evaluators) >= 3:                     # tiles + cards + one recent count
+                evaluators.pop(next(iter(evaluators))).release()
+            evaluator = evaluators[structure] = WaveformStudioEvaluator()
+            evaluator.select("mid")
+        return evaluator.evaluate(min(3.0, evaluator.fixture.duration), dict(values), exact=False)
+
+    # Tile close-up: the selected ribbon alone, nothing around it (no particles, strands, mist or floor);
+    # the lens factor frames one crest and one trough of it in a 3:2 tile (measured, 5 Nov).
+    TILE_LENS = 1.15
+    _TILE_OFF = {"sparks_enabled": False, "strands_enabled": False, "mist_enabled": False}
+    _TILE_ZERO = ("floor_brightness", "floor_reflection")
+
+    def tile_values(self, values, object_id):
         view = dict(values)
-        instant = min(3.0, evaluator.fixture.duration)
-        frame = evaluator.evaluate(instant, view, exact=False)
+        cards = list(view.get(PREFIX + "ribbons") or ())
+        try:
+            index = int(str(object_id).replace("ribbon", ""))
+        except ValueError:
+            index = 0
+        if cards:
+            # The card set is always complete; the selected card moves first and only the first is shown.
+            index = min(max(index, 0), len(cards) - 1)
+            view[PREFIX + "ribbons"] = [cards[index]] + cards[:index] + cards[index + 1:]
+            view[PREFIX + "count"] = 1
+        for key, value in self._TILE_OFF.items():
+            if PREFIX + key in view:
+                view[PREFIX + key] = value
+        for key in self._TILE_ZERO:
+            if PREFIX + key in view:
+                view[PREFIX + key] = [0.0, 0.0]
+        if PREFIX + "camera_fov" in view:
+            spec = require_mode_settings(MODE).control(PREFIX + "camera_fov")
+            view[PREFIX + "camera_fov"] = min(float(spec.high), max(float(spec.low),
+                                              float(view[PREFIX + "camera_fov"]) * self.TILE_LENS))
+        return view
+
+    def preset_preview(self, group, preset_id, values, object_id=""):
+        from ui.studio.adapter import StudioPreview
+        from widgets.spotify_visualizer.presentation_geometry import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
         base_h = float(CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1])
-        return frame, (base_h * 1.5, base_h), ()
+        frame = self._preview_frame(self.tile_values(values, object_id or "ribbon0"))
+        return StudioPreview(frame, (base_h * 1.5, base_h), (), (96.0, 64.0))
+
+    # Rendered world cards: the live framing, the group's Quiet/Peak pairs held on one lane.
+    # Mist: the ribbons dimmed so the atmosphere's density, light and tint read; Floor: the floor band.
+    MIST_RIBBON_LIGHT = 0.1
+    CARD_CROPS = {"Mist": (0.0, 0.22, 1.0, 0.6), "Floor": (0.0, 0.52, 1.0, 0.48)}
+
+    def card_preview(self, group, values, endpoint, framing, evaluator=None):
+        from ui.studio.adapter import StudioPreview
+        if group not in self.CARD_CROPS:
+            return None
+        view = dict(values)
+        endpoint = 1 if int(endpoint) else 0
+        for prop in self.schema().properties:
+            if prop.group == group and prop.instrument == QUIET_PEAK and len(prop.path) == 1 and prop.path[0] in view:
+                pair = list(view[prop.path[0]])
+                view[prop.path[0]] = [pair[endpoint], pair[endpoint]]
+        for key in ("sparks_enabled", "strands_enabled"):       # the card is about the world, not the emitters
+            if PREFIX + key in view:
+                view[PREFIX + key] = False
+        if group == "Mist":
+            # Dim the ribbons through their material light (the scene's own levers) so the atmosphere reads.
+            for key in list(view):
+                field = key[len(PREFIX):] if key.startswith(PREFIX + "material_") else ""
+                if field and ("light" in field or "glow" in field):
+                    view[key] = [float(v) * self.MIST_RIBBON_LIGHT for v in view[key]]
+        extent = framing.extent if framing is not None else None
+        style = framing.style if framing is not None else ()
+        aspect = (extent[0] / extent[1]) if extent else 1.5
+        logical = (220.0, round(220.0 / aspect, 1))
+        # The scene on screen (the Studio evaluator's current instant), re-presented with these values.
+        frame = evaluator.restyle(view) if evaluator is not None and hasattr(evaluator, "restyle") else None
+        if frame is None:
+            return None
+        return StudioPreview(frame, extent, style, logical, self.CARD_CROPS[group])
 
     def scene_handles(self, frame, values, object_id, size, extent, style):
         return ribbon_handles(frame, values, object_id, size, extent, style)

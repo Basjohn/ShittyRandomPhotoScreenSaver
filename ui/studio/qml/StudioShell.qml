@@ -753,7 +753,7 @@ Rectangle {
             var id = spec.roles ? spec.roles[role] : undefined
             var x = id !== undefined ? studio.values[id] : undefined
             if (x === undefined) return 0
-            if (typeof x === "object" && x !== null && x.length !== undefined) return Number(x[idx === undefined ? 1 : idx])
+            if (typeof x === "object" && x !== null && x.length !== undefined) return Number(x[idx === undefined ? card.endpoint : idx])
             return x
         }
         function paletteRgb(t) {
@@ -781,13 +781,45 @@ Rectangle {
             return out.join(" · ")
         }
         function hex(role) { var id = spec.roles ? spec.roles[role] : undefined; return id ? (studio.values[id] || "#808080") : "#808080" }
-        implicitHeight: 128
+        // A rendered card (the mode's renderer, once per commit) replaces the diagram once it arrives.
+        readonly property string render: card.spec.rendered ? (studio.previews["card/" + card.spec.group] || "") : ""
+        readonly property int endpoint: card.spec.rendered ? (studio.cardEndpoints[card.spec.group] || 0) : 1
+        implicitHeight: card.spec.rendered ? Math.round(cardImage.height) + 52 : 128
         radius: 6
         color: shell.cViewport
         border.width: 1; border.color: shell.cOutlineSoft
         Text { x: 8; y: 6; text: card.spec.title || ""; color: shell.cDim; font.pixelSize: shell.fontBase - 2 }
+        Row {
+            visible: card.spec.rendered === true
+            anchors.right: parent.right; anchors.rightMargin: 6; y: 3
+            spacing: 4
+            Repeater {
+                model: ["Quiet", "Peak"]
+                delegate: Chip { text: modelData; selected: card.endpoint === index; implicitHeight: 20
+                                 onPicked: studio.setCardEndpoint(card.spec.group, index) }
+            }
+        }
+        Image {
+            id: cardImage
+            objectName: "cardRender"
+            visible: card.render !== ""
+            x: 6; y: 28; width: card.width - 12
+            // The render keeps its own shape (no crop of the crop): height follows the image's aspect.
+            height: implicitWidth > 0 ? width * implicitHeight / implicitWidth : Math.round(width * 0.42)
+            source: card.render
+            fillMode: Image.PreserveAspectFit
+            smooth: true; mipmap: true
+        }
+        HintText {
+            visible: card.render !== ""
+            x: 8; anchors.bottom: parent.bottom; anchors.bottomMargin: 4; width: parent.width - 16
+            text: (card.endpoint ? "Peak" : "Quiet") + " lane · rendered by the visualizer · "
+                  + (card.spec.kind === "falloff" ? card.caption(["density", "height", "clearance"])
+                                                  : card.caption(["brightness", "reflection"]))
+        }
         Canvas {
             id: diagram
+            visible: card.render === ""
             anchors.fill: parent; anchors.margins: 8; anchors.topMargin: 22
             onPaint: {
                 var ctx = getContext("2d"); ctx.reset()

@@ -233,6 +233,7 @@ class StudioBridge(QObject):
         self._rebuild_inspector()
         self.objectsChanged.emit()
         self._c.refresh_handles()
+        self._c.refresh_preset_previews()
 
     # --------------------------------------------------------- inspector
     def _rebuild_inspector(self) -> None:
@@ -277,6 +278,7 @@ class StudioBridge(QObject):
                                               "label": lifecycle.label}
                                              if lifecycle is not None else {}),
                                "card": ({"kind": card.kind, "title": card.title, "roles": dict(card.roles),
+                                         "rendered": card.rendered, "group": card.group,
                                          "labels": {role: self._schema.find(pid).label for role, pid in card.roles}}
                                         if card is not None else {}),
                                "group": group})
@@ -372,6 +374,40 @@ class StudioBridge(QObject):
         return getattr(self, "_preview_urls", {})
 
     presetPreviews = Property("QVariantMap", _previews, notify=previewsChanged)
+    previews = Property("QVariantMap", _previews, notify=previewsChanged)
+
+    cardEndpointsChanged = Signal()
+
+    def card_endpoint(self, group: str) -> int:
+        """Which Quiet/Peak lane a rendered card shows: the lane last edited in its group (Peak at first)."""
+        return int(getattr(self, "_card_endpoints", {}).get(group, 1))
+
+    def _card_endpoints_map(self) -> dict:
+        return {card.group: self.card_endpoint(card.group) for card in self._schema.cards}
+
+    cardEndpoints = Property("QVariantMap", _card_endpoints_map, notify=cardEndpointsChanged)
+
+    @Slot(str, int)
+    def setCardEndpoint(self, group: str, endpoint: int) -> None:
+        endpoints = dict(getattr(self, "_card_endpoints", {}))
+        if endpoints.get(group) == int(endpoint):
+            return
+        endpoints[group] = int(endpoint)
+        self._card_endpoints = endpoints
+        self.cardEndpointsChanged.emit()
+        self._c.refresh_preset_previews()
+
+    def note_endpoint_edit(self, property_id: str, endpoint: int) -> None:
+        """An edit on one lane of a Quiet/Peak value: that group's rendered card follows the lane."""
+        prop = self._schema.find(property_id)
+        if prop.instrument != QUIET_PEAK:
+            return
+        if any(card.group == prop.group and card.rendered for card in self._schema.cards):
+            if self.card_endpoint(prop.group) != int(endpoint):
+                endpoints = dict(getattr(self, "_card_endpoints", {}))
+                endpoints[prop.group] = int(endpoint)
+                self._card_endpoints = endpoints
+                self.cardEndpointsChanged.emit()
 
     def set_preview(self, key: str, url: str) -> None:
         urls = dict(self._previews())
@@ -432,6 +468,8 @@ class StudioBridge(QObject):
 
     @Slot(str, int, float)
     def previewValue(self, property_id: str, endpoint: int, value: float) -> None:
+        self.note_endpoint_edit(property_id, endpoint)
+
         def run():
             prop, path = self._prop_path(property_id, endpoint)
             if prop.view_pose:
@@ -476,6 +514,8 @@ class StudioBridge(QObject):
 
     @Slot(str, int, "QVariant")
     def commitValue(self, property_id: str, endpoint: int, value: Any) -> None:
+        self.note_endpoint_edit(property_id, endpoint)
+
         def run():
             prop, path = self._prop_path(property_id, endpoint)
             if prop.view_pose:
@@ -488,6 +528,8 @@ class StudioBridge(QObject):
     @Slot(str, int, str)
     def commitText(self, property_id: str, endpoint: int, text: str) -> None:
         """Exact numeric/hex entry; out-of-range numbers are clamped and the clamp is reported."""
+        self.note_endpoint_edit(property_id, endpoint)
+
         def run():
             prop, path = self._prop_path(property_id, endpoint)
             if prop.instrument == COLOUR:
@@ -830,6 +872,7 @@ class StudioController(QObject):
         self._preview_jobs: list = []
         self._preview_sent: dict = {}
         self._preview_done: dict = {}
+        self._preview_crops: dict = {}
         self._auto_clip: str | None = None
 
     # ---------------------------------------------------------------- open
@@ -950,8 +993,8 @@ class StudioController(QObject):
 
     # ------------------------------------------------------- preset tile previews
     def refresh_preset_previews(self) -> None:
-        """Queue tile previews for the starting points on screen whose inputs changed (commits only).
-        Served one per frame by ``on_frame``; nothing runs while idle."""
+        """Queue the small renders on screen whose inputs changed (commits only): starting-point tiles and
+        rendered cards of the current workspace. Served one per frame by ``on_frame``; nothing runs at rest."""
         if self.bridge is None or self.viewport is None or not self.capabilities.viewport:
             return
         workspace = next((w for w in self.session.schema.workspaces if w.id == self.bridge.workspace), None)
@@ -959,23 +1002,37 @@ class StudioController(QObject):
             return
         import hashlib
         from ui.studio.session import write_path
-        values = self.session.values
+        values = self.evaluation_values()
         baseline = self.session.baseline_values
-        queued = False
+        selected = self.bridge.selectedObject
+        framing = next((f for f in self.framings if f.id == self.bridge.framingId), None)
+        jobs = []
         for group, presets in self.session.schema.group_presets:
             if group not in workspace.groups:
                 continue
             for preset in presets:
-                key = f"{group}/{preset.id}"
                 variant = dict(values)
                 for path, value in self.adapter.apply_preset(group, preset.id, baseline, values).items():
                     variant[path[0]] = write_path(variant[path[0]], tuple(path[1:]), value)
-                signature = hashlib.sha1(repr(sorted(variant.items())).encode()).hexdigest()
-                if self._preview_done.get(key) == signature or self._preview_sent.get(key) == signature:
-                    continue
-                self._preview_jobs = [job for job in self._preview_jobs if job[0] != key]
-                self._preview_jobs.append((key, group, preset.id, signature, variant))
-                queued = True
+                jobs.append((f"{group}/{preset.id}", (selected, variant),
+                             lambda g=group, p=preset.id, v=variant: self.adapter.preset_preview(g, p, v, selected)))
+        for card in self.session.schema.cards:
+            if not card.rendered or card.group not in workspace.groups:
+                continue
+            endpoint = self.bridge.card_endpoint(card.group)
+            instant = (self.evaluator.fixture.id, round(float(self.transport.time), 4))
+            jobs.append((f"card/{card.group}", (endpoint, framing, instant, values),
+                         lambda g=card.group, e=endpoint: self.adapter.card_preview(g, values, e, framing,
+                                                                                     self.evaluator)))
+        queued = False
+        for key, inputs, compute in jobs:
+            signature = hashlib.sha1(repr(inputs if not isinstance(inputs[-1], dict)
+                                          else inputs[:-1] + (sorted(inputs[-1].items()),)).encode()).hexdigest()
+            if self._preview_done.get(key) == signature or self._preview_sent.get(key) == signature:
+                continue
+            self._preview_jobs = [job for job in self._preview_jobs if job[0] != key]
+            self._preview_jobs.append((key, signature, compute))
+            queued = True
         if queued and self.surface is not None:
             self.surface.request_frame()
 
@@ -989,25 +1046,30 @@ class StudioController(QObject):
         if any(key not in self._preview_done or self._preview_done[key] != sig
                for key, sig in self._preview_sent.items()):
             return                                    # one in flight at a time
-        key, group, preset_id, signature, variant = self._preview_jobs.pop(0)
+        key, signature, compute = self._preview_jobs.pop(0)
         try:
-            spec = self.adapter.preset_preview(group, preset_id, variant)
+            spec = compute()
         except Exception:
-            logger.exception("[STUDIO] Preset preview evaluation failed")
+            logger.exception("[STUDIO] Preview evaluation failed")
             spec = None
         if spec is None:
             self._preview_done[key] = signature
             return
-        frame, extent, style = spec
         self._preview_sent[key] = signature
-        logical = (96.0, 64.0)
-        self.viewport.request_snapshot(f"{key}|{signature}", frame, (192, 128), logical, extent, style)
+        self._preview_crops[key] = tuple(spec.crop)
+        logical = (float(spec.logical[0]), float(spec.logical[1]))
+        size = (int(round(logical[0] * 2)), int(round(logical[1] * 2)))
+        self.viewport.request_snapshot(f"{key}|{signature}", spec.frame, size, logical, spec.extent, spec.style)
 
     def _on_snapshot(self, key: str, width: int, height: int, pixels: bytes) -> None:
         from PySide6.QtCore import QBuffer, QByteArray, QIODevice
         from PySide6.QtGui import QImage
         name, _sep, signature = key.partition("|")
         image = QImage(pixels, width, height, width * 4, QImage.Format.Format_RGBA8888).flipped(Qt.Orientation.Vertical)
+        cx, cy, cw, ch = self._preview_crops.get(name, (0.0, 0.0, 1.0, 1.0))
+        if (cx, cy, cw, ch) != (0.0, 0.0, 1.0, 1.0):
+            image = image.copy(int(round(cx * width)), int(round(cy * height)),
+                               max(1, int(round(cw * width))), max(1, int(round(ch * height))))
         data = QByteArray()
         buffer = QBuffer(data)
         buffer.open(QIODevice.OpenModeFlag.WriteOnly)
@@ -1118,6 +1180,7 @@ class StudioController(QObject):
         if self.bridge is not None:
             self.bridge.set_framing(framing.id)
         self._invalidate()
+        self.refresh_preset_previews()            # rendered cards use the live framing
 
     def _choose_default_source(self) -> None:
         """Recorded music when the mode has a clip (analysed in the background), else its default input."""
@@ -1295,6 +1358,7 @@ class StudioController(QObject):
         allows it; every other view-pose value stays a preview view."""
         if not self._pose:
             return
+        self.refresh_preset_previews()            # rendered cards follow the finished view
         nav = self.navigation()
         orbit_keys = set(nav.saved_with_camera_policy) if nav is not None else set()
         allowed = getattr(self.store, "camera_commit_allowed", lambda: False)()
@@ -1315,6 +1379,7 @@ class StudioController(QObject):
         if self.bridge is not None:
             self.bridge.on_session_changed("pose")
         self._invalidate()
+        self.refresh_preset_previews()
 
     # ---------------------------------------------------------------- close
     def close(self) -> None:
