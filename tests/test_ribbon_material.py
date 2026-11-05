@@ -218,7 +218,7 @@ def test_both_boundary_filaments_keep_their_light_on_a_curved_quiet_sheet(scene)
     for i in range(6):
         ring.append(i,[(i-2.5,0.,-10.)],.6,.6,.2)
     material=RibbonMaterial(cross_curve=.35,strand_light=0.,fill_light=0.,rim_glow_light=0.,
-                            glint_light=0.,rim_light=1.,rim_white=1.)
+                            glint_light=0.,rim_light=1.,rim_white=1.,lattice_light=0.)
     scene.target.bind(clear=(0.,0.,0.,0.))
     gl.glDisable(gl.GL_DEPTH_TEST)
     scene.primitive.draw(ring.packet(),MVP,shading='light',view=VIEW,material=material,sweep_axis=(1.,0.,0.))

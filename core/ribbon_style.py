@@ -87,6 +87,14 @@ class RibbonMaterial:
     glow: float = 1.                # share of the sheet's light sent to the bloom (local glow, not the mist's)
     hot: float = 0.                 # white-hot cores on the brightest strands (0..1), the rest keep their colour
     glint_reactivity: float = 0.    # additional local highlight admission from the packet's current musical emission
+    # Lattice: two diagonal families of thin lines woven through the sheet in its own surface coordinates (the
+    # warped across coordinate and the path phase), so the net travels and twists with the cloth.
+    lattice_cells: float = 3.       # lattice spacings across the width (each family)
+    lattice_along: float = 5.       # lattice spacings per strand-phase unit; whole, so phase rebases never shift it
+    lattice_half_width: float = .045  # of one lattice spacing
+    lattice_light: float = .25      # relative to the sheet's emission; 0 is off
+    lattice_reactivity: float = 2.5  # extra lattice light from the knot's musical emission above its quiet level
+    lattice_glow: float = .35       # share of the lattice's light sent to the bloom (keeps peaks from washing white)
 
     def __post_init__(self):
         values = astuple(self)
@@ -99,6 +107,11 @@ class RibbonMaterial:
             raise ValueError('Ribbon strands need 1..256 lines and positive half-widths up to half a spacing')
         if self.body_alpha > .95 or self.path_cap < 1 or self.min_pixels > 8 or self.cross_curve > 1:
             raise ValueError('Ribbon body alpha must stay below 0.95, path cap at least 1, minimum width at most 8 px')
+        if (not 1 <= self.lattice_cells <= 128 or not 1 <= self.lattice_along <= 64
+                or float(self.lattice_along) != int(self.lattice_along) or not 0 < self.lattice_half_width <= .5
+                or self.lattice_glow > 1):
+            raise ValueError('Ribbon lattice needs 1..128 spacings across, a whole 1..64 along, a positive half-width '
+                             'up to half a spacing and a 0..1 glow share')
 
     def uniforms(self):
         return dict(uStrands=(self.strands, self.strand_half_width, self.strand_light, self.strand_warp),
@@ -107,5 +120,7 @@ class RibbonMaterial:
                     uFill=(self.fill_light, self.fill_centre, self.rim_glow_width, self.rim_glow_light),
                     uGlint=(self.glint_density, self.glint_chance, self.glint_light, self.glint_radius),
                     uTone=(self.strand_white, self.rim_white, self.strand_jitter, self.glint_min_pixels),
-                    uGlow=(self.glow, self.hot,self.glint_reactivity))
+                    uGlow=(self.glow, self.hot,self.glint_reactivity),
+                    uLattice=(self.lattice_cells, self.lattice_along, self.lattice_half_width, self.lattice_light),
+                    uLatticeTone=(self.lattice_reactivity, self.lattice_glow))
 
