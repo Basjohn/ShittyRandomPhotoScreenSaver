@@ -108,7 +108,7 @@ tests/test_s_hotkey_workflow.py tests/test_visualizer_live_check.py tests/test_c
 tests/test_scene3d_spheres.py tests/test_scene3d_spheres_mirrors.py tests/test_extruded_bubble_renderer.py
 tests/test_extruded_bubble_world_gpu.py tests/test_qt611_shader_admission.py tests/test_combo_popup_single_outline.py
 tests/test_theme_typography.py tests/test_neon_lake_camera_editor.py tests/test_account_setup_controllers.py
-tests/test_reddit_helper_task_harness.py tests/test_waveform_studio_lifecycle.py
+tests/test_reddit_helper_task_harness.py tests/test_waveform_studio_lifecycle.py tests/test_gmail_backend_smoke.py
 ```
 
 Windows visual checks for the shared fixes: Extruded Bubble presets look unchanged (vertex shaders only lost an
