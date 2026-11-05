@@ -55,6 +55,9 @@ def main(argv: list[str]) -> int:
         if not required.exists():
             return _fail(f"install.sh did not produce {required}")
 
+    # Frozen release builds log nothing by default; the product's own sidecar switch enables it.
+    (installed.parent / "srpss.logging.cfg").write_text("1", encoding="utf-8")
+
     xvfb = lh.start_xvfb(display)
     try:
         lh.copy_repo_images(work / "images")
