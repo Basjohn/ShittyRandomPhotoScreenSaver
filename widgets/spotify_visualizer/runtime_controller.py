@@ -55,6 +55,9 @@ class VisualizerRuntimeController:
     belong here.
     """
 
+    # Display-power park request default; __init__ / set_logical_parked own the instance value.
+    _logical_parked = False
+
     def __init__(
         self,
         *,
@@ -102,6 +105,7 @@ class VisualizerRuntimeController:
         self._logical_mailbox = LatestStateMailbox()
         self._logical_runtime: VisualizerLogicalRuntime | None = None
         self._logical_present_pending = False
+        self._logical_parked = False
         self._logical_mode_states: dict[str, Any] = {}
         # Viewport extent has two distinct owners that must not fight over one
         # scalar: the ordinary committed presentation extent (set by the render
@@ -614,6 +618,12 @@ class VisualizerRuntimeController:
                 self._logical_mode_states[canonical] = state
             return state
 
+    def logical_mode_states_snapshot(self) -> tuple[Any, ...]:
+        """The live plain mode states (display-power clock rebase walks these)."""
+
+        with self._lock:
+            return tuple(self._logical_mode_states.values())
+
     def peek_logical_mode_state(self, mode_id: object) -> Any:
         """Inspect an already-active plain mode state without constructing it."""
 
@@ -759,10 +769,13 @@ class VisualizerRuntimeController:
                     return runtime
                 self._logical_runtime = None
 
+            # A runtime started while the displays are off (a mode activation or
+            # restart that lands then) starts parked instead of stepping all night.
             runtime = VisualizerLogicalRuntime(
                 step=step,
                 interval_s=interval_s,
                 generation=self._runtime_generation,
+                parked=self._logical_parked,
             )
             # Publish the owner before the thread starts. A fast first step can
             # then observe that it is the thread-owned path and request the one
@@ -774,6 +787,29 @@ class VisualizerRuntimeController:
                 self._logical_runtime = None
                 raise
             return runtime
+
+    @property
+    def logical_parked(self) -> bool:
+        return self._logical_parked
+
+    def set_logical_parked(self, parked: bool) -> bool:
+        """Park or resume the sole logical runtime for display power.
+
+        The request is retained, so a runtime started later honours it. Parking
+        returns only once the thread holds no step (False if it did not get
+        there in time); resuming never waits.
+        """
+
+        parked = bool(parked)
+        with self._lock:
+            self._logical_parked = parked
+            runtime = self._logical_runtime
+        if runtime is None:
+            return True
+        if parked:
+            return bool(runtime.park())
+        runtime.unpark()
+        return True
 
     def stop_logical_runtime(self) -> bool:
         """Close and join logical ownership without orphaning a live thread."""
@@ -813,6 +849,7 @@ class VisualizerRuntimeController:
             "enabled": self._enabled,
             "playing": self._playing,
             "logical_running": bool(runtime and runtime.is_running()),
+            "logical_parked": self._logical_parked,
             "logical_revision": self._logical_mailbox.revision,
             "render_admission_open": self._render_bridge.is_open,
         }

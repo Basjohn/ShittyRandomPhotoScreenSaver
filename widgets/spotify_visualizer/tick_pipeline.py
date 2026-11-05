@@ -101,6 +101,31 @@ def arm_reentry_fresh_frame_fence(state: Any, engine: Any) -> bool:
     return True
 
 
+def rebase_logical_clocks_after_park(state: Any, mode_states: tuple[Any, ...] = ()) -> int:
+    """Forget the last-step timestamps of a parked runtime so resume integrates no gap.
+
+    Display power parks the logical thread for minutes or hours. Every
+    integrator measures dt from its own last-step timestamp; left alone the
+    first resumed step would integrate the whole parked interval (clamped to
+    0.1 s by most modes, unclamped for a few phases). Resetting each baseline to
+    its "no previous step" value gives the first resumed step the same dt a
+    first step after start gets (0, or the nominal tick), while every piece of
+    warm simulation state is kept. Call only while the runtime is parked (the
+    GUI thread then has exclusive access). Returns how many mode states rebased.
+    """
+
+    state._last_update_ts = -1.0
+    state._bubble_last_tick_ts = 0.0
+    state._perf_tick_last_ts = None
+    rebased = 0
+    for mode_state in mode_states:
+        rebase = getattr(mode_state, "rebase_clock", None)
+        if callable(rebase):
+            rebase()
+            rebased += 1
+    return rebased
+
+
 def _mode_requires_fresh_waveform(mode_str: str) -> bool:
     """Return True when a mode should wait for fresh waveform data after reset."""
     return str(mode_str or "").lower() == "oscilloscope"

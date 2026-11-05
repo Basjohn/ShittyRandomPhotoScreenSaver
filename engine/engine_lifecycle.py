@@ -640,6 +640,14 @@ def cleanup(engine: ScreensaverEngine) -> None:
 
         # Clean up a residual display stack even if the engine was already stopped.
         teardown_display_runtime(engine, reason="engine_cleanup")
+        # Unregister the process-scoped display-power source before its
+        # ThreadManager (the Linux listener lane) shuts down.
+        display_power = getattr(engine, "_display_power", None)
+        if display_power is not None:
+            try:
+                display_power.retire()
+            except Exception as e:
+                logger.warning("Display power authority retirement failed: %s", e, exc_info=True)
         # Cleanup thread manager
         if engine.thread_manager:
             try:

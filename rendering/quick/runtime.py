@@ -404,6 +404,25 @@ class QuickDisplayRuntime(QObject):
     def quiesce_for_runtime_pause(self) -> None:
         self.hide()
 
+    def set_display_power(self, on: bool) -> bool:
+        """Console displays off/on (``core.display_power``): stop or allow transition frames.
+
+        Off snaps an in-flight transition to its authored destination once (the
+        same live cancellation as ``clear_all``), so nothing is left mid-run to
+        jump on resume, then suspends native frame demand. The window stays
+        visible and bound: wake input must still reach it, and visibility and
+        topology keep their own pause owners. Returns whether demand changed.
+        """
+
+        if self._phase in (QuickRuntimePhase.RETIRING, QuickRuntimePhase.RETIRED):
+            return False
+        pacer, transition = self._pacer, self._transition
+        if pacer is None or transition is None:
+            return False
+        if not on:
+            transition.cancel_current(reason="display-power-off")
+        return pacer.set_power_suspended(not on)
+
     def bind_visualizer_render_source(
         self,
         controller: Any,
