@@ -58,9 +58,9 @@
         "shockwave_grid_glow": 0.5,
         "shockwave_grid_horizon": 0.75,
         "shockwave_grid_horizon_color": [
-          70,
-          30,
-          3,
+          110,
+          50,
+          5,
           255
         ],
         "shockwave_grid_horizon_thickness": 1.8,
@@ -183,9 +183,9 @@
           255
         ],
         "shockwave_grid_sky_color": [
-          30,
-          15,
-          3,
+          42,
+          21,
+          4,
           255
         ],
         "shockwave_grid_sky_enabled": true,
@@ -227,7 +227,7 @@
         "shockwave_grid_sun_rays_enabled": true,
         "shockwave_grid_sun_rays_length": 0.65,
         "shockwave_grid_sun_rays_spread": 0.4,
-        "shockwave_grid_sun_rays_strength": 0.3,
+        "shockwave_grid_sun_rays_strength": 0.5,
         "shockwave_grid_sun_size": 0.17,
         "shockwave_grid_sun_x": -0.5701,
         "shockwave_grid_sun_y": 1.0369,
