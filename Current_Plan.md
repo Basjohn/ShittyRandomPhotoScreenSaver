@@ -9,11 +9,16 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 
 **Work strictly in this order:**
 
-1. **§6 Shared 3D architecture**: build reusable 3D primitives, each proven on its own harness.
-2. **§7 Visualizer modes**, one at a time: **Waveform Ribbon → Reactive Liquid / Melt Pool → Concrete Rain →
-   Usu Moonscape**. Each is built lab-first (§7.0).
+1. **§7.1 Waveform Ribbon**: finish acceptance (already built; the only 3D mode in flight).
+2. **§9 Studio for every visualizer** (operator, 5 Nov): replaces the deferred Bubble scalar-to-range/UX sweep.
 3. **§8 Accepted-mode follow-ups**: the brief Bubble performance-parity check is operator-admitted now.
-4. **§9 Studio for every visualizer** (operator, 5 Nov): replaces the deferred Bubble scalar-to-range/UX sweep.
+4. **Graphics-backend decision gate (operator, 5 Nov):** decide between a custom Vulkan backend (FSR <=3 / DLSS <=4.5
+   where applicable) and SMP & Full Display (`Future_Work.md` §2 and §2.5) BEFORE any new 3D work: "if we choose
+   Vulkan the earlier the better for parity". Nothing in §6 or §7.2-7.4 starts until the operator decides; the audit
+   and recommendation that informs it may be prepared earlier.
+5. Then, on the chosen backend: **§6 Shared 3D architecture** (reusable primitives, each proven on its own harness) and
+   **§7 Visualizer modes** one at a time: **Reactive Liquid / Melt Pool → Concrete Rain → Usu Moonscape**, each built
+   lab-first (§7.0).
 
 **Accepted baseline (not live work):** original Bubble, Extruded Bubble, Neon Lake, Oscilloscope,
 Spectrum/Rainbow Ghost, Sphere, source routing, transitions and Foundry launch buttons. Reopen an accepted
@@ -81,7 +86,7 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 - [ ] **Conditional evidence only:** original Bubble tiny-radius judder (R-105) and dual-display reboot recovery
   (R-134–R-145) need new reproductions. The 90 Hz versus 60 Hz investigation stays off limits.
 
-## 6. Shared 3D architecture (one step, before the next mode)
+## 6. Shared 3D architecture (one step, before the next mode; gated on the backend decision, §0 step 4)
 
 The architecture planned for the dropped concepts (volumetric music chamber, audio aurora/ribbon volume, photo
 fracture portal, voxel morph field, holographic depth slices, procedural storm, reactive particle field,
@@ -359,10 +364,6 @@ scalar-to-range audit remains deferred until explicitly reprioritized.
     (up to 110 with draining trails) instead of its authored ~31-68, and the hero loops are per fragment.
 - [ ] **R-170 operator eyes-on:** Bubble on a tall, a wide and the TV card should move and size like the canonical
   card, denser on large cards. Evidence: `Docs/Historical_Bugs/R-170_Bubble_Shape_Dependent_Speed_And_Aspect_Modifiers.md`.
-- [ ] **Operator decision - Bubble density past the renderer capacity:** the shader's 110-hero uniform arrays and
-  per-fragment hero loops cap density growth at 72 live heroes; past that the world zooms (the TV card: 72 heroes at
-  ~1.6x canonical size). Truly area-proportional density on large cards needs an instanced/binned hero renderer with
-  its own native performance evidence. Not started.
 - [ ] **Side defect (found during R-170, not fixed):** `_apply_bubble_collision_response` smooth mode multiplies
   `max_disp *= 0.72` inside the per-bubble loop, so the in-view correction cap compounds down the list (order-dependent).
   Fixing it changes canonical Bubble output, so it needs an explicit BTF behaviour-change decision first.
