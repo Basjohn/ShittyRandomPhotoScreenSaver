@@ -82,6 +82,23 @@ def camera_navigation(mode_id: str, prefix: str) -> StudioNavigation:
                             saved_on_keep=frozenset({prefix + "camera_fov"}))
 
 
+def orbit_navigation(mode_id: str) -> StudioNavigation:
+    """A free-orbit mode's navigation (no lens, dolly or pan of its own): drag orbits the descriptor's declared
+    live view pose (``view_orbit_settings``: turn, tilt), bounded by the registry. The orbit is a live view, saved
+    only when the store's camera policy allows it (otherwise a preview view)."""
+    from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    turn, tilt = get_visualizer_mode_descriptor(mode_id).view_orbit_settings
+    spec = require_mode_settings(mode_id)
+
+    def axis(key, label):
+        control = spec.control(key)
+        return NavAxis(control.key, (float(control.low), float(control.high)), label)
+    orbit_h, orbit_v = axis(turn, "Turn"), axis(tilt, "Tilt")
+    return StudioNavigation(orbit_h=orbit_h, orbit_v=orbit_v,
+                            saved_with_camera_policy=frozenset({orbit_h.key, orbit_v.key}))
+
+
 class QuickModeRenderer:
     """Render-thread adapter around a mode's production Quick renderer (its own scene instance): the frame
     is handed over exactly as the runtime hands it (mode state + resolved presentation + item mapping)."""
@@ -143,4 +160,5 @@ class ContractModeRenderer(QuickModeRenderer):
         return bool(step(self._frame(card, frame))) if callable(step) else True
 
 
-__all__ = ["ContractModeRenderer", "QuickModeRenderer", "camera_navigation", "card_framings", "presentation"]
+__all__ = ["ContractModeRenderer", "QuickModeRenderer", "camera_navigation", "card_framings", "orbit_navigation",
+           "presentation"]

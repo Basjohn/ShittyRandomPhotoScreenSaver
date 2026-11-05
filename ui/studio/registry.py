@@ -51,6 +51,8 @@ register_studio_adapter("extruded_bubble", "Extruded Bubble", "ui.studio.extrude
 register_studio_adapter("bubble", "Bubble", "ui.studio.bubble_adapter:BubbleStudioAdapter")
 register_studio_adapter("sphere", "Sphere", "ui.studio.sphere_adapter:SphereStudioAdapter")
 register_studio_adapter("spectrum", "Spectrum", "ui.studio.spectrum_adapter:SpectrumStudioAdapter")
+register_studio_adapter("extruded_spectrum", "Extruded Spectrum",
+                        "ui.studio.extruded_spectrum_adapter:ExtrudedSpectrumStudioAdapter")
 
 
 __all__ = ["StudioEntry", "create_adapter", "has_studio", "register_studio_adapter", "studio_modes",
