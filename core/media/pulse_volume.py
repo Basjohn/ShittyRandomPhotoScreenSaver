@@ -27,6 +27,7 @@ import threading
 from typing import Callable, Optional
 
 from core.logging.logger import get_logger
+from core.media.sidecar_reader import start_reader, stop_reader
 from core.media.provider_registry import (
     get_provider_process_exe_name_for_source,
     get_provider_process_exe_names,
@@ -94,7 +95,7 @@ class PulseSystemVolumeProbe:
         self._on_volume = on_volume
         self._on_device = on_default_device
         self._process: subprocess.Popen | None = None
-        self._reader: threading.Thread | None = None
+        self._reader = None
         self._state: Optional[tuple[str, float, bool]] = None
         self._lock = threading.Lock()
         self._active = False
@@ -121,8 +122,15 @@ class PulseSystemVolumeProbe:
         with self._lock:
             self._state = state
         self._process, self._active = process, True
-        self._reader = threading.Thread(target=self._read, args=(process,), name="srpss-pactl-subscribe", daemon=True)
-        self._reader.start()
+        try:
+            self._reader = start_reader("pulse_system_volume", f"pulse_system_volume_{id(self):x}",
+                                        lambda: self._read(process))
+        except RuntimeError:
+            logger.warning("[PULSE] system volume subscription has no reader worker", exc_info=True)
+            self._active = False
+            process.terminate()
+            self._process = None
+            return False
         return True
 
     def _read(self, process: subprocess.Popen) -> None:
@@ -191,10 +199,9 @@ class PulseSystemVolumeProbe:
                 process.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 process.kill()
-            if process.stdout is not None:
-                process.stdout.close()
-        if reader is not None:
-            reader.join(timeout=3)
+        stop_reader(reader)
+        if process is not None and process.stdout is not None:
+            process.stdout.close()
 
 
 def _sink_input_details() -> list[tuple[int, str, Optional[float], bool]]:
@@ -295,7 +302,7 @@ class PulseSessionVolumeListener:
         self._bridge = None
         self._index: Optional[int] = None
         self._process: subprocess.Popen | None = None
-        self._reader: threading.Thread | None = None
+        self._reader = None
         self._closed = False
 
     def _require_owner(self) -> None:
@@ -340,9 +347,14 @@ class PulseSessionVolumeListener:
                     if entry[2] is not None:
                         mailbox.push_volume(token, float(entry[2]), bool(entry[3]))
 
-        self._bridge, self._index, self._process = bridge, index, process
-        self._reader = threading.Thread(target=_read, name="srpss-pactl-session", daemon=True)
-        self._reader.start()
+        try:
+            reader = start_reader("pulse_app_volume", f"pulse_app_volume_{id(self):x}", _read)
+        except RuntimeError:
+            logger.warning("[PULSE] app volume subscription has no reader worker", exc_info=True)
+            process.terminate()
+            bridge.close()
+            return False
+        self._bridge, self._index, self._process, self._reader = bridge, index, process, reader
         return True
 
     def _consume(self, event) -> None:
@@ -368,10 +380,9 @@ class PulseSessionVolumeListener:
                 process.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 process.kill()
-            if process.stdout is not None:
-                process.stdout.close()
-        if reader is not None and reader is not threading.current_thread():
-            reader.join(timeout=3)
+        stop_reader(reader)
+        if process is not None and process.stdout is not None:
+            process.stdout.close()
 
     def close(self) -> None:
         self._require_owner()

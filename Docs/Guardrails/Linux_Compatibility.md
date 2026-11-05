@@ -27,6 +27,10 @@ that stay true.
 - Windows-only subsystems live under `core/windows/` (or are clearly named) and
   are never *called* on Linux. Their callers check the platform first.
 
+- Linux backends talk to the system through CLI sidecars (`pactl`, `parec`) or D-Bus, never environment
+  configuration. A sidecar's blocking stdout reader runs on a named ThreadManager worker
+  (`core/media/sidecar_reader.py`); no raw threads, no polling cadence, and stop ends the process first.
+
 ## 3. Unavailable is loud, never a silent fallback
 
 - When a feature has no Linux implementation, its owner reports it once at INFO or
