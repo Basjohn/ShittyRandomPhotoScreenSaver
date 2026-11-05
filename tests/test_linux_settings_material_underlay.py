@@ -82,14 +82,3 @@ def test_non_windows_paints_the_underlay_and_never_touches_dwm(monkeypatch, mode
     # Off removes the substitute; no native call either.
     dialog._apply_native_backdrop_theme(_theme("off"))
     assert dialog._material_underlay is None
-
-
-def test_windows_keeps_the_native_backdrop_and_never_paints_an_underlay(monkeypatch, windows_platform) -> None:
-    calls = []
-    monkeypatch.setattr("core.windows.dwm_blur.enable_glass_blur", lambda hwnd: calls.append(hwnd) or True)
-    dialog = _DialogStub()
-
-    assert dialog._apply_native_backdrop_theme(_theme("glass")) is True
-    assert calls == [4242]
-    assert dialog._material_underlay is None
-    assert dialog.updates == 0

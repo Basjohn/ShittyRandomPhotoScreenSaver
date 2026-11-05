@@ -63,6 +63,12 @@ if not sys.platform.startswith("win"):
 # See the 2026-09-05 reconciliation section in Docs/TestSuite.md.
 collect_ignore: list[str] = []
 
+# Linux-only tests (tests/test_linux_*.py) are neither collected from a directory
+# nor run when named explicitly off Linux (Docs/Guardrails/Linux_Compatibility.md §7).
+from tools.impacted_tests import LINUX_ONLY_TEST_GLOB, runs_on_this_platform  # noqa: E402
+
+collect_ignore_glob: list[str] = [] if sys.platform.startswith("linux") else [LINUX_ONLY_TEST_GLOB]
+
 
 # ---------------------------------------------------------------------------
 # Chunked-suite support
@@ -74,7 +80,12 @@ def pytest_addoption(parser):
     parser.addoption("--total-chunks", type=int, default=None,
                      help="Total number of chunks the suite is split into")
 def pytest_collection_modifyitems(config, items):
-    """Select a deterministic requested chunk."""
+    """Skip Linux-only tests off Linux; select a deterministic requested chunk."""
+
+    linux_only = pytest.mark.skip(reason="Linux-only test (tests/test_linux_*.py)")
+    for item in items:
+        if not runs_on_this_platform(item.path):
+            item.add_marker(linux_only)
 
     chunk = config.getoption("--chunk")
     total = config.getoption("--total-chunks")

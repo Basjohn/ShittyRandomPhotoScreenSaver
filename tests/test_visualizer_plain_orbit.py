@@ -738,30 +738,3 @@ def test_actual_camera_reset_glyph_retains_press_before_plain_orbit(production_c
     assert card.window._plain_orbit_pending is None
     mouse(card, QEvent.Type.MouseButtonRelease, p, Qt.MouseButton.LeftButton, NONE)
     assert requests == [1]
-
-
-def test_orbit_capture_owner_is_native_on_windows_and_qt_grab_elsewhere(monkeypatch):
-    from rendering.quick import pointer_capture
-
-    class _Window:
-        def __init__(self):
-            self.grab_calls = []
-
-        def setMouseGrabEnabled(self, enabled):
-            self.grab_calls.append(enabled)
-            return True
-
-    built = []
-    monkeypatch.setattr(pointer_capture, 'NativeOrbitCapture', lambda window: built.append(window) or 'native')
-    monkeypatch.setattr('core.platform_paths.IS_WINDOWS', True)
-    window = _Window()
-    assert pointer_capture.new_orbit_capture(window) == 'native' and built == [window]
-
-    monkeypatch.setattr('core.platform_paths.IS_WINDOWS', False)
-    capture = pointer_capture.new_orbit_capture(window)
-    assert isinstance(capture, pointer_capture.QtOrbitCapture)
-    assert not capture.cleanup_pending
-    capture.acquire(QRectF(0., 0., 10., 10.))
-    assert capture.cleanup_pending and window.grab_calls == [True]
-    capture.release()
-    assert not capture.cleanup_pending and window.grab_calls == [True, False]

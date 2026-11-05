@@ -44,3 +44,15 @@ def test_build_entry_points_and_workflow_reference_existing_files() -> None:
     assert "linux-build/*" in workflow and "workflow_dispatch" in workflow
     windows = (ROOT / "scripts" / "linux" / "build_from_windows.ps1").read_text(encoding="utf-8")
     assert "linux-build.yml" in windows and "srpss-linux" in workflow and "srpss-linux" in windows
+
+
+def test_linux_only_tests_are_never_selected_or_run_off_linux(monkeypatch) -> None:
+    sys.path.insert(0, str(ROOT))
+    from tools import impacted_tests
+
+    linux_files = [path for path in impacted_tests.all_test_files() if path.name.startswith("test_linux_")]
+    assert ROOT / "tests" / "test_linux_build.py" in linux_files and len(linux_files) >= 5
+    monkeypatch.setattr(impacted_tests.sys, "platform", "win32")
+    assert not impacted_tests.runs_on_this_platform(ROOT / "tests" / "test_linux_build.py")
+    assert impacted_tests.runs_on_this_platform(ROOT / "tests" / "test_platform_selection.py")
+    assert not any(path.name.startswith("test_linux_") for path in impacted_tests.all_test_files())

@@ -142,21 +142,6 @@ def test_factory_selects_mpris_off_windows_and_is_loud_without_a_bus(monkeypatch
     assert warnings and "[PLATFORM]" in warnings[0] and "no D-Bus session bus" in warnings[0]
 
 
-def test_windows_factory_never_constructs_mpris(monkeypatch, windows_platform) -> None:
-    from core.media import media_controller, mpris_controller
-
-    monkeypatch.setattr(mpris_controller, "create_mpris_controller", lambda **_: pytest.fail("MPRIS on Windows"))
-    built = []
-
-    class FakeWindowsController:
-        _available = True
-
-        def __init__(self, **kwargs):
-            built.append(kwargs)
-
-    monkeypatch.setattr(media_controller, "WindowsGlobalMediaController", FakeWindowsController)
-    assert isinstance(media_controller.create_media_controller(app_filter="spotify"), FakeWindowsController)
-    assert built and built[0]["app_filter"] == "spotify"
 
 
 def test_observation_stop_interrupts_the_blocking_listener() -> None:

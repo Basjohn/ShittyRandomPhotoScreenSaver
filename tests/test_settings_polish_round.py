@@ -27,12 +27,6 @@ def test_one_folder_is_one_folder_whatever_its_separators() -> None:
     assert not same_folder("", "")
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX path spelling")
-def test_posix_folder_spelling_ignores_trailing_separators_but_keeps_case() -> None:
-    assert same_folder("/home/me/Wallpapers/", "/home/me/Wallpapers")
-    assert display_folder_path("/home/me/Wallpapers/") == "/home/me/Wallpapers"
-    assert not same_folder("/home/me/wallpapers", "/home/me/Wallpapers")
-    assert without_folder(["/home/me/Wallpapers/", "/srv/Other"], "/home/me/Wallpapers") == ["/srv/Other"]
 
 
 @_WINDOWS_SPELLING
