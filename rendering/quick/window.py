@@ -290,8 +290,8 @@ class QuickDisplayWindow(QQuickWindow):
         return self._plain_orbit_capture is not None
 
     def _new_plain_orbit_capture(self):
-        from .pointer_capture import NativeOrbitCapture
-        return NativeOrbitCapture(self)
+        from .pointer_capture import new_orbit_capture
+        return new_orbit_capture(self)
 
     def _clear_plain_orbit_pending(self):
         self._plain_orbit_pending = None
