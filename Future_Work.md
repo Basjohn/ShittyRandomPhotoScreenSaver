@@ -24,7 +24,8 @@ docs should not encode a cardinality that becomes stale when another effect is r
 
 Decided 5 Nov 2026: `Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md`. SMP & Full Display go next; the
 eventual Vulkan backend is a native render core on Qt Quick's Vulkan RHI (DLSS/FSR via native handles), started on
-measured triggers; spatial upscaling (FSR 1) for Full Display meanwhile; port-readiness rules bind new GPU code.
+measured triggers (never a Python-driven Vulkan port); mixed resolution for soft layers meanwhile (whole-frame
+upscalers rejected); port-readiness rules bind new GPU code.
 
 ## 3. Visual concepts
 

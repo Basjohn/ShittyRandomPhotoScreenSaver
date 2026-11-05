@@ -16,7 +16,11 @@ Cross-links:
 
 ## Retired audit proposals (R-100 and legacy repaint failures)
 
-The September 2026 runtime audit explicitly rejected treating small theoretical CPU savings as permission to weaken the accepted logical freshness, Bubble fidelity, or Qt Quick scheduling authority. Do **not** re-propose, without new measured evidence, forced swap interval 1, arbitrary GIL switch/GC tuning, render-thread priority boosts, visualizer cadence/Update coalescing, speculative per-frame presentation caches, a Python display-refresh timer or `frameSwapped → requestUpdate()` rescue, legacy pending-paint/paint-ack throttles, or restoring the old QWidget/GL overlay repaint machinery. These ideas were tested or rejected for architecture/fidelity reasons, not merely forgotten. Keep diagnostic deep traces opt-in and outside normal frame work. An old repair's **30-second/no-paint** workaround is not current Qt Quick policy.
+The September 2026 runtime audit explicitly rejected treating small theoretical CPU savings as permission to weaken the accepted logical freshness, Bubble fidelity, or Qt Quick scheduling authority. Do **not** re-propose, without new measured evidence, forced swap interval 1, arbitrary GIL switch/GC tuning, render-thread priority boosts, visualizer cadence/Update coalescing, speculative per-frame presentation caches, a Python display-refresh timer or `frameSwapped → requestUpdate()` rescue, legacy pending-paint/paint-ack throttles, or restoring the old QWidget/GL overlay repaint machinery. These ideas were tested or rejected for architecture/fidelity reasons, not merely forgotten. Also rejected (5 Nov 2026,
+`Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md`): whole-frame upscaling of visualizer content (FSR 1 / any
+spatial upscaler softens thin emissive lines and rings on dot grids and 1-px cores; FSR 2-3 / DLSS temporal upscaling and
+frame generation smear particles, OIT sheets, fog and fast music flashes without per-mode masks), and any Python-driven
+Vulkan/D3D port (more GIL-bound API calls per frame than GL). Use mixed resolution for soft layers instead. Keep diagnostic deep traces opt-in and outside normal frame work. An old repair's **30-second/no-paint** workaround is not current Qt Quick policy.
 
 ## 1. Definition of good performance
 
