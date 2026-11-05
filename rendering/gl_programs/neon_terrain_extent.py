@@ -11,11 +11,11 @@ import math
 from collections.abc import Mapping
 
 from rendering.gl_programs.heightfield import (
-    heightfield_basin, heightfield_grid_transform, normalize_heightfield, sample_heightfield,
+    HEIGHTFIELD_MAX_SIZE, heightfield_basin, heightfield_grid_transform, normalize_heightfield, sample_heightfield,
 )
 
 # One Extend step: half the basin's depth further back, a quarter of its width on each side (square cells).
-MAX_GRID_SIZE = 257
+MAX_GRID_SIZE = HEIGHTFIELD_MAX_SIZE
 
 
 def _smoothstep(low: float, high: float, x: float) -> float:
