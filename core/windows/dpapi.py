@@ -137,8 +137,19 @@ def decrypt_user_data(ciphertext: bytes) -> bytes:
 
 
 def save_encrypted(path: Path, data: bytes) -> None:
-    """Encrypt and write *data* to *path*."""
-    path.write_bytes(encrypt_user_data(data))
+    """Encrypt and write *data* to *path*.
+
+    Off Windows the payload is the loud ``plain::`` fallback, so the file is
+    created (and kept) owner-only (0600) instead of inheriting the umask.
+    """
+    payload = encrypt_user_data(data)
+    if os.name == "nt":
+        path.write_bytes(payload)
+    else:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "wb") as handle:
+            os.fchmod(handle.fileno(), 0o600)
+            handle.write(payload)
     logger.debug("[DPAPI] Saved encrypted data to %s", path)
 
 
