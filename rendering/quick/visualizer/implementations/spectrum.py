@@ -181,6 +181,8 @@ class QuickSpectrumRenderer:
         self._last_content_rotation_quarters: int | None = None
         self._last_decor: tuple | None = None
         self._last_decor_inputs: tuple | None = None
+        self._last_decor_parameters: object | None = None
+        self._last_decor_scale: float | None = None
 
     @property
     def has_resources(self) -> bool:
@@ -347,12 +349,21 @@ class QuickSpectrumRenderer:
         gl.glUniform1f(uniforms["u_bar_width_px"], layout.bar_width)
         gl.glUniform1f(uniforms["u_bar_gap_px"], layout.bar_gap)
         gl.glUniform1f(uniforms["u_bar_span_px"], layout.bar_span)
-        # Optional decoration: program state persists, so resolve and upload only when its inputs change (at rest:
-        # one C-level fetch and one tuple comparison). A missing key falls through to the resolver, which names it.
-        try:
-            inputs = (_decor_sources(parameters), presentation.uniform_visual_scale)
-        except KeyError:
-            inputs = None
+        # Optional decoration: program state persists, so resolve and upload only when its inputs change. Each tick
+        # carries a fresh but equal parameter mapping at rest: comparing it whole is one call (the frozen mapping's
+        # entries compare in C); only when something changed are the decoration inputs fetched (one C call, though
+        # each key is a Python lookup) and compared, so an unrelated change does not resolve. A missing key falls
+        # through to the resolver, which names it.
+        visual_scale = presentation.uniform_visual_scale
+        if parameters == self._last_decor_parameters and visual_scale == self._last_decor_scale:
+            inputs = self._last_decor_inputs
+        else:
+            try:
+                inputs = (_decor_sources(parameters), visual_scale)
+            except KeyError:
+                inputs = None
+            self._last_decor_parameters = parameters if inputs is not None else None
+            self._last_decor_scale = visual_scale
         if inputs is None or inputs != self._last_decor_inputs:
             decor = resolve_spectrum_decor_uniforms(
                 parameters, presentation.uniform_visual_scale,
@@ -382,6 +393,8 @@ class QuickSpectrumRenderer:
         self._last_content_rotation_quarters = None
         self._last_decor = None
         self._last_decor_inputs = None
+        self._last_decor_parameters = None
+        self._last_decor_scale = None
         self._uniforms.clear()
 
     def _initialize(self) -> None:
