@@ -1011,8 +1011,10 @@ void main() {
         // Outer corona around the sphere silhouette. The Moon also gets a very
         // small same-colour lift just inside the illuminated rim, so the glow
         // reads as originating from the body rather than a detached tube.
-        float halo=smoothstep(0.965,1.015,normalizedAngle)
-                   *exp(-pow(max(0.0,normalizedAngle-1.005)/0.115,2.0));
+        // A soft corona hugging the limb (it starts just inside the edge and fades over a fifth of the radius,
+        // no hard ring) ...
+        float halo=smoothstep(0.94,1.02,normalizedAngle)
+                   *exp(-pow(max(0.0,normalizedAngle-1.0)/0.2,2.0));
         halo*=step(0.0,facing)*cameraCoverage;
         vec4 bodyColour=(uBodyKind==0 ? uSunColor : uMoonColor);
         float haloGain=basinCelestialHaloGain(uCelestialGlow,uMidband,uBeatPulse);
@@ -1022,8 +1024,9 @@ void main() {
         float haloAlpha=(uBodyKind==1 ? 0.26 : 0.23)*bodyColour.a*haloGain*halo;
         // A wide soft glow spreading far past the corona (the bright body lighting the night air round it),
         // falling off over about its own diameter; land in front hides it (this pass is depth-tested).
-        float wide=smoothstep(0.97,1.03,normalizedAngle)*exp(-max(0.0,normalizedAngle-1.0)/0.7);
-        haloAlpha+=0.08*bodyColour.a*haloGain*wide*step(0.0,facing)*cameraCoverage;
+        // ... and a wide bloom spreading over about a radius and a half.
+        float wide=smoothstep(0.95,1.03,normalizedAngle)*exp(-max(0.0,normalizedAngle-1.0)/0.8);
+        haloAlpha+=0.12*bodyColour.a*haloGain*wide*step(0.0,facing)*cameraCoverage;
         float rimMarks=0.0;
         if (uCelestialRimVertices!=0 && uCelestialGlow.x>0.0 && facing>0.0) {
             rimMarks=basinCelestialRimMarks(eye,ray,normalizedAngle)*cameraCoverage;

@@ -95,11 +95,11 @@
           255,
           255
         ],
-        "shockwave_grid_moon_phase": 0.56,
+        "shockwave_grid_moon_phase": 0.62,
         "shockwave_grid_nebula_color_a": [
+          230,
+          60,
           200,
-          70,
-          255,
           255
         ],
         "shockwave_grid_nebula_color_b": [
@@ -112,7 +112,7 @@
         "shockwave_grid_nebula_dust": 0.2,
         "shockwave_grid_nebula_enabled": true,
         "shockwave_grid_nebula_filaments": 0.9,
-        "shockwave_grid_nebula_intensity": 0.5,
+        "shockwave_grid_nebula_intensity": 0.4,
         "shockwave_grid_nebula_position": 0.0,
         "shockwave_grid_nebula_scale": 0.45,
         "shockwave_grid_notch_positions_linear": [
