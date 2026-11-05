@@ -95,6 +95,7 @@ The September 10 Sphere acoustic-admission and cohort-motion incident merges fiv
 | [R-154 / Retired QuickDisplayUnit signal retention and Sphere slot-1 conflict](Historical_Bugs/R-154_Quick_Display_Terminal_Callback_And_Sphere_Slot_Collision.md) | Source repair / physical lifecycle gate open | **STRONG** |
 | [R-169 / GUI stall sampler frame cycle pinned a retiring display](Historical_Bugs/R-169_Stall_Sampler_Frame_Cycle_Pinned_Retiring_Display.md) | Source repair | **STRONG** |
 | [R-170 / Bubble speed changed with card shape; aspect modifiers faked a fix](Historical_Bugs/R-170_Bubble_Shape_Dependent_Speed_And_Aspect_Modifiers.md) | Source repair / operator eyes-on open | **STRONG** |
+| [R-171 / Capture TripleBuffer lost fresh audio every third callback; Spectrum stutter](Historical_Bugs/R-171_Capture_TripleBuffer_Slot_Index_Freshness_Spectrum_Stutter.md) | Source repair / operator eyes-on open | **STRONG** |
 | [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](Historical_Bugs/A-01_Settings_Dialog_Placeholder_Investigation.md) | Archived investigation | Standard |
 | [U-02 — 2026-04-10 / 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](Historical_Bugs/U-02_Bubble_Blob_Signal_Contract.md) | Archived investigation | Standard |
 | [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](Historical_Bugs/U-05_MC_Keyboard_Focus_Ctrl_Halo.md) | Archived investigation | **STRONG** |

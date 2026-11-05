@@ -9,11 +9,17 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 
 **Work strictly in this order:**
 
-1. **§6 Shared 3D architecture**: build reusable 3D primitives, each proven on its own harness.
-2. **§7 Visualizer modes**, one at a time: **Waveform Ribbon → Reactive Liquid / Melt Pool → Concrete Rain →
-   Usu Moonscape**. Each is built lab-first (§7.0).
+1. **§7.1 Waveform Ribbon**: finish acceptance (already built; the only 3D mode in flight).
+2. **§9 Studio for every visualizer** (operator, 5 Nov): replaces the deferred Bubble scalar-to-range/UX sweep.
 3. **§8 Accepted-mode follow-ups**: the brief Bubble performance-parity check is operator-admitted now.
-4. **§9 Studio for every visualizer** (operator, 5 Nov): replaces the deferred Bubble scalar-to-range/UX sweep.
+4. **SMP & Full Display (backend decision, 5 Nov: `Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md`):**
+   Expanded Visualizer (plan 01) first, then ShittyMusicPlayer (plan 02). No Vulkan backend now: the eventual backend is
+   a native render core on Qt Quick's Vulkan RHI, started only when a recorded trigger fires (full-display 4K GPU
+   budget, render-thread GIL starvation, a needed capability, a platform blocker). Port-readiness rules bind all new
+   GPU code from now.
+5. **§6 Shared 3D architecture** and **§7 Visualizer modes** (Reactive Liquid / Melt Pool → Concrete Rain → Usu
+   Moonscape, lab-first per §7.0) resume after Expanded Visualizer acceptance and its full-display measurements, under
+   the port-readiness rules; if a trigger fires first, the native Vulkan core precedes them.
 
 **Accepted baseline (not live work):** original Bubble, Extruded Bubble, Neon Lake, Oscilloscope,
 Spectrum/Rainbow Ghost, Sphere, source routing, transitions and Foundry launch buttons. Reopen an accepted
@@ -32,16 +38,15 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
-- [ ] **Neon Lake goal mocks (Presets 1-3, 5 Nov third pass, awaiting operator look):** shared contour lines, glowing
-  lake (shore rings, network), horizon glow at the real horizon, wide halo, world-fixed beat stars, calmer water
-  (`Docs/Reference/Neon_Lake_Basin.md`, "Third pass"). Not yet at parity with `references/NeonLakeGoalPreset1.png` /
-  `NeonLakeGoalPreset3.png`: Preset 1's dunes read as parallel stripes where the mock has rounded dotted volumes
-  with a few long sweeping ridges, its mountains are dotted where the mock is a dense contour wireframe, its low
-  react is nearer the mock's high (brighter lines and lake), and it reads more magenta (hue match 0.56); Preset 3's
-  dunes still lack the mock's gold specular sheen and dense rim ridges, and its water lacks the mock's dense glossy
-  reflections. Preset 3's frame-to-frame change is above the baseline (0.28-0.32 vs 0.165/255) only because its
-  lake is about five times larger; per moving pixel it is at the baseline. GPU at 1300x750 (baseline -> now):
-  Preset 1 1.01 -> 0.68 ms, Preset 3 0.44 -> 0.60 ms. Evidence: `.artifacts/evidence/neon_lake/fidelity_20261105/pass3/`.
+- [ ] **Neon Lake goal mocks (Presets 1-3, 5 Nov fourth pass, awaiting operator look):** range drawn as a contour
+  wireframe, glossy glass rims, calmer water, four large meandering dunes on Preset 1 (`Docs/Reference/Neon_Lake_Basin.md`,
+  "Third pass" / "Fourth pass"). Still short of `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`:
+  Preset 1's lake lacks the mock's vivid line mesh and island glow, its colour is slightly more magenta than the mock
+  (hue match ~0.62), the foothills nearest the lake are still dotted; Preset 3's dunes catch rims only where the Sun
+  sees them (the mock's dense gold dune lines are partly covered by the contour rows on the hills), its sky is
+  warmer than the mock's. Preset 3's frame-to-frame change is 0.25/255 against the baseline's 0.165 (its lake
+  covers about five times the screen; with every water feature off the scene's own floor is about 0.2).
+  Evidence: `.artifacts/evidence/neon_lake/fidelity_20261105/pass4/`.
 
 - [ ] **4x MSAA repeat-render noise (driver, 5 Nov; was "Floor Give run-to-run noise"):** the same frame rendered
   again through a 4x scene target differs by 1 level (rarely 2-3) on a pixel or two in Waveform (more often with Floor
@@ -90,7 +95,7 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 - [ ] **Conditional evidence only:** original Bubble tiny-radius judder (R-105) and dual-display reboot recovery
   (R-134–R-145) need new reproductions. The 90 Hz versus 60 Hz investigation stays off limits.
 
-## 6. Shared 3D architecture (one step, before the next mode)
+## 6. Shared 3D architecture (one step, before the next mode; after Expanded Visualizer, under port-readiness rules)
 
 The architecture planned for the dropped concepts (volumetric music chamber, audio aurora/ribbon volume, photo
 fracture portal, voxel morph field, holographic depth slices, procedural storm, reactive particle field,
@@ -211,6 +216,17 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   the ribbons' contact), so troughs stay round and dip in instead of flattening. Perspective only. In the visible
   frame P2 reaches the floor only in the ragdoll loud end (about 49.5-52 s); P3 never does, so it is unchanged there.
   Evidence `.artifacts/evidence/waveform_ribbon/floor_deform/`; design in the Migration Plan's Floor bucket.
+- [~] **Pulse Rim (operator, 5 Nov: "where the pulse is that section of the ribbon's rim can be even brighter with
+  falloff") — awaiting operator eyes:** Reaction-bucket slider (0 = today's rims, pixel-identical). The rims (line and
+  rim glow) brighten by the square of the published pulse field over a reference level, softly capped, sampled at
+  each fragment's history x (direct and reflected light), so every Reaction Mode and both Travel Directions put it
+  exactly on the pulse; the field's own smooth shape is the falloff. Evidence
+  `.artifacts/evidence/waveform_ribbon/pulse_rim/`; design in the Migration Plan's Reaction bucket.
+- [ ] **Swells reach the Preset camera already faded (side defect, 5 Nov, found by Pulse Rim):** the Preset 1 camera
+  sees history x in about [-5, 5], but `PULSE_ORIGIN` (44) still assumes a ~±30 view; a swell travels ~3 s before it
+  is visible, so on recorded music the in-view appearance field is a faint plateau (human_heavy1: in-view max p50
+  .11, peak/median 1.6) and the fresh-led band has already settled. Re-derive the origin (and the fresh fade) from the
+  framed camera's visible span; then recheck Pulse Rim's REFERENCE level.
 - [~] **Travel Direction (operator, 5 Nov: "Travel Direction ... chosen in the studio ... an important basic need") —
   awaiting operator eyes:** Flow-bucket Choice, Right To Left (default, unchanged) or Left To Right (the mirror image:
   history enters at the left; pulses, held swells, Tilt Shift, sparks, strands and floor give follow; the world colour
@@ -362,10 +378,6 @@ scalar-to-range audit remains deferred until explicitly reprioritized.
     (up to 110 with draining trails) instead of its authored ~31-68, and the hero loops are per fragment.
 - [ ] **R-170 operator eyes-on:** Bubble on a tall, a wide and the TV card should move and size like the canonical
   card, denser on large cards. Evidence: `Docs/Historical_Bugs/R-170_Bubble_Shape_Dependent_Speed_And_Aspect_Modifiers.md`.
-- [ ] **Operator decision - Bubble density past the renderer capacity:** the shader's 110-hero uniform arrays and
-  per-fragment hero loops cap density growth at 72 live heroes; past that the world zooms (the TV card: 72 heroes at
-  ~1.6x canonical size). Truly area-proportional density on large cards needs an instanced/binned hero renderer with
-  its own native performance evidence. Not started.
 - [ ] **Side defect (found during R-170, not fixed):** `_apply_bubble_collision_response` smooth mode multiplies
   `max_disp *= 0.72` inside the per-bubble loop, so the in-view correction cap compounds down the list (order-dependent).
   Fixing it changes canonical Bubble output, so it needs an explicit BTF behaviour-change decision first.
@@ -382,8 +394,8 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
 - [ ] Finish Waveform Studio acceptance first (§7.1), then extract any remaining Waveform-shaped assumptions.
 - [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble and Spectrum/Rainbow Ghost built; Sphere in
   progress): Extruded Spectrum, Shockwave Grid, DevCurve, Oscilloscope. Spectrum awaits operator acceptance (evidence
-  `.artifacts/evidence/spectrum/studio_20261105/`); its Studio edits existing shape nodes but cannot add or remove one
-  (Settings' shape editor still does), so its builder stays until that is decided. Each: full registry coverage test, production-parity preview test, theme,
+  `.artifacts/evidence/spectrum/studio_20261105/`); its Studio now reaches everything Settings' Spectrum builder saves
+  (shape nodes added/removed, lanes reordered), so the builder body can be replaced on acceptance. Each: full registry coverage test, production-parity preview test, theme,
   Settings Custom launcher replacing that builder body once the operator accepts it.
 
 ## Operator execution and evidence rules

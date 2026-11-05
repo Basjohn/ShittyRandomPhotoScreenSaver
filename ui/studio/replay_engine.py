@@ -304,5 +304,102 @@ class RecordedEngineAnswers:
         return getter
 
 
-__all__ = ["EngineAnswerRecorder", "EngineTick", "RecordedEngineAnswers", "clocked_scheduler", "decode_answer",
-           "encode_answer", "fixture_engine_type", "offline_controller", "recorded_answers"]
+# ---------------------------------------------------------------------------- step-state snapshots
+def _shared_types() -> tuple:
+    import enum
+    import threading
+    import types
+    import weakref
+    import numpy as np
+    from PySide6.QtCore import QObject
+    return (type(threading.RLock()), type(threading.Lock()), QObject, types.FunctionType, types.MethodType,
+            types.BuiltinFunctionType, types.ModuleType, type, enum.Enum, np.generic, weakref.ref)
+
+
+_ATOMS = (int, float, str, bool, bytes, type(None), complex, range, slice)
+
+
+def _clone(value: Any, memo: dict, shared: tuple) -> Any:
+    """A deep copy of plain step state. Locks, QObjects, functions, enums and the ``memo``-seeded objects are
+    shared (they hold no per-tick state, or are the owners being restored); anything unknown refuses loudly."""
+    if isinstance(value, _ATOMS):
+        return value
+    key = id(value)
+    if key in memo:
+        return memo[key]
+    if isinstance(value, shared):
+        return value
+    if isinstance(value, list):
+        out: Any = memo.setdefault(key, [])
+        out.extend(_clone(item, memo, shared) for item in value)
+        return out
+    if isinstance(value, dict):
+        out = memo.setdefault(key, {} if type(value) is dict else type(value)())
+        for k, item in value.items():
+            out[_clone(k, memo, shared)] = _clone(item, memo, shared)
+        return out
+    if isinstance(value, tuple):
+        items = tuple(_clone(item, memo, shared) for item in value)
+        if all(a is b for a, b in zip(items, value)):
+            out = value
+        else:
+            out = type(value)(*items) if hasattr(value, "_fields") else type(value)(items)
+        memo[key] = out
+        return out
+    if isinstance(value, (set, frozenset)):
+        out = memo[key] = type(value)(_clone(item, memo, shared) for item in value)
+        return out
+    from collections import deque
+    if isinstance(value, deque):
+        out = memo[key] = deque((_clone(item, memo, shared) for item in value), maxlen=value.maxlen)
+        return out
+    import numpy as np
+    if isinstance(value, np.ndarray):
+        out = memo[key] = value.copy()
+        return out
+    import shiboken6
+    if isinstance(value, shiboken6.Shiboken.Object):
+        out = memo[key] = type(value)(value)              # a Qt value type (QColor, QPointF, ...)
+        return out
+    cls = type(value)
+    if hasattr(value, "__dict__") or getattr(cls, "__slots__", None):
+        out = memo[key] = object.__new__(cls)
+        for name, item in getattr(value, "__dict__", {}).items():
+            object.__setattr__(out, name, _clone(item, memo, shared))
+        for klass in cls.__mro__:
+            for name in getattr(klass, "__slots__", ()):
+                if name not in ("__dict__", "__weakref__") and hasattr(value, name):
+                    object.__setattr__(out, name, _clone(getattr(value, name), memo, shared))
+        return out
+    raise TypeError(f"Step state holds an uncopyable {cls.__qualname__}")
+
+
+class StepState:
+    """The per-tick state of a production ``VisualizerRuntimeController`` (its own attributes, its logical tick
+    state and its presentation state, the mode runtimes they hold included), captured and put back in place.
+
+    A Studio evaluator rewinds its production step with it instead of configuring a new controller: a capture
+    right after configuration (``pristine``) and periodic checkpoints. ``keep`` lists objects that are shared, not
+    copied (the engine and the engine-answer view the step reads through)."""
+
+    def __init__(self, controller, keep: tuple = ()) -> None:
+        self._owners = (controller, controller.logical_tick_state, controller.presentation_state)
+        self._keep = tuple(keep)
+        self._shared = _shared_types()
+        self._state = self._copy({owner: dict(vars(owner)) for owner in self._owners})
+
+    def _copy(self, states):
+        memo = {id(obj): obj for obj in self._owners + self._keep}
+        return {owner: {name: _clone(value, memo, self._shared) for name, value in state.items()}
+                for owner, state in states.items()}
+
+    def restore(self) -> None:
+        """Put the captured state back (a fresh copy each time, so the capture stays reusable)."""
+        fresh = self._copy(self._state)
+        for owner, state in fresh.items():
+            owner.__dict__.clear()
+            owner.__dict__.update(state)
+
+
+__all__ = ["EngineAnswerRecorder", "EngineTick", "RecordedEngineAnswers", "StepState", "clocked_scheduler",
+           "decode_answer", "encode_answer", "fixture_engine_type", "offline_controller", "recorded_answers"]
