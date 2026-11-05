@@ -113,6 +113,7 @@ def test_strong_beats_move_the_curve_without_twitch(monkeypatch):
     assert ratio < 0.5, ratio               # ... with continuous velocity (a snap measures ~0.9)
     # Negative control: snap attacks (the old single fast follower taken to its limit, a swell landing in one tick).
     monkeypatch.setattr(devcurve, "DEVCURVE_SWING_STAGE_S", (1e-4, devcurve.DEVCURVE_SWING_STAGE_S[1]))
+    monkeypatch.setattr(devcurve, "DEVCURVE_ACCENT_STAGE_S", (1e-4, devcurve.DEVCURVE_ACCENT_STAGE_S[1]))
     monkeypatch.setattr(devcurve, "DEVCURVE_SWELL_STAGE_S", 1e-4)
     snapped, _ = _twitch_ratio()
     assert snapped > ratio * 1.6, (snapped, ratio)

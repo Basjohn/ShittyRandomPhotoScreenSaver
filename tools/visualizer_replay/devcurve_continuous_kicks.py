@@ -29,6 +29,11 @@ if str(ROOT) not in sys.path:
 LAYERS = ("bass", "vocals", "mids", "transients")
 BODY = ("bass", "vocals", "mids")
 TIME_BUCKETS = ((0.0, 15.0), (15.0, 45.0), (45.0, 90.0), (90.0, 1e9))
+METRICS = ("drive", "react", "rms")
+# Kick-locked grid (seconds from the kick) for the synchronous average: averaging the traces first and taking the
+# peak of the mean removes the bias of a per-kick "max after minus mean before", which is positive on any noisy
+# trace even with no kick at all.
+LOCK_GRID = tuple(round(-0.3 + i / 90.0, 6) for i in range(int(round(0.45 * 90)) + 1))
 
 
 def preset_parameters(preset: int):
@@ -48,6 +53,8 @@ def play(clip_paths, parameters, nodes, *, warmup: float = 2.0):
     from widgets.spotify_visualizer.transient_bus import PassageIntensity
     runtime, twin, intensity = DevCurveFrameRuntime(), DevCurveFrameRuntime(), PassageIntensity()
     rows, clock, last = [], 100.0, None
+    smooth01 = min(1.0, max(0.0, float(parameters.get("devcurve_smoothness", 0.0))))
+    max_step = 0.040 - 0.020 * smooth01
     for index, path in enumerate(clip_paths):
         clip = load_feature_clip(path)
         origin = clip.frames[0].timestamp_us
@@ -82,6 +89,13 @@ def play(clip_paths, parameters, nodes, *, warmup: float = 2.0):
                           for key in LAYERS},
                 "rms": {key: float(np.sqrt(np.mean((np.asarray(curves[key]) - np.asarray(still[key])) ** 2)))
                         for key in LAYERS},
+                # At the geometric cap: a segment held by the smoothness slope limiter (straight runs at the
+                # limit survive the moving averages) or a sample in the top knee / bottom clamp.
+                "cap": {key: bool((np.abs(np.diff(np.asarray(curves[key]))) >= 0.97 * max_step).any()
+                                  or ((np.asarray(curves[key]) > 0.95) | (np.asarray(curves[key]) < 0.045)).any())
+                        for key in LAYERS},
+                # Near the floor: a trough within 0.08 of the bottom, flattened by a clamp or a soft floor.
+                "low": {key: bool((np.asarray(curves[key]) < 0.08).any()) for key in LAYERS},
             })
         clock = start + (clip.frames[-1].timestamp_us - origin) / 1e6 + 1.0 / 90.0
     return [row for row in rows if row["song_t"] >= warmup or row["clip"] > 0]
@@ -105,7 +119,7 @@ def kick_responses(rows, *, pre: float = 0.3, post: float = 0.15, sustain: float
         if ((kick_times < row["t"]) & (kick_times >= row["t"] - gap)).any():
             continue
         rec = {"t": row["t"], "clip": row["clip"], "song_t": row["song_t"], "intensity": row["intensity"],
-               "held": float(inten[held].mean())}
+               "held": float(inten[held].mean()), "trace": {}}
         if inten[held].min() >= 0.5:
             rec["passage"] = "sustained_loud"
         elif inten[held].max() <= 0.3:
@@ -120,8 +134,30 @@ def kick_responses(rows, *, pre: float = 0.3, post: float = 0.15, sustain: float
             v = np.asarray([rows[j]["react"][key] for j in np.nonzero(before | after)[0]])
             rec[f"react_{key}"] = float(v[nb:].max() - v[:nb].mean())
             rec[f"rms_{key}"] = float(r[nb:].max() - r[:nb].mean())
+            window = np.nonzero(before | after)[0]
+            tt = t[window] - row["t"]
+            for metric, values in (("drive", d), ("react", v), ("rms", r)):
+                rec["trace"][f"{metric}_{key}"] = np.interp(LOCK_GRID, tt, values)
         out.append(rec)
     return out
+
+
+def _locked(sel, name):
+    """Synchronous average of the kick-locked traces: peak of the mean within the post window minus its pre mean."""
+    import numpy as np
+    mean = np.mean([k["trace"][name] for k in sel], axis=0)
+    grid = np.asarray(LOCK_GRID)
+    return float(mean[grid >= 0.0].max() - mean[grid < 0.0].mean())
+
+
+def _cell(sel):
+    import numpy as np
+    cell = {"kicks": len(sel)}
+    for key in (*BODY, "transients"):
+        for metric in METRICS:
+            cell[f"{metric}_{key}"] = float(np.mean([k[f"{metric}_{key}"] for k in sel]))
+            cell[f"locked_{metric}_{key}"] = _locked(sel, f"{metric}_{key}")
+    return cell
 
 
 def tabulate(kicks):
@@ -132,12 +168,7 @@ def tabulate(kicks):
             sel = [k for k in kicks if lo <= k["t"] < hi and (passage == "all" or k["passage"] == passage)]
             if not sel:
                 continue
-            cell = {"kicks": len(sel)}
-            for key in (*BODY, "transients"):
-                cell[f"drive_{key}"] = float(np.mean([k[f"drive_{key}"] for k in sel]))
-                cell[f"react_{key}"] = float(np.mean([k[f"react_{key}"] for k in sel]))
-                cell[f"rms_{key}"] = float(np.mean([k[f"rms_{key}"] for k in sel]))
-            table[f"{passage} {lo:g}-{'end' if hi > 1e8 else f'{hi:g}'}s"] = cell
+            table[f"{passage} {lo:g}-{'end' if hi > 1e8 else f'{hi:g}'}s"] = _cell(sel)
     # Per recording (clip index in the play order), per passage.
     for clip in sorted({k["clip"] for k in kicks}):
         mine = [k for k in kicks if k["clip"] == clip]
@@ -150,11 +181,7 @@ def tabulate(kicks):
                 sel = [k for k in mine if k["passage"] == passage]
             if not sel:
                 continue
-            cell = {"kicks": len(sel)}
-            for key in (*BODY, "transients"):
-                for metric in ("drive", "react", "rms"):
-                    cell[f"{metric}_{key}"] = float(np.mean([k[f"{metric}_{key}"] for k in sel]))
-            table[f"clip{clip} {passage}"] = cell
+            table[f"clip{clip} {passage}"] = _cell(sel)
     return table
 
 
@@ -169,11 +196,39 @@ def paired_repeat(kicks, length: float):
         if not sel:
             continue
         for key in (*BODY, "transients"):
-            for metric in ("drive", "react", "rms"):
+            for metric in METRICS:
                 late = np.mean([b[f"{metric}_{key}"] for _, b in sel])
                 early = np.mean([a[f"{metric}_{key}"] for a, _ in sel])
                 result[f"{passage} {metric}_{key} late/early"] = float(late / early) if early > 1e-9 else None
+                early = _locked([a for a, _ in sel], f"{metric}_{key}")
+                late = _locked([b for _, b in sel], f"{metric}_{key}")
+                result[f"{passage} locked_{metric}_{key} early"] = early
+                result[f"{passage} locked_{metric}_{key} late"] = late
     return result
+
+
+def geometry(rows):
+    """Per recording (clip index in the play order): time at the geometric cap per layer and the height drive's
+    reach, over all ticks and over loud ones (passage intensity >= 0.5)."""
+    import numpy as np
+    out = {}
+    for clip in sorted({row["clip"] for row in rows}):
+        mine = [row for row in rows if row["clip"] == clip]
+        for passage in ("all", "loud"):
+            chosen = [row for row in mine if passage == "all" or row["intensity"] >= 0.5]
+            for key in LAYERS if chosen else ():
+                drive = np.asarray([row["drive"][key] for row in chosen])
+                out[f"clip{clip} {passage} {key}"] = {
+                    "at_cap": float(np.mean([row["cap"][key] for row in chosen])),
+                    "near_floor": float(np.mean([row["low"][key] for row in chosen])),
+                    "drive_p05": float(np.percentile(drive, 5)), "drive_p50": float(np.percentile(drive, 50)),
+                    "drive_p95": float(np.percentile(drive, 95)), "drive_above_0.9": float((drive > 0.9).mean()),
+                    "rms_p50": float(np.median([row["rms"][key] for row in chosen])),
+                    # The drawn reaction over its geometric ceiling (revisions that publish it): above 1 it
+                    # sits in the mapping's own soft cap.
+                    "react_above_1": float(np.mean([row["react"][key] > 1.0 for row in chosen])),
+                }
+    return out
 
 
 def main():
@@ -186,7 +241,8 @@ def main():
     parameters, nodes = preset_parameters(args.preset)
     rows = play(args.clip, parameters, nodes)
     kicks = kick_responses(rows)
-    report = {"clips": [str(p) for p in args.clip], "preset": args.preset, "table": tabulate(kicks)}
+    report = {"clips": [str(p) for p in args.clip], "preset": args.preset, "table": tabulate(kicks),
+              "geometry": geometry(rows)}
     if len(args.clip) == 2 and args.clip[0].resolve() == args.clip[1].resolve():
         report["repeat"] = paired_repeat(kicks, 60.0)
     args.output.mkdir(parents=True, exist_ok=True)
