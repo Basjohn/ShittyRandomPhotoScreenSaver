@@ -139,8 +139,15 @@ class ContractModeRenderer(QuickModeRenderer):
     when the evaluator produces one), the live card's resolved presentation at the target's pixel ratio, and the
     item mapping. A renderer with a prepared reveal compiles through its own ``prepare_step``."""
 
+    @staticmethod
+    def pixel_ratio(card: RenderCard) -> float:
+        """Target pixels per item unit, from the item mapping itself: the live viewport draws into the whole window
+        target (wider than a letterboxed item), a snapshot into a target of exactly the item's pixel size."""
+        scale = abs(float(card.matrix_values[0])) * 0.5 * float(card.viewport[2])
+        return scale if scale > 0.0 else card.viewport[2] / max(1e-6, card.logical_size[0])
+
     def _resolved(self, card: RenderCard):
-        dpr = card.viewport[2] / max(1e-6, card.logical_size[0])
+        dpr = self.pixel_ratio(card)
         key = (card.logical_size, card.extent, card.style, round(dpr, 4))
         if key != self._key:
             self._presentation = presentation(self._mode_id, card.logical_size, card.extent, card.style, dpr=dpr)
