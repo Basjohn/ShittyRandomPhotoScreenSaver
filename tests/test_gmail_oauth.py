@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import json
+import sys
 import threading
 import time
 import urllib.request
 from pathlib import Path
 
+import pytest
 from PySide6.QtCore import QThread
 
 import core.gmail.gmail_oauth as gmail_oauth_module
@@ -37,6 +39,14 @@ def _write_fake_client_config(path: Path) -> None:
     )
 
 
+_PLAINTEXT_OFF_WINDOWS = pytest.mark.xfail(
+    sys.platform != "win32",
+    strict=True,
+    reason="Linux has no credential encryption backend yet (plain:: fallback); Linux_Plan.md credentials item",
+)
+
+
+@_PLAINTEXT_OFF_WINDOWS
 def test_dpapi_roundtrip_no_leak() -> None:
     """Verify DPAPI encrypt/decrypt roundtrip with fake credentials (no leak)."""
     from core.windows.dpapi import encrypt_user_data, decrypt_user_data
@@ -122,6 +132,7 @@ def test_no_real_credentials_in_code() -> None:
     assert "fake_password" in source
 
 
+@_PLAINTEXT_OFF_WINDOWS
 def test_imap_password_storage_mocked() -> None:
     """Verify IMAP password storage with DPAPI (no real credentials)."""
     from core.windows.dpapi import encrypt_user_data, decrypt_user_data
@@ -332,3 +343,17 @@ def test_settings_owner_destruction_cancels_oauth_flow() -> None:
     assert len(tab.destroyed.callbacks) == 1
     tab.destroyed.emit()
     assert manager.cancel_calls == 1
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes")
+def test_non_windows_plain_credential_file_is_owner_only(tmp_path):
+    import stat
+
+    from core.windows.dpapi import load_encrypted, save_encrypted
+
+    target = tmp_path / "imap.bin"
+    target.write_bytes(b"old")
+    target.chmod(0o644)  # a pre-existing world-readable file is tightened too
+    save_encrypted(target, b"secret")
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600
+    assert load_encrypted(target) == b"secret"
