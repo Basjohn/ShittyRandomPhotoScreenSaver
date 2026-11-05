@@ -39,6 +39,14 @@ TEST_APPDATA.mkdir(parents=True, exist_ok=True)
 TEST_LOCALAPPDATA.mkdir(parents=True, exist_ok=True)
 os.environ["APPDATA"] = str(TEST_APPDATA)
 os.environ["LOCALAPPDATA"] = str(TEST_LOCALAPPDATA)
+# Linux resolves the same roots from XDG base directories (core/platform_paths.py);
+# isolate them identically so no test run touches the real ~/.config or ~/.local.
+if not sys.platform.startswith("win"):
+    TEST_SHARED_DATA = ROOT / "tests_tmp_shareddata"
+    TEST_SHARED_DATA.mkdir(parents=True, exist_ok=True)
+    os.environ["XDG_CONFIG_HOME"] = str(TEST_APPDATA)
+    os.environ["XDG_STATE_HOME"] = str(TEST_LOCALAPPDATA)
+    os.environ["XDG_DATA_HOME"] = str(TEST_SHARED_DATA)
 
 
 # ---------------------------------------------------------------------------

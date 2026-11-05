@@ -40,6 +40,9 @@ for widget in sys.argv[3].split(",") if sys.argv[3] else ():
     settings.set(f"widgets.{widget}.enabled", False)
 """
 
+# Lets Mesa llvmpipe create the production OpenGL 4.6 Core context (see module docstring).
+MESA_GL46_OVERRIDE = {"MESA_GL_VERSION_OVERRIDE": "4.6", "MESA_GLSL_VERSION_OVERRIDE": "460"}
+
 # Network/credential widgets have no meaning in an isolated headless profile.
 DEFAULT_DISABLED_WIDGETS = ("gmail", "reddit", "reddit2", "weather", "media", "system_audio_osd")
 
@@ -59,8 +62,7 @@ def child_env(display: str, profile: Path, logs: Path) -> dict[str, str]:
         "XDG_DATA_HOME": str(profile / "data"),
         "XDG_STATE_HOME": str(profile / "state"),
         "SRPSS_FORCE_LOG_DIR": str(logs),
-        "MESA_GL_VERSION_OVERRIDE": "4.6",
-        "MESA_GLSL_VERSION_OVERRIDE": "460",
+        **MESA_GL46_OVERRIDE,
     }
     # Windows-shaped variables must not leak in from a parent shell.
     for name in ("APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "QT_QPA_PLATFORM"):

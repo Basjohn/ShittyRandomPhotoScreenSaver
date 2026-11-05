@@ -42,7 +42,7 @@ def _tracked_sources(root: Path) -> list[Path]:
             result.extend(
                 p for p in base.rglob("*")
                 if p.is_file() and p.suffix.lower() in _SOURCE_SUFFIXES
-                and not any(part in {"__pycache__", ".venv", "cache", "build", "release"} for part in p.relative_to(root).parts)
+                and not any(part in {"__pycache__", ".venv", ".venv-linux", "cache", "build", "release"} for part in p.relative_to(root).parts)
             )
     # Critical build configuration participates in the runtime identity.
     result.extend(
