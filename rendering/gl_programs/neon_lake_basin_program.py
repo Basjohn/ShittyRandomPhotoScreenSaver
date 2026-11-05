@@ -986,7 +986,8 @@ void main() {
     if ((!outside && vTerrainBase<0.035) || vContourFade<0.005) discard;
     // Fading where the ridge thins; near ridges are a softer, translucent core whose bloom carries them.
     float alpha=uCrestColor.a*vContourFade*mix(0.3,1.0,smoothstep(0.05,0.8,vRidgeVary))*(1.0-0.35*vRidgeNear);
-    float midband=clamp(uMidband,0.0,1.0);
+    // Broad near ridges breathe with the midband half as much: their wide glow pumping read as busy foreground.
+    float midband=clamp(uMidband,0.0,1.0)*(1.0-0.5*vRidgeNear);
     vec3 colour=min(uCrestColor.rgb*(0.78+0.16*midband),vec3(1.0));
     FragColor=vec4(colour,alpha);
     // The ridges' glow swells with the music's midband (smoothed upstream, so it breathes rather than flickers).
