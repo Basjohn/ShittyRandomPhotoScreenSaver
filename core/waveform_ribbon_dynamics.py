@@ -113,6 +113,12 @@ GLOBAL_ATTACK = .35
 # by up to TROUGH_LIFT_MAX, easing up over TROUGH_ATTACK and down over TROUGH_RELEASE per stage (two stages).
 PACKET_FLOOR_HEIGHT, TROUGH_CLEARANCE, TROUGH_ROOM_MIN, TROUGH_LIFT_MAX = 2., .3, .4, 1.5
 TROUGH_ATTACK, TROUGH_RELEASE, TROUGH_VIEW = .15, 1.2, 32.  # the authored long lens sees ~±30 world units
+# Height Shift options (operator, 5 Nov). Static Height holds every ribbon at the highest safe point: the top of the shift
+# (TROUGH_LIFT_MAX), constant through every passage.
+# Tilt Shift: while the lift moves, the side the history travels toward leads by TILT_LEAD seconds of lift velocity
+# (bounded softly to TILT_MAX world units each side), so it rises first and settles first. History travels toward -x.
+HEIGHT_MODES = ('Dynamic Height Shift', 'Static Height')
+TILT_LEAD, TILT_MAX, TILT_SIDE, TILT_EASE = .35, .6, -1., .3   # the lead eases over TILT_EASE seconds (no tick steps)
 
 # Selectable reaction modes (operator, 5 Nov). All share the injection and the couplings above.
 REACTION_MODES = ('Travelling Pulse', 'Frozen Past', 'Whole Swell', 'Group Wave')
@@ -277,6 +283,8 @@ class HybridControls:
     idle_motion: float = .35
     strands: RibbonStrandControls | None = None
     pulse: PulseControls = PulseControls()
+    height_mode: str = 'Dynamic Height Shift'
+    tilt_shift: bool = False
 
 
 @dataclass(frozen=True)
@@ -315,6 +323,7 @@ class WaveformDynamics:
         self._fresh = np.zeros((2,PULSE_GRID.size))  # the same transport with a short fade: recently launched swells
         self._pulse_pending = 0.
         self._trough_stage,self._trough_lift,self._trough_time = np.zeros((RIBBON_CAPACITY,1)),np.zeros((RIBBON_CAPACITY,1)),None
+        self._tilt_lead,self._tilt_time = np.zeros((RIBBON_CAPACITY,1)),None
         self._held = np.zeros((4,PULSE_GRID.size))  # Frozen Past on the cloth: memory, peak, previous swell, rising
         self._whole = self._whole_fresh = 0.         # Whole Swell global raw level and its short-fade copy
         self._drift_stage = np.zeros(PULSE_GRID.size)  # first stage of the surge's easing
@@ -759,12 +768,15 @@ class WaveformDynamics:
             x[rows,order] = target
         return x,y,z
 
-    def _floor_room(self,height,hang,room,visible):
+    def _floor_room(self,height,hang,room,visible,static=None):
         """Per ribbon: how far to lift the whole ribbon so its lower edge stays TROUGH_CLEARANCE above the floor (see
         snapshot). Two cascaded followers (TROUGH_ATTACK up, TROUGH_RELEASE down, on the logical clock), so the lift's
         velocity is continuous: a one-stage follower jumped on every new trough, which was itself a twitch."""
-        sinking = np.where(visible,hang-height,-np.inf)                     # depth of the lower edge below rest
-        target = np.clip(sinking.max(axis=1,keepdims=True)-room,0.,TROUGH_LIFT_MAX)
+        if static is None:
+            sinking = np.where(visible,hang-height,-np.inf)                 # depth of the lower edge below rest
+            target = np.clip(sinking.max(axis=1,keepdims=True)-room,0.,TROUGH_LIFT_MAX)
+        else:
+            target = np.full((RIBBON_CAPACITY,1),static)                    # Static Height (a live switch eases)
         if self._trough_time is None:
             self._trough_stage = self._trough_lift = target
         elif self.time>self._trough_time:
@@ -776,6 +788,24 @@ class WaveformDynamics:
                 setattr(self,name,current+(goal-current)*(1.-np.exp(-dt/tau)))
         self._trough_time = self.time
         return self._trough_lift
+
+    def _height_shift(self,height,hang,room,x):
+        """Per ribbon (and, with Tilt Shift, per knot) vertical offset that keeps lower edges off the floor."""
+        static = TROUGH_LIFT_MAX if self.controls.height_mode=='Static Height' else None
+        lift = self._floor_room(height,hang,room,np.abs(x)<TROUGH_VIEW,static)
+        # Tilt Shift: the lift's velocity (its second stage follows the first, so it is continuous) sets a lead that
+        # eases once more, so the tilt is smooth in velocity too. Switched off (or Static Height) the lead eases back to
+        # zero rather than vanishing; a ribbon that never tilted keeps an exact zero lead (byte-identical body).
+        goal = 0.
+        if static is None and self.controls.tilt_shift:
+            gap = self._trough_stage-lift
+            goal = TILT_MAX*np.tanh(TILT_LEAD*gap/np.where(gap>0.,TROUGH_ATTACK,TROUGH_RELEASE)/TILT_MAX)
+        if self._tilt_time is not None and self.time>self._tilt_time:
+            self._tilt_lead = self._tilt_lead+(goal-self._tilt_lead)*(1.-math.exp(-(self.time-self._tilt_time)/TILT_EASE))
+        self._tilt_time = self.time
+        if not self._tilt_lead.any():
+            return lift
+        return lift+self._tilt_lead*np.clip(TILT_SIDE*x/TROUGH_VIEW,-1.,1.)
 
     def _advance_zoom(self,dt,enabled,hold):
         self._sustain = follower(self._sustain,self.passage,dt,ZOOM_SUSTAIN_ATTACK,ZOOM_SUSTAIN_RELEASE)
@@ -863,7 +893,7 @@ class WaveformDynamics:
         # eases through two stages on the logical clock (see _floor_room); a deeper trough than the cap may still graze.
         hang = np.abs(rows[:,:,3]*np.cos(data[:,5::KNOT_ROWS,1]))
         room = max(TROUGH_ROOM_MIN,PACKET_FLOOR_HEIGHT+values['lift']-TROUGH_CLEARANCE)
-        rise = self._floor_room(y,hang,room,np.abs(x)<TROUGH_VIEW)
+        rise = self._height_shift(y,hang,room,x)
         rows[:,:,1] = 5.*np.tanh(y/5.)+values['lift']+rise
         # Strong local musical regions change colour immediately, even before new head history enters view.
         # The crest mask is carried by immutable carrier geometry, so coloured regions travel with the waveform.
