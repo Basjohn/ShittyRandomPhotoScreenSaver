@@ -243,11 +243,24 @@ class StudioFraming:
     extent: tuple[float, float]
     description: str = ""
     style: tuple = ()          # (key, value) pairs the mode's renderer needs to present this frame
+    # Grow with the viewport: the presented extent is ``extent`` widened (or heightened) to the viewport's
+    # own shape, so the picture fills the viewport and still shows at least all of ``extent``'s world.
+    fill: bool = False
+
+
+def fill_extent(extent, aspect: float) -> tuple[float, float]:
+    """``extent`` grown on one axis to ``aspect`` (width / height): never less world than ``extent``."""
+    width, height = float(extent[0]), float(extent[1])
+    if aspect <= 0.0 or width <= 0.0 or height <= 0.0:
+        return width, height
+    if width / height < aspect:
+        return height * aspect, height
+    return width, width / aspect
 
 
 __all__ = [
     "NavAxis", "RECORDED", "REFERENCE", "SYNTHETIC", "RenderCard", "StudioCapabilities", "StudioEvaluator",
-    "StudioFixture", "StudioPreview",
+    "StudioFixture", "StudioPreview", "fill_extent",
     "StudioFraming", "StudioNavigation",
     "StudioModeAdapter", "StudioRenderer",
 ]

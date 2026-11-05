@@ -715,7 +715,7 @@ class ExtrudedBubbleStudioAdapter(StudioModeAdapter):
         return framed.card_framings(card_extent, card_style)
 
     def default_framing(self) -> str:
-        return "wide"           # the dashboard's wide viewport; Live Card shows the true card, letterboxed
+        return "fill"           # the live card's world and scale, filling the viewport; Live Card is exact
 
     def default_fixture(self, evaluator) -> str | None:
         return "mid"
