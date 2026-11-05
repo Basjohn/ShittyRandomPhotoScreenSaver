@@ -116,10 +116,13 @@ GLOBAL_ATTACK = .35
 # to BREATHING_CONTRAST: it swells AND lets go without being lifted as a whole. Loud passages keep their authored Decay,
 # their targets and their reach. Attack, both follower stages and the rate limits are unchanged (no twitch).
 BREATHING_REACH, BREATHING_CONTRAST, BREATHING_LOUD, BREATHING_BASE = .75, 1.5, .8, 3.
-# Breathing also keeps a quieter passage quiet (see advance): while a drive sits below its remembered peak the memory
-# relaxes over RESPONSE_MEMORY x (1 + Breathing x (RESPONSE_HOLD - 1)): a song-scale memory (135 s at Breathing .7)
-# instead of a passage-scale one. Breathing 0 keeps RESPONSE_MEMORY exactly.
-RESPONSE_HOLD = 6.
+# Breathing also keeps a quieter PASSAGE quiet (see advance). The gain memory is held only while the slow sustained
+# level (the published passage held over seconds, ZOOM_SUSTAIN_ATTACK/RELEASE: it never dips between beats) sits
+# clearly below the loud level the remembered peaks were set at: from HOLD_BELOW[0] of it (no hold) to HOLD_BELOW[1]
+# (full hold), the memory relaxes over up to RESPONSE_MEMORY x (1 + Breathing x (RESPONSE_HOLD - 1)). That loud level
+# rises with the sustained level at once and relaxes with the memory, so a song that stays softer is re-normalised
+# over minutes. Sustained music, and Breathing 0, keep RESPONSE_MEMORY exactly.
+RESPONSE_HOLD, HOLD_BELOW = 6., (.8, .7)
 
 # Floor clearance (operator, 5 Nov; see WaveformDynamics._floor_room): the packet origin sits PACKET_FLOOR_HEIGHT above
 # the world floor; a ribbon whose lower edge would come within TROUGH_CLEARANCE of it lifts as a whole (never reshaped),
@@ -355,6 +358,7 @@ class WaveformDynamics:
         self.bands, self.power = (0.,0.,0.),0.
         self.passage = self.phrase = 0.
         self.zoom, self._sustain = 1., 0.
+        self._loud_level = 0.  # the sustained level the remembered peaks were set at (Breathing's quieter-passage hold)
         self._glow = 0.  # swell-shaped light response to hits (rise HIT_GLOW_RISE, settle HIT_GLOW_SETTLE)
         self._pulse = np.zeros((2,PULSE_GRID.size))  # travelling toward -x, toward +x
         self._fresh = np.zeros((2,PULSE_GRID.size))  # the same transport with a short fade: recently launched swells
@@ -487,6 +491,9 @@ class WaveformDynamics:
         energy_shaped = sum(weight*value for weight,value in zip(ENERGY_WEIGHTS,bands))
         hold = unit(c.breathing)
         softness = hold*unit((BREATHING_LOUD-self.passage)/BREATHING_LOUD)
+        quieter = unit((HOLD_BELOW[0]-self._sustain/max(self._loud_level,1e-6))/(HOLD_BELOW[0]-HOLD_BELOW[1]))
+        memory = RESPONSE_MEMORY*(1.+hold*quieter*(RESPONSE_HOLD-1.)) if hold and quieter else RESPONSE_MEMORY
+        self._loud_level = max(self._sustain,follower(self._loud_level,self._sustain,dt,0.,memory))
         geometry_release = c.release*(1.-BREATHING_REACH*softness)
         for key in TARGETS:
             target = route(c.routing[key],sources,passage=gate)
@@ -499,16 +506,12 @@ class WaveformDynamics:
                 # a loud one stays quiet (an offset window re-expanded quiet intros to full size). The remembered
                 # peak lands at RESPONSE_TOP, so a sustained loud passage keeps headroom for its accents instead of
                 # pinning at Peak (operator: sustained passages need the most judgement).
-                peak = self._response_peak[key]
-                memory = RESPONSE_MEMORY
-                if hold and target < peak:
-                    # Breathing keeps a quieter passage quiet (operator, 5 Nov: Preset 7 "swelled up to full power when
-                    # the song went QUIETER"). The passage-scale 30 s memory re-normalised a passage at 70% of the loud
-                    # input back up to loud reach (Pulse Strength .73 -> .88, above the loud passage's .87) within 25 s.
-                    # Held for a song-scale time, a quiet passage keeps its proportion to the loud one; a song that
-                    # stays softer is still re-normalised, over minutes. Rises still reach the peak in RESPONSE_REACH.
-                    memory = RESPONSE_MEMORY*(1.+hold*(RESPONSE_HOLD-1.))
-                self._response_peak[key] = max(RESPONSE_PEAK_FLOOR,follower(peak,target,dt,RESPONSE_REACH,memory))
+                # Breathing holds the memory only through a quieter PASSAGE (``memory`` above): the passage-scale 30 s
+                # memory re-normalised a passage at 70% of the loud input back up to loud reach (Pulse Strength .73 ->
+                # .88, above the loud passage's .87) within 25 s. Keyed to the drive's own dips it held every song
+                # (the drive sits below its peak between almost every pair of beats). Rises still reach in RESPONSE_REACH.
+                self._response_peak[key] = max(RESPONSE_PEAK_FLOOR,follower(
+                    self._response_peak[key],target,dt,RESPONSE_REACH,memory))
                 target = unit(RESPONSE_TOP*target/self._response_peak[key])
                 base = self._breath_base[key] = follower(self._breath_base[key],target,dt,BREATHING_BASE,BREATHING_BASE)
                 if softness:  # Breathing 0 (or a loud passage) keeps the exact unwidened target

@@ -95,8 +95,9 @@ constants); all state integrates on the sole logical clock and the projection on
   `BREATHING_LOUD`; a soft passage releases its geometry drives faster (up to `BREATHING_REACH` of Decay, on both
   stages) and widens each drive's swings about its own phrase-scale mean (up to `1 + BREATHING_CONTRAST`), so it
   swells and lets go within its phrases instead of holding. Loud passages keep Decay, targets and reach. Breathing
-  also holds the adaptive gain's memory while a drive sits below it (`RESPONSE_MEMORY x (1 + Breathing x
-  (RESPONSE_HOLD - 1))`, song-scale), so a quieter passage after a loud one is not re-normalised to loud reach.
+  also holds the adaptive gain's memory through a quieter PASSAGE (`RESPONSE_MEMORY x (1 + Breathing x (RESPONSE_HOLD
+  - 1))`, engaged only while the slow sustained level sits below `HOLD_BELOW` of the loud level the peaks were set at,
+  never between beats), so a quieter passage after a loud one is not re-normalised to loud reach.
   Breathing 0 is bit-exact with the 5 Nov baseline (Preset 4).
 - **Anchored history ends** (5 Nov, side-angle tail stagger). The packet header carries the history ring's admission
   phase (`extra.w`); the drawn history ends `ANCHOR_INSET` knots inside each end at anchors fixed in the scene, and the
