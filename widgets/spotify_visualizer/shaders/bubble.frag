@@ -17,7 +17,7 @@ uniform vec2 u_viewport_origin_px;
 uniform int u_quick_item_coords;
 uniform vec4 u_content_rect;  // item-local x, y, width, height
 uniform float u_visual_scale;
-uniform float u_response_radius_scale; // equal-area canonical response / content height
+uniform float u_response_radius_scale; // canonical-card radius unit (x world scale) / content height
 uniform float u_border_width;
 uniform float u_fade;
 uniform float u_time;
@@ -43,8 +43,7 @@ uniform vec4 u_bubbles_extra[110];
 uniform vec3 u_bubbles_trail[330];  // 110 * 3
 uniform float u_trail_strength;     // 0.0 = off, 1.0 = full
 uniform float u_tail_opacity;       // max opacity ceiling for tail gradient (0.0-0.85)
-uniform vec2 u_trail_axis_scale;    // authored-pixel history-source footprint on CUSTOM axes
-uniform float u_trail_radial_scale;  // authored-pixel ripple radius/ring footprint on CUSTOM height
+uniform float u_trail_radial_scale;  // canonical-card wake ring geometry in current content heights
 uniform float u_viewport_stroke_extra_half_px; // cached physical half-stroke gradient (Quick only)
 
 // --- Styling ---
@@ -244,20 +243,16 @@ void main() {
         float trail_strength = clamp(u_trail_strength, 0.0, 1.5);
         float opacity_cap = clamp(u_tail_opacity, 0.0, 0.85);
         vec2 uv_aspect = vec2(uv.x * aspect, uv.y);
-        // The old compositor never uploads the Quick-only viewport-transfer
-        // uniforms. Preserve its canonical shader behavior while Quick applies
-        // authored-pixel footprint correction after CUSTOM edge resizing.
-        vec2 trail_axis_scale = (u_quick_item_coords == 1)
-            ? clamp(u_trail_axis_scale, vec2(0.01), vec2(1.0))
-            : vec2(1.0);
+        // The old compositor never uploads the Quick-only uniform; it draws the
+        // canonical card. Bubble history is already in this card's coordinates
+        // at the canonical card's scale (the simulation moves in canonical-card
+        // units on every shape), so only the ring constants need projecting.
         float trail_radial_scale = (u_quick_item_coords == 1)
-            ? clamp(u_trail_radial_scale, 0.01, 1.0)
+            ? clamp(u_trail_radial_scale, 0.01, 100.0)
             : 1.0;
 
-        // Ripple ring parameters. Distance is normalized to current content
-        // height, so maintaining authored-pixel radius *and ring spacing*
-        // requires shrinking radial dimensions and increasing normalized
-        // frequency by the reciprocal transfer on tall edge-resized cards.
+        // Ripple ring parameters are authored in canonical content heights;
+        // distance here is in current content heights.
         float ring_freq = 220.0 / trail_radial_scale;
         float ring_thickness = 0.38;      // how sharp the rings are (0=needle, 1=solid)
         float max_ripple_radius = 0.12 * trail_radial_scale;
@@ -275,24 +270,15 @@ void main() {
                 float strength = sample_data.z;
                 if (strength < 0.001) continue;
 
-                // Keep the simulation/history geometry unchanged, but render
-                // its presentation footprint with baseline-pixel authority.
-                // At a 3x-tall viewport, for example, three normalized history
-                // samples otherwise separate by ~3x in pixels and read as three
-                // extra ghost bubbles instead of one compact wake.
-                vec2 sample_uv = bpos.xy + (sample_data.xy - bpos.xy) * trail_axis_scale;
-                vec2 src = vec2(sample_uv.x * aspect, sample_uv.y);
+                vec2 src = vec2(sample_data.x * aspect, sample_data.y);
                 vec2 delta = uv_aspect - src;
 
                 // Age determines how far the ripples have expanded:
                 // oldest sample (s=0) → age 1.0, newest (s=2) → age 0.15
                 float age = mix(1.0, 0.15, float(s) / 2.0);
 
-                // Wake geometry is an authored presentation effect, not a
-                // second copy of the height-scaled Bubble head. R4 corrected
-                // only source-centre separation; use the same baseline-pixel
-                // authority for each source's complete radial field.
-                float wake_brad = brad * trail_radial_scale;
+                // The head radius is already projected at the canonical scale.
+                float wake_brad = brad;
                 float ripple_r = wake_brad * (2.0 + age * 6.0) * trail_strength;
                 ripple_r = min(ripple_r, max_ripple_radius);
 
