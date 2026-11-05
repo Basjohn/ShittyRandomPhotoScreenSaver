@@ -45,7 +45,17 @@ class VisualizerSettingsStore:
         for control in self._spec().controls:
             default = tab._widget_default("spotify_visualizer", control.key)
             config[control.key] = control.admit(read_control_value(control, config.get, default), default)
+        config["scene3d_detail"] = self._scene3d_detail()
         return config
+
+    def _scene3d_detail(self) -> str:
+        """The 3D Detail tier the stored 3D Settings resolve for this mode, exactly as the display manager hands it
+        to the visualizer's presentation (renderers never read Settings). Not an edited value: a render context."""
+        from core.settings.scene3d_quality import read_scene3d_section, resolve_visualizer_tier
+        from rendering.quick.bootstrap import last_validated_gpu
+        manager = getattr(self._tab, "_settings", None)
+        section = read_scene3d_section(manager.get) if manager is not None and hasattr(manager, "get") else None
+        return resolve_visualizer_tier(section, self._mode, gpu=last_validated_gpu())
 
     def commit(self, values: Mapping[str, Any], changed: frozenset[str]) -> dict[str, Any]:
         from ui.tabs.media import framed_camera_editor as fce
