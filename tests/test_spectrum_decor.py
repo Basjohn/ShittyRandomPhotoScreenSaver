@@ -443,3 +443,32 @@ def test_unchanged_decoration_is_neither_resolved_nor_uploaded_again(render, mon
     assert len(calls) == first                              # at rest: no resolve
     render({"spectrum_gloss": 1.0})
     assert len(calls) == first + 1                          # a change is seen
+
+
+@pytest.mark.qt
+def test_an_equal_parameter_mapping_skips_even_the_decoration_fetch(render, monkeypatch):
+    """Each tick hands the renderer a fresh, equal parameter mapping; at rest it is compared whole (one call) and
+    the per-key decoration fetch is skipped. A change to an unrelated parameter is fetched and compared but not
+    resolved; a decoration change is resolved (negative controls)."""
+    from rendering.quick.visualizer.implementations import spectrum as owner
+    fetches, resolves = [], []
+    real_fetch, real_resolve = owner._decor_sources, owner.resolve_spectrum_decor_uniforms
+
+    def fetch(parameters):
+        fetches.append(1)
+        return real_fetch(parameters)
+
+    def resolve(parameters, visual_scale):
+        resolves.append(1)
+        return real_resolve(parameters, visual_scale)
+    monkeypatch.setattr(owner, "_decor_sources", fetch)
+    monkeypatch.setattr(owner, "resolve_spectrum_decor_uniforms", resolve)
+    render()
+    fetched, resolved = len(fetches), len(resolves)
+    render()
+    render()
+    assert (len(fetches), len(resolves)) == (fetched, resolved)          # at rest: no fetch, no resolve
+    render(raw_parameters={"spectrum_unrelated_probe": 1.0})
+    assert (len(fetches), len(resolves)) == (fetched + 1, resolved)      # unrelated change: fetched, not resolved
+    render({"spectrum_gloss": 1.0}, raw_parameters={"spectrum_unrelated_probe": 1.0})
+    assert len(resolves) == resolved + 1                                 # a decoration change is resolved
