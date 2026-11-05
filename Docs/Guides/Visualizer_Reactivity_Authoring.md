@@ -588,8 +588,13 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` â†
   bursts; sliding points along their own curve (exact resampling of the unswollen body, bounded compression, rate
   limited) carries the energy without changing the curve. Horizontal position otherwise moves only with the steady
   flow.
-- **Born outside the view.** Inject travelling energy just beyond the visible edge so it slides in already formed;
-  energy born inside the view pops into existence.
+- **Born outside the view, but just outside it, and fading only once seen.** Inject travelling energy just beyond the
+  visible edge so it slides in already formed (energy born inside the view pops into existence), and measure that edge
+  from the camera the card really uses: Waveform assumed +-30 and launched at 44, while the card shows +-16 (+-5 at the
+  canonical size), so a Head To Tail swell arrived ~2 s late with 5% of its strength (in-view swell p50 .13 against
+  Centre Out's 1.39). The capture now passes the camera's visible span as configuration; edge swells are born a few
+  envelope widths beyond it and their fade starts at the edge, as a Centre Out swell's starts at its birth (p50 .99).
+  A visible swell lifts the pre-kick baseline, so judge kicks by their peak as well as their rise.
 - **Keep the travelling feature legible.** Geometry and look should follow the *fresh* energy (a short-fade copy of
   the field), or overlapping old energy piles into a uniform inflation or a glow parked at the emitter. Check the
   feature's median/max over the visible span on dense real music, and that successive beats stay separate bands.
