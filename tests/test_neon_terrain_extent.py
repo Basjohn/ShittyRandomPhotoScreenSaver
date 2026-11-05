@@ -251,3 +251,17 @@ def test_the_dragged_sun_settles_on_gentle_steps_and_keeps_its_size():
         distance = math.dist((x * NOMINAL_HALF_WIDTH, y, z), CELESTIAL_REFERENCE)
         assert distance == pytest.approx(3.0, abs=1e-6)
     assert angled.place_body(projection, point, 3.0, snap=True) != angled.place_body(projection, point, 3.0, snap=False)
+
+
+def test_the_camera_floor_unpacks_a_render_payload_once():
+    """The renderer asks for the camera floor every frame; its frozen payload is unpacked once, not per frame
+    (a 121-cell extended grid cost about 1.5 ms a frame)."""
+    from rendering.gl_programs.heightfield import basin_profile, heightfield_surface_bytes
+    from core.settings import neon_lake_camera
+
+    terrain = normalize_heightfield(basin_profile(17))
+    record = {"size": terrain["size"], "data": heightfield_surface_bytes(terrain)}
+    neon_lake_camera._packed_heights.cache_clear()
+    floors = [neon_lake_camera.terrain_floor(record, 1.0)(0.0, -1.2) for _ in range(3)]
+    assert floors[0] > 0.0 and floors.count(floors[0]) == 3
+    assert neon_lake_camera._packed_heights.cache_info().misses == 1
