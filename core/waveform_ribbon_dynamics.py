@@ -183,6 +183,25 @@ def carrier_wavelength(controls):
     return min(GEOM_MAX_WAVELENGTH,flow.speed/slowest)
 
 
+def row_gradient(f,xs):
+    """``np.gradient(f[i],xs[i])`` for every row i at once, with NumPy's exact arithmetic (edge order 1, and the
+    uniform-spacing formula for a row whose spacing is exactly constant), so results are bit-identical."""
+    dx = np.diff(xs,axis=1)
+    out = np.empty_like(f)
+    dx1,dx2 = dx[:,:-1],dx[:,1:]
+    a = -(dx2)/(dx1*(dx1+dx2))
+    b = (dx2-dx1)/(dx1*dx2)
+    c = dx1/(dx2*(dx1+dx2))
+    interior = a*f[:,:-2]+b*f[:,1:-1]+c*f[:,2:]
+    uniform = (dx==dx[:,:1]).all(axis=1)
+    if uniform.any():
+        interior[uniform] = ((f[:,2:]-f[:,:-2])/(2.*dx[:,:1]))[uniform]
+    out[:,1:-1] = interior
+    out[:,0] = (f[:,1]-f[:,0])/dx[:,0]
+    out[:,-1] = (f[:,-1]-f[:,-2])/dx[:,-1]
+    return out
+
+
 def soft(value):
     return PULSE_SATURATION*np.tanh(value/PULSE_SATURATION)
 
@@ -594,36 +613,49 @@ class WaveformDynamics:
 
     def _surge(self,data,x,y,z,amount):
         """Slide each knot ALONG its own curve by the signed swell: the body is resampled at the shifted positions
-        (cubic Hermite through the unsurged knots), so the curve itself never changes, only its cloth moves."""
+        (cubic Hermite through the unsurged knots), so the curve itself never changes, only its cloth moves.
+
+        Ribbons sharing one history window (count, start, capacity) are resampled together as rows: the same
+        element-wise arithmetic as one ribbon at a time (``row_gradient`` reproduces ``np.gradient``), so the
+        published packet is byte-identical, at a fraction of the per-ribbon NumPy dispatch (5 Nov profile)."""
         drift = self.pulse_drift(x)*amount
         if not np.any(drift):
             return x,y,z
         x,y,z = x.copy(),y.copy(),z.copy()
+        windows = {}
         for index,path in enumerate(data):
             count,start,capacity = int(path[0,0]),int(path[1,1]),int(path[1,2])
-            if count<4:
-                continue
+            if count>=4:
+                windows.setdefault((count,start,capacity),[]).append(index)
+        for (count,start,capacity),members in windows.items():
             order = (start+np.arange(count))%capacity
-            xs,ds = x[index,order],drift[index,order].copy()
-            if not np.any(ds):
+            rows = np.asarray(members)[:,None]
+            xs,ds = x[rows,order],drift[rows,order]
+            moving = ds.any(axis=1)
+            if not moving.any():
                 continue
+            rows,xs,ds = rows[moving],xs[moving],ds[moving]
             # The ends never slide: a smooth taper long enough to respect the compression bound.
-            ramp = max(1e-6,np.abs(ds).max()/(.9*SURGE_MAX_COMPRESSION))
-            edge = np.clip(np.minimum(xs-xs[0],xs[-1]-xs)/ramp,0.,1.)
-            ds *= edge*edge*(3.-2.*edge)
-            squeeze = np.diff(ds)/np.diff(xs)
-            if squeeze.min() < -SURGE_MAX_COMPRESSION:
-                ds *= SURGE_MAX_COMPRESSION/-squeeze.min()
+            ramp = np.maximum(1e-6,np.abs(ds).max(axis=1,keepdims=True)/(.9*SURGE_MAX_COMPRESSION))
+            edge = np.clip(np.minimum(xs-xs[:,:1],xs[:,-1:]-xs)/ramp,0.,1.)
+            ds = ds*(edge*edge*(3.-2.*edge))
+            squeeze = (np.diff(ds,axis=1)/np.diff(xs,axis=1)).min(axis=1,keepdims=True)
+            limited = squeeze < -SURGE_MAX_COMPRESSION
+            ds = np.where(limited,ds*(SURGE_MAX_COMPRESSION/np.where(limited,-squeeze,1.)),ds)
             target = xs+ds
-            cell = np.clip(np.searchsorted(xs,target)-1,0,count-2)
-            h = xs[cell+1]-xs[cell]
-            t = (target-xs[cell])/h
+            cell = np.stack([np.searchsorted(row,goal) for row,goal in zip(xs,target)])
+            cell = np.clip(cell-1,0,count-2)
+            left,right = np.take_along_axis(xs,cell,1),np.take_along_axis(xs,cell+1,1)
+            h = right-left
+            t = (target-left)/h
             h00,h10,h01,h11 = 2*t**3-3*t*t+1,t**3-2*t*t+t,-2*t**3+3*t*t,t**3-t*t
             for values in (y,z):
-                vs = values[index,order]
-                slope = np.gradient(vs,xs)
-                values[index,order] = (h00*vs[cell]+h10*h*slope[cell]+h01*vs[cell+1]+h11*h*slope[cell+1])
-            x[index,order] = target
+                vs = values[rows,order]
+                slope = row_gradient(vs,xs)
+                pick = lambda field,at: np.take_along_axis(field,at,1)
+                values[rows,order] = (h00*pick(vs,cell)+h10*h*pick(slope,cell)+h01*pick(vs,cell+1)
+                                      +h11*h*pick(slope,cell+1))
+            x[rows,order] = target
         return x,y,z
 
     def _advance_zoom(self,dt,enabled,hold):

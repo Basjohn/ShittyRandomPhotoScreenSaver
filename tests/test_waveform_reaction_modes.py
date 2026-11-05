@@ -262,3 +262,16 @@ def test_hit_light_swells_instead_of_flashing():
     assert trace[0] < .5*trace[peak] and peak/90 <= .15
     assert trace[round(.5*90)] > .35*trace[peak]
     assert (np.diff(trace[peak:]) <= 1e-12).all()  # settles monotonically: no back-and-forth
+
+
+def test_row_gradient_is_bit_identical_to_numpy_gradient_per_row():
+    """The vectorised surge relies on this to keep the published packet byte-identical (5 Nov optimisation)."""
+    from core.waveform_ribbon_dynamics import row_gradient
+    rng = np.random.default_rng(7)
+    xs = np.cumsum(rng.uniform(.05, .3, (3, 40)), axis=1).astype(np.float32)
+    xs[1] = np.arange(40, dtype=np.float32)*.25  # exactly uniform spacing: NumPy switches formula
+    for f in (rng.normal(size=(3, 40)), rng.normal(size=(3, 40)).astype(np.float32)):
+        out = row_gradient(f, xs)
+        for row in range(3):
+            expected = np.gradient(f[row], xs[row])
+            assert out.dtype == expected.dtype and np.array_equal(out[row], expected)
