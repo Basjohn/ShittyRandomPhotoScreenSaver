@@ -41,10 +41,13 @@ class RibbonBurstRenderer:
         if self.stream is None:
             alignment=gl_query.get_int(gl.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT)
             size=CAPACITY*STRIDE*4+alignment
-            self.stream=StreamRing('ribbon event sparks',slots=3,slot_bytes=size,hold_bytes=size)
+            # Two binds a frame (direct and reflected), one slot each: six slots keep the GPU three frames clear of
+            # a reused slot, so no fence wait ties this frame's submission to the previous frame's completion.
+            self.stream=StreamRing('ribbon event sparks',slots=6,slot_bytes=size,hold_bytes=size)
         return self.stream
 
-    def draw(self,payload,*,mvp,now,viewport,mist,grade):
+    def draw(self,payload,*,mvp,now,viewport,mist,grade,restore=True):
+        """``restore=False``: the caller owns the program and storage binding for its frame (nothing read back)."""
         if not payload:return
         if len(payload)!=CAPACITY*STRIDE*4:raise ValueError('Invalid ribbon burst packet size')
         self._context(admit=True)
@@ -66,7 +69,7 @@ class RibbonBurstRenderer:
         vao,_=self.resources.mesh('quad',(0.,0.,1.,0.,0.,1.,1.,1.),(2,))
         from types import SimpleNamespace
         stream=self._stream();stream.warm()
-        with stream.bound(gl.GL_SHADER_STORAGE_BUFFER,1,payload):
+        with stream.bound(gl.GL_SHADER_STORAGE_BUFFER,1,payload,restore=restore):
             draw_particles(SimpleNamespace(quad_vao=vao),CAPACITY)
 
     def release(self):
