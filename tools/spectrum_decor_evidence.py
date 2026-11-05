@@ -130,6 +130,30 @@ class GLTarget:
         assert self.host.render(snapshot=snapshot, viewport=(0, 0, width, height),
                                 logical_size=(float(width), float(height)), matrix_values=matrix) == MODE
 
+    def timed_draw(self, frame, scale: float, repeat: int, query: int) -> float:
+        """GPU ms of the production Spectrum draw of ``frame``: the renderer's own draw call (every uniform, blend and
+        quad state it and the host set) issued ``repeat`` times in one instanced call inside a TIME_ELAPSED query,
+        so the figure is the shader's cost, not Python submission."""
+        from OpenGL import GL as gl
+        import rendering.quick.visualizer.implementations.spectrum as spectrum_module
+
+        class TimedGL:
+            def __getattr__(self, name):
+                return getattr(gl, name)
+
+            @staticmethod
+            def glDrawArrays(mode, first, count):
+                gl.glBeginQuery(gl.GL_TIME_ELAPSED, query)
+                gl.glDrawArraysInstanced(mode, first, count, repeat)
+                gl.glEndQuery(gl.GL_TIME_ELAPSED)
+
+        spectrum_module.gl = TimedGL()
+        try:
+            self.draw(frame, scale)
+        finally:
+            spectrum_module.gl = gl
+        return float(gl.glGetQueryObjectuiv(query, gl.GL_QUERY_RESULT)) / 1e6 / repeat
+
     def render(self, frame, scale: float, *, background=(0.0, 0.0, 0.0, 0.0)):
         """Top-origin RGBA uint8 pixels of ``frame`` drawn at ``scale``."""
         import numpy as np
@@ -265,7 +289,8 @@ def cmd_showcase(out_dir: Path) -> int:
 
 
 def cmd_cost(out_json: Path | None) -> int:
-    """Median / p90 GPU ms of one Spectrum draw (GL_TIME_ELAPSED) per option, at the card (x1) and x2."""
+    """Median / p90 GPU ms of one Spectrum draw per option (``GLTarget.timed_draw``: the production draw repeated
+    200 times in one instanced call), at the card (x1), x2 and x4 (1680x1120, a near full-screen card)."""
     import statistics
     from OpenGL import GL as gl
     _app()
@@ -273,25 +298,26 @@ def cmd_cost(out_json: Path | None) -> int:
     results = {}
     try:
         base = organs_values()
-        looks = {"organs": {}, **variants()}
+        # Organs first and last: the control the options are judged against (absolute ms swing with GPU clocks).
+        looks = {"organs": {}, **variants(), "organs_again": {}}
         query = gl.glGenQueries(1)[0]
+        _now, warm = production_frames(base, fractions=(0.5,))[0]
+        for _ in range(40):                       # raise the GPU clocks before the first measurement
+            target.timed_draw(warm, 4.0, 500, query)
         for name, overrides in looks.items():
             values = dict(base, **overrides)
             frames = [f for _n, f in production_frames(values, fractions=(0.3, 0.5, 0.7, 0.9))]
             entry = {}
-            for scale in SCALES:
+            for scale in (*SCALES, 4.0):
                 for frame in frames:            # warm
                     target.render(frame, scale)
                 samples = []
-                for _repeat in range(60):
+                for _repeat in range(20):
                     for frame in frames:
-                        gl.glBeginQuery(gl.GL_TIME_ELAPSED, query)
-                        target.draw(frame, scale)
-                        gl.glEndQuery(gl.GL_TIME_ELAPSED)
-                        samples.append(gl.glGetQueryObjectui64v(query, gl.GL_QUERY_RESULT) / 1e6)
+                        samples.append(target.timed_draw(frame, scale, 200, query))
                 samples.sort()
-                entry[f"x{scale:g}"] = {"median_ms": round(statistics.median(samples), 4),
-                                        "p90_ms": round(samples[int(len(samples) * 0.9)], 4)}
+                entry[f"x{scale:g}"] = {"median_ms": round(float(statistics.median(samples)), 5),
+                                        "p90_ms": round(float(samples[int(len(samples) * 0.9)]), 5)}
             results[name] = entry
             print(name, entry)
         gl.glDeleteQueries(1, [query])
