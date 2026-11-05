@@ -18,7 +18,8 @@ SWITCH = "switch"            # boolean
 CHOICE = "choice"            # categorical: chips
 QUIET_PEAK = "quiet_peak"    # two response endpoints of ONE quantity: Quiet|Peak A/B selector + one slider
 COLOUR = "colour"            # display swatch + exact hex entry
-INSTRUMENTS = frozenset({SCALAR, COUNT, SWITCH, CHOICE, QUIET_PEAK, COLOUR})
+GRADIENT = "gradient"        # ordered colour nodes [[position, rgb], ...]: draggable strip + picker
+INSTRUMENTS = frozenset({SCALAR, COUNT, SWITCH, CHOICE, QUIET_PEAK, COLOUR, GRADIENT})
 
 Path = tuple  # (settings_key, *index)
 
@@ -132,6 +133,40 @@ class StudioResponse:
 
 
 @dataclass(frozen=True)
+class StudioPreset:
+    """A reversible starting point for a group: applied as one undoable edit of real values."""
+    id: str
+    label: str
+    description: str = ""
+    swatch: tuple[str, ...] = ()      # display colours for the tile
+
+
+@dataclass(frozen=True)
+class LifecycleSpec:
+    """A birth -> sustain -> fade timeline over existing values (quiet/peak endpoints edited one at a time).
+
+    ``total`` is the full lifetime (seconds); ``fade_share`` the share of it spent fading at the end;
+    ``peel`` an optional delay before the object detaches/is fully born (seconds)."""
+    group: str
+    total: str
+    fade_share: str = ""
+    peel: str = ""
+    label: str = ""
+
+
+@dataclass(frozen=True)
+class CardSpec:
+    """A schematic preview card above a group's controls (a diagram of real values, never a render).
+
+    ``kind`` is a shell diagram ("falloff", "reflection", "exposure"); ``roles`` maps the diagram's
+    roles to property ids."""
+    group: str
+    kind: str
+    roles: tuple[tuple[str, str], ...]
+    title: str = ""
+
+
+@dataclass(frozen=True)
 class StudioSchema:
     """A mode's complete editable surface."""
 
@@ -146,6 +181,9 @@ class StudioSchema:
     group_traces: tuple[tuple[str, tuple[str, ...]], ...] = ()
     group_icons: tuple[tuple[str, str], ...] = ()      # (group, glyph) for inspector section headers
     object_noun: str = "Object"                         # e.g. "Add <noun>" in the scene list
+    group_presets: tuple[tuple[str, tuple[StudioPreset, ...]], ...] = ()
+    lifecycles: tuple[LifecycleSpec, ...] = ()
+    cards: tuple[CardSpec, ...] = ()
 
     def __post_init__(self) -> None:
         ids = [prop.id for prop in self.properties]
@@ -168,6 +206,7 @@ class StudioSchema:
 
 
 __all__ = [
+    "CardSpec", "GRADIENT", "LifecycleSpec", "StudioPreset",
     "ResponseCell", "ResponseSource", "ResponseTarget", "StudioResponse",
     "CHOICE", "COLOUR", "COUNT", "INSTRUMENTS", "QUIET_PEAK", "SCALAR", "SWITCH",
     "SceneObject", "StudioProperty", "StudioSchema", "Workspace",

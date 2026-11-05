@@ -18,7 +18,7 @@ from PySide6.QtCore import Property, QObject, Qt, Signal, Slot
 
 from core.logging.logger import get_logger
 from ui.studio.adapter import RECORDED, StudioFixture, StudioModeAdapter
-from ui.studio.schema import CHOICE, COLOUR, COUNT, QUIET_PEAK, SCALAR, SWITCH, StudioProperty
+from ui.studio.schema import CHOICE, COLOUR, COUNT, GRADIENT, QUIET_PEAK, SCALAR, SWITCH, StudioProperty
 from ui.studio.session import CanonicalStore, StudioEditSession, read_path
 from ui.studio.transport import StudioTransport
 
@@ -43,6 +43,34 @@ def _colour_value(prop: StudioProperty, text: str, previous: Any) -> Any:
     rgb = [int(digits[i:i + 2], 16) for i in (0, 2, 4)]
     alpha = list(previous)[3:4] or [255]
     return rgb + alpha
+
+
+def _gradient_display(prop: StudioProperty, nodes: Any) -> list:
+    return [{"pos": float(position), "hex": _colour_hex(prop, colour)} for position, colour in nodes]
+
+
+def _gradient_value(prop: StudioProperty, display: Any, previous: Any) -> list:
+    """Display nodes -> stored nodes. A node whose display colour is unchanged keeps its exact stored
+    colour (no linear <-> display round-trip drift); only edited colours are converted."""
+    import json
+    nodes = json.loads(display) if isinstance(display, str) else list(display)
+    if not prop.minimum <= len(nodes) <= prop.maximum:
+        raise ValueError(f"{prop.label} needs {int(prop.minimum)} to {int(prop.maximum)} nodes")
+    old = list(previous)
+    out = []
+    for node in nodes:
+        source = node.get("from")
+        colour = None
+        if isinstance(source, int) and 0 <= source < len(old):
+            original = old[source][1]
+            if _colour_hex(prop, original).lower() == str(node["hex"]).lower():
+                colour = list(original)
+        if colour is None:
+            colour = _colour_value(prop, node["hex"], [0, 0, 0, 255])[:3] if prop.colour_format != "linear01" \
+                else _colour_value(prop, node["hex"], None)
+        out.append([max(0.0, min(1.0, float(node["pos"]))), colour])
+    out.sort(key=lambda item: item[0])
+    return out
 
 
 class StudioBridge(QObject):
@@ -150,6 +178,7 @@ class StudioBridge(QObject):
         self._workspace = workspace_id
         self._rebuild_inspector()
         self.workspaceChanged.emit()
+        self._c.refresh_handles()
 
     # ----------------------------------------------------------- objects
     def _rebuild_objects(self) -> None:
@@ -197,6 +226,7 @@ class StudioBridge(QObject):
         self._selected = object_id
         self._rebuild_inspector()
         self.objectsChanged.emit()
+        self._c.refresh_handles()
 
     # --------------------------------------------------------- inspector
     def _rebuild_inspector(self) -> None:
@@ -224,9 +254,26 @@ class StudioBridge(QObject):
                     title = group.replace("{object}", label or "Selected")
                 traces = dict(self._schema.group_traces).get(group, ())
                 is_open = group in workspace.open_groups if workspace.open_groups else position < 2
+                is_open = is_open or group in getattr(self, "_forced_open", ())
                 icon = dict(self._schema.group_icons).get(group, "")
+                presets = dict(self._schema.group_presets).get(group, ())
+                lifecycle = next((spec for spec in self._schema.lifecycles if spec.group == group), None)
+                card = next((spec for spec in self._schema.cards if spec.group == group), None)
                 groups.append({"title": title, "rows": rows, "traces": list(traces), "open": is_open,
-                               "icon": icon})
+                               "icon": icon,
+                               "presets": [{"id": p.id, "label": p.label, "description": p.description,
+                                            "swatch": list(p.swatch)} for p in presets],
+                               "lifecycle": ({"total": self._row(self._schema.find(lifecycle.total)),
+                                              "fade": (self._row(self._schema.find(lifecycle.fade_share))
+                                                       if lifecycle.fade_share else {}),
+                                              "peel": (self._row(self._schema.find(lifecycle.peel))
+                                                       if lifecycle.peel else {}),
+                                              "label": lifecycle.label}
+                                             if lifecycle is not None else {}),
+                               "card": ({"kind": card.kind, "title": card.title, "roles": dict(card.roles),
+                                         "labels": {role: self._schema.find(pid).label for role, pid in card.roles}}
+                                        if card is not None else {}),
+                               "group": group})
         self._inspector = groups
         self.inspectorChanged.emit()
 
@@ -253,11 +300,69 @@ class StudioBridge(QObject):
                 out[prop.id] = str(value)
             elif prop.instrument == COLOUR:
                 out[prop.id] = _colour_hex(prop, value)
+            elif prop.instrument == GRADIENT:
+                out[prop.id] = _gradient_display(prop, value)
         self._values = out
+        self._active_presets = self._preset_state(values)
         self.valuesChanged.emit()
 
     def _value_map(self) -> dict:
         return self._values
+
+    def _preset_state(self, values) -> dict:
+        """group -> id of the preset the current values equal (none when edited away from all)."""
+        state = {}
+        baseline = self._c.session.baseline_values
+        for group, presets in self._schema.group_presets:
+            state[group] = next((p.id for p in presets
+                                 if not self._c.adapter.apply_preset(group, p.id, baseline, values)), "")
+        return state
+
+    def _presets_active(self) -> dict:
+        return getattr(self, "_active_presets", {})
+
+    activePresets = Property("QVariantMap", _presets_active, notify=valuesChanged)
+
+    @Slot(str, str)
+    def applyPreset(self, group: str, preset_id: str) -> None:
+        presets = dict(self._schema.group_presets).get(group, ())
+        preset = next((p for p in presets if p.id == preset_id), None)
+        if preset is None:
+            return
+        changes = self._c.adapter.apply_preset(group, preset_id, self._c.session.baseline_values,
+                                               self._c.session.values)
+        if changes:
+            self._guard(lambda: self._c.session.set_many(changes, f"{group.replace('{object}', '').strip()}: "
+                                                         f"{preset.label}"))
+
+    @Slot(str, str)
+    def previewGradient(self, property_id: str, nodes: str) -> None:
+        def run():
+            prop = self._schema.find(property_id)
+            if not self._c.session.gesture_active:
+                self._c.session.begin_gesture(prop.label)
+            previous = read_path(self._c.session.values, prop.path)
+            self._c.session.preview(prop.path, _gradient_value(prop, nodes, previous))
+        self._guard(run)
+
+    @Slot(str, str)
+    def commitGradient(self, property_id: str, nodes: str) -> None:
+        def run():
+            prop = self._schema.find(property_id)
+            previous = read_path(self._c.session.values, prop.path)
+            self._c.session.set(prop.path, _gradient_value(prop, nodes, previous), f"Edit {prop.label}")
+        self._guard(run)
+
+    # ------------------------------------------------------------- handles
+    def _handles(self) -> dict:
+        return getattr(self, "_handle_state", {"outline": [], "handles": []})
+
+    handlesChanged = Signal()
+    handles = Property("QVariantMap", _handles, notify=handlesChanged)
+
+    def set_handles(self, state: Mapping[str, Any]) -> None:
+        self._handle_state = dict(state)
+        self.handlesChanged.emit()
 
     values = Property("QVariantMap", _value_map, notify=valuesChanged)
 
@@ -324,6 +429,28 @@ class StudioBridge(QObject):
             return
         self._guard(self._c.session.end_gesture)
 
+    @Slot(str, str)
+    def previewColour(self, property_id: str, hex_text: str) -> None:
+        """Live colour preview while a picker is dragged (one gesture; endEdit commits it)."""
+        def run():
+            prop = self._schema.find(property_id)
+            if not self._c.session.gesture_active:
+                self._c.session.begin_gesture(f"Set {prop.label}")
+            self._c.session.preview(prop.path, self._coerce(prop, hex_text))
+        self._guard(run)
+
+    revealed = Signal(str, int)
+
+    @Slot(str, int)
+    def revealProperty(self, property_id: str, endpoint: int = 0) -> None:
+        """Open the property's group in the inspector and focus its exact-entry field."""
+        prop = self._schema.find(property_id)
+        if prop.workspace != self._workspace:
+            self.setWorkspace(prop.workspace)
+        self._forced_open = set(getattr(self, "_forced_open", ())) | {prop.group}
+        self._rebuild_inspector()
+        self.revealed.emit(property_id, int(endpoint))
+
     @Slot()
     def cancelEdit(self) -> None:
         self._c.session.cancel_gesture()
@@ -345,6 +472,9 @@ class StudioBridge(QObject):
         def run():
             prop, path = self._prop_path(property_id, endpoint)
             if prop.instrument == COLOUR:
+                current = read_path(self._c.session.values, prop.path)
+                if _colour_hex(prop, current).lower() == str(text).strip().lower():
+                    return                       # same display colour: keep the exact stored value
                 value = self._coerce(prop, text)
             else:
                 typed = float(str(text).strip().replace(prop.units.strip(), "") or "nan")
@@ -818,6 +948,7 @@ class StudioController(QObject):
             measure = getattr(self.evaluator, "measurements", None)
             if callable(measure) and self.bridge is not None:
                 self.bridge.push_measurements(measure())
+            self.refresh_handles()
         if self.transport.wants_frames:
             self.surface.request_frame()
 
@@ -834,6 +965,26 @@ class StudioController(QObject):
             self.bridge.set_viewport("preparing")
         if self.surface is not None and self.state in ("opening", "presented"):
             self.surface.request_frame()
+
+    # -------------------------------------------------------------- handles
+    def refresh_handles(self) -> None:
+        """Project the selected object's handles through the mode's camera (direct manipulation)."""
+        if self.bridge is None or self.viewport is None or self.last_frame is None:
+            return
+        if self.bridge.workspace != self.session.schema.workspaces[0].id:
+            if self.bridge.handles.get("handles"):
+                self.bridge.set_handles({"outline": [], "handles": []})
+            return
+        framing = next((f for f in self.framings if f.id == self.bridge.framingId), None)
+        try:
+            state = self.adapter.scene_handles(self.last_frame, self.evaluation_values(), self.bridge.selectedObject,
+                                               (self.viewport.width(), self.viewport.height()),
+                                               framing.extent if framing else None,
+                                               framing.style if framing else ())
+        except Exception:
+            logger.exception("[STUDIO] Handle projection failed")
+            state = {"outline": [], "handles": []}
+        self.bridge.set_handles(state)
 
     # -------------------------------------------------------------- framing
     def select_framing(self, framing_id: str) -> None:
