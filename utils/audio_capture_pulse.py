@@ -17,10 +17,10 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-import threading
 from typing import Any, Callable, Optional
 
 from core.logging.logger import get_logger
+from core.media.sidecar_reader import start_reader, stop_reader
 from utils.audio_capture import AudioCaptureBackend, AudioCaptureConfig
 
 logger = get_logger(__name__)
@@ -46,7 +46,7 @@ class PulseMonitorBackend(AudioCaptureBackend):
         self._sample_rate = int(self._config.sample_rate)
         self._channels = int(self._config.channels)
         self._process: subprocess.Popen | None = None
-        self._reader: threading.Thread | None = None
+        self._reader = None
         self._running = False
         self._callback: Optional[Callable[[Any], None]] = None
         self._source = ""
@@ -110,8 +110,14 @@ class PulseMonitorBackend(AudioCaptureBackend):
                 self._running = False
                 self._note_capture_failed()
 
-        self._reader = threading.Thread(target=_read, name="srpss-parec-reader", daemon=True)
-        self._reader.start()
+        try:
+            self._reader = start_reader("parec_capture", f"parec_capture_{id(self):x}", _read)
+        except RuntimeError:
+            logger.exception("[AUDIO] parec reader could not start; capture start rejected")
+            self._running = False
+            process.terminate()
+            self._process = None
+            return False
         logger.info(
             "[AUDIO] Linux monitor capture started (source=%s, block=%d, rate=%dHz, channels=%d)",
             self._source, block, self._sample_rate, self._channels,
@@ -130,11 +136,11 @@ class PulseMonitorBackend(AudioCaptureBackend):
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait(timeout=3)
+        stop_reader(reader)
+        if process is not None:
             for pipe in (process.stdout, process.stderr):
                 if pipe is not None:
                     pipe.close()
-        if reader is not None and reader is not threading.current_thread():
-            reader.join(timeout=3)
         self._note_capture_stopped()
 
     def is_running(self) -> bool:

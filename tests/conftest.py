@@ -287,6 +287,18 @@ def thread_manager():
 
 
 @pytest.fixture
+def app_shared_thread_manager():
+    """A ThreadManager registered as app-shared (e.g. for sidecar readers), restored afterwards."""
+    from core.threading.manager import ThreadManager
+    previous = ThreadManager.get_app_shared()
+    manager = ThreadManager()
+    ThreadManager.set_app_shared(manager)
+    yield manager
+    ThreadManager.set_app_shared(previous)
+    manager.shutdown(wait=True)
+
+
+@pytest.fixture
 def resource_manager():
     """Create ResourceManager instance for testing."""
     from core.resources import ResourceManager

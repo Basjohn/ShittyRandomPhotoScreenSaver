@@ -31,7 +31,7 @@ class _FakeProcess:
         self.terminated = True
 
 
-def test_reader_slices_parec_pcm_into_float32_blocks_from_the_default_monitor(monkeypatch) -> None:
+def test_reader_slices_parec_pcm_into_float32_blocks_from_the_default_monitor(monkeypatch, app_shared_thread_manager) -> None:
     frames = np.arange(2 * 64 * 2, dtype="<f4").reshape(-1, 2)  # two 64-frame stereo blocks
     commands = []
 

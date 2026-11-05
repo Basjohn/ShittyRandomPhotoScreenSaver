@@ -82,7 +82,7 @@ def test_system_probe_reports_volume_and_default_device_changes_from_subscribe(m
 
 
 
-def test_session_listener_follows_only_the_selected_stream_and_its_removal(monkeypatch) -> None:
+def test_session_listener_follows_only_the_selected_stream_and_its_removal(monkeypatch, app_shared_thread_manager) -> None:
     import threading as _threading
 
     pushed = []
@@ -120,7 +120,7 @@ def test_session_listener_follows_only_the_selected_stream_and_its_removal(monke
     listener = pulse_volume.PulseSessionVolumeListener(on_volume=lambda v, m: None, on_disconnected=lambda: None,
                                                        bridge_factory=Bridge)
     assert listener.start(("spotify", "chromium")) is True
-    listener._reader.join(2.0)
+    listener._reader.stop(wait=True, timeout=2.0)  # the fake stdout ends; wait for the reader
     # Stream 9 is not the selected one; stream 7 changes once, then its removal ends observation.
     assert pushed == [("volume", 3, 0.5, False), ("device",)]
     listener.close()
@@ -135,3 +135,20 @@ def test_volume_owners_are_pactl_off_windows(monkeypatch) -> None:
     monkeypatch.setattr("core.platform_paths.IS_WINDOWS", False)
     assert isinstance(audio_event_session._platform_probe(**callbacks), pulse_volume.PulseSystemVolumeProbe)
     assert isinstance(media_volume_runtime._create_volume_controller("spotify"), pulse_volume.PulseAppVolumeController)
+
+
+def test_subscriptions_refuse_to_start_without_a_thread_manager_worker(monkeypatch) -> None:
+    from core.threading.manager import ThreadManager
+
+    monkeypatch.setattr(ThreadManager, "get_app_shared", classmethod(lambda cls: None))
+    monkeypatch.setattr(pulse_volume, "pactl_available", lambda: True)
+    monkeypatch.setattr(pulse_volume, "_default_sink_state", lambda sink=None: ("sink", 0.5, False))
+    terminated = []
+
+    class Process(_Lines):
+        def terminate(self):
+            terminated.append(True)
+
+    monkeypatch.setattr(pulse_volume.subprocess, "Popen", lambda *a, **k: Process([]))
+    probe = pulse_volume.PulseSystemVolumeProbe(on_volume=lambda v, m: None, on_default_device=lambda: None)
+    assert probe.start() is False and terminated == [True]  # no raw-thread fallback; sidecar ended
