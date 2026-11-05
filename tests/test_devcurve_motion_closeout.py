@@ -8,7 +8,7 @@ import pytest
 from widgets.spotify_visualizer.devcurve_runtime import (
     DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE,
     DEVCURVE_PASSAGE_USUAL,
-    DEVCURVE_SWING_STAGE_S,
+    DEVCURVE_ACCENT_STAGE_S,
     DevCurveRuntimeState,
     solve_devcurve_frame,
 )
@@ -80,27 +80,28 @@ def test_devcurve_travel_never_follows_the_beat():
 
 
 def test_devcurve_height_rises_quickly_and_settles_gently_without_a_velocity_jump():
-    """The reaction is the curves' height: a hit lifts it within a fraction of a second and, once
-    it has gone, it settles over the release (never in the ~50 ms the old per-frame blend fell in).
-    Two cascaded stages keep the height's velocity continuous: the first tick of a hit moves far
-    less than the fastest one (a single fast attack moved most on the very first tick: a twitch)."""
-    attack, release = DEVCURVE_SWING_STAGE_S
+    """The reaction is the curves' height: a hit (a flux spike on the bus) lifts it within a fraction of
+    a second and, once it has gone, it settles over the release (never in the ~50 ms the old per-frame
+    blend fell in). Two cascaded stages keep the height's velocity continuous: the first tick of a hit
+    moves far less than the fastest one (a single fast attack moved most on the very first tick: a twitch).
+    The hit rides the accents (fixed scale), so it lifts the height clearly above the body's level."""
+    attack, release = DEVCURVE_ACCENT_STAGE_S
     state = DevCurveRuntimeState()
-    for i in range(400):                                   # a quiet bed
-        _solve(state, now=50.0 + i * 0.016, energy=0.6, loudness=3.0)
+    for i in range(400):                                   # a steady bed
+        _solve(state, now=50.0 + i * 0.016, energy=0.6, transient=0.05, loudness=8.0)
     rest = state.drive["bass"]
     steps = []
-    for i in range(int(8 * attack / 0.016)):               # a loud hit, held long enough to land
+    for i in range(int(8 * attack / 0.016)):               # a hit, held long enough to land
         before = state.drive["bass"]
-        _solve(state, now=57.0 + i * 0.016, energy=0.6, loudness=12.0)
+        _solve(state, now=57.0 + i * 0.016, energy=0.6, transient=0.9, loudness=12.0)
         steps.append(state.drive["bass"] - before)
     peak = state.drive["bass"]
-    assert peak > 3.0 * rest
+    assert peak - rest > 0.2
     assert steps[0] < 0.25 * max(steps)                     # no velocity jump where the hit starts
     assert sum(steps[: int(4 * attack / 0.016)]) > 0.6 * (peak - rest)
     held = []
     for i in range(int(release / 0.016)):
-        _solve(state, now=58.0 + i * 0.016, energy=0.6, loudness=3.0)
+        _solve(state, now=58.0 + i * 0.016, energy=0.6, transient=0.05, loudness=8.0)
         held.append(state.drive["bass"])
     drops = [a - b for a, b in zip([peak, *held], held)]
     assert drops[0] < 0.25 * max(drops)                     # the settle starts gently too

@@ -2,15 +2,19 @@
 kicks/beats ~30 s into a sustained passage; "you likely did not check later in the songs from continuous play").
 
 The production frame runtime plays, without any reset, a quieter verse and then a long sustained loud chorus: the
-same kick every 0.5 s over a steady bed, with an occasional bigger accent (a crash). A kick's visible response is the
-rise of the mean multiplier the music puts on each body layer's undulation (height x travelling swell, the solver's
-published ``reaction_*``) within 150 ms of the kick over its mean in the 300 ms before. Kicks 40-55 s into the chorus
-must respond at least ~85% as much as the same kicks near its start, and a kick in the sustained chorus must stay
-clearly visible. Test-owned settings; structure only."""
+same kick every 0.5 s over a steady bed, with an occasional bigger accent (a crash). A lockstep twin plays the same
+verse, chorus, passage and loudness with no flux spikes, so the passage's own ramps (the chorus entry eases the swing
+up over seconds, the body follows the loudness) cancel out of the comparison. A kick's visible response is the rise
+of the live-minus-twin reaction (the drawn undulation's amplitude as a share of its geometric ceiling: the solver's
+published ``reaction_*``) within 150 ms of the kick over its mean in the 300 ms before. The travelling swell is off
+(test-owned Swell Strength 0): this gate is about the HEIGHT's beats; the swell has its own tests, and its tanh
+saturation in dense passages is a separate, recorded matter. Kicks 40-55 s into the chorus must respond at least ~85% as much as the same kicks near its start, and a
+kick in the sustained chorus must stay clearly visible. Test-owned settings; structure only."""
 from __future__ import annotations
 
 import numpy as np
 
+import widgets.spotify_visualizer.devcurve_runtime as devcurve
 from widgets.spotify_visualizer.devcurve_frame_runtime import DevCurveFrameRuntime
 from widgets.spotify_visualizer.render_state import VisualizerEnergyState, VisualizerTransientState
 from tests.test_qtquick_visualizer_devcurve import _nodes, _parameters
@@ -25,33 +29,38 @@ _BODY = ("bass", "vocals", "mids")
 
 
 def _play(chorus=56.0):
-    """(time into the chorus, is a plain chorus kick, per-layer reaction) for every tick of continuous play."""
-    runtime, rows, params = DevCurveFrameRuntime(), [], _parameters()
+    """(time into the chorus, is a plain chorus kick, per-layer reaction live - twin) for every tick of play."""
+    runtime, twin, rows, params = DevCurveFrameRuntime(), DevCurveFrameRuntime(), [], {**_parameters(), "devcurve_swell_strength": 0.0}
     for index in range(round((VERSE + chorus) / DT)):
         t = index * DT
         beat = int(t / PERIOD)
         on = (t - beat * PERIOD) < KICK
         chorus_now = t >= VERSE
+        bed = BED if chorus_now else VERSE_BED
         if chorus_now:
             loud = (CRASH if beat % 16 == 7 else HIT) if on else BED
         else:
             loud = VERSE_HIT if on else VERSE_BED
-        live = runtime.advance(
+        common = dict(
             now_ts=50.0 + t, runtime_generation=1, engine_generation=1, activation_id=1, source_generation=1,
-            source_activation_id=1, source_timestamp=50.0 + t, playing=True, musical_level=(loud, 1.0),
+            source_activation_id=1, source_timestamp=50.0 + t, playing=True,
             musical_intensity=0.9 if chorus_now else 0.4, layer_shape_nodes=_nodes(), parameters=params,
-            energy=VisualizerEnergyState(bass=1.0, mid=0.8, high=0.4, overall=0.8),
-            transient=VisualizerTransientState(bass=0.9 if on else 0.03, mid=0.4 if on else 0.03, high=0.1))
-        drives = live.diagnostics["drives"]
+            energy=VisualizerEnergyState(bass=1.0, mid=0.8, high=0.4, overall=0.8))
+        live = runtime.advance(musical_level=(loud, 1.0), transient=VisualizerTransientState(
+            bass=0.9 if on else 0.03, mid=0.4 if on else 0.03, high=0.1), **common)
+        rest = twin.advance(musical_level=(loud, 1.0), transient=VisualizerTransientState(
+            bass=0.03, mid=0.03, high=0.1), **common)
+        drives, still = live.diagnostics["drives"], rest.diagnostics["drives"]
         rows.append((t - VERSE, chorus_now and on and (t - beat * PERIOD) < DT / 2 and beat % 16 != 7,
-                     {key: float(drives[f"reaction_{key}"]) for key in _BODY}))
+                     {key: float(drives[f"reaction_{key}"] - still[f"reaction_{key}"]) for key in _BODY},
+                     float(drives["reaction_bass"])))
     return rows
 
 
 def _response(rows, start, stop):
     times = np.asarray([row[0] for row in rows])
     out = []
-    for t, kick, _ in rows:
+    for t, kick, _, _ in rows:
         if not kick or not start <= t < stop:
             continue
         before = [rows[j][2] for j in np.nonzero((times >= t - 0.3) & (times < t))[0]]
@@ -60,12 +69,27 @@ def _response(rows, start, stop):
     return float(np.mean(out))
 
 
-def test_kicks_late_in_a_sustained_passage_respond_like_kicks_near_its_start():
+def _early_late():
     rows = _play()
     early = _response(rows, 1.5, 5.0)       # near the start, once the chorus has entered (~1 s)
     late = _response(rows, 40.0, 55.0)
-    level = np.mean([row[2]["bass"] for row in rows if 40.0 <= row[0] < 55.0])
+    level = np.mean([row[3] for row in rows if 40.0 <= row[0] < 55.0])
+    return early, late, level
+
+
+def test_kicks_late_in_a_sustained_passage_respond_like_kicks_near_its_start():
+    early, late, level = _early_late()
     assert late >= 0.85 * early, (late, early)
     # Visible, not merely proportional: a sustained-chorus kick lifts the undulation by a clear share of its level
     # (normalising the beats by the passage's remembered peak left ~2% of the level here).
     assert late > 0.05 * level, (late, level)
+
+
+def test_negative_control_normalising_the_beats_mutes_sustained_passage_kicks(monkeypatch):
+    """The first cut: the whole height (beats included) through the fast stages and divided by the remembered
+    peak, no accents. The same measurement must see its sustained-chorus kicks fade or vanish."""
+    monkeypatch.setattr(devcurve, "DEVCURVE_BODY_STAGE_S", devcurve.DEVCURVE_SWING_STAGE_S)
+    monkeypatch.setattr(devcurve, "DEVCURVE_ACCENT_ROOM", dict.fromkeys(devcurve.DEVCURVE_ACCENT_ROOM, 0.0))
+    monkeypatch.setattr(devcurve, "DEVCURVE_BODY_TOP", dict.fromkeys(devcurve.DEVCURVE_BODY_TOP, 0.95))
+    early, late, level = _early_late()
+    assert late < 0.85 * early or late <= 0.05 * level, (late, early, level)
