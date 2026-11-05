@@ -88,6 +88,9 @@ data locations, product builds (including from Windows) and the Linux test route
 - [ ] Real GPU (NVIDIA/AMD/Intel) performance, vsync and pacing; X11 vs Wayland (XWayland) behaviour.
 - [ ] Physical multi-monitor and mixed DPI; real players (Spotify, Firefox) over MPRIS; PipeWire desktops.
 - [ ] Settings look on a real desktop (underlay vs. taste); fonts available on common distros.
+- [ ] Display power (`core/display_power.py`): on GNOME, a real blank (`PowerSaveMode` != 0) parks the Visualizer and
+  stops rotation, and unblank resumes it; on KDE/other desktops or without a session bus the inert backend logs
+  `[PLATFORM]` once and everything keeps running. Only the selection is tested (`tests/test_linux_display_power.py`).
 
 ## 4. Windows regression gates
 

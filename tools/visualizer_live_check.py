@@ -289,13 +289,21 @@ def analyse_display_power(trace: Path, edges: list[dict], samples: list[dict]) -
         on = next((e for e in edges if e["state"] == 1 and e["perf_ns"] > off["perf_ns"]), None)
         if on is None:
             continue
-        before_start = max(off["perf_ns"] - (on["perf_ns"] - off["perf_ns"]), off["perf_ns"] - 30_000_000_000)
-        after_end = on["perf_ns"] + (off["perf_ns"] - before_start)
+        # Windows never reach into a neighbouring pair (bursts): before ends at this OFF, after at the next OFF.
+        previous_on = max((e["perf_ns"] for e in edges if e["state"] == 1 and e["perf_ns"] < off["perf_ns"]),
+                          default=None)
+        next_off = min((e["perf_ns"] for e in offs if e["perf_ns"] > on["perf_ns"]), default=None)
+        before_start = max(off["perf_ns"] - (on["perf_ns"] - off["perf_ns"]), off["perf_ns"] - 30_000_000_000,
+                           previous_on if previous_on is not None else 0)
+        after_end = on["perf_ns"] + min(on["perf_ns"] - off["perf_ns"], 30_000_000_000)
+        resume_end = on["perf_ns"] + RESUME_WINDOW_NS
+        if next_off is not None:
+            after_end, resume_end = min(after_end, next_off), min(resume_end, next_off)
         swaps_after = [ts for ts, e in events if e == 6 and ts >= on["perf_ns"]]
-        resume = [ts for ts in swaps_after if ts < on["perf_ns"] + RESUME_WINDOW_NS]
+        resume = [ts for ts in swaps_after if ts < resume_end]
         gaps = [(b - a) / 1e6 for a, b in zip(resume, resume[1:])]
         # The logical side of resume: a hole here (rather than in swaps) is a time-gap / cadence failure.
-        published = [ts for ts, e in events if e == 1 and on["perf_ns"] <= ts < on["perf_ns"] + RESUME_WINDOW_NS]
+        published = [ts for ts, e in events if e == 1 and on["perf_ns"] <= ts < resume_end]
         publish_gaps = [(b - a) / 1e6 for a, b in zip(published, published[1:])]
         pairs.append({
             "listener": bool(off.get("listener")), "delivered": bool(off.get("delivered") and on.get("delivered")),
@@ -303,7 +311,8 @@ def analyse_display_power(trace: Path, edges: list[dict], samples: list[dict]) -
             "off": window(off["perf_ns"] + settle, on["perf_ns"]),
             "on_after": window(on["perf_ns"] + settle, after_end),
             "first_swap_after_on_ms": round((swaps_after[0] - on["perf_ns"]) / 1e6, 1) if swaps_after else None,
-            "resume_2s": {"frames": len(resume), "swap_gap_ms": _stats(gaps),
+            "resume_2s": {"seconds": round((resume_end - on["perf_ns"]) / 1e9, 2),
+                          "frames": len(resume), "swap_gap_ms": _stats(gaps),
                           "late_pct": round(100.0 * sum(g > LATE_MS for g in gaps) / max(len(gaps), 1), 1),
                           "max_gap_ms": round(max(gaps), 1) if gaps else None,
                           "publishes": len(published), "publish_gap_ms": _stats(publish_gaps),
@@ -598,6 +607,8 @@ def main() -> int:
              if edges_path.exists() else [])
     summary.update(analyse_trace(trace, steady_stop_ns=edges[0]["perf_ns"] if edges else None))
     if args.display_off:
+        (out / "power_samples.jsonl").write_text("".join(json.dumps(row) + "\n" for row in power_samples),
+                                                 encoding="utf-8")
         summary["display_power"] = analyse_display_power(trace, edges, power_samples)
     summary["hud_age_ms"] = hud_ages(out / "logs" / "screensaver_perf.log", args.mode)
     usage = usage_summary(out / "logs" / "screensaver_usage.log")

@@ -304,6 +304,58 @@ Do not copy QRhiWidget-specific context assumptions into Quick.
 
 Generation `0` remains valid.
 
+### Display power
+
+Before 5 Nov 2026 nothing listened for display power: a power-plan display-off (or an HDMI panel that stays enumerated)
+left the logical tick, render thread, transitions and rotation running all night (Waveform Preset 1, invisible MC
+run: ~142% of a core and ~10% GPU, 51 swaps/s and 90 publishes/s with the displays "off").
+
+**Authority.** `core.display_power.DisplayPowerAuthority`, owned by the process-scoped `ScreensaverEngine`
+(`initialize` → `cleanup`), is the only display-power listener. Windows: `core.windows.display_power_notifier` registers
+one message-only window for `GUID_CONSOLE_DISPLAY_STATE` and receives `WM_POWERBROADCAST` / `PBT_POWERSETTINGCHANGE`
+through the GUI thread's ordinary pump (0 off, 1 on, 2 dimmed = on; Windows also sends the current state at
+registration). Linux: GNOME Mutter `PowerSaveMode` over a blocking D-Bus `PropertiesChanged` listener on a ThreadManager
+lane, else the explicit inert backend (always on, one `[PLATFORM]` line). `deliver()` records the latest state and queues
+one dispatch: every state before that dispatch collapses into it, and one that ends where the authority already is emits
+nothing (no rebuild loop on an off→on→off burst). Each emitted edge carries a new `generation`; the engine and
+`DisplayManager` drop older ones. No timer, polling or environment flag.
+
+**Off pauses** (engine `_on_display_power_changed` → `DisplayManager.set_display_power`):
+
+- rotation: the engine's rotation timer stops;
+- transitions: each live `QuickDisplayRuntime.set_display_power(False)` snaps an in-flight run to its authored
+  destination once (`cancel_current`) and suspends `QuickFramePacer` demand (`power_suspended`, independent of the
+  visibility pause, so neither can restart the other's frames); a run admitted while off finishes on its own deadline
+  timer without frames;
+- Visualizer: `QuickDisplayVisualizerOwner.set_display_power(False)` parks the sole logical runtime (its thread blocks
+  on an event with no timeout; the call returns once no step is in flight), drops the unread publication and releases
+  the owner's engine reference (the last one stops capture and analysis). The park request lives on the
+  `VisualizerRuntimeController`, so a runtime started while off (activation, restart) starts parked;
+- Clock: `GlobalClockTicker` stops, so no 1 Hz frame of the whole scene (heavy Visualizer included) is rendered.
+
+**Keeps running:** windows stay shown and bound (wake input must reach them; hiding would expose the desktop and churn
+the scene graph); topology stays with the monitor reconciler; data providers (Media, Feeds, Steam, Weather, Gmail,
+Reddit, System Stats) keep their own cadence, and a content change still renders one frame; pixel shift (one shift per
+configured minute) and the `--usage` sampler continue. Measured cost while off (same run): ~4% of a core median, GPU
+~0-1%, ~0.6 swaps/s, 0 publishes/s.
+
+**On resumes:** the engine reference and capture return, `arm_reentry_fresh_frame_fence` keeps a retained pre-off
+audio frame from being the first reactive result, `rebase_logical_clocks_after_park` resets every logical last-step
+clock (tick state plus each mode state's `rebase_clock()`) so the first resumed step integrates no parked gap while all
+simulation state stays warm, and the runtime resumes on a fresh deadline sequence (the parked interval is not counted as
+skipped deadlines). The clock ticks at once, then every second; rotation restarts from a full interval (a fresh hold,
+never a catch-up). Pure wall-time functions (Auto Rotate pose, shader time) simply read the current time.
+
+**Interactions.** A generation built while off (topology rebuild, Settings return) inherits the state: new units suspend
+their pacer, the Visualizer owner parks before `start`, and `engine.start()` leaves rotation waiting. Exit while off
+retires normally (`stop()` releases a parked loop). MC (windowed) and the secure-desktop run use the same engine path.
+
+**Limit.** Windows exposes the console (session) display state, not per-monitor power. A monitor switched off at its own
+button over DisplayPort usually leaves the topology and already pauses through binding loss; an HDMI panel switched off at
+its button that stays enumerated is not observable and keeps running. Evidence and the injection probe:
+`tools/visualizer_live_check.py --display-off AT:FOR` (`.artifacts/evidence/display_power/`); tests
+`tests/test_display_power.py`, `tests/test_linux_display_power.py`.
+
 ## 11. Transition model
 
 Transition request/run semantics are display-local, immutable, monotonic, and exactly-once for

@@ -425,6 +425,12 @@ Ordinary Pause/Play preserves:
 
 Pixel-owner changes must not reintroduce playback debounce or recreate the logical runtime on ordinary Pause/Play.
 
+Displays off is not Pause/Play. The owner parks the same logical runtime (no cadence, warm state) and releases capture;
+resume re-acquires capture behind the fresh-frame fence, rebases every logical last-step clock and resumes on a fresh
+deadline sequence. A new dt-integrating mode state implements `rebase_clock()` (reset its last-step timestamp to the
+"no previous step" value) so resume never integrates the parked gap (`Docs/Architecture/Compositor_Architecture.md` →
+Display power).
+
 ## 14. Fidelity
 
 Preserve all current-mode personality and behavioral goldens.
