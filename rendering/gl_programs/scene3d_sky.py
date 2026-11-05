@@ -134,6 +134,8 @@ vec4 skyNebula(vec3 ray, vec3 rim, vec3 core, vec4 nebula, vec3 focus, uint seed
     // The finest wisps: hair-thin threads through the brighter gas, the filament detail of a real nebula.
     float hair = 1.0 - abs(2.0 * skyFbm3(q * 9.5 + vec3(2.2, 8.1, 4.4), 2, seed + 11u) - 1.0);
     float edge = smoothstep(0.0, 0.5, region);
+    // The gas's own fill gathers round the filaments (soft ropes with dark lanes between them), not an even wash.
+    float rope = 0.25 + 0.75 * pow(strand, 4.0);
     strand = (pow(strand, mix(3.0, 14.0, nebula.z)) + 0.45 * pow(fine, mix(6.0, 22.0, nebula.z)) * body
               + 0.30 * pow(hair, mix(10.0, 30.0, nebula.z)) * smoothstep(0.1, 0.6, body)) * edge;
     float dust = nebula.w <= 0.0 ? 0.0
@@ -146,11 +148,11 @@ vec4 skyNebula(vec3 ray, vec3 rim, vec3 core, vec4 nebula, vec3 focus, uint seed
     // slower noise, so the colour drifts along the band instead of alternating between two.
     float midTint = smoothstep(0.4, 0.7, skyNoise3(q * 0.3 + vec3(7.4), seed + 23u));
     vec3 tint = mix(mix(rim, core, clamp(0.65 * hue + 0.35 * heat, 0.0, 1.0)), 0.5 * (rim + core), 0.45 * midTint);
-    vec3 light = tint * body * region * mix(0.45, 0.12, nebula.z)
+    vec3 light = tint * body * region * rope * mix(0.45, 0.12, nebula.z)
                + mix(tint, core, heat * 0.4) * strand * mix(0.35, 1.1, nebula.z)
-               + mix(core, vec3(1.0), 0.4) * heat * heat * heat * 0.45
+               + mix(core, vec3(1.0), 0.4) * heat * heat * heat * 0.45 * rope * rope
                // The veil: faint soft light round the streams, deeper and wider than the gas itself.
-               + 0.5 * (rim + core) * 0.07 * veil * smoothstep(0.3, 0.7, skyFbm3(a * 0.35 + vec3(4.1), 2, seed + 27u));
+               + 0.5 * (rim + core) * 0.03 * veil * smoothstep(0.3, 0.7, skyFbm3(a * 0.35 + vec3(4.1), 2, seed + 27u));
     // Highlights roll off instead of clipping into flat plateaus.
     light /= 1.0 + 0.6 * max(max(light.r, light.g), light.b);
     return vec4(light * (1.0 - dust * 0.95) * nebula.x, dust * 0.9 * min(1.0, nebula.x * 2.0));
