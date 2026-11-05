@@ -404,16 +404,16 @@ float basinStarField(vec3 ray, float crowd, out float tone) {
         for (int x = -1; x <= 1; ++x) {
             vec2 c = bigCell + vec2(float(x), float(y));
             float bigHash = basinStarHash(c + vec2(17.0, 53.0));
-            if (bigHash <= 0.86) continue;
+            if (bigHash <= 0.92) continue;
             vec2 centre = c + vec2(0.2) + 0.6 * vec2(fract(bigHash * 97.0), fract(bigHash * 389.0));
             vec2 cellOffset = coarse - centre;
             vec2 offset = cellOffset / coarseScale;
             float r2 = dot(offset, offset);
-            float strength = 0.18 + 0.82 * pow(fract(bigHash * 53.0), 3.0);
+            float strength = 1.3 * (0.30 + 0.70 * pow(fract(bigHash * 53.0), 2.0));
             // A soft bright core in a gentle glow, no spikes (the mocks' bright stars have no diffraction cross),
             // the glow reaching a few pixels and ending inside a cell's reach.
             float reach = 1.0 - smoothstep(0.55, 0.95, length(cellOffset));
-            float light = strength * (exp(-r2 / 0.8) + 0.30 * exp(-r2 / 4.0)
+            float light = strength * (exp(-r2 / 1.1) + 0.32 * exp(-r2 / 5.0)
                                       + 0.06 * strength * exp(-r2 / 22.0) * reach);
             if (light > bright) brightTone = fract(bigHash * 61.0);
             bright += light;
