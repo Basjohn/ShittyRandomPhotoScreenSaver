@@ -104,7 +104,8 @@ def kick_responses(rows, *, pre: float = 0.3, post: float = 0.15, sustain: float
             continue
         if ((kick_times < row["t"]) & (kick_times >= row["t"] - gap)).any():
             continue
-        rec = {"t": row["t"], "clip": row["clip"], "song_t": row["song_t"], "intensity": row["intensity"]}
+        rec = {"t": row["t"], "clip": row["clip"], "song_t": row["song_t"], "intensity": row["intensity"],
+               "held": float(inten[held].mean())}
         if inten[held].min() >= 0.5:
             rec["passage"] = "sustained_loud"
         elif inten[held].max() <= 0.3:
@@ -139,8 +140,14 @@ def tabulate(kicks):
             table[f"{passage} {lo:g}-{'end' if hi > 1e8 else f'{hi:g}'}s"] = cell
     # Per recording (clip index in the play order), per passage.
     for clip in sorted({k["clip"] for k in kicks}):
-        for passage in ("sustained_loud", "quiet"):
-            sel = [k for k in kicks if k["clip"] == clip and k["passage"] == passage]
+        mine = [k for k in kicks if k["clip"] == clip]
+        # The recording's own loudest third (3 s held passage), so every recording has a loud group.
+        cut = float(np.percentile([k["held"] for k in mine], 67)) if mine else 0.0
+        for passage in ("sustained_loud", "quiet", "loudest_third"):
+            if passage == "loudest_third":
+                sel = [k for k in mine if k["held"] >= cut]
+            else:
+                sel = [k for k in mine if k["passage"] == passage]
             if not sel:
                 continue
             cell = {"kicks": len(sel)}
