@@ -135,12 +135,14 @@ and Quick shader (`widgets/spotify_visualizer/spectrum_decor.py`, `widgets/spoti
 **Ghost Colour** (Bar Colour / Custom; Rainbow Ghost, when on, still colours the ghosts), **Ghost Gradient** (toward a
 tip colour at the peak), the **Finish** bucket (Gloss, Fill Gradient toward a tip colour at the top of the field, Peak
 Caps resting on the existing decaying peaks) and the **Pattern** bucket (a second-colour pattern over the bar fill:
-Horizontal Bands, Scanlines, Dots, Diagonal Stripes, Grid, Chevrons; Colour, Scale, Strength). Rules:
+Horizontal Bands, Scanlines, Dots, Diagonal Stripes, Grid, Chevrons; Pattern Anchor Per Bar or Shared; Colour, Scale,
+Strength). Rules:
 
 - Every option at its default draws byte-identically to the decoration-free renderer; the shader takes no decoration
   branch at rest and the renderer uploads the decoration uniforms only when they change.
 - Patterns change fill pixels only, are box-filtered (a pattern finer than a pixel settles to its mean coverage) and
-  are anchored to the bar baseline and each bar's own width (Diagonal Stripes to the field), so moving bars reveal
+  are anchored to the bar baseline and each bar's own width (Diagonal Stripes to the field; Pattern Anchor Shared
+  frames every pattern by the whole field: one sheet through bars and gaps), so moving bars reveal
   more or less of a fixed pattern and never shimmer.
 - Peak caps reuse Spectrum's existing peak decay (Ghost Decay Speed); they add no logical state.
 - Toggling fades (`SpectrumDecorFade`, `FADE_SECONDS`): one envelope per option on the presentation owner, advanced

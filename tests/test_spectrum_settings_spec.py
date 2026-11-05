@@ -85,7 +85,7 @@ def test_spectrum_specs_reach_real_source_logical_presentation_and_capture_param
               "spectrum_fill_gradient": True, "spectrum_fill_tip_color": [9, 10, 11, 12], "spectrum_peak_caps": True,
               "spectrum_peak_cap_color": [13, 14, 15, 16], "spectrum_peak_cap_thickness": 5,
               "spectrum_pattern": "Grid", "spectrum_pattern_color": [17, 18, 19, 20], "spectrum_pattern_scale": 2.5,
-              "spectrum_pattern_strength": 0.44}
+              "spectrum_pattern_strength": 0.44, "spectrum_pattern_anchor": "Shared"}
     projected = resolve_mode_source_config("spectrum", values)
     apply_logical_vis_mode_kwargs(logical, projected)
     apply_presentation_vis_mode_kwargs(presentation, projected)

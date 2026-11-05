@@ -261,19 +261,23 @@ def variants() -> dict:
     for pattern in ("Horizontal Bands", "Scanlines", "Dots", "Diagonal Stripes", "Grid", "Chevrons"):
         on["pattern_" + pattern.lower().replace(" ", "_")] = {
             "spectrum_pattern": pattern, "spectrum_pattern_color": [120, 200, 255, 170]}
+    for pattern in ("Horizontal Bands", "Scanlines", "Dots", "Diagonal Stripes", "Grid", "Chevrons"):
+        on["pattern_shared_" + pattern.lower().replace(" ", "_")] = {
+            "spectrum_pattern": pattern, "spectrum_pattern_anchor": "Shared",
+            "spectrum_pattern_color": [120, 200, 255, 170]}
     on["combined"] = {**on["fill_gradient"], **on["peak_caps"], **on["gloss"], **on["pattern_scanlines"],
                       "spectrum_pattern_color": [255, 255, 255, 60]}
     return on
 
 
-def cmd_showcase(out_dir: Path) -> int:
+def cmd_showcase(out_dir: Path, only: str = "") -> int:
     import numpy as np
     _app()
     out_dir.mkdir(parents=True, exist_ok=True)
     target = GLTarget()
     try:
         base = organs_values()
-        looks = {"organs": {}, **variants()}
+        looks = {name: v for name, v in {"organs": {}, **variants()}.items() if only in name}
         for name, overrides in looks.items():
             values = dict(base, **overrides)
             stills = [target.render(frame, 2.0) for _now, frame in production_frames(values, fractions=(0.6,))]
@@ -340,6 +344,7 @@ def main(argv=None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("baseline", "compare", "showcase"):
         sub.add_parser(name).add_argument("path", type=Path)
+    sub.choices["showcase"].add_argument("--only", default="", help="only looks whose name contains this")
     sub.add_parser("cost").add_argument("path", type=Path, nargs="?")
     args = parser.parse_args(argv)
     if args.command == "baseline":
@@ -347,7 +352,7 @@ def main(argv=None) -> int:
     if args.command == "compare":
         return cmd_compare(args.path)
     if args.command == "showcase":
-        return cmd_showcase(args.path)
+        return cmd_showcase(args.path, args.only)
     return cmd_cost(args.path)
 
 

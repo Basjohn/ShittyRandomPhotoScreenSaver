@@ -5948,6 +5948,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                                                           [0.65, 'Low-Mid'],
                                                                           [1.0, 'Bass']],
                                     'spectrum_pattern': 'Off',
+                                    'spectrum_pattern_anchor': 'Per Bar',
                                     'spectrum_pattern_color': [255, 255, 255, 110],
                                     'spectrum_pattern_scale': 1.0,
                                     'spectrum_pattern_strength': 0.6,

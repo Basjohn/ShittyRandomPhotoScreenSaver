@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
-from rendering.gl_programs.spectrum_options import SPECTRUM_PATTERNS
+from rendering.gl_programs.spectrum_options import SPECTRUM_PATTERN_ANCHORS, SPECTRUM_PATTERNS
 from tests._visualizer_presentation import resolve_presentation
 from widgets.spotify_visualizer.spectrum_decor import DECOR_KEYS, FADE_SECONDS, SpectrumDecorFade
 
@@ -240,6 +240,7 @@ def test_options_off_draw_the_same_pixels_whatever_their_colours_and_sizes_hold(
             wild[key] = [11, 222, 33, 200]
         elif isinstance(control, Slider) and key != "spectrum_gloss":
             wild[key] = control.high
+    wild["spectrum_pattern_anchor"] = SPECTRUM_PATTERN_ANCHORS[-1]
     base = render(solid=solid)
     assert (base[..., 3] > 0).sum() > 1000
     assert np.array_equal(base, render(wild, solid=solid))
@@ -303,15 +304,72 @@ def test_the_pattern_is_fixed_in_place_while_the_bars_move(render):
     """No shimmer: where a bar's body covers the same pixel in two frames of different heights, the pattern colours
     it identically (patterns are anchored to the baseline and the bar, not to the bar's moving top)."""
     import numpy as np
-    for pattern in SPECTRUM_PATTERNS[1:]:
-        settings = dict(ON["pattern"], spectrum_pattern=pattern)
+    for pattern, anchor in ((p, a) for p in SPECTRUM_PATTERNS[1:] for a in SPECTRUM_PATTERN_ANCHORS):
+        settings = dict(ON["pattern"], spectrum_pattern=pattern, spectrum_pattern_anchor=anchor)
         low = render(settings, bars=tuple(b * 0.8 for b in BARS), ghosting=False)
         high = render(settings, bars=BARS, ghosting=False)
         body_low = _is(render(bars=tuple(b * 0.8 for b in BARS), ghosting=False), FILL)
         body_high = _is(render(bars=BARS, ghosting=False), FILL)
         both = body_low & body_high
         assert both.sum() > 1000
-        assert np.array_equal(low[both], high[both]), pattern
+        assert np.array_equal(low[both], high[both]), (pattern, anchor)
+
+
+def _sheet_mismatch(render, pattern: str, anchor: str) -> tuple[int, int]:
+    """(differing, compared) pattern pixels between two bar layouts (12 and 7 bars: other widths and positions) over
+    the fill pixels both layouts cover."""
+    import numpy as np
+    other = tuple(0.3 + 0.08 * i for i in range(7))
+    settings = dict(ON["pattern"], spectrum_pattern=pattern, spectrum_pattern_anchor=anchor)
+    many = render(settings, ghosting=False)
+    few = render(settings, bars=other, peaks=other, ghosting=False)
+    both = _is(render(ghosting=False), FILL) & _is(render(bars=other, peaks=other, ghosting=False), FILL)
+    return int(np.abs(many[both] - few[both]).max(axis=1).astype(bool).sum()), int(both.sum())
+
+
+@pytest.mark.qt
+@pytest.mark.parametrize("pattern", ("Dots", "Diagonal Stripes", "Grid", "Chevrons"))
+def test_a_shared_pattern_is_one_sheet_over_the_field_whatever_the_bars(render, pattern):
+    """Shared: the pattern belongs to the bar field, so two layouts with different bar counts (different widths and
+    positions) show the identical sheet wherever both have fill. Negative control: Per Bar fits the pattern to each
+    bar, so the same comparison differs (Diagonal Stripes already run across the field in both)."""
+    differing, compared = _sheet_mismatch(render, pattern, SPECTRUM_PATTERN_ANCHORS[1])
+    assert compared > 2000 and differing == 0, pattern
+    if pattern != "Diagonal Stripes":
+        assert _sheet_mismatch(render, pattern, SPECTRUM_PATTERN_ANCHORS[0])[0] > 200, pattern
+
+
+@pytest.mark.qt
+def test_the_anchor_changes_only_patterns_with_a_horizontal_frame(render):
+    """Shared re-frames a pattern horizontally; bands and scanlines have none, so the anchor leaves them unchanged
+    (negative control), while chevrons change; only fill pixels are touched."""
+    import numpy as np
+    def both(pattern):
+        return [render(dict(ON["pattern"], spectrum_pattern=pattern, spectrum_pattern_anchor=a))
+                for a in SPECTRUM_PATTERN_ANCHORS]
+    for pattern in ("Horizontal Bands", "Scanlines"):
+        per_bar, shared = both(pattern)
+        assert np.array_equal(per_bar, shared), pattern
+    per_bar, shared = both("Chevrons")
+    changed = _changed(per_bar, shared)
+    assert changed.sum() > 200 and not (changed & ~_is(render(), FILL)).any()
+
+
+def test_an_anchor_change_dips_the_pattern_through_zero():
+    owner = _owner(spectrum_pattern=SPECTRUM_PATTERNS[6])
+    fade = SpectrumDecorFade(owner)
+    fade.advance(owner, 0.0)
+    owner._spectrum_pattern_anchor = SPECTRUM_PATTERN_ANCHORS[1]
+    fade.advance(owner, 0.2)
+    mixes = fade.mixes()
+    assert mixes["spectrum_pattern_anchor_shown"] == SPECTRUM_PATTERN_ANCHORS[0] and 0.0 < mixes[
+        "spectrum_pattern_mix"] < 1.0
+    t = 0.2
+    for _ in range(30):
+        t += 0.05
+        fade.advance(owner, t)
+    assert fade.mixes()["spectrum_pattern_anchor_shown"] == SPECTRUM_PATTERN_ANCHORS[1]
+    assert fade.mixes()["spectrum_pattern_mix"] == 1.0
 
 
 @pytest.mark.qt
