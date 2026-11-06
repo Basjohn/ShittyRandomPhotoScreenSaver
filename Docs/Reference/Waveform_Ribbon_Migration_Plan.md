@@ -72,7 +72,10 @@ constants); all state integrates on the sole logical clock and the projection on
   Reaction Mode place it exactly on the published field. The response is the square of the field over a reference
   level (a passing swell's in-view level on recorded music), softly capped, so the plateau of older swells keeps its
   rims near their own light while a passing swell's rims light up with the field's own smooth falloff. 0 is
-  pixel-identical to the light pass without it (`tests/test_waveform_pulse_rim.py`).
+  pixel-identical to the light pass without it (`tests/test_waveform_pulse_rim.py`). The reference is set where a
+  swell carries half the injection (each Centre Out swell); an edge swell seen at full strength publishes
+  `RIM_EDGE_SHARE` of its level, so its rims respond as Centre Out's do. The floor lift reads the card's visible span
+  plus `TROUGH_LOOKAHEAD` sigmas of the mode's envelope, within ±`TROUGH_VIEW`.
 - **Coupled accents.** Pulse Particles buys births once per injection, released over the swell's first journey and
   only into the headroom left after the authored Spark Count; Pulse Strands gives a restrained lean/chance/glow
   near the swell.

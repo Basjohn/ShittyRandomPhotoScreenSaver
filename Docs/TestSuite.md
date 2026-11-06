@@ -790,6 +790,17 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   theme, the preset row, Settings round trip and every exit restoring it, and Save To <Preset> on a tmp copy of a
   curated DevCurve preset through the real SettingsDialog. `tests/test_devcurve_shape_editor.py` keeps Settings'
   editor at the two nodes the solver needs (negative control: one node is refused).
+- `tests/test_neon_lake_studio.py` — Neon Lake Basin (`shockwave_grid`) on the shared recorded engine answers: full
+  logical frames byte-identical to the production replay at every tick (synthetic audio and a shipped clip, canonical
+  and a Terrain Reaction / Starscape Beat / Glass + Vertices / turned variant), with the fixtures driving waves from
+  onsets and the land from the analysis spectrum; the derived split proven both ways (Terrain Reaction's reads
+  recorded while it is off, with a negative control), mode-owned edits replaying exactly and under the frame budget,
+  engine edits re-running the worker (in and out of process); registry coverage (every control, Custom row and
+  vector element; the terrain record through its whole-record actions) with negative controls, shaper and terrain
+  structural edits, no wallpaper backdrop, dormancy of the registry lookup; on a real VisualizersTab the preset
+  row's Open Studio, Custom rows and families saved through Settings' own editors, every exit restoring it, the
+  framed camera's navigation saved only under the camera policy, identical production-renderer pixels, theme; on the
+  real SettingsDialog, Save To <Preset> into a tmp copy of a curated Neon Lake preset.
 - `tests/test_spectrum_studio_shape_editor.py` — each capability of Settings' shape editor driven on the real widget
   and reached exactly by the Studio's own edits (node add/remove, lane reorder), with a negative control.
 - `tests/test_spectrum_studio_replay_budget.py` — exact replays rewind (pristine / checkpoints) instead of

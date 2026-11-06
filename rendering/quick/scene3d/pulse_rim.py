@@ -14,7 +14,8 @@ STEP = (LAST-FIRST)/(SAMPLES-1)
 # along the rim, a little wider than the authored band, never ending in a hard edge.
 SPREAD = .75
 # Response = CEILING*tanh((field/REFERENCE)^2/CEILING). REFERENCE is a passing swell's level in the visible span on
-# recorded music (human_heavy1, Preset 1 camera, 5 Nov: in-view peak p90 .12, plateau median .06), so Pulse Rim k
+# recorded music for a swell carrying half the injection, as each Centre Out swell does (an edge swell seen at full
+# strength publishes core.waveform_ribbon_dynamics.RIM_EDGE_SHARE of its level; 5 Nov: in-view peak p90 .12), so Pulse Rim k
 # lights a passing swell's rims to about 1+k times and leaves the plateau near 1+k/4; CEILING bounds a strong or
 # Whole Swell (1+2k at most).
 REFERENCE, CEILING = .12, 2.

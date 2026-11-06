@@ -299,9 +299,13 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   capture and the Studio pass the camera's visible span; Travelling Pulse edge swells are born just beyond it and age
   only once seen (p50 .81-.99 at ±16; the peak visible swell after each kick is 1.7-5.6x main at every time in song).
   Preset 4 and Presets 5-7 are byte-identical. Evidence `.artifacts/evidence/waveform_ribbon/reactivity_preset7/`
-  (`visibility_tag_vs_final.txt`, `kicks4_table.txt`, `sheets/*_p1..3_*`). Open: Pulse Rim's REFERENCE level (.12,
-  set against the faded plateau) now meets a far stronger in-view field on Presets 1-3; `TROUGH_VIEW` still assumes
-  ±30; the no-twitch probe's .02/.01 bounds only held because its swells never reached the cloth.
+  (`visibility_tag_vs_final.txt`, `kicks4_table.txt`, `sheets/*_p1..3_*`). Follow-ups (6 Nov): an edge swell now
+  publishes half its level for Pulse Rim, as a Centre Out swell carries half the injection (rims at their ceiling over
+  43% of the view -> 0-1%; rim pixels at 255 4.3% -> 3.6% P1, 3.2% -> 2.5% P3; Preset 4 pixel-identical); the floor
+  lift reads the card's visible span plus 5 envelope sigmas within ±32 (identical at a 1282x1005 card, lower lift for
+  unseen troughs at the canonical card with unchanged contact). Open: on Presets 1/3 the rim's swell-to-elsewhere
+  contrast (1.11/1.17) is still below Preset 4's (1.27); the no-twitch probe's .02/.01 bounds only held because its
+  swells never reached the cloth (in-view .028/.012).
 - [~] **Travel Direction (operator, 5 Nov: "Travel Direction ... chosen in the studio ... an important basic need") —
   awaiting operator eyes:** Flow-bucket Choice, Right To Left (default, unchanged) or Left To Right (the mirror image:
   history enters at the left; pulses, held swells, Tilt Shift, sparks, strands and floor give follow; the world colour
@@ -471,8 +475,12 @@ design pack's control policy (quiet/peak A/B, real ranges only where a true inte
 serialized data unless a migration is justified. Accepted looks/behaviour (BTF, presets, timings) must not change.
 
 - [ ] Finish Waveform Studio acceptance first (§7.1), then extract any remaining Waveform-shaped assumptions.
-- [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost and Extruded Spectrum
-  built; Sphere in progress): Shockwave Grid, DevCurve, Oscilloscope. Extruded Spectrum awaits operator acceptance
+- [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost, Extruded Spectrum and
+  Neon Lake built, DevCurve built (below); Sphere in progress): Oscilloscope. Neon Lake (Shockwave Grid) awaits operator acceptance
+  (evidence `.artifacts/evidence/neon_lake/studio/`, Presets 1 and 3): recorded engine answers like Spectrum, the
+  shared framed camera, no wallpaper. Operator decision on acceptance: the Studio carries the terrain heightfield and
+  its Extend / Reset edits but has no brush instrument, so its builder body can shrink to the preset row plus the
+  terrain editor, not to `build_studio_owned_mode_ui` alone, unless a shared brush instrument is admitted. Extruded Spectrum awaits operator acceptance
   (evidence `.artifacts/evidence/extruded_spectrum/studio/`); its cast-shadow rows stay out of the Studio while
   Settings keeps them unavailable (`EXTRUDED_CAST_SHADOW_AVAILABLE`). Spectrum awaits operator acceptance (evidence
   `.artifacts/evidence/spectrum/studio_20261105/`); its Studio now reaches everything Settings' Spectrum builder saves
@@ -485,7 +493,13 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   workspace (one panel per layer), and whether the Audio Analysis group earns its place (in the replay only Bar Count
   and the noise floor change what the engine answers DevCurve, and nothing DevCurve draws). The builder body is
   replaced with `build_studio_owned_mode_ui` only on acceptance.
-- [ ] **Edit Preset survives only for modes without a Studio** (Shockwave Grid, DevCurve, Oscilloscope): Studio modes
+- [ ] **Orphaned clip workers (side defect, 6 Nov):** `tests/test_spectrum_studio.py::...failed_analysis...` retries a
+  missing-clip analysis and releases the evaluator; the cancelled `ClipLoadJob` (`process.kill()`) leaves a
+  `python -m ui.studio.spectrum_recorded_inputs ... no_such_clip.srclip` process alive indefinitely on Windows (seen
+  hours old), which also holds `tests/run_chunked.py --isolated`'s pipe so the file reports FAIL with every test
+  passed. Reproduce, then make cancel end the whole worker (the venv launcher's child too) and the worker exit on a
+  missing source.
+- [ ] **Edit Preset survives only for modes without a Studio** (Oscilloscope): Studio modes
   author curated presets with Open Studio (preset row, every slot) and the Studio's confirmed Save To <Preset>
   (`Docs/Reference/Visualizer_Studio.md` §4); the Notepad path and its pop-up go for each mode when its adapter
   registers (automatic: the slider builds Edit Preset only for `not has_studio(mode)`); delete `_open_preset_json`
