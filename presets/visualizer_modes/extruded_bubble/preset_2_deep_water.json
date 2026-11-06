@@ -79,6 +79,7 @@
         ],
         "extruded_bubble_dust": 0.0,
         "extruded_bubble_dynamic_floor": false,
+        "extruded_bubble_ember_grain": 0.0,
         "extruded_bubble_emission_geometry": "SCENE",
         "extruded_bubble_exposure": 0.9,
         "extruded_bubble_floor": 0.0,

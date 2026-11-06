@@ -521,3 +521,26 @@ def test_light_tint_carries_the_lights_colour_into_the_water(light_type):
         return float(np.abs(colour - light / light.max()).sum())
     for key in ("sky", "shaft"):
         assert distance(0.85, key) < 0.5 * distance(0.3, key)
+
+
+@pytest.mark.qt
+def test_ember_grain_breaks_the_dust_into_grit_and_is_dormant_without_dust(target):
+    """Ember Grain (deep red ocean goal) turns the glowing dust clouds into burning grit and torn filaments with dark
+    water between them. It acts only on the dust: with no dust it draws nothing, and 0 is the smooth cloud."""
+    capture, host = target
+
+    def at(dust, grain):
+        return capture.render(host, _snapshot(extruded_bubble_dust=dust, extruded_bubble_ember_grain=grain,
+                                              extruded_bubble_light_type="Sunlit Surface"))
+    assert np.array_equal(at(0.0, 1.0), at(0.0, 0.0))            # no dust: the grain never touches the water
+    smooth, grit = at(1.0, 0.0), at(1.0, 1.0)
+    assert np.abs(grit - smooth).mean() > .5                     # it reaches the native pixels
+
+    # What the grain changes is fine structure (grit, strands, sparks), not a smooth re-shading of the cloud: the
+    # change's own pixel-to-pixel variation, relative to its size, clearly exceeds a plain dust-amount change's.
+    def roughness(a, b):
+        change = (a[..., :3].astype(np.float64) - b[..., :3]).mean(-1)
+        laplacian = np.abs(change[1:-1, 1:-1] * 4 - change[:-2, 1:-1] - change[2:, 1:-1] - change[1:-1, :-2]
+                           - change[1:-1, 2:]).mean()
+        return laplacian / max(np.abs(change).mean(), 1e-6)
+    assert roughness(grit, smooth) > 1.4 * roughness(smooth, at(0.6, 0.0))

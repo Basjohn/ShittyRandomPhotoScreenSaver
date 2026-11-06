@@ -170,6 +170,7 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
     knobs.update(shaft_soft=softness, fan_contrast=0.8+(0.2-0.8)*softness,
                  fan_march=0.15+(0.6-0.15)*softness, fan_rays=80.0+(30.0-80.0)*softness, fan_reach=0.3 + 0.7 * float(_p(parameters, "ray_reach")))
     knobs.update(mist=float(_p(parameters, "haze")), veils=float(_p(parameters, "veils")), dust=float(_p(parameters, "dust")),
+                 ember_grain=float(_p(parameters, "ember_grain")),
                  floor=float(_p(parameters, "floor")))
     clarity, softness = float(_p(parameters, "clarity")), float(_p(parameters, "softness"))
     knobs.update(face_reflect=1.0 + (0.2 - 1.0) * clarity,
