@@ -724,6 +724,17 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   first wobble. Every drag instrument in a scrolling panel now sets `preventStealing: true`
   (`Docs/Reference/Visualizer_Studio.md` "Drags are batched"). `tests/test_studio_drag_coalescing.py` covers it,
   with a negative control.
+- [ ] **No automatic switch to Custom (operator 6 Nov), awaiting the operator's look.** A Studio edit on a curated
+  preset is now held, with nothing saved and the preset still selected.
+  - Closing the Studio yourself, switching preset or switching mode asks *Unsaved Preset Changes* with four
+    choices: Overwrite <Preset> (not offered on a read-only file), Save As New Preset (Settings' own Save Preset
+    As, then the new preset is selected), Place In Custom, Discard. Closing the prompt stays in the Studio.
+  - Quit, Settings going away and other closes nobody can answer keep the edits in Custom.
+  - Spec: `Docs/Reference/Visualizer_Studio.md` §4 "Canonical save". Tests:
+    `tests/test_studio_preset_row_and_save_to_preset.py` (every choice, read-only, edits returned to the preset,
+    unanswerable closes, and a Custom negative control).
+  - Operator to check: the prompt's wording and buttons over a real Studio, and that Save As New Preset's file
+    dialog lands in the right folder in an installed build (ProgramData's shared preset tree).
 - [ ] **Neon Lake: drag the Sun/Moon in the Studio preview.** Retiring the Settings terrain section (6 Nov, Studio brush)
   removed its 3/4 view, where the Sun/Moon could be dragged; it is now placed with Position X/Y/Z only. Give the Studio
   preview a direct drag for it: the same pick through the production camera as the terrain brush, one undoable commit

@@ -362,8 +362,27 @@ control.
   live; negative controls drop a property per category; every authored heightfield is the brush's target, and a brush
   stroke saves once, reloads and undoes exactly. Before the flip it also proved each Studio against the body
   users had (every row the body collected and every row its spec and hand-written conditions hid; commit `db7468ab`).
-- **Canonical save.** `VisualizerSettingsStore.commit` loads the values into the mode body with signals blocked, then
-  runs the tab's own `_force_visualizer_preset_to_custom` and `_save_settings_now`. The mode's shared families that
+- **Canonical save.** `VisualizerSettingsStore.commit` loads the values into the mode body with signals blocked. On
+  Custom it then runs the tab's own `_force_visualizer_preset_to_custom` and `_save_settings_now`. On a curated
+  preset there is **no automatic switch to Custom** (operator, 6 Nov). The edit is held as a *draft*:
+  - It lives in Settings' widgets only, with nothing saved and the preset still selected.
+  - The session reads it back as the canonical save would store it (`_draft_config`: the tab's own collect and
+    merge, read as Custom, never written).
+  - It is settled when the user saves explicitly (Save To <Preset>) or when the session would leave that preset.
+    The user's own closes (Close button, Esc, title-bar close, window X / Alt+F4), a preset switch and a mode
+    switch show Settings' prompt **Unsaved Preset Changes**, with four choices:
+    - **Overwrite <Preset>** writes the changed keys into its file, the same patch as Save To. It is left out when
+      the file is read-only.
+    - **Save As New Preset** runs Settings' own Save Preset As file dialog into the presets folder; the new preset
+      is then selected.
+    - **Place In Custom** does what every edit used to do.
+    - **Discard** reloads the preset and writes nothing.
+  - Closing the prompt without a choice keeps the Studio open.
+  - Edits returned to the preset's own values are dropped without asking.
+  - Exits nobody can answer (application quit, Settings destroyed, a lost window, a failure, a programmatic
+    `close()`) place the draft in Custom, so nothing is lost.
+
+  The mode's shared families that
   Settings keeps outside the mode body (bar Fill / Border / Border Opacity, the per-mode rainbow toggle and speed)
   are loaded into their owning Settings widgets first, so the tab's own save collects them. The Studio never writes
   the settings map directly. Camera turn/tilt go through the framed camera editor's pose authority.
@@ -371,10 +390,10 @@ control.
   preset), Save Preset As… (on Custom, Settings' own file dialog) and, for authoring the curated presets themselves,
   **Save To <Preset>**. This replaced Settings' Edit Preset (the preset file opened in the OS editor), deleted on
   6 Nov 2026 once every visualizer mode had a Studio.
-- **Save To <Preset>.** The store remembers the curated preset this session's Custom values came from (the preset the
-  Studio opened on, a Studio edit made on a curated preset, which moves it into Custom, or Move To Custom from it;
-  choosing another curated preset starts afresh, returning to Custom keeps it) and the keys edited since. On Custom
-  with such an origin the menu offers Save To <that preset>: it writes only the edited keys whose value differs from
+- **Save To <Preset>.** The store remembers the curated preset this session's edits came from: the preset the Studio
+  opened on, the preset a held draft edits, or the preset Move To Custom was used from. Choosing another curated
+  preset starts afresh; returning to Custom keeps it. The store also remembers the keys edited since. While a draft is
+  held, or on Custom with such an origin, the menu offers Save To <that preset>. It writes only the edited keys whose value differs from
   what selecting that preset resolves (its own settings over the canonical defaults), plus the starting view when the
   view was edited and Include Camera View is on. It always asks first (Settings' `StyledPopup`; Cancel writes
   nothing), then patches the preset's own file through `core.settings.visualizer_preset_file.save_changes_to_preset`:
@@ -382,7 +401,8 @@ control.
   order and value, a new key goes in by the repair's ordering rule, inert keys and metadata stay), the file keeps its
   indentation, escaping, line endings and final newline, the result must load the written values, and
   `reload_presets` follows. A read-only location (an installed build) gives a clear message pointing to Save Preset
-  As… and writes nothing. Custom stays selected with its values; the release mirror is not refreshed (an explicit
+  As… and writes nothing. The slot that was selected stays selected (Custom with its values, or the preset, which
+  now holds the edits and asks nothing more at close); the release mirror is not refreshed (an explicit
   release step). Opened on Custom, the origin is unknown and only Save Preset As… is offered.
 - **Mode switcher.** Switching modes selects that mode's Settings page (as its pill would) and hands the Studio a new
   canonical store; only enabled modes with an adapter are offered.
