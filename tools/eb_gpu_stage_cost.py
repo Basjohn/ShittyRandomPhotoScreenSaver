@@ -2,6 +2,7 @@
 
     .venv/Scripts/python tools/eb_gpu_stage_cost.py --clip logs/visualizer_recordings/heavy1.jsonl --preset 1
     .venv/Scripts/python tools/eb_gpu_stage_cost.py --clip <clip> --preset 1 --size 1662x888 --frames 60
+    .venv/Scripts/python tools/eb_gpu_stage_cost.py --clip <clip> --preset 9 --compare extruded_bubble_ember_grain=0
 
 Stage timers inside a frame misattribute: a ``GL_TIME_ELAPSED`` begin is taken when the command reaches the GPU
 front end, while the previous stage's fragments are still draining, so the next stage absorbs them (the probe's
@@ -9,6 +10,8 @@ prefilter once showed up as 2.3 ms of "shafts"). This tool times only whole fram
 frame, flushed and finished per frame) and removes one stage at a time: a stage's cost is the frame it leaves
 behind, ``full - skipped``. Variants run round-robin in one process (outside load and clock changes spoil one pass,
 not one variant). The pictures of skipped variants are wrong by design; this measures cost, never looks.
+``--compare KEY=JSON`` adds a variant drawing the same snapshots with one render parameter changed (a render-only
+option's own cost, ``full - variant``, timed round-robin beside the full frame).
 
 Stages: probe capture + prefilter (and each of its prefilter and glint-proxy parts), shafts (march + blurs), the near layer (begin, draw, end, composite), procedural
 material draws (beads/snow/fizz and specks), the drift compute solver, and the scene background capture.
@@ -16,6 +19,7 @@ material draws (beads/snow/fizz and specks), the drift compute solver, and the s
 from __future__ import annotations
 
 import argparse
+import json
 import ctypes
 import statistics
 import sys
@@ -54,8 +58,15 @@ def _skips():
     }
 
 
+def _with_parameter(snapshot, key: str, value):
+    import dataclasses
+    state = snapshot.logical.mode_state
+    state = dataclasses.replace(state, parameters={**dict(state.parameters), key: value})
+    return dataclasses.replace(snapshot, logical=dataclasses.replace(snapshot.logical, mode_state=state))
+
+
 def measure(clip: Path, *, preset: int, size: tuple[int, int], frames: int, rounds: int, wall: bool = False,
-            throughput: bool = False) -> dict:
+            throughput: bool = False, compare: tuple[str, object] | None = None) -> dict:
     import numpy as np
     from PySide6.QtGui import QGuiApplication
     QGuiApplication.instance() or QGuiApplication(sys.argv)
@@ -81,6 +92,9 @@ def measure(clip: Path, *, preset: int, size: tuple[int, int], frames: int, roun
     query = int(np.asarray(gl.glGenQueries(1)).ravel()[0])
     skips = _skips()
     variants = ["full", *skips]
+    compared = [] if compare is None else [_with_parameter(s, *compare) for s in snapshots]
+    if compare is not None:
+        variants.append(f"{compare[0]}={compare[1]}")
     results: dict[str, list[float]] = {name: [] for name in variants}
     sampler = SystemSampler()
     conditions = [sampler.sample()]
@@ -125,7 +139,7 @@ def measure(clip: Path, *, preset: int, size: tuple[int, int], frames: int, roun
         return value.value / 1e6
 
     try:
-        for snapshot in snapshots[:20]:
+        for snapshot in snapshots[:20] + compared[:5]:
             frame(snapshot)                      # warm every program and target
         for _ in range(rounds):
             for name in variants:
@@ -133,7 +147,8 @@ def measure(clip: Path, *, preset: int, size: tuple[int, int], frames: int, roun
                 for owner, attr, replacement in skips.get(name, ()):
                     setattr(owner, attr, replacement)
                 try:
-                    results[name].extend(frame(s) for s in snapshots)
+                    results[name].extend(frame(s) for s in (compared if name not in skips and name != "full"
+                                                            else snapshots))
                 finally:
                     for owner, attr, original in saved:
                         setattr(owner, attr, original)
@@ -157,6 +172,8 @@ def main() -> int:
     parser.add_argument("--rounds", type=int, default=3)
     parser.add_argument("--throughput", action="store_true",
                         help="score the sustained frame interval with two frames in flight (no per-frame finish)")
+    parser.add_argument("--compare", metavar="KEY=JSON",
+                        help="also time the same snapshots with one render parameter changed (round-robin)")
     parser.add_argument("--wall", action="store_true",
                         help="score submit -> GPU completion wall time (use under tools/gpu_load_generator.py)")
     args = parser.parse_args()
@@ -164,7 +181,9 @@ def main() -> int:
         raise SystemExit("could not disable per-call GL error checking")
     width, height = (int(v) for v in args.size.split("x"))
     result = measure(args.clip, preset=args.preset, size=(width, height), frames=args.frames, rounds=args.rounds,
-                     wall=args.wall, throughput=args.throughput)
+                     wall=args.wall, throughput=args.throughput,
+                     compare=None if args.compare is None else (args.compare.split("=", 1)[0],
+                                                                json.loads(args.compare.split("=", 1)[1])))
     print(f"{width}x{height} preset {args.preset}: whole frame {'sustained interval' if args.throughput else 'submit->finish wall' if args.wall else 'GPU'} median {result['full_ms']:.2f} ms "
           f"(p90 {result['full_p90_ms']:.2f})")
     for name, ms in sorted(result["stage_ms"].items(), key=lambda kv: -kv[1]):

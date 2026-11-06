@@ -1343,6 +1343,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                                     'extruded_bubble_drift_snow': [0.0, 0.0],
                                     'extruded_bubble_drift_specks': [0.0, 0.0],
                                     'extruded_bubble_dust': 0.0,
+                                    'extruded_bubble_ember_grain': 0.0,
                                     'extruded_bubble_dynamic_floor': False,
                                     'extruded_bubble_emission_geometry': 'BEAM',
                                     'extruded_bubble_exposure': 1.0,

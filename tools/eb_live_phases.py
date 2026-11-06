@@ -7,8 +7,7 @@ render stages (probe, shafts, near layer, background capture, drift solver, unif
 ``gl_query`` / host fence state read, and the logical ``_publish_logical_state``; at exit it writes median/p90/p99
 milliseconds per frame (and per tick) plus solver restarts to ``--out``. The first 200 frames are dropped (startup).
 
-Use it under the real competing load the question is about, with ``SRPSS_FORCE_LOG_DIR`` pointing at a scratch
-folder so the operator's own logs stay untouched. Offline harnesses (``eb_gpu_stage_cost``, ``eb_logical_cost_probe``)
+Use it under the real competing load the question is about, with ``--log-dir=<scratch folder>`` among the main_mc arguments so the operator's own logs stay untouched. Offline harnesses (``eb_gpu_stage_cost``, ``eb_logical_cost_probe``)
 cannot see Qt's scene, the swap chain, the real driver queue or the other displays; this can.
 """
 from __future__ import annotations

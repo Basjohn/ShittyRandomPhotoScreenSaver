@@ -63,7 +63,7 @@ def main(argv: list[str]) -> int:
         lh.copy_repo_images(work / "images")
         lh.seed_profile(env, work / "images", 4)
 
-        run = subprocess.run([str(installed), "/s", "--exit-after", "20"], env=env,
+        run = subprocess.run([str(installed), "/s", "--exit-after", "20", lh.log_dir_arg(logs)], env=env,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90)
         log = logs / "screensaver.log"
         text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
@@ -77,7 +77,7 @@ def main(argv: list[str]) -> int:
         if errors:
             return _fail("ERROR/CRITICAL in /s log:\n" + "\n".join(errors[:20]), log)
 
-        settings = subprocess.Popen([str(installed), "/c"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        settings = subprocess.Popen([str(installed), "/c", lh.log_dir_arg(logs)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         time.sleep(12)
         alive = settings.poll() is None
         settings.terminate()

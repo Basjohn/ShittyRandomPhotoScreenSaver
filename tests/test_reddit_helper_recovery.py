@@ -58,7 +58,7 @@ def test_worker_log_and_breadcrumb_log_never_exceed_one_megabyte(monkeypatch, tm
         logging.info("x" * (16 * 1024))
     logging.shutdown()
 
-    monkeypatch.setenv("SRPSS_ALLOW_TEST_HELPER_BREADCRUMBS", "1")
+    monkeypatch.setattr(installer, "_ALLOW_BREADCRUMBS_UNDER_TEST", True)
     monkeypatch.setattr(installer, "BASE_DIR", tmp_path)
     for _ in range(90):
         installer._log_helper_event("y" * (16 * 1024))

@@ -50,7 +50,8 @@ uniform float uMist;
 uniform float uSurfaceGain;
 uniform float uSurfaceSky;      // the window's light away from the sun   // the light through the surface (HDR: what bubbles mirror)
 uniform float uDust;
-uniform vec2 uFloor;            // Floor amount, world height of the floor below the tank
+uniform float uEmberGrain;      // 0 smooth glowing dust clouds .. 1 burning grit and torn filaments (Ember Grain)
+uniform vec2 uFloor;           // Floor amount, world height of the floor below the tank
 uniform vec3 uDustAlong;        // the stream (world), along which the particle bands run
 uniform vec3 uDustAcross;
 uniform vec3 uDustBands;        // band frequency, world unit, how far the dust gathers into the particle bands (0..1)
@@ -228,6 +229,32 @@ void main() {
         vec3 ember = mix(uShaftColour, uLightColour, 0.6) * vec3(1.0, 0.55, 0.3);
         // Glowing smoke, not a faint tint (sixth goal: molten clouds along the bands); a dim light still shows it.
         colour += ember * uDust * dust * dust * 1.2 * toward * (0.5 + 0.5 * uLightStrength);
+        if (uEmberGrain > 0.0) {
+            // Ember Grain (deep red ocean goal): the cloud breaks into burning grit and torn filaments with dark
+            // water between them, deep red where it smoulders and orange only at hot cores. Grain is sized in
+            // pixels (a few px), filaments run along the stream; both drift with the water.
+            float pxPerRadian = uFrameSize.y / (2.0 * uTan.y);
+            vec2 px = rotated * pxPerRadian + vec2(uTime * 6.0, 0.0);
+            // Wisps: thin smoke strands drawn out along the stream (tens of px long, a few px across).
+            float wisp = skyFbm2(px * vec2(0.011, 0.07), 4, 79u);
+            float strands = smoothstep(0.48, 0.82, wisp);
+            float body = clamp(dust * 1.4, 0.0, 1.6);
+            // Sparks: sparse 1-2 px burning grains, gathered where the smoke is thick.
+            vec2 cell = floor(px / 5.0);
+            float h = sceneRandom(uint(int(cell.x) + 65536) * 0x8da6b343u ^ uint(int(cell.y) + 65536) * 0xd8163841u, 89u, 7u);
+            vec2 centre = (cell + 0.2 + 0.6 * vec2(fract(h * 57.31), fract(h * 91.17))) * 5.0;
+            float d = distance(px, centre);
+            float lit = step(1.0 - 0.55 * smoothstep(0.1, 0.9, body * (0.4 + strands)), fract(h * 7.91));
+            float spark = lit * exp(-d * d / 0.9) * (0.4 + 0.6 * fract(h * 13.3));
+            vec3 smoulder = ember * 0.8;
+            vec3 hot = mix(ember, vec3(1.0, 0.55, 0.2), 0.35);
+            // Embers burn by themselves: they lean only gently toward the light, unlike the lit smoke.
+            float gain = uDust * (0.9 + 0.25 * (toward - 0.5)) * (0.5 + 0.5 * uLightStrength);
+            vec3 grained = (smoulder * body * body * (0.25 + 1.6 * strands) + hot * spark * 3.5 * min(body, 1.0)) * gain;
+            // Ember Grain 0 keeps the expression above untouched (pixel-identical); otherwise it blends toward grit.
+            vec3 smoke = ember * uDust * dust * dust * 1.2 * toward * (0.5 + 0.5 * uLightStrength);
+            colour += (grained - smoke) * uEmberGrain;
+        }
     }
     if (uWisps > 0.0) {
         float strands = 0.0;
