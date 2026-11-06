@@ -65,6 +65,7 @@ class ProcessSupervisor:
     RESPONSE_QUEUE_SIZE = 64   # Max pending responses per worker
     MAX_BUFFERED_RESPONSES = 128
     POLL_TIMEOUT_MS = 10       # Non-blocking poll timeout
+    WORKER_READY_TIMEOUT_S = 10.0  # Longest wait for a spawned child's ready signal
     _RESPONSE_LISTENER_STOP = "__SRPSS_RESPONSE_LISTENER_STOP__"
     
     def __init__(
@@ -81,10 +82,22 @@ class ProcessSupervisor:
             settings_manager: Optional SettingsManager for worker enable/disable
             event_system: Optional EventSystem for health broadcasts
         """
+        # ``_lock`` guards supervisor state and is only ever held for short,
+        # non-blocking sections. Anything that waits on a child process (ready
+        # signal, graceful join, terminate, kill) happens under the per-role
+        # lifecycle lock instead, so a GUI-thread ``is_running()`` or a
+        # telemetry snapshot can never queue behind a worker start or stop.
         self._lock = threading.RLock()
+        self._lifecycle_locks: dict[WorkerType, threading.RLock] = {
+            wt: threading.RLock() for wt in WorkerType
+        }
+        # Roles whose child process is being started or stopped right now
+        # (guarded by ``_lock``). Such a role is "not available": no new
+        # messages, listeners or heartbeat decisions until it settles.
+        self._transitioning: set[WorkerType] = set()
         self._shutdown = False
         self._initialized = False
-        
+
         self._resource_manager = resource_manager
         self._settings_manager = settings_manager
         self._event_system = event_system
@@ -184,78 +197,96 @@ class ProcessSupervisor:
         if self._shutdown:
             logger.warning("Cannot start worker during shutdown")
             return False
-        
+
+        # One start/stop/restart per role at a time. This lock is held across
+        # the spawn and the ready wait, so it is never taken by availability
+        # queries, messaging or telemetry (those use ``_lock`` alone).
+        with self._lifecycle_locks[worker_type]:
+            return self._start_role(worker_type)
+
+    def _start_role(self, worker_type: WorkerType) -> bool:
         with self._lock:
             # Check if already running
             if worker_type in self._workers and self._workers[worker_type].is_alive():
                 logger.debug("%s worker already running", worker_type.value)
                 return True
-            
+
             # Check if worker is enabled in settings
             if not self._is_worker_enabled(worker_type):
                 logger.info("%s worker disabled in settings", worker_type.value)
                 return False
-            
+
             # Check for factory
             if worker_type not in self._worker_factories:
                 logger.error("No factory registered for %s worker", worker_type.value)
                 return False
-            
+
             try:
                 # Create queues
-                self._request_queues[worker_type] = Queue(self.REQUEST_QUEUE_SIZE)
-                self._response_queues[worker_type] = Queue(self.RESPONSE_QUEUE_SIZE)
-                
+                req_q = Queue(self.REQUEST_QUEUE_SIZE)
+                resp_q = Queue(self.RESPONSE_QUEUE_SIZE)
+                self._request_queues[worker_type] = req_q
+                self._response_queues[worker_type] = resp_q
+
                 # Update health state
                 self._health[worker_type].state = WorkerState.STARTING
-                
-                # Create and start process
+
                 factory = self._worker_factories[worker_type]
                 process = mp.Process(
                     target=factory,
-                    args=(
-                        self._request_queues[worker_type],
-                        self._response_queues[worker_type],
-                    ),
+                    args=(req_q, resp_q),
                     name=f"SRPSS_{worker_type.value}_worker",
                     daemon=True,  # Die with parent
                 )
-                process.start()
-                self._apply_worker_process_priority(worker_type, process.pid)
-                
+                # From here until the role settles, nothing else may use it.
+                self._transitioning.add(worker_type)
+            except Exception as e:
+                logger.exception("Failed to start %s worker: %s", worker_type.value, e)
+                self._health[worker_type].state = WorkerState.ERROR
+                self._health[worker_type].error_message = str(e)
+                self._broadcast_health(worker_type)
+                return False
+
+        # Spawning and the ready wait take as long as the child needs (seconds
+        # on a loaded machine) and run without the state lock.
+        try:
+            process.start()
+            self._apply_worker_process_priority(worker_type, process.pid)
+
+            with self._lock:
                 self._workers[worker_type] = process
                 self._health[worker_type].pid = process.pid
-                
-                logger.info(
-                    "Started %s worker (PID: %d), waiting for ready signal...",
-                    worker_type.value,
-                    process.pid,
-                )
-                
-                # Wait for WORKER_READY signal before marking as RUNNING.
-                # Without this, callers may send messages before the worker's
-                # message loop has started, causing timeouts on the first
-                # request (e.g. display 0's initial image load).
-                ready = False
-                resp_q = self._response_queues[worker_type]
-                deadline = time.time() + 10.0  # 10s max wait
-                while time.time() < deadline and process.is_alive():
-                    try:
-                        data = resp_q.get(timeout=0.25)
-                        resp = self._response_from_data(data)
-                        if resp.msg_type == MessageType.WORKER_READY:
-                            ready = True
-                            break
-                        if self._process_internal_response(worker_type, resp):
-                            continue
-                        if self._dispose_if_abandoned(worker_type, resp):
-                            continue
-                        self._buffer_response(worker_type, resp)
-                    except QueueEmpty:
-                        continue
-                    except Exception:
+
+            logger.info(
+                "Started %s worker (PID: %d), waiting for ready signal...",
+                worker_type.value,
+                process.pid,
+            )
+
+            # Wait for WORKER_READY signal before marking as RUNNING.
+            # Without this, callers may send messages before the worker's
+            # message loop has started, causing timeouts on the first
+            # request (e.g. display 0's initial image load).
+            ready = False
+            deadline = time.time() + self.WORKER_READY_TIMEOUT_S
+            while time.time() < deadline and process.is_alive() and not self._shutdown:
+                try:
+                    data = resp_q.get(timeout=0.25)
+                    resp = self._response_from_data(data)
+                    if resp.msg_type == MessageType.WORKER_READY:
+                        ready = True
                         break
-                
+                    if self._process_internal_response(worker_type, resp):
+                        continue
+                    if self._dispose_if_abandoned(worker_type, resp):
+                        continue
+                    self._buffer_response(worker_type, resp)
+                except QueueEmpty:
+                    continue
+                except Exception:
+                    break
+
+            with self._lock:
                 if not ready:
                     logger.error(
                         "%s worker started but never signalled ready",
@@ -265,26 +296,30 @@ class ProcessSupervisor:
                     self._health[worker_type].error_message = "Worker never signalled ready"
                     self._broadcast_health(worker_type)
                     return False
-                
+
                 self._health[worker_type].state = WorkerState.RUNNING
                 self._health[worker_type].record_heartbeat()
                 logger.info("%s worker ready", worker_type.value)
-                
+
                 # Start heartbeat monitoring if not already running
                 self._ensure_heartbeat_monitoring()
-                
+
                 # Broadcast health update
                 self._broadcast_health(worker_type)
-                
+
                 return True
-                
-            except Exception as e:
-                logger.exception("Failed to start %s worker: %s", worker_type.value, e)
+
+        except Exception as e:
+            logger.exception("Failed to start %s worker: %s", worker_type.value, e)
+            with self._lock:
                 self._health[worker_type].state = WorkerState.ERROR
                 self._health[worker_type].error_message = str(e)
                 self._broadcast_health(worker_type)
-                return False
-    
+            return False
+        finally:
+            with self._lock:
+                self._transitioning.discard(worker_type)
+
     def stop(self, worker_type: WorkerType, timeout: float = 5.0) -> bool:
         """
         Stop a worker process gracefully.
@@ -304,78 +339,91 @@ class ProcessSupervisor:
             reason="worker_stopping",
         )
 
+        with self._lifecycle_locks[worker_type]:
+            return self._stop_role(worker_type, timeout)
+
+    def _stop_role(self, worker_type: WorkerType, timeout: float) -> bool:
         with self._lock:
             if worker_type not in self._workers:
                 return True
-            
+
             process = self._workers[worker_type]
             if not process.is_alive():
                 self._cleanup_worker(worker_type)
                 return True
-            
-            self._health[worker_type].state = WorkerState.STOPPING
-            
-            try:
-                # Send shutdown message
-                shutdown_msg = WorkerMessage(
-                    msg_type=MessageType.SHUTDOWN,
-                    seq_no=self._next_seq(worker_type),
-                    correlation_id=str(uuid.uuid4()),
-                    worker_type=worker_type,
-                )
-                
-                req_queue = self._request_queues.get(worker_type)
-                if req_queue is None:
-                    return False
-                try:
-                    req_queue.put_nowait(shutdown_msg.to_dict())
-                except Exception:
-                    pass
-                
-                # Drain response resources while waiting.  In particular this
-                # acknowledges a published ImageWorker mapping so the worker
-                # can close its producer handle and reach SHUTDOWN cleanly.
-                deadline = time.monotonic() + max(0.0, float(timeout))
-                while process.is_alive() and time.monotonic() < deadline:
-                    self._drain_worker_response_queue(
-                        worker_type,
-                        dispose_application=True,
-                        reason="worker_stopping",
-                    )
-                    remaining = max(0.0, deadline - time.monotonic())
-                    process.join(timeout=min(0.05, remaining))
 
+            self._health[worker_type].state = WorkerState.STOPPING
+            req_queue = self._request_queues.get(worker_type)
+            if req_queue is None:
+                return False
+            self._transitioning.add(worker_type)
+
+        # The graceful wait, terminate and kill below take seconds when a child
+        # is wedged or starved. They run without the state lock: holding it here
+        # froze every is_running()/telemetry caller (the GUI thread among them)
+        # for the whole stop.
+        try:
+            # Send shutdown message
+            shutdown_msg = WorkerMessage(
+                msg_type=MessageType.SHUTDOWN,
+                seq_no=self._next_seq(worker_type),
+                correlation_id=str(uuid.uuid4()),
+                worker_type=worker_type,
+            )
+            try:
+                req_queue.put_nowait(shutdown_msg.to_dict())
+            except Exception:
+                pass
+
+            # Drain response resources while waiting.  In particular this
+            # acknowledges a published ImageWorker mapping so the worker
+            # can close its producer handle and reach SHUTDOWN cleanly.
+            deadline = time.monotonic() + max(0.0, float(timeout))
+            while process.is_alive() and time.monotonic() < deadline:
                 self._drain_worker_response_queue(
                     worker_type,
                     dispose_application=True,
                     reason="worker_stopping",
                 )
-                
+                remaining = max(0.0, deadline - time.monotonic())
+                process.join(timeout=min(0.05, remaining))
+
+            self._drain_worker_response_queue(
+                worker_type,
+                dispose_application=True,
+                reason="worker_stopping",
+            )
+
+            if process.is_alive():
+                logger.warning(
+                    "%s worker did not stop gracefully, terminating",
+                    worker_type.value,
+                )
+                process.terminate()
+                process.join(timeout=PROCESS_TERMINATE_TIMEOUT_S)
+
                 if process.is_alive():
-                    logger.warning(
-                        "%s worker did not stop gracefully, terminating",
+                    logger.error(
+                        "%s worker did not terminate, killing",
                         worker_type.value,
                     )
-                    process.terminate()
+                    process.kill()
                     process.join(timeout=PROCESS_TERMINATE_TIMEOUT_S)
-                    
-                    if process.is_alive():
-                        logger.error(
-                            "%s worker did not terminate, killing",
-                            worker_type.value,
-                        )
-                        process.kill()
-                        process.join(timeout=PROCESS_TERMINATE_TIMEOUT_S)
-                
+
+            with self._lock:
                 self._cleanup_worker(worker_type)
-                logger.info("Stopped %s worker", worker_type.value)
-                return True
-                
-            except Exception as e:
-                logger.exception("Error stopping %s worker: %s", worker_type.value, e)
+            logger.info("Stopped %s worker", worker_type.value)
+            return True
+
+        except Exception as e:
+            logger.exception("Error stopping %s worker: %s", worker_type.value, e)
+            with self._lock:
                 self._cleanup_worker(worker_type)
-                return False
-    
+            return False
+        finally:
+            with self._lock:
+                self._transitioning.discard(worker_type)
+
     def restart(self, worker_type: WorkerType) -> bool:
         """
         Restart a worker process with backoff.
@@ -436,7 +484,7 @@ class ProcessSupervisor:
             Correlation ID if sent, None if queue full or worker not running
         """
         with self._lock:
-            if worker_type not in self._workers:
+            if worker_type in self._transitioning or worker_type not in self._workers:
                 return None
             
             if not self._workers[worker_type].is_alive():
@@ -504,7 +552,7 @@ class ProcessSupervisor:
             if self._response_listener_active_locked(worker_type):
                 return responses
             resp_queue = self._response_queues.get(worker_type)
-            if not resp_queue:
+            if not resp_queue or worker_type in self._transitioning:
                 return responses
         
         # Poll outside lock to avoid blocking
@@ -548,6 +596,8 @@ class ProcessSupervisor:
         buffered: Optional[WorkerResponse] = None
         with self._lock:
             if self._shutdown or worker_type in self._response_listener_stopping:
+                return False
+            if worker_type in self._transitioning:
                 return False
             if self._response_queues.get(worker_type) is None:
                 return False
@@ -600,7 +650,7 @@ class ProcessSupervisor:
 
         with self._lock:
             resp_queue = self._response_queues.get(worker_type)
-            if not resp_queue:
+            if not resp_queue or worker_type in self._transitioning:
                 return None
             listener_active = self._response_listener_active_locked(worker_type)
 
@@ -709,7 +759,7 @@ class ProcessSupervisor:
             True if worker process is alive and running
         """
         with self._lock:
-            if worker_type not in self._workers:
+            if worker_type in self._transitioning or worker_type not in self._workers:
                 return False
             return self._workers[worker_type].is_alive()
     
@@ -741,6 +791,7 @@ class ProcessSupervisor:
         Returns:
             Dict with detailed health information
         """
+        memory_pid: int | None = None
         with self._lock:
             health = self._health.get(worker_type)
             if not health:
@@ -770,20 +821,7 @@ class ProcessSupervisor:
             if process and process.is_alive():
                 diagnostics["process_alive"] = True
                 diagnostics["process_pid"] = process.pid
-                
-                # Try to get memory info via psutil
-                try:
-                    import psutil
-                    proc = psutil.Process(process.pid)
-                    mem_info = proc.memory_info()
-                    diagnostics["memory_rss_mb"] = mem_info.rss / (1024 * 1024)
-                    diagnostics["memory_vms_mb"] = mem_info.vms / (1024 * 1024)
-                    diagnostics["cpu_percent"] = proc.cpu_percent(interval=0)
-                except Exception as e:
-                    logger.debug("[WORKER] Exception suppressed: %s", e)
-                    diagnostics["memory_rss_mb"] = None
-                    diagnostics["memory_vms_mb"] = None
-                    diagnostics["cpu_percent"] = None
+                memory_pid = process.pid
             else:
                 diagnostics["process_alive"] = False
                 diagnostics["process_pid"] = None
@@ -807,8 +845,23 @@ class ProcessSupervisor:
             diagnostics["response_callbacks_pending"] = len(
                 self._response_callbacks[worker_type]
             )
-            
-            return diagnostics
+
+        # Process memory comes from the OS, not supervisor state: query it
+        # outside the state lock so a slow query cannot stall other callers.
+        if memory_pid is not None:
+            try:
+                import psutil
+                proc = psutil.Process(memory_pid)
+                mem_info = proc.memory_info()
+                diagnostics["memory_rss_mb"] = mem_info.rss / (1024 * 1024)
+                diagnostics["memory_vms_mb"] = mem_info.vms / (1024 * 1024)
+                diagnostics["cpu_percent"] = proc.cpu_percent(interval=0)
+            except Exception as e:
+                logger.debug("[WORKER] Exception suppressed: %s", e)
+                diagnostics["memory_rss_mb"] = None
+                diagnostics["memory_vms_mb"] = None
+                diagnostics["cpu_percent"] = None
+        return diagnostics
 
     def get_shared_memory_accounting_snapshot(self) -> dict[str, int]:
         """Return a detached ImageWorker transfer-accounting snapshot."""
@@ -1560,7 +1613,9 @@ class ProcessSupervisor:
         # This is CRITICAL - without this, heartbeat responses are never processed
         # and workers get restarted unnecessarily
         with self._lock:
-            worker_types = list(self._workers.keys())
+            # A role being started or stopped is owned by that transition; the
+            # monitor must neither drain its queue nor judge its heartbeat.
+            worker_types = [wt for wt in self._workers if wt not in self._transitioning]
         
         for worker_type in worker_types:
             # Poll responses to process HEARTBEAT_ACK messages
@@ -1576,6 +1631,8 @@ class ProcessSupervisor:
         
         with self._lock:
             for worker_type, process in list(self._workers.items()):
+                if worker_type in self._transitioning:
+                    continue
                 if not process.is_alive():
                     logger.warning(
                         "%s worker process died unexpectedly",
