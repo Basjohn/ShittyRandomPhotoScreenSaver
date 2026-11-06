@@ -251,7 +251,9 @@ def _add_studio_launcher(tab, mode_id: str) -> None:
         return
     from ui.widgets.outlined_button import OutlinedButton
     title = next(entry.title for entry in studio_modes() if entry.mode_id == mode_id)    # the Studio's own name
-    button = OutlinedButton("Open Studio", role="secondary")     # the preset row's own button style
+    # The preset row's own button style, in capitals and two sizes up (12 -> 14 px) so the Studio stands out in
+    # the row without shouting (operator, 6 Nov).
+    button = OutlinedButton("OPEN STUDIO", role="secondary", font_px=14)
     button.setObjectName(f"{mode_id}_open_studio")
     button.setToolTip(f"Edit this preset in the {title} Studio's large live preview. Settings hides while the "
                       "Studio is open and returns when it closes.")
