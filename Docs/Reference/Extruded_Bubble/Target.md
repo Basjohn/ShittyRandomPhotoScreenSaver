@@ -56,6 +56,7 @@ appearance, while the existing no-seabed/no-ribbon rulings below retain their ex
 | P5 | Deep blue contrast, violet film, diagonal streams, restrained particles | Existing film/stream/spread/band controls over correct material and world population |
 | P6 | Cyan/violet glass and caustic-looking background | Existing colours/glass/veils do not provide rocky geometry. Its pictured floor is outside the current explicit no-seabed contract; do not claim that haze substitutes for it |
 | P7 | Copper-lit clear shells, diagonal microbubble streams, broad warm upper-right illumination over dark teal water | Shared light/optics first; substantial particle, stream, camera and glass-emphasis authoring remains |
+| P9 Deep Red Ocean (`Preset7Goal.png`, 6 Nov) | The same goal read literally: near-black teal water, burning ember grit and strands on the diagonal streams, copper-lit shells, warm beams from the upper-right corner, defocused foreground | Shared **Ember Grain** (Water) turns the dust clouds into grit, strands and sparks; the rest is authoring (Sunlit Surface with Surface Brightness 0, sun placed off the upper-right corner by the camera). Preset 7 is untouched (operator: "its own thing"). Status and shortfalls: Investigation §72 |
 
 P7's current strength-corrected capture is still dominated by orange point/bokeh populations. The goal instead
 uses clear spherical shells, separated highlights, readable interiors and dark space between streams. Reducing
