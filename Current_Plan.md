@@ -108,6 +108,11 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
+- [ ] **`tests/test_process_supervisor_availability.py` load sensitivity (6 Nov):** `test_start_does_not_block_
+  availability_calls_or_the_heartbeat` failed once inside a 700-file isolated run and passed alone (its 0.15 s
+  budget per availability call). If it recurs, widen the budget to the measured loaded worst case rather than drop
+  the check; the old lock scope took seconds, so the bound keeps its meaning.
+
 - [ ] **Neon Lake goal mocks (Presets 1-3, 6 Nov sixth pass, awaiting operator look):** darker mirror lake with a
   longer Moon/Sun column and no swell wash, Preset 3's mid-lake blob fixed (mirror counted swell troughs as land),
   navy Preset 1 sky with a shallower band and a soft blue stream upper left, even luminous Moon face, near ridges
