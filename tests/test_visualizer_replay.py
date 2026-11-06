@@ -73,6 +73,66 @@ def test_frozen_devcurve_runtime_fails_own_output_floor(clips, monkeypatch):
         check_floors(result, "beats_120_bpm__devcurve")
 
 
+def _held(clip, seconds=8.0):
+    """The clip's last frame held on at its own cadence: DevCurve's body is slow by design (two stages of 0.45
+    and 0.8 s), so the shipped 0.5-2 s fixtures only ever see its cold start."""
+    from dataclasses import replace
+
+    from widgets.spotify_visualizer.feature_frame import FeatureClip
+
+    step = clip.frames[1].timestamp_us - clip.frames[0].timestamp_us
+    count = int(seconds * 1_000_000 / step)
+    last = len(clip.frames) - 1
+    frames = tuple(replace(clip.frames[min(i, last)], timestamp_us=i * step) for i in range(count))
+    return FeatureClip(clip.name, frames), step
+
+
+def _flux_per_second(result, step_us, first_s, last_s):
+    from tools.visualizer_replay.driver import mode_output
+
+    vectors = [mode_output(frame) for frame in result["logical_series"]]
+    first, last = int(first_s * 1e6 / step_us), int(last_s * 1e6 / step_us)
+    flux = sum(sum(abs(a - b) for a, b in zip(left, right))
+               for left, right in zip(vectors[first:last], vectors[first + 1:last + 1]))
+    return flux / (last_s - first_s)
+
+
+def _idle_result(clips):
+    clip, _ = _held(clips["silence"])
+    return replay_clip(clip, "devcurve", settings=frozen_visualizer_settings)
+
+
+def _assert_settled_field_alive(result, idle, step):
+    settled_rate = _flux_per_second(result, step, 6.0, 8.0)
+    assert settled_rate > 100.0 * _flux_per_second(idle, step, 6.0, 8.0), "settled field no livelier than the idle wave"
+
+
+@pytest.mark.parametrize("fixture", ["sudden_volume_step", "sustained_bass", "broadband_noise"])
+def test_devcurve_held_input_keeps_moving_the_field_after_its_slow_body_settles(clips, fixture):
+    """DevCurve's floors measure the shipped fixtures' first second, where the slow body is still rising (that is
+    why their output_flux floors sit well under the pre-rework values). The settled field must still be alive:
+    the same input held for 8 s moves the curves far more in its last 2 s than the idle wave does."""
+    clip, step = _held(clips[fixture])
+    settled = replay_clip(clip, "devcurve", settings=frozen_visualizer_settings)
+    _assert_settled_field_alive(settled, _idle_result(clips), step)
+
+
+def test_frozen_devcurve_runtime_fails_the_held_settled_response(clips, monkeypatch):
+    from widgets.spotify_visualizer.devcurve_frame_runtime import DevCurveFrameRuntime
+
+    advance = DevCurveFrameRuntime.advance
+
+    def freeze_after_first(self, **kwargs):
+        return self.latest if self.latest.curves else advance(self, **kwargs)
+
+    monkeypatch.setattr(DevCurveFrameRuntime, "advance", freeze_after_first)
+    clip, step = _held(clips["sustained_bass"])
+    result = replay_clip(clip, "devcurve", settings=frozen_visualizer_settings)
+    assert _flux_per_second(result, step, 6.0, 8.0) < 1e-6
+    with pytest.raises(AssertionError, match="no livelier than the idle wave"):
+        _assert_settled_field_alive(result, _idle_result(clips), step)
+
+
 def test_oscilloscope_output_reads_live_trace_and_beam_reactions():
     from widgets.spotify_visualizer.render_state import OscilloscopeFrame
 
