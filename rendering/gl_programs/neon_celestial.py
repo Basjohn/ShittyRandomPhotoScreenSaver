@@ -174,7 +174,8 @@ float basinMoonSurfaceBrightness(vec3 normal,vec3 eye) {
     // A bright lunar face with restrained relief. The shaded hemisphere is
     // retained below as dim earthshine for a solid 3-D body. Surface emission
     // follows the resulting albedo in the celestial presentation pass.
-    return 0.82+0.18*pow(lambert,0.70);
+    // Pass 6: flatter (the mock's Moon is one even luminous face; relief stays in the albedo below).
+    return 0.90+0.10*pow(lambert,0.70);
 }
 
 float basinMoonRimIllumination(vec3 eye, vec3 ray) {

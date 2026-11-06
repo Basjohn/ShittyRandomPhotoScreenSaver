@@ -497,8 +497,10 @@ float basinMirrorLand(vec3 origin,vec3 dir,float softness,out float rim) {
         vec3 p=origin+level*t;
         vec2 uv=vec2(p.x/(2.0*uHalfWidth)+0.5,-p.z/SHOCKWAVE_DEPTH);
         float base=basinBase(uv);
-        float h=sceneHeightfieldWater(base) ? 0.0 : base*uLand.x;
-        h-=basinDistantDrop(uv);
+        // Only land stands in the mirror. Counting the water's rest level as land made every swell trough
+        // (water below its rest height) mirror "land" all round it: a dark blob in the middle of the lake.
+        if (sceneHeightfieldWater(base)) { t*=1.19; continue; }
+        float h=base*uLand.x-basinDistantDrop(uv);
         profile=max(profile,(h-origin.y)/t);
         t*=1.19;
     }
@@ -526,7 +528,7 @@ float basinRipple(vec2 xz,float perPixel,out vec2 slope) {
     vec2 g=vec2(0.0);
     for (int i=0;i<6;++i) {
         float fade=clamp(2.0-length(K[i].xy)*perPixel*2.2,0.0,1.0);   // gone below ~3 pixels a wave
-        float phase=dot(K[i].xy,w)+0.15*K[i].z*uTime+float(i)*1.7;
+        float phase=dot(K[i].xy,w)+0.11*K[i].z*uTime+float(i)*1.7;
         height+=K[i].w*fade*sin(phase);
         g+=K[i].w*fade*K[i].xy*cos(phase);
         total+=K[i].w;
@@ -544,9 +546,10 @@ float basinWaterGlint(vec3 world,float depthPerPixel,float ripple,float screenPe
     float radius=uBodySize/max(length(uBodyPosition-uEye),1e-3)/uTan.y;
     float below=b.y-h.y;
     if (below<=0.0) return 0.0;
-    float width=radius*(0.45+0.45*below);
+    // Pass 6: a broader, longer column (the mocks' reflection reaches from the far shore to the near one).
+    float width=radius*(0.6+0.5*below);
     float column=exp(-pow((h.x-b.x)/max(width,1e-4),2.0));
-    float reach=exp(-below/1.4);
+    float reach=exp(-below/3.0);
     // The path is the ripples' crests catching the body: many short bright streaks, softening into an even
     // shimmer where the ripples are too fine to draw.
     float detail=clamp(1.5-35.0*depthPerPixel,0.0,1.0);
@@ -689,8 +692,10 @@ void main() {
         // A shining surface shows its water, not a ruled grid: the resting curves fade, crests stay whole.
         // A passing crest lights its curves gently (they used to flash at over half strength, the lake's busiest motion).
         float curveCoverage=waveWire*(0.11*(1.0-0.8*uWaterShine)+0.22*min(crest,1.5));
+        // Pass 6: faint at rest (long smooth curves across a mirror read as scratches, not water), still lit by
+        // the music's crests.
         float network=(1.0-smoothstep(0.0,0.9*uEdgePx,rippleDistance))*rippleClarity
-                      *(0.14+0.3*min(crest,1.5)+0.25*vEnergy)*min(3.0*uWaterDetail,1.4);   // Water Detail 0: none
+                      *(0.06+0.22*min(crest,1.5)+0.2*vEnergy)*min(3.0*uWaterDetail,1.4);   // Water Detail 0: none
         // Rings lapping out from every shore (concentric round an island), drifting slowly outward and
         // fading over open water; drawn as the network's lines, so they glow with it.
         float bankUv=sceneHeightfieldBankDistance(uTerrain,uTerrainSize,basinGrid(vUv))/uTerrainGrid.z;
@@ -787,7 +792,7 @@ void main() {
         // Water Detail 0: a still mirror; otherwise the slow swell and the small ripples tilt it.
         // The mirror leans only partly with the mesh's facets: their flat triangles, tilting as waves pass,
         // made the reflection jump in blotches from triangle to triangle (busy motion on a calm lake).
-        vec3 calm=normalize(mix(vec3(0.0,1.0,0.0),n,0.15));
+        vec3 calm=normalize(mix(vec3(0.0,1.0,0.0),n,0.08));
         vec3 wn=normalize(calm+0.04*uWaterDetail*ripple+vec3(-rippleSlope.x,0.0,-rippleSlope.y)*mix(8.0,18.0,smoothstep(0.15,0.4,uWaterDetail))*uWaterDetail);
         vec3 mirror=reflect(-view,wn);
         mirror.y=abs(mirror.y);                       // the mirror shows the sky above the water
@@ -804,10 +809,13 @@ void main() {
         vec3 depthTint=uWaterColor.rgb*(0.45+0.35*light);
         // A neon lake is a dark mirror: even looking down it shows the sky and land above it (an artistic
         // floor on the Fresnel term), brightening toward grazing angles.
-        float mirrorWeight=clamp((0.22+0.78*fresnel)*(0.35+0.65*uWaterShine),0.0,1.0);
-        vec3 surface=mix(depthTint,sky*1.25,mirrorWeight);
-        // A passing wave lifts the body itself, not only its crest lines, so music moves the water.
-        surface+=palette*smoothstep(0.15,1.6,crest)*0.18;
+        // Pass 6: darker (the mocks' lakes are near-black mirrors whose light is the reflection column and the
+        // glints): a lower floor and a darker body.
+        float mirrorWeight=clamp((0.12+0.88*fresnel)*(0.35+0.65*uWaterShine),0.0,1.0);
+        vec3 surface=mix(depthTint*0.8,sky,mirrorWeight);
+        // A passing wave lifts the body itself, not only its crest lines, so music moves the water (gently:
+        // a swell washing the whole lake read as a bright sheet).
+        surface+=palette*smoothstep(0.3,1.8,crest)*0.07;
         // Ripple highlights: each crest catches the bright band above the far horizon, in the water's own
         // line/crest colours, so the lake shimmers in short horizontal strokes (brighter with the music).
         vec2 heading=normalize(vec2(-uBack.x,-uBack.z)+vec2(1e-5,0.0));
@@ -819,17 +827,17 @@ void main() {
         // crests catching the glowing ridges and sky), not a smooth sheet: every ripple crest takes a faint
         // stroke of the water's colours, brightening toward grazing angles and with the music.
         vec2 gq=vec2(dot(vWorld.xz,vec2(-heading.y,heading.x)),dot(vWorld.xz,heading));
-        float glintRows=sin(gq.y*85.0+gq.x*4.0+0.35*uTime+1.6*sin(gq.x*9.0+gq.y*7.0));
-        float glintBreaks=sin(gq.x*31.0-gq.y*11.0-0.25*uTime+2.2*sin(gq.x*7.3+gq.y*5.1)+1.3*sin(gq.y*17.0))
-                         *(0.6+0.4*sin(gq.x*3.1+gq.y*13.7+0.15*uTime));
+        float glintRows=sin(gq.y*85.0+gq.x*4.0+0.2*uTime+1.6*sin(gq.x*9.0+gq.y*7.0));
+        float glintBreaks=sin(gq.x*31.0-gq.y*11.0-0.14*uTime+2.2*sin(gq.x*7.3+gq.y*5.1)+1.3*sin(gq.y*17.0))
+                         *(0.6+0.4*sin(gq.x*3.1+gq.y*13.7+0.09*uTime));
         float glintFade=clamp(2.0-85.0*depthPerPixel*0.9,0.0,1.0);   // gone before its rows are under ~5 px apart
-        float glints=smoothstep(0.5,0.95,glintRows)*smoothstep(-0.1,0.5,glintBreaks)*glintFade*(0.5+0.5*fresnel);
+        float glints=smoothstep(0.7,0.98,glintRows)*smoothstep(0.1,0.6,glintBreaks)*glintFade*(0.5+0.5*fresnel);
         fill=mix(fill,surface,uWaterShine*wetness);
         // The glints sit on top of the mirror in the ridges' colours (the mock's violet-magenta strokes).
         vec3 glintColour=mix(uLineColor.rgb,uCrestColor.rgb,0.7);
-        fill+=glintColour*glints*(1.3+0.6*min(crest,1.5)+0.5*vEnergy)*min(2.0*uWaterDetail,1.0)*uWaterShine*wetness;
+        fill+=glintColour*glints*(0.9+0.6*min(crest,1.5)+0.5*vEnergy)*min(2.0*uWaterDetail,1.0)*uWaterShine*wetness;
         fillAlpha=max(fillAlpha,uWaterShine*wetness*(0.6+0.4*fresnel));
-        shineEmission=sky*fresnel*uWaterShine*wetness*0.35;
+        shineEmission=sky*fresnel*uWaterShine*wetness*0.12;   // pass 6: a dark mirror's own glow stays faint
     }
     // The same continuous surface settles into opaque atmospheric land at
     // its far horizon. Keep depth/coverage while fading detail and glow.
@@ -910,6 +918,8 @@ NEON_SKYLINE_VERTEX_SOURCE = (
 out vec2 vUv;
 out float vContourFade;
 out float vTerrainBase;
+out float vRidgeVary;
+out float vRidgeNear;
 uniform float uOutlineLiftNdc; // physical-pixel lift, supplied by renderer viewport
 uniform float uHorizonThickness;
 void main() {
@@ -921,7 +931,21 @@ void main() {
                     -aUv.y*SHOCKWAVE_DEPTH);
     vec4 clip=basinClip(world);
     // Near ridges draw thicker with Depth Scale, like the marks on the same land.
-    float width=mix(1.8,uHorizonThickness,smoothstep(0.0,0.25,basinOutside(aUv)))*basinDepthGrowth(clip.w);
+    float growth=basinDepthGrowth(clip.w);
+    float width=mix(1.8,uHorizonThickness,smoothstep(0.0,0.25,basinOutside(aUv)))*growth;
+    // Pass 6: ridges on the authored land swell and thin along their length (the mocks' near dune crests are
+    // soft glows that widen, brighten and fade out, not one even stroke); the distant horizon keeps its
+    // authored thickness. A smooth function of the land position, so it stays put on the ground.
+    float vary=0.5+0.5*sin(world.x*2.3+world.z*1.1+1.7*sin(world.z*0.9-world.x*0.6));
+    vary=0.65*vary+0.35*(0.5+0.5*sin(world.x*5.3-world.z*3.1+0.8));
+    float inside=1.0-smoothstep(0.0,0.25,basinOutside(aUv));
+    // Never wider than 1.45x: the lift is a screen shift of the whole land, and a larger one exposed the lifted
+    // copy over a near dune's own face as a solid lobe (Preset 3, lead review 2026-11-06). Near ridges get their
+    // breadth from a softer core and its glow instead.
+    float nearRidge=smoothstep(1.05,1.6,growth);
+    width*=mix(1.0,mix(0.45,1.45,vary),inside);
+    vRidgeVary=mix(1.0,vary,inside);
+    vRidgeNear=inside*nearRidge;
     clip.y+=uOutlineLiftNdc*width*clip.w;
     // Farther than the same real surface, never internal paint: a fixed NDC offset, or 2% of the view
     // distance where that is more (near land, whose NDC depth changes fast, otherwise let the lifted copy
@@ -949,6 +973,8 @@ NEON_SKYLINE_FRAGMENT_SOURCE = (
 in vec2 vUv;
 in float vContourFade;
 in float vTerrainBase;
+in float vRidgeVary;
+in float vRidgeNear;
 uniform sampler2D uTerrain;
 uniform int uTerrainSize;
 uniform vec4 uCrestColor;
@@ -960,8 +986,10 @@ void main() {
     // not a clamp to an unrelated authored edge row.
     bool outside=any(lessThan(vUv,vec2(0.0))) || any(greaterThan(vUv,vec2(1.0)));
     if ((!outside && vTerrainBase<0.035) || vContourFade<0.005) discard;
-    float alpha=uCrestColor.a*vContourFade;
-    float midband=clamp(uMidband,0.0,1.0);
+    // Fading where the ridge thins; near ridges are a softer, translucent core whose bloom carries them.
+    float alpha=uCrestColor.a*vContourFade*mix(0.3,1.0,smoothstep(0.05,0.8,vRidgeVary))*(1.0-0.35*vRidgeNear);
+    // Broad near ridges breathe with the midband half as much: their wide glow pumping read as busy foreground.
+    float midband=clamp(uMidband,0.0,1.0)*(1.0-0.5*vRidgeNear);
     vec3 colour=min(uCrestColor.rgb*(0.78+0.16*midband),vec3(1.0));
     FragColor=vec4(colour,alpha);
     // The ridges' glow swells with the music's midband (smoothed upstream, so it breathes rather than flickers).

@@ -101,12 +101,12 @@ vec4 skyNebula(vec3 ray, vec3 rim, vec3 core, vec4 nebula, vec3 focus, uint seed
     vec3 p = ray * mix(0.9, 3.2, nebula.y);
     // Streams of gas with dark space between them, ragged at their edges, rather than a fill: the regions are
     // drawn out along one flowing direction (detail a third as fast along it), so the gas lies in long bands.
-    vec3 flow = normalize(vec3(0.70, 0.71, 0.04));
+    vec3 flow = normalize(vec3(0.84, 0.54, 0.04));
     vec3 a = p - flow * dot(p, flow) * 0.66;
     float gather = 0.3 * dot(ray, focus) - 0.12 * length(focus);
     // The gas crowds along one great circle (a galactic band rising diagonally from the horizon), meandering
     // and ragged, with only sparse patches away from it, as a real night sky's nebulae lie along its plane.
-    vec3 bandNormal = normalize(cross(vec3(0.136, 0.238, -0.962), vec3(-0.100, 0.000, -0.995)));
+    vec3 bandNormal = normalize(cross(vec3(0.200, 0.110, -0.974), vec3(-0.100, 0.000, -0.995)));
     float across = dot(ray, bandNormal) + 0.8 * (skyFbm3(a * 0.55 + vec3(2.3, 5.1, 0.7), octaves <= 2 ? 1 : 3, seed + 50u) - 0.5);
     float band = exp(-across * across / 0.008);
     // Layered streams: a second, thinner strand beside the main one and a faint wide veil round both, so the band
