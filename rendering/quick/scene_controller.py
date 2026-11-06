@@ -505,9 +505,6 @@ class QuickSceneController(QObject):
         # outside the few frames immediately following a meaningful surface event.
         self._surface_event_sequence = 0
         self._surface_probe_frames_remaining = 0
-        # One-shot continuation for the idle transition warm-up: it runs on the next
-        # frame this window swaps anyway, so the warm-up needs no timer of its own.
-        self._warm_frame_request: tuple[Callable[..., None], tuple] | None = None
         self._context_menu_trace_model: QuickContextMenuModel | None = None
         self._readiness = QuickSceneReadiness(
             screen_index=window.screen_index,
@@ -1724,33 +1721,7 @@ class QuickSceneController(QObject):
             return False
         return self.background_item.schedule_warm_step(transition_id, parameters, reporter, ticket)
 
-    def request_transition_warm_frame(self, callback: Callable[..., None], *args) -> bool:
-        """Run ``callback(*args)`` once, on this window's next swapped frame.
-
-        Returns False when the window cannot render frames (admission closed, not
-        exposed), so the idle warm-up owner skips it instead of waiting forever.
-        Requests no repaint: only a frame something else already produces fires it.
-        """
-        if not self._readiness.admission_open:
-            return False
-        window = self.background_item.window()
-        if window is None or not window.isExposed():
-            return False
-        self._warm_frame_request = (callback, args)
-        return True
-
-    def _run_warm_frame_request(self) -> None:
-        request, self._warm_frame_request = self._warm_frame_request, None
-        if request is None:
-            return
-        callback, args = request
-        try:
-            callback(*args)
-        except Exception:
-            logger.debug("[TRANSITION] Idle warm-up frame continuation failed", exc_info=True)
-
     def cancel_transition_warm_up(self) -> None:
-        self._warm_frame_request = None
         self.background_item.cancel_warm_up()
 
     def set_transition_run(self, run: TransitionRun | None) -> bool:
@@ -2761,10 +2732,8 @@ class QuickSceneController(QObject):
                 "frame_swapped_probe",
                 detail=f"remaining={self._surface_probe_frames_remaining}",
             )
-        self._run_warm_frame_request()
 
     def _on_scene_graph_invalidated(self) -> None:
-        self._warm_frame_request = None
         snapshot = self._telemetry.snapshot()
         self._publish_readiness(
             scene_graph_initialized=False,

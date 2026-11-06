@@ -279,12 +279,12 @@ def test_a_starting_run_cancels_the_idle_job(qt_app):
 def test_display_manager_warms_only_after_both_displays_idle_and_serially(qt_app, monkeypatch):
     import sys
     from types import SimpleNamespace
-    from engine.display_manager import DisplayManager
+    from engine.display_manager import DisplayManager, IDLE_TRANSITION_WARM_STEP_SPACING_MS
     from rendering.quick.transitions.request_resolution import RandomTransitionSelection
 
     module = "rendering.quick.transitions.implementations.crumble"
     monkeypatch.delitem(sys.modules, module, raising=False)
-    requests, frames = [], []
+    requests, deferred = [], []
 
     class _Settings:
         def get(self, key, default=None):
@@ -296,7 +296,8 @@ def test_display_manager_warms_only_after_both_displays_idle_and_serially(qt_app
 
     class _Threads:
         def single_shot(self, delay, callback, *args):
-            raise AssertionError("idle warm-up is paced by rendered frames, not a timer")
+            deferred.append((delay, lambda: callback(*args)))
+            return SimpleNamespace(active=True)
 
     def _unit(name):
         return SimpleNamespace(
@@ -304,17 +305,8 @@ def test_display_manager_warms_only_after_both_displays_idle_and_serially(qt_app
             transition_logical_size=lambda: (1920.0, 1081.0),
             schedule_transition_warm_step=lambda transition, params, reporter, ticket:
                 (requests.append((name, transition, params, ticket)) or True),
-            request_transition_warm_frame=lambda callback, *args:
-                (frames.append((name, callback, args)) or True),
             cancel_transition_warm_up=lambda: None,
         )
-
-    def _deliver_frame(spaced):
-        """The display swaps a frame; ``spaced`` says the 200 ms minimum has already passed."""
-        if spaced:
-            manager._idle_warm_not_before = 0.0
-        _name, callback, args = frames.pop(0)
-        callback(*args)
 
     manager = DisplayManager(settings_manager=_Settings(), thread_manager=_Threads(), runtime_generation=706)
     try:
@@ -322,24 +314,22 @@ def test_display_manager_warms_only_after_both_displays_idle_and_serially(qt_app
         manager._authoritative_first_frame_emitted = True
         manager._transition_work_pending = True
         manager.prepare_next_transition(RandomTransitionSelection("Crumble"))
-        assert not frames and not requests
+        assert not deferred and not requests
         manager._transition_work_pending = False
         manager.prepare_next_transition(RandomTransitionSelection("Crumble"))
-        assert module in sys.modules and len(frames) == 1 and not requests
-        _deliver_frame(spaced=False)   # a frame inside the minimum spacing admits nothing
-        assert not requests and len(frames) == 1
-        _deliver_frame(spaced=True)
-        assert [item[0] for item in requests] == ["D0"] and not frames
+        assert module in sys.modules and len(deferred) == 1 and not requests
+        assert deferred[0][0] == IDLE_TRANSITION_WARM_STEP_SPACING_MS
+        deferred.pop(0)[1]()
+        assert [item[0] for item in requests] == ["D0"]
         ticket = requests[-1][3]
         manager._on_idle_warm_step_finished(ticket, False)
-        assert len(frames) == 1 and len(requests) == 1   # the next step waits for another frame
-        _deliver_frame(spaced=True)
+        deferred.pop(0)[1]()
         assert [item[0] for item in requests] == ["D0", "D0"]
         manager._on_idle_warm_step_finished(requests[-1][3], True)
-        _deliver_frame(spaced=True)
+        deferred.pop(0)[1]()
         assert [item[0] for item in requests] == ["D0", "D0", "D1"]
         manager._on_idle_warm_step_finished(requests[-1][3], True)
-        assert not frames and manager._idle_warm_seed is None
+        assert not deferred and manager._idle_warm_seed is None
     finally:
         manager._cancel_idle_transition_warmup()
         manager.displays = []
@@ -352,12 +342,15 @@ def test_the_next_batch_meets_the_spec_and_geometry_prepared_while_idle(qt_app):
     from rendering.quick.transitions.request_resolution import RandomTransitionSelection
     from rendering.quick.transitions.run_geometry import prepare_run_geometry
 
-    submitted, warmed, frames = [], [], []
+    submitted, warmed, deferred = [], [], []
 
     class _Threads:
         def submit_compute_task(self, func, *args, **kwargs):
             submitted.append((func, args))
             return "task"
+        def single_shot(self, delay, callback, *args):
+            deferred.append((delay, lambda: callback(*args)))
+            return SimpleNamespace(active=True)
 
     class _Settings:
         def __init__(self):
@@ -376,7 +369,6 @@ def test_the_next_batch_meets_the_spec_and_geometry_prepared_while_idle(qt_app):
         display_bounds=lambda: SimpleNamespace(x=0.0, y=0.0, width=1920.0, height=1080.0),
         transition_logical_size=lambda: (1920.0, 1081.0),
         schedule_transition_warm_step=lambda transition_id, parameters, reporter, ticket: (warmed.append(parameters) or True),
-        request_transition_warm_frame=lambda callback, *args: (frames.append((callback, args)) or True),
         cancel_transition_warm_up=lambda: None,
     )
     settings = _Settings()
@@ -389,10 +381,8 @@ def test_the_next_batch_meets_the_spec_and_geometry_prepared_while_idle(qt_app):
             submitted.clear(), warmed.clear()
             manager.prepare_next_transition(selection)
             manager.prepare_next_transition(selection)          # a second idle edge: same spec
-            assert len(frames) == 1 and len(warmed) == 0
-            manager._idle_warm_not_before = 0.0   # the display swaps a frame after the minimum spacing
-            callback, args = frames.pop(0)
-            callback(*args)
+            assert len(deferred) == 1 and len(warmed) == 0
+            deferred.pop(0)[1]()
             assert len(warmed) == 1
             assert [func for func, _ in submitted] == [prepare_run_geometry]
             prepared = submitted[0][1]
@@ -553,10 +543,11 @@ def test_stale_reservation_and_recreation_cancel_idle_gl_jobs(qt_app, monkeypatc
     import engine.display_manager as source
     from engine.display_manager import DisplayManager
 
-    warmed, frames, cancelled = [], [], []
+    warmed, deferred, cancelled = [], [], []
     class _Threads:
         def single_shot(self, delay, callback, *args):
-            raise AssertionError("idle warm-up is paced by rendered frames, not a timer")
+            deferred.append((delay, lambda: callback(*args)))
+            return SimpleNamespace(active=True)
 
     monkeypatch.setattr(source, "resolve_quick_transition_spec",
                         lambda *a, **k: SimpleNamespace(transition_id="crossfade", parameters={}))
@@ -566,27 +557,24 @@ def test_stale_reservation_and_recreation_cancel_idle_gl_jobs(qt_app, monkeypatc
     manager._authoritative_first_frame_emitted = True
     manager.displays = [SimpleNamespace(
         schedule_transition_warm_step=lambda *args: (warmed.append(args) or True),
-        request_transition_warm_frame=lambda callback, *args: (frames.append((callback, args)) or True),
         cancel_transition_warm_up=lambda: cancelled.append(True),
     )]
     try:
         manager.prepare_next_transition(None)
-        assert len(frames) == 1
-        stale_callback, stale_args = frames.pop(0)
+        assert len(deferred) == 1
+        _, stale = deferred.pop(0)
         manager._begin_quick_transition_batch({0})
-        stale_callback(*stale_args)
+        stale()
         assert warmed == [] and cancelled
         manager._transition_work_pending = False
         manager._reset_quick_transition_batch()
         manager.prepare_next_transition(None)
-        manager._idle_warm_not_before = 0.0
-        callback, args = frames.pop(0)
-        callback(*args)
+        deferred.pop(0)[1]()
         assert len(warmed) == 1
         old_ticket = warmed[-1][-1]
         manager._cancel_idle_transition_warmup()
         manager._on_idle_warm_step_finished(old_ticket, False)
-        assert not frames
+        assert not deferred
     finally:
         manager._cancel_idle_transition_warmup()
         manager.displays = []
