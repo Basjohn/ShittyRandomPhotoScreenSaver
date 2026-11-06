@@ -117,6 +117,43 @@ def test_the_selection_check_detects_the_old_override_negative_control(clip_stud
     assert controller.bridge.fixtureId == "clip:first"
 
 
+def test_the_automatic_source_notice_goes_when_the_user_picks_another_source(clip_studio):
+    """The notice naming the automatically chosen clip is withdrawn as soon as the user picks another source (it would
+    name the wrong one), whether that source is ready or still analysing; picking it again keeps no stale notice."""
+    controller, adapter = clip_studio
+    bridge = controller.bridge
+    adapter.land("clip:first")
+    first = next(c for c in CLIPS if c.id == "clip:first")
+    assert first.label in bridge.message                         # the default announced itself
+    bridge.selectFixture("pulse")
+    assert bridge.message == "" and bridge.fixtureId == "pulse"
+    bridge.selectFixture("clip:second")                          # analysing: still no stale notice
+    assert bridge.message == ""
+    adapter.land("clip:second")
+    assert bridge.fixtureId == "clip:second" and bridge.message == ""
+
+
+def test_picking_a_source_keeps_any_other_notice(clip_studio):
+    """Only the automatic-source notice is withdrawn: a clip failure's notice (with its Retry) stays when the user
+    picks another source."""
+    controller, adapter = clip_studio
+    bridge = controller.bridge
+    adapter.land("clip:first", error="decoder exploded")
+    bridge.selectFixture("pulse")
+    assert "decoder exploded" in bridge.message and bridge.messageAction == "Retry"
+
+
+def test_the_stale_notice_check_detects_the_old_behaviour_negative_control(clip_studio):
+    """Negative control: a controller that does not remember which notice announced the automatic source (the
+    original behaviour) leaves 'Preview source: First' up after the user picked another source."""
+    controller, adapter = clip_studio
+    bridge = controller.bridge
+    adapter.land("clip:first")
+    controller._source_notice = ""
+    bridge.selectFixture("pulse")
+    assert "First" in bridge.message and bridge.fixtureId == "pulse"
+
+
 # ------------------------------------------------------------------------------- failures are surfaced
 def test_a_failed_clip_analysis_is_shown_with_a_retry_that_reanalyses(clip_studio):
     controller, adapter = clip_studio

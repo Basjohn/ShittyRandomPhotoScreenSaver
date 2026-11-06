@@ -13,9 +13,9 @@ shared event-driven ``ClipLoadJob``. Every piece here takes the mode id; the wor
   ``EngineAnswerRecorder`` in for the engine during the production step: everything the engine answered the mode's
   step is recorded, with a digest of the logical frame the production tick published.
 * **Studio.** ``EngineAnswerEvaluator`` configures a ``VisualizerRuntimeController`` exactly as the offline replay
-  does and, per recorded tick, runs the production step itself (``consume_engine_bars`` then
-  ``capture_visualizer_logical_frame``, the two calls ``logical_tick`` makes for a mode with no tick hook) with
-  ``RecordedEngineAnswers`` standing in for the engine. A mode-owned edit replays exactly and at once; an
+  does and, per recorded tick, runs the production step itself (``consume_engine_bars``, the mode's logical tick
+  hook when it has one, as DevCurve's, then ``capture_visualizer_logical_frame``: the calls ``logical_tick`` makes)
+  with ``RecordedEngineAnswers`` standing in for the engine. A mode-owned edit replays exactly and at once; an
   engine-owned edit changes the answers' key and re-runs the worker, the previous answers (with their own engine
   values) staying on screen meanwhile.
 * **The split.** ``EngineAnswerMode.owned_keys``: the keys the engine never reads, from the production projection
@@ -779,8 +779,6 @@ class EngineAnswerEvaluator:
         controller = self.mode.configure(self._engine, self._effective(values, inputs), environment=self._environment)
         if self._extent is not None:
             controller.hydrate_committed_layout_metrics(self._extent, 0)
-        if controller.active_logical_tick_hook is not None:
-            raise RuntimeError(f"{self.mode.mode_id} gained a logical tick hook; the Studio step must call it")
         self._view = RecordedEngineAnswers(self._engine, inputs.arrays)
         controller.engine = self._view
         self._controller = controller
@@ -796,8 +794,9 @@ class EngineAnswerEvaluator:
         return (self._engine, self._view, *self._inputs.arrays)
 
     def _step(self, tick: ServedTick) -> None:
-        """One production tick: what ``tick_pipeline.logical_tick`` runs for a mode with no tick hook
-        (``consume_engine_bars``, the teardown readiness query, the publication capture) at the tick's time."""
+        """One production tick: what ``tick_pipeline.logical_tick`` runs (``consume_engine_bars``, the teardown
+        readiness query, the mode's logical tick hook when it has one, the publication capture) at the tick's
+        time."""
         from widgets.spotify_visualizer.logical_frame_capture import capture_visualizer_logical_frame
         from widgets.spotify_visualizer.tick_pipeline import consume_engine_bars
         controller = self._controller
@@ -810,6 +809,9 @@ class EngineAnswerEvaluator:
         if state._waiting_for_fresh_engine_frame or (state._mode_teardown_block_until_ready
                                                      and not state._mode_transition_ready):
             raise RuntimeError("The Studio step reached a fresh-frame fence the offline replay never arms")
+        hook = controller.active_logical_tick_hook
+        if hook is not None:
+            hook(state, now)                       # a mode's own logical step (DevCurve's dispatch_devcurve_field)
         frame = capture_visualizer_logical_frame(state, now_ts=now, changed=changed, mode_reveal_ready=ready)
         self.steps_run += 1
         self._last_tick = tick

@@ -54,6 +54,7 @@ register_studio_adapter("spectrum", "Spectrum", "ui.studio.spectrum_adapter:Spec
 register_studio_adapter("extruded_spectrum", "Extruded Spectrum",
                         "ui.studio.extruded_spectrum_adapter:ExtrudedSpectrumStudioAdapter")
 register_studio_adapter("shockwave_grid", "Neon Lake", "ui.studio.shockwave_grid_adapter:NeonLakeStudioAdapter")
+register_studio_adapter("devcurve", "DevCurve", "ui.studio.devcurve_adapter:DevCurveStudioAdapter")
 register_studio_adapter("oscilloscope", "Oscilloscope", "ui.studio.oscilloscope_adapter:OscilloscopeStudioAdapter")
 
 
