@@ -654,6 +654,14 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   Extruded Bubble's and Sphere's evaluators still replay exactly in one evaluation from the fixture start, without the
   frame budget and checkpoints Waveform and the engine-answer modes now share (`ui/studio/exact_replay.py`); measure
   with `tools/studio_drag_profile.py` and move them onto `ExactReplay` where a release stalls.
+- [ ] **Neon Lake: drag the Sun/Moon in the Studio preview.** Retiring the Settings terrain section (6 Nov, Studio brush)
+  removed its 3/4 view, where the Sun/Moon could be dragged; it is now placed with Position X/Y/Z only. Give the Studio
+  preview a direct drag for it: the same pick through the production camera as the terrain brush, one undoable commit
+  on release.
+- [ ] **Operator look: the Studio terrain brush** (brush button or B in the viewport toolbar; Raise, Lower, Flatten,
+  Water; left-drag paints, right/middle drag pans). Evidence `.artifacts/evidence/studio_completion_20261106/brush/`.
+  Audio Analysis now moves the DevCurve, Oscilloscope, Neon Lake, Bubble, Extruded Bubble and Sphere previews on
+  recorded clips. Sensitivity sheet: `audio_analysis/`. DevCurve normalises its body, so it barely shows, as live.
 
 ## Operator execution and evidence rules
 
