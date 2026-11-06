@@ -95,6 +95,7 @@ Item {
         z: 1
 
         ShadowedText {
+            surfacePlateEnabled: false   // MediaPresentation's mediaMetadataLegibilityRow
             objectName: "mediaTitle"
             width: currentColumn.width
             horizontalAlignment: metadataFade.textAlignment === "right"
@@ -124,6 +125,7 @@ Item {
             height: visible ? currentArtistText.implicitHeight : 0.0
 
             ShadowedText {
+                surfacePlateEnabled: false   // MediaPresentation's mediaMetadataLegibilityRow
                 id: currentArtistText
                 objectName: "mediaArtist"
                 visible: currentArtistSlot.visible
@@ -155,6 +157,7 @@ Item {
         }
 
         ShadowedText {
+            surfacePlateEnabled: false   // MediaPresentation's mediaMetadataLegibilityRow
             objectName: "mediaAlbum"
             visible: metadataFade.mediaModel.showAlbum && text.length > 0
             width: currentColumn.width
@@ -188,6 +191,7 @@ Item {
         z: 0
 
         ShadowedText {
+            surfacePlateEnabled: false   // MediaPresentation's mediaMetadataLegibilityRow
             width: outgoingColumn.width
             horizontalAlignment: metadataFade.textAlignment === "right"
                 ? Text.AlignRight : Text.AlignLeft
@@ -216,6 +220,7 @@ Item {
             height: visible ? outgoingArtistText.implicitHeight : 0.0
 
             ShadowedText {
+                surfacePlateEnabled: false   // MediaPresentation's mediaMetadataLegibilityRow
                 id: outgoingArtistText
                 objectName: "mediaOutgoingArtist"
                 visible: outgoingArtistSlot.visible
@@ -247,6 +252,7 @@ Item {
         }
 
         ShadowedText {
+            surfacePlateEnabled: false   // MediaPresentation's mediaMetadataLegibilityRow
             visible: metadataFade.mediaModel.showAlbum && text.length > 0
             width: outgoingColumn.width
             horizontalAlignment: metadataFade.textAlignment === "right"

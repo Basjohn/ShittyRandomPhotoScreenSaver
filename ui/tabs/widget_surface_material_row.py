@@ -1,7 +1,8 @@
 """The per-widget Surface Material row (Docs/Architecture/Card_Surface_Materials.md, section 4).
 
-One shared control for every card family page: **Inherit** (the Widget Theme baseline set in
-Widgets -> General -> Style Overrides) or an explicit material that beats it. The value is the
+One shared control for every card family page: **Inherit** (the baseline set in
+Widgets -> General -> Style Overrides, by default the active Widget Theme's material) or an
+explicit material that beats it. The value is the
 canonical ``widgets.<section>.surface_material`` key, so a page save keeps it even when the row
 is not built; the row joins the WidgetsTab's existing descriptor load and save paths through
 ``sync_surface_material_rows`` and ``apply_surface_material_rows``. No timer, no Settings read
@@ -34,7 +35,8 @@ def add_surface_material_row(tab: Any, row: QHBoxLayout, section: str) -> Styled
         combo.addItem(SURFACE_MATERIAL_LABELS[material], material)
     combo.setToolTip(
         "This card's surface. Inherit follows Widgets > General > Style Overrides > Surface "
-        "Material; any other choice wins for this card only."
+        "Material (by default the Widget Theme's own material); any other choice wins for "
+        "this card only."
     )
     combo.setObjectName(f"surfaceMaterialCombo_{section}")
     _select(combo, INHERIT)

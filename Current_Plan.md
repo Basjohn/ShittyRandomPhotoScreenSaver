@@ -79,11 +79,8 @@ context and worktree):**
   process (one per Studio session in production: the `finished`/`report` closures in `open_mode_studio` hold the
   controller); then the same context-ownership fix in `tools/onboarding_preview_foundry.py`; then Spectrum rendering
   black when all Studio test files run in one process (record if deep). The R-172 exit crash itself is merged.
-- **Card surface style fixes and material themes** (Opus medium, started 6 Nov evening): the operator's light/dark
-  look fixes (inner legibility region 2-3 px from the border with concentric rounded corners, the media bar's square
-  shadow corner, full rounded rows instead of per-text chips in Weather/Reddit and every list card, a style sweep, the
-  mute button 3+ px left), the full cost table, Widget Themes carrying a material with a "Theme" default in the Style
-  Overrides dropdown, and about 15 new material themes in rarely used complementary colours.
+- **Card surface style fixes and material themes** (Opus medium, 6 Nov evening): done on its branch, awaiting the
+  lead's merge and the operator's eyes; details under "Widget card surfaces" below.
 
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
 
@@ -183,13 +180,31 @@ context and worktree):**
   4.90, Acrylic 3.89 -> 4.89; soft halos dropped on materials; inner edge on light cards; Normal unchanged, dark
   materials unchanged outside text runs (Card_Surface_Materials.md section 6; crops in
   `legibility_compare/legibility_before_after.png`).
+  **Style pass and material themes (6 Nov evening, operator's fixes):** the darker inner legibility panel now sits
+  2.5 px inside the border with corners concentric with the card; full rounded **rows** replace the per-run chips on
+  every list card (Reddit posts, Gmail messages, Feed rows/tiles, Friend Pulse rows/tiles, Games You Follow tiles,
+  System Stats panels, Abandonment/Achievement shelves and capsules, Weather's primary/detail/5-day blocks, Media's
+  track text), one even tone per row computed in the vertex stage; the Media bar's shadow is no longer cut square
+  (the content column stopped clipping at the padding); the mute button keeps an even gap inside the bar's end (about
+  5 px further left); Friend Pulse's secondary texts follow the light-palette soft shadow (no doubled glyphs). Worst
+  small-text run on every material 4.72-4.94:1 light, 4.83-5.02 dark; large 4.01+. Widget Themes may name a
+  `surface_material`; Style Overrides' Surface Material defaults to **Theme** (Normal when the theme names none;
+  a stored `normal` stays an explicit override, no bridge). 15 new material themes (3 per material) in the pack's
+  least-used hues (chartreuse, green, yellow, violet, blue, magenta; 4 light cards). Cost, all Normal zero: steady
+  frame +0.024-0.046 ms GPU / +0.05 ms render-thread CPU at 1440p (5 cards), up to +0.117 / +0.082 ms at 4K with 4
+  list cards; backdrop refresh 0.04-0.08 ms GPU (Card_Surface_Materials.md section 6). Evidence (1x/3x before/after
+  crops per fix, busy/flat/mid-transition, dark and light; theme contact sheets; palette survey):
+  `.artifacts/evidence/widget_surfaces_style_20261106/`.
   Left:
   1. **Live check under the lead-scheduled game load**, materials on, a transition-heavy run, and Normal as the
      control.
-  2. **Operator's eyes on the light-theme pass:** small text now holds 4.5:1 on every material through a per-run
-     legibility plate (it reads as a soft chip behind small muted text where the backdrop is busy), soft halos are
-     dropped on materials, and light cards get an inner hairline and highlight. The per-family Surface Material row
-     is built (every card family declares `surface_material: inherit`).
+  2. **Operator's eyes:** the rows (light themes draw them as lighter bands, dark themes mostly nothing), the inner
+     panel's thin rim, the mute position, the 15 new themes (contact sheets `theme_sheet_*.png`). Normal changes
+     only where intended: the Media bar/artwork shadows, the mute button and Friend Pulse on light themes.
+  3. **Side defects found (not caused here):** `tests/test_surface_materials.py` crashes (access violation) when a
+     hidden-GL material-scene test runs before `test_per_family_row_round_trips...` in one process (base commit
+     too, 4 of 4 runs); each passes alone. Light themes keep the weather detail icons white (asset images), faint on
+     pale cards; a themed icon tint would fix it.
 - [~] **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent) - second
   pass done, awaiting operator eyes:** the mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`.
   Preset 9 (Deep Red Ocean) only; Presets 1-8 pixel-identical. Shared work, each dormant at 0: **Ember Grain**,
