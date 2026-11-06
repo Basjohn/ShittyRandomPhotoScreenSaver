@@ -277,6 +277,17 @@ def rebuild_styles(scene: MaterialScene) -> None:
     art = foundry._gradient_art(Path(os.environ.get("TEMP", ".")) / "surface_material_art.png",
                                 (480, 480), ("#27336e", "#e7678a"), 1)
     build_cards(scene, art)
+    settle_animations(scene)
+
+
+def settle_animations(scene: MaterialScene, seconds: float = 1.6) -> None:
+    """Let the cards' wall-time animations (fade-ins, meter fills, media crossfades) finish,
+    so frames from different runs of the tool compare pixel for pixel."""
+
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        scene.render(1)
+        time.sleep(0.02)
 
 
 def slug(text: str) -> str:
@@ -405,19 +416,216 @@ def measure_cost(scene: MaterialScene, wallpapers: list[Path], frames: int = 80)
     return results
 
 
+# --------------------------------------------------------------------------- legibility
+
+SMALL_TEXT_PX = 18.0      # below this a run needs 4.5:1 (WCAG AA body text), at or above it 3:1
+
+
+def _relative_luminance(rgb):
+    import numpy
+
+    c = numpy.asarray(rgb, numpy.float64) / 255.0
+    c = numpy.where(c <= 0.03928, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    return c[..., 0] * 0.2126 + c[..., 1] * 0.7152 + c[..., 2] * 0.0722
+
+
+def _text_runs(scene: MaterialScene):
+    from PySide6.QtCore import QRectF
+    from PySide6.QtQuick import QQuickItem
+
+    runs = []
+    mains, pending = [], [scene.scene.root]
+    while pending:                      # the visual tree: Repeater delegates are not QObject children
+        node = pending.pop()
+        children = node.childItems()
+        pending.extend(children)
+        if node.objectName() == "shadowedTextMain":
+            mains.append(node)
+    for main in mains:
+        item = main.parentItem()
+        if item is None or not item.isVisible() or not main.isVisible() or not str(item.property("text") or ""):
+            continue
+        shadow = item.findChild(QQuickItem, "shadowedTextShadow")
+        rect = main.mapRectToScene(QRectF(0.0, 0.0, main.width(), main.height()))
+        font = main.property("font")
+        size = font.pixelSize() if font.pixelSize() > 0 else font.pointSizeF() * 96.0 / 72.0
+        runs.append((item, main, shadow, rect, float(size)))
+    return runs
+
+
+def measure_text_legibility(scene: MaterialScene, out: Path) -> list[dict]:
+    """Per text run: WCAG contrast of the run's own colour against the pixels right under its
+    glyphs (the frame re-rendered with every run's glyphs and shadows hidden), p5 over the glyph
+    pixels. Saves the frame; returns one row per run."""
+
+    import numpy
+
+    scene.render(2)
+    frame = scene.read()
+    frame.save(out)
+    full = numpy.asarray(frame, numpy.int16)
+    runs = _text_runs(scene)
+    saved = []
+    for _item, main, shadow, _rect, _size in runs:
+        saved.append((main.opacity(), shadow.opacity() if shadow is not None else None))
+        main.setOpacity(0.0)
+        if shadow is not None:
+            shadow.setOpacity(0.0)
+    scene.render(2)
+    bare = numpy.asarray(scene.read(), numpy.int16)
+    for (item, main, shadow, _rect, _size), (main_opacity, shadow_opacity) in zip(runs, saved):
+        main.setOpacity(main_opacity)
+        if shadow is not None:
+            shadow.setOpacity(shadow_opacity)
+    scene.render(1)
+    rows = []
+    height, width = full.shape[:2]
+    for item, _main, _shadow, rect, size in runs:
+        left, top = max(0, int(rect.left())), max(0, int(rect.top()))
+        right, bottom = min(width, int(rect.right()) + 1), min(height, int(rect.bottom()) + 1)
+        if right - left < 2 or bottom - top < 2:
+            continue
+        mask = numpy.abs(full[top:bottom, left:right] - bare[top:bottom, left:right]).max(axis=2) > 24
+        if mask.sum() < 6:
+            continue
+        colour = item.property("color")
+        text_l = float(_relative_luminance([colour.red(), colour.green(), colour.blue()]))
+        back_l = _relative_luminance(bare[top:bottom, left:right][mask])
+        hi = numpy.maximum(back_l, text_l)
+        lo = numpy.minimum(back_l, text_l)
+        contrast = (hi + 0.05) / (lo + 0.05)
+        rows.append({"text": str(item.property("text"))[:40], "size_px": round(size, 1),
+                     "small": size < SMALL_TEXT_PX, "rect": [left, top, right, bottom],
+                     "colour": colour.name(), "p5": round(float(numpy.percentile(contrast, 5)), 2),
+                     "min": round(float(contrast.min()), 2), "median": round(float(numpy.median(contrast)), 2)})
+    return rows
+
+
+def capture_legibility(scene: MaterialScene, wallpapers: list[Path], output: Path) -> dict:
+    """Light and dark themes, every wallpaper, every material: frames plus per-run contrast."""
+
+    report: dict = {}
+    images = [presentation_image(path, SCENE, f"leg-{index}") for index, path in enumerate(wallpapers)]
+    for theme in (LIGHT_THEME, DARK_THEME):
+        activate_theme(theme)
+        rebuild_styles(scene)
+        for index, image in enumerate(images):
+            scene.set_wallpaper(image)
+            for material in MATERIALS:
+                scene.set_material(material)
+                scene.render(4)
+                folder = output / slug(theme) / wallpapers[index].stem
+                folder.mkdir(parents=True, exist_ok=True)
+                rows = measure_text_legibility(scene, folder / f"{material}.png")
+                report.setdefault(slug(theme), {}).setdefault(wallpapers[index].stem, {})[material] = rows
+                small = [row["p5"] for row in rows if row["small"]]
+                large = [row["p5"] for row in rows if not row["small"]]
+                print(f"{theme[:14]:14s} {wallpapers[index].stem:12s} {material:8s} runs {len(rows):3d}  "
+                      f"small p5 min {min(small) if small else 0:5.2f}  large p5 min {min(large) if large else 0:5.2f}",
+                      flush=True)
+    boxes = scene.card_boxes()
+    report["card_boxes"] = boxes
+    return report
+
+
+def compare_legibility(before: Path, after: Path, output: Path) -> dict:
+    """Before/after crops at 1x and 3x for every material on the light theme's busiest
+    wallpaper: the smallest text run that was worst before, and a card edge over the busiest
+    region, each labelled with its contrast. Also a per-material summary of both runs."""
+
+    from PIL import Image, ImageDraw
+
+    old = json.loads((before / "report.json").read_text(encoding="utf-8"))["legibility"]
+    new = json.loads((after / "report.json").read_text(encoding="utf-8"))["legibility"]
+    summary: dict = {}
+    for theme, walls in new.items():
+        if theme == "card_boxes":
+            continue
+        for material in MATERIALS:
+            row = {}
+            for tag, data in (("before", old), ("after", new)):
+                runs = [run for wall, rows in data[theme].items() for run in rows[material]]
+                row[tag] = {"small_p5_min": min(r["p5"] for r in runs if r["small"]),
+                            "large_p5_min": min(r["p5"] for r in runs if not r["small"])}
+            summary.setdefault(theme, {})[material] = row
+    theme = slug(LIGHT_THEME)
+    # The busiest wallpaper: where Glass small text was worst before.
+    wall = min(old[theme], key=lambda w: min(r["p5"] for r in old[theme][w]["glass"] if r["small"]))
+    boxes = new["card_boxes"]
+    reddit = boxes[2]
+    edge = (reddit[2] - 34, reddit[1] + 40, reddit[2] + 22, reddit[1] + 110)
+    tiles = []
+    for material in MATERIALS:
+        runs_before = {r["text"] + str(r["rect"]): r for r in old[theme][wall][material]}
+        runs_after = {r["text"] + str(r["rect"]): r for r in new[theme][wall][material]}
+        small = [r for r in old[theme][wall][material] if r["small"]]
+        worst = min(small, key=lambda r: r["p5"])
+        key = worst["text"] + str(worst["rect"])
+        left, top, right, bottom = worst["rect"]
+        glyphs = (left - 8, top - 6, min(right, left + 150) + 8, bottom + 6)
+        images = {tag: Image.open(folder / theme / wall / f"{material}.png").convert("RGB")
+                  for tag, folder in (("before", before), ("after", after))}
+        label = (f"{material.upper()}  '{worst['text'][:22]}' {worst['size_px']:.0f}px  p5 "
+                 f"{worst['p5']:.2f} -> {runs_after.get(key, worst)['p5']:.2f}")
+        tiles.append((label, {tag: (img.crop(glyphs), img.crop(edge)) for tag, img in images.items()}))
+    scale = 3
+    rows = []
+    for label, crops in tiles:
+        text_w, text_h = crops["before"][0].size
+        edge_w, edge_h = crops["before"][1].size
+        width = (text_w + edge_w) * (1 + scale) * 2 + 60
+        height = 18 + max(text_h, edge_h) * scale
+        tile = Image.new("RGB", (width, height), (18, 18, 20))
+        draw = ImageDraw.Draw(tile)
+        draw.text((4, 2), label, fill=(235, 235, 235))
+        x = 4
+        for tag in ("before", "after"):
+            text_crop, edge_crop = crops[tag]
+            for crop in (text_crop, edge_crop):
+                tile.paste(crop, (x, 18))
+                x += crop.width + 4
+                big = crop.resize((crop.width * scale, crop.height * scale), Image.Resampling.NEAREST)
+                tile.paste(big, (x, 18))
+                x += big.width + 8
+            draw.text((x - 40, 2), tag.upper(), fill=(255, 220, 90))
+            x += 14
+        rows.append(tile)
+    sheet = Image.new("RGB", (max(r.width for r in rows), sum(r.height + 6 for r in rows) + 24), (10, 10, 12))
+    ImageDraw.Draw(sheet).text((6, 4), f"{LIGHT_THEME} on {wall}: smallest worst text and a card edge, "
+                                       f"1x and 3x, before | after", fill=(235, 235, 235))
+    y = 24
+    for tile in rows:
+        sheet.paste(tile, (0, y))
+        y += tile.height + 6
+    output.mkdir(parents=True, exist_ok=True)
+    sheet.save(output / "legibility_before_after.png")
+    (output / "legibility_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    return summary
+
+
 # --------------------------------------------------------------------------- main
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--wallpapers", type=Path, nargs="+", required=True,
+    parser.add_argument("--compare-legibility", type=Path, nargs=2, metavar=("BEFORE", "AFTER"),
+                        help="compose before/after crops and the contrast summary from two --legibility runs")
+    parser.add_argument("--wallpapers", type=Path, nargs="+",
                         help="wallpaper files (the first two also drive the transitions)")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--sheets", action="store_true")
     parser.add_argument("--smoke", action="store_true", help="one still per material, for a quick look")
     parser.add_argument("--cadence", action="store_true", help="staleness error per backdrop refresh rate")
     parser.add_argument("--cost", action="store_true", help="steady whole-frame GPU per material vs Normal")
+    parser.add_argument("--legibility", action="store_true",
+                        help="per text run contrast against its local backdrop, light and dark themes")
     args = parser.parse_args(argv)
+    if args.compare_legibility:
+        summary = compare_legibility(*args.compare_legibility, args.output)
+        print(json.dumps(summary, indent=1))
+        return 0
+    if not args.wallpapers:
+        parser.error("--wallpapers is required")
 
     from PySide6.QtGui import QGuiApplication
     from rendering.quick.bootstrap import configure_quick_graphics
@@ -445,6 +653,8 @@ def main(argv: list[str] | None = None) -> int:
                 settle_still(scene)
                 frames[material] = scene.read()
             contact(frames, args.output / "smoke.png", "smoke")
+        if args.legibility:
+            report["legibility"] = capture_legibility(scene, list(args.wallpapers), args.output)
         if args.cost:
             report["cost"] = measure_cost(scene, list(args.wallpapers))
         if args.cadence:

@@ -1638,6 +1638,9 @@ class WidgetsTab(VisualizerSettingsContextMixin, QWidget):
             descriptor.section_id == "visualizers"
             for descriptor in save_descriptors
         )
+        from ui.tabs.widget_surface_material_row import apply_surface_material_rows
+
+        apply_surface_material_rows(self, section_results)
 
         apply_widget_section_save_results(
             existing_widgets,

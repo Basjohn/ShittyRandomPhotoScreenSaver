@@ -25,6 +25,7 @@ from ui.tabs.shared_styles import (
     style_group_box,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
+from ui.tabs.widget_surface_material_row import add_surface_material_row
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -178,6 +179,8 @@ def build_system_stats_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     font_size_row.addWidget(tab.system_stats_font_size)
     font_size_row.addWidget(QLabel("px"))
     font_size_row.addStretch()
+
+    add_surface_material_row(tab, aligned_row("Surface Material:"), "system_stats")
 
     finalize_bucket_body(layout_toggle, layout_body)
 

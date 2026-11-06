@@ -25,6 +25,10 @@ Item {
     property color surfaceTextColor: "#ffffffff"
     readonly property bool surfaceMaterialActive: shellEnabled
         && surfaceMaterial !== "normal" && surfaceBackdrop !== null
+    // Read by text runs inside the card (ShadowedText's legibility plate): the same
+    // per-material uniforms the surface uses.
+    readonly property var surfaceMaterialParameters: surfaceMaterialLoader.item
+        ? surfaceMaterialLoader.item.resolvedParameters : null
     // Card CONTENT paints only within the card at every point in its lifecycle.
     // Background, border and the external shadow remain separate/unclipped.
 
@@ -105,6 +109,7 @@ Item {
             material: card.surfaceMaterial
             cornerRadius: card.cornerRadius
             contentInset: card.padding
+            borderWidth: card.borderWidth
             normalColor: card.backgroundColor
             tintColor: card.backgroundColor
             textColor: card.surfaceTextColor
