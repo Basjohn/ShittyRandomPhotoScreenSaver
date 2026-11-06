@@ -161,14 +161,25 @@ def shockwave_water_reaction(events) -> tuple[float, float]:
     return 1.0 - math.exp(-math.sqrt(total) / WATER_REACT_SCALE), 1.0 - math.exp(-accent)
 
 
-def shockwave_water_react(events, amount: float) -> float:
-    """The lake's reaction uniform (0..``amount``): the level, swung by the accents (multiplicative, so a quiet
-    passage's beats never lift it to a loud passage's look). ``amount`` is Water Reaction (0 = none, no work)."""
+def shockwave_music_drive(events) -> float:
+    """The music's drive (0..1): the level, swung by the accents (multiplicative, so a quiet passage's beats never
+    lift it to a loud passage's look)."""
+    level, accent = shockwave_water_reaction(events)
+    return level * (1.0 - WATER_REACT_BEAT + WATER_REACT_BEAT * accent)
+
+
+# Water Reaction also lets the ridges breathe with this drive instead of the display midband, which sits at ~1
+# through ordinary music (so near ridges bloomed at their loud strength in every passage and washed the lake).
+WATER_REACT_RIDGE_GAIN = 1.25
+
+
+def shockwave_ridge_breath(midband: float, drive: float, amount: float) -> float:
+    """The skyline's breathing (0..1): the display midband at Water Reaction 0 (exactly), the music drive at 1."""
     amount = max(0.0, min(1.0, float(amount)))
     if amount <= 0.0:
-        return 0.0
-    level, accent = shockwave_water_reaction(events)
-    return amount * level * (1.0 - WATER_REACT_BEAT + WATER_REACT_BEAT * accent)
+        return midband
+    return midband + amount * (min(1.0, WATER_REACT_RIDGE_GAIN * drive) - midband)
+
 
 
 def shockwave_event_records(events, half_width: float) -> list[dict[str, float]]:
