@@ -19,7 +19,7 @@ from ui.studio import engine_answers
 from ui.studio.engine_answers import frame_digest, to_inputs  # noqa: F401  (re-exported)
 
 MODE = "oscilloscope"
-OSCILLOSCOPE = engine_answers.EngineAnswerMode(MODE)
+OSCILLOSCOPE = engine_answers.EngineAnswerMode(MODE, production_lanes=True)
 
 
 def extract(source: str | Path, settings: Mapping[str, Any], **options) -> dict:

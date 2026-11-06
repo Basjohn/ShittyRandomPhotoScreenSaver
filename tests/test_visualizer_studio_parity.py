@@ -22,6 +22,7 @@ from core.settings.visualizer_mode_registry import (
 from core.settings.visualizer_mode_settings import (
     Choice,
     Colour,
+    Custom,
     Range,
     SceneCameraPosition,
     Slider,
@@ -94,7 +95,7 @@ def test_the_parity_check_detects_a_missing_property_negative_control(mode):
     from ui.tabs.media.spec_mode_builder import body_keys
     properties = _schema(mode).properties
     spec = require_mode_settings(mode)
-    customs = {key for entry in spec.entries if hasattr(entry, "build") for key in entry.keys}
+    customs = {key for entry in spec.entries if isinstance(entry, Custom) for key in entry.keys}
     dropped = [next(key for key in body_keys(mode) if key not in customs), *sorted(_technical_keys(mode))[:1],
                *sorted(customs)[:1], *sorted(_family_keys(mode))[:1]]
     for key in dropped:
@@ -455,7 +456,7 @@ def test_the_settings_body_collects_exactly_the_body_keys(studio_on, mode):
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_the_settings_body_is_only_the_preset_row_the_launcher_and_kept_sections(studio_on, mode):
+def test_the_settings_body_is_only_the_preset_row_and_the_launcher(studio_on, mode):
     from PySide6.QtWidgets import QAbstractButton, QAbstractSlider, QComboBox, QScrollBar, QWidget
     spec = require_mode_settings(mode)
     tab = studio_on.make_tab(mode, get_custom_preset_index(mode))
@@ -474,7 +475,6 @@ def test_the_settings_body_is_only_the_preset_row_the_launcher_and_kept_sections
         assert holder.isAncestorOf(accessory) or accessory.isHidden()
         assert not accessory.isVisibleTo(tab) or holder.isAncestorOf(accessory)
     quality = getattr(tab, f"_{mode}_quality_controls", None)          # the 3D Detail row (Settings' 3D page owner)
-    sections = getattr(tab, f"_{spec.prefix}_settings_sections")
     for widget in body.findChildren(QAbstractButton) + body.findChildren(QAbstractSlider) \
             + body.findChildren(QComboBox):
         if holder.isAncestorOf(widget) or widget is button or slider.isAncestorOf(widget):
@@ -483,49 +483,182 @@ def test_the_settings_body_is_only_the_preset_row_the_launcher_and_kept_sections
             continue
         if quality is not None and quality.isAncestorOf(widget):
             continue
-        if sections:                       # a section Settings keeps (Neon Lake's terrain brush) is its own editor
-            continue
         pytest.fail(f"unexpected Settings control {widget.objectName() or widget!r}")
     # On a curated preset too, the launcher stays offered.
     slider._slider.setValue(0)
     assert not button.isHidden() and holder.isHidden()
 
 
-def test_only_neon_lake_keeps_a_settings_section_its_terrain_brush(studio_on):
-    """The Studio carries the terrain heightfield and its whole-record edits but has no brush instrument: the brush
-    is the one Settings control without a Studio home, kept in Neon Lake's body (operator decision)."""
-    kept = {}
+# ------------------------------------------------------------------------------------- the terrain brush
+def _heightfield_keys(mode: str) -> set[str]:
+    """Custom-row records whose canonical value is an authored heightfield (Neon Lake's terrain)."""
+    from core.settings.default_contract import require_canonical_default
+    from rendering.gl_programs.heightfield import normalize_heightfield
+    defaults = require_canonical_default("widgets.spotify_visualizer")
+    out = set()
+    for entry in require_mode_settings(mode).entries:
+        if isinstance(entry, Custom):
+            for key in entry.keys:
+                try:
+                    normalize_heightfield(defaults[key])
+                except (ValueError, KeyError):
+                    continue
+                out.add(key)
+    return out
+
+
+def test_every_authored_heightfield_is_painted_by_the_studio_brush():
+    """The Studio's shared brush instrument is the heightfield's Studio home: every mode storing one declares the
+    brush, its target is that record, and the record is a carried (``instrument_only``) Studio property. Derived from
+    the registries; the negative control is a mode with no heightfield, which declares no brush."""
+    painted = {}
     for mode in MODES:
-        tab = studio_on.make_tab(mode, get_custom_preset_index(mode))
-        sections = getattr(tab, f"_{require_mode_settings(mode).prefix}_settings_sections")
-        if sections:
-            kept[mode] = tuple(entry.name for entry in sections)
-    assert kept == {"shockwave_grid": ("terrain",)}
-    terrain = next(p for p in _schema("shockwave_grid").properties if p.path[0] == "shockwave_grid_terrain")
-    assert terrain.instrument_only
+        adapter = create_adapter(mode)
+        keys = _heightfield_keys(mode)
+        brush = adapter.capabilities().as_map()["brush"]
+        assert brush == bool(keys), mode
+        if keys:
+            target = adapter.brush_target()
+            assert target is not None and {target.key} == keys, mode
+            prop = next(p for p in adapter.schema().properties if p.path[0] == target.key)
+            assert prop.instrument_only
+            painted[mode] = target.key
+        else:
+            assert adapter.brush_target() is None, mode
+    assert painted, "a mode authors a heightfield"
 
 
-def test_a_kept_section_saves_through_settings_and_reaches_the_studio(studio_on, settings_manager):
-    """A stroke of Neon Lake's terrain brush saves through Settings' own save, and the Studio opened next shows it;
-    a Studio commit of another value keeps it."""
-    tab = studio_on.make_tab("shockwave_grid", get_custom_preset_index("shockwave_grid"))
-    editor = tab.shockwave_grid_terrain_editor
-    field = editor.get_heightfield()
-    heights = list(field["heights"])
-    middle = len(heights) // 2
-    heights[middle] = 0.5 if heights[middle] != 0.5 else 0.25
-    editor.set_heightfield({**field, "heights": heights})
-    tab._force_visualizer_preset_to_custom("shockwave_grid")
-    tab._save_settings_now()
-    painted = editor.get_heightfield()
-    assert _stored(settings_manager)["shockwave_grid_terrain"] == painted
-    controller = studio_on.open(studio_on.make_tab("shockwave_grid"), "shockwave_grid")   # the settings as saved
-    assert controller.session.values["shockwave_grid_terrain"] == painted
-    key = "shockwave_grid_wave_height"
-    prop = controller.session.schema.find(key)
-    controller.bridge.commitValue(key, 0, _different(prop, controller.bridge.values[key],
-                                                   require_mode_settings("shockwave_grid").control(key)))
-    assert _stored(settings_manager)["shockwave_grid_terrain"] == painted
+def _ground_point(controller, uv):
+    """The presented-frame pixel showing grid uv ``uv`` on the drawn ground (through the production camera)."""
+    import numpy as np
+    from rendering.gl_programs.heightfield import heightfield_basin
+    from rendering.gl_programs.neon_terrain_surface import surface_points
+    from ui.studio.shockwave_grid_adapter import terrain_view
+    values = controller.evaluation_values()
+    record = values["shockwave_grid_terrain"]
+    world = surface_points(record["size"], record["heights"], heightfield_basin(record), np.array([uv[0]]),
+                           np.array([uv[1]]), values["shockwave_grid_terrain_height"])[0]
+    view = terrain_view(controller.last_frame, controller.presented_geometry())
+    return view.item_point(tuple(world))
+
+
+def _paint(controller, surface, uv, *, moves=24, per_frame=8):
+    """One stroke from ``uv`` sweeping right across the ground; ``per_frame`` pointer moves between frame starts."""
+    bridge = controller.bridge
+    x, y = _ground_point(controller, uv)
+    bridge.brushPress(x, y)
+    for index in range(1, moves + 1):
+        bridge.brushMove(x + 3.0 * index, y)
+        if index % per_frame == 0:
+            surface.pump()
+    return x, y
+
+
+def test_the_brush_lands_on_the_ground_the_production_camera_draws(studio_on):
+    """A viewport point picks the grid uv the production camera shows there, on the drawn land (not the water plane
+    behind it), and the footprint is drawn back round it; off the scene (the sky) picks nothing."""
+    from ui.studio.shockwave_grid_adapter import pick_terrain, terrain_footprint
+    import math
+    _tab, controller = studio_on("shockwave_grid")
+    size = 33                    # a test-owned terrain: low land with a tall hill in the middle
+    hill = [round(0.3 + 0.6 * math.exp(-((x / (size - 1) - 0.5) ** 2 + (y / (size - 1) - 0.5) ** 2) / 0.02), 4)
+            for y in range(size) for x in range(size)]
+    controller.session.set(("shockwave_grid_terrain",), {"version": 1, "size": size, "heights": hill}, "Test terrain")
+    controller.surface.pump(3)
+    geometry = controller.presented_geometry()
+    frame, values = controller.last_frame, controller.evaluation_values()
+    record = values["shockwave_grid_terrain"]
+    land = [(0.3, 0.2), (0.5, 0.3), (0.7, 0.15), (0.5, 0.42)]          # the near land and the hill's front slope
+    for uv in land:
+        point = _ground_point(controller, uv)
+        picked = pick_terrain(frame, values, point, geometry)
+        assert picked == pytest.approx(uv, abs=2e-3), uv
+        rings = terrain_footprint(frame, values, picked, (0.1, 0.05), geometry)
+        assert len(rings) == 2 and all(len(ring) > 10 for ring in rings)
+        xs = [p[0] for p in rings[0]]
+        assert min(xs) < point[0] < max(xs)
+    assert pick_terrain(frame, values, (geometry[0][0] / 2, 2.0), geometry) is None
+    # Negative control: the same point met with the flat water plane lands elsewhere on raised land.
+    import numpy as np
+    from ui.studio.shockwave_grid_adapter import _grid_uv, terrain_view
+    from rendering.gl_programs.heightfield import heightfield_basin
+    view = terrain_view(frame, geometry)
+    point = _ground_point(controller, land[-1])
+    fx, fy, fw, fh = view.field
+    direction = np.asarray(view.ray((point[0] - fx) / fw, (point[1] - fy) / fh))
+    eye = np.asarray(view.eye)
+    hit = eye + (-eye[1] / direction[1]) * direction
+    flat = _grid_uv(size, heightfield_basin(record), hit[0], hit[2])
+    assert flat != pytest.approx(land[-1], abs=0.02)
+
+
+def test_a_brush_stroke_saves_once_through_settings_and_reloads(studio_on, settings_manager):
+    """A stroke painted on the Neon Lake preview is held in the session while the pointer moves (previewed at most
+    once per frame start, nothing saved), then saved once on release by Settings' own owners; a fresh Settings tab
+    and a new Studio both load exactly the painted record, and Undo restores the exact heightfield."""
+    from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings
+    from ui.studio.surface import OffscreenStudioSurface
+    tab, controller = studio_on("shockwave_grid")
+    surface = next(s for s in (controller.surface,) if isinstance(s, OffscreenStudioSurface))
+    surface.pump(2)
+    session, bridge = controller.session, controller.bridge
+    key = "shockwave_grid_terrain"
+    before = session.values[key]
+    stored_before = _stored(settings_manager).get(key)
+    bridge.setBrushActive(True)
+    assert bridge.brushState["active"] is True
+    bridge.setBrushValue("strength", 0.8)
+    commits = session.commit_count
+    _paint(controller, surface, (0.45, 0.35))
+    brush = bridge.brush
+    # Coalesced: 24 moves over 3 frames are at most 3 previews, and nothing is saved before the release.
+    assert brush.pointer_events == 25 and 1 <= brush.previews <= 3
+    assert session.commit_count == commits and session.gesture_active
+    assert _stored(settings_manager).get(key) == stored_before
+    bridge.brushRelease()
+    painted = session.values[key]
+    assert painted != before and session.commit_count == commits + 1 and not session.gesture_active
+    assert session.undo_label.startswith("Paint Terrain")
+    assert _stored(settings_manager)[key] == painted                      # through Settings' own save
+    assert collect_spec_mode_settings(tab, "shockwave_grid")[key] == painted
+    # A fresh Settings tab and a new Studio load exactly what was painted.
+    controller.close()
+    reloaded = studio_on.make_tab("shockwave_grid")
+    assert collect_spec_mode_settings(reloaded, "shockwave_grid")[key] == painted
+    reopened = studio_on.open(reloaded, "shockwave_grid")
+    assert reopened.session.values[key] == painted
+    # Undo restores the exact heightfield (the session's history is per Studio: paint, then undo, here).
+    surface = reopened.surface
+    surface.pump(2)
+    reopened.bridge.setBrushActive(True)
+    _paint(reopened, surface, (0.6, 0.3))
+    reopened.bridge.brushRelease()
+    assert reopened.session.values[key] != painted
+    reopened.bridge.undo()
+    assert reopened.session.values[key] == painted and _stored(settings_manager)[key] == painted
+
+
+def test_a_stroke_on_the_sky_or_cancelled_saves_nothing_negative_control(studio_on, settings_manager):
+    """The brush paints only the drawn ground: a stroke that never meets it, an inactive brush and Escape save
+    nothing, so the save above is the stroke's own."""
+    _tab, controller = studio_on("shockwave_grid")
+    surface = controller.surface
+    surface.pump(2)
+    session, bridge = controller.session, controller.bridge
+    key = "shockwave_grid_terrain"
+    before, commits = session.values[key], session.commit_count
+    _paint(controller, surface, (0.45, 0.35))                       # brush not active: ignored
+    bridge.brushRelease()
+    bridge.setBrushActive(True)
+    bridge.brushPress(4.0, 4.0)                                     # the top-left corner: sky
+    surface.pump()
+    bridge.brushRelease()
+    _paint(controller, surface, (0.45, 0.35))
+    assert session.gesture_active and session.values[key] != before
+    bridge.brushCancel()                                            # Escape
+    bridge.brushRelease()
+    assert session.values[key] == before and session.commit_count == commits
+    assert _stored(settings_manager).get(key, before) == before
 
 
 def test_bar_count_is_named_by_one_descriptor_fact_in_settings_and_the_studio():
@@ -543,7 +676,7 @@ def test_bar_count_is_named_by_one_descriptor_fact_in_settings_and_the_studio():
     assert len(names[True]) == 1 and len(names[False]) == 1 and names[True] != names[False]
 
 
-@pytest.mark.parametrize("mode", [m for m in MODES if any(getattr(e, "keys", ()) and hasattr(e, "build")
+@pytest.mark.parametrize("mode", [m for m in MODES if any(isinstance(e, Custom) and e.keys
                                                           for e in require_mode_settings(m).entries)])
 def test_studio_edits_of_every_custom_row_save_and_reload_through_settings(studio_on, settings_manager, mode):
     """Each Custom row's record (shape editors, layers, smoothing, the terrain shaper...) edited through the Studio

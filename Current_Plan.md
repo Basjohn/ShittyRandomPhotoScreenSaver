@@ -149,10 +149,10 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
   Hero Shell reads as a soft ring rather than a shell full of bokeh discs; faint surface ripples at the top. Details,
   numbers, reactivity and cost: Extruded_Bubble/Investigation.md §72-73; evidence
   `.artifacts/evidence/extruded_bubble/deep_red_ocean_pass2_20261106/`.
-- [ ] **Side defects found in the deep red ocean pass (6 Nov):** `tools/release_media.py` renders EB presets without
-  their `starting_view` (the replayed config already carries a live pose, so the preset's view is not applied): the
-  P9 showcase WebP frames differently from the preset as selected (pass 1's showcase had it too); and the near
-  (defocus) layer stair-steps the rim of a large near shell on some frames (seen with Lit Glass off as well).
+- [ ] **Side defects found in the deep red ocean pass (6 Nov):** the near (defocus) layer stair-steps the rim of a
+  large near shell on some frames (seen with Lit Glass off as well). Also `tools/release_media.py` cannot render
+  Waveform Ribbon showcases: the replay raises "Raw musical replay requires current PCM reanalysis" because
+  `replay_clip` never drives `tools/visualizer_replay/pcm_reanalysis.py`.
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
@@ -596,18 +596,14 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
 - [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost, Extruded Spectrum and
   Neon Lake built, DevCurve and Oscilloscope built (below); Sphere in progress). Neon Lake (Shockwave Grid) awaits operator acceptance
   (evidence `.artifacts/evidence/neon_lake/studio/`, Presets 1 and 3): recorded engine answers like Spectrum, the
-  shared framed camera, no wallpaper; its Settings body keeps the terrain brush (the one Settings control without a
-  Studio home) unless a shared brush instrument is admitted. Extruded Spectrum awaits operator acceptance
+  shared framed camera, no wallpaper; its terrain is painted with the Studio's shared brush (6 Nov; evidence
+  `.artifacts/evidence/studio_completion_20261106/brush/`; the retired Settings editor's 3/4 view Sun / Moon drag is
+  now Position X / Y / Z only). Extruded Spectrum awaits operator acceptance
   (evidence `.artifacts/evidence/extruded_spectrum/studio/`); its cast-shadow rows stay out of the Studio while
   they are unavailable (`EXTRUDED_CAST_SHADOW_AVAILABLE`). Spectrum awaits operator acceptance (evidence
   `.artifacts/evidence/spectrum/studio_20261105/`). Every mode's Settings body is now the preset row and the Studio
   launcher (operator 6 Nov: migrate fully once parity+ is proven; `tests/test_visualizer_studio_parity.py`). Operator
-  look pending on the migrated Settings pages (one sentence per mode; Neon Lake's page keeps the terrain brush).
-- [ ] **Neon Lake terrain brush in the Studio (the last step to "fully migrated", operator 6 Nov: "not be half in and
-  half off"):** the Studio carries the heightfield, undo, Extend and Reset but has no brush instrument, so Neon Lake's
-  Settings page keeps the brush section (`settings_sections=("terrain",)`). Build a shared Studio brush instrument
-  that paints on the preview (raise, lower, flatten; radius, strength, falloff; the existing undo), then retire the
-  Settings section with the parity test proving the brush round trip.
+  look pending on the migrated Settings pages (one sentence per mode) and on the terrain brush in the Studio.
 - [ ] **DevCurve Studio built (6 Nov), awaiting operator acceptance** (`ui/studio/devcurve_adapter.py`, registered;
   so DevCurve's preset row now shows Open Studio and no Edit Preset). Evidence `.artifacts/evidence/devcurve/studio/`
   (Deep Blue on Rag Doll, Neon Skyline on Human: every workspace with the live traces, plus the node rows). Operator
@@ -623,21 +619,6 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   its place (re-analysed from PCM through the production DSP, every offered control moves Flare and Drive, and Bar Count,
   Block Size and Input Gain also move Tone: the trace itself is the raw capture, but the beam's reactions are not;
   `Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode).
-- [ ] **Studio replay understates Audio Analysis (found 6 Nov):** the engine-processed Studios serve the clip's *recorded*
-  post-DSP lanes (`ReplayBeatEngine`; only the Spectrum family's bars are re-shaped from PCM), so editing Sensitivity,
-  the floors, Gain or Block Size in the DevCurve, Oscilloscope, Bubble, Extruded Bubble or Sphere Studio (and Neon
-  Lake's onset waves) changes little or nothing on screen while the live engine changes Flare, Drive, onsets and the
-  curves. The audit's
-  `ProductionLaneEngine` (`tools/visualizer_replay/analysis_controls_audit.py`: per-frame PCM through
-  `compute_bars_from_samples`, production getters) is the candidate: promote it to `feature_replay`, use it in
-  `engine_answers.extract` for modes with engine-owned analysis, and re-prove the parity tests. It takes one analysis
-  block per 11 ms tick where live analyses every capture callback, so absolute levels approximate. Worker cost
-  measured 6 Nov (`engine_answers.extract` with `ReplayBeatEngine` swapped for `ProductionLaneEngine`, the three
-  shipped 12 s clips, frozen settings, best of two, machine at ~80% CPU from other work): DevCurve 3.8-3.9 s -> 4.2-4.3 s
-  (+9-14%), Oscilloscope 2.0-2.2 s -> 2.5-2.6 s (+18-28%); the cost is no obstacle. Still to do: move the class into
-  `widgets/spotify_visualizer/feature_replay.py` (the audit tool then imports it), pick it in `extract` for modes with
-  engine-owned analysis (Bubble, Extruded Bubble and Sphere run their own recorded-input workers and need the same
-  swap), and re-anchor the Studio parity tests, whose oracle is the production replay on recorded lanes.
 - [ ] **Edit Preset deleted (6 Nov)**: every visualizer mode now has a Studio, so the preset row's Edit Preset button,
   `_open_preset_json` and its pop-up are gone (`ui/tabs/media/preset_slider.py`); curated presets are authored with
   Open Studio and the Studio's confirmed Save To <Preset> (`Docs/Reference/Visualizer_Studio.md` §4).
@@ -673,6 +654,14 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   Extruded Bubble's and Sphere's evaluators still replay exactly in one evaluation from the fixture start, without the
   frame budget and checkpoints Waveform and the engine-answer modes now share (`ui/studio/exact_replay.py`); measure
   with `tools/studio_drag_profile.py` and move them onto `ExactReplay` where a release stalls.
+- [ ] **Neon Lake: drag the Sun/Moon in the Studio preview.** Retiring the Settings terrain section (6 Nov, Studio brush)
+  removed its 3/4 view, where the Sun/Moon could be dragged; it is now placed with Position X/Y/Z only. Give the Studio
+  preview a direct drag for it: the same pick through the production camera as the terrain brush, one undoable commit
+  on release.
+- [ ] **Operator look: the Studio terrain brush** (brush button or B in the viewport toolbar; Raise, Lower, Flatten,
+  Water; left-drag paints, right/middle drag pans). Evidence `.artifacts/evidence/studio_completion_20261106/brush/`.
+  Audio Analysis now moves the DevCurve, Oscilloscope, Neon Lake, Bubble, Extruded Bubble and Sphere previews on
+  recorded clips. Sensitivity sheet: `audio_analysis/`. DevCurve normalises its body, so it barely shows, as live.
 
 ## Operator execution and evidence rules
 

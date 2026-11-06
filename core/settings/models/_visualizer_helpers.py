@@ -87,6 +87,16 @@ def admit_spectrum_shape_key(key: str, value: Any, default: Any) -> Any:
     return deepcopy(value)
 
 
+def admit_heightfield_key(key: str, value: Any, default: Any) -> Any:
+    """An authored heightfield as the model admits it (``normalize_heightfield``); a malformed record falls back to
+    the canonical default rather than reaching the model, which would refuse it."""
+    from rendering.gl_programs.heightfield import normalize_heightfield
+    try:
+        return normalize_heightfield(value)
+    except ValueError:
+        return normalize_heightfield(default)
+
+
 def _technical_mode_ids() -> Tuple[str, ...]:
     """Return canonical technical-profile owners from descriptor capabilities."""
 

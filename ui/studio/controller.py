@@ -166,6 +166,13 @@ class StudioBridge(QObject):
         self._source = response.sources[0].id if response is not None and response.sources else ""
         if self._target:
             self._source = self._dominant_source(self._target)
+        self.brush = None
+        if controller.capabilities.as_map().get("brush"):
+            target = controller.adapter.brush_target()
+            if target is not None:
+                from ui.studio.brush import StudioBrush
+                self.brush = StudioBrush(target, controller.session, controller.brush_scene,
+                                         controller.request_preview_frame)
         self._rebuild_objects()
         self._rebuild_inspector()
         self._rebuild_values()
@@ -581,6 +588,7 @@ class StudioBridge(QObject):
 
     def apply_pending_previews(self) -> None:
         """Frame start (and before anything that ends or replaces the gesture): apply the held previews."""
+        self._flush_brush()
         while self._pending:
             (property_id, endpoint), (kind, payload) = next(iter(self._pending.items()))
             del self._pending[(property_id, endpoint)]
@@ -594,6 +602,87 @@ class StudioBridge(QObject):
 
     def drop_pending_previews(self) -> None:
         self._pending.clear()
+        if self.brush is not None:
+            self.brush.cancel()
+
+    # --------------------------------------------------------- the terrain brush (shared instrument)
+    brushChanged = Signal()
+    brushCursorChanged = Signal()
+
+    def _brush_map(self) -> dict:
+        return self.brush.as_map() if self.brush is not None else {}
+
+    def _brush_cursor(self) -> list:
+        return list(self.brush.cursor) if self.brush is not None else []
+
+    brushState = Property("QVariantMap", _brush_map, notify=brushChanged)
+    brushCursor = Property("QVariantList", _brush_cursor, notify=brushCursorChanged)
+
+    def _flush_brush(self) -> None:
+        brush = self.brush
+        if brush is None:
+            return
+        cursor = brush.cursor
+        self._guard(brush.flush)
+        if brush.cursor is not cursor:
+            self.brushCursorChanged.emit()
+
+    @Slot(bool)
+    def setBrushActive(self, active: bool) -> None:
+        if self.brush is None:
+            return
+        self.brush.set_active(bool(active))
+        self.brushChanged.emit()
+        self.brushCursorChanged.emit()
+
+    @Slot(str, "QVariant")
+    def setBrushValue(self, name: str, value: Any) -> None:
+        """A brush setting (mode, radius, strength, falloff, flatten_height): tool state, never saved."""
+        if self.brush is not None and self.brush.set_value(str(name), value):
+            self.brushChanged.emit()
+
+    @Slot(float, float)
+    def brushPress(self, x: float, y: float) -> None:
+        """A stroke starts at (x, y) in presented-frame pixels; the paint follows at the next frame start."""
+        if self.brush is None or not self.brush.active:
+            return
+        if self._c.session.gesture_active:
+            self.apply_pending_previews()
+            self._guard(self._c.session.end_gesture)       # another gesture ends before a stroke starts
+        self.brush.press((x, y))
+        self.brushChanged.emit()
+
+    @Slot(float, float)
+    def brushMove(self, x: float, y: float) -> None:
+        if self.brush is not None and self.brush.active:
+            self.brush.move((x, y))
+
+    @Slot(float, float)
+    def brushHover(self, x: float, y: float) -> None:
+        if self.brush is not None and self.brush.active:
+            self.brush.hover((x, y))
+
+    @Slot()
+    def brushLeave(self) -> None:
+        if self.brush is not None:
+            self.brush.hover(None)
+            self.brushCursorChanged.emit()
+
+    @Slot()
+    def brushRelease(self) -> None:
+        """The stroke ends: the held points are painted and the record is saved once (one undo entry)."""
+        if self.brush is None:
+            return
+        self._guard(self.brush.release)
+        self.brushChanged.emit()
+        self.brushCursorChanged.emit()
+
+    @Slot()
+    def brushCancel(self) -> None:
+        if self.brush is None:
+            return
+        self.brush.cancel()
+        self.brushChanged.emit()
 
     @Slot(str, str)
     def commitGradient(self, property_id: str, nodes: str) -> None:
@@ -1201,6 +1290,7 @@ class StudioController(QObject):
         self._pose: dict[str, float] = {}
         self._unsubscribe = None
         self._clip_jobs: dict[str, Any] = {}
+        self._clip_analysis: dict[str, str] = {}   # clip id -> the analysis values its loaded inputs were made under
         self._clip_errors: dict[str, str] = {}
         self.evaluations = 0
         self.last_frame = None
@@ -1412,6 +1502,8 @@ class StudioController(QObject):
         self._invalidate()
         if not self.session.gesture_active:
             self.refresh_preset_previews()
+            if reason in ("commit", "undo", "redo", "hydrate"):
+                self._refresh_clip_analysis()
 
     # ------------------------------------------------------- preset tile previews
     def refresh_preset_previews(self) -> None:
@@ -1547,6 +1639,8 @@ class StudioController(QObject):
         if keys is None:
             deferred = getattr(self.evaluator, "release_only_keys", None)
             keys = frozenset(deferred(self.session.schema.keys)) if callable(deferred) else frozenset()
+            # A clip re-analysed for some keys (``clip_analysis_keys``) re-runs its worker once, on release.
+            keys |= self._clip_analysis_keys() & self.session.schema.keys
             self._release_only = keys
         return keys
 
@@ -1614,6 +1708,19 @@ class StudioController(QObject):
         if self.surface is not None and self.state in ("opening", "presented"):
             self.surface.request_frame()
 
+    def presented_geometry(self) -> tuple:
+        """(presented-frame size, the live card's world extent, the framing's card style) of the viewport: what
+        handles and the brush project through."""
+        framing = next((f for f in self.framings if f.id == self.bridge.framingId), None)
+        return ((self.viewport.width(), self.viewport.height()), self.presented_extent(),
+                framing.style if framing else ())
+
+    def brush_scene(self):
+        """(frame on screen, the values it shows, presented geometry) for the brush, or None before a frame."""
+        if self.bridge is None or self.viewport is None or self.last_frame is None:
+            return None
+        return self.last_frame, self.evaluation_values(), self.presented_geometry()
+
     # -------------------------------------------------------------- handles
     def refresh_handles(self) -> None:
         """Project the selected object's handles through the mode's camera (direct manipulation)."""
@@ -1625,12 +1732,10 @@ class StudioController(QObject):
             if self.bridge.handles.get("handles") or self.bridge.handles.get("outline"):
                 self.bridge.set_handles({"outline": [], "handles": []})    # an outline may stand alone
             return
-        framing = next((f for f in self.framings if f.id == self.bridge.framingId), None)
+        size, extent, style = self.presented_geometry()
         try:
             state = self.adapter.scene_handles(self.last_frame, self.evaluation_values(), self.bridge.selectedObject,
-                                               (self.viewport.width(), self.viewport.height()),
-                                               self.presented_extent(),
-                                               framing.style if framing else ())
+                                               size, extent, style)
         except Exception:
             logger.exception("[STUDIO] Handle projection failed")
             state = {"outline": [], "handles": []}
@@ -1740,6 +1845,7 @@ class StudioController(QObject):
             self.bridge.clear_traces()
             self.bridge.transportChanged.emit()
             self.bridge.timeChanged.emit()
+        self._refresh_clip_analysis()
         self._invalidate()
 
     def clip_status(self, clip_id: str) -> str:
@@ -1749,7 +1855,36 @@ class StudioController(QObject):
             return "error"
         return "available"
 
-    def _load_clip(self, clip_id: str) -> None:
+    # ------------------------------------------------ recorded clips re-analysed for the analysis values
+    def _clip_analysis_keys(self) -> frozenset[str]:
+        """The values a recorded clip's analysis depends on, for a mode whose clip worker answers them
+        (``clip_analysis_keys``: Bubble, Extruded Bubble, Sphere: the Audio Analysis values)."""
+        keys = getattr(self.adapter, "clip_analysis_keys", None)
+        return frozenset(keys()) if callable(keys) else frozenset()
+
+    def _analysis_signature(self, values) -> str:
+        import json
+        keys = self._clip_analysis_keys()
+        return json.dumps({key: values.get(key) for key in sorted(keys)}, sort_keys=True, default=repr)
+
+    def _refresh_clip_analysis(self) -> None:
+        """The recorded clip on screen was analysed under other analysis values (an Audio Analysis edit, undo or
+        redo): analyse it again in the background; its previous inputs stay on screen until the new ones land."""
+        if not self._clip_analysis_keys() or self.evaluator is None or self.state not in ("opening", "presented"):
+            return
+        fixture = self.evaluator.fixture
+        clip_id = fixture.id
+        if not clip_id.startswith("clip:") or clip_id not in self._clip_analysis:
+            return
+        wanted = self._analysis_signature(self.session.committed_values)
+        if self._clip_analysis[clip_id] == wanted:
+            return
+        job = self._clip_jobs.pop(clip_id, None)
+        if job is not None:
+            job.cancel()
+        self._load_clip(clip_id, refresh=True)
+
+    def _load_clip(self, clip_id: str, *, refresh: bool = False) -> None:
         if clip_id in self._clip_jobs:
             return
         clip = next((c for c in self.adapter.recorded_clips() if c.id == clip_id), None)
@@ -1758,15 +1893,31 @@ class StudioController(QObject):
             self.bridge.notify("Recorded clips are not available for this mode")
             return
 
+        values = self.session.committed_values
+        signature = self._analysis_signature(values)
+
         def finished(result, error: str = "") -> None:
+            if self._clip_jobs.get(clip_id) is not job_ref[0] and job_ref[0] is not None:
+                return                                   # a newer analysis of this clip replaced this one
             self._clip_jobs.pop(clip_id, None)
             if self.state not in ("opening", "presented"):
                 return
             if error:
                 self._clip_errors[clip_id] = error
                 self.bridge.notify(f"Clip analysis failed: {error}", "Retry", lambda: self.retry_clip(clip_id))
+            elif refresh:
+                # The clip on screen, re-analysed for new analysis values: its new inputs replace the old at the
+                # same instant (the transport keeps its place).
+                self._clip_errors.pop(clip_id, None)
+                self._clip_analysis[clip_id] = signature
+                self.evaluator.add_recorded(result)
+                if self.evaluator.fixture.id == clip_id:
+                    self.evaluator.select(clip_id)
+                    self._invalidate()
+                self._refresh_clip_analysis()           # values edited again while it ran
             else:
                 self._clip_errors.pop(clip_id, None)
+                self._clip_analysis[clip_id] = signature
                 self.evaluator.add_recorded(result)
                 # Only the source last asked for (by the user, or the default while the user has asked for
                 # nothing) is selected when its analysis lands; any other landing load only becomes available.
@@ -1778,9 +1929,11 @@ class StudioController(QObject):
                         self.bridge.notify(self._source_notice)
             self.bridge.transportChanged.emit()
 
+        job_ref = [None]
         try:
-            job = loader(clip, self.session.committed_values, finished)
+            job = loader(clip, values, finished)
             if job is not None:
+                job_ref[0] = job
                 self._clip_jobs[clip_id] = job
         except Exception as exc:
             self._clip_errors[clip_id] = str(exc)
