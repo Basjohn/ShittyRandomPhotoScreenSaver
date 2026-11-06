@@ -220,11 +220,6 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
 - [ ] **Helper breadcrumb diagnostics unavailable:** current native MC evidence logs no access to
   `C:\ProgramData\SRPSS\logs\scr_helper.log`. Inspect the helper/log-path authority before relying on that
   diagnostic route; do not hide it behind a silent local fallback. Separate from Waveform rendering.
-- [ ] **Doc sweep leftover (6 Nov, `Docs/Audits/Doc_Sweep_2026-11-06.md`; the remembered-peak gain was rewritten as
-  superseded with the v7 merge):**
-  - **Stale Orthographic text** in the Waveform docs (`Waveform_Ribbon_Lab_Plan.md`, `Waveform_Ribbon_Migration_Plan.md`)
-    and the Extruded Bubble docs (`Investigation.md` ~1325, `Motion_Reactivity_Viewport_Plan.md`) is fixed once their
-    running agents finish.
 - [ ] **Frozen release gate (operator scheduled):** Standard/Diagnostic from one compile, MC and Reddit Helper installed
   startup/exit, Settings/widgets/cache/audio and installer behaviour.
   Check installer logs and obsolete-file removal in both curated theme/preset trees. Both sources declare whole-tree
