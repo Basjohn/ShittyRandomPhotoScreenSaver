@@ -83,6 +83,10 @@ lead as reviewer/orchestrator.
   re-run overwrote each log, so the failing test is unknown (most likely a QSG clip probe timing out). The isolated
   runner now keeps the parallel-run failure as `logs/pytest_isolated/<file>.under_load.log`; next time, read it and
   fix the probe's timeout or synchronisation rather than rerunning.
+- [ ] **`test_studio_exit_every_mode.py` exited non-zero with every test passing (6 Nov, once):** "19 passed" in its
+  log but a failing exit code under the 8-way gate, and that runner stopped before its summary; the immediate re-run
+  passed 64/64. Looks like a native crash at interpreter teardown after the Studio tests. If it recurs, capture the
+  exit code and any faulthandler output (run the file alone with `-X faulthandler`) and fix the teardown owner.
 
 - [ ] **4x MSAA repeat-render noise (driver, 5 Nov; was "Floor Give run-to-run noise"):** the same frame rendered
   again through a 4x scene target differs by 1 level (rarely 2-3) on a pixel or two in Waveform (more often with Floor
