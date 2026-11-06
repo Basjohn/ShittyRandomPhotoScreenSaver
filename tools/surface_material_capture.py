@@ -534,12 +534,13 @@ def measure_text_legibility(scene: MaterialScene, out: Path) -> list[dict]:
     return rows
 
 
-def capture_legibility(scene: MaterialScene, wallpapers: list[Path], output: Path) -> dict:
-    """Light and dark themes, every wallpaper, every material: frames plus per-run contrast."""
+def capture_legibility(scene: MaterialScene, wallpapers: list[Path], output: Path, themes=None) -> dict:
+    """Light and dark themes (or ``themes``), every wallpaper, every material: frames plus
+    per-run contrast."""
 
     report: dict = {}
     images = [presentation_image(path, SCENE, f"leg-{index}") for index, path in enumerate(wallpapers)]
-    for theme in (LIGHT_THEME, DARK_THEME):
+    for theme in (themes or (LIGHT_THEME, DARK_THEME)):
         activate_theme(theme)
         rebuild_styles(scene)
         for index, image in enumerate(images):
@@ -703,6 +704,49 @@ def capture_style(scene: MaterialScene, wallpapers: list[Path], output: Path,
     return report
 
 
+def capture_theme_sheet(scene: MaterialScene, wallpapers: list[Path], output: Path, themes) -> list[Path]:
+    """One contact sheet per wallpaper: every named Widget Theme on its own material (the
+    "Theme" baseline), a labelled tile each, plus the full frames."""
+
+    from PIL import Image, ImageDraw
+    from ui.widget_theme_io import load_widget_theme_file
+    from rendering.quick.widgets.surface_material import theme_surface_material
+
+    images = [presentation_image(path, SCENE, f"sheet-{index}") for index, path in enumerate(wallpapers)]
+    frames: dict = {}
+    for theme in themes:
+        spec = load_widget_theme_file(ROOT / "themes" / "widgets" / f"{theme}.srwtheme")
+        activate_theme(theme)
+        rebuild_styles(scene)
+        material = theme_surface_material(spec)
+        for index, image in enumerate(images):
+            scene.set_wallpaper(image)
+            scene.set_material(material)
+            settle_still(scene)
+            frame = scene.read()
+            folder = output / "frames" / slug(theme)
+            folder.mkdir(parents=True, exist_ok=True)
+            frame.save(folder / f"{wallpapers[index].stem}.png")
+            frames.setdefault(index, []).append((f"{theme}  ({material})", frame))
+        print("sheet", theme, material, flush=True)
+    sheets = []
+    columns = 3
+    for index, tiles in frames.items():
+        w, h = SCENE[0] * 2 // 5, SCENE[1] * 2 // 5
+        rows = (len(tiles) + columns - 1) // columns
+        sheet = Image.new("RGB", (w * columns, (h + 22) * rows + 26), (14, 14, 16))
+        draw = ImageDraw.Draw(sheet)
+        draw.text((8, 6), f"{wallpapers[index].name}: each theme on its own material", fill=(235, 235, 235))
+        for n, (label, frame) in enumerate(tiles):
+            x, y = (n % columns) * w, 26 + (n // columns) * (h + 22)
+            draw.text((x + 6, y + 4), label, fill=(255, 220, 90))
+            sheet.paste(frame.resize((w, h)), (x, y + 20))
+        path = output / f"theme_sheet_{wallpapers[index].stem}.png"
+        sheet.save(path)
+        sheets.append(path)
+    return sheets
+
+
 # --------------------------------------------------------------------------- main
 
 
@@ -719,6 +763,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cost", action="store_true", help="steady whole-frame GPU per material vs Normal")
     parser.add_argument("--legibility", action="store_true",
                         help="per text run contrast against its local backdrop, light and dark themes")
+    parser.add_argument("--theme-sheet", nargs="+", metavar="THEME",
+                        help="contact sheets: each named Widget Theme on its own material, per wallpaper")
+    parser.add_argument("--legibility-themes", nargs="+", metavar="THEME",
+                        help="Widget Theme names for --legibility (default: the light and dark pair)")
     parser.add_argument("--style", action="store_true",
                         help="full frames per theme/wallpaper/material plus a mid-transition frame, and item rects")
     parser.add_argument("--dpr", type=float, default=1.0,
@@ -764,13 +812,17 @@ def main(argv: list[str] | None = None) -> int:
                 frames[material] = scene.read()
             contact(frames, args.output / "smoke.png", "smoke")
         if args.legibility:
-            report["legibility"] = capture_legibility(scene, list(args.wallpapers), args.output)
+            report["legibility"] = capture_legibility(scene, list(args.wallpapers), args.output,
+                                                      themes=args.legibility_themes)
         if args.cost:
             report["cost"] = measure_cost(scene, list(args.wallpapers))
         if args.cadence:
             report["cadence"] = measure_cadence(scene, list(args.wallpapers))
         if args.sheets:
             report["sheets"] = capture_sheets(scene, list(args.wallpapers), args.output)
+        if args.theme_sheet:
+            report["theme_sheet"] = [str(p) for p in capture_theme_sheet(scene, list(args.wallpapers),
+                                                                          args.output, args.theme_sheet)]
         if args.style:
             report["style"] = capture_style(scene, list(args.wallpapers), args.output,
                                             themes=tuple(args.themes) if args.themes else (None, None))

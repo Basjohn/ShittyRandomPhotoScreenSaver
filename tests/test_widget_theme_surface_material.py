@@ -108,6 +108,37 @@ def test_style_overrides_offers_theme_first_and_saves_it(qt_app, settings_manage
         qt_app.processEvents()
 
 
+def _contrast(a, b) -> float:
+    def lum(rgb):
+        c = [v / 255 for v in rgb[:3]]
+        c = [v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4 for v in c]
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+    la, lb = lum(a), lum(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+
+def _over(top, bottom):
+    alpha = top[3] / 255
+    return [t * alpha + b * (1 - alpha) for t, b in zip(top[:3], bottom[:3])]
+
+
+def test_material_themes_keep_their_own_text_roles_legible_on_their_own_surfaces() -> None:
+    """A theme made for a material: its text roles reach 4.5:1 on its own opaque card surface
+    and the header label on its header fill. (The wallpaper side is the material's legibility
+    rows; measured per run by tools/surface_material_capture.py --legibility-themes.)"""
+    themes = [path for path in sorted((ROOT / "themes" / "widgets").glob("*.srwtheme"))
+              if "surface_material" in json.loads(path.read_text(encoding="utf-8"))]
+    for path in themes:
+        colors = json.loads(path.read_text(encoding="utf-8"))["colors"]
+        panel = colors["widget.panel"][:3]
+        # widget.accent is a text colour too (System Stats labels inherit it).
+        for role in ("card.text", "widget.muted", "widget.accent", "gmail.sender", "header.text"):
+            assert _contrast(colors[role], panel) >= 4.5, (path.name, role)
+        header = _over(colors["header.fill"], panel)
+        assert _contrast(colors["header.text"], header) >= 4.5, path.name
+
+
 def test_every_shipped_theme_parses_with_a_valid_material_or_none() -> None:
     from rendering.quick.widgets.surface_material import SURFACE_MATERIALS
     from ui.widget_theme_io import load_widget_theme_file
