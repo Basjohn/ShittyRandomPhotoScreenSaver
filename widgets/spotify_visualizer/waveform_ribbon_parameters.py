@@ -37,7 +37,9 @@ class CompiledWaveformSettings:
         self.base=detached(Recipe(flow=flow,palette=palette,
             ribbon_colours={'low':tuple(card['quiet'] for card in cards),'high':tuple(card['peak'] for card in cards)},
             grade_share=(float(read('gradient_share')),float(read('mist_gradient_share'))),
-            pulse_rim=float(read('pulse_rim'))))
+            pulse_rim=float(read('pulse_rim')),
+            # Floor Give is read by the logical floor bound too (authored contact keeps its full swell).
+            floor=replace(Recipe().floor,give=float(read('floor_give')))))
         self.controls=HybridControls(self.base,MappingProxyType({key:tuple(read(key)) for key in TARGETS}),
             routing,cards,int(read('count')),float(read('elastic_frequency')),float(read('damping')),
             float(read('impulse')),float(read('attack')),float(read('release')),bool(read('rotation_enabled')),
