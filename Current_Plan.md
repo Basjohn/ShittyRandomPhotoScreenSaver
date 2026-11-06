@@ -50,6 +50,15 @@ challenges and improves it into a live checklist (priority, reward, fix detail; 
 the Expanded Visualizer / SMP plans and this plan. Afterwards the cap returns to one Opus high plus one Opus medium,
 once no existing agent holds loaded work.
 
+**Data-corruption bug (found 7 Nov in the merge gate; the Studio agent's top priority):** during the operator's source
+run on 6 Nov, `presets/visualizer_modes/shockwave_grid/preset_1_synthwave.json` (Neon Lake Preset 1) was rewritten
+at 21:45:04 as a Bubble preset (`"mode": "bubble"`, 78 Bubble keys, name kept), with no log line, while Settings was
+open after a Bubble preset save (21:44:41 `VIS_PRESETS_SAVE ... bubble`). Neon Lake was the last live mode. Values
+came from Bubble, the target from another mode. The original is restored from git; the bad file is kept in
+`.artifacts/evidence/preset_cross_mode_write_20261106/`. Fix: find the writer; every preset-file write asserts that
+its target mode equals the payload mode, fails closed, and logs mode/index/path; a regression test fails on the old
+code. Check installed builds too.
+
 **Queued (operator 6 Nov ~22:00), next free medium slot:**
 - **Two clicks on Reset Camera count as the card's double-click, which cycles the Visualizer mode**
   (`logs/screensaver*.log` 22:04:34-36). Two presses each ran a reset ("[VIS_ORBIT] Camera reset to preset home" x2).
@@ -77,13 +86,10 @@ context and worktree):**
   tests. The gate is byte-identical output (Preset 4 required); then the lead schedules the game60 live check.
 - **Studio controller leak** (Opus high, worktree `agent-ae914e4586e23615a`): closed `StudioController`s live for the
   process (one per Studio session in production: the `finished`/`report` closures in `open_mode_studio` hold the
-  controller); then the same context-ownership fix in `tools/onboarding_preview_foundry.py`; then Spectrum rendering
+  controller) (the `tools/onboarding_preview_foundry.py` context-ownership fix is done: R-173); then Spectrum rendering
   black when all Studio test files run in one process (record if deep). The R-172 exit crash itself is merged.
-- **Card surface style fixes and material themes** (Opus medium, started 6 Nov evening): the operator's light/dark
-  look fixes (inner legibility region 2-3 px from the border with concentric rounded corners, the media bar's square
-  shadow corner, full rounded rows instead of per-text chips in Weather/Reddit and every list card, a style sweep, the
-  mute button 3+ px left), the full cost table, Widget Themes carrying a material with a "Theme" default in the Style
-  Overrides dropdown, and about 15 new material themes in rarely used complementary colours.
+- **Card surface style fixes and material themes** (Opus medium, 6 Nov evening): done on its branch, awaiting the
+  lead's merge and the operator's eyes; details under "Widget card surfaces" below.
 
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
 
@@ -183,13 +189,30 @@ context and worktree):**
   4.90, Acrylic 3.89 -> 4.89; soft halos dropped on materials; inner edge on light cards; Normal unchanged, dark
   materials unchanged outside text runs (Card_Surface_Materials.md section 6; crops in
   `legibility_compare/legibility_before_after.png`).
+  **Style pass and material themes (6 Nov evening, operator's fixes):** the darker inner legibility panel now sits
+  2.5 px inside the border with corners concentric with the card; full rounded **rows** replace the per-run chips on
+  every list card (Reddit posts, Gmail messages, Feed rows/tiles, Friend Pulse rows/tiles, Games You Follow tiles,
+  System Stats panels, Abandonment/Achievement shelves and capsules, Weather's primary/detail/5-day blocks, Media's
+  track text), one even tone per row computed in the vertex stage; the Media bar's shadow is no longer cut square
+  (the content column stopped clipping at the padding); the mute button keeps an even gap inside the bar's end (about
+  5 px further left); Friend Pulse's secondary texts follow the light-palette soft shadow (no doubled glyphs). Worst
+  small-text run on every material 4.72-4.94:1 light, 4.83-5.02 dark; large 4.01+. Widget Themes may name a
+  `surface_material`; Style Overrides' Surface Material defaults to **Theme** (Normal when the theme names none;
+  a stored `normal` stays an explicit override, no bridge). 15 new material themes (3 per material) in the pack's
+  least-used hues (chartreuse, green, yellow, violet, blue, magenta; 4 light cards). Cost, all Normal zero: steady
+  frame +0.024-0.046 ms GPU / +0.05 ms render-thread CPU at 1440p (5 cards), up to +0.117 / +0.082 ms at 4K with 4
+  list cards; backdrop refresh 0.04-0.08 ms GPU (Card_Surface_Materials.md section 6). Evidence (1x/3x before/after
+  crops per fix, busy/flat/mid-transition, dark and light; theme contact sheets; palette survey):
+  `.artifacts/evidence/widget_surfaces_style_20261106/`.
   Left:
   1. **Live check under the lead-scheduled game load**, materials on, a transition-heavy run, and Normal as the
      control.
-  2. **Operator's eyes on the light-theme pass:** small text now holds 4.5:1 on every material through a per-run
-     legibility plate (it reads as a soft chip behind small muted text where the backdrop is busy), soft halos are
-     dropped on materials, and light cards get an inner hairline and highlight. The per-family Surface Material row
-     is built (every card family declares `surface_material: inherit`).
+  2. **Operator's eyes:** the rows (light themes draw them as lighter bands, dark themes mostly nothing), the inner
+     panel's thin rim, the mute position, the 15 new themes (contact sheets `theme_sheet_*.png`). Normal changes
+     only where intended: the Media bar/artwork shadows, the mute button and Friend Pulse on light themes.
+  3. **Side defect found (not caused here):** light themes keep the weather detail icons white (asset images),
+     faint on pale cards; a themed icon tint would fix it. (The `tests/test_surface_materials.py` access violation
+     found in the same pass is fixed: R-173, the hidden scene's GL context freed before its render control.)
 - [~] **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent) - second
   pass done, awaiting operator eyes:** the mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`.
   Preset 9 (Deep Red Ocean) only; Presets 1-8 pixel-identical. Shared work, each dormant at 0: **Ember Grain**,
@@ -721,8 +744,7 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
     in production. The cycle runs through Qt connections that gc cannot see: `open_mode_studio`'s `finished` /
     `report` closures are connected to the controller's own `closed` / `failed` and close over the controller. Break
     it at close: disconnect them, or hold the controller weakly. Prove it with a gc-free retention test.
-  - `tools/onboarding_preview_foundry.py`'s capture has the same imported-context structure and needs the same
-    ownership.
+  - `tools/onboarding_preview_foundry.py`'s capture had the same imported-context structure: fixed as R-173 (7 Nov).
   - The Studio files fail when run in one pytest process. After the first 17 Studio files (Bubble through
     `test_studio_preset_row_and_save_to_preset.py`), `test_studio_scene_theme_independence.py[spectrum]` renders a
     black scene (std 0). The fix did not cause it: the same failure appears with and without it. Every file passes

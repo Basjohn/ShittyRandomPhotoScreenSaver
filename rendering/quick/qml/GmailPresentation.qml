@@ -471,6 +471,22 @@ OverlayWidget {
                     width: parent.width
                     height: gmailRoot.extentRowHeight
 
+                    // On a surface material: one rounded row behind the whole message
+                    // line (date, sender, subject, menu glyph opt out of their own
+                    // plates). Inactive on Normal.
+                    LegibilityRow {
+                        objectName: "gmailMessageLegibilityRow_" + messageRow.index
+                        x: -4.0
+                        y: 1.0
+                        width: rowContent.width + 8.0
+                        height: Math.max(0.0, rowContent.height - 2.0)
+                        primaryColor: messageRow.messageUnread
+                            ? gmailRoot.gmailModel.textColor : gmailRoot.gmailModel.readSubjectColor
+                        secondaryColor: messageRow.messageUnread
+                            ? gmailRoot.gmailModel.senderColor : gmailRoot.gmailModel.readSenderColor
+                        tertiaryColor: gmailRoot.gmailModel.timestampColor
+                    }
+
                     Image {
                         id: envelope
                         objectName: "gmailEnvelope_" + messageRow.index
@@ -549,6 +565,7 @@ OverlayWidget {
                         ShadowedText {
                             id: timestampText
                             objectName: "gmailTimestamp_" + messageRow.index
+                            surfacePlateEnabled: false   // the message's LegibilityRow
                             x: openArea.columnX("timestamp")
                             anchors.verticalCenter: parent.verticalCenter
                             horizontalAlignment: gmailRoot.headerFlipped
@@ -583,6 +600,7 @@ OverlayWidget {
                             ShadowedText {
                                 id: senderText
                                 objectName: "gmailSender_" + messageRow.index
+                                surfacePlateEnabled: false   // the message's LegibilityRow
                                 x: openArea.columnX("sender")
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: openArea.senderWidth
@@ -608,6 +626,7 @@ OverlayWidget {
                             ShadowedText {
                                 id: subjectText
                                 objectName: "gmailSubject_" + messageRow.index
+                                surfacePlateEnabled: false   // the message's LegibilityRow
                                 x: openArea.columnX("subject")
                                 width: openArea.subjectWidth
                                 anchors.verticalCenter: parent.verticalCenter
@@ -649,6 +668,7 @@ OverlayWidget {
                         ShadowedText {
                             anchors.fill: parent
                             text: "⋮"
+                            surfacePlateEnabled: false   // the message's LegibilityRow
                             color: gmailRoot.gmailModel.timestampColor
                             font.family: gmailRoot.gmailModel.fontFamily
                             font.pointSize: gmailRoot.gmailModel.fontSize + 2.0

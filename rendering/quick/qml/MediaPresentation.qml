@@ -354,12 +354,13 @@ OverlayWidget {
         anchors.bottom: parent.bottom
         anchors.right: parent.right
         spacing: mediaRoot.sectionSpacing
-        // Presentation-only containment lock for CUSTOM content extents.
-        // The authored band positions, outer content_extent and saved child
-        // geometry remain unchanged; painting outside the real card is hidden.
-        // The card's content has an unconditional legal paint boundary. The
-        // separately mounted external-volume accessory has its own boundary.
-        clip: true
+        // The card's content has an unconditional legal paint boundary (the
+        // card's own rect, OverlayCard contentPaintBoundary); painting outside
+        // the real card is hidden there. This column does not clip again at the
+        // padded content edge: that cut the transport bar's and artwork's
+        // shadows square at the padding (the "square bottom-right corner").
+        // The separately mounted external-volume accessory has its own boundary.
+        clip: false
 
         Item {
             id: headerSlot
@@ -469,6 +470,23 @@ OverlayWidget {
                     ? Math.max(0.1, (mainBand.height - 2.0) / implicitHeight)
                     : 1.0
 
+                // On a surface material: one rounded box behind the whole track text
+                // (title, artist, album and playback state opt out of their own
+                // plates); it stays put through the metadata crossfade. Inactive on
+                // Normal.
+                LegibilityRow {
+                    objectName: "mediaMetadataLegibilityRow"
+                    x: -6.0
+                    y: -4.0
+                    width: metadata.width + 10.0
+                    height: metadata.height + 8.0
+                    primaryColor: mediaRoot.mediaModel.textColor
+                    secondaryColor: Qt.rgba(mediaRoot.mediaModel.textColor.r, mediaRoot.mediaModel.textColor.g,
+                                            mediaRoot.mediaModel.textColor.b, mediaRoot.mediaModel.textColor.a * 0.75)
+                    tertiaryColor: Qt.rgba(mediaRoot.mediaModel.textColor.r, mediaRoot.mediaModel.textColor.g,
+                                           mediaRoot.mediaModel.textColor.b, mediaRoot.mediaModel.textColor.a * 0.62)
+                }
+
                 // The Column positions only flow slots. Editable X/Y/scale
                 // belong to the content INSIDE each slot, so a child reset
                 // cannot fight the positioner's own Y assignment. Slot heights
@@ -512,6 +530,7 @@ OverlayWidget {
                     ShadowedText {
                         id: playbackState
                         objectName: "mediaPlaybackState"
+                        surfacePlateEnabled: false   // mediaMetadataLegibilityRow
                         x: mediaRoot.childOffsetX("playback_state")
                         y: mediaRoot.childOffsetY("playback_state")
                         scale: mediaRoot.childWidthScale("playback_state")
@@ -881,7 +900,8 @@ OverlayWidget {
                         1.0,
                         parent.width
                             - (systemMuteButton.visible && mediaRoot.muteOnAuthoredRail
-                                ? systemMuteButton.width + 8.0 : 0.0)
+                                ? systemMuteButton.width
+                                    + systemMuteButton.anchors.rightMargin + 4.0 : 0.0)
                     )
                     height: parent.height
 
@@ -1040,7 +1060,10 @@ OverlayWidget {
                     // existing authored child translation or pressed transform.
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.right: parent.right
-                    anchors.rightMargin: 4.0
+                    // Clear of the bar's rounded end cap: the same gap on the right
+                    // as above and below (never under 8 px), so it reads as a button
+                    // inside the bar rather than part of its end.
+                    anchors.rightMargin: Math.max(8.0, (parent.height - height) / 2.0)
                     transform: Translate {
                         id: mutePaintTranslation
                         x: mediaRoot.childOffsetX("mute_button")
