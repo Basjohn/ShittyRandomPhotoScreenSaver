@@ -142,13 +142,23 @@ class RevealWatch:
         self._native_lines = 0
         self.records: list[str] = []
         self.active = True
+        # Repaint since the reveal (the 6 Nov re-expose fix was proven only on a bare window): the first Expose,
+        # UpdateRequest and Paint Settings receives are logged, and the first-input line reports their counts, so a
+        # click into a Settings that never repainted is named outright.
+        self._surface_counts: dict[str, int] = {}
         watch = self
         inputs = (QEvent.Type.MouseButtonPress, QEvent.Type.KeyPress)
+        surface_events = {QEvent.Type.Expose: "Expose", QEvent.Type.UpdateRequest: "UpdateRequest",
+                          QEvent.Type.Paint: "Paint"}
 
         class _Qt(QObject):
             def eventFilter(self, obj, event):  # noqa: N802 - Qt override
-                if watch.active and event.type() in inputs:
-                    watch._guarded(watch._qt_input, obj, event)
+                if watch.active:
+                    kind = event.type()
+                    if kind in inputs:
+                        watch._guarded(watch._qt_input, obj, event)
+                    elif kind in surface_events:
+                        watch._guarded(watch._surface, surface_events[kind])
                 return False
 
         class _Native(QAbstractNativeEventFilter):
@@ -166,6 +176,7 @@ class RevealWatch:
         self._window = widget.windowHandle()
         if self._window is not None:
             self._window.installEventFilter(self._qt_filter)
+        widget.installEventFilter(self._qt_filter)       # Settings' own top level: its Paint and posted UpdateRequests
         if sys.platform == "win32":
             self._app.installNativeEventFilter(self._native_filter)
         widget.destroyed.connect(self.disarm)          # Settings gone: nothing left to watch
@@ -198,10 +209,19 @@ class RevealWatch:
         self.disarm()
         return True
 
+    def _surface(self, name: str) -> None:
+        if self._expired():
+            return
+        count = self._surface_counts.get(name, 0) + 1
+        self._surface_counts[name] = count
+        if count == 1:
+            self._log(f"first {name} on Settings since the reveal")
+
     def _qt_input(self, obj, event) -> None:
         if self._expired():
             return
-        self._log(f"first input delivered to Settings: {event.type().name}")
+        repaint = ", ".join(f"{name} x{count}" for name, count in sorted(self._surface_counts.items())) or "none"
+        self._log(f"first input delivered to Settings: {event.type().name} (repaint since reveal: {repaint})")
         self.disarm()
 
     def _native(self, event_type, message) -> None:
@@ -233,6 +253,8 @@ class RevealWatch:
             import shiboken6
             if self._window is not None and shiboken6.isValid(self._window):
                 self._window.removeEventFilter(self._qt_filter)
+            if self._widget is not None and shiboken6.isValid(self._widget):
+                self._widget.removeEventFilter(self._qt_filter)
             if sys.platform == "win32":
                 self._app.removeNativeEventFilter(self._native_filter)
         except RuntimeError:

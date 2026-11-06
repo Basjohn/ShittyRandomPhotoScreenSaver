@@ -777,6 +777,12 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
     the modal Studio is still shown.
   - Next field run: the `[STUDIO] after reveal` lines (`presence.RevealWatch`, one-shot, removed at the first input
     to Settings) name which window Windows sent the clicks to, and the state at each step. Fix the owner from them.
+  - Lead fix audit (7 Nov): this is the third round. 5 Nov (a4a6978d) fixed a real deadlock with real-Studio
+    tests. 6 Nov (2a3626f0, "re-expose so the layered window repaints") was proven only on a bare stand-in
+    window, and the freeze returned that night. The watch now also records Settings' first Expose, UpdateRequest
+    and Paint after the reveal, and the first-input line reports them ("repaint since reveal: none" is the
+    takes-input-but-never-repaints signature). Acceptance needs the operator's field log plus a fix proven on the
+    real SettingsDialog path, never a stand-in only.
 - [ ] **Per-session memory growth in the Studio (side defect, 6 Nov).** Process memory grows about 2-3 MB per
   offscreen Extruded Bubble session (private bytes and USS, 16 sessions). The growth is the same with and without the
   controller-leak fix, which `test_closed_studio_sessions_are_released_and_live_counts_stay_flat` guards: closed

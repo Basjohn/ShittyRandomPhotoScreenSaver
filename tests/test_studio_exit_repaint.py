@@ -344,6 +344,46 @@ def test_a_studio_exit_arms_a_one_shot_input_record_that_ends_with_the_first_inp
     assert "native_disabled=False" in lines[0] and "native_visible=True" in lines[0]
 
 
+def test_the_first_input_line_reports_whether_settings_repainted_since_the_reveal(probe, caplog):
+    """The 6 Nov re-expose fix was proven only on a bare window, and the freeze came back that night: the record must
+    say whether Settings repainted between the reveal and the first input, so the field log tells "input reached a
+    Settings that never repainted" apart from "input never reached Settings"."""
+    import logging
+    from PySide6.QtTest import QTest
+    window = probe(acrylic=True)
+    with caplog.at_level(logging.INFO):
+        controller, surface = _studio_session(window)
+        _leave(controller, surface, "close button")
+        watch = controller.presence.watch
+        window.dialog.update()
+        _pump()
+        centre = window.body.mapTo(window.dialog, window.body.rect().center())
+        QTest.mouseClick(window.window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre)
+        assert not watch.active
+    lines = [r.getMessage() for r in caplog.records if "after reveal" in r.getMessage()]
+    final = lines[-1]
+    assert "first input delivered to Settings: MouseButtonPress (repaint since reveal: " in final
+    assert "repaint since reveal: none" not in final, final
+    assert any("first UpdateRequest on Settings since the reveal" in line or "first Paint on Settings since the reveal"
+               in line for line in lines)
+
+
+def test_a_watch_that_saw_no_repaint_reports_none_negative_control(probe, caplog):
+    """Input with no repaint since the arm is reported as such (the freeze signature), not silently."""
+    import logging
+    from PySide6.QtCore import QEvent, QPointF
+    from PySide6.QtGui import QMouseEvent
+    from ui.studio.presence import RevealWatch
+    window = probe()
+    with caplog.at_level(logging.INFO):
+        watch = RevealWatch(window.dialog)
+        press = QMouseEvent(QEvent.Type.MouseButtonPress, QPointF(5, 5), QPointF(5, 5), Qt.MouseButton.LeftButton,
+                            Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+        watch._qt_input(window.dialog, press)
+    assert not watch.active
+    assert "repaint since reveal: none" in watch.records[-1]
+
+
 def test_input_elsewhere_does_not_end_the_record_negative_control(probe):
     """Only input that reaches Settings ends the record: a click on another window leaves it armed."""
     from PySide6.QtTest import QTest
