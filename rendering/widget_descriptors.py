@@ -1215,6 +1215,7 @@ def load_widget_sections(
         if loader is None:
             continue
         loader(owner, widgets_config)
+        _sync_surface_material_rows(owner, widgets_config)
         marker = getattr(owner, "_mark_widget_section_hydrated", None)
         section_id = getattr(descriptor, "section_id", None)
         if callable(marker) and section_id:
@@ -1236,10 +1237,20 @@ def load_widget_section(
     if loader is None:
         return False
     loader(owner, widgets_config)
+    _sync_surface_material_rows(owner, widgets_config)
     marker = getattr(owner, "_mark_widget_section_hydrated", None)
     if callable(marker):
         marker(descriptor.section_id)
     return True
+
+
+def _sync_surface_material_rows(owner: Any, widgets_config: Mapping[str, Any]) -> None:
+    """A loaded section's Surface Material row shows its stored value (shared row, one place)."""
+
+    if getattr(owner, "_surface_material_rows", None):
+        from ui.tabs.widget_surface_material_row import sync_surface_material_rows
+
+        sync_surface_material_rows(owner, widgets_config)
 
 
 def collect_widget_section_save_results(

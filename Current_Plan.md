@@ -135,18 +135,18 @@ context is valuable). Slots need not always be full: when the right agent is not
   `tools/surface_material_capture.py --sheets`). Lead review 6 Nov: accepted and merged. The read happens after the
   background in Qt's in-order pass (the background node is not depth-aware), GL state is saved and restored, a
   multisampled target or any failure leaves cards Normal. **Operator 6 Nov: "The dark looks good but light exposes
-  some legibility/shadow improvements for UX it should get"** - in progress (same agent): small grey text faint on
-  Glass/Frosted/Smoked over busy wallpaper (target >= 4.5:1 per text run against the local backdrop), light text
-  halos hazy over the blur, card edges that blend into the wallpaper; Normal pixel-identical, dark looks kept.
+  some legibility/shadow improvements for UX it should get"** - done (same agent), measured per text run against the
+  local backdrop: worst small-text contrast on the light theme Glass 2.11 -> 4.58, Frosted 2.64 -> 4.91, Smoked 2.70 ->
+  4.90, Acrylic 3.89 -> 4.89; soft halos dropped on materials; inner edge on light cards; Normal unchanged, dark
+  materials unchanged outside text runs (Card_Surface_Materials.md section 6; crops in
+  `legibility_compare/legibility_before_after.png`).
   Left:
   1. **Live check under the lead-scheduled game load**, materials on, a transition-heavy run, and Normal as the
      control.
-  2. **Operator's eyes on the looks:** tints, blur strength and the legibility layer, Glass's highlight and
-     refraction. The legibility shift follows the text: darker under light text, lighter under dark text on light
-     themes.
-  3. **Per-family Surface Material row** on each family page. The resolver already honours
-     `widgets.<id>.surface_material`, but no family declares the key in canonical defaults, so a page save would drop
-     it.
+  2. **Operator's eyes on the light-theme pass:** small text now holds 4.5:1 on every material through a per-run
+     legibility plate (it reads as a soft chip behind small muted text where the backdrop is busy), soft halos are
+     dropped on materials, and light cards get an inner hairline and highlight. The per-family Surface Material row
+     is built (every card family declares `surface_material: inherit`).
 - [~] **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent) - second
   pass done, awaiting operator eyes:** the mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`.
   Preset 9 (Deep Red Ocean) only; Presets 1-8 pixel-identical. Shared work, each dormant at 0: **Ember Grain**,
