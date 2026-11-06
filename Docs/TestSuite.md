@@ -86,6 +86,11 @@ at New, thin crescents, quarters and Full, separately from illuminated-only rim 
 `tests/test_neon_fidelity_controls.py` checks Depth Scale (near marks grow, far keep size), Shore Glow (stays
 on the shoreline, colour by alpha), Sun / Moon Path (water only, none without a body) and the wet fringe
 shining as water, through the production renderer.
+`tests/test_neon_water_layers.py` also proves the water's mirror shows only land, never the water's own rest level
+from a swell trough (all-water basin under heavy waves at a low view; negative control: counting water as land
+changes about 6% of pixels).
+`tests/test_neon_ridge_shape.py` keeps skyline ridges thin bands over near dunes (bloom off, every column's crest
+band at most 16 px; negative control: the rejected 2.35x near-ridge lift fails at 42 px).
 `tests/test_neon_visible_stars_and_horizon.py` also proves a lit beat star keeps its world direction when the
 camera later turns or tilts (negative control: choosing again from the new view lands it on different sky).
 `tests/test_neon_lake_camera_limits.py` pushes the loosened Neon camera (27 extreme turn/tilt/scale poses, four
