@@ -1290,6 +1290,7 @@ class StudioController(QObject):
         self._pose: dict[str, float] = {}
         self._unsubscribe = None
         self._clip_jobs: dict[str, Any] = {}
+        self._clip_analysis: dict[str, str] = {}   # clip id -> the analysis values its loaded inputs were made under
         self._clip_errors: dict[str, str] = {}
         self.evaluations = 0
         self.last_frame = None
@@ -1501,6 +1502,8 @@ class StudioController(QObject):
         self._invalidate()
         if not self.session.gesture_active:
             self.refresh_preset_previews()
+            if reason in ("commit", "undo", "redo", "hydrate"):
+                self._refresh_clip_analysis()
 
     # ------------------------------------------------------- preset tile previews
     def refresh_preset_previews(self) -> None:
@@ -1636,6 +1639,8 @@ class StudioController(QObject):
         if keys is None:
             deferred = getattr(self.evaluator, "release_only_keys", None)
             keys = frozenset(deferred(self.session.schema.keys)) if callable(deferred) else frozenset()
+            # A clip re-analysed for some keys (``clip_analysis_keys``) re-runs its worker once, on release.
+            keys |= self._clip_analysis_keys() & self.session.schema.keys
             self._release_only = keys
         return keys
 
@@ -1840,6 +1845,7 @@ class StudioController(QObject):
             self.bridge.clear_traces()
             self.bridge.transportChanged.emit()
             self.bridge.timeChanged.emit()
+        self._refresh_clip_analysis()
         self._invalidate()
 
     def clip_status(self, clip_id: str) -> str:
@@ -1849,7 +1855,36 @@ class StudioController(QObject):
             return "error"
         return "available"
 
-    def _load_clip(self, clip_id: str) -> None:
+    # ------------------------------------------------ recorded clips re-analysed for the analysis values
+    def _clip_analysis_keys(self) -> frozenset[str]:
+        """The values a recorded clip's analysis depends on, for a mode whose clip worker answers them
+        (``clip_analysis_keys``: Bubble, Extruded Bubble, Sphere: the Audio Analysis values)."""
+        keys = getattr(self.adapter, "clip_analysis_keys", None)
+        return frozenset(keys()) if callable(keys) else frozenset()
+
+    def _analysis_signature(self, values) -> str:
+        import json
+        keys = self._clip_analysis_keys()
+        return json.dumps({key: values.get(key) for key in sorted(keys)}, sort_keys=True, default=repr)
+
+    def _refresh_clip_analysis(self) -> None:
+        """The recorded clip on screen was analysed under other analysis values (an Audio Analysis edit, undo or
+        redo): analyse it again in the background; its previous inputs stay on screen until the new ones land."""
+        if not self._clip_analysis_keys() or self.evaluator is None or self.state not in ("opening", "presented"):
+            return
+        fixture = self.evaluator.fixture
+        clip_id = fixture.id
+        if not clip_id.startswith("clip:") or clip_id not in self._clip_analysis:
+            return
+        wanted = self._analysis_signature(self.session.committed_values)
+        if self._clip_analysis[clip_id] == wanted:
+            return
+        job = self._clip_jobs.pop(clip_id, None)
+        if job is not None:
+            job.cancel()
+        self._load_clip(clip_id, refresh=True)
+
+    def _load_clip(self, clip_id: str, *, refresh: bool = False) -> None:
         if clip_id in self._clip_jobs:
             return
         clip = next((c for c in self.adapter.recorded_clips() if c.id == clip_id), None)
@@ -1858,15 +1893,31 @@ class StudioController(QObject):
             self.bridge.notify("Recorded clips are not available for this mode")
             return
 
+        values = self.session.committed_values
+        signature = self._analysis_signature(values)
+
         def finished(result, error: str = "") -> None:
+            if self._clip_jobs.get(clip_id) is not job_ref[0] and job_ref[0] is not None:
+                return                                   # a newer analysis of this clip replaced this one
             self._clip_jobs.pop(clip_id, None)
             if self.state not in ("opening", "presented"):
                 return
             if error:
                 self._clip_errors[clip_id] = error
                 self.bridge.notify(f"Clip analysis failed: {error}", "Retry", lambda: self.retry_clip(clip_id))
+            elif refresh:
+                # The clip on screen, re-analysed for new analysis values: its new inputs replace the old at the
+                # same instant (the transport keeps its place).
+                self._clip_errors.pop(clip_id, None)
+                self._clip_analysis[clip_id] = signature
+                self.evaluator.add_recorded(result)
+                if self.evaluator.fixture.id == clip_id:
+                    self.evaluator.select(clip_id)
+                    self._invalidate()
+                self._refresh_clip_analysis()           # values edited again while it ran
             else:
                 self._clip_errors.pop(clip_id, None)
+                self._clip_analysis[clip_id] = signature
                 self.evaluator.add_recorded(result)
                 # Only the source last asked for (by the user, or the default while the user has asked for
                 # nothing) is selected when its analysis lands; any other landing load only becomes available.
@@ -1878,9 +1929,11 @@ class StudioController(QObject):
                         self.bridge.notify(self._source_notice)
             self.bridge.transportChanged.emit()
 
+        job_ref = [None]
         try:
-            job = loader(clip, self.session.committed_values, finished)
+            job = loader(clip, values, finished)
             if job is not None:
+                job_ref[0] = job
                 self._clip_jobs[clip_id] = job
         except Exception as exc:
             self._clip_errors[clip_id] = str(exc)

@@ -765,8 +765,14 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   (membership from the mode registry, controls from the canonical registries): spec entries, Custom-row keys,
   technical controls and the shared families, with their ranges, choices and conditions; preset-row actions; plain
   and Custom-row edits saved and reloaded through a never-shown `VisualizersTab`; conditional rows live; each body only
-  the preset row and launcher (Neon Lake keeps its terrain brush); Bar Count named by `draws_bars`; negative controls
+  the preset row and launcher; the terrain brush (pick through the production camera, one coalesced stroke saved
+  once, reload, exact Undo, sky / cancelled strokes save nothing); Bar Count named by `draws_bars`; negative controls
   per category;
+- `tests/test_studio_audio_analysis_response.py` — the DevCurve, Oscilloscope, Neon Lake (onset waves), Bubble, Extruded
+  Bubble and Sphere Studios react to Sensitivity, the fixed floor and Input Gain as the live engine does: their clip
+  workers' frames move on `ProductionLaneEngine` and stay bit-identical on the old recorded lanes (negative control),
+  the engine-answer workers equal the production replay on re-analysed lanes, and a bridge edit re-analyses the
+  selected clip and moves the frame on screen (without re-analysis it does not);
 - `tests/test_waveform_studio_framing.py` — the Studio opens on the live card's world (Fill), measured as production
   measures it;
 - `tests/test_waveform_studio_editors.py`, `tests/test_waveform_studio_theme.py` — direct editors, handles, tiles,
