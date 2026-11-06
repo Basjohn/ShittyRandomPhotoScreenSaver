@@ -273,7 +273,7 @@ The development machine is also the operator's only physical acceptance machine.
 Use the least intrusive surface that still proves the contract:
 
 1. no top-level window for pure model/signal/geometry tests;
-2. `QT_QPA_PLATFORM=offscreen` for tests that do not need the native GL/window-system path;
+2. `QT_QPA_PLATFORM=offscreen`, handed to the child process a test or tool launches (never exported into the operator's shell and never read by product code), for tests that do not need the native GL/window-system path. This and `tests/conftest.py`'s `APPDATA` / `LOCALAPPDATA` profile isolation are test isolation, not product flags (`Docs/TestSuite.md` §1);
 3. `tests._invisible_windows.keep_off_screen()` or `WA_DontShowOnScreen` for real native/GL windows that must be shown/exposed to initialize correctly;
 4. a deliberately visible/focused window only when real focus, OS input routing, taskbar/DWM behavior or physical pixels are the contract. Such tests belong in an explicit physical/operator gate, not a routine suite.
 

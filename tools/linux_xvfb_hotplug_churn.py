@@ -144,7 +144,7 @@ def main() -> int:
         lh.seed_profile(child_env, images, args.interval)
         entry = [str(args.entry)] if args.entry else ["main.py"]
         with (logs / "stdout.txt").open("w") as stdout:
-            app = subprocess.Popen([sys.executable, *entry, "/s", "--debug"], cwd=REPO, env=child_env,
+            app = subprocess.Popen([sys.executable, *entry, "/s", "--debug", lh.log_dir_arg(logs)], cwd=REPO, env=child_env,
                                    stdout=stdout, stderr=subprocess.STDOUT)
         watch = _LogWatch(logs / "screensaver_verbose.log")
         if not watch.wait_for(REVEALED.format(generation=0), 60.0):

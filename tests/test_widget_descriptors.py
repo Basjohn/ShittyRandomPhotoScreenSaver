@@ -971,7 +971,6 @@ def test_restore_all_widget_positions_to_application_defaults_resets_all_custom_
 
 
 def test_layout_edit_runtime_descriptors_capture_attr_and_resize_contract(monkeypatch):
-    monkeypatch.setenv("SRPSS_ENABLE_DEV", "true")
     descriptors = {item.widget_id: item for item in get_layout_edit_runtime_descriptors()}
 
     assert descriptors["clock"].attr_name == "clock_widget"

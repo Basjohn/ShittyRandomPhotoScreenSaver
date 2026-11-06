@@ -118,6 +118,8 @@ only in captures specifically testing those paths. `--viz-switch-telemetry` admi
 boundary telemetry without activating the A/B/C driver. `--gui-stall-stacks` requires
 `--frame-trace`. Full diagnostic logging is evidence collection, not a performance baseline.
 
+Three more opt-in admissions are parsed once at startup by `core/diagnostics/experiment_flags.py`, as `=` tokens that never reach RUN/CONFIG mode detection: `--log-dir=<path>` redirects the log root (a harness scratch folder; it is bound before `--fresh`, so a harness can never clear the operator's own logs), `--profile-cpu` wraps the CONFIG or RUN session in `cProfile` and writes `screensaver_config.pstats` / `screensaver_run.pstats` beside the logs, and `--mc-window-flags=splash` (hardware-ingress harnesses) gives the Media Center window the splash role. None of the retired `SRPSS_*` environment variables is read; frozen builds enable or relocate logging with the `<exe>.logging.cfg` / `<exe>.logdir.cfg` sidecar files.
+
 `--handle-attribution` implies `--usage` and captures Windows handle types, with an initial
 sample followed by a 60-second cadence outside Diagnostic. It does **not** capture Python
 strong reference edges. Failure-only `[LIFECYCLE_BARRIER][PYTHON_OWNER_REFS*]` capture is
