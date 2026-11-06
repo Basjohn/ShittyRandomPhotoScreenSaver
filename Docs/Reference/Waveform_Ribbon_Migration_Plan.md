@@ -86,10 +86,28 @@ constants); all state integrates on the sole logical clock and the projection on
   its leading edge with a stronger surge; like Travelling Pulse, its geometry and surge follow the fresh field: built
   from the long-fade field its peak-keeping set envelope pinned the swell at the soft bound over the view, 5 Nov
   Preset 7). Every mode obeys the flow rule and the no-twitch rules.
-- **Adaptive response gain.** Geometry drives are divided by a memory of their own recent peak (fast reach, slow
-  relaxation, a floor), so each song uses the whole authored Quiet→Peak ramp while a quiet passage after a loud one
-  stays quiet; the remembered peak lands below Peak, keeping headroom for accents. Light, colour and sparkle keep the
-  fixed calibrated anchors. The whole body's size (height, lift, width) follows the passage, not each beat; beats
+- **Fixed response (6 Nov; Adaptive Response is an opt-in).** Geometry drives are a fixed function of the routed
+  target on the real-music scale, the same for every song: `fixed_response` = gain x target^curve (`FIXED_RESPONSE`:
+  height and lift on the curve fitted to the remembered-peak gain's output quantiles on seven recordings back to back;
+  every other drive `FIXED_RESPONSE_DEFAULT`), eased above `RESPONSE_FIXED_KNEE` toward `RESPONSE_FIXED_CEILING` (.92,
+  as the remembered peak landed a sustained loud passage at .85). Each phrase is then widened about Breathing's
+  heard-only 3 s mean of the drive (`PHRASE_DIP` below it, `PHRASE_RISE` above it, eased again under the ceiling),
+  as the remembered peak's fast reach and slow release did; after real silence that mean rises up to
+  1/`PHRASE_SETTLE_MIN` times faster for `PHRASE_SETTLE` seconds (it still falls at the Breathing rate), so music that
+  returns louder than it left is not widened upward against the mean the break left behind (spliced breaks: the
+  following 10 s had grown 2-17%). Calibrated to main's VISIBLE behaviour, not hotter (lead
+  review 6 Nov rejected a hotter curve that pinned Pulse Strength, flattened passages and pushed crests out of the card).
+  Each target's Range (Quiet→Peak) maps the drive to size, so the Ranges are the authored reactivity. Nothing is remembered: a break, a loud chorus
+  or a quiet intro never re-scales what follows (operator, 6 Nov: "Adaptive is a very problematic approach"; guide 2A).
+  The former remembered-peak gain stays behind the **Adaptive Response** toggle (off in every preset); its peak now
+  learns only from heard music, so a break cannot lower it (it had sized the 10 s after a spliced 5 s break in Rag
+  Doll's loud end 5-9% up, Preset 4). Breathing's
+  phrase-scale mean learns only from heard music and holds through a break and the passage's return
+  (`BREATHING_HEARD_RETURN`); its contrast is not applied to a returning passage. **Kick Accent** (0..1, .7 in every
+  preset but Preset 4, which ships 0): when the bend drive has little headroom, the share of a kick the geometry cannot
+  show goes to an eased roll-speed nudge bounded at `KICK_ROLL_SHARE` of the roll's own speed (unbounded, dense kicks
+  overlapped into a ~2x spin) and spark births on the swell (`KICK_SENSE_*`, `KICK_ROLL`, `KICK_BIRTHS`). Light, colour and
+  sparkle keep the fixed calibrated anchors. The whole body's size (height, lift, width) follows the passage, not each beat; beats
   belong to the pulse. Measured in continuous play the gain is not what muted mid-song kicks (removing it lowers kick
   response 40-50% at every point of a song); the frame runtime's per-kind running-mean contrast was (below).
 - **Kick force in continuous play** (5 Nov). A typed onset's force follows its own unclipped magnitude (already
@@ -113,14 +131,22 @@ constants); all state integrates on the sole logical clock and the projection on
   pulse instead of flashing with the raw hit decay; swells land with a short rise, never a one-tick pop.
 - **Whole-ribbon floor lift.** When a ribbon's lower edge (its sheet hang, width × |cos twist|) would come within the
   floor clearance inside the view, that ribbon lifts as a whole, bounded, through two cascaded followers (quick up,
-  slow down). Shape is never changed; per-knot trough limits were rejected as boxy.
+  slow down). Shape is never changed; per-knot trough limits were rejected as boxy. The floor is cleared with height,
+  never by shrinking a reaction (operator, 6 Nov: "Better to have good reactivity than excessively avoid the floor").
+  **Top edge first, floor second** (lead review 6 Nov): the limit stays `TROUGH_LIFT_MAX` 1.5 (2 or 3 cleared the floor
+  but lifted crests out of the card's top), and with the card's top edge supplied (`core.waveform_ribbon_view.card_span`
+  returns it after the scene-axis span; `visible_top`) the lift never raises a crest (plus its sheet hang) within
+  `TOP_CLEARANCE` of it; a lift the top lowers eases down at `TROUGH_ATTACK`. Brief floor contact is accepted instead.
+  At 1282x1005 the top sits far above every crest, so the bound only acts on smaller cards. A swell-gain bound that kept
+  every trough clear was rejected: it cut peak kicks by up to a third. Gate: `tests/test_waveform_top_edge_first.py`.
 - **Dynamic Zoom** (opt-in, off by default): a sustained-level follower widens or narrows only the lens extents,
   frozen while the user operates the camera.
 
 Gates: `tests/test_waveform_energy_pulse.py`, `tests/test_waveform_reaction_modes.py`,
 `tests/test_waveform_pulse_coupling.py`, `tests/test_waveform_no_twitch.py`, `tests/test_waveform_trough_clearance.py`,
 `tests/test_waveform_dynamic_zoom.py`, `tests/test_waveform_ribbon_dynamics.py`, `tests/test_waveform_continuous_play.py`,
-`tests/test_waveform_breathing.py`, `tests/test_waveform_reaction_continuity.py` (quieter passage after a loud one,
+`tests/test_waveform_breathing.py`, `tests/test_waveform_fixed_response_and_kick_accent.py` (a 2-5 s break, Adaptive
+Response off remembers nothing, Kick Accent), `tests/test_waveform_reaction_continuity.py` (quieter passage after a loud one,
 Group Wave sets in sustained/soft passages) and `tests/test_waveform_tail_continuity.py` (test-owned controls; structure, never
 authored values). Probes: `tools/visualizer_replay/waveform_ribbon_breathing_probe.py` (continuous play: songs back to
 back without a reset; kick response by time in song and passage, breathing contrast, reach) and
