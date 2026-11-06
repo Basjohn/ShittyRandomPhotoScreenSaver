@@ -157,8 +157,10 @@ def _record_concealment_at_teardown(controller, surface, monkeypatch) -> list:
 MODES = sorted(entry.mode_id for entry in studio_modes())
 
 
-def test_the_registry_offers_the_operators_studios():
-    assert {"waveform_ribbon", "extruded_bubble", "bubble", "sphere", "spectrum"} <= set(MODES)
+def test_every_visualizer_mode_has_a_studio():
+    """Every registered Visualizer mode offers a Studio (Edit Preset was retired once the last one landed)."""
+    from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
+    assert {d.mode_id for d in iter_visualizer_mode_descriptors()} <= set(MODES)
 
 
 @pytest.mark.parametrize("mode", MODES)

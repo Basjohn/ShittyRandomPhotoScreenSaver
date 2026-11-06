@@ -105,6 +105,11 @@ class StudioEditSession:
         return merged
 
     @property
+    def preview_keys(self) -> frozenset[str]:
+        """The keys the live gesture holds a preview value for (what a preview change can have changed)."""
+        return frozenset(self._preview)
+
+    @property
     def committed_values(self) -> dict[str, Any]:
         return self._committed
 
