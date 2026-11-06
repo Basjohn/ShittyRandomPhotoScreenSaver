@@ -55,6 +55,13 @@ PULSE_ORIGIN = 44.          # world x of the edge origins: just beyond the view 
 # 44 a swell reached a +-16 view ~2 s after its beat with 5% of its fresh strength. Centre Out (born in view) and the
 # other modes (wider envelopes that already reach the view) are untouched; without a supplied span nothing changes.
 VIEW_MARGIN = 2.5
+# Pulse Rim reads the published field against one reference level (rendering/quick/scene3d/pulse_rim.REFERENCE), set
+# where a swell carries HALF the injected energy, as each Centre Out swell does (pulse_sources splits a release between
+# its sources). An edge swell carries all of it, and once seen at full strength its in-view field is twice Centre Out's
+# (6 Nov, recorded continuous play at +-16: peak p50 .42 vs .21, median .19 vs .10), which lit the rims at their ceiling
+# over 43% of the view. Such a swell publishes RIM_EDGE_SHARE of its level for the rim (peak .21, median .09: the same
+# response as Centre Out's). Centre Out and every swell still born at PULSE_ORIGIN publish the level itself.
+RIM_EDGE_SHARE = .5
 PULSE_RISE = .08             # seconds: a beat lands quickly (DevCurve: fast rise, gentle settle), never a one-tick pop
 PULSE_DIFFUSION = .35        # world units^2 per second: packets widen gently as they travel
 PULSE_SATURATION = 1.2       # soft bound of the sampled swell
@@ -137,7 +144,13 @@ RESPONSE_HOLD, HOLD_BELOW = 6., (.8, .7)
 # the world floor; a ribbon whose lower edge would come within TROUGH_CLEARANCE of it lifts as a whole (never reshaped),
 # by up to TROUGH_LIFT_MAX, easing up over TROUGH_ATTACK and down over TROUGH_RELEASE per stage (two stages).
 PACKET_FLOOR_HEIGHT, TROUGH_CLEARANCE, TROUGH_ROOM_MIN, TROUGH_LIFT_MAX = 2., .3, .4, 1.5
-TROUGH_ATTACK, TROUGH_RELEASE, TROUGH_VIEW = .15, 1.2, 32.  # the authored long lens sees ~±30 world units
+TROUGH_ATTACK, TROUGH_RELEASE, TROUGH_VIEW = .15, 1.2, 32.  # TROUGH_VIEW: the fallback view without a card span
+# With the card's visible span the floor lift reads only what the camera shows, plus TROUGH_LOOKAHEAD geometric-envelope
+# sigmas beyond each edge (see _trough_view), never wider than +-TROUGH_VIEW: a trough entering the view (or a swell
+# deepening one on its way in) is already lifted for. 6 Nov sweep on recorded continuous play: at 2.5 sigmas the lift
+# moved more and visible floor contact rose by up to .9 points (Preset 7); at 5 of the mode's own envelope sigmas (a
+# Group Wave set is 3.5 carrier wavelengths wide) it equals the fixed view's on every preset at a 1282x1005 card.
+TROUGH_LOOKAHEAD = 5.
 # Height Shift options (operator, 5 Nov). Static Height holds every ribbon at the highest safe point: the top of the shift
 # (TROUGH_LIFT_MAX), constant through every passage.
 # Tilt Shift: while the lift moves, the side the history travels toward leads by TILT_LEAD seconds of lift velocity
@@ -374,6 +387,7 @@ class WaveformDynamics:
         self._pulse_pending = 0.
         self._view_world = None  # (low, high) world x of the scene axis the framed camera shows (capture-supplied)
         self._seen = (None,None)  # cached (key, per-direction seen weights) for the age-once-seen fade
+        self._rim_share = 1.      # share of the appearance level published for Pulse Rim (RIM_EDGE_SHARE once seen)
         self._trough_stage,self._trough_lift,self._trough_time = np.zeros((RIBBON_CAPACITY,1)),np.zeros((RIBBON_CAPACITY,1)),None
         self._tilt_lead,self._tilt_time = np.zeros((RIBBON_CAPACITY,1)),None
         # Frozen Past on the cloth: memory, peak, previous swell, rising, and the Pulse Strength the passage was shaped with
@@ -635,6 +649,7 @@ class WaveformDynamics:
         self._pulse_pending -= release
         sigma = p.width/2.3548
         sources,seen = self._view_sources(p)
+        self._rim_share = 1. if seen is None else RIM_EDGE_SHARE
         shift = p.speed*dt
         blur = min(.24,PULSE_DIFFUSION*dt/(PULSE_DX*PULSE_DX))
         fades = (p.fade,min(p.fade,FRESH_FADE))
@@ -936,10 +951,31 @@ class WaveformDynamics:
         self._trough_time = self.time
         return self._trough_lift
 
+    def _trough_view(self,x):
+        """(knots the floor lift considers, the view's centre and half extent for Tilt Shift). With the card's visible
+        span (``view_span``) only what the camera shows, plus a lookahead of TROUGH_LOOKAHEAD geometric-envelope sigmas
+        beyond each edge so a trough (or a swell deepening one) entering the view is already lifted for, within the
+        former fixed +-TROUGH_VIEW (a large card's view reaches it); without a span exactly that fixed view."""
+        if self._view_world is None:
+            return np.abs(x)<TROUGH_VIEW,0.,TROUGH_VIEW
+        key = (self._view_world,self.direction)
+        cached = getattr(self,'_trough_span',None)
+        # One solve per controls (by identity: they are frozen and replaced on change) / span / direction change.
+        if cached is None or cached[0] is not self.controls or cached[1]!=key:
+            low,high = self._view_world
+            if self.direction < 0.:   # history axis -> world x is mirrored (Travel Direction)
+                low,high = -high,-low
+            waves = GROUP_WAVES if self.controls.pulse.mode=='Group Wave' else GEOM_WAVES   # the mode's own envelope
+            margin = TROUGH_LOOKAHEAD*self._blur_kernel(waves)[1]
+            cached = self._trough_span = (self.controls,key,(max(-TROUGH_VIEW,low-margin),min(TROUGH_VIEW,high+margin)))
+        low,high = cached[2]
+        return (x>low)&(x<high),.5*(low+high),.5*(high-low)
+
     def _height_shift(self,height,hang,room,x):
         """Per ribbon (and, with Tilt Shift, per knot) vertical offset that keeps lower edges off the floor."""
         static = TROUGH_LIFT_MAX if self.controls.height_mode=='Static Height' else None
-        lift = self._floor_room(height,hang,room,np.abs(x)<TROUGH_VIEW,static)
+        visible,centre,half = self._trough_view(x)
+        lift = self._floor_room(height,hang,room,visible,static)
         # Tilt Shift: the lift's velocity (its second stage follows the first, so it is continuous) sets a lead that
         # eases once more, so the tilt is smooth in velocity too. Switched off (or Static Height) the lead eases back to
         # zero rather than vanishing; a ribbon that never tilted keeps an exact zero lead (byte-identical body).
@@ -952,7 +988,7 @@ class WaveformDynamics:
         self._tilt_time = self.time
         if not self._tilt_lead.any():
             return lift
-        return lift+self._tilt_lead*np.clip(TILT_SIDE*x/TROUGH_VIEW,-1.,1.)
+        return lift+self._tilt_lead*np.clip(TILT_SIDE*(x-centre)/half,-1.,1.)
 
     def _advance_zoom(self,dt,enabled,hold):
         self._sustain = follower(self._sustain,self.passage,dt,ZOOM_SUSTAIN_ATTACK,ZOOM_SUSTAIN_RELEASE)
@@ -1107,5 +1143,5 @@ class WaveformDynamics:
         self._snapshot = HybridSnapshot(packet,self.time,self.travel,self.angle,self.angular_speed,self.twist_phase,
             tuple(self.drive.items()),tuple(values.items()),self.ready,passage=self.passage,
             head_x=self.controls.scene.flow.head_x,zoom=self.zoom,direction=self.direction,
-            pulse=self._level.astype(np.float32).tobytes())
+            pulse=(self._level if self._rim_share==1. else self._level*self._rim_share).astype(np.float32).tobytes())
         return self._snapshot

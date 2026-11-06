@@ -48,22 +48,24 @@ def test_devcurve_active_amplitude_exceeds_idle_amplitude():
         layer_settings=_layer_defaults(),
         passage_intensity=DEVCURVE_PASSAGE_USUAL,
     )
-    active = solve_devcurve_frame(
-        state,
-        dt=0.016,
-        now_ts=1.5,
-        playing=True,
-        energy_bands=EnergyBands(bass=0.75, mid=0.62, high=0.55, overall=0.70),
-        transient_bus=TransientEnergyBands(bass_transient=0.9, mid_transient=0.3, high_transient=0.2),
-        layer_shape_nodes=_layer_shapes(),
-        base_level=0.58,
-        motion_power=1.0,
-        idle_motion=0.2,
-        idle_speed=0.6,
-        smoothness=0.55,
-        layer_settings=_layer_defaults(),
-        passage_intensity=DEVCURVE_PASSAGE_USUAL,
-    )
+    # A few ticks of playing: the drives are velocity-continuous, so a hit's very first tick barely moves them.
+    for index in range(10):
+        active = solve_devcurve_frame(
+            state,
+            dt=0.016,
+            now_ts=1.5 + index * 0.016,
+            playing=True,
+            energy_bands=EnergyBands(bass=0.75, mid=0.62, high=0.55, overall=0.70),
+            transient_bus=TransientEnergyBands(bass_transient=0.9, mid_transient=0.3, high_transient=0.2),
+            layer_shape_nodes=_layer_shapes(),
+            base_level=0.58,
+            motion_power=1.0,
+            idle_motion=0.2,
+            idle_speed=0.6,
+            smoothness=0.55,
+            layer_settings=_layer_defaults(),
+            passage_intensity=DEVCURVE_PASSAGE_USUAL,
+        )
     assert active["active_amplitude"] > idle["active_amplitude"]
 
 

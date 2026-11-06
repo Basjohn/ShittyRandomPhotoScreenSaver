@@ -8,7 +8,7 @@ import pytest
 from widgets.spotify_visualizer.devcurve_runtime import (
     DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE,
     DEVCURVE_PASSAGE_USUAL,
-    DEVCURVE_SWING_RELEASE_S,
+    DEVCURVE_ACCENT_STAGE_S,
     DevCurveRuntimeState,
     solve_devcurve_frame,
 )
@@ -32,7 +32,7 @@ def _shapes():
 
 
 def _solve(state: DevCurveRuntimeState, *, now: float, energy: float, passage: float = DEVCURVE_PASSAGE_USUAL,
-           transient: float | None = None):
+           transient: float | None = None, loudness: float = 8.5):
     transient = energy if transient is None else transient
     return solve_devcurve_frame(
         state,
@@ -61,6 +61,7 @@ def _solve(state: DevCurveRuntimeState, *, now: float, energy: float, passage: f
         smoothness=0.55,
         layer_settings=_settings(),
         passage_intensity=passage,
+        loudness=loudness,
     )
 
 
@@ -78,26 +79,34 @@ def test_devcurve_travel_never_follows_the_beat():
     assert rates[0] == pytest.approx(DEVCURVE_MATERIAL_TRAVEL_CRUISE_RATE)
 
 
-def test_devcurve_height_rises_at_once_and_settles_gently():
-    """The reaction is the curves' height: a hit lifts it within a few frames, and once the hit
-    has gone it settles over the release (never in the ~50 ms the old per-frame blend fell in)."""
+def test_devcurve_height_rises_quickly_and_settles_gently_without_a_velocity_jump():
+    """The reaction is the curves' height: a hit (a flux spike on the bus) lifts it within a fraction of
+    a second and, once it has gone, it settles over the release (never in the ~50 ms the old per-frame
+    blend fell in). Two cascaded stages keep the height's velocity continuous: the first tick of a hit
+    moves far less than the fastest one (a single fast attack moved most on the very first tick: a twitch).
+    The hit rides the accents (fixed scale), so it lifts the height clearly above the body's level."""
+    attack, release = DEVCURVE_ACCENT_STAGE_S
     state = DevCurveRuntimeState()
-    for i in range(120):
-        _solve(state, now=50.0 + i * 0.016, energy=0.1)
-    rest = state.smooth_energy["bass"]
-    for i in range(8):                                   # a 130 ms hit
-        _solve(state, now=52.0 + i * 0.016, energy=1.2)
-    peak = state.smooth_energy["bass"]
-    assert peak - rest > 0.85 * (1.2 - 0.1)
+    for i in range(400):                                   # a steady bed
+        _solve(state, now=50.0 + i * 0.016, energy=0.6, transient=0.05, loudness=8.0)
+    rest = state.drive["bass"]
+    steps = []
+    for i in range(int(8 * attack / 0.016)):               # a hit, held long enough to land
+        before = state.drive["bass"]
+        _solve(state, now=57.0 + i * 0.016, energy=0.6, transient=0.9, loudness=12.0)
+        steps.append(state.drive["bass"] - before)
+    peak = state.drive["bass"]
+    assert peak - rest > 0.2
+    assert steps[0] < 0.25 * max(steps)                     # no velocity jump where the hit starts
+    assert sum(steps[: int(4 * attack / 0.016)]) > 0.6 * (peak - rest)
     held = []
-    for i in range(int(DEVCURVE_SWING_RELEASE_S / 0.016)):
-        _solve(state, now=53.0 + i * 0.016, energy=0.1)
-        held.append(state.smooth_energy["bass"])
-    # After one release time a third of the hit remains (an exponential settle), and no frame
-    # drops more than its share of a gentle settle.
-    assert held[-1] - rest == pytest.approx((peak - rest) / math.e, rel=0.05)
+    for i in range(int(release / 0.016)):
+        _solve(state, now=58.0 + i * 0.016, energy=0.6, transient=0.05, loudness=8.0)
+        held.append(state.drive["bass"])
     drops = [a - b for a, b in zip([peak, *held], held)]
-    assert max(drops) <= (peak - rest) * 0.016 / DEVCURVE_SWING_RELEASE_S + 1e-9
+    assert drops[0] < 0.25 * max(drops)                     # the settle starts gently too
+    assert max(drops) < 0.5 * max(steps)                    # it falls more gently than it rose
+    assert held[-1] - rest > 0.3 * (peak - rest)            # and lingers through one release time
 
 
 def test_devcurve_material_position_integrates_smoothed_rate_without_rephasing():
