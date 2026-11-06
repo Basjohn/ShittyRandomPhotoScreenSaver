@@ -626,6 +626,33 @@ Each foundation slice adds what it learned here.
 - Judge regional colour over several moments of a recording, never one frame: single frames swung warm share by 2x
   as populations moved.
 
+**Lit Glass, Stream Lanes, Ember Band, Hero Shell (EB deep red ocean, second pass, 2026-11-06)**
+- Size a shell's rim in screen pixels in from the silhouette, `(1 - sqrt(1 - facing^2)) * radiusPx`, never as a
+  band of the facing cosine: a facing band of `k / radiusPx` is about `k^2 / (2 radiusPx)` px wide, sub-pixel on a
+  large shell, and read as a dotted hairline.
+- A lit shell in a field of embers reads as glass by what it mirrors: a crisp pale line plus a string of seeded hot
+  points just inside it (one per ~9 px of circumference, more on the light side) and sparse points on the face. A
+  brighter or wider Fresnel band alone read as a golden marble; filling the interior read as amber.
+- Light added on top of OIT glass (`sceneTransparent(rgb * alpha + light, alpha)`) brightens without adding coverage:
+  the weighted average returns it exactly where one layer covers the pixel.
+- Glitter is a broad glint on tiny beads: the bead glint's lobe exponent at 2-4 px is a few units, so it fills the
+  bead. A lit-glass mode attenuates that glint (a multiplier that is exactly 1.0 at 0, bit-identical) and draws a
+  ring instead; the stream then reads as micro-bubbles.
+- In the near (defocus) layer drop the fine detail and widen lines by the lens circle, but keep the hot points: the
+  lens spreads them into the bokeh discs a defocused lit shell shows. Fine sharp lines in that low-resolution layer
+  stair-step.
+- Shared paths again: gathering chains into lanes, gathering ordinary births and banding the dust all use one axis
+  (the stream's Source -> End midpoint along the stream). Author the band by moving that path, then project it
+  through the preset's camera before rendering.
+- Gathering a population off its inlet faces starts members mid-water: give them a fade over a share of their run
+  (beads: a fifth; shells already fade in from alpha 0), never the wall fade's few radii.
+- A mask that confines a glow to a band removes it from places the goal still lights (embers caught in the beams
+  near the light): let the light's own lobe reopen it, or the shaft corner loses its glitter.
+- Concentrating a population raises local density by the inverse of the kept spread: re-author counts after
+  gathering (P9's small bubbles 110-130 -> 40-60), or the band reads as a crowd.
+- Comparisons of the same inputs on EB are not bit-exact (weighted OIT over thousands of micro-glass fragments):
+  tests compare within its noise floor (max 2 levels, under 1e-4 of pixels), measured, never zero.
+
 ## Operator-triggered appearance review (reference checklist)
 
 Automated image differences are not aesthetic acceptance. Previously implemented work is operator-accepted; use the following reference checks **only if** a newly observed regression or new transition tranche requires targeted appearance review:

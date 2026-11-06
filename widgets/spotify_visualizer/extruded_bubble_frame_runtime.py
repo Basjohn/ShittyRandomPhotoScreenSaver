@@ -62,6 +62,7 @@ def controls_from_parameters(parameters) -> ExtrudedBubbleControls:
         doublets=float(parameters["extruded_bubble_doublets"]),
         wake_trails=float(parameters["extruded_bubble_wake_trails"]),
         columns=float(parameters["extruded_bubble_columns"]),
+        stream_lanes=float(parameters.get("extruded_bubble_stream_lanes", 0.0)),
         bubble_spread=float(parameters["extruded_bubble_bubble_spread"]),
         emission_geometry=str(parameters.get("extruded_bubble_emission_geometry", "BEAM")),
         surface_scene=str(parameters["extruded_bubble_light_type"]) == "Sunlit Surface",

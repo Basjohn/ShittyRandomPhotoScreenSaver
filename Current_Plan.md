@@ -138,14 +138,21 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
   5. **Acceptance plan:** offscreen sheets on real wallpapers per material and theme, transitions mid-flight, cost
      against the overhead baseline (control-relative), and a live check under the lead-scheduled game load. Then
      rewrite the Contracts/Spec/guide passages as a superseded decision, not an overwrite.
-- [~] **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent) - awaiting
-  operator eyes:** the mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`. Preset 9 (Deep Red
-  Ocean) is new; Preset 7 is untouched (pixel-identical, as are Presets 1-8). Shared work: **Ember Grain** (Water) breaks
-  the dust clouds into burning grit, strands and sparks (0 = the previous look, verbatim). Water, shafts and ember
-  colour now measure close to the mock region by region; still short: the mock's dense lit glass micro-bubbles and
-  bright copper rims along the streams (ours read dimmer and sparser), embers also drift into the dark top-middle, and
-  the bokeh giant appears only when the simulation brings a bubble near the lens. Details, numbers and cost:
-  Extruded_Bubble/Investigation.md §72; evidence `.artifacts/evidence/extruded_bubble/deep_red_ocean_20261106/`.
+- [~] **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent) - second
+  pass done, awaiting operator eyes:** the mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`.
+  Preset 9 (Deep Red Ocean) only; Presets 1-8 pixel-identical. Shared work, each dormant at 0: **Ember Grain**,
+  **Ember Band** (Water), **Lit Glass** (Glass), **Stream Lanes**, **Wake Tint** (Bubbles), **Hero Shell** with Hero
+  Across/Height (Lens). Shells now read as lit glass, micro-bubbles as glass beads in lanes, the band runs where the
+  mock's does and the top-middle is dark. Still short: shells paler and smoother inside than the mock's copper,
+  busy-interior glass, and too many crowded together; embers partly along-stream strokes rather than torn debris; the
+  lower right far too busy (the mock's band fades out there); the shaft corner lacks its bright glittering core; the
+  Hero Shell reads as a soft ring rather than a shell full of bokeh discs; faint surface ripples at the top. Details,
+  numbers, reactivity and cost: Extruded_Bubble/Investigation.md §72-73; evidence
+  `.artifacts/evidence/extruded_bubble/deep_red_ocean_pass2_20261106/`.
+- [ ] **Side defects found in the deep red ocean pass (6 Nov):** `tools/release_media.py` renders EB presets without
+  their `starting_view` (the replayed config already carries a live pose, so the preset's view is not applied): the
+  P9 showcase WebP frames differently from the preset as selected (pass 1's showcase had it too); and the near
+  (defocus) layer stair-steps the rim of a large near shell on some frames (seen with Lit Glass off as well).
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
