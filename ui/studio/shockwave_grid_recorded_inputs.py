@@ -20,7 +20,7 @@ MODE = "shockwave_grid"
 # Terrain Reaction (a mode-owned switch and amounts) reads these only while it is on; recorded every tick so turning
 # it on in the Studio replays from the record (``_capture_shockwave_grid``).
 NEON_LAKE = engine_answers.EngineAnswerMode(
-    MODE, conditional_reads=("get_musical_level", "get_pre_agc_analysis_spectrum"))
+    MODE, conditional_reads=("get_musical_level", "get_pre_agc_analysis_spectrum"), production_lanes=True)
 
 
 def extract(source: str | Path, settings: Mapping[str, Any], **options) -> dict:

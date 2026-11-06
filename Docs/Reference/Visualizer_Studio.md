@@ -121,6 +121,22 @@ is optional and defaults to "not offered":
   split is proven in both directions on the production replay; it is derived, not listed: engine-owned are the
   mode's keys the production source projection hands the engine (the Spectrum source keys and the technical
   analysis), mode-owned everything else the mode stores (spec controls, Custom rows, shared bar and rainbow families).
+  A mode whose step reads the engine's lanes beyond its shaped bars (`EngineAnswerMode.production_lanes`: DevCurve,
+  Oscilloscope, Neon Lake) records on `feature_replay.ProductionLaneEngine`: every lane, the transient bus, its onsets
+  and events, the musical level and intensity and the analysis spectrum re-analysed from the clip's PCM through the
+  production DSP under the edited values, so Sensitivity, the floors, Gain and Block Size move these Studios as they
+  move the live engine (the others' shaped bars were always re-shaped from the PCM). Recorded clips only: a synthetic
+  fixture keeps its authored lanes, since its held Quiet / Mid / Peak levels and scripted hits are references the
+  production DSP's own normalisation would flatten (measured 6 Nov: a quiet bed reads at full scale, and the
+  transient fixture's isolated kick no longer reaches DevCurve's accents). Its frames equal the production
+  replay on re-analysed lanes tick for tick (`tests/test_studio_audio_analysis_response.py`, with the old
+  recorded-lanes path as the negative control). Scale caveat: one analysis block per 11 ms tick, where live analyses
+  every capture callback, so absolute levels approximate. Worker cost (6 Nov, the three shipped 12 s clips, frozen
+  settings, best of two, Ryzen 9 5900X at ~12% load; recorded lanes -> production lanes): DevCurve 9.9 -> 11.0 s
+  (+11%), Oscilloscope 3.8 -> 5.1 s (+35%), Neon Lake 5.8 -> 8.2 s (+41%), Bubble 10.1 -> 12.3 s (+22%), Extruded
+  Bubble 4.2 -> 5.2 s (+25%), Sphere 2.0 -> 3.9 s (+100%, about 1.3 s a clip). A re-analysis runs once per release.
+  DevCurve normalises its body to the song, so Sensitivity / floor / Gain move its picture only subtly, as live
+  (evidence `.artifacts/evidence/studio_completion_20261106/audio_analysis/`).
   Synthetic fixtures of such a mode are generated *audio* through the same worker, so engine-owned edits stay
   truthful for them too; each synthetic frame carries what a recording carries: its audio's analysis spectrum (the
   live engine's band math), the score's hits as the transient bus's onsets, and the loudness on the real-music scale
@@ -131,11 +147,9 @@ is optional and defaults to "not offered":
   musical level and intensity, the source frame), so it uses the same recorded engine answers: the worker records
   everything the engine answered the whole production `logical_tick`, and `EngineAnswerEvaluator._step` runs what
   `logical_tick` runs, the mode's hook included, between `consume_engine_bars` and the capture. Engine-owned are the
-  technical (audio analysis) values; this replay serves the clip's *recorded* pre-AGC and transient lanes, so most of
-  them leave its lanes unchanged here although the live engine answers every one (Sensitivity, the floors, Gain,
-  Block Size and Clamp all move DevCurve's frame when the lanes are re-analysed from PCM: `Docs/Reference/
-  Visualizer_Reference.md` → Audio Analysis controls per mode; `Current_Plan.md` §9 records the Studio gap), and the
-  split is still proven both ways (`tests/test_devcurve_studio.py`). Its schema follows
+  technical (audio analysis) values, each re-analysed from the clip's PCM (production lanes, above), so every offered
+  one moves DevCurve's frame here as live (`Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per
+  mode); the split is proven both ways (`tests/test_devcurve_studio.py`). Its schema follows
   DevCurve's Settings buckets: Layers (Settings' Shaper: one group per layer with its Custom-row values, the
   shape-editor nodes, Add / Remove Node and Settings' stack re-ranking as `follow`), Motion & Swell (Core and the
   analysis) and Foreground & Ghost (with the rainbow). Each layer group traces that layer's **Body** (over its body
@@ -154,14 +168,22 @@ is optional and defaults to "not offered":
   tick. `StepState` shares the recorded arrays instead of copying them, so a rewound step still holds the object the
   view serves. Without a pool an array answer is still refused, so a mode whose answers hold no arrays records
   exactly as before. A shipped clip: about 830 distinct 4096-sample histories (13.6 MB sidecar), 7.6 MB of answer
-  JSON, about 0.1 s to load. Engine-owned are the technical values (this replay serves recorded lanes, so only Bar Count and
-  the noise floor change an answer here; live, every offered one moves Flare and Drive: see the DevCurve note above);
+  JSON, about 0.1 s to load. Engine-owned are the technical values (re-analysed from the PCM: every offered one moves Flare
+  and Drive, as live);
   every `osc_*` key is mode-owned. Workspaces follow the buckets: Trace (Display), Beam & Screen,
   Reaction (with the analysis). Traces, read from the frame on screen (`OscilloscopeStudioEvaluator.measurements`):
   **Level** (the live trace's swing in its display's own units), **Afterglow** (the newest afterglow trace's
   brightness against a fresh one) and **Ghosts** (held traces against the capacity), **Flare**, **Drive**, **Tone**;
   the transport overview is the recorded loudness (`EngineAnswerEvaluator.timeline_measure`). No value is a true
   interval: every slider is one scalar.
+- **Recorded-input modes re-analyse a clip for the Audio Analysis values (Bubble, Extruded Bubble, Sphere).** Their
+  clip workers replay on `ProductionLaneEngine` (the events they record are those the production scheduler accepted,
+  `feature_replay.fed_events`) and their adapters name the values a clip's analysis depends on
+  (`clip_analysis_keys`: the mode's offered technical keys; clip caches are keyed by them). After a commit, undo or
+  redo that changes them, the controller analyses the clip on screen again in the background
+  (`StudioController._refresh_clip_analysis`); the previous inputs stay on screen until the new ones land at the same
+  instant, and those keys' sliders update on release. Synthetic and held fixtures are authored lanes in every mode
+  and do not react to Audio Analysis (the engine-answer modes' note above says why).
 - **Exact replay without a stall (`ui/studio/exact_replay.py`).** The engine-answer evaluators and Waveform's share
   one mechanism, `ExactReplay`. Such an evaluator never re-configures its controller for a mode-owned edit:
   `replay_engine.StepState` captures the production step state (controller, logical tick state, presentation state

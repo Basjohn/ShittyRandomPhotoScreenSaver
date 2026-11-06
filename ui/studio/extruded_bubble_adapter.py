@@ -743,6 +743,11 @@ class ExtrudedBubbleStudioAdapter(StudioModeAdapter):
     # do not depend on EB's authored controls, so reopening the Studio does not re-run the analysis.
     _clip_cache: dict = {}
 
+    def clip_analysis_keys(self) -> frozenset[str]:
+        """The values a recorded clip is re-analysed for (the controller re-runs the worker when they change)."""
+        from ui.studio.technical import technical_keys
+        return technical_keys(MODE)
+
     @staticmethod
     def _clip_key(clip: StudioFixture, values: Mapping[str, Any]) -> str:
         import json

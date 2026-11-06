@@ -45,7 +45,7 @@ from ui.studio.technical import TECHNICAL_GROUP, admit_technical, technical_prop
 
 MODE = "devcurve"
 PREFIX = "devcurve_"
-DEVCURVE = EngineAnswerMode(MODE)
+DEVCURVE = EngineAnswerMode(MODE, production_lanes=True)
 ACTIVE_LAYER = PREFIX + "active_layer"
 RAINBOW_GROUP = "Rainbow"
 ADD_NODE = "devcurve.add_node."            # + layer

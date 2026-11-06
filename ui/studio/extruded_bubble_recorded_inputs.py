@@ -2,12 +2,13 @@
 
 Runs in a *separate process* (``python -m ui.studio.extruded_bubble_recorded_inputs``), like the Waveform worker
 (``waveform_recorded_inputs``, whose event-driven ``ClipLoadJob`` launches this one): the production offline replay
-(``widgets.spotify_visualizer.feature_replay``: ``ReplayBeatEngine`` + ``PcmReanalysis`` + ``logical_tick``) pins
-the process clocks and builds its own runtime controller, so the Studio never runs it inside the app.
+(``widgets.spotify_visualizer.feature_replay``: ``ProductionLaneEngine`` + ``logical_tick``) pins the process clocks
+and builds its own runtime controller, so the Studio never runs it inside the app.
 
-EB reads its own fixed-scale body feed (``get_extruded_bubble_body_bands``). Recordings carry no raw lanes, so the
-replay engine serves EB the recorded shared feed unless the PCM is reanalysed; this worker reanalyses every frame's
-native PCM and serves EB the production engine's own feed from it (what the EB recorded-reactivity gates do). Every
+EB reads its own fixed-scale body feed (``get_extruded_bubble_body_bands``) and the transient bus's onsets.
+Recordings carry no raw lanes, so ``ProductionLaneEngine`` reanalyses every frame's native PCM under the settings'
+Audio Analysis values and answers EB from the production engine's own feed and onsets (what the EB
+recorded-reactivity gates do), so Sensitivity, the floors and Gain move EB as they do live. Every
 keyword input the production capture passes to ``ExtrudedBubbleFrameRuntime.advance`` is recorded with a digest of
 the frame the production capture built from it, so the Studio's evaluator can be proven to reproduce it.
 """
@@ -41,24 +42,26 @@ def frame_digest(frame) -> str:
     return digest.hexdigest()
 
 
-def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: float | None = None) -> dict:
+def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: float | None = None,
+            features=None) -> dict:
+    """``features``: already-loaded feature frames instead of ``clip_path`` (tests)."""
     from unittest.mock import patch
     from PySide6.QtGui import QGuiApplication
     from widgets.spotify_visualizer import logical_frame_capture
-    from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
     from widgets.spotify_visualizer.extruded_bubble_frame_runtime import ExtrudedBubbleFrameRuntime
     from widgets.spotify_visualizer.compact_clip import load_feature_clip
     from widgets.spotify_visualizer.feature_replay import (
-        PcmReanalysis, ReplayBeatEngine, configure_offline_controller, deterministic_clock,
+        ProductionLaneEngine, configure_offline_controller, deterministic_clock,
     )
     from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
     from widgets.spotify_visualizer.tick_pipeline import logical_tick
 
     if QGuiApplication.instance() is None:
         raise RuntimeError("extract() needs an existing QGuiApplication (main() creates one)")
-    clip = load_feature_clip(clip_path)
-    origin_us = clip.frames[0].timestamp_us
-    frames = [f for f in clip.frames if seconds is None or (f.timestamp_us - origin_us) / 1e6 <= seconds]
+    if features is None:
+        features = load_feature_clip(clip_path).frames
+    origin_us = features[0].timestamp_us
+    frames = [f for f in features if seconds is None or (f.timestamp_us - origin_us) / 1e6 <= seconds]
     if any(f.capture_history is None for f in frames):
         raise RuntimeError("EB replay needs native PCM history on every frame; re-record the clip")
     records: list[dict] = []
@@ -84,13 +87,10 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
 
     resolved = dict(settings)
     resolved["mode"] = MODE
-    reanalysis = PcmReanalysis()
     with patch.object(ExtrudedBubbleFrameRuntime, "advance", recording), \
             patch.dict(logical_frame_capture._BUILTIN_MODE_CAPTURE, {MODE: capturing}), \
-            patch.object(ReplayBeatEngine, "get_extruded_bubble_body_bands",
-                         _SpotifyBeatEngine.get_extruded_bubble_body_bands), \
             deterministic_clock() as clock:
-        engine = ReplayBeatEngine(32)
+        engine = ProductionLaneEngine(32)
         controller = VisualizerRuntimeController(runtime_generation=0, initial_mode=MODE,
                                                  engine_factory=lambda _: engine)
         controller.engine = engine
@@ -101,7 +101,6 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
                 controller.playing = feature.playing
                 engine.set_playback_state(feature.playing)
                 engine.accept_feature_frame(feature)
-                reanalysis.accept(engine, feature)
                 logical_tick(controller.logical_tick_state)
         finally:
             engine.force_stop()

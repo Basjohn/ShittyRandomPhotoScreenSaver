@@ -15,6 +15,19 @@ _NOTE = ("Live audio analysis for this mode (Settings' Technical controls). The 
          "analysis; recorded clips are re-analysed with these values.")
 
 
+def technical_keys(mode_id: str) -> frozenset[str]:
+    """The storage keys of the mode's offered technical (Audio Analysis) controls."""
+    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
+    return frozenset(_storage_key(mode_id, defn) for defn in _control_defs_for_mode(mode_id))
+
+
+def clip_analysis_key(clip, mode_id: str, values) -> str:
+    """A recorded clip's analysis cache key: the clip and the mode's Audio Analysis values it was analysed under."""
+    import json
+    keys = sorted(technical_keys(mode_id))
+    return clip.description + "|" + json.dumps({key: values.get(key) for key in keys}, sort_keys=True, default=repr)
+
+
 def technical_properties(mode_id: str, *, workspace: str, group: str = TECHNICAL_GROUP,
                          note: str = _NOTE) -> dict[str, tuple[StudioProperty, Any]]:
     """storage key -> (Studio property, Settings' control definition), in Settings' order."""
