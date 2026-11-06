@@ -140,12 +140,67 @@ BREATHING_REACH, BREATHING_CONTRAST, BREATHING_LOUD, BREATHING_BASE = .75, 1.5, 
 # rises with the sustained level at once and relaxes with the memory, so a song that stays softer is re-normalised
 # over minutes. Sustained music, and Breathing 0, keep RESPONSE_MEMORY exactly.
 RESPONSE_HOLD, HOLD_BELOW = 6., (.8, .7)
+# Silence must not teach a running level (guide 2A). Breathing's phrase-scale mean learns at the rate of BREATHING_HEARD,
+# which drops to 0 with the musical weight at once and returns over BREATHING_HEARD_RETURN seconds: through a break and
+# the passage's own return (the shared passage level climbs back over about a second) the mean holds, so the music's
+# return is not swelled against a mean that fell with the silence.
+BREATHING_HEARD_RETURN = 1.5
+# Fixed response (Adaptive Response off, operator 6 Nov: "Adaptive is a very problematic approach"; guide 2A: never
+# learn a level from the track). Each geometry drive's routed target is already on the fixed real-music scale (BAND_SPAN,
+# PASSAGE_SPAN, ENERGY_SPAN); its drive target is gain x target^curve, eased above RESPONSE_FIXED_KNEE toward 1, the same
+# for every song, and the Ranges map it to size. Nothing is remembered, so a break, a loud chorus or a quiet intro never
+# re-scales what follows. Fitted to the remembered-peak gain's VISIBLE behaviour, not hotter (lead review 6 Nov: a hotter
+# curve pinned Pulse Strength, flattened passages and pushed crests out of the card): on seven long recordings back to
+# back (chain7) the quantiles of the adaptive output paired with the routed target's are gain x t^curve within .005-.014
+# rms; height and lift (the body's size) fit 1.17-1.20 x t^.75-.82, every other drive 1.24-1.32 x t^.86-.91. Above
+# RESPONSE_FIXED_KNEE the drive eases toward RESPONSE_FIXED_CEILING, as the remembered peak landed a sustained loud
+# passage at .85: with an easing toward 1 the crests of loud passages topped the card on 2-6% of frames where main did
+# on .8-2.9% (lead review captures, 640x560).
+FIXED_RESPONSE = {'height':(1.2,.75),'lift':(1.2,.82)}
+FIXED_RESPONSE_DEFAULT, RESPONSE_FIXED_KNEE, RESPONSE_FIXED_CEILING = (1.12,.86), .8, .92
+# The remembered peak's fast reach (.5 s) and slow release (30 s) also widened every phrase: a swell overshot before the
+# peak caught up and the moments after it were scaled down. A static curve fitted to its levels kept 85-91% of its 3 s
+# contrast; the fixed response widens a phrase about Breathing's 3 s mean of the drive (which learns only from heard
+# music) by PHRASE_DIP below it and PHRASE_RISE above it, eased again under RESPONSE_FIXED_CEILING. With the fitted
+# gain (1.25) and a rise of 1.5 Pulse Strength sat high in the knee through sustained loud passages (its 3 s contrast
+# 92% of main's, Preset 7's view contrast 99.5%); the other drives' gain sits at 1.12 (still on the fitted curve's
+# shape) and phrases rise by 2 (chain7: 3 s view contrast 103-105% of main on Presets 1/3/4/7 at both card sizes,
+# Pulse Strength contrast 98% / 105% (Preset 4), above .9 in loud passages 8% against main's 10-15%).
+PHRASE_DIP, PHRASE_RISE = 1., 2.
+# The phrase mean holds through a break (it learns only from heard music), so music that came back louder than it left
+# was widened upward against the mean the silence left behind (spliced 2-5 s breaks in recorded music: the following
+# 10 s 2-17% larger than the unbroken clip; without the widening 0-4%). After real silence (the musical weight under
+# PHRASE_SILENCE; `_settled` falls over PHRASE_SETTLE_DROP and comes back over PHRASE_SETTLE) the mean RISES up to
+# 1/PHRASE_SETTLE_MIN times faster, so it catches up with the louder music, and it still falls at BREATHING_BASE, so
+# the passage's own quieter return is not learnt (6 Nov: the following 10 s -7..+9% of the unbroken clip on Presets
+# 1/7 against main's +4..+10%, -5..+5% on Preset 4). Continuous music keeps settled at 1 (BREATHING_BASE exactly).
+PHRASE_SETTLE, PHRASE_SETTLE_DROP, PHRASE_SILENCE, PHRASE_SETTLE_MIN = 8., .5, .1, .1
+# Kick Accent (operator 6 Nov: "many sustained kicks ignored (consider maybe increasing particle count at the sustained
+# points or rotation speed? Something for a sense of them?)"). In a sustained loud passage the geometry has little
+# headroom: the bend drive (it sets Pulse Strength) sits near its top, so a kick's swell barely rises above the swells
+# already in view (rise above the pre-kick view on recorded continuous play: P7 .05-.17 against a peak of 2.4-3.0). The
+# share of an admitted kick the geometry cannot show goes to channels that do not fight the shape: an eased roll-speed
+# nudge (KICK_ROLL degrees per second per unit, in the roll's own direction; two stages, KICK_SENSE_ATTACK /
+# KICK_SENSE_RELEASE, so the roll's speed stays continuous) bounded at KICK_ROLL_SHARE of the roll's own speed, so dense
+# kicks never add up to a faster spin (lead review 6 Nov: unbounded it averaged 2x the roll in loud songs), and up to
+# KICK_BIRTHS sparks born on the swell. The share is
+# the kick's strength on the fixed reward scale (1 - exp(-reward / KICK_SENSE_REF): granular, never a clamped
+# confidence; the reward already carries the onset's musical weight, so silence buys none) x how far bend sits above
+# KICK_SENSE_KNEE x Kick Accent. A passage with headroom is unchanged.
+KICK_SENSE_KNEE, KICK_SENSE_REF, KICK_ROLL, KICK_BIRTHS, KICK_ROLL_SHARE = .55, .15, 45., 4., .15
+KICK_SENSE_HOLD, KICK_SENSE_ATTACK, KICK_SENSE_RELEASE = .05, .07, .25
 
 # Floor clearance (operator, 5 Nov; see WaveformDynamics._floor_room): the packet origin sits PACKET_FLOOR_HEIGHT above
 # the world floor; a ribbon whose lower edge would come within TROUGH_CLEARANCE of it lifts as a whole (never reshaped),
 # by up to TROUGH_LIFT_MAX, easing up over TROUGH_ATTACK and down over TROUGH_RELEASE per stage (two stages).
 PACKET_FLOOR_HEIGHT, TROUGH_CLEARANCE, TROUGH_ROOM_MIN, TROUGH_LIFT_MAX = 2., .3, .4, 1.5
+# The limit stays 1.5 (lead review 6 Nov): with swells at the adaptive gain's visible size a limit of 2 or 3 cleared the
+# floor (contact 7% -> .3% on Preset 4) but lifted crests toward the card's top (top edge p99 +.4 to +1.3 world units);
+# the operator ranks reactivity over floor avoidance, and a clipped crest over brief floor contact.
 TROUGH_ATTACK, TROUGH_RELEASE, TROUGH_VIEW = .15, 1.2, 32.  # TROUGH_VIEW: the fallback view without a card span
+# Top edge first, floor second (lead review 6 Nov: crests out of the card's top are worse than brief floor contact).
+# With the card's top edge supplied (core.waveform_ribbon_view.card_span) the floor lift stops TOP_CLEARANCE below it.
+TOP_CLEARANCE = .3
 # With the card's visible span the floor lift reads only what the camera shows, plus TROUGH_LOOKAHEAD geometric-envelope
 # sigmas beyond each edge (see _trough_view), never wider than +-TROUGH_VIEW: a trough entering the view (or a swell
 # deepening one on its way in) is already lifted for. 6 Nov sweep on recorded continuous play: at 2.5 sigmas the lift
@@ -221,6 +276,21 @@ def span(value, low, high):
     if position > .8:
         position = .8+.2*(1.-math.exp(-(position-.8)/.2))
     return position
+
+
+def ease_top(value):
+    """Above RESPONSE_FIXED_KNEE an exponential approach to RESPONSE_FIXED_CEILING that never flattens on it."""
+    if value > RESPONSE_FIXED_KNEE:
+        room = RESPONSE_FIXED_CEILING-RESPONSE_FIXED_KNEE
+        value = RESPONSE_FIXED_KNEE+room*(1.-math.exp(-(value-RESPONSE_FIXED_KNEE)/room))
+    return value
+
+
+def fixed_response(target, key):
+    """A routed geometry target on the fixed scale -> drive target: gain x target^curve (FIXED_RESPONSE per drive) to
+    RESPONSE_FIXED_KNEE, then an exponential approach to RESPONSE_FIXED_CEILING that never flattens on it."""
+    gain,curve = FIXED_RESPONSE.get(key,FIXED_RESPONSE_DEFAULT)
+    return unit(ease_top(gain*max(0.,target)**curve))
 
 
 def follower(value, target, dt, attack, release):
@@ -347,6 +417,8 @@ class HybridControls:
     height_mode: str = 'Dynamic Height Shift'
     tilt_shift: bool = False
     breathing: float = 0.
+    adaptive_response: bool = False   # True: the remembered-peak gain (pre-6 Nov); False: FIXED_RESPONSE
+    kick_accent: float = 0.           # share of a sustained kick the geometry cannot show sent to roll and sparks
 
 
 @dataclass(frozen=True)
@@ -378,6 +450,9 @@ class WaveformDynamics:
         self.ring = RibbonRing(RIBBON_CAPACITY, colours=[(*c['quiet'][0],1.) for c in controls.cards],
                                edge_colours=[(*c['quiet'][1],1.) for c in controls.cards],period=.5)
         self.time = self.travel = self.angle = self.angular_speed = self.twist_phase = self._hit = 0.
+        self._kick_impulse = self._kick_stage = self.kick_sense = 0.   # Kick Accent: held share, eased stages
+        self._heard = 1.   # how fully Breathing's mean may learn (BREATHING_HEARD_RETURN)
+        self._settled = 1. # 1 in continuous music; 0 just after real silence (the phrase mean's catch-up, PHRASE_SETTLE)
         self.phase = controls.scene.flow.phase
         self.bands, self.power = (0.,0.,0.),0.
         self.passage = self.phrase = 0.
@@ -388,6 +463,7 @@ class WaveformDynamics:
         self._fresh = np.zeros((2,PULSE_GRID.size))  # the same transport with a short fade: recently launched swells
         self._pulse_pending = 0.
         self._view_world = None  # (low, high) world x of the scene axis the framed camera shows (capture-supplied)
+        self._view_top = None    # world y of the card's top edge above the scene axis (capture-supplied), or None
         self._seen = (None,None)  # cached (key, per-direction seen weights) for the age-once-seen fade
         self._rim_share = 1.      # share of the appearance level published for Pulse Rim (RIM_EDGE_SHARE once seen)
         self._trough_stage,self._trough_lift,self._trough_time = np.zeros((RIBBON_CAPACITY,1)),np.zeros((RIBBON_CAPACITY,1)),None
@@ -461,14 +537,18 @@ class WaveformDynamics:
     def advance(self, dt, *, bands, intensity, presence, hit=0., hit_components=None, accent=None, controls=None,
                 dynamic_zoom=False, zoom_hold=False, view_span=None):
         """``view_span``: (low, high) world x of the scene axis the framed camera shows (configuration from the
-        capture; ``core.waveform_ribbon_view.visible_span``). None keeps the last one supplied (initially none)."""
+        capture; ``core.waveform_ribbon_view.visible_span``), optionally with the world y of the card's top edge above
+        that axis (``card_span``; the floor lift never lifts a crest through it). None keeps the last one supplied
+        (initially none)."""
         if not math.isfinite(dt) or not 0. <= dt <= .1:
             raise ValueError('Ribbon logical dt must be finite in 0..0.1 seconds')
         if view_span is not None:
-            low,high = (float(v) for v in view_span)
-            if not (math.isfinite(low) and math.isfinite(high) and high > low):
-                raise ValueError('Waveform view span must be a finite (low, high) interval')
+            low,high,*top = (float(v) for v in view_span)
+            if not (math.isfinite(low) and math.isfinite(high) and high > low) or len(top) > 1 or \
+                    not all(math.isfinite(v) for v in top):
+                raise ValueError('Waveform view span must be a finite (low, high[, top]) interval')
             self._view_world = (low,high)
+            self._view_top = top[0] if top else None
         if controls is not None:
             self.controls = controls
         c = self.controls
@@ -529,6 +609,10 @@ class WaveformDynamics:
         memory = RESPONSE_MEMORY*(1.+hold*quieter*(RESPONSE_HOLD-1.)) if hold and quieter else RESPONSE_MEMORY
         self._loud_level = max(self._sustain,follower(self._loud_level,self._sustain,dt,0.,memory))
         geometry_release = c.release*(1.-BREATHING_REACH*softness)
+        learn = self._learn_rate(dt,presence)
+        # Breathing's phrase mean re-learns the music fast after a break (PHRASE_SETTLE), so a phrase is not widened
+        # against a mean the silence left stale; the remembered-peak path keeps BREATHING_BASE.
+        mean_tau = BREATHING_BASE if c.adaptive_response else BREATHING_BASE*max(PHRASE_SETTLE_MIN,self._settled)
         for key in TARGETS:
             target = route(c.routing[key],sources,passage=gate)
             if key in RESPONSE_TARGETS:
@@ -544,12 +628,28 @@ class WaveformDynamics:
                 # memory re-normalised a passage at 70% of the loud input back up to loud reach (Pulse Strength .73 ->
                 # .88, above the loud passage's .87) within 25 s. Keyed to the drive's own dips it held every song
                 # (the drive sits below its peak between almost every pair of beats). Rises still reach in RESPONSE_REACH.
-                self._response_peak[key] = max(RESPONSE_PEAK_FLOOR,follower(
-                    self._response_peak[key],target,dt,RESPONSE_REACH,memory))
-                target = unit(RESPONSE_TOP*target/self._response_peak[key])
-                base = self._breath_base[key] = follower(self._breath_base[key],target,dt,BREATHING_BASE,BREATHING_BASE)
+                if c.adaptive_response:
+                    # The remembered peak learns only from heard music (``learn``): a break can no longer lower it
+                    # and size the music's return up (spliced 5 s break, Rag Doll's loud end: +5-9% for 10 s).
+                    self._response_peak[key] = max(RESPONSE_PEAK_FLOOR,follower(
+                        self._response_peak[key],target,dt*learn,RESPONSE_REACH,memory))
+                    target = unit(RESPONSE_TOP*target/self._response_peak[key])
+                else:
+                    target = fixed_response(target,key)
+                # Breathing's phrase-scale mean learns only from heard music (BREATHING_HEARD_RETURN): it fell with a
+                # break, so the music's return swelled against it (spliced 2-5 s breaks on recorded music: +4..11%
+                # height for 10 s on every Breathing preset, 0..1% with Breathing 0).
+                base = self._breath_base[key] = follower(self._breath_base[key],target,dt*learn,mean_tau,BREATHING_BASE)
                 if softness:  # Breathing 0 (or a loud passage) keeps the exact unwidened target
-                    target = unit(base+(target-base)*(1.+BREATHING_CONTRAST*softness))
+                    # A passage returning from a break is not widened while it returns (its deficit against the held
+                    # mean is the silence, not a phrase): the contrast comes back with the learning rate.
+                    target = unit(base+(target-base)*(1.+BREATHING_CONTRAST*softness*learn))
+                if not c.adaptive_response and (target<base or PHRASE_RISE):
+                    # The fixed response widens a phrase about its mean (PHRASE_DIP below it, PHRASE_RISE above it,
+                    # eased again under the ceiling), as the remembered peak's fast reach and slow release did.
+                    widen = PHRASE_DIP if target<base else PHRASE_RISE
+                    target = base+(target-base)*(1.+widen*learn)
+                    target = unit(ease_top(target) if target>base else target)
             if key in SMOOTH_TARGETS:
                 # Geometry never snaps (operator, 5 Nov: "twitch"): two cascaded followers, so the drive's VELOCITY
                 # is continuous. A single 45 ms first-order attack made lift/bend/width/twist jump on every transient
@@ -559,6 +659,17 @@ class WaveformDynamics:
                 self.drive[key] = follower(self.drive[key],self._drive_stage[key],dt,attack,geometry_release)
             else:
                 self.drive[key] = follower(self.drive[key],target,dt,c.attack,c.release)
+        if c.kick_accent>0. or self.kick_sense>0.:
+            lack = unit((self.drive['bend']-KICK_SENSE_KNEE)/(1.-KICK_SENSE_KNEE))*unit(c.kick_accent)
+            share = (1.-math.exp(-hit/KICK_SENSE_REF))*lack
+            self._kick_impulse = max(share,self._kick_impulse*math.exp(-dt/KICK_SENSE_HOLD))
+            self._kick_stage = follower(self._kick_stage,self._kick_impulse,dt,KICK_SENSE_ATTACK,KICK_SENSE_RELEASE)
+            self.kick_sense = min(follower(self.kick_sense,self._kick_stage,dt,KICK_SENSE_ATTACK,KICK_SENSE_RELEASE),
+                                  KICK_ROLL_SHARE*abs(self.angular_speed)/KICK_ROLL)
+            if self.kick_sense<1e-6 and not self._kick_impulse:
+                self.kick_sense = self._kick_stage = 0.
+            if share>0. and c.accents is not None:   # sparks on the swell, admitted once (as pulse births are)
+                self._pulse_births = min(float(MAX_BURST),self._pulse_births+KICK_BIRTHS*share)
         released = self._advance_pulse(dt,hit,energy_shaped)
         self._advance_pulse_births(dt,released)
         for owner,card in enumerate(c.cards):
@@ -576,7 +687,8 @@ class WaveformDynamics:
                     self._elastic_frequencies[index],c.damping)
         target_speed = self._value('rotation') if c.rotation_enabled else 0.
         self.angular_speed = follower(self.angular_speed,target_speed,dt,c.rotation_attack,c.rotation_release)
-        self.angle = math.remainder(self.angle+math.radians(self.angular_speed)*dt,2*math.pi)
+        roll = self.angular_speed+(math.copysign(KICK_ROLL*self.kick_sense,target_speed) if c.rotation_enabled else 0.)
+        self.angle = math.remainder(self.angle+math.radians(roll)*dt,2*math.pi)
         low,high = c.twist_speed
         self.twist_phase = math.remainder(self.twist_phase+(low+(high-low)*self.drive['twist'])*dt,2*math.pi)
         for index in range(RIBBON_CAPACITY):
@@ -819,12 +931,22 @@ class WaveformDynamics:
         step = SURGE_RATE*dt
         self._drift = self._drift+np.clip((self._drift_stage-self._drift)*ease,-step,step)
 
+    def _learn_rate(self,dt,presence):
+        """Share of real time Breathing's phrase-scale mean learns this tick: 0 with the musical weight, back over
+        BREATHING_HEARD_RETURN seconds (see BREATHING_HEARD_RETURN)."""
+        self._heard = follower(self._heard,unit(presence),dt,BREATHING_HEARD_RETURN,0.)
+        self._settled = follower(self._settled,1. if presence>PHRASE_SILENCE else 0.,dt,PHRASE_SETTLE,PHRASE_SETTLE_DROP)
+        return self._heard
+
     def _advance_pulse_births(self,dt,released):
         """Injected energy buys a bounded number of swell-carried births, released over the swell's journey and
         consumed once by burst admission. Silence buys none; without sparks or the control nothing is banked."""
         c = self.controls
-        if c.accents is None or c.pulse.particles<=0.:
+        if c.accents is None:
             self._pulse_credit = self._pulse_births = 0.
+            return
+        if c.pulse.particles<=0.:   # births a kick banked (Kick Accent) stay due; the pulse buys none
+            self._pulse_credit = 0.
             return
         self._pulse_credit = min(4.*MAX_BURST,self._pulse_credit+PULSE_BIRTHS*c.pulse.particles*released)
         moved = self._pulse_credit*(1.-math.exp(-dt/PULSE_BIRTH_TAU))
@@ -932,13 +1054,22 @@ class WaveformDynamics:
             x[rows,order] = target
         return x,y,z
 
-    def _floor_room(self,height,hang,room,visible,static=None):
+    def _floor_room(self,height,hang,room,visible,static=None,soft=None,headroom=None):
         """Per ribbon: how far to lift the whole ribbon so its lower edge stays TROUGH_CLEARANCE above the floor (see
         snapshot). Two cascaded followers (TROUGH_ATTACK up, TROUGH_RELEASE down, on the logical clock), so the lift's
-        velocity is continuous: a one-stage follower jumped on every new trough, which was itself a twitch."""
+        velocity is continuous: a one-stage follower jumped on every new trough, which was itself a twitch.
+        Top edge first, floor second (lead review 6 Nov): with the card's top supplied (``headroom``: room above the
+        rest line for the published crest ``soft`` plus its sheet hang, TOP_CLEARANCE below the edge) the lift never
+        raises a crest the floor lift considers through it; the floor may then be grazed. A lift the top lowers eases
+        down at TROUGH_ATTACK, as fast as it rose, so a crest climbing toward the edge is not lifted past it."""
+        capped = None
         if static is None:
             sinking = np.where(visible,hang-height,-np.inf)                 # depth of the lower edge below rest
             target = np.clip(sinking.max(axis=1,keepdims=True)-room,0.,TROUGH_LIFT_MAX)
+            if headroom is not None:
+                top = np.maximum(headroom-np.where(visible,soft+hang,-np.inf).max(axis=1,keepdims=True),0.)
+                capped = top<target
+                target = np.minimum(target,top)
         else:
             target = np.full((RIBBON_CAPACITY,1),static)                    # Static Height (a live switch eases)
         if self._trough_time is None:
@@ -948,7 +1079,8 @@ class WaveformDynamics:
             for name,goal in (('_trough_stage',target),('_trough_lift',None)):
                 goal = self._trough_stage if goal is None else goal
                 current = getattr(self,name)
-                tau = np.where(goal>current,TROUGH_ATTACK,TROUGH_RELEASE)
+                fast = goal>current if capped is None else (goal>current)|capped
+                tau = np.where(fast,TROUGH_ATTACK,TROUGH_RELEASE)
                 setattr(self,name,current+(goal-current)*(1.-np.exp(-dt/tau)))
         self._trough_time = self.time
         return self._trough_lift
@@ -973,11 +1105,12 @@ class WaveformDynamics:
         low,high = cached[2]
         return (x>low)&(x<high),.5*(low+high),.5*(high-low)
 
-    def _height_shift(self,height,hang,room,x):
-        """Per ribbon (and, with Tilt Shift, per knot) vertical offset that keeps lower edges off the floor."""
+    def _height_shift(self,height,hang,room,x,soft=None,headroom=None):
+        """Per ribbon (and, with Tilt Shift, per knot) vertical offset that keeps lower edges off the floor, never
+        lifting a crest through the card's top edge (``headroom``: see _floor_room)."""
         static = TROUGH_LIFT_MAX if self.controls.height_mode=='Static Height' else None
         visible,centre,half = self._trough_view(x)
-        lift = self._floor_room(height,hang,room,visible,static)
+        lift = self._floor_room(height,hang,room,visible,static,soft,headroom)
         # Tilt Shift: the lift's velocity (its second stage follows the first, so it is continuous) sets a lead that
         # eases once more, so the tilt is smooth in velocity too. Switched off (or Static Height) the lead eases back to
         # zero rather than vanishing; a ribbon that never tilted keeps an exact zero lead (byte-identical body).
@@ -1081,8 +1214,12 @@ class WaveformDynamics:
         # eases through two stages on the logical clock (see _floor_room); a deeper trough than the cap may still graze.
         hang = np.abs(rows[:,:,3]*np.cos(data[:,5::KNOT_ROWS,1]))
         room = max(TROUGH_ROOM_MIN,PACKET_FLOOR_HEIGHT+values['lift']-TROUGH_CLEARANCE)
-        rise = self._height_shift(y,hang,room,x)
-        rows[:,:,1] = 5.*np.tanh(y/5.)+values['lift']+rise
+        soft_y = 5.*np.tanh(y/5.)
+        # The card's top above the packet's rest line, scaled with Dynamic Zoom (the long lens is all but orthographic).
+        headroom = None if self._view_top is None else \
+            (self._view_top-PACKET_FLOOR_HEIGHT)*self.zoom-TOP_CLEARANCE-values['lift']
+        rise = self._height_shift(y,hang,room,x,soft_y,headroom)
+        rows[:,:,1] = soft_y+values['lift']+rise
         # Strong local musical regions change colour immediately, even before new head history enters view.
         # The crest mask is carried by immutable carrier geometry, so coloured regions travel with the waveform.
         # All cards at once as rows; each card's Python scalars become a column in exactly the dtype NumPy would

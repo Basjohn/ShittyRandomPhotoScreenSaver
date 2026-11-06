@@ -1322,8 +1322,8 @@ settings defaults and missing-key runtime fallback preserve owner-authored
 choices without a migration overwrite. Qt integration, real Settings startup,
 Reset/Custom/preset switching, hidden-bucket edit persistence, rendering shape,
 0.5–2.0 endpoints and cross-bucket predicates need native test and visual
-inspection. Added `tests/test_extruded_bubble_lazy_settings.py`, a real VisualizersTab
-Qt test for unopened-bucket hydration, live edits, first-open construction,
+inspection. Added `tests/test_extruded_bubble_lazy_settings.py` (no longer in the
+repository), a real VisualizersTab Qt test for unopened-bucket hydration, live edits, first-open construction,
 cross-bucket preservation and silent preset reload; it compiles but is NOT
 executable in this environment. The Python environment here lacks PySide6
 and cannot certify that lifecycle. The C++ Qt/Windows build stays operator-owned.
