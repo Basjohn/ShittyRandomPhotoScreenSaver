@@ -845,7 +845,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
              'global': {'card_border_width_px': 4,
                         'child_collision_enabled': False,
                         'stacking_enabled': True,
-                        'surface_material': 'normal'},
+                        'surface_material': 'theme'},
              'gmail': {'account_slot': '0',
                        'auto_title_case': True,
                        'bg_color': [35, 35, 35, 255],

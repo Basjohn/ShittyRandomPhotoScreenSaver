@@ -2,8 +2,10 @@
 
 The baseline is the Widget Theme style value ``widgets.global.surface_material``; every
 ordinary card and the Context Menu inherit it, and an explicit per-widget
-``widgets.<id>.surface_material`` (anything but ``inherit``) beats it. Widget Theme
-files stay colour-only. Resolution happens once per style build, never per frame.
+``widgets.<id>.surface_material`` (anything but ``inherit``) beats it. The baseline's
+default, ``theme``, follows the active Widget Theme's optional ``surface_material``
+(Normal when the theme names none); an explicit material there overrides the theme.
+Resolution happens once per style build, never per frame.
 """
 from __future__ import annotations
 
@@ -14,9 +16,12 @@ from PySide6.QtGui import QColor
 
 NORMAL = "normal"
 INHERIT = "inherit"
+# The Style Overrides baseline's default: the active Widget Theme's material.
+THEME = "theme"
 # Canonical order: the Settings combo lists them so; Normal is the default.
 SURFACE_MATERIALS: tuple[str, ...] = ("normal", "acrylic", "glass", "frosted", "mica", "smoked")
 SURFACE_MATERIAL_LABELS: dict[str, str] = {
+    "theme": "Theme",
     "normal": "Normal",
     "acrylic": "Acrylic",
     "glass": "Glass",
@@ -41,22 +46,42 @@ TRANSITION_REFRESH_INTERVAL_S: dict[str, float] = {
 }
 
 
-def normalize_surface_material(value: object, *, allow_inherit: bool = False) -> str | None:
+def normalize_surface_material(value: object, *, allow_inherit: bool = False,
+                               allow_theme: bool = False) -> str | None:
     """The canonical material id for ``value`` (case-insensitive), or None if unknown."""
 
     text = str(value or "").strip().lower()
     if allow_inherit and text == INHERIT:
         return INHERIT
+    if allow_theme and text == THEME:
+        return THEME
     return text if text in SURFACE_MATERIALS else None
 
 
-def resolve_global_surface_material(widgets_config: Mapping[str, object] | None) -> str:
-    """The Widget Theme baseline material (Normal when absent or unknown)."""
+def theme_surface_material(theme=None) -> str:
+    """The material the (active) Widget Theme is designed for; Normal when it names none."""
+
+    if theme is None:
+        from ui.widget_theme_active import get_active_widget_theme
+
+        theme = get_active_widget_theme()
+    return normalize_surface_material(getattr(theme, "surface_material", None)) or NORMAL
+
+
+def resolve_global_surface_material(widgets_config: Mapping[str, object] | None, theme=None) -> str:
+    """The baseline material: an explicit choice, or (``theme``, the default, or absent) the
+    active Widget Theme's material. An unknown stored value is Normal."""
 
     values = widgets_config.get("global", {}) if isinstance(widgets_config, Mapping) else {}
     if not isinstance(values, Mapping):
-        return NORMAL
-    return normalize_surface_material(values.get("surface_material")) or NORMAL
+        return theme_surface_material(theme)
+    stored = values.get("surface_material")
+    if stored is None:
+        return theme_surface_material(theme)
+    choice = normalize_surface_material(stored, allow_theme=True)
+    if choice == THEME:
+        return theme_surface_material(theme)
+    return choice or NORMAL
 
 
 # Instances whose appearance (and so their Surface Material row) is their family's first card.
@@ -111,8 +136,9 @@ def with_surface_material(style, widgets_config: Mapping[str, object] | None, wi
 
 
 __all__ = [
-    "INHERIT", "NORMAL", "SURFACE_MATERIALS", "SURFACE_MATERIAL_LABELS",
+    "INHERIT", "NORMAL", "SURFACE_MATERIALS", "SURFACE_MATERIAL_LABELS", "THEME",
     "TRANSITION_REFRESH_INTERVAL_S", "normalize_surface_material", "resolve_global_surface_material",
-    "resolve_surface_material", "surface_text_color", "transition_refresh_interval_s",
+    "resolve_surface_material", "surface_text_color", "theme_surface_material",
+    "transition_refresh_interval_s",
     "with_surface_material",
 ]

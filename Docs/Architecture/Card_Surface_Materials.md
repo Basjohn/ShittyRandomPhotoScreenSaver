@@ -165,8 +165,10 @@ values without their icons). The plate is now a **row**:
   the metadata crossfade).
 - The row holds the floor for up to three run colours (`primaryColor`, `secondaryColor`, `tertiaryColor`; a muted
   tag, an accent label), composited with their alpha; a run too faint to reach the floor at all is held to its opaque
-  colour's floor. The overlay is **one even tone**: the shader samples the surface at seven points along the row's
-  centre line (plus its own pixel) and takes the worst, instead of a patch per glyph.
+  colour's floor. The overlay is **one even tone**: the shader samples the surface across the row and takes the
+  worst, instead of a patch per glyph: 18 points (two lines of nine) evaluated once per row in the
+  vertex stage; each pixel then only checks its own surface (grain excluded, inside the 10 % margin) and takes more
+  only where it is worse than every sample.
 - A row inside its own filled panel (stats panel, tile, capsule) passes `underlayColor` (the panel fill) and the
   panel's inner radius: the floor is measured against what the text actually sits on, and the row's corners are
   concentric with the panel. Rows on the card itself reach 4 px into the padding with corners concentric with the
@@ -220,18 +222,36 @@ theme's resolved card surface colour; its alpha moves the tint opacity within ea
 | Mica | heaviest (level 1) | wallpaper-tinted, near-solid theme surface; refreshes at a lower rate | same quad; backdrop refresh only |
 | Smoked | light-heavy mix | dark, desaturated tinted translucent | same |
 
-## 4. Settings model
+## 4. Settings model and themes
 
-Materials join the Widget Theme model without changing the colour-only `.srwtheme` schema (themes still carry
-colours only; the old "theme recommends a material" field stays rejected):
+**Superseded decision (6 Nov 2026, evening).** The first version kept `.srwtheme` files colour-only: "themes still
+carry colours only; the old 'theme recommends a material' field stays rejected". The operator then asked for themes
+to carry a material once the cost proved low ("we should if cost is low"; it is, section 6), so a Widget Theme may
+now name one. What stays rejected is the Sep 2026 mechanism (the `default_card_material_mode` /
+`card_material_override` keys, still stripped by `core/settings/widget_theme_input_compat.py`, and every capture,
+layer and per-card Loader of that design), not the idea of a theme designed for a material.
 
 ```text
-widgets.global.surface_material        Normal (default) | Acrylic | Glass | Frosted | Mica | Smoked
-widgets.<family>.surface_material       Inherit (default) | the six above
+<theme>.srwtheme  "surface_material"    optional: normal | acrylic | glass | frosted | mica | smoked (absent = none)
+widgets.global.surface_material        Theme (default) | Normal | Acrylic | Glass | Frosted | Mica | Smoked
+widgets.<family>.surface_material       Inherit (default) | Normal | the five materials
 ```
 
-`Widgets -> General -> Style Overrides -> Surface Material` sets the baseline beside Card Border Width. Every
-ordinary card and the Context Menu inherit it; an explicit per-widget value beats the baseline. The projection is one
+- **Theme files.** `WidgetThemeSpec.surface_material` (`ui/widget_theme_spec.py`) is optional within schema v3:
+  the strict loader (`ui/widget_theme_io.py`) accepts the key or its absence and rejects anything but a real
+  material; the writer emits it only when set, so every older theme round-trips byte for byte. The Foundry editor
+  (`tools/widget_theme_foundry.py`) shows and saves it; the Custom theme (a `replace` of the active spec) keeps it.
+  Existing themes name none and stay Normal under "Theme".
+- **Baseline.** `Widgets -> General -> Style Overrides -> Surface Material` sets the baseline beside Card Border
+  Width; its first option, **Theme** (the new default), follows the active Widget Theme's material and is Normal when
+  the theme names none (`resolve_global_surface_material` / `theme_surface_material` in
+  `rendering/quick/widgets/surface_material.py`). The explicit materials override the theme. Every ordinary card
+  and the Context Menu inherit the baseline; an explicit per-widget value beats it.
+- **Stored values.** The feature had not shipped when the default changed, but a stored `widgets.global.surface_material:
+  "normal"` cannot be told apart from a choice: page saves write the whole `global` section, defaults included. So
+  there is **no bridge**: a stored `normal` stays an explicit Normal override (`theme` and an absent value follow the
+  theme), recorded in `Docs/Architecture/Persisted_Input_Compatibility.md`. A profile saved today with the old
+  default needs one switch to Theme. The projection is one
 seam: `family_binder` passes every ordinary family's style through `with_surface_material` (and Games You Follow's
 visual style), which also resolves the active Widget Theme's `card.text` as the legibility reference.
 
@@ -289,6 +309,36 @@ at rest the node is not traversed.
 adds 0.006-0.008 ms (Acrylic +0.006, Glass +0.007, Frosted +0.008, Mica +0.006, Smoked +0.008), with no per-frame
 Python.
 
+**Full cost with rows (6 Nov evening, RTX 4090; the lead reports it to the operator).** Steady frame: the hidden
+production scene on a still wallpaper (no backdrop refresh), each material against Normal measured alternately beside
+it, median of best-of-4 frames; GPU is `GL_TIME_ELAPSED` around the scene render, CPU the render thread's wall time
+for sync + render. "5 cards" is Weather, Media, Reddit, System Stats and a Clock; "4 list cards" is Gmail, a news
+Feed, Friend Pulse and System Stats (about 45 legibility rows). 1440p and 4K are the 1600x900 layout at DPR 1.6 and
+2.4 (`tools/surface_material_capture.py --cost --dpr D --card-set main|lists`). Backdrop refresh:
+`tools/overhead_baseline.py --only surfaces --size WxH` (control-relative; refresh happens only on image edges and
+during transitions, see 3.1).
+
+| Cost over Normal | Acrylic | Glass | Frosted | Mica | Smoked |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1440p, 5 cards: GPU / CPU ms | 0.030 / 0.047 | 0.032 / 0.048 | 0.033 / 0.047 | 0.024 / 0.049 | 0.046 / 0.048 |
+| 1440p, 4 list cards | 0.075 / 0.069 | 0.064 / 0.063 | 0.092 / 0.064 | 0.075 / 0.065 | 0.090 / 0.061 |
+| 4K, 5 cards | 0.055 / 0.050 | 0.058 / 0.046 | 0.059 / 0.048 | 0.046 / 0.046 | 0.057 / 0.048 |
+| 4K, 4 list cards | 0.091 / 0.070 | 0.103 / 0.071 | 0.095 / 0.066 | 0.093 / 0.065 | 0.117 / 0.082 |
+
+| Backdrop refresh | GPU | Crossfade frames | render-thread CPU | GL calls | Python calls |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 2560x1440 | 0.080 ms | 8.2 | 0.103 ms | 67 | 176 |
+| 3840x2160 | 0.042 ms | 1.8 | 0.102 ms | 67 | 176 |
+
+All Normal: zero. Normal measured against itself reads 0.000 ms GPU and 0.00 ms CPU (within ±0.006 ms noise), and with
+every card Normal no backdrop item, material or row exists (`tests/test_surface_materials.py`,
+`tests/test_surface_material_style.py`). Nothing runs in Python per frame. The full overhead benchmark against
+`2026-11-06_90f65ee9` is unchanged in GL and Python calls for every transition and Visualizer except Extruded Bubble
+and Shockwave Grid, the same two main changed before this work (above). Rows first computed their tone per pixel
+(+0.14-0.16 ms GPU at 1440p); the tone is now computed once per row in the vertex stage (18 surface samples, 4
+vertices) and each pixel only checks its own surface, which also made rows cheaper on the CPU than the per-run chips
+they replace (chips: +0.11-0.19 ms render-thread CPU at 1440p, one unbatched node per run).
+
 **Legibility, per text run** (`tools/surface_material_capture.py --legibility` and `--compare-legibility`): the
 WCAG contrast of each run's own colour against the pixels under its glyphs (the frame re-rendered with all glyphs and
 shadows hidden), 5th percentile over the glyph pixels, worst run over three wallpapers including the busiest:
@@ -310,10 +360,10 @@ Clock; then Gmail, World News feed, Friend Pulse, System Stats) and three wallpa
 
 | Theme, text | Normal | Acrylic | Glass | Frosted | Mica | Smoked |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Light, small | 4.27 → 4.27 | 4.88 → 4.93 | 4.58 → 4.93 | 4.90 → 4.92 | 4.87 → 4.94 | 4.57 → 4.94 |
-| Light, large | 5.97 → 5.97 | 5.08 → 5.25 | 3.28 → 4.01 | 3.45 → 4.44 | 6.46 → 6.46 | 3.28 → 4.39 |
-| Dark, small | 5.24 → 5.24 | 4.68 → 4.91 | 4.91 → 4.92 | 4.60 → 4.91 | 5.19 → 5.02 | 4.91 → 4.93 |
-| Dark, large | 6.64 → 6.64 | 3.77 → 7.04 | 3.31 → 5.73 | 3.73 → 7.04 | 5.94 → 7.08 | 4.43 → 7.02 |
+| Light, small | 4.27 → 4.27 | 4.88 → 4.76 | 4.58 → 4.93 | 4.90 → 4.72 | 4.87 → 4.94 | 4.57 → 4.90 |
+| Light, large | 5.97 → 5.97 | 5.08 → 5.19 | 3.28 → 4.01 | 3.45 → 4.44 | 6.46 → 6.46 | 3.28 → 4.39 |
+| Dark, small | 5.24 → 5.24 | 4.68 → 4.86 | 4.91 → 4.92 | 4.60 → 4.83 | 5.19 → 5.02 | 4.91 → 4.93 |
+| Dark, large | 6.64 → 6.64 | 3.77 → 6.84 | 3.31 → 5.73 | 3.73 → 6.83 | 5.94 → 7.08 | 4.43 → 6.98 |
 
 (The Normal 4.27 is the light theme's own muted System Stats label on its panel; Normal is not touched.) Crops at 1x
 and 3x, busy/flat/mid-transition, dark and light: `.artifacts/evidence/widget_surfaces_style_20261106/`. Normal frames differ from before only by the renderer's
