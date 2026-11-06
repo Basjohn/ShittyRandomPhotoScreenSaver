@@ -43,15 +43,16 @@ lead as reviewer/orchestrator. Agents that already hold unfinished work may exce
 context is valuable). Slots need not always be full: when the right agent is not free, queue the item here.
 
 **Queued (operator 6 Nov ~22:00), next free medium slot:**
-- **Reset Camera on Extruded Bubble switched live playback to Waveform** (`logs/screensaver*.log` 22:04:34-36). The
-  reset (`DisplayManager`, "[VIS_ORBIT] Camera reset to preset home", `engine/display_manager.py` ~1080-1116) ran
-  twice and wrote the whole `widgets.spotify_visualizer` section through
-  `settings.replace_visualizer_runtime_preset_state`. Audio capture then restarted, and 2 s later
-  `widgets.spotify_visualizer.mode` changed to waveform_ribbon. Lead diagnosis: several modes are activated, so the live
-  mode (EB) need not be the stored `mode` (the last saved, Waveform). The reset reads the stored section and writes it
-  back with its `mode`, and the runtime then switches to it. Fix at the owner: a camera reset writes only the camera
-  and preset-state fields and never re-applies a mode. Also find why it fired twice (one click). Regression bar: reset
-  in a non-stored live mode keeps that mode.
+- **Two clicks on Reset Camera count as the card's double-click, which cycles the Visualizer mode**
+  (`logs/screensaver*.log` 22:04:34-36). Two presses each ran a reset ("[VIS_ORBIT] Camera reset to preset home" x2).
+  The pair also reached the visualizer region's double-click admission (`QuickVisualizerDoubleClickAdmission`,
+  `cycle_mode=self._cycle_quick_visualizer_mode`, `engine/display_manager.py` ~3529). That cycled to the next mode in
+  `mode_activation` (the modes double-click and context-menu cycling may choose; after Extruded Bubble comes Waveform)
+  and wrote `widgets.spotify_visualizer.mode` (~1939). The one-Visualizer contract held: EB's last tick was 22:04:34
+  and Waveform's first was 22:04:36, never overlapping. Fix at the owner: the camera hint buttons (Reset Camera and
+  any other in-card control) consume their presses, including the second press of a double-click, so no in-card
+  control press reaches mode cycling. Regression bar: a double-click on Reset Camera resets once or twice but never
+  cycles; a double-click on the card's empty area still cycles.
 
 **Follow-ups sent to the agents below (operator 6 Nov ~22:00):** the Studio agent: the UI freeze after closing a
 Studio (idle process, 18 s with no GUI-thread log after the window was destroyed, 21:56:34), sliders snapping out of a
