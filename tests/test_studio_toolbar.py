@@ -91,6 +91,14 @@ def _toolbar_and_scene(controller, surface, seconds):
     controller.select_fixture("peak", user=True)
     controller.seek(seconds)
     surface.pump(3)
+    # A budgeted exact replay (Waveform, the engine-answer modes) keeps the last frame on screen until it lands.
+    evaluator = controller.evaluator
+    for _ in range(2000):
+        if not getattr(evaluator, "converging", False):
+            break
+        surface.pump()
+    assert not getattr(evaluator, "converging", False)
+    surface.pump(2)
     image = surface.grab()[..., :3].astype(np.int16)
     backings = [_rect(b) for b in _backings(surface.host.root) if b.isVisible()]
     # Everything inside the backing's border except its anti-aliased rounded corners.

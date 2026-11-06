@@ -43,27 +43,19 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
 
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
 
-- [ ] **Slow startup (operator, 6 Nov 10:30; owner found and fixed, three leftovers):** proved from the logs plus offline
-  measurement that neither the Feeds delivery nor the usage sampler owned the 7 s. The `_FeedFamilyOwner` delivery's
-  `_release_admission` resumes the deferred startup image change, whose worker-authority preflight
-  (`image_processing_authority_available`) called `ProcessSupervisor.is_running(IMAGE)` before `image_queue.next()`; the sampler's first sample called `get_image_worker_usage_snapshot()`; both took
-  the supervisor's single state lock, which the heartbeat thread held for the whole `stop()` (graceful wait + terminate +
-  kill, 10:30:20 to :27) of the image_prefetch child that never signalled ready, and again for the next `start()`'s 10 s
-  ready wait (10:30:30 to :40: GlobalClockTicker gap 10.2 s). The pure-Python Visualizer tick kept 450 frames in those
-  5 s (no GIL hold); the sampler's first `collect()` offline is 133 ms with a 27 ms worst tick gap; Feeds cache delivery
-  work is 0.1-18 ms per source at 18 publishers x 40 stories. Fixed in `core/process/supervisor.py`: state lock held for
-  dictionary work only, start/stop of a role run under a per-role lifecycle lock, a role mid-transition reports "not
-  available" (`tests/test_process_supervisor_availability.py` with old-shape negative controls). Still open: (1)
-  `_start_workers` still waits synchronously on the engine init thread for the optional speculative child's ready signal
-  (up to 10 s under heavy load, 10:30:10 to :20); make that start off-thread once the supervisor change is confirmed;
-  (2) the 166-240 ms per-source `FEED_GUI_DELIVERY` cache lines at 10:30:40-42 are not reproduced on the owner side
-  (consumer/QML model side is unmeasured, and they landed the instant the GUI thread was released); re-check in the next
-  quiet startup with `--usage`; (3) operator confirmation that a cold start with `--usage` no longer freezes the GUI
-  (compare the `UI_CALLBACK` and `collect_ms` lines). Evidence `.artifacts/evidence/slow_startup_20261106/`.
-- [ ] **Spectrum visual-only smoothing still broken (operator, 6 Nov):** wired (Settings -> `_spectrum_visual_smoothing
-  (_enabled)` -> `SpectrumFrameRuntime.resolve(smoothing_enabled, smoothing_strength)`), so the defect is in what it
-  does. Measure bar motion on recorded music with smoothing off / on / at 0.3 / 0.7 / 1.0 (frame-to-frame jerk, lag,
-  peak preservation), find the owner, fix, and show it in the Spectrum Studio.
+- [ ] **Slow startup (operator, 6 Nov 10:30; owners found and fixed, awaiting the operator's cold start):** the 7 s
+  GUI "Feeds delivery" and the sampler's 7.2 s first sample were one `ProcessSupervisor` state lock held across a
+  stuck optional child's stop/start; fixed (lock for dictionary work only, per-role lifecycle lock, a role mid-transition
+  reports "not available"; `tests/test_process_supervisor_availability.py`). The engine init thread no longer waits up
+  to 10 s for the OPTIONAL image_prefetch child's ready signal (10:30:10 to :20): `_start_optional_worker` queues that
+  start on a ThreadManager IO worker (the required IMAGE worker keeps its inline ready wait; supervisor `shutdown()`
+  aborts the wait and the engine stops the supervisor before the ThreadManager; `tests/test_optional_worker_startup.py`).
+  Offline, Feeds cache delivery including the NEWS card model is 0.1-15 ms per source at 18 publishers x 40 stories, so
+  the 166-240 ms `FEED_GUI_DELIVERY` lines at 10:30:40-42 are not reproduced (`_complete` excludes QML) and are treated
+  as the post-block backlog on a 97-100% CPU machine. Open: confirm on the operator's next cold start with `--usage`
+  that no `UI_CALLBACK` / `FEED_GUI_DELIVERY` line exceeds a frame and the first `collect_ms` is small; a prefetch
+  batch asked for before the child is ready fails as "not running" (a logged `[PREFETCH]` error; no retry of that batch). Evidence
+  `.artifacts/evidence/slow_startup_20261106/`.
 - [ ] **Bubble / Extruded Bubble "terrible performance" (operator log 10:32-10:35):** confounded: the machine was at
   97-100% system CPU from the agents' game60 live checks and parallel work during that session (quiet-machine game60
   this morning: Bubble P1 62.7 fps, EB 54.6 fps). Re-check in a quiet operator session before acting; heavy
@@ -104,9 +96,45 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
     rest of the simulation 0.62, capture 0.45. A NumPy contact sweep measured slower in situ and was dropped. Open:
     the paired `--load game60` live checks (P1 and P5, main and branch alternately, 2 rounds each, 60 s) are owed by
     the lead on a free machine. The 6 Nov rounds overlapped the operator's own session (system CPU 97-100%) and
-    are void. Evidence `.artifacts/evidence/eb_logical_tick/` (branch worktree).
+    are void. Evidence `.artifacts/evidence/eb_logical_tick/` (summaries and scripts; the void live-run logs were
+    deleted on the operator's word).
+- [ ] **Widget card surfaces: Acrylic, Glass and other materials (operator 6 Nov, near term; the lead or an Opus 5.5
+  high agent, never a smaller model).** Operator: the old attempt failed with a weaker agent; done properly it is a
+  lasting visual uplift. This **supersedes** the recorded rejection: `Docs/Contracts.md` (runtime cards are plain RGBA,
+  "no ... card-material Loader/capture path"), `Spec.md` ("rejected runtime Glass/Acrylic card experiment"),
+  `Docs/Guides/Custom_Style_Implementation.md` and `Docs/Guides/10_WIDGET_GUIDELINES.md`, which already names the way
+  back: "a broader independently justified renderer architecture and a fresh acceptance plan rather than reviving the
+  rejected card-only experiments". **Operator priorities, in order:** never risk damaging the compositor; stay as
+  performance-neutral as possible; every result proved by captures, including during transitions. Before any code:
+  1. **Read the failed-method record** in those docs and the historical bugs (R-61 Settings Glass layered-HWND
+     backdrop mismatch, R-63 black flash, R-95, and grep Glass/Acrylic/backdrop/material). Write down why each
+     earlier mechanism failed.
+  2. **Design one scene-local Qt Quick material owner per display**, never routed through the Settings HWND or
+     AccentPolicy stack. A blurred, tinted copy of the wallpaper/transition layer is made once per display and
+     shared by every card through its mask: no per-card capture, blur or owner. Its update cadence is tied to the
+     wallpaper/transition edges, not a timer. Cost is zero when every card is Normal (dormancy). Cards over a running
+     transition stay correct. Light-theme legibility holds, with a darker legibility layer behind text, as in the
+     Settings rule. The Visualizer card is included or explicitly excluded.
+  3. **Materials to offer, each measured for cost:** Acrylic (blur, tint, luminosity, noise), Glass (lighter blur,
+     edge highlight, slight refraction), Frosted, a Mica-like wallpaper-tinted solid (very cheap), Smoked/tinted
+     translucent, and Normal (today's default).
+  4. **Settings:** the Widget Theme model (memory: Normal first; Context Menu and cards inherit the Widget Theme;
+     per-family overrides beat the theme baseline).
+  5. **Acceptance plan:** offscreen sheets on real wallpapers per material and theme, transitions mid-flight, cost
+     against the overhead baseline (control-relative), and a live check under the lead-scheduled game load. Then
+     rewrite the Contracts/Spec/guide passages as a superseded decision, not an overwrite.
+- [ ] **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent):** the mock is
+  `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`: near-black teal water, fiery orange-red ember
+  streaks and dust along diagonal streams, clear copper-lit shells, warm shafts from the upper right, bokeh foreground.
+  The current Preset 7 stays as it is ("good as it is but it is its own thing"); make a new preset that matches the
+  mock, plus whatever shared 3D work it needs (method in §7.0: mock | ours sheets per pass, Range audit, cost).
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
+
+- [ ] **`tests/test_process_supervisor_availability.py` load sensitivity (6 Nov):** `test_start_does_not_block_
+  availability_calls_or_the_heartbeat` failed once inside a 700-file isolated run and passed alone (its 0.15 s
+  budget per availability call). If it recurs, widen the budget to the measured loaded worst case rather than drop
+  the check; the old lock scope took seconds, so the bound keeps its meaning.
 
 - [ ] **Neon Lake goal mocks (Presets 1-3, 6 Nov sixth pass, awaiting operator look):** darker mirror lake with a
   longer Moon/Sun column and no swell wash, Preset 3's mid-lake blob fixed (mirror counted swell troughs as land),
@@ -134,10 +162,6 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
   passed 64/64. Looks like a native crash at interpreter teardown after the Studio tests. If it recurs, capture the
   exit code and any faulthandler output (run the file alone with `-X faulthandler`) and fix the teardown owner.
   Probably the same family as the leaked clip workers fixed in 90f65ee9 (a surviving worker held the runner's pipe).
-- [ ] **Worker-lifetime negative control is timing-dependent:** `test_without_the_job_tree_..._negative_control`
-  cancels inside the venv launcher's setup window by delay sweeps; under an 8-way gate no delay landed (6 Nov, twice),
-  so it now skips with that reason. Replace it with a deterministic stand-in (a probe parent that starts a child with
-  `CREATE_SUSPENDED` and is killed alone, with and without the job tree).
 
 - [ ] **4x MSAA repeat-render noise (driver, 5 Nov; was "Floor Give run-to-run noise"):** the same frame rendered
   again through a 4x scene target differs by 1 level (rarely 2-3) on a pixel or two in Waveform (more often with Floor
@@ -588,13 +612,6 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   Extruded Bubble's and Sphere's evaluators still replay exactly in one evaluation from the fixture start, without the
   frame budget and checkpoints Waveform and the engine-answer modes now share (`ui/studio/exact_replay.py`); measure
   with `tools/studio_drag_profile.py` and move them onto `ExactReplay` where a release stalls.
-- [ ] **DevCurve replay floors red since the reactivity merge (found 6 Nov):** `tests/test_visualizer_replay.py::
-  test_current_reactivity_passes_fixed_floors[*__devcurve]` passes at `1488c7ce^1` and fails at `1488c7ce` (the
-  DevCurve reactivity merge): `output_flux` fell to 43-66% of its reviewed floor on broadband noise, representative
-  music, the sudden volume step, sustained bass and sustained treble. Decide with measurements whether that is the
-  intended smoother loud body or lost motion: compare the per-case traces before and after, check kicks and passage
-  changes still read, and either fix the field or recalibrate only the DevCurve floors (`floors.calibrate`) with the
-  reason recorded. Never bless the drift unexplained.
 
 ## Operator execution and evidence rules
 

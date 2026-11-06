@@ -150,3 +150,29 @@ Future Spectrum smoothing or interpolation must:
 - require stronger goldens first and explicit installed user approval afterward.
 
 More paints are not evidence of smoother motion.
+
+## 2026-11-06 Follow-Up — The Accepted Smoothing Was Dead Since The R77 Cleanup
+
+Operator (6 Nov): "Spectrum still has broken visual only smoothing" (live: Spectrum smoothing on at `0.7`).
+
+**Cause.** `SpectrumFrameRuntime.resolve` snaps to source while `first_frame` holds (a correct reset boundary). The
+capture derives `first_frame = not widget._has_pushed_first_frame`, and the only writer that set the flag True was the
+legacy GL overlay push deleted in `2cd939a0` (2 Sep, R77 debris cleanup). From then on every tick was a "first
+frame", the reset branch ran every tick and every strength drew exactly the unsmoothed bars: Spectrum, Extruded
+Spectrum and Shockwave Grid alike, and the Spectrum Studio's step too. The tests missed it because their stub hosts
+set `_has_pushed_first_frame=True` by hand, which production never did.
+
+**Measured** (production replay, preset index 0, 30 s each of anything_mixed2 / 1985_loud1 / growingpains / ragdoll):
+before the fix, off, 0.3, 0.5, 0.7 and 1.0 were byte-identical. After: mean drawn-vs-source difference and jerk
+reduction grow monotonically with strength (anything_mixed2 jerk −9% / −17% / −23% / −30% at 0.3 / 0.5 / 0.7 / 1.0;
+added velocity lag ≈ +1.1 / +2.3 / +3.4 / +5.1 ms; kick peak retention 99 / 98 / 98 / 97%).
+Evidence: `.artifacts/evidence/spectrum_smoothing_20261106/` (worktree evidence).
+
+**Fix.** `capture_visualizer_logical_frame` ends the first-frame edge with the first captured frame (one attribute
+write per capture; no timer, thread or new state). The filter itself, its symmetric one-pole shape, its `2–14 ms`
+mapping and its reset boundaries are unchanged: this restores the August-accepted behaviour. Regression:
+`tests/test_spectrum_visual_smoothing_seam.py` (production tick seam, with a negative control re-creating the
+never-cleared flag).
+
+**Physical check.** The restored effect is subtle at ~90 Hz (≤ half a tick of lag at 1.0). Whether the authored
+range is strong enough is the operator's call in a real session; widening it is a product choice, not part of this fix.
