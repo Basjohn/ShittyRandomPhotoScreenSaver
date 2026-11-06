@@ -130,19 +130,23 @@ context is valuable). Slots need not always be full: when the right agent is not
   parked. Refreshes are edge-driven, and during transitions ride rendered frames at a measured rate per material.
   Backdrop refresh costs 0.045-0.058 ms GPU and 0.11-0.15 ms render-thread CPU; the card quads add 0.006-0.008 ms per
   frame. `Widgets -> General -> Style Overrides -> Surface Material` (Normal default). The Visualizer card and the
-  System Volume OSD stay Normal. Captures: `.artifacts/evidence/widget_surfaces_20261106/` in the agent worktree.
+  System Volume OSD stay Normal. Captures: `.artifacts/evidence/widget_surfaces_20261106/` (side-by-side sheets per
+  theme, still and transition; `crop_dark_busy.png` first; regenerate full frames with
+  `tools/surface_material_capture.py --sheets`). Lead review 6 Nov: accepted and merged. The read happens after the
+  background in Qt's in-order pass (the background node is not depth-aware), GL state is saved and restored, a
+  multisampled target or any failure leaves cards Normal. **Operator 6 Nov: "The dark looks good but light exposes
+  some legibility/shadow improvements for UX it should get"** - done (same agent), measured per text run against the
+  local backdrop: worst small-text contrast on the light theme Glass 2.11 -> 4.58, Frosted 2.64 -> 4.91, Smoked 2.70 ->
+  4.90, Acrylic 3.89 -> 4.89; soft halos dropped on materials; inner edge on light cards; Normal unchanged, dark
+  materials unchanged outside text runs (Card_Surface_Materials.md section 6; crops in
+  `legibility_compare/legibility_before_after.png`).
   Left:
   1. **Live check under the lead-scheduled game load**, materials on, a transition-heavy run, and Normal as the
      control.
   2. **Operator's eyes on the light-theme pass:** small text now holds 4.5:1 on every material through a per-run
      legibility plate (it reads as a soft chip behind small muted text where the backdrop is busy), soft halos are
      dropped on materials, and light cards get an inner hairline and highlight. The per-family Surface Material row
-     is built.
-- [ ] **Side defects seen in the card-surface run (6 Nov), not caused by it:** the isolated suite fails
-  `tests/test_r41_glyph_tooltip_and_light_audit.py::test_eb_settings_tooltips_are_escaped_wrapped_not_one_line_or_new_owner`
-  (it expects `textwrap.wrap(control.tooltip, width=59` in a Visualizer mode settings module; that code is identical to
-  main), and `tests/test_release_media.py::test_source_change_during_capture_discards_media` needs the gitignored
-  `assets/usu/scenes/UsuScene*.png` originals, so it fails in any agent worktree.
+     is built (every card family declares `surface_material: inherit`).
 - [~] **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent) - second
   pass done, awaiting operator eyes:** the mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`.
   Preset 9 (Deep Red Ocean) only; Presets 1-8 pixel-identical. Shared work, each dormant at 0: **Ember Grain**,
