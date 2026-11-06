@@ -426,9 +426,9 @@ def extract(mode: EngineAnswerMode, source: str | Path, settings: Mapping[str, A
     whole = features
     if seconds is not None and origin is None:
         features = [f for f in features if (f.timestamp_us - first_us) / 1e6 <= seconds]
-    start = None
+    loop_start = None
     if origin is None:
-        features, start = clip_loop.primed(whole, features, source)     # a loop: its end replayed first
+        features, loop_start = clip_loop.primed(whole, features, source)     # a loop: its end replayed first
     records: list[dict] = []
     with deterministic_clock() as clock:
         engine = mode.replay_engine_for(features, 32, synthetic=origin is not None)
@@ -457,18 +457,16 @@ def extract(mode: EngineAnswerMode, source: str | Path, settings: Mapping[str, A
                     frames_out.append((now, payload))
         finally:
             engine.force_stop()
-    if start is not None:                  # only the clip's own ticks are recorded; the lead-in just primed the engine
-        records = [r for r in records if r["now_ts"] >= start - 1e-9]
-        if frames_out is not None:
-            frames_out[:] = [item for item in frames_out if item[0] >= start - 1e-9]
     if not any(r["frame_sha256"] for r in records):
         raise RuntimeError(f"The source never published a {mode.mode_id} frame")
-    start = float(records[0]["now_ts"]) if origin is None else float(origin)
+    # A loop's lead-in ticks stay in the record, before the origin: the Studio's own history replays them first, so
+    # its state at the clip's start is the production replay's (and a running loop's), not a cold start.
+    start = float(records[0]["now_ts"] if loop_start is None else loop_start) if origin is None else float(origin)
     data = {"source": str(source), "origin": start, "duration": float(records[-1]["now_ts"] - start),
             "engine_values": mode.engine_values(settings), "steps": records}
     if len(recorder.arrays):
         data["arrays"] = recorder.arrays.payload()        # arrays the engine answered (by identity), as bytes
-    return clip_loop.mark_loop(data, source, start)
+    return clip_loop.mark_loop(data, source, loop_start)
 
 
 def array_blob(data: Mapping[str, Any]) -> bytes | None:
@@ -528,7 +526,7 @@ class RecordedInputs:
                  engine_values: Mapping[str, Any], arrays: tuple = (), period: float = 0.0) -> None:
         self.fixture = fixture
         self.period = float(period)        # > 0: a seamless loop (``ui/studio/clip_loop.py``)
-        self._span = clip_loop.served_span(steps) if self.period > 0.0 else 0
+        self._span = clip_loop.served_span(steps, origin) if self.period > 0.0 else 0
         self.arrays = tuple(arrays)        # the recorded arrays, one object per number (``served_arrays``)
         self._steps = steps
         self._origin = origin

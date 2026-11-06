@@ -40,6 +40,12 @@ FAMILIES = {
 }
 
 
+# Paths of a mode's state that jump by design, left out of the step: DevCurve's travelling highlights leave at one edge
+# and respawn at the other (position, variant and amplitude restart there), whenever their own travel says, not when
+# the music or the wrap does.
+HIDDEN_JUMPS = {"devcurve": r"\.specular_slots"}
+
+
 def values() -> dict:
     from core.settings.default_contract import require_canonical_default
     return dict(require_canonical_default("widgets.spotify_visualizer"))
@@ -156,8 +162,16 @@ def wrap_steps(evaluator, inputs, vals, *, loop: bool, window: float = 1.5, read
 def probe(family: str, clip: str = "growing_pains") -> dict:
     """The wrap of ``family`` on ``clip``: the step across it, the ordinary steps (median, 95th percentile, maximum)
     and the same measurements for the old restart at zero."""
+    import re
     vals = values()
-    read = beam_state if family == "oscilloscope" else None
+    hidden = re.compile(HIDDEN_JUMPS[family]) if family in HIDDEN_JUMPS else None
+    if family == "oscilloscope":
+        read = beam_state
+    elif hidden is not None:
+        def read(_evaluator, frame):
+            return {k: v for k, v in state_map(frame).items() if not hidden.search(k)}
+    else:
+        read = None
     out = {}
     for label, loop in (("carried", True), ("restart", False)):
         steps, across = wrap_steps(*evaluator_for(family, clip), vals, loop=loop, read=read)
