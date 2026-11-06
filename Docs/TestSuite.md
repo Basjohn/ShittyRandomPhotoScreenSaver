@@ -790,6 +790,17 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   theme, the preset row, Settings round trip and every exit restoring it, and Save To <Preset> on a tmp copy of a
   curated DevCurve preset through the real SettingsDialog. `tests/test_devcurve_shape_editor.py` keeps Settings'
   editor at the two nodes the solver needs (negative control: one node is refused).
+- `tests/test_oscilloscope_studio.py` — Oscilloscope on the shared recorded engine answers with arrays recorded by
+  identity: full logical frames byte-identical to the production replay at every tick (synthetic audio and a shipped
+  clip, canonical and a Phase / full afterglow / full reactions variant; zero unrecorded reads), with afterglow
+  traces, flare and drive driven by the fixture; the array pool (identity numbering, exact bytes, one served object,
+  refused without a pool), the served history keeping the engine's identity pattern across ticks and rewinds, the
+  worker's binary sidecar and the out-of-process job; the split proven both ways (arrays included), mode-owned edits
+  replaying exactly and under the frame budget, engine edits re-running the worker, a perturbed-answer negative
+  control; registry coverage with a negative control and registry instruments / conditions; the Level / Afterglow /
+  Ghosts / Flare / Drive / Tone instruments and the loudness overview; dormancy; on a real VisualizersTab the preset
+  row, Settings round trip and every exit restoring it, identical production-renderer pixels, theme; on the real
+  SettingsDialog, Save To <Preset> into a tmp copy of a curated Oscilloscope preset.
 - `tests/test_neon_lake_studio.py` — Neon Lake Basin (`shockwave_grid`) on the shared recorded engine answers: full
   logical frames byte-identical to the production replay at every tick (synthetic audio and a shipped clip, canonical
   and a Terrain Reaction / Starscape Beat / Glass + Vertices / turned variant), with the fixtures driving waves from
@@ -826,11 +837,16 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
 - `tests/test_studio_exit_every_mode.py` — every registered Studio, after a commit, through the shell's Close button:
   Settings revealed before teardown, forced retire failures, the window never hidden from Python, the `--studio`
   sidecar and main log receiving the lifecycle.
+- `tests/test_studio_exit_repaint.py` — a natively concealed and revealed frameless translucent (layered) window is exposed and
+  paints again, through every exit path (Close, Esc, window X, `close()`), plain and with the acrylic AccentPolicy; negative
+  controls without the re-expose and an opaque control. Mechanism-level on a bare window with Settings' window recipe (the real
+  `SettingsDialog` raises visible guided-setup / "No Image Sources" popups when shown); every window has an empty region and an
+  `EnumWindows` guard asserts no visible window with pixels.
 - `tests/test_settings_percent_slider_round_trip.py` — Settings sliders reload stored hundredths exactly (no `int`
   truncation in any Settings tab), through the real widgets and a Studio commit.
 - `tests/test_studio_preset_row_and_save_to_preset.py` — on the real SettingsDialog: every registered Studio mode
-  offers Open Studio in its preset row on a curated slot and on Custom with no Edit Preset (modes without a Studio
-  keep Edit Preset, no launcher); the launcher opens the Studio on the slot shown; Save To <Preset> asks first
+  offers Open Studio in its preset row on a curated slot and on Custom with no other launcher, and every mode the
+  preset owner serves has a Studio (Edit Preset is deleted); the launcher opens the Studio on the slot shown; Save To <Preset> asks first
   (Cancel writes nothing), writes only the edited key into a tmp copy of a real curated preset in the file's own
   shape (LF and CRLF), reloads presets, and a read-only file gives the message and writes nothing (negative
   control: writable prompts); opened on Custom it is not offered; the shared patcher touches nothing else.

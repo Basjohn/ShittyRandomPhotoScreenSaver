@@ -1,4 +1,4 @@
-"""Open Studio on every preset slot, and the Studio's Save To <Preset> (Edit Preset's Notepad path retired).
+"""Open Studio on every preset slot, and the Studio's Save To <Preset> (Edit Preset's Notepad path deleted).
 
 Drives the real SettingsDialog (its Visualizers tab, lazy mode bodies and preset sliders) and the real Studio
 bridge on the hidden offscreen surface; nothing is shown. Membership comes from the Studio registry and the
@@ -31,7 +31,6 @@ from ui.studio.schema import SCALAR
 pytestmark = pytest.mark.qt
 
 STUDIO_MODES = tuple(entry.mode_id for entry in studio_modes())
-OTHER_MODES = tuple(mode for mode in vp.MODES if not has_studio(mode))
 MODE = "waveform_ribbon"          # the Studio driven end to end (its quiet test renderer draws nothing)
 
 
@@ -86,13 +85,12 @@ def _launcher(tab, mode):
 
 # ------------------------------------------------------------------------------------- the preset row
 def test_every_studio_mode_offers_open_studio_on_curated_and_custom_and_no_edit_preset(real_dialog):
-    dialog, tab = real_dialog(STUDIO_MODES[0], STUDIO_MODES + OTHER_MODES)
+    dialog, tab = real_dialog(STUDIO_MODES[0], STUDIO_MODES)
     assert STUDIO_MODES
     for mode in STUDIO_MODES:
         tab._select_mode_page(mode)
         slider, launcher = _slider(tab, mode), _launcher(tab, mode)
         assert launcher is not None and slider.isAncestorOf(launcher), mode
-        assert slider._edit_btn is None, mode                       # Edit Preset is retired here
         row_buttons = {id(b) for b in slider.findChildren(QAbstractButton) if b is not slider._include_starting_view}
         assert row_buttons == {id(launcher), id(slider._custom_action_btn)}, mode   # never two launchers
         for index in (0, slider.custom_index()):
@@ -100,17 +98,10 @@ def test_every_studio_mode_offers_open_studio_on_curated_and_custom_and_no_edit_
             assert launcher.isVisibleTo(tab) and launcher.isEnabled(), (mode, index)
 
 
-def test_modes_without_a_studio_keep_edit_preset_and_get_no_launcher(real_dialog):
-    if not OTHER_MODES:
-        pytest.skip("every visualizer mode has a Studio: Edit Preset is gone everywhere")
-    dialog, tab = real_dialog(OTHER_MODES[0], OTHER_MODES)
-    for mode in OTHER_MODES:
-        tab._select_mode_page(mode)
-        slider = _slider(tab, mode)
-        assert _launcher(tab, mode) is None, mode
-        assert slider._edit_btn is not None and slider.isAncestorOf(slider._edit_btn), mode
-        slider._slider.setValue(0)
-        assert slider._edit_btn.isVisibleTo(tab), mode
+def test_every_mode_with_curated_presets_has_a_studio():
+    """Edit Preset (the preset file opened in the OS editor) is deleted: every mode the preset owner serves authors
+    its curated presets in its Studio (Save To <Preset>), so none is left without a preset editor."""
+    assert vp.MODES and all(has_studio(mode) for mode in vp.MODES), [m for m in vp.MODES if not has_studio(m)]
 
 
 # ------------------------------------------------------------------------------- the Studio, offscreen

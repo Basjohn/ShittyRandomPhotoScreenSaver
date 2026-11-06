@@ -34,7 +34,7 @@ and must not be copied per mode.
 | `core/settings/visualizer_preset_file.py` | Shape-preserving edits of an authored preset file (section merge, in-place patching, source-like formatting, `save_changes_to_preset`), shared by the preset repair tool and the Studio's Save To <Preset>. |
 | `ui/studio/presence.py` | `WindowPresence`: conceal/reveal the *same* Settings dialog without ending its `QDialog.exec()` loop (native `SW_HIDE` on Windows; zero opacity plus off-screen move elsewhere). |
 | `ui/studio/framed.py` | Shared pieces for 3D (and card-presented) adapters: production presentation resolver and uniform aperture scale, `card_framings` / `live_card_framings`, `camera_navigation` over the shared framed camera, `orbit_navigation` for a free-orbit mode (the descriptor's `view_orbit_settings` only), `QuickModeRenderer` wrapping a production Quick renderer and `ContractModeRenderer` handing it the production render-frame contract (pixel ratio from the item mapping, so a letterboxed live card presents at the true DPR). |
-| `ui/studio/engine_answers.py` | The Spectrum family's recorded engine answers (Spectrum, Extruded Spectrum, Neon Lake, DevCurve), mode-neutral (`EngineAnswerMode(mode_id, conditional_reads)`): synthetic audio (with the analysis spectrum and onsets a recording carries), the out-of-process `extract`, recorded inputs, the per-mode answer cache, `start_clip_load` and `EngineAnswerEvaluator` (the production step in process, rewinds, checkpoints, frame budget). The engine-owned / mode-owned split follows from the production source projection (`source_config_applier`). |
+| `ui/studio/engine_answers.py` | The Spectrum family's recorded engine answers (Spectrum, Extruded Spectrum, Neon Lake, DevCurve, Oscilloscope), mode-neutral (`EngineAnswerMode(mode_id, conditional_reads)`): synthetic audio (with the analysis spectrum and onsets a recording carries), the out-of-process `extract`, recorded inputs, the per-mode answer cache, `start_clip_load` and `EngineAnswerEvaluator` (the production step in process, rewinds, checkpoints, frame budget). The engine-owned / mode-owned split follows from the production source projection (`source_config_applier`). |
 | `ui/studio/spectrum_shape.py` | The Spectrum family's shape editor as Studio rows, admission and structural edits (add / remove node, lane swap), by key prefix (`ShapeKeys`). |
 | `ui/studio/theme.py`, `colour.py` | Chrome tokens derived from the active Settings theme with enforced contrast; display ↔ linear colour conversion for instruments. Scene colours never pass through the theme. |
 | `ui/studio/chrome.py` | The painted chrome items (`StudioFrame`, `StudioWindowEdge`, QML module `SRPSS.StudioChrome`), painting with Settings' own owners (below). |
@@ -131,6 +131,24 @@ is optional and defaults to "not offered":
   Swell; Audio Analysis the served band shares and loudness. All are reads of the evaluator's own runtime and served
   answers (`DevCurveStudioEvaluator.measurements`), never saver work. Instruments: no DevCurve value is a true
   interval, so none is a Quiet/Peak A/B; the stack order is a segmented count.
+- **Arrays answered by identity (Oscilloscope).** Oscilloscope's capture reads the capture history (a read-only NumPy
+  array the engine keeps as the *same object* while its capture serial holds), the 256-sample waveform, onsets after
+  the runtime's serial, the musical level and intensity, the analysis spectrum and the history's rate; its frame
+  runtime rebuilds the trace only for a new history object. The recorder therefore numbers every array an answer
+  carries by identity (`replay_engine.RecordedArrays`: one number per distinct object for the whole recording, a
+  reference held so an id is never reused) and the answer names the number; the worker writes the arrays' raw bytes
+  to a binary sidecar beside its JSON (`<output>.arrays`, read before the job's folder is removed), and the Studio
+  serves one read-only `np.frombuffer` view per number (`served_arrays`), so a held history is the same object tick to
+  tick. `StepState` shares the recorded arrays instead of copying them, so a rewound step still holds the object the
+  view serves. Without a pool an array answer is still refused, so a mode whose answers hold no arrays records
+  exactly as before. A shipped clip: about 830 distinct 4096-sample histories (13.6 MB sidecar), 7.6 MB of answer
+  JSON, about 0.1 s to load. Engine-owned are the technical values (in the replay only Bar Count and the noise floor
+  change any answer); every `osc_*` key is mode-owned. Workspaces follow the buckets: Trace (Display), Beam & Screen,
+  Reaction (with the analysis). Traces, read from the frame on screen (`OscilloscopeStudioEvaluator.measurements`):
+  **Level** (the live trace's swing in its display's own units), **Afterglow** (the newest afterglow trace's
+  brightness against a fresh one) and **Ghosts** (held traces against the capacity), **Flare**, **Drive**, **Tone**;
+  the transport overview is the recorded loudness (`EngineAnswerEvaluator.timeline_measure`). No value is a true
+  interval: every slider is one scalar.
 - **Exact replay without a stall.** Such an evaluator never re-configures its controller for a mode-owned edit:
   `replay_engine.StepState` captures the production step state (controller, logical tick state, presentation state
   and the mode runtimes they hold; locks, QObjects and the engine view shared) right after configuration and at
@@ -214,8 +232,8 @@ gesture evaluates with `exact=False`, which never starts one). Their sliders say
   the settings map directly. Camera turn/tilt go through the framed camera editor's pose authority.
 - **Preset menu.** The header's preset picker offers Settings' own preset-row actions: Move To Custom (on a curated
   preset), Save Preset As… (on Custom, Settings' own file dialog) and, for authoring the curated presets themselves,
-  **Save To <Preset>**. This replaces Settings' retired Edit Preset (the preset file opened in the OS editor), which
-  remains only for modes that have no Studio yet (`Current_Plan.md` §9).
+  **Save To <Preset>**. This replaced Settings' Edit Preset (the preset file opened in the OS editor), deleted on
+  6 Nov 2026 once every visualizer mode had a Studio.
 - **Save To <Preset>.** The store remembers the curated preset this session's Custom values came from (the preset the
   Studio opened on, a Studio edit made on a curated preset, which moves it into Custom, or Move To Custom from it;
   choosing another curated preset starts afresh, returning to Custom keeps it) and the keys edited since. On Custom
@@ -240,6 +258,12 @@ gesture evaluates with `exact=False`, which never starts one). Their sliders say
   retired, and again (idempotently) in a `finally`, so neither a failing nor a hanging teardown step can leave
   Settings concealed; a mode switch retires without revealing because the next session follows. Open failures show a
   "Studio Unavailable" popup over Settings.
+- **Reveal re-exposes (layered window).** Settings is frameless and translucent, so Qt presents it as a layered window,
+  which never receives `WM_PAINT`; Qt exposes it only from a show it initiated, and `WindowPresence` shows it natively.
+  Without help the revealed window stays *not exposed* to Qt: it accepts input but never repaints (the 6 Nov "frozen and
+  unclickable" stall: saves logged for 25 s after a clean reveal). `reveal` therefore follows the native show with
+  `RedrawWindow(RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW)`, which makes Windows send the missing `WM_PAINT` so Qt
+  exposes and repaints; the reveal log line carries `exposed=`. `tests/test_studio_exit_repaint.py` guards it.
 - **Never hide the window from Python.** PySide holds the GIL through `QWindow.hide()`, and Qt's threaded render
   loop waits inside it for the render thread, which runs the viewport's Python (render-node release,
   `sceneGraphInvalidated`) when the non-persistent scene graph is invalidated: calling it from Python deadlocked the
