@@ -334,6 +334,13 @@ no longer build the settings model (evaluation per frame 29.7 -> 7.3 ms median o
 release replay spreads over frames within the budget (one 222 ms evaluation -> about 8.4 ms per frame); evidence
 `.artifacts/evidence/studio_followups/drag_profile/`.
 
+A drag holds until release. Drag instruments that sit in a scrolling panel set `preventStealing: true`: the value
+slider, the colour picker's field and hue bar, gradient nodes, and the response curve in the sideways-scrolling
+dock. Without it, a vertical wobble past the drag threshold handed the press to the panel's scroll view, and the
+slider let go mid-drag (operator, 6 Nov: "sliders snap out of being dragged in mid motion"; it reproduced on every
+mode at the first wobble). `tests/test_studio_drag_coalescing.py` drags every mode with a wobble, with a negative
+control.
+
 ## 4. Settings link and the restore guarantee
 
 - **Entry.** Every visualizer mode's Settings body is `build_studio_owned_mode_ui` (`ui/tabs/media/spec_mode_builder.py`,
