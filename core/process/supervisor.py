@@ -202,7 +202,14 @@ class ProcessSupervisor:
         # the spawn and the ready wait, so it is never taken by availability
         # queries, messaging or telemetry (those use ``_lock`` alone).
         with self._lifecycle_locks[worker_type]:
-            return self._start_role(worker_type)
+            started = self._start_role(worker_type)
+            if self._shutdown and worker_type in self._workers:
+                # shutdown() began while this start was waiting for ready; it
+                # may already have walked the worker table, so retire the child
+                # here rather than leave it registered but unowned.
+                self._stop_role(worker_type, 1.0)
+                return False
+            return started
 
     def _start_role(self, worker_type: WorkerType) -> bool:
         with self._lock:

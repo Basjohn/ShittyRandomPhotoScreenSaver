@@ -43,23 +43,19 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
 
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
 
-- [ ] **Slow startup (operator, 6 Nov 10:30; owner found and fixed, three leftovers):** proved from the logs plus offline
-  measurement that neither the Feeds delivery nor the usage sampler owned the 7 s. The `_FeedFamilyOwner` delivery's
-  `_release_admission` resumes the deferred startup image change, whose worker-authority preflight
-  (`image_processing_authority_available`) called `ProcessSupervisor.is_running(IMAGE)` before `image_queue.next()`; the sampler's first sample called `get_image_worker_usage_snapshot()`; both took
-  the supervisor's single state lock, which the heartbeat thread held for the whole `stop()` (graceful wait + terminate +
-  kill, 10:30:20 to :27) of the image_prefetch child that never signalled ready, and again for the next `start()`'s 10 s
-  ready wait (10:30:30 to :40: GlobalClockTicker gap 10.2 s). The pure-Python Visualizer tick kept 450 frames in those
-  5 s (no GIL hold); the sampler's first `collect()` offline is 133 ms with a 27 ms worst tick gap; Feeds cache delivery
-  work is 0.1-18 ms per source at 18 publishers x 40 stories. Fixed in `core/process/supervisor.py`: state lock held for
-  dictionary work only, start/stop of a role run under a per-role lifecycle lock, a role mid-transition reports "not
-  available" (`tests/test_process_supervisor_availability.py` with old-shape negative controls). Still open: (1)
-  `_start_workers` still waits synchronously on the engine init thread for the optional speculative child's ready signal
-  (up to 10 s under heavy load, 10:30:10 to :20); make that start off-thread once the supervisor change is confirmed;
-  (2) the 166-240 ms per-source `FEED_GUI_DELIVERY` cache lines at 10:30:40-42 are not reproduced on the owner side
-  (consumer/QML model side is unmeasured, and they landed the instant the GUI thread was released); re-check in the next
-  quiet startup with `--usage`; (3) operator confirmation that a cold start with `--usage` no longer freezes the GUI
-  (compare the `UI_CALLBACK` and `collect_ms` lines). Evidence `.artifacts/evidence/slow_startup_20261106/`.
+- [ ] **Slow startup (operator, 6 Nov 10:30; owners found and fixed, awaiting the operator's cold start):** the 7 s
+  GUI "Feeds delivery" and the sampler's 7.2 s first sample were one `ProcessSupervisor` state lock held across a
+  stuck optional child's stop/start; fixed (lock for dictionary work only, per-role lifecycle lock, a role mid-transition
+  reports "not available"; `tests/test_process_supervisor_availability.py`). The engine init thread no longer waits up
+  to 10 s for the OPTIONAL image_prefetch child's ready signal (10:30:10 to :20): `_start_optional_worker` queues that
+  start on a ThreadManager IO worker (the required IMAGE worker keeps its inline ready wait; supervisor `shutdown()`
+  aborts the wait and the engine stops the supervisor before the ThreadManager; `tests/test_optional_worker_startup.py`).
+  Offline, Feeds cache delivery including the NEWS card model is 0.1-15 ms per source at 18 publishers x 40 stories, so
+  the 166-240 ms `FEED_GUI_DELIVERY` lines at 10:30:40-42 are not reproduced (`_complete` excludes QML) and are treated
+  as the post-block backlog on a 97-100% CPU machine. Open: confirm on the operator's next cold start with `--usage`
+  that no `UI_CALLBACK` / `FEED_GUI_DELIVERY` line exceeds a frame and the first `collect_ms` is small; a prefetch
+  batch asked for before the child is ready fails as "not running" (a logged `[PREFETCH]` error; no retry of that batch). Evidence
+  `.artifacts/evidence/slow_startup_20261106/`.
 - [ ] **Spectrum visual-only smoothing still broken (operator, 6 Nov):** wired (Settings -> `_spectrum_visual_smoothing
   (_enabled)` -> `SpectrumFrameRuntime.resolve(smoothing_enabled, smoothing_strength)`), so the defect is in what it
   does. Measure bar motion on recorded music with smoothing off / on / at 0.3 / 0.7 / 1.0 (frame-to-frame jerk, lag,

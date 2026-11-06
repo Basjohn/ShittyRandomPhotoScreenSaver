@@ -129,15 +129,22 @@ def test_worker_startup_admits_speculation_only_for_selected_quality_and_budget(
     values = {"workers.max_workers": limit, "workers.image.enabled": enabled,
               "display.resample_filter": resample_filter, "display.sharpen_downscale": sharpen}
     started = []
+    background = []
     engine = SimpleNamespace(
         _process_supervisor=SimpleNamespace(start=lambda role: started.append(role) or True),
         _prefetch_ahead=ahead,
         _display_selection_suspended=lambda: False,
         _workers_waiting_for_display=False,
+        thread_manager=SimpleNamespace(submit_io_task=lambda func, **_kw: background.append(func)),
         settings_manager=SimpleNamespace(get=values.__getitem__, get_bool=values.__getitem__,
                                          get_application_name=lambda: "Screensaver"),
     )
+    engine._start_optional_worker = lambda *args: ScreensaverEngine._start_optional_worker(engine, *args)
     ScreensaverEngine._start_workers(engine)
+    # The required worker starts inline; the speculative one is only queued.
+    assert started == [role for role in expected if role == WorkerType.IMAGE]
+    for task in background:
+        task()
     assert started == expected
 
 
