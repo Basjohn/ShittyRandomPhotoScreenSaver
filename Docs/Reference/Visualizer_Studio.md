@@ -127,8 +127,10 @@ is optional and defaults to "not offered":
   argument), so no state resets. A rewind to the start (an edit, a seek, new answers) re-anchors to the start of
   the pass the instant is in, so it replays what it always replayed, never every pass played; `ExactReplay` drops
   checkpoints older than two passes and returns the re-anchored time, so a budgeted replay converges across a wrap
-  exactly as before. *Primed workers*: a worker replays the loop's last 2 s (`PREROLL_S`) before the clip, so the
-  engine's lanes at the start are those of a running loop, not a cold start (measured: without it the first second
+  exactly as before. *Primed workers*: a worker replays the loop's last 2 s (`PREROLL_S`) before the clip and the
+  record keeps those ticks before the clip's origin (`Cycles` plays them once, as the first pass's head), so the Studio's
+  history at the clip's start is the production replay's and a running loop's, and the engine's lanes at the start are
+  a running loop's, not a cold start (measured: without it the first second
   of Bubble's overall lane sat at 0.008-0.014 against 0.33-0.45 steady; with 1 s of lead-in the lanes equal the
   converged third pass of an unbroken run, 2 s is the margin, +0.4 s of worker time on ~3.3 s, about +12%). A native
   recording, or a clip cut short by `seconds`, is not a loop and behaves as before. Why not 30 s clips: the best

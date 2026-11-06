@@ -239,8 +239,9 @@ def shift_answers(answers, seconds: float, serials: int) -> dict:
     return out
 
 
-def served_span(steps) -> int:
-    """Onset serials one pass of recorded engine answers advances the runtime that reads them."""
+def served_span(steps, origin: float = 0.0) -> int:
+    """Onset serials one pass of recorded engine answers advances the runtime that reads them: from what the runtime
+    has seen when the clip starts (the lead-in's onsets, before ``origin``, are not part of a pass) to the last."""
     base, top = None, 0
 
     def scan(value):
@@ -258,7 +259,7 @@ def served_span(steps) -> int:
         for key, value in step.answers.items():
             call = _ONSET_CALL.match(key)
             if call:
-                if base is None:
+                if base is None and step.now >= origin - 1e-9:
                     base = int(call.group(1))
                 scan(value)
     return max(0, top - (base or 0))

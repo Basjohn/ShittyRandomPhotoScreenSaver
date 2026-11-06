@@ -162,6 +162,10 @@ def test_the_preview_passes_through_the_wrap_without_a_jump(qt_app, family):
     carried, restart = probe["carried"], probe["restart"]
     assert carried["wrap"] <= 1.25 * carried["p95"]              # as ordinary as the steps around it
     assert carried["after_wrap_moves"]                           # and the preview plays on after it (not frozen)
+    if family == "oscilloscope":
+        # Its carried state (afterglow, flare, drive) settles within the lead-in the loop's history now starts with, so
+        # a restart no longer shows there: the trace itself was the visible jump, and the baked audio removes that.
+        return
     assert restart["wrap"] > 2.0 * restart["p95"]                # the restart at zero is a visible event
     assert restart["wrap"] > 3.0 * carried["wrap"]
 

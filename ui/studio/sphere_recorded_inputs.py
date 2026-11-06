@@ -100,14 +100,12 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
                     frames_out.append((records[-1]["now_ts"], payload))
         finally:
             engine.force_stop()
-    if start is not None:                  # only the clip's own ticks are recorded; the lead-in just primed the engine
-        records = [r for r in records if r["now_ts"] >= start - 1e-9]
-        if frames_out is not None:
-            frames_out[:] = [item for item in frames_out if item[0] >= start - 1e-9]
     if not records:
         raise RuntimeError("The clip never captured a Sphere frame")
     from ui.studio.clip_loop import mark_loop
-    return mark_loop({"clip": str(clip_path), "origin": float(records[0]["now_ts"]),
+    # A loop's lead-in ticks stay in the record, before the origin: the Studio's own history replays them first, so
+    # its state at the clip's start is the production replay's (and a running loop's), not a cold start.
+    return mark_loop({"clip": str(clip_path), "origin": float(records[0]["now_ts"] if start is None else start),
                       "duration": float(records[-1]["now_ts"] - records[0]["now_ts"]), "steps": records},
                      clip_path, start)
 
