@@ -288,8 +288,7 @@ def studio_on(qt_app, settings_manager):
         built.append(dialog)
         return tab
 
-    def open_on(mode, preset_index=None):
-        tab = make_tab(mode, get_custom_preset_index(mode) if preset_index is None else preset_index)
+    def open_tab(tab, mode):
         surfaces = []
 
         def factory(controller):
@@ -298,9 +297,14 @@ def studio_on(qt_app, settings_manager):
             return surface
         controller = open_mode_studio(tab, mode, adapter=light_adapter(mode), surface_factory=factory)
         surfaces[0].pump()
-        return tab, controller
+        return controller
+
+    def open_on(mode, preset_index=None):
+        tab = make_tab(mode, get_custom_preset_index(mode) if preset_index is None else preset_index)
+        return tab, open_tab(tab, mode)
 
     open_on.make_tab = make_tab
+    open_on.open = open_tab
     yield open_on
     active = StudioController.active()
     if active is not None:
@@ -439,80 +443,138 @@ def test_conditional_rows_hide_and_show_live_in_the_studio(studio_on, mode):
                 not term_holds for term_holds in (bridge.values.get(k) in a for k, a in prop.when)), prop.id
 
 
-# ------------------------------------------------------------ anchored on the Settings body users have today
+# ----------------------------------------------------------------------------------- the Settings body itself
+# Before the flip, this file proved the Studios against the bodies users had (commit db7468ab): every row each body
+# collected and every row its spec and hand-written conditions hid (Bubble's Swirl and Particles rules, now
+# StudioProperty.when / when_any in the Bubble adapter). The bodies are now the preset row and the launcher.
 @pytest.mark.parametrize("mode", MODES)
 def test_the_settings_body_collects_exactly_the_body_keys(studio_on, mode):
     from ui.tabs.media.spec_mode_builder import body_keys, collect_spec_mode_settings
     tab = studio_on.make_tab(mode, get_custom_preset_index(mode))
-    _open_every_bucket(tab, mode)
     assert set(collect_spec_mode_settings(tab, mode)) == set(body_keys(mode))
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_settings_shows_exactly_the_shared_families_the_oracle_names(studio_on, mode):
-    tab = studio_on.make_tab(mode, get_custom_preset_index(mode))
-    tab._update_rainbow_visibility()
-    shown = set()
-    if not tab._rainbow_controls_container.isHidden():
-        shown |= set(get_owned_mode_setting_keys(mode, "rainbow").values())
-    if not tab._base_appearance_group.isHidden():
-        shown |= set(get_owned_mode_setting_keys(mode, "shared_bar").values())
-    assert shown == _family_keys(mode)
-
-
-def _open_every_bucket(tab, mode):
-    from ui.widgets.continuous_border import BucketToggle
-    body = getattr(tab, f"_{require_mode_settings(mode).prefix}_settings_container")
-    adv = getattr(tab, f"_{require_mode_settings(mode).prefix}_adv_toggle", None)
-    if adv is not None and not adv.isChecked():
-        adv.setChecked(True)
-    for toggle in body.findChildren(BucketToggle):
-        if not toggle.isChecked():
-            toggle.setChecked(True)
-
-
-def _settings_hidden_rows(tab, mode) -> set[str]:
-    rows = getattr(tab, f"_{require_mode_settings(mode).prefix}_rows")
-    return {key for key, row in rows.items() if row.isHidden()}
-
-
-def _studio_hidden_roots(schema, values) -> set[str]:
-    hidden = condition_hidden(schema, values)
-    roots: dict[str, list[bool]] = {}
-    for prop in schema.properties:
-        roots.setdefault(prop.path[0], []).append(bool(hidden.get(prop.id)))
-    return {root for root, flags in roots.items() if all(flags)}
-
-
-@pytest.mark.parametrize("mode", MODES)
-def test_conditional_rows_hide_as_in_the_settings_body(studio_on, mode):
-    """For every condition source (each toggle and choice the body edits) and each of its values, the rows the
-    Settings body hides (its spec conditions and its hand-written ones) are exactly the rows the Studio hides."""
-    from core.settings.default_contract import require_canonical_default
-    from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings
-    from ui.tabs.widgets_tab_media import _hydrate_visualizer_mode_body
-    tab = studio_on.make_tab(mode, get_custom_preset_index(mode))
-    _open_every_bucket(tab, mode)
-    schema = _schema(mode)
+def test_the_settings_body_is_only_the_preset_row_the_launcher_and_kept_sections(studio_on, mode):
+    from PySide6.QtWidgets import QAbstractButton, QAbstractSlider, QComboBox, QScrollBar, QWidget
     spec = require_mode_settings(mode)
-    rows = getattr(tab, f"_{spec.prefix}_rows")
-    compared = set(rows) & {prop.path[0] for prop in schema.properties}
-    defaults = dict(require_canonical_default("widgets.spotify_visualizer"))
-    sources = [c for c in spec.controls if isinstance(c, (Toggle, Choice)) and _available(c)]
-    checked = 0
-    for base in (defaults, next(iter(_curated_configs(mode)), defaults)):
-        for source in sources:
-            for value in ((False, True) if isinstance(source, Toggle) else source.choices):
-                config = {**base, source.key: value}
-                previous = tab._loading
-                tab._loading = True
-                try:
-                    _hydrate_visualizer_mode_body(tab, mode, config)
-                finally:
-                    tab._loading = previous
-                values = {**config, **collect_spec_mode_settings(tab, mode)}
-                settings = _settings_hidden_rows(tab, mode) & compared
-                studio = _studio_hidden_roots(schema, values) & compared
-                assert settings == studio, (source.key, value, sorted(settings ^ studio))
-                checked += 1
-    assert checked
+    tab = studio_on.make_tab(mode, get_custom_preset_index(mode))
+    body = getattr(tab, f"_{spec.prefix}_settings_container")
+    slider = tab._get_visualizer_preset_slider(mode)
+    button = getattr(tab, f"_{spec.prefix}_studio_button")
+    assert body.isAncestorOf(button) and not button.isHidden()
+    for bucket in spec.buckets:
+        assert body.findChild(QWidget, f"{mode}_bucket_{bucket.key}") is None, bucket.key
+    holder = body.findChild(QWidget, f"{mode}_studio_owned_values")
+    assert holder is not None and holder.isHidden()
+    # The page's shared Bar Appearance and Rainbow rows are value owners only: with the mode's other value
+    # owners in the hidden holder when the mode owns them, else parked hidden; never on the page.
+    tab._update_rainbow_visibility()
+    for accessory in (tab._base_appearance_group, tab._rainbow_controls_container):
+        assert holder.isAncestorOf(accessory) or accessory.isHidden()
+        assert not accessory.isVisibleTo(tab) or holder.isAncestorOf(accessory)
+    quality = getattr(tab, f"_{mode}_quality_controls", None)          # the 3D Detail row (Settings' 3D page owner)
+    sections = getattr(tab, f"_{spec.prefix}_settings_sections")
+    for widget in body.findChildren(QAbstractButton) + body.findChildren(QAbstractSlider) \
+            + body.findChildren(QComboBox):
+        if holder.isAncestorOf(widget) or widget is button or slider.isAncestorOf(widget):
+            continue
+        if widget.isHidden() or isinstance(widget, QScrollBar):
+            continue
+        if quality is not None and quality.isAncestorOf(widget):
+            continue
+        if sections:                       # a section Settings keeps (Neon Lake's terrain brush) is its own editor
+            continue
+        pytest.fail(f"unexpected Settings control {widget.objectName() or widget!r}")
+    # On a curated preset too, the launcher stays offered.
+    slider._slider.setValue(0)
+    assert not button.isHidden() and holder.isHidden()
+
+
+def test_only_neon_lake_keeps_a_settings_section_its_terrain_brush(studio_on):
+    """The Studio carries the terrain heightfield and its whole-record edits but has no brush instrument: the brush
+    is the one Settings control without a Studio home, kept in Neon Lake's body (operator decision)."""
+    kept = {}
+    for mode in MODES:
+        tab = studio_on.make_tab(mode, get_custom_preset_index(mode))
+        sections = getattr(tab, f"_{require_mode_settings(mode).prefix}_settings_sections")
+        if sections:
+            kept[mode] = tuple(entry.name for entry in sections)
+    assert kept == {"shockwave_grid": ("terrain",)}
+    terrain = next(p for p in _schema("shockwave_grid").properties if p.path[0] == "shockwave_grid_terrain")
+    assert terrain.instrument_only
+
+
+def test_a_kept_section_saves_through_settings_and_reaches_the_studio(studio_on, settings_manager):
+    """A stroke of Neon Lake's terrain brush saves through Settings' own save, and the Studio opened next shows it;
+    a Studio commit of another value keeps it."""
+    tab = studio_on.make_tab("shockwave_grid", get_custom_preset_index("shockwave_grid"))
+    editor = tab.shockwave_grid_terrain_editor
+    field = editor.get_heightfield()
+    heights = list(field["heights"])
+    middle = len(heights) // 2
+    heights[middle] = 0.5 if heights[middle] != 0.5 else 0.25
+    editor.set_heightfield({**field, "heights": heights})
+    tab._force_visualizer_preset_to_custom("shockwave_grid")
+    tab._save_settings_now()
+    painted = editor.get_heightfield()
+    assert _stored(settings_manager)["shockwave_grid_terrain"] == painted
+    controller = studio_on.open(studio_on.make_tab("shockwave_grid"), "shockwave_grid")   # the settings as saved
+    assert controller.session.values["shockwave_grid_terrain"] == painted
+    key = "shockwave_grid_wave_height"
+    prop = controller.session.schema.find(key)
+    controller.bridge.commitValue(key, 0, _different(prop, controller.bridge.values[key],
+                                                   require_mode_settings("shockwave_grid").control(key)))
+    assert _stored(settings_manager)["shockwave_grid_terrain"] == painted
+
+
+@pytest.mark.parametrize("mode", [m for m in MODES if any(getattr(e, "keys", ()) and hasattr(e, "build")
+                                                          for e in require_mode_settings(m).entries)])
+def test_studio_edits_of_every_custom_row_save_and_reload_through_settings(studio_on, settings_manager, mode):
+    """Each Custom row's record (shape editors, layers, smoothing, the terrain shaper...) edited through the Studio
+    bridge is saved by Settings' owners and survives a fresh Settings tab's own save."""
+    from core.settings.visualizer_mode_settings import Custom
+    from ui.studio.session import read_path
+    tab, controller = studio_on(mode)
+    bridge, session = controller.bridge, controller.session
+    hidden = bridge.conditionHidden
+    customs = {key for e in require_mode_settings(mode).entries if isinstance(e, Custom) for key in e.keys}
+    wanted = {}
+    for prop in session.schema.properties:
+        key = prop.path[0]
+        if key not in customs or key in wanted or prop.instrument not in (SCALAR, SWITCH) or hidden.get(prop.id):
+            continue
+        if prop.instrument_only:
+            continue
+        before = read_path(session.values, prop.path)
+        bridge.commitValue(prop.id, 0, _different(prop, before))
+        after = read_path(session.values, prop.path)
+        if after != before:
+            wanted[key] = (prop.path, after)
+    assert wanted, f"{mode}: no Custom row was edited"
+    controller.close()
+    reloaded = studio_on.make_tab(mode)
+    reloaded._force_visualizer_preset_to_custom(mode)
+    reloaded._save_settings_now()
+    stored = _stored(settings_manager)
+    for key, (path, value) in wanted.items():
+        assert read_path(stored, path) == pytest.approx(value), path
+
+
+def test_moving_a_bubble_gradient_endpoint_selects_custom_and_undo_restores_both(studio_on, settings_manager):
+    """Settings' gradient rule, now the Bubble Studio's: an endpoint move selects the Custom recipe in the same
+    undoable edit; named recipes keep the latent endpoints."""
+    _tab, controller = studio_on("bubble")
+    bridge, session = controller.bridge, controller.session
+    direction, endpoints = "bubble_gradient_direction", "bubble_gradient_endpoints"
+    named = next(p for p in session.schema.properties if p.id == direction)
+    recipe = next(v for v in named.choice_values if v != "custom")
+    bridge.commitValue(direction, 0, named.choices[named.choice_values.index(recipe)])
+    before = list(session.values[endpoints])
+    moved = round(0.2 if before[0] > 0.5 else 0.8, 2)
+    bridge.commitValue(f"{endpoints}.0", 0, moved)
+    assert session.values[direction] == "custom" and session.values[endpoints][0] == pytest.approx(moved)
+    stored = _stored(settings_manager)
+    assert stored[direction] == "custom" and stored[endpoints][0] == pytest.approx(moved)
+    bridge.undo()
+    assert session.values[direction] == recipe and session.values[endpoints] == pytest.approx(before)

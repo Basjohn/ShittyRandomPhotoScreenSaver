@@ -437,18 +437,19 @@ def _surfaces(store, size=(1100, 640)):
     return factory
 
 
-def test_custom_body_offers_the_studio_and_keeps_closed_buckets_unbuilt(qt_app, dialog_tab, monkeypatch):
+def test_custom_body_offers_the_studio_and_builds_no_control(qt_app, dialog_tab, monkeypatch):
     from ui.studio import settings_link
     _dialog, tab = dialog_tab()
     button = getattr(tab, f"_{MODE}_studio_button")
     assert getattr(tab, f"_{MODE}_settings_container").isAncestorOf(button)
     assert tab._get_visualizer_preset_slider(MODE).isAncestorOf(button)     # in the preset row, every slot
-    built = set(getattr(tab, f"_{MODE}_lazy_built"))
+    from PySide6.QtWidgets import QWidget
+    body = getattr(tab, f"_{MODE}_settings_container")
     calls = []
     monkeypatch.setattr(settings_link, "open_mode_studio", lambda t, m: calls.append((t, m)))
     button.click()
     assert calls == [(tab, MODE)]
-    assert set(getattr(tab, f"_{MODE}_lazy_built")) == built          # the launcher builds no EB bucket
+    assert body.findChildren(QWidget, f"{MODE}_bucket_") == []          # the launcher builds no EB bucket
 
 
 def test_studio_edits_save_through_the_eb_settings_owner_and_close_restores(

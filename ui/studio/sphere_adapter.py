@@ -76,15 +76,25 @@ def _custom_controls(spec) -> dict[str, str]:
             if not c.bucket and _norm(c.key[len(PREFIX):]) in rows}
 
 
+# The Finish bundles: (Gloss, Specular) each finish writes. The finish name is never sent to the renderer.
+_FINISH_PRESETS: dict[str, tuple[float, float]] = {
+    "Neutral": (0.20, 0.25),
+    "Matte": (0.05, 0.08),
+    "Plastic": (0.55, 0.45),
+    "Polished": (0.82, 0.70),
+    "Metallic": (0.72, 1.00),
+    "Glassy": (0.95, 0.75),
+}
+
+
 def finish_presets() -> dict[str, tuple[float, float]]:
-    """Settings' Finish bundles: (Gloss, Specular) a finish writes (``sphere_builder``)."""
-    from ui.tabs.media.sphere_builder import _FINISH_PRESETS
+    """The Finish bundles: (Gloss, Specular) a finish writes."""
     return dict(_FINISH_PRESETS)
 
 
 def _follow(key: str, value: Any, values: Mapping[str, Any]) -> dict:
-    """Settings' Finish coupling: a finish writes Gloss and Specular; a manual Gloss or Specular edit marks the
-    finish Custom (``sphere_builder.bind_sphere_finish_axes``)."""
+    """The Finish coupling (Settings' former Finish row): a finish writes Gloss and Specular; a manual Gloss or
+    Specular edit marks the finish Custom."""
     finish, gloss, specular = PREFIX + "finish", PREFIX + "gloss", PREFIX + "specular"
     if key == finish:
         pair = finish_presets().get(str(value))
