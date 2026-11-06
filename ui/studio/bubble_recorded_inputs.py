@@ -1,14 +1,16 @@
 """Recorded clip -> the exact ticks Bubble's production logical step is served, via the production replay.
 
 Runs in a *separate process* (``python -m ui.studio.bubble_recorded_inputs``) through the shared event-driven
-``ClipLoadJob``: the production offline replay (``widgets.spotify_visualizer.feature_replay``: ``ReplayBeatEngine``
+``ClipLoadJob``: the production offline replay (``widgets.spotify_visualizer.feature_replay``: ``ProductionLaneEngine``
 + ``configure_offline_controller`` + ``logical_tick`` under ``deterministic_clock``) pins the process clocks, so the
-Studio never runs it inside the app.
+Studio never runs it inside the app. ``ProductionLaneEngine`` re-analyses every lane from the clip's PCM through the
+production DSP under the settings' Audio Analysis values, so Sensitivity, the floors, Gain and Block Size move
+Bubble's lanes and events as they do live (the recorded post-DSP lanes cannot move).
 
 For every replay tick the worker records what the engine served Bubble's step (``get_bubble_energy_bands``,
 ``get_transient_energy_bands``, the typed events fed to the event scheduler, the authoritative source frame) and a
 digest of the frame the production Bubble capture built after it, so the Studio's evaluator can be proven to
-reproduce the live path frame for frame. The ticks themselves do not depend on Bubble's authored controls.
+reproduce the live path frame for frame. The ticks depend on the Audio Analysis (technical) values only, never on Bubble's authored controls.
 """
 from __future__ import annotations
 
@@ -45,7 +47,7 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
     from widgets.spotify_visualizer import logical_frame_capture
     from widgets.spotify_visualizer.compact_clip import load_feature_clip
     from widgets.spotify_visualizer.feature_replay import (
-        ReplayBeatEngine, configure_offline_controller, deterministic_clock,
+        configure_offline_controller, deterministic_clock, fed_events, lane_engine,
     )
     from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
     from widgets.spotify_visualizer.tick_pipeline import logical_tick
@@ -61,7 +63,7 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
     capture = logical_frame_capture._BUILTIN_MODE_CAPTURE[MODE]
     records: list[dict] = []
     with deterministic_clock() as clock:
-        engine = ReplayBeatEngine(32)
+        engine = lane_engine(frames)
         controller = VisualizerRuntimeController(runtime_generation=0, initial_mode=MODE,
                                                  engine_factory=lambda _: engine)
         controller.engine = engine
@@ -78,13 +80,11 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
                 bubble = engine.get_bubble_energy_bands()
                 transient = engine.get_transient_energy_bands()
                 ts, generation, activation = engine.get_latest_authoritative_frame()
-                real = feature.real
                 cadence = getattr(state, "_bubble_cadence_state", None)
                 before = cadence.integrated_steps if cadence is not None else 0
                 logical_tick(state)
                 cadence = getattr(state, "_bubble_cadence_state", None)
-                fed = ([[feature.timestamp_us / 1e6, e.kind, float(e.strength)] for e in real.events]
-                       if real is not None else [])
+                fed = fed_events(engine, feature)
                 if cadence is None or cadence.integrated_steps == before:
                     carried.extend(fed)     # the production tick did not step Bubble: neither does the Studio
                     continue

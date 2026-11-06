@@ -303,3 +303,146 @@ def test_visualizer_frames_crop_to_the_union_of_what_any_frame_draws(tmp_path):
     assert content_box([frames[2]], VISUALIZER_BACKGROUND, 0.02) is None      # nothing drawn: no crop
     edge = content_box([frame("d.png", (0, 0, 10, 10))], VISUALIZER_BACKGROUND, 0.5)
     assert edge[:2] == (0, 0) and edge[2] <= 200 and edge[3] <= 100           # kept inside the frame
+
+
+# --- Showcase camera parity: a preset is framed as the product frames it -----------------------------------------
+
+def _framed_cases():
+    from core.settings.framed_camera import spec_for_mode
+    from core.settings.visualizer_presets import get_presets
+    return [(case.identity, case.preset) for case in catalogue()
+            if case.kind == "visualizer" and spec_for_mode(case.identity) is not None
+            and get_presets(case.identity)[case.preset].starting_view is not None]
+
+
+def _replay_activation_parameters(mode: str, preset: int, settings=None) -> dict:
+    """The Visualizer parameters the showcase's replay activation hands the renderer, with no ticking."""
+    from PySide6.QtGui import QGuiApplication
+    from core.settings.framed_camera import spec_for_mode
+    from tools.visualizer_replay.engine import ReplayBeatEngine
+    from widgets.spotify_visualizer.config_applier import spec_mode_parameters
+    from widgets.spotify_visualizer.feature_replay import configure_offline_controller
+    from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
+
+    QGuiApplication.instance() or QGuiApplication([])
+    engine = ReplayBeatEngine(32)
+    controller = VisualizerRuntimeController(runtime_generation=0, initial_mode=mode,
+                                             engine_factory=lambda _count: engine)
+    controller.engine = engine
+    try:
+        configure_offline_controller(controller, mode, preset, settings=settings)
+        spec = spec_for_mode(mode)
+        host = controller.presentation_state
+        return {**spec_mode_parameters(host, mode), **{key: getattr(host, "_" + key) for key in spec.input_keys}}
+    finally:
+        controller.close_render_admission()
+        engine.deleteLater()
+
+
+def _camera(mode: str, parameters, presentation):
+    """The physical eye, effective offset and vertical lens tangent a renderer would draw these through."""
+    from core.settings.framed_camera import resolve_camera_frame, spec_for_mode, viewport_tangents
+    from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
+
+    spec = spec_for_mode(mode)
+    values = {key: parameters[key] for key in spec.input_keys}
+    _axes, eye, offset = resolve_camera_frame(spec, values)
+    tan_y = viewport_tangents(float(values[spec.key("camera_fov")]), 1.0, framed_aperture_scale(presentation))[1]
+    return (*eye, *offset, tan_y)
+
+
+def _default_card(mode: str):
+    from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+    from widgets.spotify_visualizer.presentation_geometry import resolve_visualizer_presentation
+
+    return resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy(mode), display_size=(1920.0, 1080.0),
+        border_width=0.0, corner_radius=0.0, content_inset=0.0, background_color=(0, 0, 0, 0),
+        border_color=(0, 0, 0, 0), shadow_enabled=False, shadow_color=(0, 0, 0, 0), shadow_blur=0.0,
+        shadow_offset=(0.0, 0.0), shadow_spread=0.0, shadow_extensions=(0.0, 0.0, 0.0, 0.0))
+
+
+def _product_camera(mode: str, preset: int):
+    """The camera the product frames a selected preset with: the activation's resolved settings, the reset
+    (Home) route's starting pose, and the canonical default card."""
+    from core.settings.framed_camera import spec_for_mode
+    from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+    from core.settings.visualizer_view_orbit import starting_camera_pose
+
+    spec = spec_for_mode(mode)
+    settings = resolve_visualizer_activation_payload({"mode": mode, f"preset_{mode}": preset}).resolved_config
+    parameters = {key: settings[key] for key in spec.input_keys}
+    parameters.update(starting_camera_pose(mode, preset))
+    return _camera(mode, parameters, _default_card(mode))
+
+
+def _assert_same_camera(left, right) -> None:
+    assert len(left) == len(right)
+    for a, b in zip(left, right):
+        assert a == pytest.approx(b, abs=1e-6)
+
+
+def test_showcase_frames_every_framed_preset_with_the_view_the_product_activates() -> None:
+    from tools.release_media import showcase_presentation
+
+    cases = _framed_cases()
+    assert {mode for mode, _preset in cases}, "no framed mode authors a starting view"
+    for mode, preset in cases:
+        parameters = _replay_activation_parameters(mode, preset)
+        _assert_same_camera(_camera(mode, parameters, showcase_presentation(mode, (1280, 720))),
+                            _product_camera(mode, preset))
+
+
+def test_showcase_camera_check_fails_without_the_starting_view_or_on_a_stretched_card() -> None:
+    from core.settings.default_contract import require_canonical_default
+    from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+    from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+    from core.settings.visualizer_view_orbit import starting_camera_pose
+    from tools.release_media import showcase_presentation
+    from widgets.spotify_visualizer.presentation_geometry import resolve_visualizer_presentation
+
+    # A preset whose authored view is not the canonical home (otherwise dropping it proves nothing).
+    cases = [(mode, preset) for mode, preset in _framed_cases()
+             if any(value != require_canonical_default("widgets.spotify_visualizer." + key)
+                    for key, value in starting_camera_pose(mode, preset).items())]
+    assert cases, "every authored starting view equals the canonical home"
+    mode, preset = cases[0]
+    product = _product_camera(mode, preset)
+    presentation = showcase_presentation(mode, (1280, 720))
+    parameters = _replay_activation_parameters(mode, preset)
+    _assert_same_camera(_camera(mode, parameters, presentation), product)       # the control the negatives differ from
+
+    # Negative 1: the activation without its starting view (the pose leaves reset to canonical home).
+    config = dict(resolve_visualizer_activation_payload({"mode": mode, f"preset_{mode}": preset}).resolved_config)
+    for key in starting_camera_pose(mode, preset):
+        config[key] = require_canonical_default("widgets.spotify_visualizer." + key)
+    unposed = _replay_activation_parameters(mode, preset, settings=config)
+    with pytest.raises(AssertionError):
+        _assert_same_camera(_camera(mode, unposed, presentation), product)
+
+    # Negative 2: the card's world extent enlarged instead of the card scaled (a taller sensor: a wider lens).
+    stretched = resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy(mode), display_size=(1280, 720), viewport_extent=(896, 504),
+        border_width=0, corner_radius=0, content_inset=0, background_color=(0, 0, 0, 0),
+        border_color=(0, 0, 0, 0), shadow_enabled=False, shadow_color=(0, 0, 0, 0), shadow_blur=0,
+        shadow_offset=(0, 0), shadow_spread=0, shadow_extensions=(0, 0, 0, 0))
+    with pytest.raises(AssertionError):
+        _assert_same_camera(_camera(mode, parameters, stretched), product)
+
+
+def test_showcase_snapshot_changes_only_detail_backdrop_and_presentation() -> None:
+    from PySide6.QtGui import QGuiApplication
+    from widgets.spotify_visualizer.feature_frame import FeatureClip
+    from tools.release_media import showcase_presentation, showcase_snapshot
+    from tools.visualizer_replay.driver import load_clips, replay_clip
+
+    QGuiApplication.instance() or QGuiApplication([])
+    original = next(iter(load_clips().values()))
+    clip = FeatureClip(original.name, original.frames[:6])
+    mode, preset = next(case for case in _framed_cases() if case[0] == "extruded_bubble")
+    snapshot = replay_clip(clip, mode, preset=preset, snapshots_at=(5,))["snapshots"][5]
+    shown = showcase_snapshot(snapshot, showcase_presentation(mode, (1280, 720)))
+    before, after = dict(snapshot.logical.mode_state.parameters), dict(shown.logical.mode_state.parameters)
+    assert {key for key in after if after.get(key) != before.get(key)} <= {"scene3d_detail"}
+    assert after["scene3d_detail"] == "High"
+    assert shown.presentation is not snapshot.presentation

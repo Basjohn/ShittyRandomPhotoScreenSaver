@@ -40,34 +40,8 @@ DEFAULT_SECONDS = 9.0
 
 
 def _production_lane_engine():
-    """A ``ReplayBeatEngine`` whose every lane getter answers from production DSP on the clip's native PCM."""
-    from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
-    from widgets.spotify_visualizer.feature_replay import PcmReanalysis, ReplayBeatEngine
-
-    getters = ("get_pre_agc_energy_bands", "get_live_pre_agc_energy_bands", "get_bubble_energy_bands",
-               "get_extruded_bubble_body_bands", "get_waveform_ribbon_body_bands", "get_transient_energy_bands",
-               "get_musical_level", "get_musical_intensity", "get_onset_events", "get_event_scheduler",
-               "get_pre_agc_analysis_spectrum")
-
-    class ProductionLaneEngine(ReplayBeatEngine):
-        def __init__(self, bar_count: int) -> None:
-            super().__init__(bar_count)
-            self._lane_reanalysis = PcmReanalysis()
-
-        def accept_feature_frame(self, frame):
-            result = super().accept_feature_frame(frame)
-            self._lane_reanalysis.accept(self, frame)
-            self._publish_pre_agc_analysis_spectrum_if_requested(self._audio_worker)
-            return result
-
-        def get_pre_agc_analysis_spectrum(self):
-            spectrum = _SpotifyBeatEngine.get_pre_agc_analysis_spectrum(self)
-            self._publish_pre_agc_analysis_spectrum_if_requested(self._audio_worker)
-            return spectrum
-
-    for name in getters:
-        if name != "get_pre_agc_analysis_spectrum":
-            setattr(ProductionLaneEngine, name, getattr(_SpotifyBeatEngine, name))
+    """``feature_replay.ProductionLaneEngine``: every lane getter answers from production DSP on the clip's PCM."""
+    from widgets.spotify_visualizer.feature_replay import ProductionLaneEngine
     return ProductionLaneEngine
 
 

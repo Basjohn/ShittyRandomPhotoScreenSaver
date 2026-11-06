@@ -8,10 +8,15 @@ out-of-process replay may pin that clock, so each such mode has a worker module
 (``python -m ui.studio.<mode>_recorded_inputs``, or the frozen app's ``--studio-clip-worker`` path) run through the
 shared event-driven ``ClipLoadJob``. Every piece here takes the mode id; the worker modules and adapters are thin.
 
-* **Worker.** ``extract`` drives the production offline replay (``ReplayBeatEngine`` +
-  ``configure_offline_controller`` + ``logical_tick`` under ``deterministic_clock``) and, for every tick, stands an
-  ``EngineAnswerRecorder`` in for the engine during the production step: everything the engine answered the mode's
-  step is recorded, with a digest of the logical frame the production tick published.
+* **Worker.** ``extract`` drives the production offline replay (``configure_offline_controller`` +
+  ``logical_tick`` under ``deterministic_clock``) and, for every tick, stands an ``EngineAnswerRecorder`` in for the
+  engine during the production step: everything the engine answered the mode's step is recorded, with a digest of
+  the logical frame the production tick published. A mode whose step reads the engine's lanes beyond its shaped bars
+  (``EngineAnswerMode.production_lanes``: DevCurve's control and transient lanes, Oscilloscope's Flare and Drive,
+  Neon Lake's onset waves) replays on ``ProductionLaneEngine``, every lane re-analysed from the clip's PCM through the
+  production DSP, so the Audio Analysis controls (Sensitivity, the floors, Gain, Block Size) move it as they do live;
+  the others, and every synthetic fixture (authored reference lanes), replay on ``ReplayBeatEngine`` (shaped bars
+  are re-shaped from the PCM there too).
 * **Studio.** ``EngineAnswerEvaluator`` configures a ``VisualizerRuntimeController`` exactly as the offline replay
   does and, per recorded tick, runs the production step itself (``consume_engine_bars``, the mode's logical tick
   hook when it has one, as DevCurve's, then ``capture_visualizer_logical_frame``: the calls ``logical_tick`` makes)
@@ -313,6 +318,24 @@ class EngineAnswerMode:
 
     mode_id: str
     conditional_reads: tuple[str, ...] = ()
+    production_lanes: bool = False
+
+    def replay_engine(self, bar_count: int = 32):
+        """The worker's replay engine: ``ProductionLaneEngine`` for a mode whose step reads the engine's lanes
+        (``production_lanes``), else ``ReplayBeatEngine``."""
+        from widgets.spotify_visualizer.feature_replay import ProductionLaneEngine, ReplayBeatEngine
+        return (ProductionLaneEngine if self.production_lanes else ReplayBeatEngine)(bar_count)
+
+    def replay_engine_for(self, frames, bar_count: int = 32, *, synthetic: bool = False):
+        """``replay_engine`` for a recording, falling back to ``ReplayBeatEngine`` for frames without native PCM
+        (nothing to re-analyse). A synthetic fixture keeps its authored lanes: its Quiet / Mid / Peak references and
+        scripted hits are controlled levels, which the production DSP's own normalisation would flatten (a held
+        quiet bed reads as loud as a peak)."""
+        if self.production_lanes and not synthetic:
+            from widgets.spotify_visualizer.feature_replay import lane_engine
+            return lane_engine(frames, bar_count)
+        from widgets.spotify_visualizer.feature_replay import ReplayBeatEngine
+        return ReplayBeatEngine(bar_count)
 
     @property
     def worker(self) -> str:
@@ -389,7 +412,7 @@ def extract(mode: EngineAnswerMode, source: str | Path, settings: Mapping[str, A
     the production ticks and ``environment`` is the photograph a reflecting mode mirrors (in-process callers only;
     the engine answers never depend on either)."""
     from PySide6.QtGui import QGuiApplication
-    from widgets.spotify_visualizer.feature_replay import ReplayBeatEngine, deterministic_clock
+    from widgets.spotify_visualizer.feature_replay import deterministic_clock
     from widgets.spotify_visualizer.tick_pipeline import logical_tick
     from ui.studio.replay_engine import EngineAnswerRecorder
 
@@ -403,7 +426,7 @@ def extract(mode: EngineAnswerMode, source: str | Path, settings: Mapping[str, A
         features = [f for f in features if (f.timestamp_us - first_us) / 1e6 <= seconds]
     records: list[dict] = []
     with deterministic_clock() as clock:
-        engine = ReplayBeatEngine(32)
+        engine = mode.replay_engine_for(features, 32, synthetic=origin is not None)
         controller = mode.configure(engine, settings, environment=environment)
         state = controller.logical_tick_state
         recorder = EngineAnswerRecorder(engine)
