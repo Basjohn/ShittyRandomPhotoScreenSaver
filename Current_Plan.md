@@ -475,14 +475,24 @@ design pack's control policy (quiet/peak A/B, real ranges only where a true inte
 serialized data unless a migration is justified. Accepted looks/behaviour (BTF, presets, timings) must not change.
 
 - [ ] Finish Waveform Studio acceptance first (§7.1), then extract any remaining Waveform-shaped assumptions.
-- [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost and Extruded Spectrum
-  built; Sphere in progress): Shockwave Grid, DevCurve, Oscilloscope. Extruded Spectrum awaits operator acceptance
+- [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost, Extruded Spectrum and
+  Neon Lake built; Sphere in progress): DevCurve, Oscilloscope. Neon Lake (Shockwave Grid) awaits operator acceptance
+  (evidence `.artifacts/evidence/neon_lake/studio/`, Presets 1 and 3): recorded engine answers like Spectrum, the
+  shared framed camera, no wallpaper. Operator decision on acceptance: the Studio carries the terrain heightfield and
+  its Extend / Reset edits but has no brush instrument, so its builder body can shrink to the preset row plus the
+  terrain editor, not to `build_studio_owned_mode_ui` alone, unless a shared brush instrument is admitted. Extruded Spectrum awaits operator acceptance
   (evidence `.artifacts/evidence/extruded_spectrum/studio/`); its cast-shadow rows stay out of the Studio while
   Settings keeps them unavailable (`EXTRUDED_CAST_SHADOW_AVAILABLE`). Spectrum awaits operator acceptance (evidence
   `.artifacts/evidence/spectrum/studio_20261105/`); its Studio now reaches everything Settings' Spectrum builder saves
   (shape nodes added/removed, lanes reordered), so the builder body can be replaced on acceptance. Each: full registry coverage test, production-parity preview test, theme,
   Settings Custom launcher replacing that builder body once the operator accepts it.
-- [ ] **Edit Preset survives only for modes without a Studio** (Shockwave Grid, DevCurve, Oscilloscope): Studio modes
+- [ ] **Orphaned clip workers (side defect, 6 Nov):** `tests/test_spectrum_studio.py::...failed_analysis...` retries a
+  missing-clip analysis and releases the evaluator; the cancelled `ClipLoadJob` (`process.kill()`) leaves a
+  `python -m ui.studio.spectrum_recorded_inputs ... no_such_clip.srclip` process alive indefinitely on Windows (seen
+  hours old), which also holds `tests/run_chunked.py --isolated`'s pipe so the file reports FAIL with every test
+  passed. Reproduce, then make cancel end the whole worker (the venv launcher's child too) and the worker exit on a
+  missing source.
+- [ ] **Edit Preset survives only for modes without a Studio** (DevCurve, Oscilloscope): Studio modes
   author curated presets with Open Studio (preset row, every slot) and the Studio's confirmed Save To <Preset>
   (`Docs/Reference/Visualizer_Studio.md` §4); the Notepad path and its pop-up go for each mode when its adapter
   registers (automatic: the slider builds Edit Preset only for `not has_studio(mode)`); delete `_open_preset_json`

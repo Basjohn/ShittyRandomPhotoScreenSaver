@@ -34,7 +34,7 @@ and must not be copied per mode.
 | `core/settings/visualizer_preset_file.py` | Shape-preserving edits of an authored preset file (section merge, in-place patching, source-like formatting, `save_changes_to_preset`), shared by the preset repair tool and the Studio's Save To <Preset>. |
 | `ui/studio/presence.py` | `WindowPresence`: conceal/reveal the *same* Settings dialog without ending its `QDialog.exec()` loop (native `SW_HIDE` on Windows; zero opacity plus off-screen move elsewhere). |
 | `ui/studio/framed.py` | Shared pieces for 3D (and card-presented) adapters: production presentation resolver and uniform aperture scale, `card_framings` / `live_card_framings`, `camera_navigation` over the shared framed camera, `orbit_navigation` for a free-orbit mode (the descriptor's `view_orbit_settings` only), `QuickModeRenderer` wrapping a production Quick renderer and `ContractModeRenderer` handing it the production render-frame contract (pixel ratio from the item mapping, so a letterboxed live card presents at the true DPR). |
-| `ui/studio/engine_answers.py` | The Spectrum family's recorded engine answers, mode-neutral (`EngineAnswerMode(mode_id)`): synthetic audio, the out-of-process `extract`, recorded inputs, the per-mode answer cache, `start_clip_load` and `EngineAnswerEvaluator` (the production step in process, rewinds, checkpoints, frame budget). The engine-owned / mode-owned split follows from the production source projection (`source_config_applier`). |
+| `ui/studio/engine_answers.py` | The Spectrum family's recorded engine answers (Spectrum, Extruded Spectrum, Neon Lake), mode-neutral (`EngineAnswerMode(mode_id, conditional_reads)`): synthetic audio (with the analysis spectrum and onsets a recording carries), the out-of-process `extract`, recorded inputs, the per-mode answer cache, `start_clip_load` and `EngineAnswerEvaluator` (the production step in process, rewinds, checkpoints, frame budget). The engine-owned / mode-owned split follows from the production source projection (`source_config_applier`). |
 | `ui/studio/spectrum_shape.py` | The Spectrum family's shape editor as Studio rows, admission and structural edits (add / remove node, lane swap), by key prefix (`ShapeKeys`). |
 | `ui/studio/theme.py`, `colour.py` | Chrome tokens derived from the active Settings theme with enforced contrast; display ↔ linear colour conversion for instruments. Scene colours never pass through the theme. |
 | `ui/studio/<mode>_adapter.py`, `<mode>_recorded_inputs.py` | One adapter per registered mode plus its recorded-clip extractor. |
@@ -55,12 +55,16 @@ is optional and defaults to "not offered":
   visualizer is never disturbed; the finished job is released after its signal returns, never inside it. Every
   Studio lists the shipped clips (`assets/production/studio_clips`) first, then a checkout's own recordings.
 - **Recorded engine answers (engine-processed modes).** A mode whose step consumes the engine's *own processing*
-  (the Spectrum family, Spectrum and Extruded Spectrum: `consume_engine_bars` ticks the engine and reads its smoothed,
-  shape-processed bars, all on the process clock) cannot be served authored lanes and must not pin the clock in
-  process. Both use `ui/studio/engine_answers.py`; their worker modules and adapters only name the mode. Its worker stands
+  (the Spectrum family, Spectrum, Extruded Spectrum and Neon Lake: `consume_engine_bars` ticks the engine and reads its
+  smoothed, shape-processed bars, all on the process clock; Neon Lake's capture also reads the transient bus's onsets,
+  the musical level and intensity and the pre-AGC analysis spectrum) cannot be served authored lanes and must not pin
+  the clock in process. All use `ui/studio/engine_answers.py`; their worker modules and adapters only name the mode. Its worker stands
   `replay_engine.EngineAnswerRecorder` in for the engine during each production `logical_tick` and records every
   answer the engine gave the step (JSON via `encode_answer`, exact for floats; a getter answering twice differently
-  in one tick raises). The Studio runs the mode's production step in process with `RecordedEngineAnswers` standing in
+  in one tick raises). Getters a mode reads only under some mode-owned setting are named as the mode's
+  `conditional_reads` and recorded every tick (Neon Lake's Terrain Reaction reads the musical level and the analysis
+  spectrum only while it is on), so switching that setting on stays a mode-owned edit served from the record. The
+  Studio runs the mode's production step in process with `RecordedEngineAnswers` standing in
   for the engine (commands inert; a read the record lacks falls through and is counted, and the parity tests require
   zero). Settings split into **engine-owned** (they change the answers: a new key re-runs the worker, the previous
   answers and their own engine values staying on screen until it lands) and **mode-owned** (exact and instant). The
@@ -68,7 +72,9 @@ is optional and defaults to "not offered":
   mode's keys the production source projection hands the engine (the Spectrum source keys and the technical
   analysis), mode-owned everything else the mode stores (spec controls, Custom rows, shared bar and rainbow families).
   Synthetic fixtures of such a mode are generated *audio* through the same worker, so engine-owned edits stay
-  truthful for them too. The store's 3D Detail tier (`scene3d_detail`) and, for a reflecting mode, the environment
+  truthful for them too; each synthetic frame carries what a recording carries: its audio's analysis spectrum (the
+  live engine's band math), the score's hits as the transient bus's onsets, and the loudness on the real-music scale
+  (`PassageIntensity`), with presence against its own 6 s running level. The store's 3D Detail tier (`scene3d_detail`) and, for a reflecting mode, the environment
   photograph reach the presentation as production hands them (both the worker's in-process replay and the Studio).
 - **Exact replay without a stall.** Such an evaluator never re-configures its controller for a mode-owned edit:
   `replay_engine.StepState` captures the production step state (controller, logical tick state, presentation state
@@ -90,7 +96,12 @@ is optional and defaults to "not offered":
   admitted change set, or None while not admissible (the button is disabled). `StudioSchema.row_label` titles a row
   from the current values (an element whose meaning moves with it). Spectrum: Add Node (widest gap, on the current
   silhouette), Remove Node per node row, and lane swaps per boundary row, under Settings' shape-editor rules; the
-  Studio reaches every state Settings' shape editor saves (`tests/test_spectrum_studio_shape_editor.py`).
+  Studio reaches every state Settings' shape editor saves (`tests/test_spectrum_studio_shape_editor.py`). Neon Lake:
+  the same for its Frequency Response shape and for Terrain Reaction's shaper (one record: nodes two to five, the
+  first lane boundary pinned at the shoreline by `normalize_terrain_shaper`), and the terrain editor's whole-record
+  edits (Extend Toward Horizon, Reset Terrain) on the authored heightfield. The heightfield itself is painted only by
+  Settings' terrain brush: the shared shell has no brush instrument, so the Studio carries the record (undo, save,
+  Save To <Preset>) through an `instrument_only` schema marker and does not author its cells.
 - **Capabilities.** `StudioCapabilities(viewport, camera, handles, objects)`; the default is a plain 2D live preview
   with a scene-object list. A flat mode declares no camera and no handles and the shell then shows no navigation,
   view readout, Keep View/Reset or handle overlay and never calls `navigation()` / `scene_handles()`.
