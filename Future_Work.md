@@ -89,9 +89,19 @@ Keep these deferred unless new evidence or an explicit request promotes them:
 ### EB composition-lab clean. Clean up scratch and no longer needed files related to labs unless they explicitly help a future visualizer lab implementation.
 
 
-### 2.5 SMP & Full Display 
+### 2.5 SMP & Full Display
 
-Details can be found in "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Future_Work\SRPSS_Expanded_Visualizer_and_SMP_Implementation_Plans_2026-11-05.zip". Decide on this or the Vulkan back end as the next series of large tasks after Waveform and Studios land cleanly.
+Decided 5 Nov (§2): this series follows Waveform and the Studios; the Vulkan core waits for a recorded trigger. The
+plans are live tracked documents (extracted 7 Nov; the zip they shipped in was never tracked and is superseded):
+
+- `Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md`: full-display Visualizer
+  (EB first), with its phase ladder, 4K budgets and the backend triggers (§0).
+- `Docs/Future_Work/ShittyMusicPlayer/02_ShittyMusicPlayer_Implementation_Plan.md`: the music player, gated behind
+  `--smp` until Gate M9, with its prerequisite phases, the SMP Settings tab with pills, the audio quality bar, the
+  icon/artwork rules and full rearrangement (§0A, §13-16).
+
+The prerequisite architecture work both plans name (AC-01 Settings tab registry, AC-02 Visualizer host binding,
+AC-03 application-service tier) lives in `Docs/Reference/Architecture_Checklist.md`; `Current_Plan.md` promotes it.
 
 ### Remaining non-code organization
 
