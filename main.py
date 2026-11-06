@@ -46,6 +46,7 @@ from core.logging.logger import (
     flush_and_close_logging,
     flush_logging,
     setup_logging,
+    set_forced_log_dir,
     get_logger,
     get_log_dir,
     is_perf_metrics_enabled,
@@ -909,6 +910,15 @@ def main(*, entrypoint: str = "main"):
         if debug_console_requested(sys.argv):
             open_debug_console()
 
+    # ``--log-dir=<path>`` redirects the log root (harness scratch folders). It must be bound
+    # before ``--fresh`` clears the resolved directory, never after, so a harness can never wipe
+    # the operator's own logs.
+    from core.diagnostics.experiment_flags import parse_experiment_flags
+
+    _log_dir_request = parse_experiment_flags(sys.argv).log_dir
+    if _log_dir_request:
+        set_forced_log_dir(_log_dir_request)
+
     fresh_mode = '--fresh' in sys.argv
     fresh_result: tuple[Path, int] | None = None
     if fresh_mode:
@@ -1153,6 +1163,8 @@ def main(*, entrypoint: str = "main"):
     ensure_custom_fonts()
     logger.debug("Custom fonts registered")
 
+    from core.diagnostics.experiment_flags import profile_cpu_admitted
+
     # Route to appropriate mode
     exit_code = 0
     
@@ -1163,8 +1175,7 @@ def main(*, entrypoint: str = "main"):
         if mode == ScreensaverMode.CONFIG:
             run_requested = False
             logger.info("Starting configuration dialog")
-            profile_flag = os.getenv("SRPSS_PROFILE_CPU", "").strip().lower()
-            if profile_flag in ("1", "true", "on", "yes"):
+            if profile_cpu_admitted():
                 import cProfile
 
                 profiler = cProfile.Profile()
@@ -1200,8 +1211,7 @@ def main(*, entrypoint: str = "main"):
                     logger.info("Windows timer resolution set to 1ms for smooth animations")
                 else:
                     logger.debug("Could not set Windows timer resolution (non-Windows or failed)")
-            profile_flag = os.getenv("SRPSS_PROFILE_CPU", "").strip().lower()
-            if exit_code != 2 and profile_flag in ("1", "true", "on", "yes"):
+            if exit_code != 2 and profile_cpu_admitted():
                 import cProfile
 
                 profiler = cProfile.Profile()

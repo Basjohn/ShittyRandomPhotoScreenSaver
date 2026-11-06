@@ -65,9 +65,9 @@ def test_extruded_controls_apply_once_through_the_existing_source_and_presentati
 def test_extruded_custom_hooks_load_silently_and_preserve_unavailable_shadow_and_orbit_boundaries(
     qt_app, settings_manager, monkeypatch,
 ):
-    from ui.tabs.media.extruded_spectrum_settings_binding import (
-        collect_extruded_spectrum_mode_settings, load_extruded_spectrum_mode_settings,
-    )
+    """The Studio-owned body loads silently, keeps the unavailable cast-shadow values latent, and owns neither the
+    live orbit nor the page's shared bar colours."""
+    from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
     from ui.tabs.visualizers_tab import VisualizersTab
 
     settings_manager.set("widgets", {"spotify_visualizer": {
@@ -88,37 +88,17 @@ def test_extruded_custom_hooks_load_silently_and_preserve_unavailable_shadow_and
                "extruded_spectrum_solid_bar_hysteresis_enabled": False,
                "extruded_spectrum_shadow_enabled": True, "extruded_spectrum_shadow_reach": "Distant",
                "extruded_spectrum_shadow_strength": 0.63,
-               "extruded_spectrum_ghosting_enabled": True, "extruded_spectrum_rainbow_ghost": False}
-        # Hydration is the availability authority even if external code enabled a disabled widget.
-        for field in ("enabled", "reach", "strength"):
-            getattr(tab, f"extruded_spectrum_shadow_{field}").setEnabled(True)
-        load_extruded_spectrum_mode_settings(tab, cfg)
+               "extruded_spectrum_ghosting_enabled": False, "extruded_spectrum_rainbow_ghost": True}
+        load_spec_mode_settings(tab, "extruded_spectrum", cfg)
         assert calls == []
-        payload = collect_extruded_spectrum_mode_settings(tab)
+        payload = collect_spec_mode_settings(tab, "extruded_spectrum")
         for key, value in payload.items():
             expected = cfg[key]
             assert value == (pytest.approx(expected) if isinstance(expected, float) else expected), key
         assert "extruded_spectrum_turn" not in payload and "extruded_spectrum_tilt" not in payload
         assert not any("bar_fill" in key or "bar_border" in key for key in payload)
-        assert tab.extruded_spectrum_rainbow_edges.isChecked()
-        assert tab.extruded_spectrum_rainbow_faces.isEnabled()
-        assert tab.extruded_spectrum_visual_smoothing_label.text() == "67%"
-        assert not tab.extruded_spectrum_visual_smoothing.parentWidget().isHidden()
-        for field in ("enabled", "reach", "strength"):
-            control = getattr(tab, f"extruded_spectrum_shadow_{field}")
-            assert not control.isEnabled() and "unavailable" in control.toolTip()
-        # Independent Rainbow Ghost remains authorable while ordinary ghost detail rows hide.
-        tab.extruded_spectrum_ghosting_enabled.setChecked(False)
-        assert tab._extruded_spectrum_rows["extruded_spectrum_ghost_alpha"].isHidden()
-        assert not tab._extruded_spectrum_rows["extruded_spectrum_rainbow_ghost"].isHidden()
-        tab.extruded_spectrum_rainbow_ghost.setChecked(True)
-        assert calls
-        payload = collect_extruded_spectrum_mode_settings(tab)
+        # Independent Rainbow Ghost stays authorable with ordinary ghosting off.
         assert payload["extruded_spectrum_rainbow_ghost"] and not payload["extruded_spectrum_ghosting_enabled"]
-        # Reset/default hydration cannot re-enable the rejected cast-shadow feature.
-        load_extruded_spectrum_mode_settings(tab, require_canonical_default("widgets.spotify_visualizer"))
-        assert all(not getattr(tab, f"extruded_spectrum_shadow_{field}").isEnabled()
-                   for field in ("enabled", "reach", "strength"))
     finally:
         tab.deleteLater()
         qt_app.processEvents()

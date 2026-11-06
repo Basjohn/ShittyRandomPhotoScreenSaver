@@ -523,16 +523,20 @@ class SceneCameraPosition(Direction):
 
 @dataclass(frozen=True)
 class Custom:
-    """A body part built by the mode's own code: ``build(tab, layout)``, ``load(tab, config)`` and
-    ``collect(tab) -> dict`` named as ``"module:function"``. Its persisted keys stay with their
-    existing owner (they are listed in ``keys`` only so the spec knows what the body covers)."""
+    """A row the mode's Studio edits as one record (a shape editor, the layers, the rainbow surface...), named so
+    adapters can place it, with the persisted ``keys`` it owns beyond the spec's controls. A section Settings itself
+    keeps (Neon Lake's terrain brush) also names its ``build(tab, layout)``, ``load(tab, config)`` and
+    ``collect(tab) -> dict`` as ``"module:function"``. ``admit`` (``"module:function(key, value, default)"``) is the
+    model's admission of the record's keys when it repairs or migrates them; without it a stored record passes
+    through."""
 
     name: str
     bucket: str
-    build: str
+    build: str = ""
     load: str = ""
     collect: str = ""
     keys: tuple[str, ...] = ()
+    admit: str = ""
 
 
 @dataclass(frozen=True)
@@ -726,10 +730,7 @@ _SHOCKWAVE_GRID = ModeSettings(
                "the rest.", bucket="reaction", when=_TERRAIN_REACTION),
         Slider("shockwave_grid_terrain_swell", "Swell:", 0.0, 1.0,
                "A broad, slow rise and fall across the whole land.", bucket="reaction", when=_TERRAIN_REACTION),
-        Custom("terrain_shaper", "reaction", "ui.tabs.media.shockwave_grid_builder:build_reaction_shaper_section",
-               "ui.tabs.media.shockwave_grid_settings_binding:load_reaction_shaper_section",
-               "ui.tabs.media.shockwave_grid_settings_binding:collect_reaction_shaper_section",
-               keys=("shockwave_grid_terrain_shaper",)),
+        Custom("terrain_shaper", "reaction", keys=("shockwave_grid_terrain_shaper",)),
         Slider("shockwave_grid_terrain_motion_speed", "Motion Speed:", 0.0, 1.0,
                "How quickly the reshaping wanders while the music plays; it holds still in silence.",
                bucket="reaction", when=_TERRAIN_REACTION),
@@ -902,10 +903,7 @@ _SHOCKWAVE_GRID = ModeSettings(
         Colour("shockwave_grid_shore_glow_color", "Shore Glow Colour:", "Choose Shore Glow Colour",
                "The colour of the water's edge glow. Alpha is how far it moves from the shoreline's own colours "
                "toward this one (0 keeps the shoreline colours).", bucket="glow"),
-        Custom("shape", "response", build="ui.tabs.media.shockwave_grid_builder:build_response_section",
-               load="ui.tabs.media.shockwave_grid_settings_binding:load_response_section",
-               collect="ui.tabs.media.shockwave_grid_settings_binding:collect_response_section",
-               keys=("shockwave_grid_mirrored", "shockwave_grid_shape_nodes",
+        Custom("shape", "response", keys=("shockwave_grid_mirrored", "shockwave_grid_shape_nodes",
                      "shockwave_grid_notch_positions_mirrored", "shockwave_grid_notch_positions_linear",
                      "shockwave_grid_lane_strengths_mirrored", "shockwave_grid_lane_strengths_linear")),
         Slider("shockwave_grid_wave_amplitude", "Reactivity:", 0.0, 1.0,
@@ -914,10 +912,7 @@ _SHOCKWAVE_GRID = ModeSettings(
                "Minimum retained body of the audio response profile.", bucket="response", source=True),
         Slider("shockwave_grid_drop_speed", "Falloff:", 0.5, 3.0,
                "How quickly the frequency response falls after the music softens.", bucket="response", source=True),
-        Custom("smoothing", "response", "ui.tabs.media.shockwave_grid_builder:build_smoothing_section",
-               "ui.tabs.media.shockwave_grid_settings_binding:load_smoothing_section",
-               "ui.tabs.media.shockwave_grid_settings_binding:collect_smoothing_section",
-               keys=("shockwave_grid_visual_smoothing_enabled", "shockwave_grid_visual_smoothing", "shockwave_grid_solid_bar_hysteresis_enabled")),
+        Custom("smoothing", "response", keys=("shockwave_grid_visual_smoothing_enabled", "shockwave_grid_visual_smoothing", "shockwave_grid_solid_bar_hysteresis_enabled")),
         Slider("shockwave_grid_camera_fov", "Camera Field of View:", 20.0, 62.0,
                scale=1, integer=True, suffix="\u00b0", decimals=0, bucket="camera",
                tooltip="Change the vertical viewing angle without moving the camera. Narrow angles frame distant "
@@ -1025,10 +1020,7 @@ _DEVCURVE = ModeSettings(
         Bucket("ghost", "Ghost", "Optional trail for debug visibility.", advanced=True),
     ),
     entries=(
-        Custom("layers", "shaper", "ui.tabs.media.devcurve_builder:build_devcurve_layers",
-               "ui.tabs.media.devcurve_settings_binding:load_devcurve_layers",
-               "ui.tabs.media.devcurve_settings_binding:collect_devcurve_layers",
-               keys=(
+        Custom("layers", "shaper", keys=(
                    'devcurve_active_layer',
                    'devcurve_layer_bass_shape_nodes',
                    'devcurve_layer_bass_enabled',
@@ -1124,17 +1116,12 @@ _EXTRUDED_SPECTRUM = ModeSettings(
     ),
     entries=(
         Choice("extruded_spectrum_colouring", "", EXTRUDED_COLOURINGS),
-        Custom("rainbow", "appearance", "ui.tabs.media.extruded_spectrum_builder:build_extruded_rainbow",
-               "ui.tabs.media.extruded_spectrum_settings_binding:load_extruded_rainbow",
-               "ui.tabs.media.extruded_spectrum_settings_binding:collect_extruded_rainbow"),
+        Custom("rainbow", "appearance"),
         Slider('extruded_spectrum_hue_drift', 'Hue Drift:', 0.0, 1.0,
                'How fast Rainbow hues drift across the bars; zero holds the spectral colours still.', bucket='appearance'),
         Slider('extruded_spectrum_depth', 'Bar Depth:', 0.25, 3.0,
                'How deep each bar is, as a multiple of its width.', bucket='shape'),
-        Custom("shape", "shape", "ui.tabs.media.extruded_spectrum_builder:build_extruded_shape",
-               "ui.tabs.media.extruded_spectrum_settings_binding:load_extruded_shape",
-               "ui.tabs.media.extruded_spectrum_settings_binding:collect_extruded_shape",
-               keys=tuple(f"extruded_spectrum_{suffix}" for suffix in (
+        Custom("shape", "shape", keys=tuple(f"extruded_spectrum_{suffix}" for suffix in (
                    "mirrored", "shape_nodes", "notch_positions_mirrored", "notch_positions_linear",
                    "lane_strengths_mirrored", "lane_strengths_linear"))),
         Slider('extruded_spectrum_wave_amplitude', 'Reactivity:', 0.0, 1.0,
@@ -1143,10 +1130,7 @@ _EXTRUDED_SPECTRUM = ModeSettings(
                'Minimum body retained by the authored bar profile.', bucket='response', source=True),
         Slider('extruded_spectrum_drop_speed', 'Falloff:', 0.5, 3.0,
                'How quickly the shared bar field falls after an energy drop.', bucket='response', source=True),
-        Custom("smoothing", "response", "ui.tabs.media.extruded_spectrum_builder:build_extruded_smoothing",
-               "ui.tabs.media.extruded_spectrum_settings_binding:load_extruded_smoothing",
-               "ui.tabs.media.extruded_spectrum_settings_binding:collect_extruded_smoothing",
-               keys=("extruded_spectrum_visual_smoothing_enabled", "extruded_spectrum_visual_smoothing",
+        Custom("smoothing", "response", keys=("extruded_spectrum_visual_smoothing_enabled", "extruded_spectrum_visual_smoothing",
                      "extruded_spectrum_solid_bar_hysteresis_enabled")),
         Slider('extruded_spectrum_gloss', 'Gloss:', 0.0, 1.0,
                "Shine on the bars' faces.", bucket='effects'),
@@ -1200,22 +1184,15 @@ _SPECTRUM = ModeSettings(
                bucket="appearance", when=("spectrum_glow_enabled", True), swatch_row=False),
         Slider('spectrum_glow_intensity', 'Glow Intensity:', 0.0, 1.5,
                'How bright the thin Spectrum rim glow appears. Higher = stronger emissive edge.', bucket='appearance', truncate=True, percent=True, tick=10, when=('spectrum_glow_enabled', True)),
-        Custom("shape", "shape", "ui.tabs.media.spectrum_builder:build_spectrum_shape",
-               "ui.tabs.media.spectrum_settings_binding:load_spectrum_shape",
-               "ui.tabs.media.spectrum_settings_binding:collect_spectrum_shape",
-               keys=("spectrum_mirrored", "spectrum_shape_nodes", "spectrum_notch_positions_mirrored",
-                     "spectrum_notch_positions_linear", "spectrum_lane_strengths_mirrored", "spectrum_lane_strengths_linear")),
+        Custom("shape", "shape", keys=("spectrum_mirrored", "spectrum_shape_nodes", "spectrum_notch_positions_mirrored",
+                     "spectrum_notch_positions_linear", "spectrum_lane_strengths_mirrored", "spectrum_lane_strengths_linear"),
+               admit="core.settings.models._visualizer_helpers:admit_spectrum_shape_key"),
         Choice("spectrum_render_mode", "", ("segment", "bars"), logical=True,
                runtime_attr="_spectrum_single_piece", runtime_values=(False, True),
                read="core.settings.visualizer_settings_contract:resolve_spectrum_render_mode",
                input_aliases=("spectrum_single_piece",)),
-        Custom("render_mode", "render", "ui.tabs.media.spectrum_builder:build_spectrum_render_mode",
-               "ui.tabs.media.spectrum_settings_binding:load_spectrum_render_mode",
-               "ui.tabs.media.spectrum_settings_binding:collect_spectrum_render_mode"),
-        Custom("smoothing", "render", "ui.tabs.media.spectrum_builder:build_spectrum_smoothing",
-               "ui.tabs.media.spectrum_settings_binding:load_spectrum_smoothing",
-               "ui.tabs.media.spectrum_settings_binding:collect_spectrum_smoothing",
-               keys=("spectrum_visual_smoothing_enabled", "spectrum_visual_smoothing")),
+        Custom("render_mode", "render"),
+        Custom("smoothing", "render", keys=("spectrum_visual_smoothing_enabled", "spectrum_visual_smoothing")),
         Toggle('spectrum_unique_colors', " ", 'Unique Colours Per Bar',
                "When 'Taste the Rainbow' is enabled: each bar gets its own unique colour spread across the rainbow. Off = all bars share one shifting colour.", bucket='render', runtime_attr='_rainbow_per_bar', read='core.settings.visualizer_settings_contract:resolve_spectrum_unique_colors', input_aliases=('spectrum_rainbow_per_bar', 'rainbow_per_bar')),
         Toggle('spectrum_rainbow_fill', " ", 'Rainbow Fill',
@@ -1224,7 +1201,6 @@ _SPECTRUM = ModeSettings(
                'When rainbow/unique colours are active: bar borders also participate in the colour shift. Off = borders keep their configured border colour.', bucket='render'),
         Slider('spectrum_border_radius', 'Border Radius:', 0.0, 12.0,
                'Round bar corners (0 = square, 6 = nicely rounded).', bucket='render', truncate=True, scale=1, decimals=0, suffix='px', admission_high=20.0),
-        Custom("audio_hint", "audio", "ui.tabs.media.spectrum_builder:build_spectrum_audio_hint"),
         Slider('spectrum_wave_amplitude', 'Reactivity:', 0.0, 1.0,
                'Overall Spectrum motion scaling after lane routing.\nLower = calmer, more reserved movement.\nHigher = punchier motion and stronger lane response.\nThis is creative reactivity, not the Technical sensitivity/noise-floor path.', bucket='audio', truncate=True, source=True, percent=True, tick=25),
         Slider('spectrum_profile_floor', 'Shape Floor:', 0.05, 0.3,
@@ -1303,25 +1279,16 @@ _SPHERE = ModeSettings(
         Bucket("effects", "Effects", "Optional Sphere-only render effects. None may become a shared visualizer setting family; Sphere keeps these controls mode-owned.", advanced=True),
     ),
     entries=(
-        Custom("analysis", "analysis", "ui.tabs.media.sphere_builder:build_sphere_analysis",
-               "ui.tabs.media.sphere_settings_binding:load_sphere_analysis",
-               "ui.tabs.media.sphere_settings_binding:collect_sphere_analysis",
-               keys=("sphere_analysis_notch_positions",)),
+        Custom("analysis", "analysis", keys=("sphere_analysis_notch_positions",)),
         Choice("sphere_finish", "", SPHERE_FINISH_VALUES, authoring=True, ingress_strict=True,
                normalizer="core.settings.visualizer_settings_contract:normalize_sphere_finish"),
-        Custom("finish", "appearance", "ui.tabs.media.sphere_builder:build_sphere_finish",
-               "ui.tabs.media.sphere_settings_binding:load_sphere_finish",
-               "ui.tabs.media.sphere_settings_binding:collect_sphere_finish"),
+        Custom("finish", "appearance"),
         Colour("sphere_fill_color", 'Fill Color:', 'Choose Sphere Fill Color',
                'Literal voxel base RGBA. No finish preset or per-cube pseudo-material multiplier changes this colour.', logical=True, runtime_strict=True, swatch_row=False),
-        Custom("fill_colour", "appearance", "ui.tabs.media.sphere_builder:build_sphere_fill_colour",
-               "ui.tabs.media.sphere_settings_binding:load_sphere_fill_colour",
-               "ui.tabs.media.sphere_settings_binding:collect_sphere_fill_colour"),
+        Custom("fill_colour", "appearance"),
         Colour("sphere_edge_color", 'Edge Color:', 'Choose Sphere Edge Color',
                'Independent cube bevel/ink RGBA. Its alpha is authored separately from Fill Color alpha.', logical=True, runtime_strict=True, swatch_row=False),
-        Custom("edge_colour", "appearance", "ui.tabs.media.sphere_builder:build_sphere_edge_colour",
-               "ui.tabs.media.sphere_settings_binding:load_sphere_edge_colour",
-               "ui.tabs.media.sphere_settings_binding:collect_sphere_edge_colour"),
+        Custom("edge_colour", "appearance"),
         Slider('sphere_edge_weight', 'Edge Weight:', 0.25, 1.75,
                'Controls how much of each existing cube face is treated as the authored Edge Color. 1.0 is the accepted current edge width; lower values thin it and higher values thicken it without adding geometry or another draw.', bucket='appearance', logical=True, runtime_strict=True, suffix='x', recommended=1.0),
         Slider('sphere_voxel_size_variation', 'Voxel Size Variation:', 0.0, 1.0,
@@ -1346,7 +1313,6 @@ _SPHERE = ModeSettings(
                'Controls per-face reflected sheen strength. Zero is matte; high values increase face shine without a shell-space glow lobe.', bucket='appearance', logical=True, runtime_strict=True, recommended=1.08),
         Slider('sphere_mirror', 'Mirror Cubes:', 0.0, 1.0,
                "Gives the cubes' faces (not their edges) a polished mirror surface reflecting the wallpaper, sharper with Gloss; zero leaves them plain. Needs a 3D Detail tier with reflections.", bucket='appearance', logical=False, runtime_strict=True),
-        Custom("finish_hooks", "appearance", "ui.tabs.media.sphere_builder:bind_sphere_finish_axes"),
         Toggle('sphere_fade_incoming_blocks', 'Particle Flow:', 'Enable detached voxel intake/outtake',
                'Master detached-voxel presentation. In Intake mode selected shell voxels begin outside and return to their canonical slots; Particle Outtake reverses newly launched cohorts so source voxels leave/fade while replacements fade into the canonical shell.', bucket='particle_flow', logical=True, runtime_bool=True),
         Toggle('sphere_incoming_density_response_enabled', 'Particle Density Response:', 'Scale detached voxel count with live energy',
@@ -1398,9 +1364,7 @@ _SPHERE = ModeSettings(
                'The sole moving bright-block effect. Each accepted audio onset queues one bounded step; travel is speed-capped and settles before fading. Gloss/Specular are per-face finish controls and cannot create a competing bright block.', bucket='effects', logical=True, runtime_bool=True),
         Colour("sphere_tracer_color", "Tracer Color:", "Choose Sphere Tracer Color",
                'Styles the existing causal tracer only. The default warm cream exactly matches the accepted hard-coded tracer colour; alpha may soften its blend without changing tracer timing or admission.', logical=True, runtime_strict=True, swatch_row=False),
-        Custom("tracer_colour", "effects", "ui.tabs.media.sphere_builder:build_sphere_tracer_colour",
-               "ui.tabs.media.sphere_settings_binding:load_sphere_tracer_colour",
-               "ui.tabs.media.sphere_settings_binding:collect_sphere_tracer_colour"),
+        Custom("tracer_colour", "effects"),
         Toggle('sphere_allow_overflow', 'Scene Overflow:', 'Allow blocks outside the visualizer bounds',
                'Sphere-only render capability. Other visualizer modes remain on the existing clipped path.', bucket='effects', logical=True, runtime_bool=True),
         Slider("sphere_turn", "", -1.0, 1.0, runtime_strict=True),
@@ -1480,8 +1444,7 @@ _BUBBLE = ModeSettings(
                labels=("None", "Left", "Right", "Diagonal", "Swish (Horizontal)", "Swish (Vertical)", "Random",
                        "Clockwise", "Counter-Clockwise"),
                normalizer="core.settings.visualizer_mode_settings:_bubble_choice"),
-        Custom("swirl", "motion", "ui.tabs.media.bubble_builder:build_bubble_swirl",
-               "ui.tabs.media.bubble_builder:load_bubble_swirl", "ui.tabs.media.bubble_builder:collect_bubble_swirl"),
+        Custom("swirl", "motion"),
         Slider("bubble_trail_strength", "Tail Length:", 0.0, 1.5, bucket="motion",
                logical=True, percent=True, tick=10, truncate=True,
                tooltip="How long the motion tail stretches behind each bubble (0 = off)."),

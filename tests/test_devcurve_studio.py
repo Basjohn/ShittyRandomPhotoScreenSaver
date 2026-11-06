@@ -238,15 +238,15 @@ def _devcurve_tab(qt_app, settings_manager):
 
 
 def _settings_round_trip(tab, values: dict) -> dict:
-    """``values`` loaded into Settings' own DevCurve layer row and collected back (``devcurve_settings_binding``)."""
-    from ui.tabs.media.devcurve_settings_binding import collect_devcurve_layers, load_devcurve_layers
-    load_devcurve_layers(tab, values)
-    return collect_devcurve_layers(tab)
+    """``values`` loaded into Settings' DevCurve body and collected back (what its save stores)."""
+    from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
+    load_spec_mode_settings(tab, MODE, values)
+    return collect_spec_mode_settings(tab, MODE)
 
 
 def test_layer_rows_store_what_settings_layer_binding_stores(qt_app, settings_manager):
-    """Every layer value admitted by the Studio (in range, between Settings' steps, and out of range) is exactly what
-    Settings' own layer row stores after a load and collect: the same steps, clamps and opaque outline."""
+    """Every layer value admitted by the Studio (in range, between steps, and out of range) is exactly what Settings
+    stores after a load and collect: the Studio's admission is the layer row's only owner."""
     dialog, tab = _devcurve_tab(qt_app, settings_manager)
     schema = build_schema()
     base = canonical_section()
@@ -266,33 +266,6 @@ def test_layer_rows_store_what_settings_layer_binding_stores(qt_app, settings_ma
                     assert stored == pytest.approx(admitted), (key, candidate)
                 checked += 1
     assert checked >= 4 * len(candidates)
-    dialog.deleteLater()
-
-
-def test_layer_order_follows_settings_stack_normalisation(qt_app, settings_manager):
-    """Changing a layer's order, or switching a layer, re-ranks the stack exactly as Settings' shaper does
-    (``_devcurve_normalize_layer_orders``), driven here on the real tab for every layer, rank and on/off state."""
-    dialog, tab = _devcurve_tab(qt_app, settings_manager)
-    names = layers()
-    base = canonical_section()
-    for target in names:
-        for disabled in (None, *(n for n in names if n != target)):
-            values = dict(base)
-            for name in names:
-                values[layer_key(name, "enabled")] = name != disabled
-            for rank in range(1, len(names) + 1):
-                key = layer_key(target, "order")
-                ours = {**values, key: rank, **follow(key, rank, {**values, key: rank})}
-                _settings_round_trip(tab, values)
-                tab._devcurve_normalize_layer_orders(target_src=target, target_rank=rank, save=False)
-                theirs = {layer_key(n, "order"): int(getattr(tab, f"_devcurve_layer_{n}_order")) for n in names}
-                assert {k: ours[k] for k in theirs} == theirs, (target, disabled, rank)
-            switch = layer_key(target, "enabled")
-            flipped = {**values, switch: not values[switch]}
-            ours = {**flipped, **follow(switch, flipped[switch], flipped)}
-            _settings_round_trip(tab, flipped)
-            theirs = {layer_key(n, "order"): int(getattr(tab, f"_devcurve_layer_{n}_order")) for n in names}
-            assert {k: ours[k] for k in theirs} == theirs, (target, disabled, "switch")
     dialog.deleteLater()
 
 

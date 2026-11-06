@@ -34,7 +34,7 @@ Local-repo transition concept mock references currently used by the plan live un
 | `Docs/Guides/` | maintained authoring/change procedures |
 | `Docs/Reference/` | current lookup/reference material and harness routing |
 | `Docs/Historical_Bugs/` | permanent regression/root-cause/failed-method evidence |
-| `Docs/Audits/` | dated audit/decision snapshots and design packs; evidence only, never current authority (durable rules move to their owner) |
+| `Docs/Audits/` | dated audit/decision snapshots and design packs; evidence only, never current authority (durable rules move to their owner; a routing row may cite one as the evidence behind a rule, never as the rule) |
 | `Docs/Future_Work/` | deferred concept briefs and packages routed from `Future_Work.md` |
 
 Keep the small routing authorities at `Docs/` root: project overview, current owner map, guardrail router, Historical Bugs router and TestSuite.
@@ -47,7 +47,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | --- | --- |
 | current work / next sequence | `Current_Plan.md` |
 | Linux: run/install/build/test how-to / live checklist and gaps / durable rules | `Docs/Guides/Linux_Guide.md` / `Linux_Plan.md` / `Docs/Guardrails/Linux_Compatibility.md`; `core/platform_paths.py` |
-| R151 Steam cache publication and Settings UTC: **106 focused Windows tests accepted**, full rerun not requested | `Docs/Historical_Bugs/R-151_Steam_Cache_Windows_Publication_Race_And_Python314_Timestamps.md` |
+| R151 Steam cache publication and Settings UTC: focused Windows gate accepted, full rerun not requested | `Docs/Historical_Bugs/R-151_Steam_Cache_Windows_Publication_Race_And_Python314_Timestamps.md` |
 | R149 Python 3.14 full-test failures, Steam cache WinError 32, NumPy BLAS introspection and 35-minute runtime review | `Docs/Contracts.md` |
 | R134–R145 dual-display collapse, reboot-dependent recovery and pre/post performance/cache/handles investigation | `Docs/Historical_Bugs/R-134_to_R-145_Dual_Display_Reboot_Recovery.md` |
 | Python 3.14 active MSVC/frozen-product gate (operator runs builds and returns logs) | `Current_Plan.md` §5; `Docs/Guides/Python314_Cutover.md` |
@@ -78,7 +78,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | ordinary widget authoring | `Docs/Guides/10_WIDGET_GUIDELINES.md` |
 | ordinary CUSTOM geometry, Edit-only keyboard controls and reset | `Docs/Guides/Custom_Child_Geometry.md` and `Docs/Guides/Custom_Child_Placement_And_Headers.md` |
 | R154 display-owner retirement callback; historical diagnostic preset collision, superseded by R155 unified runtime root | `Docs/Historical_Bugs/R-154_Quick_Display_Terminal_Callback_And_Sphere_Slot_Collision.md` |
-| R156 missing Diagnostic frame-trace evidence; native Windows CLI admission and writer-failure receipts | `Docs/Guides/Qt_QML_Observability.md`; `Current_Plan.md` §5 |
+| R156 missing Diagnostic frame-trace evidence; native Windows CLI admission and writer-failure receipts | `Docs/Guides/Qt_QML_Observability.md` |
 | R155 cross-display Media shortcuts and compiled Diagnostic shared preset authority | `Docs/Guardrails/Visualizer_Presentation.md`; `Spec.md` → Media transport / Visualizer preset catalogue |
 | current-screen Settings rows, physical saver/widget selection, absent-display lifecycle, monitor power/wake and saved CUSTOM replay | `Spec.md` → Visualizer display routing; `Docs/Contracts.md` → Saver display selection / Geometry / CUSTOM; `Docs/Architecture/Persisted_Input_Compatibility.md`; `Current_Plan.md` §5 |
 | current source/Qt/physical proof for CUSTOM changes | `Docs/TestSuite.md` → Shared paint/Edit parity acceptance; `Current_Plan.md` for newly opened gates |
@@ -136,6 +136,9 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | test inventory / acceptance authority | `Docs/TestSuite.md` |
 | durable test authoring / mutable-authority hygiene | `Docs/Guides/Test_Durability.md` |
 | harness commands | `Docs/Reference/Harness_Index.md` |
+| release/README animated media (`tools/release_media.py`, ignored output) | `Docs/Reference/Release_Media.md` |
+| ordinary widget resize/stack capture harness (maintained tooling, never imported by production) | `Docs/Guides/Ordinary_Widget_Resize_Capture.md` |
+| Theme Sorter Foundry (optional standalone theme triage tool) | `Docs/Guides/Theme_Sorter_Foundry.md` |
 | delegating work to Codex and auditing it | `Docs/Guides/Codex_Delegation.md` |
 | GODZIP Foundry quick-launch Foundries / GUI tools | `Docs/Reference/Harness_Index.md` → GODZIP Foundry operator commands |
 | friendly 60-second music capture / full waveform replay | `tools/music_recorder.py`; `Docs/Reference/Harness_Index.md` |

@@ -597,17 +597,21 @@ def _launch_runtime(
     launch: str,
     appdata_root: Optional[Path],
     log_dir: Path,
+    mc_window_flags: str = "default",
 ) -> tuple[subprocess.Popen[str], List[Any]]:
+    # Child-process isolation only: the product learns its log root and window role from
+    # command-line arguments, never from SRPSS_* environment variables.
     env = os.environ.copy()
-    env["SRPSS_FORCE_LOGS"] = "1"
-    env["SRPSS_FORCE_LOG_DIR"] = str(log_dir)
     if appdata_root is not None:
         env["APPDATA"] = str(appdata_root)
 
+    redirect = [f"--log-dir={log_dir}"]
+    if mc_window_flags != "default":
+        redirect.append(f"--mc-window-flags={mc_window_flags}")
     if launch == "mc":
-        cmd = [sys.executable, "main_mc.py", "--debug", "/s"]
+        cmd = [sys.executable, "main_mc.py", "--debug", *redirect, "/s"]
     elif launch == "run":
-        cmd = [sys.executable, "main.py", "--debug", "/s"]
+        cmd = [sys.executable, "main.py", "--debug", *redirect, "/s"]
     else:
         raise ValueError(f"Unsupported launch mode: {launch}")
     stdout_path = log_dir / "launcher_stdout.log"

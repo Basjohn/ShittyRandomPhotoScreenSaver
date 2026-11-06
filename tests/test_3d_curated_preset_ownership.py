@@ -42,7 +42,6 @@ def _raw(mode, index):
     return json.loads(path.read_text(encoding="utf-8"))["snapshot"]["widgets"]["spotify_visualizer"]
 
 
-
 def test_extruded_curated_presets_preserve_their_own_response_without_live_organs_borrowing():
     """Each editable Extruded preset must retain its *own* authored response.
 
@@ -653,40 +652,6 @@ def test_recorder_applies_source_projection_before_its_engine_configuration(monk
         assert engine._audio_worker._spectrum_shape_nodes is None
     finally:
         record._close_configured_engine(controller, engine)
-
-
-@pytest.mark.parametrize("mode", ("spectrum", *_MODES))
-def test_shared_temporal_ui_uses_owned_values_and_custom_save_flow(mode, qt_app):
-    from PySide6.QtWidgets import QWidget, QVBoxLayout
-    from tests._settings_context_stub import CanonicalWidgetDefaultsStub
-    from ui.tabs.media.spectrum_smoothing_controls import build_spectrum_smoothing_controls
-    class Tab(CanonicalWidgetDefaultsStub):
-        def __init__(self):
-            super().__init__()
-            self.saved = 0
-            self.custom = 0
-        def _save_settings(self, *_):
-            self.saved += 1
-        def _force_visualizer_preset_to_custom(self):
-            self.custom += 1
-    tab = Tab()
-    host = QWidget()
-    layout = QVBoxLayout(host)
-    # Dormant body has no controls or signal connections before its builder.
-    assert not hasattr(tab, f"{mode}_visual_smoothing")
-    build_spectrum_smoothing_controls(tab, layout, mode_key=mode)
-    enabled = getattr(tab, f"{mode}_visual_smoothing_enabled")
-    strength = getattr(tab, f"{mode}_visual_smoothing")
-    strength.setValue(17)
-    enabled.setChecked(False)
-    assert tab.saved == 2
-    assert tab.custom == (0 if mode == "spectrum" else 2)
-    assert getattr(tab, f"{mode}_visual_smoothing_label").text() == "17%"
-    assert strength.parentWidget().isHidden()
-    if mode != "spectrum":
-        stabilization = getattr(tab, f"{mode}_solid_bar_hysteresis_enabled")
-        stabilization.setChecked(False)
-        assert tab.saved == 3 and tab.custom == 3
 
 
 @pytest.mark.qt

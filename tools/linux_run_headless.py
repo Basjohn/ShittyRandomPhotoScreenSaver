@@ -90,7 +90,8 @@ def main() -> int:
             else:
                 lh.copy_repo_images(images)
             lh.seed_profile(env, images, args.interval, () if args.keep_widgets else lh.DEFAULT_DISABLED_WIDGETS)
-        command = [sys.executable, "main.py", args.mode, "--exit-after", str(args.seconds), *args.main_args]
+        command = [sys.executable, "main.py", args.mode, "--exit-after", str(args.seconds),
+                   lh.log_dir_arg(logs), *args.main_args]
         with (logs / "stdout.txt").open("w") as stdout:
             app = subprocess.Popen(command, cwd=lh.REPO, env=env, stdout=stdout, stderr=subprocess.STDOUT)
         started = time.monotonic()
