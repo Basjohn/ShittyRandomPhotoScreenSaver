@@ -50,6 +50,15 @@ challenges and improves it into a live checklist (priority, reward, fix detail; 
 the Expanded Visualizer / SMP plans and this plan. Afterwards the cap returns to one Opus high plus one Opus medium,
 once no existing agent holds loaded work.
 
+**Data-corruption bug (found 7 Nov in the merge gate; the Studio agent's top priority):** during the operator's source
+run on 6 Nov, `presets/visualizer_modes/shockwave_grid/preset_1_synthwave.json` (Neon Lake Preset 1) was rewritten
+at 21:45:04 as a Bubble preset (`"mode": "bubble"`, 78 Bubble keys, name kept), with no log line, while Settings was
+open after a Bubble preset save (21:44:41 `VIS_PRESETS_SAVE ... bubble`). Neon Lake was the last live mode. Values
+came from Bubble, the target from another mode. The original is restored from git; the bad file is kept in
+`.artifacts/evidence/preset_cross_mode_write_20261106/`. Fix: find the writer; every preset-file write asserts that
+its target mode equals the payload mode, fails closed, and logs mode/index/path; a regression test fails on the old
+code. Check installed builds too.
+
 **Queued (operator 6 Nov ~22:00), next free medium slot:**
 - **Two clicks on Reset Camera count as the card's double-click, which cycles the Visualizer mode**
   (`logs/screensaver*.log` 22:04:34-36). Two presses each ran a reset ("[VIS_ORBIT] Camera reset to preset home" x2).
