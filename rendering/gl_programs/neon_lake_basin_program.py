@@ -955,6 +955,12 @@ out float vRidgeVary;
 out float vRidgeNear;
 uniform float uOutlineLiftNdc; // physical-pixel lift, supplied by renderer viewport
 uniform float uHorizonThickness;
+vec3 basinSkylinePoint(vec2 uv) {
+    float base=basinBase(uv);
+    return vec3((uv.x*2.0-1.0)*uHalfWidth,
+                sceneHeightfieldWater(base) ? -basinDistantDrop(uv) : basinLandHeight(uv,base,basinCurve(uv)),
+                -uv.y*SHOCKWAVE_DEPTH);
+}
 void main() {
     float crest, energy, curved;
     float base=basinBase(aUv);
@@ -985,7 +991,25 @@ void main() {
     // paint over its own face).
     float farPlane=basinFar();
     float farther=clip.w*((farPlane+BASIN_NEAR)-2.0*farPlane*BASIN_NEAR/(1.02*max(clip.w,1e-4)))/(farPlane-BASIN_NEAR);
-    clip.z=max(clip.z+0.0012*clip.w,farther);
+    // Pass 7: a face climbing up the screen as it recedes (near land seen grazing) gains depth fast per pixel. Over
+    // the lift the real surface there lies farther than 2% behind this vertex, so the lifted copy showed over the
+    // land's own face as a broad sheet (Depth Scale 1, thickness 3). Push the copy behind the depth that face
+    // reaches over the lift: the surface's own depth per NDC height, three quarters of a cell farther from the eye.
+    // At a crest the land beyond falls away on screen, so no extra offset applies and the ridge stays in front of
+    // farther land (a whole cell also swallowed interior crests in front of the next dune: Preset 3's near bands).
+    vec2 away=normalize(-uBack.xz+vec2(1e-5,0.0));
+    vec2 toward=vec2(away.x/(2.0*uHalfWidth),-away.y/SHOCKWAVE_DEPTH);
+    toward*=0.75/(float(uTerrainSize-1)*uTerrainGrid.z*max(abs(toward.x),abs(toward.y)));
+    vec4 next=basinClip(basinSkylinePoint(aUv+toward));
+    float rise=next.y/max(next.w,1e-4)-(clip.y-uOutlineLiftNdc*width*clip.w)/max(clip.w,1e-4);
+    // Only where the face climbs on past the lift (a cell rising further on screen than the lift): a crest within
+    // the lift is a silhouette, whose copy must stay in front of the land beyond it. Eased in, never popped.
+    float lift=uOutlineLiftNdc*width;
+    float extra=0.0;
+    if (rise>lift && next.w>clip.w)
+        extra=min(1.5*lift*(next.w-clip.w)/rise,0.5*clip.w)*smoothstep(1.0,2.0,rise/max(lift,1e-6));
+    float behind=clip.w*((farPlane+BASIN_NEAR)-2.0*farPlane*BASIN_NEAR/max(clip.w+extra,1e-4))/(farPlane-BASIN_NEAR);
+    clip.z=max(max(clip.z+0.0012*clip.w,farther),behind);
     gl_Position=clip;
     vUv=aUv;
     vTerrainBase=base;
