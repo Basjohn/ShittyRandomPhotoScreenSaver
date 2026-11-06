@@ -1,8 +1,7 @@
 #version 460 core
 // Bake with PySide6 qsb: --glsl "460" -o surface_material.vert.qsb surface_material.vert
-// Card surface materials (Docs/Architecture/Card_Surface_Materials.md). The backdrop
-// coordinate comes from this vertex's own position in the render target, so it follows
-// pixel shift, Edit drags and CUSTOM scale with no binding.
+// Card surface materials (Docs/Architecture/Card_Surface_Materials.md). The backdrop coordinate comes from this vertex's own position in the render
+// target, so it follows pixel shift, Edit drags and CUSTOM scale with no binding.
 layout(location = 0) in vec4 qt_Vertex;
 layout(location = 1) in vec2 qt_MultiTexCoord0;
 layout(location = 0) out vec2 vLocal;
@@ -13,6 +12,7 @@ layout(std140, binding = 0) uniform buf {
     vec2 itemSize;
     float cornerRadius;
     float contentInset;
+    float borderWidth;
     vec4 normalColor;
     vec4 tintColor;
     vec4 textColor;

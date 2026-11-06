@@ -277,6 +277,17 @@ def rebuild_styles(scene: MaterialScene) -> None:
     art = foundry._gradient_art(Path(os.environ.get("TEMP", ".")) / "surface_material_art.png",
                                 (480, 480), ("#27336e", "#e7678a"), 1)
     build_cards(scene, art)
+    settle_animations(scene)
+
+
+def settle_animations(scene: MaterialScene, seconds: float = 1.6) -> None:
+    """Let the cards' wall-time animations (fade-ins, meter fills, media crossfades) finish,
+    so frames from different runs of the tool compare pixel for pixel."""
+
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        scene.render(1)
+        time.sleep(0.02)
 
 
 def slug(text: str) -> str:
@@ -405,6 +416,118 @@ def measure_cost(scene: MaterialScene, wallpapers: list[Path], frames: int = 80)
     return results
 
 
+# --------------------------------------------------------------------------- legibility
+
+SMALL_TEXT_PX = 18.0      # below this a run needs 4.5:1 (WCAG AA body text), at or above it 3:1
+
+
+def _relative_luminance(rgb):
+    import numpy
+
+    c = numpy.asarray(rgb, numpy.float64) / 255.0
+    c = numpy.where(c <= 0.03928, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    return c[..., 0] * 0.2126 + c[..., 1] * 0.7152 + c[..., 2] * 0.0722
+
+
+def _text_runs(scene: MaterialScene):
+    from PySide6.QtCore import QRectF
+    from PySide6.QtQuick import QQuickItem
+
+    runs = []
+    mains, pending = [], [scene.scene.root]
+    while pending:                      # the visual tree: Repeater delegates are not QObject children
+        node = pending.pop()
+        children = node.childItems()
+        pending.extend(children)
+        if node.objectName() == "shadowedTextMain":
+            mains.append(node)
+    for main in mains:
+        item = main.parentItem()
+        if item is None or not item.isVisible() or not main.isVisible() or not str(item.property("text") or ""):
+            continue
+        shadow = item.findChild(QQuickItem, "shadowedTextShadow")
+        rect = main.mapRectToScene(QRectF(0.0, 0.0, main.width(), main.height()))
+        font = main.property("font")
+        size = font.pixelSize() if font.pixelSize() > 0 else font.pointSizeF() * 96.0 / 72.0
+        runs.append((item, main, shadow, rect, float(size)))
+    return runs
+
+
+def measure_text_legibility(scene: MaterialScene, out: Path) -> list[dict]:
+    """Per text run: WCAG contrast of the run's own colour against the pixels right under its
+    glyphs (the frame re-rendered with every run's glyphs and shadows hidden), p5 over the glyph
+    pixels. Saves the frame; returns one row per run."""
+
+    import numpy
+
+    scene.render(2)
+    frame = scene.read()
+    frame.save(out)
+    full = numpy.asarray(frame, numpy.int16)
+    runs = _text_runs(scene)
+    saved = []
+    for _item, main, shadow, _rect, _size in runs:
+        saved.append((main.opacity(), shadow.opacity() if shadow is not None else None))
+        main.setOpacity(0.0)
+        if shadow is not None:
+            shadow.setOpacity(0.0)
+    scene.render(2)
+    bare = numpy.asarray(scene.read(), numpy.int16)
+    for (item, main, shadow, _rect, _size), (main_opacity, shadow_opacity) in zip(runs, saved):
+        main.setOpacity(main_opacity)
+        if shadow is not None:
+            shadow.setOpacity(shadow_opacity)
+    scene.render(1)
+    rows = []
+    height, width = full.shape[:2]
+    for item, _main, _shadow, rect, size in runs:
+        left, top = max(0, int(rect.left())), max(0, int(rect.top()))
+        right, bottom = min(width, int(rect.right()) + 1), min(height, int(rect.bottom()) + 1)
+        if right - left < 2 or bottom - top < 2:
+            continue
+        mask = numpy.abs(full[top:bottom, left:right] - bare[top:bottom, left:right]).max(axis=2) > 24
+        if mask.sum() < 6:
+            continue
+        colour = item.property("color")
+        text_l = float(_relative_luminance([colour.red(), colour.green(), colour.blue()]))
+        back_l = _relative_luminance(bare[top:bottom, left:right][mask])
+        hi = numpy.maximum(back_l, text_l)
+        lo = numpy.minimum(back_l, text_l)
+        contrast = (hi + 0.05) / (lo + 0.05)
+        rows.append({"text": str(item.property("text"))[:40], "size_px": round(size, 1),
+                     "small": size < SMALL_TEXT_PX, "rect": [left, top, right, bottom],
+                     "colour": colour.name(), "p5": round(float(numpy.percentile(contrast, 5)), 2),
+                     "min": round(float(contrast.min()), 2), "median": round(float(numpy.median(contrast)), 2)})
+    return rows
+
+
+def capture_legibility(scene: MaterialScene, wallpapers: list[Path], output: Path) -> dict:
+    """Light and dark themes, every wallpaper, every material: frames plus per-run contrast."""
+
+    report: dict = {}
+    images = [presentation_image(path, SCENE, f"leg-{index}") for index, path in enumerate(wallpapers)]
+    for theme in (LIGHT_THEME, DARK_THEME):
+        activate_theme(theme)
+        rebuild_styles(scene)
+        for index, image in enumerate(images):
+            scene.set_wallpaper(image)
+            for material in MATERIALS:
+                scene.set_material(material)
+                scene.render(4)
+                folder = output / slug(theme) / wallpapers[index].stem
+                folder.mkdir(parents=True, exist_ok=True)
+                rows = measure_text_legibility(scene, folder / f"{material}.png")
+                report.setdefault(slug(theme), {}).setdefault(wallpapers[index].stem, {})[material] = rows
+                small = [row["p5"] for row in rows if row["small"]]
+                large = [row["p5"] for row in rows if not row["small"]]
+                print(f"{theme[:14]:14s} {wallpapers[index].stem:12s} {material:8s} runs {len(rows):3d}  "
+                      f"small p5 min {min(small) if small else 0:5.2f}  large p5 min {min(large) if large else 0:5.2f}",
+                      flush=True)
+    boxes = scene.card_boxes()
+    report["card_boxes"] = boxes
+    return report
+
+
 # --------------------------------------------------------------------------- main
 
 
@@ -417,6 +540,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--smoke", action="store_true", help="one still per material, for a quick look")
     parser.add_argument("--cadence", action="store_true", help="staleness error per backdrop refresh rate")
     parser.add_argument("--cost", action="store_true", help="steady whole-frame GPU per material vs Normal")
+    parser.add_argument("--legibility", action="store_true",
+                        help="per text run contrast against its local backdrop, light and dark themes")
     args = parser.parse_args(argv)
 
     from PySide6.QtGui import QGuiApplication
@@ -445,6 +570,8 @@ def main(argv: list[str] | None = None) -> int:
                 settle_still(scene)
                 frames[material] = scene.read()
             contact(frames, args.output / "smoke.png", "smoke")
+        if args.legibility:
+            report["legibility"] = capture_legibility(scene, list(args.wallpapers), args.output)
         if args.cost:
             report["cost"] = measure_cost(scene, list(args.wallpapers))
         if args.cadence:
