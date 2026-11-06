@@ -344,10 +344,10 @@ def test_parity_check_detects_a_perturbed_engine_answer_negative_control(qt_app)
     original = recorded(clip.description, values)
     data = {**original, "steps": json.loads(json.dumps(original["steps"]))}
     middle = len(data["steps"]) // 2
-    answers = data["steps"][middle]["answers"]
-    answers["get_musical_level"] = encode_answer((17.0, 2.0))          # a loud, present moment it never had
+    for step in data["steps"][middle:]:           # a loud, present stretch it never had (whichever tick the beam reads it on)
+        step["answers"]["get_musical_level"] = encode_answer((17.0, 2.0))
     evaluator = _clip_evaluator(clip, data=data)
-    step = data["steps"][middle]
+    step = data["steps"][-1]
     assert frame_digest(evaluator.evaluate(step["now_ts"] - data["origin"], values)) != step["frame_sha256"]
     evaluator.release()
 
