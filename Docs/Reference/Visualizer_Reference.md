@@ -386,8 +386,10 @@ preset-authorable; Settings' Technical group and the Studio's Audio Analysis gro
 `ui/tabs/media/technical_controls._control_defs_for_mode`) do not offer it; a mode that starts reading it drops it from the
 tuple. `tests/test_audio_analysis_controls.py` derives both directions from the registry: every hidden control leaves the
 published frame bit-identical, every offered one moves it, and hidden values round-trip through the model and the real tab.
-Bar Count is not hidden anywhere (it moves every mode's frame); hiding it outside Spectrum and Extruded Spectrum is a
-product call (stored values would keep applying, so no look changes), listed in `Current_Plan.md` §9.
+Bar Count is not hidden anywhere (it moves every mode's frame). It is the drawn bar count only on a mode whose
+descriptor `draws_bars` (Spectrum, Extruded Spectrum; the same fact shows the page's Bar Appearance family there);
+everywhere else `_control_defs_for_mode` labels it **Analysis Bands** with a tooltip saying it is the analysis
+resolution, and Settings and the Studio read that one definition (decided 6 Nov with the Studio migration).
 
 ## 6. Latest-state semantics
 

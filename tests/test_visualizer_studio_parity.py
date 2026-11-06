@@ -528,6 +528,21 @@ def test_a_kept_section_saves_through_settings_and_reaches_the_studio(studio_on,
     assert _stored(settings_manager)["shockwave_grid_terrain"] == painted
 
 
+def test_bar_count_is_named_by_one_descriptor_fact_in_settings_and_the_studio():
+    """Bar Count is the drawn bar count only where the mode draws bars (``draws_bars``); elsewhere it is the analysis
+    resolution, named and explained as such. One definition feeds Settings' Technical group and the Studio."""
+    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
+    names: dict[bool, set] = {True: set(), False: set()}
+    for mode in MODES:
+        defn = next((d for d in _control_defs_for_mode(mode) if d.config_key == "bar_count"), None)
+        assert defn is not None, f"{mode} must keep its Bar Count (it moves every mode's frame)"
+        assert defn.tooltip, mode
+        names[get_visualizer_mode_descriptor(mode).draws_bars].add((defn.label_text, defn.suffix_text, defn.tooltip))
+        prop = _schema(mode).find(_storage_key(mode, defn))
+        assert prop.label == defn.label_text.rstrip(":").strip() and prop.tooltip.startswith(defn.tooltip), mode
+    assert len(names[True]) == 1 and len(names[False]) == 1 and names[True] != names[False]
+
+
 @pytest.mark.parametrize("mode", [m for m in MODES if any(getattr(e, "keys", ()) and hasattr(e, "build")
                                                           for e in require_mode_settings(m).entries)])
 def test_studio_edits_of_every_custom_row_save_and_reload_through_settings(studio_on, settings_manager, mode):
