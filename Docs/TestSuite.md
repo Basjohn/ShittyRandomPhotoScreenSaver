@@ -781,6 +781,15 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   coverage (Settings-unavailable controls excluded by their flag), the free orbit as a preview view, Settings round
   trip and every exit restoring it, theme; framework pieces it relies on: overflow clipped to the viewport slot and the
   presentation pixel ratio from the item mapping, each with a negative control.
+- `tests/test_devcurve_studio.py` — DevCurve on the shared recorded engine answers with its own logical hook: full
+  logical frames byte-identical to the production replay at every tick (synthetic audio and a shipped clip, canonical
+  and a reordered / one-layer-off / reshaped variant; zero unrecorded engine reads), the split proven both ways,
+  registry coverage (spec controls, every Custom layer key, every node slot, technical, rainbow), layer values and
+  stack re-ranking equal to Settings' own layer binding on the real tab, node limits, traces measured read-only and
+  showing a hit in the accents while the body holds, the worker out of process, identical production-renderer pixels,
+  theme, the preset row, Settings round trip and every exit restoring it, and Save To <Preset> on a tmp copy of a
+  curated DevCurve preset through the real SettingsDialog. `tests/test_devcurve_shape_editor.py` keeps Settings'
+  editor at the two nodes the solver needs (negative control: one node is refused).
 - `tests/test_spectrum_studio_shape_editor.py` — each capability of Settings' shape editor driven on the real widget
   and reached exactly by the Studio's own edits (node add/remove, lane reorder), with a negative control.
 - `tests/test_spectrum_studio_replay_budget.py` — exact replays rewind (pristine / checkpoints) instead of
