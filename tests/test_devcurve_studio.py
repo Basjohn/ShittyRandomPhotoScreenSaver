@@ -503,28 +503,55 @@ def test_every_traced_channel_is_measured_and_reads_change_nothing(qt_app):
     plain.release()
 
 
-def test_traces_show_a_hit_in_the_accents_while_the_body_holds(qt_app):
-    """On the isolated-hit fixture each body layer's Accent jumps after the hit while its Body (the slow, normalised
-    passage height) barely moves; the swell travels in. Before any audio there is nothing to trace."""
+# The hit window: from just before the isolated kick to the accents' own reach (two stages of 0.025 s attack land a
+# hit well inside 0.1 s), far shorter than the body's two slow stages (``DEVCURVE_BODY_STAGE_S``, 0.45 s attack).
+HIT_WINDOW = (-0.05, 0.1)
+BODY_LAYERS = ("bass", "vocals", "mids")         # the layers whose height is a slow body plus fast accents
+
+
+def _hit_rises(values) -> dict[str, tuple[float, float]]:
+    """Per body layer, (Accent rise, Body rise) of the traces across the hit window of the isolated-hit fixture."""
     from ui.studio.engine_answers import PREROLL, START, synthetic_score
-    values = canonical_section()
     evaluator, _data = _synthetic_evaluator("transient", values)
     _pcm, events = synthetic_score("transient")
     hit = next(when for when, kind, _s in events if kind == "kick") - (START + PREROLL)
-    evaluator.evaluate(hit - 0.15, values)
-    before = evaluator.measurements()["signals"]
-    peaks = {}
-    for k in range(1, 30):
-        evaluator.evaluate(hit + 0.01 * k, values)
-        for channel, value in evaluator.measurements()["signals"].items():
-            peaks[channel] = max(peaks.get(channel, 0.0), value)
-    label = layer_label(layers()[0])
-    accent_rise = peaks[f"{label} Accent"] - before[f"{label} Accent"]
-    body_rise = peaks[f"{label} Body"] - before[f"{label} Body"]
-    assert accent_rise > 0.1 and accent_rise > 3.0 * max(body_rise, 0.0), (before, peaks)
-    evaluator.evaluate(hit + 0.9, values)
-    assert evaluator.measurements()["signals"][f"{label} Swell"] > 0.0
+    traces = []
+    for offset in HIT_WINDOW:
+        evaluator.evaluate(hit + offset, values)
+        traces.append(evaluator.measurements()["signals"])
     evaluator.release()
+    before, after = traces
+    return {name: tuple(after[f"{layer_label(name)} {part}"] - before[f"{layer_label(name)} {part}"]
+                        for part in ("Accent", "Body")) for name in BODY_LAYERS}
+
+
+def _hit_shows_in_the_accents(rises) -> bool:
+    """Every body layer's Accent carries the hit (a clear rise) and its Body holds (a small fraction of that)."""
+    return all(accent > 0.1 and max(body, 0.0) < 0.2 * accent for accent, body in rises.values())
+
+
+def test_traces_show_a_hit_in_the_accents_while_the_body_holds(qt_app, monkeypatch):
+    """On the isolated-hit fixture each body layer's Accent jumps within the hit window while its Body (the slow,
+    normalised passage height) holds; the swell travels in afterwards. Negative controls on the production solver: with
+    no accent room the hit has nowhere to show in the accents, and with the body as fast as the accents the hit lands
+    in the body; either way the check fails. Before any audio there is nothing to trace."""
+    from widgets.spotify_visualizer import devcurve_runtime as solver
+    values = canonical_section()
+    rises = _hit_rises(values)
+    assert _hit_shows_in_the_accents(rises), rises
+    evaluator, _data = _synthetic_evaluator("transient", values)
+    evaluator.evaluate(4.0, values)
+    assert evaluator.measurements()["signals"][f"{layer_label(layers()[0])} Swell"] > 0.0
+    evaluator.release()
+    with monkeypatch.context() as patch:                       # accents can no longer carry hits
+        patch.setattr(solver, "DEVCURVE_ACCENT_ROOM", dict.fromkeys(solver.DEVCURVE_ACCENT_ROOM, 0.0))
+        muted = _hit_rises(values)
+    assert not _hit_shows_in_the_accents(muted), muted
+    with monkeypatch.context() as patch:                       # the hit routed into the body: fast as an accent
+        patch.setattr(solver, "DEVCURVE_BODY_STAGE_S", solver.DEVCURVE_ACCENT_STAGE_S)
+        patch.setattr(solver, "DEVCURVE_RESPONSE_REACH_S", solver.DEVCURVE_RESPONSE_MEMORY_S)
+        routed = _hit_rises(values)
+    assert not _hit_shows_in_the_accents(routed), routed
     empty = DevCurveStudioEvaluator(loader=lambda *_a: None)
     assert empty.measurements()["signals"] == {}
 
