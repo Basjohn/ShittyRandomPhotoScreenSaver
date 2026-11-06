@@ -848,19 +848,18 @@ def _read_bool_flag_file(path: Path) -> Optional[bool]:
         return None
 
 
-_env_widget_perf_verbose = os.getenv("SRPSS_WIDGET_PERF_VERBOSE")
-if _env_widget_perf_verbose is not None:
-    try:
-        parsed = _parse_bool_token(str(_env_widget_perf_verbose))
-        if parsed is not None:
-            _WIDGET_PERF_VERBOSE = parsed
-    except Exception:
-        pass
+def set_forced_log_dir(path: str | Path | None) -> None:
+    """Bind (or clear) the harness log-root redirect requested by ``--log-dir=<path>``.
 
-_env_log_dir = os.getenv("SRPSS_FORCE_LOG_DIR")
-if _env_log_dir:
+    Called once at startup before anything resolves the log directory. A relative path is
+    resolved against the working directory; an unusable value clears the redirect.
+    """
+    global _FORCED_LOG_DIR
+    if not path:
+        _FORCED_LOG_DIR = None
+        return
     try:
-        candidate = Path(_env_log_dir).expanduser()
+        candidate = Path(path).expanduser()
         if not candidate.is_absolute():
             candidate = candidate.resolve()
         _FORCED_LOG_DIR = candidate
@@ -881,16 +880,6 @@ def _determine_logging_disabled(exe_path: Path | None) -> bool:
         if cfg_value is not None:
             # File stores "1" to enable logging, "0" to disable.
             logging_disabled = not cfg_value
-
-    env_disable = _parse_bool_token(os.getenv("SRPSS_DISABLE_LOGS"))
-    if env_disable is True:
-        logging_disabled = True
-    elif env_disable is False:
-        logging_disabled = False
-
-    env_force = _parse_bool_token(os.getenv("SRPSS_FORCE_LOGS"))
-    if env_force is True:
-        logging_disabled = False
 
     return logging_disabled
 

@@ -61,12 +61,6 @@ Keep these deferred unless new evidence or an explicit request promotes them:
 
 - ImageWorker lean-spawn entry and residual memory-footprint follow-up;
 - `--usage` observer-cost refinement and residual handle-slope attribution;
-- migrate the remaining environment-variable gates to explicit CLI/sidecar boundaries, despite the project policy against
-  them: `main.py`'s `SRPSS_PROFILE_CPU` (CONFIG and RUN branches), `engine/display_manager.py`'s `SRPSS_MC_WINDOW_FLAGS`,
-  `core/windows/reddit_helper_bridge.py`'s `SRPSS_DISABLE_REDDIT_HELPER_BRIDGE` and `core/logging/logger.py`'s
-  `SRPSS_DISABLE_LOGS` / `SRPSS_FORCE_LOGS` / `SRPSS_WIDGET_PERF_VERBOSE` (`SRPSS_FORCE_LOG_DIR` is the harness log-root
-  hook recorded in `Linux_Plan.md`); `Docs/Guides/Linux_Guide.md` states SRPSS is never configured through environment
-  variables, which the source does not yet honour;
 - remove `SounddeviceBackend`'s unreachable Windows WASAPI selection path after the factory's canonical PyAudioWPatch
   Windows routing; its non-Windows input-device policy also needs an explicit source-selection contract rather than
   silent first-device prioritization;

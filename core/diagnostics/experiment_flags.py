@@ -16,6 +16,15 @@ Admissions:
 * ``--abc-drive=A|B|C`` — admit the opt-in in-app A/B/C stress/causal harness.
   Because the harness may need the boundary ownership facts above, ``--abc-drive``
   **implicitly** enables the switch telemetry too.
+* ``--profile-cpu`` — wrap the CONFIG or RUN session in ``cProfile`` and write
+  ``screensaver_config.pstats`` / ``screensaver_run.pstats`` to the log directory.
+* ``--mc-window-flags=splash`` — hardware-ingress harnesses only: give the Media
+  Center window the splash top-level role instead of the tool role.
+* ``--log-dir=<path>`` — harness log-root redirect: the logger writes its files
+  under ``<path>`` (a scratch folder) so the operator's own logs stay untouched.
+
+All three are ordinary argv tokens in the ``=`` form, so a harness that launches a
+child passes them as arguments; nothing is read from the environment.
 
 Contract:
 
@@ -45,6 +54,9 @@ class ExperimentFlags:
     viz_switch_telemetry: bool = False
     abc_layout_slot: str | None = None
     abc_exclude_seconds: float | None = None
+    profile_cpu: bool = False
+    mc_window_splash: bool = False
+    log_dir: str | None = None
 
     @property
     def lifecycle_telemetry_admitted(self) -> bool:
@@ -69,9 +81,21 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
     viz_switch_telemetry = False
     abc_layout_slot: str | None = None
     abc_exclude_seconds: float | None = None
+    profile_cpu = False
+    mc_window_splash = False
+    log_dir: str | None = None
     for index, arg in enumerate(args):
         if arg == "--viz-switch-telemetry":
             viz_switch_telemetry = True
+            continue
+        if arg == "--profile-cpu":
+            profile_cpu = True
+            continue
+        if arg.startswith("--mc-window-flags="):
+            mc_window_splash = arg.split("=", 1)[1].strip().lower() == "splash"
+            continue
+        if arg.startswith("--log-dir="):
+            log_dir = arg.split("=", 1)[1].strip() or None
             continue
         value: str | None = None
         if arg.startswith("--abc-drive="):
@@ -108,6 +132,9 @@ def parse_experiment_flags(argv: Sequence[str]) -> ExperimentFlags:
         viz_switch_telemetry=viz_switch_telemetry,
         abc_layout_slot=abc_layout_slot,
         abc_exclude_seconds=abc_exclude_seconds,
+        profile_cpu=profile_cpu,
+        mc_window_splash=mc_window_splash,
+        log_dir=log_dir,
     )
 
 
@@ -124,6 +151,9 @@ def experiment_flag_tokens(argv: Sequence[str]) -> tuple[str, ...]:
     for index, arg in enumerate(args):
         if (
             arg == "--viz-switch-telemetry"
+            or arg == "--profile-cpu"
+            or arg.startswith("--mc-window-flags=")
+            or arg.startswith("--log-dir=")
             or arg.startswith("--abc-drive=")
             or arg.startswith("--abc-layout-slot=")
             or arg.startswith("--abc-exclude-seconds=")
@@ -173,6 +203,16 @@ def abc_exclude_seconds() -> float | None:
     return active_experiment_flags().abc_exclude_seconds
 
 
+def profile_cpu_admitted() -> bool:
+    """True when ``--profile-cpu`` asked for a cProfile of the CONFIG/RUN session."""
+    return active_experiment_flags().profile_cpu
+
+
+def mc_window_splash_admitted() -> bool:
+    """True when ``--mc-window-flags=splash`` selected the splash Media Center role."""
+    return active_experiment_flags().mc_window_splash
+
+
 def visualizer_switch_telemetry_admitted() -> bool:
     """True when opt-in render-host switch/resource telemetry must be allocated."""
     return active_experiment_flags().lifecycle_telemetry_admitted
@@ -193,6 +233,8 @@ __all__ = [
     "abc_drive_condition",
     "abc_layout_slot",
     "abc_exclude_seconds",
+    "profile_cpu_admitted",
+    "mc_window_splash_admitted",
     "visualizer_switch_telemetry_admitted",
     "override_active_flags_for_testing",
 ]

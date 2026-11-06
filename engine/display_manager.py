@@ -4,7 +4,6 @@ Display manager for multi-monitor support.
 Owns one authoritative Quick display unit for each selected screen.
 """
 import math
-import os
 import random
 import time
 import weakref
@@ -748,10 +747,9 @@ class DisplayManager(QObject):
 
         if not is_mc_build():
             return QuickWindowPolicy()
-        use_splash = (
-            os.environ.get("SRPSS_MC_WINDOW_FLAGS", "").strip().lower()
-            == "splash"
-        )
+        from core.diagnostics.experiment_flags import mc_window_splash_admitted
+
+        use_splash = mc_window_splash_admitted()
         if self.settings_manager is not None:
             always_on_top = self.settings_manager.get_bool("mc.always_on_top")
         else:
