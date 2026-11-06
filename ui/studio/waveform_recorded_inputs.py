@@ -92,6 +92,8 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
     clip = load_feature_clip(clip_path)
     origin_us = clip.frames[0].timestamp_us
     frames = [f for f in clip.frames if seconds is None or (f.timestamp_us - origin_us) / 1e6 <= seconds]
+    from ui.studio import clip_loop
+    frames, start = clip_loop.primed(clip.frames, frames, clip_path)    # a loop: its end replayed first
     records: list[dict] = []
     original = WaveformRibbonFrameRuntime.advance
 
@@ -135,12 +137,15 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
     ready = [r for r in records if r["ready"]]
     if not ready:
         raise RuntimeError("The clip never produced a primed waveform frame")
-    return {"clip": str(clip_path), "origin": float(ready[0]["now_ts"]),
-            "duration": float(records[-1]["now_ts"] - ready[0]["now_ts"]), "steps": records}
+    # A loop's lead-in ticks stay in the record (before the origin): the Studio's frame runtime primes on them.
+    return clip_loop.mark_loop({"clip": str(clip_path), "origin": float(ready[0]["now_ts"] if start is None else start),
+                                "duration": float(records[-1]["now_ts"] - ready[0]["now_ts"]), "steps": records},
+                               clip_path, start)
 
 
 def to_inputs(data: Mapping[str, Any], fixture) -> "RecordedInputs":
     from widgets.spotify_visualizer.transient_bus import MusicalOnset
+    from ui.studio.clip_loop import looped_fixture
     from ui.studio.waveform_adapter import AdvanceInput, RecordedInputs
     steps = tuple(AdvanceInput(now=float(s["now_ts"]), playing=bool(s["playing"]),
                                onsets=tuple(MusicalOnset(**o) for o in s["onsets"]),
@@ -148,7 +153,8 @@ def to_inputs(data: Mapping[str, Any], fixture) -> "RecordedInputs":
                                loudness=float(s["loudness"]), presence=float(s["presence"]),
                                identity=tuple(s["identity"]), source_identity=tuple(s["source_identity"]))
                   for s in data["steps"])
-    return RecordedInputs(fixture, steps, float(data["origin"]))
+    return RecordedInputs(looped_fixture(fixture, data), steps, float(data["origin"]),
+                          float(data.get("loop_period", 0.0)))
 
 
 def frozen_build() -> bool:
@@ -263,7 +269,7 @@ class ClipLoadJob:
             return
         try:
             data = json.loads(self._output_path.read_text(encoding="utf-8"))
-            fixture = self._replace(self._clip, duration=float(data["duration"]))
+            fixture = self._replace(self._clip, duration=float(data["duration"]))   # ``to_inputs`` marks a loop
             self._complete(self._convert(data, fixture))
         except Exception as exc:
             self._complete(None, f"{type(exc).__name__}: {exc}")

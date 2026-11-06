@@ -58,6 +58,8 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
         features = load_feature_clip(clip_path).frames
     origin_us = features[0].timestamp_us
     frames = [f for f in features if seconds is None or (f.timestamp_us - origin_us) / 1e6 <= seconds]
+    from ui.studio import clip_loop
+    frames, start = clip_loop.primed(features, frames, clip_path)       # a loop: its end replayed first
     records: list[dict] = []
     current = {"feature": None, "carried": []}
     original = sphere_capture.capture_sphere
@@ -98,10 +100,16 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
                     frames_out.append((records[-1]["now_ts"], payload))
         finally:
             engine.force_stop()
+    if start is not None:                  # only the clip's own ticks are recorded; the lead-in just primed the engine
+        records = [r for r in records if r["now_ts"] >= start - 1e-9]
+        if frames_out is not None:
+            frames_out[:] = [item for item in frames_out if item[0] >= start - 1e-9]
     if not records:
         raise RuntimeError("The clip never captured a Sphere frame")
-    return {"clip": str(clip_path), "origin": float(records[0]["now_ts"]),
-            "duration": float(records[-1]["now_ts"] - records[0]["now_ts"]), "steps": records}
+    from ui.studio.clip_loop import mark_loop
+    return mark_loop({"clip": str(clip_path), "origin": float(records[0]["now_ts"]),
+                      "duration": float(records[-1]["now_ts"] - records[0]["now_ts"]), "steps": records},
+                     clip_path, start)
 
 
 def to_inputs(data: Mapping[str, Any], fixture):
@@ -114,7 +122,9 @@ def to_inputs(data: Mapping[str, Any], fixture):
                              musical_level=tuple(s["musical_level"]), musical_intensity=float(s["musical_intensity"]),
                              spectrum=tuple(s["spectrum"]))
                   for s in data["steps"])
-    return RecordedInputs(fixture, steps, float(data["origin"]))
+    from ui.studio.clip_loop import looped_fixture
+    return RecordedInputs(looped_fixture(fixture, data), steps, float(data["origin"]),
+                          float(data.get("loop_period", 0.0)))
 
 
 def main(argv: list[str]) -> int:

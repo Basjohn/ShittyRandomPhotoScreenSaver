@@ -24,7 +24,7 @@ from typing import Any, Iterable, Mapping
 from core.settings.visualizer_mode_settings import (
     Choice, Colour, Range, SceneCameraPosition, ScenePath, Slider, Toggle, Triangle, require_mode_settings,
 )
-from ui.studio import framed
+from ui.studio import clip_loop, framed
 from ui.studio.adapter import (RECORDED, REFERENCE, SYNTHETIC, StudioCapabilities, StudioFixture, StudioModeAdapter,
                                control_condition)
 from ui.studio.schema import (
@@ -373,10 +373,18 @@ class SyntheticInputs:
 class RecordedInputs:
     """Advance inputs extracted from a recording by the production replay (``extruded_bubble_recorded_inputs``)."""
 
-    def __init__(self, fixture: StudioFixture, steps: tuple[AdvanceInput, ...], origin: float) -> None:
+    def __init__(self, fixture: StudioFixture, steps: tuple[AdvanceInput, ...], origin: float,
+                 period: float = 0.0) -> None:
         self.fixture = fixture
         self._steps = steps
         self._origin = origin      # the first source time whose capture built a frame; Studio time 0
+        self.period = float(period)        # > 0: a seamless loop (``ui/studio/clip_loop.py``)
+        serials = [o.serial for step in steps if step.now >= origin - 1e-9 for o in step.onsets]
+        self._span = clip_loop.onset_span(serials, (min(serials) - 1) if serials else 0)
+
+    def shifted(self, step, cycle: int):
+        """``step`` ``cycle`` whole passes on (times moved, onset serials kept increasing)."""
+        return clip_loop.shift_advance(step, cycle * self.period, cycle * self._span)
 
     def steps(self, until: float) -> Iterable[AdvanceInput]:
         limit = self._origin + until + 1e-9
@@ -444,6 +452,7 @@ class ExtrudedBubbleStudioEvaluator:
         self._parameters = None
         self._frozen = None
         self._wanted = None
+        self._anchor = clip_loop.Anchor()
         self.steps_run = 0
         self._restart()
 
@@ -467,7 +476,7 @@ class ExtrudedBubbleStudioEvaluator:
         if self._runtime is not None:
             self._runtime.retire()
         self._runtime = ExtrudedBubbleFrameRuntime()
-        self._iterator = iter(self._inputs.steps(self.fixture.duration))
+        self._iterator = iter(clip_loop.unrolled_ticks(self._inputs, self.fixture.duration))
         self._pending: AdvanceInput | None = None
         self._time = -math.inf
         self._last = None
@@ -502,13 +511,20 @@ class ExtrudedBubbleStudioEvaluator:
         (light, water, glass, lens, camera...) only re-presents the same logical instant: the simulation would step
         identically. ``exact=False`` (a live gesture) re-publishes the current step with new controls (dt = 0, no
         time moves) instead of replaying."""
-        time = max(0.0, min(float(time), self.fixture.duration))
+        at = float(time)
+        anchor = self._anchor = self._anchor.sync(getattr(self._inputs, "period", 0.0))
+        # A seamless loop plays on through its wrap in the transport's unrolled time (``ui/studio/clip_loop.py``).
+        time = max(0.0, anchor.virtual(at)) if anchor.looped else max(0.0, min(at, self.fixture.duration))
         if time < self._time:
             self._restart()
+            if anchor.looped:
+                time = anchor.rebase(at)
         frozen, controls = self._derive(values, revision)
         changed = self._controls is not None and controls != self._controls
         if exact and (changed or self._approximate):
             self._restart()
+            if anchor.looped:
+                time = anchor.rebase(at)       # a replay from the start of the pass the instant is in
         elif changed:
             self._approximate = True
             if self._last_step is not None and time == self._time:

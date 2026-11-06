@@ -22,6 +22,7 @@ from core.settings.visualizer_mode_settings import (
 from ui.studio.adapter import (
     RECORDED, REFERENCE, SYNTHETIC, RenderCard, StudioCapabilities, StudioFixture, StudioModeAdapter,
 )
+from ui.studio import clip_loop
 from ui.studio.exact_replay import ExactReplay
 from ui.studio.schema import (
     CHOICE, COLOUR, COUNT, GRADIENT, QUIET_PEAK, SCALAR, SWITCH, CardSpec, LifecycleSpec, SceneObject,
@@ -547,10 +548,18 @@ class SyntheticInputs:
 class RecordedInputs:
     """Advance inputs extracted from a recording by the production replay (see waveform_recorded_inputs)."""
 
-    def __init__(self, fixture: StudioFixture, steps: tuple[AdvanceInput, ...], origin: float) -> None:
+    def __init__(self, fixture: StudioFixture, steps: tuple[AdvanceInput, ...], origin: float,
+                 period: float = 0.0) -> None:
         self.fixture = fixture
         self._steps = steps
         self._origin = origin      # first source time whose frame is ready; Studio time 0
+        self.period = float(period)        # > 0: a seamless loop (``ui/studio/clip_loop.py``)
+        serials = [o.serial for step in steps if step.now >= origin - 1e-9 for o in step.onsets]
+        self._span = clip_loop.onset_span(serials, (min(serials) - 1) if serials else 0)
+
+    def shifted(self, step, cycle: int):
+        """``step`` ``cycle`` whole passes on (times moved, onset serials kept increasing)."""
+        return clip_loop.shift_advance(step, cycle * self.period, cycle * self._span)
 
     def steps(self, until: float) -> Iterable[AdvanceInput]:
         limit = self._origin + until + 1e-9
@@ -755,12 +764,12 @@ class WaveformStudioEvaluator(ExactReplay):
         of a replay. ``revision``: an optional caller token that changes whenever ``values``
         change; an equal token skips re-deriving the configuration (the per-frame cost while playing)."""
         deadline = self._deadline()
-        time = max(0.0, min(float(time), self.fixture.duration))
+        time = self._history_time(time)
         fresh = self._runtime is None
         if fresh:
             from widgets.spotify_visualizer.waveform_ribbon_frame_runtime import WaveformRibbonFrameRuntime
             self._runtime = WaveformRibbonFrameRuntime()
-            self._ticks = tuple(self._inputs.steps(self.fixture.duration))
+            self._ticks = clip_loop.unrolled_ticks(self._inputs, self.fixture.duration)
             self._origin = getattr(self._inputs, "_origin", 0.0)
         if revision is None or revision != self._revision or self._resolved is None:
             logical = _logical_values(values)
