@@ -528,12 +528,89 @@ def capture_legibility(scene: MaterialScene, wallpapers: list[Path], output: Pat
     return report
 
 
+def compare_legibility(before: Path, after: Path, output: Path) -> dict:
+    """Before/after crops at 1x and 3x for every material on the light theme's busiest
+    wallpaper: the smallest text run that was worst before, and a card edge over the busiest
+    region, each labelled with its contrast. Also a per-material summary of both runs."""
+
+    from PIL import Image, ImageDraw
+
+    old = json.loads((before / "report.json").read_text(encoding="utf-8"))["legibility"]
+    new = json.loads((after / "report.json").read_text(encoding="utf-8"))["legibility"]
+    summary: dict = {}
+    for theme, walls in new.items():
+        if theme == "card_boxes":
+            continue
+        for material in MATERIALS:
+            row = {}
+            for tag, data in (("before", old), ("after", new)):
+                runs = [run for wall, rows in data[theme].items() for run in rows[material]]
+                row[tag] = {"small_p5_min": min(r["p5"] for r in runs if r["small"]),
+                            "large_p5_min": min(r["p5"] for r in runs if not r["small"])}
+            summary.setdefault(theme, {})[material] = row
+    theme = slug(LIGHT_THEME)
+    # The busiest wallpaper: where Glass small text was worst before.
+    wall = min(old[theme], key=lambda w: min(r["p5"] for r in old[theme][w]["glass"] if r["small"]))
+    boxes = new["card_boxes"]
+    reddit = boxes[2]
+    edge = (reddit[2] - 34, reddit[1] + 40, reddit[2] + 22, reddit[1] + 110)
+    tiles = []
+    for material in MATERIALS:
+        runs_before = {r["text"] + str(r["rect"]): r for r in old[theme][wall][material]}
+        runs_after = {r["text"] + str(r["rect"]): r for r in new[theme][wall][material]}
+        small = [r for r in old[theme][wall][material] if r["small"]]
+        worst = min(small, key=lambda r: r["p5"])
+        key = worst["text"] + str(worst["rect"])
+        left, top, right, bottom = worst["rect"]
+        glyphs = (left - 8, top - 6, min(right, left + 150) + 8, bottom + 6)
+        images = {tag: Image.open(folder / theme / wall / f"{material}.png").convert("RGB")
+                  for tag, folder in (("before", before), ("after", after))}
+        label = (f"{material.upper()}  '{worst['text'][:22]}' {worst['size_px']:.0f}px  p5 "
+                 f"{worst['p5']:.2f} -> {runs_after.get(key, worst)['p5']:.2f}")
+        tiles.append((label, {tag: (img.crop(glyphs), img.crop(edge)) for tag, img in images.items()}))
+    scale = 3
+    rows = []
+    for label, crops in tiles:
+        text_w, text_h = crops["before"][0].size
+        edge_w, edge_h = crops["before"][1].size
+        width = (text_w + edge_w) * (1 + scale) * 2 + 60
+        height = 18 + max(text_h, edge_h) * scale
+        tile = Image.new("RGB", (width, height), (18, 18, 20))
+        draw = ImageDraw.Draw(tile)
+        draw.text((4, 2), label, fill=(235, 235, 235))
+        x = 4
+        for tag in ("before", "after"):
+            text_crop, edge_crop = crops[tag]
+            for crop in (text_crop, edge_crop):
+                tile.paste(crop, (x, 18))
+                x += crop.width + 4
+                big = crop.resize((crop.width * scale, crop.height * scale), Image.Resampling.NEAREST)
+                tile.paste(big, (x, 18))
+                x += big.width + 8
+            draw.text((x - 40, 2), tag.upper(), fill=(255, 220, 90))
+            x += 14
+        rows.append(tile)
+    sheet = Image.new("RGB", (max(r.width for r in rows), sum(r.height + 6 for r in rows) + 24), (10, 10, 12))
+    ImageDraw.Draw(sheet).text((6, 4), f"{LIGHT_THEME} on {wall}: smallest worst text and a card edge, "
+                                       f"1x and 3x, before | after", fill=(235, 235, 235))
+    y = 24
+    for tile in rows:
+        sheet.paste(tile, (0, y))
+        y += tile.height + 6
+    output.mkdir(parents=True, exist_ok=True)
+    sheet.save(output / "legibility_before_after.png")
+    (output / "legibility_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    return summary
+
+
 # --------------------------------------------------------------------------- main
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--wallpapers", type=Path, nargs="+", required=True,
+    parser.add_argument("--compare-legibility", type=Path, nargs=2, metavar=("BEFORE", "AFTER"),
+                        help="compose before/after crops and the contrast summary from two --legibility runs")
+    parser.add_argument("--wallpapers", type=Path, nargs="+",
                         help="wallpaper files (the first two also drive the transitions)")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--sheets", action="store_true")
@@ -543,6 +620,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--legibility", action="store_true",
                         help="per text run contrast against its local backdrop, light and dark themes")
     args = parser.parse_args(argv)
+    if args.compare_legibility:
+        summary = compare_legibility(*args.compare_legibility, args.output)
+        print(json.dumps(summary, indent=1))
+        return 0
+    if not args.wallpapers:
+        parser.error("--wallpapers is required")
 
     from PySide6.QtGui import QGuiApplication
     from rendering.quick.bootstrap import configure_quick_graphics
