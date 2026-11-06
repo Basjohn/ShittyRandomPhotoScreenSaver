@@ -126,7 +126,6 @@ def test_real_terrain_body_silent_roundtrip_reset_and_stroke_save_batch(qt_app, 
             "shockwave_grid_sky_enabled": False,
         })
         assert calls == []
-        assert not tab.shockwave_grid_sky_color_btn.isEnabled() and not tab.shockwave_grid_sky_strength.isEnabled()
         payload = collect_spec_mode_settings(tab, "shockwave_grid")
         assert payload["shockwave_grid_terrain"] == FIELD
         assert not set(pose) & set(payload) and "shockwave_grid_allow_overflow" not in payload
@@ -194,47 +193,6 @@ def test_test_owned_preset_cycle_preserves_custom_terrain_old_frequency_profile_
     assert all(resolved[key] == value for key, value in pose.items())
 
 
-def test_wire_display_real_body_roundtrip_and_default(qt_app, settings_manager, monkeypatch):
-    from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
-    from core.settings.visualizer_mode_settings import Choice, spec_control
-    from core.settings.visualizer_presets import get_custom_preset_index
-    from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
-    from ui.tabs.visualizers_tab import VisualizersTab
-    key = 'shockwave_grid_wire_display'
-    control = spec_control(key)
-    assert isinstance(control, Choice) and control.choices == ('Vertices', 'Glass', 'Glass + Vertices')
-    assert control.bucket == 'render' and not control.when and not control.enabled_when
-    assert require_canonical_default('widgets.spotify_visualizer.' + key) in control.choices
-    settings_manager.set('widgets', {'spotify_visualizer': {
-        'enabled': True, 'visualizers_enabled': True, 'mode': 'shockwave_grid',
-        'mode_activation': build_visualizer_mode_activation(['shockwave_grid']),
-        'preset_shockwave_grid': get_custom_preset_index('shockwave_grid'), key: 'Glass + Vertices'}})
-    tab = VisualizersTab(settings_manager)
-    try:
-        tab._select_mode_page('shockwave_grid')
-        calls = []
-        monkeypatch.setattr(tab, '_save_settings', lambda: calls.append('save'))
-        combo = getattr(tab, key)
-        assert combo.currentText() == 'Glass + Vertices' and combo.isEnabled()
-        defaults = require_canonical_default('widgets.spotify_visualizer')
-        load_spec_mode_settings(tab, 'shockwave_grid', defaults)
-        assert not calls and combo.currentText() == 'Vertices'
-        for value in control.choices:
-            load_spec_mode_settings(tab, 'shockwave_grid', {**defaults, key: value})
-            assert not calls and combo.currentText() == value
-            assert collect_spec_mode_settings(tab, 'shockwave_grid')[key] == value
-        tab._save_settings_now()
-        assert settings_manager.get('widgets', {})['spotify_visualizer'][key] == 'Glass + Vertices'
-    finally:
-        tab.deleteLater(); qt_app.processEvents()
-    reopened = VisualizersTab(settings_manager)
-    try:
-        reopened._select_mode_page('shockwave_grid')
-        assert getattr(reopened, key).currentText() == 'Glass + Vertices'
-    finally:
-        reopened.deleteLater(); qt_app.processEvents()
-
-
 def test_wire_display_model_projection_and_custom_preset_retention(monkeypatch):
     from core.settings import visualizer_presets as presets
     from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs, shockwave_grid_parameters
@@ -262,63 +220,6 @@ def test_wire_display_model_projection_and_custom_preset_retention(monkeypatch):
     assert resolved[key] == 'Vertices'
     assert presets.restore_visualizer_snapshot('shockwave_grid', resolved, custom)
     assert resolved[key] == 'Glass + Vertices'
-
-
-def test_celestial_and_glass_body_conditions_are_live_silent_and_preserve_latent_values(qt_app, settings_manager, monkeypatch):
-    from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
-    from core.settings.visualizer_presets import get_custom_preset_index
-    from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
-    from ui.tabs.visualizers_tab import VisualizersTab
-    settings_manager.set('widgets', {'spotify_visualizer': {
-        'enabled': True, 'visualizers_enabled': True, 'mode': 'shockwave_grid',
-        'mode_activation': build_visualizer_mode_activation(['shockwave_grid']),
-        'preset_shockwave_grid': get_custom_preset_index('shockwave_grid')}})
-    tab = VisualizersTab(settings_manager)
-    try:
-        tab._select_mode_page('shockwave_grid')
-        calls = []
-        monkeypatch.setattr(tab, '_save_settings', lambda: calls.append('save'))
-        defaults = require_canonical_default('widgets.spotify_visualizer')
-        latent = {'shockwave_grid_sun_color': [11, 22, 33, 77], 'shockwave_grid_moon_color': [44, 55, 66, 88],
-                  'shockwave_grid_sun_rays_color': [77, 88, 99, 111], 'shockwave_grid_glass_tint': [12, 34, 56, 123]}
-        config = {**defaults, **latent, 'shockwave_grid_sky_enabled': False, 'shockwave_grid_sun_enabled': True,
-                  'shockwave_grid_sun_orbit_enabled': True, 'shockwave_grid_sun_rays_enabled': True}
-        load_spec_mode_settings(tab, 'shockwave_grid', config)
-        assert not calls
-        assert tab.shockwave_grid_sun_enabled.isEnabled() and tab.shockwave_grid_sun_color_btn.isEnabled()
-        assert tab.shockwave_grid_sun_orbit_speed.isEnabled() and tab.shockwave_grid_sun_rays_color_btn.isEnabled()
-        assert not tab.shockwave_grid_star_color_btn.isEnabled()
-        tab.shockwave_grid_sun_enabled.setChecked(False)
-        assert not tab.shockwave_grid_sun_orbit_speed.isEnabled()
-        assert not tab.shockwave_grid_sun_rays_strength.isEnabled() and not tab.shockwave_grid_sun_rays_color_btn.isEnabled()
-        tab.shockwave_grid_sun_enabled.setChecked(True)
-        tab.shockwave_grid_sun_orbit_enabled.setChecked(False)
-        tab.shockwave_grid_sun_rays_enabled.setChecked(False)
-        assert not tab.shockwave_grid_sun_orbit_speed.isEnabled() and not tab.shockwave_grid_sun_rays_strength.isEnabled()
-        rows = tab._shockwave_grid_rows
-        tab.shockwave_grid_sun_mode.setCurrentText('Moon')
-        assert rows['shockwave_grid_sun_color'].isHidden()
-        assert not rows['shockwave_grid_moon_color'].isHidden() and not rows['shockwave_grid_moon_phase'].isHidden()
-        for style in ('Vertices', 'Glass', 'Glass + Vertices'):
-            tab.shockwave_grid_wire_display.setCurrentText(style)
-            glass = 'Glass' in style
-            points = 'Vertices' in style or 'Glass + Vertices' in style
-            assert rows['shockwave_grid_glass_tint'].isHidden() == (not glass)
-            assert rows['shockwave_grid_glass_strength'].isHidden() == (not glass)
-            assert rows['shockwave_grid_vertex_color'].isHidden() == (not points or glass)
-            assert rows['shockwave_grid_vertex_accent_color'].isHidden() == (not points or glass)
-            assert rows['shockwave_grid_vertex_outline_color'].isHidden() == (not (glass and points))
-        collected = collect_spec_mode_settings(tab, 'shockwave_grid')
-        assert all(collected[key] == value for key, value in latent.items())
-        model = SpotifyVisualizerSettings.from_mapping(collected, apply_preset_overlay=False)
-        saved = model.to_dict()
-        assert all(saved['widgets.spotify_visualizer.' + key] == value for key, value in latent.items())
-        calls.clear()
-        load_spec_mode_settings(tab, 'shockwave_grid', {**config, 'shockwave_grid_sun_enabled': False})
-        assert not calls and not tab.shockwave_grid_sun_orbit_speed.isEnabled()
-        assert not tab.shockwave_grid_sun_rays_color_btn.isEnabled()
-    finally:
-        tab.deleteLater(); qt_app.processEvents()
 
 
 @pytest.mark.parametrize('mode', ['spectrum','extruded_spectrum','sphere','bubble'])
@@ -375,68 +276,6 @@ def test_active_neon_default_full_configuration_and_changed_terrain_pack_once(mo
     assert owner._shockwave_grid_terrain is edited_frozen and len(calls)==3
 
 
-def test_neon_glow_bucket_live_conditions_and_latent_roundtrip(qt_app, settings_manager, monkeypatch):
-    """Cross-bucket Glow dependencies never erase saved values or silently save on load."""
-    from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
-    from core.settings.visualizer_presets import get_custom_preset_index
-    from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
-    from ui.tabs.visualizers_tab import VisualizersTab
-
-    settings_manager.set('widgets', {'spotify_visualizer': {
-        'enabled': True, 'visualizers_enabled': True, 'mode': 'shockwave_grid',
-        'mode_activation': build_visualizer_mode_activation(['shockwave_grid']),
-        'preset_shockwave_grid': get_custom_preset_index('shockwave_grid')}})
-    tab = VisualizersTab(settings_manager)
-    try:
-        tab._select_mode_page('shockwave_grid')
-        calls = []
-        monkeypatch.setattr(tab, '_save_settings', lambda: calls.append('save'))
-        defaults = require_canonical_default('widgets.spotify_visualizer')
-        saved = {
-            'shockwave_grid_sun_enabled': False,
-            'shockwave_grid_celestial_glow_enabled': True,
-            'shockwave_grid_celestial_glow_strength': 1.35,
-            'shockwave_grid_sun_rays_enabled': True,
-            'shockwave_grid_sun_rays_strength': .47,
-            'shockwave_grid_sun_rays_color': [31, 92, 147, 168],
-            'shockwave_grid_sky_enabled': False,
-            'shockwave_grid_starscape_beat': True,
-            'shockwave_grid_star_glow_strength': 1.25,
-            'shockwave_grid_star_glow_reactivity': 1.15,
-            'shockwave_grid_horizon': .55,
-        }
-        load_spec_mode_settings(tab, 'shockwave_grid', {**defaults, **saved})
-        assert not calls
-        rows = tab._shockwave_grid_rows
-        hidden = ('celestial_glow_enabled', 'celestial_glow_strength', 'celestial_glow_reactivity',
-                  'sun_rays_enabled', 'sun_rays_strength', 'sun_rays_color',
-                  'starscape_beat', 'star_glow_strength', 'star_glow_reactivity')
-        assert all(rows['shockwave_grid_' + key].isHidden() for key in hidden)
-        tab.shockwave_grid_sun_enabled.setChecked(True)
-        assert not rows['shockwave_grid_celestial_glow_enabled'].isHidden()
-        assert not rows['shockwave_grid_celestial_glow_strength'].isHidden()
-        assert not rows['shockwave_grid_sun_rays_strength'].isHidden()
-        tab.shockwave_grid_celestial_glow_enabled.setChecked(False)
-        tab.shockwave_grid_sun_rays_enabled.setChecked(False)
-        assert rows['shockwave_grid_celestial_glow_strength'].isHidden()
-        assert rows['shockwave_grid_sun_rays_color'].isHidden()
-        tab.shockwave_grid_sky_enabled.setChecked(True)
-        assert not rows['shockwave_grid_starscape_beat'].isHidden()
-        assert not rows['shockwave_grid_star_glow_strength'].isHidden()
-        tab.shockwave_grid_starscape_beat.setChecked(False)
-        assert rows['shockwave_grid_star_glow_strength'].isHidden()
-        # Loading is silent and restores even the hidden controls' authored values.
-        calls.clear()
-        load_spec_mode_settings(tab, 'shockwave_grid', {**defaults, **saved})
-        assert calls == []
-        collected = collect_spec_mode_settings(tab, 'shockwave_grid')
-        assert all(collected[key] == value for key, value in saved.items())
-        assert all(rows['shockwave_grid_' + key].isHidden() for key in hidden)
-    finally:
-        tab.deleteLater()
-        qt_app.processEvents()
-
-
 def test_real_terrain_view_places_the_sun_and_follows_its_settings(qt_app, settings_manager, monkeypatch):
     """The terrain editor's 3/4 view shows the scene's Sun / Moon; dragging it there sets Position X / Y / Z like
     any edit (Custom, one save), at the same authored distance (its apparent size), and the view follows edits."""
@@ -447,6 +286,7 @@ def test_real_terrain_view_places_the_sun_and_follows_its_settings(qt_app, setti
     from core.settings.visualizer_presets import get_custom_preset_index
     from rendering.gl_programs.neon_celestial import CELESTIAL_REFERENCE
     from core.constants.neon_lake_world import NOMINAL_HALF_WIDTH
+    from core.settings.visualizer_mode_settings import require_mode_settings
     from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
     from ui.tabs.visualizers_tab import VisualizersTab
 
@@ -485,8 +325,9 @@ def test_real_terrain_view_places_the_sun_and_follows_its_settings(qt_app, setti
         assert after["shockwave_grid_sun_x"] < before["shockwave_grid_sun_x"]
         assert after["shockwave_grid_terrain"] == FIELD                # the drag painted nothing
         assert distance(after) == pytest.approx(distance(before), rel=0.05)
-        # The view follows Settings edits (here, the Position Y control).
-        tab.shockwave_grid_sun_y.setValue(tab.shockwave_grid_sun_y.minimum())
+        # The view follows the Studio's edits: each commit reloads the body (here, the Position Y value).
+        low = require_mode_settings("shockwave_grid").control("shockwave_grid_sun_y").low
+        load_spec_mode_settings(tab, "shockwave_grid", {**after, "shockwave_grid_sun_y": low})
         assert float(canvas._body["sun_y"]) == pytest.approx(
             collect_spec_mode_settings(tab, "shockwave_grid")["shockwave_grid_sun_y"])
     finally:

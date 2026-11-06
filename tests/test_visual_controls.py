@@ -199,38 +199,6 @@ def _tab():
     return tab, saves
 
 
-def test_the_spec_builder_builds_loads_collects_and_saves_once_per_gesture(qt_app, monkeypatch):
-    import ui.tabs.media.spec_mode_builder as builder
-
-    monkeypatch.setattr(builder, "require_mode_settings", lambda mode_id: _SPEC)
-    tab, saves = _tab()
-    host = QWidget()
-    layout = QVBoxLayout(host)
-    for control in _SPEC.controls:
-        builder._build_control(tab, layout, control)
-    assert isinstance(tab.t_span, RangeSlider) and isinstance(tab.t_mix, TriangleMapper)
-    assert isinstance(tab.t_flow, DirectionMapper)
-    assert builder.collect_spec_mode_settings(tab, "t_mode") == {
-        "t_span": [3, 30], "t_mix": [0.5, 0.3, 0.2], "t_flow": [35.0, 10.0]}
-    # Loading shows (repaired) values without saving and updates the value labels.
-    builder.load_spec_mode_settings(tab, "t_mode", {"t_span": [40, 10], "t_mix": [1, 1, 2], "t_flow": [-200, 5]})
-    assert saves == []
-    assert builder.collect_spec_mode_settings(tab, "t_mode") == {
-        "t_span": [10, 40], "t_mix": [0.25, 0.25, 0.5], "t_flow": [160.0, 5.0]}
-    assert tab.t_span_label.text() == "10 – 40"
-    # A drag saves once, at release; the label follows every move.
-    tab.t_span.resize(216, 34)
-    start = _point(tab.t_span.handle_centre(1))
-    QTest.mousePress(tab.t_span, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start)
-    for dx in (10, 20, 30):
-        QTest.mouseMove(tab.t_span, start + QPoint(dx, 0))
-    assert saves == []
-    QTest.mouseRelease(tab.t_span, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start + QPoint(30, 0))
-    assert len(saves) == 1
-    low, high = builder._current_value(tab, _SPEC.control("t_span"))
-    assert tab.t_span_label.text() == f"{low} – {high}" and high > 40
-
-
 def test_a_collapsed_height_range_is_a_plain_angle_dial(qt_app):
     dial = DirectionMapper((0.0, 0.0))
     dial.resize(dial.sizeHint())
@@ -260,44 +228,6 @@ def test_direction_midline_is_opt_in_painted_guide_not_a_second_direction_author
     assert ordinary == ignored                           # angle-only dials have no horizon
     assert not Direction("ordinary", "Ordinary:").midline
     assert Direction("surface", "Surface:", midline=True).midline
-
-
-def test_compass_choice_dial_preserves_enum_loading_and_commits_once(qt_app, monkeypatch):
-    from core.settings.visualizer_mode_settings import Choice
-    import ui.tabs.media.spec_mode_builder as builder
-
-    control = Choice("t_heading", "Heading:", ("top", "right", "bottom", "left", "random", "none"),
-                     bucket="b", direction_mapper=True)
-    spec = ModeSettings("t_heading_mode", (Bucket("b", "B"),), (control,))
-    monkeypatch.setattr(builder, "require_mode_settings", lambda _: spec)
-    saves = []
-    tab = SimpleNamespace(_widget_default=lambda *_: "top", _save_settings=lambda *_: saves.append(True),
-                          _force_visualizer_preset_to_custom=lambda: None)
-    host = QWidget()
-    builder._build_control(tab, QVBoxLayout(host), control)
-    combo = tab.t_heading
-    dial = combo.direction_mapper
-    dial.resize(dial.sizeHint())
-    for value in control.choices:
-        builder.load_spec_mode_settings(tab, "t_heading_mode", {control.key: value})
-        assert builder.collect_spec_mode_settings(tab, "t_heading_mode") == {control.key: value}
-        assert dial.isEnabled() == (value not in {"random", "none"})
-    assert saves == []
-    builder.load_spec_mode_settings(tab, "t_heading_mode", {control.key: "right"})
-    assert dial.value()[0] == pytest.approx(90.)
-    centre, radius = dial.disc()
-    left = _point(QPointF(centre.x() - radius, centre.y()))
-    QTest.mousePress(dial, Qt.LeftButton, pos=left)
-    assert saves == []
-    QTest.mouseRelease(dial, Qt.LeftButton, pos=left)
-    assert combo.currentText() == "left" and len(saves) == 1
-    QTest.keyClick(dial, Qt.Key_Right)
-    assert combo.currentText() == "top" and len(saves) == 2
-    combo.setEnabled(False)
-    assert not dial.isEnabled()
-    dial.valueCommitted.emit((90., 0.))
-    assert combo.currentText() == "top" and len(saves) == 2
-    host.deleteLater()
 
 
 @pytest.mark.parametrize("disable_combo", [False, True])

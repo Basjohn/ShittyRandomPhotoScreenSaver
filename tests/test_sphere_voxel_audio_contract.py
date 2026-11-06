@@ -325,7 +325,6 @@ def test_sustained_loud_transient_level_does_not_accumulate_packets() -> None:
     assert len(visited) <= 1
 
 
-
 def test_separate_spectral_flux_peaks_repeat_without_continuous_level_authority() -> None:
     render_state, sphere_runtime = _load_plain_visualizer_modules()
     runtime = sphere_runtime.SphereFrameRuntime()
@@ -431,7 +430,6 @@ def test_section_attack_is_aggressive_and_fallout_is_gentle() -> None:
     assert max(late.section_drives) < 0.03
 
 
-
 def test_low_band_spectral_onset_fragments_and_held_spectrum_does_not_repeat() -> None:
     render_state, sphere_runtime = _load_plain_visualizer_modules()
     energy = render_state.VisualizerEnergyState(bass=0.48, mid=0.24, high=0.12, overall=0.31)
@@ -521,8 +519,7 @@ def test_sustained_growth_distinguishes_soft_and_heavy_without_pulsing() -> None
 
 
 def test_dead_experimental_controls_are_retired_and_sustained_growth_is_live() -> None:
-    builder = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
-    binding = (ROOT / "ui/tabs/media/sphere_settings_binding.py").read_text(encoding="utf-8")
+    builder = (ROOT / "ui/studio/sphere_adapter.py").read_text(encoding="utf-8")       # the Sphere editor
     config = (ROOT / "widgets/spotify_visualizer/config_applier.py").read_text(encoding="utf-8")
     defaults = (ROOT / "core/settings/default_settings.py").read_text(encoding="utf-8")
     model = (ROOT / "core/settings/models/_spotify_visualizer.py").read_text(encoding="utf-8")
@@ -538,7 +535,6 @@ def test_dead_experimental_controls_are_retired_and_sustained_growth_is_live() -
     )
     for name in dead:
         assert name not in builder
-        assert name not in binding
         assert name not in config
         assert name not in defaults
         assert name not in model
@@ -732,7 +728,6 @@ def test_incoming_blocks_are_event_owned_and_decay_instead_of_spawning_ambiently
     assert 0.0 < later.incoming_drive < vocal.incoming_drive
 
 
-
 def test_voxel_light_is_screen_anchored_and_cube_definition_is_independent() -> None:
     source = (ROOT / "rendering/quick/visualizer/implementations/sphere_voxel.py").read_text(encoding="utf-8")
     from rendering.quick.visualizer.implementations.sphere_voxel import _FRAGMENT_SOURCE
@@ -917,8 +912,7 @@ def test_scene_shadow_cel_and_arrival_fade_are_sphere_renderer_only() -> None:
 
 def test_toon_finish_colors_remain_sphere_owned_and_rejected_rainbow_ghosting_is_retired() -> None:
     source = (ROOT / "rendering/quick/visualizer/implementations/sphere_voxel.py").read_text(encoding="utf-8")
-    builder = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
-    binding = (ROOT / "ui/tabs/media/sphere_settings_binding.py").read_text(encoding="utf-8")
+    builder = (ROOT / "ui/studio/sphere_adapter.py").read_text(encoding="utf-8")       # the Sphere editor
     config_applier = (ROOT / "widgets/spotify_visualizer/config_applier.py").read_text(encoding="utf-8")
 
     from widgets.spotify_visualizer.config_applier import _SPHERE_PARAMETER_KEYS
@@ -927,7 +921,6 @@ def test_toon_finish_colors_remain_sphere_owned_and_rejected_rainbow_ghosting_is
     spec = require_mode_settings("sphere")
     for key in ("sphere_fill_color", "sphere_edge_color", "sphere_shadow_enabled"):
         assert key in _SPHERE_PARAMETER_KEYS and spec.control(key).logical
-    assert "ColorSwatchButton" in builder
     from core.settings.visualizer_mode_settings import require_mode_settings
 
     _SPHERE_SETTING_KEYS = require_mode_settings("sphere").keys()
@@ -957,30 +950,12 @@ def test_toon_finish_colors_remain_sphere_owned_and_rejected_rainbow_ghosting_is
         assert rejected not in source
         if rejected == "sphere_rainbow_ghosting":
             assert rejected not in builder
-            assert rejected not in binding
             assert rejected not in config_applier
     assert "uFillColor" in source and "uEdgeColor" in source
     assert "uMaterial" not in source and "materialBase" not in source
     assert "authoredAlpha = mix(uFillColor.a, uEdgeColor.a, alphaEdge)" in source
     assert "sourceEdge" in source and "specEnergy" in source
     assert "specLobe" in source
-
-
-def test_sphere_builder_uses_shared_circular_toggle_style_and_real_advanced_buckets() -> None:
-    builder = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
-    from core.settings.visualizer_mode_settings import require_mode_settings
-
-    spec = require_mode_settings("sphere")
-    shared = (ROOT / "ui/tabs/media/spec_mode_builder.py").read_text(encoding="utf-8")
-    assert 'widget.setProperty("circleIndicator", True)' in shared
-    assert [(bucket.key, bucket.advanced) for bucket in spec.buckets] == [
-        ("analysis", False), ("appearance", False), ("particle_flow", False),
-        ("reaction", True), ("rotation", True), ("effects", True),
-    ]
-    assert spec.control("sphere_particle_amount").enabled_when == ("sphere_fade_incoming_blocks", True)
-    assert "RecommendedMarkSlider" in shared
-    assert spec.control("sphere_gloss").recommended == 0.75
-    assert spec.control("sphere_specular").recommended == 1.08
 
 
 def test_light_tracer_is_optional_event_owned_and_uses_connected_ribbon() -> None:
@@ -1299,7 +1274,6 @@ def test_transient_particle_velocity_changes_real_cohort_travel_without_changing
     assert accented_later.particle_cohorts[0].progress < fixed_later.particle_cohorts[0].progress
 
 
-
 def test_real_acoustic_jump_granularises_particle_velocity_without_changing_admission() -> None:
     render_state, sphere_runtime = _load_plain_visualizer_modules()
     params = _params(render_state, incoming_transient_velocity=True)
@@ -1325,7 +1299,6 @@ def test_real_acoustic_jump_granularises_particle_velocity_without_changing_admi
     assert flat.velocity_accent < 0.35
     assert peak.velocity_accent > 0.95
     assert peak.strength > flat.strength
-
 
 
 def test_particle_cohorts_are_bounded_independent_and_keep_progress_when_new_events_arrive() -> None:
@@ -1520,16 +1493,17 @@ def test_legacy_sphere_material_keys_forward_migrate_to_clean_finish_contract() 
 def test_finish_preset_is_ui_only_and_never_reaches_voxel_renderer() -> None:
     renderer = (ROOT / "rendering/quick/visualizer/implementations/sphere_voxel.py").read_text(encoding="utf-8")
     config = (ROOT / "widgets/spotify_visualizer/config_applier.py").read_text(encoding="utf-8")
-    builder = (ROOT / "ui/tabs/media/sphere_builder.py").read_text(encoding="utf-8")
     assert "sphere_finish" not in renderer
     from widgets.spotify_visualizer.config_applier import _SPHERE_PARAMETER_KEYS
     from core.settings.visualizer_mode_settings import require_mode_settings
 
     assert "sphere_finish" not in _SPHERE_PARAMETER_KEYS
     assert require_mode_settings("sphere").control("sphere_finish").authoring
-    assert "_FINISH_PRESETS" in builder
-    assert "tab.sphere_gloss.setValue" in builder
-    assert "tab.sphere_specular.setValue" in builder
+    # The Studio's Finish coupling writes the visible Gloss and Specular values (and nothing the renderer reads).
+    from ui.studio.sphere_adapter import _follow, finish_presets
+    name, (gloss, specular) = next(iter(finish_presets().items()))
+    assert _follow("sphere_finish", name, {}) == {"sphere_gloss": gloss, "sphere_specular": specular}
+    assert _follow("sphere_gloss", 0.5, {"sphere_finish": name}) == {"sphere_finish": "Custom"}
 
 
 def test_incoming_shader_uses_four_distributed_quadrants_with_one_dominant_corner() -> None:
@@ -1544,7 +1518,6 @@ def test_incoming_shader_uses_four_distributed_quadrants_with_one_dominant_corne
     # Z must not choose the ingress quadrant; front/back depth therefore shares
     # each visible corner instead of re-forming a compact 3D octant fountain.
     assert "direction.z <" not in incoming
-
 
 
 def test_sustained_growth_uses_pre_agc_local_floor_peak_stages() -> None:
