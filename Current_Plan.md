@@ -644,11 +644,17 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
     operator did not find them; there is no travel-speed reactivity. Make them findable (name / workspace / tooltip)
     and consider a quiet -> peak History Speed under the flow rule (music pushes history faster, smoothly; knot spacing
     and the anchored ends stay continuous). After the adaptive rework (same owner).
-  - **Studio clips: 30 s small, or cleanly loopable.** Shipped clips are ~12 s, ~0.9 MB each (2.5 MB total); 30 s would
-    be ~2.2 MB each but an engine-owned edit re-analyses the whole clip (~2.5x longer). A clean loop instead: loop
-    points on matching musical positions with a short crossfade, and the Studio's evaluator continuing its simulation
-    state across the loop (today the replay restarts at t = 0, which would jump). Choose with measurements. Operator
-    (6 Nov): the clips are still 12 s; the loop must be seamless (no skip at the end).
+  - **Studio clips are seamless loops (6 Nov), awaiting the operator's listen and look.** Built: the three clips are
+    12.6-13.2 s loops (0.86-1.01 MB each) with searched loop points and a 1 s equal-power crossfade baked into the
+    capture stream, and every Studio's evaluator plays on through the wrap with its state carried (no restart at
+    `t = 0`); workers prime on the loop's last 2 s. 30 s clips were measured and not chosen (size and re-analysis
+    grow, the seam does not improve): `Docs/Reference/Visualizer_Studio.md` §3 "Studio clips", evidence
+    `.artifacts/evidence/studio_clip_loop_20261106/`. Note the Studio plays no sound: the clips are the capture
+    stream the analysis reads, so "listen" means the music-reactive picture across the wrap. Operator: (1) let any
+    Studio loop on each of the three clips and watch the wrap (end of the 13 s timeline): the preview should not
+    jump, empty, or re-start its motion; (2) Rag Doll has no steady beat, so its seam is the least certain: judge it
+    first; (3) the clips now start and end mid-song at the loop points chosen (Human and Growing Pains on their
+    groove), not at the earlier quiet-to-hot windows; say if the quiet-to-hot arc matters more than the seam.
 - [ ] **Studio chrome matches Settings (6 Nov), awaiting the operator's look** (all Studios: one shell;
   `Docs/Reference/Visualizer_Studio.md` "Chrome and theme"). Frameless window with Settings' title bar and forged
   rounded edge, the theme's Glass/Acrylic material, 1.5 px one-path card borders, Settings' panel casts at half

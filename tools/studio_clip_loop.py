@@ -139,7 +139,7 @@ def _fade_samples(fade_s: float) -> int:
 
 # --------------------------------------------------------------------------------------- the search
 def choose_loop(source: Source, *, span: tuple[float, float] | None, period: tuple[float, float], fade_s: float,
-                align: int = 96, top: int = 1):
+                align: int = 96, top: int = 1, grid_limit_ms: float | None = 15.0):
     """The loop points whose seam resembles the music before the start best.
 
     ``span``: seconds of the recording the loop must contain (the passage the clip is for). ``period``: the loop
@@ -179,6 +179,8 @@ def choose_loop(source: Source, *, span: tuple[float, float] | None, period: tup
                 natural = abs(((phase[s + width] - phase[s] + groove * 500.0) % (groove * 1000.0)) - groove * 500.0)
                 grid += natural / (groove * 500.0) * min(1.0, min(coherence[s], coherence[s + width])
                                                            / max(strength, 0.05))
+            if grid_limit_ms is not None and reliable >= 0.5 and offset > grid_limit_ms:
+                continue                  # a groove that is there must line up: the blend would double its beats
             score = correlation - 0.05 * level - 0.5 * spectrum - 2.0 * grid
             ranked.append((score, first, after, (correlation, level, spectrum, offset)))
     if not ranked:
@@ -322,7 +324,40 @@ def bake_loop(source: Source, choice: LoopChoice):
     info = {"frames": count, "period_samples": period, "period_s": period_us / 1e6,
             "crossfade_s": choice.fade_s, "first_source_s": float(source.seconds[first]),
             "after_source_s": float(source.seconds[after]), "shift_samples": int(choice.shift)}
+    info["measured"] = _measure_bake(body, stream, r0, period, length, tail, lead, choice.detail)
     return out, period_us, info
+
+
+def _measure_bake(body, stream, r0, period, length, tail, lead, detail) -> dict:
+    """What the bake did, in numbers a rebuild must reproduce (and the tests hold it to):
+
+    * ``join_error_db``: the last 5 ms of the loop against the 5 ms of source it has become by then (0 dB would be a
+      different signal; the more negative, the closer the join is to the source's own continuation);
+    * ``step_loop`` / ``step_source``: the sample step from the loop's last sample to its first against the
+      source's own step from ``src[s - 1]`` to ``src[s]`` (equal when the join is the source's continuation);
+    * ``level_deviation_db``: the crossfade's 50 ms-scale level against the equal-power target of its two sources,
+      worst of eight stretches (after the level match);
+    * ``blend``: how alike the two blended sources are (onset-envelope correlation, level difference in dB, mean
+      log-spectrum difference, beat-grid offset in ms)."""
+    edge = int(0.005 * SAMPLE_RATE)
+    last = np.asarray(body[period - edge:period], dtype=np.float64)
+    source_last = np.asarray(stream[r0 - edge:r0], dtype=np.float64)
+    error = math.sqrt(float(np.mean((last - source_last) ** 2)) + 1e-30)
+    scale = math.sqrt(float(np.mean(source_last ** 2)) + 1e-30)
+    mixed = np.asarray(body[period - length:period], dtype=np.float64)
+    deviations = []
+    for k in range(8):
+        piece = slice(k * length // 8, (k + 1) * length // 8)
+        angle = (k + 0.5) / 8 * math.pi / 2
+        target = math.sqrt(math.cos(angle) ** 2 * float(np.mean(tail[piece] ** 2))
+                           + math.sin(angle) ** 2 * float(np.mean(lead[piece] ** 2)))
+        deviations.append(20.0 * math.log10(math.sqrt(float(np.mean(mixed[piece] ** 2))) / max(target, 1e-12)))
+    return {"join_error_db": round(20.0 * math.log10(error / scale), 2),
+            "step_loop": round(float(abs(float(body[0]) - float(body[period - 1]))), 6),
+            "step_source": round(float(abs(float(stream[r0]) - float(stream[r0 - 1]))), 6),
+            "level_deviation_db": round(max(abs(v) for v in deviations), 2),
+            "blend": {"onset_correlation": round(float(detail[0]), 3), "level_db": round(float(detail[1]), 2),
+                      "spectrum": round(float(detail[2]), 3), "beat_offset_ms": round(float(detail[3]), 1)}}
 
 
 # --------------------------------------------------------------------------------- the seam report
@@ -332,18 +367,36 @@ def tiled(stream: np.ndarray, period: int, passes: int = 4) -> np.ndarray:
 
 
 def loop_stream(frames, period_samples: int) -> np.ndarray:
-    """The loop's periodic capture stream (``period_samples`` samples), read from the frames' histories.
+    """The loop's periodic capture stream (``period_samples`` samples, position 0 = the end of frame 0's history),
+    read from the frames' histories.
 
-    Frame ``j``'s history ends at stream position ``p_j``; here that position is rebuilt from the cumulative history
-    overlap, and the stream is the samples from frame 0's end for one period."""
+    The stored stream holds the first frame's history (the loop's last samples, which precede position 0), then the
+    samples up to the last frame's end; the few positions after that are the end of the first frame's history."""
     from widgets.spotify_visualizer.compact_clip import _history_stream
     stream, slices = _history_stream(frames)
     start = slices[0][1]
     block = np.asarray(stream[start:start + period_samples], dtype=np.float64)
-    if len(block) < period_samples:       # the frames do not reach the period's end: wrap the periodic lead-in
+    missing = period_samples - len(block)
+    if missing > 0:
         head = np.asarray(stream[:start], dtype=np.float64)
-        block = np.concatenate([block, head])[:period_samples]
+        block = np.concatenate([block, head[len(head) - missing:]])
     return block
+
+
+def histories_follow_the_loop(frames, period_samples: int) -> bool:
+    """Whether every frame's capture history is the periodic loop stream read up to the frame's position (the
+    first frame's included: its history is the loop's last samples). True for a baked loop, false for a clip cut
+    short of its period."""
+    from widgets.spotify_visualizer.compact_clip import _history_stream
+    block = loop_stream(frames, period_samples)
+    _stream, slices = _history_stream(frames)
+    origin = slices[0][1]
+    for frame, (start, end) in zip(frames, slices):
+        history = np.frombuffer(frame.capture_history.pcm_f32le, dtype="<f4").astype(np.float64)
+        where = (np.arange(end - start) + (end - origin) - (end - start)) % period_samples
+        if not np.array_equal(block[where], history):
+            return False
+    return True
 
 
 def _grid(flux: np.ndarray, start: int, stop: int, tempo: float) -> tuple[float, float]:
@@ -412,5 +465,5 @@ def seam_report(stream: np.ndarray, period: int, *, beat: tuple[float, float] | 
     return report
 
 
-__all__ = ["LoopChoice", "Source", "bake_loop", "beat_period", "choose_loop", "loop_stream", "onset_envelope",
-           "seam_report", "tiled"]
+__all__ = ["LoopChoice", "Source", "bake_loop", "beat_period", "choose_loop", "histories_follow_the_loop",
+           "loop_stream", "onset_envelope", "refine_beat", "running_grid", "seam_report", "tiled"]
