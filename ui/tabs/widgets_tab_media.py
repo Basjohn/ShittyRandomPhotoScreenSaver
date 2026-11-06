@@ -52,34 +52,7 @@ from ui.tabs.media.bubble_settings_binding import (
     collect_bubble_mode_settings,
     load_bubble_mode_settings,
 )
-from ui.tabs.media.devcurve_settings_binding import (
-    collect_devcurve_mode_settings,
-    load_devcurve_mode_settings,
-)
-from ui.tabs.media.oscilloscope_settings_binding import (
-    collect_oscilloscope_mode_settings,
-    load_oscilloscope_mode_settings,
-)
-from ui.tabs.media.spectrum_settings_binding import (
-    collect_spectrum_mode_settings,
-    load_spectrum_mode_settings,
-)
-from ui.tabs.media.extruded_bubble_settings_binding import (
-    collect_extruded_bubble_mode_settings,
-    load_extruded_bubble_mode_settings,
-)
-from ui.tabs.media.shockwave_grid_settings_binding import (
-    collect_shockwave_grid_mode_settings,
-    load_shockwave_grid_mode_settings,
-)
-from ui.tabs.media.extruded_spectrum_settings_binding import (
-    collect_extruded_spectrum_mode_settings,
-    load_extruded_spectrum_mode_settings,
-)
-from ui.tabs.media.sphere_settings_binding import (
-    collect_sphere_mode_settings,
-    load_sphere_mode_settings,
-)
+from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
 from ui.tabs.media.visualizer_mode_binding import (
     collect_visualizer_mode_selection,
     collect_visualizer_preset_indices,
@@ -806,24 +779,9 @@ def _hydrate_visualizer_mode_body(tab, mode_id: str, config) -> None:
 
     cfg = config or {}
 
-    if mode_id == "spectrum":
-        load_spectrum_mode_settings(tab, cfg)
-    elif mode_id == "oscilloscope":
-        load_oscilloscope_mode_settings(tab, cfg)
-    elif mode_id == "bubble":
-        load_bubble_mode_settings(tab, cfg)
-    elif mode_id == "devcurve":
-        load_devcurve_mode_settings(tab, cfg)
-    elif mode_id == "sphere":
-        load_sphere_mode_settings(tab, cfg)
-    elif mode_id == "extruded_spectrum":
-        load_extruded_spectrum_mode_settings(tab, cfg)
-    elif mode_id == "shockwave_grid":
-        load_shockwave_grid_mode_settings(tab, cfg)
-    elif mode_id == "extruded_bubble":
-        load_extruded_bubble_mode_settings(tab, cfg)
+    if mode_id == "bubble":
+        load_bubble_mode_settings(tab, cfg)        # Bubble's versioned gradient-direction input migration
     else:
-        from ui.tabs.media.spec_mode_builder import load_spec_mode_settings
         load_spec_mode_settings(tab, mode_id, cfg)
 
     # The section-level technical-controls loader runs before this body existed,
@@ -1398,24 +1356,9 @@ def save_visualizer_settings(tab: "VisualizerSettingsContextMixin") -> dict:
     _cur_mode = current_mode
     _cur_mode_built = hasattr(tab, _VIS_MODE_CONTAINER_ATTR.get(_cur_mode, ''))
     if _cur_mode_built:
-        if _cur_mode == 'spectrum':
-            spotify_vis_config.update(collect_spectrum_mode_settings(tab))
-        elif _cur_mode == 'oscilloscope':
-            spotify_vis_config.update(collect_oscilloscope_mode_settings(tab))
-        elif _cur_mode == 'bubble':
+        if _cur_mode == 'bubble':
             spotify_vis_config.update(collect_bubble_mode_settings(tab))
-        elif _cur_mode == 'devcurve':
-            spotify_vis_config.update(collect_devcurve_mode_settings(tab))
-        elif _cur_mode == 'sphere':
-            spotify_vis_config.update(collect_sphere_mode_settings(tab))
-        elif _cur_mode == 'extruded_spectrum':
-            spotify_vis_config.update(collect_extruded_spectrum_mode_settings(tab))
-        elif _cur_mode == 'shockwave_grid':
-            spotify_vis_config.update(collect_shockwave_grid_mode_settings(tab))
-        elif _cur_mode == 'extruded_bubble':
-            spotify_vis_config.update(collect_extruded_bubble_mode_settings(tab))
         else:
-            from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings
             spotify_vis_config.update(collect_spec_mode_settings(tab, _cur_mode))
     collect_per_mode_technical_controls(tab, spotify_vis_config, current_mode=_cur_mode)
 

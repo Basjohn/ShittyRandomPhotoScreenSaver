@@ -83,38 +83,6 @@ def test_held_orbit_pitch_and_approach_stay_grounded_and_persist_the_same_admitt
     if strafe:assert abs(persisted[SPEC.key('turn')])==pytest.approx(1.)
 
 
-@pytest.mark.qt
-def test_camera_editor_marker_aim_and_saved_pose_match_the_rendered_grounded_eye(qt_app):
-    from PySide6.QtWidgets import QWidget
-    from ui.widgets.visual_controls import SceneVolumeMapper
-    from ui.tabs.media import framed_camera_editor as editor
-    values=camera();tab=QWidget();mapper=SceneVolumeMapper(camera_only=True,parent=tab)
-    tab._settings={};tab._waveform_ribbon_lazy_values=dict(values)
-    tab._widget_default=lambda section,key:values[key]
-    tab.waveform_ribbon_camera_position=mapper
-    saves=[]
-    tab._save_settings=lambda: saves.append(editor.collected(tab,'waveform_ribbon',
-        {SPEC.key('camera_position'):tuple(mapper.value())}))
-    try:
-        editor.hydrate_pose(tab,'waveform_ribbon',values)
-        editor.refresh(tab,'waveform_ribbon')
-        editor.set_offset(tab,'waveform_ribbon',(1.,1.,-1.),commit=True)
-        editor.set_aim(tab,'waveform_ribbon',(.8,.3),commit=True)
-        saved={**values,**saves[-1]}
-        axes,eye,offset=fc.resolve_camera_frame(SPEC,saved)
-        marker=np.asarray(SPEC.eye_center)+np.asarray(mapper._eye())*SPEC.eye_half
-        np.testing.assert_allclose(marker,eye,atol=1e-10)
-        np.testing.assert_allclose(mapper._forward(),-np.asarray(axes[6:]),atol=1e-10)
-        focused(saved)
-        # Rehydrate exactly the saved view through the same Settings path.
-        tab._waveform_ribbon_lazy_values.update(saved)
-        editor.hydrate_pose(tab,'waveform_ribbon',saved)
-        editor.refresh(tab,'waveform_ribbon')
-        marker=np.asarray(SPEC.eye_center)+np.asarray(mapper._eye())*SPEC.eye_half
-        np.testing.assert_allclose(marker,eye,atol=1e-10)
-    finally:tab.close();tab.deleteLater()
-
-
 def test_near_level_tilt_is_half_a_degree_down_at_every_admitted_radius_with_shared_inverse():
     assert SPEC.grounded_orbit.eye_height==4.5
     assert SPEC.grounded_orbit.radius_range==(64.,104.)

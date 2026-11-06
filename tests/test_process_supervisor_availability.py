@@ -126,7 +126,10 @@ def _slowest_availability_call(supervisor, transition, ready, extra=None):
     }
     answers = {name: [] for name in probes}
     worst = 0.0
-    while transition.is_alive():
+    # Judge only while the role is transitioning: once the transition clears its mark, the thread still has to
+    # return, and a probe in that gap sees the settled state (a failed start leaves its child registered, as the old
+    # code did). Under load that gap was hit twice (6 Nov).
+    while transition.is_alive() and ROLE in supervisor._transitioning:
         calls = list(probes.items())
         if extra is not None:
             calls.append(("extra", extra))

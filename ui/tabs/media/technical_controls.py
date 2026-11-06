@@ -248,6 +248,11 @@ _BUCKET_DEFS: tuple[_BucketDef, ...] = (
     ),
 )
 
+_BAR_COUNT_TIP = "How many bars are drawn: the audio is split into this many frequency bands, one bar each."
+_ANALYSIS_BANDS_TIP = ("How finely the audio is split into frequency bands before this mode reads it. It draws no bars, "
+                       "but more or fewer bands change how bass, mids and treble are measured, so the picture moves "
+                       "a little differently.")
+
 _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
     _ControlDef(
         control_key="bar_count",
@@ -425,8 +430,14 @@ def _control_defs_for_mode(mode_key: str) -> tuple[_ControlDef, ...]:
     hidden = get_visualizer_mode_descriptor(mode_key).technical_hidden_suffixes
     defs = [defn for defn in _BASE_CONTROL_DEFS
             if defn.config_key in owned and defn.config_key not in hidden and (defn.modes is None or mode_key in defn.modes)]
-    if get_visualizer_mode_descriptor(mode_key).analysis_notch_setting:
-        defs = [replace(defn, label_text="Analysis Bands:", suffix_text="bands") if defn.config_key == "bar_count" else defn for defn in defs]
+    # Bar Count is the number of bars drawn only where the mode draws one bar per band; elsewhere it is the
+    # analysis resolution (it still moves the frame), labelled for what it does. Settings and the Studio both read
+    # these definitions.
+    if get_visualizer_mode_descriptor(mode_key).draws_bars:
+        bar_count = dict(tooltip=_BAR_COUNT_TIP)
+    else:
+        bar_count = dict(label_text="Analysis Bands:", suffix_text="bands", tooltip=_ANALYSIS_BANDS_TIP)
+    defs = [replace(defn, **bar_count) if defn.config_key == "bar_count" else defn for defn in defs]
     mix_meta = _TRANSIENT_MIX_META.get(mode_key)
     if mix_meta is not None:
         mix_key, mix_label, mix_tip, mix_lo, mix_hi = mix_meta
