@@ -113,7 +113,12 @@ constants); all state integrates on the sole logical clock and the projection on
   pulse instead of flashing with the raw hit decay; swells land with a short rise, never a one-tick pop.
 - **Whole-ribbon floor lift.** When a ribbon's lower edge (its sheet hang, width × |cos twist|) would come within the
   floor clearance inside the view, that ribbon lifts as a whole, bounded, through two cascaded followers (quick up,
-  slow down). Shape is never changed; per-knot trough limits were rejected as boxy.
+  slow down). Shape is never changed; per-knot trough limits were rejected as boxy. The floor is cleared with height,
+  never by shrinking a reaction (operator, 6 Nov: "Better to have good reactivity than excessively avoid the floor"):
+  since swells reach the view at strength the limit is `TROUGH_LIFT_MAX` 3 (was 1.5, which sat at the cap on 44-67% of
+  music ticks); Floor Give keeps the former limit (`FLOOR_GIVE_LIFT_MAX`) so its authored contact stays, and Static
+  Height holds its own `STATIC_HEIGHT_LIFT`. A swell-gain bound that kept every trough clear was rejected: it cut peak
+  kicks by up to a third. Gate: `tests/test_waveform_floor_lift_clears_swells.py`.
 - **Dynamic Zoom** (opt-in, off by default): a sustained-level follower widens or narrows only the lens extents,
   frozen while the user operates the camera.
 
