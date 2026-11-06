@@ -331,6 +331,14 @@ class OffscreenStudioSurface(QObject):
         self.surface.setFormat(self.context.format())
         self.surface.create()
         self.control = QQuickRenderControl()
+        # The render control's RHI imports this context and uses it until the control's own destructor (Qt requires
+        # the imported context to outlive the render control). Owning the context and its surface as the control's
+        # Qt children makes that order structural: whatever destroys the control (``retire``, a garbage-collected
+        # surface whose retirement failed, PySide's exit sweep of Python-owned QObjects, which runs in hash order)
+        # destroys them after it, never before. Two independent Python owners let the sweep free the context first,
+        # and the control's teardown then used it: an intermittent access violation at interpreter exit.
+        self.context.setParent(self.control)
+        self.surface.setParent(self.control)
         self.window = QQuickWindow(self.control)
         self.window.resize(*size)
         # ``transparent``: clear to nothing, as the visible window does under a Glass/Acrylic theme, so a grab keeps
@@ -417,14 +425,13 @@ class OffscreenStudioSurface(QObject):
         # Destroy the Quick window, render control and engine NOW, while their GL context and offscreen
         # surface still exist. Left to deleteLater they would outlive this surface (nothing runs an
         # event loop in hidden captures/tests) and be destroyed at interpreter exit against a dead context.
+        # The render control goes last: its children, the context and the offscreen surface, go with it.
         engine = self.host.engine
-        for obj in (self.window, self.control, engine):
+        for obj in (self.window, engine, self.control):
             _keep_until_destroyed(obj)
             obj.deleteLater()
-        for obj in (self.window, self.control, engine):
+        for obj in (self.window, engine, self.control):
             QCoreApplication.sendPostedEvents(obj, QEvent.Type.DeferredDelete)
-        self.context.doneCurrent()
-        self.surface.destroy()
 
 
 __all__ = ["OffscreenStudioSurface", "StudioShellHost", "StudioWindowSurface", "initial_geometry", "material_mode"]

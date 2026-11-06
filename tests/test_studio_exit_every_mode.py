@@ -250,6 +250,84 @@ def test_the_python_hide_probe_detects_a_synchronous_hide_negative_control(qt_ap
     controller.evaluator.release()
 
 
+# ------------------------------------------------- a surface that was never retired is still destroyed legally
+def _unretired_toy_surface(qt_app, monkeypatch):
+    """A toy Studio closed with the surface's retirement forced to fail: its render tree is left alive, as after
+    ``test_a_failing_teardown_still_reveals_settings`` (or a failing evidence capture)."""
+    from PySide6.QtWidgets import QDialog
+    from ui.studio.controller import StudioController
+    from ui.studio.presence import WindowPresence
+    from ui.studio.surface import OffscreenStudioSurface
+    from tests.test_waveform_studio_second_mode import ToyAdapter, ToyStore
+    surfaces = []
+    dialog = QDialog()                                         # never shown
+
+    def factory(controller):
+        surfaces.append(OffscreenStudioSurface(controller, size=(900, 600), present_on_show=False))
+        return surfaces[-1]
+    controller = StudioController(ToyAdapter(), ToyStore(), WindowPresence(dialog), factory)
+    assert controller.open()
+    surface = surfaces[0]
+    surface.pump(2)                                            # the render control's RHI exists and imported the context
+
+    def boom():
+        raise RuntimeError("forced retire failure")
+    monkeypatch.setattr(surface, "retire", boom)
+    controller.close()
+    assert controller.state == "closed" and "surface" in controller.close_failures
+    dialog.deleteLater()
+    return surface
+
+
+def _exit_sweep(surface) -> list:
+    """What PySide's interpreter-exit sweep destroys of this surface: every live *Python-owned* native QObject, one by
+    one, in an order it does not control (hash order). Arranged adversarially here: the GL context first."""
+    import shiboken6
+    natives = (surface.context, surface.surface, surface.control, surface.window, surface.host.engine,
+               surface.host._component)
+    owned = [o for o in natives if shiboken6.isValid(o) and shiboken6.ownedByPython(o)]
+    return sorted(owned, key=lambda o: o is not surface.context)
+
+
+def _context_freed_before_control(plan, surface) -> bool:
+    return surface.context in plan and plan.index(surface.context) < plan.index(surface.control)
+
+
+def test_an_unretired_surface_destroys_its_gl_context_only_after_its_render_control(qt_app, monkeypatch):
+    """The render control's RHI uses the imported context until its own destructor; the context and its surface are
+    the control's children, so no sweep order (exit, GC) can free the context first. The fault this pins was an
+    intermittent access violation after the whole file had passed."""
+    import shiboken6
+    surface = _unretired_toy_surface(qt_app, monkeypatch)
+    plan = _exit_sweep(surface)
+    assert surface.control in plan and not _context_freed_before_control(plan, surface)
+    events = []
+    surface.control.destroyed.connect(lambda *_a: events.append("control"))
+    surface.context.aboutToBeDestroyed.connect(lambda: events.append("context"))
+    surface.surface.destroyed.connect(lambda *_a: events.append("offscreen surface"))
+    for obj in plan:
+        if shiboken6.isValid(obj):
+            shiboken6.delete(obj)
+    assert events == ["control", "context", "offscreen surface"]
+    assert not shiboken6.isValid(surface.context) and not shiboken6.isValid(surface.surface)
+
+
+def test_a_context_with_its_own_python_owner_is_flagged_by_the_sweep_negative_control(qt_app, monkeypatch):
+    """The former structure (context and render control as two independent Python owners) puts the context ahead
+    of the control in the sweep. Only the plan is checked; the illegal deletion itself is never run."""
+    import shiboken6
+    surface = _unretired_toy_surface(qt_app, monkeypatch)
+    surface.context.setParent(None)                            # back to its own Python owner, as before the fix
+    try:
+        assert shiboken6.ownedByPython(surface.context)
+        assert _context_freed_before_control(_exit_sweep(surface), surface)
+    finally:
+        surface.context.setParent(surface.control)
+    assert not _context_freed_before_control(_exit_sweep(surface), surface)
+    surface.control.deleteLater()
+    QCoreApplication.sendPostedEvents(surface.control, QEvent.Type.DeferredDelete)
+
+
 # ------------------------------------------------------------------------------------------- the --studio sidecar
 @pytest.fixture
 def logging_into(tmp_path, monkeypatch):
