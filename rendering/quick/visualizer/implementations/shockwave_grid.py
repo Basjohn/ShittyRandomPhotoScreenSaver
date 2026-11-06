@@ -28,7 +28,7 @@ from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, 
 from rendering.gl_programs.shockwave_grid_program import (
     SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_MAX_RIDGE,
     shockwave_amplitude, shockwave_event_records, shockwave_grid_cells, SHOCKWAVE_HALF_WIDTH,
-    shockwave_idle, shockwave_wave_speed, shockwave_water_react,
+    shockwave_idle, shockwave_wave_speed, shockwave_music_drive, shockwave_ridge_breath,
 )
 from rendering.quick.scene3d.frame import item_pixel_rect
 from rendering.quick.scene3d.heightfield import HeightfieldTexture
@@ -280,6 +280,8 @@ class QuickShockwaveGridRenderer:
                           for age, _x, _z, strength in mode_state.events if age >= 0.0), default=0.0)
         samples, glow, cells = shockwave_quality(parameters)
         style=_wire_display(parameters)
+        water_amount = max(0.0, min(1.0, float(parameter(parameters, "shockwave_grid_water_reaction"))))
+        music_drive = shockwave_music_drive(mode_state.events) if water_amount > 0.0 else 0.0
         r = self._resources
         program = r.program("basin", NEON_VERTEX_SOURCE, NEON_FRAGMENT_SOURCE)
         uniforms = r.uniforms("basin", _UNIFORMS)
@@ -362,8 +364,7 @@ class QuickShockwaveGridRenderer:
             # The glint brightens with the halo's own musical drive (existing midband and onset envelope).
             gl.glUniform4f(uniforms["uGlintLight"], *_halo_light(parameters), midband, beat_pulse)
             # Water Reaction reads the admitted waves (fixed real-music scale), not the pinned display bars.
-            gl.glUniform1f(uniforms["uWaterReact"], shockwave_water_react(
-                mode_state.events, float(parameter(parameters, "shockwave_grid_water_reaction"))))
+            gl.glUniform1f(uniforms["uWaterReact"], water_amount * music_drive)
             # fwidth already measures physical fragments, including DPR/MSAA.
             gl.glUniform1f(uniforms["uEdgePx"], 0.75)
             gl.glUniform1f(uniforms["uCurveCells"], 12.0+40.0*float(parameter(parameters,"shockwave_grid_density")))
@@ -437,7 +438,8 @@ class QuickShockwaveGridRenderer:
                     gl.glUniform4f(skyline_uniforms["uCrestColor"],
                                    *rgba(parameter(parameters,"shockwave_grid_crest_color")))
                     gl.glUniform1f(skyline_uniforms["uGlow"],glow)
-                    gl.glUniform1f(skyline_uniforms["uMidband"],midband)
+                    gl.glUniform1f(skyline_uniforms["uMidband"],
+                                   shockwave_ridge_breath(midband, music_drive, water_amount))
                     gl.glUniform1f(skyline_uniforms["uOutlineLiftNdc"], 2.0 / max(frame.viewport[3],1))
                     gl.glUniform1f(skyline_uniforms["uHorizonThickness"],
                                    float(parameter(parameters,"shockwave_grid_horizon_thickness")))

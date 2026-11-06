@@ -468,7 +468,7 @@ uniform vec4 uShoreGlowColor;     // its colour; alpha mixes it in over the shor
 uniform float uWaterGlint;        // the Sun/Moon's glittering path on the water below it (0 = none)
 uniform float uContourLines;      // level lines over the land's slopes (0 = none)
 uniform vec4 uGlintLight;         // halo intensity, halo reactivity (0, 0 with the halo off), midband, beat pulse
-uniform float uWaterReact;        // Water Reaction times the music's reaction (shockwave_water_react; 0 = none)
+uniform float uWaterReact;        // Water Reaction times the music drive (shockwave_music_drive; 0 = none)
 vec4 sceneEmission(vec3 rgb) { return vec4(rgb, dot(rgb, vec3(0.2126,0.7152,0.0722))); }
 // Screen distance in physical pixels from a water or wet-fringe fragment to the visible shoreline (negative
 // up the dry bank): the bank distance across open water, the shoreline contour on land. Derivatives come from
@@ -702,7 +702,9 @@ void main() {
         float ga=exp(-abs(fa)/(4.0*wa))*(1.0-smoothstep(0.25,0.55,wa));
         float gb=exp(-abs(fb)/(4.0*wb))*(1.0-smoothstep(0.25,0.55,wb));
         reactNet=clamp(max(la,lb)+0.35*max(ga,gb),0.0,1.0);
-        reactColour=(uLineColor.rgb*(la+0.35*ga)+uCrestColor.rgb*(lb+0.35*gb))/max(la+lb+0.35*(ga+gb),1e-4);
+        // The mocks' net leans violet-magenta: the ripple family takes a third of the crest colour.
+        reactColour=(mix(uLineColor.rgb,uCrestColor.rgb,0.35)*(la+0.35*ga)+uCrestColor.rgb*(lb+0.35*gb))
+                    /max(la+lb+0.35*(ga+gb),1e-4);
         reactColour=mix(reactColour,vec3(1.0),0.45*la*lb);
     }
     if (waterCoverage>0.0) {
@@ -921,12 +923,14 @@ void main() {
     }
     vec3 reactLight=vec3(0.0);
     if (reactNet>0.0 && waterCoverage>0.0) {
-        float reactAlpha=clamp(reactNet*uWaterReact*1.2,0.0,0.95)*waterCoverage;
+        // Convex in the drive: a quiet passage's net stays faint, a loud one's vivid.
+        float reactGain=uWaterReact*sqrt(uWaterReact);
+        float reactAlpha=clamp(reactNet*reactGain*1.4,0.0,0.95)*waterCoverage;
         premult=premult*(1.0-reactAlpha)+reactColour*reactAlpha;
         alpha=alpha*(1.0-reactAlpha)+reactAlpha;
         reactLight=reactColour*reactAlpha*1.3;
         // The whole lake lifts a little in the net's colours (the mocks' high-react water is lit, not black).
-        premult+=mix(uLineColor.rgb,uCrestColor.rgb,0.4)*0.10*uWaterReact*waterCoverage*(1.0-reactAlpha);
+        premult+=mix(uLineColor.rgb,uCrestColor.rgb,0.6)*0.10*reactGain*waterCoverage*(1.0-reactAlpha);
     }
     FragColor=vec4(min(premult/max(alpha,1e-4),vec3(1.0)),alpha*distanceFade);
     // Only water carries lines here; their glow takes its own colour and strength.
