@@ -297,7 +297,8 @@ Centre Out "like night and day"; logical cadence survives heavy game load; **Pre
 lose this"). Every later dynamics change shows, on the recorded clips, that Preset 4 is unchanged against this tag
 (or names the improvement for operator sign-off). Preset 4 keeps Breathing 0 (exactly the baseline dynamics).
 
-- [ ] **Fixed-scale rework (branch `worktree-agent-ab2ce64aff1fa59c4`): REJECTED by the lead review 6 Nov, in rework.**
+- [ ] **Fixed-scale rework (branch `worktree-agent-ab2ce64aff1fa59c4`): REJECTED by the lead review 6 Nov; reworked,
+  awaiting the lead's re-review (status under the acceptance list).**
   Kept from it: no adaptive memory (a song replayed after ~7 min of other music responds the same: height within .01,
   roll .35 deg/s), breaks no longer re-scale what follows, an Adaptive Response toggle (off), Breathing's mean learns
   only from heard music, and the floor cleared with height. Rejected, measured on whole recordings against main
@@ -324,6 +325,23 @@ lose this"). Every later dynamics change shows, on the recorded clips, that Pres
     born swell).
   - Build on the reactivity guide's real-music scale: loudness 3-17 in music, the live lane at 2.5, 0..1 absolutes
     mean only "silent", calibrate by presence on recorded music.
+
+  Rework status (6 Nov, v7; evidence `.artifacts/evidence/waveform_ribbon/reactivity_preset7/` PROGRESS.md and
+  `tmp/waveform_review_20261106/`): fixed response fitted to main's visible behaviour (height/lift on the fitted curve,
+  other drives 1.12 x t^.86, knee .8 -> .92, phrases widened about a heard-only 3 s mean, dip 1 / rise 2); Kick Accent
+  roll bounded at 15% of the roll, Preset 4 ships 0; lift limit back to 1.5 and the floor lift never raises a crest
+  through the card's top (top edge first); after real silence the phrase mean catches up with louder music.
+  - Met on chain7 (both card sizes): Preset 4 p10/p50/p90 -4/+4/+5%, contrast +4.5%; Presets 1/3/7 contrast +2..+4%;
+    Pulse Strength above .9 in loud passages 6% (main 10-15%); roll mean 1.12x, roll acceleration p99.9 1.07x; crests
+    clipped by the 640x560 card's top on <= main's frames in 8 of 10 recordings (P1 Anything / Night So Long 1 frame
+    each against 0); no drift on a song replayed after 7 min (height within .06, roll .6 deg/s).
+  - Open for the lead: `wf_topclip`'s raw share is still above main on P1 Night So Long, P4 Anything / Rag Doll and P7
+    Anything (5.8/15.4/4.6/5.8% against 2.9/8.8/2.1/2.9%): those frames are sparks drifting into the top rows (spark
+    density in the top 12% +10..+50%, births .1-.2 world units higher on the larger swells), not crests; matching
+    main's spark field would mean smaller swells (and kicks). Kick peaks are below main in 6 of 16 song-time bins
+    (-1.6..-6.4%, worst P7 0-15 s), above it in every sustained-loud bin (+6..+11%); quieter-after-loud kicks are
+    8-27% under main by design (a quieter passage is no longer re-normalised up). Post-break 10 s: -7..+9% of the
+    unbroken clip on Presets 1/7 (main +4..+10%), -5..+5% on Preset 4 (main 0..+7%).
 - [~] **Preset 7 and the other reaction modes (operator log `logse7a84d332e.zip`, Rag Doll, 5 Nov) - awaiting
   operator eyes:** no decay/breathing in soft passages, sustained passages with changes read almost flat, and a swell to
   full power as the song got QUIETER. Preset 7 is Group Wave (song 31-123 s in the log; the recorded clip is song
