@@ -3147,3 +3147,88 @@ of two recordings; regional metrics; showcase WebP; motion captures; cost).
   2.34-2.41 ms, P7 2.57, P1 2.42, P5 2.46. Logical tick (`tools/eb_logical_cost_probe.py`, heavy1 30 s,
   alternating): P9 1.66-2.72 ms median, P7 2.05-2.18, P1 3.15-3.17, P5 2.05-3.03; P9's extra over P7 is its Wake
   Trails (wakes snapshot +0.5 ms), as in P1/P5. Dormancy: nothing runs outside Extruded Bubble.
+
+## 73. Deep red ocean, second pass: lit glass, lanes, ember band, hero shell (6 November)
+
+Lead review of §72: keep the mood, water, shafts and ember hue; close, in order, the subject (large, clearly lit glass
+shells over dense chains of lit micro-bubbles in lanes), the embers (granular, in a band along the streams, top-middle
+dark), the foreground bokeh shell, then the faint surface and the cyan/violet wake strands. Evidence:
+`.artifacts/evidence/extruded_bubble/deep_red_ocean_pass2_20261106/` (`sheets/`: mock | before | after at full
+resolution and per-region crops for five moments of ragdoll and anything_mixed2; `regional_metrics.txt`;
+`motion_*`: 10 s at 12 fps through the production host with WebP and contact sheet; `webp/`: the release-media
+showcase; `reactivity_summary.txt`; `gpu_*` and `logical_*` cost).
+
+- **Shared work, each dormant at 0** (repair-filled at 0 into Presets 1-8; Presets 1-8 rendered from a HEAD snapshot
+  and from this tree on anything_mixed2 at 25/30/35 s: max difference 0 on every frame, except one level on one
+  frame of P2, the renderer's own noise floor):
+  - **Lit Glass** (Glass): shells, fused clusters and beads lit in the light's colour: a crisp pale line 2-3 px in
+    from the silhouette (sized in screen pixels; a facing-cosine band was sub-pixel), a second faint line for the far
+    wall on large shells, seeded hot points just inside the rim (mirrored embers, more toward the light) and sparse
+    ones on the face, an inset hot spot, a thin warm crescent inside the far wall; light added on top of the glass,
+    no extra coverage, and a share into the bloom. On beads it draws a ring and attenuates the existing broad glint
+    (x1.0 at 0) that had filled every bead into a golden dot (the "glitter"). In the near layer the line widens and
+    fades with the lens circle and the hot points stay, so they defocus into bokeh discs.
+  - **Stream Lanes** (Bubbles): bead chains gather into 12 lanes near the stream's axis (the line along the stream
+    through the Source -> End midpoint), keeping their own sway, jitter and plume; gathered chains fade over a fifth
+    of their run. In SCENE it also draws ordinary births toward that axis (keeping 40% of their distance at 1;
+    deterministic, no random draw, so 0 leaves the simulation bit-identical; tested).
+  - **Ember Band** (Water): the dust burns in a frayed tube round that same axis (four depths along each ray, edge
+    broken by the cloud noise), reopened by the light's own lobe so embers still glitter in the beams.
+  - **Wake Tint** (Bubbles): wake strands take the light's hue instead of the fixed cyan/violet.
+  - **Hero Shell** (Lens; Hero Across/Height place it in the frame): one ordinary shell row held in front of the
+    focus distance at an authored place in the view, through the existing near (defocus) layer; it sways slowly with
+    the motion phase and swells a little with sustain (never the beat). Not a simulation bubble and not a shaft
+    occluder.
+  - **Ember Grain** (only P9 used it): the cloud now tears into ragged patches with few-pixel grit inside them
+    rather than along-stream brush strokes.
+- **Authoring (P9 only):** Lit Glass 1, Stream Lanes 1, Ember Band 1, Wake Tint 0.6, Hero Shell 0.45 at (-0.8,
+  -0.6); stream path moved down (Source y 0.375, End y -0.975; same direction) so the axis crosses the frame where
+  the goal's band does (projected through the preset's camera first); Small Bubbles 40-60 and Large 8-12 (the band
+  concentrates them; 110-130 read as a crowd), Large Size 0.7, Small Size 0.85, Bead Chains 5-8, Bead Size 1.3, Bead
+  Scatter 0.35, Rim Glow 1, Sparkle 1.2, Light Tint 0.95, Dust 0.9, Particles 0.12-0.30.
+- **Measured against the mock** (mean of ten frames: five moments each of ragdoll and anything_mixed2; luminance
+  0..1; warm = share of pixels with luminance > 0.05, R > 1.4 B and R > 1.15 G; bright = luminance > 0.55; this
+  pass's definitions, so before is re-measured):
+
+  | region | mock mean / warm / bright | before (§72) | after |
+  | --- | --- | --- | --- |
+  | top-middle (cell 01) | 0.149 / 0.040 / 0.008 | 0.152 / 0.232 / 0.027 | 0.120 / 0.090 / 0.015 |
+  | stream band | 0.187 / 0.273 / 0.046 | 0.136 / 0.194 / 0.019 | 0.181 / 0.262 / 0.055 |
+  | hero shell box | 0.265 / 0.634 / 0.128 | 0.105 / 0.161 / 0.014 | 0.203 / 0.344 / 0.084 |
+  | shafts | 0.314 / 0.385 / 0.084 | 0.318 / 0.497 / 0.089 | 0.253 / 0.499 / 0.027 |
+  | embers left | 0.142 / 0.459 / 0.033 | 0.122 / 0.142 / 0.024 | 0.216 / 0.319 / 0.095 |
+  | embers low | 0.090 / 0.320 / 0.008 | 0.098 / 0.292 / 0.015 | 0.188 / 0.467 / 0.084 |
+  | bokeh corner | 0.174 / 0.471 / 0.053 | 0.121 / 0.277 / 0.036 | 0.134 / 0.322 / 0.041 |
+  | lower right (cell 22) | 0.067 / 0.104 / 0.001 | 0.096 / 0.257 / 0.014 | 0.198 / 0.436 / 0.094 |
+
+- **Parity judgement (honest):** the subject moved most. Shells now read as lit glass with bright rims and hot
+  points, and the micro-bubbles as glass beads in lanes rather than glitter; the band of bubbles, lanes and embers now
+  runs where the mock's does and the top-middle is dark (warm 0.23 -> 0.09 against 0.04). Still short: (1) the
+  mock's shells are crisper and more copper, with busy refracted interiors and an orange flare on the light side;
+  ours have paler rims and darker, smoother interiors, and there are more of them close together than in the mock;
+  (2) the embers still read partly as along-stream strokes (dotted with grit) where the mock's are torn, turbulent
+  debris with dark grit texture; (3) the lower right is far too busy (mean 0.20 against 0.07): the mock lets the band
+  fade out there, our population and embers continue to the far wall; (4) the shaft corner lost its bright core
+  (bright 0.03 against 0.08) when the band removed the embers that sat there: the beams themselves are thinner and
+  dimmer than the mock's dense glittering fan; (5) the Hero Shell reads as a soft ring with two glows, the mock's as a
+  defocused shell with many bokeh discs round its rim; (6) the Snell's-window ripple texture still shows faintly at
+  the top; the mock's fine silvery water streaks are absent.
+- **Reactivity** (`reactivity_summary.txt`, 10 s at 12 fps through the production host): Preset 9 keeps P7's
+  reaction controls, so the simulation's level/flash/sustain/rays match P7 frame for frame. anything_mixed2 30-40 s:
+  frame luma swings 30% of its median (P7 22%), corr(luma, level) 0.42 (P7 0.42); ragdoll 50-60 s swing 25%. The
+  largest frame steps (9.2% on anything_mixed2 frame 77, 12.9% on ragdoll frame 43) are breathing swells on kicks:
+  every shell grows within one frame (inspected pairwise), nothing appears or vanishes. Kicks read more than before
+  because lit rims carry the swell. Not yet seen on a real display or under the live game load.
+- **Cost (same machine, same session; the GPU was shared with other work, so absolute ms ran high and only
+  relative figures count; conditions in each file):** whole frame GPU (`tools/eb_gpu_stage_cost.py`, heavy1,
+  1662x888) P9 3.48 ms median against P1 4.08, P5 4.48, P7 4.59. Each new control's own cost on P9, round-robin
+  `--compare` (full - control at 0): Lit Glass -0.01 ms, Ember Band -0.03, Stream Lanes 0.00, Wake Tint 0.05 (noise),
+  Hero Shell 0.10 (one near-layer shell); Lit Glass 1 on P7 +0.01. Logical tick (`tools/eb_logical_cost_probe.py`,
+  heavy1 30 s, P7/P9 run twice, alternating): P9 1.77/1.77 ms median against P7 2.14/2.14, P1 2.84, P5 2.33; P9 now
+  holds about 60 bubbles (P7 115), and its wakes snapshot costs 0.34 ms against P7's 0.16. At 0 the controls add no
+  work: every shader term sits behind its uniform's `> 0` branch, Hero Shell adds no row, Stream Lanes draws no
+  random number; nothing runs outside Extruded Bubble. Not measured live under the game load.
+- **Tests:** `tests/test_extruded_bubble_deep_red_ocean_controls.py` (each control reaches the native pixels; each
+  is a no-op where its subject is absent or at 0; Stream Lanes 0 leaves the simulation identical and 1 gathers it;
+  Hero Shell lands at its authored place in front of the focus; Ember Band is a spatial mask, not a dimming). HEAD
+  pixel identity of Presets 1-8 is the snapshot comparison above (evidence, not a golden).

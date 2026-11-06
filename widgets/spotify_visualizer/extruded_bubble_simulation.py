@@ -103,6 +103,7 @@ class ExtrudedBubbleControls:
     doublets: float = 0.0                   # chance a birth rises already fused with a smaller companion (or two)
     wake_trails: float = 0.0                # share of bubbles trailing a wake of the water they pass through
     columns: float = 0.0                    # 0..1 share of bubbles that rise in lines along the stream
+    stream_lanes: float = 0.0               # SCENE: 0 whole inlet faces .. 1 births gathered toward the stream's axis
     bubble_spread: float = 1.0               # source-patch width; independent from Columns and particle width
     emission_geometry: str = "BEAM"           # BEAM authored patch / SCENE all physical upstream faces
     surface_scene: bool = False              # authored Sunlit Surface light mode; only governs real water-plane retirement
@@ -188,6 +189,21 @@ class _Bubble:
     push: tuple[float, float, float] = (0.0, 0.0, 0.0)     # decaying contact separation velocity
     # The motion loop's per-bubble constants of ``phase`` (_phase_terms), kept with the phase they came from.
     phase_terms: tuple | None = field(default=None, compare=False, repr=False)
+
+
+_LANE_GATHER = 0.6   # Stream Lanes 1: births keep 40% of their distance from the stream's axis
+
+
+def gather_toward_stream_axis(point, direction, stream_path, amount: float):
+    """Stream Lanes for ordinary SCENE births: the inlet point drawn toward the stream's authored axis (the line along
+    ``direction`` through the Source -> End midpoint, the axis the bead lanes and the Ember Band share), keeping its
+    place along the stream. Deterministic (no random draw), so Stream Lanes 0 leaves the population untouched."""
+    source, end = world_point(stream_path[:3], WORLD_HALF), world_point(stream_path[3:], WORLD_HALF)
+    axis = tuple(0.5 * (s + e) for s, e in zip(source, end))
+    rel = tuple(p - a for p, a in zip(point, axis))
+    along = sum(r * d for r, d in zip(rel, direction))
+    keep = 1.0 - _LANE_GATHER * max(0.0, min(1.0, float(amount)))
+    return tuple(a + d * along + (r - d * along) * keep for a, d, r in zip(axis, direction, rel))
 
 
 def _phase_terms(phase: float) -> tuple[float, float, float, float, float]:
@@ -447,6 +463,8 @@ class ExtrudedBubbleSimulation:
                     fraction = rng.uniform(0.025, 0.965)
                     distance = scene_track_length(point, direction)
                     point = tuple(p + d * distance * fraction for p, d in zip(point, direction))
+                if controls.stream_lanes > 0.0 and controls.stream_path is not None:
+                    point = gather_toward_stream_axis(point, direction, controls.stream_path, controls.stream_lanes)
             elif controls.stream_path is not None:
                 across, deep_axis = stream_basis(direction)
                 anchor = world_point(controls.stream_path[:3], WORLD_HALF)
