@@ -61,8 +61,6 @@ Keep these deferred unless new evidence or an explicit request promotes them:
 
 - ImageWorker lean-spawn entry and residual memory-footprint follow-up;
 - `--usage` observer-cost refinement and residual handle-slope attribution;
-- migrate `main.py`'s `SRPSS_PROFILE_CPU` environment gate to an explicit profiling CLI/sidecar boundary; current CONFIG
-  and RUN branches still read it directly, despite the project policy against environment-variable feature gates;
 - remove `SounddeviceBackend`'s unreachable Windows WASAPI selection path after the factory's canonical PyAudioWPatch
   Windows routing; its non-Windows input-device policy also needs an explicit source-selection contract rather than
   silent first-device prioritization;

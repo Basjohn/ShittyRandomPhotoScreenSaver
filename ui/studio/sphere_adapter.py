@@ -76,15 +76,25 @@ def _custom_controls(spec) -> dict[str, str]:
             if not c.bucket and _norm(c.key[len(PREFIX):]) in rows}
 
 
+# The Finish bundles: (Gloss, Specular) each finish writes. The finish name is never sent to the renderer.
+_FINISH_PRESETS: dict[str, tuple[float, float]] = {
+    "Neutral": (0.20, 0.25),
+    "Matte": (0.05, 0.08),
+    "Plastic": (0.55, 0.45),
+    "Polished": (0.82, 0.70),
+    "Metallic": (0.72, 1.00),
+    "Glassy": (0.95, 0.75),
+}
+
+
 def finish_presets() -> dict[str, tuple[float, float]]:
-    """Settings' Finish bundles: (Gloss, Specular) a finish writes (``sphere_builder``)."""
-    from ui.tabs.media.sphere_builder import _FINISH_PRESETS
+    """The Finish bundles: (Gloss, Specular) a finish writes."""
     return dict(_FINISH_PRESETS)
 
 
 def _follow(key: str, value: Any, values: Mapping[str, Any]) -> dict:
-    """Settings' Finish coupling: a finish writes Gloss and Specular; a manual Gloss or Specular edit marks the
-    finish Custom (``sphere_builder.bind_sphere_finish_axes``)."""
+    """The Finish coupling (Settings' former Finish row): a finish writes Gloss and Specular; a manual Gloss or
+    Specular edit marks the finish Custom."""
     finish, gloss, specular = PREFIX + "finish", PREFIX + "gloss", PREFIX + "specular"
     if key == finish:
         pair = finish_presets().get(str(value))
@@ -564,12 +574,20 @@ class SphereStudioAdapter(StudioModeAdapter):
         from ui.studio.waveform_recorded_inputs import studio_clips
         return studio_clips(recordings_directory())
 
+    # Analysed clips for this process, keyed by clip and the Audio Analysis values (the production DSP's answers on
+    # the clip's PCM under them).
     _clip_cache: dict = {}
+
+    def clip_analysis_keys(self) -> frozenset[str]:
+        """The values a recorded clip is re-analysed for (the controller re-runs the worker when they change)."""
+        from ui.studio.technical import technical_keys
+        return technical_keys(MODE)
 
     def start_clip_load(self, clip: StudioFixture, values: Mapping[str, Any], finished):
         from ui.studio.sphere_recorded_inputs import to_inputs
+        from ui.studio.technical import clip_analysis_key
         from ui.studio.waveform_recorded_inputs import ClipLoadJob
-        key = clip.description
+        key = clip_analysis_key(clip, MODE, values)
         cached = SphereStudioAdapter._clip_cache.get(key)
         if cached is not None:
             finished(cached, "")

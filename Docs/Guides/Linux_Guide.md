@@ -116,7 +116,8 @@ the tarball into `release\linux`. The branch must be pushed; GitHub builds the p
 ```
 
 The headless tools give only their child process an isolated profile, a private Xvfb display and Mesa's
-OpenGL 4.6 override for llvmpipe (`tools/linux_headless.py`). Software rendering proves correctness and
+OpenGL 4.6 override for llvmpipe (`tools/linux_headless.py`); the child's main log directory is redirected with the
+product argument `--log-dir=<path>`, not an environment variable. Software rendering proves correctness and
 pixels, never performance.
 
 Tests: Linux-only tests live in `tests/test_linux_*.py` and are never collected on Windows; a test pinning a

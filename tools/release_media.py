@@ -278,6 +278,46 @@ def transition_timeline_ms(duration_ms: int) -> int:
 # cropped to what the mode actually draws over the whole run, with a slim margin.
 VISUALIZER_BACKGROUND = (28, 28, 30)
 VISUALIZER_CROP_MARGIN = 0.01
+# The card the showcase draws fills this fraction of the capture frame; the rest is room for 3D overflow.
+VISUALIZER_STAGE_FRACTION = 0.7
+
+
+def showcase_presentation(mode_id: str, size: tuple[int, int]):
+    """The presentation a Visualizer showcase is drawn through: the product's canonical card, uniformly scaled.
+
+    A framed 3D mode's lens is authored against the canonical card height (``framed_aperture_scale``: the
+    sensor height relative to ``CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE``); enlarging the card's world
+    extent instead of scaling the card would reveal more of the scene than the preset's starting view frames.
+    So the capture's aspect is kept by widening the extent at the canonical height, and the card grows by the
+    uniform visual scale (which changes display size only), exactly as a resized product card does.
+    """
+    from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy
+    from widgets.spotify_visualizer.presentation_geometry import resolve_visualizer_presentation
+    from widgets.spotify_visualizer.render_state import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
+
+    width, height = size
+    baseline_height = CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE[1]
+    return resolve_visualizer_presentation(
+        policy=get_visualizer_presentation_policy(mode_id), display_size=(width, height),
+        viewport_extent=(baseline_height * width / height, baseline_height),
+        uniform_visual_scale=height * VISUALIZER_STAGE_FRACTION / baseline_height,
+        border_width=0, corner_radius=0, content_inset=0,
+        background_color=(0, 0, 0, 0), border_color=(0, 0, 0, 0), shadow_enabled=False,
+        shadow_color=(0, 0, 0, 0), shadow_blur=0, shadow_offset=(0, 0), shadow_spread=0,
+        shadow_extensions=(0, 0, 0, 0))
+
+
+def showcase_snapshot(snapshot, presentation, *, backdrop=None):
+    """One replayed production snapshot as the showcase renders it: Scene3D High, the fixture backdrop for
+    reflection-capable modes, the showcase presentation. Nothing else about the mode state is touched."""
+    from widgets.spotify_visualizer.render_state import freeze_render_fields
+
+    state = snapshot.logical.mode_state
+    parameters = {**dict(state.parameters), "scene3d_detail": "High"}
+    if backdrop is not None:
+        parameters["backdrop"] = backdrop
+    state = replace(state, parameters=freeze_render_fields(parameters))
+    return replace(snapshot, presentation=presentation, logical=replace(snapshot.logical, mode_state=state))
 
 
 def content_box(frames: list[Path], background: tuple[int, int, int], margin: float) -> tuple[int, int, int, int] | None:
@@ -333,9 +373,7 @@ def capture_frames(case: MediaCase, directory: Path, *, size: tuple[int, int], f
         else:
             from OpenGL import GL as gl
             from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
-            from widgets.spotify_visualizer.render_state import freeze_render_fields
-            from widgets.spotify_visualizer.presentation_geometry import resolve_visualizer_presentation
-            from core.settings.visualizer_mode_registry import get_visualizer_presentation_policy, get_visualizer_mode_descriptor
+            from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
             from widgets.spotify_visualizer.backdrop import VisualizerBackdrop
             from tools.visualizer_replay.driver import replay_clip
 
@@ -347,25 +385,17 @@ def capture_frames(case: MediaCase, directory: Path, *, size: tuple[int, int], f
             descriptor = get_visualizer_mode_descriptor(case.identity)
             backdrop = VisualizerBackdrop(identity="release_transition_fixture", size=size,
                                           rgba=capture.images[0].tobytes())
-            item_width, item_height = width * .7, height * .7   # room for 3D overflow; the crop removes the rest
-            presentation = resolve_visualizer_presentation(
-                policy=get_visualizer_presentation_policy(case.identity), display_size=(width, height),
-                viewport_extent=(item_width, item_height), border_width=0, corner_radius=0, content_inset=0,
-                background_color=(0, 0, 0, 0), border_color=(0, 0, 0, 0), shadow_enabled=False,
-                shadow_color=(0, 0, 0, 0), shadow_blur=0, shadow_offset=(0, 0), shadow_spread=0,
-                shadow_extensions=(0, 0, 0, 0))
-            matrix = (2 / width, 0, 0, 0, 0, -2 / height, 0, 0, 0, 0, 1, 0, -.7, .7, 0, 1)
+            # Room for 3D overflow around the card; the crop removes the rest.
+            presentation = showcase_presentation(case.identity, size)
+            item_width, item_height = presentation.outer_rect[2:]
+            matrix = (2 / width, 0, 0, 0, 0, -2 / height, 0, 0, 0, 0, 1, 0,
+                      -VISUALIZER_STAGE_FRACTION, VISUALIZER_STAGE_FRACTION, 0, 1)
             for ordinal, index in enumerate(indices):
                 snapshot = result["snapshots"].get(index)
                 if snapshot is None:
                     raise RuntimeError(f"production replay did not publish snapshot {index}")
-                state = snapshot.logical.mode_state
-                parameters = {**dict(state.parameters), "scene3d_detail": "High"}
-                if descriptor.backdrop_setting:
-                    parameters["backdrop"] = backdrop
-                state = replace(state, parameters=freeze_render_fields(parameters))
-                snapshot = replace(snapshot, presentation=presentation,
-                                   logical=replace(snapshot.logical, mode_state=state))
+                snapshot = showcase_snapshot(snapshot, presentation,
+                                             backdrop=backdrop if descriptor.backdrop_setting else None)
                 gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
                 gl.glViewport(0, 0, width, height)
                 gl.glDisable(gl.GL_SCISSOR_TEST)

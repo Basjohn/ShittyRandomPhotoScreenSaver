@@ -5,8 +5,9 @@ Linux only, development only. One owner for how a harness runs the unmodified
 
 * **Profile isolation.** Only the child process gets XDG base directories under
   the harness work directory, so ``core.platform_paths`` resolves settings,
-  data, curated trees and diagnostic logs there. ``SRPSS_FORCE_LOG_DIR`` keeps
-  the main log directory beside them. Nothing outside the work directory is touched.
+  data, curated trees and diagnostic logs there. The launch command carries
+  ``log_dir_arg(logs)`` (``--log-dir=<path>``, a product CLI argument) so the main log
+  directory sits beside them. Nothing outside the work directory is touched.
 * **OpenGL 4.6 Core floor.** Production refuses anything below 4.6 Core
   (``rendering/quick/bootstrap.py``). Mesa's llvmpipe implements the features
   SRPSS uses but advertises 4.5, so the child alone gets Mesa's version
@@ -52,8 +53,18 @@ def require_linux() -> None:
         raise SystemExit("Linux/Xvfb only")
 
 
+def log_dir_arg(logs: Path) -> str:
+    """Return the product CLI argument that redirects the main log directory to *logs*."""
+
+    return f"--log-dir={logs}"
+
+
 def child_env(display: str, profile: Path, logs: Path) -> dict[str, str]:
-    """Return the isolated environment for one headless SRPSS child process."""
+    """Return the isolated environment for one headless SRPSS child process.
+
+    *logs* is accepted so every caller names its log root in one place; the child learns it
+    from ``log_dir_arg(logs)`` on its command line, never from the environment.
+    """
 
     env = {
         **os.environ,
@@ -61,7 +72,6 @@ def child_env(display: str, profile: Path, logs: Path) -> dict[str, str]:
         "XDG_CONFIG_HOME": str(profile / "config"),
         "XDG_DATA_HOME": str(profile / "data"),
         "XDG_STATE_HOME": str(profile / "state"),
-        "SRPSS_FORCE_LOG_DIR": str(logs),
         **MESA_GL46_OVERRIDE,
     }
     # Windows-shaped variables must not leak in from a parent shell.

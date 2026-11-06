@@ -1,10 +1,11 @@
-"""Lazy Settings body for Extruded Bubble, built from its spec (``core/settings/visualizer_mode_settings.py``)."""
-from __future__ import annotations
+"""Extruded Bubble's Settings body: the preset row and the Extruded Bubble Studio launcher.
 
-from ui.tabs.media.spec_mode_builder import build_spec_mode_ui
+Every Extruded Bubble control (including its audio analysis) is edited in the Studio, which has parity+ with the retired
+buckets (``tests/test_visualizer_studio_parity.py`` proves it from the registries)."""
+from ui.tabs.media.spec_mode_builder import build_studio_owned_mode_ui
+
+INTRO = "The light, the bubbles, the water and the camera are all edited live in the Studio."
 
 
 def build_extruded_bubble_ui(tab, parent_layout) -> None:
-    """Build Extruded Bubble's body (its buckets, visual controls and technical profile)."""
-
-    build_spec_mode_ui(tab, parent_layout, "extruded_bubble")
+    build_studio_owned_mode_ui(tab, parent_layout, "extruded_bubble", INTRO)

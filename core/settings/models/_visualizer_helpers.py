@@ -77,6 +77,26 @@ def _normalize_spectrum_lane_strengths(value: Any, defaults: Mapping[str, float]
     return normalized
 
 
+def admit_spectrum_shape_key(key: str, value: Any, default: Any) -> Any:
+    """One key of Spectrum's shape record as the model admits it (the Settings body holds what the model reads):
+    legacy linear notch families migrate to the vocal lane, lane strengths clamp; other keys pass through."""
+    if key == "spectrum_notch_positions_linear":
+        return _normalize_spectrum_linear_notches(value, default)
+    if key in ("spectrum_lane_strengths_mirrored", "spectrum_lane_strengths_linear"):
+        return _normalize_spectrum_lane_strengths(value, default)
+    return deepcopy(value)
+
+
+def admit_heightfield_key(key: str, value: Any, default: Any) -> Any:
+    """An authored heightfield as the model admits it (``normalize_heightfield``); a malformed record falls back to
+    the canonical default rather than reaching the model, which would refuse it."""
+    from rendering.gl_programs.heightfield import normalize_heightfield
+    try:
+        return normalize_heightfield(value)
+    except ValueError:
+        return normalize_heightfield(default)
+
+
 def _technical_mode_ids() -> Tuple[str, ...]:
     """Return canonical technical-profile owners from descriptor capabilities."""
 

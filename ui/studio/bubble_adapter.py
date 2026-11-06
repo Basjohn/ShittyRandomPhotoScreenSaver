@@ -34,7 +34,8 @@ from ui.studio.adapter import (
 from ui.studio.schema import (
     CHOICE, COLOUR, SCALAR, SWITCH, StudioProperty, StudioSchema, Workspace, WorkspaceColumn,
 )
-from ui.studio.technical import TECHNICAL_GROUP, admit_technical, technical_properties
+from ui.studio.technical import (RAINBOW_GROUP, TECHNICAL_GROUP, admit_rainbow, admit_technical, rainbow_properties,
+                                 technical_properties)
 
 MODE = "bubble"
 PREFIX = "bubble_"
@@ -71,6 +72,37 @@ _ROW_ICONS = {"big_count": "dots", "small_count": "dots", "big_size_max": "heigh
               "big_bass_pulse": "bolt", "small_freq_pulse": "bolt", "gradient_direction": "gradient",
               "outline_color": "colour", "trail_strength": "strand", "rotation_amount": "roll"}
 _AXES = ("X", "Y")
+DRIFT = PREFIX + "drift_direction"
+STREAM = PREFIX + "stream_direction"
+GRADIENT_DIRECTION, GRADIENT_ENDPOINTS, GRADIENT_CUSTOM = PREFIX + "gradient_direction", PREFIX + "gradient_endpoints", "custom"
+# Settings' Particles rule: a population's size, density, direction and colour show while any of its toggles is on
+# (the rows stay stored either way).
+_AMBIENT = (
+    (("microbubble_stream", "microbubble_drift"),
+     ("microbubble_density", "microbubble_size", "microbubble_direction_mode", "microbubble_columnarity")),
+    (("particle_stream", "particle_drift", "particle_glow"),
+     ("particle_size", "particle_density", "particle_direction_mode", "particle_color")),
+)
+
+
+def _extra_conditions(spec) -> dict[str, dict]:
+    """Settings' Bubble conditions beyond the registry's ``when``: the stream direction shows only while Drift is not
+    a Swirl (Swirl replaces the stream), and each particle population's rows show while any of its toggles is on."""
+    drift = spec.control(DRIFT)
+    out = {STREAM: {"when": ((DRIFT, tuple(v for v in drift.choices if not str(v).startswith("swirl_"))),)}}
+    for toggles, rows in _AMBIENT:
+        terms = tuple((PREFIX + toggle, (True,)) for toggle in toggles)
+        for row in rows:
+            out[PREFIX + row] = {"when_any": terms}
+    return out
+
+
+def _follow(key: str, value: Any, values: Mapping[str, Any]) -> dict:
+    """Settings' gradient coupling: moving a Custom Gradient endpoint selects the Custom recipe (named recipes keep
+    their own appearance and the latent endpoints)."""
+    if key == GRADIENT_ENDPOINTS and values.get(GRADIENT_DIRECTION) != GRADIENT_CUSTOM:
+        return {GRADIENT_DIRECTION: GRADIENT_CUSTOM}
+    return {}
 
 
 def _label(text: str) -> str:
@@ -101,6 +133,7 @@ def build_schema() -> StudioSchema:
     props: list[StudioProperty] = []
     placed: dict[str, list[str]] = {w[0]: [] for w in _WORKSPACES}
     customs = _custom_controls(spec)
+    conditions_of = _extra_conditions(spec)
     for control in spec.controls:
         bucket = control.bucket or customs.get(control.key, "")
         if not bucket:
@@ -114,7 +147,10 @@ def build_schema() -> StudioSchema:
         if not control.label and control.key in customs:
             label = "Drift Direction"                                # the Custom row's own title
         tooltip = getattr(control, "tooltip", "")
-        common = dict(workspace=workspace, group=group, tooltip=tooltip, when=control_condition(control),
+        conditions = conditions_of.get(control.key, {})
+        common = dict(workspace=workspace, group=group, tooltip=tooltip,
+                      when=control_condition(control) + conditions.get("when", ()),
+                      when_any=conditions.get("when_any", ()),
                       priority=_PRIORITY.get(control.key, 100), icon=_ROW_ICONS.get(control.key[len(PREFIX):], ""))
         if isinstance(control, Slider):
             # Stored values are shown; a Settings display multiplier (sizes x1000) becomes extra decimals.
@@ -147,6 +183,10 @@ def build_schema() -> StudioSchema:
                                             maximum=1.0, decimals=2,
                                             **{**common, "priority": common["priority"] + index, "icon": ""}))
         # Any other control type is deliberately not guessed at: the coverage test names it.
+    rainbow = rainbow_properties(MODE, workspace="look", subject="the bubbles' colours")
+    props.extend(rainbow.values())
+    if rainbow:
+        placed["look"].append(RAINBOW_GROUP)
     technical = technical_properties(MODE, workspace="reactivity")
     props.extend(prop for prop, _defn in technical.values())
     placed["reactivity"].append(TECHNICAL_GROUP)
@@ -159,7 +199,8 @@ def build_schema() -> StudioSchema:
             continue
         columns = []
         for group in groups:
-            glyph, subtitle = _BUCKET_PANEL.get(bucket_of.get(group, ""), ("bars", "Live analysis feeding Bubble"))
+            glyph, subtitle = (("gradient", "Hue drift across the bubbles") if group == RAINBOW_GROUP else
+                               _BUCKET_PANEL.get(bucket_of.get(group, ""), ("bars", "Live analysis feeding Bubble")))
             columns.append(WorkspaceColumn(group, (group,), glyph, subtitle))
         workspaces.append(Workspace(workspace_id, title, tuple(groups), open_groups=tuple(groups), icon=icon,
                                     help=help_text, columns=tuple(columns)))
@@ -168,15 +209,18 @@ def build_schema() -> StudioSchema:
     def admit(key: str, candidate: Any, previous: Any) -> Any:
         if key in technical:
             return admit_technical(technical[key], candidate, previous)
+        if key in rainbow:
+            return admit_rainbow(rainbow, key, candidate, previous)
         return controls[key].admit(candidate, previous)
 
     group_icons = {titles[key]: glyph for key, (glyph, _sub) in _BUCKET_PANEL.items() if key in titles}
     group_icons[TECHNICAL_GROUP] = "bars"
+    group_icons[RAINBOW_GROUP] = "gradient"
     return StudioSchema(MODE, "Bubble Studio", tuple(workspaces), tuple(props), admit,
                         group_traces=((titles.get("reactivity", ""), ("Bass", "Mid / High", "Hero Pulse")),
                                       (titles.get("population", ""), ("Bubbles", "Hero Size")),
                                       (titles.get("motion", ""), ("Stream", "Drift"))),
-                        group_icons=tuple(group_icons.items()), object_noun="Bubble")
+                        group_icons=tuple(group_icons.items()), object_noun="Bubble", follow=_follow)
 
 
 # --------------------------------------------------------------------------- inputs
@@ -329,6 +373,14 @@ def simulation_keys() -> frozenset[str]:
                      | {_storage_key(MODE, d) for d in _control_defs_for_mode(MODE)})
 
 
+def presentation_keys() -> tuple[str, ...]:
+    """Settings the presentation reads: the spec's presentation controls and the shared rainbow family."""
+    from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
+    keys = {c.key for c in require_mode_settings(MODE).presentation_controls()}
+    keys |= set(get_owned_mode_setting_keys(MODE, "rainbow").values())
+    return tuple(sorted(keys))
+
+
 # ------------------------------------------------------------------------- evaluator
 class BubbleStudioEvaluator:
     """Own runtime controller and Bubble runtime, stepped deterministically through one fixture's ticks."""
@@ -418,8 +470,7 @@ class BubbleStudioEvaluator:
 
     @staticmethod
     def _presentation_signature(values: Mapping[str, Any]):
-        keys = sorted(c.key for c in require_mode_settings(MODE).presentation_controls())
-        return tuple(repr(values.get(key)) for key in keys)
+        return tuple(repr(values.get(key)) for key in presentation_keys())
 
     def _restyle_controller(self, values: Mapping[str, Any]) -> None:
         from widgets.spotify_visualizer.config_applier import apply_presentation_vis_mode_kwargs
@@ -585,13 +636,20 @@ class BubbleStudioAdapter(StudioModeAdapter):
         from ui.studio.waveform_recorded_inputs import studio_clips
         return studio_clips(recordings_directory())
 
-    # Analysed clips for this process, keyed by clip: the recorded ticks do not depend on Bubble's controls.
+    # Analysed clips for this process, keyed by clip and the Audio Analysis values: the recorded ticks are the
+    # production DSP's answers on the clip's PCM under those values, never dependent on Bubble's authored controls.
     _clip_cache: dict = {}
+
+    def clip_analysis_keys(self) -> frozenset[str]:
+        """The values a recorded clip is re-analysed for (the controller re-runs the worker when they change)."""
+        from ui.studio.technical import technical_keys
+        return technical_keys(MODE)
 
     def start_clip_load(self, clip: StudioFixture, values: Mapping[str, Any], finished):
         from ui.studio.bubble_recorded_inputs import to_inputs
+        from ui.studio.technical import clip_analysis_key
         from ui.studio.waveform_recorded_inputs import ClipLoadJob
-        key = clip.description
+        key = clip_analysis_key(clip, MODE, values)
         cached = BubbleStudioAdapter._clip_cache.get(key)
         if cached is not None:
             finished(cached, "")

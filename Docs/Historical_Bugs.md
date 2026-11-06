@@ -1,6 +1,6 @@
 # Historical Bugs — single archive index
 
-**Updated:** 2026-10-20. **One canonical navigation/status authority:** this file. There is no Historical Bugs folder README.
+**Updated:** 2026-11-06. **One canonical navigation/status authority:** this file. There is no Historical Bugs folder README.
 
 **Admission bar:** retain costly, elusive, multi-tool investigations and architectural, resource, timing, scheduling or performance failures. A quickly fixed one-off UI/test/routing defect is not archival merely because it happened. Historical data records what was true *then*, never an instruction to revive retired QWidget/GL infrastructure. Current behavior is in `Spec.md`, `Docs/Contracts.md`, current reference/guardrail documents and tests. `Current_Plan.md` owns actual remaining work.
 
@@ -93,6 +93,8 @@ The September 10 Sphere acoustic-admission and cohort-motion incident merges fiv
 | [R-150 / Sphere analysis-only DSP, Shockwave shaping audit](Historical_Bugs/R-150_Sphere_Analysis_Only_Shockwave_Shaper_Audit.md) | Sphere/Shockwave accepted | **STRONG** |
 | [R-151 / Same-destination Steam cache publication collision on Windows](Historical_Bugs/R-151_Steam_Cache_Windows_Publication_Race_And_Python314_Timestamps.md) | Steam cache focused gate accepted | **STRONG** |
 | [R-154 / Retired QuickDisplayUnit signal retention and Sphere slot-1 conflict](Historical_Bugs/R-154_Quick_Display_Terminal_Callback_And_Sphere_Slot_Collision.md) | Source repair / physical lifecycle gate open | **STRONG** |
+| [R-167 / 2D Spectrum ghost controls disabled by source projection](Historical_Bugs/R-167_Spectrum_2D_Ghost_Control_Source_Projection.md) | Source repair | Standard |
+| [R-168 / Stale test contracts after R160 mode-owned audio and the R166/R167 ghosts](Historical_Bugs/R-168_Chunk_Gate_Test_Contracts_After_R160_R167.md) | Test-contract repair (kept for the Dev Curve floor note; below the admission bar otherwise) | Standard |
 | [R-169 / GUI stall sampler frame cycle pinned a retiring display](Historical_Bugs/R-169_Stall_Sampler_Frame_Cycle_Pinned_Retiring_Display.md) | Source repair | **STRONG** |
 | [R-170 / Bubble speed changed with card shape; aspect modifiers faked a fix](Historical_Bugs/R-170_Bubble_Shape_Dependent_Speed_And_Aspect_Modifiers.md) | Source repair / operator eyes-on open | **STRONG** |
 | [R-171 / Capture TripleBuffer lost fresh audio every third callback; Spectrum stutter](Historical_Bugs/R-171_Capture_TripleBuffer_Slot_Index_Freshness_Spectrum_Stutter.md) | Source repair / operator eyes-on open | **STRONG** |

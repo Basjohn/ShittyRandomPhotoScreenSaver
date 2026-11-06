@@ -100,9 +100,11 @@ def test_instruments_and_bounds_come_from_the_registry_not_copies():
         elif isinstance(control, Triangle):
             rows = [p for p in schema.properties if p.path[0] == control.key]
             assert all(corner in row.label for corner, row in zip(control.corners, rows))
-    # Group titles are the registry's bucket titles (plus the per-path group and the live View).
+    # Group titles are the registry's bucket titles (plus the per-path group, the live View and Settings'
+    # Technical group, the audio analysis).
+    from ui.studio.technical import TECHNICAL_GROUP
     titles = {bucket.title for bucket in spec().buckets}
-    assert {g for w in schema.workspaces for g in w.groups} == titles | {PATH_GROUP, "View"}
+    assert {g for w in schema.workspaces for g in w.groups} == titles | {PATH_GROUP, "View", TECHNICAL_GROUP}
     # The live view pose is preview-only (saved only through the preset's camera policy).
     view = [p for p in schema.properties if p.group == "View"]
     assert view and all(p.view_pose for p in view)
@@ -113,7 +115,8 @@ def test_headline_controls_lead_and_paths_belong_to_their_scene_objects():
     schema = adapter.schema()
     first = schema.workspaces[0]
     assert first.groups[0] == PATH_GROUP and set(first.open_groups) == set(first.groups)
-    assert adapter.capabilities().as_map() == {"viewport": True, "camera": True, "handles": True, "objects": True}
+    assert adapter.capabilities().as_map() == {"viewport": True, "camera": True, "handles": True, "objects": True,
+                                               "brush": False}
 
     def first_row(group):
         rows = sorted((p for p in schema.properties if p.group == group), key=lambda p: p.priority)
@@ -435,18 +438,19 @@ def _surfaces(store, size=(1100, 640)):
     return factory
 
 
-def test_custom_body_offers_the_studio_and_keeps_closed_buckets_unbuilt(qt_app, dialog_tab, monkeypatch):
+def test_custom_body_offers_the_studio_and_builds_no_control(qt_app, dialog_tab, monkeypatch):
     from ui.studio import settings_link
     _dialog, tab = dialog_tab()
     button = getattr(tab, f"_{MODE}_studio_button")
     assert getattr(tab, f"_{MODE}_settings_container").isAncestorOf(button)
     assert tab._get_visualizer_preset_slider(MODE).isAncestorOf(button)     # in the preset row, every slot
-    built = set(getattr(tab, f"_{MODE}_lazy_built"))
+    from PySide6.QtWidgets import QWidget
+    body = getattr(tab, f"_{MODE}_settings_container")
     calls = []
     monkeypatch.setattr(settings_link, "open_mode_studio", lambda t, m: calls.append((t, m)))
     button.click()
     assert calls == [(tab, MODE)]
-    assert set(getattr(tab, f"_{MODE}_lazy_built")) == built          # the launcher builds no EB bucket
+    assert body.findChildren(QWidget, f"{MODE}_bucket_") == []          # the launcher builds no EB bucket
 
 
 def test_studio_edits_save_through_the_eb_settings_owner_and_close_restores(

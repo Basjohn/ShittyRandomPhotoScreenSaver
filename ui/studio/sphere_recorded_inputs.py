@@ -47,7 +47,7 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
     from PySide6.QtGui import QGuiApplication
     from widgets.spotify_visualizer import sphere_capture
     from widgets.spotify_visualizer.compact_clip import load_feature_clip
-    from widgets.spotify_visualizer.feature_replay import ReplayBeatEngine, deterministic_clock
+    from widgets.spotify_visualizer.feature_replay import deterministic_clock, fed_events, lane_engine
     from widgets.spotify_visualizer.tick_pipeline import logical_tick
     from ui.studio.replay_engine import offline_controller, recorded_answers
     from ui.studio.sphere_adapter import resolved_settings
@@ -75,7 +75,7 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
         return result
 
     with deterministic_clock() as clock, patch.object(sphere_capture, "capture_sphere", recording):
-        engine = ReplayBeatEngine(32)
+        engine = lane_engine(frames)
         controller = offline_controller(engine, MODE, resolved_settings(settings))
         if environment is not None:
             from ui.studio.environment import refresh_backdrop
@@ -93,10 +93,7 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
                 payload = logical_tick(state)
                 if len(records) == before:
                     # No capture this tick: its fed events stay in the scheduler for the next one.
-                    real = feature.real
-                    if real is not None:
-                        current["carried"] += [[feature.timestamp_us / 1e6, e.kind, float(e.strength)]
-                                               for e in real.events]
+                    current["carried"] += fed_events(engine, feature)
                 elif frames_out is not None and payload is not None:
                     frames_out.append((records[-1]["now_ts"], payload))
         finally:

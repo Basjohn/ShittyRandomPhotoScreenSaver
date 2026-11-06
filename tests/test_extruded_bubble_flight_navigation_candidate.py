@@ -91,7 +91,6 @@ def test_input_and_settings_crash_contracts_are_explicit_and_mode_scoped():
     inp = (ROOT/'rendering/runtime_input.py').read_text(encoding='utf-8')
     rt = (ROOT/'rendering/quick/runtime.py').read_text(encoding='utf-8')
     manager = (ROOT/'engine/display_manager.py').read_text(encoding='utf-8')
-    builder = (ROOT/'ui/tabs/media/spec_mode_builder.py').read_text(encoding='utf-8')
     assert 'self._framed_flight_enabled' in inp
     assert 'Qt.Key.Key_Escape:' in inp and 'if key == Qt.Key.Key_Q:\n            return False' in inp
     assert 'self._framed_shift' in inp and 'view_framed_flight_rates_changed.emit' in inp
@@ -105,16 +104,3 @@ def test_input_and_settings_crash_contracts_are_explicit_and_mode_scoped():
     assert "config[position_key] = list(getattr(owner.controller.presentation_state, '_' + position_key))" in manager
     from core.settings.framed_camera import spec_for_mode
     assert spec_for_mode('extruded_bubble').key('camera_position') == 'extruded_bubble_camera_position'
-    # Formatters must exist before branching, and each volume mapper must receive
-    # its admitted value. Exact source-line formatting is not the acceptance gate.
-    import ast
-    tree = ast.parse(builder)
-    fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_build_visual_control')
-    assignments = [(i, n) for i, n in enumerate(fn.body) if isinstance(n, ast.Assign)]
-    formatter_at = next(i for i, n in assignments
-                        if any(isinstance(t, ast.Name) and t.id == 'describe' for t in n.targets)
-                        and isinstance(n.value, ast.Attribute) and n.value.attr == 'text')
-    branch_at = next(i for i, n in enumerate(fn.body) if isinstance(n, ast.If))
-    assert formatter_at < branch_at
-    assert 'widget.setValue(value)' in builder
-    assert 'label = QLabel(describe(widget.value()))' in builder

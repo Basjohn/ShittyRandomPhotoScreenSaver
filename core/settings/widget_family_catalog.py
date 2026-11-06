@@ -7,7 +7,7 @@ Both use this catalog to map a stable ``family_id`` to its member runtime widget
 ids.
 
 This module is the single source of truth for family membership. It imports no
-QWidget/Quick/provider/renderer code — only ``os`` and the neutral
+QWidget/Quick/provider/renderer code — only the neutral
 ``core.dev_gates`` authority — so ``core.settings.capability_activation``,
 Settings SETUP, and the runtime can consult it without dragging in presentation
 or family-implementation modules.
@@ -34,7 +34,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
-import os
 
 from core.dev_gates import gate_signature, is_named_gate_enabled
 
@@ -42,15 +41,10 @@ from core.dev_gates import gate_signature, is_named_gate_enabled
 def _family_env_signature() -> tuple[tuple[str, str | None], ...]:
     """Return the neutral environment signature for family availability."""
 
-    env_names = ("SRPSS_ENABLE_DEV",)
-    signature: list[tuple[str, str | None]] = [
-        (name, os.getenv(name)) for name in env_names
-    ]
-    signature.extend(
+    return tuple(
         (f"gate:{name}", "true" if enabled else "false")
         for name, enabled in gate_signature()
     )
-    return tuple(signature)
 
 
 @dataclass(frozen=True)
@@ -66,15 +60,12 @@ class WidgetFamilyDescriptor:
     # This is the single neutral dependency authority (e.g. Visualizers requires
     # Media); do not scatter per-family ``if family_id == ...`` checks elsewhere.
     required_family_ids: tuple[str, ...] = ()
-    dev_feature_env: str | None = None
     dev_feature_gate: str | None = None
 
     def is_enabled_in_environment(self) -> bool:
         if self.dev_feature_gate:
             return is_named_gate_enabled(self.dev_feature_gate)
-        if not self.dev_feature_env:
-            return True
-        return os.getenv(self.dev_feature_env, "false").lower() == "true"
+        return True
 
 
 WIDGET_FAMILY_DESCRIPTORS: tuple[WidgetFamilyDescriptor, ...] = (

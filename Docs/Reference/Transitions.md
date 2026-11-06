@@ -127,7 +127,7 @@ The open perceptual/freshness work is tracked only in the Physical acceptance ch
 - `rendering/quick/transitions/parameter_resolution.py` resolves settings, direction and seeds once before immutable `TransitionRequest` admission. `state.py` owns monotonic progress/exactly-once completion; effects never create clocks or CPU simulation loops.
 - `implementation_registry.py` lazily resolves implementations; `render_host.py` owns the context-local lifetime and inherited GL-state fence. The existing display render node remains the sole presentation surface.
 - `rendering/quick/transitions/implementations/block_spins.py` and `rendering/gl_programs/blockspin_program.py` prove mesh/depth resources inside Quick. Voxel Sphere is an independent consumer to inspect for small identical resource seams, not a transition foundation or base class.
-- Existing transition tests, `tools/qtquick_render_node_smoke.py` and `tools/qtquick_phase_c_effect_smoke.py` provide production host, endpoint, fence and real-GL seams.
+- Existing transition tests, `tools/qtquick_render_node_smoke.py` and `tools/qtquick_phase_c_effect_smoke.py` provide production host, endpoint, fence and real-GL seams. The render-node smoke calls `show_on_screen()` (a real window): it is an operator-run tool, never an agent probe or test; agents use the offscreen hosts in the transition tests and `tools/overhead_baseline.py` (doc sweep 6 Nov).
 
 ## Resource rules
 
@@ -604,6 +604,54 @@ Each foundation slice adds what it learned here.
 - Raster passes with a physical camera: homogeneous clip from view depth (numerator linear in view position), the
   sky ray from the same right/up/back and tan, and one per-frame CPU view object (`BasinView`) that every CPU
   projection (shafts, beat stars, edit envelope) uses — never a second CPU camera.
+
+**Ember Grain and the deep red ocean preset (EB, 2026-11-06)**
+- An option layered onto an existing shader expression leaves that expression verbatim and adds only the
+  difference in its own branch (`colour += (new - old) * amount`). Rewriting `colour += x` as `smoke = x; ...;
+  colour += smoke` moved 23 pixels by one level in Preset 7 (compiler contraction); the verbatim form is
+  zero-difference against HEAD. Measure the renderer's own noise floor first (two base runs): EB differs by one
+  level on one pixel between identical runs, so judge identity against base-vs-base, not against zero alone.
+- Smooth noise never reads as embers, however it is coloured or thresholded: a thresholded fbm became camouflage
+  blotches. Glowing debris needs structure sized in pixels (1-2 px sparks in ~5 px cells, gathered where the cloud
+  is thick) plus thin along-stream strands, with dark water between them; colour it from the light (a deep
+  smoulder, orange only at hot cores) and let it lean only gently toward the light (burning things glow by
+  themselves).
+- Place a light by projecting it through the preset's own physical camera (Sunlit Surface: the refracted sun,
+  which cannot drop below Snell's window), never by trial renders. A Deep Light just outside the frame still floods
+  that corner with its broad glow lobes, and its fan has no dark gaps; a corner of distinct beams came from Sunlit
+  Surface with Surface Brightness 0 and the sun put just off the corner by the camera turn.
+- An eye inside the tank sees only a few units of water toward a near wall: composition density across the frame
+  is set by the pose, not by population counts. Check visible counts per on-screen band (`eb_screen_stats`) before
+  raising counts.
+- Judge regional colour over several moments of a recording, never one frame: single frames swung warm share by 2x
+  as populations moved.
+
+**Lit Glass, Stream Lanes, Ember Band, Hero Shell (EB deep red ocean, second pass, 2026-11-06)**
+- Size a shell's rim in screen pixels in from the silhouette, `(1 - sqrt(1 - facing^2)) * radiusPx`, never as a
+  band of the facing cosine: a facing band of `k / radiusPx` is about `k^2 / (2 radiusPx)` px wide, sub-pixel on a
+  large shell, and read as a dotted hairline.
+- A lit shell in a field of embers reads as glass by what it mirrors: a crisp pale line plus a string of seeded hot
+  points just inside it (one per ~9 px of circumference, more on the light side) and sparse points on the face. A
+  brighter or wider Fresnel band alone read as a golden marble; filling the interior read as amber.
+- Light added on top of OIT glass (`sceneTransparent(rgb * alpha + light, alpha)`) brightens without adding coverage:
+  the weighted average returns it exactly where one layer covers the pixel.
+- Glitter is a broad glint on tiny beads: the bead glint's lobe exponent at 2-4 px is a few units, so it fills the
+  bead. A lit-glass mode attenuates that glint (a multiplier that is exactly 1.0 at 0, bit-identical) and draws a
+  ring instead; the stream then reads as micro-bubbles.
+- In the near (defocus) layer drop the fine detail and widen lines by the lens circle, but keep the hot points: the
+  lens spreads them into the bokeh discs a defocused lit shell shows. Fine sharp lines in that low-resolution layer
+  stair-step.
+- Shared paths again: gathering chains into lanes, gathering ordinary births and banding the dust all use one axis
+  (the stream's Source -> End midpoint along the stream). Author the band by moving that path, then project it
+  through the preset's camera before rendering.
+- Gathering a population off its inlet faces starts members mid-water: give them a fade over a share of their run
+  (beads: a fifth; shells already fade in from alpha 0), never the wall fade's few radii.
+- A mask that confines a glow to a band removes it from places the goal still lights (embers caught in the beams
+  near the light): let the light's own lobe reopen it, or the shaft corner loses its glitter.
+- Concentrating a population raises local density by the inverse of the kept spread: re-author counts after
+  gathering (P9's small bubbles 110-130 -> 40-60), or the band reads as a crowd.
+- Comparisons of the same inputs on EB are not bit-exact (weighted OIT over thousands of micro-glass fragments):
+  tests compare within its noise floor (max 2 levels, under 1e-4 of pixels), measured, never zero.
 
 ## Operator-triggered appearance review (reference checklist)
 
