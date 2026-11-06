@@ -336,7 +336,7 @@ def test_qml_bloat_prune_contract_is_shared_by_every_product_worker() -> None:
     assert "'QtWebEngine'" in shared
     assert "'QtQuick/Pdf'" in shared
     assert "'QtQuick/VirtualKeyboard'" in shared
-    assert "'QtQuick/Controls'" in shared
+    assert "'QtQuick/Controls/Material'" in shared         # the unused Controls styles (the Studio keeps Basic)
     assert "'QtQuick3D'" in shared
     assert "--noinclude-dlls=*qpdf.dll" in shared
     assert "*Qt6WebEngine*.dll" in shared
@@ -381,7 +381,8 @@ def test_qml_prune_arguments_keep_authored_qtquick_effects_and_drop_unused_famil
     assert "PySide6/qml/QtWebEngine/**" in prune
     assert "PySide6/qml/QtQuick/Pdf/**" in prune
     assert "PySide6/qml/QtQuick/VirtualKeyboard/**" in prune
-    assert "PySide6/qml/QtQuick/Controls/**" in prune
+    assert "PySide6/qml/QtQuick/Controls/Material/**" in prune
+    assert "PySide6/qml/QtQuick/Controls/**" not in prune     # the Studio's Controls.Basic closure stays
     assert "*qpdf.dll" in prune
     assert "*Qt6WebEngine*.dll" in prune
     assert "*Qt6Pdf*.dll" in prune
@@ -548,6 +549,87 @@ def test_qml_import_contract_flags_a_new_namespace_and_reads_the_build_allowlist
     assert violations(tmp_path) == []
     (tmp_path / "New.qml").write_text("import QtQuick\nimport QtQml.Models\nItem {}\n", encoding="utf-8")
     assert len(violations(tmp_path)) == 1 and violations(tmp_path)[0].endswith("QtQml.Models")
+
+
+def _qml_prune_rules() -> tuple[list[str], list[str]]:
+    """(pruned PySide6/qml families, pruned DLL basename patterns) from the build's own prune function."""
+    result = _run_layout_command(
+        """
+. $env:SRPSS_LAYOUT_SCRIPT
+@(Get-SRPSSNuitkaQmlPruneArguments -RepoRoot $env:SRPSS_REPO_ROOT) -join "`n"
+""",
+        repo_root=REPO_ROOT,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    families, dlls = [], []
+    for line in result.stdout.replace("\\", "/").splitlines():
+        if line.startswith("--noinclude-data-files=PySide6/qml/"):
+            families.append(line.split("PySide6/qml/", 1)[1].removesuffix("/**"))
+        elif line.startswith("--noinclude-dlls=") and "PySide6/qml/" not in line:
+            dlls.append(line.split("=", 1)[1])
+    return families, dlls
+
+
+def _qml_closure_losses(families: list[str], dll_patterns: list[str]) -> list[str]:
+    """What the prune rules would remove from the closure of every Qt namespace the shipped QML imports: module
+    directories (through each qmldir's ``depends`` / ``import`` / ``default import`` and the module's own QML imports)
+    and their plugin DLLs with the Qt6 DLLs those link (read from the import table strings)."""
+    import fnmatch
+    import re
+    import PySide6
+    from tools.qml_import_contract import qt_imports
+    package = Path(PySide6.__file__).resolve().parent
+    qml_dir = package / "qml"
+    pending = list(qt_imports())
+    seen_modules, seen_dlls, losses = set(), set(), []
+    dll_queue: list[Path] = []
+    while pending:
+        namespace = pending.pop()
+        if namespace in seen_modules:
+            continue
+        seen_modules.add(namespace)
+        relative = namespace.replace(".", "/")
+        module = qml_dir / relative
+        if any(relative == family or relative.startswith(family + "/") for family in families):
+            losses.append(f"QML module {namespace} is pruned")
+        qmldir = module / "qmldir"
+        if not qmldir.is_file():
+            continue            # QtQuick itself is built into the Qt6Quick binding, not a qml/ module directory
+        for line in qmldir.read_text(encoding="utf-8").splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[0] in ("depends", "import"):
+                pending.append(parts[1])
+            elif len(parts) >= 3 and parts[:2] == ["default", "import"]:
+                pending.append(parts[2])
+        for qml in module.glob("*.qml"):        # its own files: sub-directories are modules of their own
+            for match in re.finditer(r"^\s*import\s+(Qt[A-Za-z0-9_.]+)", qml.read_text(encoding="utf-8"), re.M):
+                pending.append(match.group(1))
+        dll_queue.extend(module.glob("*.dll"))
+    while dll_queue:
+        dll = dll_queue.pop()
+        if dll.name.lower() in seen_dlls:
+            continue
+        seen_dlls.add(dll.name.lower())
+        if any(fnmatch.fnmatch(dll.name, pattern) for pattern in dll_patterns):
+            losses.append(f"DLL {dll.name} is pruned")
+        for name in set(re.findall(rb"Qt6[A-Za-z0-9]+\.dll", dll.read_bytes())):
+            linked = package / name.decode()
+            if linked.is_file():
+                dll_queue.append(linked)
+    return losses
+
+
+def test_every_shipped_qml_import_survives_the_frozen_prune() -> None:
+    """6 Nov: frozen builds could not open any Studio ("module QtQuick.Controls.Basic is not installed"): the prune
+    removed QtQuick/Controls, Templates and Shapes, which the Studio's QML needs. Walk the closure of every Qt import
+    the shipped QML (saver scene and Studio) makes and prove the build keeps all of it."""
+    families, dlls = _qml_prune_rules()
+    assert _qml_closure_losses(families, dlls) == []
+    # Negative control: the former prune of the whole Controls family loses the Studio's modules and DLLs.
+    losses = _qml_closure_losses(families + ["QtQuick/Controls", "QtQuick/Templates"],
+                                 dlls + ["*Qt6QuickControls2*.dll", "*Qt6QuickTemplates2*.dll"])
+    assert any("QtQuick.Controls.Basic" in loss for loss in losses)
+    assert any("Qt6QuickTemplates2" in loss for loss in losses)
 
 
 def test_every_pytest_session_fails_on_a_qml_import_outside_the_build_allowlist() -> None:
