@@ -11,6 +11,7 @@ registry.
 from __future__ import annotations
 
 import math
+import struct
 from array import array
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, fields, is_dataclass
@@ -175,6 +176,92 @@ def freeze_render_fields(
             raise ValueError(f"duplicate render field: {name}")
         frozen[name] = freeze_render_value(value)
     return FrozenFields._from_frozen_entries(tuple(sorted(frozen.items())))
+
+
+def wake_record_bytes(values: Sequence[float]) -> bytes:
+    """The float32 native bytes of a float sequence: exactly ``array("f", values).tobytes()``, packed by ``struct``
+    (about twice as fast for the thousands of wake floats a tick carries). A value ``struct`` refuses (out of
+    float32 range, not a number) takes the ``array`` path, so the outcome, error or bytes, is the same."""
+    try:
+        return struct.pack(f"{len(values)}f", *values)
+    except (OverflowError, struct.error):
+        return array("f", values).tobytes()
+
+
+_PLAIN_IMMUTABLE = (int, str, bytes, bool, type(None))
+
+
+def strictly_equal_render_value(a: object, b: object) -> bool:
+    """Whether ``a`` and ``b`` are the same immutable value as far as ``freeze_render_value`` can tell them apart:
+    same type all the way down, equal, and floats with the same sign of zero. Only plain scalars, tuples of them
+    and ``FrozenFields`` (by identity) ever qualify; anything mutable, or NaN, never does."""
+    kind = type(a)
+    if kind is not type(b):
+        return False
+    if kind is float:
+        return a == b and (a != 0.0 or math.copysign(1.0, a) == math.copysign(1.0, b))
+    if kind in _PLAIN_IMMUTABLE:
+        return a is b or a == b
+    if kind is tuple:
+        return len(a) == len(b) and all(map(strictly_equal_render_value, a, b))
+    return kind is FrozenFields and a is b
+
+
+class FrozenFieldsMemo:
+    """``freeze_render_fields`` for an owner that freezes much the same fields on every logical tick.
+
+    A field whose value is strictly equal (``strictly_equal_render_value``) to the one it had last time keeps last
+    time's frozen value, and when no field changed the very same ``FrozenFields`` is returned. The result always
+    equals freezing afresh; only the repeated work disappears. A different set or order of field names starts over.
+    Single-threaded: one memo per capture owner (the logical thread's mode runtime).
+    """
+
+    __slots__ = ("_keys", "_order", "_raw", "_frozen", "_result")
+
+    def __init__(self) -> None:
+        self._keys: tuple | None = None
+        self._order: tuple[tuple[str, object], ...] = ()     # (name, key) in name order
+        self._raw: dict = {}
+        self._frozen: dict = {}
+        self._result: FrozenFields | None = None
+
+    def freeze(self, values: Mapping[str, object]) -> FrozenFields:
+        keys = tuple(values)
+        if keys != self._keys:
+            return self._rebuild(keys, values)
+        raw, frozen = self._raw, self._frozen
+        changed = False
+        try:
+            for _name, key in self._order:
+                value = values[key]
+                if not strictly_equal_render_value(value, raw[key]):
+                    frozen[key] = freeze_render_value(value)
+                    changed = True
+                raw[key] = value
+        except BaseException:
+            self._keys = None        # a value freezing refused: the next call starts over
+            raise
+        if changed or self._result is None:
+            self._result = FrozenFields._from_frozen_entries(tuple((name, frozen[key]) for name, key in self._order))
+        return self._result
+
+    def _rebuild(self, keys: tuple, values: Mapping[str, object]) -> FrozenFields:
+        self._keys = None            # a failure below leaves no half-built memo behind
+        frozen: dict = {}
+        names: dict[str, object] = {}
+        for key, value in values.items():
+            name = str(key).strip()
+            if not name:
+                raise ValueError("render field names must not be empty")
+            if name in names:
+                raise ValueError(f"duplicate render field: {name}")
+            names[name] = key
+            frozen[key] = freeze_render_value(value)
+        self._order = tuple(sorted(names.items()))
+        self._raw, self._frozen = dict(values), frozen
+        self._result = FrozenFields._from_frozen_entries(tuple((name, frozen[key]) for name, key in self._order))
+        self._keys = keys
+        return self._result
 
 
 def _float_tuple(values: Sequence[object], *, name: str) -> tuple[float, ...]:
