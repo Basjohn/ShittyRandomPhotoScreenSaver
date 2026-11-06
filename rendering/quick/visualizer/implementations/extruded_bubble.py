@@ -267,7 +267,7 @@ def _common(knobs, *, view_to_world, tan, time, surface_travel, rays, streak, ey
         "uGlow": float(knobs.get("glow", 1.0)), "uRays": float(rays) * float(knobs["light_strength"]),
         "uMist": float(knobs.get("mist", 0.0)),
         "uSurfaceGain": float(knobs.get("surface_gain", 1.0)), "uSurfaceSky": float(knobs.get("surface_sky", 1.0)),
-        "uDust": float(knobs.get("dust", 0.0)), "uFloor": (float(knobs.get("floor", 0.0)), float(WORLD_CENTER[1] - WORLD_HALF[1] - 4.0)), "uShaftWhite": float(knobs.get("shaft_white", 0.35)), "uRayFocus": float(knobs.get("ray_focus", 0.0)), "uRayCut": float(knobs.get("ray_cut", 0.25)),
+        "uDust": float(knobs.get("dust", 0.0)), "uEmberGrain": float(knobs.get("ember_grain", 0.0)), "uFloor": (float(knobs.get("floor", 0.0)), float(WORLD_CENTER[1] - WORLD_HALF[1] - 4.0)), "uShaftWhite": float(knobs.get("shaft_white", 0.35)), "uRayFocus": float(knobs.get("ray_focus", 0.0)), "uRayCut": float(knobs.get("ray_cut", 0.25)),
         "uShaftScale": float(knobs.get("shaft_scale", 1.0)), "uShaftSoft": float(knobs.get("shaft_soft", 0.0)),
         "uSurfaceShaft": float(knobs["surface_shaft"]),
         "uShaftFan": float(knobs.get("shaft_fan",0.0)), "uFanRays": float(knobs["fan_rays"]),

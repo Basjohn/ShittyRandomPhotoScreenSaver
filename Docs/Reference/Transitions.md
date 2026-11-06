@@ -605,6 +605,27 @@ Each foundation slice adds what it learned here.
   sky ray from the same right/up/back and tan, and one per-frame CPU view object (`BasinView`) that every CPU
   projection (shafts, beat stars, edit envelope) uses — never a second CPU camera.
 
+**Ember Grain and the deep red ocean preset (EB, 2026-11-06)**
+- An option layered onto an existing shader expression leaves that expression verbatim and adds only the
+  difference in its own branch (`colour += (new - old) * amount`). Rewriting `colour += x` as `smoke = x; ...;
+  colour += smoke` moved 23 pixels by one level in Preset 7 (compiler contraction); the verbatim form is
+  zero-difference against HEAD. Measure the renderer's own noise floor first (two base runs): EB differs by one
+  level on one pixel between identical runs, so judge identity against base-vs-base, not against zero alone.
+- Smooth noise never reads as embers, however it is coloured or thresholded: a thresholded fbm became camouflage
+  blotches. Glowing debris needs structure sized in pixels (1-2 px sparks in ~5 px cells, gathered where the cloud
+  is thick) plus thin along-stream strands, with dark water between them; colour it from the light (a deep
+  smoulder, orange only at hot cores) and let it lean only gently toward the light (burning things glow by
+  themselves).
+- Place a light by projecting it through the preset's own physical camera (Sunlit Surface: the refracted sun,
+  which cannot drop below Snell's window), never by trial renders. A Deep Light just outside the frame still floods
+  that corner with its broad glow lobes, and its fan has no dark gaps; a corner of distinct beams came from Sunlit
+  Surface with Surface Brightness 0 and the sun put just off the corner by the camera turn.
+- An eye inside the tank sees only a few units of water toward a near wall: composition density across the frame
+  is set by the pose, not by population counts. Check visible counts per on-screen band (`eb_screen_stats`) before
+  raising counts.
+- Judge regional colour over several moments of a recording, never one frame: single frames swung warm share by 2x
+  as populations moved.
+
 ## Operator-triggered appearance review (reference checklist)
 
 Automated image differences are not aesthetic acceptance. Previously implemented work is operator-accepted; use the following reference checks **only if** a newly observed regression or new transition tranche requires targeted appearance review:
