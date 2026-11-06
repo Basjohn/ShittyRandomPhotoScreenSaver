@@ -198,6 +198,9 @@ is optional and defaults to "not offered":
   edits (Extend Toward Horizon, Reset Terrain) on the authored heightfield. The heightfield itself is painted only by
   Settings' terrain brush: the shared shell has no brush instrument, so the Studio carries the record (undo, save,
   Save To <Preset>) through an `instrument_only` schema marker and does not author its cells.
+- **Conditions.** A property's `when` terms must all hold, its `when_any` terms at least one (Settings' former OR
+  rules, e.g. Bubble's particle rows while any population is on); `ui/studio/schema.condition_hidden` is the one
+  evaluation the bridge's `conditionHidden` uses.
 - **Switch rows.** Every boolean control is the shell's one `SwitchRow` (an `Item`: a `Row` ignores the `x` of its
   children, which once pushed the click area past the label and made every switch unclickable, 6 Nov). A row whose
   `when` condition fails is hidden (`conditionHidden`). `tests/test_studio_switch_rows_click.py` clicks the rendered rows
@@ -224,7 +227,8 @@ is optional and defaults to "not offered":
   mapping for 2D); an `"xy"` handle is one undoable two-axis move.
 
 Every adapter carries a registry-derived full-coverage test (every canonical control reachable), a production-parity
-preview test and a Settings round-trip test; see `Docs/TestSuite.md` → Visualizer Studio. A property whose path the
+preview test and a Settings round-trip test, and is covered by the shared parity+ test
+(`tests/test_visualizer_studio_parity.py`); see `Docs/TestSuite.md` → Visualizer Studio. A property whose path the
 current values do not hold (an unused optional element, such as a curve-node slot) is hidden.
 
 ### Drags are batched
@@ -247,13 +251,24 @@ release replay spreads over frames within the budget (one 222 ms evaluation -> a
 
 ## 4. Settings link and the restore guarantee
 
-- **Entry.** `ui/tabs/media/spec_mode_builder.py` gives any spec-built mode with a registered adapter an **Open Studio**
-  button in its preset row (`VisualizerPresetSlider.set_studio_launcher`, where Edit Preset was), so it is offered on
-  every curated preset and on Custom alike; there is no second launcher in the Custom body. Opened on a curated preset,
-  the Studio shows that preset. A mode whose every control is Studio-edited uses `build_studio_owned_mode_ui`: its
-  body is only the preset row and one sentence. Its values live in the section-lazy cache with nothing ever
-  built, and the technical (audio-analysis) controls keep their canonical widgets as value owners in a never-shown
-  holder, so load/collect/save, preset switching and Custom snapshots run through unchanged owners.
+- **Entry.** Every visualizer mode's Settings body is `build_studio_owned_mode_ui` (`ui/tabs/media/spec_mode_builder.py`,
+  operator 6 Nov: migrate fully once each Studio has parity+): the preset row with its **OPEN STUDIO** button
+  (`VisualizerPresetSlider.set_studio_launcher`, where Edit Preset was; offered on every curated preset and on Custom
+  alike) and one sentence. Opened on a curated preset, the Studio shows that preset. The body's values (`body_keys`: the
+  bucketed controls, each Custom row's keys and the bucketless controls a Custom row edits) live in the section-lazy
+  cache `_<prefix>_lazy_values`, admitted as the model admits them, with nothing built; the technical (audio-analysis)
+  controls and the page's shared Bar Appearance / Rainbow rows keep their canonical widgets as value owners in the
+  body's never-shown holder, so load/collect/save, preset switching and Custom snapshots run through unchanged owners.
+  The one Settings control without a Studio home is Neon Lake's terrain brush: the Studio carries the heightfield (undo,
+  save, Extend Toward Horizon, Reset Terrain) but has no brush instrument, so Neon Lake's body keeps that section
+  (`settings_sections=("terrain",)`: the spec Custom's own build / load / collect hooks).
+- **Parity+ proof.** `tests/test_visualizer_studio_parity.py` derives every mode (each descriptor with a registered
+  adapter) and every control from the registries: spec bucket entries and Custom-row keys, the offered technical
+  controls, and the shared families (Rainbow wherever owned; Bar Appearance where the mode `draws_bars`), each a Studio
+  property with the registry's range, choices and condition; every preset-row control has a Studio action; plain and
+  Custom-row edits through the bridge save and reload through a never-shown `VisualizersTab`; conditional rows hide
+  live; negative controls drop a property per category. Before the flip it also proved each Studio against the body
+  users had (every row the body collected and every row its spec and hand-written conditions hid; commit `db7468ab`).
 - **Canonical save.** `VisualizerSettingsStore.commit` loads the values into the mode body with signals blocked, then
   runs the tab's own `_force_visualizer_preset_to_custom` and `_save_settings_now`. The mode's shared families that
   Settings keeps outside the mode body (bar Fill / Border / Border Opacity, the per-mode rainbow toggle and speed)
@@ -321,4 +336,6 @@ evaluation timings. It never shows a window. Command examples live in `Docs/Refe
    framed 3D modes reuse `ui/studio/framed.py` and the shared framed camera (`core/settings/framed_camera.py`).
 3. Register one line in `ui/studio/registry.py`.
 4. Add the coverage, parity and Settings round-trip tests; render evidence with the capture tool.
-5. Replace the mode's builder body with `build_studio_owned_mode_ui` only after operator acceptance of that Studio.
+5. The mode's builder is `build_studio_owned_mode_ui` with one plain sentence; `tests/test_visualizer_studio_parity.py`
+   must pass for it (a Settings control with no sensible Studio home stays a `settings_sections` entry, reported to the
+   operator).

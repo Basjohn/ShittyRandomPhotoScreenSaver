@@ -1,11 +1,11 @@
-"""Lazy Settings body for the Oscilloscope visualizer, built from its spec
-(``core/settings/visualizer_mode_settings.py``)."""
-from __future__ import annotations
+"""Oscilloscope's Settings body: the preset row and the Oscilloscope Studio launcher.
 
-from ui.tabs.media.spec_mode_builder import build_spec_mode_ui
+Every Oscilloscope control (including its audio analysis) is edited in the Studio, which has parity+ with the retired
+buckets (``tests/test_visualizer_studio_parity.py`` proves it from the registries)."""
+from ui.tabs.media.spec_mode_builder import build_studio_owned_mode_ui
+
+INTRO = "The trace, the beam and how it reacts are all edited live in the Studio."
 
 
 def build_oscilloscope_ui(tab, parent_layout) -> None:
-    """Build Oscilloscope's body and its consumed technical profile."""
-
-    build_spec_mode_ui(tab, parent_layout, "oscilloscope")
+    build_studio_owned_mode_ui(tab, parent_layout, "oscilloscope", INTRO)

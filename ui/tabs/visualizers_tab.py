@@ -461,7 +461,10 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
             widget.setParent(mode_page)
 
     def _place_custom_accessories(self, mode_id: str) -> None:
-        """Place stable Custom buckets inside the selected mode's normal controls."""
+        """Place the stable shared-family rows (Bar Appearance, Rainbow) with the selected mode's value owners.
+
+        Every mode is edited in its Studio, which edits these families too, so the mode's normal controls sit in
+        the body's never-shown value holder: the rows are value owners only and never appear on the page."""
         self._park_custom_accessories()
         normal_attr = _MODE_NORMAL_ATTR.get(str(mode_id or "").strip().lower())
         normal_widget = getattr(self, normal_attr, None) if normal_attr else None
@@ -471,11 +474,9 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
                 f"Visualizer mode {mode_id!r} has no Custom normal-layout for accessories"
             )
 
-        if mode_id in {"spectrum", "extruded_spectrum"}:
-            if mode_id == "extruded_spectrum":
-                normal_layout.insertWidget(0, self._base_appearance_group)
-            else:
-                normal_layout.addWidget(self._base_appearance_group)
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+        if get_visualizer_mode_descriptor(mode_id).draws_bars:
+            normal_layout.addWidget(self._base_appearance_group)
             shared_styles.set_bucket_toggle_checked(
                 self._base_appearance_toggle,
                 self.get_visualizer_bucket_state(mode_id, "bar_appearance"),
@@ -746,8 +747,6 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
                 break
         body.hide()
         self._mode_body_layout.removeWidget(body)
-        from ui.tabs.media.spec_mode_builder import retire_spec_mode_conditions
-        retire_spec_mode_conditions(self, mode_id)
 
         # Technical controls use one shared mode-indexed store, so retire only
         # this mode's entry rather than deleting the store for other live bodies.

@@ -43,43 +43,6 @@ def test_bad_nodes_use_the_single_canonical_default(value):
 
 
 @pytest.mark.qt
-def test_node_gesture_selects_custom_and_undo_restores_recipe_nodes_and_disclosure(body):
-    tab, manager, config = body
-    points = [.2, .8, .8, .2]
-    load_bubble_mode_settings(tab, {**config, 'bubble_gradient_direction': 'top_right',
-                                   'bubble_gradient_semantics_version': 2,
-                                   'bubble_gradient_endpoints': points})
-    assert not hasattr(tab.bubble_gradient_direction, 'direction_mapper')
-    editor = tab.bubble_gradient_endpoints
-    owner = SettingsUndo(tab)
-    assert not owner.can_undo
-    editor.setFocus()
-    QTest.keyClick(editor, Qt.Key.Key_Right)
-    tab._flush_pending_visualizer_save()
-    changed = editor.value()
-    assert changed != tuple(points) and owner.can_undo
-    assert tab.bubble_gradient_direction.currentData() == 'custom'
-    saved = manager.get('widgets', {})['spotify_visualizer']
-    assert saved['bubble_gradient_direction'] == 'custom'
-    assert saved['bubble_gradient_endpoints'] == list(changed)
-    # A programmatic recipe change is not a user gesture. It must not destroy
-    # latent custom nodes or leave disclosure stale when the node edit is undone.
-    tab.bubble_gradient_direction.setCurrentIndex(tab.bubble_gradient_direction.findData('center_out'))
-    assert tab._bubble_rows['bubble_gradient_endpoints'].isHidden()
-    assert editor.value() == changed
-    assert owner.undo()
-    tab._flush_pending_visualizer_save()
-    assert editor.value() == tuple(points)
-    assert tab.bubble_gradient_direction.currentData() == 'top_right'
-    assert not tab._bubble_rows['bubble_gradient_endpoints'].isHidden()
-    assert not owner.can_undo and owner.can_redo
-    assert owner.redo()
-    tab._flush_pending_visualizer_save()
-    assert editor.value() == changed and tab.bubble_gradient_direction.currentData() == 'custom'
-    assert owner.can_undo and not owner.can_redo
-
-
-@pytest.mark.qt
 def test_recipe_switch_and_hydration_preserve_latent_custom_nodes_without_undo(body):
     tab, _manager, config = body
     points = [.1, .7, .6, .2]
