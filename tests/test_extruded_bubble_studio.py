@@ -100,9 +100,11 @@ def test_instruments_and_bounds_come_from_the_registry_not_copies():
         elif isinstance(control, Triangle):
             rows = [p for p in schema.properties if p.path[0] == control.key]
             assert all(corner in row.label for corner, row in zip(control.corners, rows))
-    # Group titles are the registry's bucket titles (plus the per-path group and the live View).
+    # Group titles are the registry's bucket titles (plus the per-path group, the live View and Settings'
+    # Technical group, the audio analysis).
+    from ui.studio.technical import TECHNICAL_GROUP
     titles = {bucket.title for bucket in spec().buckets}
-    assert {g for w in schema.workspaces for g in w.groups} == titles | {PATH_GROUP, "View"}
+    assert {g for w in schema.workspaces for g in w.groups} == titles | {PATH_GROUP, "View", TECHNICAL_GROUP}
     # The live view pose is preview-only (saved only through the preset's camera policy).
     view = [p for p in schema.properties if p.group == "View"]
     assert view and all(p.view_pose for p in view)
