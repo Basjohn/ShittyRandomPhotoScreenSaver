@@ -1,5 +1,5 @@
 """Floor Clearance options (operator, 5 Nov): Dynamic Height Shift (the eased whole-ribbon lift, default), Static Height
-(every ribbon holds its own constant height, STATIC_HEIGHT_LIFT) and, with the dynamic shift, Tilt Shift (the side the
+(every ribbon holds the highest point the shift would reach) and, with the dynamic shift, Tilt Shift (the side the
 history travels toward moves first). Test-owned controls only; structure, never authored values."""
 from dataclasses import replace
 import numpy as np
@@ -26,7 +26,7 @@ def rest_heights(frames):
     return [[y for y, _ in frame] for frame in frames]
 
 
-def test_static_height_holds_one_constant_lift():
+def test_static_height_holds_one_constant_lift_at_the_top_of_the_shift():
     model = configured(height_mode='Static Height')
     run(model, 270)
     lifts = []
@@ -35,10 +35,12 @@ def test_static_height_holds_one_constant_lift():
             model.advance(1/90, **(LOUD if loud else QUIET))
             lifts.append(model._trough_lift.copy())
     lifts = np.asarray(lifts)[:, :, 0]
-    # Constant through loud and quiet passages, the same for every ribbon, at Static Height's own constant (the dynamic
-    # shift may now rise higher: its limit covers swell troughs, test_waveform_floor_lift_clears_swells).
+    # Constant through loud and quiet passages, the same for every ribbon, and at least what the dynamic shift reaches.
     assert np.ptp(lifts) < 1e-6
-    assert abs(lifts[0, 0]-dyn.STATIC_HEIGHT_LIFT) < 1e-6
+    dynamic = configured()
+    run(dynamic, 540)
+    assert lifts[0, 0] > 0. and lifts[0, 0] >= dynamic._trough_lift.max()-1e-9
+    assert abs(lifts[0, 0]-dyn.TROUGH_LIFT_MAX) < 1e-6
 
 
 def test_switching_floor_clearance_live_eases_instead_of_jumping():
