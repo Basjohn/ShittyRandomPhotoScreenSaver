@@ -520,32 +520,41 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   so DevCurve's preset row now shows Open Studio and no Edit Preset). Evidence `.artifacts/evidence/devcurve/studio/`
   (Deep Blue on Rag Doll, Neon Skyline on Human: every workspace with the live traces, plus the node rows). Operator
   to judge: the per-layer Body / Accent / Swell traces as the way to read the reworked reactivity, the Layers
-  workspace (one panel per layer), and whether the Audio Analysis group earns its place (in the replay only Bar Count
-  and the noise floor change what the engine answers DevCurve, and nothing DevCurve draws). The builder body is
-  replaced with `build_studio_owned_mode_ui` only on acceptance.
+  workspace (one panel per layer), and whether the Audio Analysis group earns its place (re-analysed from PCM through the
+  production DSP, every offered control moves DevCurve's frame; AGC Strength and Output Lift read nothing and are now
+  hidden: `Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode). The builder body is replaced with
+  `build_studio_owned_mode_ui` only on acceptance.
 - [ ] **Oscilloscope Studio built (6 Nov), awaiting operator acceptance** (`ui/studio/oscilloscope_adapter.py`,
   registered). Evidence `.artifacts/evidence/oscilloscope/studio/` (Preset 1 Phosphor on Human, Preset 3 Lissajous on
   Rag Doll: every workspace with the live traces). Recorded engine answers with the capture history recorded by
   identity (binary sidecar; `Docs/Reference/Visualizer_Studio.md` §3). Operator to judge: Level / Afterglow / Ghosts /
   Flare / Drive / Tone as the way to read the beam, the three workspaces, and whether the Audio Analysis group earns
-  its place (in the replay only Bar Count and the noise floor change what the engine answers Oscilloscope; Sensitivity,
-  Input Gain, Block Size and Use Recommended Sensitivity change nothing it reads, since it draws the raw capture
-  history: confirm against the live engine before removing anything). The builder body is replaced with
+  its place (re-analysed from PCM through the production DSP, every offered control moves Flare and Drive, and Bar Count,
+  Block Size and Input Gain also move Tone: the trace itself is the raw capture, but the beam's reactions are not;
+  `Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode). The builder body is replaced with
   `build_studio_owned_mode_ui` only on acceptance.
+- [ ] **Studio replay understates Audio Analysis (found 6 Nov):** the engine-processed Studios serve the clip's *recorded*
+  post-DSP lanes (`ReplayBeatEngine`; only the Spectrum family's bars are re-shaped from PCM), so editing Sensitivity,
+  the floors, Gain or Block Size in the DevCurve, Oscilloscope, Bubble, Extruded Bubble or Sphere Studio (and Neon
+  Lake's onset waves) changes little or nothing on screen while the live engine changes Flare, Drive, onsets and the
+  curves. The audit's
+  `ProductionLaneEngine` (`tools/visualizer_replay/analysis_controls_audit.py`: per-frame PCM through
+  `compute_bars_from_samples`, production getters) is the candidate: promote it to `feature_replay`, use it in
+  `engine_answers.extract` for modes with engine-owned analysis, and re-prove the parity tests. It takes one analysis
+  block per 11 ms tick where live analyses every capture callback, so absolute levels approximate; measure the worker's
+  cost on the shipped clips first.
 - [ ] **Edit Preset deleted (6 Nov)**: every visualizer mode now has a Studio, so the preset row's Edit Preset button,
   `_open_preset_json` and its pop-up are gone (`ui/tabs/media/preset_slider.py`); curated presets are authored with
   Open Studio and the Studio's confirmed Save To <Preset> (`Docs/Reference/Visualizer_Studio.md` §4).
   `tools/flicker_test.py` keeps its own historical mock of the old row. Operator look pending: Open Studio's place in
   the preset row and the Save To flow.
 - [ ] **Operator side requests (6 Nov, "important eventually"; queue after the running work):**
-  - **Bar Count outside Spectrum:** it reads out of place on other modes. Audit per mode what the engine's bar count
-    actually feeds (the DevCurve and Oscilloscope Studio replays found only Bar Count and the noise floor change what
-    the engine answers them; Sensitivity / Input Gain / Block Size / Use Recommended Sensitivity changed nothing they
-    read). Keep it only where a mode demonstrably depends on it (show the dependency), hide it elsewhere; the same
-    question for the rest of the Audio Analysis group per mode, checked against the live engine.
-  - **Tilt Shift cannot be toggled:** every curated Waveform preset has Floor Clearance = Dynamic Height Shift (its
-    `when` condition), so the toggle should be live. Reproduce in Settings and the Studio, fix the owner, and test the
-    real dialog with a negative control.
+  - **Bar Count outside Spectrum (operator decision):** audited 6 Nov (`Docs/Reference/Visualizer_Reference.md` → Audio
+    Analysis controls per mode): outside Spectrum and Extruded Spectrum it is analysis resolution, not a drawn count,
+    yet it moves every mode's frame (Neon Lake waves, Oscilloscope Flare / Drive, Bubble, Extruded Bubble, Sphere,
+    DevCurve, Waveform), so nothing was hidden. Decide whether to hide it on Oscilloscope, Bubble, Extruded Bubble,
+    DevCurve and Waveform (`technical_hidden_suffixes` in the descriptor; stored values keep applying, so no look
+    changes) and keep it on Spectrum, Extruded Spectrum, Neon Lake and Voxel Sphere (its Analysis Bands).
   - **Waveform travel speed:** History Speed (`flow_speed`, 0.8-2.4, Flow bucket) and Pulse Speed exist but the
     operator did not find them; there is no travel-speed reactivity. Make them findable (name / workspace / tooltip)
     and consider a quiet -> peak History Speed under the flow rule (music pushes history faster, smoothly; knot spacing
