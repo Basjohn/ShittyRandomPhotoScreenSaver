@@ -220,6 +220,13 @@ The native mode is stateful but simple. Avoid compositor churn.
 
 No post-show retries, zero-delay timers, stylesheet replay, event-loop pumping or repeated native calls are part of this contract.
 
+The mode -> AccentPolicy mapping is one function, `core/windows/dwm_blur.py:apply_backdrop`, called by Settings'
+backdrop owner and by the Visualizer Studio's frameless window (`ui/studio/surface.py`), which carries the active
+theme's material the same way (applied once on first show; Normal makes no call). The Studio window is a Qt Quick
+(OpenGL, alpha surface) top-level rather than a layered QWidget HWND, so its composition is not covered by the
+physical validation of the Settings HWND: it awaits its own physical Default Dark / Acrylic / Glass smoke
+(`Current_Plan.md` §9). The forged edge painter is likewise shared (`ui/settings_window_edge.py`, below).
+
 ## Non-Windows material underlay
 
 Native Glass/Acrylic exist only on Windows. On every other platform the dialog's backdrop owner
@@ -256,7 +263,9 @@ A future move to DWM system backdrops is an **architecture change**, not a theme
 
 `ui/settings_theme.py`, `ui/tabs/shared_styles.py` and component renderers own selector/geometry application while ThemeSpec owns visual values. Typography, spacing, radii, dimensions and behavior stay renderer-owned unless deliberately promoted into the schema.
 
-The forged Settings outer edge/corner remains renderer-owned in `ui/settings_dialog.py`. Its geometry is fragile and is **not** theme data. Camouflage colour follows the adjacent semantic shell surface; do not independently theme it.
+The forged Settings outer edge/corner remains renderer-owned: its geometry and painter live in
+`ui/settings_window_edge.py` (`paint_forged_window_edge`), called by `SettingsDialog.paintEvent` and by the Studio's
+frameless window, never copied. Its geometry is fragile and is **not** theme data. Camouflage colour follows the adjacent semantic shell surface; do not independently theme it.
 
 Settings shadows remain under `ui/widgets/control_shadow.py`; ThemeSpec supplies their semantic visual parameters. Runtime screensaver widget shadow authority is separate.
 

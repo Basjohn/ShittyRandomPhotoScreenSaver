@@ -4,6 +4,7 @@
 // renderer under the `viewportSlot` item.
 import QtQuick
 import QtQuick.Controls.Basic as C
+import SRPSS.StudioChrome 1.0
 
 Rectangle {
     id: shell
@@ -39,6 +40,14 @@ Rectangle {
     readonly property color cTrace1: tc("trace1", "#9a7cff")
     readonly property color cTrace2: tc("trace2", "#b8b8c0")
     readonly property color cTrace3: tc("trace3", "#6aa9d9")
+    // Instrument wells (trace cards, the response curve, the transport bar) and the inks checked on them
+    // (ui/studio/theme.py): the viewport tone on a dark theme, the theme's input surface on a light one.
+    readonly property color cWell: tc("well", cViewport)
+    readonly property color cWellText: tc("wellText", cText)
+    readonly property color cWellDim: tc("wellDim", cDim)
+    readonly property color cWellTrace1: tc("wellTrace1", cTrace1)
+    readonly property color cWellTrace2: tc("wellTrace2", cTrace2)
+    readonly property color cWellTrace3: tc("wellTrace3", cTrace3)
     readonly property int unit: 8
     // Viewport toolbar state (preview only, never saved): overlays hidden; viewport expanded over the panels.
     property bool overlaysHidden: false
@@ -50,11 +59,39 @@ Rectangle {
     readonly property color cGlowSoft: accentA(0.16)
     readonly property color cPanelTop: Qt.lighter(cPanel, 1.18)
 
-    color: cBg
-    gradient: Gradient {
-        GradientStop { position: 0.0; color: Qt.lighter(shell.cBg, 1.35) }
-        GradientStop { position: 0.45; color: shell.cBg }
-        GradientStop { position: 1.0; color: Qt.darker(shell.cBg, 1.2) }
+    // Window chrome as Settings draws it (ui/studio/theme.py): the native backdrop mode of the active theme, the
+    // title bar roles, the forged edge, and Settings' panel cast scaled to the Studio's gutters.
+    readonly property bool translucent: tc("backdrop", "off") === "acrylic" || tc("backdrop", "off") === "glass"
+    readonly property color cWindow: tc("windowSurface", cBg)
+    readonly property color cTitlebar: tc("titlebar", cHeader)
+    readonly property color cTitleText: tc("titlebarText", cText)
+    readonly property color cTitleHover: tc("titlebarHover", cRaised)
+    readonly property color cTitlePressed: tc("titlebarPressed", cRaised)
+    readonly property color cCloseHover: tc("closeHover", "#e81123")
+    readonly property real panelAlpha: Number(tc("panelAlpha", "1"))
+    function withAlpha(c, a) { return Qt.rgba(c.r, c.g, c.b, c.a * a) }
+    readonly property color cPanelFill: withAlpha(cPanel, panelAlpha)
+    readonly property color cPanelFillTop: withAlpha(cPanelTop, panelAlpha)
+    readonly property color cShadow: tc("shadow", "#5a000000")
+    readonly property real shadowX: Number(tc("shadowX", "3"))
+    readonly property real shadowY: Number(tc("shadowY", "4"))
+    // Card and section borders: one painted path (StudioFrame) or one Quick ring, never QSS-like segments.
+    readonly property real cardBorder: 1.5
+    readonly property bool maximized: studio.windowMaximized === true
+
+    color: "transparent"
+    // The window surface: the theme's own window role (translucent under Glass/Acrylic); Normal keeps the
+    // opaque lit gradient.
+    Rectangle {
+        anchors.fill: parent
+        color: shell.cWindow
+        gradient: shell.translucent ? null : windowGradient
+        Gradient {
+            id: windowGradient
+            GradientStop { position: 0.0; color: Qt.lighter(shell.cBg, 1.35) }
+            GradientStop { position: 0.45; color: shell.cBg }
+            GradientStop { position: 1.0; color: Qt.darker(shell.cBg, 1.2) }
+        }
     }
 
     Keys.onPressed: function(event) {
@@ -207,6 +244,7 @@ Rectangle {
     // A compact slider whose shown value follows the bridge except while it is being dragged.
     component ValueSlider: Item {
         id: vs
+        objectName: "valueSlider"
         property string propId: ""
         property string label: ""
         property int endpoint: 0
@@ -217,6 +255,8 @@ Rectangle {
         property bool integer: false
         property int decimals: 2
         property real dragValue: 0
+        // An edit the preview follows only on release (the engine re-analyses it once, when the drag ends).
+        property bool releaseOnly: false
         readonly property bool dragging: area.pressed
         readonly property real shown: dragging ? dragValue : value
         function frac(v) { return to > from ? Math.max(0, Math.min(1, (v - from) / (to - from))) : 0 }
@@ -265,6 +305,14 @@ Rectangle {
             color: vs.dragging ? shell.cText : Qt.lighter(shell.cRaised, 1.4)
             border.width: 2
             border.color: vs.activeFocus ? shell.cFocus : shell.cAccent
+        }
+        Text {                             // a held edit says so while it is dragged
+            objectName: "releaseHint"
+            visible: vs.dragging && vs.releaseOnly
+            anchors.right: parent.right; anchors.rightMargin: 7
+            anchors.bottom: parent.top; anchors.bottomMargin: -4
+            text: "Updates On Release"
+            color: shell.cDim; font.pixelSize: shell.fontBase - 3
         }
         MouseArea {
             id: area
@@ -375,11 +423,12 @@ Rectangle {
     component SignalTrace: Rectangle {
         id: trace
         property var channels: []
+        objectName: "signalTrace"
         implicitHeight: 56
         radius: 4
-        color: shell.cViewport
-        border.width: 1; border.color: shell.cOutlineSoft
-        readonly property var colours: [shell.cTrace1, shell.cTrace2, shell.cTrace3]
+        color: shell.cWell
+        border.width: shell.cardBorder; border.color: shell.cOutlineSoft
+        readonly property var colours: [shell.cWellTrace1, shell.cWellTrace2, shell.cWellTrace3]
         Canvas {
             id: canvas
             anchors.fill: parent; anchors.margins: 4
@@ -668,7 +717,7 @@ Rectangle {
                 width: Math.floor((tiles.width - tiles.spacing * (tiles.perRow - 1)) / tiles.perRow)
                 height: swatch.height + 32; radius: 6
                 color: tileMouse.containsMouse ? shell.cRaised : shell.cPanel
-                border.width: active ? 2 : 1
+                border.width: active ? shell.cardBorder + 1 : shell.cardBorder
                 border.color: active ? shell.cAccent : shell.cOutlineSoft
                 activeFocusOnTab: true
                 Accessible.role: Accessible.Button
@@ -874,7 +923,7 @@ Rectangle {
         implicitHeight: card.spec.rendered ? Math.round(cardImage.height) + 52 : 128
         radius: 6
         color: shell.cViewport
-        border.width: 1; border.color: shell.cOutlineSoft
+        border.width: shell.cardBorder; border.color: shell.cOutlineSoft
         Text { x: 8; y: 6; text: card.spec.title || ""; color: shell.cDim; font.pixelSize: shell.fontBase - 2 }
         Row {
             visible: card.spec.rendered === true
@@ -1089,7 +1138,7 @@ Rectangle {
         Rectangle {
             width: parent.width; height: 30; radius: 6
             color: groupMouse.containsMouse ? shell.cRaised : shell.accentA(0.05)
-            border.width: 1; border.color: shell.cOutlineSoft
+            border.width: shell.cardBorder; border.color: shell.cOutlineSoft
             activeFocusOnTab: true
             Accessible.role: Accessible.Button
             Accessible.name: group.groupData.title || ""
@@ -1190,13 +1239,17 @@ Rectangle {
         height: 28
         RowLabel { text: row.label; icon: row.icon || ""; tip: row.tooltip; propId: row.id; height: parent.height }
         ValueSlider {
+            id: scalarSlider
             width: parent.width - 118 - 72 - 16 - scalarRow.rowActions.length * 30
             anchors.verticalCenter: parent.verticalCenter
             propId: row.id; label: row.label; from: row.min; to: row.max; integer: row.integer
+            releaseOnly: row.releaseOnly === true
             value: studio.values[row.id] !== undefined ? studio.values[row.id] : row.min
         }
+        // While dragged the readout follows the slider at once (the scene follows at the next frame).
         NumberField { propId: row.id; anchors.verticalCenter: parent.verticalCenter
-                      display: shell.fmt(studio.values[row.id], row.decimals, "") }
+                      display: shell.fmt(scalarSlider.dragging ? scalarSlider.dragValue : studio.values[row.id],
+                                         row.decimals, "") }
         Repeater {          // structural edits of this element (remove a node, reorder a lane)
             model: scalarRow.rowActions
             delegate: StudioButton { objectName: "rowAction"; icon: modelData.icon; iconSize: 14; width: 22
@@ -1254,22 +1307,27 @@ Rectangle {
             height: 26
             x: 126
             ValueSlider {
+                id: qpSlider
                 width: qp.width - 126 - 72 - 16; anchors.verticalCenter: parent.verticalCenter
                 propId: row.id; label: row.label + (qp.endpoint ? " (Peak)" : " (Quiet)")
                 endpoint: qp.endpoint; from: row.min; to: row.max; integer: row.integer
+                releaseOnly: row.releaseOnly === true
                 value: qp.pair[qp.endpoint]; ghost: qp.pair[1 - qp.endpoint]
             }
             NumberField { propId: row.id; endpoint: qp.endpoint; anchors.verticalCenter: parent.verticalCenter
-                          display: shell.fmt(qp.pair[qp.endpoint], row.decimals, "") }
+                          display: shell.fmt(qpSlider.dragging ? qpSlider.dragValue : qp.pair[qp.endpoint],
+                                             row.decimals, "") }
         }
     }
 
-    component SwitchRow: Row {
+    // An Item, not a Row: a Row positions every visible child in sequence and ignores their x, which pushed the click
+    // area past the end of the text (the 6 Nov "Tilt Shift is unclickable": no switch row could be clicked).
+    component SwitchRow: Item {
         id: switchRow
         property var row
         readonly property bool on: studio.values[row.id] === true
-        spacing: 10
-        height: 28
+        implicitHeight: 20
+        height: 20
         Rectangle {
             id: track
             objectName: "checkBox"
@@ -1286,9 +1344,9 @@ Rectangle {
             Keys.onSpacePressed: studio.commitValue(row.id, 0, !on)
             FocusRing { visible: track.activeFocus; radius: 7 }
         }
-        Text { anchors.verticalCenter: parent.verticalCenter; text: row.label; color: shell.cText
+        Text { x: 30; anchors.verticalCenter: parent.verticalCenter; text: row.label; color: shell.cText
                font.pixelSize: shell.fontBase - 1; width: switchRow.width - 30; elide: Text.ElideRight }
-        MouseArea { x: 0; width: switchRow.width; height: switchRow.height; cursorShape: Qt.PointingHandCursor
+        MouseArea { objectName: "switchHit"; anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                     hoverEnabled: true
                     onClicked: studio.commitValue(row.id, 0, !switchRow.on)
                     C.ToolTip.visible: containsMouse && row.tooltip !== ""
@@ -1381,30 +1439,92 @@ Rectangle {
         }
     }
 
+    // ---------------------------------------------------------------- title bar
+    // Settings' custom title bar (ui/settings_dialog.py CustomTitleBar): the window title and minimise / maximise /
+    // close, on the theme's title bar roles. Dragging moves the window through the system (Windows snap and
+    // Aero snap included); double-click maximises; the window edges resize it.
+    Rectangle {
+        id: titleBar
+        objectName: "studioTitleBar"
+        width: parent.width; height: 40
+        color: shell.cTitlebar
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton
+            onPressed: studio.startWindowMove()
+            onDoubleClicked: studio.toggleMaximize()
+        }
+        Row {
+            anchors.left: parent.left; anchors.leftMargin: 14
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 10
+            StudioIcon { name: "wave"; width: 24; height: 24; stroke: 2.2; color: shell.cAccent
+                         anchors.verticalCenter: parent.verticalCenter }
+            Text { objectName: "titleBarLabel"; text: "SRPSS STUDIO"; color: shell.cTitleText
+                   font.family: "Jost"; font.pixelSize: 19; font.bold: true; font.letterSpacing: 0.5
+                   anchors.verticalCenter: parent.verticalCenter }
+        }
+        Row {
+            anchors.right: parent.right; anchors.rightMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 10
+            Repeater {
+                model: [{"id": "minimize", "glyph": "−", "tip": "Minimise"},
+                        {"id": "maximize", "glyph": shell.maximized ? "❐" : "□",
+                         "tip": shell.maximized ? "Restore" : "Maximise"},
+                        {"id": "close", "glyph": "×", "tip": "Close the Studio and return to Settings"}]
+                delegate: Rectangle {
+                    objectName: "titleBarButton"
+                    property string action: modelData.id
+                    width: 40; height: 30; radius: 4
+                    color: buttonMouse.pressed ? (action === "close" ? shell.cCloseHover : shell.cTitlePressed)
+                           : buttonMouse.containsMouse ? (action === "close" ? shell.cCloseHover : shell.cTitleHover)
+                           : "transparent"
+                    Accessible.role: Accessible.Button
+                    Accessible.name: modelData.tip
+                    Text { anchors.centerIn: parent; text: modelData.glyph; color: shell.cTitleText
+                           font.pixelSize: action === "close" ? 18 : 16; font.bold: true }
+                    MouseArea {
+                        id: buttonMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: {
+                            if (parent.action === "minimize") studio.minimizeWindow()
+                            else if (parent.action === "maximize") studio.toggleMaximize()
+                            else Qt.callLater(studio.requestCloseFrom, "title bar close")
+                        }
+                    }
+                    C.ToolTip.visible: buttonMouse.containsMouse
+                    C.ToolTip.text: modelData.tip
+                    C.ToolTip.delay: 600
+                }
+            }
+        }
+    }
+
     // ------------------------------------------------------------------- layout
     Column {
         anchors.fill: parent
+        anchors.topMargin: titleBar.height
         spacing: 0
 
         // Header ---------------------------------------------------------------------
         Rectangle {
             id: header
             width: parent.width; height: 56
-            color: shell.cHeader
-            gradient: Gradient {
+            color: shell.translucent ? shell.withAlpha(shell.cHeader, shell.panelAlpha) : shell.cHeader
+            gradient: shell.translucent ? null : headerGradient
+            Gradient {
+                id: headerGradient
                 GradientStop { position: 0.0; color: Qt.lighter(shell.cHeader, 1.3) }
                 GradientStop { position: 1.0; color: shell.cHeader }
             }
+            Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: shell.cOutlineSoft }
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: shell.cOutlineSoft }
             Row {
                 anchors.left: parent.left; anchors.leftMargin: 18
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 12
-                StudioIcon { name: "wave"; width: 30; height: 30; stroke: 2.2; color: shell.cAccent
-                             anchors.verticalCenter: parent.verticalCenter }
-                Text { text: "SRPSS"; color: shell.cText; font.pixelSize: 19; font.bold: true; font.letterSpacing: 1
-                       anchors.verticalCenter: parent.verticalCenter }
-                Rectangle { width: 1; height: 24; color: shell.cOutlineSoft; anchors.verticalCenter: parent.verticalCenter }
                 Text { objectName: "studioTitle"; text: studio.title; color: shell.cText; font.pixelSize: 19
                        visible: studio.modes.length <= 1; anchors.verticalCenter: parent.verticalCenter }
                 // Mode switcher: every registered Studio mode (one shell, one save path per mode).
@@ -1620,12 +1740,14 @@ Rectangle {
         // Workspace tabs ------------------------------------------------------------------
         Item {
             width: parent.width; height: 52
-            Rectangle {                       // the segmented bar the tabs sit in
-                anchors.centerIn: parent
-                width: tabRow.width + 8; height: 42; radius: 9
-                color: Qt.darker(shell.cPanel, 1.15)
-                border.width: 1; border.color: shell.cOutlineSoft
-                PanelRim {}
+            StudioFrame {                     // the segmented bar the tabs sit in, with its cast
+                objectName: "tabStripFrame"
+                x: (parent.width - tabRow.width - 8) / 2; y: (parent.height - 42) / 2
+                width: tabRow.width + 8 + shell.shadowX; height: 42 + shell.shadowY
+                radius: 9; strokeWidth: shell.cardBorder
+                surfaceColor: shell.withAlpha(Qt.darker(shell.cPanel, 1.15), shell.panelAlpha)
+                strokeColor: shell.cOutlineSoft
+                shadowColor: shell.cShadow; shadowX: shell.shadowX; shadowY: shell.shadowY
             }
             Row {
                 id: tabRow
@@ -1674,17 +1796,23 @@ Rectangle {
             readonly property int topH: shell.viewportExpanded ? height - 10 : Math.max(200, Math.round(height * 0.56))
 
             // Scene objects -------------------------------------------------------------------
+            StudioFrame {                     // the panel's surface, one-path border and cast (the panel clips)
+                objectName: "panelFrame"
+                visible: objectsPanel.visible
+                x: objectsPanel.x; y: objectsPanel.y
+                width: objectsPanel.width + shell.shadowX; height: objectsPanel.height + shell.shadowY
+                radius: 10; strokeWidth: shell.cardBorder
+                surfaceColor: shell.cPanelFill; surfaceTopColor: shell.cPanelFillTop; strokeColor: shell.cOutline
+                shadowColor: shell.cShadow; shadowX: shell.shadowX; shadowY: shell.shadowY
+            }
             Rectangle {
                 id: objectsPanel
                 objectName: "objectsPanel"
                 x: 10; y: 0
                 visible: mainRow.objectsShown
                 width: mainRow.leftW; height: mainRow.topH
-                radius: 10; color: shell.cPanel
+                radius: 10; color: "transparent"
                 clip: true
-                gradient: Gradient { GradientStop { position: 0.0; color: shell.cPanelTop }
-                                     GradientStop { position: 0.35; color: shell.cPanel } }
-                border.width: 1; border.color: shell.cOutline
                 PanelRim {}
                 Column {
                     anchors.fill: parent; anchors.margins: 12
@@ -1757,22 +1885,40 @@ Rectangle {
                 width: mainRow.objectsShown ? parent.width - mainRow.leftW - 30 : parent.width - 20
                 height: mainRow.topH
 
-                Rectangle {
+                Item {
                     id: viewportFrame
-                    width: parent.width
-                    height: parent.height
-                    radius: 10
-                    color: shell.cViewport
-                    border.width: 1; border.color: shell.cOutline
-                    PanelRim {}
+                    objectName: "viewportFrame"
+                    // The frame reaches `inset` px past the column so the slot keeps its place and size (the scene's
+                    // pixels never change), while every slot corner lies inside the frame's rounded outline: the
+                    // border, drawn above the scene, covers the slot's square corners.
+                    readonly property real radius: 10
+                    readonly property real inset: 3
+                    x: -2; y: -2
+                    width: parent.width + 4
+                    height: parent.height + 4
+                    StudioFrame {                 // surface and cast, under the scene
+                        objectName: "viewportFrameSurface"
+                        z: -2
+                        width: parent.width + shell.shadowX; height: parent.height + shell.shadowY
+                        radius: viewportFrame.radius; strokeWidth: shell.cardBorder
+                        surfaceColor: shell.cViewport; strokeColor: shell.cOutline
+                        shadowColor: shell.cShadow; shadowX: shell.shadowX; shadowY: shell.shadowY
+                    }
+                    StudioFrame {                 // the border alone, over the scene: the rounded corners
+                        objectName: "viewportFrameBorder"
+                        z: 1
+                        anchors.fill: parent
+                        radius: viewportFrame.radius; strokeWidth: shell.cardBorder
+                        strokeColor: shell.cOutline; strokeOnly: true
+                    }
 
                     // Toolbar groups sit on opaque themed backings (mock): the scene never shows through a chip.
                     Rectangle {
                         objectName: "toolbarBacking"
-                        x: 8; y: 6; z: 2
+                        x: 10; y: 8; z: 2
                         width: toolbar.width + 8; height: toolbar.height + 8
                         radius: 8; color: shell.opaque(shell.cPanel)
-                        border.width: 1; border.color: shell.cOutlineSoft
+                        border.width: shell.cardBorder; border.color: shell.cOutlineSoft
                         Row {
                             id: toolbar
                             x: 4; y: 4
@@ -1829,10 +1975,10 @@ Rectangle {
                     }
                     Rectangle {
                         objectName: "toolbarBacking"
-                        anchors.right: parent.right; anchors.rightMargin: 8; y: 6; z: 2
+                        anchors.right: parent.right; anchors.rightMargin: 10; y: 8; z: 2
                         width: toolbarRight.width + 8; height: toolbarRight.height + 8
                         radius: 8; color: shell.opaque(shell.cPanel)
-                        border.width: 1; border.color: shell.cOutlineSoft
+                        border.width: shell.cardBorder; border.color: shell.cOutlineSoft
                         Row {
                             id: toolbarRight
                             x: 4; y: 4
@@ -1882,10 +2028,10 @@ Rectangle {
                     Item {
                         id: viewportSlot
                         objectName: "viewportSlot"
-                        x: 1; y: 1
-                        width: parent.width - 2
+                        x: viewportFrame.inset; y: viewportFrame.inset
+                        width: parent.width - 2 * viewportFrame.inset
                         // The scene ends where the (opaque) scrub bar starts: no part of the frame hides under it.
-                        height: parent.height - 2 - scrubBar.height
+                        height: parent.height - 2 * viewportFrame.inset - scrubBar.height
                         clip: true
                         // Set by the shell host: where the letterboxed presented frame (the live card's
                         // world extent, production aperture) sits inside this slot.
@@ -2122,7 +2268,7 @@ Rectangle {
                             height: statusText.implicitHeight + 24
                             radius: 6
                             color: "#cc0b0d14"
-                            border.width: 1
+                            border.width: shell.cardBorder
                             border.color: studio.viewportStatus === "error" ? shell.cDanger : shell.cOutline
                             Text {
                                 id: statusText
@@ -2156,10 +2302,10 @@ Rectangle {
                         id: scrubBar
                         objectName: "scrubBar"
                         anchors.bottom: parent.bottom
-                        anchors.bottomMargin: 1; x: 1
-                        width: parent.width - 2; height: 48
-                        radius: 9
-                        color: shell.opaque(shell.cViewport)
+                        anchors.bottomMargin: viewportFrame.inset; x: viewportFrame.inset
+                        width: parent.width - 2 * viewportFrame.inset; height: 48
+                        radius: viewportFrame.radius - viewportFrame.inset      // concentric with the frame
+                        color: shell.opaque(shell.cWell)
                         Rectangle { width: parent.width; height: 1; color: shell.cOutlineSoft }
                         Row {
                             anchors.fill: parent; anchors.margins: 10
@@ -2198,7 +2344,7 @@ Rectangle {
                                     Component.onCompleted: requestPaint()
                                 }
                                 Rectangle { x: parent.width * scrub.frac - 1; anchors.verticalCenter: parent.verticalCenter
-                                            width: 3; height: 18; color: scrub.activeFocus ? shell.cFocus : shell.cText }
+                                            width: 3; height: 18; color: scrub.activeFocus ? shell.cFocus : shell.cWellText }
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
@@ -2209,9 +2355,10 @@ Rectangle {
                                 Keys.onLeftPressed: studio.seek(studio.time - 0.5)
                                 Keys.onRightPressed: studio.seek(studio.time + 0.5)
                             }
-                            Text { id: timeText; anchors.verticalCenter: parent.verticalCenter; width: 92
+                            Text { id: timeText; objectName: "transportTime"
+                                   anchors.verticalCenter: parent.verticalCenter; width: 92
                                    text: studio.time.toFixed(2) + " / " + studio.duration.toFixed(1) + " s"
-                                   color: shell.cDim; font.pixelSize: shell.fontBase - 1 }
+                                   color: shell.cWellDim; font.pixelSize: shell.fontBase - 1 }
                             StudioButton { id: loopBtn; icon: "loop"; iconSize: 18; width: 38; checked: studio.loop
                                            anchors.verticalCenter: parent.verticalCenter
                                            tip: "Repeat the preview input"; onClicked: studio.setLoop(!studio.loop) }
@@ -2246,6 +2393,16 @@ Rectangle {
             }
 
             // Response editor (Reactivity): target -> source mix with live input -> transfer curve -> range.
+            StudioFrame {                     // the dock's surface, one-path border and cast (the dock clips)
+                objectName: "panelFrame"
+                parent: bottomArea
+                visible: responseDock.visible
+                x: responseDock.x; y: responseDock.y
+                width: responseDock.width + shell.shadowX; height: responseDock.height + shell.shadowY
+                radius: 10; strokeWidth: shell.cardBorder
+                surfaceColor: shell.cPanelFill; surfaceTopColor: shell.cPanelFillTop; strokeColor: shell.cOutline
+                shadowColor: shell.cShadow; shadowX: shell.shadowX; shadowY: shell.shadowY
+            }
             Rectangle {
                 id: responseDock
                 parent: bottomArea
@@ -2257,10 +2414,7 @@ Rectangle {
                 objectName: "responseDock"
                 clip: true
                 radius: 10
-                color: shell.cPanel
-                gradient: Gradient { GradientStop { position: 0.0; color: shell.cPanelTop }
-                                     GradientStop { position: 0.35; color: shell.cPanel } }
-                border.width: 1; border.color: shell.cOutline
+                color: "transparent"
                 PanelHeader {
                     id: dockTitle
                     icon: bottomArea.responseIndex >= 0 ? bottomArea.columns[bottomArea.responseIndex].icon : ""
@@ -2413,7 +2567,7 @@ Rectangle {
                         Rectangle {
                             id: curveBox
                             width: parent.width; height: 92; radius: 4
-                            color: shell.cViewport; border.width: 1; border.color: shell.cOutlineSoft
+                            color: shell.cWell; border.width: shell.cardBorder; border.color: shell.cOutlineSoft
                             readonly property var cell: responseDock.cellFor(studio.selectedSource)
                             readonly property real gain: cell && studio.values[cell.gain] !== undefined ? studio.values[cell.gain] : 0
                             readonly property real power: cell && studio.values[cell.power] !== undefined ? studio.values[cell.power] : 1
@@ -2436,7 +2590,7 @@ Rectangle {
                                     }
                                     ctx.stroke()
                                     var lx = curveBox.live, ly = Math.min(1, curveBox.gain * Math.pow(lx, curveBox.shownPower))
-                                    ctx.fillStyle = shell.cTrace3
+                                    ctx.fillStyle = shell.cWellTrace3
                                     ctx.beginPath(); ctx.arc(lx * width, height - ly * height, 4, 0, 2 * Math.PI); ctx.fill()
                                 }
                                 Connections { target: studio
@@ -2470,7 +2624,7 @@ Rectangle {
                             }
                             Text { anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 6
                                    text: "gain " + curveBox.gain.toFixed(2) + " · curve " + curveBox.shownPower.toFixed(2)
-                                   color: shell.cDim; font.pixelSize: shell.fontBase - 3 }
+                                   color: shell.cWellDim; font.pixelSize: shell.fontBase - 3 }
                             C.ToolTip.visible: curveDrag.containsMouse
                             C.ToolTip.text: "Drag up/down to bend the curve (exact power below). Dot: live input → output."
                         }
@@ -2575,10 +2729,15 @@ Rectangle {
                         readonly property var column: modelData
                         visible: column.kind === "groups"
                         x: bottomArea.columnX(index); width: bottomArea.columnWidth(index); height: bottomArea.height
-                        radius: 10; color: shell.cPanel
-                        gradient: Gradient { GradientStop { position: 0.0; color: shell.cPanelTop }
-                                             GradientStop { position: 0.35; color: shell.cPanel } }
-                        border.width: 1; border.color: shell.cOutline
+                        radius: 10; color: "transparent"
+                        StudioFrame {         // surface, one-path border and cast, under the panel's content
+                            objectName: "panelFrame"
+                            z: -2
+                            width: parent.width + shell.shadowX; height: parent.height + shell.shadowY
+                            radius: 10; strokeWidth: shell.cardBorder
+                            surfaceColor: shell.cPanelFill; surfaceTopColor: shell.cPanelFillTop; strokeColor: shell.cOutline
+                            shadowColor: shell.cShadow; shadowX: shell.shadowX; shadowY: shell.shadowY
+                        }
                         PanelRim {}
                         PanelHeader { id: panelHeader; icon: panel.column.icon; title: panel.column.title
                                       subtitle: panel.column.subtitle }
@@ -2637,7 +2796,7 @@ Rectangle {
             height: Math.min(parent.height - 48, helpColumn.implicitHeight + 48)
             radius: 10
             color: shell.cPanel
-            border.width: 1; border.color: shell.cOutline
+            border.width: shell.cardBorder; border.color: shell.cOutline
             MouseArea { anchors.fill: parent }       // clicks inside do not close
             C.ScrollView {
                 id: helpScroll
@@ -2693,6 +2852,45 @@ Rectangle {
             StudioButton { anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 10
                            icon: "close"; iconSize: 16; width: 30; height: 28; tip: "Close help (Esc)"
                            onClicked: helpOverlay.open = false }
+        }
+    }
+
+    // The forged rounded window edge, painted by Settings' own painter over everything (its corner caps make the
+    // rectangular window read as rounded), then the resize edges a frameless window needs.
+    StudioWindowEdge {
+        objectName: "studioWindowEdge"
+        anchors.fill: parent
+        z: 1000
+        maximized: shell.maximized
+        outerBorder: shell.tc("outerBorder", shell.cOutline)
+        forgedEdge: shell.tc("forgedEdge", shell.cHeader)
+    }
+    Repeater {
+        // Every side and corner: the Qt edges it resizes (through the system) and its cursor.
+        model: shell.maximized ? [] : [
+            {"edges": Qt.LeftEdge, "cursor": Qt.SizeHorCursor}, {"edges": Qt.RightEdge, "cursor": Qt.SizeHorCursor},
+            {"edges": Qt.TopEdge, "cursor": Qt.SizeVerCursor}, {"edges": Qt.BottomEdge, "cursor": Qt.SizeVerCursor},
+            {"edges": Qt.TopEdge | Qt.LeftEdge, "cursor": Qt.SizeFDiagCursor},
+            {"edges": Qt.BottomEdge | Qt.RightEdge, "cursor": Qt.SizeFDiagCursor},
+            {"edges": Qt.TopEdge | Qt.RightEdge, "cursor": Qt.SizeBDiagCursor},
+            {"edges": Qt.BottomEdge | Qt.LeftEdge, "cursor": Qt.SizeBDiagCursor}]
+        delegate: MouseArea {
+            objectName: "resizeEdge"
+            readonly property int grip: 5
+            readonly property int corner: 14
+            readonly property bool onLeft: (modelData.edges & Qt.LeftEdge) !== 0
+            readonly property bool onRight: (modelData.edges & Qt.RightEdge) !== 0
+            readonly property bool onTop: (modelData.edges & Qt.TopEdge) !== 0
+            readonly property bool onBottom: (modelData.edges & Qt.BottomEdge) !== 0
+            readonly property bool isCorner: (onLeft || onRight) && (onTop || onBottom)
+            z: 1001
+            x: onRight ? shell.width - (isCorner ? corner : grip) : (onLeft ? 0 : corner)
+            y: onBottom ? shell.height - (isCorner ? corner : grip) : (onTop ? 0 : corner)
+            width: isCorner ? corner : (onLeft || onRight ? grip : shell.width - 2 * corner)
+            height: isCorner ? corner : (onTop || onBottom ? grip : shell.height - 2 * corner)
+            cursorShape: modelData.cursor
+            acceptedButtons: Qt.LeftButton
+            onPressed: studio.startWindowResize(modelData.edges)
         }
     }
 

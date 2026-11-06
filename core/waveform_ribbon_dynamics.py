@@ -6,6 +6,7 @@ head history; one vectorized pure projection publishes the complete body for eve
 """
 from __future__ import annotations
 import colorsys
+import functools
 import math
 from dataclasses import dataclass, replace
 from collections.abc import Mapping
@@ -303,6 +304,7 @@ def impulse_velocity(frequency, damping):
     return 2.*math.pi*frequency*math.exp(damping*math.acos(damping)/root)
 
 
+@functools.lru_cache(maxsize=64)   # a pure function of the spring; a new dynamics (activation, Studio replay) reuses it
 def spread_impulse_velocity(frequency, damping):
     """Momentum whose kick, delivered over IMPULSE_SPREAD, gives the spring a unit peak displacement (the spread kick
     peaks lower than an instantaneous one; this keeps the authored hit excursion). Integrated finely once per spring

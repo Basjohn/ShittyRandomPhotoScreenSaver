@@ -28,6 +28,11 @@ from ui.studio.adapter import RenderCard
 
 logger = get_logger(__name__)
 
+# What the scene composites onto: the same opaque backing for the live viewport and every snapshot, never a chrome
+# colour. Production modes draw over their card (transparent backgrounds, translucent rims and glows), so whatever
+# lies under the render node shows through; the Studio's scene must not follow the Settings theme.
+SCENE_BACKING = (0.0, 0.0, 0.0, 1.0)
+
 
 def _int_state(name: int) -> int:
     value = gl.glGetIntegerv(name)
@@ -176,6 +181,21 @@ class StudioRenderNode(QSGRenderNode):
             gl.glEnable(gl.GL_SCISSOR_TEST)
             gl.glScissor(int(rect.x()), int(rect.y()), int(rect.width()), int(rect.height()))
 
+    def clear_backing(self, state, viewport, matrix) -> None:
+        """Clear the scene's region (the slot's scissor; without one, the item's own rect) to ``SCENE_BACKING``,
+        so nothing the chrome painted under the viewport composites into the scene."""
+        if state is None or not bool(state.scissorEnabled()):
+            data = matrix.data()
+            width, height = self._logical_size
+            xs = sorted(((data[0] * x + data[12]) + 1.0) * 0.5 * viewport[2] for x in (0.0, width))
+            ys = sorted(((data[5] * y + data[13]) + 1.0) * 0.5 * viewport[3] for y in (0.0, height))
+            gl.glEnable(gl.GL_SCISSOR_TEST)
+            gl.glScissor(int(round(xs[0])), int(round(ys[0])), int(round(xs[1] - xs[0])), int(round(ys[1] - ys[0])))
+        gl.glClearColor(*SCENE_BACKING)
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+        gl.glDisable(gl.GL_SCISSOR_TEST)
+        self.apply_clip(state)
+
     def render(self, state: QSGRenderNode.RenderState) -> None:
         frame = self._frame
         if frame is None or min(self._logical_size) <= 0.0 or self._released:
@@ -211,6 +231,7 @@ class StudioRenderNode(QSGRenderNode):
                     if not self._prepared:
                         self._reporter.notePreparing()
                         return
+                self.clear_backing(state, viewport, matrix)
                 self._renderer.render(card, frame)
             finally:
                 inherited.restore_render_host()
@@ -250,7 +271,7 @@ class StudioRenderNode(QSGRenderNode):
             gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo)
             gl.glViewport(0, 0, width, height)
             gl.glDisable(gl.GL_SCISSOR_TEST)
-            gl.glClearColor(0.0, 0.0, 0.0, 1.0)
+            gl.glClearColor(*SCENE_BACKING)
             gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT | gl.GL_STENCIL_BUFFER_BIT)
             gl.glEnable(gl.GL_BLEND)
             gl.glBlendEquationSeparate(gl.GL_FUNC_ADD, gl.GL_FUNC_ADD)
@@ -448,4 +469,4 @@ class StudioViewportItem(QQuickItem):
         self.snapshotPending.emit()
 
 
-__all__ = ["StudioRenderNode", "StudioViewportItem"]
+__all__ = ["SCENE_BACKING", "StudioRenderNode", "StudioViewportItem"]

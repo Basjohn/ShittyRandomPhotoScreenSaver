@@ -507,6 +507,9 @@ shifted to hide latency. Pixels are evidence, not visual or listening acceptance
 .\.venv\Scripts\python.exe tools\waveform_studio_capture.py --mode spectrum --preset 3 --clip rag_doll --time 7 --set spectrum_rainbow_ghost=true --output <new dir>
 .\.venv\Scripts\python.exe tools\waveform_studio_capture.py --mode extruded_spectrum --preset 0 --clip rag_doll --time 7 [--framing card --set extruded_spectrum_turn=0.6] --output <new dir>
 .\.venv\Scripts\python.exe tools\spectrum_studio_replay_budget.py --budget 0.008 --out <new dir>\after.json
+# Hidden Studio slider drag (real mouse events, no window): per-move and per-frame cost, previews applied, values-map
+# rebuilds, evaluations and analyses started during the drag and after release (nothing is saved)
+.\.venv\Scripts\python.exe tools\studio_drag_profile.py --mode waveform_ribbon [--key <property id>] [--json <new dir>\drag.json]
 ```
 
 Lab tools live under `tools/labs/` (`waveform_ribbon_lab.py`, `waveform_ribbon_targets.py`,

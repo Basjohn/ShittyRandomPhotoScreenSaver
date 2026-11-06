@@ -26,17 +26,60 @@ and must not be copied per mode.
 | `ui/studio/technical.py` | A mode's technical (audio-analysis) controls as Studio properties with Settings' own keys, ranges, choices, labels and coercion; adapters call it instead of copying them. |
 | `ui/studio/schema.py` | Typed, mode-supplied property schema: instruments (`SCALAR`, `COUNT`, `SWITCH`, `CHOICE`, `QUIET_PEAK`, `COLOUR`, `GRADIENT`), workspaces/columns, scene objects, response tuner, starting-point presets, lifecycle timelines and rendered cards. `admit` is the mode's canonical validator; the framework stores no defaults. |
 | `ui/studio/session.py` | `StudioEditSession`: hydrate from the canonical store, preview vs committed values, one commit per gesture, undo/redo/dirty. The store answers each commit with its canonical post-save snapshot. No Qt, no mode knowledge. |
-| `ui/studio/controller.py` | `StudioController` (single active instance, open → present → retire lifecycle) and `StudioBridge`, the only object QML sees. Bridge slots are plain methods (no `result=`), per the QML signal → result-slot crash rule. |
-| `ui/studio/viewport.py` | Inline `QSGRenderNode` that draws the adapter's renderer straight into the window framebuffer on the render thread (no readback, no per-frame texture copy). It applies the viewport slot's scene-graph clip (scissor), so a frameless mode that overflows its card in production (Extruded Spectrum, Sphere: up to the window) reaches the slot's edge, never the Studio chrome. Renderer created lazily and released on the render thread on `sceneGraphInvalidated` / node release. Snapshots (tiles, rendered cards, Copy Frame) use a second renderer instance, at most one per frame and only on request. |
+| `ui/studio/controller.py` | `StudioController` (single active instance, open → present → retire lifecycle) and `StudioBridge`, the only object QML sees. Bridge slots are plain methods (no `result=`), per the QML signal → result-slot crash rule. The bridge's `values` is a `StudioValueMap` (`QQmlPropertyMap`): each property id notifies on its own, so a changed value re-evaluates only the bindings that read it. |
+| `ui/studio/viewport.py` | Inline `QSGRenderNode` that draws the adapter's renderer straight into the window framebuffer on the render thread (no readback, no per-frame texture copy). Before drawing it clears the scene's region (the slot's scissor) to `SCENE_BACKING`, the opaque backing snapshots also use, so nothing the chrome paints under the viewport composites into a mode's transparent background or translucent edges. It applies the viewport slot's scene-graph clip (scissor), so a frameless mode that overflows its card in production (Extruded Spectrum, Sphere: up to the window) reaches the slot's edge, never the Studio chrome. Renderer created lazily and released on the render thread on `sceneGraphInvalidated` / node release. Snapshots (tiles, rendered cards, Copy Frame) use a second renderer instance, at most one per frame and only on request. |
 | `ui/studio/transport.py` | Play/pause/scrub/loop on the Studio's own time. No timer: it advances on the surface's `afterAnimating` frame start and requests another frame only while playing. |
 | `ui/studio/surface.py` | `StudioWindowSurface` (visible window) and `OffscreenStudioSurface` (hidden `QQuickRenderControl` host used by tests and the capture tool). Same shell, same signals (`frameStarted`, `presented`, `closeRequested`, `lost`, `failed`). |
 | `ui/studio/settings_link.py` | `open_mode_studio` and `VisualizerSettingsStore`, the canonical store over the Visualizers tab (see §4), including Save To <Preset>. |
 | `core/settings/visualizer_preset_file.py` | Shape-preserving edits of an authored preset file (section merge, in-place patching, source-like formatting, `save_changes_to_preset`), shared by the preset repair tool and the Studio's Save To <Preset>. |
 | `ui/studio/presence.py` | `WindowPresence`: conceal/reveal the *same* Settings dialog without ending its `QDialog.exec()` loop (native `SW_HIDE` on Windows; zero opacity plus off-screen move elsewhere). |
 | `ui/studio/framed.py` | Shared pieces for 3D (and card-presented) adapters: production presentation resolver and uniform aperture scale, `card_framings` / `live_card_framings`, `camera_navigation` over the shared framed camera, `orbit_navigation` for a free-orbit mode (the descriptor's `view_orbit_settings` only), `QuickModeRenderer` wrapping a production Quick renderer and `ContractModeRenderer` handing it the production render-frame contract (pixel ratio from the item mapping, so a letterboxed live card presents at the true DPR). |
-| `ui/studio/engine_answers.py` | The Spectrum family's recorded engine answers (Spectrum, Extruded Spectrum, Neon Lake), mode-neutral (`EngineAnswerMode(mode_id, conditional_reads)`): synthetic audio (with the analysis spectrum and onsets a recording carries), the out-of-process `extract`, recorded inputs, the per-mode answer cache, `start_clip_load` and `EngineAnswerEvaluator` (the production step in process, rewinds, checkpoints, frame budget). The engine-owned / mode-owned split follows from the production source projection (`source_config_applier`). |
+| `ui/studio/engine_answers.py` | The Spectrum family's recorded engine answers (Spectrum, Extruded Spectrum, Neon Lake, DevCurve, Oscilloscope), mode-neutral (`EngineAnswerMode(mode_id, conditional_reads)`): synthetic audio (with the analysis spectrum and onsets a recording carries), the out-of-process `extract`, recorded inputs, the per-mode answer cache, `start_clip_load` and `EngineAnswerEvaluator` (the production step in process on `ExactReplay`). |
+| `ui/studio/exact_replay.py` | `ExactReplay`, the shared exact-history mechanism of the replaying evaluators (the engine-answer modes and Waveform): checkpoints per values signature, rewinds, the frame budget (`converging`) and the live-gesture path. An evaluator supplies only its step, its state capture and its restyle. The engine-owned / mode-owned split follows from the production source projection (`source_config_applier`). |
 | `ui/studio/spectrum_shape.py` | The Spectrum family's shape editor as Studio rows, admission and structural edits (add / remove node, lane swap), by key prefix (`ShapeKeys`). |
 | `ui/studio/theme.py`, `colour.py` | Chrome tokens derived from the active Settings theme with enforced contrast; display ↔ linear colour conversion for instruments. Scene colours never pass through the theme. |
+| `ui/studio/chrome.py` | The painted chrome items (`StudioFrame`, `StudioWindowEdge`, QML module `SRPSS.StudioChrome`), painting with Settings' own owners (below). |
+
+### Chrome and theme
+
+The Studio's chrome follows the Settings theme; the scene never does: the viewport clears the scene's region to one
+fixed backing (`viewport.SCENE_BACKING`) before the mode draws, so a transparent background or a translucent rim
+composites onto it, never onto the themed surface under it (`tests/test_studio_scene_theme_independence.py` renders
+every registered Studio under the darkest and the lightest shipped theme and compares the scene pixels). The chrome
+reuses Settings' owners rather than restating them:
+
+- **Window.** `StudioWindowSurface` is a frameless top-level (`Qt.FramelessWindowHint`). The shell draws Settings'
+  custom title bar in QML (`studioTitleBar`: "SRPSS STUDIO", minimise, maximise/restore, close, on the theme's
+  `window.titlebar.*` roles); the Studio header (mode picker, preset, undo/redo, help, Save Preset As…, Close) sits
+  directly under it, as Settings keeps its title bar free of controls. A title-bar drag is the system move
+  (`QWindow.startSystemMove`: Windows snap and Aero snap), double-click maximises to the work area (manual, as
+  Settings), a drag from maximised restores under the pointer, the window sides and corners resize through
+  `startSystemResize`, and Esc / Alt+F4 / the title bar's × close through the same close path as before.
+- **Rounded edge.** `StudioWindowEdge` paints `ui/settings_window_edge.py:paint_forged_window_edge`, the function
+  `SettingsDialog.paintEvent` calls: the same radius, outer border (`chrome.outer_border`), backing and opaque corner
+  caps (`window.titlebar.surface`), square when maximised. There is one forged edge, not one per window.
+- **Material.** Normal (`backdrop.mode` off) is an opaque window with no native call. Under a Glass or Acrylic theme
+  the window gets an alpha surface and, on first show, the theme's material through
+  `core/windows/dwm_blur.py:apply_backdrop`, the mode → AccentPolicy mapping Settings' own backdrop owner calls
+  (Acrylic: state 4 with the theme tint; Glass: untinted state 3). One window-level material, no per-panel blur or
+  capture. The window surface (`window.dialog_glass`) and title bar take the theme's translucent roles; the large
+  panels let the material through at the theme's polarity with an opacity floor (`PANEL_MATERIAL_FLOOR`, 0.88) so
+  dense instruments stay legible over any desktop; the viewport, toolbars and inputs stay opaque. The material is
+  chosen when the window opens (Settings is concealed while a Studio is open).
+- **Cards and sections.** Main panels, the response dock, the tab strip and the viewport frame are `StudioFrame`s:
+  Settings' hard outside-only cast (`ui/widgets/control_shadow.py:cast_shadow_path`, the `panel.group` shadow role at
+  half its offset, `SHADOW_SCALE`), the surface, and the border stroked once along one continuous path
+  (`ui/widgets/continuous_border.py:rounded_border_path`), 1.5 px. Smaller cards (group headers, schematic and trace
+  cards, starting-point tiles, toolbar backings) are Quick rectangles whose border is one ring, also 1.5 px. A painted
+  frame repaints only when its size or a colour changes: nothing per frame, no frame requests.
+- **Instrument wells.** Signal-trace cards, the response-curve box and the transport bar (with its time readout) sit
+  on the `well` role: the viewport tone while the theme's own text reads on it at 4.5:1 (every dark theme, unchanged),
+  else the theme's input surface (a light theme). Their inks (`wellText`, `wellDim`, `wellTrace1..3`) are the panel's
+  text and trace colours checked on the well (`ui/studio/theme.py`).
+- **Viewport corners.** The viewport frame reaches 2 px past its column so the slot keeps its exact place and size
+  (the scene's pixels are unchanged) while every slot corner lies inside the frame's rounded outline; the frame's
+  border is drawn over the scene (`viewportFrameBorder`), covering the slot's square corners. The render node, its
+  scissor and the saver's clip path are untouched.
 | `ui/studio/<mode>_adapter.py`, `<mode>_recorded_inputs.py` | One adapter per registered mode plus its recorded-clip extractor. |
 
 ## 3. Adapter contract
@@ -82,21 +125,68 @@ is optional and defaults to "not offered":
   live engine's band math), the score's hits as the transient bus's onsets, and the loudness on the real-music scale
   (`PassageIntensity`), with presence against its own 6 s running level. The store's 3D Detail tier (`scene3d_detail`) and, for a reflecting mode, the environment
   photograph reach the presentation as production hands them (both the worker's in-process replay and the Studio).
-- **Exact replay without a stall.** Such an evaluator never re-configures its controller for a mode-owned edit:
+- **A mode with its own logical step (DevCurve).** DevCurve's tick runs its descriptor hook
+  (`tick_pipeline.dispatch_devcurve_field`) on the engine's live answers (pre-AGC control lanes, transient lanes,
+  musical level and intensity, the source frame), so it uses the same recorded engine answers: the worker records
+  everything the engine answered the whole production `logical_tick`, and `EngineAnswerEvaluator._step` runs what
+  `logical_tick` runs, the mode's hook included, between `consume_engine_bars` and the capture. Engine-owned are the
+  technical (audio analysis) values; this replay serves the clip's *recorded* pre-AGC and transient lanes, so most of
+  them leave its lanes unchanged here although the live engine answers every one (Sensitivity, the floors, Gain,
+  Block Size and Clamp all move DevCurve's frame when the lanes are re-analysed from PCM: `Docs/Reference/
+  Visualizer_Reference.md` → Audio Analysis controls per mode; `Current_Plan.md` §9 records the Studio gap), and the
+  split is still proven both ways (`tests/test_devcurve_studio.py`). Its schema follows
+  DevCurve's Settings buckets: Layers (Settings' Shaper: one group per layer with its Custom-row values, the
+  shape-editor nodes, Add / Remove Node and Settings' stack re-ranking as `follow`), Motion & Swell (Core and the
+  analysis) and Foreground & Ghost (with the rainbow). Each layer group traces that layer's **Body** (over its body
+  top), **Accent** (over its reserved accent room) and **Swell**; Core traces Passage, Reaction and the strongest
+  Swell; Audio Analysis the served band shares and loudness. All are reads of the evaluator's own runtime and served
+  answers (`DevCurveStudioEvaluator.measurements`), never saver work. Instruments: no DevCurve value is a true
+  interval, so none is a Quiet/Peak A/B; the stack order is a segmented count.
+- **Arrays answered by identity (Oscilloscope).** Oscilloscope's capture reads the capture history (a read-only NumPy
+  array the engine keeps as the *same object* while its capture serial holds), the 256-sample waveform, onsets after
+  the runtime's serial, the musical level and intensity, the analysis spectrum and the history's rate; its frame
+  runtime rebuilds the trace only for a new history object. The recorder therefore numbers every array an answer
+  carries by identity (`replay_engine.RecordedArrays`: one number per distinct object for the whole recording, a
+  reference held so an id is never reused) and the answer names the number; the worker writes the arrays' raw bytes
+  to a binary sidecar beside its JSON (`<output>.arrays`, read before the job's folder is removed), and the Studio
+  serves one read-only `np.frombuffer` view per number (`served_arrays`), so a held history is the same object tick to
+  tick. `StepState` shares the recorded arrays instead of copying them, so a rewound step still holds the object the
+  view serves. Without a pool an array answer is still refused, so a mode whose answers hold no arrays records
+  exactly as before. A shipped clip: about 830 distinct 4096-sample histories (13.6 MB sidecar), 7.6 MB of answer
+  JSON, about 0.1 s to load. Engine-owned are the technical values (this replay serves recorded lanes, so only Bar Count and
+  the noise floor change an answer here; live, every offered one moves Flare and Drive: see the DevCurve note above);
+  every `osc_*` key is mode-owned. Workspaces follow the buckets: Trace (Display), Beam & Screen,
+  Reaction (with the analysis). Traces, read from the frame on screen (`OscilloscopeStudioEvaluator.measurements`):
+  **Level** (the live trace's swing in its display's own units), **Afterglow** (the newest afterglow trace's
+  brightness against a fresh one) and **Ghosts** (held traces against the capacity), **Flare**, **Drive**, **Tone**;
+  the transport overview is the recorded loudness (`EngineAnswerEvaluator.timeline_measure`). No value is a true
+  interval: every slider is one scalar.
+- **Exact replay without a stall (`ui/studio/exact_replay.py`).** The engine-answer evaluators and Waveform's share
+  one mechanism, `ExactReplay`. Such an evaluator never re-configures its controller for a mode-owned edit:
   `replay_engine.StepState` captures the production step state (controller, logical tick state, presentation state
-  and the mode runtimes they hold; locks, QObjects and the engine view shared) right after configuration and at
-  checkpoints (Spectrum: every 90 ticks, for the current values and the last two), and a rewind restores the
-  pristine capture plus the production restyle, or the latest checkpoint of the same values (undo, seek back). The
-  rewound replay equals the production replay for every mode-owned key. The controller sets a frame budget
-  (`set_frame_budget`, `StudioController.EVALUATION_BUDGET_S`); a replay that does not fit continues on the next
-  frames (`converging`, the controller requests them) while the live-applied frame stays on screen. What remains per
-  frame is one production settings-model build per new set of values (on the commit frame) and the budget.
+  and the mode runtimes they hold; locks, QObjects and the engine view shared; Waveform: its frame runtime, the
+  compiled configuration shared) right after configuration and at checkpoints (every 90 ticks, for the current values
+  and the last two), and a rewind restores the pristine capture plus the production restyle (Waveform: the runtime's
+  own `reset` and `configure`), or the latest checkpoint of the same values (undo, seek back). The rewound replay
+  equals the production replay. The controller sets a frame budget (`set_frame_budget`,
+  `StudioController.EVALUATION_BUDGET_S`); a replay that does not fit continues on the next frames (`converging`, the
+  controller requests them) while the last frame shown stays on screen (the live-applied one after a click or a
+  drag), and when a rewind alone used the frame's budget, stepping starts on the next frame. What remains per commit
+  is one configuration build (an engine-answer mode's production settings model, Waveform's compiled settings) on the
+  commit frame; a single production tick cannot be split.
+- **Drags without a model build per frame (engine-answer modes).** A live gesture dragging one numeric key that the
+  production build hands through verbatim takes the latest full build with that one entry replaced
+  (`EngineAnswerEvaluator._mode_kwargs_for`). A key counts as such only after a full build in this Studio differed
+  from the previous one in that key alone and produced exactly that key with exactly its value; anything else builds.
+  The patched kwargs are never cached, so the release replays from a full build. Every Spectrum-owned slider passes
+  (`tests/test_spectrum_studio_drag_model.py`).
 - **Background analysis hooks.** An evaluator that analyses in the background exposes `set_invalidate(callback)`
   (the controller re-evaluates and refreshes the transport when a result lands), `analysing`, and
   `timeline_revision` (the transport overview is recomputed when it changes). A failure is reported through
   `analysis_failure` (the controller shows it once as a notice with **Retry**, `retry_analysis`; the previous
   answers stay on screen); a failed clip analysis offers Retry the same way. A background clip load that lands
   selects itself only while it is still the source last asked for (the user's choice, or the default before any).
+  Its "Preview source" notice is withdrawn when the user picks another source (other notices stay).
 - **Structural edits.** A schema `StudioAction` on a row (`StudioProperty.actions`) or under a group
   (`StudioSchema.group_actions`) is answered by the adapter's `structure_edit(action_id, values)` as one undoable,
   admitted change set, or None while not admissible (the button is disabled). `StudioSchema.row_label` titles a row
@@ -108,6 +198,10 @@ is optional and defaults to "not offered":
   edits (Extend Toward Horizon, Reset Terrain) on the authored heightfield. The heightfield itself is painted only by
   Settings' terrain brush: the shared shell has no brush instrument, so the Studio carries the record (undo, save,
   Save To <Preset>) through an `instrument_only` schema marker and does not author its cells.
+- **Switch rows.** Every boolean control is the shell's one `SwitchRow` (an `Item`: a `Row` ignores the `x` of its
+  children, which once pushed the click area past the label and made every switch unclickable, 6 Nov). A row whose
+  `when` condition fails is hidden (`conditionHidden`). `tests/test_studio_switch_rows_click.py` clicks the rendered rows
+  through real window events on the hidden offscreen surface and reads the canonical store.
 - **Capabilities.** `StudioCapabilities(viewport, camera, handles, objects)`; the default is a plain 2D live preview
   with a scene-object list. A flat mode declares no camera and no handles and the shell then shows no navigation,
   view readout, Keep View/Reset or handle overlay and never calls `navigation()` / `scene_handles()`.
@@ -133,6 +227,24 @@ Every adapter carries a registry-derived full-coverage test (every canonical con
 preview test and a Settings round-trip test; see `Docs/TestSuite.md` → Visualizer Studio. A property whose path the
 current values do not hold (an unused optional element, such as a curve-node slot) is hidden.
 
+### Drags are batched
+
+Every drag instrument (value sliders, Quiet/Peak lanes, lifecycle grips, response curves, XY handles, colour pickers,
+gradient nodes) goes through `previewValue` / `previewColour` / `previewGradient`, which only hold the newest value
+per target. The controller applies the held values at the next frame start (`on_frame`, the surface's existing
+`afterAnimating` edge; no timer), latest wins, so the session previews at most once per rendered frame however fast
+the pointer moves. An applied preview re-shows only the properties stored under the gesture's keys; the whole values
+map, the starting-point state and the condition map are rebuilt when the gesture ends (or at once when a changed key
+decides another property's visibility). The slider and its readout follow the pointer locally at once. Release
+applies the last held value and commits once (one save, one undo entry); Escape drops the held value and restores;
+keyboard steps and typed values commit per step. An evaluator can name keys whose preview follows only on release
+(`release_only_keys`): the engine-answer modes' engine-owned keys, whose analysis runs once on release (a live
+gesture evaluates with `exact=False`, which never starts one). Their sliders say "Updates On Release" while dragged.
+`tools/studio_drag_profile.py` measures a drag (`Docs/Reference/Harness_Index.md`): Spectrum's mode-owned drag frames
+no longer build the settings model (evaluation per frame 29.7 -> 7.3 ms median on a loaded machine), and Waveform's
+release replay spreads over frames within the budget (one 222 ms evaluation -> about 8.4 ms per frame); evidence
+`.artifacts/evidence/studio_followups/drag_profile/`.
+
 ## 4. Settings link and the restore guarantee
 
 - **Entry.** `ui/tabs/media/spec_mode_builder.py` gives any spec-built mode with a registered adapter an **Open Studio**
@@ -149,8 +261,8 @@ current values do not hold (an unused optional element, such as a curve-node slo
   the settings map directly. Camera turn/tilt go through the framed camera editor's pose authority.
 - **Preset menu.** The header's preset picker offers Settings' own preset-row actions: Move To Custom (on a curated
   preset), Save Preset As… (on Custom, Settings' own file dialog) and, for authoring the curated presets themselves,
-  **Save To <Preset>**. This replaces Settings' retired Edit Preset (the preset file opened in the OS editor), which
-  remains only for modes that have no Studio yet (`Current_Plan.md` §9).
+  **Save To <Preset>**. This replaced Settings' Edit Preset (the preset file opened in the OS editor), deleted on
+  6 Nov 2026 once every visualizer mode had a Studio.
 - **Save To <Preset>.** The store remembers the curated preset this session's Custom values came from (the preset the
   Studio opened on, a Studio edit made on a curated preset, which moves it into Custom, or Move To Custom from it;
   choosing another curated preset starts afresh, returning to Custom keeps it) and the keys edited since. On Custom
@@ -175,6 +287,12 @@ current values do not hold (an unused optional element, such as a curve-node slo
   retired, and again (idempotently) in a `finally`, so neither a failing nor a hanging teardown step can leave
   Settings concealed; a mode switch retires without revealing because the next session follows. Open failures show a
   "Studio Unavailable" popup over Settings.
+- **Reveal re-exposes (layered window).** Settings is frameless and translucent, so Qt presents it as a layered window,
+  which never receives `WM_PAINT`; Qt exposes it only from a show it initiated, and `WindowPresence` shows it natively.
+  Without help the revealed window stays *not exposed* to Qt: it accepts input but never repaints (the 6 Nov "frozen and
+  unclickable" stall: saves logged for 25 s after a clean reveal). `reveal` therefore follows the native show with
+  `RedrawWindow(RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW)`, which makes Windows send the missing `WM_PAINT` so Qt
+  exposes and repaints; the reveal log line carries `exposed=`. `tests/test_studio_exit_repaint.py` guards it.
 - **Never hide the window from Python.** PySide holds the GIL through `QWindow.hide()`, and Qt's threaded render
   loop waits inside it for the render thread, which runs the viewport's Python (render-node release,
   `sceneGraphInvalidated`) when the non-persistent scene graph is invalidated: calling it from Python deadlocked the

@@ -39,6 +39,8 @@ class StudioShellHost:
     """QML engine + shell root + viewport inside one QQuickWindow."""
 
     def __init__(self, window: QQuickWindow, bridge: QObject, renderer_factory: Callable[[], Any]) -> None:
+        from ui.studio.chrome import register_chrome_types
+        register_chrome_types()
         self.window = window
         self.engine = QQmlEngine()
         self.engine.addImportPath(str(QML_DIR))
@@ -114,6 +116,12 @@ class _StudioQuickWindow(QQuickWindow):
         self.closeRequested.emit()
 
 
+def material_mode(theme) -> str:
+    """The Settings theme's native backdrop mode the Studio window carries: ``off`` (Normal), ``acrylic``, ``glass``."""
+    mode = str(getattr(getattr(theme, "backdrop", None), "mode", "off"))
+    return mode if mode in ("acrylic", "glass") else "off"
+
+
 def initial_geometry(anchor: QRect | None) -> QRect:
     """Inherit the originating window's screen and centre; desktop-sized within its screen."""
     screen = None
@@ -140,11 +148,27 @@ class StudioWindowSurface(QObject):
     lost = Signal()
     failed = Signal(str)
 
-    def __init__(self, controller, *, anchor: QRect | None = None) -> None:
+    def __init__(self, controller, *, anchor: QRect | None = None, theme=None) -> None:
         super().__init__()
         window = _StudioQuickWindow()
         window.setTitle(controller.adapter.title or "Studio")
-        window.setColor(Qt.GlobalColor.black)
+        # Settings' chrome: frameless, with the shell's custom title bar and forged rounded edge. Under a Glass or
+        # Acrylic Settings theme the window carries the same native material as Settings (an alpha surface the
+        # theme's translucent roles let it through); Normal stays an opaque window with no backdrop at all.
+        from ui.settings_theme_runtime import get_active_settings_theme
+        self.theme = theme or get_active_settings_theme()
+        self.material = material_mode(self.theme)
+        window.setFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
+        if self.material != "off":
+            surface_format = window.requestedFormat()
+            surface_format.setAlphaBufferSize(8)
+            window.setFormat(surface_format)
+            window.setColor(Qt.GlobalColor.transparent)
+        else:
+            window.setColor(Qt.GlobalColor.black)
+        self.backdrop_applied = False
+        self.maximized = False
+        self._normal_geometry: QRect | None = None
         # Settings may be in a modal exec(); the Studio must not be blocked by it, and it is the sole
         # authoring surface while open.
         window.setModality(Qt.WindowModality.ApplicationModal)
@@ -170,7 +194,57 @@ class StudioWindowSurface(QObject):
     def show(self) -> None:
         self.window.setGeometry(initial_geometry(self._anchor))
         self.window.show()
+        self.apply_backdrop()
         self.window.requestActivate()
+
+    def apply_backdrop(self) -> bool:
+        """The theme's native material, once, on first show (as Settings applies its own): the shared
+        mode -> AccentPolicy mapping in ``core.windows.dwm_blur``. Normal applies nothing."""
+        if self.material == "off" or self.backdrop_applied:
+            return False
+        from core import platform_paths
+        if not platform_paths.IS_WINDOWS:
+            return False
+        try:
+            from core.windows.dwm_blur import apply_backdrop
+            self.backdrop_applied = bool(apply_backdrop(int(self.window.winId()), self.material,
+                                                        self.theme.backdrop.tint))
+        except Exception:
+            logger.debug("[STUDIO] Native backdrop not available", exc_info=True)
+        return self.backdrop_applied
+
+    # Window chrome (the shell's title bar and edges) ---------------------------------
+    def start_move(self) -> None:
+        """Title bar drag: the system move (Windows snap and Aero snap). From maximised, restore under the pointer
+        first, as Settings does."""
+        if self.maximized:
+            from PySide6.QtGui import QCursor
+            cursor = QCursor.pos()
+            ratio = 0.5
+            if self.window.width() > 0:
+                ratio = max(0.05, min(0.95, (cursor.x() - self.window.x()) / self.window.width()))
+            self.toggle_maximize()
+            self.window.setPosition(int(cursor.x() - self.window.width() * ratio), int(cursor.y() - 20))
+        self.window.startSystemMove()
+
+    def start_resize(self, edges: int) -> None:
+        if not self.maximized:
+            self.window.startSystemResize(Qt.Edge(int(edges)))
+
+    def toggle_maximize(self) -> None:
+        """Maximise to the screen's work area, or restore (manual, as Settings: a frameless window)."""
+        if self.maximized:
+            self.maximized = False
+            if self._normal_geometry is not None:
+                self.window.setGeometry(self._normal_geometry)
+            return
+        self._normal_geometry = self.window.geometry()
+        screen = self.window.screen() or QGuiApplication.primaryScreen()
+        self.maximized = True
+        self.window.setGeometry(screen.availableGeometry())
+
+    def minimize(self) -> None:
+        self.window.showMinimized()
 
     def raise_(self) -> None:
         self.window.raise_()
@@ -240,7 +314,7 @@ class OffscreenStudioSurface(QObject):
     failed = Signal(str)
 
     def __init__(self, controller, *, size: tuple[int, int] = (1600, 900), dpr: float = 1.0,
-                 present_on_show: bool = True) -> None:
+                 present_on_show: bool = True, transparent: bool = False) -> None:
         super().__init__()
         from OpenGL import GL as gl
         from PySide6.QtGui import QOffscreenSurface, QOpenGLContext, QSurfaceFormat
@@ -259,7 +333,9 @@ class OffscreenStudioSurface(QObject):
         self.control = QQuickRenderControl()
         self.window = QQuickWindow(self.control)
         self.window.resize(*size)
-        self.window.setColor(Qt.GlobalColor.black)
+        # ``transparent``: clear to nothing, as the visible window does under a Glass/Acrylic theme, so a grab keeps
+        # the chrome's alpha (evidence of what the native material shows through). Otherwise over black.
+        self.window.setColor(Qt.GlobalColor.transparent if transparent else Qt.GlobalColor.black)
         self.window.setGraphicsDevice(QQuickGraphicsDevice.fromOpenGLContext(self.context))
         if not self.control.initialize():
             raise RuntimeError("Studio offscreen render control did not initialize")
@@ -351,4 +427,4 @@ class OffscreenStudioSurface(QObject):
         self.surface.destroy()
 
 
-__all__ = ["OffscreenStudioSurface", "StudioShellHost", "StudioWindowSurface", "initial_geometry"]
+__all__ = ["OffscreenStudioSurface", "StudioShellHost", "StudioWindowSurface", "initial_geometry", "material_mode"]

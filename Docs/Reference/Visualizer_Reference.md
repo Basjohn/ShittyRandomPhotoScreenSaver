@@ -30,8 +30,8 @@ the membership authority. Canonical defaults and editable presets own values. Th
 the same declared type/range/owner, while bespoke editors retain named Custom build/load/collect entries.
 
 A mode with a registered Studio adapter (`ui/studio/registry.py`) gets an **Open Studio** button in its preset row
-on every preset slot (the Studio opens on the slot shown, and its Save To <Preset> replaces Edit Preset; modes
-without a Studio keep Edit Preset). A mode whose controls are all Studio-edited (currently Waveform Ribbon) builds its
+on every preset slot (the Studio opens on the slot shown, and its Save To <Preset> authors the curated presets;
+every mode has one, and Settings' former Edit Preset is deleted). A mode whose controls are all Studio-edited (currently Waveform Ribbon) builds its
 body with `build_studio_owned_mode_ui` (`ui/tabs/media/spec_mode_builder.py`): preset row and one sentence, with
 values kept in the unchanged lazy-value/technical owners. The spec stays the declaration authority either way;
 `Docs/Reference/Visualizer_Studio.md` owns the Studio contract.
@@ -348,6 +348,46 @@ The resolved technical cache is deliberately not monolithic: DSP/capture control
 BeatEngine/audio-worker boundary, while technical-origin transient controls that authored logical evolution reads live on
 controller-owned logical state. Bar-count reconfiguration keeps controller, engine generation and logical display-bar
 mirror/freshness state coherent. Legacy overlay-only mirrors have no current role without an exact retained consumer.
+
+### Audio Analysis controls per mode (measured 6 Nov 2026)
+
+One DSP stage serves every mode (`bar_computation.fft_to_bars`): the FFT is binned into **Bar Count** log-spaced bands;
+three zone means (split at the notch fractions) give the raw bass / mid / treble lanes; the noise floor
+(**Sensitivity**, **Use Recommended Sensitivity**, **Dynamic Noise Floor**, **Noise Floor Baseline**) turns them into the
+post-floor energies that feed the transient bus (onsets, musical level and intensity) and the pre-AGC control and live
+lanes; **Input Gain** scales the PCM before the FFT and **Audio Block Size** sets the FFT length. Only a mode with authored
+Spectrum shaping continues into the shaped bars, where **AGC Strength**, **Output Lift**, **Kick Lane Gain / Mix** and
+**Transient Clamp** act; **Transient Pulse** and the Bubble mixes are read by Bubble's own tick. So Bar Count is the number of
+drawn bars only for Spectrum and Extruded Spectrum; elsewhere it is analysis resolution and moves the zone means (and with
+them every lane downstream) by a few percent to a quarter.
+
+`tools/visualizer_replay/analysis_controls_audit.py` measures this: ordinary replay serves *recorded* post-DSP lanes, so
+a technical control could never move them (the DevCurve and Oscilloscope Studio notes that only Bar Count and the noise
+floor mattered came from that). The audit recomputes every lane from the clip's native PCM through the production DSP
+and the production getters, moves each owned control from the mode's frozen baseline, and diffs the mode's published
+frame field by field (shipped Studio clips, two clips, deterministic; a repeat of the baseline differs by exactly 0).
+Scale caveat: it takes one analysis block per 11 ms tick, where live analyses every capture callback, so absolute levels
+approximate the live engine's while structural facts (a control that reaches nothing) are exact.
+
+| Mode | What its frame reads from the engine | Audio Analysis controls that move it | Inert (read by nothing the frame publishes) |
+| --- | --- | --- | --- |
+| Spectrum, Extruded Spectrum | shaped, smoothed bars (Bar Count of them) and their peaks | all offered; Kick Lane Gain / Mix and Transient Clamp only slightly | Transient Pulse (owned, never offered) |
+| Neon Lake | the same bars, onset waves from the bus, the analysis spectrum for Terrain Reaction | all offered | Transient Pulse (not offered) |
+| Oscilloscope | raw capture history for the trace; onsets, musical level / intensity and the analysis spectrum for Flare, Drive, Tone | all offered (Bar Count, Block Size and Gain also move Tone) | none offered |
+| Bubble | the Bubble feed, transient lanes, the event scheduler | Bar Count, Block Size, Sensitivity, Floors, Gain, Transient Pulse / Clamp / Mixes (Vocal Mix only through Rotation Amount) | **AGC Strength, Output Lift** (hidden); Kick Lane Gain (not offered) |
+| Extruded Bubble | onsets from the bus; fixed-scale body bands | all offered; Sensitivity and the floors reach it only through onset detection (the body bands sit ahead of them) | none offered |
+| Voxel Sphere | the analysis spectrum (Analysis Bands), live pre-AGC lanes, onsets | all offered | none offered |
+| Spline Curve (DevCurve) | the pre-AGC control lanes, transient lanes, musical level and intensity | Bar Count, Block Size, Sensitivity, Floors, Gain, Transient Clamp | **AGC Strength, Output Lift** (hidden); Kick Lane Gain, Transient Pulse (not offered) |
+| Waveform | fixed-scale raw body bands, raw-scale bus onsets, level and intensity | Bar Count, Block Size, Input Gain | **Use Recommended Sensitivity, Sensitivity, Dynamic Noise Floor, Noise Floor Baseline** (hidden) |
+
+A control a mode provably never reads is hidden with the descriptor's `technical_hidden_suffixes`
+(`core/settings/visualizer_mode_registry.py`): visibility only. The key stays owned, stored, serialized and
+preset-authorable; Settings' Technical group and the Studio's Audio Analysis group (both built from
+`ui/tabs/media/technical_controls._control_defs_for_mode`) do not offer it; a mode that starts reading it drops it from the
+tuple. `tests/test_audio_analysis_controls.py` derives both directions from the registry: every hidden control leaves the
+published frame bit-identical, every offered one moves it, and hidden values round-trip through the model and the real tab.
+Bar Count is not hidden anywhere (it moves every mode's frame); hiding it outside Spectrum and Extruded Spectrum is a
+product call (stored values would keep applying, so no look changes), listed in `Current_Plan.md` §9.
 
 ## 6. Latest-state semantics
 
