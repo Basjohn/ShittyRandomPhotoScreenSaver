@@ -140,6 +140,11 @@ context is valuable). Slots need not always be full: when the right agent is not
   3. **Per-family Surface Material row** on each family page. The resolver already honours
      `widgets.<id>.surface_material`, but no family declares the key in canonical defaults, so a page save would drop
      it.
+- [ ] **Side defects seen in the card-surface run (6 Nov), not caused by it:** the isolated suite fails
+  `tests/test_r41_glyph_tooltip_and_light_audit.py::test_eb_settings_tooltips_are_escaped_wrapped_not_one_line_or_new_owner`
+  (it expects `textwrap.wrap(control.tooltip, width=59` in a Visualizer mode settings module; that code is identical to
+  main), and `tests/test_release_media.py::test_source_change_during_capture_discards_media` needs the gitignored
+  `assets/usu/scenes/UsuScene*.png` originals, so it fails in any agent worktree.
 - [~] **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent) - second
   pass done, awaiting operator eyes:** the mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`.
   Preset 9 (Deep Red Ocean) only; Presets 1-8 pixel-identical. Shared work, each dormant at 0: **Ember Grain**,

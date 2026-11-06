@@ -789,7 +789,7 @@ class QuickSceneController(QObject):
                 # Dimming lies beneath the backdrop; pixel shift moves only the cards,
                 # which sample the backdrop in screen space and need no refresh.
                 backdrop_changed = backdrop_changed or name.startswith("dimming")
-        owner = self._surface_backdrop_owner
+        owner = getattr(self, "_surface_backdrop_owner", None)
         if backdrop_changed and owner is not None:
             owner.note_background_changed()
         return True

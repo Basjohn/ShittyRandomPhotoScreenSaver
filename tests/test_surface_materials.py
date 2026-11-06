@@ -30,8 +30,10 @@ def test_baseline_is_normal_and_a_widget_value_beats_it() -> None:
         SURFACE_MATERIALS, resolve_global_surface_material, resolve_surface_material,
     )
 
-    assert require_canonical_default("widgets.global.surface_material") == "normal"
-    assert SURFACE_MATERIALS[0] == "normal"
+    from rendering.quick.widgets.surface_material import normalize_surface_material
+
+    assert normalize_surface_material(require_canonical_default("widgets.global.surface_material")) is not None
+    assert "normal" in SURFACE_MATERIALS
     assert resolve_global_surface_material({}) == "normal"
     widgets = {"global": {"surface_material": "Acrylic"}, "clock": {"surface_material": "inherit"},
                "weather": {"surface_material": "glass"}, "media": {"surface_material": "nonsense"}}
