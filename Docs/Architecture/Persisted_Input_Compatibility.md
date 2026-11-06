@@ -106,8 +106,9 @@ without the safe path below.
 - **Widget Theme v1/v2 → v3 material-state rewrite**
   (`core/settings/widget_theme_input_compat.py`).
   *Blocked:* reintroducing card-material runtime ownership to make old state
-  meaningful. Runtime card Glass/Acrylic/material is rejected historical
-  architecture, not "cleanup compatibility."
+  meaningful. The Sep 2026 keys stay stripped and are never mapped onto the
+  current `surface_material` values (Docs/Architecture/Card_Surface_Materials.md),
+  which are a different design, not "cleanup compatibility."
 - **Ordinary Widget family colour bridge** (old per-family colour persistence,
   superseded by Widget Theme `header.*` + Style Overrides → Header Fill).
   *Blocked:* flattening durable per-family colour customization to make the

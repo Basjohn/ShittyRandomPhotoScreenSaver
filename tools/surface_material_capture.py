@@ -131,6 +131,29 @@ class MaterialScene:
             self.owner.set_transition_active(True)
         return run
 
+    def frame_at(self, identity: str, source, destination, progress: float, *, refresh: bool = True):
+        """The scene at ``progress`` of ``identity``; ``refresh`` False keeps the previous backdrop.
+
+        Offscreen frames come faster than real time, so the bounded continuous refresh is
+        driven explicitly: interval 0 refreshes this frame, a huge interval keeps the last one.
+        """
+
+        self.start_transition(identity, source, destination, progress)
+        if self.owner is not None:
+            self.owner.item.set_continuous(True, 0.0 if refresh else 1e9)
+        self.render(1)
+        return self.read()
+
+    def card_boxes(self) -> list[tuple[int, int, int, int]]:
+        from PySide6.QtCore import QRectF
+
+        boxes = []
+        for presentation in self.presentations:
+            item = presentation.item
+            rect = item.mapRectToScene(QRectF(0.0, 0.0, item.width(), item.height()))
+            boxes.append((int(rect.left()) + 6, int(rect.top()) + 6, int(rect.right()) - 6, int(rect.bottom()) - 6))
+        return boxes
+
     def close(self) -> None:
         for presentation in self.presentations:
             try:
@@ -233,9 +256,7 @@ def capture_sheets(scene: MaterialScene, wallpapers: list[Path], output: Path) -
                     settle_still(scene)
                     scene.start_transition(identity, images[0], images[1 % len(images)], 0.0)
                     scene.render(3)       # first-use programs/geometry off the measured frame
-                    scene.start_transition(identity, images[0], images[1 % len(images)], progress)
-                    scene.render(1)
-                    frames[material] = scene.read()
+                    frames[material] = scene.frame_at(identity, images[0], images[1 % len(images)], progress)
                 name = f"transition_{slug(theme)}_{identity}_{int(progress * 100)}.png"
                 contact(frames, output / name, f"{theme} - {identity} at {progress:.2f}")
                 rows.append({"kind": "transition", "theme": theme, "transition": identity,
@@ -284,6 +305,106 @@ def contact(frames: dict, path: Path, title: str) -> None:
         frame.save(full / f"{material}.png")
 
 
+# --------------------------------------------------------------------------- cadence
+
+CADENCE_HZ = (165.0, 120.0, 60.0, 30.0, 20.0, 15.0)
+CADENCE_MATERIALS = ("glass", "acrylic", "mica")
+CADENCE_POINTS = (0.2, 0.35, 0.5, 0.65, 0.8)
+
+
+def measure_cadence(scene: MaterialScene, wallpapers: list[Path]) -> dict:
+    """Worst-case staleness error inside the cards for each refresh rate.
+
+    For refresh rate R the backdrop is at most one interval old: the card is drawn at
+    progress p over a backdrop refreshed at p - (1/R)/duration. The error is the 8-bit
+    difference against a backdrop refreshed at p, inside the card rectangles only.
+    """
+
+    import numpy
+    from tools.transition_contact_sheet import production_transition_spec
+
+    images = [presentation_image(path, SCENE, f"cad-{index}") for index, path in enumerate(wallpapers[:2])]
+    boxes = scene.card_boxes()
+    mask = numpy.zeros((SCENE[1], SCENE[0]), dtype=bool)
+    for left, top, right, bottom in boxes:
+        mask[max(0, top):bottom, max(0, left):right] = True
+    results: dict = {}
+    for material in CADENCE_MATERIALS:
+        scene.set_material(material)
+        for identity in TRANSITIONS:
+            duration_s = production_transition_spec(identity).duration_ms / 1000.0
+            scene.set_wallpaper(images[0])
+            scene.render(4)
+            scene.start_transition(identity, images[0], images[1], 0.0)
+            scene.render(3)
+            row = {}
+            for hz in CADENCE_HZ:
+                step = (1.0 / hz) / duration_s
+                means, p99s = [], []
+                for point in CADENCE_POINTS:
+                    fresh = numpy.asarray(scene.frame_at(identity, images[0], images[1], point), numpy.int16)
+                    scene.frame_at(identity, images[0], images[1], max(0.0, point - step))
+                    stale = numpy.asarray(scene.frame_at(identity, images[0], images[1], point, refresh=False),
+                                          numpy.int16)
+                    diff = numpy.abs(fresh - stale).max(axis=2)[mask]
+                    means.append(float(diff.mean()))
+                    p99s.append(float(numpy.percentile(diff, 99)))
+                row[f"{hz:g}"] = {"mean": round(max(means), 3), "p99": round(max(p99s), 1)}
+            results.setdefault(material, {})[identity] = {"duration_s": duration_s, "rates": row}
+            print(material, identity, {k: v["p99"] for k, v in row.items()}, flush=True)
+    return results
+
+
+# --------------------------------------------------------------------------- cost
+
+
+def measure_cost(scene: MaterialScene, wallpapers: list[Path], frames: int = 80) -> dict:
+    """Whole-frame GPU time (GL_TIME_ELAPSED around the scene's render) per material, relative
+    to Normal measured alternately beside it, on a still wallpaper with no backdrop refresh: the
+    steady cost of the card quads. Five cards on the 1600x900 scene."""
+
+    import ctypes
+    from OpenGL import GL as gl
+
+    image = presentation_image(wallpapers[0], SCENE, "cost")
+    scene.set_wallpaper(image)
+
+    def timed() -> float:
+        scene.scene._make_current()
+        query = int(gl.glGenQueries(1)[0])
+        gl.glBeginQuery(gl.GL_TIME_ELAPSED, query)
+        scene.scene.control.render()
+        scene.scene.control.endFrame()      # the GL backend executes the recorded frame here
+        scene.scene._make_current()
+        gl.glEndQuery(gl.GL_TIME_ELAPSED)
+        value = ctypes.c_uint64()
+        gl.glGetQueryObjectui64v(query, gl.GL_QUERY_RESULT, ctypes.byref(value))
+        gl.glDeleteQueries(1, [query])
+        return value.value / 1e6
+
+    def frame_gpu(material: str) -> float:
+        scene.set_material(material)
+        scene.render(4)              # settle: refresh once, then disarmed
+        app = scene.scene.app
+        app.processEvents()
+        scene.scene.control.polishItems()
+        scene.scene.control.beginFrame()
+        scene.scene.control.sync()
+        return timed()
+
+    results = {}
+    for material in MATERIALS[1:]:
+        normal, case = [], []
+        for _ in range(frames // 8):
+            normal.append(min(frame_gpu("normal") for _ in range(4)))
+            case.append(min(frame_gpu(material) for _ in range(4)))
+        results[material] = {"normal_ms": round(statistics.median(normal), 4),
+                             "material_ms": round(statistics.median(case), 4),
+                             "delta_ms": round(statistics.median(case) - statistics.median(normal), 4)}
+        print(material, results[material], flush=True)
+    return results
+
+
 # --------------------------------------------------------------------------- main
 
 
@@ -294,6 +415,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--sheets", action="store_true")
     parser.add_argument("--smoke", action="store_true", help="one still per material, for a quick look")
+    parser.add_argument("--cadence", action="store_true", help="staleness error per backdrop refresh rate")
+    parser.add_argument("--cost", action="store_true", help="steady whole-frame GPU per material vs Normal")
     args = parser.parse_args(argv)
 
     from PySide6.QtGui import QGuiApplication
@@ -322,6 +445,10 @@ def main(argv: list[str] | None = None) -> int:
                 settle_still(scene)
                 frames[material] = scene.read()
             contact(frames, args.output / "smoke.png", "smoke")
+        if args.cost:
+            report["cost"] = measure_cost(scene, list(args.wallpapers))
+        if args.cadence:
+            report["cadence"] = measure_cadence(scene, list(args.wallpapers))
         if args.sheets:
             report["sheets"] = capture_sheets(scene, list(args.wallpapers), args.output)
     finally:

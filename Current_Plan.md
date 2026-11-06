@@ -121,31 +121,25 @@ context is valuable). Slots need not always be full: when the right agent is not
   the import allowlist scanned only the saver's QML, never `ui/studio/qml`. The build now keeps the Basic style's
   closure and prunes only the other Controls styles. `test_every_shipped_qml_import_survives_the_frozen_prune` walks
   every shipped import's module and DLL closure against the prune. Open: open a Studio from a fresh build.
-- [ ] **Widget card surfaces: Acrylic, Glass and other materials (operator 6 Nov, near term; the lead or an Opus 5.5
-  high agent, never a smaller model).** Operator: the old attempt failed with a weaker agent; done properly it is a
-  lasting visual uplift. This **supersedes** the recorded rejection: `Docs/Contracts.md` (runtime cards are plain RGBA,
-  "no ... card-material Loader/capture path"), `Spec.md` ("rejected runtime Glass/Acrylic card experiment"),
-  `Docs/Guides/Custom_Style_Implementation.md` and `Docs/Guides/10_WIDGET_GUIDELINES.md`, which already names the way
-  back: "a broader independently justified renderer architecture and a fresh acceptance plan rather than reviving the
-  rejected card-only experiments". **Operator priorities, in order:** never risk damaging the compositor; stay as
-  performance-neutral as possible; every result proved by captures, including during transitions. Before any code:
-  1. **Read the failed-method record** in those docs and the historical bugs (R-61 Settings Glass layered-HWND
-     backdrop mismatch, R-63 black flash, R-95, and grep Glass/Acrylic/backdrop/material). Write down why each
-     earlier mechanism failed.
-  2. **Design one scene-local Qt Quick material owner per display**, never routed through the Settings HWND or
-     AccentPolicy stack. A blurred, tinted copy of the wallpaper/transition layer is made once per display and
-     shared by every card through its mask: no per-card capture, blur or owner. Its update cadence is tied to the
-     wallpaper/transition edges, not a timer. Cost is zero when every card is Normal (dormancy). Cards over a running
-     transition stay correct. Light-theme legibility holds, with a darker legibility layer behind text, as in the
-     Settings rule. The Visualizer card is included or explicitly excluded.
-  3. **Materials to offer, each measured for cost:** Acrylic (blur, tint, luminosity, noise), Glass (lighter blur,
-     edge highlight, slight refraction), Frosted, a Mica-like wallpaper-tinted solid (very cheap), Smoked/tinted
-     translucent, and Normal (today's default).
-  4. **Settings:** the Widget Theme model (memory: Normal first; Context Menu and cards inherit the Widget Theme;
-     per-family overrides beat the theme baseline).
-  5. **Acceptance plan:** offscreen sheets on real wallpapers per material and theme, transitions mid-flight, cost
-     against the overhead baseline (control-relative), and a live check under the lead-scheduled game load. Then
-     rewrite the Contracts/Spec/guide passages as a superseded decision, not an overwrite.
+- [~] **Widget card surfaces: Acrylic, Glass, Frosted, Mica, Smoked (operator 6 Nov) - built, awaiting the live
+  check and the operator's eyes.** Design, failure analysis, invariants and measurements:
+  `Docs/Architecture/Card_Surface_Materials.md`. The Sep 2026 rejection is rewritten as a superseded decision in
+  Contracts, Spec and both guides. One per-display backdrop reads the frame the wallpaper/transition renderer has
+  already drawn, blurs it once, and every non-Normal card and the Context Menu sample it. The background renderer is
+  never redirected, layered or re-dirtied. With every card Normal nothing exists; after a material the backdrop is
+  parked. Refreshes are edge-driven, and during transitions ride rendered frames at a measured rate per material.
+  Backdrop refresh costs 0.045-0.058 ms GPU and 0.11-0.15 ms render-thread CPU; the card quads add 0.006-0.008 ms per
+  frame. `Widgets -> General -> Style Overrides -> Surface Material` (Normal default). The Visualizer card and the
+  System Volume OSD stay Normal. Captures: `.artifacts/evidence/widget_surfaces_20261106/` in the agent worktree.
+  Left:
+  1. **Live check under the lead-scheduled game load**, materials on, a transition-heavy run, and Normal as the
+     control.
+  2. **Operator's eyes on the looks:** tints, blur strength and the legibility layer, Glass's highlight and
+     refraction. The legibility shift follows the text: darker under light text, lighter under dark text on light
+     themes.
+  3. **Per-family Surface Material row** on each family page. The resolver already honours
+     `widgets.<id>.surface_material`, but no family declares the key in canonical defaults, so a page save would drop
+     it.
 - [~] **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent) - second
   pass done, awaiting operator eyes:** the mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`.
   Preset 9 (Deep Red Ocean) only; Presets 1-8 pixel-identical. Shared work, each dormant at 0: **Ember Grain**,

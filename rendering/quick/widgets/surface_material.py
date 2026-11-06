@@ -26,12 +26,15 @@ SURFACE_MATERIAL_LABELS: dict[str, str] = {
 }
 
 # Continuous backdrop refresh spacing while a transition runs, per material (seconds of
-# render-thread time between refreshes; frames in between reuse the last backdrop). Mica
-# is a near-solid wallpaper tint and needs far less. Measured on mid-transition sequences:
+# render-thread time between refreshes; frames in between reuse the last backdrop). Chosen
+# by the measured worst-case staleness inside the cards (one full interval old, p99 of the
+# 8-bit difference, six transitions incl. 3D, tools/surface_material_capture.py --cadence):
+# at most ~12 levels. Glass (light blur) needs >=120 Hz, so it refreshes on every rendered
+# frame (never stale); Acrylic/Frosted/Smoked hold <=12 at 60 Hz; Mica <=9 at 20 Hz.
 # Docs/Architecture/Card_Surface_Materials.md section 6.
 TRANSITION_REFRESH_INTERVAL_S: dict[str, float] = {
+    "glass": 0.0,
     "acrylic": 1.0 / 60.0,
-    "glass": 1.0 / 60.0,
     "frosted": 1.0 / 60.0,
     "smoked": 1.0 / 60.0,
     "mica": 1.0 / 20.0,
