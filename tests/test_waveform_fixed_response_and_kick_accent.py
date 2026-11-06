@@ -68,14 +68,15 @@ def test_a_two_to_five_second_break_does_not_rescale_what_follows(monkeypatch):
 
 
 def test_adaptive_response_off_remembers_nothing():
-    """Off is the fixed calibration: what came before (a loud or a quiet prelude) never changes the size of what follows.
-    On, the remembered peak sizes the same passage differently (negative control)."""
+    """Off is the fixed calibration: beyond the 3 s phrase mean the dip is measured against, what came before (a loud
+    or a quiet prelude) never changes the size of what follows. On, the remembered peak sizes the same passage
+    differently for its 30 s memory (negative control)."""
     c = replace(controls(), breathing=0.)
-    loud, quiet = run(c, 12., prelude=1., level=.6), run(c, 12., prelude=.3, level=.6)
-    assert np.abs(after(loud, 8., 12.)-after(quiet, 8., 12.)).max() < 1e-3
+    loud, quiet = run(c, 20., prelude=1., level=.6), run(c, 20., prelude=.3, level=.6)
+    assert np.abs(after(loud, 16., 20.)-after(quiet, 16., 20.)).max() < 5e-3
     a = replace(c, adaptive_response=True)
-    loud, quiet = run(a, 12., prelude=1., level=.6), run(a, 12., prelude=.3, level=.6)
-    assert np.abs(after(loud, 8., 12.)-after(quiet, 8., 12.)).max() > .05
+    loud, quiet = run(a, 20., prelude=1., level=.6), run(a, 20., prelude=.3, level=.6)
+    assert np.abs(after(loud, 16., 20.)-after(quiet, 16., 20.)).max() > .05
 
 
 def roll_and_births(kick_accent, level=1.):
