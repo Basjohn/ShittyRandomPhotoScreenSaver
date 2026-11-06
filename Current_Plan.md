@@ -67,6 +67,18 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
   cost is mostly elsewhere (capture, packet build, field/strand/spark work): profile the LIVE logical tick, then cut
   it with byte-identical output (Preset 4 bit-exact with the tag). This is the Graphics Backend Decision's "optimise
   the logical tick first" step before trigger 2 can be judged. Evidence `.artifacts/evidence/live_check_quiet_20261106/`.
+  - **Extruded Bubble part (built 6 Nov; offline proven, live re-measure open):** byte-identical cuts at the owners.
+    These are the contact discovery and far-pair skip, the cluster motion and layout, the cached phase terms, steer
+    with no closure, the wake fast path, the snapshot records, controls re-resolved only on a read value's change,
+    a strict-equality memo for the renderer parameters, struct-packed wake floats and presentation attrs resolved
+    once per spec. Every published frame matches main on 4 recordings x 6 cases (24 replays, 130,926 frames, per-frame
+    digests). `tests/test_extruded_bubble_logical_tick_exactness.py` compares the output against the straightforward
+    forms. The offline P1 tick (`tools/eb_logical_cost_probe.py`, paired with main) went from 2.50 to 2.13 ms median
+    (p90 3.25 to 2.78), about 15%. The tick is now spread thin: contacts 0.38, wakes 0.42 (NumPy flow 0.2), the
+    rest of the simulation 0.62, capture 0.45. A NumPy contact sweep measured slower in situ and was dropped. Open:
+    the paired `--load game60` live checks (P1 and P5, main and branch alternately, 2 rounds each, 60 s) are owed by
+    the lead on a free machine. The 6 Nov rounds overlapped the operator's own session (system CPU 97-100%) and
+    are void. Evidence `.artifacts/evidence/eb_logical_tick/` (branch worktree).
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
