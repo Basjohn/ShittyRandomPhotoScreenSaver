@@ -95,6 +95,7 @@ class WidgetThemeDraft:
     name: str
     linked_settings_theme_id: str | None
     colors: dict[str, Rgba]
+    surface_material: str | None = None
 
     @classmethod
     def from_spec(cls, spec: WidgetThemeSpec) -> "WidgetThemeDraft":
@@ -103,6 +104,7 @@ class WidgetThemeDraft:
             name=spec.name,
             linked_settings_theme_id=spec.linked_settings_theme_id,
             colors=dict(spec.colors),
+            surface_material=spec.surface_material,
         )
 
     def to_spec(self) -> WidgetThemeSpec:
@@ -111,6 +113,7 @@ class WidgetThemeDraft:
             name=self.name,
             linked_settings_theme_id=self.linked_settings_theme_id,
             colors=dict(self.colors),
+            surface_material=self.surface_material,
         )
 
     def is_core(self, role: str) -> bool:
