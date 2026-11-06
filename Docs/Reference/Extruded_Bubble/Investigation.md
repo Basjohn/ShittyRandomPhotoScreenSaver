@@ -3107,3 +3107,43 @@ Steady GPU for P7 at 1672x941: 4.2-4.5 ms median. Presets 1/2 render pixel-ident
   `tools/visualizer_replay/eb_chain_population_probe.py`; tests in `test_extruded_bubble_chain_visibility.py`
   and `test_extruded_bubble_bead_gpu.py`. Not yet seen on a real display.
 Methods are in [Visualizer_Visual_Tuning.md](../../Guides/Visualizer_Visual_Tuning.md).
+
+## 72. Deep red ocean: Preset 9 toward `Preset7Goal.png` (6 November)
+
+Operator: make a truly deep red ocean preset like the mock; Preset 7 is good but "its own thing". Preset 9 (Deep Red
+Ocean) is new and Preset 7 is untouched. Evidence: `.artifacts/evidence/extruded_bubble/deep_red_ocean_20261106/`
+(full-resolution mock | P7 | P9 sheets and mock | P9 crops of stream, shell, shafts, bokeh and embers at five moments
+of two recordings; regional metrics; showcase WebP; motion captures; cost).
+
+- **Shared work: Ember Grain (Water, 0..1).** The mock's embers are burning grit and torn strands with dark water
+  between them; the dust was smooth blurred fbm smears whatever its colour. Tried and rejected: a thresholded
+  pixel-scale fbm (camouflage blotches). Kept: thin along-stream strands plus sparse 1-2 px sparks in ~5 px cells,
+  gathered where the cloud is thick, coloured from the light (smoulder at 0.8 of the ember colour, orange at hot
+  cores), leaning only gently toward the light. 0 leaves the old expression verbatim: Presets 1-8 are pixel-identical
+  to HEAD on two moments each (EB's own noise floor is one level on one pixel between identical runs). Authored 0
+  into every existing preset by repair fill. Cost 0.02-0.10 ms GPU at 1662x888 (round-robin `--compare`; the same
+  compare on P7, where it is a no-op, read -0.01).
+- **Authoring:** Deep Light could not give the mock's corner beams: its broad glow lobes wash the whole corner
+  (rays off still left it) and its fan has no dark gaps. Sunlit Surface with Surface Brightness 0 gives distinct
+  beams with gaps; the refracted sun cannot sit below Snell's window, so it was put just off the upper-right corner by
+  projecting it through the preset's physical camera (Turn -0.10, Tilt 0 from Preset 7's pose). Water/Depth darker,
+  Haze 0.25, Particles 0.06-0.18 (P7's orange point population dominated its frame), Dust 0.75 with Ember Grain 1,
+  Clarity 1, Rim Glow 2, Sparkle 2, no Doublets, more bubbles (Large 10-16, Small 110-130, Bead Chains 8-12).
+- **Measured against the mock** (3x3 grid of 35th-percentile luminance and warm-pixel share, mean of five moments
+  on ragdoll and anything_mixed2): water p35 now within about 0.75-1.5x of the mock in every cell (P7 was 2-4x
+  brighter); shafts region p35/mean/warm 0.22/0.31/0.30 against 0.23/0.31/0.27 (P7 0.45/0.52/0.89); ember hue 17-19°
+  against the mock's 13-16°.
+- **Still short of the mock:** the stream band is dimmer (mean 0.12 against 0.19, warm 0.12-0.14 against 0.22): the
+  mock's thousands of lit glass micro-bubbles and bright copper rims along the streams read as dim dots and thin rims
+  here, though on-screen counts per size band are comparable (`eb_screen_stats`: 74-89 visible, 6-39 at 18-40 px);
+  embers also drift into the top-middle, which the mock keeps dark (warm 0.19 against 0.02), and fall short on the
+  left; the Snell's-window surface still shows faintly at the top; the bokeh giant appears only when the simulation
+  brings a bubble near the lens; Wake Trails strands carry their fixed cyan/violet tint.
+- **Reactivity:** Preset 9 keeps Preset 7's reaction controls (breathing, pulse, sustain, stream speed, drift), so the
+  realized quiet/mid/loud values match (`eb_control_audit --realized`); rays widen to 0.55-1.0. On anything_mixed2
+  30-40 s the frame luminance swings 17% (P7 23%), following the level (r 0.47); the largest frame-to-frame step is 5%
+  (no pops). Not yet seen on a real display or under the live game load.
+- **Cost against controls (same machine, `tools/eb_gpu_stage_cost.py`, heavy1, 1662x888):** whole frame GPU P9
+  2.34-2.41 ms, P7 2.57, P1 2.42, P5 2.46. Logical tick (`tools/eb_logical_cost_probe.py`, heavy1 30 s,
+  alternating): P9 1.66-2.72 ms median, P7 2.05-2.18, P1 3.15-3.17, P5 2.05-3.03; P9's extra over P7 is its Wake
+  Trails (wakes snapshot +0.5 ms), as in P1/P5. Dormancy: nothing runs outside Extruded Bubble.
