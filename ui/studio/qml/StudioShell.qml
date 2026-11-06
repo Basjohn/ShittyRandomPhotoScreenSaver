@@ -1264,12 +1264,14 @@ Rectangle {
         }
     }
 
-    component SwitchRow: Row {
+    // An Item, not a Row: a Row positions every visible child in sequence and ignores their x, which pushed the click
+    // area past the end of the text (the 6 Nov "Tilt Shift is unclickable": no switch row could be clicked).
+    component SwitchRow: Item {
         id: switchRow
         property var row
         readonly property bool on: studio.values[row.id] === true
-        spacing: 10
-        height: 28
+        implicitHeight: 20
+        height: 20
         Rectangle {
             id: track
             objectName: "checkBox"
@@ -1286,9 +1288,9 @@ Rectangle {
             Keys.onSpacePressed: studio.commitValue(row.id, 0, !on)
             FocusRing { visible: track.activeFocus; radius: 7 }
         }
-        Text { anchors.verticalCenter: parent.verticalCenter; text: row.label; color: shell.cText
+        Text { x: 30; anchors.verticalCenter: parent.verticalCenter; text: row.label; color: shell.cText
                font.pixelSize: shell.fontBase - 1; width: switchRow.width - 30; elide: Text.ElideRight }
-        MouseArea { x: 0; width: switchRow.width; height: switchRow.height; cursorShape: Qt.PointingHandCursor
+        MouseArea { objectName: "switchHit"; anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                     hoverEnabled: true
                     onClicked: studio.commitValue(row.id, 0, !switchRow.on)
                     C.ToolTip.visible: containsMouse && row.tooltip !== ""
