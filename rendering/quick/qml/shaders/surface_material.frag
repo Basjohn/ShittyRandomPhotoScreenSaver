@@ -23,8 +23,8 @@ layout(std140, binding = 0) uniform buf {
 };
 layout(binding = 1) uniform sampler2D source;
 
-// SURFACE BEGIN (identical in surface_material.frag and text_legibility.frag;
-// tests/test_surface_materials.py checks it)
+// SURFACE BEGIN (identical in surface_material.frag, text_legibility.frag and
+// text_legibility.vert; tests/test_surface_materials.py checks it)
 float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 
 vec3 unpremultiply(vec4 c) { return c.a > 0.0 ? c.rgb / c.a : c.rgb; }
@@ -46,8 +46,9 @@ float grain(vec2 pixel) {
 }
 
 // The card surface at card-local point p (origin at the card centre), sampled through the
-// shared backdrop at this fragment's screen coordinate. rgb = surface, a = backdrop validity.
-vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit) {
+// shared backdrop at this point's screen coordinate. rgb = surface, a = backdrop validity.
+// grainValue is the static grain at this pixel (grain(gl_FragCoord.xy)); 0.5 = none.
+vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit, float grainValue) {
     vec2 halfSize = cardSize * 0.5;
     vec2 cardUnit = p / max(cardSize, vec2(1.0)) + vec2(0.5);
     float r = clamp(cornerRadius, 0.0, min(halfSize.x, halfSize.y));
@@ -113,9 +114,10 @@ vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit) {
         c = mix(c, vec3(1.0), 0.35 * highlight * edgeAmount);
     }
 
-    c += (grain(gl_FragCoord.xy) - 0.5) * lightNoise.y;
+    c += (grainValue - 0.5) * lightNoise.y;
     return vec4(clamp(c, 0.0, 1.0), valid);
 }
+// SURFACE END
 
 // Local units -> backdrop uv per unit (axis-aligned; the signs carry the y flip).
 vec2 backdropPerUnit(vec2 p, vec2 screen) {
@@ -124,7 +126,6 @@ vec2 backdropPerUnit(vec2 p, vec2 screen) {
     return vec2(abs(dx) > 1e-6 ? dFdx(screen.x) / dx : 0.0,
                 abs(dy) > 1e-6 ? dFdy(screen.y) / dy : 0.0);
 }
-// SURFACE END
 
 void main() {
     vec2 p = (vLocal - vec2(0.5)) * itemSize;
@@ -133,7 +134,7 @@ void main() {
     float d = roundedBox(p, halfSize, clamp(cornerRadius, 0.0, min(halfSize.x, halfSize.y)), n);
     float aa = max(fwidth(d), 0.001);
     float inside = 1.0 - smoothstep(-aa, aa, d);
-    vec4 surface = surfaceAt(p, itemSize, vScreen, backdropPerUnit(p, vScreen));
+    vec4 surface = surfaceAt(p, itemSize, vScreen, backdropPerUnit(p, vScreen), grain(gl_FragCoord.xy));
     vec4 material = vec4(surface.rgb, 1.0);
     vec4 normal = normalColor;   // ShaderEffect passes colours premultiplied
     fragColor = mix(normal, material, surface.a) * (inside * qt_Opacity);
