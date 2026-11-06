@@ -98,10 +98,12 @@ describe the current build only and exist to identify real package/dependency bl
 Themes and presets retain their loose editable packaging.
 
 The frozen QML package contract is evidence-gated rather than `qml`-means-everything. Project-authored QML currently
-imports only `QtQuick` and `QtQuick.Effects`; the shared build-layout authority rejects any new external QML namespace
-until the package contract is deliberately reviewed. Nuitka's broad QML scan is therefore pruned for source-proven
-unused families, including WebEngine, QML PDF and the `qpdf` image plugin, VirtualKeyboard, Qt3D/Quick3D, Controls
-families, Charts/Graphs/DataVisualization and Location/Positioning. Standard, Media Center and their Venv workers use
+imports `QtQuick` and `QtQuick.Effects` (the saver scene and everything shared) plus `QtQuick.Controls.Basic` and
+`QtQuick.Shapes`, which are the Settings-side Studio's only (`ui/studio/qml`, never the saver scene); the shared
+build-layout authority checks both QML trees and rejects any other external QML namespace until the package contract is
+deliberately reviewed. Nuitka's broad QML scan is therefore pruned for source-proven unused families, including
+WebEngine, QML PDF and the `qpdf` image plugin, VirtualKeyboard, Qt3D/Quick3D, the non-Basic Controls styles (the
+Basic closure the Studio imports is kept), Charts/Graphs/DataVisualization and Location/Positioning. Standard, Media Center and their Venv workers use
 the same exclusion authority; the diagnostic file is the Standard binary itself. Native Qt Multimedia remains
 packaged because notification/Jedi playback uses `QMediaPlayer`/`QAudioOutput`; QtQuick/Qml/Effects, QtGui's OpenGL
 context surface, NumPy/OpenBLAS and other currently owned runtime dependencies are not removed merely for size.
