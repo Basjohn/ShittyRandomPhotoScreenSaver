@@ -60,13 +60,13 @@ lead as reviewer/orchestrator.
   stays ~18% below pre-work main's loud RMS (a smooth wave cannot match a slope-limited triangle at the same slope);
   the quiet-passage evidence is one recording's cold start (9 kicks); a capped layer shows the swell less (it lives
   inside the body's share).
-- [ ] **Re-take the stored overhead baseline on a quiet machine** (`tools/overhead_baseline.py --size 2560x1440`,
-  commit it under `tools/baselines/overhead/`). The 6 Nov call-count rises against `2026-10-18_f4dbb4ab.json` are
-  resolved: the +72/+144 (scene3d transitions, Oscilloscope, Sphere, Extruded Spectrum; d91eb165's float32 raster
-  bounds re-derived every frame) is gone, with counts now below the 18 Oct figures, and Spectrum is 755. Three kept,
-  intended: Neon Lake +14 GL calls (339 -> 353, camera basis and pass 2-3 controls), Bubble +2 Python calls (custom
-  two-node gradient, e3b48138), Spectrum +1 (the whole-mapping comparison). The final run was taken on a loaded
-  machine, so it is not committed as the stored baseline: `.artifacts/evidence/overhead/2026-11-06_3a676343_vs_f4dbb4ab.txt`.
+- [ ] **Waveform logical tick starves the render thread under game load (quiet-machine game60, 6 Nov):** Waveform
+  P1/P4 logical tick median 8.5/8.3 ms (p90 14.4/14.0) holding the GIL 73-75% of the time, so render-mode time is
+  16-17 ms and frames drop to 41-44 fps (Neon Lake 89 fps, Spectrum 90, Bubble 63 under the same load; Extruded Bubble
+  5.9 ms / GIL 0.53 / 55 fps is the second case). Offline the Waveform dynamics alone are ~1.3 ms, so the live tick's
+  cost is mostly elsewhere (capture, packet build, field/strand/spark work): profile the LIVE logical tick, then cut
+  it with byte-identical output (Preset 4 bit-exact with the tag). This is the Graphics Backend Decision's "optimise
+  the logical tick first" step before trigger 2 can be judged. Evidence `.artifacts/evidence/live_check_quiet_20261106/`.
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
