@@ -139,16 +139,19 @@ def shockwave_height(x: float, z: float, events, amplitude: float, speed: float)
 # Height Scale), so they cannot tell a loud passage from a usual one.
 WATER_REACT_MEMORY = 2.0            # seconds: each wave's share of the level falls to 1/e
 WATER_REACT_WINDOW = (2.5, 4.0)     # seconds: the level forgets a wave smoothly here (the ring holds ~4.4 s at most)
-WATER_REACT_SCALE = 1.8             # sqrt of the summed strength per e-fold of the level's headroom
+WATER_REACT_SCALE = 1.6             # sqrt of the summed strength per e-fold of the level's headroom
+WATER_REACT_LEVEL_RISE = 0.25       # seconds: a wave's share of the level eases in (the level is not a flash)
+WATER_REACT_FOOT = 0.25             # the square root's foot (bounds its slope out of silence)
 WATER_REACT_ACCENT = (0.08, 0.35)   # seconds: a wave's light rises over the first, settles over the second
 WATER_REACT_BEAT = 0.4              # the share of the reaction the accents swing (beats swing the passage level)
 
 
 def shockwave_water_reaction(events) -> tuple[float, float]:
     """(level, accent), each 0..1, from the onset ring [(age, x, z, strength), ...]: the level is the recent waves'
-    summed strength on a fixed compressive scale (1985_loud1 p50 ~0.45, louder captures ~0.7-0.8, with headroom),
-    the accent the newest waves' quick-rise, gentle-settle light. Both rise over ``WATER_REACT_ACCENT[0]`` and
-    fade (never vanish): a wave's share eases out before the ring can drop it."""
+    summed strength on a fixed compressive scale (six recordings: p50 0.42 on the quiet 1985_loud1 capture to 0.78,
+    never above 0.9), the accent the newest waves' quick-rise, gentle-settle light. The level eases in over
+    ``WATER_REACT_LEVEL_RISE``, the accent over ``WATER_REACT_ACCENT[0]``; both fade (never vanish): a wave's share
+    eases out before the ring can drop it."""
     rise, settle = WATER_REACT_ACCENT
     total = accent = 0.0
     for age, _x, _z, strength in events:
@@ -156,9 +159,13 @@ def shockwave_water_reaction(events) -> tuple[float, float]:
         if age < 0.0 or strength <= 0.0:
             continue
         onset = _smoothstep(0.0, rise, age)
-        total += strength * onset * math.exp(-age / WATER_REACT_MEMORY) * (1.0 - _smoothstep(*WATER_REACT_WINDOW, age))
+        total += (strength * _smoothstep(0.0, WATER_REACT_LEVEL_RISE, age) * math.exp(-age / WATER_REACT_MEMORY)
+                  * (1.0 - _smoothstep(*WATER_REACT_WINDOW, age)))
         accent += strength * onset * math.exp(-age / settle)
-    return 1.0 - math.exp(-math.sqrt(total) / WATER_REACT_SCALE), 1.0 - math.exp(-accent)
+    # The square root compresses the summed strength (dense loud passages) but has no slope limit at zero; the
+    # small offset bounds it, so the first wave out of silence eases in over its rise instead of jumping.
+    return (1.0 - math.exp(-(math.sqrt(total + WATER_REACT_FOOT ** 2) - WATER_REACT_FOOT) / WATER_REACT_SCALE),
+            1.0 - math.exp(-accent))
 
 
 def shockwave_music_drive(events) -> float:
