@@ -476,7 +476,7 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
 
 - [ ] Finish Waveform Studio acceptance first (§7.1), then extract any remaining Waveform-shaped assumptions.
 - [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost, Extruded Spectrum and
-  Neon Lake built, DevCurve built (below); Sphere in progress): Oscilloscope. Neon Lake (Shockwave Grid) awaits operator acceptance
+  Neon Lake built, DevCurve and Oscilloscope built (below); Sphere in progress). Neon Lake (Shockwave Grid) awaits operator acceptance
   (evidence `.artifacts/evidence/neon_lake/studio/`, Presets 1 and 3): recorded engine answers like Spectrum, the
   shared framed camera, no wallpaper. Operator decision on acceptance: the Studio carries the terrain heightfield and
   its Extend / Reset edits but has no brush instrument, so its builder body can shrink to the preset row plus the
@@ -493,11 +493,20 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   workspace (one panel per layer), and whether the Audio Analysis group earns its place (in the replay only Bar Count
   and the noise floor change what the engine answers DevCurve, and nothing DevCurve draws). The builder body is
   replaced with `build_studio_owned_mode_ui` only on acceptance.
-- [ ] **Edit Preset survives only for modes without a Studio** (Oscilloscope): Studio modes
-  author curated presets with Open Studio (preset row, every slot) and the Studio's confirmed Save To <Preset>
-  (`Docs/Reference/Visualizer_Studio.md` §4); the Notepad path and its pop-up go for each mode when its adapter
-  registers (automatic: the slider builds Edit Preset only for `not has_studio(mode)`); delete `_open_preset_json`
-  with the last one. Operator look pending (6 Nov): Open Studio's place in the preset row and the Save To flow.
+- [ ] **Oscilloscope Studio built (6 Nov), awaiting operator acceptance** (`ui/studio/oscilloscope_adapter.py`,
+  registered). Evidence `.artifacts/evidence/oscilloscope/studio/` (Preset 1 Phosphor on Human, Preset 3 Lissajous on
+  Rag Doll: every workspace with the live traces). Recorded engine answers with the capture history recorded by
+  identity (binary sidecar; `Docs/Reference/Visualizer_Studio.md` §3). Operator to judge: Level / Afterglow / Ghosts /
+  Flare / Drive / Tone as the way to read the beam, the three workspaces, and whether the Audio Analysis group earns
+  its place (in the replay only Bar Count and the noise floor change what the engine answers Oscilloscope; Sensitivity,
+  Input Gain, Block Size and Use Recommended Sensitivity change nothing it reads, since it draws the raw capture
+  history: confirm against the live engine before removing anything). The builder body is replaced with
+  `build_studio_owned_mode_ui` only on acceptance.
+- [ ] **Edit Preset deleted (6 Nov)**: every visualizer mode now has a Studio, so the preset row's Edit Preset button,
+  `_open_preset_json` and its pop-up are gone (`ui/tabs/media/preset_slider.py`); curated presets are authored with
+  Open Studio and the Studio's confirmed Save To <Preset> (`Docs/Reference/Visualizer_Studio.md` §4).
+  `tools/flicker_test.py` keeps its own historical mock of the old row. Operator look pending: Open Studio's place in
+  the preset row and the Save To flow.
 
 ## Operator execution and evidence rules
 
