@@ -73,6 +73,11 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
   by the power plan, then check Task Manager CPU/GPU for the saver while dark, that wake input reaches the saver, and
   the first seconds after wake (no stale frame, jump or hitch; run with `--frame-trace --usage`). Per-monitor power is
   not observable on Windows: an HDMI panel switched off at its own button that stays enumerated keeps running.
+  Confirmed on the operator's hardware 6 Nov (diagnostic log 15:06-17:14, both screens switched off at their buttons):
+  no console display-off event in any SRPSS log on this machine. The MSI (DisplayPort) left the topology while off
+  and was handled; the LG TV (HDMI) stayed enumerated, so screen 0 rendered at 90 fps with transitions and the
+  Visualizer for ~2 h (32-37% of a core). The TV rejects DDC/CI power queries even while on, so there is no signal to
+  read; the overnight check must let Windows' screen timeout turn the displays off.
 - [~] **DevCurve "more alive while keeping the flow" (second cut 6 Nov; awaiting lead review, then operator eyes):**
   loud body owns most of the drawn ceiling (big, smooth: carrier blends to its broad component instead of limiter
   triangles), kicks ride linear headroom, quiet passages take the band share's rise, swell inside the body's share,
