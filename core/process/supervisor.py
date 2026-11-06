@@ -357,6 +357,7 @@ class ProcessSupervisor:
             if req_queue is None:
                 return False
             self._transitioning.add(worker_type)
+            shutdown_seq = self._next_seq(worker_type)          # the counters are lock-guarded state
 
         # The graceful wait, terminate and kill below take seconds when a child
         # is wedged or starved. They run without the state lock: holding it here
@@ -366,7 +367,7 @@ class ProcessSupervisor:
             # Send shutdown message
             shutdown_msg = WorkerMessage(
                 msg_type=MessageType.SHUTDOWN,
-                seq_no=self._next_seq(worker_type),
+                seq_no=shutdown_seq,
                 correlation_id=str(uuid.uuid4()),
                 worker_type=worker_type,
             )
