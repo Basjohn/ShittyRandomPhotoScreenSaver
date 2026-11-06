@@ -53,6 +53,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | Python 3.14 active MSVC/frozen-product gate (operator runs builds and returns logs) | `Current_Plan.md` §5; `Docs/Guides/Python314_Cutover.md` |
 | durable product / architecture | `Spec.md` |
 | fast current owner map | `Docs/Contracts.md` |
+| architecture checklist (SSOT, dormancy, lifecycle, 2D/3D consistency, performance; SMP / full-display prerequisites AC-01..03) | `Docs/Reference/Architecture_Checklist.md` (live; evidence: `Docs/Audits/Architecture_Audit_2026-11-06.md`) |
 | project overview | `Docs/00_PROJECT_OVERVIEW.md` |
 | runtime presentation architecture | `Docs/Architecture/Compositor_Architecture.md` |
 | card surface materials (Acrylic, Glass, Frosted, Mica, Smoked; shared per-display backdrop) | `Docs/Architecture/Card_Surface_Materials.md` |
