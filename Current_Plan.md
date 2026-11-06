@@ -138,11 +138,14 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
   5. **Acceptance plan:** offscreen sheets on real wallpapers per material and theme, transitions mid-flight, cost
      against the overhead baseline (control-relative), and a live check under the lead-scheduled game load. Then
      rewrite the Contracts/Spec/guide passages as a superseded decision, not an overwrite.
-- [ ] **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent):** the mock is
-  `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`: near-black teal water, fiery orange-red ember
-  streaks and dust along diagonal streams, clear copper-lit shells, warm shafts from the upper right, bokeh foreground.
-  The current Preset 7 stays as it is ("good as it is but it is its own thing"); make a new preset that matches the
-  mock, plus whatever shared 3D work it needs (method in §7.0: mock | ours sheets per pass, Range audit, cost).
+- [~] **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent) - awaiting
+  operator eyes:** the mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`. Preset 9 (Deep Red
+  Ocean) is new; Preset 7 is untouched (pixel-identical, as are Presets 1-8). Shared work: **Ember Grain** (Water) breaks
+  the dust clouds into burning grit, strands and sparks (0 = the previous look, verbatim). Water, shafts and ember
+  colour now measure close to the mock region by region; still short: the mock's dense lit glass micro-bubbles and
+  bright copper rims along the streams (ours read dimmer and sparser), embers also drift into the dark top-middle, and
+  the bokeh giant appears only when the simulation brings a bubble near the lens. Details, numbers and cost:
+  Extruded_Bubble/Investigation.md §72; evidence `.artifacts/evidence/extruded_bubble/deep_red_ocean_20261106/`.
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
