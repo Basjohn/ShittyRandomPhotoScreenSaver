@@ -52,6 +52,21 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
   publish a bounded first page and stream the rest (or build the payload off-thread and hand the GUI one coherent
   bundle), keep R-104's single gentle startup transition, and prove the GUI-thread time per delivery stays under the
   stall budget. Evidence `.artifacts/evidence/slow_startup_20261106/`.
+  **Lead correlation (same log):** the 6.9 s callback ends exactly when the `--usage` sampler's FIRST collection does:
+  `collect_ms=7238.78 topology_refresh=1 topology_source=toolhelp` at 10:30:27 on a machine at 97-100% system CPU
+  (agents' game60 live checks were running). A single long GIL-holding collection (cf. the "usage sampler
+  children()/num_threads()" lesson) starves every Python thread, so the feeds callback may only be the one that got
+  measured. First prove which owns the 7 s (sampler topology snapshot vs feeds publish), then fix both: the sampler's
+  startup topology refresh must not hold the GIL for seconds (chunk it, or take the snapshot without the GIL), and
+  the per-source 166-240 ms feeds deliveries still need trimming.
+- [ ] **Spectrum visual-only smoothing still broken (operator, 6 Nov):** wired (Settings -> `_spectrum_visual_smoothing
+  (_enabled)` -> `SpectrumFrameRuntime.resolve(smoothing_enabled, smoothing_strength)`), so the defect is in what it
+  does. Measure bar motion on recorded music with smoothing off / on / at 0.3 / 0.7 / 1.0 (frame-to-frame jerk, lag,
+  peak preservation), find the owner, fix, and show it in the Spectrum Studio.
+- [ ] **Bubble / Extruded Bubble "terrible performance" (operator log 10:32-10:35):** confounded: the machine was at
+  97-100% system CPU from the agents' game60 live checks and parallel work during that session (quiet-machine game60
+  this morning: Bubble P1 62.7 fps, EB 54.6 fps). Re-check in a quiet operator session before acting; heavy
+  load-generator runs are now scheduled by the lead only.
 
 - [~] **Displays off -> presentation pauses entirely, resumes clean (built 5 Nov; awaiting the operator's physical
   overnight check):** `core.display_power` pauses rotation, transitions, the Visualizer (parked, capture released) and
