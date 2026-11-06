@@ -284,6 +284,16 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   P1 1.3%, P3 .75%, P4 .19%, P7 .13% of music ticks (main 27/16/7/7%); a faster attack clears more but moves the lift
   harder (TROUGH_ATTACK .1: P1 .45%, lift acceleration p99 x1.3) -- not adopted. Wide sheets (P2) still graze ~60% of ticks:
   optional Floor Give (below) lets the wet floor dent under them instead.
+- [~] **Fixed response, break-proof Breathing, Kick Accent (operator, 6 Nov: "when it went suddenly quiet everything
+  become more reactive ... Adaptive is a very problematic approach"; "many sustained kicks ignored") — awaiting
+  operator eyes:** geometry drives are a fixed function of the real-music scale (Adaptive Response toggle, off in every
+  preset; Preset 4 differs from the tag only through it, Kick Accent and the floor lift — set Adaptive Response on and
+  Kick Accent 0 to compare). Open: the Range audit (`.artifacts/evidence/waveform_ribbon/reactivity_preset7/
+  rangeaudit_*.txt`) shows Rotation's drive never above .36 on any recording (its Peak handle is never reached), and
+  Light/Colour/Sparkle/Highlights, Width and Lift never reach .8 on three or four of five songs: those calibrations (not
+  the response gain) are the remaining Range losses; the music's return after a break still dips for about a second
+  while the shared passage level climbs back (return window 30-50% of the unbroken clip; Breathing presets, 40-50% with
+  Breathing 0).
 - [~] **Floor Give (operator, 5 Nov: "the floor can deform inwards, allowing crests") — awaiting operator eyes:**
   opt-in Floor slider (default 0 = the rigid floor, pixel-identical); P2 authored 1.0. Where a lower edge comes down
   onto the floor the wet floor yields in a soft dent (one surface for the floor's ray hit, its shading/reflection and

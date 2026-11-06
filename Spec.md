@@ -790,7 +790,7 @@ The production reaction (operator, 5 November; supersedes the 2 November "C prim
 under a flow rule (a swell never reverses curvature or bends a curve inward), with selectable Reaction Modes, A's
 twisting, localized high-power colour, particles/strands and independently reactive axial roll about the waveform's
 length (separate from camera orbit). The C springs remain only for depth sway/torsion. The Migration Plan's
-"Current reaction model" section owns the details, including adaptive response gain, the whole-ribbon floor lift and
+"Current reaction model" section owns the details, including the fixed response (Adaptive Response opt-in), Kick Accent, the whole-ribbon floor lift and
 the no-twitch rules.
 The Migration Plan owns full visual editors/ranges, endpoint audits, the original two presets and the new Preset 3/four-ribbon migration.
 Free strand admission/base look belongs to immutable logical root cohorts, not live renderer thresholds. The latest

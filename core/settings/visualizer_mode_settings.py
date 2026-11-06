@@ -1846,6 +1846,12 @@ def _waveform_ribbon() -> ModeSettings:
         'passages let go between their swells: the body releases faster the softer the music, so quiet phrases rise '
         'and fall instead of holding, and a quieter passage after a loud one stays quieter instead of growing back to '
         'full size. Loud passages keep the Decay set in Response.'))
+    entries.append(Slider(prefix+'kick_accent','Kick Accent:',0.,1.,bucket='reaction',logical=True,tooltip='How much '
+        'of a kick the ribbon cannot show in a loud, full passage goes to a brief faster roll and a burst of sparks '
+        'at the swell; 0 leaves loud passages to the swell alone.'))
+    entries.append(Toggle(prefix+'adaptive_response','','Adaptive Response',bucket='reaction',logical=True,
+        tooltip="Sizes the ribbon against each song's own recent peaks instead of the fixed real-music scale; turn it "
+        'off if the ribbon grows or shrinks after a break or a loud chorus fades the longer it plays.'))
     entries.append(Choice(prefix+'pulse_direction','Pulse Direction:',('Head To Tail','Tail To Head','Centre Out'),
         bucket='pulse',logical=True,tooltip='Where musical swells start and which way they travel.'))
     for key,label,low,high,tip in (
