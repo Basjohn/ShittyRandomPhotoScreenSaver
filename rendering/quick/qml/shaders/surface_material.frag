@@ -77,12 +77,15 @@ vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit) {
         c += vec3(glassLegibility.x) * (edge * edge * (0.35 + 0.65 * facing) + 0.10 * sheen);
     }
 
-    // Legibility layer inside the padded content area: shift away from the text colour,
-    // then hold a luminance-contrast floor against it where the backdrop is busy.
-    vec2 plateHalf = max(halfSize - vec2(contentInset), vec2(1.0));
+    // Legibility layer: the card interior 2.5 px inside the border, its corners concentric
+    // with the card's (radius minus the inset) and a 2 px soft edge, so it reads as one
+    // deliberate inner panel. Shift away from the text colour, then hold a
+    // luminance-contrast floor against it where the backdrop is busy.
+    float plateInset = max(0.0, borderWidth) + 2.5;
+    vec2 plateHalf = max(halfSize - vec2(plateInset), vec2(1.0));
     vec2 plateNormal;
-    float pd = roundedBox(p, plateHalf, max(0.0, r - contentInset * 0.5), plateNormal);
-    float plate = 1.0 - smoothstep(-6.0, 6.0, pd);
+    float pd = roundedBox(p, plateHalf, max(0.0, r - plateInset), plateNormal);
+    float plate = 1.0 - smoothstep(-1.0, 1.0, pd);
     float textL = luma(text);
     float floorRatioCard = max(1.0, glassLegibility.w);
     if (textL >= 0.5) {

@@ -127,8 +127,11 @@ bound. While loaded, the card's `Rectangle` keeps its border and drops its fill 
 
 ### 3.3 Legibility
 
-Inside the card's padded content area the material adds a legibility layer: a slight constant shift away from the
-text colour (darker under light text, which is every dark theme; lighter under dark text on light themes), then a
+Inside the card the material adds a legibility layer, one inner panel 2.5 px inside the border (border width +
+2.5 px from the card edge) whose corners are concentric with the card's (card radius minus that inset) and whose
+edge is a 2 px soft step, so the darker interior reads as a deliberate panel with a thin rim, never a block (style
+pass 6 Nov; it used to stop at the padding with a 12 px feather and nearly square corners). It applies a slight
+constant shift away from the text colour (darker under light text, which is every dark theme; lighter under dark text on light themes), then a
 contrast floor that pushes further only where the blurred backdrop would leave the theme's text below a 3:1
 luminance contrast. The backdrop is heavily blurred, so the adjustment is smooth. This follows the Studio rule (a
 layer slightly darker than the base behind controls); the direction follows the text so a dark-text light theme is
@@ -150,12 +153,47 @@ a `TextLegibilityPlate` behind its glyph box (`ShadowedText.qml`, `TextLegibilit
 - it samples the same shared backdrop: no capture, no extra blur, no per-frame work. A run on its own fill (the
   branded header labels) opts out with `surfacePlateEnabled: false`.
 
+**Rows, not chips (style pass, 6 Nov evening).** The operator: "Full rows and rounded boxes are better than individual
+pop outs." A plate per run made each list line a set of separate chips (Reddit's age, AGO and title; Weather's detail
+values without their icons). The plate is now a **row**:
+
+- `LegibilityRow.qml` (an inactive `Loader` on Normal) sits behind a whole list line or panel and loads the same
+  `TextLegibilityPlate`; the runs on that line opt out of their own plates. One row per Reddit post, Gmail message,
+  Feed story (list row or grid tile), Friend Pulse row/tile, Games You Follow story tile, System Stats metric panel,
+  Abandonment Issues ledger shelf, Achievement Pulse capsule/shelf; one box for Weather's location+condition, detail
+  row (icons and values) and 5-day strip; one box for Media's track text (title, artist, album, state, steady through
+  the metadata crossfade).
+- The row holds the floor for up to three run colours (`primaryColor`, `secondaryColor`, `tertiaryColor`; a muted
+  tag, an accent label), composited with their alpha; a run too faint to reach the floor at all is held to its opaque
+  colour's floor. The overlay is **one even tone**: the shader samples the surface at seven points along the row's
+  centre line (plus its own pixel) and takes the worst, instead of a patch per glyph.
+- A row inside its own filled panel (stats panel, tile, capsule) passes `underlayColor` (the panel fill) and the
+  panel's inner radius: the floor is measured against what the text actually sits on, and the row's corners are
+  concentric with the panel. Rows on the card itself reach 4 px into the padding with corners concentric with the
+  card.
+- A lone run (a clock face, a header subtitle) keeps its own plate, now an even rounded box: the run's whole width when
+  it spans at least 85 % of the card's content (a line), otherwise its glyph box.
+- Continuous: everything is a function of the blurred backdrop, so rows fade with it and never pop; still no
+  per-frame Python, no timer, no capture.
+
 On a material the light-theme soft text halo (a blurred `MultiEffect` silhouette) is not drawn: over a colourful blur it
 reads as haze around the glyphs, and the plate now carries the contrast. Hard (dark-theme) shadows are unchanged.
 
 **Edges (light themes).** Inside the border the surface draws a dark hairline and, below it, a soft highlight, so the
 pale light-theme border reads as an edge over busy wallpaper. It scales with the tint's luminance and is exactly zero
 on dark tints. The outer card shadow (the shared shadow lane, R-74) is unchanged.
+
+**Style sweep fixes outside the materials (6 Nov evening; they change Normal pixels on purpose, nowhere else):**
+
+- Media's content column clipped at the padded content edge, cutting the transport bar's small offset shadow (and
+  the artwork's) square at the bar's right and bottom edges: the "square bottom-right corner" on light themes. The
+  column no longer clips; the card's own `contentPaintBoundary` still bounds every child at the card edge.
+- The mute button sat 4 px from the bar's rounded end and read as part of the end cap. It now keeps the same gap on
+  the right as above and below (never under 8 px; about 5 px further left at the default size), and the transport
+  arrows' lane shrinks by the same amount.
+- Friend Pulse's grid/row secondary texts and quiet-state texts did not pass `shadowSoft`, so light themes drew the
+  hard dark-theme shadow glyph (doubled names). Every shadowed run now follows the light-palette soft shadow
+  (`tests/test_surface_material_style.py` checks every `ShadowedText` in the scene QML).
 
 ### 3.4 The Visualizer card and the System Volume OSD are excluded
 
@@ -264,7 +302,21 @@ shadows hidden), 5th percentile over the glyph pixels, worst run over three wall
 | Mica | 4.47 → 4.90 | 5.02 → 5.19 |
 | Smoked | 2.70 → 4.90 | 4.71 → 5.01 |
 
-Large text stays at 4.0 or better everywhere (floor 3:1). Normal frames differ from before only by the renderer's
+Large text stays at 4.0 or better everywhere (floor 3:1).
+
+**Rows (style pass, 6 Nov evening).** Same measurement, now over nine cards (Weather, Media, Reddit, System Stats,
+Clock; then Gmail, World News feed, Friend Pulse, System Stats) and three wallpapers (busy 859804, mixed 670483, light
+656207); worst run per cell, before (per-run chips) → after (rows):
+
+| Theme, text | Normal | Acrylic | Glass | Frosted | Mica | Smoked |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Light, small | 4.27 → 4.27 | 4.88 → 4.93 | 4.58 → 4.93 | 4.90 → 4.92 | 4.87 → 4.94 | 4.57 → 4.94 |
+| Light, large | 5.97 → 5.97 | 5.08 → 5.25 | 3.28 → 4.01 | 3.45 → 4.44 | 6.46 → 6.46 | 3.28 → 4.39 |
+| Dark, small | 5.24 → 5.24 | 4.68 → 4.91 | 4.91 → 4.92 | 4.60 → 4.91 | 5.19 → 5.02 | 4.91 → 4.93 |
+| Dark, large | 6.64 → 6.64 | 3.77 → 7.04 | 3.31 → 5.73 | 3.73 → 7.04 | 5.94 → 7.08 | 4.43 → 7.02 |
+
+(The Normal 4.27 is the light theme's own muted System Stats label on its panel; Normal is not touched.) Crops at 1x
+and 3x, busy/flat/mid-transition, dark and light: `.artifacts/evidence/widget_surfaces_style_20261106/`. Normal frames differ from before only by the renderer's
 run-to-run jitter (at most 2 levels on about 1,200 pixels, the same signature as two runs of identical code); dark
 material frames are unchanged outside the text runs.
 
