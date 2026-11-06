@@ -79,12 +79,16 @@
         ],
         "extruded_bubble_dust": 0.0,
         "extruded_bubble_dynamic_floor": false,
+        "extruded_bubble_ember_band": 0.0,
         "extruded_bubble_ember_grain": 0.0,
         "extruded_bubble_emission_geometry": "SCENE",
         "extruded_bubble_exposure": 1.0,
         "extruded_bubble_floor": 0.0,
         "extruded_bubble_focus": 0.5,
         "extruded_bubble_haze": 0.35,
+        "extruded_bubble_hero_across": -0.8,
+        "extruded_bubble_hero_height": -0.6,
+        "extruded_bubble_hero_shell": 0.0,
         "extruded_bubble_idle": 0.5,
         "extruded_bubble_input_gain": 1.0,
         "extruded_bubble_iridescence": 0.3,
@@ -111,6 +115,7 @@
         "extruded_bubble_light_tint": 0.45,
         "extruded_bubble_light_type": "Sunlit Surface",
         "extruded_bubble_lighting_coverage": "SCENE",
+        "extruded_bubble_lit_glass": 0.0,
         "extruded_bubble_manual_floor": 0.12,
         "extruded_bubble_mid_bubbles": [
           14,
@@ -168,6 +173,7 @@
           0.9961,
           -0.0
         ],
+        "extruded_bubble_stream_lanes": 0.0,
         "extruded_bubble_stream_speed": [
           0.1,
           1.0
@@ -176,6 +182,7 @@
         "extruded_bubble_sustained": 0.6,
         "extruded_bubble_sway": 0.5,
         "extruded_bubble_veils": 0.11,
+        "extruded_bubble_wake_tint": 0.0,
         "extruded_bubble_wake_trails": 0.0,
         "extruded_bubble_water_colour": [
           48,
