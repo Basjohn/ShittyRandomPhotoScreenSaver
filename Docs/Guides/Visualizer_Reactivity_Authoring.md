@@ -595,6 +595,11 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` â†
   Centre Out's 1.39). The capture now passes the camera's visible span as configuration; edge swells are born a few
   envelope widths beyond it and their fade starts at the edge, as a Centre Out swell's starts at its birth (p50 .99).
   A visible swell lifts the pre-kick baseline, so judge kicks by their peak as well as their rise.
+- **A shared light reference is per unit of energy, not per mode.** Pulse Rim's reference had been set on swells that
+  each carry half the injection (Centre Out splits it); a full-strength edge swell then sat at the ceiling over 43% of
+  the view. Normalise what is published to the energy one swell carries, and check the share of rim pixels at 255 and
+  the response's swell-to-elsewhere contrast per preset, not only the peak. Size every view-dependent quantity (birth,
+  floor lift, its lookahead) from the same visible span, in units of the mode's own envelope.
 - **Keep the travelling feature legible.** Geometry and look should follow the *fresh* energy (a short-fade copy of
   the field), or overlapping old energy piles into a uniform inflation or a glow parked at the emitter. Check the
   feature's median/max over the visible span on dense real music, and that successive beats stay separate bands.
