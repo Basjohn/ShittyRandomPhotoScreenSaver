@@ -102,6 +102,71 @@ def _apply_shell_state(surface, args) -> None:
             flick.setProperty("contentY", bottom if args.scroll < 0 else min(bottom, args.scroll))
 
 
+def _settle_replay(controller, surface) -> None:
+    """Pump frames until the exact replay of the current values has landed (``converging`` off)."""
+    surface.pump()
+    for _ in range(2000):
+        if not getattr(controller.evaluator, "converging", False):
+            break
+        surface.pump()
+    surface.pump(2)
+
+
+def _presented_frame(surface):
+    """The presented frame's pixels (the letterboxed live-card extent) of the current shell frame."""
+    from PySide6.QtCore import QPointF
+    slot = surface.host.slot
+    origin = slot.mapToScene(QPointF(slot.property("frameX"), slot.property("frameY")))
+    fw, fh = int(slot.property("frameWidth")), int(slot.property("frameHeight"))
+    return surface.grab()[int(origin.y()):int(origin.y()) + fh, int(origin.x()):int(origin.x()) + fw]
+
+
+def _paint_stroke(controller, surface, args) -> dict:
+    """One brush stroke through the bridge, as the shell's brush layer sends it (press, moves between frame starts,
+    release), then the footprint hovered at the stroke's end. ``--brush`` is in presented-frame fractions."""
+    bridge = controller.bridge
+    if bridge.brush is None:
+        raise SystemExit(f"{args.mode} has no Studio brush")
+    fx0, fy0, fx1, fy1 = (float(v) for v in args.brush.split(","))
+    _settle_replay(controller, surface)
+    frames = {"before": _presented_frame(surface)}
+    bridge.setBrushActive(True)
+    bridge.setBrushValue("mode", args.brush_mode)
+    if args.brush_strength is not None:
+        bridge.setBrushValue("strength", args.brush_strength)
+    if args.brush_radius is not None:
+        bridge.setBrushValue("radius", args.brush_radius)
+    target = bridge.brush.target
+    width, height = controller.presented_geometry()[0]
+    (x0, y0), (x1, y1) = (fx0 * width, fy0 * height), (fx1 * width, fy1 * height)
+    before = controller.session.values[target.key]
+    bridge.brushPress(x0, y0)
+    steps = 32
+    for index in range(1, steps + 1):
+        t = index / steps
+        bridge.brushMove(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)
+        if index % 4 == 0:
+            surface.pump()
+    bridge.brushRelease()
+    bridge.setBrushActive(False)          # the scene alone (the panel and footprint are over the frame)
+    _settle_replay(controller, surface)
+    frames["after"] = _presented_frame(surface)
+    bridge.setBrushActive(True)
+    bridge.brushHover(x1, y1)
+    surface.pump(3)
+    frames["cursor"] = _presented_frame(surface)
+    from PIL import Image
+    tag = ("_" + args.tag) if args.tag else ""
+    for name, pixels in frames.items():
+        Image.fromarray(pixels).save(args.output / f"brush_{name}{tag}.png")
+    after = controller.session.values[target.key]
+    changed = sum(1 for a, b in zip(before["heights"], after["heights"]) if a != b)
+    return {"stroke_frame_fraction": [fx0, fy0, fx1, fy1], "screen": [[x0, y0], [x1, y1]], "mode": args.brush_mode,
+            "settings": bridge.brush.settings.as_map(), "previews": bridge.brush.previews,
+            "pointer_events": bridge.brush.pointer_events, "cells_changed": changed,
+            "commits": controller.session.commit_count, "undo": controller.session.undo_label}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
@@ -135,6 +200,14 @@ def main() -> int:
     parser.add_argument("--help-open", action="store_true", help="Show the help overlay")
     parser.add_argument("--preset-menu", action="store_true", help="Open the header preset dropdown")
     parser.add_argument("--viewport-expanded", action="store_true", help="Expand the viewport over the panels")
+    parser.add_argument("--brush", default="", metavar="X0,Y0,X1,Y1",
+                        help="A mode with the Studio brush (Neon Lake): paint one stroke between two points of the "
+                             "presented frame (fractions of its width and height) "
+                             "before the workspace captures (the in-memory store takes it; nothing is saved), "
+                             "leaving the brush active with its footprint at the stroke's end")
+    parser.add_argument("--brush-mode", default="Raise", help="With --brush: Raise, Lower, Flatten or Water")
+    parser.add_argument("--brush-strength", type=float, default=None, help="With --brush: 0..1")
+    parser.add_argument("--brush-radius", type=float, default=None, help="With --brush: grid uv share")
     args = parser.parse_args()
     width, height = (int(v) for v in args.size.split("x"))
 
@@ -187,7 +260,7 @@ def main() -> int:
     surfaces = []
 
     def factory(controller):
-        surface = OffscreenStudioSurface(controller, size=(width, height))
+        surface = OffscreenStudioSurface(controller, size=(width, height), present_on_show=False)
         surfaces.append(surface)
         return surface
 
@@ -304,6 +377,8 @@ def main() -> int:
             compare_path = args.output / f"compare_{args.framing}{suffix}.png"
             sheet.save(compare_path)
             record["compare"] = str(compare_path)
+        if args.brush:
+            record["brush"] = _paint_stroke(controller, surface, args)
         workspaces = args.workspaces.split(",") if args.workspaces else [
             w.id for w in controller.session.schema.workspaces]
         for workspace in workspaces:

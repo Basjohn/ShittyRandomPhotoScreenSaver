@@ -106,6 +106,10 @@ Rectangle {
             viewportExpanded = !viewportExpanded; event.accepted = true
         } else if (event.key === Qt.Key_F1 || event.key === Qt.Key_Question) {
             helpOverlay.open = !helpOverlay.open; event.accepted = true
+        } else if (event.key === Qt.Key_B && !(event.modifiers & Qt.ControlModifier) && shell.caps.brush === true) {
+            studio.setBrushActive(!(studio.brushState.active === true)); event.accepted = true
+        } else if (event.key === Qt.Key_Escape && studio.brushState.painting === true) {
+            studio.brushCancel(); event.accepted = true          // Esc drops the stroke being painted
         } else if (event.key === Qt.Key_Escape && helpOverlay.open) {
             helpOverlay.open = false; event.accepted = true
         } else if (event.key === Qt.Key_Escape) {
@@ -257,6 +261,8 @@ Rectangle {
         property real dragValue: 0
         // An edit the preview follows only on release (the engine re-analyses it once, when the drag ends).
         property bool releaseOnly: false
+        // A tool setting (the brush's radius, strength...): set on the bridge directly, never a saved edit.
+        property string toolName: ""
         readonly property bool dragging: area.pressed
         readonly property real shown: dragging ? dragValue : value
         function frac(v) { return to > from ? Math.max(0, Math.min(1, (v - from) / (to - from))) : 0 }
@@ -266,7 +272,9 @@ Rectangle {
         }
         function step(sign, coarse) {
             var s = integer ? 1 : (to - from) / (coarse ? 10 : 100)
-            studio.commitValue(propId, endpoint, Math.max(from, Math.min(to, value + sign * s)))
+            var next = Math.max(from, Math.min(to, value + sign * s))
+            if (toolName !== "") studio.setBrushValue(toolName, next)
+            else studio.commitValue(propId, endpoint, next)
         }
         implicitHeight: 22
         activeFocusOnTab: true
@@ -322,16 +330,18 @@ Rectangle {
             onPressed: function(mouse) {
                 vs.forceActiveFocus()
                 vs.dragValue = vs.valueAt(mouse.x)
+                if (vs.toolName !== "") { studio.setBrushValue(vs.toolName, vs.dragValue); return }
                 studio.beginEdit(vs.propId, vs.label)
                 studio.previewValue(vs.propId, vs.endpoint, vs.dragValue)
             }
             onPositionChanged: function(mouse) {
                 if (!pressed) return
                 vs.dragValue = vs.valueAt(mouse.x)
+                if (vs.toolName !== "") { studio.setBrushValue(vs.toolName, vs.dragValue); return }
                 studio.previewValue(vs.propId, vs.endpoint, vs.dragValue)
             }
-            onReleased: studio.endEdit()
-            onCanceled: studio.cancelEdit()
+            onReleased: if (vs.toolName === "") studio.endEdit()
+            onCanceled: if (vs.toolName === "") studio.cancelEdit()
         }
         Keys.onLeftPressed: function(e) { step(-1, e.modifiers & Qt.ShiftModifier); e.accepted = true }
         Keys.onRightPressed: function(e) { step(1, e.modifiers & Qt.ShiftModifier); e.accepted = true }
@@ -2008,6 +2018,14 @@ Rectangle {
                                            tip: shell.overlaysHidden ? "Show the handles and outline over the scene"
                                                                      : "Hide the handles and outline: see the scene alone"
                                            onClicked: shell.overlaysHidden = !shell.overlaysHidden }
+                            StudioButton { icon: "brush"; iconSize: 20; width: 36; objectName: "brushButton"
+                                           visible: shell.caps.brush === true
+                                           checked: studio.brushState.active === true
+                                           tip: studio.brushState.active === true
+                                                ? "Stop painting: drag the scene to orbit again (B)"
+                                                : "Paint " + (studio.brushState.label || "") + ": drag on the scene to "
+                                                  + "raise, lower, flatten or flood the land (B); right-drag still pans"
+                                           onClicked: studio.setBrushActive(!(studio.brushState.active === true)) }
                             StudioButton { icon: "camera"; iconSize: 20; width: 36; objectName: "copyFrameButton"
                                            tip: "Copy Frame: the scene as rendered (no handles) to the clipboard"
                                            onClicked: studio.copyFrame() }
@@ -2234,6 +2252,128 @@ Rectangle {
                                                     : modelData.label + " — drag to edit (Undo reverts); double-click to type an exact value"
                                     C.ToolTip.delay: 600
                                 }
+                            }
+                        }
+
+                        // The shared brush: strokes land on the scene's ground (presented-frame pixels); the
+                        // footprint follows the pointer. Left button paints; right / middle still pan, wheel zooms.
+                        Item {
+                            id: brushLayer
+                            objectName: "brushLayer"
+                            visible: shell.caps.brush === true && studio.brushState.active === true
+                            x: viewportSlot.frameX; y: viewportSlot.frameY
+                            width: viewportSlot.frameWidth; height: viewportSlot.frameHeight
+                            readonly property var rings: studio.brushCursor
+                            Canvas {
+                                id: brushCanvas
+                                anchors.fill: parent
+                                onPaint: {
+                                    var ctx = getContext("2d"); ctx.reset()
+                                    var rings = brushLayer.rings || []
+                                    for (var r = 0; r < rings.length; ++r) {
+                                        var pts = rings[r]
+                                        if (pts.length < 2) continue
+                                        for (var pass = 0; pass < 2; ++pass) {
+                                            ctx.strokeStyle = pass === 0 ? "#80000000" : (r === 0 ? shell.cAccent : "#e6ffffff")
+                                            ctx.lineWidth = pass === 0 ? 4 : 1.6
+                                            ctx.setLineDash(r === 0 || pass === 0 ? [] : [5, 4])
+                                            ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1])
+                                            for (var i = 1; i < pts.length; ++i) ctx.lineTo(pts[i][0], pts[i][1])
+                                            ctx.stroke()
+                                        }
+                                    }
+                                }
+                                Connections { target: brushLayer; function onRingsChanged() { brushCanvas.requestPaint() } }
+                            }
+                            MouseArea {
+                                id: brushArea
+                                objectName: "brushArea"
+                                anchors.fill: parent
+                                enabled: brushLayer.visible
+                                hoverEnabled: true
+                                acceptedButtons: Qt.LeftButton
+                                preventStealing: true
+                                cursorShape: Qt.CrossCursor
+                                onPressed: function(m) { shell.forceActiveFocus(); studio.brushPress(m.x, m.y) }
+                                onPositionChanged: function(m) {
+                                    if (pressed) studio.brushMove(m.x, m.y)
+                                    else studio.brushHover(m.x, m.y)
+                                }
+                                onReleased: studio.brushRelease()
+                                onCanceled: studio.brushCancel()
+                                onExited: studio.brushLeave()
+                                onWheel: function(w) {
+                                    studio.zoomBy(w.angleDelta.y / 120.0, (w.modifiers & Qt.ShiftModifier) !== 0)
+                                    w.accepted = true
+                                }
+                            }
+                        }
+                        Rectangle {
+                            id: brushPanel
+                            objectName: "brushPanel"
+                            visible: brushLayer.visible
+                            x: 10; y: 56; z: 3
+                            width: 286; height: brushColumn.implicitHeight + 20
+                            radius: 8; color: shell.opaque(shell.cPanel)
+                            border.width: shell.cardBorder; border.color: shell.cOutlineSoft
+                            MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons
+                                        onWheel: function(w) { w.accepted = true } }      // the panel is not the scene
+                            Column {
+                                id: brushColumn
+                                x: 10; y: 10; width: parent.width - 20
+                                spacing: 8
+                                Text { text: (studio.brushState.label || "") + " Brush"; color: shell.cText
+                                       font.pixelSize: shell.fontBase; font.bold: true }
+                                Flow {
+                                    width: parent.width; spacing: 6
+                                    Repeater {
+                                        model: studio.brushState.modes || []
+                                        delegate: Chip {
+                                            objectName: "brushMode"
+                                            text: modelData
+                                            selected: studio.brushState.mode === modelData
+                                            onPicked: studio.setBrushValue("mode", modelData)
+                                        }
+                                    }
+                                }
+                                Repeater {
+                                    model: [
+                                        { name: "radius", label: "Radius", from: 0.03, to: 0.35,
+                                          tip: "The brush size, as a share of the terrain grid's side." },
+                                        { name: "strength", label: "Strength", from: 0.01, to: 1.0,
+                                          tip: "How much a stroke changes the land per brush-width it travels. Low values build up gently; Flatten snaps to its height only at 100%." },
+                                        { name: "falloff", label: "Falloff", from: 0.0, to: 1.0,
+                                          tip: "How soft the brush edge is: 0 is a hard disc, higher values ease out over a wider rim (the dashed ring is the flat core)." },
+                                        { name: "flatten_height", label: "Flatten Height", from: 0.0, to: 1.0,
+                                          tip: "The height Flatten moves land toward." }
+                                    ]
+                                    delegate: Row {
+                                        objectName: "brushSetting"
+                                        spacing: 8; height: 24
+                                        visible: modelData.name !== "flatten_height" || studio.brushState.mode === "Flatten"
+                                        Text { width: 92; text: modelData.label; color: shell.cDim; elide: Text.ElideRight
+                                               font.pixelSize: shell.fontBase - 1; anchors.verticalCenter: parent.verticalCenter
+                                               C.ToolTip.visible: tipMouse.containsMouse; C.ToolTip.text: modelData.tip
+                                               C.ToolTip.delay: 500
+                                               MouseArea { id: tipMouse; anchors.fill: parent; hoverEnabled: true
+                                                           acceptedButtons: Qt.NoButton } }
+                                        ValueSlider {
+                                            id: brushSlider
+                                            width: brushColumn.width - 92 - 44 - 16
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            toolName: modelData.name; label: modelData.label
+                                            from: modelData.from; to: modelData.to
+                                            value: Number(studio.brushState[modelData.name] || 0)
+                                        }
+                                        Text { width: 44; horizontalAlignment: Text.AlignRight
+                                               anchors.verticalCenter: parent.verticalCenter
+                                               color: shell.cText; font.pixelSize: shell.fontBase - 1
+                                               text: Math.round(100 * (brushSlider.dragging ? brushSlider.dragValue
+                                                                       : Number(studio.brushState[modelData.name] || 0))) + "%" }
+                                    }
+                                }
+                                HintText { width: parent.width; wrapMode: Text.Wrap
+                                           text: "One stroke is one edit; Undo takes it back." }
                             }
                         }
 

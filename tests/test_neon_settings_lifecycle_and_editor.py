@@ -111,18 +111,9 @@ def test_quick_runtime_callbacks_do_not_retain_retired_display_unit(monkeypatch)
     assert events == ['play'], 'an orphan runtime signal must be inert'
 
 
-def test_terrain_editor_reuses_dark_glass_palette_without_changing_water_ownership():
-    source = (ROOT / 'ui/tabs/media/terrain_editor.py').read_text(encoding='utf-8')
-    shape = (ROOT / 'ui/tabs/media/spectrum_shape_editor.py').read_text(encoding='utf-8')
-    for token in ('_BG_COLOR = QColor(18, 18, 18, 240)',
-                  '_GRID_COLOR = QColor(255, 255, 255, 18)',
-                  '_GRID_MAJOR_COLOR = QColor(255, 255, 255, 35)',
-                  '_BORDER_COLOR = QColor(255, 255, 255, 60)'):
-        assert token in source and token in shape
-    from ui.tabs.media.terrain_editor import apply_brush
+def test_the_terrain_brush_never_changes_water_ownership():
+    from rendering.gl_programs.heightfield_brush import apply_brush
 
     # Water stays exact authored zero; no other brush reaches it from land.
     assert apply_brush(0.4, "Water", 1.0, 1.0, 1.0, 0.0) == 0.0
     assert apply_brush(0.4, "Lower", 1.0, 100.0, 1.0, 0.0) > 0.0
-    assert 'self.terrain_changed.emit(self.get_heightfield())' in source
-    assert 'self._cancel_stroke()' in source

@@ -636,13 +636,20 @@ class BubbleStudioAdapter(StudioModeAdapter):
         from ui.studio.waveform_recorded_inputs import studio_clips
         return studio_clips(recordings_directory())
 
-    # Analysed clips for this process, keyed by clip: the recorded ticks do not depend on Bubble's controls.
+    # Analysed clips for this process, keyed by clip and the Audio Analysis values: the recorded ticks are the
+    # production DSP's answers on the clip's PCM under those values, never dependent on Bubble's authored controls.
     _clip_cache: dict = {}
+
+    def clip_analysis_keys(self) -> frozenset[str]:
+        """The values a recorded clip is re-analysed for (the controller re-runs the worker when they change)."""
+        from ui.studio.technical import technical_keys
+        return technical_keys(MODE)
 
     def start_clip_load(self, clip: StudioFixture, values: Mapping[str, Any], finished):
         from ui.studio.bubble_recorded_inputs import to_inputs
+        from ui.studio.technical import clip_analysis_key
         from ui.studio.waveform_recorded_inputs import ClipLoadJob
-        key = clip.description
+        key = clip_analysis_key(clip, MODE, values)
         cached = BubbleStudioAdapter._clip_cache.get(key)
         if cached is not None:
             finished(cached, "")
