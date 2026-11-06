@@ -11,11 +11,15 @@ so the two theme systems share one mental model and one file root.
 Boundaries (durable design owners: `Docs/Contracts.md`,
 `Docs/Guides/Custom_Style_Implementation.md`):
 
-* Widget Theme owns runtime semantic colours only. It does **not** own widget
-  activation, provider/account state, geometry, cadence, compositor state, native
-  Settings-window backdrop mode, or other business logic.
-* Runtime cards are ordinary RGBA Qt Quick surfaces. Settings Glass/Acrylic remain
-  a separate QWidget/native-HWND theme concern and are never projected into cards.
+* Widget Theme owns runtime semantic colours and, optionally, the card surface
+  material it is designed for (``surface_material``; 6 Nov 2026,
+  Docs/Architecture/Card_Surface_Materials.md section 4: it supersedes "theme files
+  stay colour-only"). The Style Overrides baseline "Theme" follows it; an explicit
+  material there or on a widget beats it. It does **not** own widget activation,
+  provider/account state, geometry, cadence, compositor state, native Settings-window
+  backdrop mode, or other business logic.
+* Settings Glass/Acrylic remain a separate QWidget/native-HWND theme concern and are
+  never projected into cards; card materials are the runtime scene's own.
 
 Rgba/palette primitives are shared with the Settings theme spec so both systems use
 one colour type.
@@ -80,6 +84,10 @@ class WidgetThemeSpec:
     linked_settings_theme_id: str | None = None
     colors: Mapping[str, Rgba] = field(default_factory=dict)
     schema_version: int = WIDGET_THEME_SCHEMA_VERSION
+    # The card surface material this theme is designed for (one of
+    # rendering.quick.widgets.surface_material.SURFACE_MATERIALS); None = names none,
+    # which the "Theme" baseline treats as Normal.
+    surface_material: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.theme_id, str) or not self.theme_id.strip():
@@ -108,6 +116,15 @@ class WidgetThemeSpec:
                 raise TypeError(
                     f"Widget theme colour {key!r} must be an Rgba value"
                 )
+
+        material = self.surface_material
+        if material is not None:
+            from rendering.quick.widgets.surface_material import normalize_surface_material
+
+            canonical = normalize_surface_material(material)
+            if canonical is None:
+                raise ValueError(f"Unknown Widget theme surface_material: {material!r}")
+            object.__setattr__(self, "surface_material", canonical)
 
         object.__setattr__(self, "theme_id", self.theme_id.strip())
         object.__setattr__(self, "name", self.name.strip())

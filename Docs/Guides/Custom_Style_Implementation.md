@@ -19,7 +19,7 @@ The Themes tab has two current catalogues:
 
 The two catalogues use explicit stable IDs and a bidirectional **Linked / Independent** control. While Linked, selecting either side transactionally selects and persists the exact counterpart on the other side. Selection does not silently unlink. A theme with no valid counterpart requires Independent mode before it can be selected independently.
 
-Widget themes are **colour-only schema-v3 bundles**. They do not own a backdrop/material recommendation; the runtime card surface material is a separate Style Overrides value (`Docs/Architecture/Card_Surface_Materials.md`). Settings theme names may legitimately retain `[Glass]`/`[Acrylic]` because those tags describe the Settings HWND; Widget counterpart names/files intentionally omit those material suffixes while `linked_settings_theme_id` still points to the exact Settings-theme identity.
+Widget themes are **schema-v3 colour bundles that may name one card surface material** (optional `surface_material`, 6 Nov 2026; this supersedes the earlier colour-only rule, see `Docs/Architecture/Card_Surface_Materials.md` section 4). Style Overrides' Surface Material defaults to Theme (the theme's material, Normal when it names none); an explicit material there or per widget beats it. The Sep 2026 material keys (`default_card_material_mode`, `card_material_override`) stay retired. Settings theme names may legitimately retain `[Glass]`/`[Acrylic]` because those tags describe the Settings HWND; Widget counterpart names/files intentionally omit those material suffixes while `linked_settings_theme_id` still points to the exact Settings-theme identity.
 
 ## Widget Theme precedence and semantic inheritance
 

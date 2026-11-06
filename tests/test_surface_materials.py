@@ -24,17 +24,20 @@ QML = ROOT / "rendering" / "quick" / "qml"
 # --------------------------------------------------------------------------- resolution
 
 
-def test_baseline_is_normal_and_a_widget_value_beats_it() -> None:
+def test_baseline_follows_the_theme_and_a_widget_value_beats_it() -> None:
     from core.settings.default_contract import require_canonical_default
     from rendering.quick.widgets.surface_material import (
-        SURFACE_MATERIALS, resolve_global_surface_material, resolve_surface_material,
+        SURFACE_MATERIALS, THEME, resolve_global_surface_material, resolve_surface_material,
     )
 
     from rendering.quick.widgets.surface_material import normalize_surface_material
 
-    assert normalize_surface_material(require_canonical_default("widgets.global.surface_material")) is not None
+    # The baseline's default follows the active Widget Theme (Default Dark names none: Normal).
+    assert normalize_surface_material(require_canonical_default("widgets.global.surface_material"),
+                                      allow_theme=True) == THEME
     assert "normal" in SURFACE_MATERIALS
     assert resolve_global_surface_material({}) == "normal"
+    assert resolve_global_surface_material({"global": {"surface_material": "theme"}}) == "normal"
     widgets = {"global": {"surface_material": "Acrylic"}, "clock": {"surface_material": "inherit"},
                "weather": {"surface_material": "glass"}, "media": {"surface_material": "nonsense"}}
     assert resolve_surface_material(widgets, "clock") == "acrylic"
@@ -328,9 +331,12 @@ def _between(text: str, begin: str, end: str) -> str:
 def test_text_plate_evaluates_the_identical_surface_function() -> None:
     card = (QML / "shaders" / "surface_material.frag").read_text(encoding="utf-8")
     plate = (QML / "shaders" / "text_legibility.frag").read_text(encoding="utf-8")
+    row = (QML / "shaders" / "text_legibility.vert").read_text(encoding="utf-8")
     block = _between(card, "// SURFACE BEGIN", "// SURFACE END")
     assert "vec4 surfaceAt(" in block
     assert block == _between(plate, "// SURFACE BEGIN", "// SURFACE END")
+    # The row's even tone is computed in the vertex stage from the same surface function.
+    assert block == _between(row, "// SURFACE BEGIN", "// SURFACE END")
     for name in ("text_legibility.vert.qsb", "text_legibility.frag.qsb"):
         assert (QML / "shaders" / name).is_file()
 
