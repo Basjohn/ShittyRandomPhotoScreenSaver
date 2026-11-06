@@ -95,6 +95,53 @@ def test_production_has_one_prefetch_constructor_and_both_routes_use_it():
                    and node.func.id == "build_image_prefetcher" for node in ast.walk(tree))
 
 
+def test_requests_wait_while_the_prefetch_child_is_unavailable_and_run_once_it_is():
+    """The optional child starts in the background (and restarts): a batch asked for meanwhile is kept, not failed
+    and dropped; the next pump runs it. Negative control: without the availability gate the batch fails at once."""
+    import engine.image_pipeline as pipeline
+
+    running = [False]
+
+    class Engine:
+        pass
+
+    engine = Engine()
+    engine._image_cache = SimpleNamespace(max_memory_bytes=256 * 1024 * 1024, contains=lambda key: False,
+                                          put=lambda key, image: None)
+    engine.settings_manager = SimpleNamespace(get=lambda key: 4 if key == "cache.max_concurrent" else None)
+    engine.display_manager = SimpleNamespace(_transition_work_pending=False, _retired=False)
+    engine._loading_in_progress = False
+    engine._process_supervisor = SimpleNamespace(is_running=lambda worker: worker is WorkerType.IMAGE_PREFETCH
+                                                 and running[0])
+    submitted = []
+    original = pipeline.derive_prefetch_via_worker
+
+    def derive(live_engine, path, requests, generation, complete):
+        submitted.append(path)
+        if not running[0]:          # the production path: a child that is not running fails the batch at once
+            return original(live_engine, path, requests, generation, complete)
+        return lambda: None         # in flight on the ready child
+
+    request = {"path": "photo.png", "cache_key": "photo|1", "width": 64, "height": 48,
+               "display_mode": DisplayMode.FILL, "resample_filter": "lanczos", "sharpen": False}
+    try:
+        pipeline.derive_prefetch_via_worker = derive
+        prefetcher = build_image_prefetcher(engine)
+        assert prefetcher.register_scaled_requests([dict(request)]) == 1
+        assert submitted == [] and prefetcher.snapshot_state()["scaled_pending"] == 1     # kept while starting
+        # Negative control: the same request through a gate that ignores availability fails at once and is dropped.
+        ungated = build_image_prefetcher(engine)
+        ungated._may_start_source_batch = lambda: True
+        ungated.register_scaled_requests([dict(request)])
+        assert submitted == ["photo.png"] and ungated.snapshot_state()["scaled_pending"] == 0
+        submitted.clear()
+        running[0] = True                       # the child signalled ready
+        prefetcher.register_scaled_requests([])  # the next pump (a registration or the transition-complete reseed)
+        assert submitted == ["photo.png"] and prefetcher.snapshot_state()["scaled_inflight"] == 1
+    finally:
+        pipeline.derive_prefetch_via_worker = original
+
+
 def test_constructor_uses_canonical_budget_without_retaining_engine():
     class Engine:
         pass
@@ -129,15 +176,22 @@ def test_worker_startup_admits_speculation_only_for_selected_quality_and_budget(
     values = {"workers.max_workers": limit, "workers.image.enabled": enabled,
               "display.resample_filter": resample_filter, "display.sharpen_downscale": sharpen}
     started = []
+    background = []
     engine = SimpleNamespace(
         _process_supervisor=SimpleNamespace(start=lambda role: started.append(role) or True),
         _prefetch_ahead=ahead,
         _display_selection_suspended=lambda: False,
         _workers_waiting_for_display=False,
+        thread_manager=SimpleNamespace(submit_io_task=lambda func, **_kw: background.append(func)),
         settings_manager=SimpleNamespace(get=values.__getitem__, get_bool=values.__getitem__,
                                          get_application_name=lambda: "Screensaver"),
     )
+    engine._start_optional_worker = lambda *args: ScreensaverEngine._start_optional_worker(engine, *args)
     ScreensaverEngine._start_workers(engine)
+    # The required worker starts inline; the speculative one is only queued.
+    assert started == [role for role in expected if role == WorkerType.IMAGE]
+    for task in background:
+        task()
     assert started == expected
 
 
