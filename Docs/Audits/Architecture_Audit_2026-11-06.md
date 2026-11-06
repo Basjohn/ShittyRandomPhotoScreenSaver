@@ -1,7 +1,10 @@
 # Architecture Audit, 6 Nov 2026 (one-time, read-only)
 
-**Status:** dated audit snapshot (evidence, not authority; `Index.md` → Directory roles). A second reviewer turns it
-into the live checklist. Nothing here is fixed. **Source:** branch `worktree-agent-ae7baee1b36deb171`, written on
+**Status:** dated audit snapshot (evidence, not authority; `Index.md` → Directory roles). Reviewed 7 Nov against
+`8328a6d2`: every finding confirmed, merged and re-weighted into the live work list
+[`Docs/Reference/Architecture_Checklist.md`](../Reference/Architecture_Checklist.md), which `Current_Plan.md` links
+and promotes from. Nothing here is fixed; `file:line` references below are as of 6 Nov. **Source:** branch
+`worktree-agent-ae7baee1b36deb171`, written on
 `0a4fba7e` and rechecked after `git merge main` (fast-forward to `d84dceff`; that merge touched only
 `Current_Plan.md`, so every `file:line` below is valid on `d84dceff`).
 
