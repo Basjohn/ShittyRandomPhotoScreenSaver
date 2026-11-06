@@ -288,6 +288,18 @@ class WidgetThemeFoundryWindow(QMainWindow):
         meta_l.addWidget(self.link_label, 1, 1, 1, 3)
         meta_l.addWidget(QLabel("File"), 2, 0)
         meta_l.addWidget(self.path_label, 2, 1, 1, 3)
+        # The card surface material the theme is designed for (Card_Surface_Materials.md
+        # section 4): Style Overrides "Theme" follows it; "None" names no material.
+        from rendering.quick.widgets.surface_material import SURFACE_MATERIALS, SURFACE_MATERIAL_LABELS
+
+        self.material_combo = QComboBox()
+        self.material_combo.setObjectName("widgetThemeFoundrySurfaceMaterial")
+        self.material_combo.addItem("None (Normal)", None)
+        for material in SURFACE_MATERIALS:
+            self.material_combo.addItem(SURFACE_MATERIAL_LABELS[material], material)
+        self.material_combo.currentIndexChanged.connect(self._material_changed)
+        meta_l.addWidget(QLabel("Surface Material"), 3, 0)
+        meta_l.addWidget(self.material_combo, 3, 1)
         meta_l.setColumnStretch(1, 2)
         meta_l.setColumnStretch(3, 2)
         outer.addWidget(meta)
@@ -537,6 +549,7 @@ class WidgetThemeFoundryWindow(QMainWindow):
         self.draft = WidgetThemeDraft.from_spec(spec)
         self.theme_path = path
         self.name_edit.setText(spec.name)
+        self._show_material(spec.surface_material)
         self.id_label.setText(spec.theme_id)
         self.link_label.setText(spec.linked_settings_theme_id or "UNLINKED")
         self.path_label.setText(str(path) if path is not None else "Compiled Default Dark")
@@ -557,6 +570,7 @@ class WidgetThemeFoundryWindow(QMainWindow):
         self.draft = WidgetThemeDraft.from_spec(self.opened_spec)
         self.theme_path = None
         self.name_edit.setText(self.draft.name)
+        self._show_material(self.draft.surface_material)
         self.id_label.setText(self.draft.theme_id)
         self.link_label.setText("UNLINKED")
         self.path_label.setText("New unsaved Widget Theme")
@@ -605,6 +619,7 @@ class WidgetThemeFoundryWindow(QMainWindow):
             name=spec.name,
             linked_settings_theme_id=None,
             colors=dict(spec.colors),
+            surface_material=spec.surface_material,
         )
         self._write_theme(fork, path)
         self.statusBar().showMessage("Saved unlinked Widget Theme fork; original Settings link was not duplicated.", 8000)
@@ -937,6 +952,16 @@ class WidgetThemeFoundryWindow(QMainWindow):
     def _name_changed(self, text: str) -> None:
         self.draft.name = text
         self._update_dirty_status()
+
+    def _material_changed(self, _index: int) -> None:
+        self.draft.surface_material = self.material_combo.currentData()
+        self._update_dirty_status()
+
+    def _show_material(self, material: str | None) -> None:
+        index = self.material_combo.findData(material)
+        self.material_combo.blockSignals(True)
+        self.material_combo.setCurrentIndex(max(0, index))
+        self.material_combo.blockSignals(False)
 
     def _is_dirty(self) -> bool:
         try:
