@@ -37,6 +37,11 @@ Item {
     property color contextSubmenuCheckedSurfaceColor: "#334e718b"
     property color contextSubmenuIndicatorBorderColor: "#b9eaff"
     property color contextSubmenuIndicatorFillColor: "#82cdff"
+    // Card surface materials: the Context Menu's material (Widget Theme baseline) and
+    // the display's shared backdrop, bound by the scene controller only while some
+    // surface is not Normal. The backdrop item itself is parented here by Python at z 2.
+    property string contextMenuSurfaceMaterial: "normal"
+    property var contextMenuSurfaceBackdrop: null
     property bool perfHudEnabled: false
     property string perfHudText: ""
 
@@ -143,8 +148,9 @@ Item {
     }
 
     // Restored healthy background topology: BackgroundRenderItem is parented
-    // directly to this scene root by Python. No texture layer/capture/material
-    // owner sits between the transition renderer and the window.
+    // directly to this scene root by Python at z 0. No texture layer or capture
+    // sits between the transition renderer and the window. A card surface
+    // backdrop, when one exists, only reads the already-drawn frame from z 2.
     Rectangle {
         id: backgroundDimming
         objectName: "backgroundDimming"
@@ -315,6 +321,8 @@ Item {
         submenuCheckedSurfaceColor: displayScene.contextSubmenuCheckedSurfaceColor
         submenuIndicatorBorderColor: displayScene.contextSubmenuIndicatorBorderColor
         submenuIndicatorFillColor: displayScene.contextSubmenuIndicatorFillColor
+        surfaceMaterial: displayScene.contextMenuSurfaceMaterial
+        surfaceBackdrop: displayScene.contextMenuSurfaceBackdrop
         z: 300
     }
 
