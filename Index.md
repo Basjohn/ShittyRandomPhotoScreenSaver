@@ -55,6 +55,7 @@ For archive handoffs, `.godzip/workflow.md` defines extraction/packaging policy 
 | fast current owner map | `Docs/Contracts.md` |
 | project overview | `Docs/00_PROJECT_OVERVIEW.md` |
 | runtime presentation architecture | `Docs/Architecture/Compositor_Architecture.md` |
+| card surface materials (Acrylic, Glass, Frosted, Mica, Smoked; shared per-display backdrop) | `Docs/Architecture/Card_Surface_Materials.md` |
 | Qt/OpenGL production floor | `Spec.md` → Accepted runtime presentation; `rendering/quick/bootstrap.py` |
 | Settings theme / Acrylic / Glass / palette previews / favourites / Theme Foundry | `Docs/Architecture/Settings_Theme_Architecture.md` |
 | light-theme font/shadow ownership, native comparisons and accepted rendering cost | `Docs/Contracts.md` → Shadow authority; `Docs/Audits/Light_Theme_Legibility_2026-10-26.md` |

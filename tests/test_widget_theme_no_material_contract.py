@@ -1,8 +1,12 @@
-"""Permanent contract for the post-material Widget Theme/runtime architecture.
+"""Permanent contract against the rejected Sep 2026 card-material mechanisms.
 
-The abandoned Qt Quick Glass/Acrylic card-backdrop experiment must not creep back
-into runtime composition, Widget Theme schema/state, or Widgets -> General UI.
-Settings-window Glass/Acrylic remain a separate native QWidget theme concern.
+The Sep 2026 Qt Quick Glass/Acrylic experiment (a captured/layered wallpaper,
+per-card material Loader/mask trees, material state in Widget Theme files) stays
+gone. Card surface materials returned on 6 Nov 2026 through a different design
+(``Docs/Architecture/Card_Surface_Materials.md``): one per-display backdrop that
+reads the already-drawn frame, owned by ``SurfaceBackdropOwner``; its own
+contract lives in ``tests/test_surface_materials.py``. Settings-window
+Glass/Acrylic remain a separate native QWidget theme concern.
 """
 from __future__ import annotations
 
@@ -45,14 +49,15 @@ def test_display_background_is_direct_and_has_no_material_capture_layer() -> Non
     assert "layered_background" not in frame_pacer
 
 
-def test_card_shells_are_plain_rgba_surfaces() -> None:
+def test_card_shells_keep_the_plain_rgba_fill_for_normal() -> None:
     card = _text(QML / "OverlayCard.qml")
     widget = _text(QML / "OverlayWidget.qml")
     visualizer = _text(QML / "VisualizerPresentation.qml")
     context = _text(QML / "ContextMenu.qml")
     host = _text(ROOT / "rendering" / "quick" / "widgets" / "host.py")
 
-    assert "color: card.backgroundColor" in card
+    # Normal is today's RGBA fill; a material replaces only the fill, never the border.
+    assert 'color: card.surfaceMaterialActive ? "transparent" : card.backgroundColor' in card
     assert "materialMode" not in card
     assert "cardMaterialMode" not in widget
     assert "cardMaterialMode" not in visualizer

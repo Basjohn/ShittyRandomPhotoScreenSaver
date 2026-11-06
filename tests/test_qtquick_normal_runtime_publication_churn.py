@@ -200,7 +200,9 @@ def test_ordinary_card_geometry_style_and_visibility_reconcile_only_changed_axes
     RetainedOverlayWidget.set_startup_reveal_opacity(retained, 0.25)
     RetainedOverlayWidget.set_working_visible(retained, True)
     assert len(item.geometry_writes) == 4
-    assert len(item.writes) == 19  # 16 shell values + two fades + visible
+    from rendering.quick.widgets.host import _CARD_STYLE_BINDINGS
+
+    assert len(item.writes) == len(_CARD_STYLE_BINDINGS) + 3  # shell values + two fades + visible
     item.geometry_writes.clear()
     item.writes.clear()
     for _ in range(24):

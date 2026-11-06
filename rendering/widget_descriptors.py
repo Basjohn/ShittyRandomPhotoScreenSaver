@@ -3035,6 +3035,7 @@ class WidgetDefaultInitDescriptor:
 
 WIDGET_DEFAULT_INIT_DESCRIPTORS: tuple[WidgetDefaultInitDescriptor, ...] = (
     WidgetDefaultInitDescriptor("_global_card_border_width", "global", "card_border_width_px", "int"),
+    WidgetDefaultInitDescriptor("_global_surface_material", "global", "surface_material", "str"),
     WidgetDefaultInitDescriptor("_clock_color", "clock", "color", "color"),
     WidgetDefaultInitDescriptor("_weather_color", "weather", "color", "color"),
     WidgetDefaultInitDescriptor("_clock_border_color", "clock", "border_color", "color"),
