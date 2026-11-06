@@ -159,9 +159,26 @@ def test_native_pan_zoom_and_orbit_never_change_card_layout(card, editing):
     for key, value in baseline.items():
         if key != 'spotify_visualizer':
             assert after[key] == value
+    # Camera Position is admitted jointly with the pose and the framed flight (core/settings/framed_camera.py,
+    # view_orbit.py): a gesture that takes the eye to a bound persists the bounded offset. Which presets reach a bound
+    # depends on their authored terrain and camera (6 Nov: the operator's Preset 1 does), so the check is the rule
+    # itself: the persisted offset is either untouched or a legal one, i.e. its own admission for the persisted pose
+    # with the runtime's complete camera inputs.
+    from core.settings.framed_camera import admit_camera_parameters, spec_for_mode
+    from widgets.spotify_visualizer.view_orbit import _camera_values
+    spec = spec_for_mode(MODE)
+    position = spec.key('camera_position')
+    stored = after['spotify_visualizer']
     for key, value in baseline['spotify_visualizer'].items():
-        if key not in get_visualizer_view_pose_keys(MODE):
-            assert after['spotify_visualizer'][key] == value
+        if key in get_visualizer_view_pose_keys(MODE):
+            continue
+        if key == position and list(stored[key]) != list(value):
+            inputs = {name: stored[name] for name in spec.input_keys if name in stored}
+            admitted = admit_camera_parameters(spec, _camera_values(card.visualizer.controller.presentation_state,
+                                                                    spec, inputs))
+            assert list(stored[key]) == pytest.approx(list(admitted), abs=1e-6), key
+            continue
+        assert stored[key] == value
     # Next native press captures the current pan after zoom, not an old baseline.
     mouse(card, QEvent.Type.MouseButtonPress, p, Qt.MouseButton.RightButton)
     mouse(card, QEvent.Type.MouseMove, p + QPointF(5., 0.), Qt.MouseButton.RightButton)
