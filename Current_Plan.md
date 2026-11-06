@@ -215,9 +215,28 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
 - [ ] **Helper breadcrumb diagnostics unavailable:** current native MC evidence logs no access to
   `C:\ProgramData\SRPSS\logs\scr_helper.log`. Inspect the helper/log-path authority before relying on that
   diagnostic route; do not hide it behind a silent local fallback. Separate from Waveform rendering.
-- [ ] **Project Python startup warning:** `.venv\Scripts\python.exe -c "pass"` reports `Failed to find real location`
-  for its configured base Python 3.14 executable, although that path exists and Python runs. Inspect installation/path
-  resolution and access before repairing the venv; preserve dependency isolation and avoid environment-variable fixes.
+- [ ] **Doc sweep decisions (6 Nov, `Docs/Audits/Doc_Sweep_2026-11-06.md`; lead decisions in bold, for the next free
+  agent):**
+  1. **Environment-variable gates become CLI diagnostic admissions** in `core/diagnostics/experiment_flags.py` (no-env
+     rule), or are deleted if dead: `SRPSS_PROFILE_CPU` (`main.py`), `SRPSS_MC_WINDOW_FLAGS`
+     (`engine/display_manager.py`), `SRPSS_WIDGET_PERF_VERBOSE`, `SRPSS_FORCE_LOG_DIR`, `SRPSS_DISABLE_LOGS` and
+     `SRPSS_FORCE_LOGS` (`core/logging/logger.py`), and `SRPSS_DISABLE_REDDIT_HELPER_BRIDGE`. Harness_Index must stop
+     telling agents to set `SRPSS_FORCE_LOG_DIR`. Linux_Guide's "never configured by environment" becomes true.
+  2. **The idle transition warm-up's 200 ms timer (`Spec.md`) converts to rendered-frame spacing**, as the
+     Visualizer's warm-up does (warm-up rule: one unit per spaced, already-rendered frame), with a behavioural test.
+  3. **Test-only environment isolation is accepted**: `tests/conftest.py` sets `APPDATA` / `LOCALAPPDATA` for profile
+     isolation, and child processes get `QT_QPA_PLATFORM`. These are not product flags. Say so once in
+     `Docs/TestSuite.md` and `Test_Durability.md`.
+  4. **The guide's remembered-peak gain** (`Visualizer_Reactivity_Authoring.md` ~623 and the Waveform Migration Plan)
+     is rewritten as superseded when the Waveform fixed-scale rework lands (that rework's owner does it).
+  5. **Restore the plan item** that `Visualizer_Reference.md` ~209 points at ("Shared camera gestures": an exclusive
+     or mouse grab must keep its whole press/release sequence below the card). Find its last text in git history.
+  6. **Housekeeping:** add R-167 and R-168 to `Historical_Bugs.md`; de-duplicate the repeated network, cache and
+     capability sections in `Contracts.md`; align the Audits role between `Index.md` and
+     `Documentation_Maintenance.md`; list the ~40 unindexed tools in `Harness_Index.md`; fix the stale Orthographic
+     text in the Waveform and Extruded Bubble docs once their running agents finish.
+  The "Failed to find real location" Python warning no longer reproduces (`python -c "pass"` is clean, 6 Nov), so
+  `Python314_Cutover.md`'s benign-sandbox note stands and that item is closed.
 - [ ] **Frozen release gate (operator scheduled):** Standard/Diagnostic from one compile, MC and Reddit Helper installed
   startup/exit, Settings/widgets/cache/audio and installer behaviour.
   Check installer logs and obsolete-file removal in both curated theme/preset trees. Both sources declare whole-tree
