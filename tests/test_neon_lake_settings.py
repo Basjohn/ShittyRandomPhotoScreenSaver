@@ -99,9 +99,10 @@ def test_response_controls_project_to_existing_source_without_unused_private_att
         assert not hasattr(logical, f"_{key}") and not hasattr(presentation, f"_{key}")
 
 
-def test_real_terrain_body_silent_roundtrip_reset_and_stroke_save_batch(qt_app, settings_manager, monkeypatch):
-    from PySide6.QtCore import QPoint, Qt
-    from PySide6.QtTest import QTest
+def test_real_terrain_body_silent_roundtrip_and_save(qt_app, settings_manager, monkeypatch):
+    """The Settings body holds the authored terrain as the model admits it (loading saves nothing), keeps the view
+    pose out of its payload, and Settings' own save and a reopened tab keep the record exactly. The terrain is
+    painted in the Studio (``tests/test_visualizer_studio_parity.py`` proves the brush round trip)."""
     from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
     from core.settings.visualizer_presets import get_custom_preset_index
     from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
@@ -115,6 +116,7 @@ def test_real_terrain_body_silent_roundtrip_reset_and_stroke_save_batch(qt_app, 
         "preset_shockwave_grid": get_custom_preset_index("shockwave_grid"), **pose,
         "shockwave_grid_terrain": FIELD,
     }})
+    edited = {**FIELD, "heights": [0.0, 0.3, 0.5, 0.0, 0.2, 0.75, 0.1, 0.0, 0.4]}
     tab = VisualizersTab(settings_manager)
     try:
         tab._select_mode_page("shockwave_grid")
@@ -131,26 +133,12 @@ def test_real_terrain_body_silent_roundtrip_reset_and_stroke_save_batch(qt_app, 
         assert not set(pose) & set(payload) and "shockwave_grid_allow_overflow" not in payload
         for key in pose:
             assert not hasattr(tab, key)
-        editor = tab.shockwave_grid_terrain_editor
-        editor.view.setCurrentText("Top")           # this stroke works in the flat authoring map
-        canvas = editor.canvas
-        canvas.resize(500, 300)
-        rect = canvas.field_rect()
-        point = QPoint(round(rect.center().x()), round(rect.center().y()))
-        QTest.mousePress(canvas, Qt.MouseButton.LeftButton, pos=point)
-        assert calls == []
-        QTest.mouseRelease(canvas, Qt.MouseButton.LeftButton, pos=point)
-        assert calls == ["shockwave_grid", "save"]
-        edited = collect_spec_mode_settings(tab, "shockwave_grid")["shockwave_grid_terrain"]
-        assert edited != FIELD and normalize_heightfield(edited) == edited
-        calls.clear()
+        # A malformed record is admitted as the model admits it: the canonical terrain, never a refused model.
+        load_spec_mode_settings(tab, "shockwave_grid", {**payload, "shockwave_grid_terrain": {"version": 1}})
+        assert collect_spec_mode_settings(tab, "shockwave_grid")["shockwave_grid_terrain"] == normalize_heightfield(
+            require_canonical_default("widgets.spotify_visualizer.shockwave_grid_terrain"))
         load_spec_mode_settings(tab, "shockwave_grid", {**payload, "shockwave_grid_terrain": edited})
-        assert calls == [] and editor.get_heightfield() == edited
-        editor.reset_button.click()
-        assert calls == ["shockwave_grid", "save"]
-        assert editor.get_heightfield() == require_canonical_default("widgets.spotify_visualizer.shockwave_grid_terrain")
-        # Real Settings save/reopen retains terrain and independent internal view state.
-        editor.set_heightfield(edited)
+        assert calls == [] and collect_spec_mode_settings(tab, "shockwave_grid")["shockwave_grid_terrain"] == edited
         tab._save_settings_now()
         stored = settings_manager.get("widgets", {})["spotify_visualizer"]
         assert stored["shockwave_grid_terrain"] == edited
@@ -161,7 +149,7 @@ def test_real_terrain_body_silent_roundtrip_reset_and_stroke_save_batch(qt_app, 
     reopened = VisualizersTab(settings_manager)
     try:
         reopened._select_mode_page("shockwave_grid")
-        assert reopened.shockwave_grid_terrain_editor.get_heightfield() == edited
+        assert collect_spec_mode_settings(reopened, "shockwave_grid")["shockwave_grid_terrain"] == edited
     finally:
         reopened.deleteLater()
         qt_app.processEvents()
@@ -274,95 +262,3 @@ def test_active_neon_default_full_configuration_and_changed_terrain_pack_once(mo
     owner.runtime_controller.mode_id='sphere'
     apply_presentation_vis_mode_kwargs(owner,defaults)
     assert owner._shockwave_grid_terrain is edited_frozen and len(calls)==3
-
-
-def test_real_terrain_view_places_the_sun_and_follows_its_settings(qt_app, settings_manager, monkeypatch):
-    """The terrain editor's 3/4 view shows the scene's Sun / Moon; dragging it there sets Position X / Y / Z like
-    any edit (Custom, one save), at the same authored distance (its apparent size), and the view follows edits."""
-    import math
-    from PySide6.QtCore import QPoint, Qt
-    from PySide6.QtTest import QTest
-    from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
-    from core.settings.visualizer_presets import get_custom_preset_index
-    from rendering.gl_programs.neon_celestial import CELESTIAL_REFERENCE
-    from core.constants.neon_lake_world import NOMINAL_HALF_WIDTH
-    from core.settings.visualizer_mode_settings import require_mode_settings
-    from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
-    from ui.tabs.visualizers_tab import VisualizersTab
-
-    settings_manager.set("widgets", {"spotify_visualizer": {
-        "enabled": True, "visualizers_enabled": True, "mode": "shockwave_grid",
-        "mode_activation": build_visualizer_mode_activation(["shockwave_grid"]),
-        "preset_shockwave_grid": get_custom_preset_index("shockwave_grid"), "shockwave_grid_terrain": FIELD,
-    }})
-    tab = VisualizersTab(settings_manager)
-    try:
-        tab._select_mode_page("shockwave_grid")
-        load_spec_mode_settings(tab, "shockwave_grid", {
-            **require_canonical_default("widgets.spotify_visualizer"), "shockwave_grid_terrain": FIELD,
-            "shockwave_grid_sun_enabled": True})
-        calls = []
-        monkeypatch.setattr(tab, "_save_settings", lambda: calls.append("save"))
-        monkeypatch.setattr(tab, "_force_visualizer_preset_to_custom", lambda mode=None: calls.append(mode))
-        canvas = tab.shockwave_grid_terrain_editor.canvas
-        canvas.resize(520, 420)
-        assert canvas.view == "Angled"
-        before = collect_spec_mode_settings(tab, "shockwave_grid")
-
-        def distance(values):
-            authored = (values["shockwave_grid_sun_x"] * NOMINAL_HALF_WIDTH, values["shockwave_grid_sun_y"],
-                        values["shockwave_grid_sun_z"])
-            return math.dist(authored, CELESTIAL_REFERENCE)
-
-        centre, _radius = canvas._body_on_screen()
-        start = QPoint(round(centre.x()), round(centre.y()))
-        QTest.mousePress(canvas, Qt.MouseButton.LeftButton, pos=start)
-        QTest.mouseMove(canvas, start + QPoint(-40, -15))
-        assert calls == []                                   # nothing is saved mid-drag
-        QTest.mouseRelease(canvas, Qt.MouseButton.LeftButton, pos=start + QPoint(-40, -15))
-        assert calls == ["shockwave_grid", "save"]
-        after = collect_spec_mode_settings(tab, "shockwave_grid")
-        assert after["shockwave_grid_sun_x"] < before["shockwave_grid_sun_x"]
-        assert after["shockwave_grid_terrain"] == FIELD                # the drag painted nothing
-        assert distance(after) == pytest.approx(distance(before), rel=0.05)
-        # The view follows the Studio's edits: each commit reloads the body (here, the Position Y value).
-        low = require_mode_settings("shockwave_grid").control("shockwave_grid_sun_y").low
-        load_spec_mode_settings(tab, "shockwave_grid", {**after, "shockwave_grid_sun_y": low})
-        assert float(canvas._body["sun_y"]) == pytest.approx(
-            collect_spec_mode_settings(tab, "shockwave_grid")["shockwave_grid_sun_y"])
-    finally:
-        tab.deleteLater()
-        qt_app.processEvents()
-
-
-def test_terrain_view_shows_the_loaded_sun_not_stale_widgets(qt_app, settings_manager):
-    """Loading Settings (reopening, or a preset) hands the 3/4 view the Sun / Moon and scene it is loading. The terrain
-    section loads before the Sun / Moon controls receive their values (with signals blocked), so reading the controls
-    there showed the previous values: after a trip into the app the body sat somewhere other than where it was seen."""
-    from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
-    from core.settings.visualizer_presets import get_custom_preset_index
-    from ui.tabs.media.spec_mode_builder import load_spec_mode_settings
-    from ui.tabs.visualizers_tab import VisualizersTab
-
-    settings_manager.set("widgets", {"spotify_visualizer": {
-        "enabled": True, "visualizers_enabled": True, "mode": "shockwave_grid",
-        "mode_activation": build_visualizer_mode_activation(["shockwave_grid"]),
-        "preset_shockwave_grid": get_custom_preset_index("shockwave_grid"), "shockwave_grid_terrain": FIELD,
-    }})
-    tab = VisualizersTab(settings_manager)
-    try:
-        tab._select_mode_page("shockwave_grid")
-        canvas = tab.shockwave_grid_terrain_editor.canvas
-        base = {**require_canonical_default("widgets.spotify_visualizer"), "shockwave_grid_terrain": FIELD,
-                "shockwave_grid_sun_enabled": True}
-        for sun in ((0.4, 1.2, -1.0, "Sun", 0.6), (-1.1, 2.3, -3.2, "Moon", 1.3)):
-            x, y, z, mode, height = sun
-            load_spec_mode_settings(tab, "shockwave_grid", {
-                **base, "shockwave_grid_sun_x": x, "shockwave_grid_sun_y": y, "shockwave_grid_sun_z": z,
-                "shockwave_grid_sun_mode": mode, "shockwave_grid_terrain_height": height})
-            body = canvas._body
-            assert (float(body["sun_x"]), float(body["sun_y"]), float(body["sun_z"])) == pytest.approx((x, y, z))
-            assert body["sun_mode"] == mode
-            assert canvas._terrain_height == pytest.approx(height)
-    finally:
-        tab.deleteLater()

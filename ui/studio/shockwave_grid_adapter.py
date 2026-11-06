@@ -18,9 +18,12 @@ Truthfulness: the Studio changes no Neon Lake simulation, timing, engine or rend
   under the store's camera policy; the lens on Keep View; dolly and pan stay preview views.
 * **Environment.** Neon Lake draws its own scene (sky, Sun / Moon, terrain, lake) and its descriptor declares no
   backdrop setting: the renderer reads no wallpaper, so the Studio hands it none (``set_environment`` is inert).
-* **Terrain.** The authored heightfield is painted with Settings' terrain brush; the Studio carries the record (Undo,
-  saving, Save To <Preset>) and offers the terrain editor's whole-record edits (Reset Terrain, Extend Toward Horizon)
-  as structural actions. There is no brush instrument in the shared shell.
+* **Terrain.** The authored heightfield is painted on the preview with the Studio's shared brush instrument
+  (``ui.studio.brush``: Raise, Lower, Flatten, Water; radius, strength, falloff, flatten height), its strokes painted
+  by the one brush owner (``rendering.gl_programs.heightfield_brush``). A pointer lands on the drawn ground through
+  the frame's production framed camera (``basin_view``: the ray from the eye through the point, met with the scene's
+  land, ``rendering.gl_programs.neon_terrain_surface``). The session carries the record (Undo, saving, Save To
+  <Preset>) and the whole-record edits (Reset Terrain, Extend Toward Horizon) are structural actions.
 * The production ``QuickShockwaveGridRenderer`` draws the resulting ``VisualizerLogicalFrame`` at the live card's
   presentation (Fill by default).
 """
@@ -318,12 +321,13 @@ def build_schema() -> StudioSchema:
             tooltip="Preview view. Drag the viewport to orbit. The view is saved only when the preset's camera "
                     "choice includes it.")
 
-    # Terrain (Custom: the bespoke brush editor). The record is carried by the session (undo, save, Save To
-    # <Preset>) through this schema-only marker; its whole-record edits are the group's actions.
+    # Terrain (Custom: painted with the viewport's brush instrument, ``brush_target``). The record is carried by the
+    # session (undo, save, Save To <Preset>) through this schema-only marker; its whole-record edits are the group's
+    # actions.
     terrain_group = titles[customs["terrain"].bucket]
     add(f"{TERRAIN}.size", (TERRAIN, "size"), "Terrain Grid", _BUCKET_WORKSPACE[customs["terrain"].bucket],
         terrain_group, SCALAR, minimum=2.0, maximum=float(_max_grid()), decimals=0, integer=True,
-        instrument_only=True, tooltip="The authored heightfield (painted in Settings' terrain editor).")
+        instrument_only=True, tooltip="The authored heightfield (painted with the viewport's terrain brush).")
 
     # Terrain Reaction's shaper (Custom).
     reaction = titles[customs["terrain_shaper"].bucket]
@@ -406,6 +410,121 @@ def build_schema() -> StudioSchema:
                         row_label=row_label)
 
 
+# ------------------------------------------------------------------------------- terrain brush
+_PICK_SAMPLES = 512          # samples along a pick ray, spaced geometrically from the eye to the far plane
+_PICK_REFINE = 24            # bisection steps on the first crossing
+_RING_POINTS = 72
+
+
+def terrain_view(frame, geometry):
+    """The frame's production framed camera at the presented frame (``QuickShockwaveGridRenderer._view``: the card's
+    content field and its aperture), for the brush's picks and footprint."""
+    from rendering.gl_programs.neon_lake_basin_program import basin_view
+    from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
+    size, extent, style = geometry
+    resolved = framed.presentation(MODE, (float(size[0]), float(size[1])), extent, style)
+    outer_x, outer_y, _w, _h = resolved.outer_rect
+    x, y, width, height = resolved.content_rect
+    return basin_view(frame.mode_state.parameters, (x - outer_x, y - outer_y, width, height),
+                      aperture_scale=framed_aperture_scale(resolved, content=True))
+
+
+def _terrain_surface(values: Mapping[str, Any]):
+    """(size, heights grid, basin, Terrain Height) of the values' authored terrain."""
+    import numpy as np
+    from rendering.gl_programs.heightfield import heightfield_basin
+    record = admit_terrain(values[TERRAIN], values[TERRAIN])
+    size = int(record["size"])
+    grid = np.asarray(record["heights"], dtype=np.float64).reshape(size, size)
+    return size, grid, heightfield_basin(record), float(values[PREFIX + "terrain_height"])
+
+
+def _ground(grid, basin, terrain_height: float, gu, gv):
+    """The drawn ground's world height at grid uv (land scaled by Terrain Height, water at the scene's level)."""
+    import numpy as np
+    from rendering.gl_programs.neon_terrain_surface import scene_surface
+    land, water = scene_surface(grid, basin, gu, gv)
+    return np.where(water, land, land * terrain_height)
+
+
+def _grid_uv(size: int, basin, x, z):
+    """World x / z -> grid uv (the inverse of ``neon_terrain_surface.world_points``)."""
+    from core.constants.neon_lake_world import DEPTH, NOMINAL_HALF_WIDTH
+    x0, y0, cells = basin
+    n1 = size - 1
+    return (((x / (2.0 * NOMINAL_HALF_WIDTH) + 0.5) * cells + x0) / n1, ((-z / DEPTH) * cells + y0) / n1)
+
+
+def pick_terrain(frame, values: Mapping[str, Any], point, geometry):
+    """The authored grid's uv under ``point`` (presented-frame pixels): the first place the camera's ray through it
+    meets the drawn ground; None on the sky, past the grid or outside the card's field."""
+    import numpy as np
+    from core.constants.neon_lake_world import FAR_PLANE
+    if frame is None or getattr(frame, "mode_state", None) is None:
+        return None
+    view = terrain_view(frame, geometry)
+    fx, fy, fw, fh = view.field
+    u, v = (float(point[0]) - fx) / fw, (float(point[1]) - fy) / fh
+    if not (0.0 <= u <= 1.0 and 0.0 <= v <= 1.0):
+        return None
+    size, grid, basin, height = _terrain_surface(values)
+    eye, direction = np.asarray(view.eye, dtype=np.float64), np.asarray(view.ray(u, v), dtype=np.float64)
+
+    def above(t):
+        p = eye + np.multiply.outer(t, direction)
+        gu, gv = _grid_uv(size, basin, p[..., 0], p[..., 2])
+        return p[..., 1] - _ground(grid, basin, height, gu, gv)
+
+    t = np.geomspace(0.01, FAR_PLANE, _PICK_SAMPLES)
+    crossing = np.flatnonzero(above(t) <= 0.0)
+    if crossing.size == 0:
+        return None
+    index = int(crossing[0])
+    near, far = (0.0, float(t[0])) if index == 0 else (float(t[index - 1]), float(t[index]))
+    for _ in range(_PICK_REFINE):
+        middle = 0.5 * (near + far)
+        if float(above(np.array([middle]))[0]) > 0.0:
+            near = middle
+        else:
+            far = middle
+    hit = eye + far * direction
+    gu, gv = _grid_uv(size, basin, float(hit[0]), float(hit[2]))
+    if not (0.0 <= gu <= 1.0 and 0.0 <= gv <= 1.0):
+        return None
+    return float(gu), float(gv)
+
+
+def terrain_footprint(frame, values: Mapping[str, Any], uv, rings, geometry) -> list:
+    """Each ring (a radius in grid uv round ``uv``, clipped to the grid) on the drawn ground, in presented-frame
+    pixels; parts behind the eye are left out."""
+    import numpy as np
+    from rendering.gl_programs.neon_terrain_surface import world_points
+    if frame is None or getattr(frame, "mode_state", None) is None:
+        return []
+    view = terrain_view(frame, geometry)
+    size, grid, basin, height = _terrain_surface(values)
+    angle = np.linspace(0.0, 2.0 * math.pi, _RING_POINTS + 1)
+    out = []
+    for radius in rings:
+        gu = np.clip(uv[0] + radius * np.cos(angle), 0.0, 1.0)
+        gv = np.clip(uv[1] + radius * np.sin(angle), 0.0, 1.0)
+        world = world_points(size, basin, gu, gv, _ground(grid, basin, height, gu, gv))
+        line = []
+        for point in world:
+            if view.depth(tuple(point)) > 1e-3:
+                x, y = view.item_point(tuple(point))
+                line.append([round(float(x), 1), round(float(y), 1)])
+        if len(line) > 1:
+            out.append(line)
+    return out
+
+
+def brush_target():
+    """The terrain brush's target: the authored heightfield, picked and drawn on the preview's ground."""
+    from ui.studio.brush import BrushTarget
+    return BrushTarget(TERRAIN, "Terrain", pick_terrain, terrain_footprint)
+
+
 def _max_grid() -> int:
     from rendering.gl_programs.heightfield import HEIGHTFIELD_MAX_SIZE
     return int(HEIGHTFIELD_MAX_SIZE)
@@ -441,7 +560,11 @@ class NeonLakeStudioAdapter(StudioModeAdapter):
         self._schema: StudioSchema | None = None
 
     def capabilities(self) -> StudioCapabilities:
-        return StudioCapabilities(viewport=True, camera=True, handles=False, objects=False)
+        return StudioCapabilities(viewport=True, camera=True, handles=False, objects=False, brush=True)
+
+    def brush_target(self):
+        """The terrain brush: paints the authored heightfield on the preview's drawn ground."""
+        return brush_target()
 
     def schema(self) -> StudioSchema:
         if self._schema is None:
@@ -488,6 +611,7 @@ class NeonLakeStudioAdapter(StudioModeAdapter):
 
 __all__ = [
     "NEON_LAKE", "NeonLakeStudioAdapter", "NeonLakeStudioEvaluator", "SHAPE", "SHAPER", "TERRAIN", "admit_shaper",
-    "admit_terrain", "build_schema", "camera_position_bounds", "engine_key", "engine_values", "owned_keys",
+    "admit_terrain", "brush_target", "build_schema", "camera_position_bounds", "pick_terrain", "terrain_footprint",
+    "terrain_view", "engine_key", "engine_values", "owned_keys",
     "row_label", "structure_edit",
 ]

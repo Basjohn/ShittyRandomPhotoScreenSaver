@@ -662,9 +662,10 @@ User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runti
 
 3D Visualizers (Extruded Spectrum, Shockwave Grid) and the shared 3D Detail tiers:
 
-- `tests/test_heightfield.py`, `tests/test_scene3d_heightfield.py`, `tests/test_terrain_editor.py`,
+- `tests/test_heightfield.py`, `tests/test_scene3d_heightfield.py`, `tests/test_heightfield_brush.py`,
   `tests/test_neon_lake_settings.py` — strict authored terrain, exact-zero water, CPU/GL sampling, upload-on-change and
-  state restoration, actual stroke-batched save/Undo/reset, lazy spec bodies, migration and pose/art separation;
+  state restoration, the brush's path-not-speed strokes and profile, lazy spec bodies, migration and pose/art
+  separation (the Studio brush's stroke-batched save, Undo and reload: `tests/test_visualizer_studio_parity.py`);
 - `tests/test_framed_scene_input.py`, `tests/test_neon_lake_renderer.py`, `tests/test_neon_lake_reaction.py` — actual native
   WASD/Alt input, five-key settlement/reload with fixed card/viewport, production QSG rounded stencil plus inherited scissor,
   warm resource reuse and two independent contexts, GPU quiet/onset/sustained classification and distinct bounded water/land.

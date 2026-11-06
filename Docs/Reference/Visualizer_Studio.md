@@ -36,6 +36,7 @@ and must not be copied per mode.
 | `ui/studio/framed.py` | Shared pieces for 3D (and card-presented) adapters: production presentation resolver and uniform aperture scale, `card_framings` / `live_card_framings`, `camera_navigation` over the shared framed camera, `orbit_navigation` for a free-orbit mode (the descriptor's `view_orbit_settings` only), `QuickModeRenderer` wrapping a production Quick renderer and `ContractModeRenderer` handing it the production render-frame contract (pixel ratio from the item mapping, so a letterboxed live card presents at the true DPR). |
 | `ui/studio/engine_answers.py` | The Spectrum family's recorded engine answers (Spectrum, Extruded Spectrum, Neon Lake, DevCurve, Oscilloscope), mode-neutral (`EngineAnswerMode(mode_id, conditional_reads)`): synthetic audio (with the analysis spectrum and onsets a recording carries), the out-of-process `extract`, recorded inputs, the per-mode answer cache, `start_clip_load` and `EngineAnswerEvaluator` (the production step in process on `ExactReplay`). |
 | `ui/studio/exact_replay.py` | `ExactReplay`, the shared exact-history mechanism of the replaying evaluators (the engine-answer modes and Waveform): checkpoints per values signature, rewinds, the frame budget (`converging`) and the live-gesture path. An evaluator supplies only its step, its state capture and its restyle. The engine-owned / mode-owned split follows from the production source projection (`source_config_applier`). |
+| `ui/studio/brush.py` | The shared heightfield brush instrument: `BrushTarget` (the record's key, `pick` and `footprint` through the mode's production camera, from `adapter.brush_target()` when `capabilities().brush`) and `StudioBrush` (tool settings, held pointer points, the stroke; flushed at frame start). Strokes are painted by `rendering/gl_programs/heightfield_brush.py`. |
 | `ui/studio/spectrum_shape.py` | The Spectrum family's shape editor as Studio rows, admission and structural edits (add / remove node, lane swap), by key prefix (`ShapeKeys`). |
 | `ui/studio/theme.py`, `colour.py` | Chrome tokens derived from the active Settings theme with enforced contrast; display ↔ linear colour conversion for instruments. Scene colours never pass through the theme. |
 | `ui/studio/chrome.py` | The painted chrome items (`StudioFrame`, `StudioWindowEdge`, QML module `SRPSS.StudioChrome`), painting with Settings' own owners (below). |
@@ -195,9 +196,21 @@ is optional and defaults to "not offered":
   Studio reaches every state Settings' shape editor saves (`tests/test_spectrum_studio_shape_editor.py`). Neon Lake:
   the same for its Frequency Response shape and for Terrain Reaction's shaper (one record: nodes two to five, the
   first lane boundary pinned at the shoreline by `normalize_terrain_shaper`), and the terrain editor's whole-record
-  edits (Extend Toward Horizon, Reset Terrain) on the authored heightfield. The heightfield itself is painted only by
-  Settings' terrain brush: the shared shell has no brush instrument, so the Studio carries the record (undo, save,
-  Save To <Preset>) through an `instrument_only` schema marker and does not author its cells.
+  edits (Extend Toward Horizon, Reset Terrain) on the authored heightfield. The heightfield's cells are painted with
+  the shared brush (below); the session carries the record (undo, save, Save To <Preset>) through an
+  `instrument_only` schema marker.
+- **Brush (`capabilities().brush`, Neon Lake's terrain).** The viewport toolbar's brush button (or B) turns the
+  viewport into a brush: left-drag paints, right / middle drag still pans and the wheel zooms; a floating panel holds
+  the mode (Raise, Lower, Flatten, Water), Radius, Strength, Falloff and Flatten Height (tool state, never saved), and
+  the footprint (reach ring, dashed core) is drawn on the ground under the pointer. The adapter's `BrushTarget` names
+  the record and picks a presented-frame point on the drawn ground through the frame's production camera (Neon Lake:
+  `basin_view` at the card's content field, the ray met with `neon_terrain_surface`). Pointer points are held and
+  painted at the next frame start, all of them in order (the path decides a stroke, not the event rate), with one
+  preview per frame; release commits once (one save, one undo entry, "Paint Terrain (<mode>)"); Esc drops the stroke.
+  During a stroke points are picked on the ground as it was when it began. `tests/test_visualizer_studio_parity.py`
+  proves the pick against the production camera, the coalesced stroke, its save through Settings' owners, reload and
+  Undo; `tools/waveform_studio_capture.py --brush` renders a stroke (evidence
+  `.artifacts/evidence/studio_completion_20261106/brush/`).
 - **Conditions.** A property's `when` terms must all hold, its `when_any` terms at least one (Settings' former OR
   rules, e.g. Bubble's particle rows while any population is on); `ui/studio/schema.condition_hidden` is the one
   evaluation the bridge's `conditionHidden` uses.
@@ -254,20 +267,21 @@ release replay spreads over frames within the budget (one 222 ms evaluation -> a
 - **Entry.** Every visualizer mode's Settings body is `build_studio_owned_mode_ui` (`ui/tabs/media/spec_mode_builder.py`,
   operator 6 Nov: migrate fully once each Studio has parity+): the preset row with its **OPEN STUDIO** button
   (`VisualizerPresetSlider.set_studio_launcher`, where Edit Preset was; offered on every curated preset and on Custom
-  alike) and one sentence. Opened on a curated preset, the Studio shows that preset. The body's values (`body_keys`: the
+  alike) and one sentence; no Settings control is kept beside them. Opened on a curated preset, the Studio shows that
+  preset. The body's values (`body_keys`: the
   bucketed controls, each Custom row's keys and the bucketless controls a Custom row edits) live in the section-lazy
   cache `_<prefix>_lazy_values`, admitted as the model admits them, with nothing built; the technical (audio-analysis)
   controls and the page's shared Bar Appearance / Rainbow rows keep their canonical widgets as value owners in the
   body's never-shown holder, so load/collect/save, preset switching and Custom snapshots run through unchanged owners.
-  The one Settings control without a Studio home is Neon Lake's terrain brush: the Studio carries the heightfield (undo,
-  save, Extend Toward Horizon, Reset Terrain) but has no brush instrument, so Neon Lake's body keeps that section
-  (`settings_sections=("terrain",)`: the spec Custom's own build / load / collect hooks).
+  Neon Lake's terrain, the last Settings-only control, is painted with the Studio's brush since 6 Nov; its Settings
+  section and editor are retired.
 - **Parity+ proof.** `tests/test_visualizer_studio_parity.py` derives every mode (each descriptor with a registered
   adapter) and every control from the registries: spec bucket entries and Custom-row keys, the offered technical
   controls, and the shared families (Rainbow wherever owned; Bar Appearance where the mode `draws_bars`), each a Studio
   property with the registry's range, choices and condition; every preset-row control has a Studio action; plain and
   Custom-row edits through the bridge save and reload through a never-shown `VisualizersTab`; conditional rows hide
-  live; negative controls drop a property per category. Before the flip it also proved each Studio against the body
+  live; negative controls drop a property per category; every authored heightfield is the brush's target, and a brush
+  stroke saves once, reloads and undoes exactly. Before the flip it also proved each Studio against the body
   users had (every row the body collected and every row its spec and hand-written conditions hid; commit `db7468ab`).
 - **Canonical save.** `VisualizerSettingsStore.commit` loads the values into the mode body with signals blocked, then
   runs the tab's own `_force_visualizer_preset_to_custom` and `_save_settings_now`. The mode's shared families that
@@ -337,5 +351,4 @@ evaluation timings. It never shows a window. Command examples live in `Docs/Refe
 3. Register one line in `ui/studio/registry.py`.
 4. Add the coverage, parity and Settings round-trip tests; render evidence with the capture tool.
 5. The mode's builder is `build_studio_owned_mode_ui` with one plain sentence; `tests/test_visualizer_studio_parity.py`
-   must pass for it (a Settings control with no sensible Studio home stays a `settings_sections` entry, reported to the
-   operator).
+   must pass for it (a control with no Studio home is a missing instrument to build, never a Settings section).

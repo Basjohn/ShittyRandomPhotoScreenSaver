@@ -601,18 +601,14 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
 - [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost, Extruded Spectrum and
   Neon Lake built, DevCurve and Oscilloscope built (below); Sphere in progress). Neon Lake (Shockwave Grid) awaits operator acceptance
   (evidence `.artifacts/evidence/neon_lake/studio/`, Presets 1 and 3): recorded engine answers like Spectrum, the
-  shared framed camera, no wallpaper; its Settings body keeps the terrain brush (the one Settings control without a
-  Studio home) unless a shared brush instrument is admitted. Extruded Spectrum awaits operator acceptance
+  shared framed camera, no wallpaper; its terrain is painted with the Studio's shared brush (6 Nov; evidence
+  `.artifacts/evidence/studio_completion_20261106/brush/`; the retired Settings editor's 3/4 view Sun / Moon drag is
+  now Position X / Y / Z only). Extruded Spectrum awaits operator acceptance
   (evidence `.artifacts/evidence/extruded_spectrum/studio/`); its cast-shadow rows stay out of the Studio while
   they are unavailable (`EXTRUDED_CAST_SHADOW_AVAILABLE`). Spectrum awaits operator acceptance (evidence
   `.artifacts/evidence/spectrum/studio_20261105/`). Every mode's Settings body is now the preset row and the Studio
   launcher (operator 6 Nov: migrate fully once parity+ is proven; `tests/test_visualizer_studio_parity.py`). Operator
-  look pending on the migrated Settings pages (one sentence per mode; Neon Lake's page keeps the terrain brush).
-- [ ] **Neon Lake terrain brush in the Studio (the last step to "fully migrated", operator 6 Nov: "not be half in and
-  half off"):** the Studio carries the heightfield, undo, Extend and Reset but has no brush instrument, so Neon Lake's
-  Settings page keeps the brush section (`settings_sections=("terrain",)`). Build a shared Studio brush instrument
-  that paints on the preview (raise, lower, flatten; radius, strength, falloff; the existing undo), then retire the
-  Settings section with the parity test proving the brush round trip.
+  look pending on the migrated Settings pages (one sentence per mode) and on the terrain brush in the Studio.
 - [ ] **DevCurve Studio built (6 Nov), awaiting operator acceptance** (`ui/studio/devcurve_adapter.py`, registered;
   so DevCurve's preset row now shows Open Studio and no Edit Preset). Evidence `.artifacts/evidence/devcurve/studio/`
   (Deep Blue on Rag Doll, Neon Skyline on Human: every workspace with the live traces, plus the node rows). Operator

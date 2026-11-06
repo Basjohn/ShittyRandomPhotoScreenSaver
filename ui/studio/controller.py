@@ -166,6 +166,13 @@ class StudioBridge(QObject):
         self._source = response.sources[0].id if response is not None and response.sources else ""
         if self._target:
             self._source = self._dominant_source(self._target)
+        self.brush = None
+        if controller.capabilities.as_map().get("brush"):
+            target = controller.adapter.brush_target()
+            if target is not None:
+                from ui.studio.brush import StudioBrush
+                self.brush = StudioBrush(target, controller.session, controller.brush_scene,
+                                         controller.request_preview_frame)
         self._rebuild_objects()
         self._rebuild_inspector()
         self._rebuild_values()
@@ -581,6 +588,7 @@ class StudioBridge(QObject):
 
     def apply_pending_previews(self) -> None:
         """Frame start (and before anything that ends or replaces the gesture): apply the held previews."""
+        self._flush_brush()
         while self._pending:
             (property_id, endpoint), (kind, payload) = next(iter(self._pending.items()))
             del self._pending[(property_id, endpoint)]
@@ -594,6 +602,87 @@ class StudioBridge(QObject):
 
     def drop_pending_previews(self) -> None:
         self._pending.clear()
+        if self.brush is not None:
+            self.brush.cancel()
+
+    # --------------------------------------------------------- the terrain brush (shared instrument)
+    brushChanged = Signal()
+    brushCursorChanged = Signal()
+
+    def _brush_map(self) -> dict:
+        return self.brush.as_map() if self.brush is not None else {}
+
+    def _brush_cursor(self) -> list:
+        return list(self.brush.cursor) if self.brush is not None else []
+
+    brushState = Property("QVariantMap", _brush_map, notify=brushChanged)
+    brushCursor = Property("QVariantList", _brush_cursor, notify=brushCursorChanged)
+
+    def _flush_brush(self) -> None:
+        brush = self.brush
+        if brush is None:
+            return
+        cursor = brush.cursor
+        self._guard(brush.flush)
+        if brush.cursor is not cursor:
+            self.brushCursorChanged.emit()
+
+    @Slot(bool)
+    def setBrushActive(self, active: bool) -> None:
+        if self.brush is None:
+            return
+        self.brush.set_active(bool(active))
+        self.brushChanged.emit()
+        self.brushCursorChanged.emit()
+
+    @Slot(str, "QVariant")
+    def setBrushValue(self, name: str, value: Any) -> None:
+        """A brush setting (mode, radius, strength, falloff, flatten_height): tool state, never saved."""
+        if self.brush is not None and self.brush.set_value(str(name), value):
+            self.brushChanged.emit()
+
+    @Slot(float, float)
+    def brushPress(self, x: float, y: float) -> None:
+        """A stroke starts at (x, y) in presented-frame pixels; the paint follows at the next frame start."""
+        if self.brush is None or not self.brush.active:
+            return
+        if self._c.session.gesture_active:
+            self.apply_pending_previews()
+            self._guard(self._c.session.end_gesture)       # another gesture ends before a stroke starts
+        self.brush.press((x, y))
+        self.brushChanged.emit()
+
+    @Slot(float, float)
+    def brushMove(self, x: float, y: float) -> None:
+        if self.brush is not None and self.brush.active:
+            self.brush.move((x, y))
+
+    @Slot(float, float)
+    def brushHover(self, x: float, y: float) -> None:
+        if self.brush is not None and self.brush.active:
+            self.brush.hover((x, y))
+
+    @Slot()
+    def brushLeave(self) -> None:
+        if self.brush is not None:
+            self.brush.hover(None)
+            self.brushCursorChanged.emit()
+
+    @Slot()
+    def brushRelease(self) -> None:
+        """The stroke ends: the held points are painted and the record is saved once (one undo entry)."""
+        if self.brush is None:
+            return
+        self._guard(self.brush.release)
+        self.brushChanged.emit()
+        self.brushCursorChanged.emit()
+
+    @Slot()
+    def brushCancel(self) -> None:
+        if self.brush is None:
+            return
+        self.brush.cancel()
+        self.brushChanged.emit()
 
     @Slot(str, str)
     def commitGradient(self, property_id: str, nodes: str) -> None:
@@ -1614,6 +1703,19 @@ class StudioController(QObject):
         if self.surface is not None and self.state in ("opening", "presented"):
             self.surface.request_frame()
 
+    def presented_geometry(self) -> tuple:
+        """(presented-frame size, the live card's world extent, the framing's card style) of the viewport: what
+        handles and the brush project through."""
+        framing = next((f for f in self.framings if f.id == self.bridge.framingId), None)
+        return ((self.viewport.width(), self.viewport.height()), self.presented_extent(),
+                framing.style if framing else ())
+
+    def brush_scene(self):
+        """(frame on screen, the values it shows, presented geometry) for the brush, or None before a frame."""
+        if self.bridge is None or self.viewport is None or self.last_frame is None:
+            return None
+        return self.last_frame, self.evaluation_values(), self.presented_geometry()
+
     # -------------------------------------------------------------- handles
     def refresh_handles(self) -> None:
         """Project the selected object's handles through the mode's camera (direct manipulation)."""
@@ -1625,12 +1727,10 @@ class StudioController(QObject):
             if self.bridge.handles.get("handles") or self.bridge.handles.get("outline"):
                 self.bridge.set_handles({"outline": [], "handles": []})    # an outline may stand alone
             return
-        framing = next((f for f in self.framings if f.id == self.bridge.framingId), None)
+        size, extent, style = self.presented_geometry()
         try:
             state = self.adapter.scene_handles(self.last_frame, self.evaluation_values(), self.bridge.selectedObject,
-                                               (self.viewport.width(), self.viewport.height()),
-                                               self.presented_extent(),
-                                               framing.style if framing else ())
+                                               size, extent, style)
         except Exception:
             logger.exception("[STUDIO] Handle projection failed")
             state = {"outline": [], "handles": []}
