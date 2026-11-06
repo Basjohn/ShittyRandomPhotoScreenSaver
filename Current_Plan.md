@@ -56,10 +56,13 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
   that no `UI_CALLBACK` / `FEED_GUI_DELIVERY` line exceeds a frame and the first `collect_ms` is small; a prefetch
   batch asked for before the child is ready fails as "not running" (a logged `[PREFETCH]` error; no retry of that batch). Evidence
   `.artifacts/evidence/slow_startup_20261106/`.
-- [ ] **Bubble / Extruded Bubble "terrible performance" (operator log 10:32-10:35):** confounded: the machine was at
-  97-100% system CPU from the agents' game60 live checks and parallel work during that session (quiet-machine game60
-  this morning: Bubble P1 62.7 fps, EB 54.6 fps). Re-check in a quiet operator session before acting; heavy
-  load-generator runs are now scheduled by the lead only.
+- [x] **Bubble / Extruded Bubble "terrible performance" (operator log 10:32-10:35): our load, not the product.** That
+  session ran at 97-100% system CPU from the agents' game60 checks. The lead re-ran them on the quiet machine at 6 Nov
+  14:00 under game60 (`.artifacts/evidence/live_20261106/`):
+  - Bubble P1: 65.9 fps, tick 1.47 ms, GIL 0.13, 3.9% late;
+  - Extruded Bubble: 45-69 fps.
+
+  Heavy load-generator runs are scheduled by the lead only. Delete this item once the operator has read it.
 
 - [~] **Displays off -> presentation pauses entirely, resumes clean (built 5 Nov; awaiting the operator's physical
   overnight check):** `core.display_power` pauses rotation, transitions, the Visualizer (parked, capture released) and
@@ -93,11 +96,18 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
     digests). `tests/test_extruded_bubble_logical_tick_exactness.py` compares the output against the straightforward
     forms. The offline P1 tick (`tools/eb_logical_cost_probe.py`, paired with main) went from 2.50 to 2.13 ms median
     (p90 3.25 to 2.78), about 15%. The tick is now spread thin: contacts 0.38, wakes 0.42 (NumPy flow 0.2), the
-    rest of the simulation 0.62, capture 0.45. A NumPy contact sweep measured slower in situ and was dropped. Open:
-    the paired `--load game60` live checks (P1 and P5, main and branch alternately, 2 rounds each, 60 s) are owed by
-    the lead on a free machine. The 6 Nov rounds overlapped the operator's own session (system CPU 97-100%) and
-    are void. Evidence `.artifacts/evidence/eb_logical_tick/` (summaries and scripts; the void live-run logs were
-    deleted on the operator's word).
+    rest of the simulation 0.62, capture 0.45. A NumPy contact sweep measured slower in situ and was dropped.
+    **Live, confirmed (lead, quiet machine, game60, before/after alternated, 2 rounds, 6 Nov 14:00):**
+    | Preset | fps (r1 / r2) | late frames (r1 / r2) |
+    |---|---|---|
+    | P1 | 44.9 -> 45.5 / 57.3 -> 63.8 | 32 -> 24.5% / 6.0 -> 2.0% |
+    | P5 | 42.3 -> 52.9 / 62.9 -> 69.2 | 36 -> 8.2% / 2.3 -> 1.5% |
+
+    Better in every pair. The live tick is only 2-4% lower (5.3-5.6 ms, GIL ~0.5): most of it lies outside the
+    simulation. Evidence `.artifacts/evidence/live_20261106/` and `.artifacts/evidence/eb_logical_tick/`.
+  - **Waveform, same session (main):** P1 / P4 / P7 run at 43.5 / 42.7 / 37.6 fps, tick 8.5-8.7 ms (p90 14-16), GIL
+    0.75, P7 64% late frames. Waveform is now the slowest live mode. The tick cut waits for the fixed-scale rework
+    (same files).
 - [ ] **Frozen builds could not open a Studio (operator 6 Nov: "module QtQuick.Controls.Basic is not installed"): fixed
   in source (e5005ffa), confirm on the next build.** The QML prune removed QtQuick/Controls, Templates and Shapes, and
   the import allowlist scanned only the saver's QML, never `ui/studio/qml`. The build now keeps the Basic style's
