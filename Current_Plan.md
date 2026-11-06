@@ -704,10 +704,14 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   `tests/test_studio_exit_every_mode.py` (about 1 run in 4) is fixed. `OffscreenStudioSurface`'s imported GL context
   is now a Qt child of its render control, so it can never be freed first, and production was not exposed. Still
   open:
-  - Every closed `StudioController` stays alive for the whole process: 19 after that file, and one per Studio session
-    in production. The cycle runs through Qt connections that gc cannot see: `open_mode_studio`'s `finished` /
-    `report` closures are connected to the controller's own `closed` / `failed` and close over the controller. Break
-    it at close: disconnect them, or hold the controller weakly. Prove it with a gc-free retention test.
+  - Fixed 6 Nov: closed `StudioController`s no longer stay alive for the process. `open_mode_studio`'s `finished`
+    closure and theme listener now hold the controller weakly. `test_closed_studio_sessions_are_released_and_live_counts_stay_flat`
+    runs three sessions of every mode and checks that the controller, bridge, session, surface and shell are all
+    collected and that live Studio object counts are flat. It fails on the old code; a negative control covers it.
+    It was not the post-close freeze: the leaked controller held no event filter, grab or window.
+    Still open: process memory grows about 2-3 MB per offscreen Extruded Bubble session (private bytes and USS, 16
+    sessions) with and without the fix, so something other than the controller grows. Find it with tracemalloc
+    plus a native heap comparison.
   - `tools/onboarding_preview_foundry.py`'s capture has the same imported-context structure and needs the same
     ownership.
   - The Studio files fail when run in one pytest process. After the first 17 Studio files (Bubble through
