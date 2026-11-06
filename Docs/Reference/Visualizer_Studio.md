@@ -432,7 +432,9 @@ control.
   - the first input Qt delivers to Settings, and how long after the reveal it arrived.
 
   It removes its filters at that first input, when Settings is destroyed, or 60 s after the reveal, so nothing runs
-  at rest.
+  at rest. Its Qt filter sits on Settings' own window, never the application. An application-wide Python filter is
+  handed every Qt Quick item an event visits, and wrapping items PySide had not wrapped yet deleted a live Studio
+  item in a later test (7 Nov).
 - **Never hide the window from Python.** PySide holds the GIL through `QWindow.hide()`, and Qt's threaded render
   loop waits inside it for the render thread, which runs the viewport's Python (render-node release,
   `sceneGraphInvalidated`) when the non-persistent scene graph is invalidated: calling it from Python deadlocked the
