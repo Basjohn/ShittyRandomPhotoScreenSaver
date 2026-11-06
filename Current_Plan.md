@@ -686,7 +686,7 @@ Never Remove This Box. Restore It If Removed. Only Remove Contents As you place 
 ####################
 - When implementing SMP aim for quality, compatible and adjustable audio as on par or beyond with apps like Music Bee as possible. Do not shy away from custom work when it will improve quality/performance/ux. Gate SMP/Library/Playlist behind --smp until production ready and feature rich.
 - When SMP is available (Library Widget ON) a new SMP Tab should exist in settings allowing for well organised adjustments to items related to SMP and audio processing. Use Pills and maintain high quality thematic UX. We should already have in the plans for what to hide when running an SMP only build and how to do it. 
-
+- For SMP Mode we will use the icon built for it in the repo (store with other icons) as both the ShittyMusicPlayer.exe icon eventually and the icon shown in media when it is switched to SMP. Additionally for artwork we will maintain our fade in system and choose artwork based on tagged/metadata/embedded, artist.jpg/png, album.jpg/png, folder.jpg/png, falling back to other images in the same folder and of course our planned artwork fetching methods that we can research. Consider an additional check that if a user has a song in their library without any pictures and is using another service than smp we grab and store that image in their artist's folder. 
 
 
 
