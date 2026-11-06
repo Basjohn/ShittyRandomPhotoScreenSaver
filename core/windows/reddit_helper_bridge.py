@@ -69,8 +69,6 @@ def _ensure_queue_dir() -> bool:
 
 
 def is_bridge_available() -> bool:
-    if os.getenv("SRPSS_DISABLE_REDDIT_HELPER_BRIDGE"):
-        return False
     return _ensure_queue_dir()
 
 

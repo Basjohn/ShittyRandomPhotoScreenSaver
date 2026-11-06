@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 from importlib import import_module
-import os
 from typing import Any, Callable, Dict, Iterable, Mapping
 
 from core.dev_gates import gate_signature, is_named_gate_enabled
@@ -92,15 +91,10 @@ STEAM_SERVICE_RUNTIME_CONTRACTS: tuple[str, ...] = (
 def _descriptor_env_signature() -> tuple[tuple[str, str | None], ...]:
     """Return the relevant environment signature for descriptor activation."""
 
-    env_names = ("SRPSS_ENABLE_DEV",)
-    signature: list[tuple[str, str | None]] = [
-        (name, os.getenv(name)) for name in env_names
-    ]
-    signature.extend(
+    return tuple(
         (f"gate:{name}", "true" if enabled else "false")
         for name, enabled in gate_signature()
     )
-    return tuple(signature)
 
 
 @dataclass(frozen=True)
@@ -118,16 +112,13 @@ class FactoryWidgetDescriptor:
     base_enabled_gate: bool = False
     factory_shadows_kwarg: bool = False
     inject_shadows_into_config: bool = False
-    dev_feature_env: str | None = None
     dev_feature_gate: str | None = None
 
     def is_enabled_in_environment(self) -> bool:
         """Return whether this descriptor is active in the current environment."""
         if self.dev_feature_gate:
             return is_named_gate_enabled(self.dev_feature_gate)
-        if not self.dev_feature_env:
-            return True
-        return os.getenv(self.dev_feature_env, "false").lower() == "true"
+        return True
 
     def build_widget_config(
         self,
@@ -215,15 +206,12 @@ class WidgetSettingsSectionDescriptor:
     programmatic_dependency_section_ids: tuple[str, ...] = ()
     default_selected: bool = False
     method_name: str | None = None
-    dev_feature_env: str | None = None
     dev_feature_gate: str | None = None
 
     def is_enabled_in_environment(self) -> bool:
         if self.dev_feature_gate:
             return is_named_gate_enabled(self.dev_feature_gate)
-        if not self.dev_feature_env:
-            return True
-        return os.getenv(self.dev_feature_env, "false").lower() == "true"
+        return True
 
     def resolve_builder(self, owner: Any) -> Callable[..., Any]:
         """Return the concrete builder callable for this section."""
@@ -1390,15 +1378,12 @@ class WidgetRuntimeDescriptor:
     custom_child_roles: tuple[CustomChildRoleDescriptor, ...] = ()
     writes_custom_position_key: bool = True
     writes_custom_monitor_key: bool = True
-    dev_feature_env: str | None = None
     dev_feature_gate: str | None = None
 
     def is_enabled_in_environment(self) -> bool:
         if self.dev_feature_gate:
             return is_named_gate_enabled(self.dev_feature_gate)
-        if not self.dev_feature_env:
-            return True
-        return os.getenv(self.dev_feature_env, "false").lower() == "true"
+        return True
 
     def matches_settings_key(self, setting_key: str) -> bool:
         return any(setting_key.startswith(prefix) for prefix in self.settings_prefixes)
@@ -3006,15 +2991,12 @@ class WidgetStackPreviewDescriptor:
     monitor_attr_name: str
     fields: tuple[WidgetPreviewFieldDescriptor, ...]
     family_enabled_attr_name: str | None = None
-    dev_feature_env: str | None = None
     dev_feature_gate: str | None = None
 
     def is_enabled_in_environment(self) -> bool:
         if self.dev_feature_gate:
             return is_named_gate_enabled(self.dev_feature_gate)
-        if not self.dev_feature_env:
-            return True
-        return os.getenv(self.dev_feature_env, "false").lower() == "true"
+        return True
 
     def build_preview_section(self, owner: Any) -> Dict[str, Any]:
         section = {

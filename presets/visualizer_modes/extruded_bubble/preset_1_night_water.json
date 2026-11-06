@@ -148,6 +148,7 @@
         "extruded_bubble_haze": 0.3,
         "extruded_bubble_floor": 0.0,
         "extruded_bubble_dust": 0.0,
+        "extruded_bubble_ember_grain": 0.0,
         "extruded_bubble_veils": 0.0,
         "extruded_bubble_surface_brightness": 1.0,
         "extruded_bubble_clarity": 0.0,
