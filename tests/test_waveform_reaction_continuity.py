@@ -17,9 +17,9 @@ DT = 1/90
 VIEW = np.abs(dyn.PULSE_GRID) <= 14.  # the part of the history the production framing shows (aperture x lens)
 
 
-def loud_then_quieter(breathing, quieter=.7):
+def loud_then_quieter(breathing, quieter=.7, adaptive=True):
     """25 s of loud phrases, then 55 s of the same phrases at ``quieter`` of the level; (time, height, bend) per tick."""
-    model = primed(replace(controls(), breathing=breathing))
+    model = primed(replace(controls(), breathing=breathing, adaptive_response=adaptive))
     rows = []
     for index in range(round(80/DT)):
         t = index*DT
@@ -39,6 +39,8 @@ def reach(rows, start, end):
 
 
 def test_a_quieter_passage_after_a_loud_one_never_rises_to_loud_reach():
+    """Adaptive Response on (the remembered-peak gain, an opt-in since 6 Nov): Breathing holds its memory through a
+    quieter passage."""
     for breathing, held in ((1., True), (0., False)):
         rows = loud_then_quieter(breathing)
         loud, late = reach(rows, 15., 25.), reach(rows, 70., 80.)
@@ -47,10 +49,22 @@ def test_a_quieter_passage_after_a_loud_one_never_rises_to_loud_reach():
         assert (late <= .9*loud).all() == held, (breathing, late, loud)
 
 
+def test_with_the_fixed_response_a_quieter_passage_never_grows_back():
+    """Adaptive Response off (the default): nothing is remembered, so a long quieter passage keeps the size it had on
+    arrival. Negative control: the remembered peak (Breathing 0) grows it back over its 30 s memory."""
+    for breathing in (0., 1.):
+        rows = loud_then_quieter(breathing, adaptive=False)
+        early, late = reach(rows, 35., 45.), reach(rows, 70., 80.)
+        assert (late <= early+.01).all(), (breathing, early, late)
+    rows = loud_then_quieter(0., adaptive=True)
+    early, late = reach(rows, 35., 45.), reach(rows, 70., 80.)
+    assert (late > early+.03).any(), (early, late)
+
+
 def test_the_quieter_passage_hold_never_engages_inside_a_sustained_passage():
     """Beat gaps, phrase swells and strong/light bars at one passage level are not a quieter passage: the slow level
     the hold reads stays within HOLD_BELOW[0] of the loud level, so the gain keeps its 30 s memory (no mid-song mute)."""
-    model = primed(replace(controls(), breathing=1.))
+    model = primed(replace(controls(), breathing=1., adaptive_response=True))
     ratios = []
     for index in range(round(60/DT)):
         t = index*DT

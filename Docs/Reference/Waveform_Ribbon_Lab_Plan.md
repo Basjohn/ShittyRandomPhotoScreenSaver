@@ -132,20 +132,18 @@ reveals additional fixed world at preserved scale; no actor stretch or audio-dri
 Camera **Dynamic Zoom** (default Off) scales only the visible extent by up to ±20% from the logical sustained level
 (out quickly in heavy sustained passages, in slowly when soft/idle), frozen while the user moves the camera; the
 physical eye, pose, world and populations never change.
-Perspective's FOV is relevant only in that projection. Do not fit a Perspective scene and assume a matrix swap
-establishes Orthographic likeness. A still cannot uniquely recover 3D camera position, and Orthographic has no finite
-projective horizon: fit floor boundaries and visible landmarks without warping the reference.
+A still cannot uniquely recover 3D camera position: fit floor boundaries and visible landmarks without warping the
+reference.
 
-Reuse `orthographic_matrix`/`perspective_matrix` from `core/settings/framed_camera.py` and parallel ray origins,
-directions and footprints from `rendering/gl_programs/framed_camera.py`. The existing `view_matrices` and
-`project_point` helpers are Perspective-only: Orthographic landmarks must use the actual admitted MVP/half-extents.
+Use `perspective_matrix`, `view_matrices` and `project_point` from `core/settings/framed_camera.py` (the parallel-ray
+helpers and `orthographic_matrix` went with Orthographic on 5 Nov 2026).
 A lab-only camera spec may be passed directly to shared axes/eye admission; do not register a production mode or
 copy a camera controller merely to draw a fixture. Full eye/floor/clearance bounds remain a WR-03 admission task.
 
-WR-01/02 camera-facing strips must use the parallel view direction in Orthographic, not `normalize(eye-point)`.
+WR-01/02 camera-facing strips face the eye (`normalize(eye-point)`).
 WR-05 planar reflection must derive the mirrored virtual eye/projection from the admitted main camera; do not
 readmit that reflected eye through the main camera's above-floor bound. Validate reflection landmarks and clipping
-in both projections independently. Native round-sphere proof does not establish ribbon/floor/reflection fidelity.
+independently. Native round-sphere proof does not establish ribbon/floor/reflection fidelity.
 
 ## 1. Reference custody and target authority
 
@@ -698,9 +696,9 @@ A global palette fade cannot demonstrate moving colour. Particles and dense high
 judgement, with their shared input mapping held equal across candidates so they do not mask identical body motion.
 The current sparks are the existing bounded history-spark primitive, not proof of production event-owned cohorts.
 
-Musical review currently admits only the fixed mock Orthographic view at the native panel aspect. The head lies beyond
-its actual right edge with two knot spacings and hidden fade margins; short off-view fades keep the live head nearby.
-This is not full navigation admission. The original distant-head/broad-navigation synthetic capture is rejected as a
+The 2 November musical review admitted only the fixed mock view (then Orthographic) at the native panel aspect. The
+head lay beyond its actual right edge with two knot spacings and hidden fade margins; short off-view fades kept the
+live head nearby. That was not full navigation admission. The original distant-head/broad-navigation synthetic capture is rejected as a
 musical demonstration. Its exact standalone producer is retained only under the corresponding local evidence's
 `producer/` directory; CPU synthetic fixtures remain diagnostic tests, not the winner comparison.
 

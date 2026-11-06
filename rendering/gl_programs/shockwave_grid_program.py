@@ -132,6 +132,63 @@ def shockwave_height(x: float, z: float, events, amplitude: float, speed: float)
     return height, crest
 
 
+# Water Reaction (pass 7): how strongly the lake answers the music, read from the admitted waves themselves. Their
+# strengths already carry the fixed real-music scale (passage share, musical weight and emphasis on the bus's
+# loudness), so loud passages admit more and stronger waves and quiet ones fewer and weaker: no level is learned
+# from the track. The display bars every other lake term read sit at ~1 through all ordinary music (post-AGC,
+# Height Scale), so they cannot tell a loud passage from a usual one.
+WATER_REACT_MEMORY = 2.0            # seconds: each wave's share of the level falls to 1/e
+WATER_REACT_WINDOW = (2.5, 4.0)     # seconds: the level forgets a wave smoothly here (the ring holds ~4.4 s at most)
+WATER_REACT_SCALE = 1.6             # sqrt of the summed strength per e-fold of the level's headroom
+WATER_REACT_LEVEL_RISE = 0.25       # seconds: a wave's share of the level eases in (the level is not a flash)
+WATER_REACT_FOOT = 0.25             # the square root's foot (bounds its slope out of silence)
+WATER_REACT_ACCENT = (0.08, 0.35)   # seconds: a wave's light rises over the first, settles over the second
+WATER_REACT_BEAT = 0.4              # the share of the reaction the accents swing (beats swing the passage level)
+
+
+def shockwave_water_reaction(events) -> tuple[float, float]:
+    """(level, accent), each 0..1, from the onset ring [(age, x, z, strength), ...]: the level is the recent waves'
+    summed strength on a fixed compressive scale (six recordings: p50 0.42 on the quiet 1985_loud1 capture to 0.78,
+    never above 0.9), the accent the newest waves' quick-rise, gentle-settle light. The level eases in over
+    ``WATER_REACT_LEVEL_RISE``, the accent over ``WATER_REACT_ACCENT[0]``; both fade (never vanish): a wave's share
+    eases out before the ring can drop it."""
+    rise, settle = WATER_REACT_ACCENT
+    total = accent = 0.0
+    for age, _x, _z, strength in events:
+        age, strength = float(age), float(strength)
+        if age < 0.0 or strength <= 0.0:
+            continue
+        onset = _smoothstep(0.0, rise, age)
+        total += (strength * _smoothstep(0.0, WATER_REACT_LEVEL_RISE, age) * math.exp(-age / WATER_REACT_MEMORY)
+                  * (1.0 - _smoothstep(*WATER_REACT_WINDOW, age)))
+        accent += strength * onset * math.exp(-age / settle)
+    # The square root compresses the summed strength (dense loud passages) but has no slope limit at zero; the
+    # small offset bounds it, so the first wave out of silence eases in over its rise instead of jumping.
+    return (1.0 - math.exp(-(math.sqrt(total + WATER_REACT_FOOT ** 2) - WATER_REACT_FOOT) / WATER_REACT_SCALE),
+            1.0 - math.exp(-accent))
+
+
+def shockwave_music_drive(events) -> float:
+    """The music's drive (0..1): the level, swung by the accents (multiplicative, so a quiet passage's beats never
+    lift it to a loud passage's look)."""
+    level, accent = shockwave_water_reaction(events)
+    return level * (1.0 - WATER_REACT_BEAT + WATER_REACT_BEAT * accent)
+
+
+# Water Reaction also lets the ridges breathe with this drive instead of the display midband, which sits at ~1
+# through ordinary music (so near ridges bloomed at their loud strength in every passage and washed the lake).
+WATER_REACT_RIDGE_GAIN = 1.25
+
+
+def shockwave_ridge_breath(midband: float, drive: float, amount: float) -> float:
+    """The skyline's breathing (0..1): the display midband at Water Reaction 0 (exactly), the music drive at 1."""
+    amount = max(0.0, min(1.0, float(amount)))
+    if amount <= 0.0:
+        return midband
+    return midband + amount * (min(1.0, WATER_REACT_RIDGE_GAIN * drive) - midband)
+
+
+
 def shockwave_event_records(events, half_width: float) -> list[dict[str, float]]:
     """The std430 records for ``events`` [(age, x share, z, strength), ..., oldest first]: x in world units.
     Only the newest ``SHOCKWAVE_CAPACITY`` younger than ``SHOCKWAVE_LIFETIME`` (the ring remembers longer)."""

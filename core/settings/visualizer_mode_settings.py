@@ -710,6 +710,10 @@ _SHOCKWAVE_GRID = ModeSettings(
         Slider("shockwave_grid_water_glint", "Sun / Moon Path:", 0.0, 1.0,
                "A glittering path of light on the water below the Sun or Moon, brightening with its halo's "
                "music. 0 turns it off.", bucket="waves", enabled_when=_BASIN_BODY),
+        Slider("shockwave_grid_water_reaction", "Water Reaction:", 0.0, 1.0,
+               "How strongly the lake lights up with the music: a glowing net of ripple lines over the water, a "
+               "brighter shore and island glow and Sun / Moon path. Loud passages light it more, beats swing it. "
+               "0 turns it off.", bucket="waves"),
         Toggle("shockwave_grid_terrain_reaction_enabled", "React to Music:", "Reshape the land with the music",
                "Off keeps the land exactly as authored, with no reaction work at all.", bucket="reaction"),
         Slider("shockwave_grid_terrain_reaction_strength", "Strength:", 0.0, 1.0,
@@ -1824,6 +1828,12 @@ def _waveform_ribbon() -> ModeSettings:
         'passages let go between their swells: the body releases faster the softer the music, so quiet phrases rise '
         'and fall instead of holding, and a quieter passage after a loud one stays quieter instead of growing back to '
         'full size. Loud passages keep the Decay set in Response.'))
+    entries.append(Slider(prefix+'kick_accent','Kick Accent:',0.,1.,bucket='reaction',logical=True,tooltip='How much '
+        'of a kick the ribbon cannot show in a loud, full passage goes to a brief faster roll and a burst of sparks '
+        'at the swell; 0 leaves loud passages to the swell alone.'))
+    entries.append(Toggle(prefix+'adaptive_response','','Adaptive Response',bucket='reaction',logical=True,
+        tooltip="Sizes the ribbon against each song's own recent peaks instead of the fixed real-music scale; turn it "
+        'off if the ribbon grows or shrinks after a break or a loud chorus fades the longer it plays.'))
     entries.append(Choice(prefix+'pulse_direction','Pulse Direction:',('Head To Tail','Tail To Head','Centre Out'),
         bucket='pulse',logical=True,tooltip='Where musical swells start and which way they travel.'))
     for key,label,low,high,tip in (
