@@ -86,10 +86,19 @@ constants); all state integrates on the sole logical clock and the projection on
   its leading edge with a stronger surge; like Travelling Pulse, its geometry and surge follow the fresh field: built
   from the long-fade field its peak-keeping set envelope pinned the swell at the soft bound over the view, 5 Nov
   Preset 7). Every mode obeys the flow rule and the no-twitch rules.
-- **Adaptive response gain.** Geometry drives are divided by a memory of their own recent peak (fast reach, slow
-  relaxation, a floor), so each song uses the whole authored Quiet→Peak ramp while a quiet passage after a loud one
-  stays quiet; the remembered peak lands below Peak, keeping headroom for accents. Light, colour and sparkle keep the
-  fixed calibrated anchors. The whole body's size (height, lift, width) follows the passage, not each beat; beats
+- **Fixed response (6 Nov; Adaptive Response is an opt-in).** Geometry drives are a fixed function of the routed
+  target on the real-music scale (`RESPONSE_FIXED_GAIN` x target^`RESPONSE_FIXED_CURVE`, eased toward
+  `RESPONSE_FIXED_CEILING` above `RESPONSE_FIXED_KNEE`), the same for every song; each target's Range (Quiet→Peak)
+  then maps the drive to size, so the Ranges are the authored reactivity. Nothing is remembered: a break, a loud chorus
+  or a quiet intro never re-scales what follows (operator, 6 Nov: "Adaptive is a very problematic approach"; guide 2A).
+  The former remembered-peak gain stays behind the **Adaptive Response** toggle (off in every preset): on a spliced 5 s
+  break in Rag Doll's loud end it sized the following 10 s 5-9% up (Preset 4). The fixed calibration keeps kick peaks
+  at or above the adaptive gain's in every time-in-song bin and passage on recorded continuous play. Breathing's
+  phrase-scale mean learns only from heard music and holds through a break and the passage's return
+  (`BREATHING_HEARD_RETURN`); its contrast is not applied to a returning passage. **Kick Accent** (0..1, .7 in every
+  preset): when the bend drive has little headroom, the share of a kick the geometry cannot show goes to an eased
+  roll-speed impulse and spark births on the swell (`KICK_SENSE_*`, `KICK_ROLL`, `KICK_BIRTHS`). Light, colour and
+  sparkle keep the fixed calibrated anchors. The whole body's size (height, lift, width) follows the passage, not each beat; beats
   belong to the pulse. Measured in continuous play the gain is not what muted mid-song kicks (removing it lowers kick
   response 40-50% at every point of a song); the frame runtime's per-kind running-mean contrast was (below).
 - **Kick force in continuous play** (5 Nov). A typed onset's force follows its own unclipped magnitude (already
@@ -125,7 +134,8 @@ constants); all state integrates on the sole logical clock and the projection on
 Gates: `tests/test_waveform_energy_pulse.py`, `tests/test_waveform_reaction_modes.py`,
 `tests/test_waveform_pulse_coupling.py`, `tests/test_waveform_no_twitch.py`, `tests/test_waveform_trough_clearance.py`,
 `tests/test_waveform_dynamic_zoom.py`, `tests/test_waveform_ribbon_dynamics.py`, `tests/test_waveform_continuous_play.py`,
-`tests/test_waveform_breathing.py`, `tests/test_waveform_reaction_continuity.py` (quieter passage after a loud one,
+`tests/test_waveform_breathing.py`, `tests/test_waveform_fixed_response_and_kick_accent.py` (a 2-5 s break, Adaptive
+Response off remembers nothing, Kick Accent), `tests/test_waveform_reaction_continuity.py` (quieter passage after a loud one,
 Group Wave sets in sustained/soft passages) and `tests/test_waveform_tail_continuity.py` (test-owned controls; structure, never
 authored values). Probes: `tools/visualizer_replay/waveform_ribbon_breathing_probe.py` (continuous play: songs back to
 back without a reset; kick response by time in song and passage, breathing contrast, reach) and

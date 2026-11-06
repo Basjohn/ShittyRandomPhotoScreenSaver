@@ -139,6 +139,33 @@ BREATHING_REACH, BREATHING_CONTRAST, BREATHING_LOUD, BREATHING_BASE = .75, 1.5, 
 # rises with the sustained level at once and relaxes with the memory, so a song that stays softer is re-normalised
 # over minutes. Sustained music, and Breathing 0, keep RESPONSE_MEMORY exactly.
 RESPONSE_HOLD, HOLD_BELOW = 6., (.8, .7)
+# Silence must not teach a running level (guide 2A). Breathing's phrase-scale mean learns at the rate of BREATHING_HEARD,
+# which drops to 0 with the musical weight at once and returns over BREATHING_HEARD_RETURN seconds: through a break and
+# the passage's own return (the shared passage level climbs back over about a second) the mean holds, so the music's
+# return is not swelled against a mean that fell with the silence.
+BREATHING_HEARD_RETURN = 1.5
+# Fixed response (Adaptive Response off, operator 6 Nov: "Adaptive is a very problematic approach"; guide 2A: never
+# learn a level from the track). Each geometry drive's routed target is already on the fixed real-music scale (BAND_SPAN,
+# PASSAGE_SPAN, ENERGY_SPAN); the drive is RESPONSE_FIXED_GAIN x target ^ RESPONSE_FIXED_CURVE, eased above
+# RESPONSE_FIXED_KNEE toward RESPONSE_FIXED_CEILING (a loud passage keeps headroom and its crests still move), the same
+# for every song: the Ranges then map it to size. Nothing is remembered, so a break, a loud chorus or a quiet intro never
+# re-scales what follows. Chosen on recorded continuous play (chain5, kicks2/rangeaudit sweeps 6 Nov): the remembered
+# peak's median gain was 1.40 (peak p50 .605); a linear 1.4 left kicks 13-26% under the adaptive gain's in quieter
+# passages and late in songs, 1.6 x target^.75 keeps every time bin and passage at or above it while the drives still
+# move over 35-80% of each Range.
+RESPONSE_FIXED_GAIN, RESPONSE_FIXED_KNEE, RESPONSE_FIXED_CURVE, RESPONSE_FIXED_CEILING = 1.6, .8, .75, .95
+# Kick Accent (operator 6 Nov: "many sustained kicks ignored (consider maybe increasing particle count at the sustained
+# points or rotation speed? Something for a sense of them?)"). In a sustained loud passage the geometry has little
+# headroom: the bend drive (it sets Pulse Strength) sits near its top, so a kick's swell barely rises above the swells
+# already in view (rise above the pre-kick view on recorded continuous play: P7 .05-.17 against a peak of 2.4-3.0). The
+# share of an admitted kick the geometry cannot show goes to channels that do not fight the shape: an eased roll-speed
+# impulse (KICK_ROLL degrees per second per unit, in the roll's own direction; two stages, KICK_SENSE_ATTACK /
+# KICK_SENSE_RELEASE, so the roll's speed stays continuous) and up to KICK_BIRTHS sparks born on the swell. The share is
+# the kick's strength on the fixed reward scale (1 - exp(-reward / KICK_SENSE_REF): granular, never a clamped
+# confidence; the reward already carries the onset's musical weight, so silence buys none) x how far bend sits above
+# KICK_SENSE_KNEE x Kick Accent. A passage with headroom is unchanged.
+KICK_SENSE_KNEE, KICK_SENSE_REF, KICK_ROLL, KICK_BIRTHS = .55, .15, 45., 4.
+KICK_SENSE_HOLD, KICK_SENSE_ATTACK, KICK_SENSE_RELEASE = .05, .07, .25
 
 # Floor clearance (operator, 5 Nov; see WaveformDynamics._floor_room): the packet origin sits PACKET_FLOOR_HEIGHT above
 # the world floor; a ribbon whose lower edge would come within TROUGH_CLEARANCE of it lifts as a whole (never reshaped),
@@ -226,6 +253,16 @@ def span(value, low, high):
     if position > .8:
         position = .8+.2*(1.-math.exp(-(position-.8)/.2))
     return position
+
+
+def fixed_response(target):
+    """A routed geometry target on the fixed scale -> drive target: RESPONSE_FIXED_GAIN x target^RESPONSE_FIXED_CURVE
+    to RESPONSE_FIXED_KNEE, then an exponential approach to RESPONSE_FIXED_CEILING that never flattens on it."""
+    value = RESPONSE_FIXED_GAIN*max(0.,target)**RESPONSE_FIXED_CURVE
+    if value > RESPONSE_FIXED_KNEE:
+        room = RESPONSE_FIXED_CEILING-RESPONSE_FIXED_KNEE
+        value = RESPONSE_FIXED_KNEE+room*(1.-math.exp(-(value-RESPONSE_FIXED_KNEE)/room))
+    return unit(value)
 
 
 def follower(value, target, dt, attack, release):
@@ -351,6 +388,8 @@ class HybridControls:
     height_mode: str = 'Dynamic Height Shift'
     tilt_shift: bool = False
     breathing: float = 0.
+    adaptive_response: bool = False   # True: the remembered-peak gain (pre-6 Nov); False: RESPONSE_FIXED_GAIN
+    kick_accent: float = 0.           # share of a sustained kick the geometry cannot show sent to roll and sparks
 
 
 @dataclass(frozen=True)
@@ -382,6 +421,8 @@ class WaveformDynamics:
         self.ring = RibbonRing(RIBBON_CAPACITY, colours=[(*c['quiet'][0],1.) for c in controls.cards],
                                edge_colours=[(*c['quiet'][1],1.) for c in controls.cards],period=.5)
         self.time = self.travel = self.angle = self.angular_speed = self.twist_phase = self._hit = 0.
+        self._kick_impulse = self._kick_stage = self.kick_sense = 0.   # Kick Accent: held share, eased stages
+        self._heard = 1.   # how fully Breathing's mean may learn (BREATHING_HEARD_RETURN)
         self.phase = controls.scene.flow.phase
         self.bands, self.power = (0.,0.,0.),0.
         self.passage = self.phrase = 0.
@@ -533,6 +574,7 @@ class WaveformDynamics:
         memory = RESPONSE_MEMORY*(1.+hold*quieter*(RESPONSE_HOLD-1.)) if hold and quieter else RESPONSE_MEMORY
         self._loud_level = max(self._sustain,follower(self._loud_level,self._sustain,dt,0.,memory))
         geometry_release = c.release*(1.-BREATHING_REACH*softness)
+        learn = self._learn_rate(dt,presence)
         for key in TARGETS:
             target = route(c.routing[key],sources,passage=gate)
             if key in RESPONSE_TARGETS:
@@ -548,12 +590,21 @@ class WaveformDynamics:
                 # memory re-normalised a passage at 70% of the loud input back up to loud reach (Pulse Strength .73 ->
                 # .88, above the loud passage's .87) within 25 s. Keyed to the drive's own dips it held every song
                 # (the drive sits below its peak between almost every pair of beats). Rises still reach in RESPONSE_REACH.
-                self._response_peak[key] = max(RESPONSE_PEAK_FLOOR,follower(
-                    self._response_peak[key],target,dt,RESPONSE_REACH,memory))
-                target = unit(RESPONSE_TOP*target/self._response_peak[key])
-                base = self._breath_base[key] = follower(self._breath_base[key],target,dt,BREATHING_BASE,BREATHING_BASE)
+                if c.adaptive_response:
+                    self._response_peak[key] = max(RESPONSE_PEAK_FLOOR,follower(
+                        self._response_peak[key],target,dt,RESPONSE_REACH,memory))
+                    target = unit(RESPONSE_TOP*target/self._response_peak[key])
+                else:
+                    target = fixed_response(target)
+                # Breathing's phrase-scale mean learns only from heard music (BREATHING_HEARD_RETURN): it fell with a
+                # break, so the music's return swelled against it (spliced 2-5 s breaks on recorded music: +4..11%
+                # height for 10 s on every Breathing preset, 0..1% with Breathing 0).
+                base = self._breath_base[key] = follower(self._breath_base[key],target,dt*learn,
+                                                         BREATHING_BASE,BREATHING_BASE)
                 if softness:  # Breathing 0 (or a loud passage) keeps the exact unwidened target
-                    target = unit(base+(target-base)*(1.+BREATHING_CONTRAST*softness))
+                    # A passage returning from a break is not widened while it returns (its deficit against the held
+                    # mean is the silence, not a phrase): the contrast comes back with the learning rate.
+                    target = unit(base+(target-base)*(1.+BREATHING_CONTRAST*softness*learn))
             if key in SMOOTH_TARGETS:
                 # Geometry never snaps (operator, 5 Nov: "twitch"): two cascaded followers, so the drive's VELOCITY
                 # is continuous. A single 45 ms first-order attack made lift/bend/width/twist jump on every transient
@@ -563,6 +614,16 @@ class WaveformDynamics:
                 self.drive[key] = follower(self.drive[key],self._drive_stage[key],dt,attack,geometry_release)
             else:
                 self.drive[key] = follower(self.drive[key],target,dt,c.attack,c.release)
+        if c.kick_accent>0. or self.kick_sense>0.:
+            lack = unit((self.drive['bend']-KICK_SENSE_KNEE)/(1.-KICK_SENSE_KNEE))*unit(c.kick_accent)
+            share = (1.-math.exp(-hit/KICK_SENSE_REF))*lack
+            self._kick_impulse = max(share,self._kick_impulse*math.exp(-dt/KICK_SENSE_HOLD))
+            self._kick_stage = follower(self._kick_stage,self._kick_impulse,dt,KICK_SENSE_ATTACK,KICK_SENSE_RELEASE)
+            self.kick_sense = follower(self.kick_sense,self._kick_stage,dt,KICK_SENSE_ATTACK,KICK_SENSE_RELEASE)
+            if self.kick_sense<1e-6 and not self._kick_impulse:
+                self.kick_sense = self._kick_stage = 0.
+            if share>0. and c.accents is not None:   # sparks on the swell, admitted once (as pulse births are)
+                self._pulse_births = min(float(MAX_BURST),self._pulse_births+KICK_BIRTHS*share)
         released = self._advance_pulse(dt,hit,energy_shaped)
         self._advance_pulse_births(dt,released)
         for owner,card in enumerate(c.cards):
@@ -580,7 +641,8 @@ class WaveformDynamics:
                     self._elastic_frequencies[index],c.damping)
         target_speed = self._value('rotation') if c.rotation_enabled else 0.
         self.angular_speed = follower(self.angular_speed,target_speed,dt,c.rotation_attack,c.rotation_release)
-        self.angle = math.remainder(self.angle+math.radians(self.angular_speed)*dt,2*math.pi)
+        roll = self.angular_speed+(math.copysign(KICK_ROLL*self.kick_sense,target_speed) if c.rotation_enabled else 0.)
+        self.angle = math.remainder(self.angle+math.radians(roll)*dt,2*math.pi)
         low,high = c.twist_speed
         self.twist_phase = math.remainder(self.twist_phase+(low+(high-low)*self.drive['twist'])*dt,2*math.pi)
         for index in range(RIBBON_CAPACITY):
@@ -823,12 +885,21 @@ class WaveformDynamics:
         step = SURGE_RATE*dt
         self._drift = self._drift+np.clip((self._drift_stage-self._drift)*ease,-step,step)
 
+    def _learn_rate(self,dt,presence):
+        """Share of real time Breathing's phrase-scale mean learns this tick: 0 with the musical weight, back over
+        BREATHING_HEARD_RETURN seconds (see BREATHING_HEARD_RETURN)."""
+        self._heard = follower(self._heard,unit(presence),dt,BREATHING_HEARD_RETURN,0.)
+        return self._heard
+
     def _advance_pulse_births(self,dt,released):
         """Injected energy buys a bounded number of swell-carried births, released over the swell's journey and
         consumed once by burst admission. Silence buys none; without sparks or the control nothing is banked."""
         c = self.controls
-        if c.accents is None or c.pulse.particles<=0.:
+        if c.accents is None:
             self._pulse_credit = self._pulse_births = 0.
+            return
+        if c.pulse.particles<=0.:   # births a kick banked (Kick Accent) stay due; the pulse buys none
+            self._pulse_credit = 0.
             return
         self._pulse_credit = min(4.*MAX_BURST,self._pulse_credit+PULSE_BIRTHS*c.pulse.particles*released)
         moved = self._pulse_credit*(1.-math.exp(-dt/PULSE_BIRTH_TAU))

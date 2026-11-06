@@ -624,10 +624,20 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` �
 - **Measure drive distributions, not one song:** p05/p50/p95 and time above 0.9 of every geometry drive, as a
   fraction of its authored Range, on several real recordings including sustained loud and soft passages. A drive
   that never leaves the middle of its Range wastes the authoring.
-- **Adaptive response gain:** divide a geometry drive by a remembered recent peak of itself (fast reach, slow
-  relaxation, a floor so silence is not amplified) and land that peak below the top of the Range so sustained loud
-  passages keep headroom for accents. Gain only: an offset window re-expands a quiet intro to full size. Apply it to
-  geometry; light, colour and sparkle keep their fixed calibrated anchors (§13A).
+- **Superseded 6 Nov: no adaptive response gain.** Dividing a geometry drive by a remembered recent peak is the
+  "slowly falling peak" §2A rejects: on recorded music with a spliced 5 s break it sized the following 10 s 5-9% up,
+  and it re-normalises a long quieter passage. Map the routed target with a FIXED function on the real-music scale
+  (Waveform: gain x target^.75 eased toward .95), calibrated once on recorded continuous play so every time bin's kicks
+  stay at or above what the adaptive gain gave, and let each target's Range be the authored reactivity. Any adaptive
+  path that survives is an opt-in control whose off position is the fixed path, with a negative-control test.
+- **A break is a test of every running reference.** Splice 2-5 s of near-silence into recorded music (scale the PCM,
+  re-analyse it through the production chain) and compare what follows against the unbroken clip per layer: engine
+  adaptive sensitivity (Waveform's raw lanes and bus loudness are before it: no effect), the bus (its passage level
+  climbs back over about a second), the response gain, Breathing. A phrase-scale mean must learn only from heard music
+  and not from the passage's own return; contrast about it must not widen a returning passage.
+- **A sustained kick with no geometry headroom still needs a sense.** When the drive that sizes the swell sits near the
+  top of its Range, send the share of the kick the geometry cannot show to channels that do not fight the shape (an
+  eased roll-speed impulse, spark births on the swell), on the fixed reward scale, never a clamped confidence.
 - **Hold the gain's memory through a quieter PASSAGE, never through beat gaps.** A 30 s relaxation re-normalises a
   quieter passage back up to loud reach within one verse (a passage at 70% of the loud input reached Pulse Strength .88
   against the loud passage's .87 after 25 s): "it swelled up to full power when the song went quieter". Keying a
