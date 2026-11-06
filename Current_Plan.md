@@ -685,6 +685,21 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   Extruded Bubble's and Sphere's evaluators still replay exactly in one evaluation from the fixture start, without the
   frame budget and checkpoints Waveform and the engine-answer modes now share (`ui/studio/exact_replay.py`); measure
   with `tools/studio_drag_profile.py` and move them onto `ExactReplay` where a release stalls.
+- [ ] **UI frozen after closing a Studio, recovered by itself (operator 6 Nov 21:56, Extruded Bubble, Wine Ice
+  Acrylic): owner not found yet, instrumented.**
+  - What the log shows: the close was clean. Settings was revealed `visible enabled exposed`, native `(True, True)`,
+    and the window was destroyed after 77 ms. Then the GUI thread logged nothing for 18 s while the process was
+    idle (CPU 4.7 %, GPU 0.1 %).
+  - The event-loop recorder still delivered its 15 s summary on time at 21:56:48, so the loop was running and this
+    was not a stall. Its `period_samples=0` only means the lifecycle window was open, as it is for all of Settings.
+  - Not reproducible offscreen: in an offscreen-QPA probe with a real application-modal `StudioWindowSurface` closed
+    by its Close button, Settings ends up active, unblocked and taking clicks.
+  - Read from Qt's source (6.11): hiding the modal window unblocks Settings before the native hide. While Settings
+    is still blocked, focus given to it is handed to the modal window (`handleFocusEvent`), and a blocked window is
+    natively `WS_DISABLED`. So the suspect is native activation or enable state at the reveal, which happens while
+    the modal Studio is still shown.
+  - Next field run: the `[STUDIO] after reveal` lines (`presence.RevealWatch`, one-shot, removed at the first input
+    to Settings) name which window Windows sent the clicks to, and the state at each step. Fix the owner from them.
 - [ ] **Studio exit-time access violation fixed (6 Nov, R-172); two side defects left open.** The exit AV after
   `tests/test_studio_exit_every_mode.py` (about 1 run in 4) is fixed. `OffscreenStudioSurface`'s imported GL context
   is now a Qt child of its render control, so it can never be freed first, and production was not exposed. Still

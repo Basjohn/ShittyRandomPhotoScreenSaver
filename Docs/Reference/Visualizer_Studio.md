@@ -394,6 +394,18 @@ release replay spreads over frames within the budget (one 222 ms evaluation -> a
   unclickable" stall: saves logged for 25 s after a clean reveal). `reveal` therefore follows the native show with
   `RedrawWindow(RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW)`, which makes Windows send the missing `WM_PAINT` so Qt
   exposes and repaints; the reveal log line carries `exposed=`. `tests/test_studio_exit_repaint.py` guards it.
+- **Post-close input record (one-shot).** The 6 Nov 21:56 report was a UI frozen after closing a Studio that
+  recovered by itself after ~18 s, with the process idle and Settings revealed `exposed=True`. Qt's own state
+  cannot reproduce it: an offscreen-QPA probe with a real application-modal `StudioWindowSurface`, closed by a click
+  on its Close button, leaves Settings active, unblocked and taking clicks. So each reveal arms
+  `presence.RevealWatch`, which logs `[STUDIO] after reveal +N ms ...` lines:
+  - Qt's and Windows' window state (modal, focus, active, mouse grab, foreground, capture, `WS_DISABLED`) at the
+    reveal and when the Studio window is destroyed;
+  - up to 12 native activation, button and key messages, with the window Windows sent each one to;
+  - the first input Qt delivers to Settings, and how long after the reveal it arrived.
+
+  It removes its filters at that first input, when Settings is destroyed, or 60 s after the reveal, so nothing runs
+  at rest.
 - **Never hide the window from Python.** PySide holds the GIL through `QWindow.hide()`, and Qt's threaded render
   loop waits inside it for the render thread, which runs the viewport's Python (render-node release,
   `sceneGraphInvalidated`) when the non-persistent scene graph is invalidated: calling it from Python deadlocked the
