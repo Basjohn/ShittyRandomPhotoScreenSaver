@@ -299,9 +299,13 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   capture and the Studio pass the camera's visible span; Travelling Pulse edge swells are born just beyond it and age
   only once seen (p50 .81-.99 at ±16; the peak visible swell after each kick is 1.7-5.6x main at every time in song).
   Preset 4 and Presets 5-7 are byte-identical. Evidence `.artifacts/evidence/waveform_ribbon/reactivity_preset7/`
-  (`visibility_tag_vs_final.txt`, `kicks4_table.txt`, `sheets/*_p1..3_*`). Open: Pulse Rim's REFERENCE level (.12,
-  set against the faded plateau) now meets a far stronger in-view field on Presets 1-3; `TROUGH_VIEW` still assumes
-  ±30; the no-twitch probe's .02/.01 bounds only held because its swells never reached the cloth.
+  (`visibility_tag_vs_final.txt`, `kicks4_table.txt`, `sheets/*_p1..3_*`). Follow-ups (6 Nov): an edge swell now
+  publishes half its level for Pulse Rim, as a Centre Out swell carries half the injection (rims at their ceiling over
+  43% of the view -> 0-1%; rim pixels at 255 4.3% -> 3.6% P1, 3.2% -> 2.5% P3; Preset 4 pixel-identical); the floor
+  lift reads the card's visible span plus 5 envelope sigmas within ±32 (identical at a 1282x1005 card, lower lift for
+  unseen troughs at the canonical card with unchanged contact). Open: on Presets 1/3 the rim's swell-to-elsewhere
+  contrast (1.11/1.17) is still below Preset 4's (1.27); the no-twitch probe's .02/.01 bounds only held because its
+  swells never reached the cloth (in-view .028/.012).
 - [~] **Travel Direction (operator, 5 Nov: "Travel Direction ... chosen in the studio ... an important basic need") —
   awaiting operator eyes:** Flow-bucket Choice, Right To Left (default, unchanged) or Left To Right (the mirror image:
   history enters at the left; pulses, held swells, Tilt Shift, sparks, strands and floor give follow; the world colour
