@@ -562,12 +562,12 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   `tools/flicker_test.py` keeps its own historical mock of the old row. Operator look pending: Open Studio's place in
   the preset row and the Save To flow.
 - [ ] **Operator side requests (6 Nov, "important eventually"; queue after the running work):**
-  - **Bar Count outside Spectrum (operator decision):** audited 6 Nov (`Docs/Reference/Visualizer_Reference.md` → Audio
-    Analysis controls per mode): outside Spectrum and Extruded Spectrum it is analysis resolution, not a drawn count,
-    yet it moves every mode's frame (Neon Lake waves, Oscilloscope Flare / Drive, Bubble, Extruded Bubble, Sphere,
-    DevCurve, Waveform), so nothing was hidden. Decide whether to hide it on Oscilloscope, Bubble, Extruded Bubble,
-    DevCurve and Waveform (`technical_hidden_suffixes` in the descriptor; stored values keep applying, so no look
-    changes) and keep it on Spectrum, Extruded Spectrum, Neon Lake and Voxel Sphere (its Analysis Bands).
+  - **Bar Count outside Spectrum (lead decision 6 Nov, with the Studio migration):** audited 6 Nov
+    (`Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode): outside Spectrum and Extruded
+    Spectrum it is analysis resolution, not a drawn count, yet it moves every mode's frame (Neon Lake waves,
+    Oscilloscope Flare / Drive, Bubble, Extruded Bubble, Sphere, DevCurve, Waveform), so it stays everywhere. Outside
+    the two bar modes it is labelled "Analysis Bands" with a tooltip saying what it does (as Voxel Sphere already is),
+    keyed off one descriptor fact and read by Settings and the Studio alike.
   - **Waveform travel speed:** History Speed (`flow_speed`, 0.8-2.4, Flow bucket) and Pulse Speed exist but the
     operator did not find them; there is no travel-speed reactivity. Make them findable (name / workspace / tooltip)
     and consider a quiet -> peak History Speed under the flow rule (music pushes history faster, smoothly; knot spacing
@@ -575,7 +575,8 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   - **Studio clips: 30 s small, or cleanly loopable.** Shipped clips are ~12 s, ~0.9 MB each (2.5 MB total); 30 s would
     be ~2.2 MB each but an engine-owned edit re-analyses the whole clip (~2.5x longer). A clean loop instead: loop
     points on matching musical positions with a short crossfade, and the Studio's evaluator continuing its simulation
-    state across the loop (today the replay restarts at t = 0, which would jump). Choose with measurements.
+    state across the loop (today the replay restarts at t = 0, which would jump). Choose with measurements. Operator
+    (6 Nov): the clips are still 12 s; the loop must be seamless (no skip at the end).
 - [ ] **Studio chrome matches Settings (6 Nov), awaiting the operator's look** (all Studios: one shell;
   `Docs/Reference/Visualizer_Studio.md` "Chrome and theme"). Frameless window with Settings' title bar and forged
   rounded edge, the theme's Glass/Acrylic material, 1.5 px one-path card borders, Settings' panel casts at half
@@ -585,13 +586,24 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   alpha OpenGL window; the evidence only simulates the blur), snap/resize/maximise by hand, and the panel opacity
   floor (0.88) and shadow strength on light themes. Light-theme instrument wells (trace cards, response curve,
   transport bar) now sit on the theme's input surface (evidence `.artifacts/evidence/studio_followups/legibility/`,
-  Pearl Blush and Default Dark, before/after): operator look pending.
+  Pearl Blush and Default Dark, before/after): operator look pending. Operator (6 Nov, not urgent): the material is
+  missing from most Studio areas (workspace tabs, the panels under the preview, their section headers). Apply the
+  theme's Glass/Acrylic to them with a slightly darker layer behind every control so it stays legible. Controls laid
+  over the preview (transport chips, aspect chips, the source notice) keep a translucent dark solid: blurring the live
+  scene behind them would cost GPU time every frame and skew what the preview shows about performance.
 - [ ] **Studio drag lag fixed (6 Nov), awaiting the operator's feel check.** Drags preview once per frame and
   re-show only the dragged key (Visualizer_Studio.md "Drags are batched"); evidence
   `.artifacts/evidence/studio_drag/` (per move 56 ms -> 0.07 ms on Waveform). Side defect (not measured): Bubble's,
   Extruded Bubble's and Sphere's evaluators still replay exactly in one evaluation from the fixture start, without the
   frame budget and checkpoints Waveform and the engine-answer modes now share (`ui/studio/exact_replay.py`); measure
   with `tools/studio_drag_profile.py` and move them onto `ExactReplay` where a release stalls.
+- [ ] **DevCurve replay floors red since the reactivity merge (found 6 Nov):** `tests/test_visualizer_replay.py::
+  test_current_reactivity_passes_fixed_floors[*__devcurve]` passes at `1488c7ce^1` and fails at `1488c7ce` (the
+  DevCurve reactivity merge): `output_flux` fell to 43-66% of its reviewed floor on broadband noise, representative
+  music, the sudden volume step, sustained bass and sustained treble. Decide with measurements whether that is the
+  intended smoother loud body or lost motion: compare the per-case traces before and after, check kicks and passage
+  changes still read, and either fix the field or recalibrate only the DevCurve floors (`floors.calibrate`) with the
+  reason recorded. Never bless the drift unexplained.
 
 ## Operator execution and evidence rules
 
