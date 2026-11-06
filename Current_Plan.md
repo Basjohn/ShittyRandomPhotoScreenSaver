@@ -276,14 +276,15 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   each fragment's history x (direct and reflected light), so every Reaction Mode and both Travel Directions put it
   exactly on the pulse; the field's own smooth shape is the falloff. Evidence
   `.artifacts/evidence/waveform_ribbon/pulse_rim/`; design in the Migration Plan's Reaction bucket.
-- [ ] **Swells reach the Preset camera already faded (side defect, 5 Nov, found by Pulse Rim):** the lens alone sees
-  history x in about [-4, 4], and with the production aperture (capture `aperture_scale` 3.59 at 1282x1005) about
-  [-14, 14], but `PULSE_ORIGIN` (44) and `TROUGH_VIEW` still assume a ~±30 view; a swell travels ~2-2.5 s before it
-  is visible, so on recorded music the in-view appearance field is a faint plateau (human_heavy1: in-view max p50
-  .11, peak/median 1.6) and the fresh-led band has already settled. Continuous play (5 Nov, five songs): the in-view
-  geometric swell of Head To Tail Travelling Pulse is p50 .11 (Preset 1) / .21 (Preset 7's controls) against 1.39 for
-  Preset 4 (Centre Out, born in view); this is most of why Presets 1-3 read flat in sustained passages. Re-derive the
-  origin (and the fresh fade) from the framed camera's visible span; then recheck Pulse Rim's REFERENCE level.
+- [~] **Swells reach the Preset camera already faded (Presets 1-3) - awaiting operator eyes:** the card's camera shows
+  about ±16 of the scene axis at 1282x1005 (±5 at the canonical card), but edge swells were born at `PULSE_ORIGIN` 44,
+  so Head To Tail swells arrived ~2 s late at 5% strength (in-view swell p50 .13-.30 against Preset 4's 1.39). Now the
+  capture and the Studio pass the camera's visible span; Travelling Pulse edge swells are born just beyond it and age
+  only once seen (p50 .81-.99 at ±16; the peak visible swell after each kick is 1.7-5.6x main at every time in song).
+  Preset 4 and Presets 5-7 are byte-identical. Evidence `.artifacts/evidence/waveform_ribbon/reactivity_preset7/`
+  (`visibility_tag_vs_final.txt`, `kicks4_table.txt`, `sheets/*_p1..3_*`). Open: Pulse Rim's REFERENCE level (.12,
+  set against the faded plateau) now meets a far stronger in-view field on Presets 1-3; `TROUGH_VIEW` still assumes
+  ±30; the no-twitch probe's .02/.01 bounds only held because its swells never reached the cloth.
 - [~] **Travel Direction (operator, 5 Nov: "Travel Direction ... chosen in the studio ... an important basic need") —
   awaiting operator eyes:** Flow-bucket Choice, Right To Left (default, unchanged) or Left To Right (the mirror image:
   history enters at the left; pulses, held swells, Tilt Shift, sparks, strands and floor give follow; the world colour
