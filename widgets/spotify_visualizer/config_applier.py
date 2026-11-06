@@ -259,12 +259,12 @@ def _apply_spec_controls(host: Any, kwargs: Dict[str, Any], *, logical: bool) ->
 def spec_mode_parameters(owner: Any, mode_id: str) -> Dict[str, object]:
     """A spec'd mode's renderer parameters: every presentation control, under its own key
     (colours as tuples)."""
-    from core.settings.visualizer_mode_settings import control_runtime_attr, require_mode_settings
+    from core.settings.visualizer_mode_settings import require_mode_settings
 
     values: Dict[str, object] = {}
-    for control in require_mode_settings(mode_id).presentation_controls():
-        value = getattr(owner, control_runtime_attr(control))
-        values[control.key] = tuple(value) if isinstance(value, list) else value
+    for key, attr in require_mode_settings(mode_id).presentation_runtime_attrs:
+        value = getattr(owner, attr)
+        values[key] = tuple(value) if isinstance(value, list) else value
     return values
 
 
