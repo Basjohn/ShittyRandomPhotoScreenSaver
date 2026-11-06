@@ -1483,8 +1483,9 @@ class ScreensaverEngine(QObject):
         logger.info(f"Worker pool: max_workers={max_workers} (CPU cores={cpu_count})")
         
         workers_started = 0
+        workers_deferred = 0
         workers_failed = 0
-        
+
         worker_configs = [
             (WorkerType.IMAGE, 'workers.image.enabled', "ImageWorker", "image publication unavailable"),
         ]
@@ -1500,14 +1501,57 @@ class ScreensaverEngine(QObject):
                 continue
                 
             if bool(self.settings_manager.get(setting_key)):
-                if self._process_supervisor.start(worker_type):
+                if worker_type == WorkerType.IMAGE_PREFETCH:
+                    # Speculation is optional: startup never waits for it. The
+                    # role is unavailable until its child signals ready, and
+                    # every caller already treats that as "no speculation yet".
+                    if self._start_optional_worker(worker_type, name, failure_msg):
+                        workers_deferred += 1
+                        workers_started += 1  # admitted against max_workers
+                    else:
+                        workers_failed += 1
+                elif self._process_supervisor.start(worker_type):
                     logger.info(f"{name} started successfully")
                     workers_started += 1
                 else:
                     logger.warning(f"[LIFECYCLE] {name} failed to start - {failure_msg}")
                     workers_failed += 1
-        
-        logger.info(f"Worker startup complete: {workers_started} started, {workers_failed} failed")
+
+        logger.info(
+            f"Worker startup complete: {workers_started} started "
+            f"({workers_deferred} optional starting in the background), {workers_failed} failed"
+        )
+
+    def _start_optional_worker(self, worker_type: WorkerType, name: str, failure_msg: str) -> bool:
+        """Start an optional child on a ThreadManager IO worker; return True once queued.
+
+        ``ProcessSupervisor.start`` waits for the child's ready signal (seconds
+        on a loaded machine). The required foreground worker keeps that wait on
+        the init path; an optional helper must not hold the engine's first
+        image behind it. The supervisor owns the work's retirement:
+        ``shutdown()`` aborts the ready wait and the engine stops the supervisor
+        before the ThreadManager, so nothing here outlives teardown.
+        """
+        manager = getattr(self, "thread_manager", None)
+        supervisor = self._process_supervisor
+
+        def _start_in_background() -> None:
+            try:
+                if supervisor.start(worker_type):
+                    logger.info(f"{name} started successfully")
+                else:
+                    logger.warning(f"[LIFECYCLE] {name} failed to start - {failure_msg}")
+            except Exception:
+                logger.exception("[LIFECYCLE] %s background start raised", name)
+
+        try:
+            if manager is None:
+                raise RuntimeError("ThreadManager unavailable")
+            manager.submit_io_task(_start_in_background, category="optional_worker_start")
+        except Exception as exc:
+            logger.warning(f"[LIFECYCLE] {name} not started - {failure_msg}: {exc}")
+            return False
+        return True
     
     def start(self, *, show_first_image: bool = True) -> bool:
         """

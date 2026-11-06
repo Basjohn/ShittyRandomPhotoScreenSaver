@@ -706,6 +706,18 @@ below it, which paid for the new reactivity. Evidence: `.artifacts/evidence/devc
 (`continuous_v5/`, `strips_v3/`, `tick_cost_v2.jsonl`); gates `tests/test_devcurve_reactivity.py`,
 `tests/test_devcurve_continuous_play.py`, `tests/test_devcurve_kick_headroom.py`.
 
+*Replay floors (6 Nov).* The synthetic replay floors' `output_flux` for DevCurve fell to 15-31% of the pre-rework value
+(five cases) when the rework merged. Measured (`.artifacts/evidence/devcurve/floors_20261106/`), it is the **cold start of the slow
+body**, not lost motion: the shipped fixtures last 0.5-2 s and carry a constant schema-1 loudness, while the body's two
+stages (0.45 s, 0.8 s) take ~3 s to settle, so a 1 s clip sees a quarter of the settled motion. Held to 8 s the same
+inputs settle at 62-95% of the pre-rework flux and ~75% of its bass amplitude (the smooth wave against the slope-limited
+triangle, above), and on four recordings (150 s each) flux is 89-104% of the pre-rework value, the quiet-to-loud
+contrast is kept or larger (growingpains 2.0x -> 2.5x) and the kick-locked rise of the field is 2-9x the old one. A real
+loudness step still lifts the field within ~1.5 s. Only DevCurve's entries of `reactivity_floor.json` were recalibrated
+(`floors.calibrate`); `test_devcurve_held_input_keeps_moving_the_field_after_its_slow_body_settles` (with its frozen-field
+control) guards the settled response the 1 s floors cannot see. Lesson: **a floor measured on a clip shorter than the
+mode's slowest stage guards its cold start only; add a held-input check when a mode gets a slow body.**
+
 **Collisions with the world**
 - **Preserve the shape: lift the whole object.** Per-point clamps against a floor produce boxy, flat-bottomed troughs;
   proportional trough scaling still changes the curve. A whole-object offset, sized from the visible part only and
