@@ -335,8 +335,9 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   rangeaudit_*.txt`) shows Rotation's drive never above .36 on any recording (its Peak handle is never reached), and
   Light/Colour/Sparkle/Highlights, Width and Lift never reach .8 on three or four of five songs: those calibrations (not
   the response gain) are the remaining Range losses; the music's return after a break still dips for about a second
-  while the shared passage level climbs back (return window 30-50% of the unbroken clip; Breathing presets, 40-50% with
-  Breathing 0).
+  while the shared passage level climbs back (return window 12-55% of the unbroken clip on every arm, main included);
+  Preset 3's quieter-after-loud kicks are 4% under main's (every time bin is above); soft passages swing less in
+  absolute terms (3 s contrast .21 vs the adaptive gain's .30) and loud ones .11 vs .16.
 - [~] **Floor Give (operator, 5 Nov: "the floor can deform inwards, allowing crests") — awaiting operator eyes:**
   opt-in Floor slider (default 0 = the rigid floor, pixel-identical); P2 authored 1.0. Where a lower edge comes down
   onto the floor the wet floor yields in a soft dent (one surface for the floor's ray hit, its shading/reflection and
