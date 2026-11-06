@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -180,13 +181,23 @@ def run_frozen_worker(argv: list[str]) -> int | None:
 
 
 _CANCELLED: set = set()
+# Workers this process started (a count only: tests check nothing outlives them when it moved).
+STARTED = [0]
+
+
+def worker_tag(pid: int | None = None) -> str:
+    """The prefix of a worker's temporary folder, naming the process that started it: it appears in the worker's
+    command line, so a leaked worker can be traced to its parent after that parent is gone."""
+    return f"srpss_studio_clip_{os.getpid() if pid is None else int(pid)}_"
 
 
 class ClipLoadJob:
     """One out-of-process extraction, event driven (QProcess.finished); ``cancel`` kills it.
 
     Mode-neutral: ``module`` is the worker (``python -m <module> clip settings output seconds``) and ``convert``
-    turns its JSON into the mode's recorded inputs (default: this module's Waveform worker and ``to_inputs``)."""
+    turns its JSON into the mode's recorded inputs (default: this module's Waveform worker and ``to_inputs``).
+    The worker and everything it starts never outlive this job or this process (``worker_lifetime.WorkerTree``):
+    a cancel ends the whole tree, and the OS ends it when this process exits or crashes."""
 
     def __init__(self, clip, settings: Mapping[str, Any], finished: Callable[..., None], *,
                  module: str = __name__, convert: Callable[..., Any] | None = None) -> None:
@@ -194,7 +205,8 @@ class ClipLoadJob:
         from PySide6.QtCore import QProcess
         from dataclasses import replace
         self._finished = finished
-        self._directory = tempfile.TemporaryDirectory(prefix="srpss_studio_clip_")
+        from ui.studio.worker_lifetime import WorkerTree
+        self._directory = tempfile.TemporaryDirectory(prefix=worker_tag())
         folder = Path(self._directory.name)
         self._settings_path = folder / "settings.json"
         self._output_path = folder / "inputs.json"
@@ -208,9 +220,14 @@ class ClipLoadJob:
         process.errorOccurred.connect(self._on_error)
         self._process = process
         self._convert = convert or to_inputs
+        self._replace = replace
+        self._tree = WorkerTree()
         process.start(*worker_command(module, [clip.description, str(self._settings_path),
                                                str(self._output_path), str(CLIP_SECONDS)]))
-        self._replace = replace
+        STARTED[0] += 1
+        pid = int(process.processId() or 0)
+        if pid:
+            self._tree.adopt(pid)
 
     def _complete(self, result=None, error: str = "") -> None:
         from PySide6.QtCore import QTimer
@@ -218,6 +235,7 @@ class ClipLoadJob:
         # QProcess) until the next event-loop turn: dropping the last reference here deletes
         # the QProcess mid-emission, and on Linux its pipe notifiers then fire into freed memory.
         _CANCELLED.add(self)
+        self._tree.close()
         callback, self._finished = self._finished, None
         if callback is not None and not self._cancelled:
             callback(result, error)
@@ -228,6 +246,10 @@ class ClipLoadJob:
         QTimer.singleShot(0, self._forget)
 
     def _on_error(self, _error) -> None:
+        import shiboken6
+        if not shiboken6.isValid(self._process):            # the QProcess went with the app (quit)
+            self._tree.close()
+            return
         if self._process.state() == self._process.ProcessState.NotRunning:
             self._complete(None, self._process.errorString() or "analysis process failed")
 
@@ -249,6 +271,7 @@ class ClipLoadJob:
     def cancel(self) -> None:
         """Kill without waiting: the GUI thread never blocks on the worker (QProcess.finished cleans up)."""
         self._cancelled = True
+        self._tree.terminate()                   # the worker and anything it started (a venv launcher's child)
         if self._process.state() != self._process.ProcessState.NotRunning:
             _CANCELLED.add(self)                 # keep the QProcess alive until its finished signal
             self._process.kill()
@@ -261,6 +284,8 @@ def main(argv: list[str]) -> int:
     clip, settings_path, output_path, *rest = argv
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
+    from ui.studio.worker_lifetime import die_with_parent
+    die_with_parent()
     settings = json.loads(Path(settings_path).read_text(encoding="utf-8"))
     from PySide6.QtGui import QGuiApplication
     _app = QGuiApplication.instance() or QGuiApplication([])     # this process is the analysis worker
