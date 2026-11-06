@@ -38,8 +38,8 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 New platform-facing work (power, display, input) still ships a basic Linux path or an explicit inert one alongside
 the Windows path, so it never needs its own Linux audit later (operator, 5 Nov).
 
-**Agents (operator, 5 Nov):** at most three subagents at once (two medium and one high, or three medium), with the
-lead as reviewer/orchestrator.
+**Agents (operator, 5-6 Nov):** at most three Opus subagents at once (two medium and one high, or three medium) plus
+one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewer/orchestrator.
 
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
 
