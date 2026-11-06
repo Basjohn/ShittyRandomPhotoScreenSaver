@@ -122,8 +122,11 @@ is optional and defaults to "not offered":
   musical level and intensity, the source frame), so it uses the same recorded engine answers: the worker records
   everything the engine answered the whole production `logical_tick`, and `EngineAnswerEvaluator._step` runs what
   `logical_tick` runs, the mode's hook included, between `consume_engine_bars` and the capture. Engine-owned are the
-  technical (audio analysis) values; in the replay most of them leave DevCurve's lanes unchanged (the clip carries
-  the pre-AGC lanes), and the split is still proven both ways (`tests/test_devcurve_studio.py`). Its schema follows
+  technical (audio analysis) values; this replay serves the clip's *recorded* pre-AGC and transient lanes, so most of
+  them leave its lanes unchanged here although the live engine answers every one (Sensitivity, the floors, Gain,
+  Block Size and Clamp all move DevCurve's frame when the lanes are re-analysed from PCM: `Docs/Reference/
+  Visualizer_Reference.md` → Audio Analysis controls per mode; `Current_Plan.md` §9 records the Studio gap), and the
+  split is still proven both ways (`tests/test_devcurve_studio.py`). Its schema follows
   DevCurve's Settings buckets: Layers (Settings' Shaper: one group per layer with its Custom-row values, the
   shape-editor nodes, Add / Remove Node and Settings' stack re-ranking as `follow`), Motion & Swell (Core and the
   analysis) and Foreground & Ghost (with the rainbow). Each layer group traces that layer's **Body** (over its body
@@ -142,8 +145,9 @@ is optional and defaults to "not offered":
   tick. `StepState` shares the recorded arrays instead of copying them, so a rewound step still holds the object the
   view serves. Without a pool an array answer is still refused, so a mode whose answers hold no arrays records
   exactly as before. A shipped clip: about 830 distinct 4096-sample histories (13.6 MB sidecar), 7.6 MB of answer
-  JSON, about 0.1 s to load. Engine-owned are the technical values (in the replay only Bar Count and the noise floor
-  change any answer); every `osc_*` key is mode-owned. Workspaces follow the buckets: Trace (Display), Beam & Screen,
+  JSON, about 0.1 s to load. Engine-owned are the technical values (this replay serves recorded lanes, so only Bar Count and
+  the noise floor change an answer here; live, every offered one moves Flare and Drive: see the DevCurve note above);
+  every `osc_*` key is mode-owned. Workspaces follow the buckets: Trace (Display), Beam & Screen,
   Reaction (with the analysis). Traces, read from the frame on screen (`OscilloscopeStudioEvaluator.measurements`):
   **Level** (the live trace's swing in its display's own units), **Afterglow** (the newest afterglow trace's
   brightness against a fresh one) and **Ghosts** (held traces against the capacity), **Flare**, **Drive**, **Tone**;
@@ -176,6 +180,10 @@ is optional and defaults to "not offered":
   edits (Extend Toward Horizon, Reset Terrain) on the authored heightfield. The heightfield itself is painted only by
   Settings' terrain brush: the shared shell has no brush instrument, so the Studio carries the record (undo, save,
   Save To <Preset>) through an `instrument_only` schema marker and does not author its cells.
+- **Switch rows.** Every boolean control is the shell's one `SwitchRow` (an `Item`: a `Row` ignores the `x` of its
+  children, which once pushed the click area past the label and made every switch unclickable, 6 Nov). A row whose
+  `when` condition fails is hidden (`conditionHidden`). `tests/test_studio_switch_rows_click.py` clicks the rendered rows
+  through real window events on the hidden offscreen surface and reads the canonical store.
 - **Capabilities.** `StudioCapabilities(viewport, camera, handles, objects)`; the default is a plain 2D live preview
   with a scene-object list. A flat mode declares no camera and no handles and the shell then shows no navigation,
   view readout, Keep View/Reset or handle overlay and never calls `navigation()` / `scene_handles()`.
