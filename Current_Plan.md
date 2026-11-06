@@ -42,6 +42,34 @@ the Windows path, so it never needs its own Linux audit later (operator, 5 Nov).
 lead as reviewer/orchestrator. Agents that already hold unfinished work may exceed this until they finish (their
 context is valuable). Slots need not always be full: when the right agent is not free, queue the item here.
 
+**Architecture audit before application-wide work (operator 6 Nov, one-time agents):** a one-time Opus agent audits
+the thread manager, resource manager, lifecycles, dead code, churn, avoidable GIL contention, memory/leaks and
+dormancy contracts. Lenses: SSOT, dormancy, lifecycle contracts, 2D/3D consistency, performance, SMP settings UX and
+full visual rearrangement. Output: `Docs/Audits/Architecture_Audit_2026-11-06.md`. Then a one-time Fable 5.1 agent
+challenges and improves it into a live checklist (priority, reward, fix detail; unrelated defects kept), and upgrades
+the Expanded Visualizer / SMP plans and this plan. Afterwards the cap returns to one Opus high plus one Opus medium,
+once no existing agent holds loaded work.
+
+**Queued (operator 6 Nov ~22:00), next free medium slot:**
+- **Two clicks on Reset Camera count as the card's double-click, which cycles the Visualizer mode**
+  (`logs/screensaver*.log` 22:04:34-36). Two presses each ran a reset ("[VIS_ORBIT] Camera reset to preset home" x2).
+  The pair also reached the visualizer region's double-click admission (`QuickVisualizerDoubleClickAdmission`,
+  `cycle_mode=self._cycle_quick_visualizer_mode`, `engine/display_manager.py` ~3529). That cycled to the next mode in
+  `mode_activation` (the modes double-click and context-menu cycling may choose; after Extruded Bubble comes Waveform)
+  and wrote `widgets.spotify_visualizer.mode` (~1939). The one-Visualizer contract held: EB's last tick was 22:04:34
+  and Waveform's first was 22:04:36, never overlapping. Fix at the owner: the camera hint buttons (Reset Camera and
+  any other in-card control) consume their presses, including the second press of a double-click, so no in-card
+  control press reaches mode cycling. Regression bar: a double-click on Reset Camera resets once or twice but never
+  cycles; a double-click on the card's empty area still cycles.
+
+**Follow-ups sent to the agents below (operator 6 Nov ~22:00):** the Studio agent: the UI freeze after closing a
+Studio (idle process, 18 s with no GUI-thread log after the window was destroyed, 21:56:34), sliders snapping out of a
+drag, no automatic switch to Custom (a close prompt: Overwrite Preset / Save As New Preset / Custom Slot / Discard),
+then the leak and its side defects. The Waveform agent, after its identity-gated cut: a music-vs-response check of every
+preset and Reaction Mode, the floor clipping the operator sees (raise the lift limit; the operator now prefers a little
+more height to floor clipping, which partly supersedes "top edge first"), and live tick spikes of 64-152 ms around
+Quick preset switches.
+
 **Paused by the weekly usage limit (6 Nov evening; resume each with a message to the same agent, which keeps its
 context and worktree):**
 - **Waveform logical tick cut** (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch
@@ -222,12 +250,6 @@ context and worktree):**
   re-run overwrote each log, so the failing test is unknown (most likely a QSG clip probe timing out). The isolated
   runner now keeps the parallel-run failure as `logs/pytest_isolated/<file>.under_load.log`; next time, read it and
   fix the probe's timeout or synchronisation rather than rerunning.
-- [ ] **`test_studio_exit_every_mode.py` exited non-zero with every test passing (6 Nov, once):** "19 passed" in its
-  log but a failing exit code under the 8-way gate, and that runner stopped before its summary; the immediate re-run
-  passed 64/64. Looks like a native crash at interpreter teardown after the Studio tests. If it recurs, capture the
-  exit code and any faulthandler output (run the file alone with `-X faulthandler`) and fix the teardown owner.
-  Probably the same family as the leaked clip workers fixed in 90f65ee9 (a surviving worker held the runner's pipe).
-
 - [ ] **4x MSAA repeat-render noise (driver, 5 Nov; was "Floor Give run-to-run noise"):** the same frame rendered
   again through a 4x scene target differs by 1 level (rarely 2-3) on a pixel or two in Waveform (more often with Floor
   Give and mist) and on ~0.7% of pixels in Neon Lake. Not renderer state: packet, uniforms, every vertex position,
