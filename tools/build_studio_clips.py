@@ -93,6 +93,17 @@ def verify(source, decoded) -> dict:
     return {"max_pcm_error": worst}
 
 
+def rebuild_frames(source: Path, loop: dict):
+    """The frames of a shipped clip, rebuilt from its recording and the ``loop`` its manifest names (the recording's
+    frame indices of the loop's start and of the frame that restarts it, the crossfade and the period shift): no
+    search, the same bake. The manifest's ``window_sha256`` and the shipped ``.srclip`` must equal this rebuild."""
+    from tools import studio_clip_loop as loops
+    recording = loops.Source.of(window_frames(source, 0.0, 600.0))
+    choice = loops.LoopChoice(int(loop["first_frame"]), int(loop["after_frame"]), float(loop["crossfade_s"]),
+                              int(loop["shift_samples"]))
+    return loops.bake_loop(recording, choice)[0]
+
+
 def build(recordings: Path, *, check: bool = False) -> list[dict]:
     from tools import studio_clip_loop as loops
     from widgets.spotify_visualizer.compact_clip import SUFFIX, decode, encode
