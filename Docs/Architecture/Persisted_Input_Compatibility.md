@@ -62,6 +62,11 @@ without the safe path below.
   (`turn` -1..1 = +-180 degrees) and level-to-straight-down (`tilt` 0..1 = 0..90 degrees); curated presets were
   rescaled (tilt x40/90, turn x40/180). Stored values were not migrated: the mode was then dormant by default and only
   the operator had saved views, which now show steeper/wider angles until re-orbited.
+- **Surface Material baseline default (no bridge, recorded).** On 2026-11-06 the default of
+  `widgets.global.surface_material` changed from `normal` to `theme` (follow the active Widget Theme's material).
+  The feature had not shipped, but page saves write the whole `global` section, so a stored `normal` cannot be told
+  apart from a choice: it stays an explicit Normal override; `theme` and an absent value follow the theme. A profile
+  saved with the old default needs one switch to Theme (Card_Surface_Materials.md section 4).
 - **QSettings → JSON profile** (`core/settings/settings_manager.py`:
   `_run_initial_migration` / `_migrate_from_qsettings`). Fires whenever
   `settings_v2.json` is absent, including after Reset.
