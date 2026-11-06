@@ -331,11 +331,12 @@ def test_a_studio_exit_arms_a_one_shot_input_record_that_ends_with_the_first_inp
         _leave(controller, surface, "close button")
         watch = controller.presence.watch
         assert watch is not None and watch.active
-        QTest.mouseClick(window.body, Qt.MouseButton.LeftButton)
+        centre = window.body.mapTo(window.dialog, window.body.rect().center())
+        QTest.mouseClick(window.window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre)
         assert not watch.active
         settled = len(watch.records)
-        QTest.mouseClick(window.body, Qt.MouseButton.LeftButton)          # disarmed: nothing runs at rest
-        assert len(watch.records) == settled
+        QTest.mouseClick(window.window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre)
+        assert len(watch.records) == settled                              # disarmed: nothing runs at rest
     lines = [r.getMessage() for r in caplog.records if "after reveal" in r.getMessage()]
     assert lines[0].split(" ms ", 1)[1].startswith("armed qt_modal=")
     assert any("studio window destroyed" in line for line in lines)
@@ -356,4 +357,26 @@ def test_input_elsewhere_does_not_end_the_record_negative_control(probe):
     assert watch.active
     watch.disarm()
     assert not watch.active
+    other.deleteLater()
+
+
+def test_the_record_never_filters_another_windows_events(probe, monkeypatch):
+    """The Qt filter sits on Settings' own window, never the application: an application-wide Python filter is handed
+    every Qt Quick item an event visits, and wrapping items PySide had not wrapped yet deleted a live Studio item in a
+    later test (7 Nov: test_waveform_studio_framing after test_waveform_studio_editors)."""
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QWindow
+    from PySide6.QtTest import QTest
+    window = probe()
+    controller, surface = _studio_session(window)
+    _leave(controller, surface, "close()")
+    watch = controller.presence.watch
+    seen = []
+    original = watch._guarded
+    monkeypatch.setattr(watch, "_guarded", lambda action, *args: (seen.append(action.__name__),
+                                                                   original(action, *args)))
+    other = QWindow()                                                  # never shown
+    QTest.mouseClick(other, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(5, 5))
+    assert [name for name in seen if name == "_qt_input"] == [] and watch.active
+    watch.disarm()
     other.deleteLater()

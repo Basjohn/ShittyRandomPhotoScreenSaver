@@ -160,7 +160,12 @@ class RevealWatch:
         self._app = QApplication.instance()
         self._qt_filter = _Qt()
         self._native_filter = _Native()
-        self._app.installEventFilter(self._qt_filter)
+        # On Settings' own window only, never the application: every input to Settings reaches its QWindow first,
+        # and an application-wide Python filter is handed every Qt Quick item an event visits (wrapping items PySide
+        # had not wrapped yet deleted a live Studio item in a later test, 7 Nov).
+        self._window = widget.windowHandle()
+        if self._window is not None:
+            self._window.installEventFilter(self._qt_filter)
         if sys.platform == "win32":
             self._app.installNativeEventFilter(self._native_filter)
         widget.destroyed.connect(self.disarm)          # Settings gone: nothing left to watch
@@ -193,25 +198,11 @@ class RevealWatch:
         self.disarm()
         return True
 
-    def _settings_owns(self, obj) -> bool:
-        import shiboken6
-        widget = self._widget
-        if not shiboken6.isValid(widget):
-            return False
-        if obj is widget or obj is widget.windowHandle():
-            return True
-        window = getattr(obj, "window", None)
-        try:
-            return callable(window) and window() is widget
-        except (RuntimeError, TypeError):
-            return False
-
     def _qt_input(self, obj, event) -> None:
         if self._expired():
             return
-        if self._settings_owns(obj):
-            self._log(f"first input delivered to Settings: {event.type().name} on {type(obj).__name__}")
-            self.disarm()
+        self._log(f"first input delivered to Settings: {event.type().name}")
+        self.disarm()
 
     def _native(self, event_type, message) -> None:
         if self._expired() or self._native_lines >= self.MAX_NATIVE_LINES:
@@ -239,7 +230,9 @@ class RevealWatch:
             return
         self.active = False
         try:
-            self._app.removeEventFilter(self._qt_filter)
+            import shiboken6
+            if self._window is not None and shiboken6.isValid(self._window):
+                self._window.removeEventFilter(self._qt_filter)
             if sys.platform == "win32":
                 self._app.removeNativeEventFilter(self._native_filter)
         except RuntimeError:
