@@ -59,11 +59,16 @@ def resolve_global_surface_material(widgets_config: Mapping[str, object] | None)
     return normalize_surface_material(values.get("surface_material")) or NORMAL
 
 
+# Instances whose appearance (and so their Surface Material row) is their family's first card.
+STYLE_SECTION: dict[str, str] = {"clock2": "clock", "clock3": "clock", "reddit2": "reddit"}
+
+
 def resolve_surface_material(widgets_config: Mapping[str, object] | None, widget_id: str) -> str:
-    """``widget_id``'s material: its own explicit value, else the baseline."""
+    """``widget_id``'s material: its section's explicit value, else the baseline."""
 
     if isinstance(widgets_config, Mapping):
-        values = widgets_config.get(str(widget_id), {})
+        section = STYLE_SECTION.get(str(widget_id), str(widget_id))
+        values = widgets_config.get(section, {})
         if isinstance(values, Mapping):
             own = normalize_surface_material(values.get("surface_material"), allow_inherit=True)
             if own is not None and own != INHERIT:

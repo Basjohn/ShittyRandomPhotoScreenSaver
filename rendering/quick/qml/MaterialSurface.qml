@@ -13,6 +13,7 @@ ShaderEffect {
     property string material: "acrylic"
     property real cornerRadius: 8.0
     property real contentInset: 8.0
+    property real borderWidth: 0.0
     property color normalColor: "#b3101010"
     property color tintColor: "#b3101010"
     property color textColor: "#ffffffff"
