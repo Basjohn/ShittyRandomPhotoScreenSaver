@@ -100,7 +100,13 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
     rest of the simulation 0.62, capture 0.45. A NumPy contact sweep measured slower in situ and was dropped. Open:
     the paired `--load game60` live checks (P1 and P5, main and branch alternately, 2 rounds each, 60 s) are owed by
     the lead on a free machine. The 6 Nov rounds overlapped the operator's own session (system CPU 97-100%) and
-    are void. Evidence `.artifacts/evidence/eb_logical_tick/` (branch worktree).
+    are void. Evidence `.artifacts/evidence/eb_logical_tick/` (summaries and scripts; the void live-run logs were
+    deleted on the operator's word).
+- [ ] **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent):** the mock is
+  `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`: near-black teal water, fiery orange-red ember
+  streaks and dust along diagonal streams, clear copper-lit shells, warm shafts from the upper right, bokeh foreground.
+  The current Preset 7 stays as it is ("good as it is but it is its own thing"); make a new preset that matches the
+  mock, plus whatever shared 3D work it needs (method in §7.0: mock | ours sheets per pass, Range audit, cost).
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
