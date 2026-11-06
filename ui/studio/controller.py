@@ -1654,8 +1654,7 @@ class StudioController(QObject):
     def evaluation_time(self) -> float:
         """The time the evaluator is asked for: the transport's time into the clip, or, for a seamless loop, its
         unrolled time (passes played plus the time into this one), so the evaluator plays on through the wrap."""
-        fixture = self.evaluator.fixture
-        return self.transport.unrolled if getattr(fixture, "loop", False) else self.transport.time
+        return self.transport.evaluation_time(bool(getattr(self.evaluator.fixture, "loop", False)))
 
     def on_frame(self) -> None:
         """Quick frame start (GUI thread): advance playback, evaluate at most once."""

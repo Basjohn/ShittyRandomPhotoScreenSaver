@@ -34,6 +34,11 @@ class StudioTransport:
         restarting at zero (``ui/studio/clip_loop.py``)."""
         return self.cycles * self.duration + self.time
 
+    def evaluation_time(self, loop: bool) -> float:
+        """The time an evaluator is asked for: the time into the clip, or, for a seamless loop (``loop``), the unrolled
+        time so the evaluator plays on through the wrap (``ui/studio/clip_loop.py``)."""
+        return self.unrolled if loop else self.time
+
     def play(self) -> None:
         if self.stopped:
             return

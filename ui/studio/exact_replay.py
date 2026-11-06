@@ -92,6 +92,8 @@ class ExactReplay:
         if anchor.looped:
             if anchor.virtual(float(time)) < 0.0:      # the transport went back past the anchor (a seek)
                 anchor.reset()
+            if self._index == 0 and self._last is None:    # a history not yet started begins at this pass
+                anchor.rebase(float(time))
             return max(0.0, anchor.virtual(float(time)))
         return max(0.0, min(float(time), self.fixture.duration))
 

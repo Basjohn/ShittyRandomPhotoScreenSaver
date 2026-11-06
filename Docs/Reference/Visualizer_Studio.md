@@ -35,6 +35,7 @@ and must not be copied per mode.
 | `ui/studio/presence.py` | `WindowPresence`: conceal/reveal the *same* Settings dialog without ending its `QDialog.exec()` loop (native `SW_HIDE` on Windows; zero opacity plus off-screen move elsewhere). |
 | `ui/studio/framed.py` | Shared pieces for 3D (and card-presented) adapters: production presentation resolver and uniform aperture scale, `card_framings` / `live_card_framings`, `camera_navigation` over the shared framed camera, `orbit_navigation` for a free-orbit mode (the descriptor's `view_orbit_settings` only), `QuickModeRenderer` wrapping a production Quick renderer and `ContractModeRenderer` handing it the production render-frame contract (pixel ratio from the item mapping, so a letterboxed live card presents at the true DPR). |
 | `ui/studio/engine_answers.py` | The Spectrum family's recorded engine answers (Spectrum, Extruded Spectrum, Neon Lake, DevCurve, Oscilloscope), mode-neutral (`EngineAnswerMode(mode_id, conditional_reads)`): synthetic audio (with the analysis spectrum and onsets a recording carries), the out-of-process `extract`, recorded inputs, the per-mode answer cache, `start_clip_load` and `EngineAnswerEvaluator` (the production step in process on `ExactReplay`). |
+| `ui/studio/clip_loop.py` | Seamless Studio clips: the loop period a compact clip names, `Anchor` (the transport's unrolled time -> the history an evaluator replays; a rewind re-anchors to the pass the instant is in), `Cycles` (the endless tick sequence of a looped input: later passes shifted whole periods, onset serials kept increasing), the per-family tick shifts and `primed` (an analysis worker replays the loop's last 2 s before the clip). See §3 "Studio clips". |
 | `ui/studio/exact_replay.py` | `ExactReplay`, the shared exact-history mechanism of the replaying evaluators (the engine-answer modes and Waveform): checkpoints per values signature, rewinds, the frame budget (`converging`) and the live-gesture path. An evaluator supplies only its step, its state capture and its restyle. The engine-owned / mode-owned split follows from the production source projection (`source_config_applier`). |
 | `ui/studio/brush.py` | The shared heightfield brush instrument: `BrushTarget` (the record's key, `pick` and `footprint` through the mode's production camera, from `adapter.brush_target()` when `capabilities().brush`) and `StudioBrush` (tool settings, held pointer points, the stroke; flushed at frame start). Strokes are painted by `rendering/gl_programs/heightfield_brush.py`. |
 | `ui/studio/spectrum_shape.py` | The Spectrum family's shape editor as Studio rows, admission and structural edits (add / remove node, lane swap), by key prefix (`ShapeKeys`). |
@@ -104,6 +105,49 @@ is optional and defaults to "not offered":
   elsewhere a cancel still ends it but a parent crash does not. Every worker exits non-zero at once on a missing or
   unreadable clip. The worker's temporary folder (`worker_tag`) names the starting process, so a leak is traceable. Every
   Studio lists the shipped clips (`assets/production/studio_clips`) first, then a checkout's own recordings.
+- **Studio clips are seamless loops (6 Nov).** The three shipped clips are not 12 s windows that restart: each is a
+  loop (12.6-13.2 s, 0.86-1.01 MB, 2.74 MB in all) whose first frame follows its last as the recording's own next
+  moment, and the Studio plays on through the wrap instead of restarting. There is no audio playback in the Studio: a
+  clip is the capture stream and lanes the analysis and every mode's logic are fed, so "the sound jumps" was the
+  analysis input and the preview's simulation state jumping at `t = 0`. Three parts, each owned once.
+  *Loop points* (`tools/studio_clip_loop.py`, run by `tools/build_studio_clips.py`): the start and the period are
+  searched inside a span the clip is for (period 12-16 s) for the pair whose lead-ins match best (onset-envelope
+  correlation, level, log-spectrum, and, where the recording has a reliable groove, the beat grid's phase, 15 ms at most); a
+  steady groove gives a whole number of beats (Human 12.80 s = 32 beats of 0.400 s, Growing Pains 12.63 s = 20 of
+  0.631 s). *Baked seam*: the last second is an equal-power crossfade (`cos`/`sin`, level-matched to the equal-power
+  target so alike sources do not bump 3 dB) of the source just before the end into the source just before the start,
+  so the loop's next sample is the source's own next sample; the capture stream is periodic and every frame's history
+  (the first frames' too) is read from it; the lanes are mixed with the same weights and the discrete onsets follow the
+  louder source. The loop (frames, period, crossfade, source times, what the bake measured) is in the clip's header
+  and `clips.json` (`loop`). *Played on through the wrap* (`ui/studio/clip_loop.py`): the transport counts passes
+  (`cycles`, `unrolled`); the controller hands a loop fixture (`StudioFixture.loop`) the unrolled time
+  (`StudioTransport.evaluation_time`); every evaluator (Bubble, Sphere, Extruded Bubble, Waveform, the engine-answer
+  modes) steps its production logic on over the clip's ticks again, shifted whole periods (`shifted` on each
+  `RecordedInputs`: times, onset serials and, for recorded engine answers, the onset query's `after_serial`
+  argument), so no state resets. A rewind to the start (an edit, a seek, new answers) re-anchors to the start of
+  the pass the instant is in, so it replays what it always replayed, never every pass played; `ExactReplay` drops
+  checkpoints older than two passes and returns the re-anchored time, so a budgeted replay converges across a wrap
+  exactly as before. *Primed workers*: a worker replays the loop's last 2 s (`PREROLL_S`) before the clip, so the
+  engine's lanes at the start are those of a running loop, not a cold start (measured: without it the first second
+  of Bubble's overall lane sat at 0.008-0.014 against 0.33-0.45 steady; with 1 s of lead-in the lanes equal the
+  converged third pass of an unbroken run, 2 s is the margin, +0.4 s of worker time on ~3.3 s, about +12%). A native
+  recording, or a clip cut short by `seconds`, is not a loop and behaves as before. Why not 30 s clips: the best
+  seam a 22-30 s loop offers gains at most 0.05 of onset correlation over a 12-16 s one on the same recordings (Human
+  .87 -> .92, Growing Pains .66 -> .68; Rag Doll gets worse, .47 -> .34), while size and a re-analysis grow with the
+  length. Measured (`tools/studio_clip_length_cost.py`, 6 Nov, other agents' load on the machine, one run each): a 30 s
+  window is 1.99-2.42 MB against the loops' 0.86-1.01 MB, and a worker takes 1.9-2.2x as long (the loops' time includes
+  the 2 s lead-in): Bubble 6.5-9.1 s -> 12.9-13.8 s, Extruded Bubble 3.7-4.2 -> 8.0-8.8 s, Waveform 6.0-6.4 -> 11.8-12.7 s,
+  Sphere 2.6-2.8 -> 5.3-5.7 s, Spectrum 2.9-3.1 -> 5.9-6.1 s.
+  Seam, measured (`.artifacts/evidence/studio_clip_loop_20261106/`): the loop's last 5 ms are the source's own to -37 / -46 /
+  -57 dB (Human / Growing Pains / Rag Doll), the sample step across the join equals the source's own step, the crossfade
+  holds the equal-power level within 0.23 dB, the 20 ms RMS changes 0.1-0.23 dB across the seam (the music's own 95th
+  percentile is 4-8 dB), no spectral-flux burst follows it, and the beat grid steps -25 / -47 / -85 ms against the
+  loops' own 95th percentile of 65 / 302 / 94 ms (Rag Doll has no steady beat; Growing Pains' triple hit wanders). The
+  two sources the crossfade blends sit 0.6 ms (Growing Pains), 12 ms (Rag Doll) and 33 ms (Human, a weak groove) apart on
+  the beat grid. The picture: at the wrap the frame-to-frame step of each mode's state is 0.04-3.6 against ordinary
+  p95 of 0.08-71 and the old restart at zero is 9-299 times larger, for all nine recorded-input modes.
+  Evidence: `tools/studio_clip_loop_report.py` (audio seam), `tools/studio_clip_loop_wrap.py` (the picture at the
+  wrap for all nine Studios with recorded inputs), `tests/test_studio_clip_loop.py`.
 - **Recorded engine answers (engine-processed modes).** A mode whose step consumes the engine's *own processing*
   (the Spectrum family, Spectrum, Extruded Spectrum and Neon Lake: `consume_engine_bars` ticks the engine and reads its
   smoothed, shape-processed bars, all on the process clock; Neon Lake's capture also reads the transient bus's onsets,
@@ -360,6 +404,13 @@ release replay spreads over frames within the budget (one 222 ms evaluation -> a
 `tools/spectrum_studio_replay_budget.py` measures the Spectrum Studio's GUI-thread evaluation cost frame by frame
 after mode-owned commits, undo, seeks and an engine-owned landing at the end of the longest shipped clip, checking
 every landed frame against the production replay (`--budget 0` measures the former one-evaluation replay).
+`tools/studio_clip_loop.py` searches, bakes and measures a clip's loop (`tools/build_studio_clips.py` builds the shipped
+clips with it; `--check` verifies them); `tools/studio_clip_loop_report.py` measures the seam of the shipped clips (sample
+step, RMS, spectral flux, beat grid, against a hard cut of the same loop and the former clips);
+`tools/studio_clip_loop_wrap.py` drives every Studio's evaluator through a clip's wrap on a fake transport clock and
+measures the frame-to-frame step of the mode's state across it against the steps around it and against the former
+restart at zero (no window, no renderer); `tools/studio_clip_length_cost.py` measures what a longer clip costs (size and
+each worker's time).
 `tools/waveform_studio_capture.py` renders any registered Studio (`--mode`, Waveform by default) through the hidden
 `OffscreenStudioSurface` against an in-memory store (nothing is saved), writing one PNG per workspace plus frame and
 evaluation timings. It never shows a window. Command examples live in `Docs/Reference/Harness_Index.md`.
