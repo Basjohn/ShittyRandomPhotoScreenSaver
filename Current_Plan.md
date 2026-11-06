@@ -719,6 +719,11 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
     black scene (std 0). The fix did not cause it: the same failure appears with and without it. Every file passes
     isolated (`run_chunked.py --isolated`, 32/32). Find the state an earlier file leaks into Spectrum's offscreen
     render.
+- [ ] **Slider drags no longer let go mid-motion (operator 6 Nov), awaiting the operator's feel check.** The cause
+  was the inspector's ScrollView: a vertical wobble past the drag threshold stole the press, on every mode at the
+  first wobble. Every drag instrument in a scrolling panel now sets `preventStealing: true`
+  (`Docs/Reference/Visualizer_Studio.md` "Drags are batched"). `tests/test_studio_drag_coalescing.py` covers it,
+  with a negative control.
 - [ ] **Neon Lake: drag the Sun/Moon in the Studio preview.** Retiring the Settings terrain section (6 Nov, Studio brush)
   removed its 3/4 view, where the Sun/Moon could be dragged; it is now placed with Position X/Y/Z only. Give the Studio
   preview a direct drag for it: the same pick through the production camera as the terrain brush, one undoable commit
