@@ -889,6 +889,11 @@ def capture_visualizer_logical_frame(
     captured = capture(widget, engine, context)
     if captured is None:
         return None
+    # The first-frame edge ends with the first captured frame. Spectrum-family
+    # visual smoothing snaps to source while ``first_frame`` holds, so a flag
+    # nothing clears (the retired GL overlay push was its only writer) turned
+    # the one-pole into a pass-through on every tick.
+    widget._has_pushed_first_frame = True
     mode_state, extra = captured
     # Keep the complete frame identity on the same atomic capture snapshot.
     # Re-reading the live playback flag here allowed a pause/play edge to land
