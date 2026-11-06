@@ -413,6 +413,10 @@ def _clone(value: Any, memo: dict, shared: tuple) -> Any:
     if isinstance(value, (set, frozenset)):
         out = memo[key] = type(value)(_clone(item, memo, shared) for item in value)
         return out
+    import types
+    if isinstance(value, types.MappingProxyType):        # a read-only view (published drives): view a copy
+        out = memo[key] = types.MappingProxyType(_clone(dict(value), memo, shared))
+        return out
     from collections import deque
     if isinstance(value, deque):
         out = memo[key] = deque((_clone(item, memo, shared) for item in value), maxlen=value.maxlen)
@@ -446,8 +450,11 @@ class StepState:
     right after configuration (``pristine``) and periodic checkpoints. ``keep`` lists objects that are shared, not
     copied (the engine and the engine-answer view the step reads through)."""
 
-    def __init__(self, controller, keep: tuple = ()) -> None:
-        self._owners = (controller, controller.logical_tick_state, controller.presentation_state)
+    def __init__(self, controller, keep: tuple = (), *, owners: tuple | None = None) -> None:
+        # ``owners``: capture these objects instead of a controller's three (a mode that steps its frame runtime
+        # directly, such as Waveform, captures that runtime).
+        self._owners = tuple(owners) if owners is not None else (
+            controller, controller.logical_tick_state, controller.presentation_state)
         self._keep = tuple(keep)
         self._shared = _shared_types()
         self._state = self._copy({owner: dict(vars(owner)) for owner in self._owners})

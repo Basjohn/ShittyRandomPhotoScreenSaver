@@ -38,7 +38,8 @@ BORDER_WIDTH = 2.0  # the compact role's stroke
 class OutlinedButton(QPushButton):
     """A shared-style Settings button with a seam-free painted border."""
 
-    def __init__(self, text: str = "", parent=None, *, role: str = "secondary") -> None:
+    def __init__(self, text: str = "", parent=None, *, role: str = "secondary",
+                 font_px: int | None = None) -> None:
         super().__init__(text, parent)
         if role not in _ROLES:
             raise ValueError(f"unknown OutlinedButton role: {role!r}")
@@ -47,9 +48,12 @@ class OutlinedButton(QPushButton):
         # The stylesheet keeps an equally wide *transparent* border in every state
         # so padding, size hints and the surface fill are unchanged; paintEvent
         # strokes it. A widget's own sheet outranks the root sheet's hover border.
+        # ``font_px`` enlarges one button's text over its role's (a launcher meant to
+        # stand out in its row); the role's family, weight and colours stay.
         transparent = f"border: {width}px solid transparent;"
+        size = "" if font_px is None else f" font-size: {int(font_px)}px;"
         trailing = (
-            f"QPushButton {{ {transparent} border-radius: {radius}px; }}"
+            f"QPushButton {{ {transparent} border-radius: {radius}px;{size} }}"
             f" QPushButton:hover {{ {transparent} }}"
             f" QPushButton:pressed {{ {transparent} }}"
             f" QPushButton:disabled {{ {transparent} }}"

@@ -7,7 +7,6 @@ QQuickItem, paint callback, render cadence, or compatibility presenter.
 
 from __future__ import annotations
 
-from array import array
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
@@ -249,11 +248,13 @@ def _render_parameters(
     extra: Mapping[str, object],
     *,
     omit: set[str] | frozenset[str] = frozenset(),
+    memo=None,
 ):
+    """The renderer parameters of a capture's ``extra``, frozen (through the owner's ``FrozenFieldsMemo`` when it
+    keeps one: the same result, without refreezing the fields that did not change)."""
     excluded = _SIGNAL_FIELDS | set(omit)
-    return freeze_render_fields(
-        {name: value for name, value in extra.items() if name not in excluded}
-    )
+    values = {name: value for name, value in extra.items() if name not in excluded}
+    return freeze_render_fields(values) if memo is None else memo.freeze(values)
 
 
 @dataclass(frozen=True, slots=True)
@@ -403,8 +404,7 @@ def _capture_extruded_bubble(
 ) -> tuple[ModeFrame, dict[str, Any]] | None:
     """Advance Extruded Bubble's own simulation on this capture's logical time with the onsets published since
     its last serial and the passage intensity, and freeze its snapshot with the renderer parameters."""
-    from widgets.spotify_visualizer.extruded_bubble_frame_runtime import controls_from_parameters
-    from widgets.spotify_visualizer.render_state import ExtrudedBubbleFrame
+    from widgets.spotify_visualizer.render_state import ExtrudedBubbleFrame, wake_record_bytes
 
     controller = getattr(widget, "runtime_controller", None)
     if controller is None:
@@ -430,7 +430,7 @@ def _capture_extruded_bubble(
         play_ramping=bool(ramp_getter()) if context.playing and callable(ramp_getter) else False,
         identity=(context.runtime_generation, context.engine_generation, context.activation_id),
         source_identity=(context.source_generation, context.source_activation_id),
-        controls=controls_from_parameters(parameters),
+        controls=runtime.controls_for(parameters),
     )
     if snapshot is None or controller.peek_logical_mode_state("extruded_bubble") is not runtime:
         return None
@@ -443,11 +443,12 @@ def _capture_extruded_bubble(
         travel=snapshot.travel, rays=snapshot.rays, shimmer=snapshot.shimmer,
         # The float32 records the renderer uploads, cast once here (as it cast them itself) rather than as a
         # thousands-long float tuple converted and checked at every boundary.
-        motion_phase=snapshot.motion_phase, wakes=array("f", snapshot.wakes).tobytes(), passage=snapshot.passage,
+        motion_phase=snapshot.motion_phase, wakes=wake_record_bytes(snapshot.wakes), passage=snapshot.passage,
         chain_activity=snapshot.chain_activity, chain_drive=snapshot.chain_drive,
         drift_families=snapshot.drift_families,
         drift_steps=snapshot.drift_steps,
-        parameters=_render_parameters({name: value for name, value in extra.items() if not name.startswith("_quick_")}),
+        parameters=_render_parameters({name: value for name, value in extra.items() if not name.startswith("_quick_")},
+                                      memo=runtime.parameter_fields),
     )
     return frame, extra
 

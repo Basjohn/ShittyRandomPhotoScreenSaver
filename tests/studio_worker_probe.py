@@ -6,6 +6,11 @@
 * ``python -m tests.studio_worker_probe parent <ready-file> [unbound]``: a parent process that starts one such worker
   through ``ClipLoadJob``, waits until it runs, prints its tag and then dies abruptly (``os._exit``, as on a crash: no
   cancel, no cleanup). ``unbound`` disables the job tree (the negative control).
+* ``python -m tests.studio_worker_probe suspended <ready-file> [unbound]``: a parent that starts one child
+  ``CREATE_SUSPENDED`` (the venv launcher's window: a process that exists but never ran), hands it to the
+  production ``WorkerTree.adopt`` and dies abruptly. Deterministic: the child is suspended by construction, not
+  by a race. ``unbound`` skips the adoption (the negative control).
+* ``start_suspended(tag)``: that child (Windows only).
 * ``surviving_workers(tag)``: live processes whose command line carries a worker tag (``worker_tag``).
 """
 from __future__ import annotations
@@ -55,6 +60,18 @@ def kill_all(processes) -> None:
             pass
 
 
+CREATE_SUSPENDED = 0x00000004
+
+
+def start_suspended(tag: str):
+    """Start a child that exists but has never run (``CREATE_SUSPENDED``), its command line carrying ``tag``.
+    If it were ever resumed it would sleep far longer than any test. Windows only."""
+    import subprocess
+    return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)", tag],
+                            creationflags=CREATE_SUSPENDED, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL, close_fds=True)
+
+
 def _worker(argv: list[str]) -> int:
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
@@ -88,6 +105,26 @@ def _parent(argv: list[str]) -> int:
     os._exit(0)                                       # an abrupt death: no cancel, no handle cleanup by Python
 
 
+def _suspended_parent(argv: list[str]) -> int:
+    ready, *flags = argv
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    import psutil
+    from ui.studio.waveform_recorded_inputs import worker_tag
+    from ui.studio.worker_lifetime import WorkerTree
+    tag = worker_tag() + "suspended"
+    child = start_suspended(tag)
+    tree = WorkerTree()                                # the production adoption, as ClipLoadJob calls it
+    bound = False if "unbound" in flags else tree.adopt(child.pid)
+    process = psutil.Process(child.pid)
+    state = "suspended" if process.status() == psutil.STATUS_STOPPED else "running"
+    fields = (tag, str(child.pid), repr(process.create_time()), state, "bound" if bound and tree.active else "unbound")
+    Path(ready).write_text("\n".join(fields), encoding="utf-8")
+    os._exit(0)                                       # an abrupt death: no cancel, no handle cleanup by Python
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
+    if args and args[0] == "suspended":
+        raise SystemExit(_suspended_parent(args[1:]))
     raise SystemExit(_parent(args[1:]) if args and args[0] == "parent" else _worker(args))

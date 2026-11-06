@@ -40,6 +40,14 @@ Rectangle {
     readonly property color cTrace1: tc("trace1", "#9a7cff")
     readonly property color cTrace2: tc("trace2", "#b8b8c0")
     readonly property color cTrace3: tc("trace3", "#6aa9d9")
+    // Instrument wells (trace cards, the response curve, the transport bar) and the inks checked on them
+    // (ui/studio/theme.py): the viewport tone on a dark theme, the theme's input surface on a light one.
+    readonly property color cWell: tc("well", cViewport)
+    readonly property color cWellText: tc("wellText", cText)
+    readonly property color cWellDim: tc("wellDim", cDim)
+    readonly property color cWellTrace1: tc("wellTrace1", cTrace1)
+    readonly property color cWellTrace2: tc("wellTrace2", cTrace2)
+    readonly property color cWellTrace3: tc("wellTrace3", cTrace3)
     readonly property int unit: 8
     // Viewport toolbar state (preview only, never saved): overlays hidden; viewport expanded over the panels.
     property bool overlaysHidden: false
@@ -415,11 +423,12 @@ Rectangle {
     component SignalTrace: Rectangle {
         id: trace
         property var channels: []
+        objectName: "signalTrace"
         implicitHeight: 56
         radius: 4
-        color: shell.cViewport
+        color: shell.cWell
         border.width: shell.cardBorder; border.color: shell.cOutlineSoft
-        readonly property var colours: [shell.cTrace1, shell.cTrace2, shell.cTrace3]
+        readonly property var colours: [shell.cWellTrace1, shell.cWellTrace2, shell.cWellTrace3]
         Canvas {
             id: canvas
             anchors.fill: parent; anchors.margins: 4
@@ -1311,12 +1320,14 @@ Rectangle {
         }
     }
 
-    component SwitchRow: Row {
+    // An Item, not a Row: a Row positions every visible child in sequence and ignores their x, which pushed the click
+    // area past the end of the text (the 6 Nov "Tilt Shift is unclickable": no switch row could be clicked).
+    component SwitchRow: Item {
         id: switchRow
         property var row
         readonly property bool on: studio.values[row.id] === true
-        spacing: 10
-        height: 28
+        implicitHeight: 20
+        height: 20
         Rectangle {
             id: track
             objectName: "checkBox"
@@ -1333,9 +1344,9 @@ Rectangle {
             Keys.onSpacePressed: studio.commitValue(row.id, 0, !on)
             FocusRing { visible: track.activeFocus; radius: 7 }
         }
-        Text { anchors.verticalCenter: parent.verticalCenter; text: row.label; color: shell.cText
+        Text { x: 30; anchors.verticalCenter: parent.verticalCenter; text: row.label; color: shell.cText
                font.pixelSize: shell.fontBase - 1; width: switchRow.width - 30; elide: Text.ElideRight }
-        MouseArea { x: 0; width: switchRow.width; height: switchRow.height; cursorShape: Qt.PointingHandCursor
+        MouseArea { objectName: "switchHit"; anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                     hoverEnabled: true
                     onClicked: studio.commitValue(row.id, 0, !switchRow.on)
                     C.ToolTip.visible: containsMouse && row.tooltip !== ""
@@ -2294,7 +2305,7 @@ Rectangle {
                         anchors.bottomMargin: viewportFrame.inset; x: viewportFrame.inset
                         width: parent.width - 2 * viewportFrame.inset; height: 48
                         radius: viewportFrame.radius - viewportFrame.inset      // concentric with the frame
-                        color: shell.opaque(shell.cViewport)
+                        color: shell.opaque(shell.cWell)
                         Rectangle { width: parent.width; height: 1; color: shell.cOutlineSoft }
                         Row {
                             anchors.fill: parent; anchors.margins: 10
@@ -2333,7 +2344,7 @@ Rectangle {
                                     Component.onCompleted: requestPaint()
                                 }
                                 Rectangle { x: parent.width * scrub.frac - 1; anchors.verticalCenter: parent.verticalCenter
-                                            width: 3; height: 18; color: scrub.activeFocus ? shell.cFocus : shell.cText }
+                                            width: 3; height: 18; color: scrub.activeFocus ? shell.cFocus : shell.cWellText }
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
@@ -2344,9 +2355,10 @@ Rectangle {
                                 Keys.onLeftPressed: studio.seek(studio.time - 0.5)
                                 Keys.onRightPressed: studio.seek(studio.time + 0.5)
                             }
-                            Text { id: timeText; anchors.verticalCenter: parent.verticalCenter; width: 92
+                            Text { id: timeText; objectName: "transportTime"
+                                   anchors.verticalCenter: parent.verticalCenter; width: 92
                                    text: studio.time.toFixed(2) + " / " + studio.duration.toFixed(1) + " s"
-                                   color: shell.cDim; font.pixelSize: shell.fontBase - 1 }
+                                   color: shell.cWellDim; font.pixelSize: shell.fontBase - 1 }
                             StudioButton { id: loopBtn; icon: "loop"; iconSize: 18; width: 38; checked: studio.loop
                                            anchors.verticalCenter: parent.verticalCenter
                                            tip: "Repeat the preview input"; onClicked: studio.setLoop(!studio.loop) }
@@ -2555,7 +2567,7 @@ Rectangle {
                         Rectangle {
                             id: curveBox
                             width: parent.width; height: 92; radius: 4
-                            color: shell.cViewport; border.width: shell.cardBorder; border.color: shell.cOutlineSoft
+                            color: shell.cWell; border.width: shell.cardBorder; border.color: shell.cOutlineSoft
                             readonly property var cell: responseDock.cellFor(studio.selectedSource)
                             readonly property real gain: cell && studio.values[cell.gain] !== undefined ? studio.values[cell.gain] : 0
                             readonly property real power: cell && studio.values[cell.power] !== undefined ? studio.values[cell.power] : 1
@@ -2578,7 +2590,7 @@ Rectangle {
                                     }
                                     ctx.stroke()
                                     var lx = curveBox.live, ly = Math.min(1, curveBox.gain * Math.pow(lx, curveBox.shownPower))
-                                    ctx.fillStyle = shell.cTrace3
+                                    ctx.fillStyle = shell.cWellTrace3
                                     ctx.beginPath(); ctx.arc(lx * width, height - ly * height, 4, 0, 2 * Math.PI); ctx.fill()
                                 }
                                 Connections { target: studio
@@ -2612,7 +2624,7 @@ Rectangle {
                             }
                             Text { anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 6
                                    text: "gain " + curveBox.gain.toFixed(2) + " · curve " + curveBox.shownPower.toFixed(2)
-                                   color: shell.cDim; font.pixelSize: shell.fontBase - 3 }
+                                   color: shell.cWellDim; font.pixelSize: shell.fontBase - 3 }
                             C.ToolTip.visible: curveDrag.containsMouse
                             C.ToolTip.text: "Drag up/down to bend the curve (exact power below). Dot: live input → output."
                         }
