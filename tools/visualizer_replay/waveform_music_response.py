@@ -209,7 +209,8 @@ def report(music_path: Path, responses: dict[str, Path], out: Path) -> None:
                     gaps.append(abs(float(late.mean() - early.mean())) / view_range)
             rescale = max(gaps) if gaps else float("nan")
             lines.append(f"song {song} {name:10s} corr(view; loudness {corr:+.2f} rms {corr_rms:+.2f} bass {corr_bass:+.2f})"
-                         f" [music 1 s range: rms {np.ptp(rms_1s):.1f} dB, bass {np.ptp(bass_1s):.1f} dB; a flat song"
+                         f" [music 1 s p5-p95: rms {np.subtract(*np.percentile(rms_1s, [95, 5])):.1f} dB,"
+                         f" bass {np.subtract(*np.percentile(bass_1s, [95, 5])):.1f} dB; a flat song"
                          f" makes the correlations noise: judge its beats in the trace]"
                          f"  saturated {saturated:5.1%}"
                          f"  dead {dead:5.1%}  spurious {spurious:5.1%}  re-scale gap {rescale:.2f}"
