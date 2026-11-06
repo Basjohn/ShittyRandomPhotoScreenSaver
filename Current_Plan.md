@@ -59,10 +59,6 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
   measured. First prove which owns the 7 s (sampler topology snapshot vs feeds publish), then fix both: the sampler's
   startup topology refresh must not hold the GIL for seconds (chunk it, or take the snapshot without the GIL), and
   the per-source 166-240 ms feeds deliveries still need trimming.
-- [ ] **Spectrum visual-only smoothing still broken (operator, 6 Nov):** wired (Settings -> `_spectrum_visual_smoothing
-  (_enabled)` -> `SpectrumFrameRuntime.resolve(smoothing_enabled, smoothing_strength)`), so the defect is in what it
-  does. Measure bar motion on recorded music with smoothing off / on / at 0.3 / 0.7 / 1.0 (frame-to-frame jerk, lag,
-  peak preservation), find the owner, fix, and show it in the Spectrum Studio.
 - [ ] **Bubble / Extruded Bubble "terrible performance" (operator log 10:32-10:35):** confounded: the machine was at
   97-100% system CPU from the agents' game60 live checks and parallel work during that session (quiet-machine game60
   this morning: Bubble P1 62.7 fps, EB 54.6 fps). Re-check in a quiet operator session before acting; heavy
