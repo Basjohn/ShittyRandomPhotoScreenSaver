@@ -700,23 +700,11 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
     the modal Studio is still shown.
   - Next field run: the `[STUDIO] after reveal` lines (`presence.RevealWatch`, one-shot, removed at the first input
     to Settings) name which window Windows sent the clicks to, and the state at each step. Fix the owner from them.
-- [ ] **Studio exit-time access violation fixed (6 Nov, R-172); two side defects left open.** The exit AV after
-  `tests/test_studio_exit_every_mode.py` (about 1 run in 4) is fixed. `OffscreenStudioSurface`'s imported GL context
-  is now a Qt child of its render control, so it can never be freed first, and production was not exposed. Still
-  open:
-  - Fixed 6 Nov: closed `StudioController`s no longer stay alive for the process. `open_mode_studio`'s `finished`
-    closure and theme listener now hold the controller weakly. `test_closed_studio_sessions_are_released_and_live_counts_stay_flat`
-    runs three sessions of every mode and checks that the controller, bridge, session, surface and shell are all
-    collected and that live Studio object counts are flat. It fails on the old code; a negative control covers it.
-    It was not the post-close freeze: the leaked controller held no event filter, grab or window.
-    Still open: process memory grows about 2-3 MB per offscreen Extruded Bubble session (private bytes and USS, 16
-    sessions) with and without the fix, so something other than the controller grows. Find it with tracemalloc
-    plus a native heap comparison.
-  - The Studio files fail when run in one pytest process. After the first 17 Studio files (Bubble through
-    `test_studio_preset_row_and_save_to_preset.py`), `test_studio_scene_theme_independence.py[spectrum]` renders a
-    black scene (std 0). The fix did not cause it: the same failure appears with and without it. Every file passes
-    isolated (`run_chunked.py --isolated`, 32/32). Find the state an earlier file leaks into Spectrum's offscreen
-    render.
+- [ ] **Per-session memory growth in the Studio (side defect, 6 Nov).** Process memory grows about 2-3 MB per
+  offscreen Extruded Bubble session (private bytes and USS, 16 sessions). The growth is the same with and without the
+  controller-leak fix, which `test_closed_studio_sessions_are_released_and_live_counts_stay_flat` guards: closed
+  sessions are now collected and live Studio object counts stay flat. So something other than the controller grows.
+  Find it with tracemalloc plus a native heap comparison.
 - [ ] **Slider drags no longer let go mid-motion (operator 6 Nov), awaiting the operator's feel check.** The cause
   was the inspector's ScrollView: a vertical wobble past the drag threshold stole the press, on every mode at the
   first wobble. Every drag instrument in a scrolling panel now sets `preventStealing: true`
