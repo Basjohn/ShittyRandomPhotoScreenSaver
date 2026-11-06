@@ -73,13 +73,15 @@ def test_bass_kicks_show_in_a_sustained_loud_passage_at_the_authored_cap():
 
 def test_negative_control_pre_headroom_mapping_rides_the_limiter(monkeypatch):
     monkeypatch.setattr(devcurve, "reaction_amplitudes",
-                        lambda unit, body, accent, gain, ceiling, key: unit * ((body + accent) * gain))
+                        lambda unit, body, accent, bed, ceiling, key, fresh=0.0:
+                        unit * ((body + accent) * (1.0 + bed + fresh)))
     rise, limited = _kick_rise()
     assert not _visible_without_the_limiter(rise, limited), (rise, limited)
 
 
 def test_negative_control_capping_the_total_squashes_the_kick(monkeypatch):
-    def capped_total(unit, body, accent, gain, ceiling, key):
+    def capped_total(unit, body, accent, bed, ceiling, key, fresh=0.0):
+        gain = 1.0 + bed + fresh
         body_amp = devcurve._soft_ceiling(unit * (body * gain), 0.65 * ceiling, 0.6)
         return devcurve._soft_ceiling(body_amp + unit * (accent * gain), 1.15 * ceiling, 0.9 / 1.15)
 

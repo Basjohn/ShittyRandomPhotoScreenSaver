@@ -48,7 +48,7 @@ def _recorded_drives(name: str):
             musical_level=tuple(frame.real.musical_level), musical_intensity=intensity.value,
             layer_shape_nodes=_nodes(), parameters=parameters,
         )
-        if t < 2.0:                     # activation ramp
+        if t < 4.0:                     # activation ramp and the response memory's first reach
             continue
         shares.append(lanes.pre_agc.bass)
         drives.append([resolved.diagnostics["drives"][f"height_{key}"] for key in _BODY])
@@ -64,8 +64,11 @@ def test_recorded_music_uses_the_height_range_without_pinning(name):
     for column in range(drives.shape[1]):
         values = drives[:, column]
         p05, p95 = np.percentile(values, [5, 95])
-        assert p95 - p05 > 0.25, (name, column, p05, p95)        # the music moves the height
-        assert (values > 0.9).mean() < 0.05, (name, column)       # and never pins it
+        # The drive's own top: the body's remembered peak (with its soft overshoot) plus the accents' room.
+        key = _BODY[column]
+        top = devcurve.DEVCURVE_BODY_TOP[key] * (1.0 + devcurve.DEVCURVE_BODY_OVER) + devcurve.DEVCURVE_ACCENT_ROOM[key]
+        assert p95 - p05 > 0.25 * devcurve.DEVCURVE_BODY_TOP[key], (name, column, p05, p95)  # the music moves the height
+        assert (values > 0.9 * top).mean() < 0.1, (name, column)   # and never pins it (kick peaks may touch the top)
 
 
 def _beats(seconds=8.0, period=0.5, dt=1 / 90):

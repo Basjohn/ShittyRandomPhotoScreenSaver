@@ -89,6 +89,8 @@ def play(clip_paths, parameters, nodes, *, warmup: float = 2.0):
                           for key in LAYERS},
                 "rms": {key: float(np.sqrt(np.mean((np.asarray(curves[key]) - np.asarray(still[key])) ** 2)))
                         for key in LAYERS},
+                # The drawn height: the curve's own peak-to-trough span.
+                "span": {key: float(np.ptp(np.asarray(curves[key]))) for key in LAYERS},
                 # At the geometric cap: a segment held by the smoothness slope limiter (straight runs at the
                 # limit survive the moving averages) or a sample in the top knee / bottom clamp.
                 "cap": {key: bool((np.abs(np.diff(np.asarray(curves[key]))) >= 0.97 * max_step).any()
@@ -224,6 +226,8 @@ def geometry(rows):
                     "drive_p05": float(np.percentile(drive, 5)), "drive_p50": float(np.percentile(drive, 50)),
                     "drive_p95": float(np.percentile(drive, 95)), "drive_above_0.9": float((drive > 0.9).mean()),
                     "rms_p50": float(np.median([row["rms"][key] for row in chosen])),
+                    "rms_mean": float(np.mean([row["rms"][key] for row in chosen])),
+                    "span_mean": float(np.mean([row["span"][key] for row in chosen])),
                     # The drawn reaction over its geometric ceiling (revisions that publish it): above 1 it
                     # sits in the mapping's own soft cap.
                     "react_above_1": float(np.mean([row["react"][key] > 1.0 for row in chosen])),
