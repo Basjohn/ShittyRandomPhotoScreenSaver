@@ -676,6 +676,21 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   Extruded Bubble's and Sphere's evaluators still replay exactly in one evaluation from the fixture start, without the
   frame budget and checkpoints Waveform and the engine-answer modes now share (`ui/studio/exact_replay.py`); measure
   with `tools/studio_drag_profile.py` and move them onto `ExactReplay` where a release stalls.
+- [ ] **Studio exit-time access violation fixed (6 Nov, R-172); two side defects left open.** The exit AV after
+  `tests/test_studio_exit_every_mode.py` (about 1 run in 4) is fixed. `OffscreenStudioSurface`'s imported GL context
+  is now a Qt child of its render control, so it can never be freed first, and production was not exposed. Still
+  open:
+  - Every closed `StudioController` stays alive for the whole process: 19 after that file, and one per Studio session
+    in production. The cycle runs through Qt connections that gc cannot see: `open_mode_studio`'s `finished` /
+    `report` closures are connected to the controller's own `closed` / `failed` and close over the controller. Break
+    it at close: disconnect them, or hold the controller weakly. Prove it with a gc-free retention test.
+  - `tools/onboarding_preview_foundry.py`'s capture has the same imported-context structure and needs the same
+    ownership.
+  - The Studio files fail when run in one pytest process. After the first 17 Studio files (Bubble through
+    `test_studio_preset_row_and_save_to_preset.py`), `test_studio_scene_theme_independence.py[spectrum]` renders a
+    black scene (std 0). The fix did not cause it: the same failure appears with and without it. Every file passes
+    isolated (`run_chunked.py --isolated`, 32/32). Find the state an earlier file leaks into Spectrum's offscreen
+    render.
 - [ ] **Neon Lake: drag the Sun/Moon in the Studio preview.** Retiring the Settings terrain section (6 Nov, Studio brush)
   removed its 3/4 view, where the Sun/Moon could be dragged; it is now placed with Position X/Y/Z only. Give the Studio
   preview a direct drag for it: the same pick through the production camera as the terrain brush, one undoable commit
