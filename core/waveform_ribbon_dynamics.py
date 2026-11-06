@@ -157,14 +157,16 @@ BREATHING_HEARD_RETURN = 1.5
 # passage at .85: with an easing toward 1 the crests of loud passages topped the card on 2-6% of frames where main did
 # on .8-2.9% (lead review captures, 640x560).
 FIXED_RESPONSE = {'height':(1.2,.75),'lift':(1.2,.82)}
-FIXED_RESPONSE_DEFAULT, RESPONSE_FIXED_KNEE, RESPONSE_FIXED_CEILING = (1.25,.86), .8, .92
+FIXED_RESPONSE_DEFAULT, RESPONSE_FIXED_KNEE, RESPONSE_FIXED_CEILING = (1.12,.86), .8, .92
 # The remembered peak's fast reach (.5 s) and slow release (30 s) also widened every phrase: a swell overshot before the
 # peak caught up and the moments after it were scaled down. A static curve fitted to its levels kept 85-91% of its 3 s
 # contrast; the fixed response widens a phrase about Breathing's 3 s mean of the drive (which learns only from heard
-# music) by PHRASE_DIP below it and PHRASE_RISE above it, eased again under RESPONSE_FIXED_CEILING (chain7: 3 s view
-# contrast 97-103% of main on Presets 1/3/4/7; Pulse Strength above .9 in loud passages 9-10% against main's 10-15%).
-PHRASE_DIP, PHRASE_RISE = 1., 1.5
-PHRASE_TARGETS = RESPONSE_TARGETS
+# music) by PHRASE_DIP below it and PHRASE_RISE above it, eased again under RESPONSE_FIXED_CEILING. With the fitted
+# gain (1.25) and a rise of 1.5 Pulse Strength sat high in the knee through sustained loud passages (its 3 s contrast
+# 92% of main's, Preset 7's view contrast 99.5%); the other drives' gain sits at 1.12 (still on the fitted curve's
+# shape) and phrases rise by 2 (chain7: 3 s view contrast 103-105% of main on Presets 1/3/4/7 at both card sizes,
+# Pulse Strength contrast 98% / 105% (Preset 4), above .9 in loud passages 8% against main's 10-15%).
+PHRASE_DIP, PHRASE_RISE = 1., 2.
 # Kick Accent (operator 6 Nov: "many sustained kicks ignored (consider maybe increasing particle count at the sustained
 # points or rotation speed? Something for a sense of them?)"). In a sustained loud passage the geometry has little
 # headroom: the bend drive (it sets Pulse Strength) sits near its top, so a kick's swell barely rises above the swells
@@ -631,7 +633,7 @@ class WaveformDynamics:
                     # A passage returning from a break is not widened while it returns (its deficit against the held
                     # mean is the silence, not a phrase): the contrast comes back with the learning rate.
                     target = unit(base+(target-base)*(1.+BREATHING_CONTRAST*softness*learn))
-                if not c.adaptive_response and key in PHRASE_TARGETS and (target<base or PHRASE_RISE):
+                if not c.adaptive_response and (target<base or PHRASE_RISE):
                     # The fixed response widens a phrase about its mean (PHRASE_DIP below it, PHRASE_RISE above it,
                     # eased again under the ceiling), as the remembered peak's fast reach and slow release did.
                     widen = PHRASE_DIP if target<base else PHRASE_RISE
