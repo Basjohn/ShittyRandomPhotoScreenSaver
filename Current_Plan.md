@@ -104,7 +104,8 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
   "no ... card-material Loader/capture path"), `Spec.md` ("rejected runtime Glass/Acrylic card experiment"),
   `Docs/Guides/Custom_Style_Implementation.md` and `Docs/Guides/10_WIDGET_GUIDELINES.md`, which already names the way
   back: "a broader independently justified renderer architecture and a fresh acceptance plan rather than reviving the
-  rejected card-only experiments". Before any code:
+  rejected card-only experiments". **Operator priorities, in order:** never risk damaging the compositor; stay as
+  performance-neutral as possible; every result proved by captures, including during transitions. Before any code:
   1. **Read the failed-method record** in those docs and the historical bugs (R-61 Settings Glass layered-HWND
      backdrop mismatch, R-63 black flash, R-95, and grep Glass/Acrylic/backdrop/material). Write down why each
      earlier mechanism failed.
