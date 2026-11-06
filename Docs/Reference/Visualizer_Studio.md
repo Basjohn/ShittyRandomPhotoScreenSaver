@@ -34,7 +34,7 @@ and must not be copied per mode.
 | `core/settings/visualizer_preset_file.py` | Shape-preserving edits of an authored preset file (section merge, in-place patching, source-like formatting, `save_changes_to_preset`), shared by the preset repair tool and the Studio's Save To <Preset>. |
 | `ui/studio/presence.py` | `WindowPresence`: conceal/reveal the *same* Settings dialog without ending its `QDialog.exec()` loop (native `SW_HIDE` on Windows; zero opacity plus off-screen move elsewhere). |
 | `ui/studio/framed.py` | Shared pieces for 3D (and card-presented) adapters: production presentation resolver and uniform aperture scale, `card_framings` / `live_card_framings`, `camera_navigation` over the shared framed camera, `orbit_navigation` for a free-orbit mode (the descriptor's `view_orbit_settings` only), `QuickModeRenderer` wrapping a production Quick renderer and `ContractModeRenderer` handing it the production render-frame contract (pixel ratio from the item mapping, so a letterboxed live card presents at the true DPR). |
-| `ui/studio/engine_answers.py` | The Spectrum family's recorded engine answers (Spectrum, Extruded Spectrum, Neon Lake), mode-neutral (`EngineAnswerMode(mode_id, conditional_reads)`): synthetic audio (with the analysis spectrum and onsets a recording carries), the out-of-process `extract`, recorded inputs, the per-mode answer cache, `start_clip_load` and `EngineAnswerEvaluator` (the production step in process, rewinds, checkpoints, frame budget). The engine-owned / mode-owned split follows from the production source projection (`source_config_applier`). |
+| `ui/studio/engine_answers.py` | The Spectrum family's recorded engine answers (Spectrum, Extruded Spectrum, Neon Lake, DevCurve), mode-neutral (`EngineAnswerMode(mode_id, conditional_reads)`): synthetic audio (with the analysis spectrum and onsets a recording carries), the out-of-process `extract`, recorded inputs, the per-mode answer cache, `start_clip_load` and `EngineAnswerEvaluator` (the production step in process, rewinds, checkpoints, frame budget). The engine-owned / mode-owned split follows from the production source projection (`source_config_applier`). |
 | `ui/studio/spectrum_shape.py` | The Spectrum family's shape editor as Studio rows, admission and structural edits (add / remove node, lane swap), by key prefix (`ShapeKeys`). |
 | `ui/studio/theme.py`, `colour.py` | Chrome tokens derived from the active Settings theme with enforced contrast; display ↔ linear colour conversion for instruments. Scene colours never pass through the theme. |
 | `ui/studio/<mode>_adapter.py`, `<mode>_recorded_inputs.py` | One adapter per registered mode plus its recorded-clip extractor. |
@@ -82,6 +82,20 @@ is optional and defaults to "not offered":
   live engine's band math), the score's hits as the transient bus's onsets, and the loudness on the real-music scale
   (`PassageIntensity`), with presence against its own 6 s running level. The store's 3D Detail tier (`scene3d_detail`) and, for a reflecting mode, the environment
   photograph reach the presentation as production hands them (both the worker's in-process replay and the Studio).
+- **A mode with its own logical step (DevCurve).** DevCurve's tick runs its descriptor hook
+  (`tick_pipeline.dispatch_devcurve_field`) on the engine's live answers (pre-AGC control lanes, transient lanes,
+  musical level and intensity, the source frame), so it uses the same recorded engine answers: the worker records
+  everything the engine answered the whole production `logical_tick`, and `EngineAnswerEvaluator._step` runs what
+  `logical_tick` runs, the mode's hook included, between `consume_engine_bars` and the capture. Engine-owned are the
+  technical (audio analysis) values; in the replay most of them leave DevCurve's lanes unchanged (the clip carries
+  the pre-AGC lanes), and the split is still proven both ways (`tests/test_devcurve_studio.py`). Its schema follows
+  DevCurve's Settings buckets: Layers (Settings' Shaper: one group per layer with its Custom-row values, the
+  shape-editor nodes, Add / Remove Node and Settings' stack re-ranking as `follow`), Motion & Swell (Core and the
+  analysis) and Foreground & Ghost (with the rainbow). Each layer group traces that layer's **Body** (over its body
+  top), **Accent** (over its reserved accent room) and **Swell**; Core traces Passage, Reaction and the strongest
+  Swell; Audio Analysis the served band shares and loudness. All are reads of the evaluator's own runtime and served
+  answers (`DevCurveStudioEvaluator.measurements`), never saver work. Instruments: no DevCurve value is a true
+  interval, so none is a Quiet/Peak A/B; the stack order is a segmented count.
 - **Exact replay without a stall.** Such an evaluator never re-configures its controller for a mode-owned edit:
   `replay_engine.StepState` captures the production step state (controller, logical tick state, presentation state
   and the mode runtimes they hold; locks, QObjects and the engine view shared) right after configuration and at
@@ -97,6 +111,7 @@ is optional and defaults to "not offered":
   `analysis_failure` (the controller shows it once as a notice with **Retry**, `retry_analysis`; the previous
   answers stay on screen); a failed clip analysis offers Retry the same way. A background clip load that lands
   selects itself only while it is still the source last asked for (the user's choice, or the default before any).
+  Its "Preview source" notice is withdrawn when the user picks another source (other notices stay).
 - **Structural edits.** A schema `StudioAction` on a row (`StudioProperty.actions`) or under a group
   (`StudioSchema.group_actions`) is answered by the adapter's `structure_edit(action_id, values)` as one undoable,
   admitted change set, or None while not admissible (the button is disabled). `StudioSchema.row_label` titles a row

@@ -1063,6 +1063,7 @@ class StudioController(QObject):
         self._preview_done: dict = {}
         self._preview_crops: dict = {}
         self._auto_clip: str | None = None
+        self._source_notice = ""            # the notice naming the automatically chosen source, while it is shown
         self._wanted_source: str | None = None
         self._failure_shown = ""
 
@@ -1554,6 +1555,11 @@ class StudioController(QObject):
     def select_fixture(self, fixture_id: str, *, user: bool = True) -> None:
         if user:
             self._auto_clip = None          # the user's choice wins over the background default
+            # The notice naming the automatic source would now name the wrong one: withdraw it (only that notice).
+            notice = self._source_notice
+            if notice and self.bridge is not None and self.bridge.message == notice:
+                self.bridge.notify("")
+            self._source_notice = ""
         # The selection the user (or, before any user choice, the default) asked for last: a background clip
         # load landing later selects itself only while it is still this one.
         self._wanted_source = fixture_id
@@ -1601,7 +1607,8 @@ class StudioController(QObject):
                     automatic = self._auto_clip == clip_id
                     self.select_fixture(clip_id, user=not automatic)
                     if automatic:
-                        self.bridge.notify(f"Preview source: {clip.label} (recorded music)")
+                        self._source_notice = f"Preview source: {clip.label} (recorded music)"
+                        self.bridge.notify(self._source_notice)
             self.bridge.transportChanged.emit()
 
         try:
