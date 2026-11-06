@@ -1126,12 +1126,19 @@ def build_image_prefetcher(engine: ScreensaverEngine, *, max_concurrent: int | N
         # never call QQuickWindow, inspect a scene node, or acquire a GUI lock.
         # A foreground batch opens _transition_work_pending *before* selection.
         manager = getattr(live_engine, "display_manager", None)
-        return bool(
+        if not (
             manager is not None
             and not getattr(live_engine, "_loading_in_progress", False)
             and not getattr(manager, "_transition_work_pending", False)
             and not getattr(manager, "_retired", False)
-        )
+        ):
+            return False
+        # The optional prefetch child starts in the background and is unavailable while it starts or restarts
+        # (ProcessSupervisor.is_running takes only the short state lock). Until it is ready the bounded pending queue
+        # keeps its requests for the next pump (a registration or the transition-complete reseed) instead of failing
+        # every batch at once and dropping the warm-up.
+        supervisor = getattr(live_engine, "_process_supervisor", None)
+        return bool(supervisor is not None and supervisor.is_running(WorkerType.IMAGE_PREFETCH))
 
     if max_concurrent is None:
         max_concurrent = max(1, min(4, int(engine.settings_manager.get("cache.max_concurrent"))))
