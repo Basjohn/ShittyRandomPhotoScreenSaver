@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
 from ui.studio.adapter import RECORDED, REFERENCE, SYNTHETIC as SYNTHETIC_KIND, StudioFixture
+from ui.studio.exact_replay import ExactReplay
 
 ROOT = Path(__file__).resolve().parents[2]
 SYNTHETIC_PREFIX = "synthetic:"
@@ -590,8 +591,9 @@ def start_clip_load(mode: EngineAnswerMode, clip: StudioFixture, values: Mapping
 
 
 # -------------------------------------------------------------------------------------- evaluator
-class EngineAnswerEvaluator:
-    """A mode's production step and capture, run in process from recorded engine answers.
+class EngineAnswerEvaluator(ExactReplay):
+    """A mode's production step and capture, run in process from recorded engine answers (the exact history,
+    its checkpoints and frame budget: ``ui.studio.exact_replay.ExactReplay``).
 
     ``loader(fixture, values, finished)`` starts one analysis (default: the out-of-process worker) and returns a
     cancellable job, or None when it already called ``finished(inputs, error)``."""
@@ -618,6 +620,9 @@ class EngineAnswerEvaluator:
         self.rewinds = 0
         self._budget: float | None = None
         self._kwargs_cache: dict = {}
+        self._built = None                 # (answers key, effective values, kwargs) of the latest full build
+        self._pass_through: set[str] = set()   # keys the production build hands through verbatim (proven here)
+        self.model_builds = 0              # full production settings-model builds (``EngineAnswerMode.mode_kwargs``)
         self._shown = None                 # the frame the last evaluation returned (shown while converging)
         self._reset_history()
 
@@ -736,29 +741,10 @@ class EngineAnswerEvaluator:
         return inputs
 
     # lifecycle --------------------------------------------------------------
-    def set_frame_budget(self, seconds: float | None) -> None:
-        """The GUI-thread time one evaluation may spend replaying (the Studio sets it; None: replay at once).
-        With a budget an exact replay that does not fit continues on the next frames (``converging``) while the
-        live-applied frame stays on screen; the replay it converges to is the same exact replay."""
-        self._budget = None if seconds is None else max(0.0, float(seconds))
-
-    @property
-    def converging(self) -> bool:
-        """An exact replay is still catching up with the requested instant (the Studio asks for another frame)."""
-        return self._converging
-
     def _reset_history(self) -> None:
-        self._ticks: tuple = ()
-        self._index = 0                    # the next tick to step
-        self._time = -math.inf             # the fixture time the history has been stepped to
-        self._last = None
-        self._last_tick: ServedTick | None = None
-        self._signature = None
-        self._approximate = False
+        super()._reset_history()
         self._pristine = None              # the step state right after configuration (``StepState``)
         self._pristine_signature = None
-        self._checkpoints: dict = {}       # mode-owned signature -> {tick index: checkpoint}
-        self._converging = False
 
     def _retire(self) -> None:
         controller, self._controller = self._controller, None
@@ -828,14 +814,63 @@ class EngineAnswerEvaluator:
 
     def _mode_kwargs_for(self, values: Mapping[str, Any], signature) -> dict:
         """The production mode kwargs for ``values`` under the current answers, computed once per signature
-        (``EngineAnswerMode.mode_kwargs`` builds the settings model, about 10 ms)."""
+        (``EngineAnswerMode.mode_kwargs`` builds the settings model, about 10 ms).
+
+        A live gesture (``_approximate``) dragging one numeric key the production build is known to hand through
+        verbatim takes the latest full build with that one entry replaced, instead of a model build per preview
+        frame. A key is known only after a full build here differed from the previous one in that key alone and
+        produced exactly that key, with exactly its value (``_learn``); anything else builds. The patched kwargs
+        are never cached: the gesture's end replays exactly from a full build."""
         key = (self._inputs.key, signature)
         cache = self._kwargs_cache
-        if key not in cache:
-            cache[key] = self.mode.mode_kwargs(self._effective(values, self._inputs))
-            while len(cache) > 6:
-                cache.pop(next(iter(cache)))
-        return cache[key]
+        if key in cache:
+            return cache[key]
+        effective = self._effective(values, self._inputs)
+        if self._approximate:
+            patched = self._patched(effective)
+            if patched is not None:
+                return patched
+        kwargs = self.mode.mode_kwargs(effective)
+        self.model_builds += 1
+        self._learn(effective, kwargs)
+        cache[key] = kwargs
+        while len(cache) > 6:
+            cache.pop(next(iter(cache)))
+        return kwargs
+
+    @staticmethod
+    def _one_change(a: Mapping[str, Any], b: Mapping[str, Any]) -> str | None:
+        """The single key whose numeric value differs between ``a`` and ``b`` (None: not exactly one such)."""
+        missing = object()
+        changed = [k for k in a.keys() | b.keys() if a.get(k, missing) != b.get(k, missing)]
+        if len(changed) != 1:
+            return None
+        value = a.get(changed[0], missing)
+        numeric = isinstance(value, (int, float)) and not isinstance(value, bool)
+        return changed[0] if numeric else None
+
+    def _learn(self, effective: dict, kwargs: dict) -> None:
+        built, self._built = self._built, (self._inputs.key, effective, kwargs)
+        if built is None or built[0] != self._inputs.key:
+            return
+        changed = self._one_change(effective, built[1])
+        if changed is None:
+            return
+        if self._one_change(kwargs, built[2]) == changed and kwargs.get(changed) == effective[changed]:
+            self._pass_through.add(changed)
+        else:
+            self._pass_through.discard(changed)
+
+    def _patched(self, effective: dict) -> dict | None:
+        built = self._built
+        if built is None or built[0] != self._inputs.key:
+            return None
+        changed = self._one_change(effective, built[1])
+        if changed is None or changed not in self._pass_through:
+            return None
+        kwargs = dict(built[2])
+        kwargs[changed] = effective[changed]
+        return kwargs
 
     def _restyle(self, values: Mapping[str, Any], signature=None) -> None:
         from widgets.spotify_visualizer.config_applier import (
@@ -852,62 +887,19 @@ class EngineAnswerEvaluator:
     # The transport overview's per-tick level from the recorded answers (None: the mean engine bar).
     timeline_measure: Callable[[Mapping[str, Any]], float] | None = None
 
-    CHECKPOINT_TICKS = 90                  # one checkpoint per second of fixture time (production cadence 90 Hz)
+    def _tick_time(self, tick: ServedTick) -> float:
+        return tick.now - self._inputs._origin
 
-    def _rewind(self, values: Mapping[str, Any], signature, time: float) -> None:
-        """Put the exact history of ``signature`` at the latest checkpoint at or before ``time`` (else at the
-        pristine configuration, restyled to ``values``): the replay from there is the replay from the start."""
-        best = None
-        for checkpoint in self._checkpoints.get(signature, {}).values():
-            if checkpoint[1] <= time + 1e-9 and (best is None or checkpoint[0] > best[0]):
-                best = checkpoint
-        if best is not None:
-            index, at, state, last, last_tick = best
-            state.restore()
-            self._index, self._time, self._last, self._last_tick = index, at, last, last_tick
-            self._signature = signature
-        else:
-            self._pristine.restore()
-            self._index, self._time, self._last, self._last_tick = 0, -math.inf, None, None
-            self._signature = self._pristine_signature
-            if signature != self._pristine_signature:
-                self._restyle(values, signature)
-        self._approximate = False
-        self.rewinds += 1
-
-    def _checkpoint(self) -> None:
+    def _capture(self):
         from ui.studio.replay_engine import StepState
-        checkpoints = self._checkpoints
-        if self._signature not in checkpoints:
-            checkpoints[self._signature] = {}
-            while len(checkpoints) > 3:    # the current values and the last two (undo / redo stay instant)
-                checkpoints.pop(next(iter(checkpoints)))
-        at = self._ticks[self._index - 1].now - self._inputs._origin
-        checkpoints[self._signature][self._index] = (
-            self._index, at, StepState(self._controller, keep=self._shared()), self._last,
-            self._last_tick)
+        return StepState(self._controller, keep=self._shared())
 
-    def _advance(self, time: float, deadline: float | None) -> tuple[bool, int]:
-        """Step the production ticks up to ``time`` (the first tick always), or until ``deadline``.
-        Returns (reached, ticks stepped)."""
-        import time as clock
-        origin = self._inputs._origin
-        ticks = self._ticks
-        stepped = 0
-        while self._index < len(ticks):
-            tick = ticks[self._index]
-            if tick.now - origin > time + 1e-9 and self._last is not None:
-                break
-            if deadline is not None and stepped and clock.perf_counter() > deadline:
-                self._time = ticks[self._index - 1].now - origin
-                return False, stepped
-            self._step(tick)
-            self._index += 1
-            stepped += 1
-            if not self._approximate and self._index % self.CHECKPOINT_TICKS == 0:
-                self._checkpoint()
-        self._time = time
-        return True, stepped
+    def _rewind_to_start(self, values: Mapping[str, Any], signature) -> None:
+        """The pristine configuration (captured right after configuration), restyled to ``values``."""
+        self._pristine.restore()
+        self._signature = self._pristine_signature
+        if signature != self._pristine_signature:
+            self._restyle(values, signature)
 
     def evaluate(self, time: float, values: Mapping[str, Any], *, exact: bool = True, revision: Any = None):
         """The logical frame ``time`` seconds into the fixture under ``values``: the mode's production step replayed
@@ -918,45 +910,13 @@ class EngineAnswerEvaluator:
         the current tick; the gesture end replays exactly. With a frame budget the exact replay may take several
         evaluations (``converging``), showing the live-applied frame meanwhile."""
         del revision
-        import time as clock
-        deadline = None if self._budget is None else clock.perf_counter() + self._budget
+        deadline = self._deadline()
         time = max(0.0, min(float(time), self.fixture.duration))
         inputs = self._choose_inputs(values, exact)
         signature = self.mode.own_signature(values)
         if self._controller is None or inputs is not self._inputs:
             self._start(values, inputs)
-        if not exact:
-            if time < self._time:
-                self._rewind(values, signature, time)
-            restyled = signature != self._signature
-            if restyled:
-                self._restyle(values, signature)
-                self._approximate = True
-            _reached, stepped = self._advance(time, None)
-            if restyled and not stepped and self._last_tick is not None:
-                self._step(self._last_tick)            # show the change on this instant (approximate)
-            self._converging = False
-            self._shown = self._last
-            return self._last
-        if signature != self._signature or self._approximate or time < self._time:
-            if deadline is not None and signature != self._signature:
-                # A change nothing has shown yet (a click, a typed value): this frame shows it live-applied on
-                # the running history; the exact replay starts on the next frame.
-                self._restyle(values, signature)
-                self._approximate = True
-                if self._last_tick is not None:
-                    self._step(self._last_tick)
-                self._converging = True
-                self._shown = self._last
-                return self._shown
-            self._rewind(values, signature, time)
-        reached, _stepped = self._advance(time, deadline)
-        self._converging = not reached
-        if reached or self._shown is None:
-            self._shown = self._last
-        if self._shown is None:
-            raise RuntimeError("Fixture produced no logical frame")
-        return self._shown
+        return self._replay(time, values, signature, exact=exact, deadline=deadline)
 
     @property
     def unrecorded_reads(self) -> int:

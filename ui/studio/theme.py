@@ -132,9 +132,16 @@ def studio_theme(theme=None) -> dict[str, str]:
         accent_soft = _mix(_mix(panel, accent, .28), away, step / 20.0)
     focus = _ensure(token("popup.input.focus_border", (106, 169, 217, 255))[0], panel, 3.0, light)
     track = _mix(panel, text, .14)
-    viewport = _mix(bg, (0.0, 0.0, 0.0), .65)
-    danger = _ensure(token("popup.icon.error", (255, 100, 100, 255))[0], panel, 3.0, light)
     input_surface = surface("control.input.surface", over=panel)
+    viewport = _mix(bg, (0.0, 0.0, 0.0), .65)
+    # Instrument wells (signal-trace cards, schematic cards, the response curve, the transport bar): the deep viewport
+    # tone while the theme's own text reads on it (every dark theme, unchanged), else the theme's input surface (a
+    # light theme: dark text on the dark viewport tone was illegible). Text and trace inks are then checked on it.
+    well = viewport if contrast(text, viewport) >= 4.5 else input_surface
+    well_light = contrast(well, (0.0, 0.0, 0.0)) > contrast(well, (1.0, 1.0, 1.0))   # inks move away from it
+    well_text = _ensure(text, well, 4.5, well_light)
+    well_dim = _ensure(dim, well, 3.0, well_light)
+    danger = _ensure(token("popup.icon.error", (255, 100, 100, 255))[0], panel, 3.0, light)
 
     # Window chrome, as Settings draws it: the theme's native backdrop mode, the title bar roles and the forged
     # window edge (ui/settings_window_edge.py). Normal ("off") keeps every surface opaque, as before. Under
@@ -181,6 +188,10 @@ def studio_theme(theme=None) -> dict[str, str]:
         "input": _hex(input_surface), "inputText": _hex(_ensure(text, input_surface, 4.5, light)),
         "focus": _hex(focus), "danger": _hex(danger), "light": "true" if light else "false",
         "trace1": _hex(accent), "trace2": _hex(_mix(text, panel, .25)), "trace3": _hex(focus),
+        "well": _hex(well), "wellText": _hex(well_text), "wellDim": _hex(well_dim),
+        "wellTrace1": _hex(_ensure(accent, well, 3.0, well_light)),
+        "wellTrace2": _hex(_ensure(_mix(text, panel, .25), well, 3.0, well_light)),
+        "wellTrace3": _hex(_ensure(focus, well, 3.0, well_light)),
     }
 
 
