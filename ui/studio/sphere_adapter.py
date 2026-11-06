@@ -18,7 +18,7 @@ import math
 from typing import Any, Iterable, Mapping
 
 from core.settings.visualizer_mode_settings import Choice, Colour, Custom, Slider, Toggle, require_mode_settings
-from ui.studio import framed
+from ui.studio import clip_loop, framed
 from ui.studio.adapter import (
     REFERENCE, SYNTHETIC, StudioCapabilities, StudioFixture, StudioModeAdapter, control_condition,
 )
@@ -314,6 +314,7 @@ class SyntheticInputs:
         self._signal = signal
         self._onsets = sorted(onsets)
         self._origin = 0.0
+        self.period = 0.0
 
     def steps(self, until: float) -> Iterable[EngineTick]:
         first = -int(round(PREROLL / STEP))
@@ -336,10 +337,15 @@ class SyntheticInputs:
 class RecordedInputs:
     """Ticks extracted from a recording by the production replay (``ui.studio.sphere_recorded_inputs``)."""
 
-    def __init__(self, fixture: StudioFixture, steps: tuple[EngineTick, ...], origin: float) -> None:
+    def __init__(self, fixture: StudioFixture, steps: tuple[EngineTick, ...], origin: float, period: float = 0.0) -> None:
         self.fixture = fixture
         self._steps = steps
         self._origin = origin
+        self.period = float(period)        # > 0: a seamless loop (``ui/studio/clip_loop.py``)
+
+    def shifted(self, tick, cycle: int):
+        """``tick`` ``cycle`` whole passes on."""
+        return clip_loop.shift_clock_tick(tick, cycle * self.period)
 
     def steps(self, until: float) -> Iterable[EngineTick]:
         limit = self._origin + until + 1e-9
@@ -368,6 +374,7 @@ class SphereStudioEvaluator:
         self._engine = None
         self._values_key = None
         self._environment = None
+        self._anchor = clip_loop.Anchor()
         self.steps_run = 0
         self._reset_history()
 
@@ -415,7 +422,7 @@ class SphereStudioEvaluator:
         self._engine.reset_ticks()
         self._controller = offline_controller(self._engine, MODE, resolved_settings(values))
         self._reflect()
-        self._iterator = iter(self._inputs.steps(self.fixture.duration))
+        self._iterator = iter(clip_loop.unrolled_ticks(self._inputs, self.fixture.duration))
         self._values_key = self._key(values)
 
     @staticmethod
@@ -449,10 +456,15 @@ class SphereStudioEvaluator:
         exactly; a live gesture (``exact=False``) keeps the current history and shows the change from the next
         tick."""
         del revision
-        time = max(0.0, min(float(time), self.fixture.duration))
+        at = float(time)
+        anchor = self._anchor = self._anchor.sync(getattr(self._inputs, "period", 0.0))
+        # A seamless loop plays on through its wrap in the transport's unrolled time (``ui/studio/clip_loop.py``).
+        time = max(0.0, anchor.virtual(at)) if anchor.looped else max(0.0, min(at, self.fixture.duration))
         key = self._key(values)
         if self._controller is None or time < self._time or (exact and key != self._values_key):
             self._start(values)
+            if anchor.looped:
+                time = anchor.rebase(at)       # a replay from the start of the pass the instant is in
         elif key != self._values_key:
             from widgets.spotify_visualizer.feature_replay import configure_offline_controller
             configure_offline_controller(self._controller, MODE, settings=resolved_settings(values))
