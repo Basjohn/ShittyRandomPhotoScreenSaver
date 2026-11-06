@@ -601,6 +601,15 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` โ
   the view. Normalise what is published to the energy one swell carries, and check the share of rim pixels at 255 and
   the response's swell-to-elsewhere contrast per preset, not only the peak. Size every view-dependent quantity (birth,
   floor lift, its lookahead) from the same visible span, in units of the mode's own envelope.
+- **Clear an obstacle with placement, never by shrinking the reaction.** When swells reached the view at strength,
+  their troughs hit the floor; bounding the swell's gain kept them clear but cut peak kicks by up to a third. Raising
+  the whole-object lift's limit cleared the same troughs with kicks identical per kick (the lift is a pure offset).
+  Classify residual contact by cause (limit reached vs follower still easing) before changing the follower.
+  **Measure every edge the placement moves toward:** that higher limit pushed crests out of the card's top (lead review
+  6 Nov: clipped frames 9% -> 66%), which no floor measure showed. Top edge first, floor second: keep the limit the
+  top allows and bound the lift by the card's real top edge (from the camera frustum, per card size), accepting brief
+  floor contact. A whole-frame "bright pixels in the top rows" count also counts sparks drifting up; separate crest
+  clipping (a wide bright run) from spark density before tuning the ribbon against it.
 - **Keep the travelling feature legible.** Geometry and look should follow the *fresh* energy (a short-fade copy of
   the field), or overlapping old energy piles into a uniform inflation or a glow parked at the emitter. Check the
   feature's median/max over the visible span on dense real music, and that successive beats stay separate bands.
@@ -620,10 +629,28 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` โ
 - **Measure drive distributions, not one song:** p05/p50/p95 and time above 0.9 of every geometry drive, as a
   fraction of its authored Range, on several real recordings including sustained loud and soft passages. A drive
   that never leaves the middle of its Range wastes the authoring.
-- **Adaptive response gain:** divide a geometry drive by a remembered recent peak of itself (fast reach, slow
-  relaxation, a floor so silence is not amplified) and land that peak below the top of the Range so sustained loud
-  passages keep headroom for accents. Gain only: an offset window re-expands a quiet intro to full size. Apply it to
-  geometry; light, colour and sparkle keep their fixed calibrated anchors (ยง13A).
+- **Superseded 6 Nov: no adaptive response gain.** Dividing a geometry drive by a remembered recent peak is the
+  "slowly falling peak" ยง2A rejects: on recorded music with a spliced 5 s break it sized the following 10 s 5-9% up,
+  and it re-normalises a long quieter passage. Map the routed target with a FIXED function on the real-music scale and
+  let each target's Range be the authored reactivity. Calibrate it to what the replaced path VISIBLY did, not hotter:
+  fit gain x target^curve to the paired output/target quantiles on long recordings played back to back, ease the top
+  toward where it landed sustained loud passages (Waveform: .92), and restore the phrase-scale swings its fast reach and
+  slow release created by widening each drive about a heard-only 3 s mean of itself. A hotter curve (lead review
+  6 Nov) pinned Pulse Strength (3 s contrast -34..-39%), flattened passages and pushed crests out of the card; a drive
+  parked in the easing knee loses contrast even when it never pins, so check each drive's own 3 s contrast, not only the
+  visible size. Gate the result per preset against main: visible size p10/p50/p90, 3 s contrast, time near the top,
+  kicks per time bin, the card's top edge. Any adaptive
+  path that survives is an opt-in control whose off position is the fixed path, with a negative-control test.
+- **A break is a test of every running reference.** Splice 2-5 s of near-silence into recorded music (scale the PCM,
+  re-analyse it through the production chain) and compare what follows against the unbroken clip per layer: engine
+  adaptive sensitivity (Waveform's raw lanes and bus loudness are before it: no effect), the bus (its passage level
+  climbs back over about a second), the response gain, Breathing. A phrase-scale mean must learn only from heard music
+  and not from the passage's own return; contrast about it must not widen a returning passage.
+- **A sustained kick with no geometry headroom still needs a sense.** When the drive that sizes the swell sits near the
+  top of its Range, send the share of the kick the geometry cannot show to channels that do not fight the shape (an
+  eased roll-speed impulse, spark births on the swell), on the fixed reward scale, never a clamped confidence. Bound
+  any continuous channel per kick against its own base (Waveform: at most 15% of the roll's speed): unbounded, dense
+  kicks overlapped into a sustained ~2x spin. Measure the mean and the acceleration tail in loud songs, not one kick.
 - **Hold the gain's memory through a quieter PASSAGE, never through beat gaps.** A 30 s relaxation re-normalises a
   quieter passage back up to loud reach within one verse (a passage at 70% of the loud input reached Pulse Strength .88
   against the loud passage's .87 after 25 s): "it swelled up to full power when the song went quieter". Keying a

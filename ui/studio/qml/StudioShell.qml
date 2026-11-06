@@ -2632,7 +2632,7 @@ Rectangle {
                                         Keys.onSpacePressed: studio.selectTarget(modelData.id)
                                         FocusRing { visible: targetItem.activeFocus }
                                         C.ToolTip.visible: tMouse.containsMouse
-                                        C.ToolTip.text: modelData.description + "\nBar: live drive (measured)"
+                                        C.ToolTip.text: modelData.description + "\nBar: where the live drive sits in this Range (empty = Quiet, full = Peak)"
                                         C.ToolTip.delay: 500
                                     }
                                 }

@@ -38,8 +38,9 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 New platform-facing work (power, display, input) still ships a basic Linux path or an explicit inert one alongside
 the Windows path, so it never needs its own Linux audit later (operator, 5 Nov).
 
-**Agents (operator, 5-6 Nov):** at most three Opus subagents at once (two medium and one high, or three medium) plus
-one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewer/orchestrator.
+**Agents (operator, 6 Nov evening):** at most one Opus 5.5 high and one Opus 5.5 medium subagent at once, with the
+lead as reviewer/orchestrator. Agents that already hold unfinished work may exceed this until they finish (their
+context is valuable). Slots need not always be full: when the right agent is not free, queue the item here.
 
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
 
@@ -73,6 +74,13 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
   by the power plan, then check Task Manager CPU/GPU for the saver while dark, that wake input reaches the saver, and
   the first seconds after wake (no stale frame, jump or hitch; run with `--frame-trace --usage`). Per-monitor power is
   not observable on Windows: an HDMI panel switched off at its own button that stays enumerated keeps running.
+  Confirmed on the operator's hardware 6 Nov (diagnostic log 15:06-17:14, both screens switched off at their buttons):
+  no console display-off event in any SRPSS log on this machine. The MSI (DisplayPort) left the topology while off
+  and was handled; the LG TV (HDMI) stayed enumerated, so screen 0 rendered at 90 fps with transitions and the
+  Visualizer for ~2 h (32-37% of a core). The TV rejects DDC/CI power queries even while on, so there is no signal to
+  read; the overnight check must let Windows' screen timeout turn the displays off. Operator decision 6 Nov: no
+  Screens Off command (it would put the burden on the user); they enabled the power plan's display timeout and will
+  report how SRPSS handles it.
 - [~] **DevCurve "more alive while keeping the flow" (second cut 6 Nov; awaiting lead review, then operator eyes):**
   loud body owns most of the drawn ceiling (big, smooth: carrier blends to its broad component instead of limiter
   triangles), kicks ride linear headroom, quiet passages take the band share's rise, swell inside the body's share,
@@ -106,8 +114,8 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
     Better in every pair. The live tick is only 2-4% lower (5.3-5.6 ms, GIL ~0.5): most of it lies outside the
     simulation. Evidence `.artifacts/evidence/live_20261106/` and `.artifacts/evidence/eb_logical_tick/`.
   - **Waveform, same session (main):** P1 / P4 / P7 run at 43.5 / 42.7 / 37.6 fps, tick 8.5-8.7 ms (p90 14-16), GIL
-    0.75, P7 64% late frames. Waveform is now the slowest live mode. The tick cut waits for the fixed-scale rework
-    (same files).
+    0.75, P7 64% late frames. Waveform is now the slowest live mode. The tick cut is unblocked (the fixed-scale rework
+    merged as b76dc269); measure on v7, since the rework added per-tick work (phrase means, the top-edge bound).
 - [ ] **Frozen builds could not open a Studio (operator 6 Nov: "module QtQuick.Controls.Basic is not installed"): fixed
   in source (e5005ffa), confirm on the next build.** The QML prune removed QtQuick/Controls, Templates and Shapes, and
   the import allowlist scanned only the saver's QML, never `ui/studio/qml`. The build now keeps the Basic style's
@@ -156,21 +164,27 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
-- [ ] **Neon Lake goal mocks (Presets 1-3, 6 Nov sixth pass, awaiting operator look):** darker mirror lake with a
-  longer Moon/Sun column and no swell wash, Preset 3's mid-lake blob fixed (mirror counted swell troughs as land),
-  navy Preset 1 sky with a shallower band and a soft blue stream upper left, even luminous Moon face, near ridges
-  that swell and fade along their length, Preset 3 cooler sky with stronger wisps and motion 0.232/255
-  (`Docs/Reference/Neon_Lake_Basin.md`, "Third" to "Sixth pass"). Still short of
-  `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`: the high-react look (vivid line mesh over the
-  lake, glowing island) is not reached on loud real music (1985_loud1: the lake barely changes; a squared
-  spectrum-energy term on the ripple network was tried and did nothing visible, reverted); Preset 1's lake is still
-  lighter than the mock's (p35 [28,30,65] vs [16,22,61]: bloom of the pink shore crest beside it) and its near dot
-  field is coarser than the mock's; the far-shore sawtooth and the crest before the lake are mesh silhouette (a
-  fine band to v 0.25 measured no gain); Preset 3 motion ideally toward 0.165. Side defect (pre-existing, found
-  6 Nov): at Depth Scale 1 + Horizon Thickness 3 over dunes seen grazing, the skyline's lifted copy shows over the
-  near land's own face as a broad translucent sheet (its 2% depth offset is less than the ground's recession over
-  the lift); fix in the skyline vertex depth, then tighten `tests/test_neon_ridge_shape.py` to those settings. Evidence:
-  `.artifacts/evidence/neon_lake/fidelity_20261105/pass6/` (triptych/, clips/*.webp, gpu_*.txt, overhead_*).
+- [ ] **Neon Lake goal mocks (Presets 1-3, 6 Nov seventh pass, awaiting operator look):** loud music now moves the
+  lake: every lake term read the display bars (midband >= 0.95 for 72-75% of every song), so loud and usual passages
+  drew the same lake; **Water Reaction** (Waves) reads the admitted waves on the fixed scale and lights a violet/cyan
+  ripple net, the shore, island glow and Moon path, and lets the ridges breathe with it (Preset 1 lake light range x4
+  on 1985_loud1, which is the quietest capture on the fixed scale); the skyline sheet at Depth Scale 1 + thickness 3
+  is fixed (`Docs/Reference/Neon_Lake_Basin.md`, "Third" to "Seventh pass"). Still short of
+  `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`: the mocks' high-react look is the whole scene,
+  not only the lake (saturated magenta land and dots, glowing near ridges ~2x ours, a flaring Moon): nothing outside
+  the water/ridge breath answers the music's level yet; the lake net leans cyan (P1 high lake mean [91,82,150] vs
+  [89,55,169]); Preset 3's high-react lake is lit swells with glints, which a net does not give (it runs at 0.25);
+  Preset 1's resting lake p35 [22,30,61] vs [17,28,69] is still a little red (near-ridge bloom); the near dot field
+  is coarser than the mock's (the mark lattice is the Scene3D tier's: a finer one costs vertices); the far-shore
+  sawtooth is the shoreline line itself (crest alpha 0 removes it; Shore Glow 0, a grazing-derivative fade and
+  per-fragment skyline classification do not); Preset 3 motion stays 0.231/255 (heavy1; all water motion off still
+  measures 0.160, so 0.165 means a still lake). Evidence: `.artifacts/evidence/neon_lake/fidelity_20261106/pass7/`
+  (final/, music/report/, clips/*.webp, gpu.txt, overhead.txt).
+- [ ] **Neon Lake camera step on real music (found 6 Nov, pass 7, pre-existing at a372f106):** Preset 1 on
+  1985_loud1 between 42.054 s and 42.075 s the whole land shifts ~8 px down in one frame and stays (mean step 8.5/255
+  against ~1.3; replay parameters and presentation identical across the two frames, Terrain Reaction bands smooth).
+  Find the owner (camera floor / reaction normalisation) with `tools/neon_lake_capture.py --clip ... --start 41.9
+  --duration 0.3 --fps 90 --all-frames`.
 
 - [ ] **Neon render tests load-sensitive under parallel runs (5-6 Nov):** `test_neon_lake_renderer.py` (once, pass-5
   merge gate) and `test_neon_scene_materials.py` (once, pass-5 branch) failed under parallel load and passed alone; the
@@ -220,13 +234,6 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
 - [ ] **Helper breadcrumb diagnostics unavailable:** current native MC evidence logs no access to
   `C:\ProgramData\SRPSS\logs\scr_helper.log`. Inspect the helper/log-path authority before relying on that
   diagnostic route; do not hide it behind a silent local fallback. Separate from Waveform rendering.
-- [ ] **Doc sweep leftovers (6 Nov, `Docs/Audits/Doc_Sweep_2026-11-06.md`):**
-  1. **The guide's remembered-peak gain** (`Visualizer_Reactivity_Authoring.md` ~623 and the Waveform Migration Plan)
-     is rewritten as superseded when the Waveform fixed-scale rework lands (that rework's owner does it), together with
-     the "adaptive response gain" wording in `Spec.md` (~795) and `Index.md` (~100).
-  2. **Stale Orthographic text** in the Waveform docs (`Waveform_Ribbon_Lab_Plan.md`, `Waveform_Ribbon_Migration_Plan.md`)
-     and the Extruded Bubble docs (`Investigation.md` ~1325, `Motion_Reactivity_Viewport_Plan.md`) is fixed once their
-     running agents finish.
 - [ ] **Frozen release gate (operator scheduled):** Standard/Diagnostic from one compile, MC and Reddit Helper installed
   startup/exit, Settings/widgets/cache/audio and installer behaviour.
   Check installer logs and obsolete-file removal in both curated theme/preset trees. Both sources declare whole-tree
@@ -306,33 +313,27 @@ Centre Out "like night and day"; logical cadence survives heavy game load; **Pre
 lose this"). Every later dynamics change shows, on the recorded clips, that Preset 4 is unchanged against this tag
 (or names the improvement for operator sign-off). Preset 4 keeps Breathing 0 (exactly the baseline dynamics).
 
-- [ ] **Fixed-scale rework (branch `worktree-agent-ab2ce64aff1fa59c4`): REJECTED by the lead review 6 Nov, in rework.**
-  Kept from it: no adaptive memory (a song replayed after ~7 min of other music responds the same: height within .01,
-  roll .35 deg/s), breaks no longer re-scale what follows, an Adaptive Response toggle (off), Breathing's mean learns
-  only from heard music, and the floor cleared with height. Rejected, measured on whole recordings against main
-  (`tmp/waveform_review_20261106/`, gitignored: frame sheets, traces, `drift_*.txt`, the 7-song `chain7.npy`;
-  scripts in `scripts/`):
-  - crests clipped by the card's top edge on P4 Anything 9% -> 66%, P4 Rag Doll 2 -> 62%, P7 Anything 3 -> 66%, P7 Rag
-    Doll 1 -> 54%, P1 0-3 -> 16-43% of frames: the hotter fixed calibration inflates the swells and the 3.0 lift
-    pushes them out of the frame (only the floor had been measured);
-  - Pulse Strength pinned near its ceiling through whole songs (3 s contrast -34..-39%); quiet stretches (Anything
-    ~40-44 s) stay nearly full size; Preset 7 loud-song swing -24..-34%: the operator's "almost flat" complaint;
-  - Kick Accent overlaps into a sustained ~2x spin in loud songs (16-18 against 8.5-9.5 deg/s, Preset 4 included);
-  - sharper size jumps (visible-amplitude rate max 41-49 against 22-24).
-
-  Acceptance for the rework:
-  - Preset 4 visible amplitude p10/p50/p90 and its 3 s contrast are within +-10% of main (the tag).
-  - Every other preset has contrast >= main, and Pulse Strength never pins.
-  - Kick Accent adds at most 15% to mean roll speed (0 on Preset 4 unless proven).
-  - Top clipping is no worse than main at 640x560 and 1282x1005, and the floor comes second.
-  - **Operator, 6 Nov:** every reaction mode must be truly reactive (Travelling Pulse in each direction, Centre Out,
-    Group Wave, Whole Swell, and the unfrozen parts of Frozen Past). See whether Breathing helps, keeping the goals.
-  - **Judge with music-vs-response traces** (`tools/visualizer_replay/waveform_music_response.py`). The song's own PCM
-    envelope sits above the response, with loudness -> response scatter and per-song saturation, dead, spurious and
-    re-scaling measures. For travelling and frozen modes, measure only the part changing at the time (the newly
-    born swell).
-  - Build on the reactivity guide's real-music scale: loudness 3-17 in music, the live lane at 2.5, 0..1 absolutes
-    mean only "silent", calibrate by presence on recorded music.
+- [ ] **Fixed-scale rework v7: accepted by the lead review 6 Nov (merged b76dc269); operator sign-off on Preset 4 and
+  the trade-offs.** No adaptive memory (Adaptive Response toggle, off in every preset), fixed response fitted to main's
+  visible behaviour, phrases widened about a heard-only 3 s mean, Kick Accent bounded at 15% of the roll (Preset 4 ships
+  0), the floor lift bounded by the card's top edge (top edge first), the phrase mean catching up after real silence.
+  The rejected v4's lessons (top edge first, fixed calibration fitted to what the replaced path visibly did, bounded
+  kick channels) are in `Docs/Guides/Visualizer_Reactivity_Authoring.md`.
+  Lead's own review on whole recordings against main (`tmp/waveform_review_20261106/`, gitignored: v7 frames in
+  `branch/`, frame sheets, music-vs-response traces, `drift_*`, `chain7.npy`, `scripts/`; the agent's curated evidence
+  in `.artifacts/evidence/waveform_ribbon/reactivity_preset7/`, PROGRESS.md):
+  - crests clipped by the card's top: P7 Anything 66% (v4) -> 5.8% raw (main 2.9%), and the residual is sparks drifting
+    into the top rows, not crests (crest clipping <= main in 8 of 10 recordings); frame sheets of P4 and P7 show main's
+    dynamics, slightly fuller; music-vs-response at parity; no drift on a song replayed after 7 min; P4 roll identical.
+  - every reaction mode (Centre Out, both Travelling Pulse directions, Group Wave, Whole Swell, Frozen Past's newly
+    born swell; `modes/summary.txt`): correlation with loudness/RMS/bass at or above main (+0..+.04), saturation
+    +0..+1.9 points (Group Wave's born swell 5.1% against 3.2%); Breathing adds +.01..+.02 correlation.
+  - **Trade-offs for the operator:** Preset 4 visible amplitude p10/p50/p90 -4/+4/+5% and 3 s contrast +4.5% against
+    the tag (inside the +-10% gate; sign off, or ask for the tag's exact dynamics); Preset 7 roll 1.12x; P7 saturation
+    higher on two songs (10.2% / 6.8% against 3.4%); kick peaks 1.6-6.4% under main in 6 of 16 song-time bins (worst
+    P7 0-15 s) and 6-11% over it in sustained loud bins; quieter-after-loud kicks 8-27% under main by design (a quieter
+    passage is no longer re-normalised up); top-row spark density up to about 2x main.
+  - Still open from the Range audit (item below): Rotation's drive never passes .36.
 - [~] **Preset 7 and the other reaction modes (operator log `logse7a84d332e.zip`, Rag Doll, 5 Nov) - awaiting
   operator eyes:** no decay/breathing in soft passages, sustained passages with changes read almost flat, and a swell to
   full power as the song got QUIETER. Preset 7 is Group Wave (song 31-123 s in the log; the recorded clip is song
@@ -397,8 +398,22 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   masses (lit saturation .60 vs reference .59, current .54). Consecutive frames smooth (flicker .0068 -> .0105, from
   brighter moving masses, no column popping); evidence `studio_20261105/floor4/`.
   Floor collision (operator, 5 Nov): a ribbon whose lower edge nears the floor lifts as a WHOLE (shape-exact, two-stage
-  eased, up to 1.5 units); per-knot trough limits were rejected as boxy. Wide sheets (P2) still graze ~60% of ticks:
+  eased, up to 3 units since 6 Nov, when in-view swells needed more; Floor Give keeps 1.5); per-knot trough limits
+  were rejected as boxy. Residual visible contact (lift still easing up, lift-only, recorded continuous play +-16):
+  P1 1.3%, P3 .75%, P4 .19%, P7 .13% of music ticks (main 27/16/7/7%); a faster attack clears more but moves the lift
+  harder (TROUGH_ATTACK .1: P1 .45%, lift acceleration p99 x1.3) -- not adopted. Wide sheets (P2) still graze ~60% of ticks:
   optional Floor Give (below) lets the wet floor dent under them instead.
+- [~] **Fixed response, break-proof Breathing, Kick Accent (operator, 6 Nov: "when it went suddenly quiet everything
+  become more reactive ... Adaptive is a very problematic approach"; "many sustained kicks ignored") — awaiting
+  operator eyes:** geometry drives are a fixed function of the real-music scale (Adaptive Response toggle, off in every
+  preset; Preset 4 differs from the tag only through it, Kick Accent and the floor lift — set Adaptive Response on and
+  Kick Accent 0 to compare). Open: the Range audit (`.artifacts/evidence/waveform_ribbon/reactivity_preset7/
+  rangeaudit_*.txt`) shows Rotation's drive never above .36 on any recording (its Peak handle is never reached), and
+  Light/Colour/Sparkle/Highlights, Width and Lift never reach .8 on three or four of five songs: those calibrations (not
+  the response gain) are the remaining Range losses; the music's return after a break still dips for about a second
+  while the shared passage level climbs back (return window 12-55% of the unbroken clip on every arm, main included);
+  Preset 3's quieter-after-loud kicks are 4% under main's (every time bin is above); soft passages swing less in
+  absolute terms (3 s contrast .21 vs the adaptive gain's .30) and loud ones .11 vs .16.
 - [~] **Floor Give (operator, 5 Nov: "the floor can deform inwards, allowing crests") — awaiting operator eyes:**
   opt-in Floor slider (default 0 = the rigid floor, pixel-identical); P2 authored 1.0. Where a lower edge comes down
   onto the floor the wet floor yields in a soft dent (one surface for the floor's ray hit, its shading/reflection and
@@ -674,7 +689,7 @@ Never Remove This Box. Restore It If Removed. Only Remove Contents As you place 
 ####################
 - When implementing SMP aim for quality, compatible and adjustable audio as on par or beyond with apps like Music Bee as possible. Do not shy away from custom work when it will improve quality/performance/ux. Gate SMP/Library/Playlist behind --smp until production ready and feature rich.
 - When SMP is available (Library Widget ON) a new SMP Tab should exist in settings allowing for well organised adjustments to items related to SMP and audio processing. Use Pills and maintain high quality thematic UX. We should already have in the plans for what to hide when running an SMP only build and how to do it. 
-
+- For SMP Mode we will use the icon built for it in the repo (store with other icons) as both the ShittyMusicPlayer.exe icon eventually and the icon shown in media when it is switched to SMP. Additionally for artwork we will maintain our fade in system and choose artwork based on tagged/metadata/embedded, artist.jpg/png, album.jpg/png, folder.jpg/png, falling back to other images in the same folder and of course our planned artwork fetching methods that we can research. Consider an additional check that if a user has a song in their library without any pictures and is using another service than smp we grab and store that image in their artist's folder. 
 
 
 
