@@ -798,6 +798,12 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   re-configuring, equal production for every Spectrum-owned key, and spread over frames under the Studio's budget.
 - `tests/test_studio_background_sources.py` — a landing background load never takes the user's source choice;
   failed analyses are shown with Retry.
+- `tests/test_studio_worker_lifetime.py` — Studio clip workers: every worker module exits non-zero within a bound on
+  a missing or unreadable clip (control: the bound catches a worker that never ends); a cancel at any point of the
+  venv launcher's setup leaves no process (control: without the job tree the launcher's child is orphaned,
+  suspended); a parent that dies abruptly takes its worker with it (control: unbound, the worker survives); the
+  guard below sees a live worker (control). `tests/conftest.py` fails any module that started a worker and left one
+  running (`tests/studio_worker_probe.py` holds the helpers and the stand-in worker / parent).
 - `tests/test_studio_exit_every_mode.py` — every registered Studio, after a commit, through the shell's Close button:
   Settings revealed before teardown, forced retire failures, the window never hidden from Python, the `--studio`
   sidecar and main log receiving the lifecycle.

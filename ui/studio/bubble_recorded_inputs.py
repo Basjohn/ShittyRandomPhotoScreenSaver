@@ -129,6 +129,8 @@ def main(argv: list[str]) -> int:
     clip, settings_path, output_path, *rest = argv
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
+    from ui.studio.worker_lifetime import die_with_parent
+    die_with_parent()                                            # never outlive the Studio (Linux)
     from ui.studio.waveform_recorded_inputs import CLIP_SECONDS
     settings = json.loads(Path(settings_path).read_text(encoding="utf-8"))
     from PySide6.QtGui import QGuiApplication
