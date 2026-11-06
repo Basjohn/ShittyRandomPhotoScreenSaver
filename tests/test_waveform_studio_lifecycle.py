@@ -258,7 +258,11 @@ def test_studio_window_lost_after_presentation_restores_settings(qt_app, dialog_
     assert controller.state == "closed" and not controller.presence.concealed
 
 
-def test_first_commit_on_a_curated_preset_moves_to_custom(qt_app, dialog_tab, settings_manager, no_gl_checks):
+def test_a_commit_on_a_curated_preset_is_held_until_a_close_settles_it(qt_app, dialog_tab, settings_manager,
+                                                                       no_gl_checks):
+    """No automatic switch to Custom: the edit is held on the preset (shown, not saved). A close nobody is asked
+    about (this programmatic one) then keeps it in Custom; the user's own closes ask
+    (tests/test_studio_preset_row_and_save_to_preset.py)."""
     from ui.studio.settings_link import open_mode_studio
     _dialog, tab = dialog_tab(preset_index=0)
     slider = tab._get_visualizer_preset_slider(MODE)
@@ -267,12 +271,16 @@ def test_first_commit_on_a_curated_preset_moves_to_custom(qt_app, dialog_tab, se
     controller = open_mode_studio(tab, MODE, adapter=LightAdapter(), surface_factory=_surfaces(surfaces))
     surfaces[0].pump()
     curated = controller.bridge.presetLabel
+    stored_rate = _stored(settings_manager)[f"{MODE}_ribbons"][2].get("rate")
     controller.bridge.commitValue(f"{MODE}_ribbons[2].rate", 0, 0.75)
+    assert slider.preset_index() == 0 and _stored(settings_manager)[f"preset_{MODE}"] == 0
+    assert controller.bridge.presetLabel == curated and controller.store.holds_draft()
+    assert controller.session.values[f"{MODE}_ribbons"][2]["rate"] == pytest.approx(0.75)
+    assert _stored(settings_manager)[f"{MODE}_ribbons"][2].get("rate") == stored_rate          # nothing saved
+    controller.close()
     custom = get_custom_preset_index(MODE)
     assert slider.preset_index() == custom and _stored(settings_manager)[f"preset_{MODE}"] == custom
-    assert controller.bridge.presetLabel != curated
     assert _stored(settings_manager)[f"{MODE}_ribbons"][2]["rate"] == pytest.approx(0.75)
-    controller.close()
 
 
 def test_real_production_renderer_draws_into_the_studio_viewport(qt_app, dialog_tab, no_gl_checks):

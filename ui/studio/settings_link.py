@@ -10,6 +10,8 @@ shape-preserving preset-file owner (``core.settings.visualizer_preset_file``).
 """
 from __future__ import annotations
 
+import weakref
+
 from importlib import import_module
 from typing import Any, Mapping
 
@@ -85,6 +87,9 @@ class VisualizerSettingsStore:
         # Studio edit or Move To Custom from it), and the keys edited since. Opened on Custom: unknown.
         self._origin: int | None = None
         self._edited: set[str] = set()
+        # Studio edits made on a curated preset are held here, in Settings' widgets, and never saved until the user
+        # chooses at the close prompt (or saves them explicitly): Settings stays on the preset (operator, 6 Nov).
+        self._draft = False
         self._set_origin(self._curated_index())
 
     def _curated_index(self) -> int | None:
@@ -106,11 +111,12 @@ class VisualizerSettingsStore:
         return require_mode_settings(self._mode)
 
     def snapshot(self) -> dict[str, Any]:
-        """The resolved section exactly as the mode body hydrates from it, controls admitted."""
+        """The resolved section exactly as the mode body hydrates from it, controls admitted (a held draft: as
+        saving it would store it, without saving)."""
         from core.settings.visualizer_mode_settings import read_control_value
         tab = self._tab
         tab.flush_pending_changes()
-        config = dict(tab._prepare_mode_hydration_config(self._mode))
+        config = self._draft_config() if self._draft else dict(tab._prepare_mode_hydration_config(self._mode))
         for control in self._spec().controls:
             default = tab._widget_default("spotify_visualizer", control.key)
             config[control.key] = control.admit(read_control_value(control, config.get, default), default)
@@ -135,18 +141,12 @@ class VisualizerSettingsStore:
         from core.settings.framed_camera import spec_for_mode
         tab = self._tab
         tab.flush_pending_changes()
-        self._set_origin(self._curated_index())   # an edit on a curated preset moves its values into Custom
+        curated = self._curated_index()
+        if curated is not None and curated != self._origin:
+            self._set_origin(curated)
         self._edited |= set(changed)
         config = dict(values)
-        previous = tab._loading
-        tab._loading = True
-        try:
-            load_spec_mode_settings(tab, self._mode, config)   # blocked signals: loading saves nothing
-            from ui.tabs.media.technical_controls import load_per_mode_technical_controls
-            load_per_mode_technical_controls(tab, config, only_mode=self._mode)
-            self._load_families(config)
-        finally:
-            tab._loading = previous
+        self._load_into_settings(config)
         camera = spec_for_mode(self._mode)
         if camera is not None:
             aimed = {camera.key("turn"), camera.key("tilt")} & set(changed)
@@ -156,9 +156,184 @@ class VisualizerSettingsStore:
                 for key in (camera.key("turn"), camera.key("tilt")):
                     pose[key] = config[key]
                 setattr(tab, fce.aim_dirty_attr(self._mode), True)
+        if curated is not None:
+            # On a curated preset the edit is held, not saved: no automatic switch to Custom.
+            self._draft = True
+            return self.snapshot()
         tab._force_visualizer_preset_to_custom(self._mode)
         tab._save_settings_now()
         return self.snapshot()
+
+    def _load_into_settings(self, config: Mapping[str, Any]) -> None:
+        """Load ``config`` into the mode body, its technical controls and shared families with signals blocked
+        (loading saves nothing)."""
+        from ui.tabs.media.spec_mode_builder import load_spec_mode_settings
+        from ui.tabs.media.technical_controls import load_per_mode_technical_controls
+        tab = self._tab
+        previous = tab._loading
+        tab._loading = True
+        try:
+            load_spec_mode_settings(tab, self._mode, dict(config))
+            load_per_mode_technical_controls(tab, dict(config), only_mode=self._mode)
+            self._load_families(config)
+        finally:
+            tab._loading = previous
+
+    # ------------------------------------------------------------------ the held draft (edits on a curated preset)
+    def holds_draft(self) -> bool:
+        """Studio edits on a curated preset that nothing has saved yet."""
+        return self._draft
+
+    def _draft_config(self) -> dict[str, Any]:
+        """The section saving Settings' widgets *would* store, read as Custom (the widgets' own values), without
+        writing anything: the held draft exactly as the canonical save would admit it."""
+        from copy import deepcopy
+        from core.settings.visualizer_presets import apply_preset_to_config, get_custom_preset_index
+        from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
+        from ui.tabs.widgets_tab_media import save_visualizer_settings
+        tab = self._tab
+        widgets = tab._settings.get("widgets")
+        widgets = deepcopy(widgets) if isinstance(widgets, dict) else {}
+        section, _mode, _index = tab._merge_visualizer_section_save(widgets, save_visualizer_settings(tab),
+                                                                    hydrated=True)
+        section = dict(section)
+        section["mode"] = self._mode
+        section["mode_activation"] = build_visualizer_mode_activation(tab._vis_body_host.enabled_modes)
+        return apply_preset_to_config(self._mode, get_custom_preset_index(self._mode), section)
+
+    def _pending_preset_changes(self):
+        """(changes, starting_view) between this session's edited keys and what the origin preset resolves."""
+        from core.settings import visualizer_preset_file as preset_file
+        from core.settings.visualizer_presets import get_presets
+        tab = self._tab
+        tab.flush_pending_changes()
+        payload = tab.build_visualizer_preset_payload(self._mode)
+        changes = preset_file.preset_setting_changes(self._mode, self._origin, payload, self._edited)
+        starting_view = None
+        if self.include_view() and "starting_view" in payload:
+            from core.settings.visualizer_view_orbit import get_visualizer_view_pose_keys
+            if self._edited & set(get_visualizer_view_pose_keys(self._mode)) \
+                    and payload["starting_view"] != get_presets(self._mode)[self._origin].starting_view:
+                starting_view = payload["starting_view"]
+        return changes, starting_view
+
+    def discard_draft(self) -> None:
+        """Drop the held edits: Settings' widgets go back to the saved preset; nothing is written."""
+        from ui.tabs.media import framed_camera_editor as fce
+        from core.settings.framed_camera import spec_for_mode
+        if not self._draft:
+            return
+        self._draft = False
+        tab = self._tab
+        config = tab._prepare_mode_hydration_config(self._mode)
+        self._load_into_settings(config)
+        camera = spec_for_mode(self._mode)
+        if camera is not None:
+            pose = getattr(tab, fce.pose_attr(self._mode))
+            for key in (camera.key("turn"), camera.key("tilt")):
+                if key in config:
+                    pose[key] = config[key]
+            setattr(tab, fce.aim_dirty_attr(self._mode), False)
+        self._edited = set()
+        self.refresh_settings()
+        logger.info("[STUDIO] draft discarded mode=%s", self._mode)
+
+    def draft_to_custom(self) -> None:
+        """Place the held edits in the Custom slot (what every Studio edit on a preset used to do at once)."""
+        if not self._draft:
+            return
+        self._draft = False
+        self._tab._force_visualizer_preset_to_custom(self._mode)
+        self._tab._save_settings_now()
+        logger.info("[STUDIO] draft placed in Custom mode=%s", self._mode)
+
+    def resolve_draft(self, *, interactive: bool = True) -> bool:
+        """Settle held edits before the session ends or leaves this preset.
+
+        Interactive: ask with Settings' prompt (Overwrite <Preset>, Save As New Preset, Place In Custom, Discard);
+        closing the prompt means "not yet" and the Studio stays. Not interactive (application quit, Settings going
+        away, a programmatic close): place them in Custom, so nothing is lost. False only when the user stays."""
+        from core.settings import visualizer_preset_file as preset_file
+        from core.settings.visualizer_presets import get_preset_file_path, get_preset_names
+        if not self._draft:
+            return True
+        changes, starting_view = self._pending_preset_changes()
+        if not changes and starting_view is None:
+            self.discard_draft()                    # back where the preset already is: nothing to keep
+            return True
+        if not interactive:
+            self.draft_to_custom()
+            return True
+        name = get_preset_names(self._mode)[self._origin]
+        path = get_preset_file_path(self._mode, self._origin)
+        writable = path is not None and preset_file.preset_file_writable(path)
+        count = len(changes) + (starting_view is not None)
+        plural = "s" if count != 1 else ""
+        while True:
+            buttons = ([(f"Overwrite {name}", "overwrite")] if writable else []) + [
+                ("Save As New Preset", "new"), ("Place In Custom", "custom"), ("Discard", "discard")]
+            lines = [f"You changed {count} setting{plural} of {name} in the Studio without saving."]
+            if not writable:
+                lines.append(f"{name}'s preset file cannot be changed here, so it cannot be overwritten.")
+            lines.append("What should happen to these changes?")
+            answer = self._popup("Unsaved Preset Changes", "\n".join(lines), "question", buttons=buttons,
+                                 default_button_index=len(buttons) - 2)
+            if answer is None:
+                return False
+            if answer == "discard":
+                self.discard_draft()
+                return True
+            if answer == "custom":
+                self.draft_to_custom()
+                return True
+            if answer == "overwrite":
+                if self._write_preset(changes, starting_view):
+                    return True
+                writable = False                    # it could not be written after all: ask again without it
+                continue
+            if answer == "new" and self.save_as_new_preset():
+                return True
+
+    def _write_preset(self, changes, starting_view) -> bool:
+        """Write the session's changes into the origin preset's own file (shape preserved, nothing else touched),
+        reload the presets and settle the draft. Failures are shown with Settings' prompt."""
+        from core.settings import visualizer_preset_file as preset_file
+        from core.settings.visualizer_presets import get_preset_names
+        name = get_preset_names(self._mode)[self._origin]
+        try:
+            result = preset_file.save_changes_to_preset(self._mode, self._origin, changes,
+                                                        starting_view=starting_view)
+        except preset_file.PresetFileReadOnly as exc:
+            self._popup("Preset Is Read-Only", self._read_only_text(exc.path), "error")
+            return False
+        except Exception as exc:
+            logger.exception("[STUDIO] Save To %s failed", name)
+            self._popup("Save Failed", f"Could not save into {name}.\n{exc}", "error")
+            return False
+        logger.info("[STUDIO] saved to preset mode=%s index=%d path=%s keys=%s",
+                    self._mode, self._origin, result.path, ",".join(result.changed))
+        slider = self._tab._get_visualizer_preset_slider(self._mode)
+        if slider is not None:
+            slider.refresh_preset_catalog(reload=False)    # the owner reloaded it; the slot stays as it is
+        self._draft = False
+        self._edited = set()
+        return True
+
+    def save_as_new_preset(self) -> bool:
+        """Settings' own Save Preset As (its file dialog, into the presets folder); the new preset is then selected,
+        so Settings ends on it. False when the dialog was cancelled or the write failed."""
+        slider = self._tab._get_visualizer_preset_slider(self._mode)
+        action = getattr(slider, "_save_custom_preset_as", None)
+        if not callable(action):
+            return False
+        index = action(select_saved=True)
+        if index is None:
+            return False
+        self._draft = False
+        self._set_origin(index)
+        self._tab.flush_pending_changes()       # the selection is on disk before Settings is refreshed from it
+        self._tab._save_settings_now()
+        return True
 
     def _load_families(self, config: Mapping[str, Any]) -> None:
         """The mode's shared setting families Settings keeps outside the mode body (shown on its page, stored per
@@ -292,16 +467,22 @@ class VisualizerSettingsStore:
         """Settings' Move To Custom: copy the current curated preset into Custom and switch to it."""
         slider = self._tab._get_visualizer_preset_slider(self._mode)
         if slider is not None and slider.preset_index() != slider.custom_index():
+            if self._draft:
+                self.draft_to_custom()          # the held edits are what moves into Custom
+                return
             self._set_origin(self._curated_index())
             slider._move_to_custom()
             self._tab._save_settings_now()
 
     def save_target_label(self) -> str:
-        """The curated preset Save To <Preset> writes into ("": not offered). Offered on Custom when this
-        session's Custom values came from a curated preset whose file exists."""
+        """The curated preset Save To <Preset> writes into ("": not offered). Offered while this session holds
+        unsaved edits of a curated preset, and on Custom when this session's Custom values came from a curated
+        preset; only when that preset's file exists."""
         from core.settings.visualizer_presets import get_preset_file_path, get_preset_names
         slider = self._tab._get_visualizer_preset_slider(self._mode)
-        if slider is None or self._origin is None or slider.preset_index() != slider.custom_index():
+        if slider is None or self._origin is None:
+            return ""
+        if not self._draft and slider.preset_index() != slider.custom_index():
             return ""
         names = get_preset_names(self._mode)
         if not 0 <= self._origin < len(names) - 1 or get_preset_file_path(self._mode, self._origin) is None:
@@ -313,24 +494,14 @@ class VisualizerSettingsStore:
         differ from the origin curated preset into that preset's own file (shape preserved, nothing else
         touched), then reload the presets. Returns a notice for the Studio ("" when nothing was done)."""
         from core.settings import visualizer_preset_file as preset_file
-        from core.settings.visualizer_presets import get_preset_file_path, get_presets
+        from core.settings.visualizer_presets import get_preset_file_path
         name = self.save_target_label()
         if not name:
             return ""
-        index = self._origin
-        tab = self._tab
-        tab.flush_pending_changes()
-        payload = tab.build_visualizer_preset_payload(self._mode)
-        changes = preset_file.preset_setting_changes(self._mode, index, payload, self._edited)
-        starting_view = None
-        if self.include_view() and "starting_view" in payload:
-            from core.settings.visualizer_view_orbit import get_visualizer_view_pose_keys
-            if self._edited & set(get_visualizer_view_pose_keys(self._mode)) \
-                    and payload["starting_view"] != get_presets(self._mode)[index].starting_view:
-                starting_view = payload["starting_view"]
+        changes, starting_view = self._pending_preset_changes()
         if not changes and starting_view is None:
             return f"{name} already holds these settings"
-        path = get_preset_file_path(self._mode, index)
+        path = get_preset_file_path(self._mode, self._origin)
         if path is None:
             return ""
         if not preset_file.preset_file_writable(path):
@@ -343,22 +514,8 @@ class VisualizerSettingsStore:
             f"Write {count} changed setting{plural} into {name}'s preset file?\n{path}\n"
             "Everything else in the file stays exactly as it is.",
             "question", buttons=[("Save", "save"), ("Cancel", "cancel")], default_button_index=1)
-        if answer != "save":
+        if answer != "save" or not self._write_preset(changes, starting_view):
             return ""
-        try:
-            result = preset_file.save_changes_to_preset(self._mode, index, changes, starting_view=starting_view)
-        except preset_file.PresetFileReadOnly as exc:
-            self._popup("Preset Is Read-Only", self._read_only_text(exc.path), "error")
-            return ""
-        except Exception as exc:
-            logger.exception("[STUDIO] Save To %s failed", name)
-            self._popup("Save Failed", f"Could not save into {name}.\n{exc}", "error")
-            return ""
-        logger.info("[STUDIO] saved to preset mode=%s index=%d path=%s keys=%s",
-                    self._mode, index, result.path, ",".join(result.changed))
-        slider = tab._get_visualizer_preset_slider(self._mode)
-        if slider is not None:
-            slider.refresh_preset_catalog(reload=False)    # the owner reloaded it; Custom stays as it is
         return f"Saved {count} setting{plural} into {name}"
 
     @staticmethod
@@ -439,21 +596,32 @@ def open_mode_studio(tab, mode_id: str, *, adapter=None, surface_factory=None, p
                                   theme_provider=studio_theme, mode_switcher=switcher, modes=modes)
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance()
-    unsubscribe = subscribe_studio_theme(
-        lambda theme: controller.bridge.set_theme(theme) if controller.bridge is not None else None)
+    # Everything below outlives the session's own references (theme listeners, and slots Qt holds strongly on the
+    # controller's own signals), so it holds the controller weakly: a strong closure over it is a cycle through Qt
+    # connections that the garbage collector cannot see, and kept every closed Studio alive for the process.
+    session = weakref.ref(controller)
+
+    def set_theme(theme) -> None:
+        current = session()
+        if current is not None and current.bridge is not None:
+            current.bridge.set_theme(theme)
+    unsubscribe = subscribe_studio_theme(set_theme)
 
     def finished(*_args) -> None:
         unsubscribe()
+        current = session()
+        if current is None:
+            return
         try:
-            dialog.destroyed.disconnect(controller.close_for_settings_gone)
+            dialog.destroyed.disconnect(current.close_for_settings_gone)
         except (RuntimeError, TypeError, AttributeError):
             pass
         if app is not None:
             try:
-                app.aboutToQuit.disconnect(controller.close_for_quit)
+                app.aboutToQuit.disconnect(current.close_for_quit)
             except (RuntimeError, TypeError):
                 pass
-        if getattr(tab, "_studio_controller", None) is controller:
+        if getattr(tab, "_studio_controller", None) is current:
             tab._studio_controller = None
 
     def report(message: str) -> None:

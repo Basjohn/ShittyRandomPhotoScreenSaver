@@ -933,7 +933,7 @@ def test_save_to_preset_writes_a_devcurve_edit_into_the_curated_files_own_shape(
     alpha = layer_key(layers()[0], "alpha")
     alpha_target = 0.21 if abs(float(authored.get(alpha, 0.0)) - 0.21) > 1e-6 else 0.79
     bridge.commitValue(alpha, 0, alpha_target)
-    assert slider.preset_index() == slider.custom_index()          # a Studio edit lands in Custom
+    assert slider.preset_index() == curated                        # held on the preset: no switch to Custom
     assert bridge.savePresetTarget == vp.get_preset_names(MODE)[curated]
     before = path.read_bytes()
     state["answer"] = "cancel"
@@ -951,4 +951,4 @@ def test_save_to_preset_writes_a_devcurve_edit_into_the_curated_files_own_shape(
     assert changed == {prop.id, alpha}
     assert new_text.endswith("\n") == before.decode("utf-8").endswith("\n")
     assert vp.get_preset_settings(MODE, curated)[prop.id] == pytest.approx(target)    # presets were reloaded
-    assert slider.preset_index() == slider.custom_index()                             # Custom stays as it was
+    assert slider.preset_index() == curated                        # the preset stays selected, now holding it
