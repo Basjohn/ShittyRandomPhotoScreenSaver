@@ -805,6 +805,12 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   and reached exactly by the Studio's own edits (node add/remove, lane reorder), with a negative control.
 - `tests/test_spectrum_studio_replay_budget.py` — exact replays rewind (pristine / checkpoints) instead of
   re-configuring, equal production for every Spectrum-owned key, and spread over frames under the Studio's budget.
+- `tests/test_studio_chrome.py` — the Studio wears Settings' chrome through Settings' owners: frameless window, the
+  shell's title bar and the forged edge painted by Settings' own painter; Normal / Acrylic / Glass follow the active
+  theme through the shared backdrop mapping (Settings uses it too); card borders stroke one continuous path (control:
+  the same outline in pieces seams); the scene is clipped to the viewport frame's rounded corners, read back from a
+  hidden magenta render (control: a slot at the frame's square corner bleeds) and keeps its place and size; chrome
+  paints once and idles (no repaint, no frame request, no evaluation).
 - `tests/test_studio_drag_coalescing.py` — real mouse drags on the hidden shell: many moves between two frames apply
   one preview (latest wins) for every drag slot (value, colour, gradient); only the dragged key re-shows during the
   gesture; release commits once with one undo entry; Escape restores and drops the held value; keyboard steps commit
