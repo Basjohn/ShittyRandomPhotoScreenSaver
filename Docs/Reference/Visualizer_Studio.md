@@ -208,6 +208,12 @@ current values do not hold (an unused optional element, such as a curve-node slo
   retired, and again (idempotently) in a `finally`, so neither a failing nor a hanging teardown step can leave
   Settings concealed; a mode switch retires without revealing because the next session follows. Open failures show a
   "Studio Unavailable" popup over Settings.
+- **Reveal re-exposes (layered window).** Settings is frameless and translucent, so Qt presents it as a layered window,
+  which never receives `WM_PAINT`; Qt exposes it only from a show it initiated, and `WindowPresence` shows it natively.
+  Without help the revealed window stays *not exposed* to Qt: it accepts input but never repaints (the 6 Nov "frozen and
+  unclickable" stall: saves logged for 25 s after a clean reveal). `reveal` therefore follows the native show with
+  `RedrawWindow(RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW)`, which makes Windows send the missing `WM_PAINT` so Qt
+  exposes and repaints; the reveal log line carries `exposed=`. `tests/test_studio_exit_repaint.py` guards it.
 - **Never hide the window from Python.** PySide holds the GIL through `QWindow.hide()`, and Qt's threaded render
   loop waits inside it for the render thread, which runs the viewport's Python (render-node release,
   `sceneGraphInvalidated`) when the non-persistent scene graph is invalidated: calling it from Python deadlocked the
