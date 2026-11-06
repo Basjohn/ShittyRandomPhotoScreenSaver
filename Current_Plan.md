@@ -106,8 +106,8 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
     Better in every pair. The live tick is only 2-4% lower (5.3-5.6 ms, GIL ~0.5): most of it lies outside the
     simulation. Evidence `.artifacts/evidence/live_20261106/` and `.artifacts/evidence/eb_logical_tick/`.
   - **Waveform, same session (main):** P1 / P4 / P7 run at 43.5 / 42.7 / 37.6 fps, tick 8.5-8.7 ms (p90 14-16), GIL
-    0.75, P7 64% late frames. Waveform is now the slowest live mode. The tick cut waits for the fixed-scale rework
-    (same files).
+    0.75, P7 64% late frames. Waveform is now the slowest live mode. The tick cut is unblocked (the fixed-scale rework
+    merged as b76dc269); measure on v7, since the rework added per-tick work (phrase means, the top-edge bound).
 - [ ] **Frozen builds could not open a Studio (operator 6 Nov: "module QtQuick.Controls.Basic is not installed"): fixed
   in source (e5005ffa), confirm on the next build.** The QML prune removed QtQuick/Controls, Templates and Shapes, and
   the import allowlist scanned only the saver's QML, never `ui/studio/qml`. The build now keeps the Basic style's
@@ -220,13 +220,11 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
 - [ ] **Helper breadcrumb diagnostics unavailable:** current native MC evidence logs no access to
   `C:\ProgramData\SRPSS\logs\scr_helper.log`. Inspect the helper/log-path authority before relying on that
   diagnostic route; do not hide it behind a silent local fallback. Separate from Waveform rendering.
-- [ ] **Doc sweep leftovers (6 Nov, `Docs/Audits/Doc_Sweep_2026-11-06.md`):**
-  1. **The guide's remembered-peak gain** (`Visualizer_Reactivity_Authoring.md` ~623 and the Waveform Migration Plan)
-     is rewritten as superseded when the Waveform fixed-scale rework lands (that rework's owner does it), together with
-     the "adaptive response gain" wording in `Spec.md` (~795) and `Index.md` (~100).
-  2. **Stale Orthographic text** in the Waveform docs (`Waveform_Ribbon_Lab_Plan.md`, `Waveform_Ribbon_Migration_Plan.md`)
-     and the Extruded Bubble docs (`Investigation.md` ~1325, `Motion_Reactivity_Viewport_Plan.md`) is fixed once their
-     running agents finish.
+- [ ] **Doc sweep leftover (6 Nov, `Docs/Audits/Doc_Sweep_2026-11-06.md`; the remembered-peak gain was rewritten as
+  superseded with the v7 merge):**
+  - **Stale Orthographic text** in the Waveform docs (`Waveform_Ribbon_Lab_Plan.md`, `Waveform_Ribbon_Migration_Plan.md`)
+    and the Extruded Bubble docs (`Investigation.md` ~1325, `Motion_Reactivity_Viewport_Plan.md`) is fixed once their
+    running agents finish.
 - [ ] **Frozen release gate (operator scheduled):** Standard/Diagnostic from one compile, MC and Reddit Helper installed
   startup/exit, Settings/widgets/cache/audio and installer behaviour.
   Check installer logs and obsolete-file removal in both curated theme/preset trees. Both sources declare whole-tree
@@ -306,51 +304,27 @@ Centre Out "like night and day"; logical cadence survives heavy game load; **Pre
 lose this"). Every later dynamics change shows, on the recorded clips, that Preset 4 is unchanged against this tag
 (or names the improvement for operator sign-off). Preset 4 keeps Breathing 0 (exactly the baseline dynamics).
 
-- [ ] **Fixed-scale rework (branch `worktree-agent-ab2ce64aff1fa59c4`): REJECTED by the lead review 6 Nov; reworked,
-  awaiting the lead's re-review (status under the acceptance list).**
-  Kept from it: no adaptive memory (a song replayed after ~7 min of other music responds the same: height within .01,
-  roll .35 deg/s), breaks no longer re-scale what follows, an Adaptive Response toggle (off), Breathing's mean learns
-  only from heard music, and the floor cleared with height. Rejected, measured on whole recordings against main
-  (`tmp/waveform_review_20261106/`, gitignored: frame sheets, traces, `drift_*.txt`, the 7-song `chain7.npy`;
-  scripts in `scripts/`):
-  - crests clipped by the card's top edge on P4 Anything 9% -> 66%, P4 Rag Doll 2 -> 62%, P7 Anything 3 -> 66%, P7 Rag
-    Doll 1 -> 54%, P1 0-3 -> 16-43% of frames: the hotter fixed calibration inflates the swells and the 3.0 lift
-    pushes them out of the frame (only the floor had been measured);
-  - Pulse Strength pinned near its ceiling through whole songs (3 s contrast -34..-39%); quiet stretches (Anything
-    ~40-44 s) stay nearly full size; Preset 7 loud-song swing -24..-34%: the operator's "almost flat" complaint;
-  - Kick Accent overlaps into a sustained ~2x spin in loud songs (16-18 against 8.5-9.5 deg/s, Preset 4 included);
-  - sharper size jumps (visible-amplitude rate max 41-49 against 22-24).
-
-  Acceptance for the rework:
-  - Preset 4 visible amplitude p10/p50/p90 and its 3 s contrast are within +-10% of main (the tag).
-  - Every other preset has contrast >= main, and Pulse Strength never pins.
-  - Kick Accent adds at most 15% to mean roll speed (0 on Preset 4 unless proven).
-  - Top clipping is no worse than main at 640x560 and 1282x1005, and the floor comes second.
-  - **Operator, 6 Nov:** every reaction mode must be truly reactive (Travelling Pulse in each direction, Centre Out,
-    Group Wave, Whole Swell, and the unfrozen parts of Frozen Past). See whether Breathing helps, keeping the goals.
-  - **Judge with music-vs-response traces** (`tools/visualizer_replay/waveform_music_response.py`). The song's own PCM
-    envelope sits above the response, with loudness -> response scatter and per-song saturation, dead, spurious and
-    re-scaling measures. For travelling and frozen modes, measure only the part changing at the time (the newly
-    born swell).
-  - Build on the reactivity guide's real-music scale: loudness 3-17 in music, the live lane at 2.5, 0..1 absolutes
-    mean only "silent", calibrate by presence on recorded music.
-
-  Rework status (6 Nov, v7; evidence `.artifacts/evidence/waveform_ribbon/reactivity_preset7/` PROGRESS.md and
-  `tmp/waveform_review_20261106/`): fixed response fitted to main's visible behaviour (height/lift on the fitted curve,
-  other drives 1.12 x t^.86, knee .8 -> .92, phrases widened about a heard-only 3 s mean, dip 1 / rise 2); Kick Accent
-  roll bounded at 15% of the roll, Preset 4 ships 0; lift limit back to 1.5 and the floor lift never raises a crest
-  through the card's top (top edge first); after real silence the phrase mean catches up with louder music.
-  - Met on chain7 (both card sizes): Preset 4 p10/p50/p90 -4/+4/+5%, contrast +4.5%; Presets 1/3/7 contrast +2..+4%;
-    Pulse Strength above .9 in loud passages 6% (main 10-15%); roll mean 1.12x, roll acceleration p99.9 1.07x; crests
-    clipped by the 640x560 card's top on <= main's frames in 8 of 10 recordings (P1 Anything / Night So Long 1 frame
-    each against 0); no drift on a song replayed after 7 min (height within .06, roll .6 deg/s).
-  - Open for the lead: `wf_topclip`'s raw share is still above main on P1 Night So Long, P4 Anything / Rag Doll and P7
-    Anything (5.8/15.4/4.6/5.8% against 2.9/8.8/2.1/2.9%): those frames are sparks drifting into the top rows (spark
-    density in the top 12% +10..+50%, births .1-.2 world units higher on the larger swells), not crests; matching
-    main's spark field would mean smaller swells (and kicks). Kick peaks are below main in 6 of 16 song-time bins
-    (-1.6..-6.4%, worst P7 0-15 s), above it in every sustained-loud bin (+6..+11%); quieter-after-loud kicks are
-    8-27% under main by design (a quieter passage is no longer re-normalised up). Post-break 10 s: -7..+9% of the
-    unbroken clip on Presets 1/7 (main +4..+10%), -5..+5% on Preset 4 (main 0..+7%).
+- [ ] **Fixed-scale rework v7: accepted by the lead review 6 Nov (merged b76dc269); operator sign-off on Preset 4 and
+  the trade-offs.** No adaptive memory (Adaptive Response toggle, off in every preset), fixed response fitted to main's
+  visible behaviour, phrases widened about a heard-only 3 s mean, Kick Accent bounded at 15% of the roll (Preset 4 ships
+  0), the floor lift bounded by the card's top edge (top edge first), the phrase mean catching up after real silence.
+  The rejected v4's lessons (top edge first, fixed calibration fitted to what the replaced path visibly did, bounded
+  kick channels) are in `Docs/Guides/Visualizer_Reactivity_Authoring.md`.
+  Lead's own review on whole recordings against main (`tmp/waveform_review_20261106/`, gitignored: v7 frames in
+  `branch/`, frame sheets, music-vs-response traces, `drift_*`, `chain7.npy`, `scripts/`; the agent's curated evidence
+  in `.artifacts/evidence/waveform_ribbon/reactivity_preset7/`, PROGRESS.md):
+  - crests clipped by the card's top: P7 Anything 66% (v4) -> 5.8% raw (main 2.9%), and the residual is sparks drifting
+    into the top rows, not crests (crest clipping <= main in 8 of 10 recordings); frame sheets of P4 and P7 show main's
+    dynamics, slightly fuller; music-vs-response at parity; no drift on a song replayed after 7 min; P4 roll identical.
+  - every reaction mode (Centre Out, both Travelling Pulse directions, Group Wave, Whole Swell, Frozen Past's newly
+    born swell; `modes/summary.txt`): correlation with loudness/RMS/bass at or above main (+0..+.04), saturation
+    +0..+1.9 points (Group Wave's born swell 5.1% against 3.2%); Breathing adds +.01..+.02 correlation.
+  - **Trade-offs for the operator:** Preset 4 visible amplitude p10/p50/p90 -4/+4/+5% and 3 s contrast +4.5% against
+    the tag (inside the +-10% gate; sign off, or ask for the tag's exact dynamics); Preset 7 roll 1.12x; P7 saturation
+    higher on two songs (10.2% / 6.8% against 3.4%); kick peaks 1.6-6.4% under main in 6 of 16 song-time bins (worst
+    P7 0-15 s) and 6-11% over it in sustained loud bins; quieter-after-loud kicks 8-27% under main by design (a quieter
+    passage is no longer re-normalised up); top-row spark density up to about 2x main.
+  - Still open from the Range audit (item below): Rotation's drive never passes .36.
 - [~] **Preset 7 and the other reaction modes (operator log `logse7a84d332e.zip`, Rag Doll, 5 Nov) - awaiting
   operator eyes:** no decay/breathing in soft passages, sustained passages with changes read almost flat, and a swell to
   full power as the song got QUIETER. Preset 7 is Group Wave (song 31-123 s in the log; the recorded clip is song
