@@ -498,6 +498,12 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   (`Docs/Reference/Visualizer_Studio.md` §4); the Notepad path and its pop-up go for each mode when its adapter
   registers (automatic: the slider builds Edit Preset only for `not has_studio(mode)`); delete `_open_preset_json`
   with the last one. Operator look pending (6 Nov): Open Studio's place in the preset row and the Save To flow.
+- [ ] **Studio drag lag fixed (6 Nov), awaiting the operator's feel check.** Drags preview once per frame and
+  re-show only the dragged key (Visualizer_Studio.md "Drags are batched"); evidence
+  `.artifacts/evidence/studio_drag/` (per move 56 ms -> 0.07 ms on Waveform). Two per-frame costs remain, both
+  outside the drag path: Waveform's exact replay on release runs in one frame (~120 ms, no frame budget or
+  checkpoints like Spectrum's), and Spectrum's live restyle builds the production settings model per new value
+  (~14 ms per frame while dragging a mode-owned key).
 
 ## Operator execution and evidence rules
 

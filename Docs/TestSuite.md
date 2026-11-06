@@ -805,6 +805,10 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   and reached exactly by the Studio's own edits (node add/remove, lane reorder), with a negative control.
 - `tests/test_spectrum_studio_replay_budget.py` — exact replays rewind (pristine / checkpoints) instead of
   re-configuring, equal production for every Spectrum-owned key, and spread over frames under the Studio's budget.
+- `tests/test_studio_drag_coalescing.py` — real mouse drags on the hidden shell: many moves between two frames apply
+  one preview (latest wins) for every drag slot (value, colour, gradient); only the dragged key re-shows during the
+  gesture; release commits once with one undo entry; Escape restores and drops the held value; keyboard steps commit
+  per step; an engine-owned key analyses once, on release. Each with a negative control on the per-move path.
 - `tests/test_studio_background_sources.py` — a landing background load never takes the user's source choice;
   failed analyses are shown with Retry.
 - `tests/test_studio_worker_lifetime.py` — Studio clip workers: every worker module exits non-zero within a bound on

@@ -207,6 +207,7 @@ Rectangle {
     // A compact slider whose shown value follows the bridge except while it is being dragged.
     component ValueSlider: Item {
         id: vs
+        objectName: "valueSlider"
         property string propId: ""
         property string label: ""
         property int endpoint: 0
@@ -217,6 +218,8 @@ Rectangle {
         property bool integer: false
         property int decimals: 2
         property real dragValue: 0
+        // An edit the preview follows only on release (the engine re-analyses it once, when the drag ends).
+        property bool releaseOnly: false
         readonly property bool dragging: area.pressed
         readonly property real shown: dragging ? dragValue : value
         function frac(v) { return to > from ? Math.max(0, Math.min(1, (v - from) / (to - from))) : 0 }
@@ -265,6 +268,14 @@ Rectangle {
             color: vs.dragging ? shell.cText : Qt.lighter(shell.cRaised, 1.4)
             border.width: 2
             border.color: vs.activeFocus ? shell.cFocus : shell.cAccent
+        }
+        Text {                             // a held edit says so while it is dragged
+            objectName: "releaseHint"
+            visible: vs.dragging && vs.releaseOnly
+            anchors.right: parent.right; anchors.rightMargin: 7
+            anchors.bottom: parent.top; anchors.bottomMargin: -4
+            text: "Updates On Release"
+            color: shell.cDim; font.pixelSize: shell.fontBase - 3
         }
         MouseArea {
             id: area
@@ -1190,13 +1201,17 @@ Rectangle {
         height: 28
         RowLabel { text: row.label; icon: row.icon || ""; tip: row.tooltip; propId: row.id; height: parent.height }
         ValueSlider {
+            id: scalarSlider
             width: parent.width - 118 - 72 - 16 - scalarRow.rowActions.length * 30
             anchors.verticalCenter: parent.verticalCenter
             propId: row.id; label: row.label; from: row.min; to: row.max; integer: row.integer
+            releaseOnly: row.releaseOnly === true
             value: studio.values[row.id] !== undefined ? studio.values[row.id] : row.min
         }
+        // While dragged the readout follows the slider at once (the scene follows at the next frame).
         NumberField { propId: row.id; anchors.verticalCenter: parent.verticalCenter
-                      display: shell.fmt(studio.values[row.id], row.decimals, "") }
+                      display: shell.fmt(scalarSlider.dragging ? scalarSlider.dragValue : studio.values[row.id],
+                                         row.decimals, "") }
         Repeater {          // structural edits of this element (remove a node, reorder a lane)
             model: scalarRow.rowActions
             delegate: StudioButton { objectName: "rowAction"; icon: modelData.icon; iconSize: 14; width: 22
@@ -1254,13 +1269,16 @@ Rectangle {
             height: 26
             x: 126
             ValueSlider {
+                id: qpSlider
                 width: qp.width - 126 - 72 - 16; anchors.verticalCenter: parent.verticalCenter
                 propId: row.id; label: row.label + (qp.endpoint ? " (Peak)" : " (Quiet)")
                 endpoint: qp.endpoint; from: row.min; to: row.max; integer: row.integer
+                releaseOnly: row.releaseOnly === true
                 value: qp.pair[qp.endpoint]; ghost: qp.pair[1 - qp.endpoint]
             }
             NumberField { propId: row.id; endpoint: qp.endpoint; anchors.verticalCenter: parent.verticalCenter
-                          display: shell.fmt(qp.pair[qp.endpoint], row.decimals, "") }
+                          display: shell.fmt(qpSlider.dragging ? qpSlider.dragValue : qp.pair[qp.endpoint],
+                                             row.decimals, "") }
         }
     }
 
