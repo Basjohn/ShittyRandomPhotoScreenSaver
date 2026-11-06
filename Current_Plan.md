@@ -597,13 +597,6 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   Extruded Bubble's and Sphere's evaluators still replay exactly in one evaluation from the fixture start, without the
   frame budget and checkpoints Waveform and the engine-answer modes now share (`ui/studio/exact_replay.py`); measure
   with `tools/studio_drag_profile.py` and move them onto `ExactReplay` where a release stalls.
-- [ ] **DevCurve replay floors red since the reactivity merge (found 6 Nov):** `tests/test_visualizer_replay.py::
-  test_current_reactivity_passes_fixed_floors[*__devcurve]` passes at `1488c7ce^1` and fails at `1488c7ce` (the
-  DevCurve reactivity merge): `output_flux` fell to 43-66% of its reviewed floor on broadband noise, representative
-  music, the sudden volume step, sustained bass and sustained treble. Decide with measurements whether that is the
-  intended smoother loud body or lost motion: compare the per-case traces before and after, check kicks and passage
-  changes still read, and either fix the field or recalibrate only the DevCurve floors (`floors.calibrate`) with the
-  reason recorded. Never bless the drift unexplained.
 
 ## Operator execution and evidence rules
 
