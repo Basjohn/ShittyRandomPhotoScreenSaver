@@ -575,8 +575,13 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   `ProductionLaneEngine` (`tools/visualizer_replay/analysis_controls_audit.py`: per-frame PCM through
   `compute_bars_from_samples`, production getters) is the candidate: promote it to `feature_replay`, use it in
   `engine_answers.extract` for modes with engine-owned analysis, and re-prove the parity tests. It takes one analysis
-  block per 11 ms tick where live analyses every capture callback, so absolute levels approximate; measure the worker's
-  cost on the shipped clips first.
+  block per 11 ms tick where live analyses every capture callback, so absolute levels approximate. Worker cost
+  measured 6 Nov (`engine_answers.extract` with `ReplayBeatEngine` swapped for `ProductionLaneEngine`, the three
+  shipped 12 s clips, frozen settings, best of two, machine at ~80% CPU from other work): DevCurve 3.8-3.9 s -> 4.2-4.3 s
+  (+9-14%), Oscilloscope 2.0-2.2 s -> 2.5-2.6 s (+18-28%); the cost is no obstacle. Still to do: move the class into
+  `widgets/spotify_visualizer/feature_replay.py` (the audit tool then imports it), pick it in `extract` for modes with
+  engine-owned analysis (Bubble, Extruded Bubble and Sphere run their own recorded-input workers and need the same
+  swap), and re-anchor the Studio parity tests, whose oracle is the production replay on recorded lanes.
 - [ ] **Edit Preset deleted (6 Nov)**: every visualizer mode now has a Studio, so the preset row's Edit Preset button,
   `_open_preset_json` and its pop-up are gone (`ui/tabs/media/preset_slider.py`); curated presets are authored with
   Open Studio and the Studio's confirmed Save To <Preset> (`Docs/Reference/Visualizer_Studio.md` §4).
