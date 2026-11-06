@@ -52,7 +52,13 @@ is optional and defaults to "not offered":
 - **Fixtures.** Held Quiet/Mid/Peak references, synthetic inputs and recorded clips. Recorded clips are analysed in a
   separate process (`python -m ui.studio.<mode>_recorded_inputs`, via `QProcess`; a frozen build runs its own
   executable with `--studio-clip-worker`) through the production offline replay, so the running app's live
-  visualizer is never disturbed; the finished job is released after its signal returns, never inside it. Every
+  visualizer is never disturbed; the finished job is released after its signal returns, never inside it. A worker
+  never outlives its job or the Studio process (`ui/studio/worker_lifetime.py`): on Windows each worker and
+  everything it starts (a venv `python.exe` is a launcher that starts the real interpreter suspended) runs in its
+  own kill-on-close Job Object held only by the Studio, so a cancel ends the whole tree and the OS ends it when the
+  Studio exits or crashes; on Linux the worker arms `PR_SET_PDEATHSIG` (and exits if its parent is already gone);
+  elsewhere a cancel still ends it but a parent crash does not. Every worker exits non-zero at once on a missing or
+  unreadable clip. The worker's temporary folder (`worker_tag`) names the starting process, so a leak is traceable. Every
   Studio lists the shipped clips (`assets/production/studio_clips`) first, then a checkout's own recordings.
 - **Recorded engine answers (engine-processed modes).** A mode whose step consumes the engine's *own processing*
   (the Spectrum family, Spectrum, Extruded Spectrum and Neon Lake: `consume_engine_bars` ticks the engine and reads its
