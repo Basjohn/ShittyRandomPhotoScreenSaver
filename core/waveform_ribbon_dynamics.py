@@ -148,7 +148,8 @@ TROUGH_ATTACK, TROUGH_RELEASE, TROUGH_VIEW = .15, 1.2, 32.  # TROUGH_VIEW: the f
 # With the card's visible span the floor lift reads only what the camera shows, plus TROUGH_LOOKAHEAD geometric-envelope
 # sigmas beyond each edge (see _trough_view), never wider than +-TROUGH_VIEW: a trough entering the view (or a swell
 # deepening one on its way in) is already lifted for. 6 Nov sweep on recorded continuous play: at 2.5 sigmas the lift
-# moved more and visible floor contact rose by up to .9 points (Preset 7); from 5 it equals the fixed view's.
+# moved more and visible floor contact rose by up to .9 points (Preset 7); at 5 of the mode's own envelope sigmas (a
+# Group Wave set is 3.5 carrier wavelengths wide) it equals the fixed view's on every preset at a 1282x1005 card.
 TROUGH_LOOKAHEAD = 5.
 # Height Shift options (operator, 5 Nov). Static Height holds every ribbon at the highest safe point: the top of the shift
 # (TROUGH_LIFT_MAX), constant through every passage.
@@ -960,7 +961,8 @@ class WaveformDynamics:
         low,high = self._view_world
         if self.direction < 0.:   # history axis -> world x is mirrored (Travel Direction)
             low,high = -high,-low
-        margin = TROUGH_LOOKAHEAD*self._blur_kernel(GEOM_WAVES)[1]
+        waves = GROUP_WAVES if self.controls.pulse.mode=='Group Wave' else GEOM_WAVES   # the mode's own envelope
+        margin = TROUGH_LOOKAHEAD*self._blur_kernel(waves)[1]
         low,high = max(-TROUGH_VIEW,low-margin),min(TROUGH_VIEW,high+margin)
         return (x>low)&(x<high),.5*(low+high),.5*(high-low)
 
