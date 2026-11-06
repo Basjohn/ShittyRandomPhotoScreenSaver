@@ -77,7 +77,7 @@ context and worktree):**
   tests. The gate is byte-identical output (Preset 4 required); then the lead schedules the game60 live check.
 - **Studio controller leak** (Opus high, worktree `agent-ae914e4586e23615a`): closed `StudioController`s live for the
   process (one per Studio session in production: the `finished`/`report` closures in `open_mode_studio` hold the
-  controller); then the same context-ownership fix in `tools/onboarding_preview_foundry.py`; then Spectrum rendering
+  controller) (the `tools/onboarding_preview_foundry.py` context-ownership fix is done: R-173); then Spectrum rendering
   black when all Studio test files run in one process (record if deep). The R-172 exit crash itself is merged.
 - **Card surface style fixes and material themes** (Opus medium, 6 Nov evening): done on its branch, awaiting the
   lead's merge and the operator's eyes; details under "Widget card surfaces" below.
@@ -201,10 +201,9 @@ context and worktree):**
   2. **Operator's eyes:** the rows (light themes draw them as lighter bands, dark themes mostly nothing), the inner
      panel's thin rim, the mute position, the 15 new themes (contact sheets `theme_sheet_*.png`). Normal changes
      only where intended: the Media bar/artwork shadows, the mute button and Friend Pulse on light themes.
-  3. **Side defects found (not caused here):** `tests/test_surface_materials.py` crashes (access violation) when a
-     hidden-GL material-scene test runs before `test_per_family_row_round_trips...` in one process (base commit
-     too, 4 of 4 runs); each passes alone. Light themes keep the weather detail icons white (asset images), faint on
-     pale cards; a themed icon tint would fix it.
+  3. **Side defect found (not caused here):** light themes keep the weather detail icons white (asset images),
+     faint on pale cards; a themed icon tint would fix it. (The `tests/test_surface_materials.py` access violation
+     found in the same pass is fixed: R-173, the hidden scene's GL context freed before its render control.)
 - [~] **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent) - second
   pass done, awaiting operator eyes:** the mock is `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`.
   Preset 9 (Deep Red Ocean) only; Presets 1-8 pixel-identical. Shared work, each dormant at 0: **Ember Grain**,
@@ -736,8 +735,7 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
     in production. The cycle runs through Qt connections that gc cannot see: `open_mode_studio`'s `finished` /
     `report` closures are connected to the controller's own `closed` / `failed` and close over the controller. Break
     it at close: disconnect them, or hold the controller weakly. Prove it with a gc-free retention test.
-  - `tools/onboarding_preview_foundry.py`'s capture has the same imported-context structure and needs the same
-    ownership.
+  - `tools/onboarding_preview_foundry.py`'s capture had the same imported-context structure: fixed as R-173 (7 Nov).
   - The Studio files fail when run in one pytest process. After the first 17 Studio files (Bubble through
     `test_studio_preset_row_and_save_to_preset.py`), `test_studio_scene_theme_independence.py[spectrum]` renders a
     black scene (std 0). The fix did not cause it: the same failure appears with and without it. Every file passes
