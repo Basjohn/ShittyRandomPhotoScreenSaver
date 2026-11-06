@@ -279,7 +279,10 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   masses (lit saturation .60 vs reference .59, current .54). Consecutive frames smooth (flicker .0068 -> .0105, from
   brighter moving masses, no column popping); evidence `studio_20261105/floor4/`.
   Floor collision (operator, 5 Nov): a ribbon whose lower edge nears the floor lifts as a WHOLE (shape-exact, two-stage
-  eased, up to 1.5 units); per-knot trough limits were rejected as boxy. Wide sheets (P2) still graze ~60% of ticks:
+  eased, up to 3 units since 6 Nov, when in-view swells needed more; Floor Give keeps 1.5); per-knot trough limits
+  were rejected as boxy. Residual visible contact (lift still easing up, lift-only, recorded continuous play +-16):
+  P1 1.3%, P3 .75%, P4 .19%, P7 .13% of music ticks (main 27/16/7/7%); a faster attack clears more but moves the lift
+  harder (TROUGH_ATTACK .1: P1 .45%, lift acceleration p99 x1.3) -- not adopted. Wide sheets (P2) still graze ~60% of ticks:
   optional Floor Give (below) lets the wet floor dent under them instead.
 - [~] **Floor Give (operator, 5 Nov: "the floor can deform inwards, allowing crests") — awaiting operator eyes:**
   opt-in Floor slider (default 0 = the rigid floor, pixel-identical); P2 authored 1.0. Where a lower edge comes down

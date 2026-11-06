@@ -601,6 +601,10 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` â†
   the view. Normalise what is published to the energy one swell carries, and check the share of rim pixels at 255 and
   the response's swell-to-elsewhere contrast per preset, not only the peak. Size every view-dependent quantity (birth,
   floor lift, its lookahead) from the same visible span, in units of the mode's own envelope.
+- **Clear an obstacle with placement, never by shrinking the reaction.** When swells reached the view at strength,
+  their troughs hit the floor; bounding the swell's gain kept them clear but cut peak kicks by up to a third. Raising
+  the whole-object lift's limit cleared the same troughs with kicks identical per kick (the lift is a pure offset).
+  Classify residual contact by cause (limit reached vs follower still easing) before changing the follower.
 - **Keep the travelling feature legible.** Geometry and look should follow the *fresh* energy (a short-fade copy of
   the field), or overlapping old energy piles into a uniform inflation or a glow parked at the emitter. Check the
   feature's median/max over the visible span on dense real music, and that successive beats stay separate bands.
