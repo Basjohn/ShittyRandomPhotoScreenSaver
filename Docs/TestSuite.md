@@ -763,7 +763,14 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
 - `tests/test_waveform_studio_framing.py` — the Studio opens on the live card's world (Fill), measured as production
   measures it;
 - `tests/test_waveform_studio_editors.py`, `tests/test_waveform_studio_theme.py` — direct editors, handles, tiles,
-  cards; theme-derived chrome contrast in every shipped theme;
+  cards; theme-derived chrome contrast in every shipped theme, the instrument wells' inks readable on their well in
+  every theme with dark themes unchanged and the shell bound to the well roles (control: the former viewport-tone
+  pairing is illegible on every light theme);
+- `tests/test_waveform_studio_replay_budget.py` — Waveform's exact replay on the shared `ExactReplay`: under the
+  budget a commit shows the live-applied frame, steps at most one tick per evaluation while that frame stays, and
+  lands byte-identical to a fresh replay; a gesture release keeps the last live frame until then; undo and seeks back
+  resume from checkpoints; the Studio sets the budget and keeps requesting frames (control: no budget replays in one
+  evaluation);
 - `tests/test_waveform_studio_second_mode.py` — the framework driven by a tiny test-only mode (reuse contract);
 - one adapter test per registered Studio mode (for example `tests/test_extruded_bubble_studio.py`): registry
   coverage, production-parity preview, handles and Settings round trip;
@@ -816,6 +823,13 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   and reached exactly by the Studio's own edits (node add/remove, lane reorder), with a negative control.
 - `tests/test_spectrum_studio_replay_budget.py` — exact replays rewind (pristine / checkpoints) instead of
   re-configuring, equal production for every Spectrum-owned key, and spread over frames under the Studio's budget.
+- `tests/test_spectrum_studio_drag_model.py` — a drag of every Spectrum-owned slider builds the production settings
+  model only on its first changed frames, applies kwargs equal to a full production build on every frame, and the
+  release replays exactly (controls: without the learned pass-through every frame builds; a key whose build changes
+  more than itself is never patched).
+- `tests/test_studio_scene_theme_independence.py` — every registered Studio's scene pixels are the same under the
+  darkest and the lightest shipped Settings theme, within the multisample noise (control: without the viewport's
+  scene backing the theme leaks into Bubble's and Spectrum's scenes).
 - `tests/test_studio_chrome.py` — the Studio wears Settings' chrome through Settings' owners: frameless window, the
   shell's title bar and the forged edge painted by Settings' own painter; Normal / Acrylic / Glass follow the active
   theme through the shared backdrop mapping (Settings uses it too); card borders stroke one continuous path (control:

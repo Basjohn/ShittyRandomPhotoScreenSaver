@@ -43,22 +43,19 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
 
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
 
-- [ ] **Slow startup: Feeds cache delivery blocks the GUI thread (operator, 6 Nov 10:30):** the first
-  `_FeedFamilyOwner._submit ... _deliver` UI callback took **6855 ms**, later per-source cache deliveries 166-240 ms
-  each (`[PERF][FEED_GUI_DELIVERY] phase=cache`), the feeds refresh held the transition gate 16.8 s, and the
-  image_prefetch worker missed its heartbeat and had to be terminated/killed (likely starved by the same block).
-  Weather/Reddit/Gmail startup deliveries 90-160 ms each. R-104 isolated parsing; the warm-restore publish of every
-  News publisher's cached rows (16-22 publishers per category) still runs on the GUI thread. Make warm restore
-  publish a bounded first page and stream the rest (or build the payload off-thread and hand the GUI one coherent
-  bundle), keep R-104's single gentle startup transition, and prove the GUI-thread time per delivery stays under the
-  stall budget. Evidence `.artifacts/evidence/slow_startup_20261106/`.
-  **Lead correlation (same log):** the 6.9 s callback ends exactly when the `--usage` sampler's FIRST collection does:
-  `collect_ms=7238.78 topology_refresh=1 topology_source=toolhelp` at 10:30:27 on a machine at 97-100% system CPU
-  (agents' game60 live checks were running). A single long GIL-holding collection (cf. the "usage sampler
-  children()/num_threads()" lesson) starves every Python thread, so the feeds callback may only be the one that got
-  measured. First prove which owns the 7 s (sampler topology snapshot vs feeds publish), then fix both: the sampler's
-  startup topology refresh must not hold the GIL for seconds (chunk it, or take the snapshot without the GIL), and
-  the per-source 166-240 ms feeds deliveries still need trimming.
+- [ ] **Slow startup (operator, 6 Nov 10:30; owners found and fixed, awaiting the operator's cold start):** the 7 s
+  GUI "Feeds delivery" and the sampler's 7.2 s first sample were one `ProcessSupervisor` state lock held across a
+  stuck optional child's stop/start; fixed (lock for dictionary work only, per-role lifecycle lock, a role mid-transition
+  reports "not available"; `tests/test_process_supervisor_availability.py`). The engine init thread no longer waits up
+  to 10 s for the OPTIONAL image_prefetch child's ready signal (10:30:10 to :20): `_start_optional_worker` queues that
+  start on a ThreadManager IO worker (the required IMAGE worker keeps its inline ready wait; supervisor `shutdown()`
+  aborts the wait and the engine stops the supervisor before the ThreadManager; `tests/test_optional_worker_startup.py`).
+  Offline, Feeds cache delivery including the NEWS card model is 0.1-15 ms per source at 18 publishers x 40 stories, so
+  the 166-240 ms `FEED_GUI_DELIVERY` lines at 10:30:40-42 are not reproduced (`_complete` excludes QML) and are treated
+  as the post-block backlog on a 97-100% CPU machine. Open: confirm on the operator's next cold start with `--usage`
+  that no `UI_CALLBACK` / `FEED_GUI_DELIVERY` line exceeds a frame and the first `collect_ms` is small; a prefetch
+  batch asked for before the child is ready fails as "not running" (a logged `[PREFETCH]` error; no retry of that batch). Evidence
+  `.artifacts/evidence/slow_startup_20261106/`.
 - [ ] **Bubble / Extruded Bubble "terrible performance" (operator log 10:32-10:35):** confounded: the machine was at
   97-100% system CPU from the agents' game60 live checks and parallel work during that session (quiet-machine game60
   this morning: Bubble P1 62.7 fps, EB 54.6 fps). Re-check in a quiet operator session before acting; heavy
@@ -88,8 +85,25 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
   cost is mostly elsewhere (capture, packet build, field/strand/spark work): profile the LIVE logical tick, then cut
   it with byte-identical output (Preset 4 bit-exact with the tag). This is the Graphics Backend Decision's "optimise
   the logical tick first" step before trigger 2 can be judged. Evidence `.artifacts/evidence/live_check_quiet_20261106/`.
+  - **Extruded Bubble part (built 6 Nov; offline proven, live re-measure open):** byte-identical cuts at the owners.
+    These are the contact discovery and far-pair skip, the cluster motion and layout, the cached phase terms, steer
+    with no closure, the wake fast path, the snapshot records, controls re-resolved only on a read value's change,
+    a strict-equality memo for the renderer parameters, struct-packed wake floats and presentation attrs resolved
+    once per spec. Every published frame matches main on 4 recordings x 6 cases (24 replays, 130,926 frames, per-frame
+    digests). `tests/test_extruded_bubble_logical_tick_exactness.py` compares the output against the straightforward
+    forms. The offline P1 tick (`tools/eb_logical_cost_probe.py`, paired with main) went from 2.50 to 2.13 ms median
+    (p90 3.25 to 2.78), about 15%. The tick is now spread thin: contacts 0.38, wakes 0.42 (NumPy flow 0.2), the
+    rest of the simulation 0.62, capture 0.45. A NumPy contact sweep measured slower in situ and was dropped. Open:
+    the paired `--load game60` live checks (P1 and P5, main and branch alternately, 2 rounds each, 60 s) are owed by
+    the lead on a free machine. The 6 Nov rounds overlapped the operator's own session (system CPU 97-100%) and
+    are void. Evidence `.artifacts/evidence/eb_logical_tick/` (branch worktree).
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
+
+- [ ] **`tests/test_process_supervisor_availability.py` load sensitivity (6 Nov):** `test_start_does_not_block_
+  availability_calls_or_the_heartbeat` failed once inside a 700-file isolated run and passed alone (its 0.15 s
+  budget per availability call). If it recurs, widen the budget to the measured loaded worst case rather than drop
+  the check; the old lock scope took seconds, so the bound keeps its meaning.
 
 - [ ] **Neon Lake goal mocks (Presets 1-3, 6 Nov sixth pass, awaiting operator look):** darker mirror lake with a
   longer Moon/Sun column and no swell wash, Preset 3's mid-lake blob fixed (mirror counted swell troughs as land),
@@ -117,10 +131,6 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
   passed 64/64. Looks like a native crash at interpreter teardown after the Studio tests. If it recurs, capture the
   exit code and any faulthandler output (run the file alone with `-X faulthandler`) and fix the teardown owner.
   Probably the same family as the leaked clip workers fixed in 90f65ee9 (a surviving worker held the runner's pipe).
-- [ ] **Worker-lifetime negative control is timing-dependent:** `test_without_the_job_tree_..._negative_control`
-  cancels inside the venv launcher's setup window by delay sweeps; under an 8-way gate no delay landed (6 Nov, twice),
-  so it now skips with that reason. Replace it with a deterministic stand-in (a probe parent that starts a child with
-  `CREATE_SUSPENDED` and is killed alone, with and without the job tree).
 
 - [ ] **4x MSAA repeat-render noise (driver, 5 Nov; was "Floor Give run-to-run noise"):** the same frame rendered
   again through a 4x scene target differs by 1 level (rarely 2-3) on a pixel or two in Waveform (more often with Floor
@@ -516,32 +526,41 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   so DevCurve's preset row now shows Open Studio and no Edit Preset). Evidence `.artifacts/evidence/devcurve/studio/`
   (Deep Blue on Rag Doll, Neon Skyline on Human: every workspace with the live traces, plus the node rows). Operator
   to judge: the per-layer Body / Accent / Swell traces as the way to read the reworked reactivity, the Layers
-  workspace (one panel per layer), and whether the Audio Analysis group earns its place (in the replay only Bar Count
-  and the noise floor change what the engine answers DevCurve, and nothing DevCurve draws). The builder body is
-  replaced with `build_studio_owned_mode_ui` only on acceptance.
+  workspace (one panel per layer), and whether the Audio Analysis group earns its place (re-analysed from PCM through the
+  production DSP, every offered control moves DevCurve's frame; AGC Strength and Output Lift read nothing and are now
+  hidden: `Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode). The builder body is replaced with
+  `build_studio_owned_mode_ui` only on acceptance.
 - [ ] **Oscilloscope Studio built (6 Nov), awaiting operator acceptance** (`ui/studio/oscilloscope_adapter.py`,
   registered). Evidence `.artifacts/evidence/oscilloscope/studio/` (Preset 1 Phosphor on Human, Preset 3 Lissajous on
   Rag Doll: every workspace with the live traces). Recorded engine answers with the capture history recorded by
   identity (binary sidecar; `Docs/Reference/Visualizer_Studio.md` §3). Operator to judge: Level / Afterglow / Ghosts /
   Flare / Drive / Tone as the way to read the beam, the three workspaces, and whether the Audio Analysis group earns
-  its place (in the replay only Bar Count and the noise floor change what the engine answers Oscilloscope; Sensitivity,
-  Input Gain, Block Size and Use Recommended Sensitivity change nothing it reads, since it draws the raw capture
-  history: confirm against the live engine before removing anything). The builder body is replaced with
+  its place (re-analysed from PCM through the production DSP, every offered control moves Flare and Drive, and Bar Count,
+  Block Size and Input Gain also move Tone: the trace itself is the raw capture, but the beam's reactions are not;
+  `Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode). The builder body is replaced with
   `build_studio_owned_mode_ui` only on acceptance.
+- [ ] **Studio replay understates Audio Analysis (found 6 Nov):** the engine-processed Studios serve the clip's *recorded*
+  post-DSP lanes (`ReplayBeatEngine`; only the Spectrum family's bars are re-shaped from PCM), so editing Sensitivity,
+  the floors, Gain or Block Size in the DevCurve, Oscilloscope, Bubble, Extruded Bubble or Sphere Studio (and Neon
+  Lake's onset waves) changes little or nothing on screen while the live engine changes Flare, Drive, onsets and the
+  curves. The audit's
+  `ProductionLaneEngine` (`tools/visualizer_replay/analysis_controls_audit.py`: per-frame PCM through
+  `compute_bars_from_samples`, production getters) is the candidate: promote it to `feature_replay`, use it in
+  `engine_answers.extract` for modes with engine-owned analysis, and re-prove the parity tests. It takes one analysis
+  block per 11 ms tick where live analyses every capture callback, so absolute levels approximate; measure the worker's
+  cost on the shipped clips first.
 - [ ] **Edit Preset deleted (6 Nov)**: every visualizer mode now has a Studio, so the preset row's Edit Preset button,
   `_open_preset_json` and its pop-up are gone (`ui/tabs/media/preset_slider.py`); curated presets are authored with
   Open Studio and the Studio's confirmed Save To <Preset> (`Docs/Reference/Visualizer_Studio.md` §4).
   `tools/flicker_test.py` keeps its own historical mock of the old row. Operator look pending: Open Studio's place in
   the preset row and the Save To flow.
 - [ ] **Operator side requests (6 Nov, "important eventually"; queue after the running work):**
-  - **Bar Count outside Spectrum:** it reads out of place on other modes. Audit per mode what the engine's bar count
-    actually feeds (the DevCurve and Oscilloscope Studio replays found only Bar Count and the noise floor change what
-    the engine answers them; Sensitivity / Input Gain / Block Size / Use Recommended Sensitivity changed nothing they
-    read). Keep it only where a mode demonstrably depends on it (show the dependency), hide it elsewhere; the same
-    question for the rest of the Audio Analysis group per mode, checked against the live engine.
-  - **Tilt Shift cannot be toggled:** every curated Waveform preset has Floor Clearance = Dynamic Height Shift (its
-    `when` condition), so the toggle should be live. Reproduce in Settings and the Studio, fix the owner, and test the
-    real dialog with a negative control.
+  - **Bar Count outside Spectrum (lead decision 6 Nov, with the Studio migration):** audited 6 Nov
+    (`Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode): outside Spectrum and Extruded
+    Spectrum it is analysis resolution, not a drawn count, yet it moves every mode's frame (Neon Lake waves,
+    Oscilloscope Flare / Drive, Bubble, Extruded Bubble, Sphere, DevCurve, Waveform), so it stays everywhere. Outside
+    the two bar modes it is labelled "Analysis Bands" with a tooltip saying what it does (as Voxel Sphere already is),
+    keyed off one descriptor fact and read by Settings and the Studio alike.
   - **Waveform travel speed:** History Speed (`flow_speed`, 0.8-2.4, Flow bucket) and Pulse Speed exist but the
     operator did not find them; there is no travel-speed reactivity. Make them findable (name / workspace / tooltip)
     and consider a quiet -> peak History Speed under the flow rule (music pushes history faster, smoothly; knot spacing
@@ -549,7 +568,8 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   - **Studio clips: 30 s small, or cleanly loopable.** Shipped clips are ~12 s, ~0.9 MB each (2.5 MB total); 30 s would
     be ~2.2 MB each but an engine-owned edit re-analyses the whole clip (~2.5x longer). A clean loop instead: loop
     points on matching musical positions with a short crossfade, and the Studio's evaluator continuing its simulation
-    state across the loop (today the replay restarts at t = 0, which would jump). Choose with measurements.
+    state across the loop (today the replay restarts at t = 0, which would jump). Choose with measurements. Operator
+    (6 Nov): the clips are still 12 s; the loop must be seamless (no skip at the end).
 - [ ] **Studio chrome matches Settings (6 Nov), awaiting the operator's look** (all Studios: one shell;
   `Docs/Reference/Visualizer_Studio.md` "Chrome and theme"). Frameless window with Settings' title bar and forged
   rounded edge, the theme's Glass/Acrylic material, 1.5 px one-path card borders, Settings' panel casts at half
@@ -557,17 +577,19 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   (before/after, Default Dark Acrylic, Matte Graphite Normal, Pearl Blush light Glass; 8x crops). Operator to check
   on screen: the live Glass/Acrylic composition of the Qt Quick window (first use of the AccentPolicy material on an
   alpha OpenGL window; the evidence only simulates the blur), snap/resize/maximise by hand, and the panel opacity
-  floor (0.88) and shadow strength on light themes. Two side defects seen in that evidence, both already in the
-  before renders: (a) Bubble's presented scene differs under the light Pearl Blush theme (max 7-9 levels over ~37k
-  pixels vs Default Dark, before and after this change), though the scene should never follow the Settings theme and
-  no test compares scene pixels across themes; (b) on light themes the signal-trace cards keep the dark viewport
-  colour and their channel labels are barely legible.
+  floor (0.88) and shadow strength on light themes. Light-theme instrument wells (trace cards, response curve,
+  transport bar) now sit on the theme's input surface (evidence `.artifacts/evidence/studio_followups/legibility/`,
+  Pearl Blush and Default Dark, before/after): operator look pending. Operator (6 Nov, not urgent): the material is
+  missing from most Studio areas (workspace tabs, the panels under the preview, their section headers). Apply the
+  theme's Glass/Acrylic to them with a slightly darker layer behind every control so it stays legible. Controls laid
+  over the preview (transport chips, aspect chips, the source notice) keep a translucent dark solid: blurring the live
+  scene behind them would cost GPU time every frame and skew what the preview shows about performance.
 - [ ] **Studio drag lag fixed (6 Nov), awaiting the operator's feel check.** Drags preview once per frame and
   re-show only the dragged key (Visualizer_Studio.md "Drags are batched"); evidence
-  `.artifacts/evidence/studio_drag/` (per move 56 ms -> 0.07 ms on Waveform). Two per-frame costs remain, both
-  outside the drag path: Waveform's exact replay on release runs in one frame (~120 ms, no frame budget or
-  checkpoints like Spectrum's), and Spectrum's live restyle builds the production settings model per new value
-  (~14 ms per frame while dragging a mode-owned key).
+  `.artifacts/evidence/studio_drag/` (per move 56 ms -> 0.07 ms on Waveform). Side defect (not measured): Bubble's,
+  Extruded Bubble's and Sphere's evaluators still replay exactly in one evaluation from the fixture start, without the
+  frame budget and checkpoints Waveform and the engine-answer modes now share (`ui/studio/exact_replay.py`); measure
+  with `tools/studio_drag_profile.py` and move them onto `ExactReplay` where a release stalls.
 
 ## Operator execution and evidence rules
 

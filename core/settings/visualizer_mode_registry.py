@@ -87,6 +87,11 @@ class VisualizerModeDescriptor:
     # the mode consumes. Unused worker outputs are configured at resolution.
     technical_setting_suffixes: tuple[str, ...] | None = None
     analysis_notch_setting: str = ""
+    # Owned technical controls the mode's published frame provably never reads (measured by
+    # ``tools/visualizer_replay/analysis_controls_audit.py``, which re-analyses recorded PCM through the production
+    # DSP): Settings and the Studio do not offer them. Visibility only: the keys stay owned, stored, serialized and
+    # preset-authorable, and a mode that starts reading one drops it from here.
+    technical_hidden_suffixes: tuple[str, ...] = ()
     # Whether this mode participates in the shared per-mode Rainbow settings
     # contract. Experimental modes may deliberately omit that product surface;
     # callers must consult the descriptor rather than assume every mode owns
@@ -236,6 +241,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         settings_builder_factory="build_bubble_ui",
         logical_tick_hook_module="widgets.spotify_visualizer.tick_pipeline",
         logical_tick_hook_factory="dispatch_bubble_simulation",
+        # No authored Spectrum shaping runs for Bubble, so the AGC and Output Lift stage after it is never reached.
+        technical_hidden_suffixes=("agc_strength", "dynamic_range_enabled"),
     ),
     VisualizerModeDescriptor(
         "devcurve",
@@ -250,6 +257,8 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         settings_builder_factory="build_devcurve_ui",
         logical_tick_hook_module="widgets.spotify_visualizer.tick_pipeline",
         logical_tick_hook_factory="dispatch_devcurve_field",
+        # Same stage as Bubble: it reads the pre-AGC control lanes, never shaped bars.
+        technical_hidden_suffixes=("agc_strength", "dynamic_range_enabled"),
     ),
     VisualizerModeDescriptor(
         "sphere",
@@ -412,6 +421,9 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
                                     'dynamic_floor','manual_floor','input_gain'),
         rainbow_controls=False,shared_bar_appearance=False,
         raw_musical_signals=True,
+        # Raw musical signals: the lanes it reads sit on a fixed analysis scale ahead of the sensitivity and floor
+        # stage, so these four never reach its frame (Bar Count, Audio Block Size and Input Gain still do).
+        technical_hidden_suffixes=('adaptive_sensitivity','sensitivity','dynamic_floor','manual_floor'),
         view_orbit_settings=('waveform_ribbon_turn','waveform_ribbon_tilt'),
         view_orbit_steps=(2./180.,2./90.),view_orbit_inertia=True,view_orbit_turn_wraps=False,
         view_auto_rotate_settings=('waveform_ribbon_auto_rotate','waveform_ribbon_auto_rotate_after','waveform_ribbon_auto_rotate_speed'),

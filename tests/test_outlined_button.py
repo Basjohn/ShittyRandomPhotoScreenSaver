@@ -29,6 +29,22 @@ def test_border_is_painted_as_one_continuous_stroke(qt_app, role, token) -> None
         button.deleteLater()
 
 
+def test_font_px_enlarges_only_that_button_keeping_its_role_style(qt_app) -> None:
+    """A launcher's larger text outranks its role's shared size (the bound bundle's own font-size), and the
+    stylesheet border stays the role's transparent one; a plain button of the same role keeps the role size."""
+    plain, larger = OutlinedButton("Apply"), OutlinedButton("Apply", font_px=20)
+    try:
+        for button in (plain, larger):
+            button.ensurePolished()
+        assert "solid transparent" in larger.styleSheet()
+        assert larger.font().pixelSize() == 20
+        assert 0 < plain.font().pixelSize() < 20                       # negative control: the role's own size
+        assert larger.sizeHint().height() > plain.sizeHint().height()
+    finally:
+        plain.deleteLater()
+        larger.deleteLater()
+
+
 def test_unknown_role_is_rejected(qt_app) -> None:
     with pytest.raises(ValueError):
         OutlinedButton("x", role="nope")
