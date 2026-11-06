@@ -149,10 +149,10 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
   Hero Shell reads as a soft ring rather than a shell full of bokeh discs; faint surface ripples at the top. Details,
   numbers, reactivity and cost: Extruded_Bubble/Investigation.md §72-73; evidence
   `.artifacts/evidence/extruded_bubble/deep_red_ocean_pass2_20261106/`.
-- [ ] **Side defects found in the deep red ocean pass (6 Nov):** `tools/release_media.py` renders EB presets without
-  their `starting_view` (the replayed config already carries a live pose, so the preset's view is not applied): the
-  P9 showcase WebP frames differently from the preset as selected (pass 1's showcase had it too); and the near
-  (defocus) layer stair-steps the rim of a large near shell on some frames (seen with Lit Glass off as well).
+- [ ] **Side defects found in the deep red ocean pass (6 Nov):** the near (defocus) layer stair-steps the rim of a
+  large near shell on some frames (seen with Lit Glass off as well). Also `tools/release_media.py` cannot render
+  Waveform Ribbon showcases: the replay raises "Raw musical replay requires current PCM reanalysis" because
+  `replay_clip` never drives `tools/visualizer_replay/pcm_reanalysis.py`.
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
