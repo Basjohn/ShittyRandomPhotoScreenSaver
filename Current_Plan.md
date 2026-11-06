@@ -55,9 +55,13 @@ run on 6 Nov, `presets/visualizer_modes/shockwave_grid/preset_1_synthwave.json` 
 at 21:45:04 as a Bubble preset (`"mode": "bubble"`, 78 Bubble keys, name kept), with no log line, while Settings was
 open after a Bubble preset save (21:44:41 `VIS_PRESETS_SAVE ... bubble`). Neon Lake was the last live mode. Values
 came from Bubble, the target from another mode. The original is restored from git; the bad file is kept in
-`.artifacts/evidence/preset_cross_mode_write_20261106/`. Fix: find the writer; every preset-file write asserts that
-its target mode equals the payload mode, fails closed, and logs mode/index/path; a regression test fails on the old
-code. Check installed builds too.
+`.artifacts/evidence/preset_cross_mode_write_20261106/`. **Fixed on the Studio branch (R-174), awaiting merge.**
+- The writer was the preset row's Save Preset As on Bubble's Custom: the file matches its payload and description
+  exactly. It wrote wherever the file dialog answered, unchecked and unlogged.
+- Every preset-file write now goes through `core/settings/visualizer_preset_file.py`, which fails closed on another
+  mode's payload, folder or file, and logs mode, index and path.
+- Installed builds had the same exposure; the same check covers them.
+- `tests/test_visualizer_preset_cross_mode_write.py` fails on the old code.
 
 **Queued (operator 6 Nov ~22:00), next free medium slot:**
 - **Two clicks on Reset Camera count as the card's double-click, which cycles the Visualizer mode**

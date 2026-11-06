@@ -11,7 +11,6 @@ Usage:
 """
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
@@ -394,10 +393,21 @@ class VisualizerPresetSlider(QWidget):
         self._apply_filename_metadata(path, payload)
         payload.setdefault("description", "Saved from current Settings state.")
 
+        from core.settings.visualizer_preset_file import PresetModeMismatch, write_new_preset_file
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("w", encoding="utf-8") as handle:
-                json.dump(payload, handle, indent=2)
+            # The owner refuses (and logs) a target outside this mode's own preset folder or another mode's file:
+            # the file dialog itself puts no bound on where it saves (R-174).
+            write_new_preset_file(self._mode, path, payload)
+        except PresetModeMismatch:
+            StyledPopup(
+                tab,
+                "Not Saved",
+                f"{self._mode_title()} presets can only be saved in {self._mode_title()}'s own preset folder:\n"
+                f"{presets_dir}\n\n{path} is somewhere else, or is another visualizer's preset. Nothing was written.",
+                icon_type="error",
+                buttons=[("OK", "ok")],
+            ).exec()
+            return None
         except Exception:
             logger.debug("[VIS_PRESETS] Failed to save preset %s", path, exc_info=True)
             StyledPopup(
@@ -428,6 +438,13 @@ class VisualizerPresetSlider(QWidget):
             return None
         self._reload_and_reapply_current_preset(index)
         return index
+
+    def _mode_title(self) -> str:
+        try:
+            from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+            return get_visualizer_mode_descriptor(self._mode).display_name
+        except Exception:
+            return str(self._mode)
 
     def _default_save_path(self, presets_dir: Path) -> Path:
         ordinal = get_next_visualizer_preset_ordinal(self._mode)
