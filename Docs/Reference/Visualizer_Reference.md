@@ -30,8 +30,8 @@ the membership authority. Canonical defaults and editable presets own values. Th
 the same declared type/range/owner, while bespoke editors retain named Custom build/load/collect entries.
 
 A mode with a registered Studio adapter (`ui/studio/registry.py`) gets an **Open Studio** button in its preset row
-on every preset slot (the Studio opens on the slot shown, and its Save To <Preset> replaces Edit Preset; modes
-without a Studio keep Edit Preset). A mode whose controls are all Studio-edited (currently Waveform Ribbon) builds its
+on every preset slot (the Studio opens on the slot shown, and its Save To <Preset> authors the curated presets;
+every mode has one, and Settings' former Edit Preset is deleted). A mode whose controls are all Studio-edited (currently Waveform Ribbon) builds its
 body with `build_studio_owned_mode_ui` (`ui/tabs/media/spec_mode_builder.py`): preset row and one sentence, with
 values kept in the unchanged lazy-value/technical owners. The spec stays the declaration authority either way;
 `Docs/Reference/Visualizer_Studio.md` owns the Studio contract.
