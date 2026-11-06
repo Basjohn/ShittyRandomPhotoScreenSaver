@@ -46,6 +46,7 @@ def test_build_preflight_and_onedir_validation_cover_qml_shaders_themes_presets_
         "VisualizerPresentation.qml",
         "WidgetInteractionGlow.qml",
         "widget_glow.frag.qsb",
+        "surface_material.frag.qsb",
         "resources\\tutuogg.ogg",
         "resources\\jedimodeyall.mp3",
         "themes\\widgets",
