@@ -36,12 +36,14 @@ class NoJob:
 
 def light_adapter(mode: str):
     """The registered adapter without recorded clips, background workers or GL drawing."""
+    from ui.studio.engine_answers import EngineAnswerEvaluator
     adapter = create_adapter(mode)
     adapter.recorded_clips = lambda: ()
     adapter.create_renderer = QuietRenderer
-    if mode == "spectrum":
-        from ui.studio.spectrum_adapter import SpectrumStudioEvaluator
-        adapter.create_evaluator = lambda: SpectrumStudioEvaluator(loader=lambda *_a: NoJob())
+    probe = adapter.create_evaluator()
+    probe.release()
+    if isinstance(probe, EngineAnswerEvaluator):        # an engine-answer mode: no out-of-process worker here
+        adapter.create_evaluator = lambda: type(probe)(loader=lambda *_a: NoJob())
     return adapter
 
 

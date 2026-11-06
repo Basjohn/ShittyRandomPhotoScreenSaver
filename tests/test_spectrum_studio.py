@@ -811,7 +811,10 @@ def test_a_failed_out_of_process_worker_is_reported_by_the_evaluator(qt_app):
     assert evaluator.analysis_failure == ""
     evaluator.evaluate(0.0, values)
     assert evaluator.analysing                                                         # retried
-    evaluator.release()
+    evaluator.release()                                # cancels the retried job: its whole worker tree ends
+    from tests.studio_worker_probe import wait_gone
+    from ui.studio.waveform_recorded_inputs import worker_tag
+    assert wait_gone(worker_tag(), 15.0) == []
 
 
 def _pump_until(surface, condition, frames=400):
