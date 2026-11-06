@@ -468,6 +468,7 @@ uniform vec4 uShoreGlowColor;     // its colour; alpha mixes it in over the shor
 uniform float uWaterGlint;        // the Sun/Moon's glittering path on the water below it (0 = none)
 uniform float uContourLines;      // level lines over the land's slopes (0 = none)
 uniform vec4 uGlintLight;         // halo intensity, halo reactivity (0, 0 with the halo off), midband, beat pulse
+uniform float uWaterReact;        // Water Reaction times the music's reaction (shockwave_water_react; 0 = none)
 vec4 sceneEmission(vec3 rgb) { return vec4(rgb, dot(rgb, vec3(0.2126,0.7152,0.0722))); }
 // Screen distance in physical pixels from a water or wet-fringe fragment to the visible shoreline (negative
 // up the dry bank): the bank distance across open water, the shoreline contour on land. Derivatives come from
@@ -681,6 +682,29 @@ void main() {
     float wetShore=basinOutside(vUv)<1e-6 ? 1.0-smoothstep(0.7*BASIN_SHORE_HEIGHT,BASIN_SHORE_HEIGHT,curvedBase) : 0.0;
     float waterCoverage=water ? 1.0 : wetShore;
     vec3 fill=water ? waterFill : mix(waterFill,landFill,shore*(1.0-wetShore));
+    // Water Reaction (pass 7): the mocks' high-react lake, a glowing net of two crossing ripple families (the
+    // ripple colour one way, the crest colour the other, whitening where they cross) that lights with the music.
+    // Its own slow clock (not Scroll); fades where its lines would crowd under ~5 px. Off (0) does no work.
+    float reactNet=0.0;
+    vec3 reactColour=vec3(0.0);
+    if (uWaterReact>0.0) {
+        vec2 rq=vWorld.xz*2.2;
+        // Each family is warped by two slow fields, so the cells are irregular (caustic light), not a ruled grid.
+        float fa=sin(rq.x*4.1+rq.y*6.3+0.16*uTime+1.1*sin(rq.y*2.3-rq.x*1.3+0.07*uTime)
+                     +0.45*sin(rq.x*5.3+rq.y*3.7-0.05*uTime));
+        float fb=sin(-rq.x*4.7+rq.y*5.6-0.13*uTime+1.1*sin(rq.y*2.1+rq.x*1.6-0.05*uTime)
+                     +0.45*sin(-rq.x*4.9+rq.y*4.1+0.06*uTime));
+        float wa=max(fwidth(fa),1e-5), wb=max(fwidth(fb),1e-5);
+        float width=(0.8+1.2*uWaterReact)*uEdgePx;
+        float la=(1.0-smoothstep(0.0,width,abs(fa)/wa))*(1.0-smoothstep(0.35,0.7,wa));
+        float lb=(1.0-smoothstep(0.0,width,abs(fb)/wb))*(1.0-smoothstep(0.35,0.7,wb));
+        // A soft light either side of each line: light on the water, not hairlines.
+        float ga=exp(-abs(fa)/(4.0*wa))*(1.0-smoothstep(0.25,0.55,wa));
+        float gb=exp(-abs(fb)/(4.0*wb))*(1.0-smoothstep(0.25,0.55,wb));
+        reactNet=clamp(max(la,lb)+0.35*max(ga,gb),0.0,1.0);
+        reactColour=(uLineColor.rgb*(la+0.35*ga)+uCrestColor.rgb*(lb+0.35*gb))/max(la+lb+0.35*(ga+gb),1e-4);
+        reactColour=mix(reactColour,vec3(1.0),0.45*la*lb);
+    }
     if (waterCoverage>0.0) {
         vec2 curveUv=vUv+vec2(0.0,uScroll/SHOCKWAVE_DEPTH);
         float waveWire=sceneHeightfieldWaterCurves(curveUv,vWorld.y,uCurveCells,uEdgePx);
@@ -702,7 +726,7 @@ void main() {
         float ringPhase=bankUv*36.0-uTime*0.06;
         float ringPx=abs(fract(ringPhase)-0.5)/max(fwidth(ringPhase),1e-5);
         float rings=(1.0-smoothstep(0.0,1.1*uEdgePx,ringPx))*exp(-bankUv/0.06)
-                    *(1.0-smoothstep(0.12,0.22,fwidth(ringPhase)))*min(3.0*uWaterDetail,1.4)*0.8
+                    *(1.0-smoothstep(0.12,0.22,fwidth(ringPhase)))*min(3.0*uWaterDetail,1.4)*(0.8+1.6*uWaterReact)
                     *(water ? smoothstep(0.004,0.02,bankUv) : 0.0);
         network=max(network,rings);
         curveCoverage=mix(curveCoverage,clamp(network,0.0,1.0),uWaterShine);
@@ -850,7 +874,7 @@ void main() {
     // not the visible terrain/sky boundary. Skyline now has its own thin pass.
     float lineAlpha=line*uLineColor.a;
     float ringAlpha=ring*uCrestColor.a;
-    float shoreAlpha=clamp(shoreLight*(0.55+0.95*vEnergy),0.0,1.0)*uCrestColor.a;
+    float shoreAlpha=clamp(shoreLight*(0.55+0.95*vEnergy+0.8*uWaterReact),0.0,1.0)*uCrestColor.a;
     vec3 premult=fill*fillAlpha*(1.0-lineAlpha)+wire*lineAlpha;
     float alpha=fillAlpha*(1.0-lineAlpha)+lineAlpha;
     premult=premult*(1.0-ringAlpha)+palette*ringAlpha;
@@ -880,7 +904,7 @@ void main() {
     if (uShoreGlow>0.0 && basinOutside(vUv)<1e-6) {
         float px=basinShorePixels(water,vUv,curvedBase,uvPerPixel,curvedPerPixel);
         float reach=1.2+2.8*min(uShoreGlow,2.0);
-        edgeGlow=(px>=0.0 ? exp(-px/reach) : exp(px/(0.35*reach)))*uShoreGlow*(0.75+0.5*vEnergy);
+        edgeGlow=(px>=0.0 ? exp(-px/reach) : exp(px/(0.35*reach)))*uShoreGlow*(0.75+0.5*vEnergy+0.8*uWaterReact);
         float edgeAlpha=clamp(0.45*edgeGlow,0.0,0.85);
         premult=premult*(1.0-edgeAlpha)+edgeColour*edgeAlpha;
         alpha=alpha*(1.0-edgeAlpha)+edgeAlpha;
@@ -890,17 +914,26 @@ void main() {
     vec3 glintColour=mix(bodyColour.rgb,vec3(1.0),0.15);
     if (wetness>0.0 && uWaterGlint>0.0 && uSunEnabled==1) {
         float gain=uGlintLight.x>0.0 ? basinCelestialHaloGain(uGlintLight.xy,uGlintLight.z,uGlintLight.w) : 1.0;
-        glintLight=uWaterGlint*wetness*basinWaterGlint(vWorld,depthPerPixel,rippleHeight,screenPerPixel)*(0.75+0.25*gain)*bodyColour.a;
+        glintLight=uWaterGlint*wetness*basinWaterGlint(vWorld,depthPerPixel,rippleHeight,screenPerPixel)*(0.75+0.25*gain+0.6*uWaterReact)*bodyColour.a;
         float glintAlpha=clamp(glintLight,0.0,1.0);
         premult=premult*(1.0-glintAlpha)+glintColour*glintAlpha;
         alpha=alpha*(1.0-glintAlpha)+glintAlpha;
+    }
+    vec3 reactLight=vec3(0.0);
+    if (reactNet>0.0 && waterCoverage>0.0) {
+        float reactAlpha=clamp(reactNet*uWaterReact*1.2,0.0,0.95)*waterCoverage;
+        premult=premult*(1.0-reactAlpha)+reactColour*reactAlpha;
+        alpha=alpha*(1.0-reactAlpha)+reactAlpha;
+        reactLight=reactColour*reactAlpha*1.3;
+        // The whole lake lifts a little in the net's colours (the mocks' high-react water is lit, not black).
+        premult+=mix(uLineColor.rgb,uCrestColor.rgb,0.4)*0.10*uWaterReact*waterCoverage*(1.0-reactAlpha);
     }
     FragColor=vec4(min(premult/max(alpha,1e-4),vec3(1.0)),alpha*distanceFade);
     // Only water carries lines here; their glow takes its own colour and strength.
     vec3 lineGlow=mix(wire,uWaterLineGlowColor.rgb*(0.65+0.55*crest),uWaterLineGlowColor.a)*uWaterLineGlow;
     Emission=sceneEmission((lineGlow*lineAlpha + palette*ringAlpha*0.45+shoreColour*shoreAlpha
                            +fill*fillAlpha*glassWeight*0.12+shineEmission*fillAlpha
-                           +edgeColour*edgeGlow*1.2+glintColour*glintLight*1.4+landLineGlow)
+                           +edgeColour*edgeGlow*1.2+glintColour*glintLight*1.4+landLineGlow+reactLight)
                            *uGlow*distanceFade*detailFade);
 }
 """

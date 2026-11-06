@@ -132,6 +132,45 @@ def shockwave_height(x: float, z: float, events, amplitude: float, speed: float)
     return height, crest
 
 
+# Water Reaction (pass 7): how strongly the lake answers the music, read from the admitted waves themselves. Their
+# strengths already carry the fixed real-music scale (passage share, musical weight and emphasis on the bus's
+# loudness), so loud passages admit more and stronger waves and quiet ones fewer and weaker: no level is learned
+# from the track. The display bars every other lake term read sit at ~1 through all ordinary music (post-AGC,
+# Height Scale), so they cannot tell a loud passage from a usual one.
+WATER_REACT_MEMORY = 2.0            # seconds: each wave's share of the level falls to 1/e
+WATER_REACT_WINDOW = (2.5, 4.0)     # seconds: the level forgets a wave smoothly here (the ring holds ~4.4 s at most)
+WATER_REACT_SCALE = 1.8             # sqrt of the summed strength per e-fold of the level's headroom
+WATER_REACT_ACCENT = (0.08, 0.35)   # seconds: a wave's light rises over the first, settles over the second
+WATER_REACT_BEAT = 0.4              # the share of the reaction the accents swing (beats swing the passage level)
+
+
+def shockwave_water_reaction(events) -> tuple[float, float]:
+    """(level, accent), each 0..1, from the onset ring [(age, x, z, strength), ...]: the level is the recent waves'
+    summed strength on a fixed compressive scale (1985_loud1 p50 ~0.45, louder captures ~0.7-0.8, with headroom),
+    the accent the newest waves' quick-rise, gentle-settle light. Both rise over ``WATER_REACT_ACCENT[0]`` and
+    fade (never vanish): a wave's share eases out before the ring can drop it."""
+    rise, settle = WATER_REACT_ACCENT
+    total = accent = 0.0
+    for age, _x, _z, strength in events:
+        age, strength = float(age), float(strength)
+        if age < 0.0 or strength <= 0.0:
+            continue
+        onset = _smoothstep(0.0, rise, age)
+        total += strength * onset * math.exp(-age / WATER_REACT_MEMORY) * (1.0 - _smoothstep(*WATER_REACT_WINDOW, age))
+        accent += strength * onset * math.exp(-age / settle)
+    return 1.0 - math.exp(-math.sqrt(total) / WATER_REACT_SCALE), 1.0 - math.exp(-accent)
+
+
+def shockwave_water_react(events, amount: float) -> float:
+    """The lake's reaction uniform (0..``amount``): the level, swung by the accents (multiplicative, so a quiet
+    passage's beats never lift it to a loud passage's look). ``amount`` is Water Reaction (0 = none, no work)."""
+    amount = max(0.0, min(1.0, float(amount)))
+    if amount <= 0.0:
+        return 0.0
+    level, accent = shockwave_water_reaction(events)
+    return amount * level * (1.0 - WATER_REACT_BEAT + WATER_REACT_BEAT * accent)
+
+
 def shockwave_event_records(events, half_width: float) -> list[dict[str, float]]:
     """The std430 records for ``events`` [(age, x share, z, strength), ..., oldest first]: x in world units.
     Only the newest ``SHOCKWAVE_CAPACITY`` younger than ``SHOCKWAVE_LIFETIME`` (the ring remembers longer)."""
