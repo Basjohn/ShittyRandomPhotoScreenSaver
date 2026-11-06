@@ -896,7 +896,7 @@ def test_save_to_preset_writes_only_the_edited_key_into_a_curated_oscilloscope_p
     span = prop.maximum - prop.minimum
     target = round(prop.minimum + span * (0.25 if float(shown) > prop.minimum + span / 2 else 0.75), prop.decimals)
     bridge.commitValue(prop.id, 0, target)
-    assert slider.preset_index() == slider.custom_index()          # a Studio edit lands in Custom
+    assert slider.preset_index() == curated                        # held on the preset: no switch to Custom
     assert bridge.savePresetTarget == names[curated]
     before = path.read_bytes()
 
@@ -920,4 +920,4 @@ def test_save_to_preset_writes_only_the_edited_key_into_a_curated_oscilloscope_p
     assert {k: v for k, v in new_resolved.items() if k != prop.id} == {
         k: v for k, v in old_resolved.items() if k != prop.id}
     assert vp.get_preset_settings(MODE, curated)[prop.id] == pytest.approx(target)    # presets were reloaded
-    assert slider.preset_index() == slider.custom_index()
+    assert slider.preset_index() == curated                        # the preset stays selected, now holding it

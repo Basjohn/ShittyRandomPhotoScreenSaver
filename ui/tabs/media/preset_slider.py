@@ -40,6 +40,7 @@ from core.logging.logger import get_logger
 from core.settings.visualizer_presets import (
     get_custom_preset_index,
     get_preset_count,
+    get_preset_file_path,
     get_preset_names,
     get_next_visualizer_preset_ordinal,
     get_visualizer_presets_dir,
@@ -338,10 +339,15 @@ class VisualizerPresetSlider(QWidget):
         # save captures them as custom.
         self._slider.setValue(self._custom_index)
 
-    def _save_custom_preset_as(self) -> None:
+    def _save_custom_preset_as(self, *, select_saved: bool = False) -> int | None:
+        """Save the current settings as a new preset file (Settings' file dialog, into the presets folder).
+
+        By default Custom stays selected (the preset row's own Save Preset As…). ``select_saved``: the new preset
+        is selected and applied instead (the Studio's "Save As New Preset" for edits held on a curated preset), and
+        its slot is returned. None when nothing was saved."""
         tab = self._find_tab()
         if tab is None or not hasattr(tab, "build_visualizer_preset_payload"):
-            return
+            return None
 
         flush = getattr(tab, "flush_pending_changes", None)
         if callable(flush):
@@ -357,7 +363,7 @@ class VisualizerPresetSlider(QWidget):
                 icon_type="error",
                 buttons=[("OK", "ok")],
             ).exec()
-            return
+            return None
 
         presets_dir = get_visualizer_presets_dir(self._mode)
         try:
@@ -373,7 +379,7 @@ class VisualizerPresetSlider(QWidget):
             "Visualizer Preset (*.json)",
         )
         if not file_path:
-            return
+            return None
 
         path = Path(file_path)
         if path.suffix.lower() != ".json":
@@ -401,7 +407,7 @@ class VisualizerPresetSlider(QWidget):
                 icon_type="error",
                 buttons=[("OK", "ok")],
             ).exec()
-            return
+            return None
 
         StyledPopup(
             tab,
@@ -410,7 +416,18 @@ class VisualizerPresetSlider(QWidget):
             icon_type="success",
             buttons=[("OK", "ok")],
         ).exec()
-        self._reload_and_reapply_current_preset(self._slider.value(), force_custom=True)
+        if not select_saved:
+            self._reload_and_reapply_current_preset(self._slider.value(), force_custom=True)
+            return None
+        reload_presets(self._mode)
+        saved = path.resolve()
+        index = next((i for i in range(get_custom_preset_index(self._mode))
+                      if (found := get_preset_file_path(self._mode, i)) is not None and found.resolve() == saved), None)
+        if index is None:
+            logger.warning("[VIS_PRESETS] Saved preset %s is not in the catalogue after reload", path)
+            return None
+        self._reload_and_reapply_current_preset(index)
+        return index
 
     def _default_save_path(self, presets_dir: Path) -> Path:
         ordinal = get_next_visualizer_preset_ordinal(self._mode)
