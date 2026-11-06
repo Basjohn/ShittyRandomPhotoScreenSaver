@@ -31,6 +31,11 @@ Item {
     property color submenuCheckedSurfaceColor: "#334e718b"
     property color submenuIndicatorBorderColor: "#b9eaff"
     property color submenuIndicatorFillColor: "#82cdff"
+    // Surface material (Docs/Architecture/Card_Surface_Materials.md): the Widget Theme
+    // baseline; Normal keeps both Loaders below inactive.
+    property string surfaceMaterial: "normal"
+    property var surfaceBackdrop: null
+    readonly property bool surfaceMaterialActive: surfaceMaterial !== "normal" && surfaceBackdrop !== null
     readonly property real shadowBaseLeft: Math.max(0.0, -shadowOffsetX)
     readonly property real shadowBaseTop: Math.max(0.0, -shadowOffsetY)
     readonly property real shadowBaseRight: Math.max(0.0, shadowOffsetX)
@@ -116,10 +121,27 @@ Item {
                 menuRoot.height - height - 4.0
             )
         )
-        color: menuRoot.surfaceColor
+        color: menuRoot.surfaceMaterialActive ? "transparent" : menuRoot.surfaceColor
         radius: 10.0
         border.color: menuRoot.borderColor
         border.width: 3.0
+
+        Loader {
+            objectName: "retainedContextMenuSurfaceMaterial"
+            anchors.fill: parent
+            z: -1
+            active: menuRoot.surfaceMaterialActive && menuSurface.visible
+            visible: active
+            sourceComponent: MaterialSurface {
+                backdrop: menuRoot.surfaceBackdrop
+                material: menuRoot.surfaceMaterial
+                cornerRadius: menuSurface.radius
+                contentInset: 6.0
+                normalColor: menuRoot.surfaceColor
+                tintColor: menuRoot.surfaceColor
+                textColor: menuRoot.textColor
+            }
+        }
 
         Column {
             id: menuColumn
@@ -307,13 +329,31 @@ Item {
                         )
                         width: 244.0
                         height: submenuColumn.implicitHeight + 12.0
-                        color: menuRoot.submenuSurfaceColor
+                        color: menuRoot.surfaceMaterialActive
+                            ? "transparent" : menuRoot.submenuSurfaceColor
                         radius: 8.0
                         border.color: menuRoot.submenuBorderColor
                         border.width: 3.0
                         visible: menuRow.modelData.kind === "submenu"
                             && menuRoot.activeSubmenuIndex === menuRow.index
                         z: 20
+
+                        Loader {
+                            objectName: "retainedContextSubmenuSurfaceMaterial"
+                            anchors.fill: parent
+                            z: -1
+                            active: menuRoot.surfaceMaterialActive && submenuSurface.visible
+                            visible: active
+                            sourceComponent: MaterialSurface {
+                                backdrop: menuRoot.surfaceBackdrop
+                                material: menuRoot.surfaceMaterial
+                                cornerRadius: submenuSurface.radius
+                                contentInset: 4.0
+                                normalColor: menuRoot.submenuSurfaceColor
+                                tintColor: menuRoot.submenuSurfaceColor
+                                textColor: menuRoot.submenuTextColor
+                            }
+                        }
 
                         HoverHandler {
                             id: submenuSurfaceHover

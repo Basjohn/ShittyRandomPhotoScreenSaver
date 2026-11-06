@@ -47,6 +47,30 @@ class SurfaceBackdropOwner:
     def retired(self) -> bool:
         return self._item is None
 
+    @property
+    def parked(self) -> bool:
+        return self._item is None or self._item.parked
+
+    def park(self) -> None:
+        """Every surface went Normal: free the GL and stop traversal (consumers unbound first).
+
+        The item stays in the scene, node-less in effect (opacity 0, no GL objects), and is
+        woken if a surface needs it again in this generation; the next generation starts
+        with nothing.
+        """
+
+        item = self._item
+        if item is None:
+            return
+        self._transition_active = False
+        item.set_parked(True)
+
+    def wake(self) -> None:
+        item = self._item
+        if item is None:
+            return
+        item.set_parked(False)
+
     def set_materials(self, materials: frozenset[str]) -> None:
         """The non-Normal materials in use; they set the transition refresh spacing."""
 
@@ -57,13 +81,13 @@ class SurfaceBackdropOwner:
     def note_background_changed(self) -> None:
         """A new presentation image, dimming change or similar one-off edge."""
 
-        if self._item is not None:
+        if self._item is not None and not self._item.parked:
             self._item.request_refresh()
 
     def set_transition_active(self, active: bool) -> None:
         active = bool(active)
         item = self._item
-        if item is None or active == self._transition_active:
+        if item is None or item.parked or active == self._transition_active:
             return
         self._transition_active = active
         item.set_continuous(active, transition_refresh_interval_s(self._materials))
@@ -77,9 +101,11 @@ class SurfaceBackdropOwner:
             return
         item.setWidth(root.width())
         item.setHeight(root.height())
-        item.request_refresh()
+        if not item.parked:
+            item.request_refresh()
 
     def retire(self) -> None:
+        """Scene retirement only: the item dies with the scene root (C++ owned)."""
         item, root = self._item, self._root
         self._item = None
         self._root = None
@@ -89,10 +115,8 @@ class SurfaceBackdropOwner:
                     signal.disconnect(self._on_geometry_changed)
                 except (RuntimeError, TypeError):
                     pass
-        if item is not None:
-            # The caller has unbound every card and the Context Menu; the item releases
-            # its GL at the next sync and then deletes itself.
-            item.retire()
+        if item is not None and not item.parked:
+            item.set_parked(True)
 
 
 __all__ = ["BACKDROP_Z", "SurfaceBackdropOwner"]
