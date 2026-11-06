@@ -38,8 +38,9 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 New platform-facing work (power, display, input) still ships a basic Linux path or an explicit inert one alongside
 the Windows path, so it never needs its own Linux audit later (operator, 5 Nov).
 
-**Agents (operator, 5-6 Nov):** at most three Opus subagents at once (two medium and one high, or three medium) plus
-one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewer/orchestrator.
+**Agents (operator, 6 Nov evening):** at most one Opus 5.5 high and one Opus 5.5 medium subagent at once, with the
+lead as reviewer/orchestrator. Agents that already hold unfinished work may exceed this until they finish (their
+context is valuable). Slots need not always be full: when the right agent is not free, queue the item here.
 
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
 
@@ -77,7 +78,9 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
   no console display-off event in any SRPSS log on this machine. The MSI (DisplayPort) left the topology while off
   and was handled; the LG TV (HDMI) stayed enumerated, so screen 0 rendered at 90 fps with transitions and the
   Visualizer for ~2 h (32-37% of a core). The TV rejects DDC/CI power queries even while on, so there is no signal to
-  read; the overnight check must let Windows' screen timeout turn the displays off.
+  read; the overnight check must let Windows' screen timeout turn the displays off. Operator decision 6 Nov: no
+  Screens Off command (it would put the burden on the user); they enabled the power plan's display timeout and will
+  report how SRPSS handles it.
 - [~] **DevCurve "more alive while keeping the flow" (second cut 6 Nov; awaiting lead review, then operator eyes):**
   loud body owns most of the drawn ceiling (big, smooth: carrier blends to its broad component instead of limiter
   triangles), kicks ride linear headroom, quiet passages take the band share's rise, swell inside the body's share,
