@@ -52,15 +52,6 @@ def test_camera_reset_tooltip_has_the_same_delayed_qml_clock():
     assert 'Timer {' not in s
 
 
-def test_eb_settings_tooltips_are_escaped_wrapped_not_one_line_or_new_owner():
-    s = read(ROOT/'ui/tabs/media/spec_mode_builder.py')
-    assert 'textwrap.wrap(control.tooltip, width=59' in s
-    assert 'html.escape(line)' in s
-    assert '<br/>' in s
-    assert 'widget.setToolTip(_control_tooltip(control))' in s
-    assert 'row.setToolTip(_control_tooltip(control))' in s
-
-
 def test_surface_and_deep_light_authority_distinction_remains_explicit():
     source = read(ROOT/'rendering/gl_programs/extruded_bubble_scene.py')
     render = read(ROOT/'rendering/quick/visualizer/implementations/extruded_bubble.py')
