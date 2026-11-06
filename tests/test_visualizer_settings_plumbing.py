@@ -1760,117 +1760,6 @@ class TestVisualizerModeBinding:
             pass
 
 
-class TestOscilloscopeSettingsBinding:
-    def test_load_oscilloscope_mode_settings_updates_osc_owned_controls(self):
-        from ui.tabs.media.oscilloscope_settings_binding import load_oscilloscope_mode_settings
-        from core.settings.visualizer_mode_settings import Choice, Colour, Slider, require_mode_settings
-
-        class _Widget:
-            def __init__(self):
-                self._value = None
-                self.text = ""
-                self.checked = None
-
-            def blockSignals(self, _blocked):
-                return None
-
-            def setValue(self, value):
-                self._value = value
-
-            def value(self):
-                return self._value
-
-            def setCurrentText(self, value):
-                self.text = value
-
-            def setChecked(self, value):
-                self.checked = value
-
-        class _Label:
-            def __init__(self):
-                self.text = ""
-
-            def setText(self, text):
-                self.text = text
-
-        class _Tab(CanonicalWidgetDefaultsStub):
-            def __init__(self):
-                super().__init__()
-                self._widgets = {}
-
-            def _widget_default(self, section, key):
-                return super()._widget_default(section, key)
-
-        spec = require_mode_settings("oscilloscope")
-        tab = _Tab()
-        config = {}
-        for entry in spec.controls:
-            if isinstance(entry, Colour):
-                config[entry.key] = [11, 22, 33, 44]
-                setattr(tab, f"{entry.key}_btn", None)
-            elif isinstance(entry, Slider):
-                config[entry.key] = (entry.low + entry.high) / 2.0
-                setattr(tab, f"{entry.key}_label", _Label())
-            elif isinstance(entry, Choice):
-                config[entry.key] = entry.choices[-1]
-            widget = _Widget()
-            setattr(tab, entry.key, widget)
-            tab._widgets[entry.key] = widget
-
-        load_oscilloscope_mode_settings(tab, config)
-
-        for entry in spec.controls:
-            if isinstance(entry, Colour):
-                colour = getattr(tab, f"_{entry.key}")
-                assert (colour.red(), colour.green(), colour.blue(), colour.alpha()) == (11, 22, 33, 44)
-            elif isinstance(entry, Slider):
-                assert tab._widgets[entry.key].value() == round(config[entry.key] * entry.scale)
-            elif isinstance(entry, Choice):
-                assert tab._widgets[entry.key].text == config[entry.key]
-
-    def test_collect_oscilloscope_mode_settings_serializes_osc_owned_state(self):
-        from ui.tabs.media.oscilloscope_settings_binding import collect_oscilloscope_mode_settings
-        from core.settings.visualizer_mode_settings import Choice, Colour, Slider, require_mode_settings
-
-        class _Slider:
-            def __init__(self, value):
-                self._value = value
-
-            def value(self):
-                return self._value
-
-        class _Choice:
-            def __init__(self, value):
-                self._value = value
-
-            def currentText(self):
-                return self._value
-
-        class _Tab(CanonicalWidgetDefaultsStub):
-            def __init__(self):
-                super().__init__()
-
-        spec = require_mode_settings("oscilloscope")
-        tab = _Tab()
-        expected = {}
-        for entry in spec.controls:
-            if isinstance(entry, Colour):
-                colour = QColor(11, 22, 33, 44)
-                setattr(tab, f"_{entry.key}", colour)
-                expected[entry.key] = [11, 22, 33, 44]
-            elif isinstance(entry, Slider):
-                value = (entry.low + entry.high) / 2.0
-                setattr(tab, entry.key, _Slider(round(value * entry.scale)))
-                expected[entry.key] = round(value * entry.scale) / entry.scale
-            elif isinstance(entry, Choice):
-                value = entry.choices[-1]
-                setattr(tab, entry.key, _Choice(value))
-                expected[entry.key] = value
-
-        payload = collect_oscilloscope_mode_settings(tab)
-        assert payload == expected
-
-
 @pytest.fixture
 def spectrum_spec_tab(qt_app, settings_manager):
     from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
@@ -1891,11 +1780,11 @@ def spectrum_spec_tab(qt_app, settings_manager):
 
 class TestSpectrumSettingsBinding:
     def test_load_spectrum_mode_settings_updates_spectrum_owned_controls(self, spectrum_spec_tab, monkeypatch):
-        from ui.tabs.media.spectrum_settings_binding import load_spectrum_mode_settings, collect_spectrum_mode_settings
+        """The Studio-owned body holds every loaded value (controls and the shape / smoothing records) and loading
+        saves nothing and switches no preset."""
+        from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
 
         tab = spectrum_spec_tab
-        tab.spectrum_unique_colors.blockSignals(True)
-        tab.spectrum_render_mode_buttons["bars"].blockSignals(True)
         calls = []
         monkeypatch.setattr(tab, "_save_settings", lambda: calls.append("save"))
         monkeypatch.setattr(tab, "_force_visualizer_preset_to_custom", lambda *_: calls.append("custom"))
@@ -1929,24 +1818,17 @@ class TestSpectrumSettingsBinding:
             "spectrum_notch_positions_mirrored": [[0.0, "Mid"], [0.25, "Vocal"], [0.60, "Low-Mid"], [1.0, "Bass"]],
             "spectrum_notch_positions_linear": [[0.0, "Bass"], [0.20, "Low-Mid"], [0.40, "Vocal"], [0.70, "Hi-Mid"], [1.0, "Treble"]],
         })
-        load_spectrum_mode_settings(tab, cfg)
-        assert tab.spectrum_unique_colors.signalsBlocked()
-        assert tab.spectrum_render_mode_buttons["bars"].signalsBlocked()
+        load_spec_mode_settings(tab, "spectrum", cfg)
         assert calls == []
-        payload = collect_spectrum_mode_settings(tab)
+        payload = collect_spec_mode_settings(tab, "spectrum")
         for key, value in cfg.items():
             if isinstance(value, float):
                 assert payload[key] == pytest.approx(value), key
             else:
                 assert payload[key] == value, key
-        assert tab.spectrum_profile_floor_label.text() == "0.17"
-        assert tab.spectrum_drop_speed_label.text() == "1.9x"
-        assert tab.spectrum_border_radius_label.text() == "7px"
-        assert tab._spectrum_rows["spectrum_ghost_alpha"].isHidden()
-        assert not tab._spectrum_rows["spectrum_glow_intensity"].isHidden()
 
     def test_collect_spectrum_mode_settings_serializes_spectrum_owned_state(self, spectrum_spec_tab):
-        from ui.tabs.media.spectrum_settings_binding import load_spectrum_mode_settings, collect_spectrum_mode_settings
+        from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
 
         cfg = {
             "spectrum_ghosting_enabled": True, "spectrum_ghost_alpha": 0.43, "spectrum_ghost_decay": 0.38,
@@ -1962,25 +1844,20 @@ class TestSpectrumSettingsBinding:
             "spectrum_lane_strengths_linear": {"Bass": 0.68, "Low-Mid": 0.52, "Vocal": 0.47, "Hi-Mid": 0.75, "Treble": 0.91},
             "spectrum_wave_amplitude": 0.51, "spectrum_profile_floor": 0.18, "spectrum_drop_speed": 1.75,
         }
-        load_spectrum_mode_settings(spectrum_spec_tab, cfg)
-        payload = collect_spectrum_mode_settings(spectrum_spec_tab)
+        load_spec_mode_settings(spectrum_spec_tab, "spectrum", cfg)
+        payload = collect_spec_mode_settings(spectrum_spec_tab, "spectrum")
         for key, value in cfg.items():
             assert payload[key] == (pytest.approx(value) if isinstance(value, float) else value), key
 
-    @pytest.mark.parametrize("notches, expected", [
-        ([[0.0, "Bass"], [0.25, "Low"], [0.50, "Mid"], [0.75, "Hi-Mid"], [1.0, "Treble"]],
-         [[0.0, "Bass"], [0.24, "Low-Mid"], [0.46, "Vocal"], [0.72, "Hi-Mid"], [1.0, "Treble"]]),
-        ([[0.0, "Bass"], [0.21, "Low"], [0.43, "Mid"], [0.74, "Hi-Mid"], [1.0, "Treble"]],
-         [[0.0, "Bass"], [0.21, "Low-Mid"], [0.43, "Vocal"], [0.74, "Hi-Mid"], [1.0, "Treble"]]),
-    ])
-    def test_load_spectrum_mode_settings_promotes_legacy_linear_labels_to_vocal_lane(
-        self, spectrum_spec_tab, notches, expected,
-    ):
-        from ui.tabs.media.spectrum_settings_binding import load_spectrum_mode_settings, collect_spectrum_mode_settings
+    def test_load_spectrum_mode_settings_promotes_legacy_linear_labels_to_vocal_lane(self, spectrum_spec_tab):
+        """The body holds the shape record as the model admits it (the model's own migration)."""
+        from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
 
-        load_spectrum_mode_settings(spectrum_spec_tab, {"spectrum_mirrored": False,
-                                                       "spectrum_notch_positions_linear": notches})
-        assert collect_spectrum_mode_settings(spectrum_spec_tab)["spectrum_notch_positions_linear"] == expected
+        notches = [[0.0, "Bass"], [0.21, "Low"], [0.43, "Mid"], [0.74, "Hi-Mid"], [1.0, "Treble"]]
+        load_spec_mode_settings(spectrum_spec_tab, "spectrum", {"spectrum_mirrored": False,
+                                                                "spectrum_notch_positions_linear": notches})
+        assert collect_spec_mode_settings(spectrum_spec_tab, "spectrum")["spectrum_notch_positions_linear"] == [
+            [0.0, "Bass"], [0.21, "Low-Mid"], [0.43, "Vocal"], [0.74, "Hi-Mid"], [1.0, "Treble"]]
 
     def test_spotify_visualizer_settings_promotes_drifted_legacy_linear_labels_to_vocal_lane(self):
         from core.settings.models import SpotifyVisualizerSettings

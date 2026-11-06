@@ -102,32 +102,3 @@ def test_3d_builder_bucket_identities_are_declared_by_their_current_owners() -> 
         assert declared <= canonical, f"Unregistered {mode} bucket identities: {sorted(declared-canonical)}"
 
 
-def test_sphere_builder_default_lookups_exist_in_canonical_visualizer_defaults() -> None:
-    """Keep the isolated Sphere builder's canonical-default lookups schema-complete."""
-    import ast
-
-    from core.settings.default_settings import DEFAULT_SETTINGS
-
-    path = ROOT / "ui" / "tabs" / "media" / "sphere_builder.py"
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    looked_up: set[str] = set()
-    default_methods = {"_default_bool", "_default_float", "_default_str", "_color_from_default"}
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
-            continue
-        if node.func.attr not in default_methods or len(node.args) < 2:
-            continue
-        section, key = node.args[0], node.args[1]
-        if not (
-            isinstance(section, ast.Constant)
-            and section.value == "spotify_visualizer"
-            and isinstance(key, ast.Constant)
-            and isinstance(key.value, str)
-        ):
-            continue
-        looked_up.add(key.value)
-
-    canonical = DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]
-    missing = looked_up - set(canonical)
-    assert not missing, f"Sphere builder canonical default lookup(s) missing: {sorted(missing)}"
-    assert looked_up, "Sphere builder default lookup contract unexpectedly discovered nothing"

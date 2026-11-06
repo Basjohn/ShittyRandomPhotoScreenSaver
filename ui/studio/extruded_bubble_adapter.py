@@ -25,11 +25,13 @@ from core.settings.visualizer_mode_settings import (
     Choice, Colour, Range, SceneCameraPosition, ScenePath, Slider, Toggle, Triangle, require_mode_settings,
 )
 from ui.studio import framed
-from ui.studio.adapter import RECORDED, REFERENCE, SYNTHETIC, StudioCapabilities, StudioFixture, StudioModeAdapter
+from ui.studio.adapter import (RECORDED, REFERENCE, SYNTHETIC, StudioCapabilities, StudioFixture, StudioModeAdapter,
+                               control_condition)
 from ui.studio.schema import (
     CHOICE, COLOUR, QUIET_PEAK, SCALAR, SWITCH, CardSpec, SceneObject, StudioProperty, StudioSchema, Workspace,
     WorkspaceColumn,
 )
+from ui.studio.technical import TECHNICAL_GROUP, admit_technical, technical_properties
 
 MODE = "extruded_bubble"
 PREFIX = "extruded_bubble_"
@@ -104,8 +106,10 @@ def path_object_label(control) -> str:
     return _label(control.label).split(" Source")[0].strip() or path_object_id(control)
 
 
-def _admit(controls: Mapping[str, Any]):
+def _admit(controls: Mapping[str, Any], technical: Mapping[str, Any]):
     def admit(key: str, candidate: Any, previous: Any) -> Any:
+        if key in technical:
+            return admit_technical(technical[key], candidate, previous)
         control = controls[key]
         if isinstance(control, Triangle):
             candidate = hold_share(candidate, previous)
@@ -155,7 +159,7 @@ def build_schema() -> StudioSchema:
         text = control.text if isinstance(control, Toggle) else ""        # a checkbox's own words
         label = _label(control.label) or _label(text) or control.key
         tooltip = getattr(control, "tooltip", "")
-        common = dict(workspace=workspace, group=group, tooltip=tooltip,
+        common = dict(workspace=workspace, group=group, tooltip=tooltip, when=control_condition(control),
                       priority=_PRIORITY.get(control.key, 100), icon=_ROW_ICONS.get(control.key[len(PREFIX):], ""))
         if isinstance(control, ScenePath):
             # One per-object inspector: the path's six normalized world coordinates (Source, End).
@@ -165,7 +169,8 @@ def build_schema() -> StudioSchema:
                 props.append(StudioProperty(
                     id=f"{control.key}.{index}", path=(control.key, index), label=f"{end} {_AXES[index % 3]}",
                     workspace="scene", group=PATH_GROUP, instrument=SCALAR, minimum=low, maximum=high, decimals=3,
-                    tooltip=tooltip, object_scope=scope, targets=(scope,), priority=index))
+                    tooltip=tooltip, object_scope=scope, targets=(scope,), priority=index,
+                    when=common["when"]))
         elif isinstance(control, SceneCameraPosition):
             for index, axis in enumerate(_AXES):
                 props.append(StudioProperty(id=f"{control.key}.{index}", path=(control.key, index),
@@ -207,11 +212,16 @@ def build_schema() -> StudioSchema:
                                     view_pose=True,
                                     tooltip="Preview view. Drag the viewport to orbit. Orbit is saved only when the "
                                             "preset's camera checkbox includes the view."))
+    # Settings' per-mode Technical group (the live audio analysis feeding EB's body bands and onsets).
+    technical = technical_properties(MODE, workspace="reactivity")
+    props.extend(prop for prop, _defn in technical.values())
     bucket_of = {title: key for key, title in titles.items()}
     order = {key: rank for rank, key in enumerate(_BUCKET_WORKSPACE)}       # headline buckets first
     for groups in placed.values():
         groups.sort(key=lambda title: order.get(bucket_of.get(title, ""), len(order)))
     placed["camera"].append("View")
+    if technical:
+        placed["reactivity"].append(TECHNICAL_GROUP)
     placed["scene"].insert(0, PATH_GROUP)
     workspaces = []
     for workspace_id, title, icon, help_text in _WORKSPACES:
@@ -224,6 +234,8 @@ def build_schema() -> StudioSchema:
                 columns.append(WorkspaceColumn("Path", (group,), "move", "Selected path: Source and End"))
             elif group == "View":
                 columns[-1] = dataclasses.replace(columns[-1], groups=columns[-1].groups + (group,))
+            elif group == TECHNICAL_GROUP:
+                columns.append(WorkspaceColumn(group, (group,), "bars", "Live analysis feeding the bubbles"))
             else:
                 glyph, subtitle = _BUCKET_PANEL.get(bucket_of.get(group, ""), ("", ""))
                 columns.append(WorkspaceColumn(group, (group,), glyph, subtitle))
@@ -231,14 +243,14 @@ def build_schema() -> StudioSchema:
                                     columns=tuple(columns)))
     controls = {control.key: control for control in spec.controls}
     group_icons = {**{titles[key]: glyph for key, (glyph, _sub) in _BUCKET_PANEL.items() if key in titles},
-                   **_GROUP_ICONS}
+                   **_GROUP_ICONS, TECHNICAL_GROUP: "bars"}
     rays = PREFIX + "rays"
     cards = ()
     if rays in controls and controls[rays].bucket in titles:
         modulation = PREFIX + "ray_modulation"
         roles = (("strength", rays),) + ((("modulation", modulation),) if modulation in controls else ())
         cards = (CardSpec(titles[controls[rays].bucket], "render", roles, "Ray strength", rendered=True),)
-    return StudioSchema(MODE, "Extruded Bubble Studio", tuple(workspaces), tuple(props), _admit(controls),
+    return StudioSchema(MODE, "Extruded Bubble Studio", tuple(workspaces), tuple(props), _admit(controls, technical),
                         group_traces=((titles.get("reaction", ""), ("Passage", "Level", "Sustain")),
                                       (titles.get("rays", ""), ("Rays",)),
                                       (titles.get("bubbles", ""), ("Bubbles", "Passage")),
