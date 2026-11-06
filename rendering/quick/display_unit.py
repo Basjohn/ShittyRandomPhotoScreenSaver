@@ -149,6 +149,10 @@ class QuickDisplayUnit:
             transition_id, parameters, reporter, ticket,
         )
 
+    def request_transition_warm_frame(self, callback, *args) -> bool:
+        """Call ``callback(*args)`` once on this display's next swapped frame, if it renders."""
+        return self._runtime.scene_controller.request_transition_warm_frame(callback, *args)
+
     def cancel_transition_warm_up(self) -> None:
         self._runtime.scene_controller.cancel_transition_warm_up()
 
