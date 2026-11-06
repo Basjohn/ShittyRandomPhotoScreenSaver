@@ -2185,6 +2185,10 @@ class StudioController(QObject):
                     signal.disconnect(slot)
                 except (RuntimeError, TypeError):
                     pass
+            watch = getattr(self.presence, "watch", None)
+            window = getattr(surface, "window", None)
+            if watch is not None and watch.active and window is not None:
+                window.destroyed.connect(lambda *_a: watch.note("studio window destroyed"))
             surface.retire()
 
         def release_models() -> None:

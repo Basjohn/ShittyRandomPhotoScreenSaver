@@ -317,3 +317,43 @@ def test_the_reveal_log_names_the_exposure(probe, caplog):
         _conceal_reveal(window)
     revealed = [r.getMessage() for r in caplog.records if "Settings revealed" in r.getMessage()]
     assert revealed and "exposed=True" in revealed[-1]
+
+
+# ------------------------------------------- the one-shot record of input after a reveal (6 Nov 21:56 post-close freeze)
+def test_a_studio_exit_arms_a_one_shot_input_record_that_ends_with_the_first_input_to_settings(probe, caplog):
+    """The field log after a close names the Qt/native window state at the reveal and when the Studio window is
+    destroyed, then the first input Qt delivers to Settings and its delay; after that nothing is installed."""
+    import logging
+    from PySide6.QtTest import QTest
+    window = probe(acrylic=True)
+    with caplog.at_level(logging.INFO):
+        controller, surface = _studio_session(window)
+        _leave(controller, surface, "close button")
+        watch = controller.presence.watch
+        assert watch is not None and watch.active
+        QTest.mouseClick(window.body, Qt.MouseButton.LeftButton)
+        assert not watch.active
+        settled = len(watch.records)
+        QTest.mouseClick(window.body, Qt.MouseButton.LeftButton)          # disarmed: nothing runs at rest
+        assert len(watch.records) == settled
+    lines = [r.getMessage() for r in caplog.records if "after reveal" in r.getMessage()]
+    assert lines[0].split(" ms ", 1)[1].startswith("armed qt_modal=")
+    assert any("studio window destroyed" in line for line in lines)
+    assert "first input delivered to Settings: MouseButtonPress" in lines[-1]
+    assert "native_disabled=False" in lines[0] and "native_visible=True" in lines[0]
+
+
+def test_input_elsewhere_does_not_end_the_record_negative_control(probe):
+    """Only input that reaches Settings ends the record: a click on another window leaves it armed."""
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QWidget
+    window = probe()
+    controller, surface = _studio_session(window)
+    _leave(controller, surface, "close()")
+    watch = controller.presence.watch
+    other = QWidget()                                                  # never shown
+    QTest.mouseClick(other, Qt.MouseButton.LeftButton)
+    assert watch.active
+    watch.disarm()
+    assert not watch.active
+    other.deleteLater()
