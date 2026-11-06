@@ -26,7 +26,7 @@ and must not be copied per mode.
 | `ui/studio/technical.py` | A mode's technical (audio-analysis) controls as Studio properties with Settings' own keys, ranges, choices, labels and coercion; adapters call it instead of copying them. |
 | `ui/studio/schema.py` | Typed, mode-supplied property schema: instruments (`SCALAR`, `COUNT`, `SWITCH`, `CHOICE`, `QUIET_PEAK`, `COLOUR`, `GRADIENT`), workspaces/columns, scene objects, response tuner, starting-point presets, lifecycle timelines and rendered cards. `admit` is the mode's canonical validator; the framework stores no defaults. |
 | `ui/studio/session.py` | `StudioEditSession`: hydrate from the canonical store, preview vs committed values, one commit per gesture, undo/redo/dirty. The store answers each commit with its canonical post-save snapshot. No Qt, no mode knowledge. |
-| `ui/studio/controller.py` | `StudioController` (single active instance, open → present → retire lifecycle) and `StudioBridge`, the only object QML sees. Bridge slots are plain methods (no `result=`), per the QML signal → result-slot crash rule. |
+| `ui/studio/controller.py` | `StudioController` (single active instance, open → present → retire lifecycle) and `StudioBridge`, the only object QML sees. Bridge slots are plain methods (no `result=`), per the QML signal → result-slot crash rule. The bridge's `values` is a `StudioValueMap` (`QQmlPropertyMap`): each property id notifies on its own, so a changed value re-evaluates only the bindings that read it. |
 | `ui/studio/viewport.py` | Inline `QSGRenderNode` that draws the adapter's renderer straight into the window framebuffer on the render thread (no readback, no per-frame texture copy). It applies the viewport slot's scene-graph clip (scissor), so a frameless mode that overflows its card in production (Extruded Spectrum, Sphere: up to the window) reaches the slot's edge, never the Studio chrome. Renderer created lazily and released on the render thread on `sceneGraphInvalidated` / node release. Snapshots (tiles, rendered cards, Copy Frame) use a second renderer instance, at most one per frame and only on request. |
 | `ui/studio/transport.py` | Play/pause/scrub/loop on the Studio's own time. No timer: it advances on the surface's `afterAnimating` frame start and requests another frame only while playing. |
 | `ui/studio/surface.py` | `StudioWindowSurface` (visible window) and `OffscreenStudioSurface` (hidden `QQuickRenderControl` host used by tests and the capture tool). Same shell, same signals (`frameStarted`, `presented`, `closeRequested`, `lost`, `failed`). |
@@ -147,6 +147,21 @@ is optional and defaults to "not offered":
 Every adapter carries a registry-derived full-coverage test (every canonical control reachable), a production-parity
 preview test and a Settings round-trip test; see `Docs/TestSuite.md` → Visualizer Studio. A property whose path the
 current values do not hold (an unused optional element, such as a curve-node slot) is hidden.
+
+### Drags are batched
+
+Every drag instrument (value sliders, Quiet/Peak lanes, lifecycle grips, response curves, XY handles, colour pickers,
+gradient nodes) goes through `previewValue` / `previewColour` / `previewGradient`, which only hold the newest value
+per target. The controller applies the held values at the next frame start (`on_frame`, the surface's existing
+`afterAnimating` edge; no timer), latest wins, so the session previews at most once per rendered frame however fast
+the pointer moves. An applied preview re-shows only the properties stored under the gesture's keys; the whole values
+map, the starting-point state and the condition map are rebuilt when the gesture ends (or at once when a changed key
+decides another property's visibility). The slider and its readout follow the pointer locally at once. Release
+applies the last held value and commits once (one save, one undo entry); Escape drops the held value and restores;
+keyboard steps and typed values commit per step. An evaluator can name keys whose preview follows only on release
+(`release_only_keys`): the engine-answer modes' engine-owned keys, whose analysis runs once on release (a live
+gesture evaluates with `exact=False`, which never starts one). Their sliders say "Updates On Release" while dragged.
+`tools/studio_drag_profile.py` measures a drag (`Docs/Reference/Harness_Index.md`).
 
 ## 4. Settings link and the restore guarantee
 
