@@ -157,7 +157,12 @@ def _settle_handles(controller, surface, frames=6):
     return controller.bridge.handles
 
 
-def test_scene_handles_follow_the_selected_ribbon_and_edit_real_values(studio):
+def test_scene_handles_follow_the_selected_ribbon_and_edit_real_values(studio, monkeypatch):
+    # The drag maps to the crest's own amplitude. A taller ribbon may also lift as a whole off the floor (Dynamic
+    # Height Shift), which moves the handle further than the drag; since swells are born in view (6 Nov) the canonical
+    # fixture's ribbon is tall enough for that, so the whole-ribbon lift is held still here.
+    import core.waveform_ribbon_dynamics as dynamics
+    monkeypatch.setattr(dynamics, "TROUGH_LIFT_MAX", 0.)
     controller, surface = studio
     bridge = controller.bridge
     bridge.setWorkspace(controller.session.schema.workspaces[0].id)
