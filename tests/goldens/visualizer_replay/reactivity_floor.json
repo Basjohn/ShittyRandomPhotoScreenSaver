@@ -1487,7 +1487,7 @@
         "waveform_zero_crossings": 7
       },
       "reference_mode_metrics": {
-        "output_flux": 16.184499871621362,
+        "output_flux": 5.238795286163888,
         "output_peak": 0.6803088764140655
       },
       "minimums": {
@@ -1495,7 +1495,7 @@
         "bar_flux": 7.63234735,
         "integrated_bar_energy": 0.01635995,
         "attack_slope_per_s": 10.88204695,
-        "output_flux": 8.092249935810681
+        "output_flux": 2.619397643081944
       },
       "maximums": {}
     },
