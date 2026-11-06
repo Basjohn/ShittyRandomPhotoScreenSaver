@@ -13,9 +13,9 @@ shared event-driven ``ClipLoadJob``. Every piece here takes the mode id; the wor
   ``EngineAnswerRecorder`` in for the engine during the production step: everything the engine answered the mode's
   step is recorded, with a digest of the logical frame the production tick published.
 * **Studio.** ``EngineAnswerEvaluator`` configures a ``VisualizerRuntimeController`` exactly as the offline replay
-  does and, per recorded tick, runs the production step itself (``consume_engine_bars`` then
-  ``capture_visualizer_logical_frame``, the two calls ``logical_tick`` makes for a mode with no tick hook) with
-  ``RecordedEngineAnswers`` standing in for the engine. A mode-owned edit replays exactly and at once; an
+  does and, per recorded tick, runs the production step itself (``consume_engine_bars``, the mode's logical tick
+  hook when it has one, as DevCurve's, then ``capture_visualizer_logical_frame``: the calls ``logical_tick`` makes)
+  with ``RecordedEngineAnswers`` standing in for the engine. A mode-owned edit replays exactly and at once; an
   engine-owned edit changes the answers' key and re-runs the worker, the previous answers (with their own engine
   values) staying on screen meanwhile.
 * **The split.** ``EngineAnswerMode.owned_keys``: the keys the engine never reads, from the production projection
@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
 from ui.studio.adapter import RECORDED, REFERENCE, SYNTHETIC as SYNTHETIC_KIND, StudioFixture
+from ui.studio.exact_replay import ExactReplay
 
 ROOT = Path(__file__).resolve().parents[2]
 SYNTHETIC_PREFIX = "synthetic:"
@@ -431,15 +432,30 @@ def extract(mode: EngineAnswerMode, source: str | Path, settings: Mapping[str, A
     if not any(r["frame_sha256"] for r in records):
         raise RuntimeError(f"The source never published a {mode.mode_id} frame")
     start = float(records[0]["now_ts"]) if origin is None else float(origin)
-    return {"source": str(source), "origin": start, "duration": float(records[-1]["now_ts"] - start),
+    data = {"source": str(source), "origin": start, "duration": float(records[-1]["now_ts"] - start),
             "engine_values": mode.engine_values(settings), "steps": records}
+    if len(recorder.arrays):
+        data["arrays"] = recorder.arrays.payload()        # arrays the engine answered (by identity), as bytes
+    return data
+
+
+def array_blob(data: Mapping[str, Any]) -> bytes | None:
+    """The recorded arrays' bytes: in the record itself (in process) or in the worker's binary sidecar."""
+    payload = data.get("arrays")
+    if not payload:
+        return None
+    if "blob" in payload:
+        return payload["blob"]
+    return Path(payload["file"]).read_bytes()
 
 
 def to_inputs(data: Mapping[str, Any], fixture) -> "RecordedInputs":
+    from ui.studio.replay_engine import served_arrays
     steps = tuple(ServedTick(now=float(s["now_ts"]), playing=bool(s["playing"]), answers=s["answers"])
                   for s in data["steps"])
     return RecordedInputs(fixture, steps, float(data["origin"]), source=str(data["source"]),
-                          engine_values=dict(data["engine_values"]))
+                          engine_values=dict(data["engine_values"]),
+                          arrays=served_arrays(data.get("arrays"), array_blob(data)))
 
 
 def worker_main(mode: EngineAnswerMode, argv: list[str]) -> int:
@@ -454,6 +470,10 @@ def worker_main(mode: EngineAnswerMode, argv: list[str]) -> int:
     from PySide6.QtGui import QGuiApplication
     _app = QGuiApplication.instance() or QGuiApplication([])     # this process is the analysis worker
     data = extract(mode, source, settings, seconds=float(rest[0]) if rest else CLIP_SECONDS)
+    if "arrays" in data:                     # raw bytes in a binary sidecar beside the JSON, never JSON floats
+        sidecar = Path(output_path).with_suffix(".arrays")
+        sidecar.write_bytes(data["arrays"].pop("blob"))
+        data["arrays"]["file"] = str(sidecar)
     Path(output_path).write_text(json.dumps(data), encoding="utf-8")
     return 0
 
@@ -472,8 +492,9 @@ class RecordedInputs:
     """Engine answers for one source under one set of engine-owned values (the mode's worker)."""
 
     def __init__(self, fixture: StudioFixture, steps: tuple[ServedTick, ...], origin: float, *, source: str,
-                 engine_values: Mapping[str, Any]) -> None:
+                 engine_values: Mapping[str, Any], arrays: tuple = ()) -> None:
         self.fixture = fixture
+        self.arrays = tuple(arrays)        # the recorded arrays, one object per number (``served_arrays``)
         self._steps = steps
         self._origin = origin
         self.source = source
@@ -488,8 +509,11 @@ class RecordedInputs:
                 return
             yield step
 
-    def levels(self) -> list[tuple[float, float]]:
-        """(fixture time, mean engine bar) per tick, for the transport's overview."""
+    def levels(self, measure: Callable[[Mapping[str, Any]], float] | None = None) -> list[tuple[float, float]]:
+        """(fixture time, mean engine bar) per tick, for the transport's overview; ``measure(answers)`` reads another
+        level from each tick's recorded answers instead (a mode whose engine publishes no bars)."""
+        if measure is not None:
+            return [(step.now - self._origin, float(measure(step.answers))) for step in self._steps]
         if self._levels is None:
             from ui.studio.replay_engine import decode_answer
             out = []
@@ -509,12 +533,13 @@ class RestInputs:
         self._origin = 0.0
         self.source = ""
         self.engine_values: dict = {}
+        self.arrays: tuple = ()
         self.key = ("", "")
 
     def steps(self, until: float) -> Iterable[ServedTick]:
         yield ServedTick(now=0.0, playing=False, answers={})
 
-    def levels(self) -> list:
+    def levels(self, measure=None) -> list:
         return []
 
 
@@ -566,8 +591,9 @@ def start_clip_load(mode: EngineAnswerMode, clip: StudioFixture, values: Mapping
 
 
 # -------------------------------------------------------------------------------------- evaluator
-class EngineAnswerEvaluator:
-    """A mode's production step and capture, run in process from recorded engine answers.
+class EngineAnswerEvaluator(ExactReplay):
+    """A mode's production step and capture, run in process from recorded engine answers (the exact history,
+    its checkpoints and frame budget: ``ui.studio.exact_replay.ExactReplay``).
 
     ``loader(fixture, values, finished)`` starts one analysis (default: the out-of-process worker) and returns a
     cancellable job, or None when it already called ``finished(inputs, error)``."""
@@ -594,6 +620,9 @@ class EngineAnswerEvaluator:
         self.rewinds = 0
         self._budget: float | None = None
         self._kwargs_cache: dict = {}
+        self._built = None                 # (answers key, effective values, kwargs) of the latest full build
+        self._pass_through: set[str] = set()   # keys the production build hands through verbatim (proven here)
+        self.model_builds = 0              # full production settings-model builds (``EngineAnswerMode.mode_kwargs``)
         self._shown = None                 # the frame the last evaluation returned (shown while converging)
         self._reset_history()
 
@@ -635,6 +664,14 @@ class EngineAnswerEvaluator:
             return
         self._environment = image
         self._retire()
+
+    def release_only_keys(self, keys) -> frozenset[str]:
+        """Of ``keys``, the engine-owned ones: a live gesture keeps the previous answers on screen (``evaluate``
+        with ``exact=False`` never starts an analysis), so their preview follows only on release."""
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+        prefixes = tuple(get_visualizer_mode_descriptor(self.mode.mode_id).setting_prefixes)
+        owned = self.mode.owned_keys()
+        return frozenset(key for key in keys if key.startswith(prefixes) and key not in owned)
 
     def set_invalidate(self, callback: Callable[[], None] | None) -> None:
         """The Studio's re-evaluate request, called when a background analysis lands."""
@@ -704,29 +741,10 @@ class EngineAnswerEvaluator:
         return inputs
 
     # lifecycle --------------------------------------------------------------
-    def set_frame_budget(self, seconds: float | None) -> None:
-        """The GUI-thread time one evaluation may spend replaying (the Studio sets it; None: replay at once).
-        With a budget an exact replay that does not fit continues on the next frames (``converging``) while the
-        live-applied frame stays on screen; the replay it converges to is the same exact replay."""
-        self._budget = None if seconds is None else max(0.0, float(seconds))
-
-    @property
-    def converging(self) -> bool:
-        """An exact replay is still catching up with the requested instant (the Studio asks for another frame)."""
-        return self._converging
-
     def _reset_history(self) -> None:
-        self._ticks: tuple = ()
-        self._index = 0                    # the next tick to step
-        self._time = -math.inf             # the fixture time the history has been stepped to
-        self._last = None
-        self._last_tick: ServedTick | None = None
-        self._signature = None
-        self._approximate = False
+        super()._reset_history()
         self._pristine = None              # the step state right after configuration (``StepState``)
         self._pristine_signature = None
-        self._checkpoints: dict = {}       # mode-owned signature -> {tick index: checkpoint}
-        self._converging = False
 
     def _retire(self) -> None:
         controller, self._controller = self._controller, None
@@ -755,20 +773,24 @@ class EngineAnswerEvaluator:
         controller = self.mode.configure(self._engine, self._effective(values, inputs), environment=self._environment)
         if self._extent is not None:
             controller.hydrate_committed_layout_metrics(self._extent, 0)
-        if controller.active_logical_tick_hook is not None:
-            raise RuntimeError(f"{self.mode.mode_id} gained a logical tick hook; the Studio step must call it")
-        self._view = RecordedEngineAnswers(self._engine)
+        self._view = RecordedEngineAnswers(self._engine, inputs.arrays)
         controller.engine = self._view
         self._controller = controller
         self._inputs = inputs
         self._ticks = tuple(inputs.steps(self.fixture.duration))
         self._signature = self._pristine_signature = self.mode.own_signature(values)
-        self._pristine = StepState(controller, keep=(self._engine, self._view))
+        self._pristine = StepState(controller, keep=self._shared())
         self.replays += 1
 
+    def _shared(self) -> tuple:
+        """What a step-state capture shares instead of copying: the engine, the answer view and the recorded arrays
+        (read-only; a rewound step keeps holding the very objects the view serves, so identity checks replay)."""
+        return (self._engine, self._view, *self._inputs.arrays)
+
     def _step(self, tick: ServedTick) -> None:
-        """One production tick: what ``tick_pipeline.logical_tick`` runs for a mode with no tick hook
-        (``consume_engine_bars``, the teardown readiness query, the publication capture) at the tick's time."""
+        """One production tick: what ``tick_pipeline.logical_tick`` runs (``consume_engine_bars``, the teardown
+        readiness query, the mode's logical tick hook when it has one, the publication capture) at the tick's
+        time."""
         from widgets.spotify_visualizer.logical_frame_capture import capture_visualizer_logical_frame
         from widgets.spotify_visualizer.tick_pipeline import consume_engine_bars
         controller = self._controller
@@ -781,6 +803,9 @@ class EngineAnswerEvaluator:
         if state._waiting_for_fresh_engine_frame or (state._mode_teardown_block_until_ready
                                                      and not state._mode_transition_ready):
             raise RuntimeError("The Studio step reached a fresh-frame fence the offline replay never arms")
+        hook = controller.active_logical_tick_hook
+        if hook is not None:
+            hook(state, now)                       # a mode's own logical step (DevCurve's dispatch_devcurve_field)
         frame = capture_visualizer_logical_frame(state, now_ts=now, changed=changed, mode_reveal_ready=ready)
         self.steps_run += 1
         self._last_tick = tick
@@ -789,14 +814,63 @@ class EngineAnswerEvaluator:
 
     def _mode_kwargs_for(self, values: Mapping[str, Any], signature) -> dict:
         """The production mode kwargs for ``values`` under the current answers, computed once per signature
-        (``EngineAnswerMode.mode_kwargs`` builds the settings model, about 10 ms)."""
+        (``EngineAnswerMode.mode_kwargs`` builds the settings model, about 10 ms).
+
+        A live gesture (``_approximate``) dragging one numeric key the production build is known to hand through
+        verbatim takes the latest full build with that one entry replaced, instead of a model build per preview
+        frame. A key is known only after a full build here differed from the previous one in that key alone and
+        produced exactly that key, with exactly its value (``_learn``); anything else builds. The patched kwargs
+        are never cached: the gesture's end replays exactly from a full build."""
         key = (self._inputs.key, signature)
         cache = self._kwargs_cache
-        if key not in cache:
-            cache[key] = self.mode.mode_kwargs(self._effective(values, self._inputs))
-            while len(cache) > 6:
-                cache.pop(next(iter(cache)))
-        return cache[key]
+        if key in cache:
+            return cache[key]
+        effective = self._effective(values, self._inputs)
+        if self._approximate:
+            patched = self._patched(effective)
+            if patched is not None:
+                return patched
+        kwargs = self.mode.mode_kwargs(effective)
+        self.model_builds += 1
+        self._learn(effective, kwargs)
+        cache[key] = kwargs
+        while len(cache) > 6:
+            cache.pop(next(iter(cache)))
+        return kwargs
+
+    @staticmethod
+    def _one_change(a: Mapping[str, Any], b: Mapping[str, Any]) -> str | None:
+        """The single key whose numeric value differs between ``a`` and ``b`` (None: not exactly one such)."""
+        missing = object()
+        changed = [k for k in a.keys() | b.keys() if a.get(k, missing) != b.get(k, missing)]
+        if len(changed) != 1:
+            return None
+        value = a.get(changed[0], missing)
+        numeric = isinstance(value, (int, float)) and not isinstance(value, bool)
+        return changed[0] if numeric else None
+
+    def _learn(self, effective: dict, kwargs: dict) -> None:
+        built, self._built = self._built, (self._inputs.key, effective, kwargs)
+        if built is None or built[0] != self._inputs.key:
+            return
+        changed = self._one_change(effective, built[1])
+        if changed is None:
+            return
+        if self._one_change(kwargs, built[2]) == changed and kwargs.get(changed) == effective[changed]:
+            self._pass_through.add(changed)
+        else:
+            self._pass_through.discard(changed)
+
+    def _patched(self, effective: dict) -> dict | None:
+        built = self._built
+        if built is None or built[0] != self._inputs.key:
+            return None
+        changed = self._one_change(effective, built[1])
+        if changed is None or changed not in self._pass_through:
+            return None
+        kwargs = dict(built[2])
+        kwargs[changed] = effective[changed]
+        return kwargs
 
     def _restyle(self, values: Mapping[str, Any], signature=None) -> None:
         from widgets.spotify_visualizer.config_applier import (
@@ -810,62 +884,22 @@ class EngineAnswerEvaluator:
         self._signature = signature
 
     # exact history: rewinds and checkpoints ------------------------------------
-    CHECKPOINT_TICKS = 90                  # one checkpoint per second of fixture time (production cadence 90 Hz)
+    # The transport overview's per-tick level from the recorded answers (None: the mean engine bar).
+    timeline_measure: Callable[[Mapping[str, Any]], float] | None = None
 
-    def _rewind(self, values: Mapping[str, Any], signature, time: float) -> None:
-        """Put the exact history of ``signature`` at the latest checkpoint at or before ``time`` (else at the
-        pristine configuration, restyled to ``values``): the replay from there is the replay from the start."""
-        best = None
-        for checkpoint in self._checkpoints.get(signature, {}).values():
-            if checkpoint[1] <= time + 1e-9 and (best is None or checkpoint[0] > best[0]):
-                best = checkpoint
-        if best is not None:
-            index, at, state, last, last_tick = best
-            state.restore()
-            self._index, self._time, self._last, self._last_tick = index, at, last, last_tick
-            self._signature = signature
-        else:
-            self._pristine.restore()
-            self._index, self._time, self._last, self._last_tick = 0, -math.inf, None, None
-            self._signature = self._pristine_signature
-            if signature != self._pristine_signature:
-                self._restyle(values, signature)
-        self._approximate = False
-        self.rewinds += 1
+    def _tick_time(self, tick: ServedTick) -> float:
+        return tick.now - self._inputs._origin
 
-    def _checkpoint(self) -> None:
+    def _capture(self):
         from ui.studio.replay_engine import StepState
-        checkpoints = self._checkpoints
-        if self._signature not in checkpoints:
-            checkpoints[self._signature] = {}
-            while len(checkpoints) > 3:    # the current values and the last two (undo / redo stay instant)
-                checkpoints.pop(next(iter(checkpoints)))
-        at = self._ticks[self._index - 1].now - self._inputs._origin
-        checkpoints[self._signature][self._index] = (
-            self._index, at, StepState(self._controller, keep=(self._engine, self._view)), self._last,
-            self._last_tick)
+        return StepState(self._controller, keep=self._shared())
 
-    def _advance(self, time: float, deadline: float | None) -> tuple[bool, int]:
-        """Step the production ticks up to ``time`` (the first tick always), or until ``deadline``.
-        Returns (reached, ticks stepped)."""
-        import time as clock
-        origin = self._inputs._origin
-        ticks = self._ticks
-        stepped = 0
-        while self._index < len(ticks):
-            tick = ticks[self._index]
-            if tick.now - origin > time + 1e-9 and self._last is not None:
-                break
-            if deadline is not None and stepped and clock.perf_counter() > deadline:
-                self._time = ticks[self._index - 1].now - origin
-                return False, stepped
-            self._step(tick)
-            self._index += 1
-            stepped += 1
-            if not self._approximate and self._index % self.CHECKPOINT_TICKS == 0:
-                self._checkpoint()
-        self._time = time
-        return True, stepped
+    def _rewind_to_start(self, values: Mapping[str, Any], signature) -> None:
+        """The pristine configuration (captured right after configuration), restyled to ``values``."""
+        self._pristine.restore()
+        self._signature = self._pristine_signature
+        if signature != self._pristine_signature:
+            self._restyle(values, signature)
 
     def evaluate(self, time: float, values: Mapping[str, Any], *, exact: bool = True, revision: Any = None):
         """The logical frame ``time`` seconds into the fixture under ``values``: the mode's production step replayed
@@ -876,45 +910,13 @@ class EngineAnswerEvaluator:
         the current tick; the gesture end replays exactly. With a frame budget the exact replay may take several
         evaluations (``converging``), showing the live-applied frame meanwhile."""
         del revision
-        import time as clock
-        deadline = None if self._budget is None else clock.perf_counter() + self._budget
+        deadline = self._deadline()
         time = max(0.0, min(float(time), self.fixture.duration))
         inputs = self._choose_inputs(values, exact)
         signature = self.mode.own_signature(values)
         if self._controller is None or inputs is not self._inputs:
             self._start(values, inputs)
-        if not exact:
-            if time < self._time:
-                self._rewind(values, signature, time)
-            restyled = signature != self._signature
-            if restyled:
-                self._restyle(values, signature)
-                self._approximate = True
-            _reached, stepped = self._advance(time, None)
-            if restyled and not stepped and self._last_tick is not None:
-                self._step(self._last_tick)            # show the change on this instant (approximate)
-            self._converging = False
-            self._shown = self._last
-            return self._last
-        if signature != self._signature or self._approximate or time < self._time:
-            if deadline is not None and signature != self._signature:
-                # A change nothing has shown yet (a click, a typed value): this frame shows it live-applied on
-                # the running history; the exact replay starts on the next frame.
-                self._restyle(values, signature)
-                self._approximate = True
-                if self._last_tick is not None:
-                    self._step(self._last_tick)
-                self._converging = True
-                self._shown = self._last
-                return self._shown
-            self._rewind(values, signature, time)
-        reached, _stepped = self._advance(time, deadline)
-        self._converging = not reached
-        if reached or self._shown is None:
-            self._shown = self._last
-        if self._shown is None:
-            raise RuntimeError("Fixture produced no logical frame")
-        return self._shown
+        return self._replay(time, values, signature, exact=exact, deadline=deadline)
 
     @property
     def unrecorded_reads(self) -> int:
@@ -940,7 +942,7 @@ class EngineAnswerEvaluator:
         duration = max(1e-6, self.fixture.duration)
         levels = [0.0] * samples
         source = self._overview()
-        for t, level in (source.levels() if source is not None else ()):
+        for t, level in (source.levels(self.timeline_measure) if source is not None else ()):
             if 0.0 <= t <= duration:
                 index = min(samples - 1, int(t / duration * samples))
                 levels[index] = max(levels[index], level)

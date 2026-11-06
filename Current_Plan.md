@@ -38,10 +38,36 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 New platform-facing work (power, display, input) still ships a basic Linux path or an explicit inert one alongside
 the Windows path, so it never needs its own Linux audit later (operator, 5 Nov).
 
-**Agents (operator, 5 Nov):** at most three subagents at once (two medium and one high, or three medium), with the
-lead as reviewer/orchestrator.
+**Agents (operator, 5-6 Nov):** at most three Opus subagents at once (two medium and one high, or three medium) plus
+one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewer/orchestrator.
 
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
+
+- [ ] **Slow startup (operator, 6 Nov 10:30; owner found and fixed, three leftovers):** proved from the logs plus offline
+  measurement that neither the Feeds delivery nor the usage sampler owned the 7 s. The `_FeedFamilyOwner` delivery's
+  `_release_admission` resumes the deferred startup image change, whose worker-authority preflight
+  (`image_processing_authority_available`) called `ProcessSupervisor.is_running(IMAGE)` before `image_queue.next()`; the sampler's first sample called `get_image_worker_usage_snapshot()`; both took
+  the supervisor's single state lock, which the heartbeat thread held for the whole `stop()` (graceful wait + terminate +
+  kill, 10:30:20 to :27) of the image_prefetch child that never signalled ready, and again for the next `start()`'s 10 s
+  ready wait (10:30:30 to :40: GlobalClockTicker gap 10.2 s). The pure-Python Visualizer tick kept 450 frames in those
+  5 s (no GIL hold); the sampler's first `collect()` offline is 133 ms with a 27 ms worst tick gap; Feeds cache delivery
+  work is 0.1-18 ms per source at 18 publishers x 40 stories. Fixed in `core/process/supervisor.py`: state lock held for
+  dictionary work only, start/stop of a role run under a per-role lifecycle lock, a role mid-transition reports "not
+  available" (`tests/test_process_supervisor_availability.py` with old-shape negative controls). Still open: (1)
+  `_start_workers` still waits synchronously on the engine init thread for the optional speculative child's ready signal
+  (up to 10 s under heavy load, 10:30:10 to :20); make that start off-thread once the supervisor change is confirmed;
+  (2) the 166-240 ms per-source `FEED_GUI_DELIVERY` cache lines at 10:30:40-42 are not reproduced on the owner side
+  (consumer/QML model side is unmeasured, and they landed the instant the GUI thread was released); re-check in the next
+  quiet startup with `--usage`; (3) operator confirmation that a cold start with `--usage` no longer freezes the GUI
+  (compare the `UI_CALLBACK` and `collect_ms` lines). Evidence `.artifacts/evidence/slow_startup_20261106/`.
+- [ ] **Spectrum visual-only smoothing still broken (operator, 6 Nov):** wired (Settings -> `_spectrum_visual_smoothing
+  (_enabled)` -> `SpectrumFrameRuntime.resolve(smoothing_enabled, smoothing_strength)`), so the defect is in what it
+  does. Measure bar motion on recorded music with smoothing off / on / at 0.3 / 0.7 / 1.0 (frame-to-frame jerk, lag,
+  peak preservation), find the owner, fix, and show it in the Spectrum Studio.
+- [ ] **Bubble / Extruded Bubble "terrible performance" (operator log 10:32-10:35):** confounded: the machine was at
+  97-100% system CPU from the agents' game60 live checks and parallel work during that session (quiet-machine game60
+  this morning: Bubble P1 62.7 fps, EB 54.6 fps). Re-check in a quiet operator session before acting; heavy
+  load-generator runs are now scheduled by the lead only.
 
 - [~] **Displays off -> presentation pauses entirely, resumes clean (built 5 Nov; awaiting the operator's physical
   overnight check):** `core.display_power` pauses rotation, transitions, the Visualizer (parked, capture released) and
@@ -67,6 +93,18 @@ lead as reviewer/orchestrator.
   cost is mostly elsewhere (capture, packet build, field/strand/spark work): profile the LIVE logical tick, then cut
   it with byte-identical output (Preset 4 bit-exact with the tag). This is the Graphics Backend Decision's "optimise
   the logical tick first" step before trigger 2 can be judged. Evidence `.artifacts/evidence/live_check_quiet_20261106/`.
+  - **Extruded Bubble part (built 6 Nov; offline proven, live re-measure open):** byte-identical cuts at the owners.
+    These are the contact discovery and far-pair skip, the cluster motion and layout, the cached phase terms, steer
+    with no closure, the wake fast path, the snapshot records, controls re-resolved only on a read value's change,
+    a strict-equality memo for the renderer parameters, struct-packed wake floats and presentation attrs resolved
+    once per spec. Every published frame matches main on 4 recordings x 6 cases (24 replays, 130,926 frames, per-frame
+    digests). `tests/test_extruded_bubble_logical_tick_exactness.py` compares the output against the straightforward
+    forms. The offline P1 tick (`tools/eb_logical_cost_probe.py`, paired with main) went from 2.50 to 2.13 ms median
+    (p90 3.25 to 2.78), about 15%. The tick is now spread thin: contacts 0.38, wakes 0.42 (NumPy flow 0.2), the
+    rest of the simulation 0.62, capture 0.45. A NumPy contact sweep measured slower in situ and was dropped. Open:
+    the paired `--load game60` live checks (P1 and P5, main and branch alternately, 2 rounds each, 60 s) are owed by
+    the lead on a free machine. The 6 Nov rounds overlapped the operator's own session (system CPU 97-100%) and
+    are void. Evidence `.artifacts/evidence/eb_logical_tick/` (branch worktree).
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
@@ -95,6 +133,11 @@ lead as reviewer/orchestrator.
   log but a failing exit code under the 8-way gate, and that runner stopped before its summary; the immediate re-run
   passed 64/64. Looks like a native crash at interpreter teardown after the Studio tests. If it recurs, capture the
   exit code and any faulthandler output (run the file alone with `-X faulthandler`) and fix the teardown owner.
+  Probably the same family as the leaked clip workers fixed in 90f65ee9 (a surviving worker held the runner's pipe).
+- [ ] **Worker-lifetime negative control is timing-dependent:** `test_without_the_job_tree_..._negative_control`
+  cancels inside the venv launcher's setup window by delay sweeps; under an 8-way gate no delay landed (6 Nov, twice),
+  so it now skips with that reason. Replace it with a deterministic stand-in (a probe parent that starts a child with
+  `CREATE_SUSPENDED` and is killed alone, with and without the job tree).
 
 - [ ] **4x MSAA repeat-render noise (driver, 5 Nov; was "Floor Give run-to-run noise"):** the same frame rendered
   again through a 4x scene target differs by 1 level (rarely 2-3) on a pixel or two in Waveform (more often with Floor
@@ -489,7 +532,7 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
 
 - [ ] Finish Waveform Studio acceptance first (§7.1), then extract any remaining Waveform-shaped assumptions.
 - [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost, Extruded Spectrum and
-  Neon Lake built; Sphere in progress): DevCurve, Oscilloscope. Neon Lake (Shockwave Grid) awaits operator acceptance
+  Neon Lake built, DevCurve and Oscilloscope built (below); Sphere in progress). Neon Lake (Shockwave Grid) awaits operator acceptance
   (evidence `.artifacts/evidence/neon_lake/studio/`, Presets 1 and 3): recorded engine answers like Spectrum, the
   shared framed camera, no wallpaper. Operator decision on acceptance: the Studio carries the terrain heightfield and
   its Extend / Reset edits but has no brush instrument, so its builder body can shrink to the preset row plus the
@@ -499,11 +542,81 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   `.artifacts/evidence/spectrum/studio_20261105/`); its Studio now reaches everything Settings' Spectrum builder saves
   (shape nodes added/removed, lanes reordered), so the builder body can be replaced on acceptance. Each: full registry coverage test, production-parity preview test, theme,
   Settings Custom launcher replacing that builder body once the operator accepts it.
-- [ ] **Edit Preset survives only for modes without a Studio** (DevCurve, Oscilloscope): Studio modes
-  author curated presets with Open Studio (preset row, every slot) and the Studio's confirmed Save To <Preset>
-  (`Docs/Reference/Visualizer_Studio.md` §4); the Notepad path and its pop-up go for each mode when its adapter
-  registers (automatic: the slider builds Edit Preset only for `not has_studio(mode)`); delete `_open_preset_json`
-  with the last one. Operator look pending (6 Nov): Open Studio's place in the preset row and the Save To flow.
+- [ ] **DevCurve Studio built (6 Nov), awaiting operator acceptance** (`ui/studio/devcurve_adapter.py`, registered;
+  so DevCurve's preset row now shows Open Studio and no Edit Preset). Evidence `.artifacts/evidence/devcurve/studio/`
+  (Deep Blue on Rag Doll, Neon Skyline on Human: every workspace with the live traces, plus the node rows). Operator
+  to judge: the per-layer Body / Accent / Swell traces as the way to read the reworked reactivity, the Layers
+  workspace (one panel per layer), and whether the Audio Analysis group earns its place (re-analysed from PCM through the
+  production DSP, every offered control moves DevCurve's frame; AGC Strength and Output Lift read nothing and are now
+  hidden: `Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode). The builder body is replaced with
+  `build_studio_owned_mode_ui` only on acceptance.
+- [ ] **Oscilloscope Studio built (6 Nov), awaiting operator acceptance** (`ui/studio/oscilloscope_adapter.py`,
+  registered). Evidence `.artifacts/evidence/oscilloscope/studio/` (Preset 1 Phosphor on Human, Preset 3 Lissajous on
+  Rag Doll: every workspace with the live traces). Recorded engine answers with the capture history recorded by
+  identity (binary sidecar; `Docs/Reference/Visualizer_Studio.md` §3). Operator to judge: Level / Afterglow / Ghosts /
+  Flare / Drive / Tone as the way to read the beam, the three workspaces, and whether the Audio Analysis group earns
+  its place (re-analysed from PCM through the production DSP, every offered control moves Flare and Drive, and Bar Count,
+  Block Size and Input Gain also move Tone: the trace itself is the raw capture, but the beam's reactions are not;
+  `Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode). The builder body is replaced with
+  `build_studio_owned_mode_ui` only on acceptance.
+- [ ] **Studio replay understates Audio Analysis (found 6 Nov):** the engine-processed Studios serve the clip's *recorded*
+  post-DSP lanes (`ReplayBeatEngine`; only the Spectrum family's bars are re-shaped from PCM), so editing Sensitivity,
+  the floors, Gain or Block Size in the DevCurve, Oscilloscope, Bubble, Extruded Bubble or Sphere Studio (and Neon
+  Lake's onset waves) changes little or nothing on screen while the live engine changes Flare, Drive, onsets and the
+  curves. The audit's
+  `ProductionLaneEngine` (`tools/visualizer_replay/analysis_controls_audit.py`: per-frame PCM through
+  `compute_bars_from_samples`, production getters) is the candidate: promote it to `feature_replay`, use it in
+  `engine_answers.extract` for modes with engine-owned analysis, and re-prove the parity tests. It takes one analysis
+  block per 11 ms tick where live analyses every capture callback, so absolute levels approximate; measure the worker's
+  cost on the shipped clips first.
+- [ ] **Edit Preset deleted (6 Nov)**: every visualizer mode now has a Studio, so the preset row's Edit Preset button,
+  `_open_preset_json` and its pop-up are gone (`ui/tabs/media/preset_slider.py`); curated presets are authored with
+  Open Studio and the Studio's confirmed Save To <Preset> (`Docs/Reference/Visualizer_Studio.md` §4).
+  `tools/flicker_test.py` keeps its own historical mock of the old row. Operator look pending: Open Studio's place in
+  the preset row and the Save To flow.
+- [ ] **Operator side requests (6 Nov, "important eventually"; queue after the running work):**
+  - **Bar Count outside Spectrum (lead decision 6 Nov, with the Studio migration):** audited 6 Nov
+    (`Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode): outside Spectrum and Extruded
+    Spectrum it is analysis resolution, not a drawn count, yet it moves every mode's frame (Neon Lake waves,
+    Oscilloscope Flare / Drive, Bubble, Extruded Bubble, Sphere, DevCurve, Waveform), so it stays everywhere. Outside
+    the two bar modes it is labelled "Analysis Bands" with a tooltip saying what it does (as Voxel Sphere already is),
+    keyed off one descriptor fact and read by Settings and the Studio alike.
+  - **Waveform travel speed:** History Speed (`flow_speed`, 0.8-2.4, Flow bucket) and Pulse Speed exist but the
+    operator did not find them; there is no travel-speed reactivity. Make them findable (name / workspace / tooltip)
+    and consider a quiet -> peak History Speed under the flow rule (music pushes history faster, smoothly; knot spacing
+    and the anchored ends stay continuous). After the adaptive rework (same owner).
+  - **Studio clips: 30 s small, or cleanly loopable.** Shipped clips are ~12 s, ~0.9 MB each (2.5 MB total); 30 s would
+    be ~2.2 MB each but an engine-owned edit re-analyses the whole clip (~2.5x longer). A clean loop instead: loop
+    points on matching musical positions with a short crossfade, and the Studio's evaluator continuing its simulation
+    state across the loop (today the replay restarts at t = 0, which would jump). Choose with measurements. Operator
+    (6 Nov): the clips are still 12 s; the loop must be seamless (no skip at the end).
+- [ ] **Studio chrome matches Settings (6 Nov), awaiting the operator's look** (all Studios: one shell;
+  `Docs/Reference/Visualizer_Studio.md` "Chrome and theme"). Frameless window with Settings' title bar and forged
+  rounded edge, the theme's Glass/Acrylic material, 1.5 px one-path card borders, Settings' panel casts at half
+  offset, viewport corners rounded over the scene. Hidden-render evidence `.artifacts/evidence/studio_chrome/`
+  (before/after, Default Dark Acrylic, Matte Graphite Normal, Pearl Blush light Glass; 8x crops). Operator to check
+  on screen: the live Glass/Acrylic composition of the Qt Quick window (first use of the AccentPolicy material on an
+  alpha OpenGL window; the evidence only simulates the blur), snap/resize/maximise by hand, and the panel opacity
+  floor (0.88) and shadow strength on light themes. Light-theme instrument wells (trace cards, response curve,
+  transport bar) now sit on the theme's input surface (evidence `.artifacts/evidence/studio_followups/legibility/`,
+  Pearl Blush and Default Dark, before/after): operator look pending. Operator (6 Nov, not urgent): the material is
+  missing from most Studio areas (workspace tabs, the panels under the preview, their section headers). Apply the
+  theme's Glass/Acrylic to them with a slightly darker layer behind every control so it stays legible. Controls laid
+  over the preview (transport chips, aspect chips, the source notice) keep a translucent dark solid: blurring the live
+  scene behind them would cost GPU time every frame and skew what the preview shows about performance.
+- [ ] **Studio drag lag fixed (6 Nov), awaiting the operator's feel check.** Drags preview once per frame and
+  re-show only the dragged key (Visualizer_Studio.md "Drags are batched"); evidence
+  `.artifacts/evidence/studio_drag/` (per move 56 ms -> 0.07 ms on Waveform). Side defect (not measured): Bubble's,
+  Extruded Bubble's and Sphere's evaluators still replay exactly in one evaluation from the fixture start, without the
+  frame budget and checkpoints Waveform and the engine-answer modes now share (`ui/studio/exact_replay.py`); measure
+  with `tools/studio_drag_profile.py` and move them onto `ExactReplay` where a release stalls.
+- [ ] **DevCurve replay floors red since the reactivity merge (found 6 Nov):** `tests/test_visualizer_replay.py::
+  test_current_reactivity_passes_fixed_floors[*__devcurve]` passes at `1488c7ce^1` and fails at `1488c7ce` (the
+  DevCurve reactivity merge): `output_flux` fell to 43-66% of its reviewed floor on broadband noise, representative
+  music, the sudden volume step, sustained bass and sustained treble. Decide with measurements whether that is the
+  intended smoother loud body or lost motion: compare the per-case traces before and after, check kicks and passage
+  changes still read, and either fix the field or recalibrate only the DevCurve floors (`floors.calibrate`) with the
+  reason recorded. Never bless the drift unexplained.
 
 ## Operator execution and evidence rules
 

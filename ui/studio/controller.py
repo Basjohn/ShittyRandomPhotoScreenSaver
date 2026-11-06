@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any, Callable, ClassVar, Mapping
 
 from PySide6.QtCore import Property, QObject, Qt, Signal, Slot
+from PySide6.QtQml import QQmlPropertyMap
 
 from core.logging.logger import get_logger
 from ui.studio.adapter import RECORDED, StudioFixture, StudioModeAdapter
@@ -73,6 +74,52 @@ def _gradient_value(prop: StudioProperty, display: Any, previous: Any) -> list:
     return out
 
 
+class StudioValueMap(QQmlPropertyMap):
+    """The inspector's displayed values, one QML property per property id.
+
+    Each key notifies on its own, so a value that changes re-evaluates only the bindings that read that key: a
+    drag of one slider never re-binds the whole inspector. Python reads it like a mapping."""
+
+    def __init__(self, parent: QObject) -> None:
+        import warnings
+        with warnings.catch_warnings():
+            # PySide binds only QQmlPropertyMap(QObject *parent), which Qt marks deprecated for subclasses.
+            warnings.simplefilter("ignore", DeprecationWarning)
+            super().__init__(parent)
+        self._shown: dict[str, Any] = {}
+
+    def __getitem__(self, key: str) -> Any:
+        return self._shown[key]
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._shown
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._shown.get(key, default)
+
+    def as_dict(self) -> dict[str, Any]:
+        return dict(self._shown)
+
+    def publish(self, values: Mapping[str, Any], *, only: frozenset[str] | None = None) -> int:
+        """Show ``values`` (every key, or just ``only``); a key absent from ``values`` reads as undefined.
+        Only keys whose value differs notify. Returns how many did."""
+        keys = set(values) | set(self._shown) if only is None else only
+        changed = 0
+        for key in keys:
+            if key in values:
+                value = values[key]
+                if key in self._shown and self._shown[key] == value:
+                    continue
+                self._shown[key] = value
+                self.insert(key, value)
+                changed += 1
+            elif key in self._shown:
+                del self._shown[key]
+                self.clear(key)
+                changed += 1
+        return changed
+
+
 class StudioBridge(QObject):
     headerChanged = Signal()
     workspaceChanged = Signal()
@@ -98,7 +145,12 @@ class StudioBridge(QObject):
         objects = controller.adapter.scene_objects(controller.session.values)
         self._selected = objects[0].id if objects else ""
         self._inspector: list[dict] = []
-        self._values: dict[str, Any] = {}
+        self._values = StudioValueMap(self)
+        # Previews a drag hands over between frames: (property id, endpoint) -> (kind, payload). The newest
+        # replaces the older one; ``apply_pending_previews`` applies them once, at the next frame start.
+        self._pending: dict[tuple[str, int], tuple[str, Any]] = {}
+        self.previews_applied = 0
+        self._when_keys = frozenset(key for prop in schema.properties for key, _accepted in prop.when)
         self._objects: list[dict] = []
         self._viewport_status = "preparing"
         self._viewport_error = ""
@@ -407,34 +459,45 @@ class StudioBridge(QObject):
 
     inspector = Property("QVariantList", _inspector_groups, notify=inspectorChanged)
 
+    @staticmethod
+    def _displayed(prop: StudioProperty, values: Mapping[str, Any]) -> tuple[bool, Any]:
+        """(held, display value) of one property under ``values``."""
+        try:
+            value = read_path(values, prop.path)
+        except (KeyError, IndexError, TypeError):
+            return False, None
+        if prop.instrument == QUIET_PEAK:
+            return True, [float(value[0]), float(value[1])]
+        if prop.instrument in (SCALAR, COUNT):
+            return True, float(value)
+        if prop.instrument == SWITCH:
+            return True, bool(value)
+        if prop.instrument == CHOICE:
+            if prop.choice_values:
+                return True, next((c for c, v in zip(prop.choices, prop.choice_values) if v == value), str(value))
+            return True, str(value)
+        if prop.instrument == COLOUR:
+            return True, _colour_hex(prop, value)
+        if prop.instrument == GRADIENT:
+            return True, _gradient_display(prop, value)
+        return False, None
+
     def _rebuild_values(self) -> None:
         values = self._c.evaluation_values()
         out: dict[str, Any] = {}
         for prop in self._schema.properties:
-            try:
-                value = read_path(values, prop.path)
-            except (KeyError, IndexError, TypeError):
-                continue
-            if prop.instrument == QUIET_PEAK:
-                out[prop.id] = [float(value[0]), float(value[1])]
-            elif prop.instrument in (SCALAR, COUNT):
-                out[prop.id] = float(value)
-            elif prop.instrument == SWITCH:
-                out[prop.id] = bool(value)
-            elif prop.instrument == CHOICE:
-                if prop.choice_values:
-                    label = next((c for c, v in zip(prop.choices, prop.choice_values) if v == value), str(value))
-                    out[prop.id] = label
-                else:
-                    out[prop.id] = str(value)
-            elif prop.instrument == COLOUR:
-                out[prop.id] = _colour_hex(prop, value)
-            elif prop.instrument == GRADIENT:
-                out[prop.id] = _gradient_display(prop, value)
-        self._values = out
+            held, shown = self._displayed(prop, values)
+            if held:
+                out[prop.id] = shown
+        self._values.publish(out)
+        self._refresh_condition_hidden(values, out)
+        self._active_presets = self._preset_state(values)
+        self.valuesChanged.emit()
+
+    def _refresh_condition_hidden(self, values: Mapping[str, Any], shown: Mapping[str, Any]) -> None:
         # A property whose value the current values do not hold (an absent optional element, such as a curve node
         # slot the profile does not use) is not shown.
-        hidden = {prop.id: True for prop in self._schema.properties if prop.id not in out}
+        hidden = {prop.id: True for prop in self._schema.properties if prop.id not in shown}
         for prop in self._schema.properties:
             for key, accepted in prop.when:
                 try:
@@ -444,10 +507,27 @@ class StudioBridge(QObject):
                 except (KeyError, IndexError, TypeError):
                     continue
         self._condition_hidden = hidden
-        self._active_presets = self._preset_state(values)
-        self.valuesChanged.emit()
 
-    def _value_map(self) -> dict:
+    def _update_live_values(self, keys: frozenset[str]) -> None:
+        """A live gesture changed ``keys``: re-show only the properties stored under them (each notifies on its
+        own). The whole map, the starting-point state and the condition map wait for the gesture's end, unless a
+        changed key decides another property's visibility."""
+        values = self._c.evaluation_values()
+        out: dict[str, Any] = {}
+        only = set()
+        for prop in self._schema.properties:
+            if prop.path[0] not in keys:
+                continue
+            only.add(prop.id)
+            held, shown = self._displayed(prop, values)
+            if held:
+                out[prop.id] = shown
+        self._values.publish(out, only=frozenset(only))
+        if keys & self._when_keys:
+            self._refresh_condition_hidden(values, self._values.as_dict())
+            self.valuesChanged.emit()
+
+    def _value_map(self) -> QObject:
         return self._values
 
     def _hidden_by_condition(self) -> dict:
@@ -483,16 +563,48 @@ class StudioBridge(QObject):
 
     @Slot(str, str)
     def previewGradient(self, property_id: str, nodes: str) -> None:
-        def run():
-            prop = self._schema.find(property_id)
-            if not self._c.session.gesture_active:
-                self._c.session.begin_gesture(prop.label)
-            previous = read_path(self._c.session.values, prop.path)
-            self._c.session.preview(prop.path, _gradient_value(prop, nodes, previous))
-        self._guard(run)
+        self._queue_preview(property_id, 0, "gradient", nodes)
+
+    def _apply_gradient(self, property_id: str, nodes: str) -> None:
+        prop = self._schema.find(property_id)
+        if not self._c.session.gesture_active:
+            self._c.session.begin_gesture(prop.label)
+        previous = read_path(self._c.session.values, prop.path)
+        self._c.session.preview(prop.path, _gradient_value(prop, nodes, previous))
+
+    # ---------------------------------------------------- coalesced drag previews
+    def _queue_preview(self, property_id: str, endpoint: int, kind: str, payload: Any) -> None:
+        """A drag's newest value: kept until the next frame start, replacing any older one for the same target.
+        However many moves arrive between two frames, one preview is applied per frame (latest wins)."""
+        key = (str(property_id), int(endpoint))
+        self._pending.pop(key, None)
+        self._pending[key] = (kind, payload)
+        self._c.request_preview_frame()
+
+    @property
+    def pending_previews(self) -> int:
+        return len(self._pending)
+
+    def apply_pending_previews(self) -> None:
+        """Frame start (and before anything that ends or replaces the gesture): apply the held previews."""
+        while self._pending:
+            (property_id, endpoint), (kind, payload) = next(iter(self._pending.items()))
+            del self._pending[(property_id, endpoint)]
+            self.previews_applied += 1
+            if kind == "value":
+                self._guard(lambda: self._apply_value(property_id, endpoint, payload))
+            elif kind == "colour":
+                self._guard(lambda: self._apply_colour(property_id, payload))
+            else:
+                self._guard(lambda: self._apply_gradient(property_id, payload))
+
+    def drop_pending_previews(self) -> None:
+        self._pending.clear()
 
     @Slot(str, str)
     def commitGradient(self, property_id: str, nodes: str) -> None:
+        self.apply_pending_previews()
+
         def run():
             prop = self._schema.find(property_id)
             previous = read_path(self._c.session.values, prop.path)
@@ -557,9 +669,12 @@ class StudioBridge(QObject):
         self._handle_state = dict(state)
         self.handlesChanged.emit()
 
-    values = Property("QVariantMap", _value_map, notify=valuesChanged)
+    values = Property(QObject, _value_map, constant=True)
 
     def on_session_changed(self, reason: str) -> None:
+        if reason == "preview":
+            self._update_live_values(frozenset(self._c.session.preview_keys))
+            return
         self._rebuild_values()
         if reason in ("commit", "undo", "redo", "hydrate"):
             self._rebuild_inspector()           # structure can change (e.g. gradient node count)
@@ -611,17 +726,18 @@ class StudioBridge(QObject):
     @Slot(str, int, float)
     def previewValue(self, property_id: str, endpoint: int, value: float) -> None:
         self.note_endpoint_edit(property_id, endpoint)
+        self._queue_preview(property_id, endpoint, "value", float(value))
 
-        def run():
-            prop, path = self._prop_path(property_id, endpoint)
-            if prop.view_pose:
-                self._c.set_pose(prop.path[0], self._coerce(prop, value))
-                return
-            self._c.session.preview(path, self._coerce(prop, value))
-        self._guard(run)
+    def _apply_value(self, property_id: str, endpoint: int, value: float) -> None:
+        prop, path = self._prop_path(property_id, endpoint)
+        if prop.view_pose:
+            self._c.set_pose(prop.path[0], self._coerce(prop, value))
+            return
+        self._c.session.preview(path, self._coerce(prop, value))
 
     @Slot()
     def endEdit(self) -> None:
+        self.apply_pending_previews()          # the release position is the committed one
         if getattr(self, "_pose_edit", False):
             self._pose_edit = False
             self._guard(self._c.end_orbit)
@@ -631,12 +747,13 @@ class StudioBridge(QObject):
     @Slot(str, str)
     def previewColour(self, property_id: str, hex_text: str) -> None:
         """Live colour preview while a picker is dragged (one gesture; endEdit commits it)."""
-        def run():
-            prop = self._schema.find(property_id)
-            if not self._c.session.gesture_active:
-                self._c.session.begin_gesture(f"Set {prop.label}")
-            self._c.session.preview(prop.path, self._coerce(prop, hex_text))
-        self._guard(run)
+        self._queue_preview(property_id, 0, "colour", str(hex_text))
+
+    def _apply_colour(self, property_id: str, hex_text: str) -> None:
+        prop = self._schema.find(property_id)
+        if not self._c.session.gesture_active:
+            self._c.session.begin_gesture(f"Set {prop.label}")
+        self._c.session.preview(prop.path, self._coerce(prop, hex_text))
 
     revealed = Signal(str, int)
 
@@ -652,10 +769,12 @@ class StudioBridge(QObject):
 
     @Slot()
     def cancelEdit(self) -> None:
+        self.drop_pending_previews()
         self._c.session.cancel_gesture()
 
     @Slot(str, int, "QVariant")
     def commitValue(self, property_id: str, endpoint: int, value: Any) -> None:
+        self.apply_pending_previews()
         self.note_endpoint_edit(property_id, endpoint)
 
         def run():
@@ -670,6 +789,7 @@ class StudioBridge(QObject):
     @Slot(str, int, str)
     def commitText(self, property_id: str, endpoint: int, text: str) -> None:
         """Exact numeric/hex entry; out-of-range numbers are clamped and the clamp is reported."""
+        self.apply_pending_previews()
         self.note_endpoint_edit(property_id, endpoint)
 
         def run():
@@ -700,10 +820,12 @@ class StudioBridge(QObject):
 
     @Slot()
     def undo(self) -> None:
+        self.drop_pending_previews()
         self._guard(self._c.session.undo)
 
     @Slot()
     def redo(self) -> None:
+        self.drop_pending_previews()
         self._guard(self._c.session.redo)
 
     @Slot()
@@ -895,7 +1017,8 @@ class StudioBridge(QObject):
                 "min": float(prop.minimum), "max": float(prop.maximum), "decimals": int(prop.decimals),
                 "units": prop.units, "choices": list(prop.choices), "tooltip": prop.tooltip,
                 "quietMeaning": prop.quiet_meaning, "peakMeaning": prop.peak_meaning, "integer": bool(prop.integer),
-                "notes": list(prop.choice_notes), "icon": prop.icon, "actions": self._actions(prop.actions)}
+                "notes": list(prop.choice_notes), "icon": prop.icon, "actions": self._actions(prop.actions),
+                "releaseOnly": prop.path[0] in self._c.release_only_keys}
 
     # ------------------------------------------------------------ structural actions
     def _actions(self, actions) -> list:
@@ -1012,6 +1135,37 @@ class StudioBridge(QObject):
         self._theme = dict(theme)
         self.themeChanged.emit()
 
+    # ------------------------------------------------------------ window chrome
+    # The shell's custom title bar and edges act on the window through the surface (a hidden surface ignores them).
+    windowStateChanged = Signal()
+
+    def _surface_call(self, name: str, *args) -> Any:
+        method = getattr(self._c.surface, name, None)
+        return method(*args) if callable(method) else None
+
+    def _window_maximized(self) -> bool:
+        return bool(getattr(self._c.surface, "maximized", False))
+
+    windowMaximized = Property(bool, _window_maximized, notify=windowStateChanged)
+
+    @Slot()
+    def startWindowMove(self) -> None:
+        self._surface_call("start_move")
+        self.windowStateChanged.emit()          # a drag from maximised restores first
+
+    @Slot(int)
+    def startWindowResize(self, edges: int) -> None:
+        self._surface_call("start_resize", int(edges))
+
+    @Slot()
+    def toggleMaximize(self) -> None:
+        self._surface_call("toggle_maximize")
+        self.windowStateChanged.emit()
+
+    @Slot()
+    def minimizeWindow(self) -> None:
+        self._surface_call("minimize")
+
 
 class StudioController(QObject):
     """One authoring session from open to the Settings reveal."""
@@ -1063,6 +1217,7 @@ class StudioController(QObject):
         self._preview_done: dict = {}
         self._preview_crops: dict = {}
         self._auto_clip: str | None = None
+        self._source_notice = ""            # the notice naming the automatically chosen source, while it is shown
         self._wanted_source: str | None = None
         self._failure_shown = ""
 
@@ -1101,6 +1256,7 @@ class StudioController(QObject):
                 except Exception:
                     logger.exception("[STUDIO] No reflection environment")
             self.transport.set_duration(self.evaluator.fixture.duration)
+            self._release_only = None            # derived from this session's evaluator
             self.bridge = StudioBridge(self)
             if self._theme_provider is not None:
                 self.bridge.set_theme(self._theme_provider())
@@ -1384,6 +1540,22 @@ class StudioController(QObject):
         if self.surface is not None:
             self.surface.request_frame()
 
+    def request_preview_frame(self) -> None:
+        """A drag handed over a new value: the next frame start applies it (no timer, no per-move work)."""
+        if self.surface is not None:
+            self.surface.request_frame()
+
+    @property
+    def release_only_keys(self) -> frozenset[str]:
+        """Keys whose edits the preview follows only on release (an evaluator that re-analyses for them, such
+        as the engine-answer modes' engine-owned keys: the analysis runs once, when the gesture ends)."""
+        keys = getattr(self, "_release_only", None)
+        if keys is None:
+            deferred = getattr(self.evaluator, "release_only_keys", None)
+            keys = frozenset(deferred(self.session.schema.keys)) if callable(deferred) else frozenset()
+            self._release_only = keys
+        return keys
+
     def evaluation_values(self) -> dict[str, Any]:
         values = self.session.values
         if self._pose:
@@ -1395,6 +1567,8 @@ class StudioController(QObject):
         """Quick frame start (GUI thread): advance playback, evaluate at most once."""
         if self.state not in ("opening", "presented") or self.transport.stopped:
             return
+        if self.bridge is not None:
+            self.bridge.apply_pending_previews()     # a drag's newest value, once per frame
         moved = self.transport.on_frame()
         if moved and self.bridge is not None:
             self.bridge.timeChanged.emit()
@@ -1554,6 +1728,11 @@ class StudioController(QObject):
     def select_fixture(self, fixture_id: str, *, user: bool = True) -> None:
         if user:
             self._auto_clip = None          # the user's choice wins over the background default
+            # The notice naming the automatic source would now name the wrong one: withdraw it (only that notice).
+            notice = self._source_notice
+            if notice and self.bridge is not None and self.bridge.message == notice:
+                self.bridge.notify("")
+            self._source_notice = ""
         # The selection the user (or, before any user choice, the default) asked for last: a background clip
         # load landing later selects itself only while it is still this one.
         self._wanted_source = fixture_id
@@ -1601,7 +1780,8 @@ class StudioController(QObject):
                     automatic = self._auto_clip == clip_id
                     self.select_fixture(clip_id, user=not automatic)
                     if automatic:
-                        self.bridge.notify(f"Preview source: {clip.label} (recorded music)")
+                        self._source_notice = f"Preview source: {clip.label} (recorded music)"
+                        self.bridge.notify(self._source_notice)
             self.bridge.transportChanged.emit()
 
         try:

@@ -17,6 +17,7 @@ from widgets.spotify_visualizer.extruded_bubble_simulation import (
     MusicInput,
 )
 from widgets.spotify_visualizer.frame_runtime_lifecycle import RetirableFrameRuntime, retirement_fenced
+from widgets.spotify_visualizer.render_state import FrozenFieldsMemo, strictly_equal_render_value
 from widgets.spotify_visualizer.transient_bus import musical_weight
 
 # The largest step one capture may take (a stalled clock never leaps the population).
@@ -89,6 +90,29 @@ def controls_from_parameters(parameters) -> ExtrudedBubbleControls:
     )
 
 
+_ABSENT = object()
+
+
+class _ReadRecorder:
+    """The parameters as ``controls_from_parameters`` reads them, noting every key it reads and what it found."""
+
+    __slots__ = ("_values", "reads")
+
+    def __init__(self, values) -> None:
+        self._values = values
+        self.reads: list[tuple[str, object]] = []
+
+    def __getitem__(self, key):
+        value = self._values[key]
+        self.reads.append((key, value))
+        return value
+
+    def get(self, key, default=None):
+        value = self._values.get(key, _ABSENT)
+        self.reads.append((key, value))
+        return default if value is _ABSENT else value
+
+
 def onset_weight(onset) -> float:
     """How much an onset moves the bubbles, 0..1: its musical weight (near-silent passages barely count) times how far
     it stood above threshold (``magnitude`` 0..3: a big hit from a medium one)."""
@@ -103,6 +127,35 @@ class ExtrudedBubbleFrameRuntime(RetirableFrameRuntime):
         self._identity: tuple | None = None
         self._last_ts: float | None = None
         self._latest = ExtrudedBubbleSnapshot()
+        self._controls: tuple[tuple[tuple[str, object], ...], ExtrudedBubbleControls] | None = None
+        # The capture's renderer parameters, frozen on the logical thread (unchanged fields are not refrozen).
+        self.parameter_fields = FrozenFieldsMemo()
+
+    def controls_for(self, parameters) -> ExtrudedBubbleControls:
+        """``controls_from_parameters(parameters)``, resolved again only when a value it reads has changed.
+
+        The Settings values reach every capture as a fresh mapping, but they change only with an edit (or a live
+        orbit, which no control reads), so the same controls are kept while every value the last resolution read
+        is strictly the same (``strictly_equal_render_value``); a key it read now missing, or now present, counts
+        as a change. A pure function of what it read, so the result is always what resolving afresh returns.
+        """
+        cached = self._controls
+        if cached is not None:
+            reads, controls = cached
+            get = parameters.get
+            for key, value in reads:
+                now = get(key, _ABSENT)
+                if now is _ABSENT or value is _ABSENT:
+                    if now is not value:
+                        break
+                elif not strictly_equal_render_value(now, value):
+                    break
+            else:
+                return controls
+        recorder = _ReadRecorder(parameters)
+        controls = controls_from_parameters(recorder)
+        self._controls = (tuple(recorder.reads), controls)
+        return controls
 
     def reset(self) -> None:
         self._simulation.reset()

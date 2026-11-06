@@ -1,8 +1,10 @@
 """Studio chrome colours, derived entirely from the active SRPSS Settings theme.
 
-The Settings window composes translucent semantic surfaces over a native backdrop;
-the Studio window has no backdrop, so every surface token is composited over an
-opaque base taken from the theme's own backdrop tint. The accent is the theme's
+The Settings window composes translucent semantic surfaces over a native backdrop.
+Every Studio surface token is composited over an opaque base taken from the theme's
+own backdrop tint (so contrast is checked against a known colour); under a Glass or
+Acrylic theme the Studio window takes the same native backdrop as Settings and the
+window surface, title bar and large panels then let it through (``panelAlpha``). The accent is the theme's
 most saturated interaction colour (slider fill, focus, selection, outer border).
 Contrast is enforced after derivation (text >= 4.5:1 on surfaces, accent and
 outlines >= 3:1 / 1.6:1), so any theme stays legible. Scene colours never pass
@@ -14,6 +16,10 @@ import colorsys
 from typing import Callable
 
 RGB = tuple[float, float, float]
+# Settings' panel shadow offsets (6, 8) fill the Studio's 10 px gutters; half fits and still reads.
+SHADOW_SCALE = 0.5
+# The least opacity a large Studio panel keeps over Glass/Acrylic.
+PANEL_MATERIAL_FLOOR = 0.88
 
 
 def _rgb(colour) -> tuple[RGB, float]:
@@ -126,10 +132,55 @@ def studio_theme(theme=None) -> dict[str, str]:
         accent_soft = _mix(_mix(panel, accent, .28), away, step / 20.0)
     focus = _ensure(token("popup.input.focus_border", (106, 169, 217, 255))[0], panel, 3.0, light)
     track = _mix(panel, text, .14)
-    viewport = _mix(bg, (0.0, 0.0, 0.0), .65)
-    danger = _ensure(token("popup.icon.error", (255, 100, 100, 255))[0], panel, 3.0, light)
     input_surface = surface("control.input.surface", over=panel)
+    viewport = _mix(bg, (0.0, 0.0, 0.0), .65)
+    # Instrument wells (signal-trace cards, schematic cards, the response curve, the transport bar): the deep viewport
+    # tone while the theme's own text reads on it (every dark theme, unchanged), else the theme's input surface (a
+    # light theme: dark text on the dark viewport tone was illegible). Text and trace inks are then checked on it.
+    well = viewport if contrast(text, viewport) >= 4.5 else input_surface
+    well_light = contrast(well, (0.0, 0.0, 0.0)) > contrast(well, (1.0, 1.0, 1.0))   # inks move away from it
+    well_text = _ensure(text, well, 4.5, well_light)
+    well_dim = _ensure(dim, well, 3.0, well_light)
+    danger = _ensure(token("popup.icon.error", (255, 100, 100, 255))[0], panel, 3.0, light)
+
+    # Window chrome, as Settings draws it: the theme's native backdrop mode, the title bar roles and the forged
+    # window edge (ui/settings_window_edge.py). Normal ("off") keeps every surface opaque, as before. Under
+    # Glass/Acrylic the window surface and the title bar take the theme's own translucent roles, and the large
+    # panels let the material through at the theme's polarity with an opacity floor (dense instruments sit on
+    # them over an arbitrary desktop), their colour the contrast-checked one above.
+    mode = str(theme.backdrop.mode)
+    translucent = mode in ("acrylic", "glass")
+    titlebar_colour, titlebar_alpha = token("window.titlebar.surface", (12, 12, 12, 209))
+    title_text = _ensure(token("window.titlebar.text", (255, 255, 255, 255))[0], header, 4.5, light)
+
+    def role(name: str, fallback, over: RGB) -> str:
+        colour, alpha = token(name, fallback)
+        return _hex(_over(colour, alpha, over))
+
+    if translucent:
+        window_colour, window_alpha = token("window.dialog_glass", (60, 60, 60, 20))
+        window_surface = _hex(window_colour, window_alpha)
+        titlebar = _hex(titlebar_colour, titlebar_alpha)
+        _panel_colour, panel_alpha = token("panel.group.surface", (60, 60, 60, 120))
+        panel_alpha = max(PANEL_MATERIAL_FLOOR, panel_alpha + window_alpha * (1.0 - panel_alpha))
+    else:
+        window_surface = _hex(bg)
+        titlebar = _hex(header)
+        panel_alpha = 1.0
+    outer_border = token("chrome.outer_border", (255, 255, 255, 255))
+    shadow = theme.shadow("panel.group")
+    shadow_rgb = (shadow.color.r / 255.0, shadow.color.g / 255.0, shadow.color.b / 255.0)
     return {
+        "backdrop": mode, "windowSurface": window_surface, "titlebar": titlebar,
+        "titlebarText": _hex(title_text),
+        "titlebarHover": role("window.titlebar.button.hover", (62, 62, 62, 204), header),
+        "titlebarPressed": role("window.titlebar.button.pressed", (50, 50, 50, 220), header),
+        "closeHover": role("window.titlebar.close.hover", (232, 17, 35, 204), header),
+        "outerBorder": _hex(*outer_border), "forgedEdge": _hex(titlebar_colour),
+        "panelAlpha": "%.3f" % panel_alpha,
+        # Settings' panel cast (panel.group), scaled to the Studio's tight gutters; hard and static, like Settings'.
+        "shadow": _hex(shadow_rgb, shadow.color.a / 255.0),
+        "shadowX": "%.2f" % (shadow.offset_x * SHADOW_SCALE), "shadowY": "%.2f" % (shadow.offset_y * SHADOW_SCALE),
         "bg": _hex(bg), "header": _hex(header), "panel": _hex(panel), "panelRaised": _hex(raised),
         "viewportBg": _hex(viewport), "outline": _hex(outline), "outlineSoft": _hex(outline_soft),
         "accent": _hex(accent), "accentSoft": _hex(accent_soft), "accentText": _hex(accent_text),
@@ -137,6 +188,10 @@ def studio_theme(theme=None) -> dict[str, str]:
         "input": _hex(input_surface), "inputText": _hex(_ensure(text, input_surface, 4.5, light)),
         "focus": _hex(focus), "danger": _hex(danger), "light": "true" if light else "false",
         "trace1": _hex(accent), "trace2": _hex(_mix(text, panel, .25)), "trace3": _hex(focus),
+        "well": _hex(well), "wellText": _hex(well_text), "wellDim": _hex(well_dim),
+        "wellTrace1": _hex(_ensure(accent, well, 3.0, well_light)),
+        "wellTrace2": _hex(_ensure(_mix(text, panel, .25), well, 3.0, well_light)),
+        "wellTrace3": _hex(_ensure(focus, well, 3.0, well_light)),
     }
 
 

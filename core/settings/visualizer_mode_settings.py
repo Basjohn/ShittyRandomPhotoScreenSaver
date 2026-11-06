@@ -615,6 +615,11 @@ class ModeSettings:
                      if (not control.logical or getattr(control, "also_presentation", False)) and not control.source
                      and not getattr(control, "authoring", False))
 
+    @cached_property
+    def presentation_runtime_attrs(self) -> tuple[tuple[str, str], ...]:
+        """(key, runtime attribute) of every presentation control, resolved once (captures read them every tick)."""
+        return tuple((control.key, control_runtime_attr(control)) for control in self._presentation_controls)
+
     def logical_controls(self) -> tuple[Control, ...]:
         return self._logical_controls
 

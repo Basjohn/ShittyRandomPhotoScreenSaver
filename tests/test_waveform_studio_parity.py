@@ -68,7 +68,9 @@ def _uncovered(properties) -> set[str]:
 def test_parity_check_detects_a_missing_control_negative_control():
     properties = build_schema().properties
     assert _uncovered(properties) == set()
-    for dropped in (f"{MODE}_ribbons", f"{MODE}_sensitivity", f"{MODE}_camera_fov"):
+    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
+    technical = _storage_key(MODE, _control_defs_for_mode(MODE)[0])           # an offered (not hidden) analysis control
+    for dropped in (f"{MODE}_ribbons", technical, f"{MODE}_camera_fov"):
         assert _uncovered([p for p in properties if p.path[0] != dropped]) == {dropped}
 
 

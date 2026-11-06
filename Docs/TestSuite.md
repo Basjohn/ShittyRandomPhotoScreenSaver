@@ -763,7 +763,14 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
 - `tests/test_waveform_studio_framing.py` — the Studio opens on the live card's world (Fill), measured as production
   measures it;
 - `tests/test_waveform_studio_editors.py`, `tests/test_waveform_studio_theme.py` — direct editors, handles, tiles,
-  cards; theme-derived chrome contrast in every shipped theme;
+  cards; theme-derived chrome contrast in every shipped theme, the instrument wells' inks readable on their well in
+  every theme with dark themes unchanged and the shell bound to the well roles (control: the former viewport-tone
+  pairing is illegible on every light theme);
+- `tests/test_waveform_studio_replay_budget.py` — Waveform's exact replay on the shared `ExactReplay`: under the
+  budget a commit shows the live-applied frame, steps at most one tick per evaluation while that frame stays, and
+  lands byte-identical to a fresh replay; a gesture release keeps the last live frame until then; undo and seeks back
+  resume from checkpoints; the Studio sets the budget and keeps requesting frames (control: no budget replays in one
+  evaluation);
 - `tests/test_waveform_studio_second_mode.py` — the framework driven by a tiny test-only mode (reuse contract);
 - one adapter test per registered Studio mode (for example `tests/test_extruded_bubble_studio.py`): registry
   coverage, production-parity preview, handles and Settings round trip;
@@ -781,6 +788,26 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   coverage (Settings-unavailable controls excluded by their flag), the free orbit as a preview view, Settings round
   trip and every exit restoring it, theme; framework pieces it relies on: overflow clipped to the viewport slot and the
   presentation pixel ratio from the item mapping, each with a negative control.
+- `tests/test_devcurve_studio.py` — DevCurve on the shared recorded engine answers with its own logical hook: full
+  logical frames byte-identical to the production replay at every tick (synthetic audio and a shipped clip, canonical
+  and a reordered / one-layer-off / reshaped variant; zero unrecorded engine reads), the split proven both ways,
+  registry coverage (spec controls, every Custom layer key, every node slot, technical, rainbow), layer values and
+  stack re-ranking equal to Settings' own layer binding on the real tab, node limits, traces measured read-only and
+  showing a hit in the accents while the body holds, the worker out of process, identical production-renderer pixels,
+  theme, the preset row, Settings round trip and every exit restoring it, and Save To <Preset> on a tmp copy of a
+  curated DevCurve preset through the real SettingsDialog. `tests/test_devcurve_shape_editor.py` keeps Settings'
+  editor at the two nodes the solver needs (negative control: one node is refused).
+- `tests/test_oscilloscope_studio.py` — Oscilloscope on the shared recorded engine answers with arrays recorded by
+  identity: full logical frames byte-identical to the production replay at every tick (synthetic audio and a shipped
+  clip, canonical and a Phase / full afterglow / full reactions variant; zero unrecorded reads), with afterglow
+  traces, flare and drive driven by the fixture; the array pool (identity numbering, exact bytes, one served object,
+  refused without a pool), the served history keeping the engine's identity pattern across ticks and rewinds, the
+  worker's binary sidecar and the out-of-process job; the split proven both ways (arrays included), mode-owned edits
+  replaying exactly and under the frame budget, engine edits re-running the worker, a perturbed-answer negative
+  control; registry coverage with a negative control and registry instruments / conditions; the Level / Afterglow /
+  Ghosts / Flare / Drive / Tone instruments and the loudness overview; dormancy; on a real VisualizersTab the preset
+  row, Settings round trip and every exit restoring it, identical production-renderer pixels, theme; on the real
+  SettingsDialog, Save To <Preset> into a tmp copy of a curated Oscilloscope preset.
 - `tests/test_neon_lake_studio.py` — Neon Lake Basin (`shockwave_grid`) on the shared recorded engine answers: full
   logical frames byte-identical to the production replay at every tick (synthetic audio and a shipped clip, canonical
   and a Terrain Reaction / Starscape Beat / Glass + Vertices / turned variant), with the fixtures driving waves from
@@ -796,6 +823,23 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   and reached exactly by the Studio's own edits (node add/remove, lane reorder), with a negative control.
 - `tests/test_spectrum_studio_replay_budget.py` — exact replays rewind (pristine / checkpoints) instead of
   re-configuring, equal production for every Spectrum-owned key, and spread over frames under the Studio's budget.
+- `tests/test_spectrum_studio_drag_model.py` — a drag of every Spectrum-owned slider builds the production settings
+  model only on its first changed frames, applies kwargs equal to a full production build on every frame, and the
+  release replays exactly (controls: without the learned pass-through every frame builds; a key whose build changes
+  more than itself is never patched).
+- `tests/test_studio_scene_theme_independence.py` — every registered Studio's scene pixels are the same under the
+  darkest and the lightest shipped Settings theme, within the multisample noise (control: without the viewport's
+  scene backing the theme leaks into Bubble's and Spectrum's scenes).
+- `tests/test_studio_chrome.py` — the Studio wears Settings' chrome through Settings' owners: frameless window, the
+  shell's title bar and the forged edge painted by Settings' own painter; Normal / Acrylic / Glass follow the active
+  theme through the shared backdrop mapping (Settings uses it too); card borders stroke one continuous path (control:
+  the same outline in pieces seams); the scene is clipped to the viewport frame's rounded corners, read back from a
+  hidden magenta render (control: a slot at the frame's square corner bleeds) and keeps its place and size; chrome
+  paints once and idles (no repaint, no frame request, no evaluation).
+- `tests/test_studio_drag_coalescing.py` — real mouse drags on the hidden shell: many moves between two frames apply
+  one preview (latest wins) for every drag slot (value, colour, gradient); only the dragged key re-shows during the
+  gesture; release commits once with one undo entry; Escape restores and drops the held value; keyboard steps commit
+  per step; an engine-owned key analyses once, on release. Each with a negative control on the per-move path.
 - `tests/test_studio_background_sources.py` — a landing background load never takes the user's source choice;
   failed analyses are shown with Retry.
 - `tests/test_studio_worker_lifetime.py` — Studio clip workers: every worker module exits non-zero within a bound on
@@ -807,11 +851,16 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
 - `tests/test_studio_exit_every_mode.py` — every registered Studio, after a commit, through the shell's Close button:
   Settings revealed before teardown, forced retire failures, the window never hidden from Python, the `--studio`
   sidecar and main log receiving the lifecycle.
+- `tests/test_studio_exit_repaint.py` — a natively concealed and revealed frameless translucent (layered) window is exposed and
+  paints again, through every exit path (Close, Esc, window X, `close()`), plain and with the acrylic AccentPolicy; negative
+  controls without the re-expose and an opaque control. Mechanism-level on a bare window with Settings' window recipe (the real
+  `SettingsDialog` raises visible guided-setup / "No Image Sources" popups when shown); every window has an empty region and an
+  `EnumWindows` guard asserts no visible window with pixels.
 - `tests/test_settings_percent_slider_round_trip.py` — Settings sliders reload stored hundredths exactly (no `int`
   truncation in any Settings tab), through the real widgets and a Studio commit.
 - `tests/test_studio_preset_row_and_save_to_preset.py` — on the real SettingsDialog: every registered Studio mode
-  offers Open Studio in its preset row on a curated slot and on Custom with no Edit Preset (modes without a Studio
-  keep Edit Preset, no launcher); the launcher opens the Studio on the slot shown; Save To <Preset> asks first
+  offers Open Studio in its preset row on a curated slot and on Custom with no other launcher, and every mode the
+  preset owner serves has a Studio (Edit Preset is deleted); the launcher opens the Studio on the slot shown; Save To <Preset> asks first
   (Cancel writes nothing), writes only the edited key into a tmp copy of a real curated preset in the file's own
   shape (LF and CRLF), reloads presets, and a read-only file gives the message and writes nothing (negative
   control: writable prompts); opened on Custom it is not offered; the shared patcher touches nothing else.

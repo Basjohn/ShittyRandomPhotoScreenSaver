@@ -183,33 +183,93 @@ def _answer_types() -> dict[str, type]:
     return {"EnergyBands": EnergyBands, "TransientEnergyBands": TransientEnergyBands, "MusicalOnset": MusicalOnset}
 
 
-def encode_answer(value: Any) -> Any:
+class RecordedArrays:
+    """Worker side: the distinct array objects the engine answered, numbered by *identity*.
+
+    An engine hands out the same array object while its source is unchanged (the capture history between capture
+    serials) and a mode may tell "the same source" by identity (Oscilloscope's trace rebuild). Each distinct object
+    gets one number for the whole recording (a reference is held, so an id is never reused); the answers carry the
+    number and the arrays travel once, as raw bytes (``payload``), never as JSON floats."""
+
+    def __init__(self) -> None:
+        self._index: dict[int, int] = {}
+        self._arrays: list = []
+
+    def __len__(self) -> int:
+        return len(self._arrays)
+
+    def number(self, array) -> int:
+        key = id(array)
+        if key not in self._index:
+            self._index[key] = len(self._arrays)
+            self._arrays.append(array)
+        return self._index[key]
+
+    def payload(self) -> dict:
+        """``{"dtypes", "shapes", "blob"}``: every array's dtype and shape and their bytes back to back."""
+        import numpy as np
+        dtypes, shapes, parts = [], [], []
+        for array in self._arrays:
+            array = np.asarray(array)
+            dtypes.append(array.dtype.str)
+            shapes.append(list(array.shape))
+            parts.append(np.ascontiguousarray(array).tobytes())
+        return {"dtypes": dtypes, "shapes": shapes, "blob": b"".join(parts)}
+
+
+def served_arrays(payload: Mapping[str, Any] | None, blob: bytes | None = None) -> tuple:
+    """Studio side: one read-only array per recorded number (views on one bytes blob, as the engine's own
+    ``np.frombuffer`` arrays are), decoded once, so every answer naming a number is the same object."""
+    if not payload:
+        return ()
+    import numpy as np
+    data = payload["blob"] if blob is None else blob
+    out, offset = [], 0
+    for dtype, shape in zip(payload["dtypes"], payload["shapes"]):
+        kind = np.dtype(dtype)
+        count = 1
+        for size in shape:
+            count *= int(size)
+        out.append(np.frombuffer(data, dtype=kind, count=count, offset=offset).reshape(shape))
+        offset += count * kind.itemsize
+    if offset != len(data):
+        raise ValueError("Recorded arrays do not match their payload")
+    return tuple(out)
+
+
+def encode_answer(value: Any, arrays: RecordedArrays | None = None) -> Any:
     """A JSON form of one engine answer that ``decode_answer`` turns back into an equal value of the same types
-    (floats round-trip exactly through JSON). Unknown types raise: an answer is never approximated."""
+    (floats round-trip exactly through JSON). With ``arrays`` a NumPy array is recorded by identity (its number).
+    Unknown types raise: an answer is never approximated."""
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
     if isinstance(value, list):
-        return {"list": [encode_answer(v) for v in value]}
+        return {"list": [encode_answer(v, arrays) for v in value]}
     if isinstance(value, tuple):
-        return {"tuple": [encode_answer(v) for v in value]}
+        return {"tuple": [encode_answer(v, arrays) for v in value]}
     if isinstance(value, dict):
-        return {"dict": [[str(k), encode_answer(v)] for k, v in value.items()]}
+        return {"dict": [[str(k), encode_answer(v, arrays)] for k, v in value.items()]}
     name = type(value).__name__
     if is_dataclass(value) and _answer_types().get(name) is type(value):
-        return {"data": name, "fields": {f.name: encode_answer(getattr(value, f.name)) for f in fields(value)}}
+        return {"data": name, "fields": {f.name: encode_answer(getattr(value, f.name), arrays)
+                                         for f in fields(value)}}
+    if arrays is not None and type(value).__name__ == "ndarray" and type(value).__module__ == "numpy":
+        return {"array": arrays.number(value)}
     raise TypeError(f"Unrecordable engine answer of type {type(value).__qualname__}")
 
 
-def decode_answer(data: Any) -> Any:
+def decode_answer(data: Any, arrays: tuple = ()) -> Any:
     if not isinstance(data, dict):
         return data
+    if "array" in data:
+        return arrays[int(data["array"])]
     if "list" in data:
-        return [decode_answer(v) for v in data["list"]]
+        return [decode_answer(v, arrays) for v in data["list"]]
     if "tuple" in data:
-        return tuple(decode_answer(v) for v in data["tuple"])
+        return tuple(decode_answer(v, arrays) for v in data["tuple"])
     if "dict" in data:
-        return {k: decode_answer(v) for k, v in data["dict"]}
-    return _answer_types()[data["data"]](**{k: decode_answer(v) for k, v in data["fields"].items()})
+        return {k: decode_answer(v, arrays) for k, v in data["dict"]}
+    return _answer_types()[data["data"]](**{k: decode_answer(v, arrays) for k, v in data["fields"].items()})
 
 
 def _answer_key(name: str, args: tuple, kwargs: Mapping[str, Any]) -> str:
@@ -229,10 +289,12 @@ class EngineAnswerRecorder:
 
     Read-only getters are recorded once per tick by name (and arguments); a getter answering two different values
     within one tick would make the served step ambiguous, so that raises. Commands (``tick``, ``set_*``, ...) run
-    on the real engine and are listed in call order."""
+    on the real engine and are listed in call order. NumPy arrays are numbered by identity in ``arrays`` (one
+    ``RecordedArrays`` for the whole recording)."""
 
     def __init__(self, engine) -> None:
         object.__setattr__(self, "_engine", engine)
+        object.__setattr__(self, "arrays", RecordedArrays())
         object.__setattr__(self, "answers", {})
         object.__setattr__(self, "commands", [])
 
@@ -253,7 +315,7 @@ class EngineAnswerRecorder:
         def getter(*args, **kwargs):
             result = value(*args, **kwargs)
             key = _answer_key(name, args, kwargs)
-            encoded = encode_answer(result)
+            encoded = encode_answer(result, self.arrays)
             if key in self.answers and self.answers[key] != encoded:
                 raise RuntimeError(f"Engine answered {key} twice differently within one tick")
             self.answers[key] = encoded
@@ -269,10 +331,12 @@ class RecordedEngineAnswers:
 
     Commands are inert (the analysis already ran in the worker). A getter the record lacks falls through to the
     configured ``base`` engine and is counted in ``unrecorded``: a diagnostics-only read (``--viz`` latency
-    logging) still answers, and the parity tests require the count to stay zero."""
+    logging) still answers, and the parity tests require the count to stay zero. ``arrays``: the recording's
+    arrays (``served_arrays``), one object per recorded number, so an identity the step checks behaves as live."""
 
-    def __init__(self, base) -> None:
+    def __init__(self, base, arrays: tuple = ()) -> None:
         self._base = base
+        self._arrays = tuple(arrays)
         self._answers: Mapping[str, Any] = {}
         self._cache: dict[str, Any] = {}
         self.unrecorded = 0
@@ -293,7 +357,7 @@ class RecordedEngineAnswers:
             key = _answer_key(name, args, kwargs)
             if key in self._answers:
                 if key not in self._cache:
-                    self._cache[key] = decode_answer(self._answers[key])
+                    self._cache[key] = decode_answer(self._answers[key], self._arrays)
                 value = self._cache[key]
                 # A fresh copy of a mutable answer, as the engine hands out (callers may keep or edit it).
                 return list(value) if isinstance(value, list) else dict(value) if isinstance(value, dict) else value
@@ -349,6 +413,10 @@ def _clone(value: Any, memo: dict, shared: tuple) -> Any:
     if isinstance(value, (set, frozenset)):
         out = memo[key] = type(value)(_clone(item, memo, shared) for item in value)
         return out
+    import types
+    if isinstance(value, types.MappingProxyType):        # a read-only view (published drives): view a copy
+        out = memo[key] = types.MappingProxyType(_clone(dict(value), memo, shared))
+        return out
     from collections import deque
     if isinstance(value, deque):
         out = memo[key] = deque((_clone(item, memo, shared) for item in value), maxlen=value.maxlen)
@@ -382,8 +450,11 @@ class StepState:
     right after configuration (``pristine``) and periodic checkpoints. ``keep`` lists objects that are shared, not
     copied (the engine and the engine-answer view the step reads through)."""
 
-    def __init__(self, controller, keep: tuple = ()) -> None:
-        self._owners = (controller, controller.logical_tick_state, controller.presentation_state)
+    def __init__(self, controller, keep: tuple = (), *, owners: tuple | None = None) -> None:
+        # ``owners``: capture these objects instead of a controller's three (a mode that steps its frame runtime
+        # directly, such as Waveform, captures that runtime).
+        self._owners = tuple(owners) if owners is not None else (
+            controller, controller.logical_tick_state, controller.presentation_state)
         self._keep = tuple(keep)
         self._shared = _shared_types()
         self._state = self._copy({owner: dict(vars(owner)) for owner in self._owners})
@@ -401,5 +472,6 @@ class StepState:
             owner.__dict__.update(state)
 
 
-__all__ = ["EngineAnswerRecorder", "EngineTick", "RecordedEngineAnswers", "StepState", "clocked_scheduler",
-           "decode_answer", "encode_answer", "fixture_engine_type", "offline_controller", "recorded_answers"]
+__all__ = ["EngineAnswerRecorder", "EngineTick", "RecordedArrays", "RecordedEngineAnswers", "StepState",
+           "clocked_scheduler", "decode_answer", "encode_answer", "fixture_engine_type", "offline_controller",
+           "recorded_answers", "served_arrays"]

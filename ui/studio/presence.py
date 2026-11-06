@@ -10,6 +10,13 @@ Off Windows there is no native hide that keeps Qt's modal loop (hiding the
 QWindow also ends ``exec()``), so the window stays shown but invisible: zero
 window opacity (every Wayland compositor and composited X11) plus a move off
 screen (non-composited X11). ``reveal`` restores opacity and geometry.
+
+A native show must also be followed by a native *re-expose*. Settings is a frameless translucent window, which Qt
+presents as a layered window; a layered window never receives ``WM_PAINT``, and Qt announces its exposure only from
+a show it initiated. Qt does see the native hide (the QWindow becomes not exposed) but not the native show, so without
+the re-expose the QWindow stays unexposed, every ``update()`` is dropped and the window accepts input while its picture
+never changes ("frozen and unclickable", 6 Nov). ``RedrawWindow(RDW_INVALIDATE | RDW_UPDATENOW)`` makes Windows send
+the ``WM_PAINT`` that a layered window otherwise never gets, and Qt turns it into the missing expose and a full repaint.
 """
 from __future__ import annotations
 
@@ -23,6 +30,9 @@ logger = get_logger(__name__)
 _SW_HIDE = 0
 _SW_SHOW = 5
 _OFF_SCREEN = -30000
+_RDW_INVALIDATE = 0x0001
+_RDW_ALLCHILDREN = 0x0080
+_RDW_UPDATENOW = 0x0100
 
 
 def _native_show(widget, command: int) -> bool:
@@ -52,6 +62,19 @@ def _native_restore(widget) -> tuple[bool, bool]:
     user32.BringWindowToTop(hwnd)
     user32.SetForegroundWindow(hwnd)
     return bool(user32.IsWindowVisible(hwnd)), bool(user32.IsWindowEnabled(hwnd))
+
+
+def _native_reexpose(widget) -> None:
+    """Make Qt expose (and so repaint) a window that was shown natively: see the module note on layered windows."""
+    import ctypes
+    from ctypes import wintypes
+    hwnd = int(widget.winId())
+    if not hwnd:
+        return
+    user32 = ctypes.windll.user32
+    user32.RedrawWindow.argtypes = [wintypes.HWND, ctypes.c_void_p, ctypes.c_void_p, wintypes.UINT]
+    user32.RedrawWindow.restype = wintypes.BOOL
+    user32.RedrawWindow(hwnd, None, None, _RDW_INVALIDATE | _RDW_ALLCHILDREN | _RDW_UPDATENOW)
 
 
 class WindowPresence:
@@ -118,6 +141,10 @@ class WindowPresence:
             except Exception:
                 logger.exception("[STUDIO] Native Settings restore failed; falling back to ShowWindow")
                 _native_show(widget, _SW_SHOW)
+            try:
+                _native_reexpose(widget)
+            except Exception:
+                logger.exception("[STUDIO] Settings re-expose after the native show failed")
         if self._soft_hidden_opacity is not None:
             widget.setWindowOpacity(self._soft_hidden_opacity)
             self._soft_hidden_opacity = None
@@ -134,8 +161,9 @@ class WindowPresence:
             widget.raise_()
             widget.activateWindow()
         self.reveal_count += 1
-        logger.info("[STUDIO] Settings revealed (qt visible=%s enabled=%s native=%s)",
-                    widget.isVisible(), widget.isEnabled(), native)
+        window = widget.windowHandle()
+        logger.info("[STUDIO] Settings revealed (qt visible=%s enabled=%s exposed=%s native=%s)",
+                    widget.isVisible(), widget.isEnabled(), window.isExposed() if window is not None else None, native)
 
 
 __all__ = ["WindowPresence"]
