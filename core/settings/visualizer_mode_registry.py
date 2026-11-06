@@ -87,6 +87,10 @@ class VisualizerModeDescriptor:
     # the mode consumes. Unused worker outputs are configured at resolution.
     technical_setting_suffixes: tuple[str, ...] | None = None
     analysis_notch_setting: str = ""
+    # The mode draws one bar per analysis band: its Bar Count is the number of bars on screen and the shared Bar
+    # Appearance (fill / border) colours those bars. Elsewhere Bar Count is only the analysis resolution (it still
+    # moves the frame), so Settings and the Studio label it Analysis Bands (``technical_controls``).
+    draws_bars: bool = False
     # Owned technical controls the mode's published frame provably never reads (measured by
     # ``tools/visualizer_replay/analysis_controls_audit.py``, which re-analyses recorded PCM through the production
     # DSP): Settings and the Studio do not offer them. Visibility only: the keys stay owned, stored, serialized and
@@ -200,6 +204,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         renderer_module="rendering.quick.visualizer.implementations.spectrum",
         settings_builder_module="ui.tabs.media.spectrum_builder",
         settings_builder_factory="build_spectrum_ui",
+        draws_bars=True,
         # The original Spectrum owns its peak-ghost settings as well as the
         # Extruded family member. Without this capability, source-config
         # projection forces ghosting off before logical capture, even when
@@ -316,6 +321,7 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
         renderer_module="rendering.quick.visualizer.implementations.extruded_spectrum",
         settings_builder_module="ui.tabs.media.extruded_spectrum_builder",
         settings_builder_factory="build_extruded_spectrum_ui",
+        draws_bars=True,
         technical_controls=True,
         rainbow_controls=False,
         shared_bar_appearance=True,

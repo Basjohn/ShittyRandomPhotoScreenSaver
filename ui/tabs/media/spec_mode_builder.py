@@ -63,6 +63,22 @@ def container_attr(mode_id: str) -> str:
     return f"_{require_mode_settings(mode_id).prefix}_settings_container"
 
 
+def body_keys(mode_id: str) -> tuple[str, ...]:
+    """Every key the mode body loads and collects, in spec order: its bucketed controls, each Custom row's keys and
+    the bucketless controls a Custom row edits (Spectrum's Render Mode, Bubble's Drift, Sphere's Finish and colours).
+    The live view pose (orbit turn/tilt, scene scale and pan) is not the body's: it is set by flying the view."""
+    spec = require_mode_settings(mode_id)
+    descriptor = get_visualizer_mode_descriptor(mode_id)
+    view = set(descriptor.view_orbit_settings) | set(descriptor.scene_transform_settings)
+    out: list[str] = []
+    for entry in spec.entries:
+        if isinstance(entry, Custom):
+            out.extend(entry.keys)
+        elif entry.bucket or entry.key not in view:
+            out.append(entry.key)
+    return tuple(out)
+
+
 def build_spec_mode_ui(tab, parent_layout, mode_id: str) -> None:
     """Build ``mode_id``'s body: the shared preset/advanced/technical scaffold, then each bucket
     with its controls in the spec's order."""

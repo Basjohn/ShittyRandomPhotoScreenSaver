@@ -435,8 +435,10 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         super()._update_rainbow_visibility()
         appearance = getattr(self, "_base_appearance_group", None)
         if appearance is not None:
+            from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, get_visualizer_mode_descriptor
+            mode = self._get_active_visualizer_mode()
             appearance.setVisible(
-                self._get_active_visualizer_mode() in {"spectrum", "extruded_spectrum"}
+                mode in VISUALIZER_MODE_IDS and get_visualizer_mode_descriptor(mode).draws_bars
                 and self._active_visualizer_preset_is_custom()
             )
 
