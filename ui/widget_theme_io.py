@@ -47,6 +47,8 @@ _TOP_LEVEL_KEYS = frozenset(
         "colors",
     }
 )
+# Optional within schema v3: a theme written before 6 Nov 2026 simply names no material.
+_OPTIONAL_TOP_LEVEL_KEYS = frozenset({"surface_material"})
 
 
 class WidgetThemeFileError(ValueError):
@@ -81,10 +83,11 @@ def _expect_exact_keys(
     value: Mapping[str, Any],
     expected: set[str] | frozenset[str],
     path: str,
+    optional: set[str] | frozenset[str] = frozenset(),
 ) -> None:
     actual = set(value)
     missing = sorted(expected - actual)
-    unexpected = sorted(actual - expected)
+    unexpected = sorted(actual - expected - optional)
     if missing or unexpected:
         details: list[str] = []
         if missing:
@@ -136,14 +139,19 @@ def widget_theme_to_payload(theme: WidgetThemeSpec) -> dict[str, Any]:
 
     if not isinstance(theme, WidgetThemeSpec):
         raise TypeError("theme must be a WidgetThemeSpec")
-    return {
+    payload: dict[str, Any] = {
         "format": WIDGET_THEME_FILE_FORMAT,
         "schema_version": theme.schema_version,
         "theme_id": theme.theme_id,
         "name": theme.name,
         "linked_settings_theme_id": theme.linked_settings_theme_id,
-        "colors": {token: color.as_list() for token, color in theme.colors.items()},
     }
+    # Only a theme that names a material carries the key, so older themes round-trip
+    # byte for byte.
+    if theme.surface_material is not None:
+        payload["surface_material"] = theme.surface_material
+    payload["colors"] = {token: color.as_list() for token, color in theme.colors.items()}
+    return payload
 
 
 def widget_theme_to_json(theme: WidgetThemeSpec) -> str:
@@ -164,7 +172,7 @@ def widget_theme_from_payload(payload: Any) -> WidgetThemeSpec:
             "theme.schema_version",
             f"unsupported version {schema_version}; expected {WIDGET_THEME_SCHEMA_VERSION}",
         )
-    _expect_exact_keys(obj, _TOP_LEVEL_KEYS, "theme")
+    _expect_exact_keys(obj, _TOP_LEVEL_KEYS, "theme", _OPTIONAL_TOP_LEVEL_KEYS)
 
     file_format = obj["format"]
     if file_format != WIDGET_THEME_FILE_FORMAT:
@@ -185,6 +193,17 @@ def widget_theme_from_payload(payload: Any) -> WidgetThemeSpec:
     link = obj["linked_settings_theme_id"]
     if link is not None and (not isinstance(link, str) or not link.strip()):
         raise _error("theme.linked_settings_theme_id", "must be a string or null")
+
+    surface_material = obj.get("surface_material")
+    if surface_material is not None:
+        from rendering.quick.widgets.surface_material import (
+            SURFACE_MATERIALS,
+            normalize_surface_material,
+        )
+
+        if not isinstance(surface_material, str) or normalize_surface_material(surface_material) is None:
+            raise _error("theme.surface_material", f"must be one of {list(SURFACE_MATERIALS)!r} or absent")
+        surface_material = normalize_surface_material(surface_material)
 
     raw_colors = _expect_mapping(obj["colors"], "colors")
     # Core card/context roles remain whole-or-reject. Schema v3 retains the sparse
@@ -207,6 +226,7 @@ def widget_theme_from_payload(payload: Any) -> WidgetThemeSpec:
             linked_settings_theme_id=link,
             colors=colors,
             schema_version=WIDGET_THEME_SCHEMA_VERSION,
+            surface_material=surface_material,
         )
     except (TypeError, ValueError) as exc:
         if isinstance(exc, WidgetThemeFileError):

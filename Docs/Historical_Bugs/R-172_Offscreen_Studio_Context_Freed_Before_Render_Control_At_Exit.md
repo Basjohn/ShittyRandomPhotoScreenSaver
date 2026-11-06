@@ -57,9 +57,7 @@ context internally, so there is no imported context. Only tests and `tools/` (`s
 `close_for_quit` retires the surface from `aboutToQuit`. A probe showed that `QCoreApplication::exec`'s own cleanup
 destroys the Studio window and engine before `exec()` returns, so nothing is left for the exit sweep.
 `tools/onboarding_preview_foundry.py`'s hidden scene had the same structure: an imported context with its own Python
-owner, and the control left to `deleteLater`. It got the same ownership on 6 Nov, and its `close()` now destroys the
-window and then the control at once. `tests/test_onboarding_preview_capture_teardown.py` covers it, with a negative
-control.
+owner, and the control left to `deleteLater`. It was fixed separately as R-173.
 
 ## Lesson
 
