@@ -5,21 +5,7 @@ implicit pass). When an item lands, delete it: completed work lives in source co
 `Spec.md` / `Docs/` (Reference, Architecture, Guardrails, Guides); rejected mechanisms in `Docs/Historical_Bugs/`. This
 is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 
-## 0. Order, scope and rules
-
-**Work strictly in this order:**
-
-1. **§7.1 Waveform Ribbon**: finish acceptance (already built; the only 3D mode in flight).
-2. **§9 Studio for every visualizer** (operator, 5 Nov): replaces the deferred Bubble scalar-to-range/UX sweep.
-3. **§8 Accepted-mode follow-ups**: the brief Bubble performance-parity check is operator-admitted now.
-4. **SMP & Full Display (backend decision, 5 Nov: `Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md`):**
-   Expanded Visualizer (plan 01) first, then ShittyMusicPlayer (plan 02). No Vulkan backend now: the eventual backend is
-   a native render core on Qt Quick's Vulkan RHI, started only when a recorded trigger fires (full-display 4K GPU
-   budget, render-thread GIL starvation, a needed capability, a platform blocker). Port-readiness rules bind all new
-   GPU code from now.
-5. **§6 Shared 3D architecture** and **§7 Visualizer modes** (Reactive Liquid / Melt Pool → Concrete Rain → Usu
-   Moonscape, lab-first per §7.0) resume after Expanded Visualizer acceptance and its full-display measurements, under
-   the port-readiness rules; if a trigger fires first, the native Vulkan core precedes them.
+## 0. Scope and rules
 
 **Accepted baseline (not live work):** original Bubble, Extruded Bubble, Neon Lake, Oscilloscope,
 Spectrum/Rainbow Ghost, Sphere, source routing, transitions and Foundry launch buttons. Reopen an accepted
@@ -38,17 +24,78 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 New platform-facing work (power, display, input) still ships a basic Linux path or an explicit inert one alongside
 the Windows path, so it never needs its own Linux audit later (operator, 5 Nov).
 
+**Architecture checklist:** `Docs/Reference/Architecture_Checklist.md` (the 6 Nov audit, verified against source on
+7 Nov: 16 items with severity, reward, effort, owning boundary, fix, regression bar). Its Tier 1 (AC-01 Settings tab
+registry, AC-02 Visualizer host binding, AC-03 application-service tier) is the prerequisite work for step 4 below;
+the items promoted to run soon are in §3. Nothing else in it is admitted until it appears here.
+
+## 1. Order of work (strict)
+
+**Now (in flight):**
+
+1. **Data-corruption fix** (§3, the Studio agent's top priority): a Neon Lake preset file was rewritten with Bubble
+   values. Nothing outranks a user-data write bug.
+2. **§7.1 Waveform Ribbon**: finish acceptance (already built; the only 3D mode in flight), including the logical
+   tick cut (§4) and the operator sign-offs listed in §2.
+3. **§9 Studio for every visualizer** (operator, 5 Nov): the controller leak, the close freeze, the close prompt,
+   then the remaining operator looks.
+4. **§4 runtime side requests** run alongside, and the small queued fixes in §3 fill free slots.
+
+**Next (admitted, waits for the above):**
+
+5. **§8 Accepted-mode follow-ups**: the brief Bubble performance-parity check is operator-admitted.
+6. **Architecture prerequisites, in this order: AC-01 → AC-02 → AC-03** (`Docs/Reference/Architecture_Checklist.md`
+   Tier 1). AC-01 may start at the next free high slot once the Studio leak lands (it pays off for every existing
+   Settings tab now); AC-02 lands before Expanded Visualizer M2; AC-03 before SMP M2.
+
+**Then (decided 5 Nov, `Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md`):**
+
+7. **SMP & Full Display:** Expanded Visualizer first
+   (`Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md`, EB only; its §0 holds the
+   phase ladder and the 4K budgets), then ShittyMusicPlayer
+   (`Docs/Future_Work/ShittyMusicPlayer/02_ShittyMusicPlayer_Implementation_Plan.md`, gated behind `--smp` until its
+   Gate M9; its §0A holds the prerequisite phases and §13-16 the operator's audio, Settings-tab, icon/artwork and
+   rearrangement targets). No Vulkan backend now: the eventual backend is a native render core on Qt Quick's Vulkan
+   RHI, started only when a recorded trigger fires (full-display 4K GPU budget, render-thread GIL starvation, a
+   needed capability, a platform blocker). Port-readiness rules bind all new GPU code from now.
+8. **§6 Shared 3D architecture** and **§7 Visualizer modes** (Reactive Liquid / Melt Pool → Concrete Rain → Usu
+   Moonscape, lab-first per §7.0) resume after Expanded Visualizer acceptance and its full-display measurements, under
+   the port-readiness rules; if a trigger fires first, the native Vulkan core precedes them.
+
+## 2. Awaiting the operator (eyes, ears, hardware, decisions; details stay at the item)
+
+One line each; the detail and evidence live in the section named. Nothing here needs an agent until the operator
+answers.
+
+- **Decision, checklist AC-11 (3D camera contract):** give Sphere and Extruded Spectrum a framed-camera spec with
+  Reset Camera to the preset home, or a reset that needs no physical camera; then inertia/wrap become declared
+  per-mode choices. Needed before a second mode opts into the Expanded Visualizer.
+- **Read:** Bubble / Extruded Bubble "terrible performance" (6 Nov log 10:32-10:35) was our load (97-100% system CPU
+  from the agents' game60 checks), not the product: on the quiet machine Bubble P1 ran 65.9 fps, tick 1.47 ms, GIL
+  0.13, 3.9% late; Extruded Bubble 45-69 fps (`.artifacts/evidence/live_20261106/`). Heavy load-generator runs are
+  scheduled by the lead only.
+- **§4 Slow startup:** a cold start with `--usage` (no `UI_CALLBACK` / `FEED_GUI_DELIVERY` line over a frame).
+- **§4 Displays off:** the overnight check with the power plan's display timeout (`--frame-trace --usage`).
+- **§4 DevCurve "more alive":** eyes after the lead's review.
+- **§4 Frozen builds:** open a Studio from a fresh build.
+- **§4 Widget card surfaces:** eyes on the rows, the inner rim, the mute position and the 15 material themes.
+- **§4 Extruded Bubble Deep Red Ocean (Preset 9):** eyes on the second pass.
+- **§5 Neon Lake goal mocks:** look at pass 7.
+- **§7.1 Waveform:** Preset 4 trade-offs of the fixed-scale v7 (sign off or ask for the tag's exact dynamics);
+  Preset 7 and the Reaction Modes; Breathing; four-ribbon Preset 3; Particles; Strands; Colour/floor/mist; Fixed
+  response; Floor Give; Pulse Rim; swell visibility; Travel Direction; Unified atmosphere.
+- **§8 Bubble:** R-170 eyes-on (tall, wide and TV cards); Particle glow.
+- **§9 Studios:** Neon Lake, Extruded Spectrum, Spectrum, DevCurve and Oscilloscope Studios; the migrated Settings
+  pages; Open Studio in the preset row and the Save To flow; the seamless clip loops; the chrome; the drag feel; the
+  terrain brush.
+- **§5 Frozen release gate:** operator-run builds and installer checks.
+
+## 3. Lead and agents: active, paused and queued work
+
 **Agents (operator, 6 Nov evening):** at most one Opus 5.5 high and one Opus 5.5 medium subagent at once, with the
 lead as reviewer/orchestrator. Agents that already hold unfinished work may exceed this until they finish (their
-context is valuable). Slots need not always be full: when the right agent is not free, queue the item here.
-
-**Architecture audit before application-wide work (operator 6 Nov, one-time agents):** a one-time Opus agent audits
-the thread manager, resource manager, lifecycles, dead code, churn, avoidable GIL contention, memory/leaks and
-dormancy contracts. Lenses: SSOT, dormancy, lifecycle contracts, 2D/3D consistency, performance, SMP settings UX and
-full visual rearrangement. Output: `Docs/Audits/Architecture_Audit_2026-11-06.md`. Then a one-time Fable 5.1 agent
-challenges and improves it into a live checklist (priority, reward, fix detail; unrelated defects kept), and upgrades
-the Expanded Visualizer / SMP plans and this plan. Afterwards the cap returns to one Opus high plus one Opus medium,
-once no existing agent holds loaded work.
+context is valuable). Slots need not always be full: when the right agent is not free, queue the item here. The
+one-time audit and review agents (6-7 Nov) are done; the cap applies again once no existing agent holds loaded work.
 
 **Data-corruption bug (found 7 Nov in the merge gate; the Studio agent's top priority):** during the operator's source
 run on 6 Nov, `presets/visualizer_modes/shockwave_grid/preset_1_synthwave.json` (Neon Lake Preset 1) was rewritten
@@ -59,41 +106,50 @@ came from Bubble, the target from another mode. The original is restored from gi
 its target mode equals the payload mode, fails closed, and logs mode/index/path; a regression test fails on the old
 code. Check installed builds too.
 
-**Queued (operator 6 Nov ~22:00), next free medium slot:**
-- **Two clicks on Reset Camera count as the card's double-click, which cycles the Visualizer mode**
-  (`logs/screensaver*.log` 22:04:34-36). Two presses each ran a reset ("[VIS_ORBIT] Camera reset to preset home" x2).
-  The pair also reached the visualizer region's double-click admission (`QuickVisualizerDoubleClickAdmission`,
-  `cycle_mode=self._cycle_quick_visualizer_mode`, `engine/display_manager.py` ~3529). That cycled to the next mode in
-  `mode_activation` (the modes double-click and context-menu cycling may choose; after Extruded Bubble comes Waveform)
-  and wrote `widgets.spotify_visualizer.mode` (~1939). The one-Visualizer contract held: EB's last tick was 22:04:34
-  and Waveform's first was 22:04:36, never overlapping. Fix at the owner: the camera hint buttons (Reset Camera and
-  any other in-card control) consume their presses, including the second press of a double-click, so no in-card
-  control press reaches mode cycling. Regression bar: a double-click on Reset Camera resets once or twice but never
-  cycles; a double-click on the card's empty area still cycles.
+**Active or paused (resume each with a message to the same agent, which keeps its context and worktree):**
+- **Studio agent** (Opus high, worktree `agent-ae914e4586e23615a`): the data-corruption bug above first; then the UI
+  freeze after closing a Studio (idle process, 18 s with no GUI-thread log after the window was destroyed, 21:56:34),
+  sliders snapping out of a drag, no automatic switch to Custom (a close prompt: Overwrite Preset / Save As New Preset
+  / Custom Slot / Discard); then the controller leak (closed `StudioController`s live for the process: the
+  `finished`/`report` closures in `open_mode_studio` hold the controller; the foundry context-ownership fix is done,
+  R-173), Spectrum rendering black when all Studio test files run in one process (record if deep), and checklist
+  **AC-06** (the four adapters' unbounded class-level clip caches and the GUI-thread clip parse; same owner, same
+  leak). The R-172 exit crash itself is merged.
+- **Waveform agent** (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch `worktree-agent-af0eb2492e1e318d7`):
+  the logical tick cut (it had computed main's identity digests and was running its branch digests and tests; the
+  gate is byte-identical output, Preset 4 required; then the lead schedules the game60 live check). After the cut: a
+  music-vs-response check of every preset and Reaction Mode, the floor clipping the operator sees (raise the lift
+  limit; the operator now prefers a little more height to floor clipping, which partly supersedes "top edge first"),
+  live tick spikes of 64-152 ms around Quick preset switches, and checklist **AC-12** (monotonic authored clock; same
+  files, so it lands after the cut).
+- **Card surfaces agent** (Opus medium, 6 Nov evening): done on its branch, awaiting the lead's merge and the
+  operator's eyes; details under "Widget card surfaces" in §4.
 
-**Follow-ups sent to the agents below (operator 6 Nov ~22:00):** the Studio agent: the UI freeze after closing a
-Studio (idle process, 18 s with no GUI-thread log after the window was destroyed, 21:56:34), sliders snapping out of a
-drag, no automatic switch to Custom (a close prompt: Overwrite Preset / Save As New Preset / Custom Slot / Discard),
-then the leak and its side defects. The Waveform agent, after its identity-gated cut: a music-vs-response check of every
-preset and Reaction Mode, the floor clipping the operator sees (raise the lift limit; the operator now prefers a little
-more height to floor clipping, which partly supersedes "top edge first"), and live tick spikes of 64-152 ms around
-Quick preset switches.
+**Queued, next free medium slot, in this order (small, bounded):**
+1. **Two clicks on Reset Camera count as the card's double-click, which cycles the Visualizer mode** (operator 6 Nov
+   ~22:00; `logs/screensaver*.log` 22:04:34-36). Two presses each ran a reset ("[VIS_ORBIT] Camera reset to preset
+   home" x2). The pair also reached the visualizer region's double-click admission
+   (`QuickVisualizerDoubleClickAdmission`, `cycle_mode=self._cycle_quick_visualizer_mode`,
+   `engine/display_manager.py` ~3529). That cycled to the next mode in `mode_activation` (after Extruded Bubble comes
+   Waveform) and wrote `widgets.spotify_visualizer.mode` (~1939). The one-Visualizer contract held: EB's last tick was
+   22:04:34 and Waveform's first was 22:04:36, never overlapping. Fix at the owner: the camera hint buttons (Reset
+   Camera and any other in-card control) consume their presses, including the second press of a double-click, so no
+   in-card control press reaches mode cycling. Regression bar: a double-click on Reset Camera resets once or twice but
+   never cycles; a double-click on the card's empty area still cycles.
+2. **Checklist AC-04:** a failing inactive-renderer release blacks out the active mode on every frame
+   (`rendering/quick/visualizer/render_host.py:182-183, 304-329`); render the active mode first, record the failure
+   once, retry at the next boundary.
+3. **Checklist AC-05:** one beat-engine authority (delete `_global_beat_engine`; the tick uses
+   `controller.ensure_engine()` or raises). Lands before any SMP PCM source.
+4. **Checklist AC-09 and AC-08 together** (one card border width resolver; one GL state-query helper on the per-frame
+   fences with the query order preserved, plus the bench node-path case). Mechanical, pixel-identical.
 
-**Paused by the weekly usage limit (6 Nov evening; resume each with a message to the same agent, which keeps its
-context and worktree):**
-- **Waveform logical tick cut** (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch
-  `worktree-agent-af0eb2492e1e318d7`): it had computed main's identity digests and was running its branch digests and
-  tests. The gate is byte-identical output (Preset 4 required); then the lead schedules the game60 live check.
-- **Studio controller leak** (Opus high, worktree `agent-ae914e4586e23615a`): closed `StudioController`s live for the
-  process (one per Studio session in production: the `finished`/`report` closures in `open_mode_studio` hold the
-  controller) (the `tools/onboarding_preview_foundry.py` context-ownership fix is done: R-173); then Spectrum rendering
-  black when all Studio test files run in one process (record if deep). The R-172 exit crash itself is merged.
-- **Card surface style fixes and material themes** (Opus medium, 6 Nov evening): done on its branch, awaiting the
-  lead's merge and the operator's eyes; details under "Widget card surfaces" below.
+**Lead only:** merges and merge gates; the game60 live checks (card surfaces with materials on; Waveform after the
+tick cut); scheduling heavy load generators; promoting checklist items here.
 
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
 
-- [ ] **Slow startup (operator, 6 Nov 10:30; owners found and fixed, awaiting the operator's cold start):** the 7 s
+- [~] **Slow startup (operator, 6 Nov 10:30; owners found and fixed, awaiting the operator's cold start):**the 7 s
   GUI "Feeds delivery" and the sampler's 7.2 s first sample were one `ProcessSupervisor` state lock held across a
   stuck optional child's stop/start; fixed (lock for dictionary work only, per-role lifecycle lock, a role mid-transition
   reports "not available"; `tests/test_process_supervisor_availability.py`). The engine init thread no longer waits up
@@ -106,14 +162,6 @@ context and worktree):**
   that no `UI_CALLBACK` / `FEED_GUI_DELIVERY` line exceeds a frame and the first `collect_ms` is small; a prefetch
   batch asked for before the child is ready fails as "not running" (a logged `[PREFETCH]` error; no retry of that batch). Evidence
   `.artifacts/evidence/slow_startup_20261106/`.
-- [x] **Bubble / Extruded Bubble "terrible performance" (operator log 10:32-10:35): our load, not the product.** That
-  session ran at 97-100% system CPU from the agents' game60 checks. The lead re-ran them on the quiet machine at 6 Nov
-  14:00 under game60 (`.artifacts/evidence/live_20261106/`):
-  - Bubble P1: 65.9 fps, tick 1.47 ms, GIL 0.13, 3.9% late;
-  - Extruded Bubble: 45-69 fps.
-
-  Heavy load-generator runs are scheduled by the lead only. Delete this item once the operator has read it.
-
 - [~] **Displays off -> presentation pauses entirely, resumes clean (built 5 Nov; awaiting the operator's physical
   overnight check):** `core.display_power` pauses rotation, transitions, the Visualizer (parked, capture released) and
   the clock while the console displays are off (`Docs/Architecture/Compositor_Architecture.md` → Display power).
@@ -165,45 +213,20 @@ context and worktree):**
   - **Waveform, same session (main):** P1 / P4 / P7 run at 43.5 / 42.7 / 37.6 fps, tick 8.5-8.7 ms (p90 14-16), GIL
     0.75, P7 64% late frames. Waveform is now the slowest live mode. The tick cut is unblocked (the fixed-scale rework
     merged as b76dc269); measure on v7, since the rework added per-tick work (phrase means, the top-edge bound).
-- [ ] **Frozen builds could not open a Studio (operator 6 Nov: "module QtQuick.Controls.Basic is not installed"): fixed
+- [~] **Frozen builds could not open a Studio (operator 6 Nov: "module QtQuick.Controls.Basic is not installed"): fixed
   in source (e5005ffa), confirm on the next build.** The QML prune removed QtQuick/Controls, Templates and Shapes, and
   the import allowlist scanned only the saver's QML, never `ui/studio/qml`. The build now keeps the Basic style's
   closure and prunes only the other Controls styles. `test_every_shipped_qml_import_survives_the_frozen_prune` walks
   every shipped import's module and DLL closure against the prune. Open: open a Studio from a fresh build.
-- [~] **Widget card surfaces: Acrylic, Glass, Frosted, Mica, Smoked (operator 6 Nov) - built, awaiting the live
-  check and the operator's eyes.** Design, failure analysis, invariants and measurements:
-  `Docs/Architecture/Card_Surface_Materials.md`. The Sep 2026 rejection is rewritten as a superseded decision in
-  Contracts, Spec and both guides. One per-display backdrop reads the frame the wallpaper/transition renderer has
-  already drawn, blurs it once, and every non-Normal card and the Context Menu sample it. The background renderer is
-  never redirected, layered or re-dirtied. With every card Normal nothing exists; after a material the backdrop is
-  parked. Refreshes are edge-driven, and during transitions ride rendered frames at a measured rate per material.
-  Backdrop refresh costs 0.045-0.058 ms GPU and 0.11-0.15 ms render-thread CPU; the card quads add 0.006-0.008 ms per
-  frame. `Widgets -> General -> Style Overrides -> Surface Material` (Normal default). The Visualizer card and the
-  System Volume OSD stay Normal. Captures: `.artifacts/evidence/widget_surfaces_20261106/` (side-by-side sheets per
-  theme, still and transition; `crop_dark_busy.png` first; regenerate full frames with
-  `tools/surface_material_capture.py --sheets`). Lead review 6 Nov: accepted and merged. The read happens after the
-  background in Qt's in-order pass (the background node is not depth-aware), GL state is saved and restored, a
-  multisampled target or any failure leaves cards Normal. **Operator 6 Nov: "The dark looks good but light exposes
-  some legibility/shadow improvements for UX it should get"** - done (same agent), measured per text run against the
-  local backdrop: worst small-text contrast on the light theme Glass 2.11 -> 4.58, Frosted 2.64 -> 4.91, Smoked 2.70 ->
-  4.90, Acrylic 3.89 -> 4.89; soft halos dropped on materials; inner edge on light cards; Normal unchanged, dark
-  materials unchanged outside text runs (Card_Surface_Materials.md section 6; crops in
-  `legibility_compare/legibility_before_after.png`).
-  **Style pass and material themes (6 Nov evening, operator's fixes):** the darker inner legibility panel now sits
-  2.5 px inside the border with corners concentric with the card; full rounded **rows** replace the per-run chips on
-  every list card (Reddit posts, Gmail messages, Feed rows/tiles, Friend Pulse rows/tiles, Games You Follow tiles,
-  System Stats panels, Abandonment/Achievement shelves and capsules, Weather's primary/detail/5-day blocks, Media's
-  track text), one even tone per row computed in the vertex stage; the Media bar's shadow is no longer cut square
-  (the content column stopped clipping at the padding); the mute button keeps an even gap inside the bar's end (about
-  5 px further left); Friend Pulse's secondary texts follow the light-palette soft shadow (no doubled glyphs). Worst
-  small-text run on every material 4.72-4.94:1 light, 4.83-5.02 dark; large 4.01+. Widget Themes may name a
-  `surface_material`; Style Overrides' Surface Material defaults to **Theme** (Normal when the theme names none;
-  a stored `normal` stays an explicit override, no bridge). 15 new material themes (3 per material) in the pack's
-  least-used hues (chartreuse, green, yellow, violet, blue, magenta; 4 light cards). Cost, all Normal zero: steady
-  frame +0.024-0.046 ms GPU / +0.05 ms render-thread CPU at 1440p (5 cards), up to +0.117 / +0.082 ms at 4K with 4
-  list cards; backdrop refresh 0.04-0.08 ms GPU (Card_Surface_Materials.md section 6). Evidence (1x/3x before/after
-  crops per fix, busy/flat/mid-transition, dark and light; theme contact sheets; palette survey):
-  `.artifacts/evidence/widget_surfaces_style_20261106/`.
+- [~] **Widget card surfaces: Acrylic, Glass, Frosted, Mica, Smoked (operator 6 Nov) - built and merged, awaiting the
+  live check and the operator's eyes.** Design, failure analysis, invariants, cost tables and the 6 Nov style pass
+  (inner legibility panel 2.5 px inside the border, full rounded rows on every list card, the Media bar's shadow and
+  mute position, light-theme legibility 4.5:1+ on every material, Widget Themes naming a `surface_material` with
+  Style Overrides defaulting to **Theme**, 15 new material themes): `Docs/Architecture/Card_Surface_Materials.md`
+  (sections 1-6). `Widgets -> General -> Style Overrides -> Surface Material` (Normal default; all-Normal creates
+  nothing; the Visualizer card and the System Volume OSD stay Normal). Evidence
+  `.artifacts/evidence/widget_surfaces_20261106/` and `.artifacts/evidence/widget_surfaces_style_20261106/`
+  (before/after crops, theme contact sheets `theme_sheet_*.png`).
   Left:
   1. **Live check under the lead-scheduled game load**, materials on, a transition-heavy run, and Normal as the
      control.
@@ -231,7 +254,7 @@ context and worktree):**
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
-- [ ] **Neon Lake goal mocks (Presets 1-3, 6 Nov seventh pass, awaiting operator look):** loud music now moves the
+- [~] **Neon Lake goal mocks (Presets 1-3, 6 Nov seventh pass, awaiting operator look):**loud music now moves the
   lake: every lake term read the display bars (midband >= 0.95 for 72-75% of every song), so loud and usual passages
   drew the same lake; **Water Reaction** (Waves) reads the admitted waves on the fixed scale and lights a violet/cyan
   ripple net, the shore, island glow and Moon path, and lets the ridges breathe with it (Preset 1 lake light range x4
@@ -374,7 +397,7 @@ Centre Out "like night and day"; logical cadence survives heavy game load; **Pre
 lose this"). Every later dynamics change shows, on the recorded clips, that Preset 4 is unchanged against this tag
 (or names the improvement for operator sign-off). Preset 4 keeps Breathing 0 (exactly the baseline dynamics).
 
-- [ ] **Fixed-scale rework v7: accepted by the lead review 6 Nov (merged b76dc269); operator sign-off on Preset 4 and
+- [~] **Fixed-scale rework v7: accepted by the lead review 6 Nov (merged b76dc269); operator sign-off on Preset 4 and
   the trade-offs.** No adaptive memory (Adaptive Response toggle, off in every preset), fixed response fitted to main's
   visible behaviour, phrases widened about a heard-only 3 s mean, Kick Accent bounded at 15% of the roll (Preset 4 ships
   0), the floor lift bounded by the card's top edge (top edge first), the phrase mean catching up after real silence.
@@ -546,8 +569,7 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   Extruded Bubble is a second real adapter) Qt Quick Studio per the operator's design pack; Settings > Custom opens it; production
   framing on the real card; camera navigation; theme-token chrome; full registry coverage; Energy Pulse/Reaction Mode
   first in Reactivity; target-first response tuner. Opens on the live card's world (Fill framing; 1493e246) with the
-  mock's viewport toolbar, ribbon arrows and curve tiles. Open: remaining mock parity; shipped audio (3 compact clips:
-  Rag Doll, Human, Growing Pains in a lazily read assets folder, never the .rcc; agent branch in progress); real-window checks on hardware (visible window,
+  mock's viewport toolbar, ribbon arrows and curve tiles. Open: remaining mock parity; real-window checks on hardware (visible window,
   native Settings hide/restore, exit timing via `[STUDIO] retire` logs, per-monitor DPI). The old builder buckets are
   already retired (Custom shows only the preset row and the Studio launcher); contract in
   `Docs/Reference/Visualizer_Studio.md`.
@@ -649,7 +671,7 @@ scalar-to-range audit remains deferred until explicitly reprioritized.
     If no material cost is measured, **close the item without redesigning Bubble**. No generic "lean out" campaign.
   - [ ] Include the R-170 density growth: a card larger than the canonical one now draws up to 72 live heroes
     (up to 110 with draining trails) instead of its authored ~31-68, and the hero loops are per fragment.
-- [ ] **R-170 operator eyes-on:** Bubble on a tall, a wide and the TV card should move and size like the canonical
+- [~] **R-170 operator eyes-on:**Bubble on a tall, a wide and the TV card should move and size like the canonical
   card, denser on large cards. Evidence: `Docs/Historical_Bugs/R-170_Bubble_Shape_Dependent_Speed_And_Aspect_Modifiers.md`.
 - [ ] **Side defect (found during R-170, not fixed):** `_apply_bubble_collision_response` smooth mode multiplies
   `max_disp *= 0.72` inside the per-bubble loop, so the in-view correction cap compounds down the list (order-dependent).
@@ -680,14 +702,14 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   `.artifacts/evidence/spectrum/studio_20261105/`). Every mode's Settings body is now the preset row and the Studio
   launcher (operator 6 Nov: migrate fully once parity+ is proven; `tests/test_visualizer_studio_parity.py`). Operator
   look pending on the migrated Settings pages (one sentence per mode) and on the terrain brush in the Studio.
-- [ ] **DevCurve Studio built (6 Nov), awaiting operator acceptance** (`ui/studio/devcurve_adapter.py`, registered;
+- [~] **DevCurve Studio built (6 Nov), awaiting operator acceptance**(`ui/studio/devcurve_adapter.py`, registered;
   so DevCurve's preset row now shows Open Studio and no Edit Preset). Evidence `.artifacts/evidence/devcurve/studio/`
   (Deep Blue on Rag Doll, Neon Skyline on Human: every workspace with the live traces, plus the node rows). Operator
   to judge: the per-layer Body / Accent / Swell traces as the way to read the reworked reactivity, the Layers
   workspace (one panel per layer), and whether the Audio Analysis group earns its place (re-analysed from PCM through the
   production DSP, every offered control moves DevCurve's frame; AGC Strength and Output Lift read nothing and are now
   hidden: `Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode).
-- [ ] **Oscilloscope Studio built (6 Nov), awaiting operator acceptance** (`ui/studio/oscilloscope_adapter.py`,
+- [~] **Oscilloscope Studio built (6 Nov), awaiting operator acceptance**(`ui/studio/oscilloscope_adapter.py`,
   registered). Evidence `.artifacts/evidence/oscilloscope/studio/` (Preset 1 Phosphor on Human, Preset 3 Lissajous on
   Rag Doll: every workspace with the live traces). Recorded engine answers with the capture history recorded by
   identity (binary sidecar; `Docs/Reference/Visualizer_Studio.md` §3). Operator to judge: Level / Afterglow / Ghosts /
@@ -695,7 +717,7 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   its place (re-analysed from PCM through the production DSP, every offered control moves Flare and Drive, and Bar Count,
   Block Size and Input Gain also move Tone: the trace itself is the raw capture, but the beam's reactions are not;
   `Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode).
-- [ ] **Edit Preset deleted (6 Nov)**: every visualizer mode now has a Studio, so the preset row's Edit Preset button,
+- [~] **Edit Preset deleted (6 Nov)**: every visualizer mode now has a Studio, so the preset row's Edit Preset button,
   `_open_preset_json` and its pop-up are gone (`ui/tabs/media/preset_slider.py`); curated presets are authored with
   Open Studio and the Studio's confirmed Save To <Preset> (`Docs/Reference/Visualizer_Studio.md` §4).
   `tools/flicker_test.py` keeps its own historical mock of the old row. Operator look pending: Open Studio's place in
@@ -716,7 +738,7 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
     jump, empty, or re-start its motion; (2) Rag Doll has no steady beat, so its seam is the least certain: judge it
     first; (3) the clips now start and end mid-song at the loop points chosen (Human and Growing Pains on their
     groove), not at the earlier quiet-to-hot windows; say if the quiet-to-hot arc matters more than the seam.
-- [ ] **Studio chrome matches Settings (6 Nov), awaiting the operator's look** (all Studios: one shell;
+- [~] **Studio chrome matches Settings (6 Nov), awaiting the operator's look**(all Studios: one shell;
   `Docs/Reference/Visualizer_Studio.md` "Chrome and theme"). Frameless window with Settings' title bar and forged
   rounded edge, the theme's Glass/Acrylic material, 1.5 px one-path card borders, Settings' panel casts at half
   offset, viewport corners rounded over the scene. Hidden-render evidence `.artifacts/evidence/studio_chrome/`
@@ -730,7 +752,7 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   theme's Glass/Acrylic to them with a slightly darker layer behind every control so it stays legible. Controls laid
   over the preview (transport chips, aspect chips, the source notice) keep a translucent dark solid: blurring the live
   scene behind them would cost GPU time every frame and skew what the preview shows about performance.
-- [ ] **Studio drag lag fixed (6 Nov), awaiting the operator's feel check.** Drags preview once per frame and
+- [~] **Studio drag lag fixed (6 Nov), awaiting the operator's feel check.**Drags preview once per frame and
   re-show only the dragged key (Visualizer_Studio.md "Drags are batched"); evidence
   `.artifacts/evidence/studio_drag/` (per move 56 ms -> 0.07 ms on Waveform). Side defect (not measured): Bubble's,
   Extruded Bubble's and Sphere's evaluators still replay exactly in one evaluation from the fixture start, without the
@@ -743,8 +765,10 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   - Every closed `StudioController` stays alive for the whole process: 19 after that file, and one per Studio session
     in production. The cycle runs through Qt connections that gc cannot see: `open_mode_studio`'s `finished` /
     `report` closures are connected to the controller's own `closed` / `failed` and close over the controller. Break
-    it at close: disconnect them, or hold the controller weakly. Prove it with a gc-free retention test.
-  - `tools/onboarding_preview_foundry.py`'s capture had the same imported-context structure: fixed as R-173 (7 Nov).
+    it at close: disconnect them, or hold the controller weakly. Prove it with a gc-free retention test. The
+    same owner takes checklist AC-06 (`Docs/Reference/Architecture_Checklist.md`): the four adapters' unbounded
+    class-level `_clip_cache` dicts and the GUI-thread clip parse in `waveform_recorded_inputs.py:262-273`.
+- `tools/onboarding_preview_foundry.py`'s capture had the same imported-context structure: fixed as R-173 (7 Nov).
   - The Studio files fail when run in one pytest process. After the first 17 Studio files (Bubble through
     `test_studio_preset_row_and_save_to_preset.py`), `test_studio_scene_theme_independence.py[spectrum]` renders a
     black scene (std 0). The fix did not cause it: the same failure appears with and without it. Every file passes
@@ -754,7 +778,7 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   removed its 3/4 view, where the Sun/Moon could be dragged; it is now placed with Position X/Y/Z only. Give the Studio
   preview a direct drag for it: the same pick through the production camera as the terrain brush, one undoable commit
   on release.
-- [ ] **Operator look: the Studio terrain brush** (brush button or B in the viewport toolbar; Raise, Lower, Flatten,
+- [~] **Operator look: the Studio terrain brush**(brush button or B in the viewport toolbar; Raise, Lower, Flatten,
   Water; left-drag paints, right/middle drag pans). Evidence `.artifacts/evidence/studio_completion_20261106/brush/`.
   Audio Analysis now moves the DevCurve, Oscilloscope, Neon Lake, Bubble, Extruded Bubble and Sphere previews on
   recorded clips. Sensitivity sheet: `audio_analysis/`. DevCurve normalises its body, so it barely shows, as live.
@@ -768,9 +792,6 @@ No memory updates without an explicit request.
 ADDITION & SIDE QUEST BOX
 Never Remove This Box. Restore It If Removed. Only Remove Contents As you place them in the active plan as real live checklist targets.
 ####################
-- When implementing SMP aim for quality, compatible and adjustable audio as on par or beyond with apps like Music Bee as possible. Do not shy away from custom work when it will improve quality/performance/ux. Gate SMP/Library/Playlist behind --smp until production ready and feature rich.
-- When SMP is available (Library Widget ON) a new SMP Tab should exist in settings allowing for well organised adjustments to items related to SMP and audio processing. Use Pills and maintain high quality thematic UX. We should already have in the plans for what to hide when running an SMP only build and how to do it. 
-- For SMP Mode we will use the icon built for it in the repo (store with other icons) as both the ShittyMusicPlayer.exe icon eventually and the icon shown in media when it is switched to SMP. Additionally for artwork we will maintain our fade in system and choose artwork based on tagged/metadata/embedded, artist.jpg/png, album.jpg/png, folder.jpg/png, falling back to other images in the same folder and of course our planned artwork fetching methods that we can research. Consider an additional check that if a user has a song in their library without any pictures and is using another service than smp we grab and store that image in their artist's folder. 
 
 
 
