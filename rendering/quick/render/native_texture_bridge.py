@@ -97,8 +97,11 @@ def wrap_gl_texture(
     texture_id: int,
     window: QQuickWindow,
     pixel_size: tuple[int, int],
+    *,
+    options: QQuickWindow.CreateTextureOption = QQuickWindow.CreateTextureOption.TextureIsOpaque,
 ) -> QSGTexture:
-    """Wrap ``texture_id`` (current context, opaque RGBA8) for ``window``'s scenegraph.
+    """Wrap ``texture_id`` (current context, RGBA8; opaque unless ``options`` says otherwise)
+    for ``window``'s scenegraph.
 
     Must run on the window's render thread with its OpenGL context current
     (Quick's sync or render phase). Raises ``NativeTextureUnavailable``.
@@ -113,7 +116,6 @@ def wrap_gl_texture(
     if texture_id <= 0 or width <= 0 or height <= 0:
         raise NativeTextureUnavailable("invalid texture name or size")
     size = _QSize(width, height)
-    options = QQuickWindow.CreateTextureOption.TextureIsOpaque
     pointer = function(int(texture_id), shiboken6.getCppPointer(window)[0],
                        ctypes.byref(size), int(options.value))
     if not pointer:
