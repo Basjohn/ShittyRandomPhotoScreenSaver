@@ -42,6 +42,25 @@ the Windows path, so it never needs its own Linux audit later (operator, 5 Nov).
 lead as reviewer/orchestrator. Agents that already hold unfinished work may exceed this until they finish (their
 context is valuable). Slots need not always be full: when the right agent is not free, queue the item here.
 
+**Queued (operator 6 Nov ~22:00), next free medium slot:**
+- **Reset Camera on Extruded Bubble switched live playback to Waveform** (`logs/screensaver*.log` 22:04:34-36). The
+  reset (`DisplayManager`, "[VIS_ORBIT] Camera reset to preset home", `engine/display_manager.py` ~1080-1116) ran
+  twice and wrote the whole `widgets.spotify_visualizer` section through
+  `settings.replace_visualizer_runtime_preset_state`. Audio capture then restarted, and 2 s later
+  `widgets.spotify_visualizer.mode` changed to waveform_ribbon. Lead diagnosis: several modes are activated, so the live
+  mode (EB) need not be the stored `mode` (the last saved, Waveform). The reset reads the stored section and writes it
+  back with its `mode`, and the runtime then switches to it. Fix at the owner: a camera reset writes only the camera
+  and preset-state fields and never re-applies a mode. Also find why it fired twice (one click). Regression bar: reset
+  in a non-stored live mode keeps that mode.
+
+**Follow-ups sent to the agents below (operator 6 Nov ~22:00):** the Studio agent: the UI freeze after closing a
+Studio (idle process, 18 s with no GUI-thread log after the window was destroyed, 21:56:34), sliders snapping out of a
+drag, no automatic switch to Custom (a close prompt: Overwrite Preset / Save As New Preset / Custom Slot / Discard),
+then the leak and its side defects. The Waveform agent, after its identity-gated cut: a music-vs-response check of every
+preset and Reaction Mode, the floor clipping the operator sees (raise the lift limit; the operator now prefers a little
+more height to floor clipping, which partly supersedes "top edge first"), and live tick spikes of 64-152 ms around
+Quick preset switches.
+
 **Paused by the weekly usage limit (6 Nov evening; resume each with a message to the same agent, which keeps its
 context and worktree):**
 - **Waveform logical tick cut** (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch
