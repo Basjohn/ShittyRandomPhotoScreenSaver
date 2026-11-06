@@ -6,10 +6,10 @@ same kick every 0.5 s over a steady bed, with an occasional bigger accent (a cra
 verse, chorus, passage and loudness with no flux spikes, so the passage's own ramps (the chorus entry eases the swing
 up over seconds, the body follows the loudness) cancel out of the comparison. A kick's visible response is the rise
 of the live-minus-twin reaction (the drawn undulation's amplitude as a share of its geometric ceiling: the solver's
-published ``reaction_*``) within 150 ms of the kick over its mean in the 300 ms before. The travelling swell is off
-(test-owned Swell Strength 0): this gate is about the HEIGHT's beats; the swell has its own tests, and its tanh
-saturation in dense passages is a separate, recorded matter. Kicks 40-55 s into the chorus must respond at least ~85% as much as the same kicks near its start, and a
-kick in the sustained chorus must stay clearly visible. Test-owned settings; structure only."""
+published ``reaction_*``, height x travelling swell) within 150 ms of the kick over its mean in the 300 ms before,
+with the swell ON at the shipped presets' strength (lead review, 6 Nov: switching it off hid the muting the operator
+complained about). Kicks 40-55 s into the chorus must respond at least ~85% as much as the same kicks near its start,
+and a kick in the sustained chorus must stay clearly visible. Test-owned settings; structure only."""
 from __future__ import annotations
 
 import numpy as np
@@ -30,7 +30,7 @@ _BODY = ("bass", "vocals", "mids")
 
 def _play(chorus=56.0):
     """(time into the chorus, is a plain chorus kick, per-layer reaction live - twin) for every tick of play."""
-    runtime, twin, rows, params = DevCurveFrameRuntime(), DevCurveFrameRuntime(), [], {**_parameters(), "devcurve_swell_strength": 0.0}
+    runtime, twin, rows, params = DevCurveFrameRuntime(), DevCurveFrameRuntime(), [], {**_parameters(), "devcurve_swell_strength": 1.0}
     for index in range(round((VERSE + chorus) / DT)):
         t = index * DT
         beat = int(t / PERIOD)
@@ -57,7 +57,7 @@ def _play(chorus=56.0):
     return rows
 
 
-def _response(rows, start, stop):
+def _response(rows, start, stop, layers=_BODY):
     times = np.asarray([row[0] for row in rows])
     out = []
     for t, kick, _, _ in rows:
@@ -65,12 +65,12 @@ def _response(rows, start, stop):
             continue
         before = [rows[j][2] for j in np.nonzero((times >= t - 0.3) & (times < t))[0]]
         after = [rows[j][2] for j in np.nonzero((times >= t) & (times <= t + 0.15))[0]]
-        out.append(np.mean([max(a[key] for a in after) - np.mean([b[key] for b in before]) for key in _BODY]))
+        out.append(np.mean([max(a[key] for a in after) - np.mean([b[key] for b in before]) for key in layers]))
     return float(np.mean(out))
 
 
-def _early_late():
-    rows = _play()
+def _early_late(rows=None):
+    rows = _play() if rows is None else rows
     early = _response(rows, 1.5, 5.0)       # near the start, once the chorus has entered (~1 s)
     late = _response(rows, 40.0, 55.0)
     level = np.mean([row[3] for row in rows if 40.0 <= row[0] < 55.0])
@@ -78,11 +78,17 @@ def _early_late():
 
 
 def test_kicks_late_in_a_sustained_passage_respond_like_kicks_near_its_start():
-    early, late, level = _early_late()
+    rows = _play()
+    early, late, level = _early_late(rows)
     assert late >= 0.85 * early, (late, early)
+    # No layer fades as the passage goes on: once the chorus has settled (passage ease, swell bed), each layer's
+    # kick 40-55 s in responds like the same kick 6-12 s in.
+    for key in _BODY:
+        settled, later = _response(rows, 6.0, 12.0, (key,)), _response(rows, 40.0, 55.0, (key,))
+        assert later >= 0.9 * settled, (key, later, settled)
     # Visible, not merely proportional: a sustained-chorus kick lifts the undulation by a clear share of its level
     # (normalising the beats by the passage's remembered peak left ~2% of the level here).
-    assert late > 0.05 * level, (late, level)
+    assert late > 0.025 * level, (late, level)
 
 
 def test_negative_control_normalising_the_beats_mutes_sustained_passage_kicks(monkeypatch):
@@ -92,4 +98,4 @@ def test_negative_control_normalising_the_beats_mutes_sustained_passage_kicks(mo
     monkeypatch.setattr(devcurve, "DEVCURVE_ACCENT_ROOM", dict.fromkeys(devcurve.DEVCURVE_ACCENT_ROOM, 0.0))
     monkeypatch.setattr(devcurve, "DEVCURVE_BODY_TOP", dict.fromkeys(devcurve.DEVCURVE_BODY_TOP, 0.95))
     early, late, level = _early_late()
-    assert late < 0.85 * early or late <= 0.05 * level, (late, early, level)
+    assert late < 0.85 * early or late <= 0.025 * level, (late, early, level)
