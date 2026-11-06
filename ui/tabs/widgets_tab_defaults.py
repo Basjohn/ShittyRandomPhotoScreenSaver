@@ -936,6 +936,31 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     border_row.addWidget(px_label)
     border_row.addStretch()
 
+    from rendering.quick.widgets.surface_material import SURFACE_MATERIALS, SURFACE_MATERIAL_LABELS
+
+    material_row, _ = add_aligned_row(
+        style_overrides_layout,
+        "Surface Material:",
+        label_width=label_width,
+        wrap=False,
+    )
+    tab.surface_material_combo = StyledComboBox()
+    tab.surface_material_combo.setFixedWidth(192)
+    for material in SURFACE_MATERIALS:
+        tab.surface_material_combo.addItem(SURFACE_MATERIAL_LABELS[material], material)
+    tab.surface_material_combo.setToolTip(
+        "Card and Context Menu surface. Normal is the theme's plain fill. Acrylic, Glass, "
+        "Frosted, Mica and Smoked show a softened view of the wallpaper behind each card, "
+        "tinted with the Widget Theme's card colour. Kept outside the theme file, like "
+        "Card Border Width; a widget's own Surface Material wins over this."
+    )
+    _select_surface_material(tab, tab._global_surface_material)
+    tab.surface_material_combo.currentIndexChanged.connect(
+        lambda _index, owner=tab: _on_surface_material_changed(owner)
+    )
+    material_row.addWidget(tab.surface_material_combo)
+    material_row.addStretch()
+
     button_row = QHBoxLayout()
     button_row.setContentsMargins(0, 6, 0, 0)
     button_row.setSpacing(12)
@@ -995,6 +1020,26 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         _finalize_bucket_body(toggle, body)
 
     return group
+
+
+def _select_surface_material(tab: WidgetsTab, material: object) -> None:
+    from rendering.quick.widgets.surface_material import NORMAL, normalize_surface_material
+
+    combo = getattr(tab, "surface_material_combo", None)
+    if combo is None:
+        return
+    index = combo.findData(normalize_surface_material(material) or NORMAL)
+    blocker = QSignalBlocker(combo)
+    combo.setCurrentIndex(max(0, index))
+    del blocker
+
+
+def _on_surface_material_changed(tab: WidgetsTab) -> None:
+    from rendering.quick.widgets.surface_material import NORMAL, normalize_surface_material
+
+    tab._global_surface_material = normalize_surface_material(
+        tab.surface_material_combo.currentData()) or NORMAL
+    tab._save_settings()
 
 
 def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]) -> None:
@@ -1064,6 +1109,12 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
         "global", global_cfg, "child_collision_enabled"
     )
     tab._global_card_border_width = border_width
+    from rendering.quick.widgets.surface_material import NORMAL, normalize_surface_material
+
+    tab._global_surface_material = normalize_surface_material(
+        global_cfg.get("surface_material") if isinstance(global_cfg, Mapping) else None
+    ) or NORMAL
+    _select_surface_material(tab, tab._global_surface_material)
     tab.widget_stacking_enabled.setChecked(stacking_enabled)
     if hasattr(tab, "widget_child_collision_enabled"):
         tab.widget_child_collision_enabled.setChecked(child_collision_enabled)
@@ -1127,5 +1178,8 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
             else tab._default_bool("global", "child_collision_enabled")
         ),
         "stacking_enabled": tab.widget_stacking_enabled.isChecked(),
+        "surface_material": str(
+            getattr(tab, "_global_surface_material", tab._widget_default("global", "surface_material"))
+        ),
     }
     return shadows_config, global_config

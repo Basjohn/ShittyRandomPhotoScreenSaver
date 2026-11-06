@@ -30,8 +30,8 @@ if str(ROOT) not in sys.path:
 
 MATERIALS = ("normal", "acrylic", "glass", "frosted", "mica", "smoked")
 SCENE = (1600, 900)
-# Several transitions, including 3D ones (Glass shatter, Block Spins, Sphere-like cube).
-TRANSITIONS = ("wipe", "crossfade", "slide", "block_spins", "glass_shatter", "ripple")
+# Several transitions, including 3D ones (Block Spins, Glass Shatter, Cube Turn, Page Curl).
+TRANSITIONS = ("wipe", "slide", "block_spins", "glass_shatter", "cube_turn", "page_curl")
 LIGHT_THEME = "Polished Chrome [Single]"
 DARK_THEME = "Default Dark"
 
@@ -78,17 +78,24 @@ class MaterialScene:
             self.owner.note_background_changed()
 
     def ensure_owner(self) -> None:
+        """As the scene controller does on the first non-Normal surface (or a woken one)."""
+
         from rendering.quick.surface_backdrop_owner import SurfaceBackdropOwner
 
         if self.owner is None:
             self.owner = SurfaceBackdropOwner(self.scene.root, screen_index=0)
-            self.host.set_surface_backdrop(self.owner.item)
+        elif self.owner.parked:
+            self.owner.wake()
+        else:
+            return
+        self.host.set_surface_backdrop(self.owner.item)
 
     def drop_owner(self) -> None:
-        if self.owner is not None:
+        """As the scene controller does when the last surface goes Normal: unbind, park."""
+
+        if self.owner is not None and not self.owner.parked:
             self.host.set_surface_backdrop(None)
-            self.owner.retire()
-            self.owner = None
+            self.owner.park()
 
     def set_material(self, material: str) -> None:
         """Every card takes ``material`` through the card-style projection QML reads."""

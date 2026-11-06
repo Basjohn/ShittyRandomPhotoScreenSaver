@@ -28,10 +28,9 @@ import threading
 import time
 import weakref
 
-import shiboken6
 
 from OpenGL import GL as gl
-from PySide6.QtCore import QObject, QRectF, Qt, Signal
+from PySide6.QtCore import QObject, QRectF, Qt, Signal, Slot
 from PySide6.QtQuick import (
     QQuickItem,
     QQuickWindow,
@@ -341,8 +340,16 @@ class BackdropPipeline:
         self._output_fbos = (0, 0)
         self._size = None
 
+    def forget(self) -> None:
+        """Drop every GL name without GL calls (no context: the context's death frees them)."""
+
+        self._levels, self._scratch = [], []
+        self._output_fbos = (0, 0)
+        self._size = None
+        self._output = self._down = self._up = self._vao = 0
+
     def release(self) -> None:
-        """Delete every GL object (owning context current)."""
+        """Delete every GL object (owning context current); ``initialize`` may rebuild later."""
 
         self._release_levels()
         if self._output:
@@ -373,7 +380,6 @@ class SurfaceBackdropRelay(QObject):
 
     refreshed = Signal(int)
     textureReady = Signal()
-    released = Signal()
 
 
 class SurfaceBackdropTextureProvider(QSGTextureProvider):
@@ -392,10 +398,12 @@ class _BackdropRenderNode(QSGRenderNode):
     """Reads the drawn frame and rebuilds the backdrop when armed; draws nothing itself."""
 
     def __init__(self, shared: _BackdropShared, relay: SurfaceBackdropRelay,
+                 provider: SurfaceBackdropTextureProvider,
                  window: QQuickWindow | None, screen_index: int) -> None:
         super().__init__()
         self._shared = shared
         self._relay_ref = weakref.ref(relay)
+        self._provider_ref = weakref.ref(provider)
         self._window_ref = weakref.ref(window) if window is not None else (lambda: None)
         self._pipeline = BackdropPipeline()
         self._done_serial = 0
@@ -498,26 +506,48 @@ class _BackdropRenderNode(QSGRenderNode):
         texture.setVerticalWrapMode(QSGTexture.WrapMode.ClampToEdge)
         with self._shared.lock:
             self._shared.texture = texture
+        provider = self._provider_ref()
+        if provider is not None:
+            try:
+                provider.textureChanged.emit()
+            except RuntimeError:
+                pass
         return True
 
-    def release_resources(self, *, delete_wrapper: bool = False) -> None:
-        """Render thread, owning context current: delete GL objects once.
+    def park(self) -> None:
+        """Render thread (sync), context current: free every GL object; the node stays.
 
-        ``delete_wrapper`` also deletes the scenegraph wrapper of the output texture. Only
-        legal once no card shader node can still reference it: at the retirement sync (the
-        cards were unbound first, so their nodes were cleaned up at the start of that sync)
-        or after scene-graph invalidation (every node is gone).
+        Called when the last surface went Normal: the consumers were unbound on the GUI side
+        before this sync, so their shader nodes were cleaned up at its start and nothing
+        samples the texture. A later unpark rebuilds everything lazily on its first refresh.
         """
+
+        self._drop_gl()
+        self._done_serial = 0
+        self._last_refresh_s = -1.0
+
+    def release_resources(self) -> None:
+        """Render thread: final release (scene-graph invalidation or node destruction)."""
 
         if self._released:
             return
         self._released = True
+        self._drop_gl()
+
+    def _drop_gl(self) -> None:
         with self._shared.lock:
             texture, self._shared.texture = self._shared.texture, None
-        self._pipeline.release()
-        if delete_wrapper and texture is not None:
+        from PySide6.QtGui import QOpenGLContext
+
+        if QOpenGLContext.currentContext() is not None:
+            self._pipeline.release()
+        else:
+            # Teardown without a context (process exit): the context's own destruction
+            # frees the names; never issue GL calls against no context.
+            self._pipeline.forget()
+        if texture is not None:
             try:
-                shiboken6.delete(texture)   # the wrapper owns no GL name
+                texture.deleteLater()   # after Qt's deferred releases; it owns no GL name
             except RuntimeError:
                 pass
 
@@ -540,7 +570,7 @@ class _NodeRetirement:
         with self._lock:
             node, self._node = self._node, None
         if node is not None:
-            node.release_resources(delete_wrapper=True)
+            node.release_resources()
 
 
 class SurfaceBackdropSource(QQuickItem):
@@ -561,9 +591,13 @@ class SurfaceBackdropSource(QQuickItem):
         self._relay = SurfaceBackdropRelay(self)
         self._relay.refreshed.connect(self._on_refreshed, Qt.ConnectionType.QueuedConnection)
         self._relay.textureReady.connect(self._on_texture_ready, Qt.ConnectionType.QueuedConnection)
-        self._relay.released.connect(self._on_released, Qt.ConnectionType.QueuedConnection)
-        self._retiring = False
         self._provider = SurfaceBackdropTextureProvider(self._shared, self)
+        # Parked: no GL objects, never traversed (the owner's demand went to zero).
+        self._parked = False
+        self._park_pending = False
+        # Python keeps the paint nodes it created referenced for the item's whole life;
+        # Qt deletes them with the item (never earlier: updatePaintNode always returns it).
+        self._paint_root: _BackdropRoot | None = None
         self._acknowledged_serial = 0
         self._texture_ready = False
         self._retirement = _NodeRetirement()
@@ -600,30 +634,34 @@ class SurfaceBackdropSource(QQuickItem):
     def texture_ready(self) -> bool:
         return self._texture_ready
 
-    def retire(self) -> None:
-        """GUI: release GL at the next sync, then delete this item. Unbind every card first."""
+    @property
+    def parked(self) -> bool:
+        return self._parked
 
-        if self._retiring:
+    def set_parked(self, parked: bool) -> None:
+        """GUI: park (free GL at the next sync, never traverse) or wake. Unbind consumers first."""
+
+        parked = bool(parked)
+        if parked == self._parked:
             return
-        self._retiring = True
-        with self._shared.lock:
-            self._shared.continuous = False
-        window = self.window()
-        if window is None or not window.isSceneGraphInitialized():
-            self._on_released()
-            return
-        self.update()
+        self._parked = parked
+        if parked:
+            with self._shared.lock:
+                self._shared.continuous = False
+            self._acknowledged_serial = self._shared.requested_serial
+            self._park_pending = True
+            self._texture_ready = False
+            self.update()
+        else:
+            self.request_refresh()
 
-    def _on_released(self) -> None:
-        self.setParentItem(None)
-        self.setParent(None)
-        self.deleteLater()
-
+    @Slot(int)
     def _on_refreshed(self, serial: int) -> None:
         self._acknowledged_serial = max(self._acknowledged_serial, int(serial))
         # Disarm at the next sync (one ordinary frame) unless something newer is pending.
         self.update()
 
+    @Slot()
     def _on_texture_ready(self) -> None:
         if not self._texture_ready:
             self._texture_ready = True
@@ -651,23 +689,20 @@ class SurfaceBackdropSource(QQuickItem):
         return self._provider
 
     def updatePaintNode(self, old_node: QSGNode | None, _data) -> QSGNode | None:
-        root = old_node if isinstance(old_node, _BackdropRoot) else None
-        if self._retiring:
-            # Cards were unbound on the GUI side before this sync; their shader nodes were
-            # cleaned up at its start, so nothing references the texture any more.
-            if root is not None:
-                root.node.release_resources(delete_wrapper=True)
-            self._retirement.set_node(None)
-            try:
-                self._relay.released.emit()
-            except RuntimeError:
-                pass
-            return None
-        if root is None:
-            root = _BackdropRoot(_BackdropRenderNode(self._shared, self._relay, self.window(),
-                                                     self._screen_index))
+        root = self._paint_root
+        if root is None or old_node is not root:
+            if self._parked:
+                return old_node
+            root = _BackdropRoot(_BackdropRenderNode(self._shared, self._relay, self._provider,
+                                                     self.window(), self._screen_index))
+            self._paint_root = root
             self._retirement.set_node(root.node)
-        root.setOpacity(1.0 if self.armed else 0.0)
+        if self._park_pending:
+            # Consumers were unbound on the GUI side before this sync; their shader nodes
+            # were cleaned up at its start, so nothing samples the texture any more.
+            self._park_pending = False
+            root.node.park()
+        root.setOpacity(1.0 if self.armed and not self._parked else 0.0)
         return root
 
 
