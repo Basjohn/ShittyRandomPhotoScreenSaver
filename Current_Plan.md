@@ -56,10 +56,13 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
   that no `UI_CALLBACK` / `FEED_GUI_DELIVERY` line exceeds a frame and the first `collect_ms` is small; a prefetch
   batch asked for before the child is ready fails as "not running" (a logged `[PREFETCH]` error; no retry of that batch). Evidence
   `.artifacts/evidence/slow_startup_20261106/`.
-- [ ] **Bubble / Extruded Bubble "terrible performance" (operator log 10:32-10:35):** confounded: the machine was at
-  97-100% system CPU from the agents' game60 live checks and parallel work during that session (quiet-machine game60
-  this morning: Bubble P1 62.7 fps, EB 54.6 fps). Re-check in a quiet operator session before acting; heavy
-  load-generator runs are now scheduled by the lead only.
+- [x] **Bubble / Extruded Bubble "terrible performance" (operator log 10:32-10:35): our load, not the product.** That
+  session ran at 97-100% system CPU from the agents' game60 checks. The lead re-ran them on the quiet machine at 6 Nov
+  14:00 under game60 (`.artifacts/evidence/live_20261106/`):
+  - Bubble P1: 65.9 fps, tick 1.47 ms, GIL 0.13, 3.9% late;
+  - Extruded Bubble: 45-69 fps.
+
+  Heavy load-generator runs are scheduled by the lead only. Delete this item once the operator has read it.
 
 - [~] **Displays off -> presentation pauses entirely, resumes clean (built 5 Nov; awaiting the operator's physical
   overnight check):** `core.display_power` pauses rotation, transitions, the Visualizer (parked, capture released) and
@@ -93,11 +96,23 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
     digests). `tests/test_extruded_bubble_logical_tick_exactness.py` compares the output against the straightforward
     forms. The offline P1 tick (`tools/eb_logical_cost_probe.py`, paired with main) went from 2.50 to 2.13 ms median
     (p90 3.25 to 2.78), about 15%. The tick is now spread thin: contacts 0.38, wakes 0.42 (NumPy flow 0.2), the
-    rest of the simulation 0.62, capture 0.45. A NumPy contact sweep measured slower in situ and was dropped. Open:
-    the paired `--load game60` live checks (P1 and P5, main and branch alternately, 2 rounds each, 60 s) are owed by
-    the lead on a free machine. The 6 Nov rounds overlapped the operator's own session (system CPU 97-100%) and
-    are void. Evidence `.artifacts/evidence/eb_logical_tick/` (summaries and scripts; the void live-run logs were
-    deleted on the operator's word).
+    rest of the simulation 0.62, capture 0.45. A NumPy contact sweep measured slower in situ and was dropped.
+    **Live, confirmed (lead, quiet machine, game60, before/after alternated, 2 rounds, 6 Nov 14:00):**
+    | Preset | fps (r1 / r2) | late frames (r1 / r2) |
+    |---|---|---|
+    | P1 | 44.9 -> 45.5 / 57.3 -> 63.8 | 32 -> 24.5% / 6.0 -> 2.0% |
+    | P5 | 42.3 -> 52.9 / 62.9 -> 69.2 | 36 -> 8.2% / 2.3 -> 1.5% |
+
+    Better in every pair. The live tick is only 2-4% lower (5.3-5.6 ms, GIL ~0.5): most of it lies outside the
+    simulation. Evidence `.artifacts/evidence/live_20261106/` and `.artifacts/evidence/eb_logical_tick/`.
+  - **Waveform, same session (main):** P1 / P4 / P7 run at 43.5 / 42.7 / 37.6 fps, tick 8.5-8.7 ms (p90 14-16), GIL
+    0.75, P7 64% late frames. Waveform is now the slowest live mode. The tick cut waits for the fixed-scale rework
+    (same files).
+- [ ] **Frozen builds could not open a Studio (operator 6 Nov: "module QtQuick.Controls.Basic is not installed"): fixed
+  in source (e5005ffa), confirm on the next build.** The QML prune removed QtQuick/Controls, Templates and Shapes, and
+  the import allowlist scanned only the saver's QML, never `ui/studio/qml`. The build now keeps the Basic style's
+  closure and prunes only the other Controls styles. `test_every_shipped_qml_import_survives_the_frozen_prune` walks
+  every shipped import's module and DLL closure against the prune. Open: open a Studio from a fresh build.
 - [ ] **Widget card surfaces: Acrylic, Glass and other materials (operator 6 Nov, near term; the lead or an Opus 5.5
   high agent, never a smaller model).** Operator: the old attempt failed with a weaker agent; done properly it is a
   lasting visual uplift. This **supersedes** the recorded rejection: `Docs/Contracts.md` (runtime cards are plain RGBA,
@@ -282,6 +297,33 @@ Centre Out "like night and day"; logical cadence survives heavy game load; **Pre
 lose this"). Every later dynamics change shows, on the recorded clips, that Preset 4 is unchanged against this tag
 (or names the improvement for operator sign-off). Preset 4 keeps Breathing 0 (exactly the baseline dynamics).
 
+- [ ] **Fixed-scale rework (branch `worktree-agent-ab2ce64aff1fa59c4`): REJECTED by the lead review 6 Nov, in rework.**
+  Kept from it: no adaptive memory (a song replayed after ~7 min of other music responds the same: height within .01,
+  roll .35 deg/s), breaks no longer re-scale what follows, an Adaptive Response toggle (off), Breathing's mean learns
+  only from heard music, and the floor cleared with height. Rejected, measured on whole recordings against main
+  (`tmp/waveform_review_20261106/`, gitignored: frame sheets, traces, `drift_*.txt`, the 7-song `chain7.npy`;
+  scripts in `scripts/`):
+  - crests clipped by the card's top edge on P4 Anything 9% -> 66%, P4 Rag Doll 2 -> 62%, P7 Anything 3 -> 66%, P7 Rag
+    Doll 1 -> 54%, P1 0-3 -> 16-43% of frames: the hotter fixed calibration inflates the swells and the 3.0 lift
+    pushes them out of the frame (only the floor had been measured);
+  - Pulse Strength pinned near its ceiling through whole songs (3 s contrast -34..-39%); quiet stretches (Anything
+    ~40-44 s) stay nearly full size; Preset 7 loud-song swing -24..-34%: the operator's "almost flat" complaint;
+  - Kick Accent overlaps into a sustained ~2x spin in loud songs (16-18 against 8.5-9.5 deg/s, Preset 4 included);
+  - sharper size jumps (visible-amplitude rate max 41-49 against 22-24).
+
+  Acceptance for the rework:
+  - Preset 4 visible amplitude p10/p50/p90 and its 3 s contrast are within +-10% of main (the tag).
+  - Every other preset has contrast >= main, and Pulse Strength never pins.
+  - Kick Accent adds at most 15% to mean roll speed (0 on Preset 4 unless proven).
+  - Top clipping is no worse than main at 640x560 and 1282x1005, and the floor comes second.
+  - **Operator, 6 Nov:** every reaction mode must be truly reactive (Travelling Pulse in each direction, Centre Out,
+    Group Wave, Whole Swell, and the unfrozen parts of Frozen Past). See whether Breathing helps, keeping the goals.
+  - **Judge with music-vs-response traces** (`tools/visualizer_replay/waveform_music_response.py`). The song's own PCM
+    envelope sits above the response, with loudness -> response scatter and per-song saturation, dead, spurious and
+    re-scaling measures. For travelling and frozen modes, measure only the part changing at the time (the newly
+    born swell).
+  - Build on the reactivity guide's real-music scale: loudness 3-17 in music, the live lane at 2.5, 0..1 absolutes
+    mean only "silent", calibrate by presence on recorded music.
 - [~] **Preset 7 and the other reaction modes (operator log `logse7a84d332e.zip`, Rag Doll, 5 Nov) - awaiting
   operator eyes:** no decay/breathing in soft passages, sustained passages with changes read almost flat, and a swell to
   full power as the song got QUIETER. Preset 7 is Group Wave (song 31-123 s in the log; the recorded clip is song
