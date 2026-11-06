@@ -1135,6 +1135,37 @@ class StudioBridge(QObject):
         self._theme = dict(theme)
         self.themeChanged.emit()
 
+    # ------------------------------------------------------------ window chrome
+    # The shell's custom title bar and edges act on the window through the surface (a hidden surface ignores them).
+    windowStateChanged = Signal()
+
+    def _surface_call(self, name: str, *args) -> Any:
+        method = getattr(self._c.surface, name, None)
+        return method(*args) if callable(method) else None
+
+    def _window_maximized(self) -> bool:
+        return bool(getattr(self._c.surface, "maximized", False))
+
+    windowMaximized = Property(bool, _window_maximized, notify=windowStateChanged)
+
+    @Slot()
+    def startWindowMove(self) -> None:
+        self._surface_call("start_move")
+        self.windowStateChanged.emit()          # a drag from maximised restores first
+
+    @Slot(int)
+    def startWindowResize(self, edges: int) -> None:
+        self._surface_call("start_resize", int(edges))
+
+    @Slot()
+    def toggleMaximize(self) -> None:
+        self._surface_call("toggle_maximize")
+        self.windowStateChanged.emit()
+
+    @Slot()
+    def minimizeWindow(self) -> None:
+        self._surface_call("minimize")
+
 
 class StudioController(QObject):
     """One authoring session from open to the Settings reveal."""

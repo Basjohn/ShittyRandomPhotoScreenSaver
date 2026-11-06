@@ -498,6 +498,18 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   (`Docs/Reference/Visualizer_Studio.md` §4); the Notepad path and its pop-up go for each mode when its adapter
   registers (automatic: the slider builds Edit Preset only for `not has_studio(mode)`); delete `_open_preset_json`
   with the last one. Operator look pending (6 Nov): Open Studio's place in the preset row and the Save To flow.
+- [ ] **Studio chrome matches Settings (6 Nov), awaiting the operator's look** (all Studios: one shell;
+  `Docs/Reference/Visualizer_Studio.md` "Chrome and theme"). Frameless window with Settings' title bar and forged
+  rounded edge, the theme's Glass/Acrylic material, 1.5 px one-path card borders, Settings' panel casts at half
+  offset, viewport corners rounded over the scene. Hidden-render evidence `.artifacts/evidence/studio_chrome/`
+  (before/after, Default Dark Acrylic, Matte Graphite Normal, Pearl Blush light Glass; 8x crops). Operator to check
+  on screen: the live Glass/Acrylic composition of the Qt Quick window (first use of the AccentPolicy material on an
+  alpha OpenGL window; the evidence only simulates the blur), snap/resize/maximise by hand, and the panel opacity
+  floor (0.88) and shadow strength on light themes. Two side defects seen in that evidence, both already in the
+  before renders: (a) Bubble's presented scene differs under the light Pearl Blush theme (max 7-9 levels over ~37k
+  pixels vs Default Dark, before and after this change), though the scene should never follow the Settings theme and
+  no test compares scene pixels across themes; (b) on light themes the signal-trace cards keep the dark viewport
+  colour and their channel labels are barely legible.
 - [ ] **Studio drag lag fixed (6 Nov), awaiting the operator's feel check.** Drags preview once per frame and
   re-show only the dragged key (Visualizer_Studio.md "Drags are batched"); evidence
   `.artifacts/evidence/studio_drag/` (per move 56 ms -> 0.07 ms on Waveform). Two per-frame costs remain, both

@@ -37,6 +37,41 @@ and must not be copied per mode.
 | `ui/studio/engine_answers.py` | The Spectrum family's recorded engine answers (Spectrum, Extruded Spectrum, Neon Lake, DevCurve), mode-neutral (`EngineAnswerMode(mode_id, conditional_reads)`): synthetic audio (with the analysis spectrum and onsets a recording carries), the out-of-process `extract`, recorded inputs, the per-mode answer cache, `start_clip_load` and `EngineAnswerEvaluator` (the production step in process, rewinds, checkpoints, frame budget). The engine-owned / mode-owned split follows from the production source projection (`source_config_applier`). |
 | `ui/studio/spectrum_shape.py` | The Spectrum family's shape editor as Studio rows, admission and structural edits (add / remove node, lane swap), by key prefix (`ShapeKeys`). |
 | `ui/studio/theme.py`, `colour.py` | Chrome tokens derived from the active Settings theme with enforced contrast; display ↔ linear colour conversion for instruments. Scene colours never pass through the theme. |
+| `ui/studio/chrome.py` | The painted chrome items (`StudioFrame`, `StudioWindowEdge`, QML module `SRPSS.StudioChrome`), painting with Settings' own owners (below). |
+
+### Chrome and theme
+
+The Studio's chrome follows the Settings theme; the scene never does (the theme tests prove the scene's pixels are
+the same under every theme). The chrome reuses Settings' owners rather than restating them:
+
+- **Window.** `StudioWindowSurface` is a frameless top-level (`Qt.FramelessWindowHint`). The shell draws Settings'
+  custom title bar in QML (`studioTitleBar`: "SRPSS STUDIO", minimise, maximise/restore, close, on the theme's
+  `window.titlebar.*` roles); the Studio header (mode picker, preset, undo/redo, help, Save Preset As…, Close) sits
+  directly under it, as Settings keeps its title bar free of controls. A title-bar drag is the system move
+  (`QWindow.startSystemMove`: Windows snap and Aero snap), double-click maximises to the work area (manual, as
+  Settings), a drag from maximised restores under the pointer, the window sides and corners resize through
+  `startSystemResize`, and Esc / Alt+F4 / the title bar's × close through the same close path as before.
+- **Rounded edge.** `StudioWindowEdge` paints `ui/settings_window_edge.py:paint_forged_window_edge`, the function
+  `SettingsDialog.paintEvent` calls: the same radius, outer border (`chrome.outer_border`), backing and opaque corner
+  caps (`window.titlebar.surface`), square when maximised. There is one forged edge, not one per window.
+- **Material.** Normal (`backdrop.mode` off) is an opaque window with no native call. Under a Glass or Acrylic theme
+  the window gets an alpha surface and, on first show, the theme's material through
+  `core/windows/dwm_blur.py:apply_backdrop`, the mode → AccentPolicy mapping Settings' own backdrop owner calls
+  (Acrylic: state 4 with the theme tint; Glass: untinted state 3). One window-level material, no per-panel blur or
+  capture. The window surface (`window.dialog_glass`) and title bar take the theme's translucent roles; the large
+  panels let the material through at the theme's polarity with an opacity floor (`PANEL_MATERIAL_FLOOR`, 0.88) so
+  dense instruments stay legible over any desktop; the viewport, toolbars and inputs stay opaque. The material is
+  chosen when the window opens (Settings is concealed while a Studio is open).
+- **Cards and sections.** Main panels, the response dock, the tab strip and the viewport frame are `StudioFrame`s:
+  Settings' hard outside-only cast (`ui/widgets/control_shadow.py:cast_shadow_path`, the `panel.group` shadow role at
+  half its offset, `SHADOW_SCALE`), the surface, and the border stroked once along one continuous path
+  (`ui/widgets/continuous_border.py:rounded_border_path`), 1.5 px. Smaller cards (group headers, schematic and trace
+  cards, starting-point tiles, toolbar backings) are Quick rectangles whose border is one ring, also 1.5 px. A painted
+  frame repaints only when its size or a colour changes: nothing per frame, no frame requests.
+- **Viewport corners.** The viewport frame reaches 2 px past its column so the slot keeps its exact place and size
+  (the scene's pixels are unchanged) while every slot corner lies inside the frame's rounded outline; the frame's
+  border is drawn over the scene (`viewportFrameBorder`), covering the slot's square corners. The render node, its
+  scissor and the saver's clip path are untouched.
 | `ui/studio/<mode>_adapter.py`, `<mode>_recorded_inputs.py` | One adapter per registered mode plus its recorded-clip extractor. |
 
 ## 3. Adapter contract
