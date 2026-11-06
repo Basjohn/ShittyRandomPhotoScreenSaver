@@ -92,7 +92,10 @@ constants); all state integrates on the sole logical clock and the projection on
   every other drive `FIXED_RESPONSE_DEFAULT`), eased above `RESPONSE_FIXED_KNEE` toward `RESPONSE_FIXED_CEILING` (.92,
   as the remembered peak landed a sustained loud passage at .85). Each phrase is then widened about Breathing's
   heard-only 3 s mean of the drive (`PHRASE_DIP` below it, `PHRASE_RISE` above it, eased again under the ceiling),
-  as the remembered peak's fast reach and slow release did. Calibrated to main's VISIBLE behaviour, not hotter (lead
+  as the remembered peak's fast reach and slow release did; after real silence that mean rises up to
+  1/`PHRASE_SETTLE_MIN` times faster for `PHRASE_SETTLE` seconds (it still falls at the Breathing rate), so music that
+  returns louder than it left is not widened upward against the mean the break left behind (spliced breaks: the
+  following 10 s had grown 2-17%). Calibrated to main's VISIBLE behaviour, not hotter (lead
   review 6 Nov rejected a hotter curve that pinned Pulse Strength, flattened passages and pushed crests out of the card).
   Each target's Range (Quiet→Peak) maps the drive to size, so the Ranges are the authored reactivity. Nothing is remembered: a break, a loud chorus
   or a quiet intro never re-scales what follows (operator, 6 Nov: "Adaptive is a very problematic approach"; guide 2A).
