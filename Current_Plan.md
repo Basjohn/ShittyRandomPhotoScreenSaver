@@ -680,6 +680,11 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
     it at close: disconnect them, or hold the controller weakly. Prove it with a gc-free retention test.
   - `tools/onboarding_preview_foundry.py`'s capture has the same imported-context structure and needs the same
     ownership.
+  - The Studio files fail when run in one pytest process. After the first 17 Studio files (Bubble through
+    `test_studio_preset_row_and_save_to_preset.py`), `test_studio_scene_theme_independence.py[spectrum]` renders a
+    black scene (std 0). The fix did not cause it: the same failure appears with and without it. Every file passes
+    isolated (`run_chunked.py --isolated`, 32/32). Find the state an earlier file leaks into Spectrum's offscreen
+    render.
 - [ ] **Neon Lake: drag the Sun/Moon in the Studio preview.** Retiring the Settings terrain section (6 Nov, Studio brush)
   removed its 3/4 view, where the Sun/Moon could be dragged; it is now placed with Position X/Y/Z only. Give the Studio
   preview a direct drag for it: the same pick through the production camera as the terrain brush, one undoable commit
