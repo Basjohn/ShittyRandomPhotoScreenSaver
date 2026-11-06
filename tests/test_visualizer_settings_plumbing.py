@@ -1062,7 +1062,7 @@ class TestPerModeTechnicalControlPresentation:
         [
             "spectrum",
             "extruded_spectrum",
-            "bubble",
+            "shockwave_grid",
         ],
     )
     def test_agc_slider_uses_mode_specific_recommended_marker(self, qt_app, mode_key):
