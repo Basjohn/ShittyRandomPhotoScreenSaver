@@ -28,7 +28,8 @@ Three steps (no renderer, no window):
         --response branch=branch_p4.npy --out <dir>
 
 Travelling and frozen reaction modes show only part of the ribbon changing at a time; ``live`` (largest visible swell)
-is the first-cut measure of that part. A mode-specific measure of the newly born swell belongs next to it.
+is the first-cut measure of that part and ``born`` (``born_swell``) the mode-specific one: the swell where it enters
+the view, or the unfrozen part of Frozen Past. ``response --mode/--direction/--breathing`` overrides the presets.
 """
 from __future__ import annotations
 
@@ -42,7 +43,8 @@ if str(ROOT) not in sys.path:
 
 MUSIC_COLUMNS = ("song", "t", "rms_db", "bass_db", "flux", "loudness", "presence")
 RESPONSE_COLUMNS = ("t", "song", "song_time", "level", "view", "live", "height", "bend", "lift_drive", "roll",
-                    "kick_sense", "floor_lift")
+                    "kick_sense", "floor_lift", "born")
+BORN_WINDOW = 4.0   # scene units inside the view edge (or about the centre) where a travelling swell is new
 
 
 def music(clips: list[Path], out: Path) -> None:
@@ -76,8 +78,34 @@ def music(clips: list[Path], out: Path) -> None:
     print("music rows", len(rows), "->", out)
 
 
-def response(root: Path, inputs_path: Path, presets: list[int], out: Path) -> None:
+def born_swell(model, controls, view=16.0):
+    """The mode's newly born ("live") part, in the units of ``live`` (gain above 1 x height): Travelling Pulse and
+    Group Wave, the swell where it enters the view (the view edge it travels in from, or about the centre for Centre
+    Out); Frozen Past, the unfrozen travelling envelope over the view (never the held trail); Whole Swell, the whole
+    field (every part is live)."""
+    import numpy as np
+    from core.waveform_ribbon_dynamics import PULSE_GRID
+    pulse = controls.pulse
+    strength, height = model._value("bend"), model._value("height")
+    share = model._geom_share[0]
+    if pulse.mode == "Frozen Past":
+        frozen = getattr(model, "_frozen_swell", None)
+        live = frozen[0] if frozen is not None else model._geom
+        return float(share * .7 * strength * np.max(live[np.abs(PULSE_GRID) <= view])) * height
+    if pulse.mode == "Whole Swell":
+        window = np.abs(PULSE_GRID) <= view
+    elif pulse.direction == "Centre Out":
+        window = np.abs(PULSE_GRID) <= BORN_WINDOW / 2
+    else:
+        entering_high = (pulse.direction == "Head To Tail") == (getattr(model, "direction", 1.0) >= 0)
+        window = ((PULSE_GRID <= view) & (PULSE_GRID >= view - BORN_WINDOW)) if entering_high else             ((PULSE_GRID >= -view) & (PULSE_GRID <= -view + BORN_WINDOW))
+    return float(share * .7 * strength * np.max(model._geom[window])) * height
+
+
+def response(root: Path, inputs_path: Path, presets: list[int], out: Path, mode: str | None = None,
+             direction: str | None = None, breathing: float | None = None) -> None:
     sys.path.insert(0, str(root.resolve()))
+    from dataclasses import replace
     import numpy as np
     import core.waveform_ribbon_dynamics as dyn
     from tools.visualizer_replay.waveform_ribbon_breathing_probe import preset_controls, swell_of, view_amplitude
@@ -85,6 +113,11 @@ def response(root: Path, inputs_path: Path, presets: list[int], out: Path) -> No
     roll_key = getattr(dyn, "KICK_ROLL", 0.0)
     for preset in presets:
         controls = preset_controls(preset - 1)
+        if mode or direction:
+            controls = replace(controls, pulse=replace(controls.pulse, mode=mode or controls.pulse.mode,
+                                                       direction=direction or controls.pulse.direction))
+        if breathing is not None:
+            controls = replace(controls, breathing=breathing)
         model = dyn.WaveformDynamics(controls)
         while not model.ready:
             model.advance(1 / 90, bands=(0.0, 0.0, 0.0), intensity=0.0, presence=0.0)
@@ -101,7 +134,7 @@ def response(root: Path, inputs_path: Path, presets: list[int], out: Path) -> No
             roll = model.angular_speed + (np.copysign(roll_key * sense, target) if controls.rotation_enabled else 0.0)
             rows.append((t, song, song_time, intensity * presence, view_amplitude(snap, 16.0), swell_of(model),
                          drives["height"], drives["bend"], drives["lift"], roll, sense,
-                         float(np.max(model._trough_lift))))
+                         float(np.max(model._trough_lift)), born_swell(model, controls)))
         target_path = out.with_name(f"{out.stem}_p{preset}.npy")
         target_path.parent.mkdir(parents=True, exist_ok=True)
         np.save(target_path, np.asarray(rows, np.float64))
@@ -138,9 +171,11 @@ def report(music_path: Path, responses: dict[str, Path], out: Path) -> None:
         white = (235, 235, 235)
         panels = [("loudness 3-17", [(ms[:, 5], white)]), ("rms dBFS", [(ms[:, 2], white)]),
                   ("bass dB", [(ms[:, 3], white)]), ("flux", [(_smooth(ms[:, 4], 9), white)])]
-        for column, label in ((4, "view amplitude"), (5, "live swell"), (7, "Pulse Strength (bend)"),
-                              (9, "roll deg/s"), (11, "floor lift")):
-            panels.append((label, [(rs[:, column], colours[k]) for k, rs in enumerate(joined.values())]))
+        for column, label in ((4, "view amplitude"), (5, "live swell"), (12, "born / unfrozen swell"),
+                              (7, "Pulse Strength (bend)"), (9, "roll deg/s"), (11, "floor lift")):
+            series = [(rs[:, column], colours[k]) for k, rs in enumerate(joined.values()) if rs.shape[1] > column]
+            if series:
+                panels.append((label, series))
         image = Image.new("RGB", (width, 30 + row_h * len(panels)), (14, 14, 20))
         draw = ImageDraw.Draw(image)
         draw.text((10, 8), f"song {song}: music (white) on top; response: " +
@@ -188,8 +223,10 @@ def report(music_path: Path, responses: dict[str, Path], out: Path) -> None:
 
         def correlation(a, b):
             return float(np.corrcoef(a, b)[0, 1]) if len(a) > 3 and np.ptp(a) and np.ptp(b) else float("nan")
-        for name, rs in joined.items():
-            view_1s = rs[: len(rs) // step * step, 4].reshape(-1, step).mean(axis=1)
+        for (name, rs), column in [(item, column) for item in joined.items()
+                                   for column in ((4, 12) if item[1].shape[1] > 12 else (4,))]:
+            view_1s = rs[: len(rs) // step * step, column].reshape(-1, step).mean(axis=1)
+            name = name if column == 4 else name + ":born"
             corr = correlation(loud_1s, view_1s)
             corr_rms, corr_bass = correlation(rms_1s, view_1s), correlation(bass_1s, view_1s)
             loud_range = np.ptp(loud_1s) or 1.0
@@ -230,6 +267,9 @@ def main() -> None:
     p.add_argument("--inputs", type=Path, required=True)
     p.add_argument("--presets", default="1,4,7")
     p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--mode", help="override the presets' Reaction Mode")
+    p.add_argument("--direction", help="override the presets' Pulse Direction")
+    p.add_argument("--breathing", type=float, help="override the presets' Breathing")
     p = sub.add_parser("report")
     p.add_argument("--music", type=Path, required=True)
     p.add_argument("--response", action="append", required=True, help="name=path.npy")
@@ -238,7 +278,8 @@ def main() -> None:
     if args.command == "music":
         music([Path(c) for c in args.clips.split(",")], args.out)
     elif args.command == "response":
-        response(args.root, args.inputs, [int(p) for p in args.presets.split(",")], args.out)
+        response(args.root, args.inputs, [int(p) for p in args.presets.split(",")], args.out, args.mode, args.direction,
+                 args.breathing)
     else:
         report(args.music, dict(item.split("=", 1) for item in args.response), args.out)
 
