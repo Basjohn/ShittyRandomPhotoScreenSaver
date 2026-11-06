@@ -70,22 +70,31 @@ lead as reviewer/orchestrator.
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
-- [ ] **Neon Lake goal mocks (Presets 1-3, 5 Nov fifth pass, awaiting operator look):** sparser blue-white stars
-  with round glows, ropy nebula, luminous Moon limb with a grey crescent, smooth near dune lines, glinting water
-  (`Docs/Reference/Neon_Lake_Basin.md`, "Third" to "Fifth pass"). Still short of
-  `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`: Preset 1's sky still purpler than the mock's navy
-  near the Moon, no blue cloud in the upper left, the nebula band steeper than the mock's; the mid-distance dune
-  crest just before the lake still kinks (beyond the fine band; extending the band costs ~+0.3 ms); the lake is
-  brighter and smoother than the mock's dark mirror and swells still wash it; the high-react look (vivid line mesh,
-  glowing island) is not reached; Preset 3's sky is warmer and its wisps fainter than the mock's, and its
-  frame-to-frame change is 0.28/255 (target 0.25, ideally 0.165). Evidence:
-  `.artifacts/evidence/neon_lake/fidelity_20261105/pass5/` (triptych/, motion/*.webp, gpu_final.txt).
+- [ ] **Neon Lake goal mocks (Presets 1-3, 6 Nov sixth pass, awaiting operator look):** darker mirror lake with a
+  longer Moon/Sun column and no swell wash, Preset 3's mid-lake blob fixed (mirror counted swell troughs as land),
+  navy Preset 1 sky with a shallower band and a soft blue stream upper left, even luminous Moon face, near ridges
+  that swell and fade along their length, Preset 3 cooler sky with stronger wisps and motion 0.232/255
+  (`Docs/Reference/Neon_Lake_Basin.md`, "Third" to "Sixth pass"). Still short of
+  `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`: the high-react look (vivid line mesh over the
+  lake, glowing island) is not reached on loud real music (1985_loud1: the lake barely changes; a squared
+  spectrum-energy term on the ripple network was tried and did nothing visible, reverted); Preset 1's lake is still
+  lighter than the mock's (p35 [28,30,65] vs [16,22,61]: bloom of the pink shore crest beside it) and its near dot
+  field is coarser than the mock's; the far-shore sawtooth and the crest before the lake are mesh silhouette (a
+  fine band to v 0.25 measured no gain); Preset 3 motion ideally toward 0.165. Side defect (pre-existing, found
+  6 Nov): at Depth Scale 1 + Horizon Thickness 3 over dunes seen grazing, the skyline's lifted copy shows over the
+  near land's own face as a broad translucent sheet (its 2% depth offset is less than the ground's recession over
+  the lift); fix in the skyline vertex depth, then tighten `tests/test_neon_ridge_shape.py` to those settings. Evidence:
+  `.artifacts/evidence/neon_lake/fidelity_20261105/pass6/` (triptych/, clips/*.webp, gpu_*.txt, overhead_*).
 
 - [ ] **Neon render tests load-sensitive under parallel runs (5-6 Nov):** `test_neon_lake_renderer.py` (once, pass-5
   merge gate) and `test_neon_scene_materials.py` (once, pass-5 branch) failed under parallel load and passed alone; the
   re-run overwrote each log, so the failing test is unknown (most likely a QSG clip probe timing out). The isolated
   runner now keeps the parallel-run failure as `logs/pytest_isolated/<file>.under_load.log`; next time, read it and
   fix the probe's timeout or synchronisation rather than rerunning.
+- [ ] **`test_studio_exit_every_mode.py` exited non-zero with every test passing (6 Nov, once):** "19 passed" in its
+  log but a failing exit code under the 8-way gate, and that runner stopped before its summary; the immediate re-run
+  passed 64/64. Looks like a native crash at interpreter teardown after the Studio tests. If it recurs, capture the
+  exit code and any faulthandler output (run the file alone with `-X faulthandler`) and fix the teardown owner.
 
 - [ ] **4x MSAA repeat-render noise (driver, 5 Nov; was "Floor Give run-to-run noise"):** the same frame rendered
   again through a 4x scene target differs by 1 level (rarely 2-3) on a pixel or two in Waveform (more often with Floor
@@ -284,14 +293,15 @@ detail still need improvement. Baseline settings are applied to Preset 3; retain
   each fragment's history x (direct and reflected light), so every Reaction Mode and both Travel Directions put it
   exactly on the pulse; the field's own smooth shape is the falloff. Evidence
   `.artifacts/evidence/waveform_ribbon/pulse_rim/`; design in the Migration Plan's Reaction bucket.
-- [ ] **Swells reach the Preset camera already faded (side defect, 5 Nov, found by Pulse Rim):** the lens alone sees
-  history x in about [-4, 4], and with the production aperture (capture `aperture_scale` 3.59 at 1282x1005) about
-  [-14, 14], but `PULSE_ORIGIN` (44) and `TROUGH_VIEW` still assume a ~±30 view; a swell travels ~2-2.5 s before it
-  is visible, so on recorded music the in-view appearance field is a faint plateau (human_heavy1: in-view max p50
-  .11, peak/median 1.6) and the fresh-led band has already settled. Continuous play (5 Nov, five songs): the in-view
-  geometric swell of Head To Tail Travelling Pulse is p50 .11 (Preset 1) / .21 (Preset 7's controls) against 1.39 for
-  Preset 4 (Centre Out, born in view); this is most of why Presets 1-3 read flat in sustained passages. Re-derive the
-  origin (and the fresh fade) from the framed camera's visible span; then recheck Pulse Rim's REFERENCE level.
+- [~] **Swells reach the Preset camera already faded (Presets 1-3) - awaiting operator eyes:** the card's camera shows
+  about ±16 of the scene axis at 1282x1005 (±5 at the canonical card), but edge swells were born at `PULSE_ORIGIN` 44,
+  so Head To Tail swells arrived ~2 s late at 5% strength (in-view swell p50 .13-.30 against Preset 4's 1.39). Now the
+  capture and the Studio pass the camera's visible span; Travelling Pulse edge swells are born just beyond it and age
+  only once seen (p50 .81-.99 at ±16; the peak visible swell after each kick is 1.7-5.6x main at every time in song).
+  Preset 4 and Presets 5-7 are byte-identical. Evidence `.artifacts/evidence/waveform_ribbon/reactivity_preset7/`
+  (`visibility_tag_vs_final.txt`, `kicks4_table.txt`, `sheets/*_p1..3_*`). Open: Pulse Rim's REFERENCE level (.12,
+  set against the faded plateau) now meets a far stronger in-view field on Presets 1-3; `TROUGH_VIEW` still assumes
+  ±30; the no-twitch probe's .02/.01 bounds only held because its swells never reached the cloth.
 - [~] **Travel Direction (operator, 5 Nov: "Travel Direction ... chosen in the studio ... an important basic need") —
   awaiting operator eyes:** Flow-bucket Choice, Right To Left (default, unchanged) or Left To Right (the mirror image:
   history enters at the left; pulses, held swells, Tilt Shift, sparks, strands and floor give follow; the world colour
