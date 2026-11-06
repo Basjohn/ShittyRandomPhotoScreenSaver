@@ -342,6 +342,19 @@ class DevCurveFrameRuntime:
             ),
             layer_settings=layer_settings,
             passage_intensity=float(musical_intensity) if source_ready else 0.0,
+            loudness=float(musical_level[0]) if source_ready else 0.0,
+            swell_strength=_bounded(
+                _parameter(parameter_values, "devcurve_swell_strength"),
+                0.0,
+                2.0,
+                name="devcurve_swell_strength",
+            ),
+            swell_speed=_bounded(
+                _parameter(parameter_values, "devcurve_swell_speed"),
+                0.2,
+                2.0,
+                name="devcurve_swell_speed",
+            ),
         )
         layer_map = frame["layers"]
         if not isinstance(layer_map, Mapping):
@@ -407,6 +420,7 @@ class DevCurveFrameRuntime:
                 ),
                 "passage_drive": float(frame["passage_drive"]),
                 "energies": frame["energies"],
+                "drives": frame["drives"],
             }
         )
 
