@@ -147,45 +147,40 @@ RESPONSE_HOLD, HOLD_BELOW = 6., (.8, .7)
 BREATHING_HEARD_RETURN = 1.5
 # Fixed response (Adaptive Response off, operator 6 Nov: "Adaptive is a very problematic approach"; guide 2A: never
 # learn a level from the track). Each geometry drive's routed target is already on the fixed real-music scale (BAND_SPAN,
-# PASSAGE_SPAN, ENERGY_SPAN); Pulse Strength's drive is RESPONSE_FIXED_GAIN x target ^ RESPONSE_FIXED_CURVE (the body's
-# below), eased above RESPONSE_FIXED_KNEE toward RESPONSE_FIXED_CEILING (headroom; crests still move), the same for
-# every song: the Ranges then map it to size. Nothing is remembered, so a break, a loud chorus or a quiet intro never
-# re-scales what follows. Chosen on recorded continuous play (chain5, kicks2/rangeaudit/breathing sweeps 6 Nov): the
-# remembered peak's median gain was 1.40 (peak p50 .605); one linear 1.4 for every drive left kicks 13-26% under the
-# adaptive gain's in quieter passages and late in songs.
-RESPONSE_FIXED_GAIN, RESPONSE_FIXED_KNEE, RESPONSE_FIXED_CURVE, RESPONSE_FIXED_CEILING = 1.6, .8, .75, .95
-# The body's size drives (every geometry drive but Pulse Strength) span their Ranges on the plainer BODY_FIXED_GAIN /
-# BODY_FIXED_CURVE (linear), so quiet passages sit near Quiet and loud ones near Peak and a loud passage keeps its
-# changes (3 s window contrast in loud passages .108 against the adaptive gain's .156; the hot curve gave .046; a linear
-# 1.4 kept .146 but left Preset 3's kicks 2-5% under the adaptive gain's in three time bins). Pulse Strength
-# (bend: the swell a kick launches) keeps the hotter calibration, and the swell takes the room the body leaves:
-# SWELL_HEADROOM x (1 - height drive) more strength (WaveformDynamics.swell_strength), so a kick in a quieter passage
-# still lands (guide 13D: normalise the passage, never the beats). Soft passages swing less in absolute terms than under
-# the adaptive gain, which multiplied them by up to 1.9 (3 s window contrast .209 against .300); doubling Breathing's
-# contrast reach bought only about .02 and doubled what a break's missing phrase carries into the return, so it stays.
-BODY_FIXED_GAIN, BODY_FIXED_CURVE, SWELL_HEADROOM = 1.6, 1., 1.
+# PASSAGE_SPAN, ENERGY_SPAN); its drive target is gain x target^curve, eased above RESPONSE_FIXED_KNEE toward 1, the same
+# for every song, and the Ranges map it to size. Nothing is remembered, so a break, a loud chorus or a quiet intro never
+# re-scales what follows. Fitted to the remembered-peak gain's VISIBLE behaviour, not hotter (lead review 6 Nov: a hotter
+# curve pinned Pulse Strength, flattened passages and pushed crests out of the card): on seven long recordings back to
+# back (chain7) the quantiles of the adaptive output paired with the routed target's are gain x t^curve within .005-.014
+# rms; height and lift (the body's size) fit 1.17-1.20 x t^.75-.82, every other drive 1.24-1.32 x t^.86-.91.
+FIXED_RESPONSE = {'height':(1.2,.75),'lift':(1.2,.82)}
+FIXED_RESPONSE_DEFAULT, RESPONSE_FIXED_KNEE = (1.25,.86), .85
+# The remembered peak also deepened the dip after every swell (a swell raised the peak, the next moments were scaled
+# down): that, not taller crests, is where its 3 s contrast came from. The fixed response matches it with a dip below
+# Breathing's phrase-scale mean, widened by PHRASE_DIP (crests are never widened, so nothing rises toward the card's top).
+PHRASE_DIP = 1.
 # Kick Accent (operator 6 Nov: "many sustained kicks ignored (consider maybe increasing particle count at the sustained
 # points or rotation speed? Something for a sense of them?)"). In a sustained loud passage the geometry has little
 # headroom: the bend drive (it sets Pulse Strength) sits near its top, so a kick's swell barely rises above the swells
 # already in view (rise above the pre-kick view on recorded continuous play: P7 .05-.17 against a peak of 2.4-3.0). The
 # share of an admitted kick the geometry cannot show goes to channels that do not fight the shape: an eased roll-speed
-# impulse (KICK_ROLL degrees per second per unit, in the roll's own direction; two stages, KICK_SENSE_ATTACK /
-# KICK_SENSE_RELEASE, so the roll's speed stays continuous) and up to KICK_BIRTHS sparks born on the swell. The share is
+# nudge (KICK_ROLL degrees per second per unit, in the roll's own direction; two stages, KICK_SENSE_ATTACK /
+# KICK_SENSE_RELEASE, so the roll's speed stays continuous) bounded at KICK_ROLL_SHARE of the roll's own speed, so dense
+# kicks never add up to a faster spin (lead review 6 Nov: unbounded it averaged 2x the roll in loud songs), and up to
+# KICK_BIRTHS sparks born on the swell. The share is
 # the kick's strength on the fixed reward scale (1 - exp(-reward / KICK_SENSE_REF): granular, never a clamped
 # confidence; the reward already carries the onset's musical weight, so silence buys none) x how far bend sits above
 # KICK_SENSE_KNEE x Kick Accent. A passage with headroom is unchanged.
-KICK_SENSE_KNEE, KICK_SENSE_REF, KICK_ROLL, KICK_BIRTHS = .55, .15, 45., 4.
+KICK_SENSE_KNEE, KICK_SENSE_REF, KICK_ROLL, KICK_BIRTHS, KICK_ROLL_SHARE = .55, .15, 45., 4., .15
 KICK_SENSE_HOLD, KICK_SENSE_ATTACK, KICK_SENSE_RELEASE = .05, .07, .25
 
 # Floor clearance (operator, 5 Nov; see WaveformDynamics._floor_room): the packet origin sits PACKET_FLOOR_HEIGHT above
 # the world floor; a ribbon whose lower edge would come within TROUGH_CLEARANCE of it lifts as a whole (never reshaped),
 # by up to TROUGH_LIFT_MAX, easing up over TROUGH_ATTACK and down over TROUGH_RELEASE per stage (two stages).
-PACKET_FLOOR_HEIGHT, TROUGH_CLEARANCE, TROUGH_ROOM_MIN, TROUGH_LIFT_MAX = 2., .3, .4, 3.
-# TROUGH_LIFT_MAX was 1.5 until swells reached the view at strength (6 Nov): the lift then sat at that cap on 44-67% of
-# music ticks and visible troughs hit the floor on 19% / 9% of them (Presets 1 / 3). Reactivity comes first (operator,
-# 6 Nov: "Better to have good reactivity than excessively avoid the floor"), so the floor is cleared with height, never
-# by shrinking a swell. Floor Give (authored contact) keeps the former limit, FLOOR_GIVE_LIFT_MAX.
-FLOOR_GIVE_LIFT_MAX = 1.5
+PACKET_FLOOR_HEIGHT, TROUGH_CLEARANCE, TROUGH_ROOM_MIN, TROUGH_LIFT_MAX = 2., .3, .4, 1.5
+# The limit stays 1.5 (lead review 6 Nov): with swells at the adaptive gain's visible size a limit of 2 or 3 cleared the
+# floor (contact 7% -> .3% on Preset 4) but lifted crests toward the card's top (top edge p99 +.4 to +1.3 world units);
+# the operator ranks reactivity over floor avoidance, and a clipped crest over brief floor contact.
 TROUGH_ATTACK, TROUGH_RELEASE, TROUGH_VIEW = .15, 1.2, 32.  # TROUGH_VIEW: the fallback view without a card span
 # With the card's visible span the floor lift reads only what the camera shows, plus TROUGH_LOOKAHEAD geometric-envelope
 # sigmas beyond each edge (see _trough_view), never wider than +-TROUGH_VIEW: a trough entering the view (or a swell
@@ -193,12 +188,11 @@ TROUGH_ATTACK, TROUGH_RELEASE, TROUGH_VIEW = .15, 1.2, 32.  # TROUGH_VIEW: the f
 # moved more and visible floor contact rose by up to .9 points (Preset 7); at 5 of the mode's own envelope sigmas (a
 # Group Wave set is 3.5 carrier wavelengths wide) it equals the fixed view's on every preset at a 1282x1005 card.
 TROUGH_LOOKAHEAD = 5.
-# Height Shift options (operator, 5 Nov). Static Height holds every ribbon at its own authored height, STATIC_HEIGHT_LIFT
-# (the former top of the shift), constant through every passage.
+# Height Shift options (operator, 5 Nov). Static Height holds every ribbon at the highest safe point: the top of the shift
+# (TROUGH_LIFT_MAX), constant through every passage.
 # Tilt Shift: while the lift moves, the side the history travels toward leads by TILT_LEAD seconds of lift velocity
 # (bounded softly to TILT_MAX world units each side), so it rises first and settles first. History travels toward -x.
 HEIGHT_MODES = ('Dynamic Height Shift', 'Static Height')
-STATIC_HEIGHT_LIFT = 1.5
 # A Travel Direction change fades every ribbon, spark and strand out over DIRECTION_FADE seconds (smoothstep, as a count
 # change shrinks and dims a ribbon), swaps the published direction while they are gone, then fades them back in over
 # the same time: never a mirrored pop. The history itself is untouched (it lives on its own axis).
@@ -265,14 +259,13 @@ def span(value, low, high):
     return position
 
 
-def fixed_response(target, pulse=True):
-    """A routed geometry target on the fixed scale -> drive target: gain x target^curve (RESPONSE_FIXED_* for Pulse
-    Strength, BODY_FIXED_* for the body's size) to RESPONSE_FIXED_KNEE, then an exponential approach to
-    RESPONSE_FIXED_CEILING that never flattens on it."""
-    gain,curve = (RESPONSE_FIXED_GAIN,RESPONSE_FIXED_CURVE) if pulse else (BODY_FIXED_GAIN,BODY_FIXED_CURVE)
+def fixed_response(target, key):
+    """A routed geometry target on the fixed scale -> drive target: gain x target^curve (FIXED_RESPONSE per drive) to
+    RESPONSE_FIXED_KNEE, then an exponential approach to 1 that never flattens on it."""
+    gain,curve = FIXED_RESPONSE.get(key,FIXED_RESPONSE_DEFAULT)
     value = gain*max(0.,target)**curve
     if value > RESPONSE_FIXED_KNEE:
-        room = RESPONSE_FIXED_CEILING-RESPONSE_FIXED_KNEE
+        room = 1.-RESPONSE_FIXED_KNEE
         value = RESPONSE_FIXED_KNEE+room*(1.-math.exp(-(value-RESPONSE_FIXED_KNEE)/room))
     return unit(value)
 
@@ -401,7 +394,7 @@ class HybridControls:
     height_mode: str = 'Dynamic Height Shift'
     tilt_shift: bool = False
     breathing: float = 0.
-    adaptive_response: bool = False   # True: the remembered-peak gain (pre-6 Nov); False: RESPONSE_FIXED_GAIN
+    adaptive_response: bool = False   # True: the remembered-peak gain (pre-6 Nov); False: FIXED_RESPONSE
     kick_accent: float = 0.           # share of a sustained kick the geometry cannot show sent to roll and sparks
 
 
@@ -608,7 +601,7 @@ class WaveformDynamics:
                         self._response_peak[key],target,dt,RESPONSE_REACH,memory))
                     target = unit(RESPONSE_TOP*target/self._response_peak[key])
                 else:
-                    target = fixed_response(target,key=='bend')
+                    target = fixed_response(target,key)
                 # Breathing's phrase-scale mean learns only from heard music (BREATHING_HEARD_RETURN): it fell with a
                 # break, so the music's return swelled against it (spliced 2-5 s breaks on recorded music: +4..11%
                 # height for 10 s on every Breathing preset, 0..1% with Breathing 0).
@@ -618,6 +611,10 @@ class WaveformDynamics:
                     # A passage returning from a break is not widened while it returns (its deficit against the held
                     # mean is the silence, not a phrase): the contrast comes back with the learning rate.
                     target = unit(base+(target-base)*(1.+BREATHING_CONTRAST*softness*learn))
+                if not c.adaptive_response and target<base:
+                    # The fixed response lets go below the phrase mean (PHRASE_DIP): a dip after a swell reads as one,
+                    # as the remembered peak's did, without raising any crest (see PHRASE_DIP).
+                    target = unit(base-(base-target)*(1.+PHRASE_DIP*learn))
             if key in SMOOTH_TARGETS:
                 # Geometry never snaps (operator, 5 Nov: "twitch"): two cascaded followers, so the drive's VELOCITY
                 # is continuous. A single 45 ms first-order attack made lift/bend/width/twist jump on every transient
@@ -632,7 +629,8 @@ class WaveformDynamics:
             share = (1.-math.exp(-hit/KICK_SENSE_REF))*lack
             self._kick_impulse = max(share,self._kick_impulse*math.exp(-dt/KICK_SENSE_HOLD))
             self._kick_stage = follower(self._kick_stage,self._kick_impulse,dt,KICK_SENSE_ATTACK,KICK_SENSE_RELEASE)
-            self.kick_sense = follower(self.kick_sense,self._kick_stage,dt,KICK_SENSE_ATTACK,KICK_SENSE_RELEASE)
+            self.kick_sense = min(follower(self.kick_sense,self._kick_stage,dt,KICK_SENSE_ATTACK,KICK_SENSE_RELEASE),
+                                  KICK_ROLL_SHARE*abs(self.angular_speed)/KICK_ROLL)
             if self.kick_sense<1e-6 and not self._kick_impulse:
                 self.kick_sense = self._kick_stage = 0.
             if share>0. and c.accents is not None:   # sparks on the swell, admitted once (as pulse births are)
@@ -756,7 +754,7 @@ class WaveformDynamics:
         settle = min(WHOLE_SETTLE[1],max(WHOLE_SETTLE[0],.25*p.fade))
         self._whole = self._whole*math.exp(-dt/settle)+(0. if travelling else release)
         self._whole_fresh = self._whole_fresh*math.exp(-dt/min(settle,FRESH_FADE))+(0. if travelling else release)
-        self._advance_frozen(dt,p.mode=='Frozen Past',self.swell_strength())
+        self._advance_frozen(dt,p.mode=='Frozen Past',self._value('bend'))
         self._publish_fields(dt)
         return release
 
@@ -898,14 +896,6 @@ class WaveformDynamics:
         step = SURGE_RATE*dt
         self._drift = self._drift+np.clip((self._drift_stage-self._drift)*ease,-step,step)
 
-    def swell_strength(self):
-        """Pulse Strength the swell is drawn with: the bend Range value, plus the room the body leaves
-        (SWELL_HEADROOM x (1 - height drive)) on the fixed response; Adaptive Response keeps the plain value."""
-        strength = self._value('bend')
-        if self.controls.adaptive_response:
-            return strength
-        return strength*(1.+SWELL_HEADROOM*(1.-unit(self.drive['height'])))
-
     def _learn_rate(self,dt,presence):
         """Share of real time Breathing's phrase-scale mean learns this tick: 0 with the musical weight, back over
         BREATHING_HEARD_RETURN seconds (see BREATHING_HEARD_RETURN)."""
@@ -1034,8 +1024,7 @@ class WaveformDynamics:
         velocity is continuous: a one-stage follower jumped on every new trough, which was itself a twitch."""
         if static is None:
             sinking = np.where(visible,hang-height,-np.inf)                 # depth of the lower edge below rest
-            top = TROUGH_LIFT_MAX if self.controls.scene.floor.give<=0. else FLOOR_GIVE_LIFT_MAX
-            target = np.clip(sinking.max(axis=1,keepdims=True)-room,0.,top)
+            target = np.clip(sinking.max(axis=1,keepdims=True)-room,0.,TROUGH_LIFT_MAX)
         else:
             target = np.full((RIBBON_CAPACITY,1),static)                    # Static Height (a live switch eases)
         if self._trough_time is None:
@@ -1072,7 +1061,7 @@ class WaveformDynamics:
 
     def _height_shift(self,height,hang,room,x):
         """Per ribbon (and, with Tilt Shift, per knot) vertical offset that keeps lower edges off the floor."""
-        static = STATIC_HEIGHT_LIFT if self.controls.height_mode=='Static Height' else None
+        static = TROUGH_LIFT_MAX if self.controls.height_mode=='Static Height' else None
         visible,centre,half = self._trough_view(x)
         lift = self._floor_room(height,hang,room,visible,static)
         # Tilt Shift: the lift's velocity (its second stage follows the first, so it is continuous) sets a lead that
@@ -1143,7 +1132,7 @@ class WaveformDynamics:
         # envelope so whole waves swell together and the curvature keeps its own sign (flow rule).
         swell = self.pulse_at(x)
         # Beyond the field the published edge value continues (a Whole Swell never ends at the grid edge).
-        broad = np.interp(x,PULSE_GRID,self.geometric_gain(self.swell_strength()))
+        broad = np.interp(x,PULSE_GRID,self.geometric_gain(values['bend']))
         geometric = np.interp(x,PULSE_GRID,self._geom)
         gain = broad
         cy = carrier*values['height']*gain
