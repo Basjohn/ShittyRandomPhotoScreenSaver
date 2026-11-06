@@ -62,6 +62,8 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
         features = load_feature_clip(clip_path).frames
     origin_us = features[0].timestamp_us
     frames = [f for f in features if seconds is None or (f.timestamp_us - origin_us) / 1e6 <= seconds]
+    from ui.studio import clip_loop
+    frames, start = clip_loop.primed(features, frames, clip_path)       # a loop: its end replayed first
     if any(f.capture_history is None for f in frames):
         raise RuntimeError("EB replay needs native PCM history on every frame; re-record the clip")
     records: list[dict] = []
@@ -107,8 +109,11 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
     steps = [r for r in records if "frame_sha256" in r]
     if not steps:
         raise RuntimeError("The clip never produced an Extruded Bubble frame")
-    return {"clip": str(clip_path), "origin": float(steps[0]["now_ts"]),
-            "duration": float(steps[-1]["now_ts"] - steps[0]["now_ts"]), "steps": records}
+    from ui.studio.clip_loop import mark_loop
+    # A loop's lead-in ticks stay in the record (before the origin): the Studio's frame runtime primes on them.
+    return mark_loop({"clip": str(clip_path), "origin": float(steps[0]["now_ts"] if start is None else start),
+                      "duration": float(steps[-1]["now_ts"] - steps[0]["now_ts"]), "steps": records},
+                     clip_path, start)
 
 
 def to_inputs(data: Mapping[str, Any], fixture):
@@ -119,7 +124,9 @@ def to_inputs(data: Mapping[str, Any], fixture):
                                body_bands=tuple(s["body_bands"]), play_ramping=bool(s["play_ramping"]),
                                identity=tuple(s["identity"]), source_identity=tuple(s["source_identity"]))
                   for s in data["steps"])
-    return RecordedInputs(fixture, steps, float(data["origin"]))
+    from ui.studio.clip_loop import looped_fixture
+    return RecordedInputs(looped_fixture(fixture, data), steps, float(data["origin"]),
+                          float(data.get("loop_period", 0.0)))
 
 
 def main(argv: list[str]) -> int:

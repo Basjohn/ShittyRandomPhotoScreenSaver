@@ -51,6 +51,7 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
     )
     from widgets.spotify_visualizer.runtime_controller import VisualizerRuntimeController
     from widgets.spotify_visualizer.tick_pipeline import logical_tick
+    from ui.studio import clip_loop
     from ui.studio.bubble_adapter import SEED, resolved_settings
 
     if QGuiApplication.instance() is None:
@@ -60,6 +61,7 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
         features = clip.frames
     origin_us = features[0].timestamp_us
     frames = [f for f in features if seconds is None or (f.timestamp_us - origin_us) / 1e6 <= seconds]
+    frames, start = clip_loop.primed(features, frames, clip_path)       # a loop: its end replayed first
     capture = logical_frame_capture._BUILTIN_MODE_CAPTURE[MODE]
     records: list[dict] = []
     with deterministic_clock() as clock:
@@ -111,8 +113,12 @@ def extract(clip_path: str | Path, settings: Mapping[str, Any], *, seconds: floa
             engine.force_stop()
     if not records:
         raise RuntimeError("The clip never stepped Bubble")
-    return {"clip": str(clip_path), "origin": float(records[0]["now_ts"]),
-            "duration": float(records[-1]["now_ts"] - records[0]["now_ts"]), "steps": records}
+    from ui.studio.clip_loop import mark_loop
+    # A loop's lead-in ticks stay in the record, before the origin: the Studio's own history replays them first, so
+    # its state at the clip's start is the production replay's (and a running loop's), not a cold start.
+    return mark_loop({"clip": str(clip_path), "origin": float(records[0]["now_ts"] if start is None else start),
+                      "duration": float(records[-1]["now_ts"] - records[0]["now_ts"]), "steps": records},
+                     clip_path, start)
 
 
 def to_inputs(data: Mapping[str, Any], fixture):
@@ -122,7 +128,9 @@ def to_inputs(data: Mapping[str, Any], fixture):
                             authoritative=float(s["authoritative"]), fresh=bool(s["fresh"]),
                             scheduler=bool(s["scheduler"]))
                   for s in data["steps"])
-    return RecordedInputs(fixture, steps, float(data["origin"]))
+    from ui.studio.clip_loop import looped_fixture
+    return RecordedInputs(looped_fixture(fixture, data), steps, float(data["origin"]),
+                          float(data.get("loop_period", 0.0)))
 
 
 def main(argv: list[str]) -> int:

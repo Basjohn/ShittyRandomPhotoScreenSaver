@@ -2,12 +2,16 @@
 
     .venv/Scripts/python tools/build_studio_clips.py [--recordings DIR] [--check]
 
-Each clip is a short window of a 60 s native-PCM recording in ``logs/visualizer_recordings`` (which never
+Each clip is a *seamless loop* cut from a 60 s native-PCM recording in ``logs/visualizer_recordings`` (which never
 ships), written in the compact form (``widgets/spotify_visualizer/compact_clip.py``: de-duplicated int16
-PCM + exact per-frame lanes, xz). Windows are seconds from the recording's first frame and include a
-lead-in, so the Waveform replay is primed before the passage the clip is for. ``clips.json`` records
-provenance: source file and its sha256, the window, the sha256 of the window's canonical JSONL frames
-and of the written clip. ``--check`` rebuilds in memory and fails if a committed clip differs.
+PCM + exact per-frame lanes, xz). The loop points are searched (``tools/studio_clip_loop.py``) for the span the clip
+is for so the music before the end resembles the music before the start (a steady groove: a whole number of
+beats), and the last second is an equal-power crossfade into the source's own lead-in, so the first frame follows the
+last one as the recording's next moment: the Studio's transport wraps without an audible or visible event
+(``ui/studio/clip_loop.py`` carries the preview's simulation state across the wrap). ``clips.json`` records
+provenance: source file and its sha256, the loop (frames, period, crossfade, source times), the sha256 of the
+loop's canonical JSONL frames and of the written clip. ``--check`` rebuilds in memory and fails if a committed clip
+differs. ``--report DIR`` writes the seam evidence (``tools/studio_clip_loop_report.py``).
 """
 from __future__ import annotations
 
@@ -26,16 +30,18 @@ if str(ROOT) not in sys.path:
 OUTPUT = ROOT / "assets" / "production" / "studio_clips"
 MANIFEST = "clips.json"
 
-# (id, Studio label, recording, start s, end s, what the window is for). Chosen from each recording's
-# 2 s musical-level profile: each window crosses a quiet-to-hot change, the span the Studio's
-# Quiet / Mid / Peak references stand for, with ~2 s of lead-in before it.
+# (id, Studio label, recording, loop span, period range, what the loop is for). The loop must contain ``span``
+# (seconds of the recording: the passage the clip is for); its period is searched inside ``period`` seconds.
+# Longer loops were measured too and buy nothing: the best seam score of a 22-30 s loop is no better than a 12-16 s
+# one (``Docs/Reference/Visualizer_Studio.md`` "Studio clips"), while the size and a re-analysis grow with the length.
+FADE_S = 1.0
 CLIPS = (
-    ("rag_doll", "Rag Doll", "ragdoll_quiet_intro_loud_end1.jsonl", 36.0, 48.0,
-     "a mid verse dipping (38-40 s) before the loud end (42 s on)"),
-    ("human", "Human", "human_heavy1.jsonl", 22.0, 34.0,
-     "a heavy track's quiet break (22-26 s) into its hottest stretch (26-32 s)"),
-    ("growing_pains", "Growing Pains", "growingpains_triplehitbeat.jsonl", 6.0, 18.0,
-     "the soft intro (6-8 s) building through the triple-hit beat into the hot groove (14 s on)"),
+    ("rag_doll", "Rag Doll", "ragdoll_quiet_intro_loud_end1.jsonl", (10.0, 20.0), (12.0, 16.0),
+     "a verse that lifts out of its quiet opening"),
+    ("human", "Human", "human_heavy1.jsonl", (24.0, 30.0), (12.0, 16.0),
+     "a heavy track's quiet break into its hottest stretch"),
+    ("growing_pains", "Growing Pains", "growingpains_triplehitbeat.jsonl", (20.0, 30.0), (12.0, 16.0),
+     "the triple-hit groove at full drive"),
 )
 
 
@@ -87,17 +93,33 @@ def verify(source, decoded) -> dict:
     return {"max_pcm_error": worst}
 
 
+def rebuild_frames(source: Path, loop: dict):
+    """The frames of a shipped clip, rebuilt from its recording and the ``loop`` its manifest names (the recording's
+    frame indices of the loop's start and of the frame that restarts it, the crossfade and the period shift): no
+    search, the same bake. The manifest's ``window_sha256`` and the shipped ``.srclip`` must equal this rebuild."""
+    from tools import studio_clip_loop as loops
+    recording = loops.Source.of(window_frames(source, 0.0, 600.0))
+    choice = loops.LoopChoice(int(loop["first_frame"]), int(loop["after_frame"]), float(loop["crossfade_s"]),
+                              int(loop["shift_samples"]))
+    return loops.bake_loop(recording, choice)[0]
+
+
 def build(recordings: Path, *, check: bool = False) -> list[dict]:
+    from tools import studio_clip_loop as loops
     from widgets.spotify_visualizer.compact_clip import SUFFIX, decode, encode
     from widgets.spotify_visualizer.feature_frame import FeatureClip
     entries = []
-    for clip_id, label, source_name, start, end, purpose in CLIPS:
+    for clip_id, label, source_name, span, period, purpose in CLIPS:
         source = recordings / source_name
-        frames = window_frames(source, start, end)
-        window_sha = FeatureClip(name=clip_id, frames=frames).sha256()
-        provenance = {"source": source_name, "source_sha256": sha256_file(source), "window_s": [start, end],
-                      "window_sha256": window_sha, "purpose": purpose,
-                      "builder": "tools/build_studio_clips.py"}
+        recording = loops.Source.of(window_frames(source, 0.0, 600.0))
+        choice = loops.choose_loop(recording, span=span, period=period, fade_s=FADE_S)
+        frames, period_us, loop = loops.bake_loop(recording, choice)
+        loop["score"] = round(choice.score, 4)
+        window = [loop["first_source_s"], loop["after_source_s"]]
+        window_sha = FeatureClip(name=clip_id, frames=tuple(frames)).sha256()
+        provenance = {"source": source_name, "source_sha256": sha256_file(source),
+                      "window_s": [round(v, 3) for v in window], "window_sha256": window_sha, "purpose": purpose,
+                      "builder": "tools/build_studio_clips.py", "loop": loop}
         data = encode(frames, name=clip_id, provenance=provenance)
         stats = verify(frames, decode(data).frames)
         target = OUTPUT / (clip_id + SUFFIX)
@@ -109,9 +131,9 @@ def build(recordings: Path, *, check: bool = False) -> list[dict]:
             target.write_bytes(data)
         entries.append({"id": clip_id, "label": label, "file": target.name, "bytes": len(data),
                         "sha256": hashlib.sha256(data).hexdigest(), "frames": len(frames),
-                        "seconds": round((frames[-1].timestamp_us - frames[0].timestamp_us) / 1e6, 3),
-                        **provenance, **stats})
-        print(f"{target.name}: {len(data) / 1e6:.3f} MB, {len(frames)} frames, {start}-{end} s of {source_name}")
+                        "seconds": round(period_us / 1e6, 3), **provenance, **stats})
+        print(f"{target.name}: {len(data) / 1e6:.3f} MB, {len(frames)} frames, loop {loop['period_s']:.3f} s "
+              f"({window[0]:.2f}-{window[1]:.2f} s of {source_name}), score {loop['score']}")
     manifest = OUTPUT / MANIFEST
     text = json.dumps({"clips": entries}, indent=1) + "\n"
     if check:
