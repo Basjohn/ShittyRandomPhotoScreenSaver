@@ -149,7 +149,8 @@ def swell_of(model):
     from core.waveform_ribbon_dynamics import PULSE_GRID
     share=model._geom_share[0]
     inside=np.abs(PULSE_GRID)<=VIEW
-    return float(share*.7*model._value('bend')*np.max(model._geom[inside]))*model._value('height')
+    strength=model.swell_strength() if hasattr(model,'swell_strength') else model._value('bend')
+    return float(share*.7*strength*np.max(model._geom[inside]))*model._value('height')
 
 
 def replay(inputs,controls,*,model_factory=None,view=False):

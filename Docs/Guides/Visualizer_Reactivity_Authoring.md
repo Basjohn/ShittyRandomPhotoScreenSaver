@@ -627,8 +627,11 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` โ
 - **Superseded 6 Nov: no adaptive response gain.** Dividing a geometry drive by a remembered recent peak is the
   "slowly falling peak" ยง2A rejects: on recorded music with a spliced 5 s break it sized the following 10 s 5-9% up,
   and it re-normalises a long quieter passage. Map the routed target with a FIXED function on the real-music scale
-  (Waveform: gain x target^.75 eased toward .95), calibrated once on recorded continuous play so every time bin's kicks
-  stay at or above what the adaptive gain gave, and let each target's Range be the authored reactivity. Any adaptive
+  (Waveform: body drives linear 1.4x, Pulse Strength 1.6 x target^.75, eased toward .95), calibrated once on recorded
+  continuous play so every time bin's kicks stay at or above what the adaptive gain gave, and let each target's Range be
+  the authored reactivity. One hot curve for everything pinned loud passages (3 s contrast .156 -> .046): keep the body
+  spanning and give the swell the headroom the body leaves. Expect soft passages to swing less in absolute terms than
+  under a normaliser that multiplied them by up to 1.9. Any adaptive
   path that survives is an opt-in control whose off position is the fixed path, with a negative-control test.
 - **A break is a test of every running reference.** Splice 2-5 s of near-silence into recorded music (scale the PCM,
   re-analyse it through the production chain) and compare what follows against the unbroken clip per layer: engine
