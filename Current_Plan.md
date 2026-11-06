@@ -512,6 +512,23 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   Open Studio and the Studio's confirmed Save To <Preset> (`Docs/Reference/Visualizer_Studio.md` §4).
   `tools/flicker_test.py` keeps its own historical mock of the old row. Operator look pending: Open Studio's place in
   the preset row and the Save To flow.
+- [ ] **Operator side requests (6 Nov, "important eventually"; queue after the running work):**
+  - **Bar Count outside Spectrum:** it reads out of place on other modes. Audit per mode what the engine's bar count
+    actually feeds (the DevCurve and Oscilloscope Studio replays found only Bar Count and the noise floor change what
+    the engine answers them; Sensitivity / Input Gain / Block Size / Use Recommended Sensitivity changed nothing they
+    read). Keep it only where a mode demonstrably depends on it (show the dependency), hide it elsewhere; the same
+    question for the rest of the Audio Analysis group per mode, checked against the live engine.
+  - **Tilt Shift cannot be toggled:** every curated Waveform preset has Floor Clearance = Dynamic Height Shift (its
+    `when` condition), so the toggle should be live. Reproduce in Settings and the Studio, fix the owner, and test the
+    real dialog with a negative control.
+  - **Waveform travel speed:** History Speed (`flow_speed`, 0.8-2.4, Flow bucket) and Pulse Speed exist but the
+    operator did not find them; there is no travel-speed reactivity. Make them findable (name / workspace / tooltip)
+    and consider a quiet -> peak History Speed under the flow rule (music pushes history faster, smoothly; knot spacing
+    and the anchored ends stay continuous). After the adaptive rework (same owner).
+  - **Studio clips: 30 s small, or cleanly loopable.** Shipped clips are ~12 s, ~0.9 MB each (2.5 MB total); 30 s would
+    be ~2.2 MB each but an engine-owned edit re-analyses the whole clip (~2.5x longer). A clean loop instead: loop
+    points on matching musical positions with a short crossfade, and the Studio's evaluator continuing its simulation
+    state across the loop (today the replay restarts at t = 0, which would jump). Choose with measurements.
 
 ## Operator execution and evidence rules
 
