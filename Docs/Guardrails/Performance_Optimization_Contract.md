@@ -366,6 +366,23 @@ Likewise, do not tune a GUI ``QTimer`` as a bandage. Qt Quick frame-pacing work 
 
 Qt Quick hot paths are scarce budget: never add dormant per-frame Python/logging/telemetry on ``frameSwapped``/sync/render edges, hidden ``Repeater`` delegate forests, or always-live effect/layer work without measured need. Keep deep render-loop timing behind an explicit diagnostic sidecar with zero normal-runtime cost. Judge smoothness by frame-spacing tails **and fresh-state age**, not average FPS alone; CUSTOM Edit FPS is a different demand regime, not a steady-runtime target. `ThreadManager` ``TaskPriority`` is currently metadata on a FIFO ``ThreadPoolExecutor``; never treat ``LOW`` as Qt/Windows scheduling priority. Best-effort CPU speculation must not use a heavyweight helper process or normal-priority shared COMPUTE lane by assumption: use the ThreadManager background lane only when semantics tolerate delay, keep it one-thread/bounded/QImage-only, and fail closed on Windows if native demotion is unavailable.
 
+**Cutting a logical tick without changing a bit (Extruded Bubble, 6 Nov 2026).** Every Python call on the logical
+thread holds the GIL against the render thread, so a mode's tick is cut at its owner, but an accepted mode's published
+frames must stay byte-identical: prove it with a full-replay digest of every published frame against main (several
+recordings and presets), and keep the straightforward forms in tests as the oracle
+(`tests/test_extruded_bubble_logical_tick_exactness.py`). Lessons that will recur:
+- `sum()` of floats is compensated (Neumaier) since Python 3.12: writing it out as `a + b + c` changes last bits.
+  Keep `sum()` (over a list rather than a generator) when rewriting; left-to-right products and sums otherwise
+  rewrite exactly, and per-element constants (a bubble's phase terms, a tick's shared products) hoist exactly.
+- NumPy is not automatically cheaper at the sizes a tick handles (~150 bodies, a few thousand pairs): replacing
+  EB's dictionary-probe contact grid with a NumPy sweep was slower in situ, because each small-array call costs
+  microseconds under load. Measure the replacement inside the real tick, not in a hot `timeit` loop.
+- Cache what is constant per settings by **strict** equality (type, value, sign of zero;
+  `render_state.strictly_equal_render_value`), never by identity of a mutable value, and record what the resolver
+  actually read (`ExtrudedBubbleFrameRuntime.controls_for`) rather than a hand-kept key list that drifts.
+- A skip is exact only when the skipped branch provably has no effect: EB's contact loop skips pairs beyond the
+  1.03 re-contact reach before any other work because every response needs an overlap first.
+
 **GL state reads are not free on the render thread.** Every `glGet*`, `glIsEnabled*` and `glGetUniformLocation` is a
 round trip to the driver thread: ~20-25 us quiet, up to milliseconds when the CPU is saturated (a game, parallel work),
 and the GPU idles until the frame's next commands arrive. Waveform made ~170 per frame (uniforms by name, per-pass
