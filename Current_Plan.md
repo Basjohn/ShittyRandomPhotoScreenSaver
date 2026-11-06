@@ -98,6 +98,30 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
     the lead on a free machine. The 6 Nov rounds overlapped the operator's own session (system CPU 97-100%) and
     are void. Evidence `.artifacts/evidence/eb_logical_tick/` (summaries and scripts; the void live-run logs were
     deleted on the operator's word).
+- [ ] **Widget card surfaces: Acrylic, Glass and other materials (operator 6 Nov, near term; the lead or an Opus 5.5
+  high agent, never a smaller model).** Operator: the old attempt failed with a weaker agent; done properly it is a
+  lasting visual uplift. This **supersedes** the recorded rejection: `Docs/Contracts.md` (runtime cards are plain RGBA,
+  "no ... card-material Loader/capture path"), `Spec.md` ("rejected runtime Glass/Acrylic card experiment"),
+  `Docs/Guides/Custom_Style_Implementation.md` and `Docs/Guides/10_WIDGET_GUIDELINES.md`, which already names the way
+  back: "a broader independently justified renderer architecture and a fresh acceptance plan rather than reviving the
+  rejected card-only experiments". Before any code:
+  1. **Read the failed-method record** in those docs and the historical bugs (R-61 Settings Glass layered-HWND
+     backdrop mismatch, R-63 black flash, R-95, and grep Glass/Acrylic/backdrop/material). Write down why each
+     earlier mechanism failed.
+  2. **Design one scene-local Qt Quick material owner per display**, never routed through the Settings HWND or
+     AccentPolicy stack. A blurred, tinted copy of the wallpaper/transition layer is made once per display and
+     shared by every card through its mask: no per-card capture, blur or owner. Its update cadence is tied to the
+     wallpaper/transition edges, not a timer. Cost is zero when every card is Normal (dormancy). Cards over a running
+     transition stay correct. Light-theme legibility holds, with a darker legibility layer behind text, as in the
+     Settings rule. The Visualizer card is included or explicitly excluded.
+  3. **Materials to offer, each measured for cost:** Acrylic (blur, tint, luminosity, noise), Glass (lighter blur,
+     edge highlight, slight refraction), Frosted, a Mica-like wallpaper-tinted solid (very cheap), Smoked/tinted
+     translucent, and Normal (today's default).
+  4. **Settings:** the Widget Theme model (memory: Normal first; Context Menu and cards inherit the Widget Theme;
+     per-family overrides beat the theme baseline).
+  5. **Acceptance plan:** offscreen sheets on real wallpapers per material and theme, transitions mid-flight, cost
+     against the overhead baseline (control-relative), and a live check under the lead-scheduled game load. Then
+     rewrite the Contracts/Spec/guide passages as a superseded decision, not an overwrite.
 - [ ] **Extruded Bubble: a deep red ocean preset that truly matches the mock (operator 6 Nov, not urgent):** the mock is
   `Docs/Reference/Extruded_Bubble/Targets/Originals/Preset7Goal.png`: near-black teal water, fiery orange-red ember
   streaks and dust along diagonal streams, clear copper-lit shells, warm shafts from the upper right, bokeh foreground.
