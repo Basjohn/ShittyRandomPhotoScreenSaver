@@ -98,6 +98,11 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
     the lead on a free machine. The 6 Nov rounds overlapped the operator's own session (system CPU 97-100%) and
     are void. Evidence `.artifacts/evidence/eb_logical_tick/` (summaries and scripts; the void live-run logs were
     deleted on the operator's word).
+- [ ] **Frozen builds could not open a Studio (operator 6 Nov: "module QtQuick.Controls.Basic is not installed"): fixed
+  in source (e5005ffa), confirm on the next build.** The QML prune removed QtQuick/Controls, Templates and Shapes, and
+  the import allowlist scanned only the saver's QML, never `ui/studio/qml`. The build now keeps the Basic style's
+  closure and prunes only the other Controls styles. `test_every_shipped_qml_import_survives_the_frozen_prune` walks
+  every shipped import's module and DLL closure against the prune. Open: open a Studio from a fresh build.
 - [ ] **Widget card surfaces: Acrylic, Glass and other materials (operator 6 Nov, near term; the lead or an Opus 5.5
   high agent, never a smaller model).** Operator: the old attempt failed with a weaker agent; done properly it is a
   lasting visual uplift. This **supersedes** the recorded rejection: `Docs/Contracts.md` (runtime cards are plain RGBA,
@@ -282,6 +287,33 @@ Centre Out "like night and day"; logical cadence survives heavy game load; **Pre
 lose this"). Every later dynamics change shows, on the recorded clips, that Preset 4 is unchanged against this tag
 (or names the improvement for operator sign-off). Preset 4 keeps Breathing 0 (exactly the baseline dynamics).
 
+- [ ] **Fixed-scale rework (branch `worktree-agent-ab2ce64aff1fa59c4`): REJECTED by the lead review 6 Nov, in rework.**
+  Kept from it: no adaptive memory (a song replayed after ~7 min of other music responds the same: height within .01,
+  roll .35 deg/s), breaks no longer re-scale what follows, an Adaptive Response toggle (off), Breathing's mean learns
+  only from heard music, and the floor cleared with height. Rejected, measured on whole recordings against main
+  (`tmp/waveform_review_20261106/`, gitignored: frame sheets, traces, `drift_*.txt`, the 7-song `chain7.npy`;
+  scripts in `scripts/`):
+  - crests clipped by the card's top edge on P4 Anything 9% -> 66%, P4 Rag Doll 2 -> 62%, P7 Anything 3 -> 66%, P7 Rag
+    Doll 1 -> 54%, P1 0-3 -> 16-43% of frames: the hotter fixed calibration inflates the swells and the 3.0 lift
+    pushes them out of the frame (only the floor had been measured);
+  - Pulse Strength pinned near its ceiling through whole songs (3 s contrast -34..-39%); quiet stretches (Anything
+    ~40-44 s) stay nearly full size; Preset 7 loud-song swing -24..-34%: the operator's "almost flat" complaint;
+  - Kick Accent overlaps into a sustained ~2x spin in loud songs (16-18 against 8.5-9.5 deg/s, Preset 4 included);
+  - sharper size jumps (visible-amplitude rate max 41-49 against 22-24).
+
+  Acceptance for the rework:
+  - Preset 4 visible amplitude p10/p50/p90 and its 3 s contrast are within +-10% of main (the tag).
+  - Every other preset has contrast >= main, and Pulse Strength never pins.
+  - Kick Accent adds at most 15% to mean roll speed (0 on Preset 4 unless proven).
+  - Top clipping is no worse than main at 640x560 and 1282x1005, and the floor comes second.
+  - **Operator, 6 Nov:** every reaction mode must be truly reactive (Travelling Pulse in each direction, Centre Out,
+    Group Wave, Whole Swell, and the unfrozen parts of Frozen Past). See whether Breathing helps, keeping the goals.
+  - **Judge with music-vs-response traces** (`tools/visualizer_replay/waveform_music_response.py`). The song's own PCM
+    envelope sits above the response, with loudness -> response scatter and per-song saturation, dead, spurious and
+    re-scaling measures. For travelling and frozen modes, measure only the part changing at the time (the newly
+    born swell).
+  - Build on the reactivity guide's real-music scale: loudness 3-17 in music, the live lane at 2.5, 0..1 absolutes
+    mean only "silent", calibrate by presence on recorded music.
 - [~] **Preset 7 and the other reaction modes (operator log `logse7a84d332e.zip`, Rag Doll, 5 Nov) - awaiting
   operator eyes:** no decay/breathing in soft passages, sustained passages with changes read almost flat, and a swell to
   full power as the song got QUIETER. Preset 7 is Group Wave (song 31-123 s in the log; the recorded clip is song
