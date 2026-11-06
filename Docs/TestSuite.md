@@ -827,6 +827,11 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
 - `tests/test_studio_exit_every_mode.py` — every registered Studio, after a commit, through the shell's Close button:
   Settings revealed before teardown, forced retire failures, the window never hidden from Python, the `--studio`
   sidecar and main log receiving the lifecycle.
+- `tests/test_studio_exit_repaint.py` — a natively concealed and revealed frameless translucent (layered) window is exposed and
+  paints again, through every exit path (Close, Esc, window X, `close()`), plain and with the acrylic AccentPolicy; negative
+  controls without the re-expose and an opaque control. Mechanism-level on a bare window with Settings' window recipe (the real
+  `SettingsDialog` raises visible guided-setup / "No Image Sources" popups when shown); every window has an empty region and an
+  `EnumWindows` guard asserts no visible window with pixels.
 - `tests/test_settings_percent_slider_round_trip.py` — Settings sliders reload stored hundredths exactly (no `int`
   truncation in any Settings tab), through the real widgets and a Studio commit.
 - `tests/test_studio_preset_row_and_save_to_preset.py` — on the real SettingsDialog: every registered Studio mode
