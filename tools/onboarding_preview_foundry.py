@@ -260,6 +260,11 @@ class _HiddenQuickScene:
         self.surface.setFormat(self.context.format())
         self.surface.create()
         self.control = QQuickRenderControl()
+        # The render control's RHI uses this imported context until its own destructor, so the context (and its
+        # surface) are the control's Qt children: no teardown order (close(), GC, PySide's exit sweep of Python-owned
+        # QObjects) can free them first (R-172, the same structure as the Studio's offscreen surface).
+        self.context.setParent(self.control)
+        self.surface.setParent(self.control)
         self.window = QQuickWindow(self.control)
         self.window.resize(width, height)
         self.window.setColor("transparent")
@@ -349,11 +354,12 @@ class _HiddenQuickScene:
         self._make_current()
         self._gl.glDeleteTextures([self.texture])
         self.control.invalidate()
-        self.window.deleteLater()
-        self.control.deleteLater()
-        self.owner.deleteLater()
-        self.context.doneCurrent()
-        self.surface.destroy()
+        # Destroyed now, window first and the render control last (its children, the context and the offscreen
+        # surface, go with it), not left to an event loop the caller may never run.
+        from PySide6.QtCore import QCoreApplication, QEvent
+        for obj in (self.window, self.control, self.owner):
+            obj.deleteLater()
+            QCoreApplication.sendPostedEvents(obj, QEvent.Type.DeferredDelete)
         self.app.processEvents()
 
 

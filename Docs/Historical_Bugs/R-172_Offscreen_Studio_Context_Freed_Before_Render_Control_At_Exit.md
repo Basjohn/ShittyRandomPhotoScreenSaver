@@ -56,8 +56,10 @@ context internally, so there is no imported context. Only tests and `tools/` (`s
 `waveform_studio_capture.py`) construct `OffscreenStudioSurface`. When the app quits with a Studio open,
 `close_for_quit` retires the surface from `aboutToQuit`. A probe showed that `QCoreApplication::exec`'s own cleanup
 destroys the Studio window and engine before `exec()` returns, so nothing is left for the exit sweep.
-`tools/onboarding_preview_foundry.py` has the same structure: an imported context with its own Python owner, and the
-control left to `deleteLater`. It is not changed here and is tracked in `Current_Plan.md`.
+`tools/onboarding_preview_foundry.py`'s hidden scene had the same structure: an imported context with its own Python
+owner, and the control left to `deleteLater`. It got the same ownership on 6 Nov, and its `close()` now destroys the
+window and then the control at once. `tests/test_onboarding_preview_capture_teardown.py` covers it, with a negative
+control.
 
 ## Lesson
 
