@@ -189,18 +189,30 @@ function Assert-SRPSSQmlExternalImportContract {
     if (-not (Test-Path -LiteralPath $qmlRoot -PathType Container)) {
         throw "Qt Quick QML source directory does not exist: $qmlRoot"
     }
+    # Every shipped QML tree is checked: the saver's scene and the Settings-side Studio (ui/studio/qml). The Studio
+    # was not, so its QtQuick.Controls.Basic / QtQuick.Shapes imports reached frozen builds whose prune list removed
+    # both (6 Nov: "Studio Unavailable ... module QtQuick.Controls.Basic is not installed").
+    $qmlRoots = @($qmlRoot)
+    $studioRoot = Join-Path $RepoRoot 'ui\studio\qml'
+    if (Test-Path -LiteralPath $studioRoot -PathType Container) {
+        $qmlRoots += $studioRoot
+    }
 
-    # The frozen QML dependency surface is intentionally tiny. Expanding it
+    # The frozen QML dependency surface is intentionally small. Expanding it
     # must be an explicit packaging decision rather than silently re-growing
-    # the PySide6 QML tree in every product.
+    # the PySide6 QML tree in every product. QtQuick.Controls.Basic and
+    # QtQuick.Shapes are the Studio's (Settings side, never the saver scene);
+    # Get-SRPSSNuitkaQmlPruneArguments keeps exactly their module closure.
     $allowedImports = @(
         'QtQuick',
-        'QtQuick.Effects'
+        'QtQuick.Effects',
+        'QtQuick.Controls.Basic',
+        'QtQuick.Shapes'
     )
     $seenImports = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     $unexpected = [System.Collections.Generic.List[string]]::new()
 
-    foreach ($qmlFile in @(Get-ChildItem -LiteralPath $qmlRoot -Filter '*.qml' -File -Recurse)) {
+    foreach ($qmlFile in @($qmlRoots | ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter '*.qml' -File -Recurse })) {
         $lineNumber = 0
         foreach ($line in [System.IO.File]::ReadLines($qmlFile.FullName)) {
             $lineNumber += 1
@@ -231,6 +243,10 @@ function Assert-SRPSSQmlExternalImportContract {
     }
 
     foreach ($requiredNamespace in $allowedImports) {
+        # A tree without the Studio (a reduced test repository) cannot use the Studio's namespaces.
+        if ($qmlRoots.Count -lt 2 -and @('QtQuick.Controls.Basic', 'QtQuick.Shapes') -contains $requiredNamespace) {
+            continue
+        }
         if (-not $seenImports.Contains($requiredNamespace)) {
             throw "Expected Qt QML namespace is no longer used: $requiredNamespace"
         }
@@ -247,7 +263,9 @@ function Get-SRPSSNuitkaQmlPruneArguments {
 
     # Validate live source before applying the denylist. QtQuick,
     # QtQuick.Effects, and the core QtQuick/QtQml substrate are intentionally
-    # retained; the families below are not imported by any SRPSS QML file.
+    # retained, and so is the Studio's QtQuick.Controls.Basic closure (QtQuick/Controls itself, Controls/Basic,
+    # Controls/impl, QtQuick/Templates, QtQuick/Shapes). Only the other Controls styles are pruned. The families
+    # below are not imported by any SRPSS QML file (tests/test_build_layout.py walks the import closure).
     [void](Assert-SRPSSQmlExternalImportContract -RepoRoot $RepoRoot)
 
     $unusedQmlFamilies = @(
@@ -264,15 +282,19 @@ function Get-SRPSSNuitkaQmlPruneArguments {
         'QtQml/StateMachine',
         'QtQml/XmlListModel',
         'QtQuick3D',
-        'QtQuick/Controls',
+        'QtQuick/Controls/designer',
+        'QtQuick/Controls/FluentWinUI3',
+        'QtQuick/Controls/Fusion',
+        'QtQuick/Controls/Imagine',
+        'QtQuick/Controls/Material',
+        'QtQuick/Controls/Universal',
+        'QtQuick/Controls/Windows',
         'QtQuick/Dialogs',
         'QtQuick/Layouts',
         'QtQuick/LocalStorage',
         'QtQuick/NativeStyle',
         'QtQuick/Particles',
         'QtQuick/Pdf',
-        'QtQuick/Shapes',
-        'QtQuick/Templates',
         'QtQuick/Timeline',
         'QtQuick/VectorImage',
         'QtQuick/VirtualKeyboard',
@@ -321,8 +343,14 @@ function Get-SRPSSNuitkaQmlPruneArguments {
         '*Qt6Sensors*.dll',
         '*Qt6TextToSpeech*.dll',
         '*Qt6WebView*.dll',
-        '*Qt6QuickControls2*.dll',
-        '*Qt6QuickTemplates2*.dll',
+        # The Controls styles SRPSS does not use (the Studio's Basic style, the Controls base, impl and
+        # Templates2 stay: tests/test_build_layout.py walks their DLL closure).
+        '*Qt6QuickControls2Fusion*.dll',
+        '*Qt6QuickControls2Imagine*.dll',
+        '*Qt6QuickControls2Material*.dll',
+        '*Qt6QuickControls2Universal*.dll',
+        '*Qt6QuickControls2FluentWinUI3*.dll',
+        '*Qt6QuickControls2WindowsStyleImpl*.dll',
         # QML scan dependency fossils whose source namespaces are explicitly
         # outside the authored QtQuick + QtQuick.Effects contract.
         '*Qt6Labs*.dll',
@@ -402,8 +430,14 @@ function Assert-SRPSSForbiddenFrozenPayloadAbsent {
         'qt6sensors',
         'qt6texttospeech',
         'qt6webview',
-        'qt6quickcontrols2',
-        'qt6quicktemplates2',
+        # The Studio's QtQuick.Controls.Basic needs Qt6QuickControls2, its Basic style, impl and Templates2;
+        # only the other styles stay forbidden.
+        'qt6quickcontrols2fusion',
+        'qt6quickcontrols2imagine',
+        'qt6quickcontrols2material',
+        'qt6quickcontrols2universal',
+        'qt6quickcontrols2fluentwinui3',
+        'qt6quickcontrols2windowsstyleimpl',
         'qt6labs',
         'qt6concurrent',
         'qt6multimediaquick',
