@@ -1,9 +1,6 @@
 """Retained framed waveform mode; consumes the sole logical owner's immutable geometry and scene."""
 from __future__ import annotations
-import numpy as np
-from core.settings import framed_camera as fc
-from core.settings.waveform_ribbon_camera import NEAR, FAR
-from core.waveform_ribbon_scene import SPEC
+from core.waveform_ribbon_view import physical_view  # the camera owner; re-exported for its consumers
 from widgets.spotify_visualizer.render_state import WaveformRibbonFrame
 from widgets.spotify_visualizer.presentation_geometry import framed_aperture_scale
 from rendering.quick.scene3d.frame import item_pixel_rect
@@ -15,20 +12,6 @@ from rendering.gl_programs.waveform_atmosphere import MEDIUM_GLSL,SKY_VERTEX,SKY
 from rendering.gl_programs.fog_volume import fog_inject_source
 from rendering.gl_programs.ribbon import (RIBBON_VERTEX,RIBBON_BODY_FRAGMENT,RIBBON_LIGHT_FRAGMENT,
     RIBBON_SPARK_VERTEX,RIBBON_SPARK_FRAGMENT,RIBBON_STRAY_VERTEX,RIBBON_STRAY_FRAGMENT)
-
-
-def physical_view(parameters,aspect,aperture_scale=1.,*,zoom=1.):
-    """``zoom`` scales the visible extent (Dynamic Zoom); the physical eye, pose and world never move.
-
-    Perspective is the only projection (Orthographic retired 5 Nov 2026); ``lens`` is the tangent pair."""
-    fov=float(parameters['waveform_ribbon_camera_fov'])
-    axes,eye,_=fc.resolve_camera_frame(SPEC,parameters)
-    right,up,back=(np.asarray(axes[i:i+3]) for i in (0,3,6))
-    view=np.identity(4);view[0,:3],view[1,:3],view[2,:3]=right,up,back
-    view[:3,3]=-view[:3,:3]@np.asarray(eye)
-    tangents=fc.viewport_tangents(fov,aspect,aperture_scale,SPEC.fov_range)
-    lens=(tangents[0]*zoom,tangents[1]*zoom);projection=fc.perspective_matrix(lens,NEAR,FAR)
-    return view,np.asarray(projection).reshape(4,4,order='F'),np.asarray(eye),lens
 
 
 class QuickWaveformRibbonRenderer:

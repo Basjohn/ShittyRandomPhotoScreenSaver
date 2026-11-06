@@ -52,7 +52,9 @@ constants); all state integrates on the sole logical clock and the projection on
 
 - **Travelling energy pulse.** Typed hits and body-energy rises inject energy at an origin set by Pulse Direction
   (Head To Tail, Tail To Head, Centre Out); edge origins sit just beyond the view, so a swell slides in already
-  formed. Energy travels at Pulse Speed, spreads gently and fades over Pulse Fade on one bounded 1D field per travel
+  formed. Travelling Pulse's edge swells use the view the card's camera really shows (`core/waveform_ribbon_view.py`
+  `card_span`, passed by the capture and the Studio as `view_span`): born `VIEW_MARGIN` envelope sigmas beyond its edge
+  (never farther than `PULSE_ORIGIN`), ageing only once seen. Centre Out and the other modes ignore it. Energy travels at Pulse Speed, spreads gently and fades over Pulse Fade on one bounded 1D field per travel
   direction. There is no steady baseline injection. The Bend range is presented as **Pulse Strength**.
 - **Flow rule.** Geometry multiplies the waveform's own displacement about its axis by a broad envelope (sign never
   flips) whose slope and curvature are bounded relative to the carrier wavenumber, so a swell may deepen existing
