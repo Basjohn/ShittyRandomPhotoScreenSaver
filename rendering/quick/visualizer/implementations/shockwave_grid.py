@@ -28,7 +28,7 @@ from rendering.gl_programs.neon_lake_basin_options import BASIN_SURFACE_STYLES, 
 from rendering.gl_programs.shockwave_grid_program import (
     SHOCKWAVE_EVENTS, SHOCKWAVE_MAX_BARS, SHOCKWAVE_MAX_RIDGE,
     shockwave_amplitude, shockwave_event_records, shockwave_grid_cells, SHOCKWAVE_HALF_WIDTH,
-    shockwave_idle, shockwave_wave_speed,
+    shockwave_idle, shockwave_wave_speed, shockwave_water_react,
 )
 from rendering.quick.scene3d.frame import item_pixel_rect
 from rendering.quick.scene3d.heightfield import HeightfieldTexture
@@ -55,7 +55,7 @@ _UNIFORMS = _VIEW_UNIFORMS + (
     "uWireDisplay", "uMarks", "uPointPx","uTerrainFillColor","uVertexColor","uVertexAccentColor",
     "uVertexOutlineColor","uGlassTint","uGlass","uLightStrength","uSmoothGlass","uDepthOnly",
     "uWaterLineGlowColor","uWaterLineGlow","uWaterShine","uDepthScale","uShoreGlow","uShoreGlowColor","uContourLines",
-    "uWaterGlint","uGlintLight",
+    "uWaterGlint","uGlintLight","uWaterReact",
 ) + _CELESTIAL_UNIFORMS + _REACTION_UNIFORMS
 _SKY_UNIFORMS = _VIEW_UNIFORMS + _CELESTIAL_UNIFORMS + (
     "uSkyPass","uShaftSpread","uMidband", "uBeatPulse", "uCelestialGlow", "uCelestialRimVertices", "uBeatStarCount", "uBeatStarCells", "uStarGlow",
@@ -361,6 +361,9 @@ class QuickShockwaveGridRenderer:
             gl.glUniform1f(uniforms["uContourLines"], float(parameter(parameters, "shockwave_grid_contour_lines")))
             # The glint brightens with the halo's own musical drive (existing midband and onset envelope).
             gl.glUniform4f(uniforms["uGlintLight"], *_halo_light(parameters), midband, beat_pulse)
+            # Water Reaction reads the admitted waves (fixed real-music scale), not the pinned display bars.
+            gl.glUniform1f(uniforms["uWaterReact"], shockwave_water_react(
+                mode_state.events, float(parameter(parameters, "shockwave_grid_water_reaction"))))
             # fwidth already measures physical fragments, including DPR/MSAA.
             gl.glUniform1f(uniforms["uEdgePx"], 0.75)
             gl.glUniform1f(uniforms["uCurveCells"], 12.0+40.0*float(parameter(parameters,"shockwave_grid_density")))

@@ -716,6 +716,10 @@ _SHOCKWAVE_GRID = ModeSettings(
         Slider("shockwave_grid_water_glint", "Sun / Moon Path:", 0.0, 1.0,
                "A glittering path of light on the water below the Sun or Moon, brightening with its halo's "
                "music. 0 turns it off.", bucket="waves", enabled_when=_BASIN_BODY),
+        Slider("shockwave_grid_water_reaction", "Water Reaction:", 0.0, 1.0,
+               "How strongly the lake lights up with the music: a glowing net of ripple lines over the water, a "
+               "brighter shore and island glow and Sun / Moon path. Loud passages light it more, beats swing it. "
+               "0 turns it off.", bucket="waves"),
         Toggle("shockwave_grid_terrain_reaction_enabled", "React to Music:", "Reshape the land with the music",
                "Off keeps the land exactly as authored, with no reaction work at all.", bucket="reaction"),
         Slider("shockwave_grid_terrain_reaction_strength", "Strength:", 0.0, 1.0,
