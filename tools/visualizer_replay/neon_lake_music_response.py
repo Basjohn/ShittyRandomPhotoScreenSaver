@@ -117,6 +117,7 @@ _MASK_OVERRIDES = {
     "shockwave_grid_water_color": [0, 255, 0, 255], "shockwave_grid_water_shine": 0.0,
     "shockwave_grid_water_detail": 0.0, "shockwave_grid_water_glint": 0.0, "shockwave_grid_shore_glow": 0.0,
     "shockwave_grid_water_reflection": 0.0, "shockwave_grid_floor": 1.0, "shockwave_grid_glow": 0.0,
+    "shockwave_grid_water_reaction": 0.0,
 }
 
 
