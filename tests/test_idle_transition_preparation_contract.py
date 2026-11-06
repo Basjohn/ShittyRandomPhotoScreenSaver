@@ -1,7 +1,7 @@
 """Qt-free execution of the exact display-owner idle GL admission methods.
 
-This protects against a future reintroduction of repaint-driven warm-up, a timer-paced
-warm-up, or parallel display preparation even where Windows Qt is not available.
+This protects against a future reintroduction of repaint-driven warm-up or
+parallel display preparation even where Windows Qt is not available.
 """
 from __future__ import annotations
 
@@ -14,12 +14,11 @@ MANAGER = ROOT / 'engine' / 'display_manager.py'
 ITEM = ROOT / 'rendering' / 'quick' / 'render' / 'background_item.py'
 METHODS = (
     '_cancel_idle_transition_warmup', '_idle_warm_valid',
-    '_arm_next_idle_warm_step', '_request_idle_warm_frame', '_on_idle_warm_frame',
-    '_admit_idle_warm_step', '_on_idle_warm_step_finished',
+    '_arm_next_idle_warm_step', '_admit_idle_warm_step', '_on_idle_warm_step_finished',
 )
 
 
-def _harness(min_spacing_s=0.2):
+def _harness():
     tree = ast.parse(MANAGER.read_text(encoding='utf-8'))
     owner = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'DisplayManager')
     implementations = []
@@ -28,12 +27,10 @@ def _harness(min_spacing_s=0.2):
             method.decorator_list = []
             implementations.append(method)
     assert len(implementations) == len(METHODS)
-    clock = [100.0]
     namespace = {
-        'IDLE_TRANSITION_WARM_MIN_SPACING_S': min_spacing_s,
+        'IDLE_TRANSITION_WARM_STEP_SPACING_MS': 200,
         'IDLE_TRANSITION_WARM_MAX_STEPS_PER_DISPLAY': 96,
         'logger': SimpleNamespace(debug=lambda *a, **k: None),
-        'time': SimpleNamespace(monotonic=lambda: clock[0]),
     }
     exec(compile(ast.fix_missing_locations(ast.Module(body=implementations, type_ignores=[])),
                  str(MANAGER), 'exec'), namespace)
@@ -47,7 +44,7 @@ def _harness(min_spacing_s=0.2):
     owner._retired = False
     owner._idle_warm_serial = 0
     owner._idle_warm_ticket = -1
-    owner._idle_warm_not_before = 0.0
+    owner._idle_warm_shot = None
     owner._idle_warm_seed = 17
     owner._next_batch_seed = 17
     owner._idle_warm_generation = 3
@@ -59,104 +56,60 @@ def _harness(min_spacing_s=0.2):
     owner._idle_warm_reporter = SimpleNamespace(finished=SimpleNamespace())
     owner._transition_work_pending = False
     owner.has_transition_work_pending = lambda: owner._transition_work_pending
-    requested, frames, cancelled = [], [], []
+    requested, deferred, cancelled = [], [], []
+    owner._thread_manager = SimpleNamespace(
+        single_shot=lambda ms, fn, *args: (deferred.append((ms, lambda: fn(*args))) or SimpleNamespace(active=True)))
 
-    def no_timer(*args, **kwargs):
-        raise AssertionError('idle warm-up must not schedule a timer')
-    owner._thread_manager = SimpleNamespace(single_shot=no_timer)
-
-    def unit(label, renders=True):
+    def unit(label):
         return SimpleNamespace(
             schedule_transition_warm_step=lambda name, params, reporter, ticket:
                 (requested.append((label, name, ticket)) or True),
-            request_transition_warm_frame=lambda callback, *args:
-                (frames.append((label, callback, args)) or True) if renders else False,
             cancel_transition_warm_up=lambda: cancelled.append(label),
         )
     owner.displays = [unit('D0'), unit('D1')]
     owner._idle_warm_order = tuple(owner.displays)
-    owner._unit = unit
-    owner._clock = clock
-    return owner, requested, frames, cancelled
+    return owner, requested, deferred, cancelled
 
 
-def _frame(frames, clock, advance=0.0):
-    """Deliver the display's next swapped frame to the pending one-shot request."""
-    clock[0] += advance
-    _label, callback, args = frames.pop(0)
-    callback(*args)
-
-
-def test_idle_gl_preparation_serializes_displays_and_steps_on_rendered_frames():
-    owner, requested, frames, _ = _harness()
+def test_idle_gl_preparation_serializes_displays_and_steps():
+    owner, requested, deferred, _ = _harness()
     owner._arm_next_idle_warm_step()
-    assert [f[0] for f in frames] == ['D0'] and not requested   # nothing runs without a frame
-    _frame(frames, owner._clock, 0.05)                           # a frame inside the spacing window
-    assert not requested and [f[0] for f in frames] == ['D0']    # ...only waits for the next one
-    _frame(frames, owner._clock, 0.2)
-    assert [r[0] for r in requested] == ['D0'] and not frames    # exactly one step per frame edge
+    assert len(deferred) == 1 and deferred[0][0] == 200
+    assert not requested
+    deferred.pop(0)[1]()
+    assert [r[0] for r in requested] == ['D0']
     owner._on_idle_warm_step_finished(requested[-1][2], False)
-    assert len(frames) == 1 and len(requested) == 1              # the next step waits for another frame
-    _frame(frames, owner._clock, 0.01)
-    assert len(requested) == 1                                   # too soon after the last step
-    _frame(frames, owner._clock, 0.25)
+    deferred.pop(0)[1]()
     assert [r[0] for r in requested] == ['D0', 'D0']
     owner._on_idle_warm_step_finished(requested[-1][2], True)
-    _frame(frames, owner._clock, 0.25)
-    assert [r[0] for r in requested] == ['D0', 'D0', 'D1']       # display order, never overlapping
+    deferred.pop(0)[1]()
+    assert [r[0] for r in requested] == ['D0', 'D0', 'D1']
     owner._on_idle_warm_step_finished(requested[-1][2], True)
-    assert not frames and owner._idle_warm_seed is None
+    assert not deferred and owner._idle_warm_seed is None
 
 
-def test_negative_control_without_spacing_the_first_frame_would_admit_a_step():
-    """The spacing assertion above discriminates: a zero spacing admits on the first frame."""
-    owner, requested, frames, _ = _harness(min_spacing_s=0.0)
-    owner._arm_next_idle_warm_step()
-    _frame(frames, owner._clock, 0.0)
-    assert [r[0] for r in requested] == ['D0']
-
-
-def test_a_display_that_renders_no_frames_is_skipped_not_waited_for():
-    owner, requested, frames, _ = _harness()
-    owner.displays = [owner._unit('D0', renders=False), owner._unit('D1')]
-    owner._idle_warm_order = tuple(owner.displays)
-    owner._arm_next_idle_warm_step()
-    assert [f[0] for f in frames] == ['D1'] and owner._idle_warm_index == 1
-    _frame(frames, owner._clock, 0.25)
-    assert [r[0] for r in requested] == ['D1']
-
-
-def test_busy_transition_new_generation_and_reservation_cancel_pending_frames():
+def test_busy_transition_new_generation_and_reservation_cancel_deferred_jobs():
     for mutation in ('busy', 'generation', 'seed', 'retirement'):
-        owner, requested, frames, cancelled = _harness()
+        owner, requested, deferred, cancelled = _harness()
         owner._arm_next_idle_warm_step()
         if mutation == 'busy': owner._transition_work_pending = True
         if mutation == 'generation': owner._runtime_generation = 4
         if mutation == 'seed': owner._next_batch_seed = 18
         if mutation == 'retirement': owner._retired = True
-        _frame(frames, owner._clock, 0.5)
-        assert not requested and not frames, mutation
+        deferred.pop(0)[1]()
+        assert not requested, mutation
         owner._cancel_idle_transition_warmup()
         assert len(cancelled) == 2
 
 
 def test_retired_result_cannot_start_another_display():
-    owner, requested, frames, _ = _harness()
+    owner, requested, deferred, _ = _harness()
     owner._arm_next_idle_warm_step()
-    _frame(frames, owner._clock, 0.25)
+    deferred.pop(0)[1]()
     ticket = requested[-1][2]
     owner._cancel_idle_transition_warmup()
     owner._on_idle_warm_step_finished(ticket, True)
-    assert not frames and len(requested) == 1
-
-
-def test_a_stale_frame_request_fails_its_serial_fence():
-    owner, requested, frames, _ = _harness()
-    owner._arm_next_idle_warm_step()
-    stale = frames.pop(0)
-    owner._cancel_idle_transition_warmup()
-    stale[1](*stale[2])
-    assert not requested and not frames
+    assert not deferred and len(requested) == 1
 
 
 def test_preparation_does_not_schedule_repaint_or_rely_on_frame_signals():
@@ -192,12 +145,36 @@ def test_render_item_imports_direct_signal_connection_authority():
     assert 'Qt.ConnectionType.DirectConnection' in source
 
 
-def test_idle_continuation_is_the_bound_manager_method_and_owns_no_timer():
-    owner, requested, frames, _ = _harness()
-    owner._arm_next_idle_warm_step()   # the harness's scheduler raises if anything asks for a timer
-    callback, args = frames[0][1], frames[0][2]
+def test_cancel_releases_existing_delayed_one_shot():
+    owner, requested, deferred, cancelled = _harness()
+    released = []
+    class Handle:
+        active = True
+        def cancel(self): released.append(True)
+    owner._thread_manager.single_shot = lambda ms, fn, *args: (deferred.append((ms, lambda: fn(*args))) or Handle())
+    owner._arm_next_idle_warm_step()
+    assert owner._idle_warm_shot is not None
+    owner._cancel_idle_transition_warmup()
+    assert released == [True] and owner._idle_warm_shot is None
+    # A closure already delivered to an event queue still fails its generation fence.
+    deferred.pop()[1]()
+    assert not requested
+
+
+def test_idle_continuations_are_bound_to_generation_owned_manager():
+    """R138 guard: no anonymous callback may escape the timer-generation registry."""
+    owner, requested, deferred, _ = _harness()
+    calls = []
+    def shot(ms, fn, *args):
+        calls.append((ms, fn, args))
+        return SimpleNamespace(active=True)
+    owner._thread_manager.single_shot = shot
+    owner._arm_next_idle_warm_step()
+    assert len(calls) == 1
+    delay, callback, args = calls[0]
+    assert delay == 200
     assert getattr(callback, '__self__', None) is owner
-    assert callback.__name__ == '_on_idle_warm_frame'
+    assert callback.__name__ == '_admit_idle_warm_step'
     assert args == (owner._idle_warm_serial,)
     assert not requested
 
@@ -211,62 +188,13 @@ def test_prefetch_stagger_continuation_is_generation_owned():
     assert 'threading.Timer(' not in method
 
 
-_TIMER_MARKERS = ('single_shot', 'QTimer', 'threading.Timer', 'startTimer', 'schedule_recurring')
-
-
-def _timer_markers_in(source):
-    return [marker for marker in _TIMER_MARKERS if marker in source]
-
-
-def _warm_up_owner_source(manager_source):
-    start = manager_source.index('def _arm_next_idle_warm_step(')
-    end = manager_source.index('def _prepare_transition_run_geometry(')
-    return manager_source[start:end]
-
-
-def test_idle_preparation_owns_no_timer():
-    assert _timer_markers_in(_warm_up_owner_source(MANAGER.read_text(encoding='utf-8'))) == []
-
-
-def test_negative_control_the_timer_scan_flags_the_retired_design():
-    retired = (
-        "def _arm_next_idle_warm_step(self):\n"
-        "    handle = self._thread_manager.single_shot(200, self._admit_idle_warm_step, 1)\n"
-        "def _prepare_transition_run_geometry(self):\n    pass\n"
-    )
-    assert _timer_markers_in(_warm_up_owner_source(retired)) == ['single_shot']
-
-
-def test_scene_controller_owns_only_a_one_shot_frame_continuation():
-    controller = (ROOT / 'rendering' / 'quick' / 'scene_controller.py').read_text(encoding='utf-8')
-    method = controller.split('def request_transition_warm_frame(', 1)[1].split('def cancel_transition_warm_up(', 1)[0]
-    assert '.update(' not in method and 'QTimer' not in method and 'single_shot' not in method
-    swapped = controller.split('def _on_frame_swapped(', 1)[1].split('def _on_scene_graph_invalidated(', 1)[0]
-    assert 'self._run_warm_frame_request()' in swapped
-
-
-def test_warm_frame_request_runs_once_on_the_next_swap_and_can_be_cancelled():
-    from rendering.quick.scene_controller import QuickSceneController
-    calls = []
-    controller = QuickSceneController.__new__(QuickSceneController)
-    controller._warm_frame_request = None
-    controller._readiness = SimpleNamespace(admission_open=True)
-    window = SimpleNamespace(isExposed=lambda: True)
-    controller._background_item = SimpleNamespace(window=lambda: window, cancel_warm_up=lambda: None)
-    assert controller.request_transition_warm_frame(lambda *a: calls.append(a), 7)
-    assert calls == []
-    controller._run_warm_frame_request()
-    controller._run_warm_frame_request()
-    assert calls == [(7,)]
-    assert controller.request_transition_warm_frame(lambda *a: calls.append(a), 8)
-    controller.cancel_transition_warm_up()
-    controller._run_warm_frame_request()
-    assert calls == [(7,)]
-    window.isExposed = lambda: False
-    assert controller.request_transition_warm_frame(lambda *a: calls.append(a), 9) is False
-    controller._readiness = SimpleNamespace(admission_open=False)
-    window.isExposed = lambda: True
-    assert controller.request_transition_warm_frame(lambda *a: calls.append(a), 9) is False
+def test_idle_preparation_uses_no_unowned_timer_closures():
+    manager = MANAGER.read_text(encoding='utf-8')
+    method = manager.split('def _arm_next_idle_warm_step(', 1)[1].split('def _on_idle_warm_step_finished(', 1)[0]
+    assert 'self._admit_idle_warm_step' in method
+    assert 'def _admit(' not in method
+    assert 'threading.Timer(' not in method
+    assert 'QTimer.singleShot(' not in method
 
 
 def _qt_free_render_job_class():
