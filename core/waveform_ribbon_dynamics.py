@@ -158,10 +158,12 @@ BREATHING_HEARD_RETURN = 1.5
 # on .8-2.9% (lead review captures, 640x560).
 FIXED_RESPONSE = {'height':(1.2,.75),'lift':(1.2,.82)}
 FIXED_RESPONSE_DEFAULT, RESPONSE_FIXED_KNEE, RESPONSE_FIXED_CEILING = (1.25,.86), .8, .92
-# The remembered peak also deepened the dip after every swell (a swell raised the peak, the next moments were scaled
-# down): that, not taller crests, is where its 3 s contrast came from. The fixed response matches it with a dip below
-# Breathing's phrase-scale mean, widened by PHRASE_DIP (crests are never widened, so nothing rises toward the card's top).
-PHRASE_DIP = 1.
+# The remembered peak's fast reach (.5 s) and slow release (30 s) also widened every phrase: a swell overshot before the
+# peak caught up and the moments after it were scaled down. A static curve fitted to its levels kept 85-91% of its 3 s
+# contrast; the fixed response widens a phrase about Breathing's 3 s mean of the drive (which learns only from heard
+# music) by PHRASE_DIP below it and PHRASE_RISE above it, eased again under RESPONSE_FIXED_CEILING (chain7: 3 s view
+# contrast 97-103% of main on Presets 1/3/4/7; Pulse Strength above .9 in loud passages 9-10% against main's 10-15%).
+PHRASE_DIP, PHRASE_RISE = 1., 1.5
 # Kick Accent (operator 6 Nov: "many sustained kicks ignored (consider maybe increasing particle count at the sustained
 # points or rotation speed? Something for a sense of them?)"). In a sustained loud passage the geometry has little
 # headroom: the bend drive (it sets Pulse Strength) sits near its top, so a kick's swell barely rises above the swells
@@ -262,15 +264,19 @@ def span(value, low, high):
     return position
 
 
+def ease_top(value):
+    """Above RESPONSE_FIXED_KNEE an exponential approach to RESPONSE_FIXED_CEILING that never flattens on it."""
+    if value > RESPONSE_FIXED_KNEE:
+        room = RESPONSE_FIXED_CEILING-RESPONSE_FIXED_KNEE
+        value = RESPONSE_FIXED_KNEE+room*(1.-math.exp(-(value-RESPONSE_FIXED_KNEE)/room))
+    return value
+
+
 def fixed_response(target, key):
     """A routed geometry target on the fixed scale -> drive target: gain x target^curve (FIXED_RESPONSE per drive) to
     RESPONSE_FIXED_KNEE, then an exponential approach to RESPONSE_FIXED_CEILING that never flattens on it."""
     gain,curve = FIXED_RESPONSE.get(key,FIXED_RESPONSE_DEFAULT)
-    value = gain*max(0.,target)**curve
-    if value > RESPONSE_FIXED_KNEE:
-        room = RESPONSE_FIXED_CEILING-RESPONSE_FIXED_KNEE
-        value = RESPONSE_FIXED_KNEE+room*(1.-math.exp(-(value-RESPONSE_FIXED_KNEE)/room))
-    return unit(value)
+    return unit(ease_top(gain*max(0.,target)**curve))
 
 
 def follower(value, target, dt, attack, release):
@@ -616,10 +622,12 @@ class WaveformDynamics:
                     # A passage returning from a break is not widened while it returns (its deficit against the held
                     # mean is the silence, not a phrase): the contrast comes back with the learning rate.
                     target = unit(base+(target-base)*(1.+BREATHING_CONTRAST*softness*learn))
-                if not c.adaptive_response and target<base:
-                    # The fixed response lets go below the phrase mean (PHRASE_DIP): a dip after a swell reads as one,
-                    # as the remembered peak's did, without raising any crest (see PHRASE_DIP).
-                    target = unit(base-(base-target)*(1.+PHRASE_DIP*learn))
+                if not c.adaptive_response and (target<base or PHRASE_RISE):
+                    # The fixed response widens a phrase about its mean (PHRASE_DIP below it, PHRASE_RISE above it,
+                    # eased again under the ceiling), as the remembered peak's fast reach and slow release did.
+                    widen = PHRASE_DIP if target<base else PHRASE_RISE
+                    target = base+(target-base)*(1.+widen*learn)
+                    target = unit(ease_top(target) if target>base else target)
             if key in SMOOTH_TARGETS:
                 # Geometry never snaps (operator, 5 Nov: "twitch"): two cascaded followers, so the drive's VELOCITY
                 # is continuous. A single 45 ms first-order attack made lift/bend/width/twist jump on every transient
