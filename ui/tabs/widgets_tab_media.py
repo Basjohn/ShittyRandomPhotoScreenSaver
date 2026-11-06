@@ -53,6 +53,7 @@ from ui.tabs.media.bubble_settings_binding import (
     load_bubble_mode_settings,
 )
 from ui.tabs.media.spec_mode_builder import collect_spec_mode_settings, load_spec_mode_settings
+from ui.tabs.widget_surface_material_row import add_surface_material_row
 from ui.tabs.media.visualizer_mode_binding import (
     collect_visualizer_mode_selection,
     collect_visualizer_preset_indices,
@@ -441,6 +442,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_show_background.setChecked(tab._default_bool('media', 'show_background'))
     tab.media_show_background.stateChanged.connect(tab._save_settings)
     appearance_layout.addWidget(tab.media_show_background)
+    add_surface_material_row(tab, _aligned_row(appearance_layout, "Surface Material:"), "media")
 
     # Background sub-controls container (shown only when show_background is checked)
     tab._media_bg_container = QWidget()

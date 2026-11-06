@@ -165,6 +165,7 @@ Item {
 
             ShadowedText {
                 id: labelText
+                surfacePlateEnabled: false   // drawn on the header's own fill
                 objectName: header.textObjectName
                 // Header labels are presentation chrome, not content metadata: one
                 // shared all-caps language regardless of provider/source casing.
@@ -184,6 +185,7 @@ Item {
 
             ShadowedText {
                 id: secondaryText
+                surfacePlateEnabled: false   // drawn on the header's own fill
                 objectName: header.secondaryTextObjectName
                 visible: text.length > 0
                 text: header.secondaryLabel

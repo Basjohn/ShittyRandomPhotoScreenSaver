@@ -134,6 +134,29 @@ luminance contrast. The backdrop is heavily blurred, so the adjustment is smooth
 layer slightly darker than the base behind controls); the direction follows the text so a dark-text light theme is
 never darkened under its own text.
 
+**Per text run (light-theme pass, 6 Nov).** The card-wide layer works against the theme's main text colour at 3:1; on
+the light theme the small, muted runs (Reddit age tags, System Stats labels, the weather details) fell to 2.1-2.8:1 on
+Glass, Frosted and Smoked over busy wallpaper. Every `ShadowedText` run on a card whose material is active now loads
+a `TextLegibilityPlate` behind its glyph box (`ShadowedText.qml`, `TextLegibilityPlate.qml`,
+`shaders/text_legibility.frag`):
+
+- it evaluates the card surface **exactly**: the whole surface computation is one function (`surfaceAt`, the
+  `SURFACE` block) kept identical in `surface_material.frag` and `text_legibility.frag`, evaluated at the run's own
+  card-local position (ShadowedText walks its parents' x/y up to the card, re-evaluated only when something moves);
+- it measures this run's own colour against that surface in WCAG relative luminance and draws the smallest overlay
+  that reaches 4.5:1 for text under 18 px and 3:1 above (with a 10 % margin for glyph antialiasing), on the side the
+  surface already is (a mid-luminance accent label on a dark card darkens, never lightens). Where the surface already
+  meets the floor the plate draws nothing, so large text and calm regions are untouched;
+- it samples the same shared backdrop: no capture, no extra blur, no per-frame work. A run on its own fill (the
+  branded header labels) opts out with `surfacePlateEnabled: false`.
+
+On a material the light-theme soft text halo (a blurred `MultiEffect` silhouette) is not drawn: over a colourful blur it
+reads as haze around the glyphs, and the plate now carries the contrast. Hard (dark-theme) shadows are unchanged.
+
+**Edges (light themes).** Inside the border the surface draws a dark hairline and, below it, a soft highlight, so the
+pale light-theme border reads as an edge over busy wallpaper. It scales with the tint's luminance and is exactly zero
+on dark tints. The outer card shadow (the shared shadow lane, R-74) is unchanged.
+
 ### 3.4 The Visualizer card and the System Volume OSD are excluded
 
 The Visualizer card keeps its Visualizer-authored Fill/Border/Opacity (outside the Widget Theme and its reset), its
@@ -174,9 +197,12 @@ ordinary card and the Context Menu inherit it; an explicit per-widget value beat
 seam: `family_binder` passes every ordinary family's style through `with_surface_material` (and Games You Follow's
 visual style), which also resolves the active Widget Theme's `card.text` as the legibility reference.
 
-Not yet built: the per-family **Surface Material** row on each family page. The resolver already honours
-`widgets.<id>.surface_material`, but no family declares the key in canonical defaults, so a family page save would not
-keep it. Tracked in `Current_Plan.md`. The retired
+Every card family declares `surface_material: inherit` in canonical defaults (Clock, Weather, Media, Reddit, Gmail,
+System Stats, every Feed, and the four Steam cards), so a page save keeps it (`_widget_save_base` preserves canonical
+keys a page does not expose). Each family page shows a **Surface Material** row beside its background controls
+(`ui/tabs/widget_surface_material_row.py`: Inherit plus the six materials), loaded and saved through the existing
+descriptor load and save edges. Clock 2/3 and Reddit 2 follow their first card's appearance, so they resolve through
+`clock` and `reddit`. The System Volume OSD stays Normal. The retired
 Sep 2026 keys (`card_material_override`, `default_card_material_mode`) remain stripped by
 `core/settings/widget_theme_input_compat.py`; they are not revived or mapped.
 
@@ -224,6 +250,23 @@ at rest the node is not traversed.
 **Card quads**, steady, still wallpaper, five cards on a 1600x900 scene: Normal frame 0.055 ms GPU. Each material
 adds 0.006-0.008 ms (Acrylic +0.006, Glass +0.007, Frosted +0.008, Mica +0.006, Smoked +0.008), with no per-frame
 Python.
+
+**Legibility, per text run** (`tools/surface_material_capture.py --legibility` and `--compare-legibility`): the
+WCAG contrast of each run's own colour against the pixels under its glyphs (the frame re-rendered with all glyphs and
+shadows hidden), 5th percentile over the glyph pixels, worst run over three wallpapers including the busiest:
+
+| Material | Light theme small text, before → after | Dark theme small text, before → after |
+| --- | --- | --- |
+| Normal | 4.27 → 4.27 (the theme's own muted label) | 5.24 → 5.24 |
+| Acrylic | 3.89 → 4.89 | 4.64 → 4.93 |
+| Glass | 2.11 → 4.58 | 3.37 → 4.93 |
+| Frosted | 2.64 → 4.91 | 3.67 → 4.92 |
+| Mica | 4.47 → 4.90 | 5.02 → 5.19 |
+| Smoked | 2.70 → 4.90 | 4.71 → 5.01 |
+
+Large text stays at 4.0 or better everywhere (floor 3:1). Normal frames differ from before only by the renderer's
+run-to-run jitter (at most 2 levels on about 1,200 pixels, the same signature as two runs of identical code); dark
+material frames are unchanged outside the text runs.
 
 **Dormancy.** The full overhead benchmark against `2026-11-06_90f65ee9` (baseline `2026-11-06_e61647f5.json`) shows
 every transition and Visualizer case unchanged in GL and Python calls except Shockwave Grid and Extruded Bubble. Their
