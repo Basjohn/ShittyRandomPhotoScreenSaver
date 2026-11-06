@@ -22,6 +22,7 @@ from core.settings.visualizer_mode_settings import (
 from ui.studio.adapter import (
     RECORDED, REFERENCE, SYNTHETIC, RenderCard, StudioCapabilities, StudioFixture, StudioModeAdapter,
 )
+from ui.studio.exact_replay import ExactReplay
 from ui.studio.schema import (
     CHOICE, COLOUR, COUNT, GRADIENT, QUIET_PEAK, SCALAR, SWITCH, CardSpec, LifecycleSpec, SceneObject,
     RESPONSE_PANEL, StudioPreset, StudioProperty, StudioSchema, Workspace, WorkspaceColumn,
@@ -611,8 +612,32 @@ def advance_options(runtime, values: Mapping[str, Any], extent=None) -> dict[str
     return options
 
 
-class WaveformStudioEvaluator:
-    """Own runtime + own dynamics, stepped deterministically through one fixture's inputs."""
+class _RuntimeCheckpoint:
+    """The Waveform frame runtime's step state (``replay_engine.StepState`` over the runtime itself) and the
+    configuration it was stepped with; the compiled configuration is shared, not copied."""
+
+    def __init__(self, evaluator: "WaveformStudioEvaluator") -> None:
+        from ui.studio.replay_engine import StepState
+        self._evaluator = evaluator
+        self._configuration, self._options = evaluator._configuration, dict(evaluator._options)
+        self._state = StepState(None, keep=(evaluator._configuration,), owners=(evaluator._runtime,))
+
+    def restore(self) -> None:
+        self._state.restore()
+        self._evaluator._configuration, self._evaluator._options = self._configuration, dict(self._options)
+
+
+def _signature(logical: Mapping[str, Any], options: Mapping[str, Any]) -> str:
+    """What the logical history depends on: the logical values and the advance options (view span, zoom)."""
+    import json
+    return json.dumps([logical, options], sort_keys=True, default=repr)
+
+
+class WaveformStudioEvaluator(ExactReplay):
+    """Own runtime + own dynamics, stepped deterministically through one fixture's inputs. The exact history, its
+    checkpoints and the frame budget are the shared ``ui.studio.exact_replay.ExactReplay``: a commit replays from the
+    latest checkpoint of its values (else the fixture start) within the Studio's frame budget, the last frame shown
+    staying on screen until the exact replay lands."""
 
     def __init__(self) -> None:
         table, _duration = _synthetic_table()
@@ -620,16 +645,19 @@ class WaveformStudioEvaluator:
         self._recorded: dict[str, RecordedInputs] = {}
         self._inputs: SyntheticInputs | RecordedInputs = SyntheticInputs("mid")
         self._runtime = None
-        self._iterator = None
-        self._pending: AdvanceInput | None = None
-        self._time = -math.inf
-        self._last = None
-        self._last_step = None
         self._configuration = None
+        self._options: dict = {}
+        self._resolved = None              # (logical values, advance options, signature) of ``_revision``
+        self._revision = None
+        self._origin = 0.0
+        self._presented = None             # the logical snapshot of the frame shown (``restyle`` re-presents it)
         # Production always has a card extent (the canonical baseline until a CUSTOM edge drag commits one).
         from widgets.spotify_visualizer.presentation_geometry import CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE
         self._extent = tuple(float(v) for v in CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE)
         self.steps_run = 0
+        self.rewinds = 0
+        self._shown = None
+        self._reset_history()
 
     def set_viewport_extent(self, extent) -> None:
         """The card world extent the frame is presented at: the pulse is born at that camera's visible edge (as the
@@ -640,7 +668,6 @@ class WaveformStudioEvaluator:
         extent = (float(extent[0]), float(extent[1]))
         if extent != self._extent:
             self._extent = extent
-            self._revision = None
             self._restart()
 
     def fixtures(self) -> tuple[StudioFixture, ...]:
@@ -659,86 +686,102 @@ class WaveformStudioEvaluator:
         else:
             self._inputs = SyntheticInputs(fixture_id)
         self._restart()
+        self._shown = self._presented = None
         return self.fixture
 
     def _restart(self) -> None:
-        from widgets.spotify_visualizer.waveform_ribbon_frame_runtime import WaveformRibbonFrameRuntime
+        """A new history (lifecycle: a new fixture or extent); the frame shown stays until the replay lands."""
         if self._runtime is not None:
             self._runtime.retire()
-        self._runtime = WaveformRibbonFrameRuntime()
-        self._iterator = iter(self._inputs.steps(self.fixture.duration))
-        self._pending = None
-        self._time = -math.inf
-        self._last = None
-        self._last_step = None
+        self._runtime = None
         self._configuration = None
-        self._approximate = False     # history was stepped with values other than the current ones
-        self._revision = None
-        self._options = {}
+        self._resolved = self._revision = None
+        self._reset_history()
+
+    # replay hooks (ExactReplay) ------------------------------------------------
+    def _tick_time(self, step: AdvanceInput) -> float:
+        return step.now - self._origin
+
+    def _configure(self) -> None:
+        logical, options, _signature_ = self._resolved
+        self._configuration = self._runtime.configure(logical)
+        self._options = options
+
+    def _step(self, step: AdvanceInput, onsets=None) -> None:
+        self._last = self._runtime.advance(
+            onsets=step.onsets if onsets is None else onsets, now_ts=step.now, playing=step.playing,
+            identity=step.identity, source_identity=step.source_identity, controls=self._configuration.controls,
+            body_bands=step.body_bands, intensity=step.intensity, loudness=step.loudness, presence=step.presence,
+            **self._options)
+        self._last_tick = step
+        self.steps_run += 1
+
+    def _restep(self) -> None:
+        # Production's live-edit behaviour: the new controls re-publish the current step (dt = 0, no onsets).
+        self._step(self._last_tick, onsets=())
+
+    def _capture(self) -> _RuntimeCheckpoint:
+        return _RuntimeCheckpoint(self)
+
+    def _rewind_to_start(self, values: Mapping[str, Any], signature) -> None:
+        self._runtime.reset()              # the production runtime's own reset: the state of a new runtime
+        self._configure()
+        self._signature = signature
+
+    def _restyle(self, values: Mapping[str, Any], signature=None) -> None:
+        self._configure()
+        self._signature = signature
+
+    def _can_pause(self) -> bool:
+        return self._shown is not None or (self._last is not None and self._last.ready)
+
+    def _present(self, values: Mapping[str, Any]):
+        if self._last is None:
+            raise RuntimeError("Fixture produced no logical step")
+        if not self._last.ready:
+            raise RuntimeError("Waveform history is not primed at this time; extend the fixture pre-roll")
+        self._presented = self._last
+        return build_frame(self._configuration, self._last, values)
 
     def evaluate(self, time: float, values: Mapping[str, Any], *, exact: bool = True, revision: Any = None):
         """The frame ``time`` seconds into the fixture under ``values``.
 
         ``exact`` (the default): the production runtime replayed from the fixture start with
-        these values, so equal fixture/values/time always give equal bytes. ``exact=False``
-        is the live-gesture path: a values change re-publishes the current step with the new
-        controls (production's live-edit behaviour: dt = 0, no time moves) instead of a replay.
-        ``revision``: an optional caller token that changes whenever ``values`` change; an equal
-        token skips re-deriving the configuration (the per-frame cost while playing)."""
+        these values (from a checkpoint of them when one is at or before ``time``), so equal
+        fixture/values/time always give equal bytes; with a frame budget the replay may take
+        several evaluations (``converging``), the last frame shown staying meanwhile.
+        ``exact=False`` is the live-gesture path: a values change re-publishes the current step
+        with the new controls (production's live-edit behaviour: dt = 0, no time moves) instead
+        of a replay. ``revision``: an optional caller token that changes whenever ``values``
+        change; an equal token skips re-deriving the configuration (the per-frame cost while playing)."""
+        deadline = self._deadline()
         time = max(0.0, min(float(time), self.fixture.duration))
-        if self._runtime is None or time < self._time:
-            self._restart()
-        if revision is not None and revision == self._revision and self._configuration is not None:
-            configuration, options = self._configuration, self._options
-        else:
-            configuration = self._runtime.configure(_logical_values(values))
+        fresh = self._runtime is None
+        if fresh:
+            from widgets.spotify_visualizer.waveform_ribbon_frame_runtime import WaveformRibbonFrameRuntime
+            self._runtime = WaveformRibbonFrameRuntime()
+            self._ticks = tuple(self._inputs.steps(self.fixture.duration))
+            self._origin = getattr(self._inputs, "_origin", 0.0)
+        if revision is None or revision != self._revision or self._resolved is None:
+            logical = _logical_values(values)
             options = advance_options(self._runtime, values, self._extent)
-        self._revision, self._options = revision, options
-        changed = self._configuration is not None and configuration is not self._configuration
-        if exact and (changed or self._approximate):
-            self._restart()
-            configuration = self._runtime.configure(_logical_values(values))
+            self._resolved = (logical, options, _signature(logical, options))
             self._revision = revision
-        elif changed:
-            self._approximate = True
-            if self._last_step is not None and time == self._time:
-                step = self._last_step
-                self._last = self._runtime.advance(onsets=(), now_ts=step.now, playing=step.playing,
-                    identity=step.identity, source_identity=step.source_identity, controls=configuration.controls,
-                    body_bands=step.body_bands, intensity=step.intensity, loudness=step.loudness,
-                    presence=step.presence, **options)
-                self.steps_run += 1
-                self._configuration = configuration
-                return build_frame(configuration, self._last, values)
-        self._configuration = configuration
-        origin = getattr(self._inputs, "_origin", 0.0)
-        while True:
-            step = self._pending if self._pending is not None else next(self._iterator, None)
-            self._pending = None
-            if step is None or step.now - origin > time + 1e-9:
-                self._pending = step
-                break
-            self._last = self._runtime.advance(onsets=step.onsets, now_ts=step.now, playing=step.playing,
-                identity=step.identity, source_identity=step.source_identity, controls=configuration.controls,
-                body_bands=step.body_bands, intensity=step.intensity, loudness=step.loudness,
-                presence=step.presence, **options)
-            self._last_step = step
-            self.steps_run += 1
-        self._time = time
-        if self._last is None:
-            raise RuntimeError("Fixture produced no logical step")
-        if not self._last.ready:
-            raise RuntimeError("Waveform history is not primed at this time; extend the fixture pre-roll")
-        return build_frame(configuration, self._last, values)
+        signature = self._resolved[2]
+        if fresh:
+            self._configure()
+            self._signature = signature
+        return self._replay(time, values, signature, exact=exact, deadline=deadline)
 
     def restyle(self, values: Mapping[str, Any]):
         """The instant last evaluated, re-presented under other ``values`` without stepping or replaying:
         the production scene construction (``CompiledWaveformSettings.scene``) applied to the same logical
         snapshot. Truthful for render-side controls (world, material, colour); None before any evaluation."""
         from widgets.spotify_visualizer.waveform_ribbon_parameters import CompiledWaveformSettings
-        if self._last is None or not self._last.ready:
+        shown = self._presented
+        if shown is None or not shown.ready:
             return None
-        return build_frame(CompiledWaveformSettings(_logical_values(values)), self._last, values)
+        return build_frame(CompiledWaveformSettings(_logical_values(values)), shown, values)
 
     def timeline(self, samples: int = 240) -> list[float]:
         """The selected input's energy over its duration (0..1), for the transport's scrub track."""
@@ -781,8 +824,8 @@ class WaveformStudioEvaluator:
     def release(self) -> None:
         if self._runtime is not None:
             self._runtime.retire()
-        self._runtime = self._iterator = self._pending = self._last = self._last_step = None
-        self._configuration = None
+        self._runtime = self._configuration = self._shown = self._presented = None
+        self._reset_history()
 
 
 # ------------------------------------------------------------------ presentation + handles

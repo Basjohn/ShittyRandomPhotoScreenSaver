@@ -583,17 +583,15 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   (before/after, Default Dark Acrylic, Matte Graphite Normal, Pearl Blush light Glass; 8x crops). Operator to check
   on screen: the live Glass/Acrylic composition of the Qt Quick window (first use of the AccentPolicy material on an
   alpha OpenGL window; the evidence only simulates the blur), snap/resize/maximise by hand, and the panel opacity
-  floor (0.88) and shadow strength on light themes. Two side defects seen in that evidence, both already in the
-  before renders: (a) Bubble's presented scene differs under the light Pearl Blush theme (max 7-9 levels over ~37k
-  pixels vs Default Dark, before and after this change), though the scene should never follow the Settings theme and
-  no test compares scene pixels across themes; (b) on light themes the signal-trace cards keep the dark viewport
-  colour and their channel labels are barely legible.
+  floor (0.88) and shadow strength on light themes. Light-theme instrument wells (trace cards, response curve,
+  transport bar) now sit on the theme's input surface (evidence `.artifacts/evidence/studio_followups/legibility/`,
+  Pearl Blush and Default Dark, before/after): operator look pending.
 - [ ] **Studio drag lag fixed (6 Nov), awaiting the operator's feel check.** Drags preview once per frame and
   re-show only the dragged key (Visualizer_Studio.md "Drags are batched"); evidence
-  `.artifacts/evidence/studio_drag/` (per move 56 ms -> 0.07 ms on Waveform). Two per-frame costs remain, both
-  outside the drag path: Waveform's exact replay on release runs in one frame (~120 ms, no frame budget or
-  checkpoints like Spectrum's), and Spectrum's live restyle builds the production settings model per new value
-  (~14 ms per frame while dragging a mode-owned key).
+  `.artifacts/evidence/studio_drag/` (per move 56 ms -> 0.07 ms on Waveform). Side defect (not measured): Bubble's,
+  Extruded Bubble's and Sphere's evaluators still replay exactly in one evaluation from the fixture start, without the
+  frame budget and checkpoints Waveform and the engine-answer modes now share (`ui/studio/exact_replay.py`); measure
+  with `tools/studio_drag_profile.py` and move them onto `ExactReplay` where a release stalls.
 
 ## Operator execution and evidence rules
 
