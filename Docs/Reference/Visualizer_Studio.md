@@ -146,8 +146,12 @@ is optional and defaults to "not offered":
   percentile is 4-8 dB), no spectral-flux burst follows it, and the beat grid steps -25 / -47 / -85 ms against the
   loops' own 95th percentile of 65 / 302 / 94 ms (Rag Doll has no steady beat; Growing Pains' triple hit wanders). The
   two sources the crossfade blends sit 0.6 ms (Growing Pains), 12 ms (Rag Doll) and 33 ms (Human, a weak groove) apart on
-  the beat grid. The picture: at the wrap the frame-to-frame step of each mode's state is 0.04-3.6 against ordinary
-  p95 of 0.08-71 and the old restart at zero is 9-299 times larger, for all nine recorded-input modes.
+  the beat grid. The picture: at the wrap the frame-to-frame step of each mode's state (Growing Pains) is 0.06-1.8 against
+  ordinary 95th percentiles of 0.09-71, and the old restart at zero is 21-299 times larger for eight of the nine
+  recorded-input modes (Bubble 29x, Sphere 73x, Extruded Bubble 299x, Waveform 48x, Spectrum 225x, Extruded Spectrum
+  229x, DevCurve 21x, Neon Lake 167x). Oscilloscope's carried beam state (afterglow, ghosts, flare, drive, tone) settles
+  inside the lead-in, so a restart no longer moves it (its jump was the trace, which the baked audio now keeps
+  continuous); DevCurve's travelling highlights respawn when their own travel ends and are left out of the step.
   Evidence: `tools/studio_clip_loop_report.py` (audio seam), `tools/studio_clip_loop_wrap.py` (the picture at the
   wrap for all nine Studios with recorded inputs), `tests/test_studio_clip_loop.py`.
 - **Recorded engine answers (engine-processed modes).** A mode whose step consumes the engine's *own processing*
