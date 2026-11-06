@@ -127,7 +127,7 @@ The open perceptual/freshness work is tracked only in the Physical acceptance ch
 - `rendering/quick/transitions/parameter_resolution.py` resolves settings, direction and seeds once before immutable `TransitionRequest` admission. `state.py` owns monotonic progress/exactly-once completion; effects never create clocks or CPU simulation loops.
 - `implementation_registry.py` lazily resolves implementations; `render_host.py` owns the context-local lifetime and inherited GL-state fence. The existing display render node remains the sole presentation surface.
 - `rendering/quick/transitions/implementations/block_spins.py` and `rendering/gl_programs/blockspin_program.py` prove mesh/depth resources inside Quick. Voxel Sphere is an independent consumer to inspect for small identical resource seams, not a transition foundation or base class.
-- Existing transition tests, `tools/qtquick_render_node_smoke.py` and `tools/qtquick_phase_c_effect_smoke.py` provide production host, endpoint, fence and real-GL seams.
+- Existing transition tests, `tools/qtquick_render_node_smoke.py` and `tools/qtquick_phase_c_effect_smoke.py` provide production host, endpoint, fence and real-GL seams. The render-node smoke calls `show_on_screen()` (a real window): it is an operator-run tool, never an agent probe or test; agents use the offscreen hosts in the transition tests and `tools/overhead_baseline.py` (doc sweep 6 Nov).
 
 ## Resource rules
 
