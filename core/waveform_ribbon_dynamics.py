@@ -958,12 +958,17 @@ class WaveformDynamics:
         former fixed +-TROUGH_VIEW (a large card's view reaches it); without a span exactly that fixed view."""
         if self._view_world is None:
             return np.abs(x)<TROUGH_VIEW,0.,TROUGH_VIEW
-        low,high = self._view_world
-        if self.direction < 0.:   # history axis -> world x is mirrored (Travel Direction)
-            low,high = -high,-low
-        waves = GROUP_WAVES if self.controls.pulse.mode=='Group Wave' else GEOM_WAVES   # the mode's own envelope
-        margin = TROUGH_LOOKAHEAD*self._blur_kernel(waves)[1]
-        low,high = max(-TROUGH_VIEW,low-margin),min(TROUGH_VIEW,high+margin)
+        key = (self._view_world,self.direction)
+        cached = getattr(self,'_trough_span',None)
+        # One solve per controls (by identity: they are frozen and replaced on change) / span / direction change.
+        if cached is None or cached[0] is not self.controls or cached[1]!=key:
+            low,high = self._view_world
+            if self.direction < 0.:   # history axis -> world x is mirrored (Travel Direction)
+                low,high = -high,-low
+            waves = GROUP_WAVES if self.controls.pulse.mode=='Group Wave' else GEOM_WAVES   # the mode's own envelope
+            margin = TROUGH_LOOKAHEAD*self._blur_kernel(waves)[1]
+            cached = self._trough_span = (self.controls,key,(max(-TROUGH_VIEW,low-margin),min(TROUGH_VIEW,high+margin)))
+        low,high = cached[2]
         return (x>low)&(x<high),.5*(low+high),.5*(high-low)
 
     def _height_shift(self,height,hang,room,x):
