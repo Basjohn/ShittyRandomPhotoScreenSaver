@@ -156,21 +156,27 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
-- [ ] **Neon Lake goal mocks (Presets 1-3, 6 Nov sixth pass, awaiting operator look):** darker mirror lake with a
-  longer Moon/Sun column and no swell wash, Preset 3's mid-lake blob fixed (mirror counted swell troughs as land),
-  navy Preset 1 sky with a shallower band and a soft blue stream upper left, even luminous Moon face, near ridges
-  that swell and fade along their length, Preset 3 cooler sky with stronger wisps and motion 0.232/255
-  (`Docs/Reference/Neon_Lake_Basin.md`, "Third" to "Sixth pass"). Still short of
-  `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`: the high-react look (vivid line mesh over the
-  lake, glowing island) is not reached on loud real music (1985_loud1: the lake barely changes; a squared
-  spectrum-energy term on the ripple network was tried and did nothing visible, reverted); Preset 1's lake is still
-  lighter than the mock's (p35 [28,30,65] vs [16,22,61]: bloom of the pink shore crest beside it) and its near dot
-  field is coarser than the mock's; the far-shore sawtooth and the crest before the lake are mesh silhouette (a
-  fine band to v 0.25 measured no gain); Preset 3 motion ideally toward 0.165. Side defect (pre-existing, found
-  6 Nov): at Depth Scale 1 + Horizon Thickness 3 over dunes seen grazing, the skyline's lifted copy shows over the
-  near land's own face as a broad translucent sheet (its 2% depth offset is less than the ground's recession over
-  the lift); fix in the skyline vertex depth, then tighten `tests/test_neon_ridge_shape.py` to those settings. Evidence:
-  `.artifacts/evidence/neon_lake/fidelity_20261105/pass6/` (triptych/, clips/*.webp, gpu_*.txt, overhead_*).
+- [ ] **Neon Lake goal mocks (Presets 1-3, 6 Nov seventh pass, awaiting operator look):** loud music now moves the
+  lake: every lake term read the display bars (midband >= 0.95 for 72-75% of every song), so loud and usual passages
+  drew the same lake; **Water Reaction** (Waves) reads the admitted waves on the fixed scale and lights a violet/cyan
+  ripple net, the shore, island glow and Moon path, and lets the ridges breathe with it (Preset 1 lake light range x4
+  on 1985_loud1, which is the quietest capture on the fixed scale); the skyline sheet at Depth Scale 1 + thickness 3
+  is fixed (`Docs/Reference/Neon_Lake_Basin.md`, "Third" to "Seventh pass"). Still short of
+  `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`: the mocks' high-react look is the whole scene,
+  not only the lake (saturated magenta land and dots, glowing near ridges ~2x ours, a flaring Moon): nothing outside
+  the water/ridge breath answers the music's level yet; the lake net leans cyan (P1 high lake mean [91,82,150] vs
+  [89,55,169]); Preset 3's high-react lake is lit swells with glints, which a net does not give (it runs at 0.25);
+  Preset 1's resting lake p35 [22,30,61] vs [17,28,69] is still a little red (near-ridge bloom); the near dot field
+  is coarser than the mock's (the mark lattice is the Scene3D tier's: a finer one costs vertices); the far-shore
+  sawtooth is the shoreline line itself (crest alpha 0 removes it; Shore Glow 0, a grazing-derivative fade and
+  per-fragment skyline classification do not); Preset 3 motion stays 0.231/255 (heavy1; all water motion off still
+  measures 0.160, so 0.165 means a still lake). Evidence: `.artifacts/evidence/neon_lake/fidelity_20261106/pass7/`
+  (final/, music/report/, clips/*.webp, gpu.txt, overhead.txt).
+- [ ] **Neon Lake camera step on real music (found 6 Nov, pass 7, pre-existing at a372f106):** Preset 1 on
+  1985_loud1 between 42.054 s and 42.075 s the whole land shifts ~8 px down in one frame and stays (mean step 8.5/255
+  against ~1.3; replay parameters and presentation identical across the two frames, Terrain Reaction bands smooth).
+  Find the owner (camera floor / reaction normalisation) with `tools/neon_lake_capture.py --clip ... --start 41.9
+  --duration 0.3 --fps 90 --all-frames`.
 
 - [ ] **Neon render tests load-sensitive under parallel runs (5-6 Nov):** `test_neon_lake_renderer.py` (once, pass-5
   merge gate) and `test_neon_scene_materials.py` (once, pass-5 branch) failed under parallel load and passed alone; the

@@ -12,12 +12,12 @@ from rendering.gl_programs.heightfield import heightfield_surface_bytes
 from tests.test_neon_lake_renderer import _snapshot, target  # noqa: F401  (pytest fixture)
 
 
-def _dunes(crest_alpha):
+def _dunes(crest_alpha, depth_scale=0.3, thickness=1.8):
     """Rolling land (no water) in rows of dunes, seen low over the near ones (Preset 3-like Depth Scale and thickness)."""
     snapshot = _snapshot(
         scene3d_detail="High", shockwave_grid_wire_display="Glass", shockwave_grid_water_reflection=0.0,
         shockwave_grid_idle=0.0, shockwave_grid_scroll=0.0, shockwave_grid_terrain_reaction_enabled=False,
-        shockwave_grid_glow=0.0, shockwave_grid_depth_scale=0.3, shockwave_grid_horizon_thickness=1.8,
+        shockwave_grid_glow=0.0, shockwave_grid_depth_scale=depth_scale, shockwave_grid_horizon_thickness=thickness,
         shockwave_grid_terrain_height=1.2, shockwave_grid_contour_lines=0.0,
         shockwave_grid_crest_color=[255, 200, 40, crest_alpha],
         shockwave_grid_tilt=0.1, shockwave_grid_turn=0.0, shockwave_grid_scene_scale=1.8,
@@ -55,3 +55,20 @@ def test_ridge_lines_stay_thin_bands_over_near_dunes(target):
     # Thickest legitimate ridge: 3 px authored thickness x 3 (Depth Scale growth) x 1.45 (shaping) ~ 13 px, plus
     # antialiasing. The lobe was several times that.
     assert np.percentile(runs[runs > 0], 99) <= 16, sorted(runs)[-10:]
+
+
+def test_ridge_lines_stay_thin_bands_at_full_depth_scale_and_thickness(target):
+    """The extreme corner (Depth Scale 1, Horizon Thickness 3, grazing over dunes): the lifted copy's depth offset
+    must stay behind the near land's own face, or it shows over it as a broad translucent sheet (found 6 Nov)."""
+    capture, host = target
+    capture.render(host, _dunes(0, 1.0, 3.0))
+    off = capture.render(host, _dunes(0, 1.0, 3.0)).astype(int)
+    capture.render(host, _dunes(255, 1.0, 3.0))
+    on = capture.render(host, _dunes(255, 1.0, 3.0)).astype(int)
+    ridge = np.abs(on - off).sum(axis=-1) > 24
+    assert ridge.any(), "the dunes draw ridge lines"
+    runs = _longest_runs(ridge)
+    # 3 px thickness x 3 (Depth Scale growth) x 1.45 (shaping) ~ 13 px, plus antialiasing, measured down a column
+    # through a ridge that falls steeply across the view (26 px with the fix). The sheet measured 95 px (pass-6
+    # shader, the negative control).
+    assert np.percentile(runs[runs > 0], 99) <= 30, sorted(runs)[-10:]
