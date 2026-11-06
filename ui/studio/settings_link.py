@@ -10,6 +10,8 @@ shape-preserving preset-file owner (``core.settings.visualizer_preset_file``).
 """
 from __future__ import annotations
 
+import weakref
+
 from importlib import import_module
 from typing import Any, Mapping
 
@@ -439,21 +441,32 @@ def open_mode_studio(tab, mode_id: str, *, adapter=None, surface_factory=None, p
                                   theme_provider=studio_theme, mode_switcher=switcher, modes=modes)
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance()
-    unsubscribe = subscribe_studio_theme(
-        lambda theme: controller.bridge.set_theme(theme) if controller.bridge is not None else None)
+    # Everything below outlives the session's own references (theme listeners, and slots Qt holds strongly on the
+    # controller's own signals), so it holds the controller weakly: a strong closure over it is a cycle through Qt
+    # connections that the garbage collector cannot see, and kept every closed Studio alive for the process.
+    session = weakref.ref(controller)
+
+    def set_theme(theme) -> None:
+        current = session()
+        if current is not None and current.bridge is not None:
+            current.bridge.set_theme(theme)
+    unsubscribe = subscribe_studio_theme(set_theme)
 
     def finished(*_args) -> None:
         unsubscribe()
+        current = session()
+        if current is None:
+            return
         try:
-            dialog.destroyed.disconnect(controller.close_for_settings_gone)
+            dialog.destroyed.disconnect(current.close_for_settings_gone)
         except (RuntimeError, TypeError, AttributeError):
             pass
         if app is not None:
             try:
-                app.aboutToQuit.disconnect(controller.close_for_quit)
+                app.aboutToQuit.disconnect(current.close_for_quit)
             except (RuntimeError, TypeError):
                 pass
-        if getattr(tab, "_studio_controller", None) is controller:
+        if getattr(tab, "_studio_controller", None) is current:
             tab._studio_controller = None
 
     def report(message: str) -> None:

@@ -328,6 +328,78 @@ def test_a_context_with_its_own_python_owner_is_flagged_by_the_sweep_negative_co
     QCoreApplication.sendPostedEvents(surface.control, QEvent.Type.DeferredDelete)
 
 
+# ----------------------------------------------------------------- a closed Studio is released, not kept for the process
+_SESSION_TYPES = ("StudioController", "StudioBridge", "StudioEditSession", "OffscreenStudioSurface", "StudioShellHost",
+                  "StudioViewportItem", "QQuickWindow", "QQmlEngine", "QQuickRenderControl", "QOpenGLContext")
+
+
+def _live_counts() -> dict:
+    import gc
+    import shiboken6
+    from PySide6.QtCore import QObject
+    gc.collect()
+    counts = dict.fromkeys(_SESSION_TYPES, 0)
+    for obj in gc.get_objects():
+        name = type(obj).__name__
+        if name in counts and (not isinstance(obj, QObject) or shiboken6.isValid(obj)):
+            counts[name] += 1
+    return counts
+
+
+def _sessions(tab, mode, times: int) -> list:
+    """``times`` real open -> commit -> Close-button sessions through Settings' own open path; weak references to what
+    each session made."""
+    import weakref
+    made = []
+    for _ in range(times):
+        controller, surface = _open(tab, mode)
+        _commit_one_value(controller)
+        _click_close(surface)
+        assert controller.state == "closed" and not controller.presence.concealed
+        made += [weakref.ref(controller), weakref.ref(controller.bridge), weakref.ref(controller.session),
+                 weakref.ref(surface), weakref.ref(surface.host)]
+        del controller, surface
+    return made
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_closed_studio_sessions_are_released_and_live_counts_stay_flat(qt_app, mode_dialog, no_gl_checks, mode):
+    """Three sessions of every mode: the controller, its bridge, session, surface and shell are all collectable once
+    closed, and the live Studio objects (window, engine, render control, GL context included) return to the count
+    before the first session. Settings is revealed every time (``_sessions``)."""
+    import gc
+    dialog, tab = mode_dialog(mode)
+    _sessions(tab, mode, 1)                                  # first use: lazily built caches and registrations
+    before = _live_counts()
+    made = _sessions(tab, mode, 3)
+    gc.collect()
+    alive = [ref() for ref in made if ref() is not None]
+    assert alive == [], f"{mode}: closed sessions still alive: {sorted({type(o).__name__ for o in alive})}"
+    assert _live_counts() == before
+    assert getattr(tab, "_studio_controller", None) is None
+
+
+def test_a_closure_that_holds_the_controller_through_its_own_signal_keeps_it_alive_negative_control(
+        qt_app, mode_dialog, no_gl_checks):
+    """The former leak's shape: a slot Qt holds on the controller's own ``closed`` signal that closes over the
+    controller. The garbage collector cannot see the Qt-side reference, so the closed session never goes."""
+    import gc
+    import weakref
+    dialog, tab = mode_dialog("spectrum")
+    controller, surface = _open(tab, "spectrum")
+    controller.closed.connect(lambda *_a, held=controller: None)
+    _click_close(surface)
+    ref = weakref.ref(controller)
+    del controller, surface
+    gc.collect()
+    assert ref() is not None
+    leaked = ref()
+    leaked.closed.disconnect()                               # release it so later tests start clean
+    del leaked
+    gc.collect()
+    assert ref() is None
+
+
 # ------------------------------------------------------------------------------------------- the --studio sidecar
 @pytest.fixture
 def logging_into(tmp_path, monkeypatch):
