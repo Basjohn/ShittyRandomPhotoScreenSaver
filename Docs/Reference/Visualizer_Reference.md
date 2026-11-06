@@ -204,9 +204,11 @@ client pixel rectangle, preserves foreign owners and retains failed cleanup at t
 gate. Release/reset/menu/Edit/mode/focus/topology/close cancel through one unwind. Cursor hiding/reveal reuses
 the existing fade timer/cache; held motion adds no polling, timer or cursor allocation. Stock native-arrow
 states explicitly decline because no alpha raster is available; existing menus already exclude orbit.
-An existing exclusive/mouse grab must retain its complete press/release sequence even below the card. The
-lower-passive-handler exception does not authorize stealing that sequence; the candidate's remaining gap
-and its required falsifier are tracked in `Current_Plan.md` → Shared camera gestures.
+An existing exclusive/mouse grab must retain its complete press/release sequence even below the card: any
+exclusive grab (including a lower retained MouseArea) declines orbit promotion, and only passive grabs use the
+lower-passive-handler stacking exception, which does not authorize stealing that sequence. Closed 23 Oct 2026
+(commit 9997e976); the falsifier is `test_lower_retained_mouse_area_exclusive_grab_keeps_its_press_and_release`
+in `tests/test_visualizer_plain_orbit.py`. Physical orbit remains operator acceptance (synthetic Qt presses are not).
 
 Framed 3D modes reuse `VisualizerPresentation.qml` for a noninteractive keyboard/mouse hint at the top right.
 A pointer entry gently reveals the supplied artwork with the hover chrome; fade-out begins after five seconds even

@@ -34,7 +34,7 @@ Local-repo transition concept mock references currently used by the plan live un
 | `Docs/Guides/` | maintained authoring/change procedures |
 | `Docs/Reference/` | current lookup/reference material and harness routing |
 | `Docs/Historical_Bugs/` | permanent regression/root-cause/failed-method evidence |
-| `Docs/Audits/` | dated audit/decision snapshots and design packs; evidence only, never current authority (durable rules move to their owner) |
+| `Docs/Audits/` | dated audit/decision snapshots and design packs; evidence only, never current authority (durable rules move to their owner; a routing row may cite one as the evidence behind a rule, never as the rule) |
 | `Docs/Future_Work/` | deferred concept briefs and packages routed from `Future_Work.md` |
 
 Keep the small routing authorities at `Docs/` root: project overview, current owner map, guardrail router, Historical Bugs router and TestSuite.
