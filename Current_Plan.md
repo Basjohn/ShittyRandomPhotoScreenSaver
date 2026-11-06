@@ -52,14 +52,14 @@ lead as reviewer/orchestrator.
   by the power plan, then check Task Manager CPU/GPU for the saver while dark, that wake input reaches the saver, and
   the first seconds after wake (no stale frame, jump or hitch; run with `--frame-trace --usage`). Per-monitor power is
   not observable on Windows: an HDMI panel switched off at its own button that stays enumerated keeps running.
-- [~] **DevCurve "more alive while keeping the flow" (branch built 6 Nov; awaiting lead review, then operator eyes):**
-  kicks ride fixed-scale flux accents with linear headroom in the drawn geometry (guide §13D → DevCurve). Sustained
-  loud kicks now beat pre-work main on bass and transients and the limiter cap is gone; evidence and before/after
-  WebPs in `.artifacts/evidence/devcurve/reactivity_20261105/` (`PROGRESS.md`). Open: (a) kicks in QUIET passages
-  respond less than on pre-work main for bass/vocals/mids (its share-follower height moved there; the flux lanes are
-  passage-ramped to ~20%); (b) the travelling swell saturates in dense passages, so the swell's share of a kick falls
-  ~17% 40-55 s into a synthetic chorus (the height's accent does not; `tests/test_devcurve_continuous_play.py` runs
-  with the swell off for that reason); (c) loud passages read calmer in amplitude than the old limiter-shaped peaks.
+- [~] **DevCurve "more alive while keeping the flow" (second cut 6 Nov; awaiting lead review, then operator eyes):**
+  loud body owns most of the drawn ceiling (big, smooth: carrier blends to its broad component instead of limiter
+  triangles), kicks ride linear headroom, quiet passages take the band share's rise, swell inside the body's share,
+  tick vectorised (guide §13D → DevCurve). Evidence and before/after WebPs (loud end and a quiet passage, P1/P6) in
+  `.artifacts/evidence/devcurve/reactivity_20261105/` (`PROGRESS.md`). Open: the strongest preset's bass (Deep Blue)
+  stays ~18% below pre-work main's loud RMS (a smooth wave cannot match a slope-limited triangle at the same slope);
+  the quiet-passage evidence is one recording's cold start (9 kicks); a capped layer shows the swell less (it lives
+  inside the body's share).
 - [ ] **Re-take the stored overhead baseline on a quiet machine** (`tools/overhead_baseline.py --size 2560x1440`,
   commit it under `tools/baselines/overhead/`). The 6 Nov call-count rises against `2026-10-18_f4dbb4ab.json` are
   resolved: the +72/+144 (scene3d transitions, Oscilloscope, Sphere, Extruded Spectrum; d91eb165's float32 raster
