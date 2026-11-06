@@ -11,7 +11,6 @@ Usage:
 """
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
@@ -40,6 +39,7 @@ from core.logging.logger import get_logger
 from core.settings.visualizer_presets import (
     get_custom_preset_index,
     get_preset_count,
+    get_preset_file_path,
     get_preset_names,
     get_next_visualizer_preset_ordinal,
     get_visualizer_presets_dir,
@@ -338,10 +338,15 @@ class VisualizerPresetSlider(QWidget):
         # save captures them as custom.
         self._slider.setValue(self._custom_index)
 
-    def _save_custom_preset_as(self) -> None:
+    def _save_custom_preset_as(self, *, select_saved: bool = False) -> int | None:
+        """Save the current settings as a new preset file (Settings' file dialog, into the presets folder).
+
+        By default Custom stays selected (the preset row's own Save Preset As…). ``select_saved``: the new preset
+        is selected and applied instead (the Studio's "Save As New Preset" for edits held on a curated preset), and
+        its slot is returned. None when nothing was saved."""
         tab = self._find_tab()
         if tab is None or not hasattr(tab, "build_visualizer_preset_payload"):
-            return
+            return None
 
         flush = getattr(tab, "flush_pending_changes", None)
         if callable(flush):
@@ -357,7 +362,7 @@ class VisualizerPresetSlider(QWidget):
                 icon_type="error",
                 buttons=[("OK", "ok")],
             ).exec()
-            return
+            return None
 
         presets_dir = get_visualizer_presets_dir(self._mode)
         try:
@@ -373,7 +378,7 @@ class VisualizerPresetSlider(QWidget):
             "Visualizer Preset (*.json)",
         )
         if not file_path:
-            return
+            return None
 
         path = Path(file_path)
         if path.suffix.lower() != ".json":
@@ -388,10 +393,21 @@ class VisualizerPresetSlider(QWidget):
         self._apply_filename_metadata(path, payload)
         payload.setdefault("description", "Saved from current Settings state.")
 
+        from core.settings.visualizer_preset_file import PresetModeMismatch, write_new_preset_file
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("w", encoding="utf-8") as handle:
-                json.dump(payload, handle, indent=2)
+            # The owner refuses (and logs) a target outside this mode's own preset folder or another mode's file:
+            # the file dialog itself puts no bound on where it saves (R-174).
+            write_new_preset_file(self._mode, path, payload)
+        except PresetModeMismatch:
+            StyledPopup(
+                tab,
+                "Not Saved",
+                f"{self._mode_title()} presets can only be saved in {self._mode_title()}'s own preset folder:\n"
+                f"{presets_dir}\n\n{path} is somewhere else, or is another visualizer's preset. Nothing was written.",
+                icon_type="error",
+                buttons=[("OK", "ok")],
+            ).exec()
+            return None
         except Exception:
             logger.debug("[VIS_PRESETS] Failed to save preset %s", path, exc_info=True)
             StyledPopup(
@@ -401,7 +417,7 @@ class VisualizerPresetSlider(QWidget):
                 icon_type="error",
                 buttons=[("OK", "ok")],
             ).exec()
-            return
+            return None
 
         StyledPopup(
             tab,
@@ -410,7 +426,25 @@ class VisualizerPresetSlider(QWidget):
             icon_type="success",
             buttons=[("OK", "ok")],
         ).exec()
-        self._reload_and_reapply_current_preset(self._slider.value(), force_custom=True)
+        if not select_saved:
+            self._reload_and_reapply_current_preset(self._slider.value(), force_custom=True)
+            return None
+        reload_presets(self._mode)
+        saved = path.resolve()
+        index = next((i for i in range(get_custom_preset_index(self._mode))
+                      if (found := get_preset_file_path(self._mode, i)) is not None and found.resolve() == saved), None)
+        if index is None:
+            logger.warning("[VIS_PRESETS] Saved preset %s is not in the catalogue after reload", path)
+            return None
+        self._reload_and_reapply_current_preset(index)
+        return index
+
+    def _mode_title(self) -> str:
+        try:
+            from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+            return get_visualizer_mode_descriptor(self._mode).display_name
+        except Exception:
+            return str(self._mode)
 
     def _default_save_path(self, presets_dir: Path) -> Path:
         ordinal = get_next_visualizer_preset_ordinal(self._mode)

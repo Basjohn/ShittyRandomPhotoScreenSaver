@@ -1405,9 +1405,9 @@ class StudioController(QObject):
 
     def select_preset(self, index: int) -> None:
         """Switch the edited preset through the store (Settings' own preset authority), then re-open the
-        session on it. Studio edits are always already saved to Custom (and Custom is snapshotted before a
-        curated preset is applied), so a switch never loses work and needs no Apply/Discard prompt; only an
-        unfinished drag is dropped."""
+        session on it. Edits on Custom are already saved (and Custom is snapshotted before a curated preset is
+        applied); unsaved edits of a curated preset are settled first with the store's prompt (staying cancels the
+        switch). An unfinished drag is dropped."""
         select = getattr(self.store, "select_preset", None)
         if not callable(select) or self.session is None:
             return
@@ -1415,6 +1415,8 @@ class StudioController(QObject):
         if int(index) == int(current):
             return
         self.session.cancel_gesture()
+        if not self.settle_draft(interactive=True):     # unsaved edits of the current preset: ask first
+            return
         try:
             select(int(index))
         except Exception as exc:
@@ -1443,6 +1445,8 @@ class StudioController(QObject):
         if mode_id == self.adapter.mode_id or self._mode_switcher is None:
             return
         if self.state not in ("opening", "presented"):
+            return
+        if not self.settle_draft(interactive=True):     # the next mode's page replaces this one's widgets
             return
         try:
             adapter, store = self._mode_switcher(mode_id)
@@ -2107,6 +2111,9 @@ class StudioController(QObject):
         hidden, and the controller always ends closed."""
         if self.state not in ("opening", "presented"):
             return
+        if not self.settle_draft(interactive=source in self.INTERACTIVE_CLOSES):
+            logger.info("[STUDIO] close via %s kept open: unsaved preset changes not settled", source)
+            return
         reveal = self.state == "presented" or bool(getattr(self.presence, "concealed", False))
         logger.info("[STUDIO] close requested mode=%s via %s (state=%s, reveal=%s)", self.adapter.mode_id,
                     source, self.state, reveal)
@@ -2126,6 +2133,25 @@ class StudioController(QObject):
                 self.closed.emit()
             except Exception:
                 logger.exception("[STUDIO] closed notification failed")
+
+    # The user's own ways out: these ask what to do with unsaved edits of a curated preset. Every other exit (quit,
+    # Settings going away, a lost window, a failure, a programmatic close) keeps them in Custom without asking.
+    INTERACTIVE_CLOSES: ClassVar[frozenset[str]] = frozenset(
+        {"close button", "escape", "title bar close", "window close (X / Alt+F4)"})
+
+    def settle_draft(self, *, interactive: bool) -> bool:
+        """Edits held on a curated preset are settled before the session ends or leaves that preset (the store's
+        prompt, or Custom when nobody can be asked). False: the user chose to stay."""
+        holds = getattr(self.store, "holds_draft", None)
+        if not callable(holds) or not holds():
+            return True
+        if self.session is not None:
+            self.session.cancel_gesture()     # an unfinished drag is not an edit
+        try:
+            return bool(self.store.resolve_draft(interactive=interactive))
+        except Exception:
+            logger.exception("[STUDIO] Settling unsaved preset changes failed")
+            return True                       # never trap the user in the Studio
 
     def _on_surface_lost(self) -> None:
         """The window disappeared without our close (crash/destroy): recover Settings."""
@@ -2185,6 +2211,10 @@ class StudioController(QObject):
                     signal.disconnect(slot)
                 except (RuntimeError, TypeError):
                     pass
+            watch = getattr(self.presence, "watch", None)
+            window = getattr(surface, "window", None)
+            if watch is not None and watch.active and window is not None:
+                window.destroyed.connect(lambda *_a: watch.note("studio window destroyed"))
             surface.retire()
 
         def release_models() -> None:

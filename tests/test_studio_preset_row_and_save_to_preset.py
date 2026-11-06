@@ -224,8 +224,11 @@ def _edited_studio(real_dialog, offscreen_launch, *, crlf=False):
     shown = bridge.values[prop.id]
     span = prop.maximum - prop.minimum
     target = round(prop.minimum + span * (0.25 if float(shown) > prop.minimum + span / 2 else 0.75), 2)
+    stored = deepcopy(tab._settings.get("widgets"))
     bridge.commitValue(prop.id, 0, target)
-    assert slider.preset_index() == slider.custom_index()          # a Studio edit lands in Custom
+    assert bridge.values[prop.id] == pytest.approx(target)        # the session shows the edit...
+    assert slider.preset_index() == curated                        # ...held on the preset: no switch to Custom
+    assert tab._settings.get("widgets") == stored                  # and nothing saved until the user chooses
     return tab, bridge, curated, path, prop.id, target
 
 
@@ -259,7 +262,8 @@ def test_save_to_preset_confirms_then_writes_only_the_changed_key_in_the_files_o
     assert new_resolved[key] == pytest.approx(target)
     assert {k: v for k, v in new_resolved.items() if k != key} == {k: v for k, v in old_resolved.items() if k != key}
     assert vp.get_preset_settings(MODE, curated)[key] == pytest.approx(target)    # presets were reloaded
-    assert _slider(tab, MODE).preset_index() == _slider(tab, MODE).custom_index()  # Custom stays as it was
+    assert _slider(tab, MODE).preset_index() == curated            # the preset stays selected, now holding it
+    assert not offscreen_launch[-1].store.holds_draft()             # saved explicitly: nothing left to ask about
 
     bridge.saveToPreset()                                          # now identical: no prompt, no write
     assert len(popups) == 2 and path.read_bytes() == after
@@ -290,6 +294,132 @@ def test_save_to_is_not_offered_when_the_studio_opened_on_custom(real_dialog, of
     _launcher(tab, MODE).click()
     bridge = offscreen_launch[-1].bridge
     assert bridge.savePresetTarget == ""                     # Custom's source is unknown: only Save Preset As
+
+
+# ------------------------------------------- unsaved edits of a curated preset: asked about on close, never auto-Custom
+def _close_by_button(controller):
+    controller.bridge.requestCloseFrom("close button")       # what the shell's Close button asks for
+    QCoreApplication.processEvents()
+
+
+def _stored_section(tab):
+    return deepcopy(tab._settings.get("widgets")["spotify_visualizer"])
+
+
+def test_closing_after_editing_a_curated_preset_asks_with_four_choices_and_dismissing_keeps_the_studio(
+        real_dialog, offscreen_launch, preset_copy, popups):
+    tab, bridge, curated, path, key, target = _edited_studio(real_dialog, offscreen_launch)
+    controller = offscreen_launch[-1]
+    before, stored = path.read_bytes(), _stored_section(tab)
+    popups.state["answer"] = None                            # the prompt closed without a choice
+    _close_by_button(controller)
+    assert [p["buttons"] for p in popups] == [["overwrite", "new", "custom", "discard"]]
+    assert popups[0]["icon"] == "question"
+    assert controller.state == "presented" and controller.store.holds_draft()   # still in the Studio, edits held
+    assert path.read_bytes() == before and _stored_section(tab) == stored
+    assert _slider(tab, MODE).preset_index() == curated
+
+
+def test_discard_leaves_settings_on_the_untouched_preset(real_dialog, offscreen_launch, preset_copy, popups):
+    tab, bridge, curated, path, key, target = _edited_studio(real_dialog, offscreen_launch)
+    controller = offscreen_launch[-1]
+    before, stored = path.read_bytes(), _stored_section(tab)
+    popups.state["answer"] = "discard"
+    _close_by_button(controller)
+    assert controller.state == "closed" and not controller.presence.concealed
+    assert path.read_bytes() == before and _stored_section(tab) == stored
+    assert _slider(tab, MODE).preset_index() == curated
+    assert controller.store.snapshot()[key] == pytest.approx(vp.get_preset_settings(MODE, curated)[key])
+
+
+def test_place_in_custom_moves_the_edits_into_custom(real_dialog, offscreen_launch, preset_copy, popups):
+    tab, bridge, curated, path, key, target = _edited_studio(real_dialog, offscreen_launch)
+    controller = offscreen_launch[-1]
+    before = path.read_bytes()
+    popups.state["answer"] = "custom"
+    _close_by_button(controller)
+    assert controller.state == "closed"
+    slider = _slider(tab, MODE)
+    assert slider.preset_index() == slider.custom_index()
+    assert _stored_section(tab)[key] == pytest.approx(target) and path.read_bytes() == before
+
+
+def test_overwrite_writes_the_edits_into_the_preset_file_and_settings_stays_on_it(
+        real_dialog, offscreen_launch, preset_copy, popups):
+    tab, bridge, curated, path, key, target = _edited_studio(real_dialog, offscreen_launch)
+    controller = offscreen_launch[-1]
+    popups.state["answer"] = "overwrite"
+    _close_by_button(controller)
+    assert controller.state == "closed" and len(popups) == 1                  # one prompt, no second confirmation
+    assert vp.resolve_preset_payload_settings(MODE, json.loads(path.read_text(encoding="utf-8")))[key] \
+        == pytest.approx(target)
+    assert _slider(tab, MODE).preset_index() == curated
+    assert controller.store.snapshot()[key] == pytest.approx(target)
+
+
+def test_save_as_new_preset_writes_a_new_preset_and_selects_it(real_dialog, offscreen_launch, preset_copy, popups,
+                                                               monkeypatch):
+    from ui.tabs.media import preset_slider
+    tab, bridge, curated, path, key, target = _edited_studio(real_dialog, offscreen_launch)
+    controller = offscreen_launch[-1]
+    before, count = path.read_bytes(), len(vp.get_preset_names(MODE))
+    new_file = preset_copy / MODE / "preset_99_studio.json"
+    monkeypatch.setattr(preset_slider.QFileDialog, "getSaveFileName", lambda *_a, **_k: (str(new_file), ""))
+    popups.state["answer"] = "new"
+    _close_by_button(controller)
+    assert controller.state == "closed" and new_file.is_file() and path.read_bytes() == before
+    assert len(vp.get_preset_names(MODE)) == count + 1
+    slider = _slider(tab, MODE)
+    assert vp.get_preset_file_path(MODE, slider.preset_index()).resolve() == new_file.resolve()
+    assert vp.get_preset_settings(MODE, slider.preset_index())[key] == pytest.approx(target)
+
+
+def test_a_read_only_preset_is_not_offered_for_overwrite(real_dialog, offscreen_launch, preset_copy, popups):
+    tab, bridge, curated, path, key, target = _edited_studio(real_dialog, offscreen_launch)
+    os.chmod(path, stat.S_IREAD)
+    try:
+        popups.state["answer"] = None
+        _close_by_button(offscreen_launch[-1])
+    finally:
+        os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
+    assert [p["buttons"] for p in popups] == [["new", "custom", "discard"]]
+
+
+def test_edits_returned_to_the_preset_close_without_asking(real_dialog, offscreen_launch, preset_copy, popups):
+    tab, bridge, curated, path, key, target = _edited_studio(real_dialog, offscreen_launch)
+    controller = offscreen_launch[-1]
+    bridge.commitValue(key, 0, vp.get_preset_settings(MODE, curated)[key])
+    _close_by_button(controller)
+    assert popups == [] and controller.state == "closed"
+    assert _slider(tab, MODE).preset_index() == curated
+
+
+def test_a_close_nobody_can_answer_keeps_the_edits_in_custom(real_dialog, offscreen_launch, preset_copy, popups):
+    """Application quit / Settings going away / a programmatic close: no prompt, nothing lost."""
+    tab, bridge, curated, path, key, target = _edited_studio(real_dialog, offscreen_launch)
+    controller = offscreen_launch[-1]
+    controller.close_for_quit()
+    assert popups == [] and controller.state == "closed"
+    slider = _slider(tab, MODE)
+    assert slider.preset_index() == slider.custom_index() and _stored_section(tab)[key] == pytest.approx(target)
+
+
+def test_edits_on_custom_save_at_once_and_close_without_asking_negative_control(
+        real_dialog, offscreen_launch, popups):
+    """Custom is the user's own slot: its edits save at once, as before, and leaving asks nothing."""
+    from ui.studio.waveform_adapter import build_schema
+    dialog, tab = real_dialog()
+    slider = _slider(tab, MODE)
+    slider._slider.setValue(slider.custom_index())
+    _launcher(tab, MODE).click()
+    controller = offscreen_launch[-1]
+    prop = next(p for p in build_schema().properties
+                if p.instrument == SCALAR and not p.integer and len(p.path) == 1 and not p.view_pose)
+    target = round(prop.minimum + (prop.maximum - prop.minimum) * 0.4, 2)
+    controller.bridge.commitValue(prop.id, 0, target)
+    assert not controller.store.holds_draft() and _stored_section(tab)[prop.id] == pytest.approx(target)
+    _close_by_button(controller)
+    assert popups == [] and controller.state == "closed"
 
 
 # --------------------------------------------------------------------------- the shared preset-file owner

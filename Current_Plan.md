@@ -102,9 +102,13 @@ run on 6 Nov, `presets/visualizer_modes/shockwave_grid/preset_1_synthwave.json` 
 at 21:45:04 as a Bubble preset (`"mode": "bubble"`, 78 Bubble keys, name kept), with no log line, while Settings was
 open after a Bubble preset save (21:44:41 `VIS_PRESETS_SAVE ... bubble`). Neon Lake was the last live mode. Values
 came from Bubble, the target from another mode. The original is restored from git; the bad file is kept in
-`.artifacts/evidence/preset_cross_mode_write_20261106/`. Fix: find the writer; every preset-file write asserts that
-its target mode equals the payload mode, fails closed, and logs mode/index/path; a regression test fails on the old
-code. Check installed builds too.
+`.artifacts/evidence/preset_cross_mode_write_20261106/`. **Fixed on the Studio branch (R-174), awaiting merge.**
+- The writer was the preset row's Save Preset As on Bubble's Custom: the file matches its payload and description
+  exactly. It wrote wherever the file dialog answered, unchecked and unlogged.
+- Every preset-file write now goes through `core/settings/visualizer_preset_file.py`, which fails closed on another
+  mode's payload, folder or file, and logs mode, index and path.
+- Installed builds had the same exposure; the same check covers them.
+- `tests/test_visualizer_preset_cross_mode_write.py` fails on the old code.
 
 **Active or paused (resume each with a message to the same agent, which keeps its context and worktree):**
 - **Studio agent** (Opus high, worktree `agent-ae914e4586e23615a`): the data-corruption bug above first; then the UI
@@ -758,22 +762,44 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   Extruded Bubble's and Sphere's evaluators still replay exactly in one evaluation from the fixture start, without the
   frame budget and checkpoints Waveform and the engine-answer modes now share (`ui/studio/exact_replay.py`); measure
   with `tools/studio_drag_profile.py` and move them onto `ExactReplay` where a release stalls.
-- [ ] **Studio exit-time access violation fixed (6 Nov, R-172); two side defects left open.** The exit AV after
-  `tests/test_studio_exit_every_mode.py` (about 1 run in 4) is fixed. `OffscreenStudioSurface`'s imported GL context
-  is now a Qt child of its render control, so it can never be freed first, and production was not exposed. Still
-  open:
-  - Every closed `StudioController` stays alive for the whole process: 19 after that file, and one per Studio session
-    in production. The cycle runs through Qt connections that gc cannot see: `open_mode_studio`'s `finished` /
-    `report` closures are connected to the controller's own `closed` / `failed` and close over the controller. Break
-    it at close: disconnect them, or hold the controller weakly. Prove it with a gc-free retention test. The
-    same owner takes checklist AC-06 (`Docs/Reference/Architecture_Checklist.md`): the four adapters' unbounded
-    class-level `_clip_cache` dicts and the GUI-thread clip parse in `waveform_recorded_inputs.py:262-273`.
-- `tools/onboarding_preview_foundry.py`'s capture had the same imported-context structure: fixed as R-173 (7 Nov).
-  - The Studio files fail when run in one pytest process. After the first 17 Studio files (Bubble through
-    `test_studio_preset_row_and_save_to_preset.py`), `test_studio_scene_theme_independence.py[spectrum]` renders a
-    black scene (std 0). The fix did not cause it: the same failure appears with and without it. Every file passes
-    isolated (`run_chunked.py --isolated`, 32/32). Find the state an earlier file leaks into Spectrum's offscreen
-    render.
+- [ ] **UI frozen after closing a Studio, recovered by itself (operator 6 Nov 21:56, Extruded Bubble, Wine Ice
+  Acrylic): owner not found yet, instrumented.**
+  - What the log shows: the close was clean. Settings was revealed `visible enabled exposed`, native `(True, True)`,
+    and the window was destroyed after 77 ms. Then the GUI thread logged nothing for 18 s while the process was
+    idle (CPU 4.7 %, GPU 0.1 %).
+  - The event-loop recorder still delivered its 15 s summary on time at 21:56:48, so the loop was running and this
+    was not a stall. Its `period_samples=0` only means the lifecycle window was open, as it is for all of Settings.
+  - Not reproducible offscreen: in an offscreen-QPA probe with a real application-modal `StudioWindowSurface` closed
+    by its Close button, Settings ends up active, unblocked and taking clicks.
+  - Read from Qt's source (6.11): hiding the modal window unblocks Settings before the native hide. While Settings
+    is still blocked, focus given to it is handed to the modal window (`handleFocusEvent`), and a blocked window is
+    natively `WS_DISABLED`. So the suspect is native activation or enable state at the reveal, which happens while
+    the modal Studio is still shown.
+  - Next field run: the `[STUDIO] after reveal` lines (`presence.RevealWatch`, one-shot, removed at the first input
+    to Settings) name which window Windows sent the clicks to, and the state at each step. Fix the owner from them.
+- [ ] **Per-session memory growth in the Studio (side defect, 6 Nov).** Process memory grows about 2-3 MB per
+  offscreen Extruded Bubble session (private bytes and USS, 16 sessions). The growth is the same with and without the
+  controller-leak fix, which `test_closed_studio_sessions_are_released_and_live_counts_stay_flat` guards: closed
+  sessions are now collected and live Studio object counts stay flat. So something other than the controller grows.
+  Find it with tracemalloc plus a native heap comparison. Same owner: checklist AC-06
+  (`Docs/Reference/Architecture_Checklist.md`), the four adapters' unbounded class-level `_clip_cache` dicts and the
+  GUI-thread clip parse in `waveform_recorded_inputs.py:262-273`. These are the first suspects for the growth.
+- [ ] **Slider drags no longer let go mid-motion (operator 6 Nov), awaiting the operator's feel check.** The cause
+  was the inspector's ScrollView: a vertical wobble past the drag threshold stole the press, on every mode at the
+  first wobble. Every drag instrument in a scrolling panel now sets `preventStealing: true`
+  (`Docs/Reference/Visualizer_Studio.md` "Drags are batched"). `tests/test_studio_drag_coalescing.py` covers it,
+  with a negative control.
+- [ ] **No automatic switch to Custom (operator 6 Nov), awaiting the operator's look.** A Studio edit on a curated
+  preset is now held, with nothing saved and the preset still selected.
+  - Closing the Studio yourself, switching preset or switching mode asks *Unsaved Preset Changes* with four
+    choices: Overwrite <Preset> (not offered on a read-only file), Save As New Preset (Settings' own Save Preset
+    As, then the new preset is selected), Place In Custom, Discard. Closing the prompt stays in the Studio.
+  - Quit, Settings going away and other closes nobody can answer keep the edits in Custom.
+  - Spec: `Docs/Reference/Visualizer_Studio.md` §4 "Canonical save". Tests:
+    `tests/test_studio_preset_row_and_save_to_preset.py` (every choice, read-only, edits returned to the preset,
+    unanswerable closes, and a Custom negative control).
+  - Operator to check: the prompt's wording and buttons over a real Studio, and that Save As New Preset's file
+    dialog lands in the right folder in an installed build (ProgramData's shared preset tree).
 - [ ] **Neon Lake: drag the Sun/Moon in the Studio preview.** Retiring the Settings terrain section (6 Nov, Studio brush)
   removed its 3/4 view, where the Sun/Moon could be dragged; it is now placed with Position X/Y/Z only. Give the Studio
   preview a direct drag for it: the same pick through the production camera as the terrain brush, one undoable commit
