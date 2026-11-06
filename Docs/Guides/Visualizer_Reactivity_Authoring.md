@@ -186,7 +186,8 @@ hit within ~45 ms and settles over ~0.65 s, timed in seconds. A per-frame blend 
 (~50 ms), so every beat pumped the swing 14–29% and the curves read fast/slow/fast/slow. Measured on the recordings,
 the asymmetric envelope halves the beat-scale pumping and makes the steepest falls ~3× gentler, at ~15–25% more
 mean swing (the height lingers between hits). Never convert a per-frame blend factor into "smoothing" without dt:
-it changes with frame rate.
+it changes with frame rate. (Superseded in part 2026-11-05: the heights now pass two cascaded stages — see
+§13D "DevCurve" — because that envelope's input was pinned and its single fast attack jumped the velocity.)
 
 ### Slow sustained response
 
@@ -638,6 +639,50 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` �
   swings about the drive's own phrase mean only as the passage gets softer, so loud reach is untouched.
 - **History ends move continuously.** Anything anchored to the oldest/newest stored sample (a continuation, an end
   taper) steps at every admission; anchor it at a point that advances with the admission phase on a smooth curve.
+
+**DevCurve (2026-11-05, the same lessons applied).** Operator: "its smoothness is great but it has almost no
+reactivity". Measured (`tools/visualizer_replay/devcurve_reactivity_audit.py`, three 60 s recordings, presets 1 and
+6): the layer drives read the shared pre-AGC *control* lanes, which divide each band by a fast-adapting norm of the
+loudest band — a band **share**, not a level — so bass/mids sat above 0.9 of their Range on 95–98% of playing
+ticks (bass input p05 = p50 = p95 = 1.0 on two songs), beat modulation of the displacement was 2–5%, quiet and loud
+windows differed by ≤ 1.4×, and the smoothness slope limiter held the bass curve on 72–98% of ticks. Fix, owner
+`widgets/spotify_visualizer/devcurve_runtime.py`: each layer's level = its share × the bus loudness (fixed real
+scale); the height is a slow **body** plus fast **accents**: only the body (two slow stages) is divided by the
+remembered peak (floor in loudness units, landing at 1.0 of the drive), while accents — the body layers' flux lane above its
+own recent mean, the transients layer's flux spike above its body, captured and held 0.06 s — are read on fixed
+scales into the reserved room above it, then eased by two stages of (0.025, 0.15) s (each second stage follows its
+first as it stood at the start of the tick, so a hit's first tick never jumps the velocity). A first cut normalised
+the whole height, beats included: a sustained-chorus kick then lifted the visible reaction by ~2% of its level;
+**normalise the passage, never the beats**, and measure kicks in continuous play (`devcurve_continuous_kicks.py`;
+same recording twice, so identical kicks compare early vs late). A per-layer travelling swell born just beyond the
+right edge, travelling left with the material and multiplying the layer's own undulation under the flow rule
+(closed-form share, rate-limited relaxation). Lesson: **a self-normalised lane (band over the loudest band) is a
+ratio, never a level**; and **check the geometric ceiling** (slope limiter, clamps) as you would a drive's Range — a
+reaction that lands where the geometry is already limited is invisible.
+
+*Kick headroom and loud size (lead reviews, 6 Nov).* (1) **Kick-lock the measurement:** average the traces around
+every kick first and take the peak of the mean; a per-kick "max after minus mean before" is positive on any noisy
+trace, kick or not (`locked_*` in the tool). (2) **Check that an accent source rises on the kick, per passage.** In
+loud passages the body layers' "fast level above the body" *fell* on kicks (+0.38 → −0.32 loudness units within
+150 ms: the bus loudness dips after onsets) and its noise held the accent half-saturated, so loud kicks ride the flux
+lanes; in quiet passages the flux lanes are passage-ramped to ~20%, and the band **share**'s rise is the kick (bass
+0.67 → 1.0 kick-locked), so quiet passages take the eased share rise, weighted by quietness, on its own linear path
+(through the flux accent's saturating response it never matched pre-work main). (3) **Keep the reserved headroom
+through the geometry, and keep the loud body big.** Capping body + accent together let the steady accent fill the cap
+(kicks invisible); a hard half-share for the body halved the loud look ("far less alive"). The body now owns 0.85 of
+the drawn ceiling (soft knee), the accent stays **linear** in its share, only overflow eases past the ceiling, the
+swell multiplies the body inside the body's share (never the accent, or a full passage's swell pushes kicks into the
+overflow), and troughs ease into a soft floor. (4) **Size is the slope budget, triangles are the limiter.** A big
+smooth wave needs a gentle carrier: a body the mixed carrier cannot draw blends it slowly toward its broad 1.35-cycle
+component, and the ceiling subtracts the slope the contour and the idle wave already use. A smooth wave reaches ~0.8 of
+a slope-limited triangle's RMS at the same slope, so the strongest preset (Deep Blue bass) stays ~18% below the old
+triangle peaks while others are within ~10%; time at the limiter goes from 76–100% to ~0. (5) **Separate onset from
+muting in continuous play:** a kick's swell share drops in the first ~5 s of a passage while the swell fills, then
+stays flat to 55 s; gate per layer "settled vs late", not only "first seconds vs late". (6) **Vectorise before
+tuning:** the curve build vectorised byte-identically (16.8 M samples) took the tick from +25% over pre-work main to
+below it, which paid for the new reactivity. Evidence: `.artifacts/evidence/devcurve/reactivity_20261105/`
+(`continuous_v5/`, `strips_v3/`, `tick_cost_v2.jsonl`); gates `tests/test_devcurve_reactivity.py`,
+`tests/test_devcurve_continuous_play.py`, `tests/test_devcurve_kick_headroom.py`.
 
 **Collisions with the world**
 - **Preserve the shape: lift the whole object.** Per-point clamps against a floor produce boxy, flat-bottomed troughs;

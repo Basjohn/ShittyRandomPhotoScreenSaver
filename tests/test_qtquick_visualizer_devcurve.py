@@ -47,6 +47,8 @@ def _parameters(*, ghosting: bool = True) -> dict[str, object]:
         "devcurve_idle_motion": 0.2,
         "devcurve_idle_speed": 0.6,
         "devcurve_smoothness": 0.55,
+        "devcurve_swell_strength": 1.0,
+        "devcurve_swell_speed": 1.0,
         "devcurve_ghosting_enabled": ghosting,
         "devcurve_ghost_alpha": 0.65 if ghosting else 0.0,
         "devcurve_ghost_decay": 0.4,
@@ -277,16 +279,16 @@ def test_devcurve_quick_aa_keeps_historical_logical_pixel_width() -> None:
 
 
 def test_devcurve_transient_layer_preserves_historical_bass_only_input() -> None:
-    mid_high_only = _advance(
-        DevCurveFrameRuntime(),
-        now_ts=4.5,
-        transient=VisualizerTransientState(bass=0.0, mid=1.2, high=1.4),
-    )
-    bass_hit = _advance(
-        DevCurveFrameRuntime(),
-        now_ts=4.5,
-        transient=VisualizerTransientState(bass=0.8, mid=0.0, high=0.0),
-    )
+    def held(transient):
+        # The height drive is velocity-continuous (two stages), so it needs a few ticks to show.
+        runtime = DevCurveFrameRuntime()
+        resolved = None
+        for step in range(10):
+            resolved = _advance(runtime, now_ts=4.5 + step * 0.016, transient=transient)
+        return resolved
+
+    mid_high_only = held(VisualizerTransientState(bass=0.0, mid=1.2, high=1.4))
+    bass_hit = held(VisualizerTransientState(bass=0.8, mid=0.0, high=0.0))
 
     assert mid_high_only is not None and bass_hit is not None
     assert mid_high_only.diagnostics["energies"]["transients"] == pytest.approx(
