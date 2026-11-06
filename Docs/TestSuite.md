@@ -42,12 +42,14 @@ The maintained `destination` profile's status must come from its actual current 
 
 The current agent/container may lack PySide6/OpenGL. In that environment, a collection failure caused by missing runtime dependencies is **ENVIRONMENT BLOCKED**, not a product RED and not a PASS.
 
-**Operator no-environment-mutation rule (2026-10-13):** do not set or modify process
-environment variables to select Python, graphics plugins or test storage. The existing
-`tests/conftest.py` currently changes `APPDATA` and `LOCALAPPDATA`, which conflicts with
-that policy. This is a documented test-harness violation, NOT an authorization to remove
-isolation and risk reading/writing real user settings. Until replaced with explicit test-owned
-storage injection, the normal pytest Qt suite must not be represented as policy-compliant.
+**Operator no-environment-mutation rule (2026-10-13), and what is accepted test isolation (6 Nov 2026):** do not
+set or modify process environment variables on the command line to select Python, graphics plugins or test
+storage, and product code reads no `SRPSS_*` variable (`tests/test_no_srpss_environment_reads.py`; diagnostics are CLI
+admissions). `tests/conftest.py` setting `APPDATA` / `LOCALAPPDATA` (and `XDG_*`) so no test can read or write the
+operator's real settings, and a test handing `QT_QPA_PLATFORM` to a child process it launches, are **test
+isolation, not product flags**: they configure the harness's own process tree, are never a way to select product
+behaviour, and are accepted. Removing them would risk real user data; do not "fix" them, and do not widen them into
+a product switch.
 The independently runnable Neon mesh/projection regression avoids the shared fixture:
 
 ```powershell

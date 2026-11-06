@@ -4,7 +4,6 @@ Display manager for multi-monitor support.
 Owns one authoritative Quick display unit for each selected screen.
 """
 import math
-import os
 import random
 import time
 import weakref
@@ -77,9 +76,10 @@ from rendering.quick.transitions.run_geometry import (
 logger = get_logger(__name__)
 REDDIT_FLUSH_LOGGING = True  # Set to False to silence deferred Reddit flush diagnostics once stable.
 MONITOR_RECONCILE_DELAY_MS = 250
-# Bound each off-frame GL preparation to one program/target operation, then
-# space the next job through the already-owned one-shot scheduler. No redraw.
-IDLE_TRANSITION_WARM_STEP_SPACING_MS = 200
+# Bound each off-frame GL preparation to one program/target operation. The next
+# job is admitted on a frame the display renders anyway, at least this long
+# after the previous one finished: no timer, no polling, no redraw.
+IDLE_TRANSITION_WARM_MIN_SPACING_S = 0.2
 IDLE_TRANSITION_WARM_MAX_STEPS_PER_DISPLAY = 96
 # Once one display of a generation is reveal-ready, a sibling that has not
 # reached its first frame within this bound no longer holds every other
@@ -289,7 +289,7 @@ class DisplayManager(QObject):
         # One owner across *all* displays: idle GL jobs never overlap and never
         # begin before the last selected display completes its transition.
         self._idle_warm_reporter = _IdleTransitionWarmReporter()
-        self._idle_warm_shot = None
+        self._idle_warm_not_before = 0.0
         self._idle_warm_reporter.finished.connect(
             self._on_idle_warm_step_finished, Qt.ConnectionType.QueuedConnection,
         )
@@ -748,10 +748,9 @@ class DisplayManager(QObject):
 
         if not is_mc_build():
             return QuickWindowPolicy()
-        use_splash = (
-            os.environ.get("SRPSS_MC_WINDOW_FLAGS", "").strip().lower()
-            == "splash"
-        )
+        from core.diagnostics.experiment_flags import mc_window_splash_admitted
+
+        use_splash = mc_window_splash_admitted()
         if self.settings_manager is not None:
             always_on_top = self.settings_manager.get_bool("mc.always_on_top")
         else:
@@ -4714,12 +4713,7 @@ class DisplayManager(QObject):
         self._arm_next_idle_warm_step()
 
     def _cancel_idle_transition_warmup(self) -> None:
-        """Cancel the owned delay and invalidate results without touching active GL work."""
-        shot, self._idle_warm_shot = self._idle_warm_shot, None
-        if shot is not None:
-            cancel = getattr(shot, "cancel", None)
-            if callable(cancel):
-                cancel()
+        """Drop pending frame requests and invalidate results without touching active GL work."""
         for display in self._idle_warm_order:
             cancel = getattr(display, "cancel_transition_warm_up", None)
             if callable(cancel):
@@ -4749,34 +4743,47 @@ class DisplayManager(QObject):
         )
 
     def _arm_next_idle_warm_step(self) -> None:
-        """Arm one generation-owned GUI continuation via ThreadManager.
+        """Wait for a rendered frame, then admit one step: no timer owns the spacing.
 
-        Bind the actual QObject owner and runtime generation instead of
-        handing the timer service an anonymous closure with no ownership.
+        The next step runs on the first frame the current display renders anyway
+        once ``IDLE_TRANSITION_WARM_MIN_SPACING_S`` has passed since the previous
+        step finished (or the reservation began). A display that renders no frames
+        simply does not warm; nothing repaints it and nothing polls it.
         """
-        scheduler = self._thread_manager
-        shot = getattr(scheduler, "single_shot", None)
-        if not callable(shot):
+        self._idle_warm_not_before = time.monotonic() + IDLE_TRANSITION_WARM_MIN_SPACING_S
+        self._request_idle_warm_frame()
+
+    def _request_idle_warm_frame(self) -> None:
+        """Ask the display being warmed for its next swapped frame (one-shot)."""
+        if self._idle_warm_index >= len(self._idle_warm_order):
             self._cancel_idle_transition_warmup()
             return
+        display = self._idle_warm_order[self._idle_warm_index]
+        request = getattr(display, "request_transition_warm_frame", None)
+        requested = False
         try:
-            handle = shot(
-                IDLE_TRANSITION_WARM_STEP_SPACING_MS,
-                self._admit_idle_warm_step,
-                self._idle_warm_serial,
-            )
-            if handle is None or not getattr(handle, "active", True):
-                self._cancel_idle_transition_warmup()
-            else:
-                self._idle_warm_shot = handle
+            if callable(request):
+                requested = bool(request(self._on_idle_warm_frame, self._idle_warm_serial))
         except Exception:
-            logger.exception("[TRANSITION] Idle GL preparation scheduling failed")
-            self._cancel_idle_transition_warmup()
+            logger.debug("[TRANSITION] Idle GL warm-up frame not requested", exc_info=True)
+        if not requested:
+            # A display that cannot render (hidden, retiring) is skipped, like a refused step.
+            self._idle_warm_serial += 1
+            self._idle_warm_ticket = self._idle_warm_serial
+            self._on_idle_warm_step_finished(self._idle_warm_ticket, True)
+
+    def _on_idle_warm_frame(self, serial: int) -> None:
+        """GUI owner, on a swapped frame: admit one step once the spacing has passed."""
+        if not self._idle_warm_valid(serial):
+            return
+        if time.monotonic() < self._idle_warm_not_before:
+            self._request_idle_warm_frame()
+            return
+        self._admit_idle_warm_step(serial)
 
     @Slot(int)
     def _admit_idle_warm_step(self, serial: int) -> None:
         """GUI owner: admit one GL operation only for the current reservation."""
-        self._idle_warm_shot = None
         if not self._idle_warm_valid(serial):
             return
         if self._idle_warm_index >= len(self._idle_warm_order):

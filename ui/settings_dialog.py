@@ -707,12 +707,6 @@ class SettingsDialog(QDialog):
         # lazy hydration changes content height. ``ui.last_tab_scroll`` remains
         # a tolerated legacy schema member but is intentionally ignored.
         self._tab_keys = ["sources", "display", "transitions", "widgets", "layout", "visualizers", "scene3d", "accessibility", "themes", "about", "quick_start"]
-        self._force_initial_sources_tab = os.getenv(
-            "SRPSS_SETTINGS_FORCE_INITIAL_TAB_SOURCES", "0"
-        ).strip().lower() in {"1", "true", "yes", "on"}
-        self._skip_widgets_hydration = os.getenv(
-            "SRPSS_SETTINGS_SKIP_WIDGETS_HYDRATION", "0"
-        ).strip().lower() in {"1", "true", "yes", "on"}
         self._tab_state_cache: Dict[str, Dict[str, Any]] = {}
         self._tab_scroll_widgets: Dict[int, Optional[QScrollArea]] = {}
         self._tab_button_by_key: Dict[str, TabButton] = {}
@@ -801,10 +795,6 @@ class SettingsDialog(QDialog):
             index = self._tab_keys.index(target.tab_key)
         else:
             index = self._read_persisted_tab_index()
-        # Diagnostic toggle for U-04 isolation:
-        # force a lightweight initial tab so we can compare startup behavior.
-        if self._force_initial_sources_tab:
-            index = 0
         if index < 0 or index >= len(self._tab_keys):
             index = 0
         self._initial_tab_index = self._admit_top_level_tab_index(index)
@@ -1697,7 +1687,7 @@ class SettingsDialog(QDialog):
             )
 
     def _restore_last_tab_selection(self) -> None:
-        if self._force_initial_sources_tab or self._launch_target is not None:
+        if self._launch_target is not None:
             return
         index = self._read_persisted_tab_index()
         if index < 0 or index >= len(self.tab_buttons):
