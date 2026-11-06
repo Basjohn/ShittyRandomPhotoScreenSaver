@@ -146,14 +146,23 @@ RESPONSE_HOLD, HOLD_BELOW = 6., (.8, .7)
 BREATHING_HEARD_RETURN = 1.5
 # Fixed response (Adaptive Response off, operator 6 Nov: "Adaptive is a very problematic approach"; guide 2A: never
 # learn a level from the track). Each geometry drive's routed target is already on the fixed real-music scale (BAND_SPAN,
-# PASSAGE_SPAN, ENERGY_SPAN); the drive is RESPONSE_FIXED_GAIN x target ^ RESPONSE_FIXED_CURVE, eased above
-# RESPONSE_FIXED_KNEE toward RESPONSE_FIXED_CEILING (a loud passage keeps headroom and its crests still move), the same
-# for every song: the Ranges then map it to size. Nothing is remembered, so a break, a loud chorus or a quiet intro never
-# re-scales what follows. Chosen on recorded continuous play (chain5, kicks2/rangeaudit sweeps 6 Nov): the remembered
-# peak's median gain was 1.40 (peak p50 .605); a linear 1.4 left kicks 13-26% under the adaptive gain's in quieter
-# passages and late in songs, 1.6 x target^.75 keeps every time bin and passage at or above it while the drives still
-# move over 35-80% of each Range.
+# PASSAGE_SPAN, ENERGY_SPAN); Pulse Strength's drive is RESPONSE_FIXED_GAIN x target ^ RESPONSE_FIXED_CURVE (the body's
+# below), eased above RESPONSE_FIXED_KNEE toward RESPONSE_FIXED_CEILING (headroom; crests still move), the same for
+# every song: the Ranges then map it to size. Nothing is remembered, so a break, a loud chorus or a quiet intro never
+# re-scales what follows. Chosen on recorded continuous play (chain5, kicks2/rangeaudit/breathing sweeps 6 Nov): the
+# remembered peak's median gain was 1.40 (peak p50 .605); one linear 1.4 for every drive left kicks 13-26% under the
+# adaptive gain's in quieter passages and late in songs.
 RESPONSE_FIXED_GAIN, RESPONSE_FIXED_KNEE, RESPONSE_FIXED_CURVE, RESPONSE_FIXED_CEILING = 1.6, .8, .75, .95
+# The body's size drives (every geometry drive but Pulse Strength) span their Ranges on the plainer BODY_FIXED_GAIN /
+# BODY_FIXED_CURVE (linear), so quiet passages sit near Quiet and loud ones near Peak and a loud passage keeps its
+# changes (3 s window contrast in loud passages .108 against the adaptive gain's .156; the hot curve gave .046; a linear
+# 1.4 kept .146 but left Preset 3's kicks 2-5% under the adaptive gain's in three time bins). Pulse Strength
+# (bend: the swell a kick launches) keeps the hotter calibration, and the swell takes the room the body leaves:
+# SWELL_HEADROOM x (1 - height drive) more strength (WaveformDynamics.swell_strength), so a kick in a quieter passage
+# still lands (guide 13D: normalise the passage, never the beats). Soft passages swing less in absolute terms than under
+# the adaptive gain, which multiplied them by up to 1.9 (3 s window contrast .209 against .300); doubling Breathing's
+# contrast reach bought only about .02 and doubled what a break's missing phrase carries into the return, so it stays.
+BODY_FIXED_GAIN, BODY_FIXED_CURVE, SWELL_HEADROOM = 1.6, 1., 1.
 # Kick Accent (operator 6 Nov: "many sustained kicks ignored (consider maybe increasing particle count at the sustained
 # points or rotation speed? Something for a sense of them?)"). In a sustained loud passage the geometry has little
 # headroom: the bend drive (it sets Pulse Strength) sits near its top, so a kick's swell barely rises above the swells
@@ -255,10 +264,12 @@ def span(value, low, high):
     return position
 
 
-def fixed_response(target):
-    """A routed geometry target on the fixed scale -> drive target: RESPONSE_FIXED_GAIN x target^RESPONSE_FIXED_CURVE
-    to RESPONSE_FIXED_KNEE, then an exponential approach to RESPONSE_FIXED_CEILING that never flattens on it."""
-    value = RESPONSE_FIXED_GAIN*max(0.,target)**RESPONSE_FIXED_CURVE
+def fixed_response(target, pulse=True):
+    """A routed geometry target on the fixed scale -> drive target: gain x target^curve (RESPONSE_FIXED_* for Pulse
+    Strength, BODY_FIXED_* for the body's size) to RESPONSE_FIXED_KNEE, then an exponential approach to
+    RESPONSE_FIXED_CEILING that never flattens on it."""
+    gain,curve = (RESPONSE_FIXED_GAIN,RESPONSE_FIXED_CURVE) if pulse else (BODY_FIXED_GAIN,BODY_FIXED_CURVE)
+    value = gain*max(0.,target)**curve
     if value > RESPONSE_FIXED_KNEE:
         room = RESPONSE_FIXED_CEILING-RESPONSE_FIXED_KNEE
         value = RESPONSE_FIXED_KNEE+room*(1.-math.exp(-(value-RESPONSE_FIXED_KNEE)/room))
@@ -595,7 +606,7 @@ class WaveformDynamics:
                         self._response_peak[key],target,dt,RESPONSE_REACH,memory))
                     target = unit(RESPONSE_TOP*target/self._response_peak[key])
                 else:
-                    target = fixed_response(target)
+                    target = fixed_response(target,key=='bend')
                 # Breathing's phrase-scale mean learns only from heard music (BREATHING_HEARD_RETURN): it fell with a
                 # break, so the music's return swelled against it (spliced 2-5 s breaks on recorded music: +4..11%
                 # height for 10 s on every Breathing preset, 0..1% with Breathing 0).
@@ -743,7 +754,7 @@ class WaveformDynamics:
         settle = min(WHOLE_SETTLE[1],max(WHOLE_SETTLE[0],.25*p.fade))
         self._whole = self._whole*math.exp(-dt/settle)+(0. if travelling else release)
         self._whole_fresh = self._whole_fresh*math.exp(-dt/min(settle,FRESH_FADE))+(0. if travelling else release)
-        self._advance_frozen(dt,p.mode=='Frozen Past',self._value('bend'))
+        self._advance_frozen(dt,p.mode=='Frozen Past',self.swell_strength())
         self._publish_fields(dt)
         return release
 
@@ -884,6 +895,14 @@ class WaveformDynamics:
         self._drift_stage = self._drift_stage+(drift_target-self._drift_stage)*ease
         step = SURGE_RATE*dt
         self._drift = self._drift+np.clip((self._drift_stage-self._drift)*ease,-step,step)
+
+    def swell_strength(self):
+        """Pulse Strength the swell is drawn with: the bend Range value, plus the room the body leaves
+        (SWELL_HEADROOM x (1 - height drive)) on the fixed response; Adaptive Response keeps the plain value."""
+        strength = self._value('bend')
+        if self.controls.adaptive_response:
+            return strength
+        return strength*(1.+SWELL_HEADROOM*(1.-unit(self.drive['height'])))
 
     def _learn_rate(self,dt,presence):
         """Share of real time Breathing's phrase-scale mean learns this tick: 0 with the musical weight, back over
@@ -1122,7 +1141,7 @@ class WaveformDynamics:
         # envelope so whole waves swell together and the curvature keeps its own sign (flow rule).
         swell = self.pulse_at(x)
         # Beyond the field the published edge value continues (a Whole Swell never ends at the grid edge).
-        broad = np.interp(x,PULSE_GRID,self.geometric_gain(values['bend']))
+        broad = np.interp(x,PULSE_GRID,self.geometric_gain(self.swell_strength()))
         geometric = np.interp(x,PULSE_GRID,self._geom)
         gain = broad
         cy = carrier*values['height']*gain

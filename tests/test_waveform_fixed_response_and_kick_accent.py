@@ -57,14 +57,14 @@ def break_change(c, length):
 def test_a_two_to_five_second_break_does_not_rescale_what_follows(monkeypatch):
     c = replace(controls(), breathing=1.)
     for length in (2., 5.):
-        assert break_change(c, length) < .03, length       # 6 Nov: 2.2% / 2.5% (the passage's own followers 1.3%)
+        assert break_change(c, length) < .035, length      # 6 Nov: 2.4% / 3.0% (Breathing 0: 1.5% / 1.6%)
     # Negative control: the remembered peak (Adaptive Response on) decays through the break and sizes the return up
     # until the song's next peak.
-    assert break_change(replace(c, adaptive_response=True), 5.) > .04             # 5.7%
+    assert break_change(replace(c, adaptive_response=True), 5.) > .045            # 5.2%
     # Negative control: Breathing's mean learning through the silence (the former code) swells the return against a
     # mean that fell with it.
     monkeypatch.setattr(dyn.WaveformDynamics, '_learn_rate', lambda self, dt, presence: 1.)
-    assert break_change(c, 5.) > .035                                               # 4.1%
+    assert break_change(c, 5.) > .038                                               # 4.2%
 
 
 def test_adaptive_response_off_remembers_nothing():

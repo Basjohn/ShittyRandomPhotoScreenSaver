@@ -87,9 +87,11 @@ constants); all state integrates on the sole logical clock and the projection on
   from the long-fade field its peak-keeping set envelope pinned the swell at the soft bound over the view, 5 Nov
   Preset 7). Every mode obeys the flow rule and the no-twitch rules.
 - **Fixed response (6 Nov; Adaptive Response is an opt-in).** Geometry drives are a fixed function of the routed
-  target on the real-music scale (`RESPONSE_FIXED_GAIN` x target^`RESPONSE_FIXED_CURVE`, eased toward
-  `RESPONSE_FIXED_CEILING` above `RESPONSE_FIXED_KNEE`), the same for every song; each target's Range (Quiet→Peak)
-  then maps the drive to size, so the Ranges are the authored reactivity. Nothing is remembered: a break, a loud chorus
+  target on the real-music scale, the same for every song: the body's size drives on `BODY_FIXED_GAIN` (linear, so
+  quiet passages sit near Quiet and loud ones near Peak and a loud passage keeps its changes), Pulse Strength on the
+  hotter `RESPONSE_FIXED_GAIN` x target^`RESPONSE_FIXED_CURVE`, both eased toward `RESPONSE_FIXED_CEILING` above
+  `RESPONSE_FIXED_KNEE`; the swell takes the room the body leaves (`SWELL_HEADROOM`, `WaveformDynamics.swell_strength`).
+  Each target's Range (Quiet→Peak) maps the drive to size, so the Ranges are the authored reactivity. Nothing is remembered: a break, a loud chorus
   or a quiet intro never re-scales what follows (operator, 6 Nov: "Adaptive is a very problematic approach"; guide 2A).
   The former remembered-peak gain stays behind the **Adaptive Response** toggle (off in every preset): on a spliced 5 s
   break in Rag Doll's loud end it sized the following 10 s 5-9% up (Preset 4). The fixed calibration keeps kick peaks
