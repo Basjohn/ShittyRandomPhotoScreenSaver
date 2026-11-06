@@ -204,10 +204,7 @@ def run_validation(args: argparse.Namespace) -> Dict[str, Any]:
     prep: Dict[str, Any] = {}
 
     try:
-        prev_flag = os.environ.get("SRPSS_MC_WINDOW_FLAGS")
-        if args.mc_window_flags != "default":
-            os.environ["SRPSS_MC_WINDOW_FLAGS"] = args.mc_window_flags
-        proc, launch_io = _launch_runtime("mc", appdata_root, log_dir)
+        proc, launch_io = _launch_runtime("mc", appdata_root, log_dir, args.mc_window_flags)
         target_pid = int(proc.pid)
         target = _wait_for_window(target_pid, timeout_s=args.launch_timeout_s)
         if target is None:
@@ -374,11 +371,6 @@ def run_validation(args: argparse.Namespace) -> Dict[str, Any]:
                     proc.kill()
                 except Exception:
                     pass
-        if "prev_flag" in locals():
-            if prev_flag is None:
-                os.environ.pop("SRPSS_MC_WINDOW_FLAGS", None)
-            else:
-                os.environ["SRPSS_MC_WINDOW_FLAGS"] = prev_flag
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Hardware ingress validator for U-05.")

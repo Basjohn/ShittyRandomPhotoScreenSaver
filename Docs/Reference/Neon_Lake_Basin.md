@@ -50,8 +50,8 @@ preset selection. Save Preset As captures it by default, outside the artwork sna
 retain the adjusted live view. Validation/selection/repair behavior is owned by the Visualizer reference's
 **Framed preset starting views** contract. Existing art files are not rewritten automatically.
 
-Edit selection remains the fixed card rectangle. The internal eight-point guide and pivot use the same `basin_fit` /
-`basin_item_point` projection as rendering and clamp to the card interior. They remain paint, never geometry authorities.
+Edit selection remains the fixed card rectangle. The internal eight-point guide and pivot use the same `basin_view`
+(`item_point`) projection as rendering and clamp to the card interior. They remain paint, never geometry authorities.
 
 ## Authoring and migration
 

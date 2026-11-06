@@ -21,6 +21,8 @@ IS_WINDOWS = sys.platform == "win32"
 BASE_DIR = machine_shared_root() / "SRPSS"
 
 _BREADCRUMB_FAILURE_REPORTED = False
+# Breadcrumbs are suppressed inside pytest runs; the one test of the bounded log flips this attribute.
+_ALLOW_BREADCRUMBS_UNDER_TEST = False
 
 
 def _running_as_system() -> bool:
@@ -39,12 +41,7 @@ def _running_as_system() -> bool:
 def _log_helper_event(message: str) -> None:
     global _BREADCRUMB_FAILURE_REPORTED
 
-    if (
-        os.getenv("PYTEST_CURRENT_TEST")
-        and not os.getenv(
-            "SRPSS_ALLOW_TEST_HELPER_BREADCRUMBS"
-        )
-    ):
+    if os.getenv("PYTEST_CURRENT_TEST") and not _ALLOW_BREADCRUMBS_UNDER_TEST:
         return
 
     stamp = (

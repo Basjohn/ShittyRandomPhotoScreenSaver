@@ -87,14 +87,29 @@ def _label(text: str) -> str:
     return str(text).rstrip(":").strip()
 
 
+# DevCurve's layers in their stored order, their titles and the row tooltips (formerly Settings' Shaper).
+_LAYER_ORDER = ("bass", "vocals", "mids", "transients")
+_LAYER_LABEL = {"bass": "Bass", "vocals": "Vocals", "mids": "Mids", "transients": "Transients"}
+_LAYER_TIPS = {
+    "enabled": "Enable/disable this layer's rendering and audio response.",
+    "alpha": "Fill opacity for this layer only.",
+    "offset": "Vertical lane offset for this layer before audio deformation.",
+    "order": "Layer stack order. Higher numbers render on top of lower numbers.",
+    "color": "Fill colour of this layer.",
+    "outline_color": "Outline colour of this layer. Outline alpha is always fully opaque.",
+    "outline_width": "Outline thickness of this layer.",
+    "power": "How strongly the music drives this layer.",
+}
+# Nodes per layer contour (the production solver needs at least two).
+_MIN_NODES, _MAX_NODES = 2, 5
+
+
 def layers() -> tuple[str, ...]:
-    """DevCurve's layers in Settings' order (the shaper's own list)."""
-    from ui.tabs.media.devcurve_builder import _LAYER_ORDER
+    """DevCurve's layers in their stored order."""
     return tuple(_LAYER_ORDER)
 
 
 def layer_label(layer: str) -> str:
-    from ui.tabs.media.devcurve_builder import _LAYER_LABEL
     return _LAYER_LABEL[layer]
 
 
@@ -103,9 +118,8 @@ def layer_key(layer: str, suffix: str) -> str:
 
 
 def node_limits() -> tuple[int, int]:
-    """Settings' shape editor's node range per layer, never below the two the production solver needs
+    """The node range per layer, never below the two the production solver needs
     (``DevCurveFrameRuntime.advance`` refuses fewer)."""
-    from ui.tabs.media.devcurve_shape_editor import _MAX_NODES, _MIN_NODES
     return max(2, int(_MIN_NODES)), int(_MAX_NODES)
 
 
@@ -163,7 +177,7 @@ def admit_nodes(candidate: Any, previous: Any, fallback: str) -> list:
 
 
 def _admit_layer(suffix: str, key: str, candidate: Any, previous: Any) -> Any:
-    """One layer value as Settings' Custom layer row stores it (``devcurve_settings_binding``): percent sliders in
+    """One layer value as it is stored (the former Settings layer row's resolution): percent sliders in
     hundredths, the outline width in thousandths of 1..20, the outline opaque, the order 1..4."""
     if suffix == "enabled":
         return bool(candidate)
@@ -187,7 +201,7 @@ def _admit_layer(suffix: str, key: str, candidate: Any, previous: Any) -> Any:
 
 
 def normalized_orders(values: Mapping[str, Any], target: str | None = None, rank: int | None = None) -> dict:
-    """Settings' stack normalisation (``devcurve_builder._normalize_layer_orders``): enabled layers take ranks 1..n
+    """The stack normalisation (the former Settings shaper's): enabled layers take ranks 1..n
     in their order (``target`` moved to ``rank`` when given), disabled layers follow in theirs."""
     names = layers()
     enabled = [name for name in names if bool(values.get(layer_key(name, "enabled")))]
@@ -259,13 +273,8 @@ def structure_edit(action_id: str, values: Mapping[str, Any]):
 # ------------------------------------------------------------------------------------ schema
 def _layer_properties(name: str, add: Callable[..., None]) -> None:
     """One layer's rows (Settings' Custom layer row and its shape-editor nodes) in that layer's own group."""
-    from ui.tabs.media import devcurve_builder as builder
     group = layer_label(name)
-    tips = {"enabled": builder._TOOLTIP_LAYER_ENABLED, "alpha": builder._TOOLTIP_LAYER_ALPHA,
-            "offset": builder._TOOLTIP_LAYER_OFFSET, "order": builder._TOOLTIP_LAYER_ORDER,
-            "color": builder._TOOLTIP_LAYER_COLOR, "outline_color": builder._TOOLTIP_LAYER_OUTLINE_COLOR,
-            "outline_width": builder._TOOLTIP_LAYER_OUTLINE_WIDTH,
-            "power": "How strongly the music drives this layer (Settings' energy arrow over the shaper)."}
+    tips = _LAYER_TIPS
     for suffix, (label, priority, icon) in _LAYER_ROWS.items():
         key = layer_key(name, suffix)
         common = dict(tooltip=tips[suffix], priority=priority, icon=icon)
@@ -333,12 +342,12 @@ def build_schema() -> StudioSchema:
             add(control.key, (control.key,), label, workspace, group, COLOUR, **common)
         # Any other control type is deliberately not guessed at: the full-coverage test names it.
 
-    # Settings' Custom layer row (Shaper): which layer Settings' shaper opens on, then one group per layer.
+    # The Shaper bucket: the stored edit layer, then one group per layer.
     shaper = titles.get("shaper", "Shaper")
     names = layers()
-    add(ACTIVE_LAYER, (ACTIVE_LAYER,), "Settings Edit Layer", "shaper", shaper, CHOICE,
+    add(ACTIVE_LAYER, (ACTIVE_LAYER,), "Edit Layer", "shaper", shaper, CHOICE,
         choices=tuple(layer_label(n) for n in names), choice_values=names, priority=0, icon="wave",
-        tooltip="The layer Settings' shaper opens on. It changes nothing on screen; every layer is edited here.")
+        tooltip="The layer a preset marks for editing. It changes nothing on screen; every layer is edited here.")
     for name in names:
         _layer_properties(name, add)
 

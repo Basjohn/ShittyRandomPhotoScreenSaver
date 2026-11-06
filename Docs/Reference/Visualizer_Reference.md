@@ -204,9 +204,11 @@ client pixel rectangle, preserves foreign owners and retains failed cleanup at t
 gate. Release/reset/menu/Edit/mode/focus/topology/close cancel through one unwind. Cursor hiding/reveal reuses
 the existing fade timer/cache; held motion adds no polling, timer or cursor allocation. Stock native-arrow
 states explicitly decline because no alpha raster is available; existing menus already exclude orbit.
-An existing exclusive/mouse grab must retain its complete press/release sequence even below the card. The
-lower-passive-handler exception does not authorize stealing that sequence; the candidate's remaining gap
-and its required falsifier are tracked in `Current_Plan.md` → Shared camera gestures.
+An existing exclusive/mouse grab must retain its complete press/release sequence even below the card: any
+exclusive grab (including a lower retained MouseArea) declines orbit promotion, and only passive grabs use the
+lower-passive-handler stacking exception, which does not authorize stealing that sequence. Closed 23 Oct 2026
+(commit 9997e976); the falsifier is `test_lower_retained_mouse_area_exclusive_grab_keeps_its_press_and_release`
+in `tests/test_visualizer_plain_orbit.py`. Physical orbit remains operator acceptance (synthetic Qt presses are not).
 
 Framed 3D modes reuse `VisualizerPresentation.qml` for a noninteractive keyboard/mouse hint at the top right.
 A pointer entry gently reveals the supplied artwork with the hover chrome; fade-out begins after five seconds even
@@ -386,8 +388,10 @@ preset-authorable; Settings' Technical group and the Studio's Audio Analysis gro
 `ui/tabs/media/technical_controls._control_defs_for_mode`) do not offer it; a mode that starts reading it drops it from the
 tuple. `tests/test_audio_analysis_controls.py` derives both directions from the registry: every hidden control leaves the
 published frame bit-identical, every offered one moves it, and hidden values round-trip through the model and the real tab.
-Bar Count is not hidden anywhere (it moves every mode's frame); hiding it outside Spectrum and Extruded Spectrum is a
-product call (stored values would keep applying, so no look changes), listed in `Current_Plan.md` §9.
+Bar Count is not hidden anywhere (it moves every mode's frame). It is the drawn bar count only on a mode whose
+descriptor `draws_bars` (Spectrum, Extruded Spectrum; the same fact shows the page's Bar Appearance family there);
+everywhere else `_control_defs_for_mode` labels it **Analysis Bands** with a tooltip saying it is the analysis
+resolution, and Settings and the Studio read that one definition (decided 6 Nov with the Studio migration).
 
 ## 6. Latest-state semantics
 

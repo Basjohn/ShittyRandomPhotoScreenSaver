@@ -72,11 +72,3 @@ def test_preset_camera_starts_are_unchanged_and_home_resets_new_position():
     # artistic value (which the operator can freely edit).
 
 
-def test_original_scene_path_mapper_kept_for_other_visualizers():
-    source = (ROOT/'ui/widgets/visual_controls.py').read_text(encoding='utf-8')
-    builder = (ROOT/'ui/tabs/media/spec_mode_builder.py').read_text(encoding='utf-8')
-    assert 'class ScenePathMapper(_VisualControl):' in source
-    assert 'class SceneVolumeMapper(_VisualControl):' in source
-    assert 'ScenePathMapper()' in builder
-    assert 'SceneVolumeMapper(camera_only=' in builder
-    assert 'cameraOffsetCommitted' in source and 'cameraOffsetCommitted.connect' in builder

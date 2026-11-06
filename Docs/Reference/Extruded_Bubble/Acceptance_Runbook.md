@@ -160,7 +160,7 @@ Do not copy `--noconftest` into an unrelated test that depends on the shared fix
 
 | Gates | Existing narrow tests to inspect/select | Additional proof still required |
 | --- | --- | --- |
-| G00–G01 | `test_extruded_bubble_lazy_bucket_ui.py`, `test_extruded_settings_spec.py` | Failure-only referrer capture, real Settings retirement and repeated native open/close |
+| G00–G01 | `test_visualizer_studio_parity.py` (EB's Settings body is Studio-owned since 6 Nov), `test_extruded_settings_spec.py` | Failure-only referrer capture, real Settings retirement and repeated native open/close |
 | G02, G12–G15, G25 | `test_extruded_bubble_recorded_reactivity.py`, `test_extruded_bubble_startup_and_sizes.py`, `test_extruded_bubble_display_only_smoothing.py`, `test_extruded_bubble_full_dynamic_audio.py` | Same-timestamp 2D/EB source→ID→pixel recordings, 256 vs 512, actual playing output |
 | G03–G06, G30 | `test_extruded_bubble_physical_camera_contract.py`, `test_extruded_bubble_world.py`, `test_extruded_bubble_r34_alignment_candidate.py`, `test_extruded_bubble_world_gpu.py` | Native 3D projection overlays, downward rays, surface/Deep source parity and animated camera |
 | G07–G09, G16–G18 | `test_extruded_bubble_scene_emission_candidate.py`, `test_extruded_bubble_r43_inlet_and_breach.py`, `test_extruded_bubble_r42_source_surface_candidates.py`, `test_extruded_bubble_population_candidate.py`, `test_extruded_bubble_source_end_candidate.py` | Native moving bands, actual admitted IDs and lifetime alpha; controlled count handle changes |
