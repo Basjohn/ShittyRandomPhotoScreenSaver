@@ -3,11 +3,10 @@
 
 Every mode is edited in its Studio (``ui/studio``), which has parity+ with the buckets it replaced
 (``tests/test_visualizer_studio_parity.py`` proves it from the registries). A mode's Settings body is the preset row
-with its OPEN STUDIO launcher, one sentence, and only the sections Settings keeps for itself (Neon Lake's terrain
-brush, which the Studio has no instrument for). The body's values live in a section-lazy cache
-(``_<prefix>_lazy_values``) so loading, collecting, saving, preset switching and Custom snapshots run through the
-unchanged owners; the technical (audio analysis) controls keep their canonical widgets as value owners in a
-never-shown holder.
+with its OPEN STUDIO launcher and one sentence; no Settings control is kept beside them (Neon Lake's terrain is
+painted with the Studio's brush). The body's values live in a section-lazy cache (``_<prefix>_lazy_values``) so
+loading, collecting, saving, preset switching and Custom snapshots run through the unchanged owners; the technical
+(audio analysis) controls keep their canonical widgets as value owners in a never-shown holder.
 """
 from __future__ import annotations
 
@@ -49,14 +48,6 @@ def body_keys(mode_id: str) -> tuple[str, ...]:
     return tuple(out)
 
 
-def _sections_attr(spec) -> str:
-    return f"_{spec.prefix}_settings_sections"
-
-
-def _kept_sections(tab, spec) -> tuple[Custom, ...]:
-    return tuple(getattr(tab, _sections_attr(spec), ()))
-
-
 def _admitted(tab, spec, key: str, config) -> Any:
     """``config``'s value of one body key (the canonical default when absent), admitted as the model admits it: a
     control by its spec, a Custom row's key by the row's ``admit`` (else the stored record passes through)."""
@@ -70,18 +61,13 @@ def _admitted(tab, spec, key: str, config) -> Any:
     return control.admit(read_control_value(control, config.get, default), default)
 
 
-def build_studio_owned_mode_ui(tab, parent_layout, mode_id: str, intro: str, *,
-                               settings_sections: tuple[str, ...] = ()) -> None:
-    """The mode's Settings body: the preset row (OPEN STUDIO is in it), one sentence and the named Custom sections
-    Settings keeps (built from their spec ``build`` hook, loaded and collected through theirs). No bucket or other
-    control widget is built; every other value lives in the section-lazy cache."""
+def build_studio_owned_mode_ui(tab, parent_layout, mode_id: str, intro: str) -> None:
+    """The mode's Settings body: the preset row (OPEN STUDIO is in it) and one sentence. No bucket or other control
+    widget is built; every value lives in the section-lazy cache."""
     spec = require_mode_settings(mode_id)
     for bucket in spec.buckets:
         tab.get_visualizer_bucket_state(mode_id, bucket.key)
     prefix = spec.prefix
-    kept = tuple(entry for entry in spec.entries if isinstance(entry, Custom) and entry.name in settings_sections)
-    if len(kept) != len(settings_sections):
-        raise ValueError(f"{mode_id} declares no Custom section among {settings_sections!r}")
     scaffold = build_mode_scaffold(
         tab,
         parent_layout,
@@ -105,13 +91,10 @@ def build_studio_owned_mode_ui(tab, parent_layout, mode_id: str, intro: str, *,
         scaffold.layout.removeWidget(region)
         holder_layout.addWidget(region)
     setattr(tab, f"_{prefix}_lazy_values", {key: _admitted(tab, spec, key, {}) for key in body_keys(mode_id)})
-    setattr(tab, _sections_attr(spec), kept)
     text = QLabel(intro)
     text.setObjectName(f"{mode_id}_studio_intro")
     text.setWordWrap(True)
     scaffold.layout.addWidget(text)
-    for entry in kept:
-        _resolve(entry.build)(tab, scaffold.layout)
     _add_studio_launcher(tab, mode_id)
 
 
@@ -143,34 +126,26 @@ def _add_studio_launcher(tab, mode_id: str) -> None:
 
 
 def load_spec_mode_settings(tab, mode_id: str, config) -> None:
-    """Hold ``config``'s values (canonical defaults for missing ones), admitted as the model admits them, and show
-    them in the sections Settings keeps. Loading saves nothing and switches no preset."""
+    """Hold ``config``'s values (canonical defaults for missing ones), admitted as the model admits them. Loading
+    saves nothing and switches no preset."""
     spec = require_mode_settings(mode_id)
     config = config if isinstance(config, dict) else {}
     cache = getattr(tab, f"_{spec.prefix}_lazy_values")
     for key in body_keys(mode_id):
         cache[key] = _admitted(tab, spec, key, config)
-    for entry in _kept_sections(tab, spec):
-        if entry.load:
-            _resolve(entry.load)(tab, config)
     if spec_for_mode(mode_id) is not None:
         fce.hydrate_pose(tab, mode_id, config)
         fce.refresh_editors(tab, mode_id)
 
 
 def collect_spec_mode_settings(tab, mode_id: str) -> dict[str, Any]:
-    """The body's values as persisted (colours as RGBA lists); a kept section's own editor wins for its keys."""
+    """The body's values as persisted (colours as RGBA lists)."""
     spec = require_mode_settings(mode_id)
     cache = getattr(tab, f"_{spec.prefix}_lazy_values")
     values: dict[str, Any] = {}
     for key in body_keys(mode_id):
         value = cache[key]
         values[key] = list(value) if isinstance(_control(spec, key), Colour) else deepcopy(value)
-    for entry in _kept_sections(tab, spec):
-        if entry.collect:
-            collected = _resolve(entry.collect)(tab)
-            cache.update(deepcopy(collected))
-            values.update(collected)
     if spec_for_mode(mode_id) is not None:
         values = fce.collected(tab, mode_id, values)
     return values

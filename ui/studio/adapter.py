@@ -58,15 +58,19 @@ class StudioCapabilities:
     ``camera``: the mode has a navigable camera; ``navigation()`` maps orbit / zoom / dolly / pan.
     ``handles``: ``scene_handles()`` supplies direct-manipulation handles over the preview.
     ``objects``: the mode has scene objects (``scene_objects()``) listed beside the viewport (False: no list; the
-    viewport takes its width)."""
+    viewport takes its width).
+    ``brush``: ``brush_target()`` names a heightfield the shared brush instrument paints on the preview
+    (``ui.studio.brush``)."""
     viewport: bool = True
     camera: bool = False
     handles: bool = False
     objects: bool = True
+    brush: bool = False
 
     def as_map(self) -> dict:
         return {"viewport": self.viewport, "camera": self.camera and self.viewport,
-                "handles": self.handles and self.viewport, "objects": self.objects}
+                "handles": self.handles and self.viewport, "objects": self.objects,
+                "brush": self.brush and self.viewport}
 
 
 @dataclass(frozen=True)
@@ -166,6 +170,11 @@ class StudioModeAdapter(ABC):
 
     def add_object(self, values: Mapping[str, Any]):
         """(path, value) edit that adds one scene object, or None at capacity / unsupported."""
+        return None
+
+    def brush_target(self):
+        """The heightfield the shared brush paints (``ui.studio.brush.BrushTarget``), consulted only when
+        ``capabilities().brush``."""
         return None
 
     def structure_edit(self, action_id: str, values: Mapping[str, Any]):
