@@ -660,6 +660,14 @@ class EngineAnswerEvaluator:
         self._environment = image
         self._retire()
 
+    def release_only_keys(self, keys) -> frozenset[str]:
+        """Of ``keys``, the engine-owned ones: a live gesture keeps the previous answers on screen (``evaluate``
+        with ``exact=False`` never starts an analysis), so their preview follows only on release."""
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+        prefixes = tuple(get_visualizer_mode_descriptor(self.mode.mode_id).setting_prefixes)
+        owned = self.mode.owned_keys()
+        return frozenset(key for key in keys if key.startswith(prefixes) and key not in owned)
+
     def set_invalidate(self, callback: Callable[[], None] | None) -> None:
         """The Studio's re-evaluate request, called when a background analysis lands."""
         self._invalidate = callback

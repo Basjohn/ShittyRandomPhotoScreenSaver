@@ -43,6 +43,31 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
 
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
 
+- [ ] **Slow startup: Feeds cache delivery blocks the GUI thread (operator, 6 Nov 10:30):** the first
+  `_FeedFamilyOwner._submit ... _deliver` UI callback took **6855 ms**, later per-source cache deliveries 166-240 ms
+  each (`[PERF][FEED_GUI_DELIVERY] phase=cache`), the feeds refresh held the transition gate 16.8 s, and the
+  image_prefetch worker missed its heartbeat and had to be terminated/killed (likely starved by the same block).
+  Weather/Reddit/Gmail startup deliveries 90-160 ms each. R-104 isolated parsing; the warm-restore publish of every
+  News publisher's cached rows (16-22 publishers per category) still runs on the GUI thread. Make warm restore
+  publish a bounded first page and stream the rest (or build the payload off-thread and hand the GUI one coherent
+  bundle), keep R-104's single gentle startup transition, and prove the GUI-thread time per delivery stays under the
+  stall budget. Evidence `.artifacts/evidence/slow_startup_20261106/`.
+  **Lead correlation (same log):** the 6.9 s callback ends exactly when the `--usage` sampler's FIRST collection does:
+  `collect_ms=7238.78 topology_refresh=1 topology_source=toolhelp` at 10:30:27 on a machine at 97-100% system CPU
+  (agents' game60 live checks were running). A single long GIL-holding collection (cf. the "usage sampler
+  children()/num_threads()" lesson) starves every Python thread, so the feeds callback may only be the one that got
+  measured. First prove which owns the 7 s (sampler topology snapshot vs feeds publish), then fix both: the sampler's
+  startup topology refresh must not hold the GIL for seconds (chunk it, or take the snapshot without the GIL), and
+  the per-source 166-240 ms feeds deliveries still need trimming.
+- [ ] **Spectrum visual-only smoothing still broken (operator, 6 Nov):** wired (Settings -> `_spectrum_visual_smoothing
+  (_enabled)` -> `SpectrumFrameRuntime.resolve(smoothing_enabled, smoothing_strength)`), so the defect is in what it
+  does. Measure bar motion on recorded music with smoothing off / on / at 0.3 / 0.7 / 1.0 (frame-to-frame jerk, lag,
+  peak preservation), find the owner, fix, and show it in the Spectrum Studio.
+- [ ] **Bubble / Extruded Bubble "terrible performance" (operator log 10:32-10:35):** confounded: the machine was at
+  97-100% system CPU from the agents' game60 live checks and parallel work during that session (quiet-machine game60
+  this morning: Bubble P1 62.7 fps, EB 54.6 fps). Re-check in a quiet operator session before acting; heavy
+  load-generator runs are now scheduled by the lead only.
+
 - [~] **Displays off -> presentation pauses entirely, resumes clean (built 5 Nov; awaiting the operator's physical
   overnight check):** `core.display_power` pauses rotation, transitions, the Visualizer (parked, capture released) and
   the clock while the console displays are off (`Docs/Architecture/Compositor_Architecture.md` → Display power).
@@ -541,6 +566,24 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
     be ~2.2 MB each but an engine-owned edit re-analyses the whole clip (~2.5x longer). A clean loop instead: loop
     points on matching musical positions with a short crossfade, and the Studio's evaluator continuing its simulation
     state across the loop (today the replay restarts at t = 0, which would jump). Choose with measurements.
+- [ ] **Studio chrome matches Settings (6 Nov), awaiting the operator's look** (all Studios: one shell;
+  `Docs/Reference/Visualizer_Studio.md` "Chrome and theme"). Frameless window with Settings' title bar and forged
+  rounded edge, the theme's Glass/Acrylic material, 1.5 px one-path card borders, Settings' panel casts at half
+  offset, viewport corners rounded over the scene. Hidden-render evidence `.artifacts/evidence/studio_chrome/`
+  (before/after, Default Dark Acrylic, Matte Graphite Normal, Pearl Blush light Glass; 8x crops). Operator to check
+  on screen: the live Glass/Acrylic composition of the Qt Quick window (first use of the AccentPolicy material on an
+  alpha OpenGL window; the evidence only simulates the blur), snap/resize/maximise by hand, and the panel opacity
+  floor (0.88) and shadow strength on light themes. Two side defects seen in that evidence, both already in the
+  before renders: (a) Bubble's presented scene differs under the light Pearl Blush theme (max 7-9 levels over ~37k
+  pixels vs Default Dark, before and after this change), though the scene should never follow the Settings theme and
+  no test compares scene pixels across themes; (b) on light themes the signal-trace cards keep the dark viewport
+  colour and their channel labels are barely legible.
+- [ ] **Studio drag lag fixed (6 Nov), awaiting the operator's feel check.** Drags preview once per frame and
+  re-show only the dragged key (Visualizer_Studio.md "Drags are batched"); evidence
+  `.artifacts/evidence/studio_drag/` (per move 56 ms -> 0.07 ms on Waveform). Two per-frame costs remain, both
+  outside the drag path: Waveform's exact replay on release runs in one frame (~120 ms, no frame budget or
+  checkpoints like Spectrum's), and Spectrum's live restyle builds the production settings model per new value
+  (~14 ms per frame while dragging a mode-owned key).
 
 ## Operator execution and evidence rules
 

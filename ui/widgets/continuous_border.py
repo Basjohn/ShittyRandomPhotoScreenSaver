@@ -23,14 +23,22 @@ def theme_color(token: str) -> QColor:
     return QColor(*get_active_settings_theme().color(token).as_tuple())
 
 
-def stroke_rounded_border(widget: QWidget, color: QColor, width: float, radius: float,
-                          painter: QPainter | None = None) -> None:
-    """Stroke ``widget.rect()``'s rounded outline as one path, fully inside the widget."""
+def rounded_border_path(bounds: QRectF, width: float, radius: float) -> QPainterPath:
+    """The one continuous path whose ``width`` stroke draws ``bounds``' rounded outline fully inside it.
+
+    Shared with the Studio's painted panel frames (``ui/studio/chrome.py``)."""
     inset = width / 2.0
-    rect = QRectF(widget.rect()).adjusted(inset, inset, -inset, -inset)
+    rect = QRectF(bounds).adjusted(inset, inset, -inset, -inset)
     radius = max(0.0, min(radius - inset, rect.height() / 2.0, rect.width() / 2.0))
     path = QPainterPath()
     path.addRoundedRect(rect, radius, radius)
+    return path
+
+
+def stroke_rounded_border(widget: QWidget, color: QColor, width: float, radius: float,
+                          painter: QPainter | None = None) -> None:
+    """Stroke ``widget.rect()``'s rounded outline as one path, fully inside the widget."""
+    path = rounded_border_path(QRectF(widget.rect()), width, radius)
     own = painter is None
     if own:
         painter = QPainter(widget)
