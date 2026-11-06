@@ -58,7 +58,7 @@ _LEVELS = 5                 # 1/2 .. 1/32
 _LIGHT_FROM = 3             # 1/8
 _HEAVY_FROM = 5             # 1/32
 
-_VERTEX = """#version 330 core
+_VERTEX = """#version 460 core
 out vec2 vUv;
 void main() {
     vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
@@ -68,7 +68,7 @@ void main() {
 """
 
 # Dual-filter (Kawase) down/up samplers: smooth, wide blurs from few bilinear taps.
-_DOWN = """#version 330 core
+_DOWN = """#version 460 core
 in vec2 vUv;
 out vec4 fragColor;
 uniform sampler2D uSource;
@@ -83,7 +83,7 @@ void main() {
 }
 """
 
-_UP = """#version 330 core
+_UP = """#version 460 core
 in vec2 vUv;
 out vec4 fragColor;
 uniform sampler2D uSource;

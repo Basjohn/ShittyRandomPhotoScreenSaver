@@ -320,7 +320,7 @@ class RetainedOverlayWidget:
 
         apply_overlay_card_style(self.item, style)
         self._surface_material = str(style.surface_material)
-        host = self._host
+        host = getattr(self, "_host", None)
         if host is not None:
             host._note_surface_demand()
 
