@@ -164,6 +164,7 @@ FIXED_RESPONSE_DEFAULT, RESPONSE_FIXED_KNEE, RESPONSE_FIXED_CEILING = (1.25,.86)
 # music) by PHRASE_DIP below it and PHRASE_RISE above it, eased again under RESPONSE_FIXED_CEILING (chain7: 3 s view
 # contrast 97-103% of main on Presets 1/3/4/7; Pulse Strength above .9 in loud passages 9-10% against main's 10-15%).
 PHRASE_DIP, PHRASE_RISE = 1., 1.5
+PHRASE_TARGETS = RESPONSE_TARGETS
 # Kick Accent (operator 6 Nov: "many sustained kicks ignored (consider maybe increasing particle count at the sustained
 # points or rotation speed? Something for a sense of them?)"). In a sustained loud passage the geometry has little
 # headroom: the bend drive (it sets Pulse Strength) sits near its top, so a kick's swell barely rises above the swells
@@ -187,6 +188,9 @@ PACKET_FLOOR_HEIGHT, TROUGH_CLEARANCE, TROUGH_ROOM_MIN, TROUGH_LIFT_MAX = 2., .3
 # floor (contact 7% -> .3% on Preset 4) but lifted crests toward the card's top (top edge p99 +.4 to +1.3 world units);
 # the operator ranks reactivity over floor avoidance, and a clipped crest over brief floor contact.
 TROUGH_ATTACK, TROUGH_RELEASE, TROUGH_VIEW = .15, 1.2, 32.  # TROUGH_VIEW: the fallback view without a card span
+# Top edge first, floor second (lead review 6 Nov: crests out of the card's top are worse than brief floor contact).
+# With the card's top edge supplied (core.waveform_ribbon_view.card_span) the floor lift stops TOP_CLEARANCE below it.
+TOP_CLEARANCE = .3
 # With the card's visible span the floor lift reads only what the camera shows, plus TROUGH_LOOKAHEAD geometric-envelope
 # sigmas beyond each edge (see _trough_view), never wider than +-TROUGH_VIEW: a trough entering the view (or a swell
 # deepening one on its way in) is already lifted for. 6 Nov sweep on recorded continuous play: at 2.5 sigmas the lift
@@ -448,6 +452,7 @@ class WaveformDynamics:
         self._fresh = np.zeros((2,PULSE_GRID.size))  # the same transport with a short fade: recently launched swells
         self._pulse_pending = 0.
         self._view_world = None  # (low, high) world x of the scene axis the framed camera shows (capture-supplied)
+        self._view_top = None    # world y of the card's top edge above the scene axis (capture-supplied), or None
         self._seen = (None,None)  # cached (key, per-direction seen weights) for the age-once-seen fade
         self._rim_share = 1.      # share of the appearance level published for Pulse Rim (RIM_EDGE_SHARE once seen)
         self._trough_stage,self._trough_lift,self._trough_time = np.zeros((RIBBON_CAPACITY,1)),np.zeros((RIBBON_CAPACITY,1)),None
@@ -521,14 +526,18 @@ class WaveformDynamics:
     def advance(self, dt, *, bands, intensity, presence, hit=0., hit_components=None, accent=None, controls=None,
                 dynamic_zoom=False, zoom_hold=False, view_span=None):
         """``view_span``: (low, high) world x of the scene axis the framed camera shows (configuration from the
-        capture; ``core.waveform_ribbon_view.visible_span``). None keeps the last one supplied (initially none)."""
+        capture; ``core.waveform_ribbon_view.visible_span``), optionally with the world y of the card's top edge above
+        that axis (``card_span``; the floor lift never lifts a crest through it). None keeps the last one supplied
+        (initially none)."""
         if not math.isfinite(dt) or not 0. <= dt <= .1:
             raise ValueError('Ribbon logical dt must be finite in 0..0.1 seconds')
         if view_span is not None:
-            low,high = (float(v) for v in view_span)
-            if not (math.isfinite(low) and math.isfinite(high) and high > low):
-                raise ValueError('Waveform view span must be a finite (low, high) interval')
+            low,high,*top = (float(v) for v in view_span)
+            if not (math.isfinite(low) and math.isfinite(high) and high > low) or len(top) > 1 or \
+                    not all(math.isfinite(v) for v in top):
+                raise ValueError('Waveform view span must be a finite (low, high[, top]) interval')
             self._view_world = (low,high)
+            self._view_top = top[0] if top else None
         if controls is not None:
             self.controls = controls
         c = self.controls
@@ -622,7 +631,7 @@ class WaveformDynamics:
                     # A passage returning from a break is not widened while it returns (its deficit against the held
                     # mean is the silence, not a phrase): the contrast comes back with the learning rate.
                     target = unit(base+(target-base)*(1.+BREATHING_CONTRAST*softness*learn))
-                if not c.adaptive_response and (target<base or PHRASE_RISE):
+                if not c.adaptive_response and key in PHRASE_TARGETS and (target<base or PHRASE_RISE):
                     # The fixed response widens a phrase about its mean (PHRASE_DIP below it, PHRASE_RISE above it,
                     # eased again under the ceiling), as the remembered peak's fast reach and slow release did.
                     widen = PHRASE_DIP if target<base else PHRASE_RISE
@@ -1031,13 +1040,22 @@ class WaveformDynamics:
             x[rows,order] = target
         return x,y,z
 
-    def _floor_room(self,height,hang,room,visible,static=None):
+    def _floor_room(self,height,hang,room,visible,static=None,soft=None,headroom=None):
         """Per ribbon: how far to lift the whole ribbon so its lower edge stays TROUGH_CLEARANCE above the floor (see
         snapshot). Two cascaded followers (TROUGH_ATTACK up, TROUGH_RELEASE down, on the logical clock), so the lift's
-        velocity is continuous: a one-stage follower jumped on every new trough, which was itself a twitch."""
+        velocity is continuous: a one-stage follower jumped on every new trough, which was itself a twitch.
+        Top edge first, floor second (lead review 6 Nov): with the card's top supplied (``headroom``: room above the
+        rest line for the published crest ``soft`` plus its sheet hang, TOP_CLEARANCE below the edge) the lift never
+        raises a crest the floor lift considers through it; the floor may then be grazed. A lift the top lowers eases
+        down at TROUGH_ATTACK, as fast as it rose, so a crest climbing toward the edge is not lifted past it."""
+        capped = None
         if static is None:
             sinking = np.where(visible,hang-height,-np.inf)                 # depth of the lower edge below rest
             target = np.clip(sinking.max(axis=1,keepdims=True)-room,0.,TROUGH_LIFT_MAX)
+            if headroom is not None:
+                top = np.maximum(headroom-np.where(visible,soft+hang,-np.inf).max(axis=1,keepdims=True),0.)
+                capped = top<target
+                target = np.minimum(target,top)
         else:
             target = np.full((RIBBON_CAPACITY,1),static)                    # Static Height (a live switch eases)
         if self._trough_time is None:
@@ -1047,7 +1065,8 @@ class WaveformDynamics:
             for name,goal in (('_trough_stage',target),('_trough_lift',None)):
                 goal = self._trough_stage if goal is None else goal
                 current = getattr(self,name)
-                tau = np.where(goal>current,TROUGH_ATTACK,TROUGH_RELEASE)
+                fast = goal>current if capped is None else (goal>current)|capped
+                tau = np.where(fast,TROUGH_ATTACK,TROUGH_RELEASE)
                 setattr(self,name,current+(goal-current)*(1.-np.exp(-dt/tau)))
         self._trough_time = self.time
         return self._trough_lift
@@ -1072,11 +1091,12 @@ class WaveformDynamics:
         low,high = cached[2]
         return (x>low)&(x<high),.5*(low+high),.5*(high-low)
 
-    def _height_shift(self,height,hang,room,x):
-        """Per ribbon (and, with Tilt Shift, per knot) vertical offset that keeps lower edges off the floor."""
+    def _height_shift(self,height,hang,room,x,soft=None,headroom=None):
+        """Per ribbon (and, with Tilt Shift, per knot) vertical offset that keeps lower edges off the floor, never
+        lifting a crest through the card's top edge (``headroom``: see _floor_room)."""
         static = TROUGH_LIFT_MAX if self.controls.height_mode=='Static Height' else None
         visible,centre,half = self._trough_view(x)
-        lift = self._floor_room(height,hang,room,visible,static)
+        lift = self._floor_room(height,hang,room,visible,static,soft,headroom)
         # Tilt Shift: the lift's velocity (its second stage follows the first, so it is continuous) sets a lead that
         # eases once more, so the tilt is smooth in velocity too. Switched off (or Static Height) the lead eases back to
         # zero rather than vanishing; a ribbon that never tilted keeps an exact zero lead (byte-identical body).
@@ -1180,8 +1200,12 @@ class WaveformDynamics:
         # eases through two stages on the logical clock (see _floor_room); a deeper trough than the cap may still graze.
         hang = np.abs(rows[:,:,3]*np.cos(data[:,5::KNOT_ROWS,1]))
         room = max(TROUGH_ROOM_MIN,PACKET_FLOOR_HEIGHT+values['lift']-TROUGH_CLEARANCE)
-        rise = self._height_shift(y,hang,room,x)
-        rows[:,:,1] = 5.*np.tanh(y/5.)+values['lift']+rise
+        soft_y = 5.*np.tanh(y/5.)
+        # The card's top above the packet's rest line, scaled with Dynamic Zoom (the long lens is all but orthographic).
+        headroom = None if self._view_top is None else \
+            (self._view_top-PACKET_FLOOR_HEIGHT)*self.zoom-TOP_CLEARANCE-values['lift']
+        rise = self._height_shift(y,hang,room,x,soft_y,headroom)
+        rows[:,:,1] = soft_y+values['lift']+rise
         # Strong local musical regions change colour immediately, even before new head history enters view.
         # The crest mask is carried by immutable carrier geometry, so coloured regions travel with the waveform.
         # All cards at once as rows; each card's Python scalars become a column in exactly the dtype NumPy would

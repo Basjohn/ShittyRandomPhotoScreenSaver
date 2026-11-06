@@ -38,13 +38,26 @@ def visible_span(parameters:Mapping,aspect:float,aperture_scale:float=1.):
     return float(low),float(high)
 
 
+def visible_top(parameters:Mapping,aspect:float,aperture_scale:float=1.):
+    """World y where the frustum's top plane crosses the vertical line through the camera pivot, zoom 1 (the card's
+    top edge above the scene axis); None when that plane holds the line (a camera looking straight up or down)."""
+    view,projection,_,_=physical_view(parameters,aspect,aperture_scale)
+    mvp=projection@view
+    plane=mvp[3]-mvp[1]          # clip y = w
+    if abs(plane[1])<1e-12:
+        return None
+    x,_,z=SPEC.pivot
+    return float(-(plane[0]*x+plane[2]*z+plane[3])/plane[1])
+
+
 _SPAN_CACHE = [None, None]
 
 
 def card_span(camera:Mapping, extent, baseline_height:float):
-    """``visible_span`` for a card of world ``extent`` (width, height): aspect from the extent and the edge-resize
-    aperture extent height / ``baseline_height`` (the canonical card's; ``framed_aperture_scale`` without the shell
-    inset, within a few percent of the renderer's). One cached solve per camera/extent change; None for no extent."""
+    """``visible_span`` for a card of world ``extent`` (width, height), followed by its ``visible_top`` when the
+    camera has one: aspect from the extent and the edge-resize aperture extent height / ``baseline_height`` (the
+    canonical card's; ``framed_aperture_scale`` without the shell inset, within a few percent of the renderer's). One
+    cached solve per camera/extent change; None for no extent."""
     if extent is None:
         return None
     width, height = float(extent[0]), float(extent[1])
@@ -53,5 +66,7 @@ def card_span(camera:Mapping, extent, baseline_height:float):
     key = (tuple(sorted((k, tuple(v) if isinstance(v, (list, tuple)) else v) for k, v in camera.items())),
            width, height, float(baseline_height))
     if _SPAN_CACHE[0] != key:
-        _SPAN_CACHE[0], _SPAN_CACHE[1] = key, visible_span(camera, width/height, height/float(baseline_height))
+        aspect, scale = width/height, height/float(baseline_height)
+        top = visible_top(camera, aspect, scale)
+        _SPAN_CACHE[0], _SPAN_CACHE[1] = key, visible_span(camera, aspect, scale)+(() if top is None else (top,))
     return _SPAN_CACHE[1]
