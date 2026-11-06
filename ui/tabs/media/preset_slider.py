@@ -22,14 +22,12 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QLabel,
     QSlider,
-    QPushButton,
     QSizePolicy,
-    QDialog,
     QFileDialog,
     QCheckBox,
 )
-from PySide6.QtCore import Qt, Signal, QUrl
-from PySide6.QtGui import QDesktopServices, QPainter, QPen, QPalette
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QPainter, QPen, QPalette
 from ui.tabs.shared_styles import (
     NoWheelSlider,
     add_section_label,
@@ -43,7 +41,6 @@ from core.settings.visualizer_presets import (
     get_custom_preset_index,
     get_preset_count,
     get_preset_names,
-    get_preset_file_path,
     get_next_visualizer_preset_ordinal,
     get_visualizer_presets_dir,
     reload_presets,
@@ -125,7 +122,7 @@ class VisualizerPresetSlider(QWidget):
         layout.setContentsMargins(0, 2, 0, 2)
         layout.setSpacing(2)
 
-        # Single row: "Preset:" label | preset name | slider | Open Studio (or Edit Preset) | Custom action
+        # Single row: "Preset:" label | preset name | slider | Open Studio | Custom action
         row = QHBoxLayout()
         row.setSpacing(6)
         row.setContentsMargins(0, 0, 0, 0)
@@ -165,18 +162,10 @@ class VisualizerPresetSlider(QWidget):
         row.addLayout(slider_column, 1)
 
         from ui.widgets.outlined_button import OutlinedButton
-        from ui.studio.registry import has_studio
         self._row = row
         self._studio_launcher: Optional[QWidget] = None
-        # A mode with a Studio edits (and saves into) its presets there; the launcher takes this
-        # place (set_studio_launcher). Modes without a Studio keep Edit Preset until theirs lands.
-        self._edit_btn: Optional[QPushButton] = None
-        if not has_studio(self._mode):
-            self._edit_btn = OutlinedButton("Edit Preset", role="secondary")
-            self._edit_btn.setToolTip("Open this preset's JSON file in your default editor.")
-            self._edit_btn.setFixedWidth(100)
-            self._edit_btn.clicked.connect(self._open_preset_json)
-            row.addWidget(self._edit_btn)
+        # Every visualizer edits (and saves into) its presets in its Studio; the launcher goes
+        # here (set_studio_launcher), before the Custom action.
 
         self._custom_action_btn = OutlinedButton("Move To Custom", role="secondary")
         self._custom_action_btn.setFixedWidth(140)
@@ -296,18 +285,6 @@ class VisualizerPresetSlider(QWidget):
             self._advanced_container.setVisible(is_custom)
         if self._technical_container is not None:
             self._technical_container.setVisible(is_custom)
-        if self._edit_btn is not None:
-            # Keep Edit button footprint stable to avoid slider flicker. Disable
-            # it when Custom is selected or when no backing file exists.
-            path = get_preset_file_path(self._mode, idx)
-            has_file = path is not None
-            self._edit_btn.setEnabled((not is_custom) and has_file)
-            if not has_file:
-                self._edit_btn.setToolTip("Preset JSON not found on disk.")
-            elif is_custom:
-                self._edit_btn.setToolTip("Switch to a curated preset to edit its JSON.")
-            else:
-                self._edit_btn.setToolTip("Open this preset's JSON file in your default editor.")
         # Move To Custom: only enabled when on a non-custom preset
         if self._custom_action_btn is not None:
             if is_custom:
@@ -467,29 +444,6 @@ class VisualizerPresetSlider(QWidget):
                 payload["name"] = base
         if not payload.get("name"):
             payload["name"] = path.stem.replace("_", " ").title()
-
-    def _open_preset_json(self) -> None:
-        """Open the current preset's JSON file in the OS default editor (modes without a Studio only)."""
-        idx = self._slider.value()
-        path = get_preset_file_path(self._mode, idx)
-        if path is None or not path.is_file():
-            logger.warning("[VIS_PRESETS] No JSON file for %s preset %d", self._mode, idx)
-            return
-        try:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
-        except Exception:
-            logger.debug("[VIS_PRESETS] Failed to open preset file", exc_info=True)
-            return
-
-        popup = StyledPopup(
-            self._find_tab(),
-            "Edit Preset",
-            "Do your weird shit and click OK when done.",
-            icon_type="info",
-            buttons=[("OK", "ok")],
-        )
-        if popup.exec() == QDialog.DialogCode.Accepted:
-            self._reload_and_reapply_current_preset(idx)
 
     def refresh_preset_catalog(self, desired_index: int | None = None, *, force_custom: bool = False,
                                reload: bool = True) -> int | None:
