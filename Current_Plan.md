@@ -42,6 +42,21 @@ the Windows path, so it never needs its own Linux audit later (operator, 5 Nov).
 lead as reviewer/orchestrator. Agents that already hold unfinished work may exceed this until they finish (their
 context is valuable). Slots need not always be full: when the right agent is not free, queue the item here.
 
+**Paused by the weekly usage limit (6 Nov evening; resume each with a message to the same agent, which keeps its
+context and worktree):**
+- **Waveform logical tick cut** (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch
+  `worktree-agent-af0eb2492e1e318d7`): it had computed main's identity digests and was running its branch digests and
+  tests. The gate is byte-identical output (Preset 4 required); then the lead schedules the game60 live check.
+- **Studio controller leak** (Opus high, worktree `agent-ae914e4586e23615a`): closed `StudioController`s live for the
+  process (one per Studio session in production: the `finished`/`report` closures in `open_mode_studio` hold the
+  controller); then the same context-ownership fix in `tools/onboarding_preview_foundry.py`; then Spectrum rendering
+  black when all Studio test files run in one process (record if deep). The R-172 exit crash itself is merged.
+- **Card surface style fixes and material themes** (Opus medium, started 6 Nov evening): the operator's light/dark
+  look fixes (inner legibility region 2-3 px from the border with concentric rounded corners, the media bar's square
+  shadow corner, full rounded rows instead of per-text chips in Weather/Reddit and every list card, a style sweep, the
+  mute button 3+ px left), the full cost table, Widget Themes carrying a material with a "Theme" default in the Style
+  Overrides dropdown, and about 15 new material themes in rarely used complementary colours.
+
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
 
 - [ ] **Slow startup (operator, 6 Nov 10:30; owners found and fixed, awaiting the operator's cold start):** the 7 s
