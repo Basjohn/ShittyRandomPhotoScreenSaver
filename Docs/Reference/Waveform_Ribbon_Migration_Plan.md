@@ -87,19 +87,23 @@ constants); all state integrates on the sole logical clock and the projection on
   from the long-fade field its peak-keeping set envelope pinned the swell at the soft bound over the view, 5 Nov
   Preset 7). Every mode obeys the flow rule and the no-twitch rules.
 - **Fixed response (6 Nov; Adaptive Response is an opt-in).** Geometry drives are a fixed function of the routed
-  target on the real-music scale, the same for every song: the body's size drives on `BODY_FIXED_GAIN` (linear, so
-  quiet passages sit near Quiet and loud ones near Peak and a loud passage keeps its changes), Pulse Strength on the
-  hotter `RESPONSE_FIXED_GAIN` x target^`RESPONSE_FIXED_CURVE`, both eased toward `RESPONSE_FIXED_CEILING` above
-  `RESPONSE_FIXED_KNEE`; the swell takes the room the body leaves (`SWELL_HEADROOM`, `WaveformDynamics.swell_strength`).
+  target on the real-music scale, the same for every song: `fixed_response` = gain x target^curve (`FIXED_RESPONSE`:
+  height and lift on the curve fitted to the remembered-peak gain's output quantiles on seven recordings back to back;
+  every other drive `FIXED_RESPONSE_DEFAULT`), eased above `RESPONSE_FIXED_KNEE` toward `RESPONSE_FIXED_CEILING` (.92,
+  as the remembered peak landed a sustained loud passage at .85). Each phrase is then widened about Breathing's
+  heard-only 3 s mean of the drive (`PHRASE_DIP` below it, `PHRASE_RISE` above it, eased again under the ceiling),
+  as the remembered peak's fast reach and slow release did. Calibrated to main's VISIBLE behaviour, not hotter (lead
+  review 6 Nov rejected a hotter curve that pinned Pulse Strength, flattened passages and pushed crests out of the card).
   Each target's Range (Quiet→Peak) maps the drive to size, so the Ranges are the authored reactivity. Nothing is remembered: a break, a loud chorus
   or a quiet intro never re-scales what follows (operator, 6 Nov: "Adaptive is a very problematic approach"; guide 2A).
-  The former remembered-peak gain stays behind the **Adaptive Response** toggle (off in every preset): on a spliced 5 s
-  break in Rag Doll's loud end it sized the following 10 s 5-9% up (Preset 4). The fixed calibration keeps kick peaks
-  at or above the adaptive gain's in every time-in-song bin and passage on recorded continuous play. Breathing's
+  The former remembered-peak gain stays behind the **Adaptive Response** toggle (off in every preset); its peak now
+  learns only from heard music, so a break cannot lower it (it had sized the 10 s after a spliced 5 s break in Rag
+  Doll's loud end 5-9% up, Preset 4). Breathing's
   phrase-scale mean learns only from heard music and holds through a break and the passage's return
   (`BREATHING_HEARD_RETURN`); its contrast is not applied to a returning passage. **Kick Accent** (0..1, .7 in every
-  preset): when the bend drive has little headroom, the share of a kick the geometry cannot show goes to an eased
-  roll-speed impulse and spark births on the swell (`KICK_SENSE_*`, `KICK_ROLL`, `KICK_BIRTHS`). Light, colour and
+  preset but Preset 4, which ships 0): when the bend drive has little headroom, the share of a kick the geometry cannot
+  show goes to an eased roll-speed nudge bounded at `KICK_ROLL_SHARE` of the roll's own speed (unbounded, dense kicks
+  overlapped into a ~2x spin) and spark births on the swell (`KICK_SENSE_*`, `KICK_ROLL`, `KICK_BIRTHS`). Light, colour and
   sparkle keep the fixed calibrated anchors. The whole body's size (height, lift, width) follows the passage, not each beat; beats
   belong to the pulse. Measured in continuous play the gain is not what muted mid-song kicks (removing it lowers kick
   response 40-50% at every point of a song); the frame runtime's per-kind running-mean contrast was (below).
@@ -125,11 +129,13 @@ constants); all state integrates on the sole logical clock and the projection on
 - **Whole-ribbon floor lift.** When a ribbon's lower edge (its sheet hang, width × |cos twist|) would come within the
   floor clearance inside the view, that ribbon lifts as a whole, bounded, through two cascaded followers (quick up,
   slow down). Shape is never changed; per-knot trough limits were rejected as boxy. The floor is cleared with height,
-  never by shrinking a reaction (operator, 6 Nov: "Better to have good reactivity than excessively avoid the floor"):
-  since swells reach the view at strength the limit is `TROUGH_LIFT_MAX` 3 (was 1.5, which sat at the cap on 44-67% of
-  music ticks); Floor Give keeps the former limit (`FLOOR_GIVE_LIFT_MAX`) so its authored contact stays, and Static
-  Height holds its own `STATIC_HEIGHT_LIFT`. A swell-gain bound that kept every trough clear was rejected: it cut peak
-  kicks by up to a third. Gate: `tests/test_waveform_floor_lift_clears_swells.py`.
+  never by shrinking a reaction (operator, 6 Nov: "Better to have good reactivity than excessively avoid the floor").
+  **Top edge first, floor second** (lead review 6 Nov): the limit stays `TROUGH_LIFT_MAX` 1.5 (2 or 3 cleared the floor
+  but lifted crests out of the card's top), and with the card's top edge supplied (`core.waveform_ribbon_view.card_span`
+  returns it after the scene-axis span; `visible_top`) the lift never raises a crest (plus its sheet hang) within
+  `TOP_CLEARANCE` of it; a lift the top lowers eases down at `TROUGH_ATTACK`. Brief floor contact is accepted instead.
+  At 1282x1005 the top sits far above every crest, so the bound only acts on smaller cards. A swell-gain bound that kept
+  every trough clear was rejected: it cut peak kicks by up to a third. Gate: `tests/test_waveform_top_edge_first.py`.
 - **Dynamic Zoom** (opt-in, off by default): a sustained-level follower widens or narrows only the lens extents,
   frozen while the user operates the camera.
 

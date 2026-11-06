@@ -167,6 +167,14 @@ FIXED_RESPONSE_DEFAULT, RESPONSE_FIXED_KNEE, RESPONSE_FIXED_CEILING = (1.12,.86)
 # shape) and phrases rise by 2 (chain7: 3 s view contrast 103-105% of main on Presets 1/3/4/7 at both card sizes,
 # Pulse Strength contrast 98% / 105% (Preset 4), above .9 in loud passages 8% against main's 10-15%).
 PHRASE_DIP, PHRASE_RISE = 1., 2.
+# The phrase mean holds through a break (it learns only from heard music), so music that came back louder than it left
+# was widened upward against the mean the silence left behind (spliced 2-5 s breaks in recorded music: the following
+# 10 s 2-17% larger than the unbroken clip; without the widening 0-4%). After real silence (the musical weight under
+# PHRASE_SILENCE; `_settled` falls over PHRASE_SETTLE_DROP and comes back over PHRASE_SETTLE) the mean RISES up to
+# 1/PHRASE_SETTLE_MIN times faster, so it catches up with the louder music, and it still falls at BREATHING_BASE, so
+# the passage's own quieter return is not learnt (6 Nov: the following 10 s -7..+9% of the unbroken clip on Presets
+# 1/7 against main's +4..+10%, -5..+5% on Preset 4). Continuous music keeps settled at 1 (BREATHING_BASE exactly).
+PHRASE_SETTLE, PHRASE_SETTLE_DROP, PHRASE_SILENCE, PHRASE_SETTLE_MIN = 8., .5, .1, .1
 # Kick Accent (operator 6 Nov: "many sustained kicks ignored (consider maybe increasing particle count at the sustained
 # points or rotation speed? Something for a sense of them?)"). In a sustained loud passage the geometry has little
 # headroom: the bend drive (it sets Pulse Strength) sits near its top, so a kick's swell barely rises above the swells
@@ -444,6 +452,7 @@ class WaveformDynamics:
         self.time = self.travel = self.angle = self.angular_speed = self.twist_phase = self._hit = 0.
         self._kick_impulse = self._kick_stage = self.kick_sense = 0.   # Kick Accent: held share, eased stages
         self._heard = 1.   # how fully Breathing's mean may learn (BREATHING_HEARD_RETURN)
+        self._settled = 1. # 1 in continuous music; 0 just after real silence (the phrase mean's catch-up, PHRASE_SETTLE)
         self.phase = controls.scene.flow.phase
         self.bands, self.power = (0.,0.,0.),0.
         self.passage = self.phrase = 0.
@@ -601,6 +610,9 @@ class WaveformDynamics:
         self._loud_level = max(self._sustain,follower(self._loud_level,self._sustain,dt,0.,memory))
         geometry_release = c.release*(1.-BREATHING_REACH*softness)
         learn = self._learn_rate(dt,presence)
+        # Breathing's phrase mean re-learns the music fast after a break (PHRASE_SETTLE), so a phrase is not widened
+        # against a mean the silence left stale; the remembered-peak path keeps BREATHING_BASE.
+        mean_tau = BREATHING_BASE if c.adaptive_response else BREATHING_BASE*max(PHRASE_SETTLE_MIN,self._settled)
         for key in TARGETS:
             target = route(c.routing[key],sources,passage=gate)
             if key in RESPONSE_TARGETS:
@@ -627,8 +639,7 @@ class WaveformDynamics:
                 # Breathing's phrase-scale mean learns only from heard music (BREATHING_HEARD_RETURN): it fell with a
                 # break, so the music's return swelled against it (spliced 2-5 s breaks on recorded music: +4..11%
                 # height for 10 s on every Breathing preset, 0..1% with Breathing 0).
-                base = self._breath_base[key] = follower(self._breath_base[key],target,dt*learn,
-                                                         BREATHING_BASE,BREATHING_BASE)
+                base = self._breath_base[key] = follower(self._breath_base[key],target,dt*learn,mean_tau,BREATHING_BASE)
                 if softness:  # Breathing 0 (or a loud passage) keeps the exact unwidened target
                     # A passage returning from a break is not widened while it returns (its deficit against the held
                     # mean is the silence, not a phrase): the contrast comes back with the learning rate.
@@ -924,6 +935,7 @@ class WaveformDynamics:
         """Share of real time Breathing's phrase-scale mean learns this tick: 0 with the musical weight, back over
         BREATHING_HEARD_RETURN seconds (see BREATHING_HEARD_RETURN)."""
         self._heard = follower(self._heard,unit(presence),dt,BREATHING_HEARD_RETURN,0.)
+        self._settled = follower(self._settled,1. if presence>PHRASE_SILENCE else 0.,dt,PHRASE_SETTLE,PHRASE_SETTLE_DROP)
         return self._heard
 
     def _advance_pulse_births(self,dt,released):

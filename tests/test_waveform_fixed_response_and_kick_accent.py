@@ -47,24 +47,56 @@ def after(rows, start, end):
     return window[:, 1:].mean(axis=0)
 
 
-def break_change(c, length):
-    """Largest relative change of the mean height/bend drives 1.5-12 s after a break against the unbroken control."""
+def break_change(c, length, signed=False):
+    """Largest relative change of the mean height/bend drives 1.5-12 s after a break against the unbroken control
+    (``signed``: the largest swell, negative when what follows is only smaller)."""
     control, broken = run(c, 48., uneven=True), run(c, 48., break_at=27., break_for=length, uneven=True)
     end = 27.+length
-    return float(np.abs(after(broken, end+1.5, end+12.)/after(control, end+1.5, end+12.)-1.).max())
+    change = after(broken, end+1.5, end+12.)/after(control, end+1.5, end+12.)-1.
+    return float(change.max()) if signed else float(np.abs(change).max())
 
 
 def test_a_two_to_five_second_break_does_not_rescale_what_follows(monkeypatch):
     c = replace(controls(), breathing=1.)
     for length in (2., 5.):
-        assert break_change(c, length) < .035, length      # 6 Nov: 2.4% / 3.0% (Breathing 0: 1.5% / 1.6%)
-    # Negative control: the remembered peak (Adaptive Response on) decays through the break and sizes the return up
-    # until the song's next peak.
-    assert break_change(replace(c, adaptive_response=True), 5.) > .045            # 5.2%
+        # Never a swell (the operator's "everything became more reactive"); the phrase mean catching up with the
+        # song's rare peaks after the silence may leave what follows a little smaller (6 Nov: -5.1% / -5.6%).
+        assert break_change(c, length, signed=True) < .015, length
+        assert break_change(c, length) < .065, length
+    # Negative control: the remembered peak (Adaptive Response on) sizes what follows differently until the song's
+    # next peak.
+    assert break_change(replace(c, adaptive_response=True), 5.) > .075            # 8.7%
     # Negative control: Breathing's mean learning through the silence (the former code) swells the return against a
     # mean that fell with it.
     monkeypatch.setattr(dyn.WaveformDynamics, '_learn_rate', lambda self, dt, presence: 1.)
-    assert break_change(c, 5.) > .038                                               # 4.2%
+    assert break_change(c, 5., signed=True) > .1                                   # 18%
+
+
+def louder_after_break_change(c, length=5.):
+    """A break that falls where the song gets louder (level .55 before 27 s, 1 from then on): the largest relative
+    change of the mean height/bend drives 1.5-12 s after the break against the unbroken control. The control's phrase
+    mean followed the louder music through those seconds; the broken run's held the quieter level through the silence."""
+    def go(broken):
+        model, rows = primed(c), []
+        for index in range(round(48./DT)):
+            t = index*DT
+            silent = broken and 27. <= t < 27.+length
+            model.advance(DT, **(SILENT if silent else phrase(t, .55 if t < 27. else 1.)))
+            rows.append((t, model.drive['height'], model.drive['bend']))
+        return np.asarray(rows)
+    end = 27.+length
+    return float(np.abs(after(go(True), end+1.5, end+12.)/after(go(False), end+1.5, end+12.)-1.).max())
+
+
+def test_a_break_where_the_song_gets_louder_does_not_swell_what_follows(monkeypatch):
+    """Recorded music with spliced 2-5 s breaks: the phrase widening (PHRASE_RISE) of a returning passage against the
+    mean held through the silence sized the following 10 s 7-17% up; it now comes back over PHRASE_SETTLE."""
+    c = replace(controls(), breathing=0.)
+    settled = louder_after_break_change(c)
+    assert settled < .04, settled
+    # Negative control: widening at once with the heard return (the former code) swells the return.
+    monkeypatch.setattr(dyn, 'PHRASE_SETTLE', 1e-3)
+    assert louder_after_break_change(c) > settled+.03
 
 
 def test_adaptive_response_off_remembers_nothing():
