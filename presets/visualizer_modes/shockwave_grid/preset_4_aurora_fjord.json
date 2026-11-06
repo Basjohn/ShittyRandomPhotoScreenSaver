@@ -1426,6 +1426,7 @@
           200,
           180
         ],
+        "shockwave_grid_water_reaction": 0.0,
         "shockwave_grid_water_reflection": 0.77,
         "shockwave_grid_water_shine": 0.6,
         "shockwave_grid_wave_amplitude": 0.75,

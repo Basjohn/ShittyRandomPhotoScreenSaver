@@ -152,8 +152,15 @@ def _named(surface, name):
 
 
 def _settle_handles(controller, surface, frames=6):
+    # The budgeted exact replay keeps the last frame (and its handles) on screen until an edit's replay lands.
     for _ in range(frames):
         surface.pump()
+    for _ in range(2000):
+        if not getattr(controller.evaluator, "converging", False):
+            break
+        surface.pump()
+    assert not getattr(controller.evaluator, "converging", False)
+    surface.pump()
     return controller.bridge.handles
 
 
