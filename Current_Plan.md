@@ -43,6 +43,16 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
 
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
 
+- [ ] **Slow startup: Feeds cache delivery blocks the GUI thread (operator, 6 Nov 10:30):** the first
+  `_FeedFamilyOwner._submit ... _deliver` UI callback took **6855 ms**, later per-source cache deliveries 166-240 ms
+  each (`[PERF][FEED_GUI_DELIVERY] phase=cache`), the feeds refresh held the transition gate 16.8 s, and the
+  image_prefetch worker missed its heartbeat and had to be terminated/killed (likely starved by the same block).
+  Weather/Reddit/Gmail startup deliveries 90-160 ms each. R-104 isolated parsing; the warm-restore publish of every
+  News publisher's cached rows (16-22 publishers per category) still runs on the GUI thread. Make warm restore
+  publish a bounded first page and stream the rest (or build the payload off-thread and hand the GUI one coherent
+  bundle), keep R-104's single gentle startup transition, and prove the GUI-thread time per delivery stays under the
+  stall budget. Evidence `.artifacts/evidence/slow_startup_20261106/`.
+
 - [~] **Displays off -> presentation pauses entirely, resumes clean (built 5 Nov; awaiting the operator's physical
   overnight check):** `core.display_power` pauses rotation, transitions, the Visualizer (parked, capture released) and
   the clock while the console displays are off (`Docs/Architecture/Compositor_Architecture.md` → Display power).
