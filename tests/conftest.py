@@ -17,6 +17,7 @@ Chunked test execution:
 import os
 import pytest
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -202,6 +203,34 @@ def _forget_idle_generation_cancellations():
     manager = sys.modules.get("core.threading.manager")
     if manager is not None:
         manager.forget_idle_generation_cancellations_for_tests()
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _no_studio_worker_outlives_its_module():
+    """A module that started a Studio clip worker (``ClipLoadJob``) leaves none running: every job is cancelled or
+    finished, and its whole process tree with it. Free for every other module (one counter read)."""
+    def started() -> int:
+        module = sys.modules.get("ui.studio.waveform_recorded_inputs")
+        return module.STARTED[0] if module is not None and hasattr(module, "STARTED") else 0
+    before = started()
+    yield
+    if started() == before:
+        return
+    from PySide6.QtCore import QCoreApplication
+    from tests.studio_worker_probe import kill_all, surviving_workers
+    from ui.studio.waveform_recorded_inputs import worker_tag
+    tag = worker_tag()
+    deadline = time.monotonic() + 20.0          # finished-signal handling needs the event loop
+    left = surviving_workers(tag)
+    while left and time.monotonic() < deadline:
+        if QCoreApplication.instance() is not None:
+            QCoreApplication.processEvents()
+        time.sleep(0.2)
+        left = surviving_workers(tag)
+    if left:
+        lines = [" ".join(p.cmdline()[-4:]) for p in left if p.is_running()]
+        kill_all(left)
+        pytest.fail(f"Studio clip workers outlived their test module: {lines}", pytrace=False)
 
 
 @pytest.fixture(scope='session')

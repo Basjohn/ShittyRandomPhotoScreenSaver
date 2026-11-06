@@ -781,12 +781,29 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   coverage (Settings-unavailable controls excluded by their flag), the free orbit as a preview view, Settings round
   trip and every exit restoring it, theme; framework pieces it relies on: overflow clipped to the viewport slot and the
   presentation pixel ratio from the item mapping, each with a negative control.
+- `tests/test_neon_lake_studio.py` — Neon Lake Basin (`shockwave_grid`) on the shared recorded engine answers: full
+  logical frames byte-identical to the production replay at every tick (synthetic audio and a shipped clip, canonical
+  and a Terrain Reaction / Starscape Beat / Glass + Vertices / turned variant), with the fixtures driving waves from
+  onsets and the land from the analysis spectrum; the derived split proven both ways (Terrain Reaction's reads
+  recorded while it is off, with a negative control), mode-owned edits replaying exactly and under the frame budget,
+  engine edits re-running the worker (in and out of process); registry coverage (every control, Custom row and
+  vector element; the terrain record through its whole-record actions) with negative controls, shaper and terrain
+  structural edits, no wallpaper backdrop, dormancy of the registry lookup; on a real VisualizersTab the preset
+  row's Open Studio, Custom rows and families saved through Settings' own editors, every exit restoring it, the
+  framed camera's navigation saved only under the camera policy, identical production-renderer pixels, theme; on the
+  real SettingsDialog, Save To <Preset> into a tmp copy of a curated Neon Lake preset.
 - `tests/test_spectrum_studio_shape_editor.py` — each capability of Settings' shape editor driven on the real widget
   and reached exactly by the Studio's own edits (node add/remove, lane reorder), with a negative control.
 - `tests/test_spectrum_studio_replay_budget.py` — exact replays rewind (pristine / checkpoints) instead of
   re-configuring, equal production for every Spectrum-owned key, and spread over frames under the Studio's budget.
 - `tests/test_studio_background_sources.py` — a landing background load never takes the user's source choice;
   failed analyses are shown with Retry.
+- `tests/test_studio_worker_lifetime.py` — Studio clip workers: every worker module exits non-zero within a bound on
+  a missing or unreadable clip (control: the bound catches a worker that never ends); a cancel at any point of the
+  venv launcher's setup leaves no process (control: without the job tree the launcher's child is orphaned,
+  suspended); a parent that dies abruptly takes its worker with it (control: unbound, the worker survives); the
+  guard below sees a live worker (control). `tests/conftest.py` fails any module that started a worker and left one
+  running (`tests/studio_worker_probe.py` holds the helpers and the stand-in worker / parent).
 - `tests/test_studio_exit_every_mode.py` — every registered Studio, after a commit, through the shell's Close button:
   Settings revealed before teardown, forced retire failures, the window never hidden from Python, the `--studio`
   sidecar and main log receiving the lifecycle.

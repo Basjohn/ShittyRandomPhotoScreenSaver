@@ -171,18 +171,54 @@ def synthetic_score(fixture_id: str):
     return mix, events
 
 
+LOUDNESS_SCALE = 24.0            # synthetic overall -> the real-music loudness scale (PassageIntensity)
+LOUDNESS_MAX = 17.0
+PRESENCE_EASE = 1.0 - math.exp(-STEP / 6.0)     # the bus's LOUDNESS_REFERENCE_SECONDS follower per tick
+PRESENCE_MAX = 2.0
+ANALYSIS_BANDS = 35              # the recorded clips' analysis-spectrum length (the recorder engine's bar count)
+
+
+def analysis_spectrum(samples, bands: int = ANALYSIS_BANDS) -> tuple[float, ...]:
+    """The pre-AGC analysis spectrum the live engine publishes for a capture block
+    (``get_pre_agc_analysis_spectrum``: ``bar_computation.fft_to_bars``' per-band RMS of the log-compressed, lightly
+    smoothed FFT magnitudes over logarithmic band edges, after ``compute_bars_from_samples``' peak gain), so a
+    synthetic fixture carries what a recording carries (Neon Lake's Terrain Reaction reads it)."""
+    import numpy as np
+    mono = np.asarray(samples, dtype=np.float32)[-2048:]
+    peak = float(np.abs(mono).max()) if mono.size else 0.0
+    if peak < 1e-3:
+        return (0.0,) * bands
+    if 0.05 <= peak <= 5.0:
+        mono = mono * min(2.8, max(1.0, 1.6 / peak))
+    magnitude = np.abs(np.fft.rfft(mono))[1:].astype(np.float32)
+    magnitude = np.power(np.log1p(magnitude), 1.2)
+    if magnitude.size > 4:
+        magnitude = np.convolve(magnitude, np.array([0.25, 0.5, 0.25], dtype=np.float32), mode="same")
+    n = int(magnitude.size)
+    edges = np.logspace(0.0, np.log10(n), bands + 1, dtype="float32").astype("int32")
+    out = []
+    for b in range(bands):
+        start, end = int(edges[b]), int(edges[b + 1])
+        end = max(end, start + 1)
+        piece = magnitude[start:end] if start < n and end <= n else magnitude[:0]
+        out.append(round(float(np.sqrt(np.mean(piece ** 2))), 6) if piece.size else 0.0)
+    return tuple(out)
+
+
 def synthetic_features(fixture_id: str):
     """The synthetic fixture as production feature frames: one per logical tick, each carrying the native capture
-    history ending at its time (new audio every tick) and lanes following the score."""
+    history ending at its time (new audio every tick), lanes following the score, the analysis spectrum of the
+    tick's audio and the score's hits as the transient bus's onsets (what a recording carries on each frame)."""
     import numpy as np
     from widgets.spotify_visualizer.feature_frame import (
         REAL_SCALE_SCHEMA_VERSION, BandEnergy, CaptureHistory, EnergyLanes, FeatureFrame, RealScaleLanes,
-        TransientEnergy, TypedEvent,
+        RecordedOnset, TransientEnergy, TypedEvent,
     )
     pcm, events = synthetic_score(fixture_id)
     frames = []
     count = int(round((PREROLL + DURATION) / STEP)) + 1
     previous_rms = (0.0, 0.0, 0.0)
+    reference = 0.0                  # the running loudness presence compares with (the bus's 6 s level)
     for k in range(count):
         now = START + k * STEP
         end = int(round(now * RATE))
@@ -206,15 +242,22 @@ def synthetic_features(fixture_id: str):
                                     onset_strength=max(1e-3, onset[1]) if onset else 0.0)
         band = BandEnergy(*lanes, overall)
         tail = history[-64:] if len(history) >= 64 else np.pad(history, (64 - len(history), 0))
-        loudness = 17.0 * overall
+        # The real-music loudness scale (``PassageIntensity``: ordinary music about 6.8..10.7, median 8.5), and
+        # presence as the bus measures it: the level over its running level (about 1 in steady music).
+        loudness = min(LOUDNESS_MAX, LOUDNESS_SCALE * overall)
+        if loudness > 0.0:
+            reference = loudness if reference <= 0.0 else reference + (loudness - reference) * PRESENCE_EASE
+        presence = min(PRESENCE_MAX, loudness / reference) if reference > 0.0 else 0.0
+        onsets = tuple(RecordedOnset(kind, strength, strength, loudness, presence) for kind, strength in due)
         frames.append(FeatureFrame(
             timestamp_us=int(round(now * 1e6)),
             energy=EnergyLanes(continuous=band, pre_agc=band, bubble=band, transient=transient),
             raw_bars=(0.0,) * 32, waveform=tuple(float(v) for v in np.clip(tail, -1.0, 1.0)), playing=True,
             visible=True, mode=LABEL_MODE, schema_version=REAL_SCALE_SCHEMA_VERSION,
             real=RealScaleLanes(live=tuple(min(2.5, 2.5 * v) for v in (*lanes, overall)),
-                                musical_level=(loudness, min(1.6, .4 + 1.2 * overall)), analysis_spectrum=(),
-                                events=tuple(TypedEvent(kind, strength) for kind, strength in sorted(kinds.items()))),
+                                musical_level=(loudness, presence), analysis_spectrum=analysis_spectrum(history),
+                                events=tuple(TypedEvent(kind, strength) for kind, strength in sorted(kinds.items())),
+                                onsets=onsets),
             capture_history=CaptureHistory(history.astype("<f4").tobytes(), capture_serial=k + 1, sample_rate=RATE),
         ))
     return frames
@@ -260,9 +303,15 @@ def _owned_keys(mode_id: str) -> frozenset[str]:
 
 @dataclass(frozen=True)
 class EngineAnswerMode:
-    """One engine-processed mode as the worker and the Studio see it: everything follows from its id."""
+    """One engine-processed mode as the worker and the Studio see it: everything follows from its id.
+
+    ``conditional_reads``: engine getters (no arguments) the mode's step reads only under some mode-owned setting
+    (Neon Lake's Terrain Reaction reads the musical level and the analysis spectrum only while it is on). The worker
+    records them every tick, so turning that setting on in the Studio stays a mode-owned edit served from the
+    record instead of an unrecorded read."""
 
     mode_id: str
+    conditional_reads: tuple[str, ...] = ()
 
     @property
     def worker(self) -> str:
@@ -368,6 +417,8 @@ def extract(mode: EngineAnswerMode, source: str | Path, settings: Mapping[str, A
                 controller.engine = recorder
                 try:
                     payload = logical_tick(state)
+                    for name in mode.conditional_reads:      # the same tick's answer, whether or not it was read
+                        getattr(recorder, name)()
                 finally:
                     controller.engine = engine
                 records.append({"now_ts": now, "playing": bool(feature.playing), "answers": recorder.answers,
@@ -396,6 +447,8 @@ def worker_main(mode: EngineAnswerMode, argv: list[str]) -> int:
     source, settings_path, output_path, *rest = argv
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
+    from ui.studio.worker_lifetime import die_with_parent
+    die_with_parent()                                            # never outlive the Studio (Linux)
     from ui.studio.waveform_recorded_inputs import CLIP_SECONDS
     settings = json.loads(Path(settings_path).read_text(encoding="utf-8"))
     from PySide6.QtGui import QGuiApplication
