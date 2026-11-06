@@ -67,6 +67,7 @@ from .image_state import PresentationImage
 from .media_artwork import MediaArtworkImageProvider
 from .render import BackgroundRenderItem, RenderNodeTelemetry
 from .state import QuickInputState, QuickSceneReadiness
+from .surface_backdrop_owner import SurfaceBackdropOwner
 from .transitions.state import TransitionRun
 from .visualizer import VisualizerRenderItem, VisualizerRenderNodeTelemetry
 from .widgets.host import OrdinaryWidgetPresentationHost, OverlayWidgetGeometry
@@ -506,6 +507,10 @@ class QuickSceneController(QObject):
         self._surface_event_sequence = 0
         self._surface_probe_frames_remaining = 0
         self._context_menu_trace_model: QuickContextMenuModel | None = None
+        # Card surface materials (Docs/Architecture/Card_Surface_Materials.md): the one
+        # backdrop owner exists only while a card or the Context Menu is not Normal.
+        self._surface_backdrop_owner: SurfaceBackdropOwner | None = None
+        self._context_menu_surface_material = "normal"
         self._readiness = QuickSceneReadiness(
             screen_index=window.screen_index,
             runtime_generation=window.runtime_generation,
@@ -561,6 +566,7 @@ class QuickSceneController(QObject):
             hover_edit_glyph_handler=self._publish_hover_edit_glyph,
             glyph_capabilities=factory.ordinary_widget_glyph_capabilities,
         )
+        self._ordinary_widget_host.set_surface_demand_listener(self._on_surface_demand_changed)
         window.bind_semantic_double_click_hit_test(
             self._semantic_double_click_hit_test
         )
@@ -771,6 +777,7 @@ class QuickSceneController(QObject):
         # Do not notify the retained scene about unrelated auxiliary state
         # edges (including the native cursor). Read actual root properties,
         # not a parallel cache that could survive a scene reconstruction.
+        backdrop_changed = False
         for name, value in (
             ("dimmingEnabled", state.dimming_enabled),
             ("dimmingOpacity", state.dimming_opacity),
@@ -779,6 +786,12 @@ class QuickSceneController(QObject):
         ):
             if root.property(name) != value:
                 root.setProperty(name, value)
+                # Dimming lies beneath the backdrop; pixel shift moves only the cards,
+                # which sample the backdrop in screen space and need no refresh.
+                backdrop_changed = backdrop_changed or name.startswith("dimming")
+        owner = getattr(self, "_surface_backdrop_owner", None)
+        if backdrop_changed and owner is not None:
+            owner.note_background_changed()
         return True
 
     def _publish_jedi_mode_event(
@@ -947,6 +960,83 @@ class QuickSceneController(QObject):
             if root.property(name) != color and not root.setProperty(name, color):
                 raise RuntimeError(f"DisplayScene.qml rejected context-menu property {name}")
         return True
+
+    def apply_context_menu_surface_material(self, material: str) -> bool:
+        """Project the Context Menu's surface material (the Widget Theme baseline)."""
+
+        from .widgets.surface_material import normalize_surface_material
+
+        root = self._scene_root
+        if root is None or not self._readiness.admission_open:
+            return False
+        resolved = normalize_surface_material(material) or "normal"
+        if root.property("contextMenuSurfaceMaterial") != resolved:
+            if not root.setProperty("contextMenuSurfaceMaterial", resolved):
+                raise RuntimeError("DisplayScene.qml rejected context-menu surface material")
+        if resolved != self._context_menu_surface_material:
+            self._context_menu_surface_material = resolved
+            self._on_surface_demand_changed()
+        return True
+
+    @property
+    def surface_backdrop_owner(self) -> SurfaceBackdropOwner | None:
+        return self._surface_backdrop_owner
+
+    def _surface_materials_in_use(self) -> frozenset[str]:
+        host = self._ordinary_widget_host
+        materials = set(host.surface_materials) if host is not None and not host.is_retired else set()
+        if self._context_menu_surface_material != "normal":
+            materials.add(self._context_menu_surface_material)
+        return frozenset(materials)
+
+    def _on_surface_demand_changed(self) -> None:
+        """Create the backdrop owner on the first non-Normal surface; retire it on the last."""
+
+        materials = self._surface_materials_in_use()
+        owner = self._surface_backdrop_owner
+        root = self._scene_root
+        if materials and (owner is None or owner.parked):
+            if root is None or not _qobject_is_alive(root) or not self._readiness.admission_open:
+                return
+            created = owner is None
+            if created:
+                owner = SurfaceBackdropOwner(root, screen_index=self._window.screen_index)
+                self._surface_backdrop_owner = owner
+            else:
+                owner.wake()
+            owner.set_materials(materials)
+            background = self._background_item
+            if background is not None and background.transition_run is not None:
+                owner.set_transition_active(True)
+            self._bind_surface_backdrop(owner.item)
+            logger.info("[QUICK] Surface backdrop %s screen=%s materials=%s",
+                        "created" if created else "woken", self._window.screen_index,
+                        ",".join(sorted(materials)))
+        elif not materials and owner is not None and not owner.parked:
+            # Unbind every consumer first: their shader nodes are cleaned up at the start
+            # of the sync in which the backdrop frees its GL.
+            self._bind_surface_backdrop(None)
+            owner.park()
+            logger.info("[QUICK] Surface backdrop parked screen=%s", self._window.screen_index)
+        elif owner is not None:
+            owner.set_materials(materials)
+
+    def _bind_surface_backdrop(self, item: QQuickItem | None) -> None:
+        host = self._ordinary_widget_host
+        if host is not None and not host.is_retired:
+            host.set_surface_backdrop(item)
+        root = self._scene_root
+        if root is not None and _qobject_is_alive(root):
+            root.setProperty("contextMenuSurfaceBackdrop", item)
+
+    def _retire_surface_backdrop(self) -> None:
+        """Scene retirement: GL went with the scene graph; the item goes with the root."""
+
+        owner, self._surface_backdrop_owner = self._surface_backdrop_owner, None
+        if owner is None:
+            return
+        self._bind_surface_backdrop(None)
+        owner.retire()
 
     def bind_context_menu_model(self, model: QuickContextMenuModel) -> bool:
         if not isinstance(model, QuickContextMenuModel):
@@ -1619,6 +1709,9 @@ class QuickSceneController(QObject):
         self.background_item.set_presentation_image(image)
         self._incoming_image = None                 # adopted (or replaced): nothing is incoming
         if prior_identity != next_identity:
+            owner = self._surface_backdrop_owner
+            if owner is not None:
+                owner.note_background_changed()
             listener = self._presentation_image_listener
             if listener is not None:
                 listener()
@@ -1747,6 +1840,9 @@ class QuickSceneController(QObject):
                 (time.monotonic_ns() - current.start_ns) / 1_000_000.0,
             )
         self.background_item.set_transition_run(run)
+        owner = self._surface_backdrop_owner
+        if owner is not None:
+            owner.set_transition_active(run is not None)
         return True
 
     def set_visualizer_render_source(
@@ -2752,6 +2848,7 @@ class QuickSceneController(QObject):
         # Retire retained overlay widgets first: each is detached from the host
         # and queued for deletion, so no C++-owned item outlives the display
         # generation or depends on the scene root still being attached.
+        self._retire_surface_backdrop()
         if self._ordinary_widget_host is not None:
             self._ordinary_widget_host.retire_all()
         if self._custom_layout_overlay is not None:

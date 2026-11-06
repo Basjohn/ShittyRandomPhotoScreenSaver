@@ -204,6 +204,9 @@ Item {
             widgetGlowClicked = false
     }
     property alias cardBackgroundColor: card.backgroundColor
+    property alias cardSurfaceMaterial: card.surfaceMaterial
+    property alias cardSurfaceBackdrop: card.surfaceBackdrop
+    property alias cardSurfaceTextColor: card.surfaceTextColor
     property alias cardBorderColor: card.borderColor
     // Global Card Border Width is specified in finished logical pixels. Uniform
     // CUSTOM families scale their authored root, so feed the card the inverse

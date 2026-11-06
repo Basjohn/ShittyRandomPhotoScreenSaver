@@ -165,6 +165,13 @@ class OverlayCardStyle:
     shadow_extend_top: float = 0.0
     shadow_extend_right: float = 0.0
     shadow_extend_bottom: float = 0.0
+    # Surface material (Docs/Architecture/Card_Surface_Materials.md): "normal" is
+    # today's fill; anything else samples the display's shared backdrop. The text
+    # colour is the legibility layer's reference.
+    surface_material: str = "normal"
+    surface_text_color: QColor = field(
+        default_factory=lambda: QColor(255, 255, 255, 230)
+    )
 
 
 _CARD_STYLE_BINDINGS: tuple[tuple[str, str], ...] = (
@@ -184,6 +191,8 @@ _CARD_STYLE_BINDINGS: tuple[tuple[str, str], ...] = (
     ("cardShadowExtendTop", "shadow_extend_top"),
     ("cardShadowExtendRight", "shadow_extend_right"),
     ("cardShadowExtendBottom", "shadow_extend_bottom"),
+    ("cardSurfaceMaterial", "surface_material"),
+    ("cardSurfaceTextColor", "surface_text_color"),
 )
 
 
@@ -226,6 +235,7 @@ class RetainedOverlayWidget:
             [Mapping[str, object]], None
         ] | None = None
         self._input_state_handler: Callable[[object], bool] | None = None
+        self._surface_material = "normal"
         # A Python presentation wrapper must never outlive its QML-owned C++ root.
         # This event-driven edge has no polling/render cost and follows the widget
         # across display-host transfers because it consults ``self._host`` at the
@@ -309,6 +319,14 @@ class RetainedOverlayWidget:
         """Apply one immutable card style record to the shared shell."""
 
         apply_overlay_card_style(self.item, style)
+        self._surface_material = str(style.surface_material)
+        host = getattr(self, "_host", None)
+        if host is not None:
+            host._note_surface_demand()
+
+    @property
+    def surface_material(self) -> str:
+        return self._surface_material
 
     def set_custom_layout_size_payload_handler(
         self,
@@ -499,6 +517,10 @@ class OrdinaryWidgetPresentationHost:
         # the scene already closed/current, rather than flashing at QML's 1.0
         # default until the coordinator's next animation value arrives.
         self._startup_reveal_opacity = 1.0
+        # Card surface materials: the display's shared backdrop item (None while every
+        # card is Normal) and the scene owner told when material demand changes.
+        self._surface_backdrop: QQuickItem | None = None
+        self._surface_demand_listener: Callable[[], None] | None = None
         # Exactly one bounded refresh-edge clock belongs to this display host.
         # Any number of Gmail/Reddit/NEWS/CUSTOM Feed/Games You Follow
         # accessories join it; providers never gain a presentation cadence.
@@ -514,6 +536,31 @@ class OrdinaryWidgetPresentationHost:
     @property
     def live_count(self) -> int:
         return len(self._live)
+
+    @property
+    def surface_materials(self) -> frozenset[str]:
+        """Non-Normal materials of the live cards (edge-maintained, no scene scan)."""
+
+        return frozenset(widget.surface_material for widget in self._live
+                         if widget.surface_material != "normal" and widget.is_qt_alive)
+
+    def set_surface_demand_listener(self, listener: Callable[[], None] | None) -> None:
+        """One owner (the scene controller) told when the material set may have changed."""
+
+        self._surface_demand_listener = listener
+
+    def _note_surface_demand(self) -> None:
+        listener = self._surface_demand_listener
+        if listener is not None and not self._retired:
+            listener()
+
+    def set_surface_backdrop(self, backdrop: QQuickItem | None) -> None:
+        """Bind (or unbind) the shared backdrop on every live card; edge-level only."""
+
+        self._surface_backdrop = backdrop
+        for widget in self._live:
+            if widget.is_qt_alive:
+                widget.item.setProperty("cardSurfaceBackdrop", backdrop)
 
     @property
     def refresh_transition_clock(self) -> RefreshTransitionClock:
@@ -720,6 +767,8 @@ class OrdinaryWidgetPresentationHost:
             shadow_item=shadow_item,
             model_identity=normalized_identity or None,
         )
+        if self._surface_backdrop is not None:
+            item.setProperty("cardSurfaceBackdrop", self._surface_backdrop)
         if geometry is not None:
             widget.set_geometry(geometry)
         if card_style is not None:
@@ -730,6 +779,8 @@ class OrdinaryWidgetPresentationHost:
         self._live.append(widget)
         if normalized_identity:
             self._by_model_identity[normalized_identity] = widget
+        if widget.surface_material != "normal":
+            self._note_surface_demand()
         # ``fade_opacity`` was deliberately projected before scene admission
         # above. Later lifecycle changes continue through RetainedOverlayWidget.
         return widget
@@ -776,7 +827,10 @@ class OrdinaryWidgetPresentationHost:
         if widget.model_identity and self._by_model_identity.get(widget.model_identity) is widget:
             self._by_model_identity.pop(widget.model_identity, None)
         self._unexpected_qt_deaths.append(identity)
+        material = widget.surface_material
         widget._retire()
+        if material != "normal":
+            self._note_surface_demand()
 
     def prune_invalid_presentations(self) -> tuple[str, ...]:
         """Drop wrappers whose QML-owned C++ roots have already died.
@@ -950,7 +1004,10 @@ class OrdinaryWidgetPresentationHost:
                 del self._live[index]
                 if live.model_identity:
                     self._by_model_identity.pop(live.model_identity, None)
+                material = live.surface_material
                 live._retire()
+                if material != "normal":
+                    self._note_surface_demand()
                 return True
         return False
 
@@ -1138,6 +1195,10 @@ class OrdinaryWidgetPresentationHost:
         if identity:
             target._by_model_identity[identity] = widget
         widget._host = target
+        item.setProperty("cardSurfaceBackdrop", target._surface_backdrop)
+        if widget.surface_material != "normal":
+            self._note_surface_demand()
+            target._note_surface_demand()
         return True
 
     def retire_all(self) -> None:
@@ -1150,6 +1211,8 @@ class OrdinaryWidgetPresentationHost:
         self._custom_layout_input_blocked = False
         self._unexpected_qt_deaths = []
         self._retired = True
+        self._surface_demand_listener = None
+        self._surface_backdrop = None
         clock, self._refresh_transition_clock = self._refresh_transition_clock, None
         if clock is not None:
             clock.stop()

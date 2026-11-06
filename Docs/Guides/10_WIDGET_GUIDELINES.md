@@ -507,11 +507,13 @@ Theme-link UI is not a widget-family responsibility. Settings Themes and Widget 
 
 Use the shared branded-header/component vocabulary when the family fits it. Header geometry/logo identity remains family-authored content, while semantic colours/opacity/shadows come from shared style/theme authority. Do not copy Media/Steam-specific layout merely to reuse the header.
 
-### Plain card surface contract
+### Card surface contract
 
-Runtime widget cards use the ordinary retained Qt Quick RGBA surface/border/shadow path only. Widget Themes provide semantic colours; explicit family overrides remain higher precedence. The abandoned runtime Glass/Acrylic backdrop experiments must not leave a `ShaderEffectSource`, `MultiEffect`, layer-backed background, material mask tree, capture FBO, material Loader, cadence callback, worker, timer or poller in the screensaver scene. The wallpaper/transition render node remains directly composited by the healthy pre-material path.
+Normal cards use the ordinary retained Qt Quick RGBA surface/border/shadow path. Widget Themes provide semantic colours; explicit family overrides remain higher precedence. The abandoned Sep 2026 Glass/Acrylic backdrop experiments must not return: no `ShaderEffectSource`, `MultiEffect` or layer-backed background, no per-card material mask tree, capture FBO or material Loader, no material cadence callback, worker, timer or poller. The wallpaper/transition render node remains directly composited.
 
-Settings-window Glass/Acrylic is a separate native QWidget/HWND theme facility and does not authorize a corresponding runtime-card material path. If runtime materials are reconsidered in future, they require a broader independently justified renderer architecture and a fresh acceptance plan rather than reviving the rejected card-only experiments.
+Superseded decision (6 Nov 2026): non-Normal surface materials exist through `Docs/Architecture/Card_Surface_Materials.md` only. A card gains one inactive `Loader` (`overlayCardSurfaceMaterial`) that loads `MaterialSurface.qml` while its material is not Normal and the display's shared backdrop is bound; the Rectangle keeps its border and drops its fill. Families never add their own material, blur or capture.
+
+Settings-window Glass/Acrylic is a separate native QWidget/HWND theme facility and is never reused by runtime cards. This guide used to require "a broader independently justified renderer architecture and a fresh acceptance plan rather than reviving the rejected card-only experiments"; `Docs/Architecture/Card_Surface_Materials.md` is that architecture and plan.
 
 A family owns a visual exception only if it independently authored that relationship. Retired `shadowtuning.json` card/text/header/icon/control/volume values are not family-authored because a widget once consumed them.
 
