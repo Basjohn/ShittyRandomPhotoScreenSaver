@@ -42,6 +42,14 @@ the Windows path, so it never needs its own Linux audit later (operator, 5 Nov).
 lead as reviewer/orchestrator. Agents that already hold unfinished work may exceed this until they finish (their
 context is valuable). Slots need not always be full: when the right agent is not free, queue the item here.
 
+**Architecture audit before application-wide work (operator 6 Nov, one-time agents):** a one-time Opus agent audits
+the thread manager, resource manager, lifecycles, dead code, churn, avoidable GIL contention, memory/leaks and
+dormancy contracts. Lenses: SSOT, dormancy, lifecycle contracts, 2D/3D consistency, performance, SMP settings UX and
+full visual rearrangement. Output: `Docs/Audits/Architecture_Audit_2026-11-06.md`. Then a one-time Fable 5.1 agent
+challenges and improves it into a live checklist (priority, reward, fix detail; unrelated defects kept), and upgrades
+the Expanded Visualizer / SMP plans and this plan. Afterwards the cap returns to one Opus high plus one Opus medium,
+once no existing agent holds loaded work.
+
 **Queued (operator 6 Nov ~22:00), next free medium slot:**
 - **Two clicks on Reset Camera count as the card's double-click, which cycles the Visualizer mode**
   (`logs/screensaver*.log` 22:04:34-36). Two presses each ran a reset ("[VIS_ORBIT] Camera reset to preset home" x2).
