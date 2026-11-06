@@ -1,14 +1,16 @@
 #version 460 core
 // Bake with PySide6 qsb: --glsl "460" -o text_legibility.frag.qsb text_legibility.frag
 // One rounded legibility row (Docs/Architecture/Card_Surface_Materials.md, 3.3): under a
-// whole list line (LegibilityRow.qml) or a single text run (ShadowedText.qml). It
-// evaluates the card surface exactly as surface_material.frag does (the SURFACE block is
-// identical; tests/test_surface_materials.py checks it), finds the row's worst surface
-// along its centre line, and draws ONE uniform overlay (away from the text, on the side the
-// surface is already on) that brings every run colour in the row to `floorRatio` WCAG
-// contrast. Where the whole row already meets it the output is exactly transparent.
+// whole list line (LegibilityRow.qml) or a single text run (ShadowedText.qml). The vertex
+// stage computed the row's one even overlay (away from the text, on the side the surface is
+// already on) that brings every run colour in the row to `floorRatio` WCAG contrast at the
+// row's worst sampled point. Here each pixel only checks its own surface (the SURFACE block,
+// identical to surface_material.frag's): where it is worse than every sampled point it takes
+// the larger overlay it needs, so the floor holds between the samples too. Where the whole
+// row already meets the floor the output is exactly transparent.
 layout(location = 0) in vec2 vLocal;
 layout(location = 1) in vec2 vScreen;
+layout(location = 2) flat in vec3 vRow;
 layout(location = 0) out vec4 fragColor;
 layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
@@ -33,8 +35,8 @@ layout(std140, binding = 0) uniform buf {
 };
 layout(binding = 1) uniform sampler2D source;
 
-// SURFACE BEGIN (identical in surface_material.frag and text_legibility.frag;
-// tests/test_surface_materials.py checks it)
+// SURFACE BEGIN (identical in surface_material.frag, text_legibility.frag and
+// text_legibility.vert; tests/test_surface_materials.py checks it)
 float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 
 vec3 unpremultiply(vec4 c) { return c.a > 0.0 ? c.rgb / c.a : c.rgb; }
@@ -56,8 +58,9 @@ float grain(vec2 pixel) {
 }
 
 // The card surface at card-local point p (origin at the card centre), sampled through the
-// shared backdrop at this fragment's screen coordinate. rgb = surface, a = backdrop validity.
-vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit) {
+// shared backdrop at this point's screen coordinate. rgb = surface, a = backdrop validity.
+// grainValue is the static grain at this pixel (grain(gl_FragCoord.xy)); 0.5 = none.
+vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit, float grainValue) {
     vec2 halfSize = cardSize * 0.5;
     vec2 cardUnit = p / max(cardSize, vec2(1.0)) + vec2(0.5);
     float r = clamp(cornerRadius, 0.0, min(halfSize.x, halfSize.y));
@@ -123,9 +126,10 @@ vec4 surfaceAt(vec2 p, vec2 cardSize, vec2 screen, vec2 uvPerUnit) {
         c = mix(c, vec3(1.0), 0.35 * highlight * edgeAmount);
     }
 
-    c += (grain(gl_FragCoord.xy) - 0.5) * lightNoise.y;
+    c += (grainValue - 0.5) * lightNoise.y;
     return vec4(clamp(c, 0.0, 1.0), valid);
 }
+// SURFACE END
 
 // Local units -> backdrop uv per unit (axis-aligned; the signs carry the y flip).
 vec2 backdropPerUnit(vec2 p, vec2 screen) {
@@ -134,7 +138,6 @@ vec2 backdropPerUnit(vec2 p, vec2 screen) {
     return vec2(abs(dx) > 1e-6 ? dFdx(screen.x) / dx : 0.0,
                 abs(dy) > 1e-6 ? dFdy(screen.y) / dy : 0.0);
 }
-// SURFACE END
 
 float wcag(vec3 c) {
     vec3 l = mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.03928), c));
@@ -180,46 +183,25 @@ vec4 straight(vec4 c) { return vec4(unpremultiply(c), c.a); }
 // surface and this row; premultiplied, transparent when the row sits on the card itself.
 vec3 underPanel(vec3 c) { return c * (1.0 - underlayColor.a) + underlayColor.rgb; }
 
-const int ROW_SAMPLES = 7;
+float rowOverlay(vec3 c, bool lift) {
+    return max(overlayFor(c, straight(runColor), lift),
+               max(overlayFor(c, straight(secondaryRunColor), lift),
+                   overlayFor(c, straight(tertiaryRunColor), lift)));
+}
 
 void main() {
     vec2 local = vLocal * itemSize;
     vec2 toCard = cardOffset - cardSize * 0.5;
-    vec2 perUnit = backdropPerUnit(local, vScreen);
-    vec4 here = surfaceAt(toCard + local, cardSize, vScreen, perUnit);
-    here.rgb = underPanel(here.rgb);
-
-    // The row's surface along its centre line (the same for every fragment of the row), so
-    // the overlay is one even tone across the line instead of a patch per glyph.
-    vec3 samples[ROW_SAMPLES];
-    float meanL = 0.0;
-    for (int i = 0; i < ROW_SAMPLES; ++i) {
-        vec2 at = vec2((float(i) + 0.5) / float(ROW_SAMPLES) * itemSize.x, 0.5 * itemSize.y);
-        samples[i] = underPanel(surfaceAt(toCard + at, cardSize, vScreen + (at - local) * perUnit, perUnit).rgb);
-        meanL += wcag(samples[i]) / float(ROW_SAMPLES);
-    }
-
-    // Side: away from the primary run, on the side the row's surface already is, unless the
-    // floor cannot be reached there.
-    vec4 run = straight(runColor);
-    vec4 run2 = straight(secondaryRunColor);
-    vec4 run3 = straight(tertiaryRunColor);
-    float runL = wcag(run.rgb);
-    float ratio = floorRatio * 1.10;
-    bool lift = meanL >= runL ? ratio * (runL + 0.05) - 0.05 <= 1.0 : (runL + 0.05) / ratio - 0.05 < 0.0;
-
-    // Worst point: the row samples and this fragment's own surface.
-    vec3 worst = here.rgb;
-    float worstL = wcag(worst);
-    for (int i = 0; i < ROW_SAMPLES; ++i) {
-        float l = wcag(samples[i]);
-        if (lift ? l < worstL : l > worstL) {
-            worst = samples[i];
-            worstL = l;
-        }
-    }
-    float t = max(overlayFor(worst, run, lift),
-                  max(overlayFor(worst, run2, lift), overlayFor(worst, run3, lift)));
+    // Without the static grain, as at the row's samples: the grain is a few per cent of a
+    // level either way (inside the 10 % margin), and per-pixel noise must not send pixels
+    // through the slow path.
+    vec4 here = surfaceAt(toCard + local, cardSize, vScreen, backdropPerUnit(local, vScreen), 0.5);
+    vec3 c = underPanel(here.rgb);
+    bool lift = vRow.y > 0.5;
+    float t = vRow.x;
+    float l = wcag(c);
+    if (lift ? l < vRow.z : l > vRow.z)
+        t = max(t, rowOverlay(c, lift));
 
     // The row's rounded shape with a 1.5 px antialiased edge.
     vec2 halfSize = itemSize * 0.5;

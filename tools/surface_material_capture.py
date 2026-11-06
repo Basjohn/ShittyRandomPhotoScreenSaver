@@ -397,38 +397,54 @@ def measure_cost(scene: MaterialScene, wallpapers: list[Path], frames: int = 80)
     image = presentation_image(wallpapers[0], SCENE, "cost")
     scene.set_wallpaper(image)
 
-    def timed() -> float:
+    def timed() -> tuple[float, float]:
         scene.scene._make_current()
         query = int(gl.glGenQueries(1)[0])
         gl.glBeginQuery(gl.GL_TIME_ELAPSED, query)
+        cpu = time.perf_counter()
         scene.scene.control.render()
         scene.scene.control.endFrame()      # the GL backend executes the recorded frame here
+        cpu = time.perf_counter() - cpu
         scene.scene._make_current()
         gl.glEndQuery(gl.GL_TIME_ELAPSED)
         value = ctypes.c_uint64()
         gl.glGetQueryObjectui64v(query, gl.GL_QUERY_RESULT, ctypes.byref(value))
         gl.glDeleteQueries(1, [query])
-        return value.value / 1e6
+        return value.value / 1e6, cpu * 1e3
 
-    def frame_gpu(material: str) -> float:
+    def frame_cost(material: str) -> tuple[float, float]:
+        """(GPU ms, render-thread CPU ms of sync + render) for one steady frame."""
         scene.set_material(material)
         scene.render(4)              # settle: refresh once, then disarmed
         app = scene.scene.app
         app.processEvents()
         scene.scene.control.polishItems()
+        cpu = time.perf_counter()
         scene.scene.control.beginFrame()
         scene.scene.control.sync()
-        return timed()
+        sync = (time.perf_counter() - cpu) * 1e3
+        gpu, render_cpu = timed()
+        return gpu, sync + render_cpu
+
+    def best(material: str) -> tuple[float, float]:
+        samples = [frame_cost(material) for _ in range(4)]
+        return min(s[0] for s in samples), min(s[1] for s in samples)
 
     results = {}
-    for material in MATERIALS[1:]:
+    # "normal" against itself first: the floor of the alternating method (must read zero).
+    for material in MATERIALS:
         normal, case = [], []
         for _ in range(frames // 8):
-            normal.append(min(frame_gpu("normal") for _ in range(4)))
-            case.append(min(frame_gpu(material) for _ in range(4)))
-        results[material] = {"normal_ms": round(statistics.median(normal), 4),
-                             "material_ms": round(statistics.median(case), 4),
-                             "delta_ms": round(statistics.median(case) - statistics.median(normal), 4)}
+            normal.append(best("normal"))
+            case.append(best(material))
+        n_gpu = statistics.median(s[0] for s in normal)
+        c_gpu = statistics.median(s[0] for s in case)
+        n_cpu = statistics.median(s[1] for s in normal)
+        c_cpu = statistics.median(s[1] for s in case)
+        results[material] = {"normal_ms": round(n_gpu, 4), "material_ms": round(c_gpu, 4),
+                             "delta_ms": round(c_gpu - n_gpu, 4),
+                             "normal_cpu_ms": round(n_cpu, 4), "material_cpu_ms": round(c_cpu, 4),
+                             "delta_cpu_ms": round(c_cpu - n_cpu, 4)}
         print(material, results[material], flush=True)
     return results
 
@@ -705,6 +721,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="per text run contrast against its local backdrop, light and dark themes")
     parser.add_argument("--style", action="store_true",
                         help="full frames per theme/wallpaper/material plus a mid-transition frame, and item rects")
+    parser.add_argument("--dpr", type=float, default=1.0,
+                        help="device pixel ratio of the hidden scene (1.6 = 2560x1440, 2.4 = 3840x2160)")
     parser.add_argument("--card-set", choices=("main", "lists"), default="main",
                         help="main: Weather/Media/Reddit/Stats/Clock; lists: Gmail/Feed/Steam/Stats")
     parser.add_argument("--themes", nargs=2, metavar=("DARK", "LIGHT"),
@@ -731,8 +749,8 @@ def main(argv: list[str] | None = None) -> int:
 
     args.output.mkdir(parents=True, exist_ok=True)
     art = foundry._gradient_art(args.output / "_media_art.png", (480, 480), ("#27336e", "#e7678a"), 1)
-    scene = MaterialScene(*SCENE)
-    report = {"scene": list(SCENE), "wallpapers": [p.name for p in args.wallpapers]}
+    scene = MaterialScene(*SCENE, dpr=args.dpr)
+    report ={"scene": list(SCENE), "wallpapers": [p.name for p in args.wallpapers]}
     try:
         activate_theme(DARK_THEME)
         build_cards(scene, art)
