@@ -241,7 +241,11 @@ widgets.<family>.surface_material       Inherit (default) | Normal | the five ma
   the strict loader (`ui/widget_theme_io.py`) accepts the key or its absence and rejects anything but a real
   material; the writer emits it only when set, so every older theme round-trips byte for byte. The Foundry editor
   (`tools/widget_theme_foundry.py`) shows and saves it; the Custom theme (a `replace` of the active spec) keeps it.
-  Existing themes name none and stay Normal under "Theme".
+  Existing themes name none and stay Normal under "Theme". Fifteen material themes (6 Nov, three per material,
+  unlinked, `theme_id` `widget:material:*`) cover the hues the first 100 rarely use (chartreuse, green, yellow,
+  violet, blue and magenta borders/accents; light cards; green/magenta, yellow/blue, violet/gold, blue/lime
+  pairings). Themes are authored content: tests check structure and that each material theme's own text roles
+  read at 4.5:1 on its own surface, never its values.
 - **Baseline.** `Widgets -> General -> Style Overrides -> Surface Material` sets the baseline beside Card Border
   Width; its first option, **Theme** (the new default), follows the active Widget Theme's material and is Normal when
   the theme names none (`resolve_global_surface_material` / `theme_surface_material` in
