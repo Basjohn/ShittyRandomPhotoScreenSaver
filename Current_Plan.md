@@ -146,11 +146,6 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
-- [ ] **`tests/test_process_supervisor_availability.py` load sensitivity (6 Nov):** `test_start_does_not_block_
-  availability_calls_or_the_heartbeat` failed once inside a 700-file isolated run and passed alone (its 0.15 s
-  budget per availability call). If it recurs, widen the budget to the measured loaded worst case rather than drop
-  the check; the old lock scope took seconds, so the bound keeps its meaning.
-
 - [ ] **Neon Lake goal mocks (Presets 1-3, 6 Nov sixth pass, awaiting operator look):** darker mirror lake with a
   longer Moon/Sun column and no swell wash, Preset 3's mid-lake blob fixed (mirror counted swell troughs as land),
   navy Preset 1 sky with a shallower band and a soft blue stream upper left, even luminous Moon face, near ridges
@@ -591,22 +586,25 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
 - [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost, Extruded Spectrum and
   Neon Lake built, DevCurve and Oscilloscope built (below); Sphere in progress). Neon Lake (Shockwave Grid) awaits operator acceptance
   (evidence `.artifacts/evidence/neon_lake/studio/`, Presets 1 and 3): recorded engine answers like Spectrum, the
-  shared framed camera, no wallpaper. Operator decision on acceptance: the Studio carries the terrain heightfield and
-  its Extend / Reset edits but has no brush instrument, so its builder body can shrink to the preset row plus the
-  terrain editor, not to `build_studio_owned_mode_ui` alone, unless a shared brush instrument is admitted. Extruded Spectrum awaits operator acceptance
+  shared framed camera, no wallpaper; its Settings body keeps the terrain brush (the one Settings control without a
+  Studio home) unless a shared brush instrument is admitted. Extruded Spectrum awaits operator acceptance
   (evidence `.artifacts/evidence/extruded_spectrum/studio/`); its cast-shadow rows stay out of the Studio while
-  Settings keeps them unavailable (`EXTRUDED_CAST_SHADOW_AVAILABLE`). Spectrum awaits operator acceptance (evidence
-  `.artifacts/evidence/spectrum/studio_20261105/`); its Studio now reaches everything Settings' Spectrum builder saves
-  (shape nodes added/removed, lanes reordered), so the builder body can be replaced on acceptance. Each: full registry coverage test, production-parity preview test, theme,
-  Settings Custom launcher replacing that builder body once the operator accepts it.
+  they are unavailable (`EXTRUDED_CAST_SHADOW_AVAILABLE`). Spectrum awaits operator acceptance (evidence
+  `.artifacts/evidence/spectrum/studio_20261105/`). Every mode's Settings body is now the preset row and the Studio
+  launcher (operator 6 Nov: migrate fully once parity+ is proven; `tests/test_visualizer_studio_parity.py`). Operator
+  look pending on the migrated Settings pages (one sentence per mode; Neon Lake's page keeps the terrain brush).
+- [ ] **Neon Lake terrain brush in the Studio (the last step to "fully migrated", operator 6 Nov: "not be half in and
+  half off"):** the Studio carries the heightfield, undo, Extend and Reset but has no brush instrument, so Neon Lake's
+  Settings page keeps the brush section (`settings_sections=("terrain",)`). Build a shared Studio brush instrument
+  that paints on the preview (raise, lower, flatten; radius, strength, falloff; the existing undo), then retire the
+  Settings section with the parity test proving the brush round trip.
 - [ ] **DevCurve Studio built (6 Nov), awaiting operator acceptance** (`ui/studio/devcurve_adapter.py`, registered;
   so DevCurve's preset row now shows Open Studio and no Edit Preset). Evidence `.artifacts/evidence/devcurve/studio/`
   (Deep Blue on Rag Doll, Neon Skyline on Human: every workspace with the live traces, plus the node rows). Operator
   to judge: the per-layer Body / Accent / Swell traces as the way to read the reworked reactivity, the Layers
   workspace (one panel per layer), and whether the Audio Analysis group earns its place (re-analysed from PCM through the
   production DSP, every offered control moves DevCurve's frame; AGC Strength and Output Lift read nothing and are now
-  hidden: `Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode). The builder body is replaced with
-  `build_studio_owned_mode_ui` only on acceptance.
+  hidden: `Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode).
 - [ ] **Oscilloscope Studio built (6 Nov), awaiting operator acceptance** (`ui/studio/oscilloscope_adapter.py`,
   registered). Evidence `.artifacts/evidence/oscilloscope/studio/` (Preset 1 Phosphor on Human, Preset 3 Lissajous on
   Rag Doll: every workspace with the live traces). Recorded engine answers with the capture history recorded by
@@ -614,8 +612,7 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   Flare / Drive / Tone as the way to read the beam, the three workspaces, and whether the Audio Analysis group earns
   its place (re-analysed from PCM through the production DSP, every offered control moves Flare and Drive, and Bar Count,
   Block Size and Input Gain also move Tone: the trace itself is the raw capture, but the beam's reactions are not;
-  `Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode). The builder body is replaced with
-  `build_studio_owned_mode_ui` only on acceptance.
+  `Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode).
 - [ ] **Studio replay understates Audio Analysis (found 6 Nov):** the engine-processed Studios serve the clip's *recorded*
   post-DSP lanes (`ReplayBeatEngine`; only the Spectrum family's bars are re-shaped from PCM), so editing Sensitivity,
   the floors, Gain or Block Size in the DevCurve, Oscilloscope, Bubble, Extruded Bubble or Sphere Studio (and Neon
@@ -624,20 +621,19 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   `ProductionLaneEngine` (`tools/visualizer_replay/analysis_controls_audit.py`: per-frame PCM through
   `compute_bars_from_samples`, production getters) is the candidate: promote it to `feature_replay`, use it in
   `engine_answers.extract` for modes with engine-owned analysis, and re-prove the parity tests. It takes one analysis
-  block per 11 ms tick where live analyses every capture callback, so absolute levels approximate; measure the worker's
-  cost on the shipped clips first.
+  block per 11 ms tick where live analyses every capture callback, so absolute levels approximate. Worker cost
+  measured 6 Nov (`engine_answers.extract` with `ReplayBeatEngine` swapped for `ProductionLaneEngine`, the three
+  shipped 12 s clips, frozen settings, best of two, machine at ~80% CPU from other work): DevCurve 3.8-3.9 s -> 4.2-4.3 s
+  (+9-14%), Oscilloscope 2.0-2.2 s -> 2.5-2.6 s (+18-28%); the cost is no obstacle. Still to do: move the class into
+  `widgets/spotify_visualizer/feature_replay.py` (the audit tool then imports it), pick it in `extract` for modes with
+  engine-owned analysis (Bubble, Extruded Bubble and Sphere run their own recorded-input workers and need the same
+  swap), and re-anchor the Studio parity tests, whose oracle is the production replay on recorded lanes.
 - [ ] **Edit Preset deleted (6 Nov)**: every visualizer mode now has a Studio, so the preset row's Edit Preset button,
   `_open_preset_json` and its pop-up are gone (`ui/tabs/media/preset_slider.py`); curated presets are authored with
   Open Studio and the Studio's confirmed Save To <Preset> (`Docs/Reference/Visualizer_Studio.md` §4).
   `tools/flicker_test.py` keeps its own historical mock of the old row. Operator look pending: Open Studio's place in
   the preset row and the Save To flow.
 - [ ] **Operator side requests (6 Nov, "important eventually"; queue after the running work):**
-  - **Bar Count outside Spectrum (lead decision 6 Nov, with the Studio migration):** audited 6 Nov
-    (`Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode): outside Spectrum and Extruded
-    Spectrum it is analysis resolution, not a drawn count, yet it moves every mode's frame (Neon Lake waves,
-    Oscilloscope Flare / Drive, Bubble, Extruded Bubble, Sphere, DevCurve, Waveform), so it stays everywhere. Outside
-    the two bar modes it is labelled "Analysis Bands" with a tooltip saying what it does (as Voxel Sphere already is),
-    keyed off one descriptor fact and read by Settings and the Studio alike.
   - **Waveform travel speed:** History Speed (`flow_speed`, 0.8-2.4, Flow bucket) and Pulse Speed exist but the
     operator did not find them; there is no travel-speed reactivity. Make them findable (name / workspace / tooltip)
     and consider a quiet -> peak History Speed under the flow rule (music pushes history faster, smoothly; knot spacing

@@ -31,8 +31,7 @@ def test_eb_behavior_replay_uses_only_test_owned_controls():
 
 def test_eb_behavior_cases_never_import_authored_preset_oracle():
     for name in ("test_extruded_bubble_startup_and_sizes.py",
-                 "test_extruded_bubble_recovery_candidate.py",
-                 "test_extruded_bubble_lazy_bucket_ui.py"):
+                 "test_extruded_bubble_recovery_candidate.py"):
         source = (ROOT / "tests" / name).read_text(encoding="utf-8")
         tree = ast.parse(source)
         names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}

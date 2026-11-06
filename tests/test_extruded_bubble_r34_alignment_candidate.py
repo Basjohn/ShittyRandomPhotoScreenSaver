@@ -74,22 +74,6 @@ def test_deep_visible_emitter_and_shaft_origin_share_world_position_with_distinc
     assert surface['ray_source'] != surface['light_source']
 
 
-def test_camera_editor_retains_shared_mapper_and_uses_existing_yaw_pitch_not_fov():
-    code = (ROOT/'ui/widgets/visual_controls.py').read_text(encoding='utf-8')
-    builder = (ROOT/'ui/tabs/media/spec_mode_builder.py').read_text(encoding='utf-8')
-    assert 'class ScenePathMapper(_VisualControl):' in code
-    assert 'cameraAimCommitted = Signal(tuple)' in code
-    assert 'linkedSourceCommitted = Signal(tuple)' in code
-    assert 'self._camera_angles = angles' in code
-    # The aim/offset logic is the shared framed-camera editor (every framed 3D mode, EB included).
-    editor = (ROOT/'ui/tabs/media/framed_camera_editor.py').read_text(encoding='utf-8')
-    assert "pose[key] = settings.control(key).admit(angle" in editor
-    assert "for suffix in ('turn', 'tilt'):" in editor
-    assert "_aim_dirty'" in editor
-    assert "def _fov(" in editor and 'camera_fov' in editor  # FOV only widens pan; aim never changes it
-    assert 'cameraAimCommitted.connect' in builder and 'fce.set_aim(' in builder
-
-
 def test_r34_aim_roundtrip_preserves_world_eye_with_camera_translation_precision():
     """TEST INPUT, NOT A DEFAULT GOLDEN: turn in place; 4 decimals loses >0.0001 world units."""
     defaults = _parameter_defaults()

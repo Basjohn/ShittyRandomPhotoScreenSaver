@@ -48,4 +48,44 @@ def admit_technical(entry: tuple[StudioProperty, Any], candidate: Any, previous:
     return _clamp_numeric(value, defn) if prop.instrument == SCALAR else value
 
 
-__all__ = ["TECHNICAL_GROUP", "admit_technical", "technical_properties"]
+RAINBOW_GROUP = "Rainbow"
+
+
+def rainbow_properties(mode_id: str, *, workspace: str, group: str = RAINBOW_GROUP,
+                       subject: str = "the visualiser's colours") -> dict[str, StudioProperty]:
+    """The mode's shared rainbow family (Settings' Rainbow bucket: Taste the Rainbow and its Speed), stored per mode;
+    empty for a mode without the family. storage key -> Studio property."""
+    from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
+    keys = get_owned_mode_setting_keys(mode_id, "rainbow")
+    if not keys:
+        return {}
+    enabled, speed = keys["rainbow_enabled"], keys["rainbow_speed"]
+    return {
+        enabled: StudioProperty(id=enabled, path=(enabled,), label="Taste the Rainbow", workspace=workspace,
+                                group=group, instrument=SWITCH, icon="gradient",
+                                tooltip=f"Slowly shift the hue of {subject} through the spectrum. Saved per "
+                                        "visualizer mode."),
+        # Settings' Speed slider: 1..100 (hundredths).
+        speed: StudioProperty(id=speed, path=(speed,), label="Rainbow Speed", workspace=workspace, group=group,
+                              instrument=SCALAR, minimum=0.01, maximum=1.0, decimals=2, when=((enabled, (True,)),),
+                              tooltip="How fast the hue cycles through the spectrum."),
+    }
+
+
+def admit_rainbow(props: dict[str, StudioProperty], key: str, candidate: Any, previous: Any) -> Any:
+    """Settings' own admission of the rainbow family: the toggle is a bool, the speed its 1..100 slider in
+    hundredths."""
+    prop = props[key]
+    if prop.instrument == SWITCH:
+        return bool(candidate)
+    try:
+        value = float(candidate)
+    except (TypeError, ValueError):
+        return previous
+    if value != value:
+        return previous
+    return round(max(0.01, min(1.0, value)), 2)
+
+
+__all__ = ["RAINBOW_GROUP", "TECHNICAL_GROUP", "admit_rainbow", "admit_technical", "rainbow_properties",
+           "technical_properties"]

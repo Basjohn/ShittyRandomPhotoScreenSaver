@@ -66,6 +66,9 @@ class StudioProperty:
     # Shown only while every term holds: ((property id, (accepted stored values...)), ...) - the canonical
     # Settings condition (e.g. a control shown only while its feature toggle is on).
     when: tuple = ()
+    # Shown only while at least one term holds (same term shape as ``when``; empty: no such condition). Settings'
+    # OR conditions, e.g. Bubble's particle size shown while any particle population is on.
+    when_any: tuple = ()
     # Structural edits offered on this row (e.g. remove this curve node): run by the adapter's ``structure_edit``.
     actions: tuple["StudioAction", ...] = ()
 
@@ -254,11 +257,37 @@ class StudioSchema:
     def keys(self) -> frozenset[str]:
         return frozenset(prop.path[0] for prop in self.properties)
 
+    @property
+    def condition_keys(self) -> frozenset[str]:
+        """Every key a property's visibility condition reads."""
+        return frozenset(key for prop in self.properties for key, _accepted in (*prop.when, *prop.when_any))
+
+
+def condition_hidden(schema: StudioSchema, values) -> dict[str, bool]:
+    """Property id -> True for every property whose condition fails on ``values`` (Settings' conditional rows).
+
+    ``when``: every term must hold; ``when_any``: at least one. A term whose key the values lack is not judged."""
+    def holds(key, accepted):
+        try:
+            return values[key] in accepted
+        except (KeyError, TypeError):
+            return None
+
+    hidden = {}
+    for prop in schema.properties:
+        if any(holds(key, accepted) is False for key, accepted in prop.when):
+            hidden[prop.id] = True
+        elif prop.when_any:
+            results = [holds(key, accepted) for key, accepted in prop.when_any]
+            if False in results and True not in results and None not in results:
+                hidden[prop.id] = True
+    return hidden
+
 
 __all__ = [
     "RESPONSE_PANEL", "WorkspaceColumn",
     "CardSpec", "GRADIENT", "LifecycleSpec", "StudioPreset",
     "ResponseCell", "ResponseSource", "ResponseTarget", "StudioResponse",
     "CHOICE", "COLOUR", "COUNT", "INSTRUMENTS", "QUIET_PEAK", "SCALAR", "SWITCH",
-    "SceneObject", "StudioAction", "StudioProperty", "StudioSchema", "Workspace",
+    "SceneObject", "StudioAction", "StudioProperty", "StudioSchema", "Workspace", "condition_hidden",
 ]

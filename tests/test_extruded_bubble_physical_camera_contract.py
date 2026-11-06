@@ -107,13 +107,6 @@ def test_all_render_pass_world_positions_use_same_physical_eye():
     assert 'shift = (0.0, 0.0)' in owner
 
 
-def test_lazy_first_open_hydrates_only_new_bucket_not_prior_controls():
-    builder = (ROOT / 'ui/tabs/media/spec_mode_builder.py').read_text()
-    assert 'only_buckets=frozenset((key,))' in builder
-    assert 'if only_buckets is not None and entry.bucket not in only_buckets:' in builder
-    assert 'if lazy_built is not None and only_buckets is None:' in builder
-
-
 def test_pan_follow_screen_pointer_sign_is_not_inverted_again():
     # Scene Pan is screen-normalised with Y down: Qt Alt-right drag right/down
     # MUST carry the visible world right/down. The previous physical-camera

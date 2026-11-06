@@ -150,7 +150,7 @@ class StudioBridge(QObject):
         # replaces the older one; ``apply_pending_previews`` applies them once, at the next frame start.
         self._pending: dict[tuple[str, int], tuple[str, Any]] = {}
         self.previews_applied = 0
-        self._when_keys = frozenset(key for prop in schema.properties for key, _accepted in prop.when)
+        self._when_keys = schema.condition_keys
         self._objects: list[dict] = []
         self._viewport_status = "preparing"
         self._viewport_error = ""
@@ -497,15 +497,9 @@ class StudioBridge(QObject):
     def _refresh_condition_hidden(self, values: Mapping[str, Any], shown: Mapping[str, Any]) -> None:
         # A property whose value the current values do not hold (an absent optional element, such as a curve node
         # slot the profile does not use) is not shown.
+        from ui.studio.schema import condition_hidden
         hidden = {prop.id: True for prop in self._schema.properties if prop.id not in shown}
-        for prop in self._schema.properties:
-            for key, accepted in prop.when:
-                try:
-                    if read_path(values, (key,)) not in accepted:
-                        hidden[prop.id] = True
-                        break
-                except (KeyError, IndexError, TypeError):
-                    continue
+        hidden.update(condition_hidden(self._schema, values))
         self._condition_hidden = hidden
 
     def _update_live_values(self, keys: frozenset[str]) -> None:

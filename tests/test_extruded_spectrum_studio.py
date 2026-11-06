@@ -699,7 +699,7 @@ def test_edits_save_through_the_settings_owners_and_every_exit_restores_settings
     assert session.values[PREFIX + "colouring"] == other                 # nothing reverted by a later save
     bridge.requestClose()
     assert _settings_restored(controller, dialog)
-    assert tab.extruded_spectrum_shape_editor.get_nodes()[0][1] == pytest.approx(round(1.0 - height, 3))
+    assert tab._extruded_spectrum_lazy_values[PREFIX + "shape_nodes"][0][1] == pytest.approx(round(1.0 - height, 3))
     for path in ("escape", "window"):
         surfaces.clear()
         controller = open_mode_studio(tab, MODE, adapter=LightAdapter(), surface_factory=_surfaces(surfaces))
