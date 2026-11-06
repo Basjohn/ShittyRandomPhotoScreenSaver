@@ -364,9 +364,9 @@ drawn bars only for Spectrum and Extruded Spectrum; elsewhere it is analysis res
 them every lane downstream) by a few percent to a quarter.
 
 `tools/visualizer_replay/analysis_controls_audit.py` measures this: ordinary replay serves *recorded* post-DSP lanes, so
-a technical control could never move them (the DevCurve and Oscilloscope Studio notes that only Bar Count and the noise
-floor mattered came from that). The audit recomputes every lane from the clip's native PCM through the production DSP
-and the production getters, moves each owned control from the mode's frozen baseline, and diffs the mode's published
+a technical control could never move them. The audit recomputes every lane from the clip's native PCM through the
+production DSP and the production getters (`feature_replay.ProductionLaneEngine`, which the Studios' DevCurve,
+Oscilloscope, Neon Lake, Bubble, Extruded Bubble and Sphere clip workers also replay on since 6 Nov), moves each owned control from the mode's frozen baseline, and diffs the mode's published
 frame field by field (shipped Studio clips, two clips, deterministic; a repeat of the baseline differs by exactly 0).
 Scale caveat: it takes one analysis block per 11 ms tick, where live analyses every capture callback, so absolute levels
 approximate the live engine's while structural facts (a control that reaches nothing) are exact.

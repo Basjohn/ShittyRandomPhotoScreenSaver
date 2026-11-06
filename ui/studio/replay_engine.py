@@ -150,12 +150,13 @@ def offline_controller(engine, mode_id: str, settings):
 
 
 def recorded_answers(engine, feature) -> dict:
-    """What the production replay engine answers after accepting ``feature`` (for the recorded-clip workers)."""
+    """What the production replay engine answers after accepting ``feature`` (for the recorded-clip workers); the typed
+    events are those its scheduler was fed (``feature_replay.fed_events``)."""
+    from widgets.spotify_visualizer.feature_replay import fed_events
     def four(value):
         return [float(value.bass), float(value.mid), float(value.high), float(value.overall)]
     transient = engine.get_transient_energy_bands()
     ts, generation, activation = engine.get_latest_authoritative_frame()
-    real = feature.real
     return {
         "playing": bool(feature.playing),
         "bubble": four(engine.get_bubble_energy_bands()),
@@ -167,8 +168,7 @@ def recorded_answers(engine, feature) -> dict:
         "transient": [float(transient.bass_transient), float(transient.mid_transient),
                       float(transient.high_transient), bool(transient.onset_detected),
                       str(transient.onset_type), float(transient.onset_strength)],
-        "events": ([[feature.timestamp_us / 1e6, e.kind, float(e.strength)] for e in real.events]
-                   if real is not None else []),
+        "events": fed_events(engine, feature),
         "authoritative": float(ts),
         "fresh": bool(generation == engine.get_generation_id() and activation == engine.get_activation_id()),
         "scheduler": engine.get_event_scheduler() is not None,

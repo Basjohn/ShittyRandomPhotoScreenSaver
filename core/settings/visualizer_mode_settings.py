@@ -523,18 +523,13 @@ class SceneCameraPosition(Direction):
 
 @dataclass(frozen=True)
 class Custom:
-    """A row the mode's Studio edits as one record (a shape editor, the layers, the rainbow surface...), named so
-    adapters can place it, with the persisted ``keys`` it owns beyond the spec's controls. A section Settings itself
-    keeps (Neon Lake's terrain brush) also names its ``build(tab, layout)``, ``load(tab, config)`` and
-    ``collect(tab) -> dict`` as ``"module:function"``. ``admit`` (``"module:function(key, value, default)"``) is the
-    model's admission of the record's keys when it repairs or migrates them; without it a stored record passes
-    through."""
+    """A row the mode's Studio edits as one record (a shape editor, the layers, the terrain, the rainbow
+    surface...), named so adapters can place it, with the persisted ``keys`` it owns beyond the spec's controls.
+    ``admit`` (``"module:function(key, value, default)"``) is the model's admission of the record's keys when it
+    repairs or migrates them; without it a stored record passes through."""
 
     name: str
     bucket: str
-    build: str = ""
-    load: str = ""
-    collect: str = ""
     keys: tuple[str, ...] = ()
     admit: str = ""
 
@@ -682,9 +677,8 @@ _SHOCKWAVE_GRID = ModeSettings(
                advanced=True),
     ),
     entries=(
-        Custom("terrain", "terrain", "ui.tabs.media.shockwave_grid_builder:build_terrain_section",
-               "ui.tabs.media.shockwave_grid_settings_binding:load_terrain_section",
-               "ui.tabs.media.shockwave_grid_settings_binding:collect_terrain_section", keys=("shockwave_grid_terrain",)),
+        Custom("terrain", "terrain", keys=("shockwave_grid_terrain",),
+               admit="core.settings.models._visualizer_helpers:admit_heightfield_key"),
         Slider("shockwave_grid_terrain_height", "Terrain Height:", 0.0, 1.5,
                "Vertical scale of the authored solid land. Authored zero regions remain water.", bucket="terrain"),
         Slider("shockwave_grid_terrain_detail", "Terrain Detail:", 0.0, 1.0,
