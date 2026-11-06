@@ -1651,6 +1651,12 @@ class StudioController(QObject):
             values.update(self._pose)
         return values
 
+    def evaluation_time(self) -> float:
+        """The time the evaluator is asked for: the transport's time into the clip, or, for a seamless loop, its
+        unrolled time (passes played plus the time into this one), so the evaluator plays on through the wrap."""
+        fixture = self.evaluator.fixture
+        return self.transport.unrolled if getattr(fixture, "loop", False) else self.transport.time
+
     def on_frame(self) -> None:
         """Quick frame start (GUI thread): advance playback, evaluate at most once."""
         if self.state not in ("opening", "presented") or self.transport.stopped:
@@ -1671,7 +1677,7 @@ class StudioController(QObject):
                     # A mode whose logical step reads the card's world extent (Bubble's domain) is evaluated at
                     # the extent actually presented.
                     spatial(self.presented_extent())
-                frame = self.evaluator.evaluate(self.transport.time, self.evaluation_values(), exact=not live,
+                frame = self.evaluator.evaluate(self.evaluation_time(), self.evaluation_values(), exact=not live,
                                                 revision=revision)
             except Exception as exc:
                 logger.exception("[STUDIO] Preview evaluation failed")

@@ -35,6 +35,8 @@ class StudioFixture:
     kind: str
     duration: float
     description: str = ""
+    loop: bool = False         # a seamless loop (``ui/studio/clip_loop.py``): ``duration`` is its period and the
+                               # evaluator plays on through the wrap instead of restarting
 
 
 @dataclass(frozen=True)

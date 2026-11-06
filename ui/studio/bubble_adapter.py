@@ -27,7 +27,7 @@ from typing import Any, Iterable, Mapping
 from core.settings.visualizer_mode_settings import (
     Choice, Colour, Custom, Gradient, Slider, Toggle, require_mode_settings,
 )
-from ui.studio import framed
+from ui.studio import clip_loop, framed
 from ui.studio.adapter import (
     RECORDED, REFERENCE, SYNTHETIC, StudioCapabilities, StudioFixture, StudioModeAdapter, control_condition,
 )
@@ -308,6 +308,7 @@ class SyntheticInputs:
         self._signal = signal
         self._onsets = sorted(onsets)
         self._origin = 0.0
+        self.period = 0.0
 
     def steps(self, until: float) -> Iterable[TickInput]:
         first = -int(round(PREROLL / STEP))
@@ -331,10 +332,15 @@ class SyntheticInputs:
 class RecordedInputs:
     """Ticks extracted from a recording by the production replay (``ui.studio.bubble_recorded_inputs``)."""
 
-    def __init__(self, fixture: StudioFixture, steps: tuple[TickInput, ...], origin: float) -> None:
+    def __init__(self, fixture: StudioFixture, steps: tuple[TickInput, ...], origin: float, period: float = 0.0) -> None:
         self.fixture = fixture
         self._steps = steps
         self._origin = origin
+        self.period = float(period)        # > 0: a seamless loop (``ui/studio/clip_loop.py``)
+
+    def shifted(self, tick, cycle: int):
+        """``tick`` ``cycle`` whole passes on."""
+        return clip_loop.shift_clock_tick(tick, cycle * self.period)
 
     def steps(self, until: float) -> Iterable[TickInput]:
         limit = self._origin + until + 1e-9
@@ -395,6 +401,7 @@ class BubbleStudioEvaluator:
         self._extent: tuple[float, float] | None = None
         self._signature = None
         self._presentation = None
+        self._anchor = clip_loop.Anchor()
         self.steps_run = 0
         self._reset_history()
 
@@ -460,7 +467,7 @@ class BubbleStudioEvaluator:
         if self._extent is not None:
             controller.hydrate_committed_layout_metrics(self._extent, 0)
         self._controller = controller
-        self._iterator = iter(self._inputs.steps(self.fixture.duration))
+        self._iterator = iter(clip_loop.unrolled_ticks(self._inputs, self.fixture.duration))
         self._signature = self._simulation_signature(values)
         self._presentation = self._presentation_signature(values)
 
@@ -504,11 +511,16 @@ class BubbleStudioEvaluator:
         re-presents the same logical instant: the step reads none of them. ``exact=False`` (a live gesture) shows a
         logical change on the next tick instead of replaying (the next exact evaluation replays)."""
         del revision
-        time = max(0.0, min(float(time), self.fixture.duration))
+        at = float(time)
+        anchor = self._anchor = self._anchor.sync(getattr(self._inputs, "period", 0.0))
+        # A seamless loop plays on through its wrap in the transport's unrolled time (``ui/studio/clip_loop.py``).
+        time = max(0.0, anchor.virtual(at)) if anchor.looped else max(0.0, min(at, self.fixture.duration))
         signature = self._simulation_signature(values)
         if self._controller is None or time < self._time or (exact and (signature != self._signature
                                                                         or self._approximate)):
             self._start(values)
+            if anchor.looped:
+                time = anchor.rebase(at)       # a replay from the start of the pass the instant is in
         elif signature != self._signature:
             from widgets.spotify_visualizer.config_applier import apply_logical_vis_mode_kwargs
             apply_logical_vis_mode_kwargs(self._controller.logical_tick_state, _mode_kwargs(values))
