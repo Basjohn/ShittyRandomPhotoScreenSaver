@@ -152,9 +152,12 @@ BREATHING_HEARD_RETURN = 1.5
 # re-scales what follows. Fitted to the remembered-peak gain's VISIBLE behaviour, not hotter (lead review 6 Nov: a hotter
 # curve pinned Pulse Strength, flattened passages and pushed crests out of the card): on seven long recordings back to
 # back (chain7) the quantiles of the adaptive output paired with the routed target's are gain x t^curve within .005-.014
-# rms; height and lift (the body's size) fit 1.17-1.20 x t^.75-.82, every other drive 1.24-1.32 x t^.86-.91.
+# rms; height and lift (the body's size) fit 1.17-1.20 x t^.75-.82, every other drive 1.24-1.32 x t^.86-.91. Above
+# RESPONSE_FIXED_KNEE the drive eases toward RESPONSE_FIXED_CEILING, as the remembered peak landed a sustained loud
+# passage at .85: with an easing toward 1 the crests of loud passages topped the card on 2-6% of frames where main did
+# on .8-2.9% (lead review captures, 640x560).
 FIXED_RESPONSE = {'height':(1.2,.75),'lift':(1.2,.82)}
-FIXED_RESPONSE_DEFAULT, RESPONSE_FIXED_KNEE = (1.25,.86), .85
+FIXED_RESPONSE_DEFAULT, RESPONSE_FIXED_KNEE, RESPONSE_FIXED_CEILING = (1.25,.86), .8, .92
 # The remembered peak also deepened the dip after every swell (a swell raised the peak, the next moments were scaled
 # down): that, not taller crests, is where its 3 s contrast came from. The fixed response matches it with a dip below
 # Breathing's phrase-scale mean, widened by PHRASE_DIP (crests are never widened, so nothing rises toward the card's top).
@@ -261,11 +264,11 @@ def span(value, low, high):
 
 def fixed_response(target, key):
     """A routed geometry target on the fixed scale -> drive target: gain x target^curve (FIXED_RESPONSE per drive) to
-    RESPONSE_FIXED_KNEE, then an exponential approach to 1 that never flattens on it."""
+    RESPONSE_FIXED_KNEE, then an exponential approach to RESPONSE_FIXED_CEILING that never flattens on it."""
     gain,curve = FIXED_RESPONSE.get(key,FIXED_RESPONSE_DEFAULT)
     value = gain*max(0.,target)**curve
     if value > RESPONSE_FIXED_KNEE:
-        room = 1.-RESPONSE_FIXED_KNEE
+        room = RESPONSE_FIXED_CEILING-RESPONSE_FIXED_KNEE
         value = RESPONSE_FIXED_KNEE+room*(1.-math.exp(-(value-RESPONSE_FIXED_KNEE)/room))
     return unit(value)
 
@@ -597,8 +600,10 @@ class WaveformDynamics:
                 # .88, above the loud passage's .87) within 25 s. Keyed to the drive's own dips it held every song
                 # (the drive sits below its peak between almost every pair of beats). Rises still reach in RESPONSE_REACH.
                 if c.adaptive_response:
+                    # The remembered peak learns only from heard music (``learn``): a break can no longer lower it
+                    # and size the music's return up (spliced 5 s break, Rag Doll's loud end: +5-9% for 10 s).
                     self._response_peak[key] = max(RESPONSE_PEAK_FLOOR,follower(
-                        self._response_peak[key],target,dt,RESPONSE_REACH,memory))
+                        self._response_peak[key],target,dt*learn,RESPONSE_REACH,memory))
                     target = unit(RESPONSE_TOP*target/self._response_peak[key])
                 else:
                     target = fixed_response(target,key)
