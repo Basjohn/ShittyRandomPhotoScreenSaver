@@ -77,3 +77,45 @@ def test_devcurve_lane_drag_path_does_not_use_soft_snap(qt_app):
         Qt.KeyboardModifier.NoModifier,
     )
     editor.mouseMoveEvent(event)
+
+
+def _right_click(editor, point) -> None:
+    event = QMouseEvent(QMouseEvent.Type.MouseButtonPress, point, point, Qt.MouseButton.RightButton,
+                        Qt.MouseButton.RightButton, Qt.KeyboardModifier.NoModifier)
+    editor.mousePressEvent(event)
+
+
+def _advance(nodes):
+    """One DevCurve step with ``nodes`` on every layer (the production frame runtime's own validation)."""
+    from core.settings.default_contract import require_canonical_default
+    from widgets.spotify_visualizer.devcurve_frame_runtime import DevCurveFrameRuntime
+    from widgets.spotify_visualizer.render_state import VisualizerEnergyState, VisualizerTransientState
+    from widgets.spotify_visualizer.tick_pipeline import _devcurve_parameter_snapshot
+    defaults = require_canonical_default("widgets.spotify_visualizer")
+
+    class Host:
+        def __getattr__(self, name):
+            return defaults[name[1:]]
+    return DevCurveFrameRuntime().advance(
+        now_ts=1.0, runtime_generation=0, engine_generation=0, activation_id=0, source_generation=0,
+        source_activation_id=0, source_timestamp=1.0, playing=True, energy=VisualizerEnergyState(),
+        transient=VisualizerTransientState(), musical_level=(8.0, 1.0), musical_intensity=0.5,
+        layer_shape_nodes={src: nodes for src in _LAYERS}, parameters=_devcurve_parameter_snapshot(Host()))
+
+
+@pytest.mark.qt
+def test_right_click_keeps_the_two_nodes_the_devcurve_solver_needs(qt_app):
+    """Removing nodes stops at two, which the production runtime accepts; one node (what the editor used to allow)
+    is refused by the runtime, so a saved one-node layer stopped DevCurve's step (negative control)."""
+    editor = _make_editor()
+    editor.resize(640, 320)
+    qt_app.processEvents()
+    editor.set_nodes([[0.0, 0.3], [0.5, 0.7], [1.0, 0.4]])
+    for _ in range(4):
+        nx, ny = editor.get_nodes()[0]
+        _right_click(editor, editor._node_to_pixel(nx, ny))
+    nodes = editor.get_nodes()
+    assert len(nodes) == 2
+    assert _advance(nodes) is not None
+    with pytest.raises(ValueError):
+        _advance(nodes[:1])
