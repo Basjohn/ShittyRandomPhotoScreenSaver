@@ -135,10 +135,6 @@ one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewe
   passed 64/64. Looks like a native crash at interpreter teardown after the Studio tests. If it recurs, capture the
   exit code and any faulthandler output (run the file alone with `-X faulthandler`) and fix the teardown owner.
   Probably the same family as the leaked clip workers fixed in 90f65ee9 (a surviving worker held the runner's pipe).
-- [ ] **Worker-lifetime negative control is timing-dependent:** `test_without_the_job_tree_..._negative_control`
-  cancels inside the venv launcher's setup window by delay sweeps; under an 8-way gate no delay landed (6 Nov, twice),
-  so it now skips with that reason. Replace it with a deterministic stand-in (a probe parent that starts a child with
-  `CREATE_SUSPENDED` and is killed alone, with and without the job tree).
 
 - [ ] **4x MSAA repeat-render noise (driver, 5 Nov; was "Floor Give run-to-run noise"):** the same frame rendered
   again through a 4x scene target differs by 1 level (rarely 2-3) on a pixel or two in Waveform (more often with Floor
