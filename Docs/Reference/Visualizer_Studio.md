@@ -111,6 +111,7 @@ is optional and defaults to "not offered":
   `analysis_failure` (the controller shows it once as a notice with **Retry**, `retry_analysis`; the previous
   answers stay on screen); a failed clip analysis offers Retry the same way. A background clip load that lands
   selects itself only while it is still the source last asked for (the user's choice, or the default before any).
+  Its "Preview source" notice is withdrawn when the user picks another source (other notices stay).
 - **Structural edits.** A schema `StudioAction` on a row (`StudioProperty.actions`) or under a group
   (`StudioSchema.group_actions`) is answered by the adapter's `structure_edit(action_id, values)` as one undoable,
   admitted change set, or None while not admissible (the button is disabled). `StudioSchema.row_label` titles a row
