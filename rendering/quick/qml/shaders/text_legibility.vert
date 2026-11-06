@@ -1,7 +1,8 @@
 #version 460 core
 // Bake with PySide6 qsb: --glsl "460" -o text_legibility.vert.qsb text_legibility.vert
-// Per-text-run legibility plate on a card surface material. The backdrop coordinate comes from this vertex's own position in the render
-// target, so it follows pixel shift, Edit drags and CUSTOM scale with no binding.
+// One rounded legibility row on a card surface material. The backdrop coordinate comes from
+// this vertex's own position in the render target, so it follows pixel shift, Edit drags and
+// CUSTOM scale with no binding.
 layout(location = 0) in vec4 qt_Vertex;
 layout(location = 1) in vec2 qt_MultiTexCoord0;
 layout(location = 0) out vec2 vLocal;
@@ -15,11 +16,14 @@ layout(std140, binding = 0) uniform buf {
     float cornerRadius;
     float contentInset;
     float borderWidth;
-    float feather;
+    float rowRadius;
     float floorRatio;
     vec4 tintColor;
     vec4 textColor;
     vec4 runColor;
+    vec4 secondaryRunColor;
+    vec4 tertiaryRunColor;
+    vec4 underlayColor;
     vec4 blurTint;
     vec4 lightNoise;
     vec4 glassLegibility;

@@ -115,25 +115,34 @@ Item {
         z: 0
     }
 
+    // A run on its own: one rounded box with one even tone (not a feathered pill per
+    // glyph). A run (nearly) as wide as its card's content is a line and its row spans
+    // the run's whole box; a shorter one gets a box around its glyphs. Runs that share
+    // a line or a panel with others opt out and that LegibilityRow holds the floor.
     Loader {
         id: legibilityPlate
         objectName: "shadowedTextLegibilityPlate"
-        readonly property real pad: 4.0
+        readonly property real padX: 4.0
+        readonly property real padY: 3.0
         readonly property real glyphWidth: Math.min(shadowedText.width, mainText.contentWidth)
         readonly property real glyphHeight: Math.min(shadowedText.height, mainText.contentHeight)
+        readonly property bool fullLine: shadowedText.surfaceCard !== null
+            && shadowedText.width >= 0.85 * (shadowedText.surfaceCard.width
+                - 2.0 * shadowedText.surfaceCard.padding)
         active: shadowedText.onSurfaceMaterial && shadowedText.surfacePlateEnabled
             && shadowedText.text.length > 0
         visible: active
-        x: (shadowedText.horizontalAlignment === Text.AlignRight
-                ? shadowedText.width - glyphWidth
-                : shadowedText.horizontalAlignment === Text.AlignHCenter
-                    ? (shadowedText.width - glyphWidth) / 2.0 : 0.0) - pad
+        x: (fullLine ? 0.0
+                : shadowedText.horizontalAlignment === Text.AlignRight
+                    ? shadowedText.width - glyphWidth
+                    : shadowedText.horizontalAlignment === Text.AlignHCenter
+                        ? (shadowedText.width - glyphWidth) / 2.0 : 0.0) - padX
         y: (shadowedText.verticalAlignment === Text.AlignBottom
                 ? shadowedText.height - glyphHeight
                 : shadowedText.verticalAlignment === Text.AlignVCenter
-                    ? (shadowedText.height - glyphHeight) / 2.0 : 0.0) - pad
-        width: glyphWidth + pad * 2.0
-        height: glyphHeight + pad * 2.0
+                    ? (shadowedText.height - glyphHeight) / 2.0 : 0.0) - padY
+        width: (fullLine ? shadowedText.width : glyphWidth) + padX * 2.0
+        height: glyphHeight + padY * 2.0
         z: -1
         sourceComponent: TextLegibilityPlate {
             card: shadowedText.surfaceCard
@@ -141,7 +150,10 @@ Item {
                 const origin = shadowedText._offsetInCard(shadowedText.surfaceCard)
                 return Qt.point(origin.x + legibilityPlate.x, origin.y + legibilityPlate.y)
             }
-            runColor: shadowedText.color
+            // A run faded by its own opacity (a muted state label) is that much
+            // closer to the surface; the row holds the floor for what is drawn.
+            runColor: Qt.rgba(shadowedText.color.r, shadowedText.color.g, shadowedText.color.b,
+                              shadowedText.color.a * shadowedText.opacity)
             runPixelSize: mainText.fontInfo.pixelSize
         }
     }

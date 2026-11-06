@@ -12,6 +12,9 @@ beside Normal under a dark and a light Widget Theme, on still wallpapers and mid
 ``--cadence`` measures how far a backdrop refreshed every Nth frame drifts from one
 refreshed every frame through whole transitions (the refresh-rate decision); ``--cost``
 times the backdrop refresh and the whole frame per material with ``GL_TIME_ELAPSED``.
+``--style`` writes full frames per theme/wallpaper/material plus one mid-transition frame and the
+scene rectangles of named items (``regions.json``) for before/after crops; ``--card-set lists`` swaps
+in Gmail, a news Feed, Friend Pulse and System Stats; ``--themes DARK LIGHT`` picks the themes.
 Design and acceptance: ``Docs/Architecture/Card_Surface_Materials.md``.
 """
 from __future__ import annotations
@@ -34,6 +37,8 @@ SCENE = (1600, 900)
 TRANSITIONS = ("wipe", "slide", "block_spins", "glass_shatter", "cube_turn", "page_curl")
 LIGHT_THEME = "Polished Chrome [Single]"
 DARK_THEME = "Default Dark"
+# "main": Weather, Media, Reddit, System Stats, Clock; "lists": Gmail, Feed, Steam, System Stats.
+CARD_SET = "main"
 
 
 # --------------------------------------------------------------------------- scene
@@ -188,6 +193,18 @@ def build_cards(material_scene: MaterialScene, art: Path) -> None:
     scene = material_scene.scene
     width, height = SCENE
     built = []
+    if CARD_SET == "lists":
+        # The other list-like families: Gmail, a news Feed, Steam Friend Pulse, System Stats.
+        for builder in (foundry._preview_gmail, foundry._preview_feeds, foundry._preview_steam,
+                        foundry._preview_system_stats):
+            built.append(builder(scene, art))
+        slots = ((40, 40), (width - 700, 40), (40, height - 420), (width - 560, height - 420))
+        for presentation, (x, y) in zip(built, slots):
+            item = presentation.item
+            presentation.set_geometry(OverlayWidgetGeometry(float(x), float(y), item.width(), item.height()))
+        material_scene.presentations = built
+        material_scene.render(8)
+        return
     for builder in (foundry._preview_weather, foundry._preview_media, foundry._preview_reddit,
                     foundry._preview_system_stats):
         built.append(builder(scene, art))
@@ -201,7 +218,7 @@ def build_cards(material_scene: MaterialScene, art: Path) -> None:
                                       display_identity="preview")
     foundry._place_preferred(scene, clock)
     built.append(clock)
-    slots = ((40, 40), (width - 640, 40), (40, height - 330), (width - 560, height - 300),
+    slots = ((40, 40), (width - 680, 40), (40, height - 330), (width - 560, height - 300),
              ((width - 300) // 2, (height - 140) // 2))
     for presentation, (x, y) in zip(built, slots):
         item = presentation.item
@@ -603,6 +620,73 @@ def compare_legibility(before: Path, after: Path, output: Path) -> dict:
     return summary
 
 
+# --------------------------------------------------------------------------- style pass
+
+STYLE_REGION_NAMES = ("mediaControlsRow", "mediaSystemMuteButton", "weatherDetailsRow", "weatherForecastText",
+                      "redditPostRow_0", "redditPostRow_1", "redditPostRow_2", "mediaTrackMetadata",
+                      "systemStatsPresentation", "weatherPresentation", "mediaPresentation",
+                      "redditPresentation", "clockPresentation")
+
+
+def named_rects(scene: MaterialScene, names=STYLE_REGION_NAMES) -> dict:
+    """Scene rectangles of the named items (the visual tree, so Repeater delegates count)."""
+
+    from PySide6.QtCore import QRectF
+
+    wanted = set(names)
+    found: dict = {}
+    pending = [scene.scene.root]
+    while pending:
+        node = pending.pop()
+        pending.extend(node.childItems())
+        name = node.objectName()
+        if name in wanted and name not in found and node.isVisible():
+            rect = node.mapRectToScene(QRectF(0.0, 0.0, node.width(), node.height()))
+            found[name] = [round(rect.left(), 2), round(rect.top(), 2), round(rect.right(), 2),
+                           round(rect.bottom(), 2)]
+    for presentation in scene.presentations:
+        item = presentation.item
+        rect = item.mapRectToScene(QRectF(0.0, 0.0, item.width(), item.height()))
+        found.setdefault(item.objectName() or type(presentation).__name__,
+                         [rect.left(), rect.top(), rect.right(), rect.bottom()])
+    return found
+
+
+def capture_style(scene: MaterialScene, wallpapers: list[Path], output: Path,
+                  themes=(None, None), transition: str = "wipe", progress: float = 0.5) -> dict:
+    """Full-resolution frames for the style pass: each theme, each wallpaper, each material,
+    still, plus one mid-transition frame per material; and the named item rectangles."""
+
+    report: dict = {}
+    images = [presentation_image(path, SCENE, f"style-{index}") for index, path in enumerate(wallpapers)]
+    for theme in (themes[0] or DARK_THEME, themes[1] or LIGHT_THEME):
+        activate_theme(theme)
+        rebuild_styles(scene)
+        for index, image in enumerate(images):
+            scene.set_wallpaper(image)
+            for material in MATERIALS:
+                scene.set_material(material)
+                settle_still(scene)
+                folder = output / slug(theme) / wallpapers[index].stem
+                folder.mkdir(parents=True, exist_ok=True)
+                scene.read().save(folder / f"{material}.png")
+        for material in MATERIALS:
+            scene.set_wallpaper(images[0])
+            scene.set_material(material)
+            settle_still(scene)
+            scene.start_transition(transition, images[0], images[1 % len(images)], 0.0)
+            scene.render(3)
+            frame = scene.frame_at(transition, images[0], images[1 % len(images)], progress)
+            folder = output / slug(theme) / f"transition_{transition}"
+            folder.mkdir(parents=True, exist_ok=True)
+            frame.save(folder / f"{material}.png")
+        scene.set_material("normal")
+        report[slug(theme)] = named_rects(scene)
+        print("style", theme, flush=True)
+    (output / "regions.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    return report
+
+
 # --------------------------------------------------------------------------- main
 
 
@@ -619,7 +703,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cost", action="store_true", help="steady whole-frame GPU per material vs Normal")
     parser.add_argument("--legibility", action="store_true",
                         help="per text run contrast against its local backdrop, light and dark themes")
+    parser.add_argument("--style", action="store_true",
+                        help="full frames per theme/wallpaper/material plus a mid-transition frame, and item rects")
+    parser.add_argument("--card-set", choices=("main", "lists"), default="main",
+                        help="main: Weather/Media/Reddit/Stats/Clock; lists: Gmail/Feed/Steam/Stats")
+    parser.add_argument("--themes", nargs=2, metavar=("DARK", "LIGHT"),
+                        help="Widget Theme names for --style (default: Default Dark, Polished Chrome)")
     args = parser.parse_args(argv)
+    global CARD_SET
+    CARD_SET = args.card_set
     if args.compare_legibility:
         summary = compare_legibility(*args.compare_legibility, args.output)
         print(json.dumps(summary, indent=1))
@@ -661,6 +753,9 @@ def main(argv: list[str] | None = None) -> int:
             report["cadence"] = measure_cadence(scene, list(args.wallpapers))
         if args.sheets:
             report["sheets"] = capture_sheets(scene, list(args.wallpapers), args.output)
+        if args.style:
+            report["style"] = capture_style(scene, list(args.wallpapers), args.output,
+                                            themes=tuple(args.themes) if args.themes else (None, None))
     finally:
         scene.close()
         (args.output / "_media_art.png").unlink(missing_ok=True)
