@@ -179,8 +179,8 @@ def recorded_answers(engine, feature) -> dict:
 def _answer_types() -> dict[str, type]:
     """The engine value types an answer may carry (anything else is refused when recorded)."""
     from widgets.spotify_visualizer.energy_bands import EnergyBands
-    from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
-    return {"EnergyBands": EnergyBands, "TransientEnergyBands": TransientEnergyBands}
+    from widgets.spotify_visualizer.transient_bus import MusicalOnset, TransientEnergyBands
+    return {"EnergyBands": EnergyBands, "TransientEnergyBands": TransientEnergyBands, "MusicalOnset": MusicalOnset}
 
 
 def encode_answer(value: Any) -> Any:
