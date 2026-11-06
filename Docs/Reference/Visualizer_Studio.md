@@ -26,7 +26,7 @@ and must not be copied per mode.
 | `ui/studio/technical.py` | A mode's technical (audio-analysis) controls as Studio properties with Settings' own keys, ranges, choices, labels and coercion; adapters call it instead of copying them. |
 | `ui/studio/schema.py` | Typed, mode-supplied property schema: instruments (`SCALAR`, `COUNT`, `SWITCH`, `CHOICE`, `QUIET_PEAK`, `COLOUR`, `GRADIENT`), workspaces/columns, scene objects, response tuner, starting-point presets, lifecycle timelines and rendered cards. `admit` is the mode's canonical validator; the framework stores no defaults. |
 | `ui/studio/session.py` | `StudioEditSession`: hydrate from the canonical store, preview vs committed values, one commit per gesture, undo/redo/dirty. The store answers each commit with its canonical post-save snapshot. No Qt, no mode knowledge. |
-| `ui/studio/controller.py` | `StudioController` (single active instance, open → present → retire lifecycle) and `StudioBridge`, the only object QML sees. Bridge slots are plain methods (no `result=`), per the QML signal → result-slot crash rule. |
+| `ui/studio/controller.py` | `StudioController` (single active instance, open → present → retire lifecycle) and `StudioBridge`, the only object QML sees. Bridge slots are plain methods (no `result=`), per the QML signal → result-slot crash rule. The bridge's `values` is a `StudioValueMap` (`QQmlPropertyMap`): each property id notifies on its own, so a changed value re-evaluates only the bindings that read it. |
 | `ui/studio/viewport.py` | Inline `QSGRenderNode` that draws the adapter's renderer straight into the window framebuffer on the render thread (no readback, no per-frame texture copy). It applies the viewport slot's scene-graph clip (scissor), so a frameless mode that overflows its card in production (Extruded Spectrum, Sphere: up to the window) reaches the slot's edge, never the Studio chrome. Renderer created lazily and released on the render thread on `sceneGraphInvalidated` / node release. Snapshots (tiles, rendered cards, Copy Frame) use a second renderer instance, at most one per frame and only on request. |
 | `ui/studio/transport.py` | Play/pause/scrub/loop on the Studio's own time. No timer: it advances on the surface's `afterAnimating` frame start and requests another frame only while playing. |
 | `ui/studio/surface.py` | `StudioWindowSurface` (visible window) and `OffscreenStudioSurface` (hidden `QQuickRenderControl` host used by tests and the capture tool). Same shell, same signals (`frameStarted`, `presented`, `closeRequested`, `lost`, `failed`). |
@@ -37,6 +37,41 @@ and must not be copied per mode.
 | `ui/studio/engine_answers.py` | The Spectrum family's recorded engine answers (Spectrum, Extruded Spectrum, Neon Lake, DevCurve, Oscilloscope), mode-neutral (`EngineAnswerMode(mode_id, conditional_reads)`): synthetic audio (with the analysis spectrum and onsets a recording carries), the out-of-process `extract`, recorded inputs, the per-mode answer cache, `start_clip_load` and `EngineAnswerEvaluator` (the production step in process, rewinds, checkpoints, frame budget). The engine-owned / mode-owned split follows from the production source projection (`source_config_applier`). |
 | `ui/studio/spectrum_shape.py` | The Spectrum family's shape editor as Studio rows, admission and structural edits (add / remove node, lane swap), by key prefix (`ShapeKeys`). |
 | `ui/studio/theme.py`, `colour.py` | Chrome tokens derived from the active Settings theme with enforced contrast; display ↔ linear colour conversion for instruments. Scene colours never pass through the theme. |
+| `ui/studio/chrome.py` | The painted chrome items (`StudioFrame`, `StudioWindowEdge`, QML module `SRPSS.StudioChrome`), painting with Settings' own owners (below). |
+
+### Chrome and theme
+
+The Studio's chrome follows the Settings theme; the scene never does (the theme tests prove the scene's pixels are
+the same under every theme). The chrome reuses Settings' owners rather than restating them:
+
+- **Window.** `StudioWindowSurface` is a frameless top-level (`Qt.FramelessWindowHint`). The shell draws Settings'
+  custom title bar in QML (`studioTitleBar`: "SRPSS STUDIO", minimise, maximise/restore, close, on the theme's
+  `window.titlebar.*` roles); the Studio header (mode picker, preset, undo/redo, help, Save Preset As…, Close) sits
+  directly under it, as Settings keeps its title bar free of controls. A title-bar drag is the system move
+  (`QWindow.startSystemMove`: Windows snap and Aero snap), double-click maximises to the work area (manual, as
+  Settings), a drag from maximised restores under the pointer, the window sides and corners resize through
+  `startSystemResize`, and Esc / Alt+F4 / the title bar's × close through the same close path as before.
+- **Rounded edge.** `StudioWindowEdge` paints `ui/settings_window_edge.py:paint_forged_window_edge`, the function
+  `SettingsDialog.paintEvent` calls: the same radius, outer border (`chrome.outer_border`), backing and opaque corner
+  caps (`window.titlebar.surface`), square when maximised. There is one forged edge, not one per window.
+- **Material.** Normal (`backdrop.mode` off) is an opaque window with no native call. Under a Glass or Acrylic theme
+  the window gets an alpha surface and, on first show, the theme's material through
+  `core/windows/dwm_blur.py:apply_backdrop`, the mode → AccentPolicy mapping Settings' own backdrop owner calls
+  (Acrylic: state 4 with the theme tint; Glass: untinted state 3). One window-level material, no per-panel blur or
+  capture. The window surface (`window.dialog_glass`) and title bar take the theme's translucent roles; the large
+  panels let the material through at the theme's polarity with an opacity floor (`PANEL_MATERIAL_FLOOR`, 0.88) so
+  dense instruments stay legible over any desktop; the viewport, toolbars and inputs stay opaque. The material is
+  chosen when the window opens (Settings is concealed while a Studio is open).
+- **Cards and sections.** Main panels, the response dock, the tab strip and the viewport frame are `StudioFrame`s:
+  Settings' hard outside-only cast (`ui/widgets/control_shadow.py:cast_shadow_path`, the `panel.group` shadow role at
+  half its offset, `SHADOW_SCALE`), the surface, and the border stroked once along one continuous path
+  (`ui/widgets/continuous_border.py:rounded_border_path`), 1.5 px. Smaller cards (group headers, schematic and trace
+  cards, starting-point tiles, toolbar backings) are Quick rectangles whose border is one ring, also 1.5 px. A painted
+  frame repaints only when its size or a colour changes: nothing per frame, no frame requests.
+- **Viewport corners.** The viewport frame reaches 2 px past its column so the slot keeps its exact place and size
+  (the scene's pixels are unchanged) while every slot corner lies inside the frame's rounded outline; the frame's
+  border is drawn over the scene (`viewportFrameBorder`), covering the slot's square corners. The render node, its
+  scissor and the saver's clip path are untouched.
 | `ui/studio/<mode>_adapter.py`, `<mode>_recorded_inputs.py` | One adapter per registered mode plus its recorded-clip extractor. |
 
 ## 3. Adapter contract
@@ -173,6 +208,21 @@ is optional and defaults to "not offered":
 Every adapter carries a registry-derived full-coverage test (every canonical control reachable), a production-parity
 preview test and a Settings round-trip test; see `Docs/TestSuite.md` → Visualizer Studio. A property whose path the
 current values do not hold (an unused optional element, such as a curve-node slot) is hidden.
+
+### Drags are batched
+
+Every drag instrument (value sliders, Quiet/Peak lanes, lifecycle grips, response curves, XY handles, colour pickers,
+gradient nodes) goes through `previewValue` / `previewColour` / `previewGradient`, which only hold the newest value
+per target. The controller applies the held values at the next frame start (`on_frame`, the surface's existing
+`afterAnimating` edge; no timer), latest wins, so the session previews at most once per rendered frame however fast
+the pointer moves. An applied preview re-shows only the properties stored under the gesture's keys; the whole values
+map, the starting-point state and the condition map are rebuilt when the gesture ends (or at once when a changed key
+decides another property's visibility). The slider and its readout follow the pointer locally at once. Release
+applies the last held value and commits once (one save, one undo entry); Escape drops the held value and restores;
+keyboard steps and typed values commit per step. An evaluator can name keys whose preview follows only on release
+(`release_only_keys`): the engine-answer modes' engine-owned keys, whose analysis runs once on release (a live
+gesture evaluates with `exact=False`, which never starts one). Their sliders say "Updates On Release" while dragged.
+`tools/studio_drag_profile.py` measures a drag (`Docs/Reference/Harness_Index.md`).
 
 ## 4. Settings link and the restore guarantee
 

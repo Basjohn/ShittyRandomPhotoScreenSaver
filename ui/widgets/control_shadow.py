@@ -406,6 +406,20 @@ def attach_text_shadow(
     setattr(label, "_settings_text_shadow_helper", helper)
 
 
+def cast_shadow_path(base_rect: QRectF, radius: float, offset: QPointF) -> QPainterPath:
+    """The exposed part of a hard cast shadow: the rounded base moved by ``offset``, minus the base itself.
+
+    Outside-only, so a translucent surface never shows its own shadow through it. Shared with the Studio's
+    painted panel frames (``ui/studio/chrome.py``)."""
+    shadow_rect = QRectF(base_rect)
+    shadow_rect.translate(offset)
+    base_path = QPainterPath()
+    base_path.addRoundedRect(base_rect, radius, radius)
+    shadow_path = QPainterPath()
+    shadow_path.addRoundedRect(shadow_rect, radius, radius)
+    return shadow_path.subtracted(base_path)
+
+
 class _CastShadowOverlay(QWidget):
     """Sibling overlay that paints only the exposed portion of a hard cast shadow."""
 
@@ -430,14 +444,7 @@ class _CastShadowOverlay(QWidget):
             return
 
         config = helper.config
-        shadow_rect = QRectF(base_rect)
-        shadow_rect.translate(config.offset)
-
-        base_path = QPainterPath()
-        base_path.addRoundedRect(base_rect, helper.radius, helper.radius)
-        shadow_path = QPainterPath()
-        shadow_path.addRoundedRect(shadow_rect, helper.radius, helper.radius)
-        cast_path = shadow_path.subtracted(base_path)
+        cast_path = cast_shadow_path(base_rect, helper.radius, config.offset)
 
         color = QColor(config.color)
         if not owner.isEnabled():

@@ -18,7 +18,14 @@ from core.settings import visualizer_presets as vp
 from tools import visualizer_preset_repair as repair
 
 ROOT = Path(__file__).resolve().parents[1]
-MODES = ("waveform_ribbon", "spectrum", "bubble", "extruded_bubble", "sphere")
+def _curated_modes() -> tuple[str, ...]:
+    """Every registered Visualizer mode with a curated preset folder (derived, never a copied catalog)."""
+    from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
+    return tuple(d.mode_id for d in iter_visualizer_mode_descriptors()
+                 if (ROOT / "presets" / "visualizer_modes" / d.mode_id).is_dir())
+
+
+MODES = _curated_modes()
 
 
 def _first_curated(mode: str) -> Path:
