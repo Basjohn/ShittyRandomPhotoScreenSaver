@@ -102,6 +102,6 @@ void main() {
 
     c += (grain(gl_FragCoord.xy) - 0.5) * lightNoise.y;
     vec4 material = vec4(clamp(c, 0.0, 1.0), 1.0);
-    vec4 normal = vec4(normalColor.rgb, 1.0) * normalColor.a;
+    vec4 normal = normalColor;   // ShaderEffect passes colours premultiplied
     fragColor = mix(normal, material, valid) * (inside * qt_Opacity);
 }

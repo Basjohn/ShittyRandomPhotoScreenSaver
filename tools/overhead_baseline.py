@@ -143,6 +143,47 @@ def _transition_counts(gl, capture, run) -> dict[str, float]:
     return {"gl_calls": statistics.median(gl_counts), "py_calls": statistics.median(py_counts)}
 
 
+def measure_surfaces(bench: PairedBench, frames: int, passes: int, max_rounds: int) -> dict[str, dict[str, float]]:
+    """The card surface backdrop refresh (Docs/Architecture/Card_Surface_Materials.md): one blit and
+    blur pyramid of the whole target, as the production node runs it when it refreshes. It runs only
+    while some surface is not Normal (dormant otherwise), on image edges and during transitions."""
+    from rendering.quick.render.surface_backdrop import BackdropPipeline
+
+    gl, capture = bench.gl, bench.capture
+    pipeline = BackdropPipeline()
+    def point(_index):
+        def render():
+            pipeline.refresh(capture.fbo, capture.width, capture.height)
+        return render
+
+    def warm():
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
+        pipeline.refresh(capture.fbo, capture.width, capture.height)
+
+    def counts():
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, capture.fbo)
+        calls = [0]
+
+        def profile(_frame, event, _arg):
+            if event in ("call", "c_call"):
+                calls[0] += 1
+
+        with _GLCounter(gl) as counter:
+            sys.setprofile(profile)
+            try:
+                pipeline.refresh(capture.fbo, capture.width, capture.height)
+            finally:
+                sys.setprofile(None)
+        gl.glFinish()
+        return {"gl_calls": counter.count, "py_calls": calls[0]}
+
+    try:
+        return bench.measure("surface", {"backdrop/refresh": BenchCase(point, warm, counts)},
+                             frames, passes, max_rounds)
+    finally:
+        pipeline.release()
+
+
 def measure_visualizers(bench: PairedBench, frames: int, passes: int, max_rounds: int) -> dict[str, dict[str, float]]:
     """Every Visualizer mode as its Guided Setup preview snapshot (curated defaults, fixture music),
     drawn by one production Visualizer host on the shared context beside the same control."""
@@ -201,7 +242,7 @@ def compare(old: dict, new: dict) -> int:
     if differs:
         print(f"  WARNING: the runs were measured under different conditions ({', '.join(differs)}); "
               f"treat GPU and wall-time deltas with care (thread CPU and call counts are unaffected)")
-    for section in ("transitions", "visualizers"):
+    for section in ("transitions", "visualizers", "surfaces"):
         rows_old, rows_new = old.get(section, {}), new.get(section, {})
         if new.get("match"):        # a partial run: only the cases it measured
             rows_old = {key: row for key, row in rows_old.items() if key in rows_new}
@@ -246,7 +287,7 @@ def main() -> int:
     parser.add_argument("--passes", type=int, default=3, help="admitted passes each transition needs")
     parser.add_argument("--max-rounds", type=int, default=12,
                         help="round-robin rounds before giving up on a quiet pass (busy machine)")
-    parser.add_argument("--only", choices=("transitions", "visualizers"))
+    parser.add_argument("--only", choices=("transitions", "visualizers", "surfaces"))
     parser.add_argument("--match", help="measure only cases whose key contains this text (e.g. liquid_lens); "
                                         "the file is named after it and comparisons cover only those cases")
     parser.add_argument("--compare", type=Path, help="older baseline to compare the new one against")
@@ -269,12 +310,15 @@ def main() -> int:
     capture = TransitionCapture(*size)
     try:
         bench = PairedBench(gl, capture, crossfade_control(capture), args.match)
-        if args.only != "visualizers":
+        if args.only in (None, "transitions"):
             print("Transitions")
             data["transitions"] = measure_transitions(bench, args.frames, args.passes, args.max_rounds)
-        if args.only != "transitions":
+        if args.only in (None, "visualizers"):
             print("Visualizers")
             data["visualizers"] = measure_visualizers(bench, args.frames, args.passes, args.max_rounds)
+        if args.only in (None, "surfaces"):
+            print("Surfaces")
+            data["surfaces"] = measure_surfaces(bench, args.frames, args.passes, args.max_rounds)
         data["load"] = load = bench.load()
         data["renderer"] = gl.glGetString(gl.GL_RENDERER).decode()
     finally:

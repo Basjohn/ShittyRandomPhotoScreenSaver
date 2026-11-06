@@ -1,7 +1,9 @@
 # Card Surface Materials (Acrylic, Glass, Frosted, Mica, Smoked)
 
-Status: design accepted for implementation 6 Nov 2026 (operator item "Widget card surfaces"); runtime proof in
-`.artifacts/evidence/widget_surfaces_20261106/`. This decision **supersedes** the 2 Sep 2026 rejection of runtime card
+Status: implemented 6 Nov 2026 (operator item "Widget card surfaces"), awaiting the lead's live check under game load
+and the operator's eyes. Captures, cadence and cost: `.artifacts/evidence/widget_surfaces_20261106/` (local
+evidence); code: `rendering/quick/render/surface_backdrop.py`, `rendering/quick/surface_backdrop_owner.py`,
+`rendering/quick/widgets/surface_material.py`, `rendering/quick/qml/MaterialSurface.qml` and its shaders. This decision **supersedes** the 2 Sep 2026 rejection of runtime card
 materials (`Docs/Contracts.md` "Runtime card surfaces", `Spec.md` Widget Themes, `Docs/Guides/10_WIDGET_GUIDELINES.md`,
 `Docs/Guides/Custom_Style_Implementation.md`). The rejection record stays in git history
 (`f8567436:Docs/QtQuick_Migration/Rejected_Card_Material_Experiments_2026-09-02.md`) and is summarised in section 1
@@ -53,8 +55,9 @@ Related records that bind the design:
    cross-display sharing.
 5. **Secure desktop / helper / MC.** Same scene code; no native window calls, no DWM, no AccentPolicy.
 6. **Visualizer freshness.** The Visualizer's GL content is never read back; nothing runs per Visualizer frame.
-7. **Dormancy.** With every card Normal the owner, its item, its render node and every card-side material item do
-   not exist.
+7. **Dormancy.** With every card Normal for the whole generation, the owner, its item, its render node and every
+   card-side material item do not exist. Once some surface used a material in a generation and the last one goes
+   Normal again, the item is parked: no GL objects, never traversed, no Python call (section 3.2).
 
 ## 3. Design: read the frame that was already drawn
 
@@ -103,13 +106,20 @@ The source node sits under an opacity node that is 0 (not traversed, no Python c
 
 ### 3.2 Dormancy and ownership
 
-`SurfaceBackdropOwner` (Python, GUI thread, one per `QuickSceneController`) exists only while the display's demand
-count is non-zero. Demand is counted at style-application edges: the ordinary widget host counts cards whose
-resolved material is not Normal; the Context Menu counts one when its resolved material is not Normal. The owner
-creates the source item (z 2), hands it to the host (which sets it on material cards) and to the Context Menu,
-receives the controller's edges, and retires the item when demand returns to zero or the scene retires. GL resources
-are released on `sceneGraphInvalidated` (direct connection, render thread) and when the node is destroyed, as the
-background node does.
+`SurfaceBackdropOwner` (Python, GUI thread, at most one per `QuickSceneController`) is created on the first
+non-Normal surface of a generation. Demand is computed at style-application edges: the ordinary widget host knows
+the materials of its live cards (`surface_materials`, maintained on create, restyle, retire, transfer and unexpected
+Qt death), and the Context Menu adds its baseline material. The owner creates the source item (z 2), hands it to the
+host (which sets it on every card) and to the Context Menu, and receives the controller's edges.
+
+When demand returns to zero the controller unbinds every consumer and **parks** the owner: at the next sync the
+render node frees every GL object (the consumers' shader nodes were cleaned up at the start of that sync) and the
+opacity node stays 0, so the node is never traversed. A later material in the same generation wakes it. The item is
+never deleted mid-generation; it dies with the scene root. (Deleting the Python item mid-generation through its
+queued render-thread signal corrupted later QML objects in the hidden render-control harness; parking avoids the
+deletion entirely.) GL is also released on `sceneGraphInvalidated` (direct connection, render thread); without a
+current context the names are dropped without GL calls. Python keeps its paint nodes referenced for the item's life
+and always returns the same root, so Qt never deletes a node Python still owns.
 
 On the card side, `OverlayCard` gains one inactive `Loader` (the only Normal-path change, an inert QML object per
 card, no scene-graph node); it loads `MaterialSurface` only when the card's material is not Normal and a source is
@@ -124,13 +134,16 @@ luminance contrast. The backdrop is heavily blurred, so the adjustment is smooth
 layer slightly darker than the base behind controls); the direction follows the text so a dark-text light theme is
 never darkened under its own text.
 
-### 3.4 The Visualizer card is excluded
+### 3.4 The Visualizer card and the System Volume OSD are excluded
 
 The Visualizer card keeps its Visualizer-authored Fill/Border/Opacity (outside the Widget Theme and its reset), its
 shell is part of the protected render-node-local clip path (Compositor_Architecture §7.2, CHK26), and its interior is
 mostly live GL content. Including it would add a material quad beneath the most timing-sensitive item for little
 visible gain. The architecture does not prevent a later inclusion (the backdrop is captured below z 20, so the
 Visualizer's own pixels would still never be read), but it needs its own acceptance pass.
+
+The System Volume OSD is a transient indicator in the foreground lane whose card style comes from its own config;
+it stays Normal.
 
 ### 3.5 Materials
 
@@ -157,7 +170,13 @@ widgets.<family>.surface_material       Inherit (default) | the six above
 ```
 
 `Widgets -> General -> Style Overrides -> Surface Material` sets the baseline beside Card Border Width. Every
-ordinary card and the Context Menu inherit it; an explicit per-family value beats the baseline. The retired
+ordinary card and the Context Menu inherit it; an explicit per-widget value beats the baseline. The projection is one
+seam: `family_binder` passes every ordinary family's style through `with_surface_material` (and Games You Follow's
+visual style), which also resolves the active Widget Theme's `card.text` as the legibility reference.
+
+Not yet built: the per-family **Surface Material** row on each family page. The resolver already honours
+`widgets.<id>.surface_material`, but no family declares the key in canonical defaults, so a family page save would not
+keep it. Tracked in `Current_Plan.md`. The retired
 Sep 2026 keys (`card_material_override`, `default_card_material_mode`) remain stripped by
 `core/settings/widget_theme_input_compat.py`; they are not revived or mapped.
 
@@ -177,3 +196,37 @@ Sep 2026 keys (`card_material_override`, `default_card_material_mode`) remain st
   that `BackgroundRenderItem` stays at z 0 directly under the root with no layer.
 - **Live:** the lead's live check under game load, then the operator's eyes. Until then the plan item stays
   `[~] AWAITING VALIDATION`.
+
+## 6. Measurements (6 Nov 2026, RTX 4090)
+
+**Cadence.** Worst case: a card drawn over a backdrop one full refresh interval old. Six transitions (Wipe, Slide,
+Block Spins, Glass Shatter, Cube Turn, Page Curl), five points each. The figure is the p99 of the per-pixel 8-bit
+difference inside the cards (`tools/surface_material_capture.py --cadence`):
+
+| Material | 165 Hz | 120 Hz | 60 Hz | 30 Hz | 20 Hz | Chosen |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Glass | 7-11 | 9-15 | 17-28 | 33-52 | 45-67 | every rendered frame (never stale) |
+| Acrylic | 1-3 | 2-4 | 3-8 | 6-17 | 9-23 | 60 Hz |
+| Frosted | 1-4 | 1-6 | 2-12 | 4-24 | 6-29 | 60 Hz |
+| Smoked | 2-4 | 3-5 | 5-10 | 10-18 | 14-25 | 60 Hz |
+| Mica | 1-2 | 1-2 | 1-3 | 2-6 | 3-9 | 20 Hz |
+
+Criterion: at most about 12 levels. Refresh runs only while a transition runs, on frames the display renders anyway;
+at rest the node is not traversed.
+
+**Backdrop refresh** (`tools/overhead_baseline.py`, `surface backdrop/refresh`, control-relative):
+
+| Target | GPU | in Crossfade frames | render-thread CPU | GL calls | Python calls |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 2560x1440 | 0.058 ms | 3.2 | 0.154 ms | 67 | 176 |
+| 3840x2160 | 0.045 ms | 2.0 | 0.111 ms | 67 | 176 |
+
+**Card quads**, steady, still wallpaper, five cards on a 1600x900 scene: Normal frame 0.055 ms GPU. Each material
+adds 0.006-0.008 ms (Acrylic +0.006, Glass +0.007, Frosted +0.008, Mica +0.006, Smoked +0.008), with no per-frame
+Python.
+
+**Dormancy.** The full overhead benchmark against `2026-11-06_90f65ee9` (baseline `2026-11-06_e61647f5.json`) shows
+every transition and Visualizer case unchanged in GL and Python calls except Shockwave Grid and Extruded Bubble. Their
+deltas (+1 GL, about +50 Python calls) come from main's own changes to those modes since that baseline; this branch has
+no diff against main in any Visualizer path. With every card Normal, the scene contains no backdrop item and no
+material shader (`tests/test_surface_materials.py`).

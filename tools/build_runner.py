@@ -890,6 +890,9 @@ def run_preflight(mode: ModeName, repo_root: Path = REPO_ROOT) -> PreflightResul
         repo_root / "rendering" / "quick" / "qml" / "WidgetInteractionGlow.qml",
         repo_root / "rendering" / "quick" / "qml" / "WidgetHoverEditGlyphs.qml",
         repo_root / "rendering" / "quick" / "qml" / "shaders" / "widget_glow.frag.qsb",
+        repo_root / "rendering" / "quick" / "qml" / "MaterialSurface.qml",
+        repo_root / "rendering" / "quick" / "qml" / "shaders" / "surface_material.vert.qsb",
+        repo_root / "rendering" / "quick" / "qml" / "shaders" / "surface_material.frag.qsb",
         # PyInstaller toolchain pins for the (default-selected) Reddit Helper job.
         repo_root / "build_deps" / "requirements_helper.txt",
     )
