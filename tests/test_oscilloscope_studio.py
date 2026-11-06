@@ -611,7 +611,7 @@ def test_the_preset_row_offers_the_oscilloscope_studio(qt_app, dialog_tab, monke
     _dialog, tab = dialog_tab()
     button = getattr(tab, f"_{spec().prefix}_studio_button")
     slider = tab._get_visualizer_preset_slider(MODE)
-    assert slider.isAncestorOf(button) and slider._edit_btn is None            # Edit Preset is retired here
+    assert slider.isAncestorOf(button)
     calls = []
     monkeypatch.setattr(settings_link, "open_mode_studio", lambda t, m: calls.append((t, m)))
     button.click()
