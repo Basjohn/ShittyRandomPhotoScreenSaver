@@ -81,8 +81,11 @@ def lockstep(schedule):
 SCHEDULE = [(index // 160) % 2 == 0 for index in range(960)]
 
 
-def test_tilt_shift_leads_on_the_travel_side_rising_and_settling():
+def test_tilt_shift_leads_on_the_travel_side_rising_and_settling(monkeypatch):
     # History travels toward TILT_SIDE (-x): that side lifts first while the lift rises and dips first while it settles.
+    # The tilt alone: the swell's floor bound (which scales the reaction, tests/test_waveform_floor_swell_bound.py)
+    # would differ between the tilted and untilted twins.
+    monkeypatch.setattr(dyn.WaveformDynamics, '_floor_share', lambda self, *args: 1.)
     frames, lifts = lockstep(SCHEDULE)
     travel = 0 if dyn.TILT_SIDE < 0 else -1
     lead = np.asarray([[offset[travel]-offset[-1-travel] for offset in frame] for frame in frames])

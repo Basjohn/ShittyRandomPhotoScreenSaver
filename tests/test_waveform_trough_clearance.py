@@ -43,6 +43,9 @@ def run(model, seconds=6.):
 
 
 def test_the_floor_rule_only_lifts_each_ribbon_as_a_whole_and_keeps_it_off_the_floor(monkeypatch):
+    # The whole-ribbon lift alone (the swell's floor bound, which scales the reaction, is tested separately in
+    # tests/test_waveform_floor_swell_bound.py).
+    monkeypatch.setattr(dyn.WaveformDynamics, '_floor_share', lambda self, *args: 1.)
     lowest, rises, bounded = run(deep_model())
     with monkeypatch.context() as off:
         off.setattr(dyn, 'TROUGH_LIFT_MAX', 0.)

@@ -151,6 +151,11 @@ TROUGH_ATTACK, TROUGH_RELEASE, TROUGH_VIEW = .15, 1.2, 32.  # TROUGH_VIEW: the f
 # moved more and visible floor contact rose by up to .9 points (Preset 7); at 5 of the mode's own envelope sigmas (a
 # Group Wave set is 3.5 carrier wavelengths wide) it equals the fixed view's on every preset at a 1282x1005 card.
 TROUGH_LOOKAHEAD = 5.
+# Swells now reach the view at strength (6 Nov), and their troughs need more lift than TROUGH_LIFT_MAX: visible floor
+# contact went from 0 (tag) to 19% / 9% of music ticks on Presets 1 / 3, lift-capped 61-67% of ticks. A higher cap would
+# throw the whole ribbon up out of the framing; instead the swell's gain is bounded so every visible lower edge stays
+# FLOOR_SWELL_MARGIN above the floor after the lift (WaveformDynamics._floor_share).
+FLOOR_SWELL_MARGIN, FLOOR_SHARE_FALL = .2, .04   # the margin covers the eased fall (.1 left 4 cm contact)
 # Height Shift options (operator, 5 Nov). Static Height holds every ribbon at the highest safe point: the top of the shift
 # (TROUGH_LIFT_MAX), constant through every passage.
 # Tilt Shift: while the lift moves, the side the history travels toward leads by TILT_LEAD seconds of lift velocity
@@ -951,6 +956,44 @@ class WaveformDynamics:
         self._trough_time = self.time
         return self._trough_lift
 
+    def _floor_share(self,y,hang,level,x,deepen,plain_hang):
+        """Largest share in [0, 1] of the swell (its gain above 1, and the sheet widening it brings) that keeps every
+        visible lower sheet edge at least FLOOR_SWELL_MARGIN above the floor at this tick's lift ``level`` (lift + rise):
+        edge = PACKET_FLOOR_HEIGHT + 5 tanh(y/5) + level - hang, with y = plain + share * ``deepen`` (the swell's part of
+        y, per knot; the surge slides knots by at most a couple of units, so it is read per knot) and hang between
+        ``plain_hang`` (no widening) and ``hang``. Each edge falls monotonically with the share, so a 12-step bisection
+        on one scalar is exact to 2.5e-4 (run only when the full swell would reach the margin). Knots that reach it even
+        without the swell are the lift's own limit and do not throttle the swell. Floor Give (authored contact) keeps
+        the full swell. Applied through two cascaded stages: falls ease over FLOOR_SHARE_FALL each (velocity-continuous:
+        a scalar that dropped at once moved the whole view's swells in one tick), rises at most GEOM_SHARE_RISE per
+        second per stage; the margin covers the few ticks of easing."""
+        stage,applied,when = getattr(self,'_floor_bound',(1.,1.,None))
+        share = 1.
+        if self.controls.scene.floor.give<=0.:
+            visible = self._trough_view(x)[0]&(np.asarray(self.count_share)[:,None]>0.)
+            floor = FLOOR_SWELL_MARGIN-PACKET_FLOOR_HEIGHT-level
+            edge = lambda f,sel: 5.*np.tanh((plain+f*deepen)[sel]/5.)-(plain_hang+f*(hang-plain_hang))[sel]-np.broadcast_to(floor,y.shape)[sel]
+            plain = y-deepen
+            if visible.any() and edge(1.,visible).min()<0.:
+                sel = visible.copy()
+                sel[visible] = edge(0.,visible)>=0.        # knots the swell could keep clear at all
+                if sel.any():
+                    low,high = 0.,1.
+                    for _ in range(12):
+                        mid = .5*(low+high)
+                        low,high = (mid,high) if edge(mid,sel).min()>=0. else (low,mid)
+                    share = low
+        if when is None:
+            stage = applied = share
+        elif self.time>when:
+            dt = self.time-when
+            ease = 1.-math.exp(-dt/FLOOR_SHARE_FALL)
+            step = lambda value,goal: min(goal,value+GEOM_SHARE_RISE*dt) if goal>value else value+(goal-value)*ease
+            stage = step(stage,share)
+            applied = step(applied,stage)
+        self._floor_bound = (stage,applied,self.time)
+        return applied
+
     def _trough_view(self,x):
         """(knots the floor lift considers, the view's centre and half extent for Tilt Shift). With the card's visible
         span (``view_span``) only what the camera shows, plus a lookahead of TROUGH_LOOKAHEAD geometric-envelope sigmas
@@ -1046,22 +1089,27 @@ class WaveformDynamics:
         # Beyond the field the published edge value continues (a Whole Swell never ends at the grid edge).
         broad = np.interp(x,PULSE_GRID,self.geometric_gain(values['bend']))
         geometric = np.interp(x,PULSE_GRID,self._geom)
-        gain = broad
-        cy = carrier*values['height']*gain
-        cz = depth_wave*values['height']*gain+separation*values['spread']
         cosine,sine = math.cos(self.angle),math.sin(self.angle)
-        y,z = cosine*cy-sine*cz,sine*cy+cosine*cz
-        # Depth sway acts in world space after the roll and travels with the cloth. The former standing bend
-        # (a fixed spatial sine the ribbon slid through) is replaced by the travelling pulse above.
-        z = z+.4*values['depth']*m*np.cos(.65*u+owner)
         idle=self.controls.idle_motion*(1.-self.passage)
-        y+=idle*.08*np.sin(.45*self.time+.6*u+owner)
-        z+=idle*.05*np.cos(.33*self.time+.4*u-owner)
-        x,y,z = self._surge(data,x,y,z,PULSE_SURGE*values['bend'])
+        unsurged,surge_state = x,dict(self._surge_bound)
+        def body(scale):
+            """The body with the swell's gain above 1 scaled by ``scale`` (1: as published before the floor bound)."""
+            gain = broad if scale==1. else 1.+scale*(broad-1.)
+            cy = carrier*values['height']*gain
+            cz = depth_wave*values['height']*gain+separation*values['spread']
+            y,z = cosine*cy-sine*cz,sine*cy+cosine*cz
+            # Depth sway acts in world space after the roll and travels with the cloth. The former standing bend
+            # (a fixed spatial sine the ribbon slid through) is replaced by the travelling pulse above.
+            z = z+.4*values['depth']*m*np.cos(.65*u+owner)
+            y+=idle*.08*np.sin(.45*self.time+.6*u+owner)
+            z+=idle*.05*np.cos(.33*self.time+.4*u-owner)
+            return self._surge(data,unsurged,y,z,PULSE_SURGE*values['bend'])
+        x,y,z = body(1.)
         rows[:,:,0] = x-raw.world_origin[0]-self.controls.scene.flow.head_x+self.travel
         # One common smooth bounding domain prevents floor-crossing/clamp kinks at extreme editor values. Peaks
         # are meant to rise high: the framing makes room for them, the body is never capped to fit a frame.
-        rows[:,:,3] = 3.5*np.tanh(rows[:,:,3]*values['width']*(1.+.35*geometric)/3.5)
+        knot_width = rows[:,:,3].copy()
+        rows[:,:,3] = 3.5*np.tanh(knot_width*values['width']*(1.+.35*geometric)/3.5)
         rows[:,:,2] = 5.*np.tanh(z/5.)
         origin_twist = (data[:,1,0,None]+math.pi)%(2*math.pi)-math.pi
         twist = data[:,5::KNOT_ROWS,1]+origin_twist
@@ -1080,6 +1128,19 @@ class WaveformDynamics:
         hang = np.abs(rows[:,:,3]*np.cos(data[:,5::KNOT_ROWS,1]))
         room = max(TROUGH_ROOM_MIN,PACKET_FLOOR_HEIGHT+values['lift']-TROUGH_CLEARANCE)
         rise = self._height_shift(y,hang,room,x)
+        # The swell may deepen a trough only as far as the floor allows (see FLOOR_SWELL_MARGIN): the whole lift above
+        # comes first; what it cannot clear scales the swell's gain over the whole field (one scalar, so the flow rule
+        # holds and nothing is reshaped), relaxing back upward at GEOM_SHARE_RISE per second.
+        cos_twist = np.abs(np.cos(data[:,5::KNOT_ROWS,1]))
+        share = self._floor_share(y,hang,values['lift']+rise,x,
+                                  (cosine*carrier-sine*depth_wave)*values['height']*(broad-1.),
+                                  3.5*np.tanh(knot_width*values['width']/3.5)*cos_twist)
+        if share<1.:
+            self._surge_bound = surge_state   # the bounded body replaces the first one, surged once
+            x,y,z = body(share)
+            rows[:,:,0] = x-raw.world_origin[0]-self.controls.scene.flow.head_x+self.travel
+            rows[:,:,2] = 5.*np.tanh(z/5.)
+            rows[:,:,3] = 3.5*np.tanh(knot_width*values['width']*(1.+.35*share*geometric)/3.5)
         rows[:,:,1] = 5.*np.tanh(y/5.)+values['lift']+rise
         # Strong local musical regions change colour immediately, even before new head history enters view.
         # The crest mask is carried by immutable carrier geometry, so coloured regions travel with the waveform.
