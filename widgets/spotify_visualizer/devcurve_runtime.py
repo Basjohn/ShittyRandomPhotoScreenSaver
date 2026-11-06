@@ -123,30 +123,34 @@ DEVCURVE_SWELL_SOURCES = {"bass": ("bass",), "vocals": ("mid", "high"), "mids": 
 DEVCURVE_FLOW_WAVENUMBER = 2.0 * math.pi * 2.75
 DEVCURVE_FLOW_SLOPE, DEVCURVE_FLOW_CURVE = 0.2, 0.3
 DEVCURVE_FLOW_SHARE_RISE = 1.5
-# Geometric headroom (lead review 2026-11-06: "the kick is bass"). The drawn undulation has a ceiling of
-# its own: the smoothness slope limiter and the top knee / bottom floor. Presets with large powers (Deep
-# Blue: bass 3.0 at motion 1.72) rode the limiter on 76-98% of ticks. Per sample, the ceiling amplitude is
-# the smaller of the slope the limiter allows (for the reactive carrier's steepest slope, 11.65 per unit
-# amplitude per width, with a margin) and the larger room to the knee or the floor. The drive's split is
-# kept one stage later: the BODY's amplitude compresses softly into (1 - share) of the ceiling (identity
-# below the knee: authored looks are unchanged where they had room); the ACCENT's amplitude is LINEAR in the
-# accent drive, on a scale that is the authored scale while it fits and otherwise eases (a soft minimum) to
-# the scale at which DEVCURVE_GEOM_ACCENT_FILL of accent drive fills the accent's share; only what still
-# overflows (the biggest hits, swells) eases toward DEVCURVE_GEOM_OVER x the ceiling. Capping the TOTAL
-# instead (the paused cut) let the steady accent fill the cap, so the kick on top of it barely showed.
+# Geometric headroom (lead reviews 2026-11-06: "the kick is bass"; then "the loud look is halved"). The drawn
+# undulation has a ceiling of its own: the smoothness slope limiter and the top knee / bottom floor. Presets with
+# large powers (Deep Blue: bass 3.0 at motion 1.72) rode the limiter on 76-98% of ticks, drawn as straight-sided
+# triangles. Per sample, the ceiling amplitude is the smaller of the larger room to the knee or the floor and the
+# slope the limiter allows (with a margin, after the slope the authored contour and the idle wave already use),
+# divided by the reactive carrier's steepest slope. Within it:
+# * the BODY (the swell multiplies it) compresses softly into DEVCURVE_GEOM_BODY_SHARE (identity below the knee:
+#   authored looks are unchanged where they had room), so a loud body stays nearly as big as the slope allows;
+# * a body the mixed carrier cannot draw that big blends the carrier toward its broad 1.35-cycle component
+#   (DEVCURVE_GEOM_BROAD_SLOPE; a slow two-stage morph keyed on the body only), whose gentler slope allows ~1.4x
+#   the amplitude: the old limiter's size without its triangles. A smooth wave reaches ~0.8 of a slope-limited
+#   triangle's RMS at the same slope, so the very strongest presets stay ~15-20% below the old peaks;
+# * the ACCENT is LINEAR in the accent drive, on a scale that is the authored scale while it fits and otherwise
+#   eases (a soft minimum) to the scale at which DEVCURVE_GEOM_ACCENT_FILL of accent drive fills its share;
+# * only what still overflows (the biggest hits) eases toward DEVCURVE_GEOM_OVER x the ceiling.
+# Capping the TOTAL instead (the paused cut) let the steady accent fill the cap, so kicks barely showed; letting the
+# swell multiply the accent let a full passage's swell push the kicks into the overflow.
 DEVCURVE_GEOM_CARRIER_SLOPE = 2.0 * math.pi * (1.35 * 0.64 + 2.75 * 0.36)
 DEVCURVE_GEOM_BROAD_SLOPE = 2.0 * math.pi * 1.35
 DEVCURVE_IDLE_SLOPE = 2.0 * math.pi * (2.0 * 0.52 + 3.4 * 0.31 + 5.1 * 0.17)   # the idle wave's steepest slope
-DEVCURVE_GEOM_BODY_SHARE = {"bass": 0.85, "vocals": 0.85, "mids": 0.85, "transients": 0.3}
-DEVCURVE_GEOM_SWELL_SHARE = 0.12         # the swell's bed (a full passage's accumulated swell)
-DEVCURVE_GEOM_FRESH_SHARE = 0.15         # the swell's fresh energy (each new hit's swell)
-DEVCURVE_MORPH_STAGE_S = (0.6, 1.5)
 DEVCURVE_GEOM_SLOPE_MARGIN = 0.88
 DEVCURVE_GEOM_TOP, DEVCURVE_GEOM_BOTTOM = 0.95, 0.04
+DEVCURVE_GEOM_BODY_SHARE = {"bass": 0.85, "vocals": 0.85, "mids": 0.85, "transients": 0.3}
+DEVCURVE_GEOM_BODY_KNEE = 0.75
 DEVCURVE_GEOM_ACCENT_SHARE = {"bass": 0.25, "vocals": 0.25, "mids": 0.25, "transients": 0.8}
 DEVCURVE_GEOM_ACCENT_FILL = {key: 0.5 * room for key, room in DEVCURVE_ACCENT_ROOM.items()}
-DEVCURVE_GEOM_BODY_KNEE = 0.75
 DEVCURVE_GEOM_OVER = 1.15
+DEVCURVE_MORPH_STAGE_S = (0.6, 1.5)
 # A trough reaching toward the bottom eases into the floor (value and slope continuous at the knee) instead
 # of being clamped flat: a layer near the bottom (the transients layer) keeps moving its troughs on a kick.
 DEVCURVE_FLOOR, DEVCURVE_FLOOR_KNEE = 0.04, 0.09
