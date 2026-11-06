@@ -1,7 +1,7 @@
 """Interactive Spline Curve shape editor — node-based spline control.
 
 Left-click on empty space adds a control node (up to MAX_NODES).
-Right-click on a node removes it (minimum 1 must remain).
+Right-click on a node removes it (minimum 2 must remain: the DevCurve solver refuses fewer).
 Drag nodes to reshape the bar-height profile curve.
 
 Spline Curve uses the full width editor by default (left→right), with
@@ -64,7 +64,9 @@ _ARROW_HIT_HALF_WIDTH = 16
 _ARROW_HEAD_HALF_WIDTH = 5
 _ARROW_HEAD_HEIGHT = 8
 _MAX_NODES = 5
-_MIN_NODES = 1
+# Two, not one: ``DevCurveFrameRuntime.advance`` refuses a layer with fewer than two nodes, so a one-node layer saved
+# from here stopped DevCurve's logical step on every tick (found by the DevCurve Studio, 6 Nov).
+_MIN_NODES = 2
 _SOFT_SNAP_THRESHOLD_PX = 14.0
 _SOFT_SNAP_BLEND = 0.45
 
