@@ -31,6 +31,7 @@ from ui.tabs.shared_styles import (
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 from ui.widgets.outlined_button import OutlinedButton
+from ui.tabs.widget_surface_material_row import add_surface_material_row
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -504,6 +505,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_show_background.setChecked(tab._default_bool('clock', 'show_background'))
     tab.clock_show_background.stateChanged.connect(tab._save_settings)
     appearance_layout.addWidget(tab.clock_show_background)
+    add_surface_material_row(tab, _aligned_row(appearance_layout, "Surface Material:"), "clock")
 
     # Background opacity
     opacity_row = _aligned_row(appearance_layout, "Background Opacity:")

@@ -41,6 +41,7 @@ from ui.tabs.shared_styles import (
 )
 from ui.widgets import StyledComboBox
 from ui.widgets.outlined_button import OutlinedButton
+from ui.tabs.widget_surface_material_row import add_surface_material_row
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -1073,6 +1074,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_show_background.setChecked(tab._default_bool('gmail', 'show_background'))
     tab.gmail_show_background.stateChanged.connect(tab._save_settings)
     appearance_inner.addWidget(tab.gmail_show_background)
+    add_surface_material_row(tab, _aligned_row(appearance_inner, "Surface Material:"), "gmail")
 
     appearance_inner.addSpacing(8)
 

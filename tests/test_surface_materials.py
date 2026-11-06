@@ -415,3 +415,48 @@ def test_small_text_meets_4_5_on_a_busy_backdrop_and_normal_is_untouched(materia
     finally:
         out.unlink(missing_ok=True)
 
+
+# --------------------------------------------------------------------------- per-family row
+
+
+def test_per_family_row_round_trips_and_a_page_save_keeps_unbuilt_values(qt_app, settings_manager) -> None:
+    from core.settings.default_contract import require_canonical_default
+    from rendering.quick.widgets.surface_material import INHERIT, normalize_surface_material, resolve_surface_material
+    from ui.tabs.widgets_tab import WidgetsTab
+
+    # Every card family declares the key (a valid value or Inherit), so a page save keeps it.
+    widgets_defaults = require_canonical_default("widgets")
+    for section in ("clock", "weather", "media", "reddit", "gmail", "system_stats", "steam_progress",
+                    "achievement_pulse", "abandonment_issues", "friend_pulse", "feeds_custom_1",
+                    "feeds_news_world"):
+        assert normalize_surface_material(widgets_defaults[section]["surface_material"],
+                                          allow_inherit=True) is not None, section
+
+    settings_manager.set("widgets", {
+        "weather": {"enabled": True, "surface_material": "glass"},
+        "clock": {"enabled": True, "surface_material": "mica"},
+        "global": {"surface_material": "acrylic"},
+    })
+    tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "weather"})
+    try:
+        combo = tab._surface_material_rows["weather"]
+        assert combo.currentData() == "glass"
+        combo.setCurrentIndex(combo.findData("frosted"))      # saves through the tab (debounced)
+        tab.flush_pending_changes()
+        widgets = settings_manager.get("widgets")
+        assert widgets["weather"]["surface_material"] == "frosted"
+        # The clock page was never built: its value survives the weather page's save.
+        assert "clock" not in tab._surface_material_rows
+        assert widgets["clock"]["surface_material"] == "mica"
+        assert widgets["global"]["surface_material"] == "acrylic"
+        assert resolve_surface_material(widgets, "weather") == "frosted"
+        assert resolve_surface_material(widgets, "clock2") == "mica"     # instances follow their family
+        combo.setCurrentIndex(combo.findData(INHERIT))
+        tab.flush_pending_changes()
+        widgets = settings_manager.get("widgets")
+        assert widgets["weather"]["surface_material"] == INHERIT
+        assert resolve_surface_material(widgets, "weather") == "acrylic"
+    finally:
+        tab.deleteLater()
+        qt_app.processEvents()
+

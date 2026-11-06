@@ -134,12 +134,10 @@ context is valuable). Slots need not always be full: when the right agent is not
   Left:
   1. **Live check under the lead-scheduled game load**, materials on, a transition-heavy run, and Normal as the
      control.
-  2. **Operator's eyes on the looks:** tints, blur strength and the legibility layer, Glass's highlight and
-     refraction. The legibility shift follows the text: darker under light text, lighter under dark text on light
-     themes.
-  3. **Per-family Surface Material row** on each family page. The resolver already honours
-     `widgets.<id>.surface_material`, but no family declares the key in canonical defaults, so a page save would drop
-     it.
+  2. **Operator's eyes on the light-theme pass:** small text now holds 4.5:1 on every material through a per-run
+     legibility plate (it reads as a soft chip behind small muted text where the backdrop is busy), soft halos are
+     dropped on materials, and light cards get an inner hairline and highlight. The per-family Surface Material row
+     is built.
 - [ ] **Side defects seen in the card-surface run (6 Nov), not caused by it:** the isolated suite fails
   `tests/test_r41_glyph_tooltip_and_light_audit.py::test_eb_settings_tooltips_are_escaped_wrapped_not_one_line_or_new_owner`
   (it expects `textwrap.wrap(control.tooltip, width=59` in a Visualizer mode settings module; that code is identical to

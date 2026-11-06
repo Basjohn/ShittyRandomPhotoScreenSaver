@@ -28,6 +28,7 @@ from ui.tabs.shared_styles import (
     finalize_bucket_body as _finalize_bucket_body,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
+from ui.tabs.widget_surface_material_row import add_surface_material_row
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -302,6 +303,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.weather_show_background.setChecked(tab._default_bool('weather', 'show_background'))
     tab.weather_show_background.stateChanged.connect(tab._save_settings)
     appearance_layout.addWidget(tab.weather_show_background)
+    add_surface_material_row(tab, _aligned_row(appearance_layout, "Surface Material:"), "weather")
 
     # Background sub-controls container (shown only when show_background is checked)
     tab._weather_bg_container = QWidget()

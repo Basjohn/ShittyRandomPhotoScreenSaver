@@ -34,6 +34,7 @@ from ui.tabs.shared_styles import (
     finalize_bucket_body as _finalize_bucket_body,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
+from ui.tabs.widget_surface_material_row import add_surface_material_row
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -298,6 +299,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_show_background.setChecked(tab._default_bool('reddit', 'show_background'))
     tab.reddit_show_background.stateChanged.connect(tab._save_settings)
     appearance_layout.addWidget(tab.reddit_show_background)
+    add_surface_material_row(tab, _aligned_row(appearance_layout, "Surface Material:"), "reddit")
 
     tab.reddit_show_separators = QCheckBox("Show Separator Lines between Posts")
     tab.reddit_show_separators.setProperty("circleIndicator", True)
