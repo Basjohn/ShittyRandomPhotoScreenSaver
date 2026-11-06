@@ -53,6 +53,7 @@ register_studio_adapter("sphere", "Sphere", "ui.studio.sphere_adapter:SphereStud
 register_studio_adapter("spectrum", "Spectrum", "ui.studio.spectrum_adapter:SpectrumStudioAdapter")
 register_studio_adapter("extruded_spectrum", "Extruded Spectrum",
                         "ui.studio.extruded_spectrum_adapter:ExtrudedSpectrumStudioAdapter")
+register_studio_adapter("devcurve", "DevCurve", "ui.studio.devcurve_adapter:DevCurveStudioAdapter")
 
 
 __all__ = ["StudioEntry", "create_adapter", "has_studio", "register_studio_adapter", "studio_modes",

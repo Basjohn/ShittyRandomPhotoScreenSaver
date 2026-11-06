@@ -70,6 +70,20 @@ is optional and defaults to "not offered":
   Synthetic fixtures of such a mode are generated *audio* through the same worker, so engine-owned edits stay
   truthful for them too. The store's 3D Detail tier (`scene3d_detail`) and, for a reflecting mode, the environment
   photograph reach the presentation as production hands them (both the worker's in-process replay and the Studio).
+- **A mode with its own logical step (DevCurve).** DevCurve's tick runs its descriptor hook
+  (`tick_pipeline.dispatch_devcurve_field`) on the engine's live answers (pre-AGC control lanes, transient lanes,
+  musical level and intensity, the source frame), so it uses the same recorded engine answers: the worker records
+  everything the engine answered the whole production `logical_tick`, and `EngineAnswerEvaluator._step` runs what
+  `logical_tick` runs, the mode's hook included, between `consume_engine_bars` and the capture. Engine-owned are the
+  technical (audio analysis) values; in the replay most of them leave DevCurve's lanes unchanged (the clip carries
+  the pre-AGC lanes), and the split is still proven both ways (`tests/test_devcurve_studio.py`). Its schema follows
+  DevCurve's Settings buckets: Layers (Settings' Shaper: one group per layer with its Custom-row values, the
+  shape-editor nodes, Add / Remove Node and Settings' stack re-ranking as `follow`), Motion & Swell (Core and the
+  analysis) and Foreground & Ghost (with the rainbow). Each layer group traces that layer's **Body** (over its body
+  top), **Accent** (over its reserved accent room) and **Swell**; Core traces Passage, Reaction and the strongest
+  Swell; Audio Analysis the served band shares and loudness. All are reads of the evaluator's own runtime and served
+  answers (`DevCurveStudioEvaluator.measurements`), never saver work. Instruments: no DevCurve value is a true
+  interval, so none is a Quiet/Peak A/B; the stack order is a segmented count.
 - **Exact replay without a stall.** Such an evaluator never re-configures its controller for a mode-owned edit:
   `replay_engine.StepState` captures the production step state (controller, logical tick state, presentation state
   and the mode runtimes they hold; locks, QObjects and the engine view shared) right after configuration and at

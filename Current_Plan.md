@@ -478,6 +478,13 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   `.artifacts/evidence/spectrum/studio_20261105/`); its Studio now reaches everything Settings' Spectrum builder saves
   (shape nodes added/removed, lanes reordered), so the builder body can be replaced on acceptance. Each: full registry coverage test, production-parity preview test, theme,
   Settings Custom launcher replacing that builder body once the operator accepts it.
+- [ ] **DevCurve Studio built (6 Nov), awaiting operator acceptance** (`ui/studio/devcurve_adapter.py`, registered;
+  so DevCurve's preset row now shows Open Studio and no Edit Preset). Evidence `.artifacts/evidence/devcurve/studio/`
+  (Deep Blue on Rag Doll, Neon Skyline on Human: every workspace with the live traces, plus the node rows). Operator
+  to judge: the per-layer Body / Accent / Swell traces as the way to read the reworked reactivity, the Layers
+  workspace (one panel per layer), and whether the Audio Analysis group earns its place (in the replay only Bar Count
+  and the noise floor change what the engine answers DevCurve, and nothing DevCurve draws). The builder body is
+  replaced with `build_studio_owned_mode_ui` only on acceptance.
 - [ ] **Edit Preset survives only for modes without a Studio** (Shockwave Grid, DevCurve, Oscilloscope): Studio modes
   author curated presets with Open Studio (preset row, every slot) and the Studio's confirmed Save To <Preset>
   (`Docs/Reference/Visualizer_Studio.md` §4); the Notepad path and its pop-up go for each mode when its adapter
