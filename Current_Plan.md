@@ -712,8 +712,6 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
     Still open: process memory grows about 2-3 MB per offscreen Extruded Bubble session (private bytes and USS, 16
     sessions) with and without the fix, so something other than the controller grows. Find it with tracemalloc
     plus a native heap comparison.
-  - `tools/onboarding_preview_foundry.py`'s capture has the same imported-context structure and needs the same
-    ownership.
   - The Studio files fail when run in one pytest process. After the first 17 Studio files (Bubble through
     `test_studio_preset_row_and_save_to_preset.py`), `test_studio_scene_theme_independence.py[spectrum]` renders a
     black scene (std 0). The fix did not cause it: the same failure appears with and without it. Every file passes
