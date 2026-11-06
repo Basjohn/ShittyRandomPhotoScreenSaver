@@ -17,6 +17,14 @@ Item {
     property real borderWidth: 2.0
     property real cornerRadius: 8.0
     property real padding: 8.0
+    // Surface material (Docs/Architecture/Card_Surface_Materials.md). Normal is today's
+    // fill and keeps the Loader below inactive; any other material samples the display's
+    // shared backdrop (set by the host only while some surface uses one).
+    property string surfaceMaterial: "normal"
+    property var surfaceBackdrop: null
+    property color surfaceTextColor: "#ffffffff"
+    readonly property bool surfaceMaterialActive: shellEnabled
+        && surfaceMaterial !== "normal" && surfaceBackdrop !== null
     // Card CONTENT paints only within the card at every point in its lifecycle.
     // Background, border and the external shadow remain separate/unclipped.
 
@@ -85,12 +93,31 @@ Item {
         z: -1
     }
 
+    Loader {
+        id: surfaceMaterialLoader
+        objectName: "overlayCardSurfaceMaterial"
+        anchors.fill: parent
+        active: card.surfaceMaterialActive
+        visible: active
+        z: -0.5
+        sourceComponent: MaterialSurface {
+            backdrop: card.surfaceBackdrop
+            material: card.surfaceMaterial
+            cornerRadius: card.cornerRadius
+            contentInset: card.padding
+            normalColor: card.backgroundColor
+            tintColor: card.backgroundColor
+            textColor: card.surfaceTextColor
+        }
+    }
+
     Rectangle {
         id: background
         objectName: "overlayCardBackground"
         anchors.fill: parent
         visible: card.shellEnabled
-        color: card.backgroundColor
+        // The material paints the fill; the border stays this Rectangle's.
+        color: card.surfaceMaterialActive ? "transparent" : card.backgroundColor
         radius: card.cornerRadius
         border.color: card.borderColor
         border.width: card.borderWidth
