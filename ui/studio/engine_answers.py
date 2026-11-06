@@ -431,15 +431,30 @@ def extract(mode: EngineAnswerMode, source: str | Path, settings: Mapping[str, A
     if not any(r["frame_sha256"] for r in records):
         raise RuntimeError(f"The source never published a {mode.mode_id} frame")
     start = float(records[0]["now_ts"]) if origin is None else float(origin)
-    return {"source": str(source), "origin": start, "duration": float(records[-1]["now_ts"] - start),
+    data = {"source": str(source), "origin": start, "duration": float(records[-1]["now_ts"] - start),
             "engine_values": mode.engine_values(settings), "steps": records}
+    if len(recorder.arrays):
+        data["arrays"] = recorder.arrays.payload()        # arrays the engine answered (by identity), as bytes
+    return data
+
+
+def array_blob(data: Mapping[str, Any]) -> bytes | None:
+    """The recorded arrays' bytes: in the record itself (in process) or in the worker's binary sidecar."""
+    payload = data.get("arrays")
+    if not payload:
+        return None
+    if "blob" in payload:
+        return payload["blob"]
+    return Path(payload["file"]).read_bytes()
 
 
 def to_inputs(data: Mapping[str, Any], fixture) -> "RecordedInputs":
+    from ui.studio.replay_engine import served_arrays
     steps = tuple(ServedTick(now=float(s["now_ts"]), playing=bool(s["playing"]), answers=s["answers"])
                   for s in data["steps"])
     return RecordedInputs(fixture, steps, float(data["origin"]), source=str(data["source"]),
-                          engine_values=dict(data["engine_values"]))
+                          engine_values=dict(data["engine_values"]),
+                          arrays=served_arrays(data.get("arrays"), array_blob(data)))
 
 
 def worker_main(mode: EngineAnswerMode, argv: list[str]) -> int:
@@ -454,6 +469,10 @@ def worker_main(mode: EngineAnswerMode, argv: list[str]) -> int:
     from PySide6.QtGui import QGuiApplication
     _app = QGuiApplication.instance() or QGuiApplication([])     # this process is the analysis worker
     data = extract(mode, source, settings, seconds=float(rest[0]) if rest else CLIP_SECONDS)
+    if "arrays" in data:                     # raw bytes in a binary sidecar beside the JSON, never JSON floats
+        sidecar = Path(output_path).with_suffix(".arrays")
+        sidecar.write_bytes(data["arrays"].pop("blob"))
+        data["arrays"]["file"] = str(sidecar)
     Path(output_path).write_text(json.dumps(data), encoding="utf-8")
     return 0
 
@@ -472,8 +491,9 @@ class RecordedInputs:
     """Engine answers for one source under one set of engine-owned values (the mode's worker)."""
 
     def __init__(self, fixture: StudioFixture, steps: tuple[ServedTick, ...], origin: float, *, source: str,
-                 engine_values: Mapping[str, Any]) -> None:
+                 engine_values: Mapping[str, Any], arrays: tuple = ()) -> None:
         self.fixture = fixture
+        self.arrays = tuple(arrays)        # the recorded arrays, one object per number (``served_arrays``)
         self._steps = steps
         self._origin = origin
         self.source = source
@@ -488,8 +508,11 @@ class RecordedInputs:
                 return
             yield step
 
-    def levels(self) -> list[tuple[float, float]]:
-        """(fixture time, mean engine bar) per tick, for the transport's overview."""
+    def levels(self, measure: Callable[[Mapping[str, Any]], float] | None = None) -> list[tuple[float, float]]:
+        """(fixture time, mean engine bar) per tick, for the transport's overview; ``measure(answers)`` reads another
+        level from each tick's recorded answers instead (a mode whose engine publishes no bars)."""
+        if measure is not None:
+            return [(step.now - self._origin, float(measure(step.answers))) for step in self._steps]
         if self._levels is None:
             from ui.studio.replay_engine import decode_answer
             out = []
@@ -509,12 +532,13 @@ class RestInputs:
         self._origin = 0.0
         self.source = ""
         self.engine_values: dict = {}
+        self.arrays: tuple = ()
         self.key = ("", "")
 
     def steps(self, until: float) -> Iterable[ServedTick]:
         yield ServedTick(now=0.0, playing=False, answers={})
 
-    def levels(self) -> list:
+    def levels(self, measure=None) -> list:
         return []
 
 
@@ -755,14 +779,19 @@ class EngineAnswerEvaluator:
         controller = self.mode.configure(self._engine, self._effective(values, inputs), environment=self._environment)
         if self._extent is not None:
             controller.hydrate_committed_layout_metrics(self._extent, 0)
-        self._view = RecordedEngineAnswers(self._engine)
+        self._view = RecordedEngineAnswers(self._engine, inputs.arrays)
         controller.engine = self._view
         self._controller = controller
         self._inputs = inputs
         self._ticks = tuple(inputs.steps(self.fixture.duration))
         self._signature = self._pristine_signature = self.mode.own_signature(values)
-        self._pristine = StepState(controller, keep=(self._engine, self._view))
+        self._pristine = StepState(controller, keep=self._shared())
         self.replays += 1
+
+    def _shared(self) -> tuple:
+        """What a step-state capture shares instead of copying: the engine, the answer view and the recorded arrays
+        (read-only; a rewound step keeps holding the very objects the view serves, so identity checks replay)."""
+        return (self._engine, self._view, *self._inputs.arrays)
 
     def _step(self, tick: ServedTick) -> None:
         """One production tick: what ``tick_pipeline.logical_tick`` runs (``consume_engine_bars``, the teardown
@@ -812,6 +841,9 @@ class EngineAnswerEvaluator:
         self._signature = signature
 
     # exact history: rewinds and checkpoints ------------------------------------
+    # The transport overview's per-tick level from the recorded answers (None: the mean engine bar).
+    timeline_measure: Callable[[Mapping[str, Any]], float] | None = None
+
     CHECKPOINT_TICKS = 90                  # one checkpoint per second of fixture time (production cadence 90 Hz)
 
     def _rewind(self, values: Mapping[str, Any], signature, time: float) -> None:
@@ -844,7 +876,7 @@ class EngineAnswerEvaluator:
                 checkpoints.pop(next(iter(checkpoints)))
         at = self._ticks[self._index - 1].now - self._inputs._origin
         checkpoints[self._signature][self._index] = (
-            self._index, at, StepState(self._controller, keep=(self._engine, self._view)), self._last,
+            self._index, at, StepState(self._controller, keep=self._shared()), self._last,
             self._last_tick)
 
     def _advance(self, time: float, deadline: float | None) -> tuple[bool, int]:
@@ -942,7 +974,7 @@ class EngineAnswerEvaluator:
         duration = max(1e-6, self.fixture.duration)
         levels = [0.0] * samples
         source = self._overview()
-        for t, level in (source.levels() if source is not None else ()):
+        for t, level in (source.levels(self.timeline_measure) if source is not None else ()):
             if 0.0 <= t <= duration:
                 index = min(samples - 1, int(t / duration * samples))
                 levels[index] = max(levels[index], level)

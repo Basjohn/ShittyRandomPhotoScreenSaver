@@ -679,7 +679,7 @@ def test_the_preset_row_offers_the_devcurve_studio_instead_of_edit_preset(qt_app
     _dialog, tab = dialog_tab()
     slider = tab._get_visualizer_preset_slider(MODE)
     button = getattr(tab, f"_{MODE}_studio_button")
-    assert slider.isAncestorOf(button) and slider._edit_btn is None
+    assert slider.isAncestorOf(button)
     calls = []
     monkeypatch.setattr(settings_link, "open_mode_studio", lambda t, m: calls.append((t, m)))
     button.click()

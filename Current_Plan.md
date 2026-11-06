@@ -38,8 +38,8 @@ its target (`Docs/Guides/Visualizer_Visual_Tuning.md`), and any claim of "fixed"
 New platform-facing work (power, display, input) still ships a basic Linux path or an explicit inert one alongside
 the Windows path, so it never needs its own Linux audit later (operator, 5 Nov).
 
-**Agents (operator, 5 Nov):** at most three subagents at once (two medium and one high, or three medium), with the
-lead as reviewer/orchestrator.
+**Agents (operator, 5-6 Nov):** at most three Opus subagents at once (two medium and one high, or three medium) plus
+one additional Sonnet 5.5 high agent (6 Nov, workload), with the lead as reviewer/orchestrator.
 
 ## 4. Runtime side requests (operator, 5 Nov; run alongside the order above)
 
@@ -95,6 +95,11 @@ lead as reviewer/orchestrator.
   log but a failing exit code under the 8-way gate, and that runner stopped before its summary; the immediate re-run
   passed 64/64. Looks like a native crash at interpreter teardown after the Studio tests. If it recurs, capture the
   exit code and any faulthandler output (run the file alone with `-X faulthandler`) and fix the teardown owner.
+  Probably the same family as the leaked clip workers fixed in 90f65ee9 (a surviving worker held the runner's pipe).
+- [ ] **Worker-lifetime negative control is timing-dependent:** `test_without_the_job_tree_..._negative_control`
+  cancels inside the venv launcher's setup window by delay sweeps; under an 8-way gate no delay landed (6 Nov, twice),
+  so it now skips with that reason. Replace it with a deterministic stand-in (a probe parent that starts a child with
+  `CREATE_SUSPENDED` and is killed alone, with and without the job tree).
 
 - [ ] **4x MSAA repeat-render noise (driver, 5 Nov; was "Floor Give run-to-run noise"):** the same frame rendered
   again through a 4x scene target differs by 1 level (rarely 2-3) on a pixel or two in Waveform (more often with Floor
@@ -476,7 +481,7 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
 
 - [ ] Finish Waveform Studio acceptance first (§7.1), then extract any remaining Waveform-shaped assumptions.
 - [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost, Extruded Spectrum and
-  Neon Lake built, DevCurve built (below); Sphere in progress): Oscilloscope. Neon Lake (Shockwave Grid) awaits operator acceptance
+  Neon Lake built, DevCurve and Oscilloscope built (below); Sphere in progress). Neon Lake (Shockwave Grid) awaits operator acceptance
   (evidence `.artifacts/evidence/neon_lake/studio/`, Presets 1 and 3): recorded engine answers like Spectrum, the
   shared framed camera, no wallpaper. Operator decision on acceptance: the Studio carries the terrain heightfield and
   its Extend / Reset edits but has no brush instrument, so its builder body can shrink to the preset row plus the
@@ -493,11 +498,37 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   workspace (one panel per layer), and whether the Audio Analysis group earns its place (in the replay only Bar Count
   and the noise floor change what the engine answers DevCurve, and nothing DevCurve draws). The builder body is
   replaced with `build_studio_owned_mode_ui` only on acceptance.
-- [ ] **Edit Preset survives only for modes without a Studio** (Oscilloscope): Studio modes
-  author curated presets with Open Studio (preset row, every slot) and the Studio's confirmed Save To <Preset>
-  (`Docs/Reference/Visualizer_Studio.md` §4); the Notepad path and its pop-up go for each mode when its adapter
-  registers (automatic: the slider builds Edit Preset only for `not has_studio(mode)`); delete `_open_preset_json`
-  with the last one. Operator look pending (6 Nov): Open Studio's place in the preset row and the Save To flow.
+- [ ] **Oscilloscope Studio built (6 Nov), awaiting operator acceptance** (`ui/studio/oscilloscope_adapter.py`,
+  registered). Evidence `.artifacts/evidence/oscilloscope/studio/` (Preset 1 Phosphor on Human, Preset 3 Lissajous on
+  Rag Doll: every workspace with the live traces). Recorded engine answers with the capture history recorded by
+  identity (binary sidecar; `Docs/Reference/Visualizer_Studio.md` §3). Operator to judge: Level / Afterglow / Ghosts /
+  Flare / Drive / Tone as the way to read the beam, the three workspaces, and whether the Audio Analysis group earns
+  its place (in the replay only Bar Count and the noise floor change what the engine answers Oscilloscope; Sensitivity,
+  Input Gain, Block Size and Use Recommended Sensitivity change nothing it reads, since it draws the raw capture
+  history: confirm against the live engine before removing anything). The builder body is replaced with
+  `build_studio_owned_mode_ui` only on acceptance.
+- [ ] **Edit Preset deleted (6 Nov)**: every visualizer mode now has a Studio, so the preset row's Edit Preset button,
+  `_open_preset_json` and its pop-up are gone (`ui/tabs/media/preset_slider.py`); curated presets are authored with
+  Open Studio and the Studio's confirmed Save To <Preset> (`Docs/Reference/Visualizer_Studio.md` §4).
+  `tools/flicker_test.py` keeps its own historical mock of the old row. Operator look pending: Open Studio's place in
+  the preset row and the Save To flow.
+- [ ] **Operator side requests (6 Nov, "important eventually"; queue after the running work):**
+  - **Bar Count outside Spectrum:** it reads out of place on other modes. Audit per mode what the engine's bar count
+    actually feeds (the DevCurve and Oscilloscope Studio replays found only Bar Count and the noise floor change what
+    the engine answers them; Sensitivity / Input Gain / Block Size / Use Recommended Sensitivity changed nothing they
+    read). Keep it only where a mode demonstrably depends on it (show the dependency), hide it elsewhere; the same
+    question for the rest of the Audio Analysis group per mode, checked against the live engine.
+  - **Tilt Shift cannot be toggled:** every curated Waveform preset has Floor Clearance = Dynamic Height Shift (its
+    `when` condition), so the toggle should be live. Reproduce in Settings and the Studio, fix the owner, and test the
+    real dialog with a negative control.
+  - **Waveform travel speed:** History Speed (`flow_speed`, 0.8-2.4, Flow bucket) and Pulse Speed exist but the
+    operator did not find them; there is no travel-speed reactivity. Make them findable (name / workspace / tooltip)
+    and consider a quiet -> peak History Speed under the flow rule (music pushes history faster, smoothly; knot spacing
+    and the anchored ends stay continuous). After the adaptive rework (same owner).
+  - **Studio clips: 30 s small, or cleanly loopable.** Shipped clips are ~12 s, ~0.9 MB each (2.5 MB total); 30 s would
+    be ~2.2 MB each but an engine-owned edit re-analyses the whole clip (~2.5x longer). A clean loop instead: loop
+    points on matching musical positions with a short crossfade, and the Studio's evaluator continuing its simulation
+    state across the loop (today the replay restarts at t = 0, which would jump). Choose with measurements.
 
 ## Operator execution and evidence rules
 
