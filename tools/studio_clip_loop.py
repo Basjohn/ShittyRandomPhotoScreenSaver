@@ -323,7 +323,8 @@ def bake_loop(source: Source, choice: LoopChoice):
                     + round(choice.shift / SAMPLE_RATE * 1e6))
     info = {"frames": count, "period_samples": period, "period_s": period_us / 1e6,
             "crossfade_s": choice.fade_s, "first_source_s": float(source.seconds[first]),
-            "after_source_s": float(source.seconds[after]), "shift_samples": int(choice.shift)}
+            "after_source_s": float(source.seconds[after]), "shift_samples": int(choice.shift),
+            "first_frame": int(first), "after_frame": int(after)}
     info["measured"] = _measure_bake(body, stream, r0, period, length, tail, lead, choice.detail)
     return out, period_us, info
 
@@ -356,8 +357,9 @@ def _measure_bake(body, stream, r0, period, length, tail, lead, detail) -> dict:
             "step_loop": round(float(abs(float(body[0]) - float(body[period - 1]))), 6),
             "step_source": round(float(abs(float(stream[r0]) - float(stream[r0 - 1]))), 6),
             "level_deviation_db": round(max(abs(v) for v in deviations), 2),
-            "blend": {"onset_correlation": round(float(detail[0]), 3), "level_db": round(float(detail[1]), 2),
-                      "spectrum": round(float(detail[2]), 3), "beat_offset_ms": round(float(detail[3]), 1)}}
+            "blend": ({"onset_correlation": round(float(detail[0]), 3), "level_db": round(float(detail[1]), 2),
+                       "spectrum": round(float(detail[2]), 3), "beat_offset_ms": round(float(detail[3]), 1)}
+                      if len(detail) >= 4 else {})}
 
 
 # --------------------------------------------------------------------------------- the seam report
