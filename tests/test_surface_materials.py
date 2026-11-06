@@ -316,3 +316,102 @@ def test_material_follows_a_running_transition(material_scene) -> None:
     early = numpy.asarray(scene.frame_at("crossfade", red, green, 0.1), numpy.int16)[180, 320]
     late = numpy.asarray(scene.frame_at("crossfade", red, green, 0.9), numpy.int16)[180, 320]
     assert late[1] - early[1] > 60 and early[0] - late[0] > 60
+
+
+# --------------------------------------------------------------------------- legibility
+
+
+def _between(text: str, begin: str, end: str) -> str:
+    return text[text.index(begin):text.index(end)]
+
+
+def test_text_plate_evaluates_the_identical_surface_function() -> None:
+    card = (QML / "shaders" / "surface_material.frag").read_text(encoding="utf-8")
+    plate = (QML / "shaders" / "text_legibility.frag").read_text(encoding="utf-8")
+    block = _between(card, "// SURFACE BEGIN", "// SURFACE END")
+    assert "vec4 surfaceAt(" in block
+    assert block == _between(plate, "// SURFACE BEGIN", "// SURFACE END")
+    for name in ("text_legibility.vert.qsb", "text_legibility.frag.qsb"):
+        assert (QML / "shaders" / name).is_file()
+
+
+def test_text_runs_change_only_on_an_active_material() -> None:
+    text = (QML / "ShadowedText.qml").read_text(encoding="utf-8")
+    header = (QML / "BrandedHeader.qml").read_text(encoding="utf-8")
+    # The plate loads only on an active material; the soft halo drops only there.
+    assert "active: shadowedText.onSurfaceMaterial && shadowedText.surfacePlateEnabled" in text
+    assert "&& !(shadowedText.shadowSoft && shadowedText.onSurfaceMaterial)" in text
+    assert "&& !shadowedText.onSurfaceMaterial" in text
+    # Header labels sit on the header's own fill and opt out.
+    assert header.count("surfacePlateEnabled: false") == 2
+
+
+def _text_run(scene, card, *, text: str, color: str, pixel_size: int, soft: bool):
+    from PySide6.QtCore import QUrl
+    from PySide6.QtQml import QQmlComponent
+    from PySide6.QtQuick import QQuickItem
+
+    engine = scene.scene.qml_context.engine()
+    component = QQmlComponent(engine)
+    component.setData(
+        (f'import QtQuick\nShadowedText {{ x: 30; y: 40; width: 220; height: 20; text: "{text}"; '
+         f'color: "{color}"; font.pixelSize: {pixel_size}; shadowEnabled: true; '
+         f'shadowSoft: {"true" if soft else "false"}; shadowColor: "#96000000" }}').encode(),
+        QUrl.fromLocalFile(str(QML / "_test_run.qml")))
+    item = component.create(scene.scene.qml_context)
+    assert item is not None, component.errorString()
+    content = card.item.findChild(QQuickItem, "overlayCardContent")
+    item.setParentItem(content)
+    item.setParent(content)
+    return item
+
+
+def test_small_text_meets_4_5_on_a_busy_backdrop_and_normal_is_untouched(material_scene) -> None:
+    import numpy
+    from PySide6.QtGui import QColor
+    from PySide6.QtQuick import QQuickItem
+    from rendering.quick.widgets.host import OverlayCardStyle, OverlayWidgetGeometry
+    from tools.surface_material_capture import measure_text_legibility
+
+    scene = material_scene
+    # Busy, bright stripes under a dim grey 12 px run on a dark-theme Glass card: the card's
+    # own 3:1 floor is not enough for it, only the run's plate brings it to 4.5:1.
+    width, height = 640, 360
+    stripes = bytearray()
+    for _y in range(height):
+        for x in range(width):
+            stripes += bytes((250, 240, 150, 255)) if (x // 6) % 2 else bytes((235, 200, 245, 255))
+    from rendering.quick.image_state import PresentationImage
+
+    scene.set_wallpaper(PresentationImage("stripes", "stripes", (640.0, 360.0), 1.0, (width, height),
+                                          width * 4, bytes(stripes)))
+    card = scene.host.create_widget(object_name="card", model_identity="clock",
+                                    geometry=OverlayWidgetGeometry(170, 100, 300, 160),
+                                    card_style=OverlayCardStyle(background_color=QColor(20, 20, 20, 77),
+                                                                shadow_enabled=False))
+    scene.presentations = []
+    run = _text_run(scene, card, text="03D AGO 25M", color="#9a9a9a", pixel_size=12, soft=True)
+    scene.render(4)
+    out = Path(__file__).resolve().parent / "_surface_material_run.png"
+    try:
+        normal_rows = measure_text_legibility(scene, out)
+        plate = run.findChild(QQuickItem, "shadowedTextLegibilityPlate")
+        shadow = run.findChild(QQuickItem, "shadowedTextShadow")
+        assert plate.property("active") is False and shadow.isVisible()
+        normal = numpy.asarray(scene.read(), numpy.int16)
+
+        scene.set_material("glass")
+        scene.render(4)
+        rows = measure_text_legibility(scene, out)
+        assert plate.property("active") is True
+        assert shadow.isVisible() is False            # no soft halo on a material
+        mine = [row for row in rows if row["text"].startswith("03D")]
+        assert mine and mine[0]["p5"] >= 4.5, (mine, normal_rows)
+
+        scene.set_material("normal")
+        scene.render(3)
+        assert plate.property("active") is False and shadow.isVisible()
+        assert numpy.array_equal(numpy.asarray(scene.read(), numpy.int16), normal)
+    finally:
+        out.unlink(missing_ok=True)
+
