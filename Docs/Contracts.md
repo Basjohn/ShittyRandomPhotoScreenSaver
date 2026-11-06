@@ -234,10 +234,11 @@ family activated/deactivated != ordinary widget ON/OFF
 
 CUSTOM X and layout-slot replay operate only on ordinary ON/OFF. They never activate a fully deactivated capability
 or replace provider/account/source settings.
+A deactivated family remains deactivated even if a saved layout contained it.
 
 ## Network transports
 
-Every network request on the ThreadManager IO lane resolves its connection host through `core/network` before connecting: `bounded_request` (requests), `bounded_urlopen` (urllib), or `resolve_bounded` ahead of a raw socket client (Gmail IMAP). `socket.getaddrinfo` ignores socket timeouts and cannot be interrupted, so the lookup runs on a short-lived daemon thread with a 4 s deadline, at most eight in progress, cancelled by the family's own retirement fence (FEEDS job event, Reddit `shutdown_event`, Weather service/request fence, Gmail `should_cancel`, geocode pending query, wallpaper RSS shutdown check) and by the one-way process exit fence `close_network_admission()`, which the engine closes immediately before its thread-manager shutdown and `main` closes at process end. Steam requests are shared through request coordinators, so no single widget retirement cancels them; their deadline and the exit fence bound them. Redirects are followed one bounded hop at a time with the library's own semantics, a proxy's host is resolved when one applies, and a failed lookup surfaces as the library's own connection error. Without this, one stalled lookup pinned a worker of the four-worker lane, held the engine's 5 s exit wait and then kept the process alive (ThreadPoolExecutor workers are joined by the interpreter; the OS does not kill them). Direct-socket TLS (`bounded_urlopen`, the artwork transport's `http.client`, Gmail `imaplib`) uses the single verified process context `core.network.tls.verified_client_context()`. Without it, `imaplib` is unverified, and urllib builds a trust-store context per connection, which on Windows holds the GIL while it enumerates the certificate stores (R-98). `requests` keeps its library-owned context. Headless bars: `tests/test_network_bounded_http.py`, `tests/test_network_dns_stall_families.py`, `tests/test_feed_dns_stall.py`, `tests/test_network_tls_context.py`.
+Every network request on the ThreadManager IO lane resolves its connection host through `core/network` before connecting: `bounded_request` (requests), `bounded_urlopen` (urllib), or `resolve_bounded` ahead of a raw socket client (Gmail IMAP). `socket.getaddrinfo` ignores socket timeouts and cannot be interrupted, so the lookup runs on a short-lived daemon thread with a 4 s deadline, at most eight in progress, cancelled by the family's own retirement fence (FEEDS job event, Reddit `shutdown_event`, Weather service/request fence, Gmail `should_cancel`, geocode pending query, wallpaper RSS shutdown check) and by the one-way process exit fence `close_network_admission()`, which the engine closes immediately before its thread-manager shutdown and `main` closes at process end. Steam requests are shared through request coordinators, so no single widget retirement cancels them; their deadline and the exit fence bound them. Redirects are followed one bounded hop at a time with the library's own semantics, a proxy's host is resolved when one applies, and a failed lookup surfaces as the library's own connection error. Without this, one stalled lookup pinned a worker of the four-worker lane, held the engine's 5 s exit wait and then kept the process alive (ThreadPoolExecutor workers are joined by the interpreter; the OS does not kill them). Direct-socket TLS (`bounded_urlopen`, the artwork transport's `http.client`, Gmail `imaplib`) uses the single verified process context `core.network.tls.verified_client_context()`. Without it, `imaplib` is unverified, and urllib builds a trust-store context per connection, which on Windows holds the GIL while it enumerates the certificate stores (R-98). `requests` keeps its library-owned context. Never add a raw `requests.get`/`Session.get`, `urlopen` or socket-client connect on the IO lane, never open direct-socket TLS without that shared context, and never answer a stall by weakening the exit barrier, extending timeouts, env flags or daemon pool threads. Headless bars: `tests/test_network_bounded_http.py`, `tests/test_network_dns_stall_families.py`, `tests/test_feed_dns_stall.py`, `tests/test_network_tls_context.py`.
 
 ## Import dormancy
 
@@ -335,7 +336,7 @@ cache record remains usable indefinitely and is the preferred fallback after net
 Failed, malformed or stale-generation responses never overwrite/freshen last-good evidence. Deletion requires explicit
 user/account/cache reset, schema rejection/corruption, or a proven identity change. Do not substitute semantically
 different data simply because the intended source is stale; Games You Follow must not replace stale follows
-with owned/recent/wishlist games.
+with owned/recent/wishlist games. Never improve apparent freshness by blanking stale-but-valid data.
 
 ### User-requested cache maintenance
 
@@ -720,24 +721,6 @@ The world-space, read-only 3D cage is derived from each renderer's projected sta
 
 ## Additional binding safeguards by subject
 These requirements belong to this subsystem. They are not a second global guardrail or a work queue.
-
-### Last-good cache retention
-
-
-A successful cache record does **not** expire merely because it becomes stale. Freshness controls refresh admission and stale labeling; it is not deletion permission. On source failure, keep rendering last-good intended data indefinitely unless an explicit account/cache reset, schema rejection/corruption, or proven identity change invalidates it. Never improve apparent freshness by blanking stale-but-valid data or substituting semantically different data.
-
-
-### Capability activation and UI ON/OFF
-
-
-Ordinary ON/OFF is not family/capability activation. CUSTOM X and layout slots may change ordinary ON/OFF only.
-A deactivated family remains deactivated even if a saved layout contained it.
-
-
-### Network transports
-
-**Network on the IO lane goes through `core/network`.** Never add a raw `requests.get`/`Session.get`, `urlopen` or socket-client connect on the IO lane: resolve through `bounded_request`, `bounded_urlopen` or `resolve_bounded` and pass the family's existing retirement fence (Contracts § Network transports). Never open direct-socket TLS without the shared `verified_client_context()`: no per-connection context, and never `imaplib`/`smtplib`'s unverified default. A stuck worker is not killed at exit; never answer a stall by weakening the exit barrier, extending timeouts, env flags or daemon pool threads.
-
 
 ### Qt deferred deletion and callback release
 

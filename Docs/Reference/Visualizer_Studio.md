@@ -36,6 +36,7 @@ and must not be copied per mode.
 | `ui/studio/framed.py` | Shared pieces for 3D (and card-presented) adapters: production presentation resolver and uniform aperture scale, `card_framings` / `live_card_framings`, `camera_navigation` over the shared framed camera, `orbit_navigation` for a free-orbit mode (the descriptor's `view_orbit_settings` only), `QuickModeRenderer` wrapping a production Quick renderer and `ContractModeRenderer` handing it the production render-frame contract (pixel ratio from the item mapping, so a letterboxed live card presents at the true DPR). |
 | `ui/studio/engine_answers.py` | The Spectrum family's recorded engine answers (Spectrum, Extruded Spectrum, Neon Lake, DevCurve, Oscilloscope), mode-neutral (`EngineAnswerMode(mode_id, conditional_reads)`): synthetic audio (with the analysis spectrum and onsets a recording carries), the out-of-process `extract`, recorded inputs, the per-mode answer cache, `start_clip_load` and `EngineAnswerEvaluator` (the production step in process on `ExactReplay`). |
 | `ui/studio/exact_replay.py` | `ExactReplay`, the shared exact-history mechanism of the replaying evaluators (the engine-answer modes and Waveform): checkpoints per values signature, rewinds, the frame budget (`converging`) and the live-gesture path. An evaluator supplies only its step, its state capture and its restyle. The engine-owned / mode-owned split follows from the production source projection (`source_config_applier`). |
+| `ui/studio/brush.py` | The shared heightfield brush instrument: `BrushTarget` (the record's key, `pick` and `footprint` through the mode's production camera, from `adapter.brush_target()` when `capabilities().brush`) and `StudioBrush` (tool settings, held pointer points, the stroke; flushed at frame start). Strokes are painted by `rendering/gl_programs/heightfield_brush.py`. |
 | `ui/studio/spectrum_shape.py` | The Spectrum family's shape editor as Studio rows, admission and structural edits (add / remove node, lane swap), by key prefix (`ShapeKeys`). |
 | `ui/studio/theme.py`, `colour.py` | Chrome tokens derived from the active Settings theme with enforced contrast; display ↔ linear colour conversion for instruments. Scene colours never pass through the theme. |
 | `ui/studio/chrome.py` | The painted chrome items (`StudioFrame`, `StudioWindowEdge`, QML module `SRPSS.StudioChrome`), painting with Settings' own owners (below). |
@@ -120,6 +121,22 @@ is optional and defaults to "not offered":
   split is proven in both directions on the production replay; it is derived, not listed: engine-owned are the
   mode's keys the production source projection hands the engine (the Spectrum source keys and the technical
   analysis), mode-owned everything else the mode stores (spec controls, Custom rows, shared bar and rainbow families).
+  A mode whose step reads the engine's lanes beyond its shaped bars (`EngineAnswerMode.production_lanes`: DevCurve,
+  Oscilloscope, Neon Lake) records on `feature_replay.ProductionLaneEngine`: every lane, the transient bus, its onsets
+  and events, the musical level and intensity and the analysis spectrum re-analysed from the clip's PCM through the
+  production DSP under the edited values, so Sensitivity, the floors, Gain and Block Size move these Studios as they
+  move the live engine (the others' shaped bars were always re-shaped from the PCM). Recorded clips only: a synthetic
+  fixture keeps its authored lanes, since its held Quiet / Mid / Peak levels and scripted hits are references the
+  production DSP's own normalisation would flatten (measured 6 Nov: a quiet bed reads at full scale, and the
+  transient fixture's isolated kick no longer reaches DevCurve's accents). Its frames equal the production
+  replay on re-analysed lanes tick for tick (`tests/test_studio_audio_analysis_response.py`, with the old
+  recorded-lanes path as the negative control). Scale caveat: one analysis block per 11 ms tick, where live analyses
+  every capture callback, so absolute levels approximate. Worker cost (6 Nov, the three shipped 12 s clips, frozen
+  settings, best of two, Ryzen 9 5900X at ~12% load; recorded lanes -> production lanes): DevCurve 9.9 -> 11.0 s
+  (+11%), Oscilloscope 3.8 -> 5.1 s (+35%), Neon Lake 5.8 -> 8.2 s (+41%), Bubble 10.1 -> 12.3 s (+22%), Extruded
+  Bubble 4.2 -> 5.2 s (+25%), Sphere 2.0 -> 3.9 s (+100%, about 1.3 s a clip). A re-analysis runs once per release.
+  DevCurve normalises its body to the song, so Sensitivity / floor / Gain move its picture only subtly, as live
+  (evidence `.artifacts/evidence/studio_completion_20261106/audio_analysis/`).
   Synthetic fixtures of such a mode are generated *audio* through the same worker, so engine-owned edits stay
   truthful for them too; each synthetic frame carries what a recording carries: its audio's analysis spectrum (the
   live engine's band math), the score's hits as the transient bus's onsets, and the loudness on the real-music scale
@@ -130,11 +147,9 @@ is optional and defaults to "not offered":
   musical level and intensity, the source frame), so it uses the same recorded engine answers: the worker records
   everything the engine answered the whole production `logical_tick`, and `EngineAnswerEvaluator._step` runs what
   `logical_tick` runs, the mode's hook included, between `consume_engine_bars` and the capture. Engine-owned are the
-  technical (audio analysis) values; this replay serves the clip's *recorded* pre-AGC and transient lanes, so most of
-  them leave its lanes unchanged here although the live engine answers every one (Sensitivity, the floors, Gain,
-  Block Size and Clamp all move DevCurve's frame when the lanes are re-analysed from PCM: `Docs/Reference/
-  Visualizer_Reference.md` → Audio Analysis controls per mode; `Current_Plan.md` §9 records the Studio gap), and the
-  split is still proven both ways (`tests/test_devcurve_studio.py`). Its schema follows
+  technical (audio analysis) values, each re-analysed from the clip's PCM (production lanes, above), so every offered
+  one moves DevCurve's frame here as live (`Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per
+  mode); the split is proven both ways (`tests/test_devcurve_studio.py`). Its schema follows
   DevCurve's Settings buckets: Layers (Settings' Shaper: one group per layer with its Custom-row values, the
   shape-editor nodes, Add / Remove Node and Settings' stack re-ranking as `follow`), Motion & Swell (Core and the
   analysis) and Foreground & Ghost (with the rainbow). Each layer group traces that layer's **Body** (over its body
@@ -153,14 +168,22 @@ is optional and defaults to "not offered":
   tick. `StepState` shares the recorded arrays instead of copying them, so a rewound step still holds the object the
   view serves. Without a pool an array answer is still refused, so a mode whose answers hold no arrays records
   exactly as before. A shipped clip: about 830 distinct 4096-sample histories (13.6 MB sidecar), 7.6 MB of answer
-  JSON, about 0.1 s to load. Engine-owned are the technical values (this replay serves recorded lanes, so only Bar Count and
-  the noise floor change an answer here; live, every offered one moves Flare and Drive: see the DevCurve note above);
+  JSON, about 0.1 s to load. Engine-owned are the technical values (re-analysed from the PCM: every offered one moves Flare
+  and Drive, as live);
   every `osc_*` key is mode-owned. Workspaces follow the buckets: Trace (Display), Beam & Screen,
   Reaction (with the analysis). Traces, read from the frame on screen (`OscilloscopeStudioEvaluator.measurements`):
   **Level** (the live trace's swing in its display's own units), **Afterglow** (the newest afterglow trace's
   brightness against a fresh one) and **Ghosts** (held traces against the capacity), **Flare**, **Drive**, **Tone**;
   the transport overview is the recorded loudness (`EngineAnswerEvaluator.timeline_measure`). No value is a true
   interval: every slider is one scalar.
+- **Recorded-input modes re-analyse a clip for the Audio Analysis values (Bubble, Extruded Bubble, Sphere).** Their
+  clip workers replay on `ProductionLaneEngine` (the events they record are those the production scheduler accepted,
+  `feature_replay.fed_events`) and their adapters name the values a clip's analysis depends on
+  (`clip_analysis_keys`: the mode's offered technical keys; clip caches are keyed by them). After a commit, undo or
+  redo that changes them, the controller analyses the clip on screen again in the background
+  (`StudioController._refresh_clip_analysis`); the previous inputs stay on screen until the new ones land at the same
+  instant, and those keys' sliders update on release. Synthetic and held fixtures are authored lanes in every mode
+  and do not react to Audio Analysis (the engine-answer modes' note above says why).
 - **Exact replay without a stall (`ui/studio/exact_replay.py`).** The engine-answer evaluators and Waveform's share
   one mechanism, `ExactReplay`. Such an evaluator never re-configures its controller for a mode-owned edit:
   `replay_engine.StepState` captures the production step state (controller, logical tick state, presentation state
@@ -195,9 +218,24 @@ is optional and defaults to "not offered":
   Studio reaches every state Settings' shape editor saves (`tests/test_spectrum_studio_shape_editor.py`). Neon Lake:
   the same for its Frequency Response shape and for Terrain Reaction's shaper (one record: nodes two to five, the
   first lane boundary pinned at the shoreline by `normalize_terrain_shaper`), and the terrain editor's whole-record
-  edits (Extend Toward Horizon, Reset Terrain) on the authored heightfield. The heightfield itself is painted only by
-  Settings' terrain brush: the shared shell has no brush instrument, so the Studio carries the record (undo, save,
-  Save To <Preset>) through an `instrument_only` schema marker and does not author its cells.
+  edits (Extend Toward Horizon, Reset Terrain) on the authored heightfield. The heightfield's cells are painted with
+  the shared brush (below); the session carries the record (undo, save, Save To <Preset>) through an
+  `instrument_only` schema marker.
+- **Brush (`capabilities().brush`, Neon Lake's terrain).** The viewport toolbar's brush button (or B) turns the
+  viewport into a brush: left-drag paints, right / middle drag still pans and the wheel zooms; a floating panel holds
+  the mode (Raise, Lower, Flatten, Water), Radius, Strength, Falloff and Flatten Height (tool state, never saved), and
+  the footprint (reach ring, dashed core) is drawn on the ground under the pointer. The adapter's `BrushTarget` names
+  the record and picks a presented-frame point on the drawn ground through the frame's production camera (Neon Lake:
+  `basin_view` at the card's content field, the ray met with `neon_terrain_surface`). Pointer points are held and
+  painted at the next frame start, all of them in order (the path decides a stroke, not the event rate), with one
+  preview per frame; release commits once (one save, one undo entry, "Paint Terrain (<mode>)"); Esc drops the stroke.
+  During a stroke points are picked on the ground as it was when it began. `tests/test_visualizer_studio_parity.py`
+  proves the pick against the production camera, the coalesced stroke, its save through Settings' owners, reload and
+  Undo; `tools/waveform_studio_capture.py --brush` renders a stroke (evidence
+  `.artifacts/evidence/studio_completion_20261106/brush/`).
+- **Conditions.** A property's `when` terms must all hold, its `when_any` terms at least one (Settings' former OR
+  rules, e.g. Bubble's particle rows while any population is on); `ui/studio/schema.condition_hidden` is the one
+  evaluation the bridge's `conditionHidden` uses.
 - **Switch rows.** Every boolean control is the shell's one `SwitchRow` (an `Item`: a `Row` ignores the `x` of its
   children, which once pushed the click area past the label and made every switch unclickable, 6 Nov). A row whose
   `when` condition fails is hidden (`conditionHidden`). `tests/test_studio_switch_rows_click.py` clicks the rendered rows
@@ -224,7 +262,8 @@ is optional and defaults to "not offered":
   mapping for 2D); an `"xy"` handle is one undoable two-axis move.
 
 Every adapter carries a registry-derived full-coverage test (every canonical control reachable), a production-parity
-preview test and a Settings round-trip test; see `Docs/TestSuite.md` → Visualizer Studio. A property whose path the
+preview test and a Settings round-trip test, and is covered by the shared parity+ test
+(`tests/test_visualizer_studio_parity.py`); see `Docs/TestSuite.md` → Visualizer Studio. A property whose path the
 current values do not hold (an unused optional element, such as a curve-node slot) is hidden.
 
 ### Drags are batched
@@ -247,13 +286,25 @@ release replay spreads over frames within the budget (one 222 ms evaluation -> a
 
 ## 4. Settings link and the restore guarantee
 
-- **Entry.** `ui/tabs/media/spec_mode_builder.py` gives any spec-built mode with a registered adapter an **Open Studio**
-  button in its preset row (`VisualizerPresetSlider.set_studio_launcher`, where Edit Preset was), so it is offered on
-  every curated preset and on Custom alike; there is no second launcher in the Custom body. Opened on a curated preset,
-  the Studio shows that preset. A mode whose every control is Studio-edited uses `build_studio_owned_mode_ui`: its
-  body is only the preset row and one sentence. Its values live in the section-lazy cache with nothing ever
-  built, and the technical (audio-analysis) controls keep their canonical widgets as value owners in a never-shown
-  holder, so load/collect/save, preset switching and Custom snapshots run through unchanged owners.
+- **Entry.** Every visualizer mode's Settings body is `build_studio_owned_mode_ui` (`ui/tabs/media/spec_mode_builder.py`,
+  operator 6 Nov: migrate fully once each Studio has parity+): the preset row with its **OPEN STUDIO** button
+  (`VisualizerPresetSlider.set_studio_launcher`, where Edit Preset was; offered on every curated preset and on Custom
+  alike) and one sentence; no Settings control is kept beside them. Opened on a curated preset, the Studio shows that
+  preset. The body's values (`body_keys`: the
+  bucketed controls, each Custom row's keys and the bucketless controls a Custom row edits) live in the section-lazy
+  cache `_<prefix>_lazy_values`, admitted as the model admits them, with nothing built; the technical (audio-analysis)
+  controls and the page's shared Bar Appearance / Rainbow rows keep their canonical widgets as value owners in the
+  body's never-shown holder, so load/collect/save, preset switching and Custom snapshots run through unchanged owners.
+  Neon Lake's terrain, the last Settings-only control, is painted with the Studio's brush since 6 Nov; its Settings
+  section and editor are retired.
+- **Parity+ proof.** `tests/test_visualizer_studio_parity.py` derives every mode (each descriptor with a registered
+  adapter) and every control from the registries: spec bucket entries and Custom-row keys, the offered technical
+  controls, and the shared families (Rainbow wherever owned; Bar Appearance where the mode `draws_bars`), each a Studio
+  property with the registry's range, choices and condition; every preset-row control has a Studio action; plain and
+  Custom-row edits through the bridge save and reload through a never-shown `VisualizersTab`; conditional rows hide
+  live; negative controls drop a property per category; every authored heightfield is the brush's target, and a brush
+  stroke saves once, reloads and undoes exactly. Before the flip it also proved each Studio against the body
+  users had (every row the body collected and every row its spec and hand-written conditions hid; commit `db7468ab`).
 - **Canonical save.** `VisualizerSettingsStore.commit` loads the values into the mode body with signals blocked, then
   runs the tab's own `_force_visualizer_preset_to_custom` and `_save_settings_now`. The mode's shared families that
   Settings keeps outside the mode body (bar Fill / Border / Border Opacity, the per-mode rainbow toggle and speed)
@@ -321,4 +372,5 @@ evaluation timings. It never shows a window. Command examples live in `Docs/Refe
    framed 3D modes reuse `ui/studio/framed.py` and the shared framed camera (`core/settings/framed_camera.py`).
 3. Register one line in `ui/studio/registry.py`.
 4. Add the coverage, parity and Settings round-trip tests; render evidence with the capture tool.
-5. Replace the mode's builder body with `build_studio_owned_mode_ui` only after operator acceptance of that Studio.
+5. The mode's builder is `build_studio_owned_mode_ui` with one plain sentence; `tests/test_visualizer_studio_parity.py`
+   must pass for it (a control with no Studio home is a missing instrument to build, never a Settings section).

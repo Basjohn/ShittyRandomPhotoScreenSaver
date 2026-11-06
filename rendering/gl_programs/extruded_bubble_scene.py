@@ -170,6 +170,11 @@ def scene_knobs(parameters: Mapping[str, object]) -> dict[str, object]:
     knobs.update(shaft_soft=softness, fan_contrast=0.8+(0.2-0.8)*softness,
                  fan_march=0.15+(0.6-0.15)*softness, fan_rays=80.0+(30.0-80.0)*softness, fan_reach=0.3 + 0.7 * float(_p(parameters, "ray_reach")))
     knobs.update(mist=float(_p(parameters, "haze")), veils=float(_p(parameters, "veils")), dust=float(_p(parameters, "dust")),
+                 ember_grain=float(_p(parameters, "ember_grain")), ember_band=float(_p(parameters, "ember_band")),
+                 lit_glass=float(_p(parameters, "lit_glass")), wake_tint=float(_p(parameters, "wake_tint")),
+                 stream_lanes=float(_p(parameters, "stream_lanes")),
+                 hero_shell=float(_p(parameters, "hero_shell")),
+                 hero_at=(float(_p(parameters, "hero_across")), float(_p(parameters, "hero_height"))),
                  floor=float(_p(parameters, "floor")))
     clarity, softness = float(_p(parameters, "clarity")), float(_p(parameters, "softness"))
     knobs.update(face_reflect=1.0 + (0.2 - 1.0) * clarity,
@@ -281,6 +286,26 @@ def bubble_instances(records) -> np.ndarray:
     return out
 
 
+def hero_shell_instance(knobs, state, view_to_world, eye, tan) -> np.ndarray:
+    """Hero Shell: one large foreground shell held near the lens (the goals' defocused giant in a lower corner), as
+    a shell row for the ordinary pass. It sits in front of the focus distance, so the shared near layer defocuses it
+    by its real depth like any close bubble. Placed by the view (Hero Across/Height, -1..1 of the frame from centre)
+    so the composition holds whatever the pose; it sways slowly with the music's motion phase and swells a little with
+    held loud passages (never with the beat). Not a simulation bubble: nothing collides with it or is spawned by it."""
+    amount = max(0.0, min(1.0, float(knobs["hero_shell"])))
+    across, height = (max(-1.0, min(1.0, float(v))) for v in knobs["hero_at"])
+    phase = float(state.motion_phase)
+    across += 0.025 * math.sin(phase * 0.31)
+    height += 0.02 * math.sin(phase * 0.23 + 1.3)
+    depth = 0.45 * float(knobs["focus"])
+    radius = amount * 0.5 * float(tan[1]) * depth * (0.97 + 0.06 * max(0.0, min(1.0, float(state.sustain))))
+    right, up, back = view_to_world[:3], view_to_world[3:6], view_to_world[6:9]
+    view = (across * float(tan[0]) * depth, height * float(tan[1]) * depth, -depth)
+    centre = [float(eye[i]) + right[i] * view[0] + up[i] * view[1] + back[i] * view[2] for i in range(3)]
+    nominal = amount * 0.5 * float(tan[1]) * depth
+    return np.asarray([[*centre, radius, 0.381966, 0.0, 1.0, nominal]], dtype=np.float32)
+
+
 def wake_instances(records) -> np.ndarray:
     """Pack stable physical emitters unchanged, including frozen retiring anchors.
 
@@ -345,5 +370,5 @@ def light_on_screen(sun_below, world_to_view, projection, size) -> tuple[float, 
 
 __all__ = ["CLUSTER_FLOATS", "ENGINE", "FAR", "FOV_Y_DEGREES", "MODES", "NEAR",
            "ORBIT_DISTANCE", "ORBIT_PIVOT", "PROXY_FLOATS", "SHELL_FLOATS", "SURFACE_Y", "bubble_instances", "camera", "physical_camera",
-           "cluster_instances", "direction_vector", "glint_proxies", "light_on_screen", "ray_strength",
+           "cluster_instances", "direction_vector", "glint_proxies", "hero_shell_instance", "light_on_screen", "ray_strength",
            "ray_motion", "scene_knobs", "screen_streak", "speck_amount", "SPECKS_FULL"]

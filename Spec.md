@@ -98,10 +98,12 @@ describe the current build only and exist to identify real package/dependency bl
 Themes and presets retain their loose editable packaging.
 
 The frozen QML package contract is evidence-gated rather than `qml`-means-everything. Project-authored QML currently
-imports only `QtQuick` and `QtQuick.Effects`; the shared build-layout authority rejects any new external QML namespace
-until the package contract is deliberately reviewed. Nuitka's broad QML scan is therefore pruned for source-proven
-unused families, including WebEngine, QML PDF and the `qpdf` image plugin, VirtualKeyboard, Qt3D/Quick3D, Controls
-families, Charts/Graphs/DataVisualization and Location/Positioning. Standard, Media Center and their Venv workers use
+imports `QtQuick` and `QtQuick.Effects` (the saver scene and everything shared) plus `QtQuick.Controls.Basic` and
+`QtQuick.Shapes`, which are the Settings-side Studio's only (`ui/studio/qml`, never the saver scene); the shared
+build-layout authority checks both QML trees and rejects any other external QML namespace until the package contract is
+deliberately reviewed. Nuitka's broad QML scan is therefore pruned for source-proven unused families, including
+WebEngine, QML PDF and the `qpdf` image plugin, VirtualKeyboard, Qt3D/Quick3D, the non-Basic Controls styles (the
+Basic closure the Studio imports is kept), Charts/Graphs/DataVisualization and Location/Positioning. Standard, Media Center and their Venv workers use
 the same exclusion authority; the diagnostic file is the Standard binary itself. Native Qt Multimedia remains
 packaged because notification/Jedi playback uses `QMediaPlayer`/`QAudioOutput`; QtQuick/Qml/Effects, QtGui's OpenGL
 context surface, NumPy/OpenBLAS and other currently owned runtime dependencies are not removed merely for size.
@@ -998,4 +1000,4 @@ The existing opt-in binary `FrameTraceEvent` v1 adds event IDs **66–73** for p
 
 ### Bounded idle transition-preparation ownership (R138)
 
-The serial idle GL warm-up is optional, batch-idle-only and Qt `NoStage`-owned. Its 200 ms step spacing uses **only** `ThreadManager.single_shot` on the GUI thread. Schedule the bound `DisplayManager._admit_idle_warm_step` slot (never an anonymous closure) so the QTimer is parented to the runtime owner and registered against its generation. Retire its one pending handle on new reservations, active transitions and runtime teardown. No OS-thread `threading.Timer`, no independent recurring clock, and no repaint-for-warmup. Prefetch source-batch delayed callbacks are generation-tagged and checked at execution; stale-runtime deferrals must be cancellable through the same central timer registry. Preserve the historical deferred-Qt-delete callback-release guardrail (R-89). Do not attribute the 2026-10-09 reboot-dependent dual-display recovery to this preparation path; see the historical incident.
+The serial idle GL warm-up is optional, batch-idle-only and Qt `NoStage`-owned. Its 200 ms step spacing uses **only** `ThreadManager.single_shot` on the GUI thread. **This timer is an accepted exception to "timers are a last resort" (lead decision, 6 Nov).** The warm-up's `NoStage` jobs run on the render thread without a frame, so they reach displays that render nothing (wallpaper only, no ticking widget). Pacing them on rendered frames instead (tried 6 Nov, reverted in cc3fa154) left those displays cold for their first transition. It also slowed a once-a-second clock display to one step per second, up to 96 s for 96 steps. There is no frame edge to pace on, so a one-shot is the only clock. Schedule the bound `DisplayManager._admit_idle_warm_step` slot (never an anonymous closure) so the QTimer is parented to the runtime owner and registered against its generation. Retire its one pending handle on new reservations, active transitions and runtime teardown. No OS-thread `threading.Timer`, no independent recurring clock, and no repaint-for-warmup. Prefetch source-batch delayed callbacks are generation-tagged and checked at execution; stale-runtime deferrals must be cancellable through the same central timer registry. Preserve the historical deferred-Qt-delete callback-release guardrail (R-89). Do not attribute the 2026-10-09 reboot-dependent dual-display recovery to this preparation path; see the historical incident.

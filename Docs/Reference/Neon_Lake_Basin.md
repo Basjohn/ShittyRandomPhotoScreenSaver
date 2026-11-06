@@ -50,8 +50,8 @@ preset selection. Save Preset As captures it by default, outside the artwork sna
 retain the adjusted live view. Validation/selection/repair behavior is owned by the Visualizer reference's
 **Framed preset starting views** contract. Existing art files are not rewritten automatically.
 
-Edit selection remains the fixed card rectangle. The internal eight-point guide and pivot use the same `basin_fit` /
-`basin_item_point` projection as rendering and clamp to the card interior. They remain paint, never geometry authorities.
+Edit selection remains the fixed card rectangle. The internal eight-point guide and pivot use the same `basin_view`
+(`item_point`) projection as rendering and clamp to the card interior. They remain paint, never geometry authorities.
 
 ## Authoring and migration
 
@@ -415,8 +415,8 @@ uv squared past `DISTANT_FLAT`, was 0.38), so the horizon line is still a real t
 direction while land reaches tens of units out. The overscan mesh reaches `FAR_OVERSCAN` (12/12/8/20 basin uv
 left/right/front/back) with cells growing with distance (about 13.7k vertices), the far plane is `FAR_PLANE` (120);
 coverage never fades (the camera-facing skirt fade left land floating over sky once the eye could roam), only detail
-and glow settle into the haze (`basinDetailFade`). The CPU mirrors (`neon_terrain_extent.far_hills`, the editor's
-`terrain_angled_view`) share the constants. Past the grid, glass takes one environment sample and land is lit
+and glow settle into the haze (`basinDetailFade`). The CPU mirrors (`neon_terrain_extent.far_hills`, the Studio brush's
+`neon_terrain_surface`) share the constants. Past the grid, glass takes one environment sample and land is lit
 unshadowed (that far land is most of the screen). Extreme-pose renders:
 `.artifacts/evidence/neon_lake/fidelity_20261105/camera_extremes/final/contact.png` (worktree evidence).
 
@@ -458,28 +458,20 @@ a working checklist **only** in `Current_Plan.md`; this reference does not maint
 old checkpoint evidence belong in source control / Historical Bugs, not in this live behavior reference.
 
 
-## Terrain editor views (2026-10-24)
+## Terrain brush (2026-11-06)
 
-The editor's **View** is Top (the square authoring map) or **Angled**: the same heights in the scene's own
-proportions (basin width of the nominal 16:9 card, `DEPTH` deep, heights at about the default Terrain Height), from
-a raised front camera that right-drag turns (in memory only). Angled is a full authoring view, not a picture: the
-cursor is picked on the drawn surface (`ui/tabs/media/terrain_angled_view.py`: barycentric hits on the projected
-preview triangles, nearest to the eye wins, so a cliff correctly hides what is behind it), the brush rim/core drape
-over the ground, and strokes run through the same brush, history and Undo as Top. Large grids preview at up to 64
-quads a side (painting still edits every cell); the picture is cached and rebuilt only after a change (15-35 ms).
-An extended grid shows the basin's dashed outline draped over the ground.
-
-**3/4 view (2026-10-25).** The Angled view now opens first and shows the scene as it will look, in its own Settings
-colours (sky, terrain fill under neon grid lines brightening toward the ridges and fading with distance, the lake
-with its shoreline blended per quad), from a three-quarter camera turned by **Turn / Tilt** sliders (or right-drag).
-The Sun / Moon (Moon with its phase) appears on a sky dome round the basin at the scene's eye height, in the
-direction its authored position names from the scene's reference viewpoint and at its apparent size; dragging it
-sets Position X / Y / Z at the same authored distance (so its size never changes), as one Custom edit and one
-save. The view follows every Setting it draws (`shockwave_grid_builder.SCENE_PREVIEW_KEYS`).
-The surface it draws is the scene's own (`terrain_angled_view.scene_surface`, the CPU mirror of `basinCurve` /
-`basinLandHeight`): the smooth cubic land with its soft banks at the scene's Terrain Height, never the raw cells (a
-first cut drew raw cells at a fixed half height: stepped banks, flattened hills), and past the grid the scene's
-continuation (dimming into the haze, not paintable), so a stream at the edge visibly flows on to the horizon.
+The authored heightfield is painted on the Studio's live preview with the shared brush instrument
+(`ui/studio/brush.py`; `Docs/Reference/Visualizer_Studio.md` §3). Settings' own terrain editor (its Top map, the
+Angled / 3/4 view with the draggable Sun / Moon, `ui/tabs/media/terrain_editor.py` and `terrain_angled_view.py`) was
+retired with it: the Sun / Moon is placed with its Position X / Y / Z in the Studio's Sky & Light workspace. How a
+stroke paints is one owner, `rendering/gl_programs/heightfield_brush.py` (Raise, Lower, Flatten, Water; radius in grid
+uv, strength, falloff, flatten height; dabs every 0.15 radii along the path, so pointer speed never changes a stroke;
+exact-zero water only from the Water mode). A pointer is picked on the drawn ground through the frame's production
+framed camera: the ray from the eye meets the CPU mirror of the drawn land (`rendering/gl_programs/
+neon_terrain_surface.py: scene_surface`, the mirror of `basinCurve` / `basinLandHeight`: the smooth cubic land at the
+scene's Terrain Height, without the music's reaction or fine detail), so a hill hides what is behind it. During a
+stroke points are picked on the ground as it was when the stroke began, or a raised ridge would catch every next
+point on its face and climb toward the camera. Only the authored grid is paintable.
 
 ## Layered water (2026-10-24)
 

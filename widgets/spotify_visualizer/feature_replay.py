@@ -5,6 +5,8 @@ beat engine, logical tick and mode runtimes with no audio capture, window or wor
 
 * ``ReplayBeatEngine``: the production engine with immutable replay-only post-DSP lane getters.
 * ``PcmReanalysis``: recompute production body-band DSP from each frame's recorded native PCM.
+* ``ProductionLaneEngine``: every lane a mode reads answered by the production getters from that reanalysis, so the
+  Audio Analysis controls (Sensitivity, the floors, Gain, Block Size...) act as they do live.
 * ``deterministic_clock``: process clocks and RNG pinned for byte-reproducible replay.
 * ``configure_offline_controller``: configure a ``VisualizerRuntimeController`` for a mode exactly as
   the runtime does, from a curated preset or a complete resolved settings mapping.
@@ -430,7 +432,95 @@ def configure_offline_controller(controller, mode, preset: int = 0, overrides=No
     state._waiting_for_fresh_engine_frame = False
 
 
+class ProductionLaneEngine(ReplayBeatEngine):
+    """A ``ReplayBeatEngine`` whose every lane getter answers from production DSP on the clip's native PCM.
+
+    Each accepted frame's capture tail goes through ``compute_bars_from_samples`` with the replay worker's *configured*
+    state (``PcmReanalysis``), then the production getters answer from that state: the control lanes, the live and
+    bubble feeds, the fixed-scale body feeds, the transient bus, the musical level, intensity and onsets, the event
+    scheduler and the analysis spectrum. A mode's technical (Audio Analysis) settings therefore move its lanes as they
+    do live, where the recorded post-DSP lanes cannot move at all. ``fed_events`` are the typed events the production
+    scheduler accepted from the last frame (what a recorded-input worker re-feeds a Studio's own scheduler).
+
+    Replay determinism: the transient bus numbers onsets from a process-wide counter, so this engine renumbers them
+    from 1 in publication order (a replay's onsets are the same whatever ran before it in the process), and it
+    publishes the analysis spectrum at every frame (the steady state of a mode that reads it each tick), so one tick's
+    reads all see one spectrum.
+
+    Scale: one analysis block per frame (~11 ms tick; the newest ``block`` samples of the frame's capture history),
+    where the live worker analyses every capture callback, so absolute levels approximate the live engine's. Every
+    frame must carry native capture history. Used by the Studio's recorded-input workers and
+    ``tools/visualizer_replay/analysis_controls_audit``."""
+
+    _PRODUCTION_GETTERS = (
+        "get_pre_agc_energy_bands", "get_live_pre_agc_energy_bands", "get_bubble_energy_bands",
+        "get_extruded_bubble_body_bands", "get_waveform_ribbon_body_bands", "get_transient_energy_bands",
+        "get_musical_level", "get_musical_intensity", "get_event_scheduler",
+    )
+
+    _ONSET_MEMORY = 64
+
+    def __init__(self, bar_count: int) -> None:
+        super().__init__(bar_count)
+        self._lane_reanalysis = PcmReanalysis()
+        self.fed_events: tuple = ()
+        self._onset_serials: dict[int, int] = {}      # the bus's process-wide serial -> this replay's own
+        self._onset_count = 0
+
+    def accept_feature_frame(self, frame: FeatureFrame) -> bool:
+        scheduler = _SpotifyBeatEngine.get_event_scheduler(self)
+        held = list(scheduler._ring) if scheduler is not None else []    # references held: ids stay unique
+        known = {id(entry) for entry in held}
+        result = super().accept_feature_frame(frame)
+        self._lane_reanalysis.accept(self, frame)
+        self._pre_agc_analysis_spectrum_requested = True
+        self._publish_pre_agc_analysis_spectrum_if_requested(self._audio_worker)
+        self.fed_events = (tuple(entry.event for entry in scheduler._ring if id(entry) not in known)
+                           if scheduler is not None else ())
+        for onset in _SpotifyBeatEngine.get_onset_events(self, 0):
+            if onset.serial not in self._onset_serials:
+                self._onset_count += 1
+                self._onset_serials[onset.serial] = self._onset_count
+        while len(self._onset_serials) > self._ONSET_MEMORY:
+            self._onset_serials.pop(next(iter(self._onset_serials)))
+        return result
+
+    def get_pre_agc_analysis_spectrum(self) -> tuple[float, ...]:
+        return self._pre_agc_analysis_spectrum
+
+    def get_onset_events(self, after_serial: int = 0) -> tuple:
+        out = []
+        for onset in _SpotifyBeatEngine.get_onset_events(self, 0):
+            serial = self._onset_serials.get(onset.serial)
+            if serial is not None and serial > after_serial:
+                out.append(replace(onset, serial=serial))
+        return tuple(out)
+
+
+for _name in ProductionLaneEngine._PRODUCTION_GETTERS:
+    setattr(ProductionLaneEngine, _name, getattr(_SpotifyBeatEngine, _name))
+del _name
+
+
+def lane_engine(frames, bar_count: int = 32):
+    """A clip worker's replay engine: ``ProductionLaneEngine`` when every frame carries native PCM (its lanes can be
+    re-analysed), else ``ReplayBeatEngine`` (a recording without PCM can only replay its recorded lanes)."""
+    engine = ProductionLaneEngine if all(f.capture_history is not None for f in frames) else ReplayBeatEngine
+    return engine(bar_count)
+
+
+def fed_events(engine, feature) -> list:
+    """The typed events fed to the engine's scheduler by ``feature``, as ``[timestamp, kind, strength]``: the
+    production scheduler's own (``ProductionLaneEngine.fed_events``), else the recording's."""
+    produced = getattr(engine, "fed_events", None)
+    if produced is not None:
+        return [[float(e.timestamp), str(e.event_type), float(e.strength)] for e in produced]
+    real = feature.real
+    return [[feature.timestamp_us / 1e6, e.kind, float(e.strength)] for e in real.events] if real is not None else []
+
+
 __all__ = [
-    "PRODUCTION_WAVEFORM_BLOCK", "PcmReanalysis", "ReplayBeatEngine", "SCHEMA_1_MUSIC",
+    "PRODUCTION_WAVEFORM_BLOCK", "PcmReanalysis", "ProductionLaneEngine", "ReplayBeatEngine", "SCHEMA_1_MUSIC",
+    "fed_events", "lane_engine",
     "configure_offline_controller", "deterministic_clock",
 ]

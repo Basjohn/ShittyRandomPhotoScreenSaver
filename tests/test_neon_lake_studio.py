@@ -724,8 +724,8 @@ def test_edits_save_through_the_settings_owners_and_every_exit_restores_settings
     size = int(session.values[TERRAIN]["size"])
     bridge.runAction("terrain.extend")
     assert int(stored()[TERRAIN]["size"]) > size
-    assert int(tab.shockwave_grid_terrain_editor.get_heightfield()["size"]) == int(stored()[TERRAIN]["size"])
-    assert tab.shockwave_grid_terrain_shaper_editor.get_lane_strengths(mirrored=False)[lane] == pytest.approx(0.25)
+    assert int(tab._shockwave_grid_lazy_values[TERRAIN]["size"]) == int(stored()[TERRAIN]["size"])
+    assert tab._shockwave_grid_lazy_values[PREFIX + "terrain_shaper"]["lanes"][lane] == pytest.approx(0.25)
     bridge.undo()
     assert int(stored()[TERRAIN]["size"]) == size                                 # one undoable edit
     assert session.values[PREFIX + "wire_display"] == other                     # nothing reverted by a later save

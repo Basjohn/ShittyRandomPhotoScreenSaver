@@ -50,7 +50,11 @@ uniform float uMist;
 uniform float uSurfaceGain;
 uniform float uSurfaceSky;      // the window's light away from the sun   // the light through the surface (HDR: what bubbles mirror)
 uniform float uDust;
-uniform vec2 uFloor;            // Floor amount, world height of the floor below the tank
+uniform float uEmberGrain;      // 0 smooth glowing dust clouds .. 1 burning grit and torn filaments (Ember Grain)
+uniform vec4 uEmberBand;        // the stream's axis point (world), Ember Band (0: dust wherever its clouds fall)
+uniform float uLitGlass;        // 0 the traced glass alone .. 1 copper-lit rims, hot spots and inner glow (Lit Glass)
+uniform float uWakeTint;        // 0 the wake sheets' own cyan/violet .. 1 the light's colour (Wake Tint)
+uniform vec2 uFloor;           // Floor amount, world height of the floor below the tank
 uniform vec3 uDustAlong;        // the stream (world), along which the particle bands run
 uniform vec3 uDustAcross;
 uniform vec3 uDustBands;        // band frequency, world unit, how far the dust gathers into the particle bands (0..1)
@@ -223,11 +227,58 @@ void main() {
         // Fine smouldering streaks drawn out along the stream inside the clouds (smoke, not a smooth glow).
         float streaks = skyFbm2(rotated * vec2(3.5, 24.0) + vec2(uTime * 0.03, 0.0), 4, 71u);
         dust *= 0.35 + 1.3 * smoothstep(0.35, 0.75, streaks);
+        if (uEmberBand.w > 0.0) {
+            // Ember Band (deep red ocean goal): the embers burn in a band along the stream's own axis and the water
+            // beside it stays dark. The axis is sampled at four depths along the ray (a soft tube, never a screen
+            // stripe), its edge broken by the cloud noise so the band frays rather than ending on a line.
+            float inBand = 0.0;
+            float width = 0.42 * min(uWorldHalf.x, min(uWorldHalf.y * 2.0, uWorldHalf.z));
+            for (int i = 0; i < 4; ++i) {
+                vec3 p = rayOrigin + ray * (4.0 + 6.0 * float(i)) - uEmberBand.xyz;
+                vec3 off = p - uDustAlong * dot(p, uDustAlong);
+                float d = length(off) / (width * (0.75 + 0.5 * cloud));
+                inBand += exp(-d * d) * 0.25;
+            }
+            // Embers caught in the beams near the light still glow there (the goal's glitter round the light).
+            float beam = pow(max(dot(ray, uSunBelow), 0.0), 8.0);
+            dust *= mix(1.0, max(1.6 * smoothstep(0.08, 0.75, inBand), 1.3 * beam), uEmberBand.w);
+        }
         float toward = 0.5 + 1.2 * pow(max(dot(ray, uSunBelow), 0.0), 2.0);
         // Smouldering: the light's own colour deepened toward red, as embers glow (the shafts' colour washed it pale).
         vec3 ember = mix(uShaftColour, uLightColour, 0.6) * vec3(1.0, 0.55, 0.3);
         // Glowing smoke, not a faint tint (sixth goal: molten clouds along the bands); a dim light still shows it.
         colour += ember * uDust * dust * dust * 1.2 * toward * (0.5 + 0.5 * uLightStrength);
+        if (uEmberGrain > 0.0) {
+            // Ember Grain (deep red ocean goal): the cloud breaks into burning grit and torn filaments with dark
+            // water between them, deep red where it smoulders and orange only at hot cores. Grain is sized in
+            // pixels (a few px), filaments run along the stream; both drift with the water.
+            float pxPerRadian = uFrameSize.y / (2.0 * uTan.y);
+            vec2 px = rotated * pxPerRadian + vec2(uTime * 6.0, 0.0);
+            // Wisps: thin smoke strands drawn out along the stream (tens of px long, a few px across).
+            float wisp = skyFbm2(px * vec2(0.011, 0.07), 4, 79u);
+            float strands = smoothstep(0.48, 0.82, wisp);
+            float body = clamp(dust * 1.4, 0.0, 1.6);
+            // Sparks: sparse 1-2 px burning grains, gathered where the smoke is thick.
+            vec2 cell = floor(px / 5.0);
+            float h = sceneRandom(uint(int(cell.x) + 65536) * 0x8da6b343u ^ uint(int(cell.y) + 65536) * 0xd8163841u, 89u, 7u);
+            vec2 centre = (cell + 0.2 + 0.6 * vec2(fract(h * 57.31), fract(h * 91.17))) * 5.0;
+            float d = distance(px, centre);
+            float lit = step(1.0 - 0.55 * smoothstep(0.1, 0.9, body * (0.4 + strands)), fract(h * 7.91));
+            float spark = lit * exp(-d * d / 0.9) * (0.4 + 0.6 * fract(h * 13.3));
+            vec3 smoulder = ember * 0.8;
+            vec3 hot = mix(ember, vec3(1.0, 0.55, 0.2), 0.35);
+            // Embers burn by themselves: they lean only gently toward the light, unlike the lit smoke.
+            float gain = uDust * (0.9 + 0.25 * (toward - 0.5)) * (0.5 + 0.5 * uLightStrength);
+            // Torn: the cloud's body breaks into ragged patches (tens of px) and inside them into grit of a few px,
+            // so it reads as burning debris rather than as brush strokes along the stream.
+            float torn = smoothstep(0.40, 0.70, skyFbm2(px * vec2(0.022, 0.05) + vec2(0.0, uTime * 0.4), 4, 83u));
+            float grit = smoothstep(0.42, 0.80, skyFbm2(px * vec2(0.28, 0.40), 3, 97u));
+            vec3 grained = (smoulder * body * body * (0.22 + 0.35 * torn + torn * (1.1 * strands + 1.6 * grit * grit))
+                            + hot * spark * 3.5 * min(body, 1.0)) * gain;
+            // Ember Grain 0 keeps the expression above untouched (pixel-identical); otherwise it blends toward grit.
+            vec3 smoke = ember * uDust * dust * dust * 1.2 * toward * (0.5 + 0.5 * uLightStrength);
+            colour += (grained - smoke) * uEmberGrain;
+        }
     }
     if (uWisps > 0.0) {
         float strands = 0.0;
@@ -705,6 +756,54 @@ vec3 sceneLightLobe(vec3 dirWorld, vec3 pointView, float footprint) {
     float shoulder = shoulder2 / (shoulder2 + f2) * exp(-angle * angle / (shoulder2 + f2));
     return uSpecColour * (core + uSpecShape.z * shoulder);
 }
+// Lit Glass (deep red ocean goal): a shell caught by a strong coloured light in water full of burning embers. Its
+// Fresnel rim is a crisp line, pale where it is lit and burning brightest on the side facing the light; the embers
+// all round mirror in it as a string of small hot points along the inner rim (seeded per shell, fixed to the shell);
+// the light's reflection is an inset hot spot; the light focused through the air core lands as a thin warm crescent
+// inside the far wall. View space; premultiplied light added over the traced glass (no coverage). Fades in above
+// ~2 px so specks never flare.
+vec3 litGlassLight(vec3 normalView, vec3 rayView, vec3 pointView, float pixels, float seed, float blurPx) {
+    vec3 toLight = uLightDir;
+    if (uPositionalLight > 0.5) {
+        vec3 delta = uLightSource - (uEye + uViewToWorld * pointView);
+        toLight = delta / max(length(delta), 1e-6);
+    }
+    toLight = normalize(toLight * uViewToWorld);                 // world -> view (the transpose of a rotation)
+    float facing = clamp(dot(normalView, -rayView), 0.0, 1.0);
+    float side = 0.5 + 0.5 * dot(normalView, toLight);
+    // Measured in screen pixels in from the silhouette (a facing-angle band is sub-pixel on a large shell).
+    float edge = (1.0 - sqrt(max(1.0 - facing * facing, 0.0))) * pixels;
+    // The glass line: a crisp bright band two or three pixels wide, and the far wall's fainter inner line.
+    // A defocused shell (the near layer, blurPx its lens circle) keeps a wider, fainter line; its rim's hot points
+    // stay, and the lens spreads them into the bokeh discs of a defocused lit bubble.
+    float line = 1.7 + 0.35 * blurPx, fine = 1.0 / (1.0 + 0.6 * blurPx);
+    float rim = exp(-pow(edge / line, 2.0)) * (0.35 + 2.4 * side * side * side)
+              + exp(-pow((edge - 0.09 * pixels - 1.5) / 1.3, 2.0)) * (0.1 + 0.6 * side * side) * smoothstep(12.0, 30.0, pixels);
+    // Mirrored embers: hot points along the inner rim, about one per 9 px of circumference, more toward the light,
+    // and sparse ones scattered over the face (the glass mirroring the burning water all round).
+    float around = atan(normalView.y, normalView.x) * 0.159155 + 0.5;
+    float count = max(floor(pixels * 0.7), 3.0);
+    float cell = around * count;
+    uint key = uint(int(floor(cell)) + 4096) ^ uint(seed * 16777215.0) * 0x9e3779b9u;   // integer hash (R-94)
+    float pick = sceneRandom(key, 211u, 3u), place = sceneRandom(key, 223u, 5u);
+    float inset = 1.5 + place * 0.22 * pixels;
+    float along = (fract(cell) - 0.5) * 6.2832 * pixels / count;  // px along the rim from the point
+    float embers = exp(-(along * along + pow(edge - inset, 2.0)) / 1.4) * step(0.5 - 0.4 * side, pick) * (0.4 + side);
+    vec2 face = normalView.xy * pixels / 7.0;
+    uint faceKey = uint(int(floor(face.x)) + 4096) * 0x8da6b343u ^ uint(int(floor(face.y)) + 4096) * 0xd8163841u
+                 ^ uint(seed * 16777215.0);
+    vec2 at = (floor(face) + 0.2 + 0.6 * vec2(sceneRandom(faceKey, 227u, 7u), sceneRandom(faceKey, 229u, 7u))) * 7.0;
+    float glimmer = exp(-dot(normalView.xy * pixels - at, normalView.xy * pixels - at) / 1.2)
+                  * step(0.86 - 0.1 * side, sceneRandom(faceKey, 233u, 7u)) * smoothstep(2.0, 5.0, edge);
+    float spot = pow(max(dot(normalView, normalize(toLight - rayView)), 0.0), 40.0 + 0.6 * pixels);
+    // The focused light inside the far wall: a thin crescent opposite the light, never a fill.
+    float crescent = pow(max(dot(normalView, -toLight), 0.0), 3.0) * exp(-pow((facing - 0.45) / 0.18, 2.0));
+    vec3 light = uLightColour * (0.6 + 0.4 * uLightStrength);
+    vec3 hot = mix(light, vec3(1.0, 0.9, 0.78), 0.45);           // hot points pale toward white, as glints do
+    vec3 pale = mix(light, vec3(1.0, 0.95, 0.9), 0.4);           // the glass line itself, lit
+    return (mix(light, pale, fine) * rim * (0.25 + 0.95 * fine) + light * crescent * 0.18 + hot * (spot * 3.0 + embers * 2.2 + glimmer * 1.4 * fine))
+           * uLitGlass * smoothstep(1.5, 4.0, pixels);
+}
 uniform float uSpeckGlow;        // light a pixel-sized bubble mirrors
 uniform float uReflect;          // reflections' share (near giants: their glass dims what they mirror)
 uniform float uFrameShare;       // what is seen through: the frame (1) or the probe (0)        // blur of the scene seen through a bubble, a share of its radius in pixels
@@ -923,15 +1022,26 @@ void main() {
             // lobe, filtered over so small a footprint, all but vanishes).
             vec3 toLight = normalize(uLightDir * uViewToWorld);   // world -> view (the transpose of a rotation)
             float spot = pow(max(dot(normalV, normalize(toLight - ray)), 0.0), 2.0 + 0.6 * pixels * pixels);
-            vec3 glint = uSpecColour * 0.05 * uSparkle * spot;
+            // Lit Glass draws its own crisp glint and rim: the broad glint here would fill a bead into a disc.
+            float spotGain = 1.0 - 0.7 * uLitGlass;
+            vec3 glint = uSpecColour * 0.05 * uSparkle * spot * spotGain;
             vec3 glass = mix(waterBehind, probe, 0.25 + 0.65 * fresnel) + uShaftColour * uSpeckGlow * 0.4 * fresnel
                        + glint;
             light = mix(light, glass, shell);
-            alpha = mix(alpha, coverage * min(1.0, 0.28 + 0.62 * fresnel + 0.5 * spot * uSparkle) * vExtra.z
+            alpha = mix(alpha, coverage * min(1.0, 0.28 + 0.62 * fresnel + 0.5 * spot * uSparkle * spotGain) * vExtra.z
                                * vOpacity, shell);
         }
         gl_FragDepth = sceneSphereDepth(front, uProjection);
 #ifndef NEAR_LAYER
+        if (uLitGlass > 0.0) {
+            // Lit Glass on micro-glass: each resolvable bead a lit ring with its glint, so a dense stream reads
+            // as chains of glass beads catching the light rather than as glitter.
+            vec3 lit = litGlassLight(normalV, ray, front, pixels + 1.0, vExtra.x, 0.0) * coverage * vExtra.z * vOpacity * shell
+                     * 0.6;
+            sceneTransparent(light * alpha + lit, alpha, -front.z);
+            Emission = vec4(lit * 0.15, dot(lit * 0.15, vec3(0.2126, 0.7152, 0.0722)));
+            return;
+        }
         sceneTransparent(light * alpha, alpha, -front.z);
         Emission = vec4(0.0);
 #endif
@@ -954,6 +1064,25 @@ void main() {
                     + mix(uSkyTint, uShaftColour, 0.4) * uSpeckGlow * sparkle * (0.7 + 0.6 * centreness);
     shaded = mix(shaded, vec4(speckLight, 0.3 + 0.5 * centreness), speck);
     float alpha = shaded.a * coverage * mix(mix(vExtra.z, 1.0, 0.3), max(vExtra.z, 0.55), speck) * vOpacity;
+    if (uLitGlass > 0.0) {
+        // Lit Glass rides on top as light (0 leaves every expression here untouched).
+#ifdef NEAR_LAYER
+        float litBlur = vLensCircle;
+#else
+        float litBlur = 0.0;
+#endif
+        vec3 lit = litGlassLight(normalize(front - vSphere.xyz), ray, front, pixels, vExtra.x, litBlur) * coverage * vOpacity
+                 * (1.0 - speck);
+#ifdef NEAR_LAYER
+        sceneDefocusWrite((shaded.rgb * alpha + lit) * uNearGain, alpha * uNearGain, vLensCircle);
+#else
+        sceneTransparent(shaded.rgb * alpha + lit, alpha, -front.z);
+        vec3 emitted = max(shaded.rgb - 1.2, 0.0) * alpha * 0.6 * smoothstep(3.0, 10.0, pixels) * (1.0 - soft * 0.8)
+                     + lit * 0.5;
+        Emission = vec4(emitted, dot(emitted, vec3(0.2126, 0.7152, 0.0722)));
+#endif
+        return;
+    }
 #ifdef NEAR_LAYER
     // The circle this bubble's light spreads over at the lens, in pixels: grows as it nears the camera.
     sceneDefocusWrite(shaded.rgb * alpha * uNearGain, alpha * uNearGain, vLensCircle);
@@ -1086,6 +1215,22 @@ void main() {
         distance_ = sceneSmoothMin(distance_, nextDistance, vInfo.y);
     }
     float alpha = shaded.a * coverage * opacity;
+    if (uLitGlass > 0.0) {
+#ifdef NEAR_LAYER
+        float litBlur = circle;
+#else
+        float litBlur = 0.0;
+#endif
+        vec3 lit = litGlassLight(normal, ray, point, localPixels, vInfo.z, litBlur) * coverage * opacity;
+#ifdef NEAR_LAYER
+        sceneDefocusWrite((shaded.rgb * alpha + lit) * uNearGain, alpha * uNearGain, circle);
+#else
+        sceneTransparent(shaded.rgb * alpha + lit, alpha, -point.z);
+        vec3 emitted = max(shaded.rgb - 1.2, 0.0) * alpha * 0.6 + lit * 0.5;
+        Emission = vec4(emitted, dot(emitted, vec3(0.2126, 0.7152, 0.0722)));
+#endif
+        return;
+    }
 #ifdef NEAR_LAYER
     sceneDefocusWrite(shaded.rgb * alpha * uNearGain, alpha * uNearGain, circle);
 #else
@@ -1322,6 +1467,8 @@ uniform int uBeadsPerChain;
 uniform int uBeadCount;        // chains x beads; instances past it are marine snow
 uniform float uBeadSize;       // bead size scale
 uniform float uBeadScatter;    // 0 single-file chains .. 1 loose plumes widening as they rise
+uniform float uStreamLanes;    // 0 chains wherever their inlet falls .. 1 gathered into a few lanes near the stream's axis
+const int STREAM_LANES = 12;
 uniform float uParticleSpread; // free chains and snow only: 1.0 original physical width
 uniform int uSceneEmission; // SCENE uses whole upstream faces; BEAM remains identical
 uniform vec3 uSceneFaces;    // physically valid face areas selected by Source
@@ -1381,6 +1528,26 @@ void beadInstance() {
                + depthAxis * ((pathEnabled && uSceneEmission == 0) ? (beadRandom(chain, 3u) * 2.0 - 1.0) * pathWidth : 0.0)
                + across * 1.15 * scale * (arc + (beadRandom(chain * 977 + k, 7u) - 0.5) * 0.035)
                + depthAxis * (beadRandom(chain * 977 + k, 8u) - 0.5) * 0.1 * scale;
+        float laneFade = 1.0;
+        if (uStreamLanes > 0.0) {
+            // Stream Lanes (deep red ocean goal): the chains gather into a few lanes running along the stream near
+            // its authored axis, so their beads read as dense chains in distinct lanes rather than scattered
+            // glitter. Only the chain's line moves (across the stream); its own sway, jitter and plume stay.
+            vec3 axisPoint = 0.5 * (uStreamSource + uStreamEnd);
+            vec3 rel = sourceLine - axisPoint;
+            rel -= along * dot(rel, along);
+            vec3 side = normalize(across - along * dot(across, along));
+            vec3 deep = cross(along, side);
+            int lane = int(beadRandom(chain, 41u) * float(STREAM_LANES));
+            float spread = min(uWorldHalf.x, min(uWorldHalf.y * 2.0, uWorldHalf.z)) * 0.5;
+            vec3 laneAt = side * (beadRandom(lane, 42u) * 2.0 - 1.0) * spread
+                        + deep * (beadRandom(lane, 43u) * 2.0 - 1.0) * spread * 0.6
+                        + (side * (beadRandom(chain, 44u) - 0.5) + deep * (beadRandom(chain, 45u) - 0.5)) * 0.9;
+            p += (laneAt - rel) * uStreamLanes;
+            // A gathered chain may start inside the water rather than at a wall: it grows in and thins out over
+            // a fifth of its run instead of the wall's few radii (fade, never pop).
+            laneFade = mix(1.0, smoothstep(0.0, 0.2, progress) * (1.0 - smoothstep(0.8, 1.0, progress)), uStreamLanes);
+        }
         if (uBeadScatter > 0.0) {
             // A plume: each bead's own (Gaussian) place across and in depth, widening as the chain rises. Stable per
             // bead, so the plume flows rather than flickers.
@@ -1398,6 +1565,7 @@ void beadInstance() {
         // The population's edge fades across a band of chains (chain_opacity in extruded_bubble_material_paths).
         float band = clamp(2.0 * uChainFill, 1.0, CHAIN_FADE_BAND);
         vOpacity = clamp((uChainFill - (float(chain) + 0.5)) / band + 0.5, 0.0, 1.0) * lifetimeFade * uChainActivity;
+        if (uStreamLanes > 0.0) vOpacity *= laneFade;
         float size = mix(0.014, 0.040, beadRandom(chain, 9u)) * uBeadSize;
         float px = size * pow(mix(0.3, 1.4, beadRandom(chain * 977 + k, 10u)), 1.5)
                  * (beadRandom(chain * 977 + k, 11u) > 0.94 ? 2.4 : 1.0);
@@ -1773,6 +1941,13 @@ void main() {
     vec3 light = (mix(uSkyTint, uShaftColour, 0.5) * 1.4 + uLightColour * 0.2) * max(uLightStrength, 0.3);
     // Thin water's colour: cyan in the body, a violet cast toward its walls (the goals' iridescent edges).
     vec3 tint = mix(vec3(0.4, 0.82, 1.0), vec3(0.72, 0.55, 1.0), smoothstep(0.55, 1.0, abs(x)));
+    if (uWakeTint > 0.0) {
+        // Wake Tint: the strands carry the light that lights them (a copper light draws copper strands), paling a
+        // little toward the walls as thin water does. 0 keeps the cyan/violet glass tint.
+        vec3 hue = uLightColour / max(max(uLightColour.r, max(uLightColour.g, uLightColour.b)), 1e-3);
+        vec3 lightTint = mix(hue, vec3(1.0, 0.9, 0.8), 0.25 * smoothstep(0.55, 1.0, abs(x)));
+        tint = mix(tint, lightTint * 1.15, uWakeTint);
+    }
     float a = clamp(body * 0.12 * strength * below, 0.0, 0.4);
     // A soft luminous fill where it leaves the bubble (lit disturbed water), clearing down the trail.
     float fill = body * (0.03 + 0.14 * (1.0 - smoothstep(0.0, 0.5, s))) * mix(1.0, 0.6, abs(x));

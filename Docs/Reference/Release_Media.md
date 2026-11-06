@@ -48,7 +48,10 @@ It replays the passage's pre-roll through the existing `ReplayBeatEngine`, produ
 mailbox and `QuickVisualizerPresentationSync`, then renders published snapshots through `QuickVisualizerRenderHost`.
 The authored preset stays intact. The capture pins Scene3D High quality, draws on a plain dark grey
 (`VISUALIZER_BACKGROUND`, operator 2026-10-17; no photograph behind the card), supplies the fixture photograph to
-reflection-capable modes, and places the canonical presentation extent in a centered stage with room for 3D overflow.
+reflection-capable modes, and places the canonical card (`showcase_presentation`: the canonical card height at the
+capture's aspect, uniformly scaled) in a centered stage with room for 3D overflow. A framed 3D mode's lens is authored
+against the canonical card height, so enlarging the card's world extent instead of scaling the card would reveal more
+scene than the preset's starting view frames; the replay's own activation applies that starting view as the product does.
 The frames are then cropped to the union over the run of every pixel the mode drew (`content_box`, a 1% margin, even
 dimensions), so no showcase carries empty space around its content and nothing a frame drew is cut.
 This is a production-renderer showcase, not a full-desktop or mixed-refresh acceptance test.
@@ -74,6 +77,8 @@ after each case; failures are printed and saved to `release_media_failures.json`
 Focused regression authority is `tests/test_release_media.py` and `tests/test_release_media_transition_loop.py`
 (scene pairs stable and varied, 480 px wide at the composition's aspect, missing scenes refused, the loop's frame count, exact ends and rest): canonical enumeration, real WebP loop/duration/metadata,
 quality-preserving size reduction, stale/corrupt output admission, recorded-clip restrictions and Extruded Spectrum's
-registered production replay/snapshot path, endpoint-hold duration and discarding media when source changes. A bounded local offscreen sample proves artifact generation on the current
+registered production replay/snapshot path, endpoint-hold duration, discarding media when source changes, and camera parity (every framed preset that authors a
+starting view resolves the same eye, offset and lens through the showcase as through the product's activation, Home
+pose and default card; negative controls drop the starting view and enlarge the card's world extent). A bounded local offscreen sample proves artifact generation on the current
 GPU; full selected release catalogue and visual review remain separate gates. In particular, promotion/authoring work can
 change the active modes/presets after an earlier sample, so regenerate stale entries before release review.

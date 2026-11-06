@@ -155,7 +155,5 @@ unchanged; media widget, app volume slider, mute/OSD and visualizer audio unchan
   `test_qtquick_custom_layout_owner` 8 raw musical replay); source-text assertions (`test_feed_f2_contract`,
   `test_frame_trace`, `test_bubble_ambient_glow_contract`, `test_test_suite_durability`, `test_release_media`).
 - `tests/test_build_runner.py::test_preflight_passes_a_complete_release_tree`: missing Waveform floor textures.
-- `SRPSS_FORCE_LOG_DIR` (logger) is an environment-variable hook used by harnesses; a CLI/sidecar equivalent
-  would match the no-env-var preference.
 - Reddit cards display raw `requests` exception text (proxy/connection errors) to the user.
 - Headless churn: main-process RSS ~490 → 780 MB over three hotplug generations under llvmpipe; not investigated.

@@ -722,7 +722,6 @@ def test_about_tab_uses_visualizer_import_export_buttons(qapp, settings_manager,
 def test_settings_dialog_does_not_expose_legacy_presets_tab(
     qapp, settings_manager, animation_manager, monkeypatch
 ):
-    monkeypatch.setenv("SRPSS_ENABLE_GENERAL_PRESETS", "1")
     dialog = SettingsDialog(settings_manager, animation_manager)
 
     assert "presets" not in dialog._tab_keys

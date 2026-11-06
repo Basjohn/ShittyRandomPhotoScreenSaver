@@ -35,7 +35,7 @@ from core.constants.extruded_bubble_world import WAKE_STRIDE, SNOW_FULL
 from rendering.gl_programs.extruded_bubble_scene import (
     CLUSTER_FLOATS, PROXY_FLOATS, SHELL_FLOATS, SURFACE_Y, bubble_instances, camera,
     SPECKS_FULL, cluster_instances, wake_instances, physical_camera, speck_amount,
-    glint_proxies, light_on_screen, ray_motion, ray_strength, scene_knobs, screen_streak,
+    glint_proxies, hero_shell_instance, light_on_screen, ray_motion, ray_strength, scene_knobs, screen_streak,
 )
 from core.settings.visualizer_paths import admit_path, world_point
 from rendering.gl_programs.scene3d import scene3d_detail
@@ -78,7 +78,7 @@ _PROGRAM_ROWS = tuple((key, (key, vertex, fragment)) for key, vertex, fragment i
 _PROBE_SIZE = {"High": 256, "Balanced": 256, "Performance": 128, "KAK": 64}
 _BLOOM = 0.55
 _NEAR_SPREAD = 22.0 * 1.6       # the widest circle the near layer spreads a giant over (pixels)
-_SHELL_CAPACITY = MAX_BUBBLES
+_SHELL_CAPACITY = MAX_BUBBLES + 1   # the simulation's bubbles and the authored Hero Shell
 _CLUSTER_CAPACITY = MAX_BUBBLES // 2
 _UNIT_SHAFTS, _UNIT_BACKGROUND, _UNIT_PROBE = 4, 5, 6
 # Procedural small bubbles: chains per step of the Bead Chains range, beads a chain, and marine snow motes (both
@@ -267,7 +267,8 @@ def _common(knobs, *, view_to_world, tan, time, surface_travel, rays, streak, ey
         "uGlow": float(knobs.get("glow", 1.0)), "uRays": float(rays) * float(knobs["light_strength"]),
         "uMist": float(knobs.get("mist", 0.0)),
         "uSurfaceGain": float(knobs.get("surface_gain", 1.0)), "uSurfaceSky": float(knobs.get("surface_sky", 1.0)),
-        "uDust": float(knobs.get("dust", 0.0)), "uFloor": (float(knobs.get("floor", 0.0)), float(WORLD_CENTER[1] - WORLD_HALF[1] - 4.0)), "uShaftWhite": float(knobs.get("shaft_white", 0.35)), "uRayFocus": float(knobs.get("ray_focus", 0.0)), "uRayCut": float(knobs.get("ray_cut", 0.25)),
+        "uDust": float(knobs.get("dust", 0.0)), "uEmberGrain": float(knobs.get("ember_grain", 0.0)),
+        "uLitGlass": float(knobs.get("lit_glass", 0.0)), "uWakeTint": float(knobs.get("wake_tint", 0.0)),"uFloor": (float(knobs.get("floor", 0.0)), float(WORLD_CENTER[1] - WORLD_HALF[1] - 4.0)), "uShaftWhite": float(knobs.get("shaft_white", 0.35)), "uRayFocus": float(knobs.get("ray_focus", 0.0)), "uRayCut": float(knobs.get("ray_cut", 0.25)),
         "uShaftScale": float(knobs.get("shaft_scale", 1.0)), "uShaftSoft": float(knobs.get("shaft_soft", 0.0)),
         "uSurfaceShaft": float(knobs["surface_shaft"]),
         "uShaftFan": float(knobs.get("shaft_fan",0.0)), "uFanRays": float(knobs["fan_rays"]),
@@ -414,7 +415,10 @@ class QuickExtrudedBubbleRenderer:
         pixel = 2.0 * tan[1] / height
         # A single physical population; close bubbles enter the existing defocus pass by real camera depth.
         shells = bubble_instances(state.bubbles)
-        shell_count = self._shells.upload(shells)
+        drawn = shells
+        if float(knobs.get("hero_shell", 0.0)) > 0.0:
+            drawn = np.vstack([shells, hero_shell_instance(knobs, state, view_to_world, eye, tan)])
+        shell_count = self._shells.upload(drawn)
         wake_count = self._wakes.upload(wake_instances(state.wakes))
         # Every logical drift step not yet applied, integrated on the GPU into the layout the draws read.
         drift_layout = self._drift.update(r, state.drift_families, state.drift_steps)
@@ -426,7 +430,7 @@ class QuickExtrudedBubbleRenderer:
         self._uniforms.set(programs['beads'],drift_uniforms)
         self._uniforms.set(programs['specks'],drift_uniforms)
         cluster_count = self._clusters.upload(cluster_instances(state.bubbles, state.clusters))
-        proxy_count = self._proxies.upload(glint_proxies(shells, knobs["sun_below"],
+        proxy_count = self._proxies.upload(glint_proxies(drawn, knobs["sun_below"],
                                                          float(knobs["proxy_power"]),
                                                          light_source=(knobs["light_source"] if knobs["mode"] == "deep"
                                                                        else None)))
@@ -437,8 +441,14 @@ class QuickExtrudedBubbleRenderer:
                          rays=ray_strength(parameters, state.rays),
                          streak=screen_streak(state.stream))
         dust_across, _depth = stream_basis(_floats(state.stream))
+        stream_path = admit_path(parameter(parameters, "extruded_bubble_stream_direction"), [0., 0.], "stream")
+        stream_source = _floats(world_point(stream_path[:3]))
+        stream_end = _floats(world_point(stream_path[3:]))
+        # Ember Band and Stream Lanes share one axis: the stream's authored Source -> End, through its midpoint.
+        axis_point = tuple(0.5 * (s + e) for s, e in zip(stream_source, stream_end))
         common.update({"uDustAlong": _floats(state.stream), "uDustAcross": dust_across,
-                       "uDustBands": (float(knobs["band_freq"]), float(WORLD_UNIT), float(knobs["band_gather"]))})
+                       "uDustBands": (float(knobs["band_freq"]), float(WORLD_UNIT), float(knobs["band_gather"])),
+                       "uEmberBand": (*axis_point, float(knobs.get("ember_band", 0.0)))})
         for key in programs:
             if key != "blur":
                 self._uniforms.set(programs[key], common)
@@ -481,9 +491,6 @@ class QuickExtrudedBubbleRenderer:
         fizz_per = math.ceil(max(fizz_fill, trail_fizz))
         stream = _floats(state.stream)
         across, depth_axis = stream_basis(stream)
-        stream_path = admit_path(parameter(parameters, "extruded_bubble_stream_direction"), [0., 0.], "stream")
-        stream_source = _floats(world_point(stream_path[:3]))
-        stream_end = _floats(world_point(stream_path[3:]))
         scene_emission = 1 if parameter(parameters, "extruded_bubble_emission_geometry") == "SCENE" else 0
         from widgets.spotify_visualizer.extruded_bubble_geometry import scene_source_face_weights
         scene_faces = _floats(scene_source_face_weights(stream_path[:3], stream))
@@ -497,6 +504,7 @@ class QuickExtrudedBubbleRenderer:
             "uBeadCount": beads, "uBeadSize": float(parameter(parameters, "extruded_bubble_bead_size"))
             * (0.9 + 0.2 * max(0.0, min(1.0, float(state.level)))),
             "uBeadScatter": float(parameter(parameters, "extruded_bubble_bead_scatter")),
+            "uStreamLanes": float(knobs.get("stream_lanes", 0.0)),
             "uChainFill": chain_fill, "uChainActivity": float(state.chain_activity),
             "uSnowFill": snow_fill, "uFizzFill": fizz_fill, "uTrailFizz": trail_fizz,
             "uBeadTravel": _BEAD_CLIMB * float(state.travel),

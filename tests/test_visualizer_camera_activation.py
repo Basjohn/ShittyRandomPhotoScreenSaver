@@ -28,12 +28,10 @@ def camera_catalog(monkeypatch):
     return home
 
 
-@pytest.mark.parametrize('camera_built',(False,True))
-def test_p8_to_p1_admits_target_xyz_against_target_pose_on_first_selection(qt_app,tmp_path,camera_catalog,camera_built):
+def test_p8_to_p1_admits_target_xyz_against_target_pose_on_first_selection(qt_app,tmp_path,camera_catalog):
     from core.settings.settings_manager import SettingsManager
     from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
     from ui.tabs.visualizers_tab import VisualizersTab
-    from tests.test_extruded_bubble_lazy_bucket_ui import toggle_bucket
     config=deepcopy(require_canonical_default('widgets.spotify_visualizer'))
     config.update(mode=MODE,preset_extruded_bubble=7,mode_activation=build_visualizer_mode_activation([MODE]))
     config=vp.apply_preset_starting_view(MODE,7,vp.apply_preset_to_config(MODE,7,config))
@@ -42,30 +40,17 @@ def test_p8_to_p1_admits_target_xyz_against_target_pose_on_first_selection(qt_ap
     manager.set('widgets',{'spotify_visualizer':config})
     tab=VisualizersTab(manager);tab._select_mode_page(MODE)
     try:
-        if camera_built:toggle_bucket(tab,'camera')
         slider=tab._extruded_bubble_preset_slider._slider
         assert slider.value()==7
         slider.setValue(0);tab.flush_pending_changes()
         first=manager.get('widgets.spotify_visualizer')
         assert first['extruded_bubble_camera_position']==pytest.approx((0.,0.,0.))
         assert {key:first[key] for key in camera_catalog}==camera_catalog
-        if camera_built:
-            tab.resize(1100,850);tab.show();qt_app.processEvents()
-            assert tab.grab().save(str(tmp_path/'p8_to_p1_camera_native.png'))
         slider.setValue(1);tab.flush_pending_changes()
         slider.setValue(0);tab.flush_pending_changes()
         again=manager.get('widgets.spotify_visualizer')
         assert again['extruded_bubble_camera_position']==pytest.approx(first['extruded_bubble_camera_position'])
         assert {key:again[key] for key in camera_catalog}==camera_catalog
-        # A manual aim between activation and its coalesced save must win.
-        from ui.tabs.media import framed_camera_editor as fce
-        slider.setValue(1)
-        fce.set_aim(tab,MODE,(.07,.03),commit=True)
-        tab.flush_pending_changes()
-        assert manager.get('widgets.spotify_visualizer.extruded_bubble_turn')==pytest.approx(.07)
-        assert manager.get('widgets.spotify_visualizer.extruded_bubble_tilt')==pytest.approx(.03)
-        tab._load_settings()
-        assert fce.camera_angles(tab,MODE)==pytest.approx((.07,.03))
     finally:
         tab._flush_pending_visualizer_save();tab.close();tab.deleteLater()
         QCoreApplication.sendPostedEvents(tab,QEvent.Type.DeferredDelete)

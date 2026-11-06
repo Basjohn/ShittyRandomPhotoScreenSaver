@@ -213,7 +213,7 @@ not full-song loud-section evidence. Remaining native acceptance and rejected UX
   is the logical history; rendering reads packets and never writes history.
 - Settings: the canonical spec (`core/settings/visualizer_mode_settings.py`) owns every control; the Custom body is
   Studio-owned (`ui/tabs/media/waveform_ribbon_builder.py` → `build_studio_owned_mode_ui`: preset row, one sentence,
-  Open Waveform Studio). The former builder buckets are retired; `tests/test_waveform_studio_parity.py` proves the
+  Open Waveform Studio). The former builder buckets are retired; `tests/test_visualizer_studio_parity.py` proves the
   Studio covers everything they built. Editing UX lives in the Studio (`Docs/Reference/Visualizer_Studio.md`).
 - Shared framed camera (`core/settings/framed_camera.py`) with a Waveform spec. **Long-lens Perspective is the only
   projection** (Orthographic removed 5 Nov 2026). The candidate uses an 80-unit home radius, 64-104 physical dolly,

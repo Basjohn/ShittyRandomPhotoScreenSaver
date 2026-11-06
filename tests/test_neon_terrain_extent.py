@@ -110,147 +110,27 @@ def test_extension_is_bounded_and_keeps_cells_square():
     assert heightfield_basin(grown)[2] == terrain["size"] - 1
 
 
-def test_extend_in_the_editor_is_one_undoable_step(qtbot):
-    from tests._invisible_windows import keep_off_screen
-    from ui.tabs.media.terrain_editor import TerrainEditor
-    terrain = _stream_terrain()
-    editor = TerrainEditor(terrain)
-    qtbot.addWidget(editor)
-    keep_off_screen(editor).resize(600, 420)
-    editor.show()
-    qtbot.waitExposed(editor)
-    emitted = []
-    editor.terrain_changed.connect(emitted.append)
-    assert editor.extend_button.isEnabled()
-    editor.extend_button.click()
-    grown = editor.get_heightfield()
-    assert grown["size"] > terrain["size"] and grown["basin"] == list(heightfield_basin(grown))
-    assert emitted and emitted[-1] == grown
-    editor.undo_button.click()
-    assert editor.get_heightfield() == terrain
-
-
-def _angled_editor(qtbot, terrain):
-    from tests._invisible_windows import keep_off_screen
-    from ui.tabs.media.terrain_editor import TerrainEditor
-    editor = TerrainEditor(terrain)
-    qtbot.addWidget(editor)
-    keep_off_screen(editor).resize(600, 560)
-    editor.show()
-    qtbot.waitExposed(editor)
-    editor.view.setCurrentText("Angled")
-    return editor, editor.canvas
-
-
-def _screen_of(canvas, u, v):
-    from PySide6.QtCore import QPointF
-    from rendering.gl_programs.heightfield import sample_heightfield
-    from ui.tabs.media import terrain_angled_view as angled
-    projection = canvas._angled_view()[1]
-    record = canvas.get_heightfield()
-    world = angled.surface_points(record["size"], record["heights"], heightfield_basin(record), np.array(u),
-                                  np.array(v), canvas._terrain_height)
-    x, y = projection.project(world)[0]
-    return QPointF(float(x), float(y))
-
-
-def test_the_angled_view_picks_the_surface_it_draws_and_paints_there(qtbot):
-    from PySide6.QtCore import QPoint, Qt
-    from rendering.gl_programs.heightfield import sample_heightfield
-    terrain = extend_heightfield(_stream_terrain(), *horizon_extension_cells(_stream_terrain()))
-    editor, canvas = _angled_editor(qtbot, terrain)
-    # Near vertices that top their own row and the row in front (nothing nearer can hide them; the rows behind are
-    # farther) pick back to their own uv; one at a cliff's foot would rightly pick the wall in front of it.
-    from PySide6.QtCore import QPointF
-    projection = canvas._angled_view()[1]
-    heights = projection.world[..., 1]
-    flat = [(row, col) for row in (0, 1, 2) for col in range(1, heights.shape[1] - 1)
-            if heights[max(0, row - 1):row + 1, col - 1:col + 2].max() <= heights[row, col] + 1e-9]
-    assert len(flat) >= 3
-    for row, col in flat:
-        picked = canvas._uv(QPointF(*projection.screen[row, col]))
-        assert picked == pytest.approx(tuple(projection.uv[row, col]), abs=1e-3)
-    assert canvas._uv(QPoint(canvas.width() // 2, 30)) is None       # the sky above the terrain
-    # Painting through the angled view raises the picked ground, as one undoable stroke.
-    emitted = []
-    canvas.terrain_changed.connect(emitted.append)
-    target = _screen_of(canvas, 0.2, 0.15)
-    before = sample_heightfield(canvas.get_heightfield(), 0.2, 0.15)
-    qtbot.mouseClick(canvas, Qt.MouseButton.LeftButton, pos=target.toPoint())
-    assert sample_heightfield(canvas.get_heightfield(), 0.2, 0.15) > before
-    assert len(emitted) == 1
-    # A click on the sky paints nothing.
-    qtbot.mouseClick(canvas, Qt.MouseButton.LeftButton, pos=QPoint(canvas.width() // 2, 30))
-    assert len(emitted) == 1
-
-
-def test_turning_the_angled_view_never_changes_the_terrain(qtbot):
-    from PySide6.QtCore import QPoint, Qt
-    terrain = _stream_terrain()
-    editor, canvas = _angled_editor(qtbot, terrain)
-    emitted = []
-    canvas.terrain_changed.connect(emitted.append)
-    yaw = canvas._yaw
-    start = QPoint(canvas.width() // 2, canvas.height() // 2)
-    qtbot.mousePress(canvas, Qt.MouseButton.RightButton, pos=start)
-    qtbot.mouseMove(canvas, start + QPoint(60, -20))
-    qtbot.mouseRelease(canvas, Qt.MouseButton.RightButton, pos=start + QPoint(60, -20))
-    assert canvas._yaw != yaw
-    assert not emitted and canvas.get_heightfield() == terrain
-    editor.view.setCurrentText("Top")                  # the top map is unchanged by the angled view
-    assert canvas.get_heightfield() == terrain
-
-
-def test_the_angled_view_draws_the_scenes_own_surface_and_its_continuation():
-    """The 3/4 view's surface is the scene's: the smooth cubic land (not raw cells), water where the scene has it, and
-    past the grid the scene's continuation (a stream at the edge flows on as water)."""
+def test_the_cpu_surface_is_the_scenes_own_and_its_continuation():
+    """The CPU surface the Studio's brush picks on is the scene's: the smooth cubic land (not raw cells), water where
+    the scene has it, and past the grid the scene's continuation (a stream at the edge flows on as water)."""
     from rendering.gl_programs.heightfield import sample_heightfield, sample_heightfield_curve
     from rendering.gl_programs.neon_terrain_extent import basin_continuation
-    from ui.tabs.media import terrain_angled_view as angled
+    from rendering.gl_programs import neon_terrain_surface as surface
     record = _stream_terrain()
     grid = np.asarray(record["heights"]).reshape(record["size"], record["size"])
     basin = heightfield_basin(record)
     for u, v in ((0.05, 0.05), (0.2, 0.9), (0.95, 0.4)):
-        land, water = angled.scene_surface(grid, basin, np.array(u), np.array(v))
+        land, water = surface.scene_surface(grid, basin, np.array(u), np.array(v))
         assert sample_heightfield(record, u, v) >= 0.015          # full land: no shore ramp
         assert not bool(water) and float(land) == pytest.approx(sample_heightfield_curve(record, u, v), abs=1e-9)
     for u, v in ((0.5, 1.6), (-0.4, 0.3), (1.3, 1.2)):
-        _land, water = angled.scene_surface(grid, basin, np.array(u), np.array(v))
+        _land, water = surface.scene_surface(grid, basin, np.array(u), np.array(v))
         assert bool(water) == (basin_continuation(record, u, v) == 0.0)
-    assert bool(angled.scene_surface(grid, basin, np.array(0.5), np.array(1.6))[1])     # the channel runs on
+    assert bool(surface.scene_surface(grid, basin, np.array(0.5), np.array(1.6))[1])     # the channel runs on
     # Terrain Height scales the drawn land exactly.
-    tall = angled.surface_points(record["size"], record["heights"], basin, np.array([0.1]), np.array([0.1]), 2.0)
-    low = angled.surface_points(record["size"], record["heights"], basin, np.array([0.1]), np.array([0.1]), 1.0)
+    tall = surface.surface_points(record["size"], record["heights"], basin, np.array([0.1]), np.array([0.1]), 2.0)
+    low = surface.surface_points(record["size"], record["heights"], basin, np.array([0.1]), np.array([0.1]), 1.0)
     assert tall[0, 1] == pytest.approx(2.0 * low[0, 1])
-
-
-def test_the_dragged_sun_settles_on_gentle_steps_and_keeps_its_size():
-    """Dragging the Sun / Moon snaps its direction (bearing and height in steps, held by the horizon and straight
-    ahead) and never its distance, so its apparent size stays; without snap it follows the cursor exactly."""
-    import math
-    from rendering.gl_programs.neon_celestial import CELESTIAL_REFERENCE
-    from core.constants.neon_lake_world import NOMINAL_HALF_WIDTH
-    from ui.tabs.media import terrain_angled_view as angled
-    for raw in ((0.31, 0.27, -0.91), (-0.52, 0.04, -0.85), (0.02, 0.6, -0.8)):
-        d = np.asarray(raw) / np.linalg.norm(raw)
-        snapped = angled.snap_direction(d)
-        assert np.linalg.norm(snapped) == pytest.approx(1.0)
-        elevation, bearing = math.asin(snapped[1]), math.atan2(snapped[0], -snapped[2])
-        for angle in (elevation, bearing):
-            steps = angle / angled.SNAP_STEP
-            assert steps == pytest.approx(round(steps), abs=1e-6)
-        assert math.degrees(math.acos(min(1.0, float(d @ snapped)))) < 2.0 + math.degrees(angled.SNAP_MAGNET)
-    near_horizon = angled.snap_direction(np.array([0.3, 0.03, -0.95]) / np.linalg.norm([0.3, 0.03, -0.95]))
-    assert near_horizon[1] == pytest.approx(0.0, abs=1e-9)                     # held on the horizon
-    record = _stream_terrain()
-    projection = angled.project_terrain(record["size"], record["heights"], heightfield_basin(record),
-                                        (0.0, 0.0, 600.0, 400.0), body=(0.0, 1.4, -2.0, 0.3))
-    point = projection.screen[0, 0] + np.array([120.0, -160.0])
-    for snap in (True, False):
-        x, y, z = angled.place_body(projection, point, 3.0, snap=snap)
-        distance = math.dist((x * NOMINAL_HALF_WIDTH, y, z), CELESTIAL_REFERENCE)
-        assert distance == pytest.approx(3.0, abs=1e-6)
-    assert angled.place_body(projection, point, 3.0, snap=True) != angled.place_body(projection, point, 3.0, snap=False)
 
 
 def test_the_camera_floor_unpacks_a_render_payload_once():

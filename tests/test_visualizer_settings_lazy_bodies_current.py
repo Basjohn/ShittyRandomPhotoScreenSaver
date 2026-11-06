@@ -65,6 +65,25 @@ def _vis_settings(mode: str = "bubble", *, enabled_modes=None) -> dict:
     return {"spotify_visualizer": section}
 
 
+def _cache(tab, mode: str) -> dict:
+    """The Studio-owned body's value cache (the body builds no controls)."""
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    return getattr(tab, f"_{require_mode_settings(mode).prefix}_lazy_values")
+
+
+def _edit(tab, mode: str, key: str, value) -> None:
+    """One edit as the Studio makes it: the value through the body's owner, Custom, then Settings' save."""
+    _cache(tab, mode)[key] = value
+    tab._force_visualizer_preset_to_custom(mode)
+    tab._save_settings()
+
+
+def _other(mode: str, key: str, current):
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    control = require_mode_settings(mode).control(key)
+    return control.low if float(current) != control.low else control.high
+
+
 def _make_tab(settings_manager, mode="bubble", *, enabled_modes=None) -> VisualizersTab:
     settings_manager.set("widgets", _vis_settings(mode, enabled_modes=enabled_modes))
     return VisualizersTab(settings_manager)
@@ -116,79 +135,15 @@ def test_opening_visualizers_lands_on_setup_and_builds_zero_modes(
         tab.deleteLater()
 
 
-def test_bubble_stream_compass_uses_the_real_enum_and_persistence(qt_app, qtbot, settings_manager, tmp_path):
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QImage
-    from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QVBoxLayout, QWidget
-    from ui.tabs.media.spec_mode_builder import load_spec_mode_settings
-    from ui.widgets.continuous_border import BucketToggle
-
-    tab = _make_tab(settings_manager, "bubble", enabled_modes=("bubble",))
-    frame = QWidget()
-    QVBoxLayout(frame).addWidget(tab)
-    try:
-        tab._select_mode_page("bubble")
-        tab._bubble_preset_slider.set_preset_index(get_custom_preset_index("bubble"))
-        motion = tab.findChild(QWidget, "bubble_bucket_motion")
-        toggle = motion.findChild(BucketToggle)
-        toggle.setChecked(True)
-        combo = tab.bubble_stream_direction
-        dial = combo.direction_mapper
-        for value in ("none", "random", "up"):
-            load_spec_mode_settings(tab, "bubble", {"bubble_stream_direction": value})
-            assert combo.currentData() == value
-            assert dial.isEnabled() == (value == "up")
-        QTest.keyClick(dial, Qt.Key.Key_Right)
-        assert combo.currentData() == "top_right"
-        qtbot.waitUntil(lambda: settings_manager.get("widgets.spotify_visualizer.bubble_stream_direction") == "top_right",
-                        timeout=1000)
-        row = tab._bubble_rows["bubble_stream_direction"]
-        frame.resize(1100, 950)
-        frame.ensurePolished()
-        for widget in reversed([frame, *frame.findChildren(QWidget)]):
-            if widget.layout() is not None:
-                widget.layout().activate()
-        qt_app.processEvents()
-        frame_image = QImage(frame.size(), QImage.Format.Format_ARGB32_Premultiplied)
-        frame_image.fill(0)
-        frame.render(frame_image)
-        assert row.height() >= dial.minimumHeight()
-        image = QImage(row.size(), QImage.Format.Format_ARGB32_Premultiplied)
-        image.fill(0)
-        row.render(image)
-        assert image.save(str(tmp_path / "bubble_stream_direction.png"))
-    finally:
-        frame.deleteLater()
-
-
-
 def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
     qt_app, settings_manager
 ):
-    """The migrated 3D Settings bodies must be real usable pages, not source-only schema.
-
-    Exercise the exact lazy path that exposed the quota-stop KeyErrors, then edit one
-    mode-owned presentation value and one Technical value per mode, persist them, and
-    prove a fresh Settings host restores each mode independently.
-    """
+    """The 3D Settings bodies are real pages: each builds through the lazy path, holds one mode-owned
+    presentation value and one Technical value edited per mode, persists them, and a fresh Settings host
+    restores each mode independently."""
     from ui.tabs.media.technical_controls import get_per_mode_controls_for_mode
 
     modes = ("extruded_spectrum", "shockwave_grid", "sphere")
-    # These 3D modes do not participate in the shared 2D Rainbow accessory.
-    # It stays parked/hidden instead of being inserted as a phantom bucket in
-    # each mode. Extruded authors its renderer-specific Faces/Edges rainbow
-    # participation explicitly in its own Appearance bucket.
-    from core.settings.visualizer_mode_settings import require_mode_settings
-
-    def spec_buckets(mode):
-        # Bucket titles come from the mode's spec, not copied wording; Extruded adds its shared bar bucket first.
-        buckets = require_mode_settings(mode).buckets
-        normal = [bucket.title for bucket in buckets if not bucket.advanced]
-        return (["Bar Appearance", *normal] if mode == "extruded_spectrum" else normal,
-                [bucket.title for bucket in buckets if bucket.advanced])
-
-    expected_buckets = {mode: spec_buckets(mode) for mode in ("extruded_spectrum", "shockwave_grid", "sphere")}
     presentation_controls = {
         "extruded_spectrum": "extruded_spectrum_depth",
         "shockwave_grid": "shockwave_grid_wave_height",
@@ -196,42 +151,14 @@ def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
     }
 
     tab = _make_tab(settings_manager, "extruded_spectrum", enabled_modes=modes)
-    authored: dict[str, tuple[int, int]] = {}
+    authored: dict[str, tuple[float, int]] = {}
     try:
         for mode in modes:
             tab._select_mode_page(mode)
             assert tab._vis_body_host.is_constructed(mode)
             assert tab._vis_body_host.selected_mode == mode
-
-            normal = getattr(tab, f"_{mode}_normal")
-            advanced = getattr(tab, f"_{mode}_advanced")
-            assert _bucket_titles(normal) == expected_buckets[mode][0]
-            assert _bucket_titles(advanced) == expected_buckets[mode][1]
             assert not mode_has_rainbow_controls(mode)
             assert tab._rainbow_controls_container.isHidden()
-
-            if mode == "extruded_spectrum":
-                shape_host = normal.findChild(type(normal), "extruded_spectrum_bucket_shape")
-                response_host = normal.findChild(type(normal), "extruded_spectrum_bucket_response")
-                assert shape_host is not None and response_host is not None
-                assert shape_host.isAncestorOf(tab.extruded_spectrum_shape_editor)
-                assert not response_host.isAncestorOf(tab.extruded_spectrum_shape_editor)
-                assert shape_host.isAncestorOf(tab.extruded_spectrum_mirrored)
-                assert tab._base_appearance_group.parentWidget() is normal
-                assert not hasattr(tab, "extruded_spectrum_colouring")
-                assert hasattr(tab, "extruded_spectrum_rainbow_enabled")
-                assert hasattr(tab, "extruded_spectrum_rainbow_faces")
-                assert hasattr(tab, "extruded_spectrum_rainbow_edges")
-
-            if mode == "shockwave_grid":
-                terrain_host = normal.findChild(type(normal), "shockwave_grid_bucket_terrain")
-                from PySide6.QtWidgets import QWidget
-                # Frequency Response is an advanced spec-owned bucket. Search
-                # for its QWidget host, not for another copy of the parent type.
-                response_host = advanced.findChild(QWidget, "shockwave_grid_bucket_response")
-                assert terrain_host is not None and terrain_host.isAncestorOf(tab.shockwave_grid_terrain_editor)
-                assert response_host is not None and response_host.isAncestorOf(tab.shockwave_grid_shape_editor)
-                assert not hasattr(tab, "shockwave_grid_allow_overflow")
 
             technical = get_per_mode_controls_for_mode(tab, mode)
             assert technical is not None
@@ -239,26 +166,20 @@ def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
             bar_count = technical.get("bar_count")
             assert bar_count is not None
 
-            presentation = getattr(tab, presentation_controls[mode])
-            new_presentation = (
-                presentation.minimum()
-                if presentation.value() != presentation.minimum()
-                else presentation.maximum()
-            )
+            key = presentation_controls[mode]
+            new_presentation = _other(mode, key, _cache(tab, mode)[key])
             new_bar_count = (
                 bar_count.minimum()
                 if bar_count.value() != bar_count.minimum()
                 else bar_count.maximum()
             )
-            presentation.setValue(new_presentation)
+            _edit(tab, mode, key, new_presentation)
             bar_count.setValue(new_bar_count)
             tab._save_settings_now()
             authored[mode] = (new_presentation, new_bar_count)
 
             persisted = settings_manager.get("widgets", {})["spotify_visualizer"]
-            assert persisted[presentation_controls[mode]] == pytest.approx(
-                new_presentation / 100.0
-            )
+            assert persisted[key] == pytest.approx(new_presentation)
             assert persisted[f"{mode}_bar_count"] == new_bar_count
     finally:
         tab.deleteLater()
@@ -271,46 +192,10 @@ def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
             technical = get_per_mode_controls_for_mode(reopened, mode)
             assert technical is not None
             expected_presentation, expected_bar_count = authored[mode]
-            assert getattr(reopened, presentation_controls[mode]).value() == expected_presentation
+            assert _cache(reopened, mode)[presentation_controls[mode]] == pytest.approx(expected_presentation)
             assert technical["bar_count"].value() == expected_bar_count
     finally:
         reopened.deleteLater()
-
-
-
-
-def test_extruded_settings_explicit_rainbow_controls_encode_runtime_colouring_without_combo(
-    qt_app, settings_manager
-):
-    """C6: product authoring is explicit while the renderer keeps its stable enum input."""
-    widgets = _vis_settings("extruded_spectrum", enabled_modes=("extruded_spectrum",))
-    section = widgets["spotify_visualizer"]
-    section["preset_extruded_spectrum"] = get_custom_preset_index("extruded_spectrum")
-    section["extruded_spectrum_colouring"] = "Bar Colours"
-    settings_manager.set("widgets", widgets)
-
-    tab = VisualizersTab(settings_manager)
-    try:
-        tab._select_mode_page("extruded_spectrum")
-        assert not hasattr(tab, "extruded_spectrum_colouring")
-        assert tab.extruded_spectrum_rainbow_enabled.isChecked() is False
-        assert tab.extruded_spectrum_rainbow_faces.isChecked() is True
-        assert tab.extruded_spectrum_rainbow_faces.isEnabled() is False
-        assert tab.extruded_spectrum_rainbow_edges.isEnabled() is False
-
-        tab.extruded_spectrum_rainbow_enabled.setChecked(True)
-        tab.extruded_spectrum_rainbow_edges.setChecked(True)
-        tab._save_settings_now()
-        persisted = settings_manager.get("widgets", {})["spotify_visualizer"]
-        assert persisted["extruded_spectrum_colouring"] == "Spectral Edges"
-
-        tab.extruded_spectrum_rainbow_enabled.setChecked(False)
-        tab._save_settings_now()
-        persisted = settings_manager.get("widgets", {})["spotify_visualizer"]
-        assert persisted["extruded_spectrum_colouring"] == "Bar Colours"
-    finally:
-        tab.deleteLater()
-        qt_app.processEvents()
 
 
 def test_current_3d_settings_curated_round_trip_restores_each_custom_without_cross_mode_leakage(
@@ -361,7 +246,7 @@ def test_current_3d_settings_curated_round_trip_restores_each_custom_without_cro
             slider = getattr(tab, f"_{mode}_preset_slider")
             assert slider.preset_index() == slider.custom_index()
             presentation_attr, expected_slider_value = presentation_controls[mode]
-            assert getattr(tab, presentation_attr).value() == expected_slider_value
+            assert _cache(tab, mode)[presentation_attr] == pytest.approx(expected_slider_value / 100.0)
             technical = get_per_mode_controls_for_mode(tab, mode)
             assert technical is not None
             assert technical["bar_count"].value() == bar_counts[mode]
@@ -395,7 +280,7 @@ def test_current_3d_settings_curated_round_trip_restores_each_custom_without_cro
             assert slider.preset_index() == custom_index
 
             presentation_attr, expected_slider_value = presentation_controls[mode]
-            assert getattr(tab, presentation_attr).value() == expected_slider_value
+            assert _cache(tab, mode)[presentation_attr] == pytest.approx(expected_slider_value / 100.0)
             technical = get_per_mode_controls_for_mode(tab, mode)
             assert technical is not None
             assert technical["bar_count"].value() == bar_counts[mode]
@@ -552,16 +437,14 @@ def test_disable_retires_real_qt_body_and_reenable_reconstructs_from_state(
     try:
         tab._select_mode_page("spectrum")
         first_body = tab._vis_body_host.body("spectrum")
-        slider = tab.spectrum_drop_speed
-        edited = slider.maximum() if slider.value() != slider.maximum() else slider.minimum()
-        slider.setValue(edited)
+        edited = _other("spectrum", "spectrum_drop_speed", _cache(tab, "spectrum")["spectrum_drop_speed"])
+        _edit(tab, "spectrum", "spectrum_drop_speed", edited)
         tab._save_settings_now()
         tab._select_setup_page()
 
         tab._on_mode_admission_toggled("spectrum", False)
         assert not tab._vis_body_host.is_constructed("spectrum")
         assert not hasattr(tab, "_spectrum_settings_container")
-        assert not hasattr(tab, "spectrum_drop_speed")
         assert "spectrum" not in tab._vis_body_host.enabled_modes
 
         persisted = settings_manager.get("widgets", {})["spotify_visualizer"]
@@ -572,7 +455,7 @@ def test_disable_retires_real_qt_body_and_reenable_reconstructs_from_state(
         second_body = tab._vis_body_host.body("spectrum")
         assert second_body is not first_body
         assert counts["spectrum"] == 2
-        assert tab.spectrum_drop_speed.value() == edited
+        assert _cache(tab, "spectrum")["spectrum_drop_speed"] == pytest.approx(edited)
     finally:
         tab.deleteLater()
 
@@ -587,37 +470,6 @@ def test_last_enabled_mode_cannot_be_disabled(qt_app, settings_manager):
         assert tab._vis_body_host.enabled_modes == ("bubble",)
     finally:
         tab.deleteLater()
-
-
-@pytest.mark.parametrize("mode,key,row_key,on,off", [
-    ("bubble", "bubble_ghosting_enabled", "bubble_ghost_alpha", True, False),
-    ("oscilloscope", "osc_display", "osc_delay", "Phase", "Trace"),
-])
-def test_conditional_signals_belong_to_each_reconstructed_body(qt_app, settings_manager, mode, key, row_key, on, off):
-    from PySide6.QtCore import QCoreApplication, QEvent
-    from PySide6.QtWidgets import QCheckBox
-    from core.settings.visualizer_mode_settings import require_mode_settings
-
-    tab = _make_tab(settings_manager, mode, enabled_modes=["spectrum", mode])
-    spec = require_mode_settings(mode)
-    try:
-        for generation in range(3):
-            tab._select_mode_page(mode)
-            source = getattr(tab, key)
-            row = getattr(tab, f"_{spec.prefix}_rows")[row_key]
-            for value, hidden in ((off, True), (on, False), (off, True)):
-                source.setChecked(value) if isinstance(source, QCheckBox) else source.setCurrentText(value)
-                assert row.isHidden() == hidden, (mode, generation, value)
-            tab._select_setup_page()
-            tab._on_mode_admission_toggled(mode, False)
-            QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-            assert not hasattr(tab, key)
-            assert not hasattr(tab, f"_{spec.prefix}_apply_conditions")
-            assert not hasattr(tab, f"_{spec.prefix}_condition_connected")
-            tab._on_mode_admission_toggled(mode, True)
-    finally:
-        tab.deleteLater()
-        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
 def test_disabling_active_mode_substitutes_without_constructing_replacement(
@@ -651,9 +503,8 @@ def test_switch_flushes_outgoing_edit_before_new_mode_becomes_authoritative(
     tab = _make_tab(settings_manager, "spectrum", enabled_modes=["spectrum", "bubble"])
     try:
         tab._select_mode_page("spectrum")
-        slider = tab.spectrum_drop_speed
-        edited = slider.maximum() if slider.value() != slider.maximum() else slider.minimum()
-        slider.setValue(edited)
+        edited = _other("spectrum", "spectrum_drop_speed", _cache(tab, "spectrum")["spectrum_drop_speed"])
+        _edit(tab, "spectrum", "spectrum_drop_speed", edited)
 
         tab._select_mode_page("bubble")
         persisted = settings_manager.get("widgets", {})["spotify_visualizer"]
@@ -661,7 +512,7 @@ def test_switch_flushes_outgoing_edit_before_new_mode_becomes_authoritative(
         assert "spectrum_drop_speed" in persisted
 
         tab._select_mode_page("spectrum")
-        assert tab.spectrum_drop_speed.value() == edited
+        assert _cache(tab, "spectrum")["spectrum_drop_speed"] == pytest.approx(edited)
     finally:
         tab.deleteLater()
 
@@ -683,27 +534,6 @@ def _bucket_titles(container) -> list[str]:
             if title:
                 titles.append(title)
     return titles
-
-
-def test_spectrum_body_uses_authored_bucket_order_and_render_mode_buttons(
-    qt_app, settings_manager
-):
-    tab = _make_tab(settings_manager, "spectrum")
-    try:
-        tab._select_mode_page("spectrum")
-        assert _bucket_titles(tab._spectrum_normal) == [
-            "Appearance",
-            "Shape",
-            "Bar Appearance",
-            "Rainbow",
-        ]
-        from core.settings.visualizer_mode_settings import require_mode_settings
-        assert _bucket_titles(tab._spectrum_advanced) == [          # the spec's own advanced order
-            bucket.title for bucket in require_mode_settings("spectrum").buckets if bucket.advanced]
-        assert set(tab.spectrum_render_mode_buttons.keys()) == {"segment", "bars"}
-        assert tab._spectrum_render_mode in {"bars", "segment"}
-    finally:
-        tab.deleteLater()
 
 
 def test_spectrum_technical_bucket_visibility_persists_per_mode(qt_app, settings_manager):
@@ -757,57 +587,6 @@ def test_spectrum_technical_bucket_visibility_persists_per_mode(qt_app, settings
         reloaded.deleteLater()
 
 
-def test_editing_advanced_control_auto_switches_bubble_preset_to_custom(
-    qt_app, settings_manager
-):
-    settings_manager.set(
-        "widgets",
-        {
-            "spotify_visualizer": {
-                "enabled": True,
-                "visualizers_enabled": True,
-                "mode": "bubble",
-                "preset_bubble": 0,
-            }
-        },
-    )
-    tab = VisualizersTab(settings_manager)
-    try:
-        tab._select_mode_page("bubble")
-        slider = tab._bubble_preset_slider
-        slider.set_preset_index(0)  # a curated preset, not Custom
-        assert slider.preset_index() != slider.custom_index()
-
-        pulse = tab.bubble_big_bass_pulse
-        pulse.setValue(min(pulse.maximum(), pulse.value() + 5))
-        qt_app.processEvents()
-
-        # Editing an advanced (mode-owned) control forks the curated preset to Custom.
-        assert slider.preset_index() == slider.custom_index()
-    finally:
-        tab.deleteLater()
-
-
-def test_bubble_swirl_toggle_hides_conflicting_direction_rows(qt_app, settings_manager):
-    tab = _make_tab(settings_manager, "bubble")
-    try:
-        tab._select_mode_page("bubble")
-
-        tab.bubble_swirl_enabled.setChecked(True)
-        qt_app.processEvents()
-        assert tab._bubble_stream_direction_row_widget.isHidden() is True
-        assert tab._bubble_drift_direction_row_widget.isHidden() is True
-        assert tab._bubble_swirl_direction_row_widget.isHidden() is False
-
-        tab.bubble_swirl_enabled.setChecked(False)
-        qt_app.processEvents()
-        assert tab._bubble_stream_direction_row_widget.isHidden() is False
-        assert tab._bubble_drift_direction_row_widget.isHidden() is False
-        assert tab._bubble_swirl_direction_row_widget.isHidden() is True
-    finally:
-        tab.deleteLater()
-
-
 def test_bubble_stream_reactivity_load_clamps_to_slider_maximum(qt_app, settings_manager):
     from core.settings.visualizer_presets import get_custom_preset_index
 
@@ -826,8 +605,8 @@ def test_bubble_stream_reactivity_load_clamps_to_slider_maximum(qt_app, settings
     tab = VisualizersTab(settings_manager)
     try:
         tab._select_mode_page("bubble")
-        assert tab.bubble_stream_reactivity.maximum() == 200
-        assert tab.bubble_stream_reactivity.value() == 200
-        assert tab.bubble_stream_reactivity_label.text() == "200%"
+        from core.settings.visualizer_mode_settings import require_mode_settings
+        high = require_mode_settings("bubble").control("bubble_stream_reactivity").high
+        assert _cache(tab, "bubble")["bubble_stream_reactivity"] == pytest.approx(high)
     finally:
         tab.deleteLater()
