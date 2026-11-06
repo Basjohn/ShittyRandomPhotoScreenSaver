@@ -99,9 +99,14 @@ def _theme_opaque_qcolor(
 # backing/corner camouflage is not independently themeable: it follows the
 # shell surface immediately inside the native edge, forced opaque so the fake
 # rounded corner continues to hide the rectangular acrylic HWND underneath.
-SETTINGS_OUTER_CORNER_RADIUS = 6.5
-SETTINGS_OUTER_BORDER_WIDTH = 4.0
-SETTINGS_OUTER_BORDER_BACKING_WIDTH = 6.0
+# The geometry and the painter live in ui/settings_window_edge.py, shared with the Studio's frameless window.
+from ui.settings_window_edge import (  # noqa: E402
+    SETTINGS_OUTER_BORDER_BACKING_WIDTH,
+    SETTINGS_OUTER_BORDER_WIDTH,
+    SETTINGS_OUTER_CORNER_RADIUS,
+    paint_forged_window_edge,
+)
+
 SETTINGS_OUTER_BORDER_COLOR = _theme_qcolor("chrome.outer_border")
 SETTINGS_FORGED_EDGE_COLOR = _theme_opaque_qcolor("window.titlebar.surface")
 SETTINGS_OUTER_BORDER_BACKING_COLOR = SETTINGS_FORGED_EDGE_COLOR
@@ -929,31 +934,11 @@ class SettingsDialog(QDialog):
                     "skipping redundant AccentPolicy rewrite"
                 )
                 native_enabled = True
-            elif mode == "acrylic":
-                from core.windows.dwm_blur import enable_acrylic_blur
-
-                native_enabled = enable_acrylic_blur(
-                    hwnd,
-                    tint_r=tint.r,
-                    tint_g=tint.g,
-                    tint_b=tint.b,
-                    tint_alpha=tint.a,
-                )
-            elif mode == "glass":
-                from core.windows.dwm_blur import enable_glass_blur
-
-                native_enabled = enable_glass_blur(hwnd)
-            elif mode == "off":
-                from core.windows.dwm_blur import disable_blur
-
-                # Off is the one state transition that actually tears down the
-                # shared AccentPolicy mechanism.
-                native_enabled = False
-                disable_blur(hwnd)
             else:
-                raise ValueError(
-                    f"Unsupported Settings native backdrop mode: {mode!r}"
-                )
+                # The one mode -> AccentPolicy mapping, shared with the Studio window.
+                from core.windows.dwm_blur import apply_backdrop
+
+                native_enabled = apply_backdrop(hwnd, mode, tint)
 
             applied = mode == "off" or bool(native_enabled)
             self._backdrop_applied = applied
@@ -2366,94 +2351,18 @@ class SettingsDialog(QDialog):
         _record_diagnostic_stage("settings_show_event_complete")
     
     def paintEvent(self, event):
-        """Paint a white border at the dialog edge."""
+        """Paint the forged rounded window edge (shared with the Studio's frameless window)."""
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        outer_rect = QRectF(self.rect())
-        border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        if self._material_underlay is not None:
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(self._material_underlay)
-            if self._is_maximized:
-                painter.drawRect(outer_rect)
-            else:
-                painter.drawRoundedRect(
-                    border_rect,
-                    SETTINGS_OUTER_CORNER_RADIUS,
-                    SETTINGS_OUTER_CORNER_RADIUS,
-                )
-        if not self._is_maximized:
-            self._paint_outer_corner_caps(painter, outer_rect, border_rect)
-            backing_pen = QPen(
-                SETTINGS_OUTER_BORDER_BACKING_COLOR,
-                SETTINGS_OUTER_BORDER_BACKING_WIDTH,
-            )
-            backing_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-            painter.setPen(backing_pen)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRoundedRect(
-                border_rect,
-                SETTINGS_OUTER_CORNER_RADIUS,
-                SETTINGS_OUTER_CORNER_RADIUS,
-            )
-
-        border_pen = QPen(SETTINGS_OUTER_BORDER_COLOR, SETTINGS_OUTER_BORDER_WIDTH)
-        border_pen.setJoinStyle(
-            Qt.PenJoinStyle.MiterJoin if self._is_maximized else Qt.PenJoinStyle.RoundJoin
+        paint_forged_window_edge(
+            painter,
+            QRectF(self.rect()),
+            float(self.devicePixelRatioF()),
+            maximized=self._is_maximized,
+            outer_border=SETTINGS_OUTER_BORDER_COLOR,
+            forged_edge=SETTINGS_CORNER_COVER_COLOR,
+            underlay=self._material_underlay,
         )
-        painter.setPen(border_pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        if self._is_maximized:
-            painter.drawRect(border_rect)
-        else:
-            painter.drawRoundedRect(
-                border_rect,
-                SETTINGS_OUTER_CORNER_RADIUS,
-                SETTINGS_OUTER_CORNER_RADIUS,
-            )
-
         painter.end()
-
-    def _paint_outer_corner_caps(
-        self,
-        painter: QPainter,
-        outer_rect: QRectF,
-        border_rect: QRectF,
-    ) -> None:
-        """Forge rounded corner fills without altering the real acrylic window edge."""
-        dpr = max(1.0, float(self.devicePixelRatioF()))
-        cover_overlap = max(
-            1.75,
-            ((SETTINGS_OUTER_BORDER_BACKING_WIDTH - SETTINGS_OUTER_BORDER_WIDTH) * 0.5)
-            + (1.25 / dpr),
-        )
-        cover_radius = (
-            SETTINGS_OUTER_CORNER_RADIUS
-            + (SETTINGS_OUTER_BORDER_BACKING_WIDTH * 0.25)
-            + cover_overlap
-        )
-        outer_path = QPainterPath()
-        outer_path.addRect(outer_rect)
-        rounded_path = QPainterPath()
-        rounded_path.addRoundedRect(
-            border_rect.adjusted(
-                -cover_overlap,
-                -cover_overlap,
-                cover_overlap,
-                cover_overlap,
-            ),
-            cover_radius,
-            cover_radius,
-        )
-        cover_path = outer_path.subtracted(rounded_path)
-
-        painter.save()
-        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(SETTINGS_CORNER_COVER_COLOR)
-        painter.drawPath(cover_path)
-        painter.restore()
 
     def keyPressEvent(self, event):
         """Enter/Return/Escape close through closeEvent (never a bare hide or minimize)."""

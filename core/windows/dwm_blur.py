@@ -191,7 +191,25 @@ def disable_blur(hwnd: int) -> bool:
     )
 
 
+def apply_backdrop(hwnd: int, mode: str, tint=None) -> bool:
+    """Apply one theme backdrop mode (``off`` / ``acrylic`` / ``glass``) to ``hwnd``; True when a material is on.
+
+    The single mode -> AccentPolicy mapping, used by every SRPSS frameless window that carries the Settings theme's
+    material (Settings, the Studio). ``tint`` is the theme's ``backdrop.tint`` (Acrylic only)."""
+
+    if mode == "acrylic":
+        return enable_acrylic_blur(hwnd, tint_r=tint.r, tint_g=tint.g, tint_b=tint.b, tint_alpha=tint.a)
+    if mode == "glass":
+        return enable_glass_blur(hwnd)
+    if mode == "off":
+        # Off is the one state transition that actually tears down the shared AccentPolicy mechanism.
+        disable_blur(hwnd)
+        return False
+    raise ValueError(f"Unsupported native backdrop mode: {mode!r}")
+
+
 __all__ = [
+    "apply_backdrop",
     "disable_blur",
     "enable_acrylic_blur",
     "enable_glass_blur",
