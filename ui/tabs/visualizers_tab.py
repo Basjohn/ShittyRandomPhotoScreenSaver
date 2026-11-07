@@ -2,7 +2,8 @@
 
 The tab rehosts the existing Visualizer Settings builders without acquiring any
 runtime or Media activation authority. SETUP owns family-level controls and mode
-admission. Stable Spectrum bar-appearance and Rainbow widgets are presented inside
+admission; FULLSCREEN MODE (first after Setup) owns the Expanded Visualizer's full-display
+overlays (``ui/tabs/visualizers_fullscreen_page.py``). Stable Spectrum bar-appearance and Rainbow widgets are presented inside
 the selected mode's Custom controls. Their tab-owned references are evacuated before
 a retireable mode body is destroyed; mode-specific bodies stay lazy under
 :class:`VisualizerModeBodyHost` and are constructed only when their visible mode pill
@@ -54,6 +55,7 @@ from ui.tabs.visualizer_settings_context import (
     DEFAULT_VISUALIZER_MODE,
     VisualizerSettingsContextMixin,
 )
+from ui.tabs.visualizers_fullscreen_page import FULLSCREEN_BUCKET_SCOPE, FullscreenModePage
 from ui.tabs.widgets_tab_media import (
     _install_visualizer_body_host,
     _update_spotify_vis_enabled_visibility,
@@ -173,6 +175,12 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         self._setup_pill.clicked.connect(self._select_setup_page)
         self._nav_flow.addWidget(self._setup_pill)
 
+        # The Expanded Visualizer's full-display overlays: first after Setup, before the mode pills (operator, 8 Nov).
+        self._fullscreen_pill = self._make_mode_pill("Fullscreen Mode")
+        self._nav_group.addButton(self._fullscreen_pill)
+        self._fullscreen_pill.clicked.connect(self._select_fullscreen_page)
+        self._nav_flow.addWidget(self._fullscreen_pill)
+
         for descriptor in iter_all_visualizer_mode_descriptors():
             if not is_mode_active(descriptor.mode_id):
                 continue
@@ -187,8 +195,10 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
 
         self._page_stack = QStackedWidget()
         self._setup_page = self._build_setup_page()
+        self._fullscreen_page = FullscreenModePage(self, changed=self._save_settings)
         self._mode_page = self._build_mode_page()
         self._page_stack.addWidget(self._setup_page)
+        self._page_stack.addWidget(self._fullscreen_page)
         self._page_stack.addWidget(self._mode_page)
         detail_layout.addWidget(self._page_stack, 1)
 
@@ -324,6 +334,8 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
                 "page": "mode",
                 "mode_id": str(self._active_visualizer_mode_id),
             }
+        if self._page_stack.currentWidget() is self._fullscreen_page:
+            return {"page": FULLSCREEN_BUCKET_SCOPE}
         return {"page": "setup"}
 
     def restore_view_state(self, state: Dict[str, Any]) -> None:
@@ -337,6 +349,13 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
             self._loading = True
             try:
                 self._select_mode_page(mode_id)
+            finally:
+                self._loading = previous_loading
+        elif page == FULLSCREEN_BUCKET_SCOPE:
+            previous_loading = self._loading
+            self._loading = True
+            try:
+                self._select_fullscreen_page()
             finally:
                 self._loading = previous_loading
         else:
@@ -364,12 +383,23 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
     # Mode admission / selection
     # ------------------------------------------------------------------
 
-    def _select_setup_page(self, _checked: bool = False) -> None:
-        if (not getattr(self, "_loading", False)
-                and self._page_stack.currentWidget() is self._mode_page):
+    def _leave_bucket_page(self, target: QWidget) -> None:
+        """Leaving a page with buckets (a mode page or Fullscreen Mode) for another page closes its editing path."""
+        current = self._page_stack.currentWidget()
+        if (not getattr(self, "_loading", False) and current is not target
+                and current in (self._mode_page, self._fullscreen_page)):
             self.retire_bucket_context()
+
+    def _select_setup_page(self, _checked: bool = False) -> None:
+        self._leave_bucket_page(self._setup_page)
         self._setup_pill.setChecked(True)
         self._page_stack.setCurrentWidget(self._setup_page)
+        self._reset_view_scroll()
+
+    def _select_fullscreen_page(self, _checked: bool = False) -> None:
+        self._leave_bucket_page(self._fullscreen_page)
+        self._fullscreen_pill.setChecked(True)
+        self._page_stack.setCurrentWidget(self._fullscreen_page)
         self._reset_view_scroll()
 
     def _select_mode_page(self, mode_id: str) -> None:
@@ -379,6 +409,8 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
             raise ValueError(f"Disabled visualizer mode has no selectable pill: {target!r}")
 
         previous = self._get_active_visualizer_mode()
+        if self._page_stack.currentWidget() is self._fullscreen_page:
+            self._leave_bucket_page(self._mode_page)
         # A lazy builder can raise before the body host commits its new mode.
         # Retain the last *visible* selection to restore coherent Settings
         # presentation on failure.
@@ -609,6 +641,8 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
                 widgets = deepcopy(widgets)
 
             result = save_visualizer_settings(self)
+            # The Fullscreen Mode page's one value (a global Visualizer setting, never a preset value).
+            result["fullscreen_overlays"] = self._fullscreen_page.values()
             spotify_vis, mode_id, preset_index = self._merge_visualizer_section_save(
                 widgets,
                 result,
@@ -644,6 +678,7 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
             widgets = {}
         section = widgets.get("spotify_visualizer", {})
         requested_activation = section.get("mode_activation") if isinstance(section, dict) else None
+        self._fullscreen_page.load(section.get("fullscreen_overlays") if isinstance(section, dict) else None)
         # Retire newly-disabled bodies before a full loader can rehydrate them.
         self._vis_body_host.set_mode_activation(requested_activation)
         load_visualizer_settings(

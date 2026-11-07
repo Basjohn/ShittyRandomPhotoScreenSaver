@@ -78,7 +78,10 @@ def _widgets_pill(view_state: Mapping[str, Any]) -> str:
 
 
 def _visualizers_pill(view_state: Mapping[str, Any]) -> str:
-    return str(view_state.get("mode_id") or "") if view_state.get("page") == "mode" else ""
+    page = view_state.get("page")
+    if page == "fullscreen":
+        return "fullscreen"     # Fullscreen Mode's buckets: ``fullscreen:<bucket>`` in ui.visualizer_bucket_states
+    return str(view_state.get("mode_id") or "") if page == "mode" else ""
 
 
 def _transitions_pill(view_state: Mapping[str, Any]) -> str:
