@@ -264,8 +264,14 @@ A future move to DWM system backdrops is an **architecture change**, not a theme
 `ui/settings_theme.py`, `ui/tabs/shared_styles.py` and component renderers own selector/geometry application while ThemeSpec owns visual values. Typography, spacing, radii, dimensions and behavior stay renderer-owned unless deliberately promoted into the schema.
 
 The forged Settings outer edge/corner remains renderer-owned: its geometry and painter live in
-`ui/settings_window_edge.py` (`paint_forged_window_edge`), called by `SettingsDialog.paintEvent` and by the Studio's
-frameless window, never copied. Its geometry is fragile and is **not** theme data. Camouflage colour follows the adjacent semantic shell surface; do not independently theme it.
+`ui/settings_window_edge.py` (`paint_forged_window_edge`), called by Settings' `ForgedWindowEdgeOverlay` and by the
+Studio's frameless window, never copied. Its geometry is fragile and is **not** theme data. Camouflage colour follows the adjacent semantic shell surface; do not independently theme it.
+The edge paints **over** the window's content in both windows (the Studio's edge item at z 1000; Settings' overlay, a
+mouse-transparent child kept above every other child). Settings' shell surfaces fill the whole window
+(`window.dialog_glass`, the title bar), so an edge painted beneath them is covered: dark themes author those surfaces
+nearly clear and hid the defect, light themes author them nearly opaque and lost the border and the rounded corners
+(fixed 8 Nov 2026; bar: `tests/test_settings_forged_edge_over_content.py`). `SettingsDialog.paintEvent` paints only
+the non-Windows material underlay (`paint_material_underlay`), beneath the content.
 
 Settings shadows remain under `ui/widgets/control_shadow.py`; ThemeSpec supplies their semantic visual parameters. Runtime screensaver widget shadow authority is separate.
 

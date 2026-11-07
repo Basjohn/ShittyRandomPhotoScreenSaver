@@ -101,7 +101,8 @@ from ui.settings_window_edge import (  # noqa: E402
     SETTINGS_OUTER_BORDER_BACKING_WIDTH,
     SETTINGS_OUTER_BORDER_WIDTH,
     SETTINGS_OUTER_CORNER_RADIUS,
-    paint_forged_window_edge,
+    ForgedWindowEdgeOverlay,
+    paint_material_underlay,
 )
 
 SETTINGS_OUTER_BORDER_COLOR = _theme_qcolor("chrome.outer_border")
@@ -1020,8 +1021,11 @@ class SettingsDialog(QDialog):
         if size_grip is not None:
             size_grip.update()
 
-        # paintEvent consumes the live forged-edge globals installed above.
+        # paintEvent and the forged-edge overlay consume the live globals installed above.
         self.update()
+        forged_edge = getattr(self, "_forged_edge", None)
+        if forged_edge is not None:
+            forged_edge.update()
 
         # Hidden dialogs use the latest ThemeSpec when shown. Visible dialogs
         # update native acrylic immediately through the exact same DWM path.
@@ -1147,6 +1151,8 @@ class SettingsDialog(QDialog):
         self._outer_layout = QVBoxLayout(self)
         self._outer_layout.setContentsMargins(0, 0, 0, 0)
         self._outer_layout.addWidget(container)
+        # The forged edge paints over every other child (the shell surfaces fill the window).
+        self._forged_edge = ForgedWindowEdgeOverlay(self, self._forged_edge_state)
         
         self.tab_buttons[self._initial_tab_index].setChecked(True)
         self.content_stack.setCurrentIndex(self._initial_tab_index)
@@ -2286,6 +2292,9 @@ class SettingsDialog(QDialog):
     def resizeEvent(self, event):
         """Handle resize event to position size grip and save geometry."""
         super().resizeEvent(event)
+        forged_edge = getattr(self, "_forged_edge", None)
+        if forged_edge is not None:
+            forged_edge.track_parent()
 
 
         # Position size grip in bottom-right corner
@@ -2353,18 +2362,19 @@ class SettingsDialog(QDialog):
         _record_diagnostic_stage("settings_show_event_complete")
     
     def paintEvent(self, event):
-        """Paint the forged rounded window edge (shared with the Studio's frameless window)."""
+        """Paint the opaque material underlay, if any, beneath the content.
+
+        The forged rounded edge (shared with the Studio's frameless window) is painted over the content by
+        ``self._forged_edge`` (``ui/settings_window_edge.py``)."""
+        if self._material_underlay is None:
+            return
         painter = QPainter(self)
-        paint_forged_window_edge(
-            painter,
-            QRectF(self.rect()),
-            float(self.devicePixelRatioF()),
-            maximized=self._is_maximized,
-            outer_border=SETTINGS_OUTER_BORDER_COLOR,
-            forged_edge=SETTINGS_CORNER_COVER_COLOR,
-            underlay=self._material_underlay,
-        )
+        paint_material_underlay(painter, QRectF(self.rect()), maximized=self._is_maximized,
+                                underlay=self._material_underlay)
         painter.end()
+
+    def _forged_edge_state(self) -> tuple[bool, QColor, QColor]:
+        return self._is_maximized, SETTINGS_OUTER_BORDER_COLOR, SETTINGS_CORNER_COVER_COLOR
 
     def keyPressEvent(self, event):
         """Enter/Return/Escape close through closeEvent (never a bare hide or minimize)."""

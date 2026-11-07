@@ -7,11 +7,21 @@ camouflage colour follows the adjacent shell surface (``window.titlebar.surface`
 ``chrome.outer_border``. Neither is independently themeable. Maximised, the edge is a plain rectangle.
 
 Both windows call :func:`paint_forged_window_edge` with these exact constants: there is one edge, not one per window.
+
+The edge is painted over the window's content, never beneath it. The Studio's edge item sits at the top of its
+scene; Settings paints it from :class:`ForgedWindowEdgeOverlay`, a mouse-transparent child kept above every other
+child. (Settings painted it in its own ``paintEvent``, beneath its children: the shell surfaces filling the window,
+``window.dialog_glass`` and the title bar, then covered the border and the corner caps. Dark themes author those
+surfaces nearly clear, so the edge showed through; light themes author them nearly opaque and pale, which washed
+the border out to the shell colour and left square pale corners.)
 """
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PySide6.QtWidgets import QWidget
 
 SETTINGS_OUTER_CORNER_RADIUS = 6.5
 SETTINGS_OUTER_BORDER_WIDTH = 4.0
@@ -83,10 +93,60 @@ def _paint_outer_corner_caps(painter: QPainter, outer_rect: QRectF, border_rect:
     painter.restore()
 
 
+class ForgedWindowEdgeOverlay(QWidget):
+    """Paints the forged edge of its parent window over all of the window's other children.
+
+    ``edge_state`` returns ``(maximized, outer_border, forged_edge)`` at paint time, so a theme change needs only a
+    repaint. The overlay takes no input (``WA_TransparentForMouseEvents``) and fills nothing else; the parent keeps
+    painting any opaque material underlay beneath its content. The parent calls :meth:`track_parent` from its
+    ``resizeEvent`` (geometry, and staying on top of children created later).
+    """
+
+    def __init__(self, parent: QWidget, edge_state: Callable[[], tuple[bool, QColor, QColor]]) -> None:
+        super().__init__(parent)
+        self.setObjectName("forgedWindowEdge")
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.setAutoFillBackground(False)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._edge_state = edge_state
+        self.track_parent()
+
+    def track_parent(self) -> None:
+        parent = self.parentWidget()
+        if parent is not None:
+            self.setGeometry(parent.rect())
+        self.raise_()
+
+    def paintEvent(self, event) -> None:  # noqa: D401 - Qt override
+        del event
+        maximized, outer_border, forged_edge = self._edge_state()
+        painter = QPainter(self)
+        try:
+            paint_forged_window_edge(painter, QRectF(self.rect()), float(self.devicePixelRatioF()),
+                                     maximized=maximized, outer_border=outer_border, forged_edge=forged_edge)
+        finally:
+            painter.end()
+
+
+def paint_material_underlay(painter: QPainter, outer_rect: QRectF, *, maximized: bool, underlay: QColor) -> None:
+    """Paint only the opaque material substitute inside the rounded outline (beneath the window's content)."""
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(underlay)
+    if maximized:
+        painter.drawRect(outer_rect)
+    else:
+        border_rect = QRectF(outer_rect).adjusted(0.5, 0.5, -0.5, -0.5)
+        painter.drawRoundedRect(border_rect, SETTINGS_OUTER_CORNER_RADIUS, SETTINGS_OUTER_CORNER_RADIUS)
+
+
 __all__ = [
+    "ForgedWindowEdgeOverlay",
     "SETTINGS_OUTER_BORDER_BACKING_WIDTH",
     "SETTINGS_OUTER_BORDER_WIDTH",
     "SETTINGS_OUTER_CORNER_RADIUS",
     "forged_edge_colours",
     "paint_forged_window_edge",
+    "paint_material_underlay",
 ]
