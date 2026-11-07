@@ -21,7 +21,7 @@ dormancy, switching and harness coverage.
 
 This reference documents shared policy plus mode-specific exceptions where they matter. Experimental status is an admission
 state, not permission to create a private scheduler/presentation engine. Shared-profile routing is explicit descriptor
-metadata. Spectrum-family 3D modes reuse the shared DSP implementation but own their persisted technical and source profiles; old borrowed values are promoted only once. **Spectrum bar shaping is a descriptor-declared capability**, not a universal BeatEngine operation. Only Spectrum, Extruded Spectrum and Shockwave evaluate authored Spectrum shape nodes/lane strengths. Bubble and Sphere consume raw FFT/zone/control/transient data without that stage. Sine heartbeat and Dev Curve layer motion consume a pre-AGC musical-energy output instead of shaped Spectrum bars; Dev Curve applies its separate authored layer shaper in its logical runtime. Oscilloscope retains waveform analysis. The single shared engine fences the policy on every activation/compute snapshot, with no second DSP/capture authority. Bubble's accepted response is protected by differential synthetic PCM tests against the former shaper-enabled path (energy, transient, onsets and adaptive-floor history); never replace this with static curated preset-value assertions. Heavy implementation resources remain lazy and retire through the normal owner.
+metadata. Spectrum-family 3D modes reuse the shared DSP implementation but own their persisted technical and source profiles; old borrowed values are promoted only once. **Spectrum bar shaping is a descriptor-declared capability**, not a universal BeatEngine operation. Only Spectrum, Extruded Spectrum and Neon Lake (`shockwave_grid`) evaluate authored Spectrum shape nodes/lane strengths. Bubble and Sphere consume raw FFT/zone/control/transient data without that stage. Spline Curve (`devcurve`) layer motion consumes a pre-AGC musical-energy output instead of shaped Spectrum bars; Spline Curve applies its separate authored layer shaper in its logical runtime. Oscilloscope retains waveform analysis. The single shared engine fences the policy on every activation/compute snapshot, with no second DSP/capture authority. Bubble's accepted response is protected by differential synthetic PCM tests against the former shaper-enabled path (energy, transient, onsets and adaptive-floor history); never replace this with static curated preset-value assertions. Heavy implementation resources remain lazy and retire through the normal owner.
 
 ### Settings declarations
 
@@ -318,7 +318,7 @@ pre-AGC loudness it happened at (the bus's own input is loudness-normalised, so 
 readily as a loud one) and its presence (that loudness against a 6 s running level). The last 16 are one tuple the
 audio lane replaces per onset; `BeatEngine.get_onset_events(after_serial)` returns the ones a consumer has not taken.
 Sampling the bus's per-frame onset flag instead depended on the analysis and logical cadences lining up. Bars:
-`tests/test_qtquick_shockwave_grid.py`. The shared primitive for Shockwave Grid, Reactive Particle Field and lightning.
+`tests/test_qtquick_shockwave_grid.py`. The shared primitive for Neon Lake (`shockwave_grid`), Reactive Particle Field and lightning.
 `BeatEngine.get_musical_level()` reads the latest frame's (loudness, presence), the same measurement an onset there
 carries, for modes whose events come from elsewhere (Voxel Sphere); near-silence does not drain the running level.
 What an onset *earns* follows one shared rule beside them (`musical_weight`, `musical_emphasis` on the fixed
@@ -331,7 +331,7 @@ its own fit (Extruded Spectrum pivots at mid-bar; Neon Lake pivots about the bas
 screen-pixel coverage helpers; Neon adds curved surface wire coordinates through its dedicated reference. A new 3D
 mode reuses the shared projection instead of copying it. See [Neon Lake](Neon_Lake_Basin.md).
 
-**Prepared reveal (3D modes).** A mode whose descriptor sets `prepared_reveal` (Extruded Spectrum, Shockwave Grid)
+**Prepared reveal (3D modes).** A mode whose descriptor sets `prepared_reveal` (Extruded Spectrum, Neon Lake)
 offers `prepare_step(frame)`: on a hidden frame (content fade 0) the render host lets it compile or allocate one unit
 of what its first visible frame of that activation would create (a program, a mesh, the stream ring, the target, the
 glow chain, the backdrop copy), at least `PREPARE_SPACING_S` (30 ms) apart, and records the (mode, activation) as
@@ -339,7 +339,7 @@ prepared; a visible draw records it too. The owner keeps a mode or preset reveal
 render thread reports the activation prepared, and reveals anyway after `_PREPARED_REVEAL_DEADLINE_S` (1.5 s) so a
 window that renders nothing cannot strand the activation. Nothing is preloaded: only the incoming activation prepares,
 and only what its parameters need. Measured at a 1600x900 card (RTX 4090), first visible frame: Extruded 6-8 ms ->
-3-4 ms, Shockwave Grid with glow 22 ms (139 ms with a cold driver shader cache) -> 4 ms; the steps themselves cost
+3-4 ms, Neon Lake with glow 22 ms (139 ms with a cold driver shader cache) -> 4 ms; the steps themselves cost
 0.5-11 ms each on hidden frames. The first hidden frame of a session also imports the renderer's modules (~20 ms
 once, shared with the 3D transitions once those have run). Bars: `tests/test_visualizer_prepared_reveal.py`.
 
@@ -380,7 +380,7 @@ them every lane downstream) by a few percent to a quarter.
 
 `tools/visualizer_replay/analysis_controls_audit.py` measures this: ordinary replay serves *recorded* post-DSP lanes, so
 a technical control could never move them. The audit recomputes every lane from the clip's native PCM through the
-production DSP and the production getters (`feature_replay.ProductionLaneEngine`, which the Studios' DevCurve,
+production DSP and the production getters (`feature_replay.ProductionLaneEngine`, which the Studios' Spline Curve,
 Oscilloscope, Neon Lake, Bubble, Extruded Bubble and Sphere clip workers also replay on since 6 Nov), moves each owned control from the mode's frozen baseline, and diffs the mode's published
 frame field by field (shipped Studio clips, two clips, deterministic; a repeat of the baseline differs by exactly 0).
 Scale caveat: it takes one analysis block per 11 ms tick, where live analyses every capture callback, so absolute levels
@@ -394,7 +394,7 @@ approximate the live engine's while structural facts (a control that reaches not
 | Bubble | the Bubble feed, transient lanes, the event scheduler | Bar Count, Block Size, Sensitivity, Floors, Gain, Transient Pulse / Clamp / Mixes (Vocal Mix only through Rotation Amount) | **AGC Strength, Output Lift, Kick Lane Gain** (hidden) |
 | Extruded Bubble | onsets from the bus; fixed-scale body bands | all offered; Sensitivity and the floors reach it only through onset detection (the body bands sit ahead of them) | none offered |
 | Voxel Sphere | the analysis spectrum (Analysis Bands), live pre-AGC lanes, onsets | all offered | none offered |
-| Spline Curve (DevCurve) | the pre-AGC control lanes, transient lanes, musical level and intensity | Bar Count, Block Size, Sensitivity, Floors, Gain, Transient Clamp | **AGC Strength, Output Lift, Kick Lane Gain, Transient Pulse** (hidden) |
+| Spline Curve (`devcurve`) | the pre-AGC control lanes, transient lanes, musical level and intensity | Bar Count, Block Size, Sensitivity, Floors, Gain, Transient Clamp | **AGC Strength, Output Lift, Kick Lane Gain, Transient Pulse** (hidden) |
 | Waveform | fixed-scale raw body bands, raw-scale bus onsets, level and intensity | Bar Count, Block Size, Input Gain | **Use Recommended Sensitivity, Sensitivity, Dynamic Noise Floor, Noise Floor Baseline** (hidden) |
 
 A control a mode provably never reads is hidden with the descriptor's `technical_hidden_suffixes`
@@ -541,7 +541,7 @@ layout, not a universal invariant. Distinguish three concepts:
 The literal `420x280` (`CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE`) arose from layout history and is
 **not** a required/sacred visible or runtime size. It is retained only as an internal reference
 coordinate extent corresponding to the 1.5 aspect, useful for normalization and authored stroke/radius
-scaling (e.g. DevCurve's baseline content extent). Do not freeze runtime visualizers to 420x280, and do
+scaling (e.g. Spline Curve's baseline content extent). Do not freeze runtime visualizers to 420x280, and do
 not delete the 1.5 default aspect in favour of arbitrary mode-specific card shapes; the retired
 `*_growth` values are not an alternate aspect/height authority.
 
@@ -575,7 +575,7 @@ Expected adaptation at constant scale:
 
 - Spectrum reflows/redistributes bars across available width/height;
 - Bubble's world grows in canonical-card units (R-170): stream, drift, swirl, trails, collision/spawn policy and lifecycle distances (entry depth/margin, cluster spread, exit/drain and contraction grace, overlap retry, pre-entry prediction) are canonical literals on every shape, so each card moves and sizes like the canonical card at equal uniform scale; only the population follows area (with an isotropic `world_scale` zoom past the 110-hero render capacity); canonical output and random draw order are exact;
-- Oscilloscope/DevCurve adapt domain while keeping stroke scale;
+- Oscilloscope/Spline Curve adapt domain while keeping stroke scale;
 - Sphere uses aspect-correct projection and stays round.
 
 Every registered mode is viewport-resize-capable through its declared presentation policy; carded and frameless policies adapt their authored domain through their own geometry contract. The core Bubble capability/reflow path is landed. Do not reintroduce a Bubble false gate to conceal an implementation defect. Committed viewport truth remains separate from temporary CUSTOM working geometry; any newly reproduced spatial defect must preserve authored Bubble response and the binding BTF contract rather than reviving phase-specific gates.
@@ -709,7 +709,7 @@ A test name does not prove it exercises the real output path.
 
 ## 16. 3D scene foundation (optional for modes)
 
-Extruded Spectrum and Shockwave Grid use the shared 3D foundation the transitions use. Voxel Sphere also uses its GPU
+Extruded Spectrum and Neon Lake use the shared 3D foundation the transitions use. Voxel Sphere also uses its GPU
 resource/ring substrate while its reaction semantics remain mode-owned and its authoring/product promotion remains in
 `Docs/Reference/Sphere_Visualizer.md` (already operator-accepted). The binding lessons in
 `Docs/Reference/Transitions.md` ("3D foundation lessons") apply to modes as well.
@@ -755,7 +755,7 @@ keeps its positive clipping.
 - **Fence:** the Visualizer fence is unchanged (CHK26-protected hot path; modes that do not use a target pay nothing);
   `SceneTarget.scope` itself restores framebuffers, viewport and scissor, including when the scene raises.
 
-## 16B. Neon Lake (Shockwave identity)
+## 16B. Neon Lake (`shockwave_grid`)
 
 [Neon Lake](Neon_Lake_Basin.md) owns the terrain/water authoring, curved wire rendering, growth, sky/sun,
 framed-card clipping, internal scene pose and resource contracts. The mode ID and settings prefix remain
@@ -906,9 +906,10 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   axis. They never move/resize the card or alter its viewport, in ordinary interaction or Edit. See
   [Neon Lake](Neon_Lake_Basin.md) for admission, persistence and clipping.
 - **Gated modes:** `_GATED_MODES` in `visualizer_mode_registry.py` holds registered modes that are not offered
-  (currently Sine, disabled pending eventual retirement, not deletion: its implementation, keys and presets stay for
-  migration, and an old configuration with only Sine enabled resolves to an enabled substitute): they own defaults, a spec, presets, a runtime and a renderer, but are never
-  selectable, cycled, offered in Guided Setup or listed in the 3D Quality tab, and get no runtime work. The gate opens in code,
+  (currently none; Sine (`sine_wave`) and Blob are retired, not gated: `core/settings/visualizer_retired_modes.py`
+  strips their settings on load, `Docs/Architecture/Persisted_Input_Compatibility.md`). A gated mode owns defaults,
+  a spec, presets, a runtime and a renderer, but is never
+  selectable, cycled, offered in Guided Setup or listed in the 3D Quality tab, and gets no runtime work. The gate opens in code,
   never through an environment flag; tests open it for themselves with `monkeypatch` when they exercise the body.
 - **Framed preset starting views:** optional top-level `starting_view` JSON metadata contains exactly the mode's
   descriptor-declared pose keys. `core/settings/visualizer_view_orbit.py` validates complete finite numeric values
