@@ -51,8 +51,8 @@ after the operator's yes on a question card; agents never run load (invisible ch
      in `hint_scene`); switching Sphere <-> Extruded Spectrum sends no plain-orbit cancel for a held drag.
 2. **§7.1 Waveform Ribbon:** the live logical-tick cut (agent in flight; byte-identical) and the operator
    sign-offs in §2.
-3. **Expanded Visualizer M2** (plan 01; built on its agent branch 7 Nov, awaiting the lead's Gate 2 audit;
-   Spectrum's bar count is milestone M2b), with the operator's M1 amendment: a mode switch never
+3. **Expanded Visualizer M2** (plan 01; merged 7 Nov, 2c6872dc, after the lead's Gate 2 audit;
+   next: M2b, Spectrum's width-scaled bar count, then M3), with the operator's M1 amendment: a mode switch never
    re-expands; Expanded is only ever the user's explicit request. Operator, 7 Nov evening:
    - "Full display" is the Visualizer card placed near the display extents with its border and surface kept, never
      edge-to-edge (R-63 overscan).
