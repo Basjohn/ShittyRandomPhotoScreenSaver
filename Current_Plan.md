@@ -203,12 +203,25 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   It broke each guarantee on purpose and showed each check catches it. 17/17 lifecycle, destruction, Settings and
   thread files pass on the merge. **All three SMP and Expanded Visualizer prerequisites (AC-01, AC-02, AC-03) have
   landed.**
-- **Expanded Visualizer M1 (Opus high, started 7 Nov):**
-  - the capability (Extruded Bubble only);
-  - the persisted intent, excluded from preset payloads;
-  - a pure takeover reducer, not yet wired.
+- **Expanded Visualizer M1: built 7 Nov on branch `worktree-agent-a027f2336f2235f1b`, unmerged until M0 exists**
+  (plan 01 §0.2).
+  - **Capability:** `supports_expanded_display`, Extruded Bubble only; `resolve_expanded_display_capable()`.
+  - **Intent:** `expanded_display_requested`, with no mode prefix, so presets and Custom never carry it.
+  - **Reducer:** the pure takeover state machine in `core/expanded_visualizer_takeover.py`; its state/event table
+    is in plan 01's M1 section.
 
-  It stays on its branch until the lead's M0 baseline exists (plan 01 §0.2).
+  **Gate 1:**
+  - 119 persistence and capability tests fail on main; the reducer tests fail on main (the module is absent).
+  - Six reducer mutations each turn the tests red.
+  - The import scan is clean.
+  - 0 call-count differences against main across 38 overhead cases.
+  - The impacted gate passed 734/735 (the Usu assets, environmental).
+
+  **For the operator (a product choice the agent made):** switching from an incapable mode back to a capable one
+  re-applies a saved "expanded" intent.
+  **Overhead drift found on main, not from M1:** the stored baseline `2026-11-06_ed9cec6b` is now behind main by
+  +46 Python calls per Visualizer frame and +14 per Burn frame. The lead attributes it at M0 (a candidate is the
+  AC-12 `authored_now()` wrapper replacing C `time.time()` calls) and re-records the baseline.
 - **Lead, the next quiet machine (no agents running):**
   - the M0 baseline receipts (plan 01 §0.2);
   - the GC freeze live check with Settings round trips (once the harness lands);
