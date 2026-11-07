@@ -56,7 +56,14 @@ after the operator's yes on a question card; agents never run load (invisible ch
 2. **§7.1 Waveform Ribbon:** the live logical-tick cut (agent in flight; byte-identical) and the operator
    sign-offs in §2.
 3. **Expanded Visualizer M2** (plan 01; agent in flight), with the operator's M1 amendment: a mode switch never
-   re-expands; Expanded is only ever the user's explicit request.
+   re-expands; Expanded is only ever the user's explicit request. Operator, 7 Nov evening:
+   - "Full display" is the Visualizer card placed near the display extents with its border and surface kept, never
+     edge-to-edge (R-63 overscan).
+   - Capable modes: Extruded Bubble, Spectrum, Oscilloscope and Spline Curve. Sphere and Extruded Spectrum are not;
+     Bubble, Neon Lake and Waveform Ribbon wait for the operator.
+   - Double-click cycling while expanded skips incapable enabled modes and stays expanded; an explicit selection of
+     an incapable mode collapses.
+   - Spectrum gains bars in proportion to the extra width (its own milestone after M2, with a fade at the edges).
 
 **Next (admitted, in this order):**
 
