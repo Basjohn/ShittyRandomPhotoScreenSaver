@@ -34,6 +34,14 @@ VISUALIZER_CARD_CORNER_RADIUS = 8.0
 VISUALIZER_CARD_CONTENT_INSET = 0.0
 VISUALIZER_CARD_SHADOW_SPREAD = 0.0
 
+# Expanded Visualizer (plan 01 M2, amended 7 Nov): the wallpaper left outside the expanded card's chrome, in logical
+# pixels. Full display is never edge to edge (operator: "we have the overscan rule ... for a good reason"), and the
+# operator asked the card to reach much closer to the display's borders than the ordinary edge margin. This is the
+# only constant in the inset; everything else is the card's own chrome (``expanded_card_inset``). Two logical
+# pixels (three device pixels at 150 %) is the smallest ring of wallpaper that still reads as a gap beyond the
+# card's frame on every DPR, so the card is plainly a card near the display's extents, not a bezel line.
+EXPANDED_CARD_EDGE_GAP = 2.0
+
 
 def _finite(value: object, *, name: str) -> float:
     number = float(value)
@@ -328,27 +336,58 @@ def resize_visualizer_presentation(
     )
 
 
+def expanded_card_inset(ordinary: ResolvedVisualizerPresentation) -> float:
+    """How far inside the display's logical rect the expanded card sits, on every side (logical px).
+
+    Only what the card's own chrome needs (operator, 7 Nov: "Don't reach nearly close enough to the screen borders";
+    the card keeps its border colour and surface, never edge to edge), plus ``EXPANDED_CARD_EDGE_GAP``:
+
+    * the card border width, the one Card Border Width every card draws (``resolve_card_border_width_px``, AC-09,
+      carried by the ordinary record as ``authored_border_width``): the frame is set off from the display edge by
+      its own width, so it reads as the card's frame and not as the bezel;
+    * when the card casts a shadow, the shadow's displaced body beyond the card (signed base offset plus the
+      directional Extra Offset, exactly what the scene's card-shadow underlay adds to the card rect), on the side
+      that reaches furthest, so the shadow's silhouette stays on the display.
+
+    The shadow's blur falloff and the transient hover glow halo fade to nothing and may meet the display edge:
+    keeping them whole would put the card about 30 px in again (the ordinary edge margin the operator rejected). The
+    ordinary card never uses this (its slot is Media's edge margin).
+    """
+
+    style = ordinary.shell_style
+    inset = float(style["authored_border_width"])
+    if bool(style["shadow_enabled"]):
+        offset_x, offset_y = (float(value) for value in style["shadow_offset"])
+        left, top, right, bottom = (float(value) for value in style["shadow_extensions"])
+        inset += max(
+            max(0.0, -offset_x) + left,
+            max(0.0, -offset_y) + top,
+            max(0.0, offset_x) + right,
+            max(0.0, offset_y) + bottom,
+        )
+    return inset + EXPANDED_CARD_EDGE_GAP
+
+
 def resolve_expanded_visualizer_presentation(
     ordinary: ResolvedVisualizerPresentation,
     *,
     display_size: Sequence[object],
-    edge_margin: float = 0.0,
     dpr: float | None = None,
 ) -> ResolvedVisualizerPresentation:
     """The display-wide variant of one resolved ordinary presentation (Expanded Visualizer, plan 01 §B2/§0.6).
 
     Expansion is a viewport, not a layout, and full display is not edge to edge (operator, 7 Nov): the Visualizer
-    card is placed near the display's visible extents, inset on every side by ``edge_margin`` (the card's ordinary
-    edge margin, the one Media's anchored slot uses), and keeps its chrome: border colour and width, corner radius,
-    shadow and surface. ``display_size`` is the display's logical rect (the monitor, never the R-63 overscanned
-    window). The ordinary record it derives from is never changed or persisted. The world grows on the card's long
-    axis only, so the
+    card is placed near the display's visible extents, inset on every side by only what its own chrome needs
+    (``expanded_card_inset``), and keeps its chrome: border colour and width, corner radius, shadow and surface.
+    ``display_size`` is the display's logical rect (the monitor, never the R-63 overscanned window). The ordinary
+    record it derives from is never changed or persisted. The world grows on the card's long axis only, so the
     whole ordinary world stays in view (its extent is contained, never cropped): on an inset card wider than the
     ordinary world's aspect the extent keeps its height and widens to the card's aspect; on a narrower (e.g.
     portrait) display it keeps its width and grows taller. Uniform scale then maps that world onto the inset card, so
     nothing is stretched anisotropically and pixel-like sizes follow the uniform scale as at the card. A framed 3D
     camera keeps its lens and pose; its aperture follows the extent's height exactly as an edge-resized card's does
-    (``framed_aperture_scale``). Shell, clip, card chrome (border width, corner radius, colours) and content
+    (``framed_aperture_scale``). Shell, clip, card chrome (border width, corner radius, colours, and the shadow as
+    the card draws it: chrome, not world, so it is not magnified with the display-wide world) and content
     orientation are the ordinary record's, through the same canonical resolver; only DPR may differ (the target
     display's).
     """
@@ -356,10 +395,9 @@ def resolve_expanded_visualizer_presentation(
     if not isinstance(ordinary, ResolvedVisualizerPresentation):
         raise TypeError("ordinary must be a ResolvedVisualizerPresentation")
     display_width, display_height = _positive_size(display_size, name="display size")
-    margin = _non_negative(edge_margin, name="edge margin")
+    # Never more than a quarter of the shorter side: a card always remains.
+    margin = min(expanded_card_inset(ordinary), min(display_width, display_height) / 4.0)
     card_width, card_height = display_width - 2.0 * margin, display_height - 2.0 * margin
-    if card_width <= 0.0 or card_height <= 0.0:
-        raise ValueError("edge margin leaves no card on this display")
     extent_width, extent_height = ordinary.viewport_extent
     card_aspect = card_width / card_height
     if card_aspect >= extent_width / extent_height:
@@ -374,6 +412,11 @@ def resolve_expanded_visualizer_presentation(
 
     def _authored(name: str) -> float:
         return float(style[name]) / baseline_scale
+
+    def _as_drawn(value: object) -> float:
+        # The canonical resolver multiplies shadow geometry by the uniform scale; handing it the drawn value over
+        # the display-wide scale makes the expanded card draw exactly the shadow the card draws.
+        return float(value) / scale
 
     shadow_offset = style["shadow_offset"]
     return resolve_visualizer_presentation(
@@ -399,10 +442,10 @@ def resolve_expanded_visualizer_presentation(
         border_color=style["border_color"],
         shadow_enabled=bool(style["shadow_enabled"]),
         shadow_color=style["shadow_color"],
-        shadow_blur=_authored("shadow_blur"),
-        shadow_offset=(float(shadow_offset[0]) / baseline_scale, float(shadow_offset[1]) / baseline_scale),
-        shadow_spread=_authored("shadow_spread"),
-        shadow_extensions=tuple(float(value) / baseline_scale for value in style["shadow_extensions"]),
+        shadow_blur=_as_drawn(style["shadow_blur"]),
+        shadow_offset=(_as_drawn(shadow_offset[0]), _as_drawn(shadow_offset[1])),
+        shadow_spread=_as_drawn(style["shadow_spread"]),
+        shadow_extensions=tuple(_as_drawn(value) for value in style["shadow_extensions"]),
     )
 
 
@@ -447,6 +490,8 @@ def resize_visualizer_presentation_uniformly(
 __all__ = [
     "CANONICAL_VISUALIZER_BASELINE_ASPECT_RATIO",
     "CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE",
+    "EXPANDED_CARD_EDGE_GAP",
+    "expanded_card_inset",
     "resize_visualizer_presentation",
     "resolve_expanded_visualizer_presentation",
     "resize_visualizer_presentation_uniformly",

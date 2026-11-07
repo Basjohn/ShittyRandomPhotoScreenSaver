@@ -91,8 +91,6 @@ class ExpandedDisplayServices:
     edit_active: Callable[[], bool]
     #: Project the glyph on one unit: (unit, available, expanded).
     publish_glyph: Callable[[Any, bool, bool], None]
-    #: The card's ordinary edge margin (logical px): the display-wide card is inset by it (operator, 7 Nov).
-    edge_margin: Callable[[], float] = lambda: 0.0
 
 
 def display_key(unit: Any) -> str | None:
@@ -337,7 +335,6 @@ class ExpandedDisplayCoordinator:
             started = owner is not None and owner.set_expanded_display(
                 True,
                 animate=bool(action.animate),
-                edge_margin=float(self._services.edge_margin()),
                 on_complete=lambda txn=action.txn, gen=generation: self._complete(EnterCommitted(gen, txn)),
             )
             if not started:

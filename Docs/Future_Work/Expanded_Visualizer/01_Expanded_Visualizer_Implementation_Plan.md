@@ -40,7 +40,7 @@ owner that signs it. The original milestones (§H) keep their checklists; this t
 | **P-A** AC-02 host binding | Waveform accepted; `Current_Plan.md` admits P-A | AC-02's regression bar green; Edit/Arrange parity maps byte-identical; `DisplayManager` no longer constructs the owner | lead |
 | **M0** baseline | P-A merged; operator admits plan 01 | EB baseline receipts at canonical, wide/tall and display-sized views, one and two monitors, idle and game60: fps, tick median/p90, GIL share, frame age, lease counts; written to `.artifacts/evidence/expanded_visualizer/baseline/`; no Visualizer code changed | lead |
 | **M1** capability + persistence + reducer | M0 receipts exist | all pure reducer tests green incl. stale generation, duplicate glyph, Edit cancel, topology loss; `replace_visualizer_runtime_preset_state` round-trips the intent; no dormant-mode import (import scan) | agent |
-| **M2** full-display viewport | M1 green; AC-02, AC-09 merged | production-host renders at 16:9, 16:10, 21:9, portrait, mixed DPR show the Visualizer card near the display's visible extents (inset by the card's edge margin, never the R-63 overscanned window) with its chrome; reactivity packet digests identical to M0 on recorded clips for every capable mode; ordinary rect round-trips to the byte | lead + operator look |
+| **M2** full-display viewport | M1 green; AC-02, AC-09 merged | production-host renders at 16:9, 16:10, 21:9, portrait, mixed DPR show the Visualizer card near the display's visible extents (inset by only what the card's own chrome needs plus a 2 px gap, amended 7 Nov; never the R-63 overscanned window) with its chrome; reactivity packet digests identical to M0 on recorded clips for every capable mode; ordinary rect round-trips to the byte | lead + operator look |
 | **M2b** Spectrum bar count at full display | M2 accepted | expanded bar count = card bar count x the width ratio (clamped to the DSP maximum), so bar width stays as authored; the DSP band layout is recomputed at the expand and collapse edges behind a fade (never a jump); Spectrum's digests differ at full display by design (per-band history re-mapped), every other mode's stay identical | lead + operator look |
 | **M3** fades, HUD, widget suspension | M2 accepted | consumer counts equal before/after N cycles (Media, OSD, Gmail, Feeds, Steam leases); no QObject/subscription growth over 20 cycles; HUD visible only on events, fades within its bounded window | agent |
 | **M4** wallpaper policy and GPU savings | E0 state diagram written and reviewed | batch traces: expected/published/covered identities, zero stalled batch, zero backlog on collapse; measured GPU and render-thread CPU delta on the covered display vs M0 (relative, load recorded) | lead |
@@ -54,7 +54,7 @@ owner that signs it. The original milestones (§H) keep their checklists; this t
 | mode capability `supports_expanded_display` | `core/settings/visualizer_mode_registry.py` descriptor (default False; every mode but Sphere and Extruded Spectrum declares True) | a Settings flag, a preset field |
 | persisted intent `widgets.spotify_visualizer.expanded_display_requested` | canonical defaults + `SettingsManager` normaliser; excluded from mode/Custom payload | a sidecar file, a per-preset copy |
 | effective state (DORMANT..RETIRING) | the takeover coordinator next to the Visualizer host binding (AC-02), one per process | QML state, `DisplayManager` ad hoc flags |
-| expanded viewport geometry | `resolve_expanded_visualizer_presentation` (`widgets/spotify_visualizer/presentation_geometry.py`), a variant of the ordinary `ResolvedVisualizerPresentation`; its edge margin is the card's ordinary one (`resolve_overlay_geometry_policy("media")`, the slot the Visualizer sits on) | a stretched texture, authored CUSTOM geometry, the overscanned window rect |
+| expanded viewport geometry | `resolve_expanded_visualizer_presentation` (`widgets/spotify_visualizer/presentation_geometry.py`), a variant of the ordinary `ResolvedVisualizerPresentation`; its inset is `expanded_card_inset`: the card's own chrome (the AC-09 border width, the shadow's displaced body) plus `EXPANDED_CARD_EDGE_GAP` (amended 7 Nov) | a stretched texture, authored CUSTOM geometry, the overscanned window rect, the ordinary slot's edge margin |
 | widget visibility while covered | one display-local transient visual policy on the retained host (§F) | `widgets.<id>.enabled`, family activation, layout slots |
 | per-display wallpaper admission | one policy at the engine/manager batch seam (§E) | a second queue, dropped callbacks |
 | HUD data | existing Media model / volume model (§G) | a second GSMTC query, decoder or art cache |
@@ -97,10 +97,17 @@ not a different renderer.
 
 - **Full display is not edge to edge (operator, 7 Nov):** "we have the overscan rule to stop opengl artifacting for a
   good reason. In my opinion a full screen visualizer would place the widget card of the visualizer near the display
-  extents. You'd still see it's border colour and surface type if relevant." The expanded card is the display's
-  logical rect (the monitor, never the R-63 window) inset on every side by the card's ordinary edge margin, and keeps
-  its chrome: border colour and width, corner radius, shadow and surface material (the Visualizer card's material is
-  its own open item in `Current_Plan.md`; the expanded card inherits whatever the card draws).
+  extents. You'd still see it's border colour and surface type if relevant." **Amended (operator, 7 Nov night, on
+  Waveform Ribbon expanded at 2560 x 1440):** "for fullscreen visualizer we currently: 1. Don't reach nearly close
+  enough to the screen borders." The expanded card is the display's logical rect (the monitor, never the R-63
+  window) inset on every side by only what the card's own chrome needs, plus a 2 px gap (`expanded_card_inset`): its
+  border width (the one AC-09 resolver) and, when it casts a shadow, the shadow's displaced body (base offset plus
+  Extra Offset) on its furthest side; the blur falloff and the transient hover glow may meet the display edge
+  (keeping them whole would put the card about 30 px in again). It keeps its chrome as the card draws it: border
+  colour and width, corner radius, shadow (not magnified with the display-wide world) and surface material (the
+  Visualizer card's material is its own open item in `Current_Plan.md`; the expanded card inherits whatever the card
+  draws). Canonical chrome on 2560 x 1440 at 150 %: 4 + 8 + 2 = 14 logical px (21 device px), was 30 (45) with a
+  shadow magnified about five times.
 - **The world is contained, never cropped or stretched (M2):** the ordinary viewport extent grows on the inset card's
   long axis only (a wider card keeps the height and widens; a portrait one keeps the width and grows taller), and one
   uniform scale maps it onto the card. The logical runtime keeps the ordinary extent (the controller is never handed
@@ -194,7 +201,7 @@ Repository `Basjohn/ShittyRandomPhotoScreenSaver`, default `main`, examined 2026
 
 ## B. Product behaviour / scoped definitions
 
-1. **Expanded** means the *existing selected Quick display scene's logical display rectangle* inset by the card's edge margin (operator, 7 Nov: the card sits near the display's visible extents with its chrome; §0.6), not exclusive OS fullscreen, a new window or altered screen/desktop shell. It covers all compositor space intended by the product, respecting actual selected display geometry and viewport/DPR, not an arbitrary 16:9 crop. Preserve current screen-window policy and monitor identity.
+1. **Expanded** means the *existing selected Quick display scene's logical display rectangle* inset by only what the card's own chrome needs (operator, 7 Nov: the card sits near the display's visible extents with its chrome, and much closer than the ordinary edge margin; §0.6), not exclusive OS fullscreen, a new window or altered screen/desktop shell. It covers all compositor space intended by the product, respecting actual selected display geometry and viewport/DPR, not an arbitrary 16:9 crop. Preserve current screen-window policy and monitor identity.
 2. **Entering:** operator presses a contextual diagonal upper-right expansion glyph on a capable visualizer. Normal hover/interaction eligibility applies. User sees a short, gentle coordinated transition from ordinary visualizer rect to display-wide viewport; ordinary widgets on **that** display fade out. Other displays behave normally. OSD remains available. There is no extra mode activation.
 3. **Exiting:** reverse glyph (diagonal lower-left), explicit collapse, Edit entry, loss of capability, or relocation. Return exact authored pre-expansion presentation rather than saving the temporary screen-sized rect. Collapse/restore is independent of preset and CUSTOM values.
 4. **Mode selection:** ordinary double-click and context-menu mode switches retain current meaning, except that a double-click while expanded cycles only through capable modes (§0.6). Capable -> capable stays expanded through the canonical activation. Capable -> incapable collapses in a strictly ordered handoff, then changes mode. A rejected mode request leaves the current mode/expansion intact. Middle-click still cycles preset only.
@@ -437,17 +444,20 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
 - [x] Implement single resolved display-space presentation variant through scene controller/retained node. No new render path, no preset changes, no whole-widget final-pixel stretching.
 - [x] Add contextually admitted vector ↗/↙ glyph with safe hitboxes and event-bound hover fade; preserve existing reset/preset and semantic double/middle clicks.
 - [x] Prove viewport clips and camera on 16:9, 16:10, 21:9, portrait and mixed DPR, with screen/window-bound geometry and safe GL target resize/retirement.
-- [ ] **Gate 2:** production-host geometry is the card near the display's visible extents (edge margin, chrome kept), and reactivity/payload numerical identities remain untouched for every capable mode; ordinary view round-trips its geometry to the byte. Lead signs; operator looks.
+- [ ] **Gate 2:** production-host geometry is the card near the display's visible extents (chrome inset, chrome kept), and reactivity/payload numerical identities remain untouched for every capable mode; ordinary view round-trips its geometry to the byte. Lead signs; operator looks.
 
 **M2 as built (7 Nov, implementing agent; the source is the authority where this plan was silent):**
 
-- *Geometry.* `resolve_expanded_visualizer_presentation(ordinary, display_size, edge_margin, dpr)`: outer rect =
-  the display's logical rect inset by `edge_margin` on every side, exactly (the inset rect is the stage authority,
-  never re-derived from extent x scale); extent contained (§0.6); shell, clip, border, radius, colours, shadow and
-  orientation from the ordinary record; DPR the target display's. The display manager passes the card's ordinary
-  edge margin (`resolve_overlay_geometry_policy("media")`, Media's anchored slot, which the Visualizer sits on; 30 px
-  canonical); the owner caps it at a quarter of the shorter side.
-- *Owner route.* `QuickDisplayVisualizerOwner.set_expanded_display(expanded, animate, on_complete, edge_margin)`
+- *Geometry.* `resolve_expanded_visualizer_presentation(ordinary, display_size, dpr)`: outer rect = the display's
+  logical rect inset on every side by `expanded_card_inset(ordinary)`, exactly (the inset rect is the stage
+  authority, never re-derived from extent x scale), capped at a quarter of the shorter side; extent contained (§0.6);
+  shell, clip, border, radius, colours, shadow and orientation from the ordinary record; DPR the target display's.
+  **Amended 7 Nov (operator: "Don't reach nearly close enough to the screen borders"):** the inset was the card's
+  ordinary edge margin (`resolve_overlay_geometry_policy("media")`, 30 px canonical) passed by the display manager;
+  it is now derived inside the resolver from the card's own chrome (§0.6), so no caller passes a margin. The shadow
+  is drawn as the card draws it (it had been magnified with the display-wide world: blur about 88 px on a 2560 x
+  1440 display). The ordinary card is untouched.
+- *Owner route.* `QuickDisplayVisualizerOwner.set_expanded_display(expanded, animate, on_complete)`
   swaps the publication sync's resolve/commit pair (`QuickVisualizerPresentationSync.set_presentation_route`) at the
   event edge, so the steady path carries no per-frame branch and a collapse restores the ordinary methods
   themselves. The display-wide commit hands the controller the ordinary record's metrics, never its own, so the

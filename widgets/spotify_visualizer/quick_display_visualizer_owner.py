@@ -106,7 +106,6 @@ class QuickDisplayVisualizerOwner:
     _expanded_display = False
     _takeover: "_TakeoverFade | None" = None
     _expanded_source: Any = None
-    _expanded_edge_margin = 0.0
 
     def __init__(
         self,
@@ -209,7 +208,6 @@ class QuickDisplayVisualizerOwner:
         self._expanded_display = False
         self._takeover: _TakeoverFade | None = None
         self._expanded_source: Any = None
-        self._expanded_edge_margin = 0.0
 
     @property
     def controller(self) -> Any:
@@ -736,13 +734,10 @@ class QuickDisplayVisualizerOwner:
         *,
         animate: bool = False,
         on_complete: Callable[[], None] | None = None,
-        edge_margin: float | None = None,
     ) -> bool:
         """Show the Visualizer card near the display's extents, or back at its ordinary rect, at this event edge.
 
-        ``edge_margin`` (logical px, the card's ordinary edge margin) insets the display-wide card on every side;
-        ``None`` keeps the last one.
-
+        The display-wide card is inset by only what its own chrome needs (``expanded_card_inset``).
         The display-wide record is a variant of the ordinary one (``resolve_expanded_visualizer_presentation``);
         it never reaches the controller's committed metrics, CUSTOM, presets or Settings, so collapsing restores
         the ordinary rect exactly. ``animate`` fades the whole presentation out, swaps the viewport and fades it
@@ -755,9 +750,6 @@ class QuickDisplayVisualizerOwner:
         if self._retired or self._sync is None:
             return False
         expanded = bool(expanded)
-        if edge_margin is not None:
-            margin = float(edge_margin)
-            self._expanded_edge_margin = margin if math.isfinite(margin) and margin > 0.0 else 0.0
         self._takeover = None
         if not animate:
             self._finish_takeover(expanded, on_complete, reapply=True)
@@ -820,12 +812,7 @@ class QuickDisplayVisualizerOwner:
 
         _x, _y, width, height = self._presentation_runtime.display_identity.geometry
         self._expanded_source = ordinary
-        return resolve_expanded_visualizer_presentation(
-            ordinary,
-            display_size=(float(width), float(height)),
-            # Never more than a quarter of the shorter side: a card always remains.
-            edge_margin=min(self._expanded_edge_margin, min(float(width), float(height)) / 4.0),
-        )
+        return resolve_expanded_visualizer_presentation(ordinary, display_size=(float(width), float(height)))
 
     def _apply_expanded_presentation(self, presentation: Any) -> None:
         """Commit a display-wide record: the scene shows it; the controller keeps the ordinary metrics."""

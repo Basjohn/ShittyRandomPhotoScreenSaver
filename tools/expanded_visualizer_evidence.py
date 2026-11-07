@@ -20,8 +20,9 @@ Three proofs, all offscreen (no window is ever shown):
 3. **Production-host renders.** The production ``DisplayScene.qml`` through ``QQuickRenderControl`` into a hidden
    GL texture (the window is never shown or mapped), with the production ``QuickSceneController``,
    ``VisualizerRenderItem`` and mode render node; the snapshot is a replayed frame and the record is
-   ``resolve_expanded_visualizer_presentation`` of the ordinary card on that display, inset by the card's edge
-   margin (full display is not edge to edge). Extruded Bubble at 16:9, 16:10, 21:9, portrait and three DPRs, every
+   ``resolve_expanded_visualizer_presentation`` of the ordinary card on that display, inset by only what the card's
+   chrome needs (``expanded_card_inset``; full display is not edge to edge). Extruded Bubble at 16:9, 16:10, 21:9,
+   portrait and three DPRs, every
    other capable mode at 3840 x 2160 (150 %) and portrait: stills (PNG, lossless) with the card for reference, and
    one animated WebP of the fade-through.
 
@@ -50,15 +51,18 @@ from tools import artifact_paths  # noqa: E402
 AREA = "visualizers/extruded_bubble"
 TOPIC = "expanded_m2"
 MODE = "extruded_bubble"
-# Neutral-but-real card chrome: a visible border and radius, so the shell/clip are exercised.
-def edge_margin() -> float:
-    """The card's ordinary edge margin: Media's anchored slot (canonical), the one the display manager passes."""
+def ordinary_edge_margin() -> float:
+    """The ordinary card's slot margin: Media's anchored slot (canonical), where the ordinary card is placed here.
+
+    The expanded card does not use it: it is inset by only what its chrome needs (``expanded_card_inset``).
+    """
     from core.settings.default_contract import get_raw_default_settings
     from rendering.quick.widgets.geometry_resolver import resolve_overlay_geometry_policy
 
     return float(resolve_overlay_geometry_policy("media", get_raw_default_settings()["widgets"]).margin)
 
 
+# Neutral-but-real card chrome: a visible border and radius, so the shell/clip are exercised.
 CARD = {
     "border_width": 3.0, "corner_radius": 8.0, "content_inset": 0.0,
     "background_color": (20, 22, 26, 200), "border_color": (230, 234, 240, 255),
@@ -165,7 +169,7 @@ def owner_replay(clip: Any, mode: str, *, preset: int = 0, settings: Any = None,
                 if index == expand_at:
                     ordinary_records["before"] = owner._resolve_current_presentation()
                     ordinary_records["before_extent"] = controller.committed_viewport_extent
-                    owner.set_expanded_display(True, animate=animate, edge_margin=edge_margin(),
+                    owner.set_expanded_display(True, animate=animate,
                                                on_complete=lambda: events.append((current[0], "entered")))
                 if index == collapse_at:
                     owner.set_expanded_display(False, animate=animate,
@@ -346,7 +350,7 @@ def render_views(clip: Any, *, logical: tuple[int, int], dpr: float, capture_at:
     try:
         with deterministic_clock() as clock:
             scene = host.scene
-            margin = edge_margin()
+            margin = ordinary_edge_margin()
             origin = (margin, float(height) - 280.0 - margin)
 
             def ordinary():
@@ -355,8 +359,7 @@ def render_views(clip: Any, *, logical: tuple[int, int], dpr: float, capture_at:
                     outer_origin=origin, dpr=dpr, **CARD)
 
             def expanded():
-                return resolve_expanded_visualizer_presentation(ordinary(), display_size=(width, height), dpr=dpr,
-                                                                edge_margin=margin)
+                return resolve_expanded_visualizer_presentation(ordinary(), display_size=(width, height), dpr=dpr)
 
             route = {"expanded": False, "start": None, "target": False}
 

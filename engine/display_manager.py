@@ -3246,7 +3246,6 @@ class DisplayManager(QObject):
             mode_capable=lambda mode_id: bool(_call("_expanded_display_mode_capable", mode_id, default=False)),
             edit_active=lambda: bool(_call("_quick_custom_layout_session_active", default=False)),
             publish_glyph=_publish_expand_glyph,
-            edge_margin=lambda: float(_call("_expanded_display_edge_margin", default=0.0)),
         ))
         self._expanded_display_coordinator = coordinator
         return coordinator
@@ -3282,13 +3281,6 @@ class DisplayManager(QObject):
         if isinstance(section, dict):
             section["expanded_display_requested"] = bool(requested)
         logger.info("[EXPANDED_VIS] Persisted expanded_display_requested=%s", bool(requested))
-
-    def _expanded_display_edge_margin(self) -> float:
-        """The Visualizer card's ordinary edge margin: the anchored slot it sits on is Media's (the one owner,
-        ``resolve_overlay_geometry_policy``), so the display-wide card keeps that distance from every edge."""
-        from rendering.quick.widgets.geometry_resolver import resolve_overlay_geometry_policy
-
-        return float(resolve_overlay_geometry_policy("media", self._widgets_config_snapshot).margin)
 
     def _quick_custom_layout_session_active(self) -> bool:
         layout = getattr(self, "_quick_custom_layout_owner", None)

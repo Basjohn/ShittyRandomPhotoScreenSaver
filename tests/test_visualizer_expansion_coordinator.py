@@ -58,7 +58,7 @@ class _Owner:
     def expanded_display_transition_active(self) -> bool:
         return self.pending is not None
 
-    def set_expanded_display(self, expanded, *, animate=False, on_complete=None, edge_margin=None):
+    def set_expanded_display(self, expanded, *, animate=False, on_complete=None):
         if self.is_retired:
             return False
         self.calls.append((bool(expanded), bool(animate)))
@@ -102,7 +102,6 @@ class _Host:
             requested=lambda: self.requested,
             persist_requested=self._persist,
             mode_capable=lambda mode: mode in CAPABLE_SET,
-            edge_margin=lambda: 30.0,
             edit_active=lambda: self.edit,
             publish_glyph=lambda unit, available, expanded: self.glyphs.append(
                 (display_key(unit), bool(available), bool(expanded))),
@@ -251,20 +250,6 @@ def test_a_double_click_on_an_ordinary_card_takes_the_next_enabled_mode():
     assert accepted and requested == [INCAPABLE]
 
 
-def test_the_display_wide_card_is_inset_by_the_edge_margin():
-    host = _Host()
-    host.coordinator.generation_ready()
-    margins = []
-    original = host.owner.set_expanded_display
-
-    def recording(expanded, *, animate=False, on_complete=None, edge_margin=None):
-        margins.append(edge_margin)
-        return original(expanded, animate=animate, on_complete=on_complete)
-    host.owner.set_expanded_display = recording
-    host.press(True)
-    assert margins == [30.0]
-
-
 def test_a_mode_request_during_a_transition_is_refused_without_change():
     host = _Host()
     host.coordinator.generation_ready()
@@ -336,7 +321,7 @@ def test_after_retire_nothing_is_called():
 
 
 _MANAGER_METHODS = ("_expanded_display", "_visualizer_section", "_expanded_display_mode_capable",
-                    "_expanded_display_edge_margin", "_cycle_quick_visualizer_mode",
+                    "_cycle_quick_visualizer_mode",
                     "_expanded_display_requested", "_persist_expanded_display_requested",
                     "_quick_custom_layout_session_active", "_expanded_display_ready",
                     "_expanded_display_blocks_layout")

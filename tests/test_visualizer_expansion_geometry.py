@@ -1,8 +1,9 @@
 """Expanded Visualizer M2: the display-wide viewport (plan 01 §B2, §0.6, §H Milestone 2 / Gate 2).
 
 The pure variant (``resolve_expanded_visualizer_presentation``) is checked on 16:9, 16:10, 21:9, portrait and three
-DPRs for canonical, edge-resized (wide and tall) and chromed cards: the outer rect is exactly the display, the
-ordinary world stays whole (contained, never cropped, never stretched), and the shell, clip, chrome and orientation
+DPRs for canonical, edge-resized (wide and tall) and chromed cards: the outer rect is the display inset by only the
+card's own chrome (amended 7 Nov: much closer to the borders than the ordinary edge margin), the ordinary world stays
+whole (contained, never cropped, never stretched), and the shell, clip, chrome and orientation
 are the ordinary record's. The production owner (``QuickDisplayVisualizerOwner`` on an unshown
 ``QuickDisplayRuntime``, driven through its real ``sync_present`` publication edge by
 ``tools/expanded_visualizer_evidence.owner_replay``) shows that record display-wide, restores the ordinary record
@@ -24,6 +25,7 @@ from core.settings.visualizer_mode_registry import (
 )
 from tests._visualizer_presentation import resolve_presentation
 from widgets.spotify_visualizer.presentation_geometry import (
+    EXPANDED_CARD_EDGE_GAP,
     framed_aperture_scale,
     resolve_expanded_visualizer_presentation,
 )
@@ -49,46 +51,77 @@ CARDS = {
 }
 
 
-def _ordinary(card: str, display: str, *, mode: str = "extruded_bubble"):
+#: Chrome variants (test-owned): the shadow falling south-east with Extra Offset, north-west, none, and no border.
+CHROMES = {
+    "shadow_se": CHROME,
+    "shadow_nw": {**CHROME, "shadow_offset": (-5.0, -3.0), "shadow_extensions": (4.0, 4.0, 0.0, 0.0)},
+    "no_shadow": {**CHROME, "shadow_enabled": False},
+    "bare": {**CHROME, "border_width": 0.0, "shadow_enabled": False},
+}
+
+
+def _ordinary(card: str, display: str, *, mode: str = "extruded_bubble", chrome: str = "shadow_se"):
     size, dpr = DISPLAYS[display]
     return resolve_presentation(policy=get_visualizer_presentation_policy(mode), display_size=size, dpr=dpr,
-                                **CHROME, **CARDS[card])
+                                **CHROMES[chrome], **CARDS[card])
 
 
-MARGIN = 30.0   # test-owned; production passes the card's ordinary edge margin (Media's anchored slot)
-
-
-def _expanded(card: str, display: str, *, mode: str = "extruded_bubble", margin: float = MARGIN):
+def _expanded(card: str, display: str, *, mode: str = "extruded_bubble", chrome: str = "shadow_se"):
     size, dpr = DISPLAYS[display]
-    ordinary = _ordinary(card, display, mode=mode)
-    return ordinary, resolve_expanded_visualizer_presentation(ordinary, display_size=size, dpr=dpr,
-                                                              edge_margin=margin)
+    ordinary = _ordinary(card, display, mode=mode, chrome=chrome)
+    return ordinary, resolve_expanded_visualizer_presentation(ordinary, display_size=size, dpr=dpr)
 
 
-@pytest.mark.parametrize("margin", [0.0, MARGIN])
+def _chrome_inset(chrome: str, card_scale: float) -> float:
+    """Derived from the test-owned chrome alone: the card's border, the shadow's displaced body beyond the card (base
+    offset + Extra Offset on its furthest side, drawn at the card's scale), and the code-owned gap."""
+    values = CHROMES[chrome]
+    reach = 0.0
+    if values["shadow_enabled"]:
+        (dx, dy), (left, top, right, bottom) = values["shadow_offset"], values["shadow_extensions"]
+        reach = max(max(0.0, -dx) + left, max(0.0, -dy) + top, max(0.0, dx) + right, max(0.0, dy) + bottom)
+    return values["border_width"] + reach * card_scale + EXPANDED_CARD_EDGE_GAP
+
+
+@pytest.mark.parametrize("chrome", list(CHROMES))
 @pytest.mark.parametrize("display", list(DISPLAYS))
 @pytest.mark.parametrize("card", list(CARDS))
-def test_the_expanded_card_sits_exactly_the_edge_margin_inside_the_display(card, display, margin):
-    """Full display is not edge to edge (operator, 7 Nov): the card keeps its chrome near the display's extents."""
+def test_the_expanded_card_sits_only_its_chrome_inside_the_display(card, display, chrome):
+    """Full display is not edge to edge, and it reaches close to the borders (operator, 7 Nov: "Don't reach nearly
+    close enough to the screen borders"): the inset is the card's own chrome (its border, its shadow's displaced
+    body) plus a small gap, never the ordinary slot's edge margin. The card keeps that chrome exactly."""
     (width, height), dpr = DISPLAYS[display]
-    ordinary, expanded = _expanded(card, display, margin=margin)
-    assert expanded.outer_rect == (margin, margin, width - 2 * margin, height - 2 * margin)
+    ordinary, expanded = _expanded(card, display, chrome=chrome)
+    inset = _chrome_inset(chrome, ordinary.uniform_visual_scale)
+    assert expanded.outer_rect == pytest.approx((inset, inset, width - 2 * inset, height - 2 * inset), abs=1e-9)
     border = ordinary.border_width
-    assert expanded.border_width == border == 3.0
-    assert expanded.shell_style["corner_radius"] == ordinary.shell_style["corner_radius"] == 8.0
-    assert expanded.content_rect == (margin + border, margin + border,
-                                     width - 2 * (margin + border), height - 2 * (margin + border))
+    assert expanded.border_width == border == CHROMES[chrome]["border_width"]
+    assert expanded.shell_style["corner_radius"] == ordinary.shell_style["corner_radius"]
+    assert expanded.content_rect == pytest.approx((inset + border, inset + border, width - 2 * (inset + border),
+                                                   height - 2 * (inset + border)), abs=1e-9)
     assert expanded.dpr == dpr
-    # Device pixels of the drawn content follow this display's DPR, never a cached screen-1 value.
-    assert expanded.content_rect[2] * dpr == (width - 2 * (margin + border)) * dpr
+    # The shadow is chrome, drawn as the card draws it: never magnified with the display-wide world (which would
+    # push the card back from the borders and darken a wide band around it).
+    for key in ("shadow_blur", "shadow_spread"):
+        assert expanded.shell_style[key] == pytest.approx(ordinary.shell_style[key], abs=1e-9), key
+    for key in ("shadow_offset", "shadow_extensions"):
+        assert expanded.shell_style[key] == pytest.approx(ordinary.shell_style[key], abs=1e-9), key
+    assert expanded.shell_style["shadow_enabled"] is ordinary.shell_style["shadow_enabled"]
+
+
+def test_the_inset_is_capped_so_a_card_always_remains():
+    ordinary = _ordinary("canonical", "16x9")
+    expanded = resolve_expanded_visualizer_presentation(ordinary, display_size=(20.0, 24.0))
+    assert expanded.outer_rect == (5.0, 5.0, 10.0, 14.0)
 
 
 @pytest.mark.parametrize("display", list(DISPLAYS))
 @pytest.mark.parametrize("card", list(CARDS))
 def test_the_ordinary_world_stays_whole_and_unstretched(card, display):
     (width, height), _dpr = DISPLAYS[display]
-    width, height = width - 2 * MARGIN, height - 2 * MARGIN
     ordinary, expanded = _expanded(card, display)
+    inset = expanded.outer_rect[0]
+    width, height = width - 2 * inset, height - 2 * inset
     (ew, eh), (xw, xh) = ordinary.viewport_extent, expanded.viewport_extent
     # Contained: the expanded world holds the whole ordinary world and grows on the display's long axis only.
     assert xw >= ew - 1e-9 and xh >= eh - 1e-9
@@ -117,7 +150,8 @@ def test_a_frameless_viewport_mode_keeps_its_own_policy():
     ordinary, expanded = _expanded("canonical", "21x9", mode="sphere")
     assert expanded.clip_policy is ordinary.clip_policy is VisualizerClipPolicy.VIEWPORT_RECT
     assert expanded.shell_policy is ordinary.shell_policy
-    assert expanded.outer_rect == expanded.content_rect == (MARGIN, MARGIN, 3440.0 - 2 * MARGIN, 1440.0 - 2 * MARGIN)
+    gap = EXPANDED_CARD_EDGE_GAP                      # frameless: no border, no card shadow
+    assert expanded.outer_rect == expanded.content_rect == (gap, gap, 3440.0 - 2 * gap, 1440.0 - 2 * gap)
 
 
 @pytest.mark.parametrize("display", list(DISPLAYS))
@@ -125,10 +159,10 @@ def test_the_framed_camera_keeps_its_lens_and_sees_the_whole_card_world(display)
     """EB's aperture follows the extent height exactly as an edge-resized card's does: on a display wider than the
     card it is unchanged (same vertical world, more width); on a narrower one it opens (same width, more height).
     The frustum's aspect is the content's, so circles stay round."""
-    (width, height), _dpr = DISPLAYS[display]
     ordinary, expanded = _expanded("canonical", display)
     before, after = framed_aperture_scale(ordinary), framed_aperture_scale(expanded)
-    if (width - 2 * MARGIN) / (height - 2 * MARGIN) >= 1.5:
+    _x, _y, card_width, card_height = expanded.outer_rect
+    if card_width / card_height >= 1.5:
         assert after == before
     else:
         assert after > before
@@ -152,18 +186,17 @@ def test_invalid_inputs_are_refused():
     for size in ((0.0, 1080.0), (1920.0, -1.0), (float("nan"), 1080.0)):
         with pytest.raises(ValueError):
             resolve_expanded_visualizer_presentation(ordinary, display_size=size)
-    for margin in (-1.0, float("nan"), 540.0):
-        with pytest.raises(ValueError):
-            resolve_expanded_visualizer_presentation(ordinary, display_size=(1920.0, 1080.0), edge_margin=margin)
 
 
 # ------------------------------------------------------------------------------- the production owner's route
 
 
-def edge_margin():
-    from tools.expanded_visualizer_evidence import edge_margin as canonical_edge_margin
+def card_inset():
+    """The replay card's chrome (``tools/expanded_visualizer_evidence.CARD``: a border, no shadow) plus the gap."""
+    from tools.expanded_visualizer_evidence import CARD
 
-    return canonical_edge_margin()
+    assert CARD["shadow_enabled"] is False
+    return CARD["border_width"] + EXPANDED_CARD_EDGE_GAP
 
 
 @pytest.fixture(scope="module")
@@ -192,7 +225,7 @@ def test_the_owner_shows_the_display_and_restores_the_ordinary_record_byte_for_b
     result = _replay(qt_app, looped_clip, expand_at=30, collapse_at=250, animate=True, committed=committed)
     _x, _y, width, height = result["display"]
     records = result["ordinary"]
-    margin = edge_margin()
+    margin = card_inset()
     # The production scene drew the card near the display's extents while expanded...
     assert result["drawn"][200] == (margin, margin, width - 2 * margin, height - 2 * margin)
     # ...and the ordinary geometry (record, committed extent, drawn record) came back exactly.
@@ -224,7 +257,7 @@ def test_published_logical_frames_are_identical_ordinary_and_expanded(qt_app, lo
     ordinary = _replay(qt_app, clip, mode)["digests"]
     from_first = _replay(qt_app, clip, mode, expand_at=0)
     mid_clip = _replay(qt_app, clip, mode, expand_at=40, collapse_at=260, animate=True)
-    margin = edge_margin()
+    margin = card_inset()
     assert from_first["drawn"][0] == (margin, margin, from_first["display"][2] - 2 * margin,
                                       from_first["display"][3] - 2 * margin)
     assert ordinary == from_first["digests"] == mid_clip["digests"]
