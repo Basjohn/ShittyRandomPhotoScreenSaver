@@ -25,6 +25,11 @@ from pathlib import Path
 from typing import Iterable
 
 import psutil
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -192,7 +197,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--duration", type=float, default=30.0, help="Sampling duration in seconds (default: 30)")
     parser.add_argument("--interval", type=float, default=0.5, help="Sampling interval in seconds (default: 0.5)")
     parser.add_argument("--startup-wait", type=float, default=4.0, help="Wait after --launch before sampling")
-    parser.add_argument("--output", type=Path, help="Optional JSON output path")
+    parser.add_argument("--output", type=artifact_paths.evidence_arg, help="Optional JSON output path")
     return parser
 
 

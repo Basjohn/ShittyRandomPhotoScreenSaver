@@ -18,7 +18,7 @@ import pytest
 pytestmark = pytest.mark.qt
 
 _PROBE = r"""
-import json, sys, tempfile
+import json, sys
 from pathlib import Path
 from PySide6.QtCore import QPoint
 from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget
@@ -61,8 +61,9 @@ def measure(combo):
     return result
 
 
-settings = SettingsManager(application="combopopupprobe", storage_base_dir=Path(tempfile.mkdtemp()))
-settings.set("sources.folders", [str(Path(tempfile.mkdtemp()))])
+# The test's tmp_path (argv[1]): pytest removes it; a never-deleted %TEMP% root leaked on every run.
+settings = SettingsManager(application="combopopupprobe", storage_base_dir=Path(sys.argv[1]) / "profile")
+settings.set("sources.folders", [str(Path(sys.argv[1]) / "images")])
 dialog = SettingsDialog(settings, AnimationManager()); dialog.resize(1280, 900); dialog.show(); pump()
 index = dialog._tab_index_for_key("scene3d")
 dialog._switch_tab(index, animate=False); pump()
@@ -82,18 +83,18 @@ import os; os._exit(0)  # skip Qt teardown; the answer is already out
 """
 
 
-def _probe() -> dict:
+def _probe(tmp_path) -> dict:
     root = Path(__file__).resolve().parents[1]
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QPA_FONTDIR="C:/Windows/Fonts", PYTHONPATH=str(root))
-    completed = subprocess.run([sys.executable, "-c", _PROBE], cwd=root, env=env,
+    completed = subprocess.run([sys.executable, "-c", _PROBE, str(tmp_path)], cwd=root, env=env,
                                capture_output=True, text=True, timeout=240)
     line = next((l for l in completed.stdout.splitlines() if l.startswith("RESULT ")), None)
     assert line is not None, completed.stderr[-3000:]
     return json.loads(line[len("RESULT "):])
 
 
-def test_custom_combo_popups_draw_one_rounded_outline():
-    results = _probe()
+def test_custom_combo_popups_draw_one_rounded_outline(tmp_path):
+    results = _probe(tmp_path)
     for name, popup in results.items():
         # The container contributes no frame and no fill: nothing outside the view is painted ...
         assert popup["frame_width"] == 0, (name, popup)

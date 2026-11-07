@@ -26,7 +26,8 @@ follows it.
 closes it immediately before its thread-manager shutdown (and ``main`` at the
 end of the process), so lookups in progress return at once and new ones are
 refused; the exit barrier itself is unchanged, it simply has nothing stalled
-left to wait for.
+left to wait for. It also interrupts every raw-socket session in flight
+(``core.network.interruptible_socket``).
 """
 from __future__ import annotations
 
@@ -85,8 +86,15 @@ def lookups_in_progress() -> int:
 
 
 def close_network_admission() -> None:
-    """Process exit: fail lookups in progress at once and refuse new ones (one-way)."""
+    """Process exit: fail lookups in progress at once and refuse new ones (one-way).
+
+    Raw-socket sessions still in flight (``core.network.interruptible_socket``)
+    are interrupted too, so a stalled server never holds the exit barrier.
+    """
     _admission_closed.set()
+    from core.network.interruptible_socket import interrupt_all_sessions
+
+    interrupt_all_sessions()
 
 
 def network_admission_closed() -> bool:

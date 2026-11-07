@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse,hashlib,json,subprocess,sys
 from pathlib import Path
+from tools import artifact_paths  # noqa: E402
 ROOT=Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:sys.path.insert(0,str(ROOT))
 
@@ -80,7 +81,7 @@ def audit(args):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--clips',nargs='+',type=Path,required=True);parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--clips',nargs='+',type=Path,required=True);parser.add_argument('--output',type=artifact_paths.evidence_arg,required=True)
     parser.add_argument('--seconds',type=float,default=60.);parser.add_argument('--preset',type=int,choices=(1,2,3),default=1)
     parser.add_argument('--block',type=int,choices=(128,256,441,512,1024),default=256)
     parser.add_argument('--mode-output',action='store_true',help='Also execute the real logical mode and hash every body/birth publication')

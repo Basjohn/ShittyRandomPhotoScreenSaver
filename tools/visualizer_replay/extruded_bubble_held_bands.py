@@ -7,7 +7,7 @@ all other source stays current. Never checks out or writes Settings/presets.
 import argparse,hashlib,json,subprocess,sys,types
 from pathlib import Path
 root=Path(__file__).resolve().parents[2];sys.path.insert(0,str(root))
-parser=argparse.ArgumentParser();parser.add_argument('--simulation-ref');parser.add_argument('--output',type=Path,required=True)
+parser=argparse.ArgumentParser();parser.add_argument('--simulation-ref');parser.add_argument('--output',type=artifact_paths.evidence_arg,required=True)
 args=parser.parse_args()
 if args.output.exists():raise FileExistsError(args.output)
 name='widgets.spotify_visualizer.extruded_bubble_simulation';path='widgets/spotify_visualizer/extruded_bubble_simulation.py'
@@ -26,6 +26,7 @@ from widgets.spotify_visualizer.feature_frame import FeatureClip
 from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
 from widgets.spotify_visualizer.extruded_bubble_frame_runtime import ExtrudedBubbleFrameRuntime
 from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+from tools import artifact_paths  # noqa: E402
 clip=load_clip(root/'logs/visualizer_recordings/cindarellaman_heavy2.jsonl',10)
 peak=max(clip.frames,key=lambda f:.7*f.energy.bubble.mid+.35*f.energy.bubble.high)
 no_events=replace(peak.real,onsets=(),events=())

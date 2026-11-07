@@ -12,6 +12,11 @@ import json
 from pathlib import Path
 import re
 import zipfile
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
 
 
 def entries(payload):
@@ -70,7 +75,7 @@ def settings_receipts(lines):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--directory', type=Path, required=True)
-    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--output', type=artifact_paths.evidence_arg, required=True)
     args = parser.parse_args()
     records = []
     for path in sorted(args.directory.glob('*.zip')):

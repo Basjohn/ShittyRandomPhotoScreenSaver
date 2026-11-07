@@ -31,6 +31,8 @@ sys.path.insert(0, str(ROOT))
 
 # Match the production GL policy before importing any GL module.
 from rendering.gl_error_policy import disable_per_call_gl_error_checking
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 MODE = "extruded_bubble"
 
@@ -227,7 +229,9 @@ def _pass_medians(frames: list[dict[str, float]]) -> dict[str, float]:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--output", type=Path, required=True, help="output directory")
+    parser.add_argument("--output", type=artifact_paths.evidence_arg,
+                        default=artifact_paths.default_evidence("visualizers/extruded_bubble", "capture"),
+                        help="output directory (PNGs published as WebP)")
     parser.add_argument("--clip", type=Path, required=True, help="recorded feature JSONL (real-music recording)")
     parser.add_argument("--size", default="1300x750", help="logical card size")
     parser.add_argument("--window", help="logical window size; centres the card inside it")
@@ -239,6 +243,7 @@ def main():
     parser.add_argument("--passes", action="store_true", help="time every draw by its program (shares, not totals)")
     parser.add_argument("--preset", type=int, default=1, help="the curated preset (1-based), with its starting view")
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "output", "extruded_bubble_capture")
     size = tuple(map(int, args.size.lower().split("x")))
     window = tuple(map(int, args.window.lower().split("x"))) if args.window else None
     if len(size) != 2 or min(size) <= 0 or (window is not None and (len(window) != 2 or window[0] < size[0] or window[1] < size[1])):
@@ -257,3 +262,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    evidence_media.finish(0)

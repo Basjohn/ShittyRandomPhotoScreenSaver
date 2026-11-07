@@ -26,6 +26,8 @@ sys.path.insert(0, str(ROOT))
 
 # Match the production GL policy before importing any GL module.
 from rendering.gl_error_policy import disable_per_call_gl_error_checking
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 
 def _draw(host, target, snapshot, width, height, window):
@@ -248,7 +250,9 @@ def capture_motion(output: Path, clip_path: Path, *, width, height, dpr, window,
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--output", type=Path, required=True, help="PNG stem, or directory with --suite")
+    parser.add_argument("--output", type=artifact_paths.evidence_arg,
+                        default=artifact_paths.default_evidence("visualizers/shockwave_grid", "capture"),
+                        help="PNG stem, or directory with --suite (published as WebP)")
     parser.add_argument("--size", default="1300x750", help="logical item dimensions")
     parser.add_argument("--dpr", type=float, default=1.0)
     parser.add_argument("--window", help="logical render-window size; centres the card inside it")
@@ -267,6 +271,9 @@ def main():
     parser.add_argument("--rgb-roi", help="normalized x0,y0,x1,y1 ROI; measure every unquantized RGB frame")
     parser.add_argument("--all-frames", action="store_true", help="save every physical RGB PNG before GIF quantization")
     args = parser.parse_args()
+    if not args.clip and not args.suite and not args.output.suffix:
+        args.output = args.output.with_suffix(".png")      # a single still: the stem names one file
+    evidence_media.redirect_output(args, "output", "neon_lake_capture")
     width, height = map(int, args.size.lower().split("x"))
     window = tuple(map(int, args.window.lower().split("x"))) if args.window else None
     if (min(width, height) <= 0 or not math.isfinite(args.dpr) or args.dpr <= 0
@@ -318,3 +325,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    evidence_media.finish(0)

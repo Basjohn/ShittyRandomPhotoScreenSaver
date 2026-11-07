@@ -26,6 +26,8 @@ from pathlib import Path
 import statistics
 import sys
 import time
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -756,7 +758,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="compose before/after crops and the contrast summary from two --legibility runs")
     parser.add_argument("--wallpapers", type=Path, nargs="+",
                         help="wallpaper files (the first two also drive the transitions)")
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=artifact_paths.evidence_arg,
+                        default=artifact_paths.default_evidence("widgets", "surface_material"))
     parser.add_argument("--sheets", action="store_true")
     parser.add_argument("--smoke", action="store_true", help="one still per material, for a quick look")
     parser.add_argument("--cadence", action="store_true", help="staleness error per backdrop refresh rate")
@@ -776,6 +779,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--themes", nargs=2, metavar=("DARK", "LIGHT"),
                         help="Widget Theme names for --style (default: Default Dark, Polished Chrome)")
     args = parser.parse_args(argv)
+    evidence_media.redirect_output(args, "output", "surface_material_capture")
     global CARD_SET
     CARD_SET = args.card_set
     if args.compare_legibility:
@@ -835,4 +839,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(evidence_media.finish(main()))

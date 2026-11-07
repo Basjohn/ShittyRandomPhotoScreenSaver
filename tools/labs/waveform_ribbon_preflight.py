@@ -17,6 +17,12 @@ if str(ROOT) not in sys.path:
 
 from PIL import Image
 from core.settings.framed_camera import perspective_matrix
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 PRIMARY = 'waveform_ribbon_package/Waveform_Ribbon_Concept.png'
 CROPS = {'low': (0, 108, 640, 817), 'high': (651, 108, 1289, 817)}
@@ -79,8 +85,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--archive', type=Path, default=ROOT / 'references/waveform_ribbon_concept_package.zip')
     parser.add_argument('--fog-board', type=Path, help='Extract the operator whole-scene fog board instead of the original archive')
-    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--output', type=artifact_paths.evidence_arg, required=True)
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "output", "waveform_ribbon_preflight")
     receipt = prepare(args.archive, args.output, fog_board=args.fog_board)
     receipt['source_revision'] = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     diff = subprocess.check_output(['git', 'diff', '--binary', 'HEAD'], cwd=ROOT)
@@ -92,3 +99,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    evidence_media.finish(0)

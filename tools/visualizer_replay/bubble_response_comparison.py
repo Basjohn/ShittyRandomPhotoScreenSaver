@@ -28,6 +28,11 @@ from tools.visualizer_replay.extruded_bubble_forensics import distribution, load
 from tools.visualizer_replay.pcm_reanalysis import reanalyzed_bubble_bands
 from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
 from widgets.spotify_visualizer.extruded_bubble_frame_runtime import ExtrudedBubbleFrameRuntime
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
 
 
 def observe_mode(clip, mode, settings, size, reanalyze=False):
@@ -124,7 +129,7 @@ def window_summary(rows, start, stop):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--clip',type=Path,required=True)
-    parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--output',type=artifact_paths.evidence_arg,required=True)
     parser.add_argument('--duration',type=float,default=12.)
     parser.add_argument('--eb-preset',type=int,default=1)
     parser.add_argument('--bubble-preset',type=int,default=1)

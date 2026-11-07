@@ -16,6 +16,12 @@ from rendering.quick.widgets.host import OverlayWidgetGeometry
 from rendering.quick.window import QuickDisplayWindow
 from rendering.widget_stacking import DisplayStackParticipant, build_display_stack_plan, build_display_auto_scale_plan
 from tools.ordinary_widget_resize_capture import FAMILIES, build_card, settle, grab, ledger
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 
 def capture(output: Path) -> None:
@@ -81,5 +87,9 @@ def capture(output: Path) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", required=True, type=Path)
-    capture(parser.parse_args().output.resolve())
+    parser.add_argument("--output", type=artifact_paths.evidence_arg,
+                        default=artifact_paths.default_evidence("widgets", "stack_capture"))
+    args = parser.parse_args()
+    evidence_media.redirect_output(args, "output", "ordinary_widget_stack_capture")
+    capture(args.output.resolve())
+    evidence_media.finish(0)

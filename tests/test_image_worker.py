@@ -7,8 +7,6 @@ Tests cover:
 - Cache key strategy preservation
 - Error handling for missing/invalid files
 """
-import os
-import tempfile
 import pytest
 
 from PIL import Image
@@ -62,32 +60,19 @@ def worker():
 
 
 @pytest.fixture
-def test_image_path():
+def test_image_path(tmp_path):
     """Create a temporary test image."""
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-        # Create a 100x100 red image
-        img = Image.new("RGB", (100, 100), color=(255, 0, 0))
-        img.save(f.name, "PNG")
-        yield f.name
-    # Cleanup
-    try:
-        os.unlink(f.name)
-    except Exception:
-        pass
+    path = tmp_path / "red.png"
+    Image.new("RGB", (100, 100), color=(255, 0, 0)).save(path, "PNG")
+    return str(path)
 
 
 @pytest.fixture
-def large_test_image_path():
+def large_test_image_path(tmp_path):
     """Create a larger temporary test image for prescale tests."""
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-        # Create a 1920x1080 gradient image
-        img = Image.new("RGB", (1920, 1080), color=(0, 128, 255))
-        img.save(f.name, "PNG")
-        yield f.name
-    try:
-        os.unlink(f.name)
-    except Exception:
-        pass
+    path = tmp_path / "large.png"
+    Image.new("RGB", (1920, 1080), color=(0, 128, 255)).save(path, "PNG")
+    return str(path)
 
 
 class TestImageWorkerDecode:

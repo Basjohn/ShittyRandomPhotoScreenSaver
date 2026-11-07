@@ -27,7 +27,6 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -44,6 +43,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.settings.settings_manager import SettingsManager
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 
 user32 = ctypes.windll.user32
@@ -1095,7 +1099,7 @@ def run_harness(args: argparse.Namespace) -> Dict[str, Any]:
     if args.profile_mode == "live":
         isolate_appdata = False
     if args.profile_mode == "mirrored":
-        appdata_root = (Path(tempfile.gettempdir()) / f"srpss_media_harness_{timestamp}").resolve()
+        appdata_root = artifact_paths.run_scratch("media_key_matrix_harness", f"profile_{timestamp}").resolve()
         profile_status = _mirror_live_profile(appdata_root)
         if not profile_status.get("copied"):
             raise RuntimeError(
@@ -1108,7 +1112,7 @@ def run_harness(args: argparse.Namespace) -> Dict[str, Any]:
             _apply_harness_safety_settings(appdata_root)
             profile_status["safe_click_guards"] = True
     elif isolate_appdata:
-        appdata_root = (Path(tempfile.gettempdir()) / f"srpss_media_harness_{timestamp}").resolve()
+        appdata_root = artifact_paths.run_scratch("media_key_matrix_harness", f"profile_{timestamp}").resolve()
         image_dir = (ROOT / "images").resolve()
         _seed_profile_settings(appdata_root, image_dir)
         if args.safe_click_guards:
@@ -1306,8 +1310,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Comma-separated scenario list.",
     )
     parser.add_argument(
-        "--output-dir",
-        default=str(ROOT / "logs"),
+        "--output-dir", type=artifact_paths.evidence_arg,
+        default=artifact_paths.default_evidence("media", "media_key_matrix"),
         help="Directory root for harness reports.",
     )
     parser.add_argument(
@@ -1359,6 +1363,7 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
     payload = run_harness(args)
+    artifact_paths.discard_run_scratch("media_key_matrix_harness")   # the profile copy; kept on failure
     print("[HARNESS] Completed media/input matrix run")
     print(f"[HARNESS] Report JSON: {Path(payload['output_dir']) / 'matrix_report.json'}")
     print(f"[HARNESS] Report MD:   {Path(payload['output_dir']) / 'matrix_report.md'}")

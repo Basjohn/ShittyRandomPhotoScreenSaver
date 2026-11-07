@@ -40,6 +40,11 @@ from media_key_matrix_harness import (  # noqa: E402
 from media_key_reality_harness import (  # noqa: E402
     _capture_input_events, _make_appdata, _native_window_styles, _vk_name,
 )
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 MEDIA_VK = {0xAD, 0xAE, 0xAF, 0xB0, 0xB1, 0xB2, 0xB3}
 PHYSICAL_MEDIA_VK = {0x21, 0x22}  # PgUp/PgDn used with PowerToys remap
@@ -381,7 +386,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--observe-seconds", type=float, default=12.0)
     parser.add_argument("--response-timeout-s", type=float, default=2.5)
     parser.add_argument("--launch-timeout-s", type=float, default=45.0)
-    parser.add_argument("--output-dir", default=str(ROOT / "logs" / "hardware_ingress"))
+    parser.add_argument("--output-dir", type=artifact_paths.evidence_arg, default=artifact_paths.default_evidence("input", "hardware_ingress"))
     parser.add_argument("--safe-click-guards", action="store_true", default=True)
     parser.add_argument("--no-safe-click-guards", dest="safe_click_guards", action="store_false")
     parser.add_argument("--refocus-before-observe", action="store_true", default=True)
@@ -391,6 +396,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     payload = run_validation(build_parser().parse_args())
+    artifact_paths.discard_run_scratch("media_key_reality_harness")   # the profile copy; kept on failure
     print("[VALIDATOR] Hardware ingress validation complete")
     print(f"[VALIDATOR] JSON: {Path(payload['output_dir']) / 'validation_report.json'}")
     print(f"[VALIDATOR] MD:   {Path(payload['output_dir']) / 'validation_report.md'}")

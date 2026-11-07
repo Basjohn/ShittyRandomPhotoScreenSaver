@@ -247,7 +247,6 @@ def differences(golden: dict, current: dict) -> list[str]:
 # Shader/filtering improvements do not require modifying artist-authored presets or golden PNGs.
 VISUAL_DIR = GOLDEN.parent / "sphere_visual"
 VISUAL_TIER = "High"                         # pinned: the reference must not depend on the GPU
-VISUAL_REVIEW = Path(__file__).resolve().parents[2] / "logs" / "sphere_visual_review"
 VISUAL_CASES = (
     ("glass_current_rest", "glass_current", "silence", 45, 480, 270),
     ("glass_current_kicks", "glass_current", "kicks", 60, 480, 270),
@@ -410,9 +409,18 @@ def main() -> None:
             reference = load_png(path) if path.exists() else np.zeros_like(pixels)
             print(f"{name:24s} {visual_difference(reference, pixels)}")
             if reference.shape == pixels.shape:
-                _save_png(VISUAL_REVIEW / f"{name}.png", np.concatenate([reference, pixels], axis=1))
-        if args.visual:
-            print(f"before | after sheets: {VISUAL_REVIEW}")
+                # Review sheets are evidence (tools/artifact_paths.py): a WebP each, via a scratch PNG.
+                from tools import artifact_paths, evidence_media
+
+                review = artifact_paths.run_scratch("sphere_golden", "review")
+                review.mkdir(parents=True, exist_ok=True)
+                _save_png(review / f"{name}.png", np.concatenate([reference, pixels], axis=1))
+                sheet = artifact_paths.webp_path("visualizers/sphere", "golden_review", artifact_paths.run_label(name))
+                evidence_media.still_from_png(review / f"{name}.png", sheet)
+                print(f"before | after sheet: {sheet}")
+        from tools import artifact_paths
+
+        artifact_paths.discard_run_scratch("sphere_golden")
         return
     from PySide6.QtCore import QCoreApplication
 

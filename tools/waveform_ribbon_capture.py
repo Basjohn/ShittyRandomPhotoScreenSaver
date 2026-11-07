@@ -5,6 +5,8 @@ from bisect import bisect_left
 from dataclasses import replace
 import hashlib,json,math,subprocess,sys,wave
 from pathlib import Path
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 ROOT=Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:sys.path.insert(0,str(ROOT))
 
@@ -156,7 +158,7 @@ def capture(args):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--clip',type=Path,required=True);parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--clip',type=Path,required=True);parser.add_argument('--output',type=artifact_paths.evidence_arg,default=artifact_paths.default_evidence('visualizers/waveform_ribbon','capture'))
     parser.add_argument('--preset',type=int,default=1,help='Curated preset number (1-based)');parser.add_argument('--start',type=float,default=20.)
     parser.add_argument('--duration',type=float,default=4.);parser.add_argument('--fps',type=int,default=12)
     parser.add_argument('--size',default='820x718');parser.add_argument('--ffmpeg',type=Path)
@@ -174,13 +176,14 @@ def main():
     if args.ffmpeg and (args.viewports or any(part%2 for part in sizes[0])):
         parser.error('Video needs one even-width/even-height size')
     if args.worker:return capture(args)
+    work=evidence_media.redirect_output(args,'output','waveform_ribbon_capture')
     from tools.build_runner import BuildProcessOwner
-    owner=BuildProcessOwner();process=owner.start([sys.executable,__file__,*sys.argv[1:],'--worker'],cwd=ROOT)
+    owner=BuildProcessOwner();process=owner.start([sys.executable,__file__,*sys.argv[1:],'--output',str(work),'--worker'],cwd=ROOT)
     try:
         try:code=process.wait(timeout=900)
         except subprocess.TimeoutExpired:owner.cancel();process.wait(timeout=10);raise
     finally:owner.retire(process);owner.shutdown()
-    raise SystemExit(code)
+    raise SystemExit(evidence_media.finish(code))
 
 
 if __name__=='__main__':main()

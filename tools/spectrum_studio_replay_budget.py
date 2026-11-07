@@ -16,6 +16,11 @@ import sys
 import time
 from dataclasses import replace
 from pathlib import Path
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -24,7 +29,7 @@ sys.path.insert(0, str(ROOT))
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--budget", type=float, default=0.008, help="seconds per evaluation; 0 = unbounded")
-    parser.add_argument("--out", type=Path, default=None)
+    parser.add_argument("--out", type=artifact_paths.evidence_arg, default=None)
     args = parser.parse_args(argv)
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication

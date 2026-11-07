@@ -28,6 +28,8 @@ from core.ribbon_ring import RibbonRing
 from core.settings.framed_camera import perspective_matrix
 from rendering.quick.scene3d.ribbon import RibbonPrimitive
 from tools.labs.render_target import OffscreenRenderTarget
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 
 def fixture(count, knots):
@@ -176,7 +178,9 @@ def run(output, frames):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--output', type=artifact_paths.evidence_arg, required=True)
     parser.add_argument('--frames', type=int, default=90)
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "output", "ribbon_strip_probe")
     run(args.output, args.frames)
+    evidence_media.finish(0)

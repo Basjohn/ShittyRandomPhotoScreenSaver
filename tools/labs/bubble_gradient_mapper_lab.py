@@ -20,6 +20,7 @@ from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QW
 from core.settings.default_contract import require_canonical_default
 from rendering.quick.visualizer.implementations.bubble import QuickBubbleRenderer
 from rendering.quick.visualizer.render_host import QuickVisualizerRenderHost
+from tools import artifact_paths, evidence_media  # noqa: E402
 from tools.labs.render_target import OffscreenRenderTarget
 from tools.onboarding_preview_foundry import _build_spectrum_preview_snapshot
 from ui.font_registration import ensure_custom_fonts
@@ -118,8 +119,11 @@ class BubbleGradientMapperLab(QWidget):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--capture", type=Path)
+    parser.add_argument("--capture", type=artifact_paths.evidence_arg,
+                        help="PNG path under the evidence layout; published as WebP on success")
     args = parser.parse_args()
+    if args.capture:
+        evidence_media.redirect_output(args, "capture", "bubble_gradient_mapper_lab")
     app = QApplication([])
     ensure_custom_fonts()
     lab = BubbleGradientMapperLab()
@@ -153,4 +157,4 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(evidence_media.finish(main()))

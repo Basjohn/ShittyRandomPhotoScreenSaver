@@ -33,6 +33,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from rendering.gl_error_policy import disable_per_call_gl_error_checking  # noqa: E402
+from tools import artifact_paths  # noqa: E402
 
 MODE = "waveform_ribbon"
 CONTROL_FRAGMENT = """#version 460 core
@@ -377,7 +378,7 @@ def main() -> int:
     parser.add_argument("--extra", type=int, default=4, help="extra repeats of an amplified stage")
     parser.add_argument("--whole", action="store_true", help="whole frame, control and CPU only (no stage variants)")
     parser.add_argument("--set", action="append", default=[], help="KEY=JSON setting override")
-    parser.add_argument("--json", type=Path, help="write the result here")
+    parser.add_argument("--json", type=artifact_paths.evidence_arg, help="write the result here")
     args = parser.parse_args()
     if not disable_per_call_gl_error_checking():
         raise SystemExit("could not disable per-call GL error checking")
