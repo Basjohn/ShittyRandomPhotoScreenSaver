@@ -341,6 +341,10 @@ Write-Host "[BUILD-VENV] Frozen source identity: $SourceFingerprint"
 $argsList = @(
     "-m", "nuitka",
     "--msvc=latest",
+    # Unattended builds (Build Runner logs the worker without a console; GitHub runners) cannot answer Nuitka's
+    # one-time Dependency Walker download prompt, whose non-interactive default "no" is a FATAL for standalone
+    # Windows builds (GitHub Remote, 8 Nov 2026). An already cached copy is reused unchanged.
+    "--assume-yes-for-downloads",
     "--jobs=4",
     "--standalone",
     "--remove-output",

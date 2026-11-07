@@ -48,6 +48,12 @@ def test_the_workflow_builds_only_the_requested_commit_with_the_canonical_worker
     assert "ISCC" not in text                                                       # installers stay local
 
 
+def test_the_canonical_workers_run_unattended():
+    # A fresh machine or runner cannot answer Nuitka's Dependency Walker prompt; "no" is FATAL (first remote run).
+    for script in ("scripts/venv/build_nuitka.ps1", "scripts/venv/build_nuitka_mc_onedir.ps1"):
+        assert '"--assume-yes-for-downloads",' in (ROOT / script).read_text(encoding="utf-8"), script
+
+
 def test_the_workflow_never_interpolates_inputs_into_scripts():
     # Inputs reach scripts only through the environment (no script injection through a crafted input).
     blocks = re.findall(r"run: \|\n((?:\s{10,}.*\n)+)", _workflow())
