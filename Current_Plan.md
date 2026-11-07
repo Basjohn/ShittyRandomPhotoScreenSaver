@@ -110,9 +110,31 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   AC-17 to AC-23. Theme-material root cause (AC-17): the generated Widget mirror of each "[Glass]"/"[Acrylic]"
   Settings theme deliberately drops the material, so the runtime never sees one. The fix waits on the operator's
   choice.
-- **Settings SSOT fold (Opus high, started 7 Nov):** AC-19, AC-22, AC-18, AC-21, AC-23 and AC-20, in that order,
-  each a separate commit. Each must fail on the old code first and keep the spec systems as the owners. AC-17 joins
-  once the operator chooses.
+- **Settings SSOT fold: merged 7 Nov (0e86b4aa).** Six items landed, each its own commit:
+  - **AC-19:** Reset and Import re-derive the active Settings and Widget themes, and the Themes tab reloads.
+  - **AC-22:** one MC predicate decides whether interaction is forced.
+  - **AC-18:** the Technical controls are spec entries. 3090 preset fields are identical and 27/27 replay digests
+    match; `technical_controls.py` is deleted.
+  - **AC-21:** the shared Bar Appearance and Rainbow families are spec entries; the hidden holder and
+    `shared_appearance_controls.py` are gone.
+  - **AC-23:** the dead residue is removed and three disclosure schemas are retired through the bridge.
+  - **AC-20:** the Particle, Blinds and Burn pages read their ranges from the transition spec.
+
+  **Lead audit:**
+  - Two of the new test files, copied onto main, fail there (30 failures, behavioural).
+  - Nothing imports the deleted modules.
+  - A 211-file Settings, Studio, transition, preset and lifecycle gate on the merge passed 210. The one failure was
+    a source-text test left stale by AC-01 (it sits outside the registry gate's import graph); it is fixed in
+    a4d34f71.
+
+  **Visible changes for the operator:**
+  - Neon Lake's Kick Lane Gain is now offered: the renderer always read it.
+  - The Particle radius default is 8, which is what always ran.
+  - Particle Gloss Size offers 16–128, which is what the resolver admits.
+  - Manual Floor's low is 0.0 everywhere.
+  - Technical tooltips use the registry names.
+
+  **AC-17 (theme material) waits on the operator's choice.**
 - [~] **Spectrum presets 2-15: re-authored by the lead (7 Nov), awaiting the operator's eyes.** The first agent
   round failed the fidelity gate (operator: "awful"). Its looks were opaque clip-art blocks, its per-bar patterns
   turned to checkerboard and tartan, its ghost trails read as soot, and Union Jack read as tartan. That round is not
