@@ -458,6 +458,15 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 - `tests/test_release_media.py::test_source_change_during_capture_discards_media` fails in any fresh worktree (main
   too): it needs the untracked operator originals `assets/usu/scenes/UsuScene*.png`.
 
+**Side defects (freeform held-left orbit fix, 7 Nov):**
+- `tests/test_visualizer_control_hints.py` calls `window.show()` / `qWaitForWindowExposed` (`hint_scene`, ~line
+  128): a visible window in a test. Run in one process after the other orbit/input files it dies with an access
+  violation at `hint_scene` (main too); run alone it once failed 2 tests and then passed 12/12 (flaky).
+- A freeform-to-freeform mode switch (Sphere to Extruded Spectrum) does not send the input controller a
+  `plain_orbit_cancel_requested('mode')` edge: that edge comes only from `set_scene_transform_enabled`, which is
+  framed-only. Not verified whether the card watchers (presentationActive, geometry) always unwind a held-left orbit
+  across such a switch; add a test, or emit the edge on any orbiting-mode change.
+
 **Lead only:** merges and merge gates; the game60 live checks (card surfaces with materials on; Waveform after the
 tick cut); scheduling heavy load generators; promoting checklist items here.
 
