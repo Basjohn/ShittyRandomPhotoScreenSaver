@@ -283,6 +283,11 @@ source identity.
 ## 9A. Product display admission / semantic input
 
 - [ ] Exactly one visualizer owner is admitted across participating displays for the current product instance.
+- [ ] Owner construction, bind, transfer, retirement, input admissions and authored placement stay in
+      `VisualizerHostBinding` (`widgets/spotify_visualizer/visualizer_host_binding.py`); a new host binds through it,
+      `DisplayManager` only picks the unit and never imports the owner. No second construction site.
+- [ ] Authored placement and Media docking resolve only through `resolve_visualizer_authored_placement` and the
+      descriptor's `docked_to`; Arrange and the saver never grow separate adjacency rules.
 - [ ] Requested-monitor/fallback and committed/CUSTOM geometry semantics are preserved.
 - [ ] Non-owning displays do not construct duplicate controller/source/logical runtime ownership.
 - [ ] Retained visualizer double-click cycles mode before display-level next-image fallback.
