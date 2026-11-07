@@ -8,68 +8,56 @@ and a runtime destruction barrier that waits for the retiring generation's
 work waits with it (measured 7 Nov 2026: a Gmail IMAP ``LOGIN`` held the
 Settings barrier for 6.2 s).
 
-``SocketInterrupt`` is the session's handle. The worker binds every socket it
-opens (the TCP socket while it connects, then the TLS socket); the owner calls
-``interrupt()`` at retirement, which shuts the bound socket down and closes it,
-so the blocked call fails at once. A socket bound after the interrupt is
-closed immediately and the bind raises ``SocketInterrupted``. The interrupt is
-event driven: no timer, poll or thread.
+``SocketInterrupt`` is the session's handle. The worker thread owns every
+socket: it connects non-blocking and runs TLS through an ``SSLObject`` over
+memory BIOs (``SSLContext.wrap_bio``), so every wait is its own ``select`` on
+the socket AND the session's wake socket. ``interrupt()`` only sets a flag and
+writes one byte to the wake socket; the waiting worker sees it, raises
+``SocketInterrupted`` and closes its own sockets. The interrupting thread
+never closes or detaches a descriptor another thread may be using (a closed
+handle number is reused at once, and OpenSSL would keep reading the old
+number). No timer, poll or helper thread.
 
-Live interrupts are also registered with the process exit fence:
-``core.network.bounded_dns.close_network_admission()`` interrupts every session
-still in flight, so a stalled server never holds process exit either.
-
-Each blocking step stays bounded by its own socket timeout; the interrupt only
-ends the wait early.
+Each blocking step (connect, one handshake, one read, one write) is bounded by
+the step timeout; the interrupt only ends the wait early. Live sessions are
+registered with the process exit fence:
+``core.network.bounded_dns.close_network_admission()`` signals every session
+still in flight.
 """
 from __future__ import annotations
 
+import errno
+import select
 import socket
+import ssl
 import threading
+import time
 import weakref
-from typing import Any, Callable
+from typing import Callable
 
 _live_lock = threading.Lock()
 _live: "weakref.WeakSet[SocketInterrupt]" = weakref.WeakSet()
+_RECV_CHUNK = 65536
+# connect_ex results meaning "in progress" (WSAEWOULDBLOCK is 10035 on Windows).
+_IN_PROGRESS = {errno.EINPROGRESS, errno.EWOULDBLOCK, errno.EAGAIN, 10035}
 
 
 class SocketInterrupted(OSError):
     """The session was interrupted by its owner or the process exit fence."""
 
 
-def _abort(sock: Any) -> None:
-    """Wake every call blocked on ``sock`` and release its handle now.
-
-    ``shutdown()`` wakes a blocked ``recv`` on POSIX but not on Windows, and
-    ``sock.close()`` is deferred while a ``makefile()`` reader (``imaplib``)
-    still holds the socket. Detaching the descriptor and closing it directly
-    closes the handle at once, which fails the blocked call (WSAENOTSOCK on
-    Windows) and also ends a ``connect()`` still in progress. Safe to repeat.
-    """
-    try:
-        socket.socket.shutdown(sock, socket.SHUT_RDWR)
-    except Exception:
-        pass
-    try:
-        fd = socket.socket.detach(sock)
-    except Exception:
-        fd = -1
-    if fd is not None and fd >= 0:
-        try:
-            socket.close(fd)
-        except Exception:
-            pass
-
-
 class SocketInterrupt:
-    """Interrupt handle for one client session (one or more sequential sockets)."""
+    """Interrupt handle for one client session; its sockets belong to the worker thread."""
 
-    __slots__ = ("_lock", "_interrupted", "_socket", "__weakref__")
+    __slots__ = ("_lock", "_interrupted", "_wake_r", "_wake_w", "_socket", "__weakref__")
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._interrupted = False
-        self._socket: Any = None
+        self._wake_r, self._wake_w = socket.socketpair()
+        self._wake_r.setblocking(False)
+        self._wake_w.setblocking(False)
+        self._socket: socket.socket | None = None     # the session's TCP socket (worker-owned)
         with _live_lock:
             _live.add(self)
 
@@ -77,36 +65,49 @@ class SocketInterrupt:
     def interrupted(self) -> bool:
         return self._interrupted
 
-    def bind(self, sock: Any) -> Any:
-        """Make ``sock`` the session's interruptible socket; returns it."""
+    def interrupt(self) -> None:
+        """Signal the session to end (any thread). Closes nothing."""
         with self._lock:
-            if not self._interrupted:
-                self._socket = sock
-                return sock
-        _abort(sock)
-        raise SocketInterrupted("network session interrupted")
+            if self._interrupted:
+                return
+            self._interrupted = True
+            if self._wake_w is not None:
+                try:
+                    self._wake_w.send(b"\0")
+                except OSError:
+                    pass                                   # wake buffer full: already signalled
+        with _live_lock:
+            _live.discard(self)
 
     def release(self) -> None:
-        """The session ended normally; forget its socket."""
+        """Worker thread, session over: close the wake pair (the session's sockets are closed already)."""
         with self._lock:
-            self._socket = None
+            wake_r, wake_w = self._wake_r, self._wake_w
+            self._wake_r = self._wake_w = None
+        for sock in (wake_r, wake_w):
+            if sock is not None:
+                sock.close()
         with _live_lock:
             _live.discard(self)
-
-    def interrupt(self) -> None:
-        """End the session now: the blocked call (and every later bind) fails."""
-        with self._lock:
-            self._interrupted = True
-            sock = self._socket
-            self._socket = None
-        with _live_lock:
-            _live.discard(self)
-        if sock is not None:
-            _abort(sock)
 
     def raise_if_interrupted(self) -> None:
         if self._interrupted:
             raise SocketInterrupted("network session interrupted")
+
+    def wait(self, sock: socket.socket, *, write: bool, deadline: float, error: bool = False) -> None:
+        """Wait until ``sock`` is readable (or writable), the interrupt fires, or the step deadline passes."""
+        while True:
+            self.raise_if_interrupted()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("network step timed out")
+            wake = self._wake_r
+            readers = [wake] if write else [sock, wake]
+            readable, writable, failed = select.select(
+                [r for r in readers if r is not None], [sock] if write else [], [sock] if error else [], remaining)
+            self.raise_if_interrupted()
+            if readable or writable or failed:
+                return
 
     def create_connection(
         self,
@@ -116,7 +117,7 @@ class SocketInterrupt:
         *,
         should_continue: Callable[[], bool] | None = None,
     ) -> socket.socket:
-        """``socket.create_connection`` with a bounded lookup and an interruptible connect."""
+        """A connected non-blocking TCP socket: bounded lookup, interruptible bounded connect (worker thread)."""
         from core.network.bounded_dns import DnsLookupError, resolve_bounded
 
         def _continue() -> bool:
@@ -133,22 +134,149 @@ class SocketInterrupt:
         for family, socktype, proto, _name, address in infos:
             self.raise_if_interrupted()
             sock = socket.socket(family, socktype, proto)
-            self.bind(sock)
             try:
-                sock.settimeout(timeout)
-                sock.connect(address)
+                sock.setblocking(False)
+                code = sock.connect_ex(address)
+                if code != 0 and code not in _IN_PROGRESS:
+                    raise OSError(code, f"connect to {address} failed")
+                if code != 0:
+                    self.wait(sock, write=True, error=True, deadline=time.monotonic() + timeout)
+                    code = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+                    if code:
+                        raise OSError(code, f"connect to {address} failed")
+                self._socket = sock
                 return sock
-            except OSError as exc:
-                _abort(sock)
-                self.raise_if_interrupted()
+            except BaseException as exc:
+                sock.close()                               # this (the worker) thread owns it
+                if isinstance(exc, SocketInterrupted) or not isinstance(exc, OSError):
+                    raise
                 last_error = exc
         if last_error is not None:
             raise last_error
         raise OSError(f"no address for {host}:{port}")
 
+    def open_tls(
+        self,
+        host: str,
+        port: int,
+        timeout: float,
+        context: ssl.SSLContext,
+        *,
+        should_continue: Callable[[], bool] | None = None,
+    ) -> "InterruptibleTLSStream":
+        """Connect and complete the TLS handshake (certificate and hostname checked by ``context``)."""
+        sock = self.create_connection(host, port, timeout, should_continue=should_continue)
+        try:
+            stream = InterruptibleTLSStream(self, sock, context, host, timeout)
+            stream.handshake()
+        except BaseException:
+            sock.close()
+            raise
+        return stream
+
+
+class _NoFile:
+    """``imaplib`` keeps ``sock.makefile('rb')`` only to close it; it reads through ``recv``."""
+
+    def close(self) -> None:
+        return None
+
+
+class InterruptibleTLSStream:
+    """TLS over a non-blocking socket via memory BIOs; every wait also watches the session's wake socket.
+
+    Offers what ``imaplib.IMAP4`` uses of its socket: ``recv``, ``sendall``, ``makefile``, ``shutdown``,
+    ``close``, ``settimeout`` and ``gettimeout``. Used only by the thread that owns the session.
+    """
+
+    def __init__(self, interrupt: SocketInterrupt, sock: socket.socket, context: ssl.SSLContext,
+                 host: str, timeout: float) -> None:
+        self._interrupt = interrupt
+        self._sock = sock
+        self._timeout = float(timeout)
+        self._incoming = ssl.MemoryBIO()
+        self._outgoing = ssl.MemoryBIO()
+        self._tls = context.wrap_bio(self._incoming, self._outgoing, server_hostname=host)
+
+    # -- the pump -------------------------------------------------------------------------------------------
+    def _flush(self, deadline: float) -> None:
+        pending = self._outgoing.read()
+        view = memoryview(pending)
+        while view:
+            try:
+                sent = self._sock.send(view)
+                view = view[sent:]
+            except (BlockingIOError, InterruptedError):
+                self._interrupt.wait(self._sock, write=True, deadline=deadline)
+
+    def _fill(self, deadline: float) -> None:
+        while True:
+            try:
+                data = self._sock.recv(_RECV_CHUNK)
+            except (BlockingIOError, InterruptedError):
+                self._interrupt.wait(self._sock, write=False, deadline=deadline)
+                continue
+            if data:
+                self._incoming.write(data)
+            else:
+                self._incoming.write_eof()
+            return
+
+    def _run(self, operation):
+        deadline = time.monotonic() + self._timeout       # one bounded step
+        while True:
+            self._interrupt.raise_if_interrupted()
+            try:
+                result = operation()
+            except ssl.SSLWantReadError:
+                self._flush(deadline)
+                self._fill(deadline)
+                continue
+            except ssl.SSLWantWriteError:
+                self._flush(deadline)
+                continue
+            self._flush(deadline)
+            return result
+
+    # -- the socket surface imaplib uses ----------------------------------------------------------------------
+    def handshake(self) -> None:
+        self._run(self._tls.do_handshake)
+
+    def recv(self, size: int) -> bytes:
+        try:
+            return self._run(lambda: self._tls.read(size))
+        except (ssl.SSLZeroReturnError, ssl.SSLEOFError):
+            return b""
+
+    def sendall(self, data: bytes) -> None:
+        view = memoryview(data)
+        while view:
+            written = self._run(lambda: self._tls.write(view))
+            view = view[written:]
+
+    def makefile(self, mode: str = "rb") -> _NoFile:
+        return _NoFile()
+
+    def settimeout(self, timeout: float | None) -> None:
+        if timeout:
+            self._timeout = float(timeout)
+
+    def gettimeout(self) -> float:
+        return self._timeout
+
+    def shutdown(self, how: int = socket.SHUT_RDWR) -> None:
+        try:
+            self._sock.shutdown(how)
+        except OSError:
+            pass
+
+    def close(self) -> None:
+        """Owner (worker) thread only."""
+        self._sock.close()
+
 
 def interrupt_all_sessions() -> int:
-    """Process exit fence: interrupt every session in flight. Returns the count."""
+    """Process exit fence: signal every session in flight. Returns the count."""
     with _live_lock:
         live = tuple(_live)
     for session in live:
@@ -162,6 +290,7 @@ def live_session_count() -> int:
 
 
 __all__ = [
+    "InterruptibleTLSStream",
     "SocketInterrupt",
     "SocketInterrupted",
     "interrupt_all_sessions",

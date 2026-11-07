@@ -13,8 +13,8 @@ Transport contract (Docs/Contracts.md -> Network transports): every blocking
 step (lookup, connect, TLS handshake, LOGIN, SELECT, SEARCH, FETCH, STORE,
 LOGOUT) is bounded by ``IMAP_TIMEOUT`` per step, and the whole session is
 interruptible through a ``core.network.interruptible_socket.SocketInterrupt``:
-a retiring Gmail runtime interrupts its sessions, which closes the socket so
-the blocked call returns at once instead of waiting for the server.
+a retiring Gmail runtime interrupts its sessions (a signal only); the waiting worker
+raises at once and closes its own socket instead of waiting for the server.
 """
 from __future__ import annotations
 
@@ -42,12 +42,14 @@ IMAP_PORT = 993
 IMAP_TIMEOUT = 30
 
 
-class InterruptibleIMAP4_SSL(imaplib.IMAP4_SSL):
-    """``IMAP4_SSL`` whose sockets are bound to a ``SocketInterrupt``.
+class InterruptibleIMAP4_SSL(imaplib.IMAP4):
+    """IMAP over TLS whose every wait can be interrupted by the session's ``SocketInterrupt``.
 
-    The TCP connect goes through ``SocketInterrupt.create_connection`` (bounded
-    lookup, interruptible connect) and the TLS handshake runs after the TLS
-    socket is bound, so an interrupt ends every phase, not only reads.
+    ``_create_socket`` returns ``SocketInterrupt.open_tls``: a non-blocking TCP connect and TLS through an
+    ``SSLObject`` over memory BIOs, so connect, handshake, each read and each write wait on the socket and
+    the session's wake socket together, bounded by ``timeout`` per step. The interrupting thread only signals;
+    this (the worker) thread raises ``SocketInterrupted`` and closes its own socket (``shutdown``).
+    Certificate and hostname checks are exactly ``ssl_context``'s.
     """
 
     def __init__(
@@ -60,30 +62,16 @@ class InterruptibleIMAP4_SSL(imaplib.IMAP4_SSL):
         interrupt: SocketInterrupt,
         should_continue: Optional[Callable[[], bool]] = None,
     ) -> None:
+        self.ssl_context = ssl_context
         self._srpss_interrupt = interrupt
         self._srpss_should_continue = should_continue
-        super().__init__(host, port, ssl_context=ssl_context, timeout=timeout)
+        super().__init__(host, port, timeout)
 
     def _create_socket(self, timeout):
-        interrupt = self._srpss_interrupt
-        raw = interrupt.create_connection(
-            self.host, self.port, timeout,
+        return self._srpss_interrupt.open_tls(
+            self.host, self.port, timeout if timeout else IMAP_TIMEOUT, self.ssl_context,
             should_continue=self._srpss_should_continue,
         )
-        try:
-            tls = self.ssl_context.wrap_socket(
-                raw, server_hostname=self.host, do_handshake_on_connect=False,
-            )
-        except BaseException:
-            raw.close()
-            raise
-        try:
-            interrupt.bind(tls)
-            tls.do_handshake()
-        except BaseException:
-            tls.close()
-            raise
-        return tls
 
 
 def _decode_header_value(raw: Optional[str]) -> str:

@@ -17,9 +17,13 @@ Only loopback sockets are used: the fake server accepts and then never answers
 """
 from __future__ import annotations
 
+import shutil
 import socket
+import ssl
+import subprocess
 import threading
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -103,10 +107,34 @@ class _PlainSocket(socket.socket):
         return None
 
 
+class _PlainObject:
+    """``SSLObject`` stand-in: passes bytes straight through the memory BIOs."""
+
+    def __init__(self, incoming, outgoing):
+        self._incoming, self._outgoing = incoming, outgoing
+
+    def do_handshake(self):
+        return None
+
+    def read(self, size):
+        data = self._incoming.read(size)
+        if not data and not self._incoming.eof:
+            raise ssl.SSLWantReadError()
+        return data
+
+    def write(self, data):
+        return self._outgoing.write(bytes(data))
+
+
 class _PlainContext:
-    """Test-only stand-in for the verified context: no TLS on the loopback link."""
+    """Test-only stand-in for the verified context: no TLS on the loopback link (the IMAP exchange is what
+    the tests hold up; the real context's TLS is covered by the handshake and bad-hostname tests)."""
+
+    def wrap_bio(self, incoming, outgoing, server_hostname=None, **_kw):
+        return _PlainObject(incoming, outgoing)
 
     def wrap_socket(self, sock, server_hostname=None, do_handshake_on_connect=True, **_kw):
+        # The pre-fix transport (``imaplib.IMAP4_SSL``) wraps the socket; kept so the controls run on main.
         timeout = sock.gettimeout()
         plain = _PlainSocket(sock.family, sock.type, sock.proto, fileno=sock.detach())
         plain.settimeout(timeout)
@@ -278,12 +306,92 @@ def test_the_process_exit_fence_interrupts_a_session_in_flight(monkeypatch):
         worker.join(_SERVER_HOLD_S + 5.0)
 
 
-def test_a_socket_bound_after_the_interrupt_is_closed_at_once():
-    from core.network.interruptible_socket import SocketInterrupt, SocketInterrupted
+def test_the_interrupting_thread_never_closes_the_session_socket(monkeypatch, ui_inline):
+    """``interrupt()`` only signals: the socket stays open until the worker thread closes it itself.
 
-    interrupt = SocketInterrupt()
-    interrupt.interrupt()
-    sock = socket.socket()
-    with pytest.raises(SocketInterrupted):
-        interrupt.bind(sock)
-    assert sock.fileno() == -1
+    Closing a descriptor another thread is reading lets a new socket reuse its handle number while OpenSSL
+    still reads the old one, so the retiring reader could consume another connection's bytes.
+    """
+    server = _StallingImapServer()
+    _point_client_at(monkeypatch, server, plain=True)
+    client = GmailImapClient("user@example.com", "app-password")
+    owner, _errors = _owner(client)
+    worker = _start_fetch(owner, client)
+    gate = threading.Event()
+    closers: list[int] = []
+    try:
+        assert server.login_seen.wait(5.0), "the fake server never saw LOGIN"
+        (session,) = tuple(owner._session_interrupts)
+        target = session._socket
+        assert target is not None and target.fileno() != -1
+        real_close = socket.socket.close
+
+        def watched_close(sock):
+            if sock is target:
+                closers.append(threading.get_ident())
+                if threading.get_ident() == worker.ident:
+                    gate.wait(5.0)          # hold the worker so the open socket can be observed
+            return real_close(sock)
+
+        monkeypatch.setattr(socket.socket, "close", watched_close)
+        owner.retire()                      # interrupt() runs on this thread and returns
+        assert target.fileno() != -1, "the interrupting thread closed the session's socket"
+        assert threading.get_ident() not in closers
+        gate.set()
+        worker.join(_SETTLE_BOUND_S)
+        assert not worker.is_alive()
+        assert target.fileno() == -1, "the worker never closed its socket"
+        assert closers and set(closers) == {worker.ident}
+    finally:
+        gate.set()
+        server.close()
+        worker.join(_SERVER_HOLD_S + 5.0)
+
+
+def _openssl() -> str | None:
+    found = shutil.which("openssl")
+    for candidate in (found, r"C:\Program Files\Git\usr\bin\openssl.exe",
+                      r"C:\Program Files\Git\mingw64\bin\openssl.exe"):
+        if candidate and Path(candidate).is_file():
+            return candidate
+    return None
+
+
+def test_a_certificate_for_another_host_still_fails_verification(tmp_path):
+    """The interruptible TLS path keeps the context's hostname check (a cert for another name is refused)."""
+    from core.network.interruptible_socket import SocketInterrupt
+
+    openssl = _openssl()
+    if openssl is None:
+        pytest.skip("openssl is not available to make a throwaway loopback certificate")
+    cert, key = tmp_path / "cert.pem", tmp_path / "key.pem"
+    made = subprocess.run([openssl, "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", str(key),
+                           "-out", str(cert), "-days", "2", "-subj", "/CN=wrong.example",
+                           "-addext", "subjectAltName=DNS:wrong.example"], capture_output=True, timeout=60)
+    if made.returncode != 0:
+        pytest.skip("openssl could not make a certificate here")
+    server_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    server_context.load_cert_chain(cert, key)
+    listener = socket.create_server(("127.0.0.1", 0))
+    listener.settimeout(10.0)
+    port = listener.getsockname()[1]
+
+    def serve():
+        try:
+            conn, _ = listener.accept()
+            with server_context.wrap_socket(conn, server_side=True):
+                pass
+        except (OSError, ssl.SSLError):
+            pass
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    client_context = ssl.create_default_context(cafile=str(cert))       # trusts the cert, checks the name
+    session = SocketInterrupt()
+    try:
+        with pytest.raises(ssl.SSLCertVerificationError):
+            session.open_tls("127.0.0.1", port, 5.0, client_context)
+    finally:
+        session.release()
+        listener.close()
+        thread.join(10.0)
