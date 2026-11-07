@@ -150,8 +150,9 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
     against floor contact before. That is an authoring choice; no reaction was shrunk.
 
   Evidence: `.artifacts/evidence/waveform_followups/` (tables, clip sheets, music traces; raw captures not kept).
-  **Next for this agent:** checklist **AC-12** (the monotonic authored clock) as its own pass, gated on byte-identical
-  replays for every mode. Its live tick spikes around preset switches are gen2 GC, now queue item 1 below.
+  **AC-12 (the monotonic authored clock) built 7 Nov, awaiting the lead's review:** every mode's recorded-clip replay
+  byte-identical to main (88 cases, nine modes); result in `Docs/Reference/Architecture_Checklist.md` AC-12, evidence
+  `.artifacts/evidence/ac12/`. Its live tick spikes around preset switches are gen2 GC, now queue item 1 below.
 **Queued, next free medium slot, in this order (small, bounded):**
 0. **Checklist AC-06** (left by the Studio agent): the four Studio adapters' unbounded class-level clip caches and
    the GUI-thread clip parse. Repeated offscreen Extruded Bubble sessions still grow about 2-3 MB each after the

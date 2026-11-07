@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
+from core.authored_clock import authored_now
 
 
 class _ImmediateLane:
@@ -228,7 +229,7 @@ def test_inline_analysis_commits_what_the_compute_lane_commits(monkeypatch):
         if manager is not None:
             engine.set_thread_manager(manager)
         engine._is_spotify_playing = True
-        frame = SimpleNamespace(samples=[0.0] * 64, capture_ts=time.time(),
+        frame = SimpleNamespace(samples=[0.0] * 64, capture_ts=authored_now(),
                                 activation_id=engine._activation_id)
         monkeypatch.setattr(engine._audio_buffer, "consume_latest", lambda: frame)
         engine.tick()

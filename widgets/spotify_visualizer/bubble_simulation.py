@@ -29,6 +29,7 @@ from widgets.spotify_visualizer.bubble_viewport_profile import (
     scale_bubble_population,
 )
 from widgets.spotify_visualizer.signal_contract import burst_authority, soft_ceiling
+from core.authored_clock import authored_now
 
 _SWIRL_DIRECTIONS = {"swirl_cw", "swirl_ccw"}
 
@@ -897,7 +898,7 @@ class BubbleSimulation:
         drift_diag_now = 0.0
         drift_diag_due = False
         if is_viz_diagnostics_enabled():
-            drift_diag_now = time.time()
+            drift_diag_now = authored_now()
             drift_diag_due = bool(
                 self._diag_tick_count <= 6
                 or (
@@ -985,7 +986,7 @@ class BubbleSimulation:
             overdrive_boost = 0.10 + 0.30 * overdrive_norm
             effective_speed = min(cap, effective_speed * (1.0 + overdrive_boost))
             if is_viz_diagnostics_enabled():
-                now = time.time()
+                now = authored_now()
                 if now - self._overdrive_last_log_ts >= 0.5:
                     self._log_overdrive_state("hold", reactivity_raw, overdrive_gate_signal)
                     self._overdrive_last_log_ts = now

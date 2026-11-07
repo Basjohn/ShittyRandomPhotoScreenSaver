@@ -124,7 +124,7 @@ def test_bubble_quantified_consumed_signal_matches_old_spectrum_path(
 
     old, new = _pair(np, dynamic_floor=dynamic_floor)
     clock = SimpleNamespace(now=1000.0)
-    monkeypatch.setattr(transient_bus.time, "time", lambda: clock.now)
+    monkeypatch.setattr(__import__("core.authored_clock").authored_clock, "authored_clock_source", lambda: clock.now)
     # Ensure old actually visits the Spectrum shaping machinery, new never.
     visits = []
     original = bar_computation._build_lane_energy_profile

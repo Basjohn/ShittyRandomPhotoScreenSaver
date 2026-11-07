@@ -39,7 +39,7 @@ def paused_engine(monkeypatch):
     engine.set_playback_state(False)
     engine._audio_buffer.consume_latest = Mock(return_value=None)
     clock = [1000.25]
-    monkeypatch.setattr(beat_engine_module.time, "time", lambda: clock[0])
+    monkeypatch.setattr(__import__("core.authored_clock").authored_clock, "authored_clock_source", lambda: clock[0])
     engine._test_clock = clock
     return engine
 

@@ -34,6 +34,7 @@ from widgets.spotify_visualizer.render_state import (
     VisualizerProtectedEdge,
     VisualizerTransientState,
 )
+from core.authored_clock import authored_now
 
 logger = get_logger(__name__)
 
@@ -987,9 +988,9 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
         declare_history(draws_samples)
 
     # Trigger engine tick (schedules audio processing + smoothing on COMPUTE pool)
-    _engine_tick_start = time.time()
+    _engine_tick_start = authored_now()
     engine.tick()
-    _engine_tick_elapsed = (time.time() - _engine_tick_start) * 1000.0
+    _engine_tick_elapsed = (authored_now() - _engine_tick_start) * 1000.0
     if _engine_tick_elapsed > 20.0 and is_perf_metrics_enabled():
         logger.warning("[PERF] [SPOTIFY_VIS] Slow engine.tick(): %.2fms", _engine_tick_elapsed)
 
@@ -1397,7 +1398,7 @@ def logical_tick(widget: Any) -> Optional[VisualizerLogicalFrame]:
     # --perf is fixed for the process; with it off the tick records no phases.
     perf_enabled = is_perf_metrics_enabled()
     if perf_enabled:
-        _tick_entry_ts = time.time()
+        _tick_entry_ts = authored_now()
         _record_tick_phase, _tick_phase_ms = _new_tick_phase_recorder()
     else:
         _record_tick_phase = _skip_tick_phase
@@ -1409,7 +1410,7 @@ def logical_tick(widget: Any) -> Optional[VisualizerLogicalFrame]:
         return None
     _record_tick_phase("validity")
 
-    now_ts = time.time()
+    now_ts = authored_now()
     # Transition state deliberately no longer reaches the logical step. It used
     # to retune the tick interval every tick and pause the tick source outright;
     # per Current_Plan sections 7.3 and 8 the authored logical cadence is
@@ -1494,7 +1495,7 @@ def logical_tick(widget: Any) -> Optional[VisualizerLogicalFrame]:
         return payload
     used_gpu = False
     first_frame = not widget._has_pushed_first_frame
-    _tick_elapsed = (time.time() - _tick_entry_ts) * 1000.0
+    _tick_elapsed = (authored_now() - _tick_entry_ts) * 1000.0
     if _tick_elapsed > 50.0 and not lifecycle_window.is_open():
         logger.warning("[PERF] [SPOTIFY_VIS] Slow _on_tick: %.2fms", _tick_elapsed)
         phase_payload = " ".join(

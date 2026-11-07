@@ -10,6 +10,7 @@ import time
 from types import SimpleNamespace
 from unittest.mock import Mock
 from widgets.spotify_visualizer.beat_engine import _SpotifyBeatEngine
+from core.authored_clock import authored_now
 
 
 def _audio_frame(samples):
@@ -18,7 +19,7 @@ def _audio_frame(samples):
         samples=samples,
         history=tuple(samples),
         history_rate=48000,
-        capture_ts=time.time(),
+        capture_ts=authored_now(),
         activation_id=0,
     )
 
@@ -189,7 +190,7 @@ class TestVisualizerPlaybackGating:
         """Paused idle bars must not be zeroed by the playing-only silence decay path."""
         beat_engine.set_playback_state(False)
         beat_engine._audio_buffer.consume_latest = Mock(return_value=None)
-        beat_engine._last_audio_ts = time.time() - 1.0
+        beat_engine._last_audio_ts = authored_now() - 1.0
 
         result = beat_engine.tick()
 
@@ -202,8 +203,8 @@ class TestVisualizerPlaybackGating:
         """Idle presentation must persist even when warm capture grace expires."""
         beat_engine.set_playback_state(False)
         beat_engine._audio_buffer.consume_latest = Mock(return_value=None)
-        beat_engine._last_audio_ts = time.time() - 1.0
-        beat_engine._capture_keepalive_deadline = time.time() - 0.1
+        beat_engine._last_audio_ts = authored_now() - 1.0
+        beat_engine._capture_keepalive_deadline = authored_now() - 0.1
         beat_engine._audio_worker.stop = Mock()
 
         result = beat_engine.tick()
@@ -259,7 +260,7 @@ class TestVisualizerPlaybackGating:
         original_set_state = beat_engine.set_playback_state
         
         def track_state_changes(is_playing):
-            state_changes.append((time.time(), is_playing))
+            state_changes.append((authored_now(), is_playing))
             return original_set_state(is_playing)
         
         beat_engine.set_playback_state = track_state_changes

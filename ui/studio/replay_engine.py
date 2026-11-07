@@ -47,7 +47,7 @@ def clocked_scheduler():
         now = 0.0
 
         def consume_next(self, event_type: str, max_age_s: float = 0.5):
-            # TransientEventScheduler.consume_next with ``time.time()`` replaced by the fixture clock.
+            # TransientEventScheduler.consume_next with the authored clock replaced by the fixture clock.
             cutoff = self.now - max_age_s
             best = None
             for entry in self._ring:

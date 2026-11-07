@@ -171,7 +171,7 @@ def test_live_compute_callback_and_replay_acceptance_publish_same_analysis(monke
         lambda _state, _samples: list(raw_bars),
     )
     clock = iter((10.0, 10.01, 10.02))
-    monkeypatch.setattr(beat_engine, "time", SimpleNamespace(time=lambda: next(clock)))
+    monkeypatch.setattr(__import__("core.authored_clock").authored_clock, "authored_clock_source", lambda: next(clock))
 
     live._schedule_compute_bars_task(object())
     assert manager.categories == ["visualizer.audio_analysis"]

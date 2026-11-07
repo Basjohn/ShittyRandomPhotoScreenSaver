@@ -7,7 +7,6 @@ center-out frequency mapping, reactive smoothing, and adaptive normalization.
 from __future__ import annotations
 
 import logging
-import time
 from dataclasses import dataclass
 from typing import List, Mapping, Optional, TYPE_CHECKING
 
@@ -17,6 +16,7 @@ from core.logging.logger import (
     is_perf_metrics_enabled,
     is_viz_diagnostics_enabled,
 )
+from core.authored_clock import authored_now
 
 if TYPE_CHECKING:
     from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker
@@ -429,7 +429,7 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
 
     # Sparse logging
     try:
-        now = time.time()
+        now = authored_now()
     except Exception as e:
         logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         now = 0.0
@@ -745,7 +745,7 @@ def _apply_reactive_smoothing(worker: "SpotifyVisualizerAudioWorker", arr, bands
     the old multiplicative-toward-zero pattern that caused center bars to
     oscillate between snapping up and decaying past the sustained level.
     """
-    now_ts = time.time()
+    now_ts = authored_now()
     dt = now_ts - worker._last_fft_ts if worker._last_fft_ts > 0 else 0.0
     worker._last_fft_ts = now_ts
 
@@ -964,7 +964,7 @@ def maybe_log_floor_state(
         return
 
     try:
-        now = time.time()
+        now = authored_now()
     except Exception as e:
         logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         return

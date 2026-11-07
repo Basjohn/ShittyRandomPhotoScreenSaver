@@ -99,7 +99,7 @@ def test_the_bus_publishes_every_onset_exactly_once_whatever_the_reading_cadence
     from widgets.spotify_visualizer.transient_bus import TransientBus
 
     clock = [100.0]
-    monkeypatch.setattr(transient_bus.time, "time", lambda: clock[0])
+    monkeypatch.setattr(__import__("core.authored_clock").authored_clock, "authored_clock_source", lambda: clock[0])
     bus = TransientBus()
     times = []
     for step in range(60):                      # 2.7 ms analysis frames: a quiet floor with three hits
