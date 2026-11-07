@@ -219,9 +219,17 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 
   **For the operator (a product choice the agent made):** switching from an incapable mode back to a capable one
   re-applies a saved "expanded" intent.
-  **Overhead drift found on main, not from M1:** the stored baseline `2026-11-06_ed9cec6b` is now behind main by
-  +46 Python calls per Visualizer frame and +14 per Burn frame. The lead attributes it at M0 (a candidate is the
-  AC-12 `authored_now()` wrapper replacing C `time.time()` calls) and re-records the baseline.
+  **Overhead drift (attributed by the lead, 7 Nov): not a regression.** The +46 Python calls per Visualizer frame
+  (Spectrum 757 → 803, Extruded Spectrum 1179 → 1225) arrive exactly at 700799e7: AC-08's `rendering/quick/gl_query.py`.
+  - AC-12 adds none: 757 before and after it.
+  - Each wrapper call replaces a PyOpenGL checked getter (~2.7 µs against ~13 µs a query).
+  - Control-relative render CPU fell: Spectrum 2.04 → 1.26 cf, Extruded Spectrum 3.29 → 2.12 cf.
+  - The baseline is re-recorded at M0.
+- **Settings round-trip memory growth (Opus high, started 7 Nov):** about 20 MB per Settings round trip, linear,
+  pre-existing (see the GC item in the queue).
+  - Classify it: Python cycles, live references, Qt/QML native, GL/driver.
+  - Fix it at the owner.
+  - Prove a flat slope over 9 round trips, with a structural regression test.
 - **Lead, the next quiet machine (no agents running):**
   - the M0 baseline receipts (plan 01 §0.2);
   - the GC freeze live check with Settings round trips (once the harness lands);
@@ -287,6 +295,19 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
      re-freeze or an early exit. Smoke (Bubble, 40 s, no load, 10,25): both re-froze, no timeout.
    - The live 64–152 ms spikes at Waveform preset switches are not yet attributed. The live trace will show whether
      they are collections.
+   - **Settings round-trip live check (lead, 7 Nov):** Waveform P4, 600 s, load none, 9 round trips.
+     - **Correct:** every round trip completed with thaw and re-freeze, and no barrier timed out.
+     - **But memory grows per Settings round trip, and it predates the GC change.** Rounds 2–8, measured before
+       each teardown:
+
+       | Build | RSS | Private bytes |
+       |---|---|---|
+       | Before the GC change (1713207d, harness adapted) | +17 MB per round trip | +19 MB |
+       | Main | +24 MB | +25 MB |
+
+     - The GC change may add a few MB through uncollected retired cycles. That is unproven and close to noise.
+     - Evidence: `.artifacts/evidence/gc_gen2/live_roundtrip_wf_p4_{main,pregc}/`. Investigation: §3, the
+       Settings round-trip memory agent.
 
 **Found while landing AC-01 (7 Nov; record, not yet admitted):**
 - **Dead after A-12: removed by the Settings SSOT fold (AC-18, AC-23).** Still open from that note:
