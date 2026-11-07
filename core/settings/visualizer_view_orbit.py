@@ -79,6 +79,10 @@ def starting_camera_pose(mode: str, preset_index: int) -> Dict[str, float]:
     from core.settings.default_contract import require_canonical_default
     from core.settings.visualizer_presets import get_custom_preset_index, get_presets
     keys = get_visualizer_view_pose_keys(mode)
+    if not get_visualizer_mode_descriptor(mode).scene_transform_settings:
+        # A freeform orbit (Sphere, Extruded Spectrum): its presets author no starting view (that metadata is a
+        # framed-mode record), so every preset's home is the canonical turn/tilt.
+        return {key: float(require_canonical_default(f"widgets.spotify_visualizer.{key}")) for key in keys}
     values = None
     presets = get_presets(mode)
     if 0 <= preset_index < len(presets) and preset_index != get_custom_preset_index(mode):

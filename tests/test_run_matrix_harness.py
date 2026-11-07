@@ -95,7 +95,8 @@ def test_runs_sequentially_snapshots_logs_and_reports_distinct_failures(tmp_path
                 "Windows fatal exception: older unrelated run\nrun 1\n" + _main_markers()
             )
         seen_commands.append(list(command))
-        assert cwd.name == "ShittyRandomPhotoScreenSaver"
+        # The harness runs every case from the checkout it lives in (any folder name: a worktree too).
+        assert Path(cwd).resolve() == harness.ROOT.resolve()
         stdout_path.write_bytes(f"stdout {run_index}\n".encode())
         stderr_path.write_bytes(f"stderr {run_index}\n".encode())
         text = "Windows fatal exception: current run\n" if run_index == 1 else f"run {run_index + 1}\n"

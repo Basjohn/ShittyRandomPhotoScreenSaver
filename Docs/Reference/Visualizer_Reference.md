@@ -873,6 +873,25 @@ GLSL and CPU mirrors in `rendering/gl_programs/extruded_spectrum_program.py`).
   orbiting stops, dropped by any camera input, which first settles the swivelled turn so the view never snaps); the
   logical capture evaluates it at its frame time. No timer, polling or per-frame write; the swivel is never
   persisted. Tests: `test_visualizer_view_orbit.py` (swivel, wait, input takeover, off/clamped/undeclared).
+- **One camera control contract across every orbiting mode (checklist AC-11, operator 7 Nov: "don't ruin the
+  bordered 3D cameras so adjust the freeform Sphere").** Every mode that declares `view_orbit_settings` declares a
+  Reset Camera path (`visualizer_camera_reset_path`): `framed` (the shared physical camera of
+  `core/settings/framed_camera.py`: preset home, lens and position) or, for a freeform mode, `home` through the
+  descriptor's `view_camera_reset` (turn/tilt to the preset's home, which is the canonical view because freeform
+  presets author no starting view; no physical camera, flight or lens), or `none: <reason>`. R and the in-card Reset
+  Camera glyph share one route (`DisplayManager._reset_quick_visualizer_camera`); the glyph consumes its own
+  double-click (`Docs/Guardrails/Visualizer_Presentation.md` §14A). The freeform modes keep their look, framing and
+  free orbit: the renderer is untouched and a reset is pixel-identical to the never-orbited home view. Inertia and
+  wrap are declared per mode; `tests/test_visualizer_camera_contract.py` holds the registry to this table:
+
+  | Mode | Reset Camera | Inertia | Turn wraps | Why |
+  | --- | --- | --- | --- | --- |
+  | `sphere` | home | yes | yes | A freeform ball: a drag spins it and it coasts; it has no back to hide. |
+  | `extruded_spectrum` | home | no | yes | Freeform bars: its orbit policy is kept as it was (a drag places the view). |
+  | `shockwave_grid` | framed | no | no | A landscape: no underside to swing round to. |
+  | `extruded_bubble` | framed | no | yes | A volume seen from any side; Auto Rotate swivels it round. |
+  | `waveform_ribbon` | framed | yes | no | A ribbon over a floor: it coasts but never swings below the floor. |
+
 - **Reusable framed 3D camera contract:** Neon Lake and Extruded Bubble consume the shared bounded internal-camera
   capability through the existing descriptor/view-orbit/scene-transform owners; future bordered 3D modes reuse it rather
   than copying renderer bounds/pan logic or adding another camera store. A framed mode supplies its declared pivot, fit,
