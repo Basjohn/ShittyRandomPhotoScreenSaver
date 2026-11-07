@@ -1,6 +1,6 @@
-"""Sphere's Settings body: the preset row and the Sphere Studio launcher.
+"""Voxel Sphere's Settings body (mode id ``sphere``): the preset row and its Studio launcher.
 
-Every Sphere control (including its audio analysis) is edited in the Studio, which has parity+ with the retired
+Every Voxel Sphere control (including its audio analysis) is edited in the Studio, which has parity+ with the retired
 buckets (``tests/test_visualizer_studio_parity.py`` proves it from the registries)."""
 from ui.tabs.media.spec_mode_builder import build_studio_owned_mode_ui
 

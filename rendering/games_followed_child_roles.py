@@ -1,5 +1,8 @@
 """Presentation-neutral, canonical grouped CUSTOM child roles for Games You Follow.
 
+Games You Follow persists as widget id ``steam_progress``; its other spellings (``games_you_follow``,
+``steam_followed``, ``games_followed``) are mapped in ``Docs/Reference/Naming.md``.
+
 Kept outside Qt so the runtime descriptor and retained Qt model share exactly
 these identities without importing Steam, starting a widget, or polling.
 """

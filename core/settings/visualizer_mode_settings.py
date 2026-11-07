@@ -833,7 +833,7 @@ def shared_family_entries(mode_id: str) -> tuple[Control, ...]:
     return tuple(entries)
 
 
-# ---- Shockwave Grid ----------------------------------------------------------------------------
+# ---- Neon Lake Basin (`shockwave_grid`) ----------------------------------------------------------
 
 _BASIN_WIRE_CHOICES = tuple(BASIN_SURFACE_STYLES)
 _BASIN_GLASS = tuple(value for value,bits in BASIN_SURFACE_STYLES.items() if bits&4)
@@ -1132,7 +1132,7 @@ _SHOCKWAVE_GRID = ModeSettings(
 )
 
 
-# ---- Oscilloscope ------------------------------------------------------------------------------
+# ---- Oscilloscope (`oscilloscope`) ---------------------------------------------------------------
 
 def _oscilloscope() -> ModeSettings:
     from rendering.gl_programs.oscilloscope_options import OSC_DISPLAYS, OSC_GRATICULES
@@ -1196,7 +1196,7 @@ def _oscilloscope() -> ModeSettings:
     )
 
 
-# ---- Spline Curve ------------------------------------------------------------------------------
+# ---- Spline Curve (`devcurve`) -------------------------------------------------------------------
 
 # DevCurve solves its full visual snapshot on the logical clock, including styling.
 
@@ -1290,7 +1290,7 @@ _DEVCURVE = ModeSettings(
 )
 
 
-# ---- Extruded Spectrum -------------------------------------------------------------------------
+# ---- Extruded Spectrum (`extruded_spectrum`) -----------------------------------------------------
 
 # Source controls project through the descriptor onto the existing Spectrum source/ghost owners.
 _EXTRUDED_SPECTRUM = ModeSettings(
@@ -1353,7 +1353,7 @@ _EXTRUDED_SPECTRUM = ModeSettings(
 )
 
 
-# ---- Spectrum ----------------------------------------------------------------------------------
+# ---- Spectrum (`spectrum`) -----------------------------------------------------------------------
 
 _SPECTRUM = ModeSettings(
     "spectrum",
@@ -1456,7 +1456,7 @@ _SPECTRUM = ModeSettings(
 )
 
 
-# ---- Voxel Sphere ------------------------------------------------------------------------------
+# ---- Voxel Sphere (`sphere`) ---------------------------------------------------------------------
 
 # Styling and response belong to Sphere's configure-owned frozen logical bundle. Finish is authoring only.
 _SPHERE = ModeSettings(
@@ -1564,6 +1564,7 @@ _SPHERE = ModeSettings(
 )
 
 
+# ---- Bubble (`bubble`) ---------------------------------------------------------------------------
 
 def _bubble_choice(value: object) -> str:
     return str(value).strip().lower()
@@ -1744,7 +1745,7 @@ _BUBBLE = ModeSettings(
 )
 
 
-# ---- Extruded Bubble ------------------------------------------------------------------------------------------
+# ---- Extruded Bubble (`extruded_bubble`) ---------------------------------------------------------
 # Its own control set (original Bubble's is only a guideline). Extruded_Bubble_Target.md section 9: nested buckets,
 # visual controls (direction mappers, the collision triangle, range sliders for every quiet..loud amount) and
 # conditionals so only what the current choices use is shown.
@@ -1957,6 +1958,9 @@ _EXTRUDED_BUBBLE = ModeSettings(
         Slider("extruded_bubble_scene_pan_y", "", -0.5, 0.5),
     ) + audio_analysis_entries("extruded_bubble", block_size=256, agc=0.4),
 )
+
+
+# ---- Waveform Ribbon (`waveform_ribbon`) ---------------------------------------------------------
 
 def _waveform_ribbon() -> ModeSettings:
     from core.waveform_ribbon_authoring import RIBBON_CAPACITY

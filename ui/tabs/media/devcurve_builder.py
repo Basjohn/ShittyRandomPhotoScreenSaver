@@ -1,6 +1,6 @@
-"""DevCurve's Settings body: the preset row and the DevCurve Studio launcher.
+"""Spline Curve's Settings body (mode id ``devcurve``): the preset row and its Studio launcher.
 
-Every DevCurve control (including its audio analysis) is edited in the Studio, which has parity+ with the retired
+Every Spline Curve control (including its audio analysis) is edited in the Studio, which has parity+ with the retired
 buckets (``tests/test_visualizer_studio_parity.py`` proves it from the registries)."""
 from ui.tabs.media.spec_mode_builder import build_studio_owned_mode_ui
 
