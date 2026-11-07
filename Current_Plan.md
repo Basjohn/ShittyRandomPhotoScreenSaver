@@ -112,23 +112,47 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   - values duplicated between 2D and 3D or between runtime and Settings.
   It produces a ranked, actionable checklist (priority, reward, the fix) that the lead challenges and promotes into
   `Docs/Reference/Architecture_Checklist.md`. Defects it finds go to this plan.
-- **Spectrum presets 2 onward** (Opus medium, started 7 Nov): queue item 5 below, in progress (flags, 2000s-app
-  themes, novel 2.5D/gloss/ghost presets on Preset 1's reactivity; judged on rendered music clips). **Merge gate
-  (operator 7 Nov): the lead judges fidelity on the rendered clips first.** Each preset must be vibrant and distinct,
-  each flag recognisable, and the reactivity on Preset 1's baseline (no saturation, dead bars or washed-out colour).
-  Anything that fails goes back to the agent.
-- **Waveform agent** (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch `worktree-agent-af0eb2492e1e318d7`):
-  the logical tick cut (it had computed main's identity digests and was running its branch digests and tests; the
-  gate is byte-identical output, Preset 4 required; then the lead schedules the game60 live check). After the cut: a
-  music-vs-response check of every preset and Reaction Mode, the floor clipping the operator sees (raise the lift
-  limit; the operator now prefers a little more height to floor clipping, which partly supersedes "top edge first"),
-  live tick spikes of 64-152 ms around Quick preset switches, and checklist **AC-12** (monotonic authored clock; same
-  files, so it lands after the cut).
+- **Spectrum presets 2 onward: the first agent round FAILED the fidelity gate and is not merged** (branch
+  `worktree-agent-a7d325cb268f513f7`, evidence `.artifacts/evidence/spectrum_presets_20261107/`). Operator, 7 Nov:
+  "those contact sheets for spectrum are awful". Lead verdict:
+  - every look is an opaque, flat, clip-art block, unlike Preset 1's luminous outline;
+  - per-bar patterns at 37 bars turn into checkerboard and tartan noise;
+  - every translucent ghost trail reads as grey or brown soot on the dark card: a white ghost tip at low alpha is
+    grey;
+  - Union Jack reads as tartan and Rising Sun as plain red bars, because the pattern system has no flag-scale
+    shapes. Shared Dots and Grid tile at most a 24 px cell.
+
+  The lead now owns the art direction (queue item 7). The agent's measured findings stay valid and are recorded
+  there as shader defects: rim glow fills bars above about 0.3, Rainbow Fill re-hues the pattern, and the fill
+  gradient blends in RGB.
+- **Waveform agent** (Opus medium, worktree `agent-af0eb2492e1e318d7`, branch `worktree-agent-af0eb2492e1e318d7`).
+  **The tick cut is merged (7 Nov).** Lead audit: three realistic mutations are each caught by
+  `tests/test_waveform_logical_tick_exactness.py` (a Gaussian cache key ignoring the width, one shifted grid shared
+  by both directions, and a 1e-6 spring-term change). 43/43 Waveform files pass isolated on main. The game60 live
+  check is owed on a quiet machine.
+  Now on the follow-ups:
+  - a music-vs-response check of every preset and Reaction Mode;
+  - the floor clipping the operator sees: raise the lift limit (the operator prefers a little more height to floor
+    clipping, which partly supersedes "top edge first");
+  - checklist **AC-12** (the monotonic authored clock).
+
+  Its live tick spikes around preset switches are gen2 GC, now queue item 1 below.
 **Queued, next free medium slot, in this order (small, bounded):**
 0. **Checklist AC-06** (left by the Studio agent): the four Studio adapters' unbounded class-level clip caches and
    the GUI-thread clip parse. Repeated offscreen Extruded Bubble sessions still grow about 2-3 MB each after the
    controller-leak fix; these caches are the first suspect.
-1. **Two clicks on Reset Camera count as the card's double-click, which cycles the Visualizer mode** (operator 6 Nov
+1. **Gen2 garbage collection stalls the logical thread for 86–161 ms about once a minute, in every mode (found by
+   the Waveform cut, 7 Nov).** Offline, every tick over ~16 ms in both builds was exactly one gen2 collection: about
+   one per 5,500 ticks, roughly every 60 s at 90 Hz. Allocation bursts (preset switches, Studio sessions) bring
+   collections forward. That fits the live 64–152 ms spikes around Waveform preset switches. A pause that long is a
+   visible hitch.
+   - **Measure first:** record gen2 collections live with `gc.callbacks` timestamps on the existing opt-in frame
+     trace (no recurring work at rest), on two modes in the live check.
+   - **Then fix at the process owner:** `gc.freeze()` once the startup warm-up ends (the long-lived startup heap
+     leaves the scanned generations), plus tuned thresholds if still needed. Name the work that disappears.
+   - **Prove:** gen2 pauses are rare and short live, there is no memory growth over a long run (overhead baseline),
+     and lifecycle and teardown are unchanged.
+2. **Two clicks on Reset Camera count as the card's double-click, which cycles the Visualizer mode** (operator 6 Nov
    ~22:00; `logs/screensaver*.log` 22:04:34-36). Two presses each ran a reset ("[VIS_ORBIT] Camera reset to preset
    home" x2). The pair also reached the visualizer region's double-click admission
    (`QuickVisualizerDoubleClickAdmission`, `cycle_mode=self._cycle_quick_visualizer_mode`,
@@ -138,20 +162,20 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
    Camera and any other in-card control) consume their presses, including the second press of a double-click, so no
    in-card control press reaches mode cycling. Regression bar: a double-click on Reset Camera resets once or twice but
    never cycles; a double-click on the card's empty area still cycles.
-2. **Checklist AC-04:** a failing inactive-renderer release blacks out the active mode on every frame
+3. **Checklist AC-04:** a failing inactive-renderer release blacks out the active mode on every frame
    (`rendering/quick/visualizer/render_host.py:182-183, 304-329`); render the active mode first, record the failure
    once, retry at the next boundary.
-3. **Checklist AC-05:** one beat-engine authority (delete `_global_beat_engine`; the tick uses
+4. **Checklist AC-05:** one beat-engine authority (delete `_global_beat_engine`; the tick uses
    `controller.ensure_engine()` or raises). Lands before any SMP PCM source.
-4. **Checklist AC-09 and AC-08 together** (one card border width resolver; one GL state-query helper on the per-frame
+5. **Checklist AC-09 and AC-08 together** (one card border width resolver; one GL state-query helper on the per-frame
    fences with the query order preserved, plus the bench node-path case). Mechanical, pixel-identical.
 6. **Checklist AC-11, decided (operator 7 Nov): "don't ruin the bordered 3D cameras so adjust the freeform Sphere
    but ideally in a way that does not ruin its look/capabilities".** The framed (bordered) 3D cameras of Extruded
    Bubble, Neon Lake and Waveform stay exactly as they are. Sphere (freeform) gains a Reset Camera to its preset home
    and declared inertia/wrap, without changing its look, framing or orbit freedom; Extruded Spectrum gets the same
    treatment where it applies. Prove it pixel-identical at the preset home and identical under orbit before and after.
-   The in-card Reset Camera button must consume its own presses (item 1).
-5. **Spectrum presets 2 onward re-authored (operator 7 Nov):** they "have no vibrancy, unique patterns, shapes and so
+   The in-card Reset Camera button must consume its own presses (item 2).
+7. **Spectrum presets 2 onward re-authored (operator 7 Nov):** they "have no vibrancy, unique patterns, shapes and so
    on. Like, even do a flags of a few countries thing would be easy and neat compared to what we have now". Give each
    preset a distinct, vibrant identity from what the mode supports (bar colour bands and gradients, shapes,
    mirroring, glow): a few national-flag palettes across the bars, plus other strong pattern and shape ideas. Judge
@@ -235,8 +259,8 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
     `tests/test_waveform_logical_tick_exactness.py` compares against the pre-cut forms with an fp64-fade negative
     control. Offline the gain is small (P4 min-of-3 median 3.01 -> 2.94 ms on a loaded machine; quiet-machine phase
     savings ~0.1-0.2 ms). Every tick above ~16 ms offline, in both builds, is one gen2 GC (86-161 ms, about one per
-    5,500 ticks): the remaining live spikes are GC, not Waveform work. Evidence
-    `.artifacts/evidence/waveform_logical_tick/` (worktree agent-af0eb2492e1e318d7).
+    5,500 ticks): the remaining live spikes are GC, not Waveform work. Merged 7 Nov after the lead's mutation audit
+    (§3). Evidence: `.artifacts/evidence/waveform_logical_tick/` in the main checkout (local, git-ignored).
 - [~] **Frozen builds could not open a Studio (operator 6 Nov: "module QtQuick.Controls.Basic is not installed"): fixed
   in source (e5005ffa), confirm on the next build.** The QML prune removed QtQuick/Controls, Templates and Shapes, and
   the import allowlist scanned only the saver's QML, never `ui/studio/qml`. The build now keeps the Basic style's
