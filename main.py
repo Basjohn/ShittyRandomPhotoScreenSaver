@@ -791,6 +791,14 @@ def run_screensaver(
         try:
             return app.exec()
         finally:
+            # Backstop: a bare QCoreApplication.exit (a replacement barrier timeout, a failed Settings cancellation)
+            # ends the loop without the terminal stop's finalization. Retire what it skipped, exactly once.
+            try:
+                from engine.engine_lifecycle import finalize_after_event_loop
+
+                finalize_after_event_loop(engine)
+            except Exception:
+                logger.exception("[LIFECYCLE] Post-loop terminal finalization failed")
             try:
                 gc_policy.stop()
             except Exception:

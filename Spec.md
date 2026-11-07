@@ -953,6 +953,13 @@ registry, modelled on the display-power authority; it is no module global and no
 - **Lifetime:** the registry is created in `initialize`. No non-terminal stop touches it (Settings, CUSTOM, monitor
   topology). Terminal shutdown retires it once, in reverse creation order, after the display teardown and before the
   ThreadManager shutdown; on the terminal stop path the network admission fence closes first.
+- **Every exit retires the terminal tier once:** the terminal stop's finalization retires the process-scoped
+  resources (beat engine audio, usage sampler, display power, ProcessSupervisor, network fence, application services,
+  ThreadManager) through one once-only `engine_lifecycle.retire_terminal_resources`. A bare `QCoreApplication.exit`
+  (a replacement barrier's timeout, a failed Settings single-shot cancellation) ends the loop without that
+  finalization, so `main.run_screensaver` calls `finalize_after_event_loop` on the UI thread once `app.exec()`
+  returns: it disarms any pending barrier and retires whatever the finalization did not, and after a normal terminal
+  stop it does nothing (`tests/test_fatal_exit_backstop.py`).
 - **Leases, not ownership:** a display generation is admitted in `_initialize_display` and a Settings dialog
   generation before the dialog is built. Each leases services by name. `teardown_display_runtime` (beside the
   generation's single-shot and queued-callback cancellation) and the dialog's `cancel_scheduled_single_shots` edge
