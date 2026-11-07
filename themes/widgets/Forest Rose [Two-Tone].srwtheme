@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Forest Rose [Two-Tone] [Glass].srtheme",
   "name": "Forest Rose [Two-Tone]",
   "linked_settings_theme_id": "file:Forest Rose [Two-Tone] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       27,

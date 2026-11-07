@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Monochrome Frost [Single] [Glass].srtheme",
   "name": "Monochrome Frost [Single]",
   "linked_settings_theme_id": "file:Monochrome Frost [Single] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       41,

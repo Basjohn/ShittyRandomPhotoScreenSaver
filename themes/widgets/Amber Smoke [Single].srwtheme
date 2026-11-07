@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Amber Smoke [Single] [Glass].srtheme",
   "name": "Amber Smoke [Single]",
   "linked_settings_theme_id": "file:Amber Smoke [Single] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       58,

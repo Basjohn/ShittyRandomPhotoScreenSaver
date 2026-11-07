@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Black Marble [Two-Tone] [Glass].srtheme",
   "name": "Black Marble [Two-Tone]",
   "linked_settings_theme_id": "file:Black Marble [Two-Tone] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       37,

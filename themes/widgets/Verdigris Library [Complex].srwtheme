@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Verdigris Library [Complex] [Acrylic].srtheme",
   "name": "Verdigris Library [Complex]",
   "linked_settings_theme_id": "file:Verdigris Library [Complex] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       28,

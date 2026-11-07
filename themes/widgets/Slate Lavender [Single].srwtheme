@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Slate Lavender [Single] [Acrylic].srtheme",
   "name": "Slate Lavender [Single]",
   "linked_settings_theme_id": "file:Slate Lavender [Single] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       40,

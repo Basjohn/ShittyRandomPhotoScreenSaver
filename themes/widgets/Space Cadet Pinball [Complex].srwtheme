@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Space Cadet Pinball [Complex] [Acrylic].srtheme",
   "name": "Space Cadet Pinball [Complex]",
   "linked_settings_theme_id": "file:Space Cadet Pinball [Complex] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       27,

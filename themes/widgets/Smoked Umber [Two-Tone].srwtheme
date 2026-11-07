@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Smoked Umber [Two-Tone] [Acrylic].srtheme",
   "name": "Smoked Umber [Two-Tone]",
   "linked_settings_theme_id": "file:Smoked Umber [Two-Tone] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       48,

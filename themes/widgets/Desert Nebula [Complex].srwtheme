@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Desert Nebula [Complex] [Glass].srtheme",
   "name": "Desert Nebula [Complex]",
   "linked_settings_theme_id": "file:Desert Nebula [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       41,

@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:AOL Dialup Violet [Complex] [Glass].srtheme",
   "name": "AOL Dialup Violet [Complex]",
   "linked_settings_theme_id": "file:AOL Dialup Violet [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       35,

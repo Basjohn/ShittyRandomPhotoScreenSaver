@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Media Player Nine [Complex] [Glass].srtheme",
   "name": "Media Player Nine [Complex]",
   "linked_settings_theme_id": "file:Media Player Nine [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       30,

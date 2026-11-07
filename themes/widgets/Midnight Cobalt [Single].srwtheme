@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Midnight Cobalt [Single] [Acrylic].srtheme",
   "name": "Midnight Cobalt [Single]",
   "linked_settings_theme_id": "file:Midnight Cobalt [Single] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       24,

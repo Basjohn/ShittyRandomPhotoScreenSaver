@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Lagoon Ember [Three-Tone] [Glass].srtheme",
   "name": "Lagoon Ember [Three-Tone]",
   "linked_settings_theme_id": "file:Lagoon Ember [Three-Tone] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       22,

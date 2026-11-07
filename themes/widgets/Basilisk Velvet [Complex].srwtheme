@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Basilisk Velvet [Complex] [Glass].srtheme",
   "name": "Basilisk Velvet [Complex]",
   "linked_settings_theme_id": "file:Basilisk Velvet [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       54,
