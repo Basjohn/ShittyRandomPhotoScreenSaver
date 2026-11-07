@@ -409,6 +409,8 @@ class QuickSceneController(QObject):
     # Expanded Visualizer glyph (plan 01 M2): True = expand to the display, False = collapse.
     visualizer_expand_requested = Signal(bool)
     visualizer_preset_step_requested = Signal(int)
+    # Expanded Visualizer overlays (plan 01 §G, M3b): a Media Controls press ("previous", "play" or "next").
+    visualizer_overlay_transport_requested = Signal(str)
     custom_layout_save_requested = Signal()
     # Semantic Edit-only routes.  The native input block remains intact while
     # the retained overlay forwards these to DisplayManager's existing orbit
@@ -457,6 +459,13 @@ class QuickSceneController(QObject):
         self._visualizer_camera_reset_available = False
         self._visualizer_display_transfer_available = (False, False)
         self._visualizer_expand_glyph = (False, False)
+        # The full-display overlays (M3b), retained for a lazily created root: whether the display-wide card is drawn
+        # (the owner's edge), their resolved options, the active preset's name and announcement serial, and the
+        # Media model the Visualizer already binds (never a second Media query).
+        self._visualizer_overlays_drawn = False
+        self._visualizer_overlay_config: dict[str, object] = {}
+        self._visualizer_overlay_preset: tuple[str, int] = ("", 0)
+        self._visualizer_overlay_media_model: QObject | None = None
         self._visualizer_control_hints_available = False
         self._visualizer_content_host: QQuickItem | None = None
         self._visualizer_item: VisualizerRenderItem | None = None
@@ -2329,6 +2338,69 @@ class QuickSceneController(QObject):
         root.setProperty("ordinaryWidgetsCovered", covered)
         return True
 
+    # ------------------------------------------------- Expanded Visualizer overlays (plan 01 §G, M3b)
+
+    def _project_visualizer_root_property(self, name: str, value: object) -> None:
+        root = self._visualizer_root
+        if root is not None and _qobject_is_alive(root):
+            root.setProperty(name, value)
+
+    def set_visualizer_expanded_overlays_drawn(self, drawn: bool) -> None:
+        """Admit (or retire) the full-display overlays: True exactly while the display-wide card is drawn.
+
+        The Visualizer owner calls it at its route's edges only (a committed swap, the fade-through's midpoint, display
+        power, retirement). Nothing exists for the overlays while it is False: their QML Loader is inactive, so no
+        item, binding, animation or Media subscription.
+        """
+
+        drawn = bool(drawn)
+        if drawn == self._visualizer_overlays_drawn:
+            return
+        self._visualizer_overlays_drawn = drawn
+        self._project_visualizer_root_property("expandedOverlaysDrawn", drawn)
+
+    @property
+    def visualizer_expanded_overlays_drawn(self) -> bool:
+        return self._visualizer_overlays_drawn
+
+    def set_visualizer_expanded_overlay_config(self, config: Mapping[str, object]) -> None:
+        """Project the overlays' resolved options (once per generation and after a transfer; a QML map)."""
+
+        value = dict(config)
+        if value == self._visualizer_overlay_config:
+            return
+        self._visualizer_overlay_config = value
+        self._project_visualizer_root_property("expandedOverlayConfig", value)
+
+    def announce_visualizer_preset(self, name: str, *, reveal: bool = True) -> None:
+        """Publish the active preset's display name; ``reveal`` makes it an event the preset toast shows."""
+
+        serial = self._visualizer_overlay_preset[1]
+        value = (str(name), serial + 1 if reveal else serial)
+        if value == self._visualizer_overlay_preset:
+            return
+        self._visualizer_overlay_preset = value
+        root = self._visualizer_root
+        if root is not None and _qobject_is_alive(root):
+            root.setProperty("expandedOverlayPresetName", value[0])
+            root.setProperty("expandedOverlayPresetSerial", value[1])
+
+    @property
+    def visualizer_overlay_preset(self) -> tuple[str, int]:
+        return self._visualizer_overlay_preset
+
+    def set_visualizer_overlay_media_model(self, model: QObject | None) -> None:
+        """The Media model the Visualizer's playback truth already binds (or None): the Now Playing source."""
+
+        if model is self._visualizer_overlay_media_model:
+            return
+        self._visualizer_overlay_media_model = model
+        self._project_visualizer_root_property("expandedOverlayMediaModel", model)
+
+    @property
+    def visualizer_overlay_media_model(self) -> QObject | None:
+        return self._visualizer_overlay_media_model
+
     @property
     def ordinary_widgets_covered(self) -> bool:
         root = self._scene_root
@@ -2534,6 +2606,11 @@ class QuickSceneController(QObject):
         root.setProperty("expandGlyphAvailable", self._visualizer_expand_glyph[0])
         root.setProperty("expandedDisplay", self._visualizer_expand_glyph[1])
         root.setProperty("controlHintsAvailable", self._visualizer_control_hints_available)
+        root.setProperty("expandedOverlayConfig", self._visualizer_overlay_config)
+        root.setProperty("expandedOverlayPresetName", self._visualizer_overlay_preset[0])
+        root.setProperty("expandedOverlayPresetSerial", self._visualizer_overlay_preset[1])
+        root.setProperty("expandedOverlayMediaModel", self._visualizer_overlay_media_model)
+        root.setProperty("expandedOverlaysDrawn", self._visualizer_overlays_drawn)
         if self._input_state is not None:
             self._apply_visualizer_input_state(self._input_state)
         hover_glyph = getattr(root, "hoverEditGlyphRequested", None)
@@ -2550,6 +2627,9 @@ class QuickSceneController(QObject):
         expand_glyph = getattr(root, "expandGlyphRequested", None)
         if expand_glyph is not None and hasattr(expand_glyph, "connect"):
             expand_glyph.connect(self.visualizer_expand_requested.emit)
+        overlay_transport = getattr(root, "expandedOverlayTransportRequested", None)
+        if overlay_transport is not None and hasattr(overlay_transport, "connect"):
+            overlay_transport.connect(self.visualizer_overlay_transport_requested.emit)
         volume_step_signal = getattr(root, "appVolumeStepRequested", None)
         if volume_step_signal is not None and hasattr(volume_step_signal, "connect"):
             volume_step_signal.connect(self._handle_visualizer_app_volume_step)

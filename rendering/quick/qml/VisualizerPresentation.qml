@@ -20,6 +20,18 @@ Item {
     property bool expandGlyphAvailable: false
     property bool expandedDisplay: false
     signal expandGlyphRequested(bool expand)
+    // Full-display overlays (plan 01 §G, M3b): the preset toast and Now Playing. The owner sets
+    // expandedOverlaysDrawn exactly while the display-wide card is drawn (and the displays are on); otherwise the
+    // overlay Loader below is inactive and nothing of them exists. The rest are retained inputs the display manager
+    // publishes at its edges (options per generation, the preset's name at activations, the Media model the
+    // Visualizer already binds); DisplayScene hands over the OSD lane once.
+    property bool expandedOverlaysDrawn: false
+    property var expandedOverlayConfig: ({})
+    property string expandedOverlayPresetName: ""
+    property int expandedOverlayPresetSerial: 0
+    property var expandedOverlayMediaModel: null
+    property Item expandedOverlayOsdHost: null
+    signal expandedOverlayTransportRequested(string key)
     signal presetStepRequested(int direction)
     property real authoredSceneOpacity: 1.0
     property real startupRevealOpacity: 1.0
@@ -249,6 +261,46 @@ Item {
         border.color: visualizerPresentationRoot.cardBorderColor
         border.width: visualizerPresentationRoot.cardBorderWidth
         z: 3
+    }
+
+    // Full-display overlays (plan 01 §G, M3b): above the content and frame, below every control of the card (z 10+),
+    // the OSD lane and the context menu. Only text and artwork plus the optional Media Controls: nothing else takes
+    // input, so double-click, middle-click, wheel and orbit drags reach the card as before.
+    Loader {
+        id: expandedOverlayLoader
+        objectName: "visualizerExpandedOverlays"
+        anchors.fill: parent
+        z: 6
+        active: visualizerPresentationRoot.expandedOverlaysDrawn && visualizerPresentationRoot.presentationActive
+        sourceComponent: ExpandedVisualizerOverlays {
+            config: visualizerPresentationRoot.expandedOverlayConfig
+            presetName: visualizerPresentationRoot.expandedOverlayPresetName
+            presetSerial: visualizerPresentationRoot.expandedOverlayPresetSerial
+            mediaModel: visualizerPresentationRoot.expandedOverlayMediaModel
+            osdHost: visualizerPresentationRoot.expandedOverlayOsdHost
+            revealOpen: visualizerPresentationRoot.startupRevealOpacity > 0.0
+            inputAdmitted: visualizerPresentationRoot.widgetGlowAdmitted
+                && visualizerPresentationRoot.volumeWheelEnabled
+            borderColor: visualizerPresentationRoot.cardBorderColor
+            borderWidth: visualizerPresentationRoot.cardBorderWidth
+            cornerRadius: visualizerPresentationRoot.cardCornerRadius
+            cardColor: visualizerPresentationRoot.cardBackgroundColor
+            surfaceMaterial: visualizerPresentationRoot.cardSurfaceMaterial
+            surfaceBackdrop: visualizerPresentationRoot.cardSurfaceBackdrop
+            cardShadowEnabled: visualizerPresentationRoot.cardShadowEnabled
+            cardShadowColor: visualizerPresentationRoot.cardShadowColor
+            cardShadowBlur: visualizerPresentationRoot.cardShadowBlur
+            cardShadowOffsetX: visualizerPresentationRoot.cardShadowOffsetX
+            cardShadowOffsetY: visualizerPresentationRoot.cardShadowOffsetY
+            // The card's own controls: the collapse glyph, its tip and the 3D control hint (top right); Reset Camera,
+            // the preset steps and their tip (bottom right).
+            topRightReserve: Math.max(expandTooltip.y + expandTooltip.height,
+                                      controlHintImage.y + controlHintImage.height) + 10.0
+            bottomRightReserve: visualizerPresentationRoot.height - cameraResetTooltip.y + 10.0
+            onTransportRequested: function(key) {
+                visualizerPresentationRoot.expandedOverlayTransportRequested(key)
+            }
+        }
     }
 
     HoverHandler {
@@ -638,6 +690,7 @@ Item {
         easing.type: Easing.InOutSine
     }
     Image {
+        id: controlHintImage
         objectName: "visualizerControlHint"
         anchors.top: parent.top
         anchors.right: parent.right
