@@ -1,5 +1,5 @@
 """Qt/GL-free ribbon appearance values shared by authoring and rendering."""
-from dataclasses import astuple, dataclass
+from dataclasses import dataclass, fields
 import math
 
 
@@ -97,7 +97,9 @@ class RibbonMaterial:
     lattice_glow: float = .35       # share of the lattice's light sent to the bloom (keeps peaks from washing white)
 
     def __post_init__(self):
-        values = astuple(self)
+        # Every field is a scalar, so the shallow field tuple equals astuple's deep copy (which cost ~30 us per
+        # material; Waveform builds one per logical tick).
+        values = tuple(getattr(self, name) for name in _MATERIAL_FIELDS)
         if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v >= 0 for v in values):
             raise ValueError('Ribbon material values must be finite and non-negative')
         if (not 1 <= self.strands <= 256 or not 0 < self.strand_half_width <= .5 or not 0 < self.rim_half_width <= .5
@@ -124,3 +126,6 @@ class RibbonMaterial:
                     uLattice=(self.lattice_cells, self.lattice_along, self.lattice_half_width, self.lattice_light),
                     uLatticeTone=(self.lattice_reactivity, self.lattice_glow))
 
+
+
+_MATERIAL_FIELDS = tuple(field.name for field in fields(RibbonMaterial))
