@@ -362,13 +362,6 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 - **Gate note:** `tests/test_release_media.py::test_source_change_during_capture_discards_media` fails in any agent
   worktree because the operator's Usu scene originals (`assets/usu/scenes/*.png`) are untracked and exist only in
   the main checkout; environmental, not a product defect.
-- **Side defect (found 7 Nov while fixing two gate reds; latent, not reached by any test): a startup whose every
-  display fails to show leaves a windowless engine.** `DisplayManager.initialize_displays` shows screen 0 at once and
-  staggers the rest onto later UI turns, so `_initialize_display` returns success while those are pending (correct).
-  If every deferred show then fails too, `_show_display_widget` empties `displays`, the startup-ready set empties
-  without emitting, and nothing reports it: the engine stays initialized and running with no window to take input.
-  The display manager should signal "no display could be shown" once the last pending show fails, and the engine
-  handle it as it handles a failed `_initialize_display`.
 
 **Found while landing AC-09 and AC-02 (7 Nov; fixed there or recorded):**
 - **Card border consumers disagreed on malformed values (fixed in AC-09).** Games You Follow drew 12 px for a stored
