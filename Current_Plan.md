@@ -102,7 +102,11 @@ after the operator's yes on a question card; agents never run load (invisible ch
 
 8b. **Universal visualizer performance architecture** (operator, 7 Nov; the Decision's addendum), started once the
    current set of fixes and optimisations lands:
-   - P1: a toolchain spike for a native `QSGRenderNode` on Qt's RHI/Vulkan, packaged by Nuitka (go/no-go).
+   - P1: GO with conditions (7 Nov, `Docs/Future_Work/Native_Core_P1_Spike.md`, sources `native/spike_p1/`): a
+     native abi3 module built against Qt 6.11.2 draws through QRhi on D3D11/D3D12/Vulkan/OpenGL standalone and
+     inside Qt Quick's frame, bound to PySide6's Qt DLLs; a native render thread is unaffected by a GIL-holding Python
+     thread. Open: the operator's approval of the qtdeclarative 6.11.2 SDK (172.5 MB, X:) to build and run part B
+     (C++ `QSGRenderNode` + QML type, sources written), and the operator's Nuitka probe run (spike README).
    - P2: an out-of-process visualizer engine for every mode (byte-identical packets; the logical tick leaves the main
      process's GIL).
    - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
