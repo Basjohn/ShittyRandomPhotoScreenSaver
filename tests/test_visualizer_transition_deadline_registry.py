@@ -48,7 +48,8 @@ def test_retiring_the_generation_cancels_a_pending_mode_transition_deadline(monk
     # The deadline's fading_out branch restores the outgoing scene; record that it ran.
     retired_reported: list = []
     live_reported: list = []
-    retired = _owner(f"ac10-retired-{uuid.uuid4().hex}", retired_reported)
+    retired_generation = f"ac10-retired-{uuid.uuid4().hex}"
+    retired = _owner(retired_generation, retired_reported)
     live = _owner(f"ac10-live-{uuid.uuid4().hex}", live_reported)
     restored: list = []
     for owner, name in ((retired, "retired"), (live, "live")):
@@ -58,12 +59,13 @@ def test_retiring_the_generation_cancels_a_pending_mode_transition_deadline(monk
 
     _switch_mode(retired)
     _switch_mode(live)
-    assert ThreadManager.cancel_scheduled_single_shots(retired._runtime_generation) == 1
+    cancelled = ThreadManager.cancel_scheduled_single_shots(retired_generation)   # the generation's teardown edge
 
-    qtbot.waitUntil(lambda: restored == ["live"], timeout=3000)   # control: the live generation's deadline fires
+    qtbot.waitUntil(lambda: "live" in restored, timeout=3000)   # control: the live generation's deadline fires
     qtbot.wait(150)
-    assert restored == ["live"]
-    assert retired._mode_transition_phase == "fading_out"            # the cancelled deadline never ran
+    assert restored == ["live"], "the retired generation's transition deadline ran after its cancellation"
+    assert retired._mode_transition_phase == "fading_out"
+    assert cancelled == 1
     assert live._mode_transition_phase == "idle"
     assert retired_reported == [] and live_reported == []
 
