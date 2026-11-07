@@ -89,14 +89,15 @@ def settings_manager(qt_app, tmp_path):
 
 
 @pytest.mark.parametrize("mode", HIDING)
-def test_real_tab_does_not_build_hidden_controls_and_keeps_their_stored_values_on_save(
+def test_real_tab_holds_no_hidden_control_value_and_keeps_their_stored_values_on_save(
         qt_app, settings_manager, monkeypatch, mode):
     """The real Visualizers tab (inside a dialog that is never shown; every pop-up patched)."""
     from PySide6.QtWidgets import QDialog, QVBoxLayout
     from core.settings.visualizer_mode_registry import build_visualizer_mode_activation
     from core.settings.visualizer_presets import get_custom_preset_index
     from ui import styled_popup
-    from ui.tabs.media.technical_controls import _BASE_CONTROL_DEFS, _control_defs_for_mode, get_per_mode_controls_for_mode
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    from ui.tabs.media.technical_controls import _BASE_CONTROL_DEFS, _control_defs_for_mode, _storage_key
     from ui.tabs.visualizers_tab import VisualizersTab
     monkeypatch.setattr(styled_popup.StyledPopup, "exec", lambda self: 0)
     from core.settings.models import SpotifyVisualizerSettings
@@ -116,12 +117,12 @@ def test_real_tab_does_not_build_hidden_controls_and_keeps_their_stored_values_o
     layout.addWidget(tab)
     tab._select_mode_page(mode)
     qt_app.processEvents()
-    controls = get_per_mode_controls_for_mode(tab, mode)
-    assert controls is not None
-    offered = {defn.control_key for defn in _control_defs_for_mode(mode)}
-    hidden_keys = {defn.control_key for defn in _BASE_CONTROL_DEFS if defn.config_key in hidden}
-    assert offered and offered <= set(controls), "the shown controls are built"
-    assert not hidden_keys & set(controls), "a hidden control builds no widget"
+    # The body's value cache is the only owner of technical values (no widget is built for any of them).
+    cache = getattr(tab, f"_{require_mode_settings(mode).prefix}_lazy_values")
+    offered = {_storage_key(mode, defn) for defn in _control_defs_for_mode(mode)}
+    hidden_keys = {f"{mode}_{suffix}" for suffix in hidden}
+    assert offered and offered <= set(cache), "the shown controls' values are held"
+    assert not hidden_keys & set(cache), "a hidden control holds no value"
     tab._save_settings_now()
     assert settings_manager.flush(timeout=5.)
     stored = settings_manager.get("widgets")["spotify_visualizer"]

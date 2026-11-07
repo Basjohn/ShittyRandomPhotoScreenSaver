@@ -405,7 +405,6 @@ def test_sphere_shared_bar_appearance_ui_load_and_save_do_not_touch_retired_keys
         "get_owned_mode_setting_keys": get_owned_mode_setting_keys,
         "collect_visualizer_mode_selection": lambda _tab: "sphere",
         "collect_visualizer_rainbow_state": lambda _tab, _cfg: None,
-        "collect_per_mode_technical_controls": lambda _tab, _cfg, current_mode=None: None,
         "collect_visualizer_preset_indices": lambda _tab, _cfg: None,
         "_VIS_MODE_CONTAINER_ATTR": {"sphere": "_sphere_settings_container"},
     })

@@ -120,9 +120,9 @@ class VisualizerSettingsStore:
         for control in self._spec().controls:
             default = tab._widget_default("spotify_visualizer", control.key)
             config[control.key] = control.admit(read_control_value(control, config.get, default), default)
-        # The mode's technical (audio analysis) values, as Settings' technical controls hold them.
-        from ui.tabs.media.technical_controls import collect_per_mode_technical_controls
-        collect_per_mode_technical_controls(tab, config, current_mode=self._mode)
+        # The mode's technical (audio analysis) values, as the Settings body's value cache holds them.
+        from ui.tabs.media.spec_mode_builder import technical_values
+        config.update(technical_values(tab, self._mode))
         config["scene3d_detail"] = self._scene3d_detail()
         return config
 
@@ -165,16 +165,14 @@ class VisualizerSettingsStore:
         return self.snapshot()
 
     def _load_into_settings(self, config: Mapping[str, Any]) -> None:
-        """Load ``config`` into the mode body, its technical controls and shared families with signals blocked
-        (loading saves nothing)."""
+        """Load ``config`` into the mode body's value cache (technical values included) and the shared families with
+        signals blocked (loading saves nothing)."""
         from ui.tabs.media.spec_mode_builder import load_spec_mode_settings
-        from ui.tabs.media.technical_controls import load_per_mode_technical_controls
         tab = self._tab
         previous = tab._loading
         tab._loading = True
         try:
             load_spec_mode_settings(tab, self._mode, dict(config))
-            load_per_mode_technical_controls(tab, dict(config), only_mode=self._mode)
             self._load_families(config)
         finally:
             tab._loading = previous

@@ -26,8 +26,9 @@ the Windows path, so it never needs its own Linux audit later (operator, 5 Nov).
 
 **Architecture checklist:** `Docs/Reference/Architecture_Checklist.md` (the 6 Nov audit, verified against source on
 7 Nov: 16 items with severity, reward, effort, owning boundary, fix, regression bar). Its Tier 1 (AC-01 Settings tab
-registry, AC-02 Visualizer host binding, AC-03 application-service tier) is the prerequisite work for step 4 below;
-the items promoted to run soon are in §3. Nothing else in it is admitted until it appears here.
+registry, AC-02 Visualizer host binding, AC-03 application-service tier) is the prerequisite work for step 7 below;
+AC-01 landed 7 Nov (contract: `Docs/Architecture/Settings_Bucket_Persistence_Contract.md`, "Tabs and pills: one
+registry"). The items promoted to run soon are in §3. Nothing else in it is admitted until it appears here.
 
 ## 1. Order of work (strict)
 
@@ -44,9 +45,8 @@ the items promoted to run soon are in §3. Nothing else in it is admitted until 
 **Next (admitted, waits for the above):**
 
 5. **§8 Accepted-mode follow-ups**: the brief Bubble performance-parity check is operator-admitted.
-6. **Architecture prerequisites, in this order: AC-01 → AC-02 → AC-03** (`Docs/Reference/Architecture_Checklist.md`
-   Tier 1). AC-01 may start at the next free high slot once the Studio leak lands (it pays off for every existing
-   Settings tab now); AC-02 lands before Expanded Visualizer M2; AC-03 before SMP M2.
+6. **Architecture prerequisites, in this order: AC-02 → AC-03** (`Docs/Reference/Architecture_Checklist.md`
+   Tier 1; AC-01 landed 7 Nov). AC-02 lands before Expanded Visualizer M2; AC-03 before SMP M2.
 
 **Then (decided 5 Nov, `Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md`):**
 
@@ -189,6 +189,44 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
    and declared inertia/wrap, without changing its look, framing or orbit freedom; Extruded Spectrum gets the same
    treatment where it applies. Prove it pixel-identical at the preset home and identical under orbit before and after.
    The in-card Reset Camera button must consume its own presses (item 2).
+
+**Found while landing AC-01 (7 Nov; record, not yet admitted):**
+- **Any ThreadManager shutdown cancels every pending single-shot in the process.** `ThreadManager.shutdown`
+  (`core/threading/manager.py`, first shutdown branch) calls `cancel_all_scheduled_single_shots()`, a staticmethod
+  that cancels the timers of every generation ("while terminal shutdown owns the UI"). A helper manager's shutdown
+  therefore cancels unrelated delayed callbacks too. This was already true of the eight private helper managers (shut
+  down when their Settings tab died in a CONFIG session); since AC-01 the one CONFIG Settings helper manager does it
+  once, when the dialog is destroyed (before Finish & Run starts the runtime). Fold into checklist AC-13: only the
+  terminal owner cancels globally; any other manager cancels only its own work. Bar: shutting down a helper manager
+  leaves another owner's pending `ThreadManager.single_shot` alive.
+- **A-12 residue:** the Visualizers page's shared Bar Appearance and Rainbow rows are still page-level hidden
+  QWidget value owners (one never-shown holder, `visualizer_studio_family_values`), read by
+  `save_visualizer_settings` and the Studio's `_load_families`. Mode bodies no longer hold any. Moving the two
+  families into a value cache like the mode bodies' is the follow-up; bar: the page builds no hidden value-owner
+  QWidget and both families round-trip through the Studio and Settings save.
+- **Dead after A-12 (fold into checklist AC-14):** the technical-control widget machinery in
+  `ui/tabs/media/technical_controls.py` (`build_per_mode_technical_group`, `register_per_mode_technical_controls`,
+  `load/collect_per_mode_technical_controls` and their widget helpers) has no production caller; only
+  `tests/test_visualizer_settings_plumbing.py` reaches it. `_VISUALIZER_ADVANCED_ROOT_ATTRS`
+  (`ui/tabs/visualizer_settings_context.py`) names Advanced/normal roots no mode builds, so
+  `_auto_switch_preset_to_custom` never matches; the `ui.visualizer_adv_states` / `ui.visualizer_tech_states` /
+  `ui.visualizer_tech_bucket_states` schemas have no live disclosure (the projection keeps them normalized).
+  Pre-existing: `tools/flicker_test.py`'s Widgets-tab `setup_ui_only_*` modes patch
+  `widgets_tab_media.build_visualizers_ui`, which no longer exists anywhere (the Visualizer left the Widgets tab at
+  V7), so those modes fail at `getattr` before measuring (its mode-body stub now targets
+  `spec_mode_builder.build_mode_body`, where the builders look it up).
+- **SMP import scan vs the registry:** `ui/settings_tabs.py` imports the existing tabs' modules at import time (as
+  the dialog did). The SMP plan's §14 bar ("no saver module is imported by opening Settings in the SMP profile")
+  needs those imports moved into the builders when the SMP descriptor lands.
+- **`tests/test_s_hotkey_workflow.py` never exits (pre-existing on main 69a34c7c):** all its tests pass in about
+  10 s, then the pytest process stays alive until killed (900 s timeout in the isolated gate; reproduced alone on
+  main in a clean checkout). Likely a non-daemon thread left by `test_s_hotkey_opens_settings_without_crash`'s real
+  engine (initialize, start, `stop(exit_app=False)`, restart, never `cleanup()`). Find the owner (a dump of live
+  threads at session end) and fix it; bar: the file's process exits within seconds of its last test.
+- **Gate note:** `tests/test_release_media.py::test_source_change_during_capture_discards_media` fails in any agent
+  worktree because the operator's Usu scene originals (`assets/usu/scenes/*.png`) are untracked and exist only in
+  the main checkout; environmental, not a product defect.
+
 **Lead only:** merges and merge gates; the game60 live checks (card surfaces with materials on; Waveform after the
 tick cut); scheduling heavy load generators; promoting checklist items here.
 

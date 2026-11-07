@@ -34,7 +34,6 @@ from core.cache_maintenance import (
     get_cache_family_descriptors,
 )
 from core.logging.logger import get_logger
-from core.resources.manager import ResourceManager
 from core.threading.manager import ThreadManager
 from ui.flow_layout import FlowContainer
 from ui.widgets import StyledComboBox
@@ -290,22 +289,8 @@ def _cache_data_root(tab: WidgetsTab) -> Path:
 
 
 def _get_cache_thread_manager(tab: WidgetsTab) -> ThreadManager:
-    manager = getattr(tab, "_general_cache_thread_manager", None)
-    if manager is not None:
-        return manager
-    manager = ThreadManager.get_app_shared()
-    owns_manager = manager is None
-    if manager is None:
-        manager = ThreadManager.create_helper_manager(
-            resource_manager=ResourceManager.get_app_shared(),
-        )
-    tab._general_cache_thread_manager = manager
-    if owns_manager:
-        try:
-            tab.destroyed.connect(lambda _obj=None, owned=manager: owned.shutdown(wait=False))
-        except Exception:
-            pass
-    return manager
+    """The app-shared manager: the runtime's, or Settings' own in a CONFIG session."""
+    return ThreadManager.require_app_shared()
 
 
 def _selected_cache_ids(tab: WidgetsTab) -> tuple[str, ...]:

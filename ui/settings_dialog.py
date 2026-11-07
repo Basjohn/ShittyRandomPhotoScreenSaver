@@ -23,7 +23,6 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPen, QGuiApplication, QPaint
 
 from core.logging.logger import get_log_dir, get_logger, is_perf_metrics_enabled
 from core.build_profile import is_diagnostic_build
-from core.mc import is_mc_build
 from core.settings.settings_manager import SettingsManager
 from core.settings.capability_activation import is_widget_family_activated
 from core.threading.manager import ThreadManager
@@ -34,14 +33,12 @@ from core.settings.visualizer_preset_transfer import (
     import_visualizer_presets_folder,
 )
 from core.animation import AnimationManager
-from ui.tabs.sources_tab import SourcesTab
-from ui.tabs.transitions_tab import TransitionsTab
-from ui.tabs.widgets_tab import WidgetsTab
-from ui.tabs.visualizers_tab import VisualizersTab
-from ui.tabs.display_tab import DisplayTab
-from ui.tabs.accessibility_tab import AccessibilityTab
-from ui.tabs.scene3d_tab import Scene3DTab
-from ui.tabs.themes_tab import ThemesTab
+from ui.settings_tabs import (
+    SettingsProfile,
+    settings_tab_descriptor,
+    settings_tab_descriptors,
+    settings_tab_pill,
+)
 from ui.styled_popup import StyledPopup
 from ui.tabs import shared_styles
 from ui.widgets.control_shadow import (
@@ -681,10 +678,16 @@ class SettingsDialog(QDialog):
         self._background_build_scheduled = False
         self._background_tab_queue: list[int] = []
         self._background_hydration_started = False
+        # Every tab-shaped list derives from the one tab registry
+        # (ui/settings_tabs.py), filtered by the product profile once per dialog.
         # Warm only cheap, frequently navigated configuration owners after first
-        # paint. Dormant tabs remain lazy; their constructors must never be
-        # required to keep runtime settings/themes valid.
-        self._background_warm_tab_keys = frozenset({"display", "transitions"})
+        # paint (descriptor ``warm_in_background``). Dormant tabs remain lazy;
+        # their constructors must never be required to keep runtime
+        # settings/themes valid.
+        self._tab_descriptors = settings_tab_descriptors(SettingsProfile.current())
+        self._background_warm_tab_keys = frozenset(
+            descriptor.key for descriptor in self._tab_descriptors if descriptor.warm_in_background
+        )
         self._background_hydration_delay_ms = 1500
         self._background_hydration_step_delay_ms = 150
         self._closing = False
@@ -706,7 +709,7 @@ class SettingsDialog(QDialog):
         # runtime -> Settings -> runtime round-trip is deterministic even after
         # lazy hydration changes content height. ``ui.last_tab_scroll`` remains
         # a tolerated legacy schema member but is intentionally ignored.
-        self._tab_keys = ["sources", "display", "transitions", "widgets", "layout", "visualizers", "scene3d", "accessibility", "themes", "about", "quick_start"]
+        self._tab_keys = [descriptor.key for descriptor in self._tab_descriptors]
         self._tab_state_cache: Dict[str, Dict[str, Any]] = {}
         self._tab_scroll_widgets: Dict[int, Optional[QScrollArea]] = {}
         self._tab_button_by_key: Dict[str, TabButton] = {}
@@ -722,6 +725,12 @@ class SettingsDialog(QDialog):
 
         self._shadow_diagnostics_enabled = is_perf_metrics_enabled()
 
+        # CONFIG mode has no runtime, so no app-shared ThreadManager: Settings
+        # owns the one helper manager its tabs' background work uses, registered
+        # before any tab exists and retired with the dialog. Under a runtime the
+        # engine's registered manager is borrowed and left alone.
+        self._owned_helper_threads = self._register_config_helper_threads()
+
         shared_styles.ensure_custom_fonts()
         self._apply_application_font()
 
@@ -732,17 +741,7 @@ class SettingsDialog(QDialog):
         # Prune legacy states *before* lazy Qt bodies read their expanded flags.
         from core.settings.ui_bucket_state import project_settings_bucket_context
         initial_key = self._tab_key_for_index(self._initial_tab_index)
-        initial_state = self._initial_view_state_for_tab(initial_key) or {}
-        if initial_key == "widgets":
-            initial_pill = str(initial_state.get("subtab_id") or "setup")
-        elif initial_key == "visualizers":
-            initial_pill = (str(initial_state.get("mode_id") or "")
-                            if initial_state.get("page") == "mode" else "")
-        elif initial_key == "transitions":
-            from ui.tabs.transitions_tab import transition_bucket_section
-            initial_pill = transition_bucket_section(str(initial_state.get("pill") or ""))
-        else:
-            initial_pill = ""
+        initial_pill = settings_tab_pill(initial_key, self._initial_view_state_for_tab(initial_key))
         # Explicit launch targets and capability redirects must not resurrect a
         # previously inactive tab's old buckets from a legacy profile.
         remembered_key = self._tab_key_for_index(self._read_persisted_tab_index())
@@ -765,29 +764,69 @@ class SettingsDialog(QDialog):
 
         logger.info("Settings dialog created")
 
+    def _register_config_helper_threads(self) -> ThreadManager | None:
+        """Own the app-shared helper ThreadManager when no runtime registered one.
+
+        Settings-only (CONFIG) sessions have no engine, so Settings is the
+        widest live owner: one narrow helper manager is registered through
+        ``ThreadManager.set_app_shared`` for the dialog's lifetime and its
+        helper sites (cache clearing, feeds, Gmail, Steam, geocoding, Guided
+        Setup) look it up instead of building private managers. It is released
+        when the dialog is destroyed. Returns the owned manager, or None when a
+        runtime's manager is borrowed.
+        """
+        if ThreadManager.get_app_shared() is not None:
+            return None
+        from core.resources.manager import ResourceManager
+        manager = ThreadManager.create_helper_manager(
+            resource_manager=ResourceManager.get_app_shared(),
+        )
+        ThreadManager.set_app_shared(manager)
+
+        def _release(_obj=None, owned=manager) -> None:
+            if ThreadManager.get_app_shared() is owned:
+                ThreadManager.set_app_shared(None)
+            owned.shutdown(wait=False)
+
+        # Bound to the manager, never to the dialog: the slot must not keep
+        # the dying dialog reachable.
+        self.destroyed.connect(_release)
+        return manager
+
     def _log_perf_event(self, label: str, start_time: float) -> None:
         if not is_perf_metrics_enabled():
             return
         elapsed_ms = (time.perf_counter() - start_time) * 1000.0
         logger.info("[PERF][SETTINGS] %s in %.1f ms", label, elapsed_ms)
 
-    def _read_persisted_tab_index(self) -> int:
-        """Resolve stable tab key first, then migrate the pre-Themes index."""
+    # Pre-Themes sidebar order (it still included Visualizers): the semantic
+    # meaning of ``ui.last_tab_index`` for profiles that predate the stable
+    # ``ui.last_tab_key``. The index is written from the key through this same
+    # table, never from a content-stack position.
+    _LEGACY_TAB_INDEX_KEYS = (
+        "sources", "display", "transitions", "widgets",
+        "visualizers", "accessibility", "about",
+    )
+
+    def _persisted_tab_key(self) -> str:
+        """The remembered tab key, whether or not this profile shows that tab.
+
+        A key the registry does not know (a retired tab) falls back to the
+        legacy index, as before the registry.
+        """
         stored_key = self._settings.get('ui.last_tab_key', None)
-        if isinstance(stored_key, str) and stored_key in self._tab_keys:
-            return self._tab_keys.index(stored_key)
-        # Pre-Themes sidebar order still included Visualizers. Preserve that
-        # semantic index mapping for profiles which have not yet written the
-        # stable ``ui.last_tab_key`` introduced later.
-        legacy_keys = (
-            "sources", "display", "transitions", "widgets",
-            "visualizers", "accessibility", "about",
-        )
+        if isinstance(stored_key, str) and settings_tab_descriptor(stored_key) is not None:
+            return stored_key
         stored = self._settings.get('ui.last_tab_index', 0)
         try: legacy_index = int(stored)
         except Exception: legacy_index = 0
-        if legacy_index < 0 or legacy_index >= len(legacy_keys): legacy_index = 0
-        return self._tab_keys.index(legacy_keys[legacy_index])
+        if legacy_index < 0 or legacy_index >= len(self._LEGACY_TAB_INDEX_KEYS): legacy_index = 0
+        return self._LEGACY_TAB_INDEX_KEYS[legacy_index]
+
+    def _read_persisted_tab_index(self) -> int:
+        """Map the remembered tab key to this dialog's position (0 when absent here)."""
+        index = self._tab_index_for_key(self._persisted_tab_key())
+        return index if index >= 0 else 0
 
     def _determine_initial_tab(self) -> None:
         target = self._launch_target
@@ -1044,69 +1083,34 @@ class SettingsDialog(QDialog):
         sidebar_layout.setContentsMargins(10, 10, 10, 10)
         sidebar_layout.setSpacing(5)
         
-        # Tab buttons
-        self.sources_tab_btn = TabButton("Sources", "sources")
-        self.display_tab_btn = TabButton("Display", "display")
-        self.transitions_tab_btn = TabButton("Transitions", "transitions")
-        self.widgets_tab_btn = TabButton("Widgets", "widgets")
-        self.layout_tab_btn = TabButton("Layout", "layout")
-        self.visualizers_tab_btn = TabButton("Visualizers", "visualizers")
-        self.scene3d_tab_btn = TabButton("3D Quality", "scene3d")
-        self.accessibility_tab_btn = TabButton("Accessibility", "accessibility")
-        self.themes_tab_btn = TabButton("Themes", "themes")
-        self.about_tab_btn = TabButton("About", "about")
-        # Title case like its siblings; all-caps did not fit the 200 px sidebar.
-        self.quick_start_tab_btn = TabButton("Quick Start", "quick_start")
-
-        self._tab_button_by_key = {
-            "sources": self.sources_tab_btn,
-            "display": self.display_tab_btn,
-            "transitions": self.transitions_tab_btn,
-            "widgets": self.widgets_tab_btn,
-            "layout": self.layout_tab_btn,
-            "visualizers": self.visualizers_tab_btn,
-            "scene3d": self.scene3d_tab_btn,
-            "accessibility": self.accessibility_tab_btn,
-            "themes": self.themes_tab_btn,
-            "about": self.about_tab_btn,
-            "quick_start": self.quick_start_tab_btn,
-        }
+        # Tab buttons, one per available registry descriptor (``<key>_tab_btn``).
+        self._tab_button_by_key = {}
+        for descriptor in self._tab_descriptors:
+            button = TabButton(descriptor.label, descriptor.key)
+            setattr(self, f"{descriptor.key}_tab_btn", button)
+            self._tab_button_by_key[descriptor.key] = button
         self.tab_buttons = [self._tab_button_by_key[key] for key in self._tab_keys]
-        
-        for btn in self.tab_buttons[:-1]:
-            sidebar_layout.addWidget(btn)
+
+        for descriptor in self._tab_descriptors:
+            if not descriptor.pinned_bottom:
+                sidebar_layout.addWidget(self._tab_button_by_key[descriptor.key])
         sidebar_layout.addStretch()
         sidebar_layout.addSpacing(16)
-        sidebar_layout.addWidget(self.quick_start_tab_btn)
+        for descriptor in self._tab_descriptors:
+            if descriptor.pinned_bottom:
+                sidebar_layout.addWidget(self._tab_button_by_key[descriptor.key])
         
         # Right content area with stacked widget
         from ui.widgets.continuous_border import OutlinedStackedWidget
         self.content_stack = OutlinedStackedWidget()
         self.content_stack.setObjectName("contentArea")
         
-        # Create actual tabs lazily
+        # Create actual tabs lazily. Descriptor builders parent each tab to the
+        # stacked widget immediately so constructors never run as transient
+        # top-level windows.
         self._tab_builders = {
-            # Build tabs with the stacked-widget as parent immediately so
-            # constructors never run as transient top-level windows.
-            "sources": lambda: SourcesTab(self._settings, parent=self.content_stack),
-            "display": lambda: DisplayTab(self._settings, parent=self.content_stack),
-            "transitions": lambda: TransitionsTab(self._settings, parent=self.content_stack),
-            "widgets": lambda: WidgetsTab(
-                self._settings,
-                parent=self.content_stack,
-                lazy_sections=True,
-                initial_view_state=self._initial_view_state_for_tab("widgets"),
-            ),
-            "layout": self._create_layout_tab,
-            "visualizers": lambda: VisualizersTab(
-                self._settings,
-                parent=self.content_stack,
-            ),
-            "scene3d": lambda: Scene3DTab(self._settings, parent=self.content_stack),
-            "accessibility": lambda: AccessibilityTab(self._settings, parent=self.content_stack),
-            "themes": lambda: ThemesTab(self._settings, parent=self.content_stack),
-            "about": self._create_about_tab,
-            "quick_start": self._create_quick_start_tab,
+            descriptor.key: (lambda build=descriptor.build: build(self))
+            for descriptor in self._tab_descriptors
         }
         for key in self._tab_keys:
             placeholder = QWidget()
@@ -1428,12 +1432,15 @@ class SettingsDialog(QDialog):
         self._settings.settings_changed.connect(self._on_settings_capability_changed)
         
 
-    def _switch_tab(self, index: int, animate: bool = True) -> None:
+    def _switch_tab(self, index: int, animate: bool = True, *, remember: bool = True) -> None:
         """
         Switch to tab with animation.
-        
+
         Args:
             index: Tab index
+            remember: Persist the tab as the remembered one (False only when
+                restoring onto a fallback because the remembered tab is absent
+                in this profile, so its memory survives).
         """
         if index < 0 or index >= len(self.tab_buttons):
             return
@@ -1497,7 +1504,8 @@ class SettingsDialog(QDialog):
             self._restore_tab_view_state(index, current_widget)
             self._reset_scroll_for_tab(index, current_widget)
             self._style_tab_widget(current_widget)
-            self._save_last_tab(index)
+            if remember:
+                self._save_last_tab(index)
             logger.debug(f"Switched to tab {index}")
         if animate and old_widget is not None:
             def fade_out_complete():
@@ -1636,9 +1644,13 @@ class SettingsDialog(QDialog):
     def _save_last_tab(self, index: int) -> None:
         if index < 0 or index >= len(self._tab_keys):
             return
+        key = self._tab_keys[index]
         try:
-            self._settings.set('ui.last_tab_key', self._tab_keys[index])
-            self._settings.set('ui.last_tab_index', int(index))
+            self._settings.set('ui.last_tab_key', key)
+            # The legacy index keeps its pre-Themes meaning (read only when no
+            # key exists); a content-stack position would vary by profile.
+            if key in self._LEGACY_TAB_INDEX_KEYS:
+                self._settings.set('ui.last_tab_index', self._LEGACY_TAB_INDEX_KEYS.index(key))
             self._settings.save()
         except Exception:
             logger.debug("Failed to persist last Settings tab", exc_info=True)
@@ -1693,7 +1705,12 @@ class SettingsDialog(QDialog):
         if index < 0 or index >= len(self.tab_buttons):
             index = 0
         index = self._admit_top_level_tab_index(index)
-        self._switch_tab(index, animate=False)
+        # A remembered tab this profile does not show keeps its memory.
+        self._switch_tab(
+            index,
+            animate=False,
+            remember=self._persisted_tab_key() in self._tab_keys,
+        )
 
     def closeEvent(self, event):
         # Geometry is saved here, first, on every close attempt (including one the
@@ -1817,27 +1834,13 @@ class SettingsDialog(QDialog):
         tab_key = self._tab_key_for_index(self.content_stack.currentIndex())
         view_getter = getattr(current, "get_view_state", None)
         view = view_getter() if callable(view_getter) else {}
-        view = view if isinstance(view, dict) else {}
-        if tab_key == "widgets":
-            pill = str(view.get("subtab_id") or "setup")
-        elif tab_key == "visualizers":
-            pill = str(view.get("mode_id") or "") if view.get("page") == "mode" else ""
-        elif tab_key == "transitions":
-            from ui.tabs.transitions_tab import transition_bucket_section
-            pill = transition_bucket_section(str(view.get("pill") or ""))
-        else:
-            pill = ""
+        pill = settings_tab_pill(tab_key, view)
         from core.settings.ui_bucket_state import project_settings_bucket_context
         project_settings_bucket_context(self._settings, tab_key, pill)
-        for key in (
-            "sources",
-            "display",
-            "transitions",
-            "widgets",
-            "visualizers",
-            "scene3d",
-            "accessibility",
-        ):
+        for descriptor in self._tab_descriptors:
+            if not descriptor.reloads_with_settings:
+                continue
+            key = descriptor.key
             tab = self.__dict__.get(f"{key}_tab")
             if tab is None:
                 continue
