@@ -2,6 +2,8 @@
 
 Use this before changing visualizer runtime, geometry, rendering, CUSTOM behavior or presentation.
 
+- [ ] Find the mode's owners through `Docs/Reference/Naming.md` (generated from the registries): the product name users see is not the mode id the code and settings use (Neon Lake Basin is `shockwave_grid`, Spline Curve is `devcurve`), and several owners use a third spelling. User-facing names come only from the registry's `display_name`; never add a second copy (the Studio derives its titles from it). After changing a registry, run `tools/naming_reference.py --write`.
+
 ## Preset and settings schema coherence (historical regression consolidation)
 
 - [ ] Per-mode curated slot label, editable filename, embedded slot metadata, persisted CUSTOM snapshot and runtime cycle refer to the same canonical slot identity; authored payloads remain freely editable.
