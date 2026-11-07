@@ -354,13 +354,12 @@ def test_a_junctioned_layout_root_still_counts_as_inside(tmp_path):
         (artifacts / "evidence").rmdir()        # removes the junction, never its target
 
 
-def test_pytest_removes_passing_tmp_paths_and_never_pins_a_shared_basetemp():
-    """%TEMP%/pytest-of-<user> reached 154 MB; a --basetemp in addopts would let concurrent runs wipe each other."""
+def test_pytest_never_pins_a_shared_basetemp():
+    """A --basetemp in addopts would let concurrent runs (agents, chunked isolation) wipe each other's folders."""
     import configparser
 
     config = configparser.ConfigParser()
     config.read(ROOT / "tests" / "pytest.ini", encoding="utf-8")
-    assert config.get("pytest", "tmp_path_retention_policy", fallback="").strip() == "failed"
     assert "--basetemp" not in config.get("pytest", "addopts", fallback="")
 
 

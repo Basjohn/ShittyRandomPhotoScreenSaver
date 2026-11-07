@@ -410,6 +410,13 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   the error. It is user-facing recovery data in a folder Windows Storage Sense may empty and nothing ever removes;
   a location beside the preset tree (or the data root) may be intended. Product behaviour unchanged pending the
   operator's call (the test redirects it to `tmp_path`).
+- **Hidden cross-test dependency on an earlier test's `tmp_path` (lead, 7 Nov):** with pytest's
+  `tmp_path_retention_policy = failed` (a passing test's folder removed at its teardown),
+  `test_3d_curated_preset_ownership.py::...promotes_missing_owned_temporal_and_profile_keys...[shockwave_grid]`
+  (0.7 vs 0.23) and two or three `test_settings_dialog.py` tab-restore tests fail. Each passes with the default
+  retention, so something process-scoped keeps a path into an earlier test's `tmp_path` (a cached preset tree or
+  storage root). The setting was reverted. Find the cache and give each test its own root; this may also hide state
+  leaking between tests.
 - **A third evidence root lives in `Docs/`:** `Docs/Reference/Extruded_Bubble/Evidence/2026-10-20/` (ignored media,
   referenced by `Docs/Reference/Extruded_Bubble/Investigation.md`). Not part of the 7 Nov migration mapping; move it
   into the layout (`visualizers/extruded_bubble/...`) on the operator's word.
