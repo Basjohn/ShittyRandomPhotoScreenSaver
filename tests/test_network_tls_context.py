@@ -78,7 +78,8 @@ def test_gmail_imap_connects_with_the_verified_context(monkeypatch):
         raise _Stop()
 
     monkeypatch.setattr(bounded_dns, "resolve_bounded", lambda *_a, **_k: [])
-    monkeypatch.setattr(gmail_imap.imaplib, "IMAP4_SSL", fake_imap)
+    # The interruptible IMAP4_SSL subclass is the one connection constructor.
+    monkeypatch.setattr(gmail_imap, "InterruptibleIMAP4_SSL", fake_imap)
 
     with pytest.raises(_Stop):
         gmail_imap.GmailImapClient("user@example.com", "app-password")._connect()
