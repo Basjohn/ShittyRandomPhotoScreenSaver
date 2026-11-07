@@ -16,6 +16,11 @@ runner job), `tools/build_runner.py` (the tab). Normal and Repo Venv are unchang
    `Basjohn/ShittyRandomPhotoScreenSaver` (dispatching a workflow requires it). Check with `gh auth status`.
 3. The workflow file must be on the default branch (`main`); GitHub only offers manual runs of workflows it lists
    there. It is committed on `main`, so this is already true.
+4. The repository must allow GitHub's own actions (`checkout`, `setup-python`, `cache`, `upload-artifact`):
+   Settings → Actions → General → Actions permissions → "Allow Basjohn, and select non-Basjohn, actions and reusable
+   workflows" with **Allow actions created by GitHub** ticked. With "local actions only" every run ends at once in
+   `startup_failure` (the first attempt, 8 Nov 2026); pre-flight now names this setting before dispatching, and a run
+   GitHub refuses to start is reported with its link. The Linux workflow needs the same setting.
 
 ## Running a remote build
 

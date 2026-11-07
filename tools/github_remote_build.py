@@ -31,7 +31,7 @@ import sys
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
@@ -427,6 +427,48 @@ class GitHubCli:
         """GitHub dispatches a workflow only once its file is on the default branch."""
         return self._run(["gh", "workflow", "view", WORKFLOW_FILE], 60.0).returncode == 0
 
+    def actions_policy_problem(self) -> str | None:
+        """Why the repository's Actions policy would refuse to start the workflow (None: it can start).
+
+        The workflow uses GitHub's own actions (checkout, setup-python, cache, upload-artifact); a policy of local
+        actions only makes every run end at once in ``startup_failure`` (seen 8 Nov 2026)."""
+        try:
+            policy = json.loads(self._call("api", "repos/{owner}/{repo}/actions/permissions", timeout=60.0) or "{}")
+        except (RemoteBuildError, ValueError):
+            return None                     # unreadable: let the run itself report what GitHub says
+        if not policy.get("enabled", True):
+            return "GitHub Actions is disabled for this repository"
+        allowed = policy.get("allowed_actions")
+        if allowed == "selected":
+            try:
+                selected = json.loads(self._call(
+                    "api", "repos/{owner}/{repo}/actions/permissions/selected-actions", timeout=60.0) or "{}")
+            except (RemoteBuildError, ValueError):
+                return None
+            if selected.get("github_owned_allowed"):
+                return None
+        elif allowed != "local_only":
+            return None
+        return ("the repository allows only its own actions; enable 'Allow actions created by GitHub' "
+                "(Settings > Actions > General)")
+
+    def startup_failure(self, since: datetime, sha: str) -> str | None:
+        """The URL of a run of this workflow that GitHub refused to start after ``since`` (its custom name is never
+        applied, so the request id cannot find it)."""
+        listed = json.loads(self._call(
+            "run", "list", "--workflow", WORKFLOW_FILE, "--event", "workflow_dispatch", "--limit", "30",
+            "--json", "conclusion,createdAt,headSha,url",
+        ) or "[]")
+        for run in listed:
+            created = str(run.get("createdAt", "")).replace("Z", "+00:00")
+            try:
+                when = datetime.fromisoformat(created)
+            except ValueError:
+                continue
+            if run.get("conclusion") == "startup_failure" and run.get("headSha") == sha and when >= since:
+                return str(run.get("url", ""))
+        return None
+
     def dispatch(self, target_key: str, branch: str, sha: str, token: str) -> None:
         self._call("workflow", "run", WORKFLOW_FILE, "--ref", branch,
                    "-f", f"target={target_key}", "-f", f"commit={sha}", "-f", f"token={token}")
@@ -582,6 +624,7 @@ def run_remote_builds(
 
     runs: dict[str, tuple[int, str]] = {}
     pending: list[str] = []
+    dispatched_at = datetime.now(timezone.utc) - timedelta(seconds=30)
     for key in keys:
         if cancelled():
             finish(key, 130, "Aborted by operator before dispatch", aborted=True)
@@ -610,6 +653,16 @@ def run_remote_builds(
                 emit("link", key, found[1])
                 emit("status", key, "Queued")
         if len(runs) < len(pending):
+            try:
+                refused = cli.startup_failure(dispatched_at, commit.sha)
+            except (RemoteBuildError, RemoteCancelled, ValueError):
+                refused = None
+            if refused:
+                for key in [key for key in pending if key not in runs]:
+                    pending.remove(key)
+                    finish(key, 1, f"GitHub could not start the workflow (startup failure: repository Actions "
+                                   f"policy or workflow file): {refused}", url=refused)
+                continue
             _wait(4.0, cancelled, sleep)
     for key in [key for key in pending if key not in runs]:
         if cancelled():
@@ -726,6 +779,10 @@ def _run_command(args: argparse.Namespace) -> int:
     cli = GitHubCli()
     if not cli.signed_in():
         print("[REMOTE-BUILD] GitHub CLI is not signed in: run `gh auth login`", file=sys.stderr)
+        return 2
+    problem = cli.actions_policy_problem()
+    if problem:
+        print(f"[REMOTE-BUILD] GitHub would refuse to start the workflow: {problem}", file=sys.stderr)
         return 2
     commit = resolve_pushed_commit(REPO_ROOT, args.branch)
     if not commit.matches_local_head:

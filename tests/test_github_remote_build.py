@@ -245,8 +245,9 @@ def test_installer_inputs_must_equal_the_built_commit(tmp_path):
 class FakeCli:
     """The GitHub CLI, recorded: each product's run reports the given states, then its artifact downloads."""
 
-    def __init__(self, artifacts: dict[str, Path], states: dict[str, list[remote.RunState]], *, appear=True):
-        self.artifacts, self.states, self.appear = artifacts, states, appear
+    def __init__(self, artifacts: dict[str, Path], states: dict[str, list[remote.RunState]], *, appear=True,
+                 refused=None):
+        self.artifacts, self.states, self.appear, self.refused = artifacts, states, appear, refused
         self.dispatched, self.cancelled, self.downloads = [], [], []
         self.ids = {}
 
@@ -259,6 +260,9 @@ class FakeCli:
             return None
         run_id = self.ids.get(request_id)
         return None if run_id is None else (run_id, f"https://github.invalid/runs/{run_id}")
+
+    def startup_failure(self, since, sha):
+        return self.refused
 
     def _key(self, run_id):
         return next(request.split("-")[0] for request, value in self.ids.items() if value == run_id)
@@ -378,6 +382,16 @@ def test_a_run_seen_only_after_the_stop_is_still_cancelled(tmp_path, monkeypatch
     assert cli.cancelled == [100] and results["standard"].aborted
 
 
+def test_a_run_github_refuses_to_start_is_reported_not_waited_for(tmp_path, monkeypatch):
+    # A refused run never gets its custom name (8 Nov: the repository allowed only local actions).
+    artifacts = _artifacts(tmp_path)
+    cli = FakeCli(artifacts, {"standard": [RUNNING]}, appear=False, refused="https://github.invalid/runs/9")
+    results, _events, release = _orchestrate(tmp_path, monkeypatch, cli, ["standard"])
+    assert not results["standard"].ok and "could not start the workflow" in results["standard"].detail
+    assert results["standard"].run_url == "https://github.invalid/runs/9"
+    assert (release / "screensaver" / "previous.txt").is_file()
+
+
 def test_a_branch_that_moved_since_pre_flight_is_never_built(tmp_path, monkeypatch):
     artifacts = _artifacts(tmp_path)
     cli = FakeCli(artifacts, {"standard": [SUCCESS]})
@@ -489,6 +503,35 @@ def test_preflight_names_the_pushed_commit_and_warns_about_local_differences(mon
     assert {"standard", "media_center"} <= result.unavailable_jobs
     assert any("not origin/main" in warning for warning in result.warnings)
     assert any("uncommitted" in warning for warning in result.warnings)
+
+
+@pytest.mark.parametrize("policy,selected,refused", [
+    ({"enabled": True, "allowed_actions": "local_only"}, None, True),
+    ({"enabled": True, "allowed_actions": "selected"}, {"github_owned_allowed": False}, True),
+    ({"enabled": True, "allowed_actions": "selected"}, {"github_owned_allowed": True}, False),
+    ({"enabled": True, "allowed_actions": "all"}, None, False),
+    ({"enabled": False}, None, True),
+])
+def test_an_actions_policy_that_would_refuse_the_workflow_is_caught_before_dispatch(policy, selected, refused):
+    def run(args, _timeout):
+        body = selected if args[-1].endswith("selected-actions") else policy
+        return subprocess.CompletedProcess(args, 0, json.dumps(body), "")
+
+    problem = remote.GitHubCli(run=run).actions_policy_problem()
+    assert (problem is not None) is refused
+
+
+def test_preflight_reports_the_actions_policy(monkeypatch):
+    monkeypatch.setattr(remote, "resolve_pushed_commit", lambda *_a, **_k: remote.PushedCommit(
+        "main", "d" * 40, "s", "d" * 40))
+    monkeypatch.setattr(build_runner.shutil, "which", lambda name: f"C:/bin/{name}.exe")
+    monkeypatch.setattr(remote.GitHubCli, "signed_in", lambda self: True)
+    monkeypatch.setattr(remote.GitHubCli, "workflow_registered", lambda self: True)
+    monkeypatch.setattr(remote.GitHubCli, "actions_policy_problem", lambda self: "only its own actions")
+    result = build_runner.PreflightResult()
+    build_runner._github_preflight(result, build_runner.jobs_for_mode("github"), build_runner.REPO_ROOT)
+    assert any("only its own actions" in error for error in result.errors)
+    assert {"standard", "media_center"} <= result.unavailable_jobs
 
 
 def test_gh_calls_run_inside_the_cancellable_process_owner():

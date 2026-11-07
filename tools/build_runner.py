@@ -814,6 +814,9 @@ def _github_preflight(result: PreflightResult, jobs: Sequence[Job], repo_root: P
                 f"GitHub Remote: GitHub does not list {remote.WORKFLOW_FILE} yet; it must be on the default branch"
             )
             result.unavailable_jobs.update(remote_jobs)
+        elif problem := cli.actions_policy_problem():
+            result.errors.append(f"GitHub Remote: GitHub would refuse to start the workflow: {problem}")
+            result.unavailable_jobs.update(remote_jobs)
     try:
         commit = remote.resolve_pushed_commit(repo_root)
     except remote.RemoteBuildError as exc:
