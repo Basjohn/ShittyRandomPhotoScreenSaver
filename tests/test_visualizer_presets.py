@@ -868,7 +868,9 @@ def test_curated_visualizer_payloads_do_not_ship_cross_mode_keys():
     assert not problems, "\n".join(problems)
 
 
-def test_repair_tool_keeps_missing_optional_bubble_keys_missing_in_source_authoritative_mode():
+def test_repair_tool_fills_bubbles_transient_mixes_without_a_doubled_prefix():
+    """The transient mixes are spec controls (AC-18), so the repair fill authors them at their canonical default
+    like every other control; it never manufactures the doubled-prefix spelling an older key builder made."""
     payload = {
         "snapshot": {
             "widgets": {
@@ -883,8 +885,9 @@ def test_repair_tool_keeps_missing_optional_bubble_keys_missing_in_source_author
     cleaned, _stats = repair._sanitize_settings("bubble", payload)
 
     assert "bubble_stream_reactivity" in cleaned
-    assert "bubble_transient_mix_bass" not in cleaned
-    assert "bubble_transient_mix_vocal" not in cleaned
+    defaults = repair._canonical_mode_defaults("bubble")
+    for key in ("bubble_transient_mix_bass", "bubble_transient_mix_vocal"):
+        assert cleaned[key] == defaults[key]
     assert "bubble_bubble_transient_mix_bass" not in cleaned
     assert "bubble_bubble_transient_mix_vocal" not in cleaned
 
