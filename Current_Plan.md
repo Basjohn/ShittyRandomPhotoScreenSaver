@@ -238,11 +238,6 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 - **SMP import scan vs the registry:** `ui/settings_tabs.py` imports the existing tabs' modules at import time (as
   the dialog did). The SMP plan's §14 bar ("no saver module is imported by opening Settings in the SMP profile")
   needs those imports moved into the builders when the SMP descriptor lands.
-- **`tests/test_s_hotkey_workflow.py` never exits (pre-existing on main 69a34c7c):** all its tests pass in about
-  10 s, then the pytest process stays alive until killed (900 s timeout in the isolated gate; reproduced alone on
-  main in a clean checkout). Likely a non-daemon thread left by `test_s_hotkey_opens_settings_without_crash`'s real
-  engine (initialize, start, `stop(exit_app=False)`, restart, never `cleanup()`). Find the owner (a dump of live
-  threads at session end) and fix it; bar: the file's process exits within seconds of its last test.
 - **Gate note:** `tests/test_release_media.py::test_source_change_during_capture_discards_media` fails in any agent
   worktree because the operator's Usu scene originals (`assets/usu/scenes/*.png`) are untracked and exist only in
   the main checkout; environmental, not a product defect.
