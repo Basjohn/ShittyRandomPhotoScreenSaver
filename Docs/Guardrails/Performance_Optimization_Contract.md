@@ -47,7 +47,7 @@ Before any performance patch, confirm every relevant box remains binding:
 - [ ] Newest-state semantics remain intact; do not add FIFO/catch-up queues or deliberately present stale history.
 - [ ] Source/snapshot age remains healthy; a prettier FPS/GC/CPU number with materially older visible state is not an optimization.
 - [ ] Bubble preserves R-69: no global viewport-dependent compression of head/radius response, motion, Ghost/history displacement or other authored reaction.
-- [ ] Spectrum/Oscilloscope/DevCurve geometry adaptation may reframe/reflow/smooth presentation but may not quietly weaken musical response.
+- [ ] Spectrum/Oscilloscope/Spline Curve (`devcurve`) geometry adaptation may reframe/reflow/smooth presentation but may not quietly weaken musical response.
 - [ ] Bubble temporal fidelity/integration remains intact; do not skip authored logical steps to reduce work.
 - [ ] If Bubble itself is touched, idle traces are not acceptance: require an active-music physical lane proving source freshness, attack/settle, elasticity/breathing, loud-passage expansion, ghost/tail motion and operator feel.
 - [ ] The persistent `visualizer.audio_analysis` lane remains one-in-flight + newest-pending, with no per-frame generic Future/task fallback.
@@ -377,7 +377,7 @@ Likewise, do not tune a GUI ``QTimer`` as a bandage. Qt Quick frame-pacing work 
 
 Qt Quick hot paths are scarce budget: never add dormant per-frame Python/logging/telemetry on ``frameSwapped``/sync/render edges, hidden ``Repeater`` delegate forests, or always-live effect/layer work without measured need. Keep deep render-loop timing behind an explicit diagnostic sidecar with zero normal-runtime cost. Judge smoothness by frame-spacing tails **and fresh-state age**, not average FPS alone; CUSTOM Edit FPS is a different demand regime, not a steady-runtime target. `ThreadManager` ``TaskPriority`` is currently metadata on a FIFO ``ThreadPoolExecutor``; never treat ``LOW`` as Qt/Windows scheduling priority. Best-effort CPU speculation must not use a heavyweight helper process or normal-priority shared COMPUTE lane by assumption: use the ThreadManager background lane only when semantics tolerate delay, keep it one-thread/bounded/QImage-only, and fail closed on Windows if native demotion is unavailable.
 
-**Cutting a logical tick without changing a bit (Extruded Bubble, 6 Nov 2026).** Every Python call on the logical
+**Cutting a logical tick without changing a bit (Extruded Bubble (`extruded_bubble`), 6 Nov 2026).** Every Python call on the logical
 thread holds the GIL against the render thread, so a mode's tick is cut at its owner, but an accepted mode's published
 frames must stay byte-identical: prove it with a full-replay digest of every published frame against main (several
 recordings and presets), and keep the straightforward forms in tests as the oracle
@@ -396,7 +396,7 @@ recordings and presets), and keep the straightforward forms in tests as the orac
 
 **GL state reads are not free on the render thread.** Every `glGet*`, `glIsEnabled*` and `glGetUniformLocation` is a
 round trip to the driver thread: ~20-25 us quiet, up to milliseconds when the CPU is saturated (a game, parallel work),
-and the GPU idles until the frame's next commands arrive. Waveform made ~170 per frame (uniforms by name, per-pass
+and the GPU idles until the frame's next commands arrive. Waveform Ribbon (`waveform_ribbon`) made ~170 per frame (uniforms by name, per-pass
 save/restore fences); at the operator's TV card that alone held its render thread at 11-50 ms a frame (5 Nov 2026). Look
 uniform locations up once per program, and let a mode that owns its frame's state use the shared primitives'
 `restore=False` contracts (`Docs/Reference/Scene3D_Resources.md`, "Owned frames") instead of reading state back per

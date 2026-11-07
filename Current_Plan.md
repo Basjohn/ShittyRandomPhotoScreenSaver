@@ -7,8 +7,8 @@ is not a changelog. Deferred, unadmitted ideas live in `Future_Work.md`.
 
 ## 0. Scope and rules
 
-**Accepted baseline (not live work):** original Bubble, Extruded Bubble, Neon Lake, Oscilloscope,
-Spectrum/Rainbow Ghost, Sphere, source routing, transitions and Foundry launch buttons. Reopen an accepted
+**Accepted baseline (not live work):** original Bubble, Extruded Bubble, Neon Lake Basin (`shockwave_grid`),
+Oscilloscope, Spectrum/Rainbow Ghost, Voxel Sphere (`sphere`), source routing, transitions and Foundry launch buttons. Reopen an accepted
 area only for a concrete new defect; deferred or unadmitted work belongs in `Future_Work.md`. Historical recovery
 IDs, completed gates and rejected mechanisms belong in source control or their focused historical/investigation docs,
 not in this working plan.
@@ -34,7 +34,7 @@ registry"). The items promoted to run soon are in §3. Nothing else in it is adm
 
 **Now (in flight):**
 
-1. **Data-corruption fix** (§3, the Studio agent's top priority): a Neon Lake preset file was rewritten with Bubble
+1. **Data-corruption fix** (§3, the Studio agent's top priority): a Neon Lake Basin (`shockwave_grid`) preset file was rewritten with Bubble
    values. Nothing outranks a user-data write bug.
 2. **§7.1 Waveform Ribbon**: finish acceptance (already built; the only 3D mode in flight), including the logical
    tick cut (§4) and the operator sign-offs listed in §2.
@@ -74,7 +74,7 @@ answers.
   scheduled by the lead only.
 - **§4 Slow startup:** a cold start with `--usage` (no `UI_CALLBACK` / `FEED_GUI_DELIVERY` line over a frame).
 - **§4 Displays off:** the overnight check with the power plan's display timeout (`--frame-trace --usage`).
-- **§4 DevCurve "more alive":** eyes after the lead's review.
+- **§4 Spline Curve (`devcurve`) "more alive":** eyes after the lead's review.
 - **§4 Frozen builds:** open a Studio from a fresh build.
 - **§4 Widget card surfaces:** eyes on the rows, the inner rim, the mute position and the 15 material themes.
 - **§4 Extruded Bubble Deep Red Ocean (Preset 9):** eyes on the second pass.
@@ -82,7 +82,7 @@ answers.
   Preset 7 and the Reaction Modes; Breathing; four-ribbon Preset 3; Particles; Strands; Colour/floor/mist; Fixed
   response; Floor Give; Pulse Rim; swell visibility; Travel Direction; Unified atmosphere.
 - **§8 Bubble:** R-170 eyes-on (tall, wide and TV cards); Particle glow.
-- **§9 Studios:** Neon Lake, Extruded Spectrum, Spectrum, DevCurve and Oscilloscope Studios; the migrated Settings
+- **§9 Studios:** Neon Lake Basin (`shockwave_grid`), Extruded Spectrum, Spectrum, Spline Curve and Oscilloscope Studios; the migrated Settings
   pages; Open Studio in the preset row and the Save To flow; the seamless clip loops; the chrome; the drag feel; the
   terrain brush.
 - **§5 Frozen release gate:** operator-run builds and installer checks.
@@ -127,7 +127,7 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
     a4d34f71.
 
   **Visible changes for the operator:**
-  - Neon Lake's Kick Lane Gain is now offered: the renderer always read it.
+  - Neon Lake Basin's (`shockwave_grid`) Kick Lane Gain is now offered: the renderer always read it.
   - The Particle radius default is 8, which is what always ran.
   - Particle Gloss Size offers 16–128, which is what the resolver admits.
   - Manual Floor's low is 0.0 everywhere.
@@ -392,10 +392,10 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   M2's takeover coordinator sits beside the binding; move any of these only when a second host needs them.
 
 **Found during the Settings SSOT fold (7 Nov; fixed or recorded by that agent):**
-- **Neon Lake's Kick Lane Gain moves its frame but was never offered (fixed in AC-18).** The old Technical
+- **Neon Lake Basin's Kick Lane Gain moves its frame but was never offered (fixed in AC-18).** The old Technical
   definitions' mode filter (`_KICK_GAIN_MODES`) hid it from Settings and the Studio although
   `tools/visualizer_replay/analysis_controls_audit.py` shows it moves the published frame (onset waves). Folding the
-  filter into `technical_hidden_suffixes` made the audit test fail, so Neon Lake now offers it; the stored values and
+  filter into `technical_hidden_suffixes` made the audit test fail, so Neon Lake Basin now offers it; the stored values and
   presets were always authored, so no value changes.
 
 **Found while landing AC-03 (7 Nov; record, not yet admitted):**
@@ -432,6 +432,15 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   `QQmlComponent`s have no QObject parent: Python owns them, so they outlive their engine for as long as their
   wrappers do (until R-175's collection).
 
+**Naming follow-ups (naming-audit agent, 7 Nov; `Docs/Reference/Naming.md` is now generated and test-guarded):**
+- **Operator's call:** Neon Lake vs Neon Lake Basin (edit only the registry `display_name`, then run
+  `tools/naming_reference.py --write`); the "Spotify Visualizer" widget label and Spline Curve's Ghost tooltip
+  ("for debug visibility") are audit #6, not done.
+- `Docs/Reference/Visualizer_Reference.md` (Gated modes paragraph) still describes Sine as a gated, registered mode;
+  Sine is retired and `_GATED_MODES` is empty. Outside this pass's doc scope.
+- `tests/test_release_media.py::test_source_change_during_capture_discards_media` fails in any fresh worktree (main
+  too): it needs the untracked operator originals `assets/usu/scenes/UsuScene*.png`.
+
 **Lead only:** merges and merge gates; the game60 live checks (card surfaces with materials on; Waveform after the
 tick cut); scheduling heavy load generators; promoting checklist items here.
 
@@ -455,7 +464,7 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
   the clock while the console displays are off (`Docs/Architecture/Compositor_Architecture.md` → Display power).
   Injected through the real window procedure, a heavy preset went from ~142% of a core / ~10% GPU / 51 swaps/s to ~4% /
   ~0% / ~0.6 swaps/s while off, and resumed with no publish or swap hole (`.artifacts/evidence/display_power/`). Still
-  needs real hardware: leave a heavy preset (Waveform Preset 1 or Neon Lake) overnight with both displays turned off
+  needs real hardware: leave a heavy preset (Waveform Ribbon (`waveform_ribbon`) Preset 1 or Neon Lake Basin (`shockwave_grid`)) overnight with both displays turned off
   by the power plan, then check Task Manager CPU/GPU for the saver while dark, that wake input reaches the saver, and
   the first seconds after wake (no stale frame, jump or hitch; run with `--frame-trace --usage`). Per-monitor power is
   not observable on Windows: an HDMI panel switched off at its own button that stays enumerated keeps running.
@@ -466,7 +475,7 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
   read; the overnight check must let Windows' screen timeout turn the displays off. Operator decision 6 Nov: no
   Screens Off command (it would put the burden on the user); they enabled the power plan's display timeout and will
   report how SRPSS handles it.
-- [~] **DevCurve "more alive while keeping the flow" (second cut 6 Nov; awaiting lead review, then operator eyes):**
+- [~] **Spline Curve (`devcurve`) "more alive while keeping the flow" (second cut 6 Nov; awaiting lead review, then operator eyes):**
   loud body owns most of the drawn ceiling (big, smooth: carrier blends to its broad component instead of limiter
   triangles), kicks ride linear headroom, quiet passages take the band share's rise, swell inside the body's share,
   tick vectorised (guide §13D → DevCurve). Evidence and before/after WebPs (loud end and a quiet passage, P1/P6) in
@@ -476,7 +485,7 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
   inside the body's share).
 - [ ] **Waveform logical tick starves the render thread under game load (quiet-machine game60, 6 Nov):** Waveform
   P1/P4 logical tick median 8.5/8.3 ms (p90 14.4/14.0) holding the GIL 73-75% of the time, so render-mode time is
-  16-17 ms and frames drop to 41-44 fps (Neon Lake 89 fps, Spectrum 90, Bubble 63 under the same load; Extruded Bubble
+  16-17 ms and frames drop to 41-44 fps (Neon Lake Basin 89 fps, Spectrum 90, Bubble 63 under the same load; Extruded Bubble
   5.9 ms / GIL 0.53 / 55 fps is the second case). Offline the Waveform dynamics alone are ~1.3 ms, so the live tick's
   cost is mostly elsewhere (capture, packet build, field/strand/spark work): profile the LIVE logical tick, then cut
   it with byte-identical output (Preset 4 bit-exact with the tag). This is the Graphics Backend Decision's "optimise
@@ -564,7 +573,7 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
-- [ ] **Neon Lake camera step on real music (found 6 Nov, pass 7, pre-existing at a372f106):** Preset 1 on
+- [ ] **Neon Lake Basin (`shockwave_grid`) camera step on real music (found 6 Nov, pass 7, pre-existing at a372f106):** Preset 1 on
   1985_loud1 between 42.054 s and 42.075 s the whole land shifts ~8 px down in one frame and stays (mean step 8.5/255
   against ~1.3; replay parameters and presentation identical across the two frames, Terrain Reaction bands smooth).
   Find the owner (camera floor / reaction normalisation) with `tools/neon_lake_capture.py --clip ... --start 41.9
@@ -577,7 +586,7 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
   fix the probe's timeout or synchronisation rather than rerunning.
 - [ ] **4x MSAA repeat-render noise (driver, 5 Nov; was "Floor Give run-to-run noise"):** the same frame rendered
   again through a 4x scene target differs by 1 level (rarely 2-3) on a pixel or two in Waveform (more often with Floor
-  Give and mist) and on ~0.7% of pixels in Neon Lake. Not renderer state: packet, uniforms, every vertex position,
+  Give and mist) and on ~0.7% of pixels in Neon Lake Basin. Not renderer state: packet, uniforms, every vertex position,
   fields, fog volumes, reflection and all four depth samples are bit-identical, single-sample renders are exact
   (`test_floor_give_repeat_renders_are_renderer_deterministic`), and no barrier/finish/stream pinning changes it; the
   multisampled colour itself flips up to 3/255 per sample. Per-sample Waveform floor shading removes it there but costs
@@ -939,7 +948,7 @@ the mist. Preset/control migration and recorded-audio calibration come only afte
 
 ### 7.2 Reactive Liquid / Audio Melt Pool
 
-A heavy viscous molten body in a real concrete chamber; must never read as Neon Lake water. Brief and hard gates
+A heavy viscous molten body in a real concrete chamber; must never read as Neon Lake Basin (`shockwave_grid`) water. Brief and hard gates
 H01–H14: `Docs/Future_Work/Melt_Pool.md` (mock in `references/Reactive_Liquid_Audio_Melt_Pool_Concept_and_Architecture.zip`).
 Uses S3D-3 (chamber), S3D-4 (surface field), S3D-5 (reflections), S3D-2 (droplets).
 
@@ -1012,7 +1021,7 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
 
 - [ ] Finish Waveform Studio acceptance first (§7.1), then extract any remaining Waveform-shaped assumptions.
 - [ ] Adapters in order of authoring pain (Extruded Bubble, Bubble, Spectrum/Rainbow Ghost, Extruded Spectrum and
-  Neon Lake built, DevCurve and Oscilloscope built (below); Sphere in progress). Neon Lake (Shockwave Grid) awaits operator acceptance
+  Neon Lake Basin (`shockwave_grid`) built, Spline Curve (`devcurve`) and Oscilloscope built (below); Voxel Sphere in progress). Neon Lake Basin awaits operator acceptance
   (evidence `.artifacts/evidence/neon_lake/studio/`, Presets 1 and 3): recorded engine answers like Spectrum, the
   shared framed camera, no wallpaper; its terrain is painted with the Studio's shared brush (6 Nov; evidence
   `.artifacts/evidence/studio_completion_20261106/brush/`; the retired Settings editor's 3/4 view Sun / Moon drag is
@@ -1022,12 +1031,12 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
   `.artifacts/evidence/spectrum/studio_20261105/`). Every mode's Settings body is now the preset row and the Studio
   launcher (operator 6 Nov: migrate fully once parity+ is proven; `tests/test_visualizer_studio_parity.py`). Operator
   look pending on the migrated Settings pages (one sentence per mode) and on the terrain brush in the Studio.
-- [~] **DevCurve Studio built (6 Nov), awaiting operator acceptance**(`ui/studio/devcurve_adapter.py`, registered;
-  so DevCurve's preset row now shows Open Studio and no Edit Preset). Evidence `.artifacts/evidence/devcurve/studio/`
+- [~] **Spline Curve Studio built (6 Nov), awaiting operator acceptance**(`ui/studio/devcurve_adapter.py`, registered;
+  so Spline Curve's preset row now shows Open Studio and no Edit Preset). Evidence `.artifacts/evidence/devcurve/studio/`
   (Deep Blue on Rag Doll, Neon Skyline on Human: every workspace with the live traces, plus the node rows). Operator
   to judge: the per-layer Body / Accent / Swell traces as the way to read the reworked reactivity, the Layers
   workspace (one panel per layer), and whether the Audio Analysis group earns its place (re-analysed from PCM through the
-  production DSP, every offered control moves DevCurve's frame; AGC Strength and Output Lift read nothing and are now
+  production DSP, every offered control moves Spline Curve's frame; AGC Strength and Output Lift read nothing and are now
   hidden: `Docs/Reference/Visualizer_Reference.md` → Audio Analysis controls per mode).
 - [~] **Oscilloscope Studio built (6 Nov), awaiting operator acceptance**(`ui/studio/oscilloscope_adapter.py`,
   registered). Evidence `.artifacts/evidence/oscilloscope/studio/` (Preset 1 Phosphor on Human, Preset 3 Lissajous on
@@ -1099,7 +1108,7 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
     and Paint after the reveal, and the first-input line reports them ("repaint since reveal: none" is the
     takes-input-but-never-repaints signature). Acceptance needs the operator's field log plus a fix proven on the
     real SettingsDialog path, never a stand-in only.
-  - Field log 7 Nov (operator's source run): the 02:00:08 close (Neon Lake) shows Settings revealed, active,
+  - Field log 7 Nov (operator's source run): the 02:00:08 close (Neon Lake Basin) shows Settings revealed, active,
     enabled and exposed, the first click delivered to Settings at +853 ms, and **no Expose, UpdateRequest or Paint
     since the reveal**. The 01:56:26 close painted at +80 ms. Cause: Settings is a layered window, so the 6 Nov
     `RedrawWindow` re-expose produces no WM_PAINT, and when nothing else dirtied Settings Qt scheduled no repaint;
@@ -1134,14 +1143,14 @@ serialized data unless a migration is justified. Accepted looks/behaviour (BTF, 
     unanswerable closes, and a Custom negative control).
   - Operator to check: the prompt's wording and buttons over a real Studio, and that Save As New Preset's file
     dialog lands in the right folder in an installed build (ProgramData's shared preset tree).
-- [ ] **Neon Lake: drag the Sun/Moon in the Studio preview.** Retiring the Settings terrain section (6 Nov, Studio brush)
+- [ ] **Neon Lake Basin: drag the Sun/Moon in the Studio preview.** Retiring the Settings terrain section (6 Nov, Studio brush)
   removed its 3/4 view, where the Sun/Moon could be dragged; it is now placed with Position X/Y/Z only. Give the Studio
   preview a direct drag for it: the same pick through the production camera as the terrain brush, one undoable commit
   on release.
 - [~] **Operator look: the Studio terrain brush**(brush button or B in the viewport toolbar; Raise, Lower, Flatten,
   Water; left-drag paints, right/middle drag pans). Evidence `.artifacts/evidence/studio_completion_20261106/brush/`.
-  Audio Analysis now moves the DevCurve, Oscilloscope, Neon Lake, Bubble, Extruded Bubble and Sphere previews on
-  recorded clips. Sensitivity sheet: `audio_analysis/`. DevCurve normalises its body, so it barely shows, as live.
+  Audio Analysis now moves the Spline Curve, Oscilloscope, Neon Lake Basin, Bubble, Extruded Bubble and Voxel Sphere previews on
+  recorded clips. Sensitivity sheet: `audio_analysis/`. Spline Curve normalises its body, so it barely shows, as live.
 
 ## Operator execution and evidence rules
 

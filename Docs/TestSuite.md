@@ -151,7 +151,7 @@ and actual GPU stills, then fails on drift against a separately saved frozen-set
 output evidence, not physical display cadence or audible latency. Existing lazy-body/preset/resource checks retain
 zero unopened bodies, canonical Custom saves and reusable renderer data ownership.
 
-Neon Lake is operator-accepted; its historical closure required actual rendered horizon/depth and size/DPR
+Neon Lake Basin (`shockwave_grid`) is operator-accepted; its historical closure required actual rendered horizon/depth and size/DPR
 evidence. Future visual/temporal changes to star/celestial response, terrain reactivity or water must still be
 checked on both synthetic replay and the operator's real-music recordings at `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\visualizer_recordings`. The local
 agent may run these replays and compare low/high signal, transient and sustained passages. Six new disposable
@@ -239,7 +239,7 @@ Use real recordings at `F:\Programming\Apps\ShittyRandomPhotoScreenSaver\logs\vi
 with the local agent; never fabricate run results. The shared DirectionMapper's opt-in horizon/midline stroke
 requires offscreen painted-pixel/DPR and unchanged drag, theme, keyboard and one-save-per-gesture coverage.
 
-**Neon Lake future work (not a regression against the accepted mode):** when admitted, test larger water
+**Neon Lake Basin future work (not a regression against the accepted mode):** when admitted, test larger water
 height/splash as actual geometry and world-space spray (not just capped crest luminance), versioned water-height
 brush authoring and falloff with preserved wet/dry distinction, and independent real-contour Water Edge Glow
 colour/intensity without changing existing Water Line Glow. The deferred contract is in
@@ -641,7 +641,7 @@ Read these before changing visualizer behavior:
 
 Permanent shared-mode work must preserve source freshness, authored logical cadence, latest-state delivery, mode hotswap and viewport/normalization contracts.
 
-**Audio analysis is not visual shaping.** The active mode descriptor/capability projection owns admission to the Spectrum visual shaper: Spectrum, Extruded Spectrum and Shockwave Grid currently use it; Bubble, Sphere, Sine, Oscilloscope and Dev Curve do **not**. Those unshaped modes still consume shared FFT, pre-AGC bands, waveform/transient or onset data as appropriate; the shared worker legitimately returns zero Spectrum-shaped bars for them. Dev Curve has its own independent curve-layer shaping, which is not the Spectrum bar shaper. Do not force `_spectrum_shaping_enabled=True` in a nonshaper fixture, infer missing acoustic analysis from zero bars, or restore a retired cross-mode dependency to satisfy an old test. `tests/test_audio_analysis_only_isolation.py`, `tests/test_visualizer_spectrum_shaper_ownership.py` and `tests/test_visualizer_compute_lanes.py` guard the current boundary. An explicitly test-owned Spectrum DSP fixture **must** configure Spectrum's own source/shaper when the test is intended to measure shaped Spectrum bars; it must not borrow a curated preset.
+**Audio analysis is not visual shaping.** The active mode descriptor/capability projection owns admission to the Spectrum visual shaper: Spectrum (`spectrum`), Extruded Spectrum (`extruded_spectrum`) and Neon Lake Basin (`shockwave_grid`) currently use it; every other registered mode (for example Bubble (`bubble`), Voxel Sphere (`sphere`), Oscilloscope (`oscilloscope`) and Spline Curve (`devcurve`)) does **not**. Those unshaped modes still consume shared FFT, pre-AGC bands, waveform/transient or onset data as appropriate; the shared worker legitimately returns zero Spectrum-shaped bars for them. Spline Curve has its own independent curve-layer shaping, which is not the Spectrum bar shaper. Do not force `_spectrum_shaping_enabled=True` in a nonshaper fixture, infer missing acoustic analysis from zero bars, or restore a retired cross-mode dependency to satisfy an old test. `tests/test_audio_analysis_only_isolation.py`, `tests/test_visualizer_spectrum_shaper_ownership.py` and `tests/test_visualizer_compute_lanes.py` guard the current boundary. An explicitly test-owned Spectrum DSP fixture **must** configure Spectrum's own source/shaper when the test is intended to measure shaped Spectrum bars; it must not borrow a curated preset.
 
 **2D and Extruded Spectrum ghosts have different mode-owned configuration paths.** `tests/test_spectrum_rainbow_ghost_contract.py` checks the production source-routing seam (ordinary 2D ghost enablement must survive normalization, and Rainbow Ghost must not be confused with bar or border rainbows); `tests/test_qtquick_visualizer_spectrum.py`, `tests/test_qtquick_extruded_spectrum.py` and `tests/test_visualizer_settings_plumbing.py` cover the relevant retained render/settings ownership. Test a synthetic source with ordinary ghosting on/off and rainbow on/off, but do not pin the operator's Organ preset or make Extruded's already accepted ghost implementation inherit 2D settings. The presence, hue and motion of a painted trail require the appropriate native GL and eyes-on evidence when affected; green configuration tests alone do not establish visibility.
 
@@ -661,7 +661,7 @@ Set-Location $root
 & '.\.venv\Scripts\python.exe' -m tools.visualizer_replay.bubble_judder --px-per-unit 300 --compare-release
 ```
 
-`mode_audit` reads the local recorded-music corpus and measures Spectrum, Oscilloscope, Dev Curve and Shockwave Grid; `sphere_ramp` exercises Voxel Sphere's real-scale response; `bubble_judder` measures Bubble's observed radius and movement in the same recordings, including the release-envelope comparison. Agents must report the actual recorded clip names, mode, measured quiet/usual/loud response or event coverage, and any replay limitations. These offline results are **logical/observation evidence, not native GPU pixels, physical musical feel, or measured end-to-end latency**. Recordings complement rather than replace committed synthetic fixtures/frozen-settings regression floors; `python -m tools.visualizer_replay` and `tests/test_visualizer_replay.py` run that **different synthetic suite**, not the operator's recordings. Do not automatically recalibrate a golden from local music, nor force Spectrum shaping into modes that lack the Spectrum shaper.
+`mode_audit` reads the local recorded-music corpus and measures Spectrum, Oscilloscope, Spline Curve, Neon Lake Basin and Bubble (`tools/visualizer_replay/mode_audit.py` `MODES`); `sphere_ramp` exercises Voxel Sphere's real-scale response; `bubble_judder` measures Bubble's observed radius and movement in the same recordings, including the release-envelope comparison. Agents must report the actual recorded clip names, mode, measured quiet/usual/loud response or event coverage, and any replay limitations. These offline results are **logical/observation evidence, not native GPU pixels, physical musical feel, or measured end-to-end latency**. Recordings complement rather than replace committed synthetic fixtures/frozen-settings regression floors; `python -m tools.visualizer_replay` and `tests/test_visualizer_replay.py` run that **different synthetic suite**, not the operator's recordings. Do not automatically recalibrate a golden from local music, nor force Spectrum shaping into modes that lack the Spectrum shaper.
 
 `test_bubble_render_judder.py` protects the accepted release-envelope negative control and exact authored small-radius
 snapshot targets. `test_bubble_fidelity_report.py` protects identity-preserving observation, truthful frame indices,
@@ -682,7 +682,7 @@ Voxel Sphere is a standard selectable Visualizer while retaining lazy mode-owned
 
 User-authored Visualizer preset counts/numbers may be arbitrary or sparse. Runtime compacts selectable positions without renaming/deleting authored files or treating shipped manifests as catalogue authority.
 
-3D Visualizers (Extruded Spectrum, Shockwave Grid) and the shared 3D Detail tiers:
+3D Visualizers (Extruded Spectrum, Neon Lake Basin) and the shared 3D Detail tiers:
 
 - `tests/test_heightfield.py`, `tests/test_scene3d_heightfield.py`, `tests/test_heightfield_brush.py`,
   `tests/test_neon_lake_settings.py` — strict authored terrain, exact-zero water, CPU/GL sampling, upload-on-change and
@@ -788,8 +788,8 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   the preset row and launcher; the terrain brush (pick through the production camera, one coalesced stroke saved
   once, reload, exact Undo, sky / cancelled strokes save nothing); Bar Count named by `draws_bars`; negative controls
   per category;
-- `tests/test_studio_audio_analysis_response.py` — the DevCurve, Oscilloscope, Neon Lake (onset waves), Bubble, Extruded
-  Bubble and Sphere Studios react to Sensitivity, the fixed floor and Input Gain as the live engine does: their clip
+- `tests/test_studio_audio_analysis_response.py` — the Spline Curve, Oscilloscope, Neon Lake Basin (onset waves), Bubble, Extruded
+  Bubble and Voxel Sphere Studios react to Sensitivity, the fixed floor and Input Gain as the live engine does: their clip
   workers' frames move on `ProductionLaneEngine` and stay bit-identical on the old recorded lanes (negative control),
   the engine-answer workers equal the production replay on re-analysed lanes, and a bridge edit re-analyses the
   selected clip and moves the frame on screen (without re-analysis it does not);
@@ -821,14 +821,14 @@ shell renders through `OffscreenStudioSurface` and Settings dialogs are never sh
   coverage (Settings-unavailable controls excluded by their flag), the free orbit as a preview view, Settings round
   trip and every exit restoring it, theme; framework pieces it relies on: overflow clipped to the viewport slot and the
   presentation pixel ratio from the item mapping, each with a negative control.
-- `tests/test_devcurve_studio.py` — DevCurve on the shared recorded engine answers with its own logical hook: full
+- `tests/test_devcurve_studio.py` — Spline Curve (`devcurve`) on the shared recorded engine answers with its own logical hook: full
   logical frames byte-identical to the production replay at every tick (synthetic audio and a shipped clip, canonical
   and a reordered / one-layer-off / reshaped variant; zero unrecorded engine reads), the split proven both ways,
   registry coverage (spec controls, every Custom layer key, every node slot, technical, rainbow), layer values and
   stack re-ranking equal to Settings' own layer binding on the real tab, node limits, traces measured read-only and
   showing a hit in the accents while the body holds, the worker out of process, identical production-renderer pixels,
   theme, the preset row, Settings round trip and every exit restoring it, and Save To <Preset> on a tmp copy of a
-  curated DevCurve preset through the real SettingsDialog.
+  curated Spline Curve preset through the real SettingsDialog.
 - `tests/test_oscilloscope_studio.py` — Oscilloscope on the shared recorded engine answers with arrays recorded by
   identity: full logical frames byte-identical to the production replay at every tick (synthetic audio and a shipped
   clip, canonical and a Phase / full afterglow / full reactions variant; zero unrecorded reads), with afterglow
@@ -1042,7 +1042,7 @@ not replace an operator real-music recording or physical mixed-DPR check.
 
 The deterministic replay uses committed synthetic feature clips under `tests/fixtures/visualizer_replay/v1/`, **independent frozen settings** under `tests/fixtures/visualizer_frozen_settings/` and the reviewed reference at `tests/goldens/visualizer_replay/reactivity_floor.json`. Test input and reference provenance must be checked together. An old reference description such as *current authored preset zero* does not override the current test's explicit `frozen_visualizer_settings` injection or license resetting an operator-editable curated preset. Normal Godzips may omit the fixture/golden payloads; missing artifacts prevent independent recalibration from that handoff, not the operator's installed-tree test run.
 
-When a current Windows replay test is RED, report the exact measured mode output, floor and case, then inspect the actual fixture, frozen input, reference provenance and current mode-owned consumer before classifying it as a stale floor or behavioral regression. For unshaped modes, zero **Spectrum bars** can be correct while the independent mode output remains active; Dev Curve `output_flux` measures its curve output, not the unused Spectrum bar shaper. Do not silently lower/reseed floors, update historic artistic snapshots or restore phantom Spectrum shaping to make the gate pass. A reviewed recalibration must demonstrate the intended behavior with test-owned inputs and retain meaningful negative controls.
+When a current Windows replay test is RED, report the exact measured mode output, floor and case, then inspect the actual fixture, frozen input, reference provenance and current mode-owned consumer before classifying it as a stale floor or behavioral regression. For unshaped modes, zero **Spectrum bars** can be correct while the independent mode output remains active; Spline Curve (`devcurve`) `output_flux` measures its curve output, not the unused Spectrum bar shaper. Do not silently lower/reseed floors, update historic artistic snapshots or restore phantom Spectrum shaping to make the gate pass. A reviewed recalibration must demonstrate the intended behavior with test-owned inputs and retain meaningful negative controls.
 
 ### Static source assertions
 
@@ -1151,12 +1151,12 @@ No deterministic FEEDS test should require live publisher access. `tools/feed_pr
 
 `tests/test_visualizer_view_orbit.py` protects Sphere presentation-clock inertia, finite settle/cancel and pose persistence boundaries, including preset rebase without held keys. `tests/test_image_bans.py` protects zero-ban no-lookup admission, hashed sentinel restart/clear, local-vs-remote canonical identity, queue skipping, preview/peek and all-banned termination, plus context-menu routing. Both require the operator's Windows Qt runtime before reporting a green gate; pure local source/execution probes are not real Quick/GL acceptance. The R128 focused result (140 pass) predates these modifications.
 
-## 2026-10-13 Neon Lake terrain continuation / camera checkpoint
+## 2026-10-13 Neon Lake Basin (`shockwave_grid`) terrain continuation / camera checkpoint
 
 `tests/test_neon_lake_landscape_extension.py` uses test-owned lattice sizes to prove
 that the authored editor 0..1 subgrid is preserved verbatim, all four sides overscan,
 triangle and vertex-point UVs are identical, and mesh caching/reduced density holds.
-`tests/test_visualizer_view_orbit.py` covers independent Shockwave saturation for both
+`tests/test_visualizer_view_orbit.py` covers independent Neon Lake Basin turn saturation for both
 held keys and drag, plus the scale-dependent internal pan clamp and config reload;
 Sphere/Extruded keep circular turn. Real GL/QSG acceptance is still mandatory for
 cut-off edges, skyline contours, Glass + Vertices, celestial occlusion and cost.
