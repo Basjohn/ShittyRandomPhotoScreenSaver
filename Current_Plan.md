@@ -243,6 +243,10 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 - **SMP import scan vs the registry:** `ui/settings_tabs.py` imports the existing tabs' modules at import time (as
   the dialog did). The SMP plan's §14 bar ("no saver module is imported by opening Settings in the SMP profile")
   needs those imports moved into the builders when the SMP descriptor lands.
+- **`tests/test_waveform_floor_give.py::test_floor_give_off_is_pixel_identical_to_the_rigid_floor` is flaky by one
+  LSB** (found 7 Nov; on main too, 1 of 5 runs): one pixel of 153,600 differs by 1 (`[119, 123, 1]: 56 vs 55`). Either
+  the two renders are not deterministic (a GPU timing/precision path) or the oracle needs a tolerance it does not
+  state. Find which before loosening anything; bar: 20 consecutive runs identical, or a documented tolerance.
 - **`tests/test_run_matrix_harness.py::test_runs_sequentially_snapshots_logs_and_reports_distinct_failures` fails
   in any worktree** (found 7 Nov; on main too): it asserts the checkout folder is named `ShittyRandomPhotoScreenSaver`
   (`'agent-…' == 'ShittyRandomPhotoScreenSaver'`). Environmental like the gate note below; the harness or the test
