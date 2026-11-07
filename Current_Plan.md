@@ -100,10 +100,13 @@ holding their press, the Unsaved Preset Changes prompt, R-172/R-173 teardown ord
 log confirms, §9). Card surfaces, the style pass and the 15 material themes are merged; their open items are in §4.
 
 **Active or paused (resume each with a message to the same agent, which keeps its context and worktree):**
-- **AC-01 Settings tab registry** (Opus high, started 7 Nov): checklist AC-01 with A-12 and A-14, proven on the real
-  SettingsDialog; side defects and conflicts reported.
-  **Next in this slot (operator 7 Nov): a Settings system and SSOT audit, once AC-01 is merged.** Read-only audit of
-  the post-registry code. Scope:
+- **AC-01 Settings tab registry: merged 7 Nov (23240af9).** Lead audit: its tests, copied onto main, fail there for
+  the stated defects (the hidden value holder; technical values missing from the cache; the Gmail job not requeued).
+  9/9 focused files pass on the merge. The branch's impact gate passed 724/726; the two failures fail on main too.
+  Its side defects are recorded below and in the checklist. The rest of A-12 (the page-level Bar Appearance and
+  Rainbow hidden rows) is open.
+- **Settings system and SSOT audit (Opus high, started 7 Nov, operator-requested after AC-01).** A read-only audit
+  of the post-registry code. Scope:
   - schema, defaults and persistence: one owner per key; defaults that leak into widgets, QML or presets;
   - typed settings versus raw key strings;
   - presets and Studio-owned values; profile gating (MC/SMP);
