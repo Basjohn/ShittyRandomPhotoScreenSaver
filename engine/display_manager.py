@@ -255,6 +255,9 @@ class DisplayManager(QObject):
     
     exit_requested = Signal()
     monitors_changed = Signal(int)  # new monitor count
+    # Not retired until retire_runtime; __init__ owns the instance value (a class default, like the owner's
+    # display-power defaults, so a route reached on a manager built without __init__ reads it too).
+    _retired = False
     displays_ready = Signal(int)  # startup generation ready for image replay
     # Startup generation in which every display's show failed (the last pending one included): nothing is on screen.
     no_display_shown = Signal(int)

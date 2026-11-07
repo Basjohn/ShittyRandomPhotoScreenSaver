@@ -20,6 +20,7 @@ from core.settings.visualizer_mode_registry import (
     VisualizerClipPolicy,
     VisualizerShellPolicy,
     get_visualizer_presentation_policy,
+    iter_all_visualizer_mode_descriptors,
 )
 from tests._visualizer_presentation import resolve_presentation
 from widgets.spotify_visualizer.presentation_geometry import (
@@ -208,8 +209,8 @@ def test_the_owner_shows_the_display_and_restores_the_ordinary_record_byte_for_b
 
 
 @pytest.mark.qt
-@pytest.mark.parametrize("mode", ["extruded_bubble", "spectrum", "oscilloscope", "devcurve", "bubble",
-                                  "shockwave_grid", "waveform_ribbon"])
+@pytest.mark.parametrize("mode", [d.mode_id for d in iter_all_visualizer_mode_descriptors()
+                                  if d.supports_expanded_display])
 def test_published_logical_frames_are_identical_ordinary_and_expanded(qt_app, looped_clip, mode):
     """Reactivity and payload are untouched for every capable mode (Spectrum's bars widen until its bar-count
     milestone). Bubble and Waveform Ribbon are extent-sensitive sentinels: their logical worlds read the

@@ -20,11 +20,20 @@ from widgets.spotify_visualizer.expanded_display_coordinator import (
     display_key,
 )
 
+def _registry_capability() -> tuple[frozenset[str], tuple[str, ...]]:
+    from core.settings.visualizer_mode_registry import iter_all_visualizer_mode_descriptors
+
+    descriptors = tuple(iter_all_visualizer_mode_descriptors())
+    return (frozenset(d.mode_id for d in descriptors if d.supports_expanded_display),
+            tuple(d.mode_id for d in descriptors if not d.supports_expanded_display))
+
+
+#: Membership is the registry's capability flag; the labels below are just members of each side.
+CAPABLE_SET, _INCAPABLE = _registry_capability()
 CAPABLE = "extruded_bubble"
-CAPABLE_2D = "oscilloscope"
-INCAPABLE = "sphere"
-INCAPABLE_2 = "extruded_spectrum"
-CAPABLE_SET = {CAPABLE, CAPABLE_2D, "spectrum", "devcurve", "bubble", "shockwave_grid", "waveform_ribbon"}
+CAPABLE_2D = sorted(CAPABLE_SET - {CAPABLE})[0]
+INCAPABLE, INCAPABLE_2 = _INCAPABLE[0], _INCAPABLE[-1]
+assert CAPABLE in CAPABLE_SET and len(_INCAPABLE) >= 2
 
 
 class _Engine:
@@ -209,8 +218,8 @@ def test_capable_to_capable_keeps_the_takeover():
 
 
 @pytest.mark.parametrize("order,target", [
-    ((INCAPABLE, INCAPABLE_2, CAPABLE_2D, "bubble"), CAPABLE_2D),      # skips the incapable ones
-    ((INCAPABLE_2, "spectrum"), "spectrum"),                          # wraps round: an earlier capable mode
+    ((INCAPABLE, INCAPABLE_2, CAPABLE_2D, CAPABLE), CAPABLE_2D),       # skips the incapable ones
+    ((INCAPABLE_2, CAPABLE), CAPABLE),                                 # wraps round: an earlier capable mode
 ])
 def test_a_double_click_while_expanded_goes_to_the_next_capable_mode_and_stays_expanded(order, target):
     host = _expanded_by_user()

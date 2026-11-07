@@ -30,18 +30,21 @@ REPO = Path(__file__).resolve().parents[1]
 REDUCER = "core.expanded_visualizer_takeover"
 COORDINATOR = "widgets.spotify_visualizer.expanded_display_coordinator"
 FIRST_CAPABLE_MODE = "extruded_bubble"   # plan 01: the initial supported Visualizer
-#: The operator's decision (7 Nov). Product capability, not authored content.
-CAPABLE_MODES = {"extruded_bubble", "spectrum", "oscilloscope", "devcurve", "bubble", "shockwave_grid",
-                 "waveform_ribbon"}
-NEVER_CAPABLE = {"sphere", "extruded_spectrum"}
 
 
-def test_capability_defaults_off_and_only_the_operators_modes_opt_in():
+def test_capability_defaults_off_and_every_carded_mode_opts_in():
+    """The operator's set (7 Nov), read structurally from the registry: every mode drawn in the card shell takes
+    the flag; the frameless freeform 3D modes (whose stage is not a card) never do."""
+    from core.settings.visualizer_mode_registry import VisualizerShellPolicy
+
     field = next(f for f in fields(VisualizerModeDescriptor) if f.name == "supports_expanded_display")
     assert field.default is False
-    capable = {d.mode_id for d in iter_all_visualizer_mode_descriptors() if d.supports_expanded_display}
-    assert capable == CAPABLE_MODES
-    assert not capable & NEVER_CAPABLE
+    descriptors = tuple(iter_all_visualizer_mode_descriptors())
+    capable = {d.mode_id for d in descriptors if d.supports_expanded_display}
+    carded = {d.mode_id for d in descriptors if d.presentation_policy.shell_policy is VisualizerShellPolicy.CARD}
+    assert FIRST_CAPABLE_MODE in capable
+    assert capable == carded
+    assert capable != {d.mode_id for d in descriptors}         # the frameless modes stay out
 
 
 @pytest.mark.parametrize("mode", VISUALIZER_MODE_IDS)

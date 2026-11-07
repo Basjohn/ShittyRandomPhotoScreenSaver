@@ -102,6 +102,11 @@ class QuickDisplayVisualizerOwner:
     # Console display power defaults (on); __init__ and set_display_power own the instance values.
     _display_power_on = True
     _engine_released_for_display_power = False
+    # Expanded Visualizer route defaults (ordinary); __init__ and set_expanded_display own the instance values.
+    _expanded_display = False
+    _takeover: "_TakeoverFade | None" = None
+    _expanded_source: Any = None
+    _expanded_edge_margin = 0.0
 
     def __init__(
         self,
@@ -768,7 +773,7 @@ class QuickDisplayVisualizerOwner:
         )
         if self._started:
             # Present the first faded frame now; later frames ride the logical publications.
-            self._reapply_route()
+            self._reapply_route(request_present=True)
         return True
 
     def _route_pair(self) -> tuple[Callable[[], Any], Callable[[Any], None]]:
@@ -778,7 +783,7 @@ class QuickDisplayVisualizerOwner:
             return self._resolve_expanded_presentation, self._apply_expanded_presentation
         return self._resolve_current_presentation, self._apply_resolved_presentation
 
-    def _reapply_route(self) -> None:
+    def _reapply_route(self, *, request_present: bool = False) -> None:
         """Resolve and commit once through the current route at an event edge (not a cadence)."""
 
         resolve, commit = self._route_pair()
@@ -786,10 +791,10 @@ class QuickDisplayVisualizerOwner:
         if presentation is None:
             return
         commit(presentation)
-        scene = self._presentation_runtime.scene_controller
-        request = getattr(scene, "request_visualizer_present", None)
-        if callable(request):
-            request()
+        if request_present:
+            request = getattr(self._presentation_runtime.scene_controller, "request_visualizer_present", None)
+            if callable(request):
+                request()
 
     def _finish_takeover(
         self, expanded: bool, on_complete: Callable[[], None] | None, *, reapply: bool
@@ -801,7 +806,7 @@ class QuickDisplayVisualizerOwner:
         resolve, commit = self._route_pair()
         self._sync.set_presentation_route(resolve, commit)
         if reapply and self._started:
-            self._reapply_route()
+            self._reapply_route(request_present=True)
         if on_complete is not None:
             on_complete()
 
