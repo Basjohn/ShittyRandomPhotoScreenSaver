@@ -32,34 +32,48 @@ registry"). The items promoted to run soon are in §3. Nothing else in it is adm
 
 ## 1. Order of work (strict)
 
+Rewritten 7 Nov (evening) after the data-corruption fix (R-174), the Studio leak/close fixes, AC-01..AC-03, AC-17
+and Expanded Visualizer M1 all landed. **Load runs:** game60 at most 10 minutes in total, started by the lead only
+after the operator's yes on a question card; agents never run load (invisible checks without load, at most 3 min).
+
 **Now (in flight):**
 
-1. **Data-corruption fix** (§3, the Studio agent's top priority): a Neon Lake (`shockwave_grid`) preset file was rewritten with Bubble
-   values. Nothing outranks a user-data write bug.
-2. **§7.1 Waveform Ribbon**: finish acceptance (already built; the only 3D mode in flight), including the logical
-   tick cut (§4) and the operator sign-offs listed in §2.
-3. **§9 Studio for every visualizer** (operator, 5 Nov): the controller leak, the close freeze, the close prompt,
-   then the remaining operator looks.
-4. **§4 runtime side requests** run alongside, and the small queued fixes in §3 fill free slots.
+1. **Operator-reported defects first:**
+   - Extruded Spectrum does not orbit on a left-drag (Sphere does): agent in flight.
+   - Card surfaces (operator screenshot, 7 Nov): the Visualizer card ignores the theme's material, so Spectrum,
+     Spline Curve and maybe Oscilloscope (the modes whose card background is visible) show an opaque fill instead of
+     Glass (`VisualizerPresentation.qml` draws a plain rectangle; Card_Surface_Materials §3.4 excluded it pending
+     its own acceptance pass).
+   - On every widget the darker legibility panel must run from slightly above the header to slightly below the
+     last element (Media's covers only the track text). Queued for the first free agent slot.
+2. **§7.1 Waveform Ribbon:** the live logical-tick cut (agent in flight; byte-identical) and the operator
+   sign-offs in §2.
+3. **Expanded Visualizer M2** (plan 01; agent in flight), with the operator's M1 amendment: a mode switch never
+   re-expands; Expanded is only ever the user's explicit request.
 
-**Next (admitted, waits for the above):**
+**Next (admitted, in this order):**
 
-5. **§8 Accepted-mode follow-ups**: the brief Bubble performance-parity check is operator-admitted.
-6. **Architecture prerequisites: AC-03** (`Docs/Reference/Architecture_Checklist.md` Tier 1; AC-01 and AC-02
-   landed 7 Nov). AC-03 lands before SMP M2. [~] Built on its agent branch (7 Nov), awaiting the lead's audit; its
-   contract is in `Spec.md` → Lifecycle ("Application services") and `Docs/Contracts.md`.
+4. Settings round-trip native residual (about 2.5-6 MB per open/close) and the Studio's about 1-2 MB per session.
+5. Card legibility: 18/98 linked material mirrors below 4.5:1, and light-theme shadows.
+6. Hygiene: the hidden cross-test `tmp_path` dependency (§3), the AC-13 remainder and AC-14..AC-16.
+7. One measurement session of at most 10 minutes under game60, only after the operator's yes. Owed: a second
+   Waveform round, a clean Waveform P4 GC run, a Settings round-trip run, the alternated Glass/Normal pair, and the
+   two-monitor outlier. Pick the most valuable runs that fit.
+8. **§8 Accepted-mode follow-ups:** the brief Bubble performance-parity check.
 
 **Then (decided 5 Nov, `Docs/Future_Work/Graphics_Backend_Decision_2026-11-05.md`):**
 
-7. **SMP & Full Display:** Expanded Visualizer first
+9. **SMP & Full Display:** Expanded Visualizer first
    (`Docs/Future_Work/Expanded_Visualizer/01_Expanded_Visualizer_Implementation_Plan.md`, EB only; its §0 holds the
    phase ladder and the 4K budgets), then ShittyMusicPlayer
    (`Docs/Future_Work/ShittyMusicPlayer/02_ShittyMusicPlayer_Implementation_Plan.md`, gated behind `--smp` until its
    Gate M9; its §0A holds the prerequisite phases and §13-16 the operator's audio, Settings-tab, icon/artwork and
-   rearrangement targets). No Vulkan backend now: the eventual backend is a native render core on Qt Quick's Vulkan
+   rearrangement targets; §16A holds the operator's fullscreen arrangement: a tiling tree with choose, swap, resize
+   and split/remove, no dead sections, SMP fullscreen remembered, Settings → Layout pills Widgets and SMP). No
+   Vulkan backend now: the eventual backend is a native render core on Qt Quick's Vulkan
    RHI, started only when a recorded trigger fires (full-display 4K GPU budget, render-thread GIL starvation, a
    needed capability, a platform blocker). Port-readiness rules bind all new GPU code from now.
-8. **§6 Shared 3D architecture** and **§7 Visualizer modes** (Reactive Liquid / Melt Pool → Concrete Rain → Usu
+10. **§6 Shared 3D architecture** and **§7 Visualizer modes** (Reactive Liquid / Melt Pool → Concrete Rain → Usu
    Moonscape, lab-first per §7.0) resume after Expanded Visualizer acceptance and its full-display measurements, under
    the port-readiness rules; if a trigger fires first, the native Vulkan core precedes them.
 
