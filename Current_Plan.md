@@ -67,9 +67,6 @@ the items promoted to run soon are in §3. Nothing else in it is admitted until 
 One line each; the detail and evidence live in the section named. Nothing here needs an agent until the operator
 answers.
 
-- **Decision, checklist AC-11 (3D camera contract):** give Sphere and Extruded Spectrum a framed-camera spec with
-  Reset Camera to the preset home, or a reset that needs no physical camera; then inertia/wrap become declared
-  per-mode choices. Needed before a second mode opts into the Expanded Visualizer.
 - **Read:** Bubble / Extruded Bubble "terrible performance" (6 Nov log 10:32-10:35) was our load (97-100% system CPU
   from the agents' game60 checks), not the product: on the quiet machine Bubble P1 ran 65.9 fps, tick 1.47 ms, GIL
   0.13, 3.9% late; Extruded Bubble 45-69 fps (`.artifacts/evidence/live_20261106/`). Heavy load-generator runs are
@@ -80,7 +77,6 @@ answers.
 - **§4 Frozen builds:** open a Studio from a fresh build.
 - **§4 Widget card surfaces:** eyes on the rows, the inner rim, the mute position and the 15 material themes.
 - **§4 Extruded Bubble Deep Red Ocean (Preset 9):** eyes on the second pass.
-- **§5 Neon Lake goal mocks:** look at pass 7.
 - **§7.1 Waveform:** Preset 4 trade-offs of the fixed-scale v7 (sign off or ask for the tag's exact dynamics);
   Preset 7 and the Reaction Modes; Breathing; four-ribbon Preset 3; Particles; Strands; Colour/floor/mist; Fixed
   response; Floor Give; Pulse Rim; swell visibility; Travel Direction; Unified atmosphere.
@@ -132,6 +128,12 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
    `controller.ensure_engine()` or raises). Lands before any SMP PCM source.
 4. **Checklist AC-09 and AC-08 together** (one card border width resolver; one GL state-query helper on the per-frame
    fences with the query order preserved, plus the bench node-path case). Mechanical, pixel-identical.
+6. **Checklist AC-11, decided (operator 7 Nov): "don't ruin the bordered 3D cameras so adjust the freeform Sphere
+   but ideally in a way that does not ruin its look/capabilities".** The framed (bordered) 3D cameras of Extruded
+   Bubble, Neon Lake and Waveform stay exactly as they are. Sphere (freeform) gains a Reset Camera to its preset home
+   and declared inertia/wrap, without changing its look, framing or orbit freedom; Extruded Spectrum gets the same
+   treatment where it applies. Prove it pixel-identical at the preset home and identical under orbit before and after.
+   The in-card Reset Camera button must consume its own presses (item 1).
 5. **Spectrum presets 2 onward re-authored (operator 7 Nov):** they "have no vibrancy, unique patterns, shapes and so
    on. Like, even do a flags of a few countries thing would be easy and neat compared to what we have now". Give each
    preset a distinct, vibrant identity from what the mode supports (bar colour bands and gradients, shapes,
@@ -249,22 +251,6 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
 
 ## 5. Watchlist (observe during normal use; reopen only on evidence)
 
-- [~] **Neon Lake goal mocks (Presets 1-3, 6 Nov seventh pass, awaiting operator look):**loud music now moves the
-  lake: every lake term read the display bars (midband >= 0.95 for 72-75% of every song), so loud and usual passages
-  drew the same lake; **Water Reaction** (Waves) reads the admitted waves on the fixed scale and lights a violet/cyan
-  ripple net, the shore, island glow and Moon path, and lets the ridges breathe with it (Preset 1 lake light range x4
-  on 1985_loud1, which is the quietest capture on the fixed scale); the skyline sheet at Depth Scale 1 + thickness 3
-  is fixed (`Docs/Reference/Neon_Lake_Basin.md`, "Third" to "Seventh pass"). Still short of
-  `references/NeonLakeGoalPreset1.png` / `NeonLakeGoalPreset3.png`: the mocks' high-react look is the whole scene,
-  not only the lake (saturated magenta land and dots, glowing near ridges ~2x ours, a flaring Moon): nothing outside
-  the water/ridge breath answers the music's level yet; the lake net leans cyan (P1 high lake mean [91,82,150] vs
-  [89,55,169]); Preset 3's high-react lake is lit swells with glints, which a net does not give (it runs at 0.25);
-  Preset 1's resting lake p35 [22,30,61] vs [17,28,69] is still a little red (near-ridge bloom); the near dot field
-  is coarser than the mock's (the mark lattice is the Scene3D tier's: a finer one costs vertices); the far-shore
-  sawtooth is the shoreline line itself (crest alpha 0 removes it; Shore Glow 0, a grazing-derivative fade and
-  per-fragment skyline classification do not); Preset 3 motion stays 0.231/255 (heavy1; all water motion off still
-  measures 0.160, so 0.165 means a still lake). Evidence: `.artifacts/evidence/neon_lake/fidelity_20261106/pass7/`
-  (final/, music/report/, clips/*.webp, gpu.txt, overhead.txt).
 - [ ] **Neon Lake camera step on real music (found 6 Nov, pass 7, pre-existing at a372f106):** Preset 1 on
   1985_loud1 between 42.054 s and 42.075 s the whole land shifts ~8 px down in one frame and stays (mean step 8.5/255
   against ~1.3; replay parameters and presentation identical across the two frames, Terrain Reaction bands smooth).

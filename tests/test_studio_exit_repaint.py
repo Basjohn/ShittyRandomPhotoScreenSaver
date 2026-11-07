@@ -391,34 +391,34 @@ def test_a_watch_that_saw_no_repaint_reports_none_negative_control(probe, caplog
     watch.disarm()
 
 
-def test_a_reveal_asks_qt_to_repaint_settings_itself(probe, monkeypatch):
-    """A layered window never receives WM_PAINT, so the native re-expose alone can leave Qt with nothing scheduled
-    (7 Nov field log: a click 853 ms after the reveal, no Expose, UpdateRequest or Paint since). The reveal requests a
-    Qt repaint itself, and again when the Studio window is gone."""
-    window = probe(acrylic=True)
-    calls = []
-    original = window.dialog.update
-    monkeypatch.setattr(window.dialog, "update", lambda *a: (calls.append("update"), original(*a)))
-    controller, surface = _studio_session(window)
-    _leave(controller, surface, "close button")
+def _reveal_without_pumping(window):
+    """Conceal natively, then reveal; the Paint count is read before any event processing after the reveal."""
+    from ui.studio.presence import WindowPresence
+    presence = WindowPresence(window.dialog)
+    presence.conceal()
     _pump()
-    assert len(calls) >= 2, calls                             # at the reveal and after the Studio window is destroyed
-    controller.presence.watch.disarm()
+    presence.reveal()
+    painted = presence.watch._surface_counts.get("Paint", 0)
+    presence.watch.disarm()
+    return painted
 
 
-def test_a_reveal_without_the_qt_repaint_request_schedules_none_negative_control(probe, monkeypatch):
-    """With the request removed, the reveal path itself calls no Qt update (the pre-7-Nov behaviour)."""
+def test_a_reveal_paints_settings_before_it_returns(probe):
+    """7 Nov field logs: after a native show Settings kept its pre-Studio picture until a click (no Expose,
+    UpdateRequest or Paint for 853 ms and 1577 ms, even with an asynchronous ``update()`` requested), and a late repaint
+    swapped the stale picture for the current one. The reveal now repaints synchronously: Settings has painted the
+    current state by the time ``reveal()`` returns, with no event loop in between."""
+    window = probe(acrylic=True)
+    assert _reveal_without_pumping(window) >= 1
+
+
+def test_a_reveal_without_the_synchronous_repaint_paints_nothing_by_return_negative_control(probe, monkeypatch):
+    """Without the repaint (or with only an asynchronous ``update()``) nothing has painted when the reveal returns."""
     from ui.studio import presence as presence_module
     window = probe(acrylic=True)
-    calls = []
-    original = window.dialog.update
-    monkeypatch.setattr(window.dialog, "update", lambda *a: (calls.append("update"), original(*a)))
-    monkeypatch.setattr(presence_module.WindowPresence, "repaint_revealed", lambda self: None)
-    controller, surface = _studio_session(window)
-    _leave(controller, surface, "close button")
-    _pump()
-    assert calls == []
-    controller.presence.watch.disarm()
+    monkeypatch.setattr(presence_module.WindowPresence, "repaint_revealed",
+                        lambda self: self._widget.update())
+    assert _reveal_without_pumping(window) == 0
 
 
 def test_input_elsewhere_does_not_end_the_record_negative_control(probe):

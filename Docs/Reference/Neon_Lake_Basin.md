@@ -1,5 +1,12 @@
 # Neon Lake Basin
 
+**Accepted 7 Nov 2026 (operator):** "In general the neon lake fidelity is much improved and I would say accepted, it
+also gives us a much nicer starting line for water deformation later." The seventh pass (Water Reaction, the skyline
+sheet fix; evidence `.artifacts/evidence/neon_lake/fidelity_20261106/pass7/`) is the accepted look. The remaining
+gaps it recorded against the goal mocks (whole-scene high-react look, net hue, dot field, far-shore line) are future
+enhancements, not acceptance failures. Water deformation (Current_Plan §6, S3D-4 dynamic surface field) starts from
+this baseline. The camera step on real music stays open in `Current_Plan.md` §5.
+
 **23 October addendum (not yet visually accepted):** the [operator reconciliation](2026-10-23_Operator_EB_Neon_Settings_Reconciliation.md) requires camera/control-hint parity with Extruded Bubble (while preventing entry into terrain and allowing almost flat horizon views), a square editor preserving existing heightmap/brush results with desirable angled pseudo-3D preview, layered water/water glow, and improved relevant shared 3D controls. Only presets 1–4 are currently useful artistic study cases; all presets remain mutable. Existing baseline acceptance is not a claim these additions have been implemented or visually accepted. [Current Plan](../../Current_Plan.md) owns status.
 
 Neon Lake Basin replaces the flat Shockwave Grid picture. The stable mode ID and settings prefix remain
