@@ -1185,6 +1185,14 @@ class ScreensaverEngine(QObject):
                 ),
             )
             _connect_runtime_signal(
+                "no_display_shown",
+                lambda generation, manager=display_manager, runtime=runtime_generation: self._on_no_display_shown(
+                    generation,
+                    manager,
+                    runtime,
+                ),
+            )
+            _connect_runtime_signal(
                 "authoritative_first_frames_ready",
                 lambda generation, manager=display_manager, runtime=runtime_generation: self._on_authoritative_first_frames_ready(
                     generation,
@@ -1236,6 +1244,28 @@ class ScreensaverEngine(QObject):
             self._display_initializing = False
             self._pending_displays_ready_generation = None
             return False
+
+    def _on_no_display_shown(
+        self,
+        generation: int,
+        display_manager: object | None = None,
+        runtime_generation: int | None = None,
+    ) -> None:
+        """Every display of this startup failed to show: a failed start, ended through the lifecycle owner.
+
+        A show that fails inside ``_initialize_display`` already makes it return False (no display counted), so
+        only a staggered show failing after it returned reaches the stop here. A partial failure never emits.
+        """
+        if display_manager is not None and runtime_generation is not None:
+            if not self._is_runtime_identity_current(runtime_generation, display_manager):
+                self._record_stale_runtime_callback("no_display_shown", runtime_generation)
+                return
+        if getattr(self, "_display_initializing", False) or self._shutting_down:
+            return
+        logger.error(
+            "[LIFECYCLE] No display could be shown (startup generation %s); stopping as a failed start", generation
+        )
+        self.stop(exit_app=True, reason="no_display_shown")
 
     def _on_displays_ready(
         self,
