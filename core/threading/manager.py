@@ -640,16 +640,22 @@ class ThreadManager:
         }
         return cls(config=config, resource_manager=resource_manager)
 
-    def __init__(self, config: Optional[Dict[ThreadPoolType, int]] = None, 
-                 resource_manager: Optional[Any] = None):
+    def __init__(self, config: Optional[Dict[ThreadPoolType, int]] = None,
+                 resource_manager: Optional[Any] = None, *, terminal_owner: bool = False):
         """
         Initialize thread manager.
-        
+
         Args:
             config: Dictionary mapping ThreadPoolType to max_workers count
             resource_manager: Optional ResourceManager for cleanup tracking
+            terminal_owner: True only for the runtime engine's manager. Its
+                shutdown is the process's terminal one and cancels every
+                pending ``single_shot`` in the process; any other manager's
+                shutdown (a Settings/CONFIG helper) cancels only its own pools,
+                never another owner's delayed callbacks.
         """
         self._shutdown = False
+        self._terminal_owner = bool(terminal_owner)
         
         # Default configuration for screensaver
         cpu_count = os.cpu_count() or 1
@@ -1288,12 +1294,15 @@ class ThreadManager:
                     self._background_task_scheduler = None
             return complete
         self._shutdown = True
-        try:
-            self.cancel_all_scheduled_single_shots()
-        except RuntimeError:
-            logger.debug(
-                "ThreadManager delayed-callback cancellation was not on the UI thread"
-            )
+        # ``single_shot`` callbacks are process-wide and owned by their runtime
+        # generation, not by a manager: only the terminal owner cancels them all.
+        if self._terminal_owner:
+            try:
+                self.cancel_all_scheduled_single_shots()
+            except RuntimeError:
+                logger.debug(
+                    "ThreadManager delayed-callback cancellation was not on the UI thread"
+                )
         with self.__class__._app_shared_lock:
             if self.__class__._app_shared_manager is self:
                 self.__class__._app_shared_manager = None

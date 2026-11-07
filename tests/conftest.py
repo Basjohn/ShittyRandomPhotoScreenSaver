@@ -140,7 +140,15 @@ def _guard_on_import(name: str, install) -> None:
 # Real display windows on the operator's monitors (operator, 7 Nov: "a test that causes a blue screen and a black
 # screen ... it disrupts my entire display ecosystem"). A test reaching QuickDisplayWindow.show_on_screen - directly or
 # through production code - is skipped unless the run asks for --display-disruptive. The window never shows.
-_DISPLAY_GUARD = {"allowed": False, "nodeid": ""}
+# The refusal is an ordinary error inside production (``DisplayWindowBlocked``), so production's own show-failure path
+# retires what it already started (the Visualizer's non-daemon logical runtime among it); the test is then reported
+# as skipped (``pytest_runtest_makereport``). A ``pytest.skip`` raised in here escaped every ``except Exception`` and
+# abandoned a running runtime: ``test_s_hotkey_workflow.py`` then never exited (7 Nov).
+_DISPLAY_GUARD = {"allowed": False, "nodeid": "", "blocked": None}
+
+
+class DisplayWindowBlocked(RuntimeError):
+    """A test reached ``QuickDisplayWindow.show_on_screen`` without --display-disruptive."""
 
 
 def _install_display_window_guard(module) -> None:
@@ -151,8 +159,10 @@ def _install_display_window_guard(module) -> None:
 
     def guarded_show_on_screen(self, *args, **kwargs):
         if not _DISPLAY_GUARD["allowed"]:
-            pytest.skip(f"{_DISPLAY_GUARD['nodeid']} would show a real display window on the operator's monitors; "
-                        "run it only when directly relevant, with --display-disruptive")
+            message = (f"{_DISPLAY_GUARD['nodeid']} would show a real display window on the operator's monitors; "
+                       "run it only when directly relevant, with --display-disruptive")
+            _DISPLAY_GUARD["blocked"] = message
+            raise DisplayWindowBlocked(message)
         return original(self, *args, **kwargs)
 
     guarded_show_on_screen._srpss_guard = True
@@ -187,7 +197,19 @@ _guard_on_import("ui.styled_popup", _install_popup_guard)
 def _no_real_display_window_unless_asked(request):
     _DISPLAY_GUARD["allowed"] = bool(request.config.getoption("--display-disruptive"))
     _DISPLAY_GUARD["nodeid"] = request.node.nodeid
+    _DISPLAY_GUARD["blocked"] = None
     yield
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """A test whose setup or body reached the display-window guard is reported as skipped, whatever it raised."""
+    outcome = yield
+    blocked = _DISPLAY_GUARD.get("blocked")
+    if blocked and call.when in ("setup", "call"):
+        report = outcome.get_result()
+        report.outcome = "skipped"
+        report.longrepr = (str(item.path), int(item.location[1] or 0), f"Skipped: {blocked}")
 
 
 @pytest.fixture(autouse=True)

@@ -7,6 +7,7 @@ from contextlib import contextmanager
 import numpy as np
 from PIL import Image
 from OpenGL import GL as gl
+from rendering.quick import gl_query
 from core.ribbon_packet import KNOT_ROWS
 from core.ribbon_continuation import continuation_bounds, frustum_axial_span
 from core.waveform_ribbon_scene import Floor, Recipe, SPEC, FLOOR_CONTACT
@@ -533,9 +534,9 @@ class WaveformScene:
         else:
             texture, target = self._specular_target((int(size[0]*factor), int(size[1]*factor)))
             if drawing_to is None:
-                framebuffer = int(gl.glGetIntegerv(gl.GL_DRAW_FRAMEBUFFER_BINDING))
-                viewport = [int(v) for v in np.asarray(gl.glGetIntegerv(gl.GL_VIEWPORT)).reshape(-1)[:4]]
-                depth_test = gl.glIsEnabled(gl.GL_DEPTH_TEST)
+                framebuffer = gl_query.get_int(gl.GL_DRAW_FRAMEBUFFER_BINDING)
+                viewport = list(gl_query.get_ints(gl.GL_VIEWPORT, 4))
+                depth_test = gl_query.is_enabled(gl.GL_DEPTH_TEST)
             else:
                 framebuffer, viewport, depth_test = drawing_to, [0, 0, *size], True
             gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, target)
