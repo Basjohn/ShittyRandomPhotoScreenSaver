@@ -489,8 +489,9 @@ python tools/test_oracle_review.py
 
 ### 3.7 Temporary files and tool output
 
-- **pytest temp folders** stay pytest's default (per-run numbered folders under `%TEMP%\pytest-of-<user>`), and
-  `tests/pytest.ini` sets `tmp_path_retention_policy = failed`, so a passing test's `tmp_path` is removed.
+- **pytest temp folders** stay pytest's default (per-run numbered folders under `%TEMP%\pytest-of-<user>`, the
+  last 3 runs kept). `tmp_path_retention_policy = failed` was tried and reverted (7 Nov): some tests still read a
+  folder an earlier test created (Current_Plan.md §3).
   Never put `--basetemp` in `addopts`: pytest wipes the basetemp at session start, so concurrent runs (agents,
   chunked isolation) would delete each other's folders. An explicit `--basetemp` for one manual run is fine.
 - A test never creates a folder it does not remove: use `tmp_path`, `TemporaryDirectory` or an in-place atomic
