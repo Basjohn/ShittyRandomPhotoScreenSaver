@@ -35,21 +35,8 @@ its bar. Tier 1 is complete.
 AC-10 (the Visualizer owner's mode-transition deadline joins the single-shot registry, A-19) landed 7 Nov; its rule,
 with the Media volume write debounce recorded as an accepted coalescing exception, is in `Spec.md` ("Delayed runtime
 callbacks join the single-shot registry").
-
-- [ ] **AC-07 Unchanged settings writes still publish** (A-13). Severity low, reward medium, effort S. **Confirmed
-  (code):** `core/settings/json_store.py:332-333` drops an unchanged write, but `SettingsManager.set`
-  (`core/settings/settings_manager.py:1099-1172`) always calls `sync()` and `_publish_store_change`, which fans out to
-  the Qt signal, every handler and the EventSystem bridge; `ScreensaverEngine._on_settings_changed` rebuilds
-  sources on any `sources*` key. **Needs measurement** for impact: count `settings_changed` publications per
-  Settings close and per preset re-application in a log before and after.
-  - **Fix (owner: `SettingsManager`):** `_set_structured_value_locked` and the store's `setValue` report "changed";
-    `set()` skips publication when nothing changed, except explicit migrations and `'*'` resets, which must publish.
-  - **Must stay true:** a first write of an explicit `None` is a change (the store's own comment at `:329-331`);
-    display-section writes stay one transaction published after coherence.
-  - **Regression bar:** `set(k, v)` twice emits `settings_changed` once; setting `sources.folders` to its current
-    value does not call `_on_sources_changed`; seeding a nullable default to `None` still publishes once.
-  - **Why it matters for SMP:** live Settings (SMP plan §9) and the SMP tab will re-save whole groups; publication
-    must mean change.
+AC-07 (unchanged settings writes no longer publish, A-13) landed 7 Nov; its rule is in `Docs/Contracts.md` ("A
+settings publication means a change"). Tier 2 is complete.
 
 ## Tier 3: product decision first (operator)
 

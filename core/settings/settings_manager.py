@@ -1105,12 +1105,16 @@ class SettingsManager(QObject):
             value: Value to set
         """
         key = self._canonicalize_key(key)
+        # Publication means change (AC-07): a write the store drops as unchanged
+        # publishes nothing (every mutation path here: set, set_section, remove,
+        # the typed Visualizer writes). Resets ('*') and imports always publish.
         if key == "display" and isinstance(value, Mapping):
             # A whole display section is one store transaction: publish only
             # after selection and its physical bindings are both coherent.
             from core.settings.display_selection import normalize_selection, selection_bindings, SELECTION_KEY, BINDINGS_KEY
             from core.settings.monitor_routes import current_screen_identities
             with self._lock:
+                revision = self._store_state_revision()
                 updates = {f"display.{leaf}": item for leaf, item in value.items()}
                 previous = {leaf: self.get(leaf) for leaf in updates}
                 if SELECTION_KEY in updates:
@@ -1129,11 +1133,13 @@ class SettingsManager(QObject):
                     self._settings.setValue(leaf, item)
                 self._invalidate_cache_for_key_locked("display")
                 self._settings.sync()
-            if emit_change:
+                changed = self._store_changed_since(revision)
+            if emit_change and changed:
                 for leaf, item in updates.items():
                     self._publish_store_change(leaf, item, previous.get(leaf))
             return
         with self._lock:
+            revision = self._store_state_revision()
             if key == "display.monitor_bindings":
                 from core.settings.display_selection import selection_bindings
                 from core.settings.monitor_routes import current_screen_identities
@@ -1167,7 +1173,11 @@ class SettingsManager(QObject):
             # Complete pending snapshots from this same store may coalesce;
             # in-memory visibility, cache invalidation, and notification do not.
             self._settings.sync()
+            changed = self._store_changed_since(revision)
 
+        if not changed:
+            logger.debug("Setting unchanged, not published: %s", key)
+            return
         if emit_change:
             self._publish_store_change(key, value, old_value)
 
@@ -1215,6 +1225,7 @@ class SettingsManager(QObject):
         )
 
         with self._lock:
+            revision = self._store_state_revision()
             raw_widgets = self._settings.value('widgets', {})
             widgets = dict(raw_widgets) if isinstance(raw_widgets, Mapping) else {}
             old_section = deepcopy(widgets.get('spotify_visualizer'))
@@ -1229,7 +1240,10 @@ class SettingsManager(QObject):
             self._invalidate_cache_for_key_locked('widgets.spotify_visualizer')
             self._invalidate_cache_for_key_locked('visualizer_custom_presets')
             self._settings.sync()
+            changed = self._store_changed_since(revision)
 
+        if not changed:
+            return
         self._publish_store_change(
             'widgets.spotify_visualizer',
             deepcopy(normalized_section),
@@ -1277,6 +1291,14 @@ class SettingsManager(QObject):
             return
         with self._cache_lock:
             self._cache.clear()
+
+    def _store_state_revision(self) -> int | None:
+        revision = getattr(self._settings, "state_revision", None)
+        return revision if isinstance(revision, int) else None
+
+    def _store_changed_since(self, revision: int | None) -> bool:
+        """Whether the store's state moved since ``revision`` (a store without revisions always counts as changed)."""
+        return revision is None or self._store_state_revision() != revision
 
     def _publish_store_change(self, key: str, value: Any, old_value: Any) -> None:
         """Synchronously notify every live manager sharing this store."""
@@ -1333,13 +1355,17 @@ class SettingsManager(QObject):
         }
 
         with self._lock:
+            revision = self._store_state_revision()
             stored_widgets = self._settings.value("widgets", {})
             widgets = dict(stored_widgets) if isinstance(stored_widgets, Mapping) else {}
             widgets["spotify_visualizer"] = visualizer_section
             widgets = self._store_widgets_root_locked(widgets)
             self._invalidate_cache_for_key_locked("widgets")
             self._settings.sync()
+            changed = self._store_changed_since(revision)
 
+        if not changed:
+            return
         self._publish_store_change("widgets", widgets, stored_widgets)
         logger.debug("Spotify visualizer settings persisted as one normalized widgets root")
 
@@ -1793,12 +1819,16 @@ class SettingsManager(QObject):
         """Remove a setting key."""
         key = self._canonicalize_key(key)
         with self._lock:
+            revision = self._store_state_revision()
             removed = self._remove_structured_key_locked(key)
             if not removed:
                 self._settings.remove(key)
             self._invalidate_cache_for_key_locked(str(key))
             self._settings.sync()
+            changed = self._store_changed_since(revision)
 
+        if not changed:
+            return
         self._publish_store_change(key, None, self._MISSING)
 
         logger.debug(f"Removed setting: {key}")
@@ -1971,6 +2001,7 @@ class SettingsManager(QObject):
             self.set("display", mapping, emit_change=emit_change)
             return
         with self._lock:
+            revision = self._store_state_revision()
             old_value = self._settings.value(section)
             if section == "widgets":
                 mapping = self._store_widgets_root_locked(mapping)
@@ -1981,7 +2012,10 @@ class SettingsManager(QObject):
             self._invalidate_cache_for_key_locked(section)
 
             self._settings.sync()
+            changed = self._store_changed_since(revision)
 
+        if not changed:
+            return
         if emit_change:
             self._publish_store_change(section, mapping, old_value)
         if is_verbose_logging():
