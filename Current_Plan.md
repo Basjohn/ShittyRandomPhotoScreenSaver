@@ -508,6 +508,32 @@ lose this"). Every later dynamics change shows, on the recorded clips, that Pres
     P7 0-15 s) and 6-11% over it in sustained loud bins; quieter-after-loud kicks 8-27% under main by design (a quieter
     passage is no longer re-normalised up); top-row spark density up to about 2x main.
   - Still open from the Range audit (item below): Rotation's drive never passes .36.
+  - **Music-vs-response on main, every preset and Reaction Mode (7 Nov, after the tick cut).** chain7 (7 recordings
+    back to back, continuous play), `waveform_music_response.py`, born swell for travelling/frozen modes; 16 runs (P1-7
+    as authored; P1/P4/P7 forced to Frozen Past, Whole Swell, Group Wave/Travelling Pulse). Means over songs: correlation
+    with loudness/RMS/bass +.34..+.49, saturated 2.2-8.2%, dead 3.7-10.6%, spurious 2.0-4.4%, re-scale gap .11-.25
+    (P1 = the v7 numbers exactly). Mid-song kicks are not muted: the median born-swell rise per kick in every later
+    15 s bin is 0.95-2.5x the first bin's (the first bin holds the intros). Findings worth the operator's eye:
+    (1) Group Wave registers single kicks least: P7 as authored born rise .03-.06 per kick, P7 forced to Travelling
+    Pulse .16-.30, and 46% of P7's kicks raise its born swell by under 1% of its range (Travelling Pulse 25%);
+    (2) Whole Swell plateaus in flat loud songs (P6 song 2 saturated 20%, ws_P1 15%): the music's RMS is flat there and
+    beats ripple the plateau, so it reads as sustained, not pinned; (3) song 1's sparse intro (big isolated kicks in
+    the PCM) barely moves any preset while the carry-over from song 0 decays (re-scale gap .37-.50 on most presets);
+    (4) the floor lift sits at its 1.5 cap for whole loud songs (P2 song 0, P6 song 2): the floor clipping item.
+    Evidence `.artifacts/evidence/waveform_followups/music/` (summary.txt, kicks.txt, report_*/ traces).
+  - **Floor first (7 Nov, operator: "rather it goes a bit higher when it has to than clips"; supersedes top edge
+    first): Preset 4 change for sign-off.** `TROUGH_LIFT_MAX` 1.5 -> 3; the card's top may take back at most 1.5 of the
+    lift (`TOP_GIVE_BACK`, swept .3/.6/1.0/1.5); Floor Give (P2) and Static Height keep 1.5. Visible lower edge through
+    the floor, chain7 continuous play, main -> now: 1282x1005 P1 21.0 -> .9%, P3 16.7 -> .3%, P4 7.8 -> .1%, P5 49.3 ->
+    2.2%, P6 47.6 -> .2%, P7 7.3 -> 0% with no crest above the top on any preset; 640x560 P1 21.4 -> 3.9%, P3 16.4 ->
+    5.0%, P4 7.3 -> 1.6%, P7 2.2 -> .2% with crests above the top on .2-1.1% of ticks (main 0-.1%). Rendered 640x560
+    frames (the lead's v7 windows, crest-clipped share): P1/P3/P7 0-2.5% (main 0-.4%), P4 Anything 6.2% (main .4%:
+    crests graze the top edge), P4 Rag Doll 2.1% (.4%). P5 and P6 do not fit a 640x560 card with any setting (floor
+    32-43% and crests above the top 16-36% of ticks; rendered crest clipping 14-47% against main's 2-16%): authoring,
+    their bodies are taller than that card. P2 (Floor Give) unchanged (72% contact is its yielding floor). Preset 4 for
+    the operator: lift p50/p90 .75/1.48 -> 1.01/2.19 at 1282x1005 (the ribbon rides ~.7 world units higher at p90,
+    at most 1.5 higher, in loud passages) and no longer dips into the floor (7.8% -> .1%). Evidence `.artifacts/evidence/waveform_followups/`
+    (floor/table_main_vs_final.txt, floor/sweep_640.txt, topclip_crest_640.txt, clipsheet_*.png, captures/).
 - [~] **Preset 7 and the other reaction modes (operator log `logse7a84d332e.zip`, Rag Doll, 5 Nov) - awaiting
   operator eyes:** no decay/breathing in soft passages, sustained passages with changes read almost flat, and a swell to
   full power as the song got QUIETER. Preset 7 is Group Wave (song 31-123 s in the log; the recorded clip is song
