@@ -204,12 +204,18 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 
   **Lead audit:** the new tests, copied onto main, fail there for the stated reasons. 13/13 cross-merge files pass.
   The Studio's remaining 2–3 MB per session is native, not these caches (side defect below).
-  **Next for it:**
-  1. the `test_s_hotkey_workflow.py` hang at exit, which costs every gate 900 s;
-  2. a helper ThreadManager's shutdown cancelling every single-shot in the process (part of AC-13);
-  3. AC-08.
+  **Second round merged 7 Nov (700799e7):**
+  - **The s_hotkey exit hang:** the lead's own display-window guard caused it. Its `pytest.skip` escaped production's
+    show-failure path and abandoned a running logical runtime. The guard now raises an ordinary error that
+    production retires after, and still reports the test as skipped. The file exits in 9 s instead of 900.
+  - **ThreadManager:** only the terminal owner's shutdown cancels every single-shot; a helper cancels only its own
+    work. This is one slice of AC-13.
+  - **AC-08:** one GL state-query helper on every per-frame fence, in the same order. On the node path, Python
+    calls fall from 1609 to 1216 and render-thread CPU from 0.68 to 0.51 ms. Clip smoke and the render-node pixel
+    tests pass, and the protected lineage is untouched.
 
-  Then queue item 3, AC-11.
+  **Lead audit:** 10/10 guard, GL, thread and lifecycle files and 4/4 pixel files pass on the merge.
+  **Next for it:** queue item 2 (AC-11), then the two flaky or environment tests recorded below.
 **Queued, next free medium slot, in this order (small, bounded):**
 1. **GC freeze per generation: merged 7 Nov; the live check is owed (lead, quiet machine).** The minute-ly 86–161 ms
    gen2 stalls came from the replay driver: it kept every frame under the interpreter's thresholds.
