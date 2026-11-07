@@ -12,10 +12,20 @@ This owner deliberately does much less:
 * observe every collection without adding a timer or polling cadence;
 * restore the interpreter's original policy when RUN lifetime ends.
 
-No manual ``gc.collect()`` ever occurs. Each display generation is frozen at its
-coordinated reveal and thawed before it retires, so the live generation's
-long-lived heap never enters a gen2 scan and a retiring one is judged by the
-strict destruction barrier exactly as an unfrozen one would be.
+Each display generation is frozen at its coordinated reveal and thawed before it
+retires, so the live generation's long-lived heap never enters a gen2 scan and a
+retiring one is judged by the strict destruction barrier exactly as an unfrozen
+one would be.
+
+The one explicit collection is ``collect_retired_generations()``: once per
+replacement, after the retiring generation's destruction barrier has completed and
+before the replacement is constructed (``_construct_and_start_replacement_runtime``).
+Under the RUN thresholds a deep collection practically never runs on its own, so
+without it every retired generation's cyclic garbage stayed for the session, and
+was re-frozen at each later reveal (Settings round trips, 7 Nov 2026: ~14.5k objects
+and ~20 MB a round trip, 15 Python-owned ``QQmlComponent`` and an ~11 MB buffer among
+them). It never runs at frame time, during a teardown, or before the barrier has
+judged the retiring owners by reference counting.
 """
 from __future__ import annotations
 
@@ -152,12 +162,13 @@ class RuntimeGCPolicy:
           immediately; only *cyclic* collection of the frozen set is deferred to
           ``gc.unfreeze()`` at that generation's teardown or RUN stop;
         - consequence: every teardown thaws first (``thaw_for_runtime_retirement``,
-          from ``teardown_display_runtime``). No sweep follows: the destruction
+          from ``teardown_display_runtime``). The thaw sweeps nothing: the destruction
           barrier judges the retiring owners by reference counting alone, exactly
-          as for a generation that was never frozen (R-53/R-154), and thawed cycles
-          return to the collector's normal cadence. The next generation is frozen
-          at its own reveal. At most one generation's garbage is ever pinned, and
-          only until its teardown.
+          as for a generation that was never frozen (R-53/R-154). Once that barrier
+          has completed, the replacement's construction collects the thawed cycles
+          once (``collect_retired_generations``). The next generation is frozen
+          at its own reveal. (Before that collection, 7 Nov, each reveal re-froze
+          every earlier generation's uncollected cycles as well.)
           (Until 7 Nov the freeze was a one-shot 45 s timer and the first Settings
           visit thawed the RUN for good: every later gen2 scanned the whole heap.)
         Idempotent; a no-op once frozen or when the policy is inactive.
@@ -225,6 +236,37 @@ class RuntimeGCPolicy:
             self._frozen = False
         logger.info("[GC_POLICY] Thawed the revealed generation before its retirement")
         return True
+
+    def collect_retired_generations(self, *, event: str = "replacement") -> int | None:
+        """Reclaim the cyclic garbage of generations the destruction barrier has already judged.
+
+        Called once per replacement, after the retiring generation's barrier (and the Settings dialog's) completed
+        and before the replacement is constructed. The barrier has already proven its watched owners released by
+        reference counting alone (R-53/R-154) or failed closed, so this collection hides nothing from it; it only
+        reclaims what that generation left in reference cycles: Python wrappers of destroyed QObjects, their
+        dicts and closures, and the Python-owned native objects and buffers they keep (Python-owned
+        ``QQmlComponent``s, arrays, images). Under the RUN thresholds a deep collection practically never runs on
+        its own (none in a 10-minute Settings round-trip run), and each later reveal re-froze that garbage, so
+        every round trip added ~20 MB for the session.
+
+        Never at frame time and never inside a teardown: no display generation exists at this point (the
+        retiring one is gone, the replacement not yet built). A no-op (``None``) while the policy is inactive or
+        a generation is still frozen.
+        """
+        with self._lock:
+            if not self._active or self._frozen:
+                return None
+        started_ns = time.perf_counter_ns()
+        unreachable = gc.collect()
+        elapsed_ms = max(0.0, (time.perf_counter_ns() - started_ns) / 1_000_000.0)
+        logger.info(
+            "[GC_POLICY] Collected %d unreachable objects of retired generations after the destruction barrier "
+            "event=%s ms=%.1f",
+            unreachable,
+            event,
+            elapsed_ms,
+        )
+        return unreachable
 
     def stop(self) -> bool:
         with self._lock:

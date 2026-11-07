@@ -241,3 +241,58 @@ def test_verdict_fails_on_a_barrier_timeout_a_missing_refreeze_or_an_early_exit(
         _state(), times=[10.0], returncode=0,
         gc_lines=["[GC_POLICY] Froze 1 stable objects", "[GC_POLICY] Thawed the revealed generation"])
     assert logged["failures"] == ["the log shows 1 GC freezes for 2 reveals"]
+
+
+def test_memory_classification_is_opt_in_and_forwarded_only_with_round_trips(tmp_path):
+    assert roundtrip.parse_roundtrip_memory("collect") == ("census", "collect")
+    assert roundtrip.parse_roundtrip_memory("map,census,tracemalloc") == ("census", "tracemalloc", "map")
+    for bad in ("", "census,sweep"):
+        with pytest.raises(ValueError):
+            roundtrip.parse_roundtrip_memory(bad)
+    args = live_check.build_parser().parse_args(
+        ["--mode", "bubble", "--settings-roundtrip", "10", "--roundtrip-memory", "collect"])
+    command = live_check.runner_command(args, tmp_path, None)
+    assert command[command.index("--roundtrip-memory") + 1] == "census,collect"
+    plain = live_check.build_parser().parse_args(["--mode", "bubble", "--settings-roundtrip", "10"])
+    assert plain.roundtrip_memory == () and "--roundtrip-memory" not in live_check.runner_command(plain, tmp_path, None)
+    driver = roundtrip.SettingsRoundTripDriver([1.0], began=time.monotonic(), memory=lambda: {})
+    assert driver.memory_probe is None                     # without the option nothing observes a reveal
+
+
+@pytest.mark.qt
+def test_memory_probe_names_a_retired_generation_kept_by_a_cycle_and_what_a_collection_frees(qt_app, tmp_path):
+    import gc
+
+    class _Cycle(QObject):
+        def __init__(self):
+            super().__init__()
+            self.me = self
+
+    class _Manager:
+        def __init__(self, roots):
+            self.roots = roots
+
+        def collect_runtime_retirement_roots(self):
+            return list(self.roots), []
+
+    memory = iter([{"rss_mb": float(v), "private_mb": float(v)} for v in range(100, 200)])
+    probe = roundtrip.RoundTripMemoryProbe(("census", "collect"), out_dir=tmp_path)
+    retired = _Cycle()
+    engine = SimpleNamespace(_runtime_generation=0, display_manager=_Manager([retired]))
+    was_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        probe.observe(engine, index="startup", memory=lambda: next(memory))
+        retired.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)     # its C++ object is gone ...
+        del retired                                                             # ... its wrapper stays in a cycle
+        engine._runtime_generation, engine.display_manager = 1, _Manager([])
+        row = probe.observe(engine, index=0, memory=lambda: next(memory))
+    finally:
+        if was_enabled:
+            gc.enable()
+    survivors = row["retired_survivors"]["display:0"]
+    assert survivors["qobject_wrappers_alive"] == {"_Cycle": 1} and survivors["native_total"] == 0
+    assert row["collect"]["garbage_qobjects"] == {"_Cycle": 1} and row["collect"]["unreachable"] >= 1
+    assert "delta" in row and (tmp_path / "settings_roundtrip_memory.json").exists()
+    assert probe._survivors("display:1") == {}                                  # the collection freed it

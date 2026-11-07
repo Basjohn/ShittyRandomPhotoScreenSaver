@@ -723,6 +723,13 @@ def _construct_and_start_replacement_runtime(
         return False
     engine._runtime_lifecycle_event = event
 
+    # Every caller runs as the continuation of the retiring generation's completed destruction barrier (and, for
+    # Settings, the dialog's): those owners were judged by reference counting alone. What they left in reference
+    # cycles is reclaimed now, once, while no display generation exists (core/performance/gc_policy.py).
+    collect_retired = getattr(getattr(engine, "_gc_policy", None), "collect_retired_generations", None)
+    if callable(collect_retired):
+        collect_retired(event=event)
+
     # H1 diagnostic: dual-display replacement generations have wedged the whole
     # process (every thread stops logging) both during construction and, on the
     # 2026-09-25 double wake, after construction while the first image and first
