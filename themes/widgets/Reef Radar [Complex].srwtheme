@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Reef Radar [Complex] [Glass].srtheme",
   "name": "Reef Radar [Complex]",
   "linked_settings_theme_id": "file:Reef Radar [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       26,

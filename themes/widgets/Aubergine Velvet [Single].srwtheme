@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Aubergine Velvet [Single] [Acrylic].srtheme",
   "name": "Aubergine Velvet [Single]",
   "linked_settings_theme_id": "file:Aubergine Velvet [Single] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       53,

@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (QButtonGroup, QGroupBox, QLabel, QListWidget,
 from ui.widgets.theme_list import (ThemeListWidget, PALETTE_ROLE, FAVOURITES_KEY,
                                   dominant_theme_colours, read_theme_favourites)
 from core.logging.logger import get_logger
+from rendering.quick.widgets.surface_material import SURFACE_MATERIAL_LABELS
 from core.settings.settings_manager import SettingsManager
 from ui.flow_layout import FlowContainer
 from ui.settings_theme_catalog import (SettingsThemeCatalog, activate_catalog_theme,
@@ -388,7 +389,8 @@ class ThemesTab(QWidget):
             catalog=get_current_widget_theme_catalog()
             self.widget_theme_list.clear()
             for entry in catalog.entries:
-                item=QListWidgetItem(entry.name); item.setData(Qt.ItemDataRole.UserRole,entry.theme_id)
+                # The theme's card material, as a tag the way Settings names carry "[Glass]".
+                item=QListWidgetItem(entry.name+(f" [{SURFACE_MATERIAL_LABELS[entry.theme.surface_material]}]" if entry.theme.surface_material else "")); item.setData(Qt.ItemDataRole.UserRole,entry.theme_id)
                 if entry.is_builtin:
                     item.setToolTip("Built-in runtime fallback. No theme file is required.")
                 elif entry.source_path is not None:

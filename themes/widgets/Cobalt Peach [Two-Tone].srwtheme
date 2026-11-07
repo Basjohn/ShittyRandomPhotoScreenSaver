@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Cobalt Peach [Two-Tone] [Glass].srtheme",
   "name": "Cobalt Peach [Two-Tone]",
   "linked_settings_theme_id": "file:Cobalt Peach [Two-Tone] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       29,

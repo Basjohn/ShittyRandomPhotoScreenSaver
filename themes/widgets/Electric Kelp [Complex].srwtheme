@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Electric Kelp [Complex] [Acrylic].srtheme",
   "name": "Electric Kelp [Complex]",
   "linked_settings_theme_id": "file:Electric Kelp [Complex] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       25,

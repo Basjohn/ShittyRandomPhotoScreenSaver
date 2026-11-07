@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Lantern Grove [Three-Tone] [Glass].srtheme",
   "name": "Lantern Grove [Three-Tone]",
   "linked_settings_theme_id": "file:Lantern Grove [Three-Tone] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       30,

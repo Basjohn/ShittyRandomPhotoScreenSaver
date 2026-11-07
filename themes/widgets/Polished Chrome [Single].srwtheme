@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Polished Chrome [Single] [Glass].srtheme",
   "name": "Polished Chrome [Single]",
   "linked_settings_theme_id": "file:Polished Chrome [Single] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       216,

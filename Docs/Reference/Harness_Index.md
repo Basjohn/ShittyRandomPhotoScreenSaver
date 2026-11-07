@@ -834,7 +834,7 @@ docstring before running one. Anything that opens a window is operator-only (pro
 **Foundries and generators**
 - `tools/theme_foundry.py` / `tools/theme_foundry_model.py`: the schema-v6 semantic Settings Theme editor and its pure model.
 - `tools/widget_theme_foundry.py` / `tools/widget_theme_foundry_model.py`: the schema-v3 `.srwtheme` editor and its Qt-free model.
-- `tools/generate_widget_theme_mirrors.py`: generates mirrored `.srwtheme` files from the curated Settings theme pack.
+- `tools/generate_widget_theme_mirrors.py`: mirrored `.srwtheme` files from the curated Settings theme pack. With no arguments it changes nothing and prints what regeneration would do. `--fill-materials` fills only each linked mirror's `surface_material` (AC-17). `--regenerate-all` rewrites every mirror wholesale but refuses (writing nothing) while it would overwrite a hand-authored mirror (any file it would not reproduce byte for byte) or delete another `.srwtheme` (the unlinked material themes); `--overwrite-authored` and `--delete-unlinked` each name one of those intents. Guard: `tests/test_widget_theme_mirror_generator_safety.py`.
 - `tools/defaults_foundry_core.py`: safety/transaction helpers for the Defaults Foundry.
 - `tools/foundry_chrome.py`, `tools/godzip_foundry_theme.py`: shared frameless chrome / appearance picker and the Settings-theme bridge for the standalone Foundry tools.
 - `tools/godzip_script_runner.py`: repo-local, opt-in script-run helpers for the GODZIP Foundry CMD tab.

@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Y2K Chrome Circuit [Complex] [Glass].srtheme",
   "name": "Y2K Chrome Circuit [Complex]",
   "linked_settings_theme_id": "file:Y2K Chrome Circuit [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       32,

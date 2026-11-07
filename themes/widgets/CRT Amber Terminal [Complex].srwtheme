@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:CRT Amber Terminal [Complex] [Glass].srtheme",
   "name": "CRT Amber Terminal [Complex]",
   "linked_settings_theme_id": "file:CRT Amber Terminal [Complex] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       38,

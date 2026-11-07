@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Mars Geological [Complex] [Acrylic].srtheme",
   "name": "Mars Geological [Complex]",
   "linked_settings_theme_id": "file:Mars Geological [Complex] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       66,

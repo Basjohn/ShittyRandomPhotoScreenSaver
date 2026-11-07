@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Obsidian Orchid [Complex] [Acrylic].srtheme",
   "name": "Obsidian Orchid [Complex]",
   "linked_settings_theme_id": "file:Obsidian Orchid [Complex] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       42,

@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Indigo Saffron [Two-Tone] [Acrylic].srtheme",
   "name": "Indigo Saffron [Two-Tone]",
   "linked_settings_theme_id": "file:Indigo Saffron [Two-Tone] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       31,

@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Steel Tangerine [Two-Tone] [Acrylic].srtheme",
   "name": "Steel Tangerine [Two-Tone]",
   "linked_settings_theme_id": "file:Steel Tangerine [Two-Tone] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       35,

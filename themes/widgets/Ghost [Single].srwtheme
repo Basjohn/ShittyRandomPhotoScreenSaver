@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Ghost [Single] [Glass].srtheme",
   "name": "Ghost [Single]",
   "linked_settings_theme_id": "file:Ghost [Single] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       38,

@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Cherry Cola Chrome [Complex] [Acrylic].srtheme",
   "name": "Cherry Cola Chrome [Complex]",
   "linked_settings_theme_id": "file:Cherry Cola Chrome [Complex] [Acrylic].srtheme",
+  "surface_material": "acrylic",
   "colors": {
     "card.background": [
       68,

@@ -4,6 +4,7 @@
   "theme_id": "mirror:file:Copper Tide [Two-Tone] [Glass].srtheme",
   "name": "Copper Tide [Two-Tone]",
   "linked_settings_theme_id": "file:Copper Tide [Two-Tone] [Glass].srtheme",
+  "surface_material": "glass",
   "colors": {
     "card.background": [
       24,
