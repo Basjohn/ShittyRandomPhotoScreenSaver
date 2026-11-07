@@ -155,6 +155,9 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   `tests/test_visualizer_authored_clock.py` fails on main; the lead re-ran it there for three modes. No external
   wall-clock timestamp reaches the clock path. The rule is in the visualizer change checklist §2.
   **Now on queue item 1 (the gen2 GC stalls),** which it found itself.
+- **Small-defects agent (Opus medium, started 7 Nov):** queue items 0, 2, 3 and 4 below, in that order (AC-06,
+  Reset Camera's double-click cycling the mode, AC-04, AC-05). Each is its own commit and must fail on the old
+  code first. The Waveform agent's work is complete and merged.
 **Queued, next free medium slot, in this order (small, bounded):**
 0. **Checklist AC-06** (left by the Studio agent): the four Studio adapters' unbounded class-level clip caches and
    the GUI-thread clip parse. Repeated offscreen Extruded Bubble sessions still grow about 2-3 MB each after the
