@@ -180,7 +180,7 @@ Repository `Basjohn/ShittyRandomPhotoScreenSaver`, default `main`, examined 2026
 4. **Mode selection:** ordinary double-click and context-menu mode switches retain current meaning. Capable -> capable stays expanded through the canonical activation (when more capabilities exist). Capable -> incapable collapses in a strictly ordered handoff, then changes mode. A rejected mode request leaves the current mode/expansion intact. Middle-click still cycles preset only.
 5. **Other display:** no fades, audio change, transition suppression, image queue mutation or OSD change, except legitimate shared-source work already occurring. A shared provider survives while any real consumer still needs it.
 6. **HUD:** tiny, tasteful bottom-right media information (artist/title/cover and volume rail, optional playback state). Event-revealed by track, play/pause, eligible volume or pointer activity; fade away after a short bounded visibility period. No permanent timer/poller, no duplicate transport controller, and no overlap/hitbox conflict with OSD, camera, presets or collapse glyph.
-7. **Persistence:** expansion is a user intent, per existing settings profile. It is effective only if the currently resolved mode supports it, owner is live, monitor participates, and Edit/Settings/retirement aren't active. Losing eligibility must not rewrite user intent as a false 'off' unless the user explicitly toggles it off; a deliberately selected incapable mode can normalize effective state off without destroying the original authored layout.
+7. **Persistence:** expansion is a user intent, per existing settings profile. It is effective only if the currently resolved mode supports it, owner is live, monitor participates, and Edit/Settings/retirement aren't active. Losing eligibility must not rewrite user intent as a false 'off' unless the user explicitly toggles it off; a deliberately selected incapable mode can normalize effective state off without destroying the original authored layout. (Operator, 7 Nov: selecting an incapable mode also clears the intent, so a later capable mode starts ordinary; §D3.)
 8. **Restore:** startup/Settings restart/topology replacement re-evaluates persisted intent **once at an already-defined readiness edge**; no unguarded early fade, first-wallpaper duplication or reentry loop. Missing explicit target remains unadmitted (no theft of another display), and later reconnection restores safely.
 9. **DPR/size:** recompute physical frame/viewport from target display and its existing display identity, not from screen-1 cached values. Treat camera, frustum, stream volume, near field, lighting reach, translucency and particles as authored mode semantics, not as a stretched old texture.
 10. **No accidental global style changes:** preserve selected themes, card chrome policy, opacity, OSD palette, default user content and existing settings. SMP later reuses the **semantic display takeover contract**, not this screensaver-only physical compositor.
@@ -268,7 +268,12 @@ The operator's intended *expanded* bool is separate from transient state. Only t
 
 - [ ] **Capable -> capable:** precompute new mode's expanded viewport and controller activation using existing request-completion edge; retain the takeover and wallpaper policy. Do not shrink to a card before a valid new frame. No controller duplication; failed activation keeps the previous mode and UI state.
 - [ ] **Capable -> incapable:** hold mode activation until orderly collapse; use current `_request_quick_visualizer_mode` call and its existing `on_complete` after the collapse has committed. If target admission fails after that temporary collapse, **roll back by re-expanding the still-active capable source mode** (subject to its current eligibility), not by silently leaving the old mode miniaturized. Do not persist an inconsistent mode or lose user geometry.
-- [ ] **Incapable -> capable:** select mode normally; do **not** silently reenter expansion unless persisted user intent is explicitly defined to reapply after capabilities become eligible. Make this decision deterministic and test it.
+- [x] **Incapable -> capable:** select mode normally; never re-enter expansion. **Decided by the operator (7 Nov):**
+  "Fullscreen is a special explicitly asked for function for the visualizer so a preset should not have the power to
+  decide it." A switch to an incapable mode clears the persisted intent once that mode is the Visualizer's and the
+  collapse has committed (also when the intent was only held, e.g. under Edit, and when a generation becomes ready on
+  an incapable mode chosen in Settings), so a later capable mode starts ordinary. A rejected incapable target leaves
+  the capable mode and its intent, and re-expands it (above). Tested in `tests/test_visualizer_expansion_reducer.py`.
 - [ ] Middle click/preset Previous/Next must not toggle expansion, destroy it, or reset playback; `replace_visualizer_runtime_preset_state` preserves the product-level intent and geometry.
 - [ ] Request rejection vs preparation failure vs accepted completion has distinct outcomes; stale completion cannot resurrect an expanded state on another display.
 
@@ -375,12 +380,18 @@ Entry and exit gates per milestone are bound in §0.2; the prerequisite phase P-
   else falls back to the canonical default, never `bool(value)`). It has no mode prefix, so preset payloads and the
   Custom snapshot exclude it by construction: no preset repair fill, and the completeness guard is unaffected. No
   visualizer schema bump: an older profile gains the key through the defaults merge. No UI at M1.
-- *Write rules (§D1.8, §D2.5).* The intent is written only by the user's glyph: True once, when the user's enter
-  commits; False when the user's collapse is accepted (collapse is always attainable, so a Settings visit during the
-  exit cannot resurrect it). Edit, Settings, mode changes, capability loss, monitor loss and shutdown never write it.
-- *Decision, §D3 incapable -> capable (deterministic, tested; operator may revisit as a product choice):* the
-  intent re-applies when a capable mode activates, because no automatic collapse clears it. Capable -> incapable
-  holds the request until the collapse commits, then forwards it; its rejection re-expands the source mode.
+- *Write rules (§D1.8, §D2.5; amended by the operator 7 Nov).* True is written only by the user's glyph, once, when
+  the user's enter commits on a capable mode. False is written when the user's collapse is accepted (collapse is
+  always attainable, so a Settings visit during the exit cannot resurrect it), and when an incapable mode becomes the
+  Visualizer's: at the activation if nothing is drawn expanded, otherwise at the edge where the collapse commits; and
+  at a generation's readiness on an incapable mode. Edit, Settings, monitor loss and shutdown never write it, so the
+  intent survives a Settings round trip and a restart while the capable mode stays selected. Presets and Custom
+  never carry it.
+- *Decision, §D3 incapable -> capable (operator, 7 Nov, superseding the agent's first choice that the intent
+  re-applies):* a mode switch never re-expands; a capable mode reached from an incapable one starts ordinary.
+  Capable -> incapable holds the request until the collapse commits, then forwards it; its rejection re-expands the
+  still-active source mode (the mode never changed, so its intent stands). Capable -> capable keeps the takeover
+  (or a held intent).
 - *Decisions on busy phases:* a mode request or transfer arriving while an enter, exit or transfer is in flight is
   rejected (never queued); one latest opposite glyph press is held to the running transition's commit edge; a
   failed enter restores ordinary and does not retry until a new edge (Edit exit, mode activation, readiness, press).

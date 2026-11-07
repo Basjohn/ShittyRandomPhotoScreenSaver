@@ -259,8 +259,10 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   - 0 call-count differences against main across 38 overhead cases.
   - The impacted gate passed 734/735 (the Usu assets, environmental).
 
-  **For the operator (a product choice the agent made):** switching from an incapable mode back to a capable one
-  re-applies a saved "expanded" intent.
+  **Amended by the operator (7 Nov), built on the M2 branch:** a mode switch never re-expands. Switching to an
+  incapable mode clears the saved "expanded" intent once the collapse has committed (also a held intent, and a
+  generation that starts on an incapable mode chosen in Settings), so a capable mode reached afterwards starts
+  ordinary. The intent still survives a Settings round trip and a restart while the capable mode stays selected.
   **Overhead drift (attributed by the lead, 7 Nov): not a regression.** The +46 Python calls per Visualizer frame
   (Spectrum 757 → 803, Extruded Spectrum 1179 → 1225) arrive exactly at 700799e7: AC-08's `rendering/quick/gl_query.py`.
   - AC-12 adds none: 757 before and after it.
