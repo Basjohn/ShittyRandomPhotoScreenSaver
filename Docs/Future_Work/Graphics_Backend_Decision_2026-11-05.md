@@ -105,8 +105,12 @@ could be going fullscreen."
   Extruded Bubble is the second case (GIL 0.53).
 - **Trigger 1 (GPU budget)** is close: at display size Extruded Bubble already renders 8.2 ms under game60 (M0
   receipts), over §0.7's 8 ms. Full display now covers every mode except Sphere and Extruded Spectrum.
-- Trigger 2's wording asks for logical-tick optimisation first. That is the byte-identical tick cut in flight; its
-  result confirms the trigger.
+- Trigger 2's wording asks for logical-tick optimisation first. That was the byte-identical tick cut (merged 7 Nov,
+  13-16% offline), and it confirmed the trigger:
+  - live with NO load, the Waveform Ribbon tick took 7.49 ms (median; p90 12.5; GIL share 0.67; 51.7 fps), against
+    about 1.5 ms of its own work in replay;
+  - about 6 ms of every live tick is therefore spent waiting for the GIL held by the render and GUI threads;
+  - code trimming cannot remove that wait. Piece A below removes it by construction.
 
 **The plan: three combinable pieces, each likely to pay off, each removing a different bottleneck.**
 
