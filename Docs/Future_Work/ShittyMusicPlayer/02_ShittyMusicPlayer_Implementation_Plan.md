@@ -108,6 +108,26 @@ Prove at every milestone (`test_smp_cross_product_dormancy.py`) and record in th
   multi-process (MC + SMP) write policy tested before M7.
 - Settings (M8): SRPSS/MC keep full teardown; SMP's live Settings is a separate application policy with reversible /
   controlled / deferred / restart classes per setting (§9); late callbacks from closed Settings fail closed.
+- [ ] **Visualizer during live Settings (operator, 7 Nov, binding):** with SMP's live Settings the Media widget and
+  playback stay visible and playing, and the Visualizer will usually have been on. While Settings is open the
+  Visualizer **pauses into dormancy**: parked, its capture/analysis lease released or idle, no ticks, no GL work, zero
+  cost by the overhead benchmark. When Settings closes it **resumes successfully**: same mode, preset and camera, a
+  fade-in rather than a pop, no stale frame, the beat engine re-admitted. Exactly one Visualizer and one beat engine
+  may exist at every instant, including across the open/close edges; never a second instance for a Settings
+  preview. A setting changed in Settings that the Visualizer reads applies on resume through the normal reapply
+  path. Acceptance:
+  - repeated open/close cycles with music playing (Visualizer on, every mode family 2D and 3D) keep the media state;
+  - a dormancy proof while Settings is open (overhead benchmark: Visualizer GL/Python calls 0);
+  - a resume-parity capture (the first frames after close match an uninterrupted run, within the mode's own replay
+    tolerance);
+  - a negative control: the Visualizer left ticking while Settings is open fails the dormancy check.
+
+  Lead's opinion on MC builds: MC would benefit from live Settings, because today every Settings visit tears down
+  and rebuilds the whole runtime, which is slow and stops the Media widget. It is harder there than in SMP: MC's
+  display runtime is the screensaver/media-centre presentation itself, so live Settings means the AC-03 service tier
+  plus a per-setting reapply class for every display, widget and transition setting, not only for SMP's own groups.
+  Recommend building it in SMP first (M8), then deciding on MC from SMP's measured reapply coverage, rather than
+  making it an MC prerequisite.
 
 ### 0A.7 Performance budgets
 
