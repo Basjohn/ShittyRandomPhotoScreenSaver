@@ -35,12 +35,14 @@ class _FakeRenderer:
         self._has_resources = True
         self.fail_release = fail_release
         self.release_count = 0
+        self.render_count = 0
 
     @property
     def has_resources(self) -> bool:
         return self._has_resources
 
     def render(self, _frame) -> None:
+        self.render_count += 1
         self._has_resources = True
 
     def release_resources(self) -> None:
@@ -212,47 +214,46 @@ def test_repeated_mode_switches_keep_one_active_renderer_and_bounded_quad(monkey
     assert final.resolved_mode_ids == ()
 
 
-def test_repeated_switch_injected_release_failure_is_accounted_then_retried(monkeypatch):
-    """P2 item 6: a failed inactive release stays accounted/cached, then a later
-    legal render retries it and restores the one-active-renderer invariant."""
+def test_a_failing_inactive_release_never_blacks_out_the_active_mode(monkeypatch):
+    """AC-04: the retired mode's ``release_resources`` raises at the switch to spectrum. Spectrum still draws on
+    every frame; the failure is recorded once (one lifecycle failure, one log line), stays accounted with the
+    renderer cached, and is retried at the next mode boundary only, never per frame."""
     host = _instrumented_host()
     renderers: dict[str, _FakeRenderer] = {}
     _install_host_render_stubs(monkeypatch, host, renderers)
+    logged = []
+    monkeypatch.setattr(render_host_module, "logger",
+                        SimpleNamespace(exception=lambda *a, **k: logged.append(a)), raising=False)
 
     assert _render_mode(host, "bubble") == "bubble"
     bubble = renderers["bubble"]
     bubble.fail_release = True
 
-    # Switching to spectrum tries to retire bubble; the failed release must raise,
-    # keep bubble cached/accounted, and register a lifecycle failure.
-    with pytest.raises(RuntimeError, match="inactive cleanup incomplete"):
-        _render_mode(host, "spectrum")
+    frames = 6
+    for _ in range(frames):
+        assert _render_mode(host, "spectrum") == "spectrum"
+    assert renderers["spectrum"].render_count == frames          # the active mode drew on every frame
+    assert bubble.release_count == 1                             # once, at the boundary, not per frame
+    assert len(logged) == 1
+    failed = host.lifecycle_snapshot()
+    assert failed.inactive_release_failures == 1
+    assert failed.release_failure_unresolved is True             # still accounted, never silently dropped
+    assert ("bubble", True) in failed.resolved_has_resources
     assert "bubble" in host.resolved_mode_ids
-    assert bubble.release_count == 1
-    failed_snapshot = host.lifecycle_snapshot()
-    assert failed_snapshot.inactive_release_failures == 1
-    assert failed_snapshot.last_release_error is not None
-    # Current ownership is broken while the failed renderer is still retained.
-    assert failed_snapshot.last_release_failure is not None
-    assert failed_snapshot.release_failure_unresolved is True
-    assert ("bubble", True) in failed_snapshot.resolved_has_resources
+    assert failed.mode_boundary_seq == 2                         # telemetry advanced once per switch
 
-    # A later legal render (failure cleared) retries and converges to one active.
+    # The next boundary retries the release (and retires spectrum with it).
     bubble.fail_release = False
-    assert _render_mode(host, "spectrum") == "spectrum"
-    assert host.resolved_mode_ids == frozenset({"spectrum"})
+    assert _render_mode(host, "sphere") == "sphere"
+    assert renderers["sphere"].render_count == 1
     assert bubble.release_count == 2
+    assert host.resolved_mode_ids == frozenset({"sphere"})
     recovered = host.lifecycle_snapshot()
-    assert recovered.inactive_release_successes >= 1
-    assert recovered.resolved_mode_ids == ("spectrum",)
-    # History is preserved (cumulative failure count + last failure text) but the
-    # ownership is no longer currently unresolved after the successful retry.
     assert recovered.inactive_release_failures == 1
-    assert recovered.last_release_failure is not None
     assert recovered.release_failure_unresolved is False
 
 
-def test_render_retires_inactive_mode_before_resolving_current_mode(monkeypatch) -> None:
+def test_render_draws_the_active_mode_then_retires_the_inactive_one(monkeypatch) -> None:
     host = QuickVisualizerRenderHost()
     old = _FakeRenderer()
     current = _FakeRenderer()

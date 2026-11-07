@@ -712,6 +712,9 @@ class QuickDisplayWindow(QQuickWindow):
         # runtime input owner remains the unhandled-display fallback.
         event.ignore()
         super().mouseDoubleClickEvent(event)
+        if self._double_click_owned_by_control():
+            event.accept()
+            return
         hit_test = self._semantic_double_click_hit_test
         if hit_test is not None and hit_test(event.position()):
             event.accept()
@@ -719,6 +722,17 @@ class QuickDisplayWindow(QQuickWindow):
         controller = self._input_controller
         if controller is not None and controller.handle_mouse_double_click(event):
             event.accept()
+
+    def _double_click_owned_by_control(self) -> bool:
+        """An in-card control (Reset Camera, the preset steps, the hover edit glyphs)
+        consumes its own presses, a double-click's second press included: its
+        MouseArea holds the exclusive grab from that press and declares
+        ``consumesDoubleClick``. Such a double-click is the control's alone, never
+        a semantic double-click (the Visualizer mode cycle) or next-image. Qt Quick
+        does not report a MouseArea's double-click acceptance back on the window's
+        event, so the grab is the evidence."""
+        grabber = self.mouseGrabberItem()
+        return grabber is not None and bool(grabber.property("consumesDoubleClick"))
 
     def _runtime_discrete_pointer_event_is_suppressed(self, source: str) -> bool:
         # Keep the R6 passive-move hot path untouched. This helper is reached
