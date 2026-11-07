@@ -606,10 +606,18 @@ constants and gates are in `Docs/Reference/Waveform_Ribbon_Migration_Plan.md` â†
   the whole-object lift's limit cleared the same troughs with kicks identical per kick (the lift is a pure offset).
   Classify residual contact by cause (limit reached vs follower still easing) before changing the follower.
   **Measure every edge the placement moves toward:** that higher limit pushed crests out of the card's top (lead review
-  6 Nov: clipped frames 9% -> 66%), which no floor measure showed. Top edge first, floor second: keep the limit the
-  top allows and bound the lift by the card's real top edge (from the camera frustum, per card size), accepting brief
-  floor contact. A whole-frame "bright pixels in the top rows" count also counts sparks drifting up; separate crest
-  clipping (a wide bright run) from spark density before tuning the ribbon against it.
+  6 Nov: clipped frames 9% -> 66%), which no floor measure showed. A whole-frame "bright pixels in the top rows" count
+  also counts sparks drifting up; separate crest clipping (a wide bright run) from spark density before tuning the
+  ribbon against it.
+  **Superseded 7 Nov: floor first, the top takes back a bounded share.** The 6 Nov rule (top edge first, floor second:
+  keep the limit the top allows, accept brief floor contact) left the visible lower edge through the floor on 7-72% of
+  music ticks, and the operator ranks that worse: "We'd rather it goes a bit higher when it has to than clips." The
+  rule now: the lift may rise as far as the floor needs (Waveform: `TROUGH_LIFT_MAX` 3), and the card's real top edge
+  may take back at most a fixed share of that lift (`TOP_GIVE_BACK` 1.5), chosen by sweeping it on recorded continuous
+  play at the smallest card you support while measuring **both** edges per preset (floor contact, and crests above the
+  top in the model and on rendered frames). When a preset's body is taller than the card holds, no placement fixes
+  both edges: report it as authoring, never shrink the reaction to fit. A floor meant to yield (Waveform's Floor Give)
+  keeps its former limit.
 - **Keep the travelling feature legible.** Geometry and look should follow the *fresh* energy (a short-fade copy of
   the field), or overlapping old energy piles into a uniform inflation or a glow parked at the emitter. Check the
   feature's median/max over the visible span on dense real music, and that successive beats stay separate bands.
