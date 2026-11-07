@@ -333,14 +333,20 @@ def test_a_studio_exit_arms_a_one_shot_input_record_that_ends_with_the_first_inp
         assert watch is not None and watch.active
         centre = window.body.mapTo(window.dialog, window.body.rect().center())
         QTest.mouseClick(window.window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre)
+        assert watch.active                                   # armed until Settings paints after that input
+        window.dialog.update()
+        _pump()
         assert not watch.active
         settled = len(watch.records)
         QTest.mouseClick(window.window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre)
+        window.dialog.update()
+        _pump()
         assert len(watch.records) == settled                              # disarmed: nothing runs at rest
     lines = [r.getMessage() for r in caplog.records if "after reveal" in r.getMessage()]
-    assert lines[0].split(" ms ", 1)[1].startswith("armed qt_modal=")
+    assert lines[0].split(" ms ", 1)[1].startswith("armed qt_exposed=")
     assert any("studio window destroyed" in line for line in lines)
-    assert "first input delivered to Settings: MouseButtonPress" in lines[-1]
+    assert any("first input delivered to Settings: MouseButtonPress" in line for line in lines)
+    assert "first Paint after the first input" in lines[-1]
     assert "native_disabled=False" in lines[0] and "native_visible=True" in lines[0]
 
 
@@ -359,9 +365,9 @@ def test_the_first_input_line_reports_whether_settings_repainted_since_the_revea
         _pump()
         centre = window.body.mapTo(window.dialog, window.body.rect().center())
         QTest.mouseClick(window.window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre)
-        assert not watch.active
+        watch.disarm()
     lines = [r.getMessage() for r in caplog.records if "after reveal" in r.getMessage()]
-    final = lines[-1]
+    final = next(line for line in lines if "first input delivered to Settings" in line)
     assert "first input delivered to Settings: MouseButtonPress (repaint since reveal: " in final
     assert "repaint since reveal: none" not in final, final
     assert any("first UpdateRequest on Settings since the reveal" in line or "first Paint on Settings since the reveal"
@@ -380,8 +386,39 @@ def test_a_watch_that_saw_no_repaint_reports_none_negative_control(probe, caplog
         press = QMouseEvent(QEvent.Type.MouseButtonPress, QPointF(5, 5), QPointF(5, 5), Qt.MouseButton.LeftButton,
                             Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
         watch._qt_input(window.dialog, press)
-    assert not watch.active
+    assert watch.active                                       # still waiting for Settings to paint after the input
     assert "repaint since reveal: none" in watch.records[-1]
+    watch.disarm()
+
+
+def test_a_reveal_asks_qt_to_repaint_settings_itself(probe, monkeypatch):
+    """A layered window never receives WM_PAINT, so the native re-expose alone can leave Qt with nothing scheduled
+    (7 Nov field log: a click 853 ms after the reveal, no Expose, UpdateRequest or Paint since). The reveal requests a
+    Qt repaint itself, and again when the Studio window is gone."""
+    window = probe(acrylic=True)
+    calls = []
+    original = window.dialog.update
+    monkeypatch.setattr(window.dialog, "update", lambda *a: (calls.append("update"), original(*a)))
+    controller, surface = _studio_session(window)
+    _leave(controller, surface, "close button")
+    _pump()
+    assert len(calls) >= 2, calls                             # at the reveal and after the Studio window is destroyed
+    controller.presence.watch.disarm()
+
+
+def test_a_reveal_without_the_qt_repaint_request_schedules_none_negative_control(probe, monkeypatch):
+    """With the request removed, the reveal path itself calls no Qt update (the pre-7-Nov behaviour)."""
+    from ui.studio import presence as presence_module
+    window = probe(acrylic=True)
+    calls = []
+    original = window.dialog.update
+    monkeypatch.setattr(window.dialog, "update", lambda *a: (calls.append("update"), original(*a)))
+    monkeypatch.setattr(presence_module.WindowPresence, "repaint_revealed", lambda self: None)
+    controller, surface = _studio_session(window)
+    _leave(controller, surface, "close button")
+    _pump()
+    assert calls == []
+    controller.presence.watch.disarm()
 
 
 def test_input_elsewhere_does_not_end_the_record_negative_control(probe):

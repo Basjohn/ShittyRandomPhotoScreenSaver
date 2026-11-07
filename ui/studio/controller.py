@@ -2215,6 +2215,10 @@ class StudioController(QObject):
             window = getattr(surface, "window", None)
             if watch is not None and watch.active and window is not None:
                 window.destroyed.connect(lambda *_a: watch.note("studio window destroyed"))
+            repaint = getattr(self.presence, "repaint_revealed", None)
+            if repaint is not None and window is not None and getattr(self.presence, "reveal_count", 0):
+                # Settings repaints once more after the modal Studio window is gone (see repaint_revealed).
+                window.destroyed.connect(lambda *_a: repaint())
             surface.retire()
 
         def release_models() -> None:

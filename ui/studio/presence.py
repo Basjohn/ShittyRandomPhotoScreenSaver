@@ -101,7 +101,9 @@ def window_state(widget) -> str:
         if widget is not None and window in (widget, widget.windowHandle()):
             return "settings"
         return type(window).__name__
-    parts = [f"qt_modal={name(QGuiApplication.modalWindow())}", f"qt_focus={name(QGuiApplication.focusWindow())}",
+    handle = widget.windowHandle() if widget is not None else None
+    parts = [f"qt_exposed={handle.isExposed() if handle is not None else None}",
+             f"qt_modal={name(QGuiApplication.modalWindow())}", f"qt_focus={name(QGuiApplication.focusWindow())}",
              f"qt_active={name(QApplication.activeWindow())}", f"qt_active_modal={name(QApplication.activeModalWidget())}",
              f"qt_popup={name(QApplication.activePopupWidget())}", f"qt_mouse_grab={name(QWidget.mouseGrabber())}",
              f"qt_override_cursor={QGuiApplication.overrideCursor() is not None}"]
@@ -146,6 +148,7 @@ class RevealWatch:
         # UpdateRequest and Paint Settings receives are logged, and the first-input line reports their counts, so a
         # click into a Settings that never repainted is named outright.
         self._surface_counts: dict[str, int] = {}
+        self._input_at_ms: float | None = None
         watch = self
         inputs = (QEvent.Type.MouseButtonPress, QEvent.Type.KeyPress)
         surface_events = {QEvent.Type.Expose: "Expose", QEvent.Type.UpdateRequest: "UpdateRequest",
@@ -205,7 +208,8 @@ class RevealWatch:
     def _expired(self) -> bool:
         if self._elapsed_ms() / 1000.0 <= self._limit_s:
             return False
-        self._log("watch expired without input reaching Settings")
+        self._log("watch expired without input reaching Settings" if self._input_at_ms is None
+                  else "watch expired: Settings never painted after the first input")
         self.disarm()
         return True
 
@@ -216,13 +220,19 @@ class RevealWatch:
         self._surface_counts[name] = count
         if count == 1:
             self._log(f"first {name} on Settings since the reveal")
+        if name == "Paint" and self._input_at_ms is not None:
+            # The 7 Nov field log: a click reached a Settings that never repainted. This line is how long the
+            # picture stayed stale after the user's first click; the record ends here.
+            self._log(f"first Paint after the first input (+{self._elapsed_ms() - self._input_at_ms:.0f} ms after it)"
+                      f" {window_state(self._widget)}")
+            self.disarm()
 
     def _qt_input(self, obj, event) -> None:
-        if self._expired():
+        if self._expired() or self._input_at_ms is not None:
             return
         repaint = ", ".join(f"{name} x{count}" for name, count in sorted(self._surface_counts.items())) or "none"
         self._log(f"first input delivered to Settings: {event.type().name} (repaint since reveal: {repaint})")
-        self.disarm()
+        self._input_at_ms = self._elapsed_ms()          # armed until Settings paints after it (or the limit)
 
     def _native(self, event_type, message) -> None:
         if self._expired() or self._native_lines >= self.MAX_NATIVE_LINES:
@@ -346,6 +356,7 @@ class WindowPresence:
             widget.raise_()
             widget.activateWindow()
         self.reveal_count += 1
+        self.repaint_revealed()
         window = widget.windowHandle()
         logger.info("[STUDIO] Settings revealed (qt visible=%s enabled=%s exposed=%s native=%s)",
                     widget.isVisible(), widget.isEnabled(), window.isExposed() if window is not None else None, native)
@@ -353,6 +364,19 @@ class WindowPresence:
             self.watch = RevealWatch(widget)
         except Exception:
             logger.exception("[STUDIO] Reveal input watch unavailable")
+
+    def repaint_revealed(self) -> None:
+        """Ask Qt itself to repaint the revealed window. A layered window (Settings is frameless and translucent)
+        never receives WM_PAINT, so the native re-expose alone can leave Qt with nothing scheduled: the 7 Nov field log
+        shows a click delivered 853 ms after a reveal with no Expose, UpdateRequest or Paint since (the "frozen"
+        Settings showing its pre-Studio picture). Called at the reveal and again when the Studio window is gone."""
+        widget = self._widget
+        try:
+            import shiboken6
+            if widget is not None and shiboken6.isValid(widget) and widget.isVisible():
+                widget.update()
+        except Exception:
+            logger.exception("[STUDIO] Settings repaint request failed")
 
 
 __all__ = ["WindowPresence"]
