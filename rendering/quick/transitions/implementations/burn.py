@@ -9,6 +9,7 @@ import math
 from OpenGL import GL as gl
 
 from rendering.gl_programs.burn_program import burn_program
+from rendering.transition_settings import require_transition_settings
 from ..fullscreen_pass import FullscreenPassRenderer
 from ..render_contract import QuickTransitionRenderFrame
 
@@ -81,16 +82,13 @@ def _burn_parameters(parameters: Mapping[str, object]) -> _BurnParameters:
     ash_density = _number(parameters, "ash_density")
     seed = _number(parameters, "seed")
 
-    if not 0.0 <= jaggedness <= 1.0:
-        raise ValueError("Burn jaggedness must be between 0 and 1")
-    if not 0.0 <= glow_intensity <= 1.0:
-        raise ValueError("Burn glow_intensity must be between 0 and 1")
-    if not 0.1 <= char_width <= 1.0:
-        raise ValueError("Burn char_width must be between 0.1 and 1")
-    if not 0.0 <= smoke_density <= 1.0:
-        raise ValueError("Burn smoke_density must be between 0 and 1")
-    if not 0.0 <= ash_density <= 1.0:
-        raise ValueError("Burn ash_density must be between 0 and 1")
+    # The trusted runtime contract: the resolver admitted these through the Burn spec, whose ranges this checks.
+    spec = require_transition_settings("burn")
+    for name, value in (("jaggedness", jaggedness), ("glow_intensity", glow_intensity), ("char_width", char_width),
+                        ("smoke_density", smoke_density), ("ash_density", ash_density)):
+        control = spec.control(name)
+        if not float(control.low) <= value <= float(control.high):
+            raise ValueError(f"Burn {name} must be between {control.low:g} and {control.high:g}")
 
     return _BurnParameters(
         direction=direction_raw,

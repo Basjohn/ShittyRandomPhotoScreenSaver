@@ -201,7 +201,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': True, 'opacity': 15
                               'light_direction': 3,
                               'mode': 'Random',
                               'overlap': 4.0,
-                              'particle_radius': 7.0,
+                              'particle_radius': 8.0,
                               'swirl_order': 2,
                               'swirl_strength': 1.0,
                               'swirl_turns': 3.5000000000000004,

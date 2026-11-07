@@ -306,10 +306,6 @@ into them.
     key (never regenerate them: ten mirrors carry hand-edited colours).
   - **Waits on the operator's choice:** the default pair would then draw Glass cards on fresh profiles. The
     alternative is linking the 15 material themes and labelling "[Glass]" as window-only.
-- [ ] **AC-20 (SS-04) The Particle, Blinds and Burn pages go through the transition spec.** P2, effort M.
-  - Particle's default radius of 7 always runs as 8. Its gloss offers 10–200 where 16–128 is admitted.
-  - The Particle save overwrites four fields it doesn't show with literals.
-  - **Radius decision (lead):** keep what users already see, so admit a minimum of 8 and make the default 8.
 
 Addenda from the same audit:
 - **AC-09:** the Studio's `card_style` and the General page's integer spin also restate the border clamp.
