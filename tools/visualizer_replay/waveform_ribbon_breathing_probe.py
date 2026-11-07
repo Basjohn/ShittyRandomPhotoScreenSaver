@@ -18,9 +18,9 @@ Inputs are identical across presets and code variants, so A/B comparisons isolat
 from __future__ import annotations
 import argparse,json,sys
 from pathlib import Path
-from tools import artifact_paths  # noqa: E402
 ROOT=Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:sys.path.insert(0,str(ROOT))
+from tools import artifact_paths  # noqa: E402
 
 DRIVES=('height','width','lift','bend','twist','depth')
 WINDOW,HOP=3.,.5

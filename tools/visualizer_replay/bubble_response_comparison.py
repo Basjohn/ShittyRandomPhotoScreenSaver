@@ -22,16 +22,16 @@ from unittest.mock import patch
 
 import numpy as np
 
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from core.settings.visualizer_presets import resolve_visualizer_activation_payload
 from tools.visualizer_replay import driver
 from tools.visualizer_replay.extruded_bubble_forensics import distribution, load_clip
 from tools.visualizer_replay.pcm_reanalysis import reanalyzed_bubble_bands
 from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
 from widgets.spotify_visualizer.extruded_bubble_frame_runtime import ExtrudedBubbleFrameRuntime
-import sys as _sys  # noqa: E402
-from pathlib import Path as _Path  # noqa: E402
-if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
-    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from tools import artifact_paths  # noqa: E402
 
 

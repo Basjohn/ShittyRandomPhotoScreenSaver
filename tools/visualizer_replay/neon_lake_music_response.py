@@ -30,12 +30,12 @@ import json
 import math
 import sys
 from pathlib import Path
-from tools import artifact_paths  # noqa: E402
-from tools import evidence_media  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 RESPONSE_COLUMNS = ("t", "song", "song_time", "lake_lines", "lake_mean", "island", "shore", "frame_mean",
                     "midband", "beat_pulse", "bars_mean", "waves", "wave_strength", "terrain_drive")

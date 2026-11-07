@@ -279,7 +279,7 @@ def main():
     parser.add_argument("--output", type=artifact_paths.evidence_arg,
                         default=str(artifact_paths.evidence_dir("visualizers/sphere", "materials",
                                                                 artifact_paths.run_label("run")) / "materials.png"),
-                        help="PNG capture path (published as WebP beside its JSON report)")
+                        help="PNG capture path (published unchanged beside its JSON report)")
     parser.add_argument("--material", choices=("All", "Chrome", "Obsidian", "Magma", "Silver", "Water"), default="All")
     parser.add_argument("--width", type=int, default=1440)
     parser.add_argument("--height", type=int, default=800)

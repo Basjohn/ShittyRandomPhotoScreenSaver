@@ -658,7 +658,7 @@ async def run(args: argparse.Namespace) -> int:
         )
         return 2
 
-    # Evidence through the owner (tools/artifact_paths.py); frames are published as WebP on success.
+    # Evidence through the owner (tools/artifact_paths.py); outputs are published unchanged on success.
     destination = SimpleNamespace(out=artifact_paths.evidence_dir(
         "media", "gsm_tc_video_probe", artifact_paths.run_label("probe")))
     out_dir = evidence_media.redirect_output(destination, "out", "gsm_tc_spotify_video_probe")

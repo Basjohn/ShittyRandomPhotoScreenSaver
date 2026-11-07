@@ -3,10 +3,10 @@ BeatEngine replay seam and plot every reactive signal over time (intensity, stre
 sustain, mid-bubble pulse, large-bubble swell, population; kicks as faint lines). For checking quick attack / slow decay, sustained loud
 passages and stutter-free motion (Extruded_Bubble_Target.md section 8).
 
-    python -m tools.visualizer_replay.extruded_bubble_traces OUT.webp ragdoll_quiet_intro_loud_end1 1985_loud1
+    python -m tools.visualizer_replay.extruded_bubble_traces OUT.png ragdoll_quiet_intro_loud_end1 1985_loud1
 
-OUT.webp lies under .artifacts/webp/ (tools/artifact_paths.py), e.g.
-.artifacts/webp/visualizers/extruded_bubble/traces/<YYYYMMDD>_<label>.webp.
+OUT.png (a still: PNG) lies under .artifacts/evidence/ (tools/artifact_paths.py), e.g.
+.artifacts/evidence/visualizers/extruded_bubble/traces/<YYYYMMDD>_<label>/traces.png.
 
 Clip names are recordings in logs/visualizer_recordings. It also prints the largest frame-to-frame stream-speed step.
 """
@@ -22,7 +22,7 @@ from widgets.spotify_visualizer.extruded_bubble_simulation import BUBBLE_STRIDE,
 from widgets.spotify_visualizer.feature_frame import FeatureClip
 
 ROOT = Path(__file__).resolve().parents[2] / "logs" / "visualizer_recordings"
-out, names = artifact_paths.webp_arg(sys.argv[1]), sys.argv[2:] or ['ragdoll_quiet_intro_loud_end1', 'cindarellaman_heavy2']
+out, names = artifact_paths.checked_output(sys.argv[1]), sys.argv[2:] or ['ragdoll_quiet_intro_loud_end1', 'cindarellaman_heavy2']
 W, PANEL = 1600, 300
 sheet = Image.new("RGB", (W, PANEL * len(names)), (18, 18, 20))
 draw = ImageDraw.Draw(sheet)
@@ -77,5 +77,6 @@ for row, name in enumerate(names):
     steps = [abs(b - a) for a, b in zip(series["speed"], series["speed"][1:])]
     print(name, "max speed step (share of loud speed):", round(max(steps), 4),
           "mean sustain:", round(sum(series["sustain"]) / len(t), 3))
-evidence_media.still_webp(sheet, out)
+out.parent.mkdir(parents=True, exist_ok=True)
+sheet.save(out)
 print("saved", out)

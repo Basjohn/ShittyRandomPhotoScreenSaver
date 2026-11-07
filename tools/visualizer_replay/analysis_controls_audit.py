@@ -30,9 +30,11 @@ import sys
 import time
 from dataclasses import replace
 from pathlib import Path
-from tools import artifact_paths  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from tools import artifact_paths  # noqa: E402
 CLIPS = ROOT / "assets" / "production" / "studio_clips"
 MODES = ("spectrum", "extruded_spectrum", "oscilloscope", "bubble", "extruded_bubble", "sphere", "devcurve",
          "shockwave_grid", "waveform_ribbon")

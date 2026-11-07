@@ -9,9 +9,9 @@ pixels and musical feel remain separate evidence.
 from __future__ import annotations
 import argparse,json,subprocess,sys
 from pathlib import Path
-from tools import artifact_paths  # noqa: E402
 ROOT=Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:sys.path.insert(0,str(ROOT))
+from tools import artifact_paths  # noqa: E402
 
 
 def body_metrics(state,*,span):

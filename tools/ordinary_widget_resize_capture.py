@@ -18,6 +18,10 @@ from PySide6.QtCore import QCoreApplication, QEvent, QEventLoop, QTimer, QSize, 
 from PySide6.QtGui import QColor, QImage, QPainter
 from PySide6.QtWidgets import QApplication
 
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from core.settings.default_contract import require_canonical_default
 from rendering.quick.bootstrap import configure_quick_graphics
 from rendering.quick.scene_controller import QuickSceneController, QuickSceneFactory
@@ -26,10 +30,6 @@ from rendering.quick.widgets.host import OverlayWidgetGeometry
 from rendering.quick.window import QuickDisplayWindow
 from rendering.quick.custom_layout_size import capture_quick_size_payload, scale_quick_size_payload
 from rendering.widget_descriptors import get_widget_runtime_descriptor
-import sys as _sys  # noqa: E402
-from pathlib import Path as _Path  # noqa: E402
-if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
-    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from tools import artifact_paths  # noqa: E402
 from tools import evidence_media  # noqa: E402
 

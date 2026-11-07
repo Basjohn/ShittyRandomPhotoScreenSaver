@@ -20,12 +20,12 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from tools import artifact_paths  # noqa: E402
-from tools import evidence_media  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 # Crop regions as fractions of the card (x0, y0, x1, y1): ribbons with rims and strands, the floor reflection under
 # them, the mist above them, and the left end where the history leaves the view.
@@ -132,7 +132,7 @@ def main() -> int:
     cap.add_argument("--clip", type=Path, required=True)
     cap.add_argument("--preset", type=int, required=True)
     cap.add_argument("--out", type=artifact_paths.evidence_arg, required=True,
-                     help="lossless frames for compare: .artifacts/scratch/<owner>/...; elsewhere published as WebP")
+                     help="lossless frames for compare: .artifacts/scratch/<owner>/...; elsewhere published unchanged")
     cap.add_argument("--size", default="3875x1450")
     cap.add_argument("--start", type=float, default=20.)
     cap.add_argument("--frames", type=int, default=12)
