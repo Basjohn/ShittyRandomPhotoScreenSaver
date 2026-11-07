@@ -95,7 +95,7 @@ The widget id is the persisted settings section (`widgets.<id>`); the label is S
 | Media (`media`) | Media | `media` | none |
 | Media (`media`) | Volume | `spotify_volume` | `widgets/media_volume_runtime.py` |
 | Media (`media`) | Mute Button | `mute_button` | `widgets/system_mute_runtime.py` |
-| Visualizers (`visualizers`) | Spotify Visualizer | `spotify_visualizer` | package `widgets/spotify_visualizer/` (every audio source, not Spotify only), `core/settings/models/_spotify_visualizer.py`, `rendering/quick/qml/VisualizerPresentation.qml` |
+| Visualizers (`visualizers`) | Visualizer | `spotify_visualizer` | package `widgets/spotify_visualizer/` (every audio source, not Spotify only), `core/settings/models/_spotify_visualizer.py`, `rendering/quick/qml/VisualizerPresentation.qml` |
 | Reddit (`reddit`) | Reddit 1 | `reddit` | none |
 | Reddit (`reddit`) | Reddit 2 | `reddit2` | none |
 | Feeds (`feeds`) | Custom 1 | `feeds_custom_1` | none |
