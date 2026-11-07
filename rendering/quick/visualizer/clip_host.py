@@ -20,6 +20,8 @@ from PySide6.QtQuick import QSGRenderNode
 
 from core.performance.frame_trace import FrameTraceEvent, FrameTraceSink
 from rendering.quick.render.gl_resources import compile_program
+from rendering.quick import gl_query
+
 from .gl_state import InheritedGlState
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
 
@@ -54,20 +56,6 @@ void main() {
 """
 
 
-def _int_state(name: int) -> int:
-    value = gl.glGetIntegerv(name)
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return int(value[0])
-
-
-def _bool_state(name: int) -> bool:
-    value = gl.glGetBooleanv(name)
-    try:
-        return bool(value[0])
-    except (IndexError, TypeError):
-        return bool(value)
 
 
 def _set_enabled(capability: int, enabled: bool) -> None:
@@ -198,37 +186,35 @@ class _InheritedClipState:
         # Preserve the established GL query ordering. CHK25 only samples
         # boundaries when explicit --frame-trace supplied a context; ordinary
         # runtime executes the same state reads with no new timestamp calls.
-        scissor_enabled = bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
-        scissor_box = tuple(
-            int(value) for value in gl.glGetIntegerv(gl.GL_SCISSOR_BOX)
-        )
+        scissor_enabled = gl_query.is_enabled(gl.GL_SCISSOR_TEST)
+        scissor_box = gl_query.get_ints(gl.GL_SCISSOR_BOX, 4)
         if trace_context is not None:
             trace_context.mark(
                 FrameTraceEvent.CLIP_BEGIN_INHERITED_SCISSOR_READY
             )
 
-        stencil_enabled = bool(gl.glIsEnabled(gl.GL_STENCIL_TEST))
-        stencil_func = _int_state(gl.GL_STENCIL_FUNC)
-        stencil_ref = _int_state(gl.GL_STENCIL_REF)
-        stencil_value_mask = _int_state(gl.GL_STENCIL_VALUE_MASK)
-        stencil_write_mask = _int_state(gl.GL_STENCIL_WRITEMASK)
-        stencil_fail = _int_state(gl.GL_STENCIL_FAIL)
-        stencil_depth_fail = _int_state(gl.GL_STENCIL_PASS_DEPTH_FAIL)
-        stencil_depth_pass = _int_state(gl.GL_STENCIL_PASS_DEPTH_PASS)
+        stencil_enabled = gl_query.is_enabled(gl.GL_STENCIL_TEST)
+        stencil_func = gl_query.get_int(gl.GL_STENCIL_FUNC)
+        stencil_ref = gl_query.get_int(gl.GL_STENCIL_REF)
+        stencil_value_mask = gl_query.get_int(gl.GL_STENCIL_VALUE_MASK)
+        stencil_write_mask = gl_query.get_int(gl.GL_STENCIL_WRITEMASK)
+        stencil_fail = gl_query.get_int(gl.GL_STENCIL_FAIL)
+        stencil_depth_fail = gl_query.get_int(gl.GL_STENCIL_PASS_DEPTH_FAIL)
+        stencil_depth_pass = gl_query.get_int(gl.GL_STENCIL_PASS_DEPTH_PASS)
         if trace_context is not None:
             trace_context.mark(
                 FrameTraceEvent.CLIP_BEGIN_INHERITED_FRONT_READY
             )
 
-        stencil_back_func = _int_state(gl.GL_STENCIL_BACK_FUNC)
-        stencil_back_ref = _int_state(gl.GL_STENCIL_BACK_REF)
-        stencil_back_value_mask = _int_state(gl.GL_STENCIL_BACK_VALUE_MASK)
-        stencil_back_write_mask = _int_state(gl.GL_STENCIL_BACK_WRITEMASK)
-        stencil_back_fail = _int_state(gl.GL_STENCIL_BACK_FAIL)
-        stencil_back_depth_fail = _int_state(
+        stencil_back_func = gl_query.get_int(gl.GL_STENCIL_BACK_FUNC)
+        stencil_back_ref = gl_query.get_int(gl.GL_STENCIL_BACK_REF)
+        stencil_back_value_mask = gl_query.get_int(gl.GL_STENCIL_BACK_VALUE_MASK)
+        stencil_back_write_mask = gl_query.get_int(gl.GL_STENCIL_BACK_WRITEMASK)
+        stencil_back_fail = gl_query.get_int(gl.GL_STENCIL_BACK_FAIL)
+        stencil_back_depth_fail = gl_query.get_int(
             gl.GL_STENCIL_BACK_PASS_DEPTH_FAIL
         )
-        stencil_back_depth_pass = _int_state(
+        stencil_back_depth_pass = gl_query.get_int(
             gl.GL_STENCIL_BACK_PASS_DEPTH_PASS
         )
         return cls(
@@ -488,10 +474,8 @@ class VisualizerClipHost:
         rect = render_state.scissorRect()
         values = tuple(int(value) for value in rect.getRect())
         if values[0] < 0 or values[1] < 0 or values[2] <= 0 or values[3] <= 0:
-            inherited_enabled = bool(gl.glIsEnabled(gl.GL_SCISSOR_TEST))
-            inherited_box = tuple(
-                int(value) for value in gl.glGetIntegerv(gl.GL_SCISSOR_BOX)
-            )
+            inherited_enabled = gl_query.is_enabled(gl.GL_SCISSOR_TEST)
+            inherited_box = gl_query.get_ints(gl.GL_SCISSOR_BOX, 4)
             raise RuntimeError(
                 "incoming Quick scissor is unusable: "
                 f"{values}; inherited={inherited_enabled}:{inherited_box}"
@@ -515,8 +499,8 @@ class VisualizerClipHost:
             return
         if QOpenGLContext.currentContext() is None:
             raise RuntimeError("visualizer clip initialized without a current GL context")
-        prior_vao = _int_state(gl.GL_VERTEX_ARRAY_BINDING)
-        prior_array_buffer = _int_state(gl.GL_ARRAY_BUFFER_BINDING)
+        prior_vao = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING)
+        prior_array_buffer = gl_query.get_int(gl.GL_ARRAY_BUFFER_BINDING)
         try:
             self._program = compile_program(
                 _VERTEX_SOURCE,
@@ -597,25 +581,21 @@ class VisualizerClipHost:
         if inherited_gl_state is None:
             # Exceptional/fallback-only path: retain the old self-contained fence
             # so rollback remains correct even if shared-state capture itself fails.
-            prior_viewport = tuple(
-                int(value) for value in gl.glGetIntegerv(gl.GL_VIEWPORT)
-            )
-            prior_program = _int_state(gl.GL_CURRENT_PROGRAM)
-            prior_vao = _int_state(gl.GL_VERTEX_ARRAY_BINDING)
-            prior_array_buffer = _int_state(gl.GL_ARRAY_BUFFER_BINDING)
+            prior_viewport = gl_query.get_ints(gl.GL_VIEWPORT, 4)
+            prior_program = gl_query.get_int(gl.GL_CURRENT_PROGRAM)
+            prior_vao = gl_query.get_int(gl.GL_VERTEX_ARRAY_BINDING)
+            prior_array_buffer = gl_query.get_int(gl.GL_ARRAY_BUFFER_BINDING)
             if trace_context is not None:
                 trace_context.mark(
                     FrameTraceEvent.CLIP_BEGIN_MASK_BINDINGS_READY
                     if trace_phase == "begin"
                     else FrameTraceEvent.CLIP_END_MASK_BINDINGS_READY
                 )
-            prior_blend = bool(gl.glIsEnabled(gl.GL_BLEND))
-            prior_cull = bool(gl.glIsEnabled(gl.GL_CULL_FACE))
-            prior_depth = bool(gl.glIsEnabled(gl.GL_DEPTH_TEST))
-            prior_depth_mask = _bool_state(gl.GL_DEPTH_WRITEMASK)
-            prior_color_mask = tuple(
-                bool(value) for value in gl.glGetBooleanv(gl.GL_COLOR_WRITEMASK)
-            )
+            prior_blend = gl_query.is_enabled(gl.GL_BLEND)
+            prior_cull = gl_query.is_enabled(gl.GL_CULL_FACE)
+            prior_depth = gl_query.is_enabled(gl.GL_DEPTH_TEST)
+            prior_depth_mask = gl_query.get_bool(gl.GL_DEPTH_WRITEMASK)
+            prior_color_mask = gl_query.get_bools(gl.GL_COLOR_WRITEMASK, 4)
             if trace_context is not None:
                 trace_context.mark(
                     FrameTraceEvent.CLIP_BEGIN_MASK_STATE_READY
