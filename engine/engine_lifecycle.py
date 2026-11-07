@@ -100,6 +100,11 @@ def teardown_display_runtime(
     from core.diagnostics import lifecycle_window
 
     lifecycle_window.open_window(f"teardown:{reason}")   # closed by the next reveal, if any
+    # The generation was frozen at its reveal: thaw it before its destruction barrier, on every teardown path
+    # (stop() thaws too; this covers the topology/CUSTOM replacements that do not enter it). Idempotent.
+    thaw = getattr(getattr(engine, "_gc_policy", None), "thaw_for_runtime_retirement", None)
+    if callable(thaw):
+        thaw()
 
     retiring_generation = getattr(manager, "_runtime_generation", None)
     barrier = None

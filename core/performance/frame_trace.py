@@ -14,6 +14,7 @@ from __future__ import annotations
 from enum import IntEnum
 from pathlib import Path
 import atexit
+import gc
 import logging
 import os
 import struct
@@ -121,6 +122,11 @@ class FrameTraceEvent(IntEnum):
     # A newer logical publication admitted at the Quick sync itself, under the
     # GUI-resolved presentation of the snapshot it supersedes.
     QUICK_SYNC_LATEST_ADMITTED = 74
+    # Garbage collections (``--frame-trace`` only): one record at the start and one at the end of every collection,
+    # auxiliary = generation, revision = objects collected (end) or -1 (start). The gc callback exists only while a
+    # trace sink is admitted, so ordinary runtime does no per-collection work.
+    GC_BEGIN = 75
+    GC_END = 76
 
 
 _MAGIC: Final[bytes] = b"SRPSSFT1"
@@ -551,6 +557,8 @@ def start_frame_trace(
             return _active_sink
         sink = FrameTraceSink(Path(log_dir) / "screensaver_frame_trace.bin")
         _active_sink = sink
+        if _gc_trace_callback not in gc.callbacks:
+            gc.callbacks.append(_gc_trace_callback)
         # N1e all-thread stack formatting is intentionally heavier than the
         # binary trace. Keep historical --frame-trace low-observer-effect and
         # admit the sampler only through its own explicit CLI switch.
@@ -561,6 +569,18 @@ def start_frame_trace(
         else:
             _active_stall_sampler = None
         return sink
+
+
+def _gc_trace_callback(phase: str, info: dict) -> None:
+    """Leaf gc callback (admitted traces only): one non-blocking ring record per collection edge, no logging."""
+    sink = _active_sink
+    if sink is None:
+        return
+    if phase == "start":
+        sink.record(FrameTraceEvent.GC_BEGIN, revision=-1, auxiliary=int(info.get("generation", -1)))
+    elif phase == "stop":
+        sink.record(FrameTraceEvent.GC_END, revision=int(info.get("collected", 0) or 0),
+                    auxiliary=int(info.get("generation", -1)))
 
 
 def current_frame_trace() -> FrameTraceSink | None:
@@ -580,6 +600,8 @@ def close_frame_trace() -> dict[str, object] | None:
     with _active_lock:
         sink, _active_sink = _active_sink, None
         sampler, _active_stall_sampler = _active_stall_sampler, None
+        while _gc_trace_callback in gc.callbacks:
+            gc.callbacks.remove(_gc_trace_callback)
     if sampler is not None:
         sampler.close()
     if sink is None:

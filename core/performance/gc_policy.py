@@ -134,7 +134,7 @@ class RuntimeGCPolicy:
     def freeze_stable_generation(self) -> bool:
         """Move the current long-lived tracked set to the permanent generation.
 
-        Called once, from a normal (non-collection) context after startup warms.
+        Called at every display generation's coordinated reveal (its warm-up end), from a normal context.
         In-situ evidence (2026-09-03): the objects that survive to gen2 are a
         stable, long-lived set that gen2 rescans for ~28-142 ms while freeing
         almost nothing (``collected=0``), and each scan stalls the pure-Python
@@ -153,13 +153,13 @@ class RuntimeGCPolicy:
         - ordinary refcount-zero destruction still frees frozen objects
           immediately; only *cyclic* collection of the frozen set is deferred to
           ``gc.unfreeze()`` at the first runtime retirement or RUN stop;
-        - consequence: the single runtime generation live *at freeze time* has a
-          cyclic Python graph, so if it later retires it stays pinned until
-          unfreeze. This is a bounded one-generation offset, NOT unbounded
-          accumulation (later generations are not frozen and retire normally),
-          and its OS resources (threads/GL/handles) are released by explicit
-          teardown regardless. Do not move runtime-owned cyclic lifetime into the
-          pre-freeze set expecting it to be reclaimed before stop.
+        - consequence: the generation live *at freeze time* has a cyclic Python
+          graph, so every teardown thaws first (``thaw_for_runtime_retirement``,
+          from ``teardown_display_runtime``) and its barrier sweeps the retired
+          cycles once; the next generation is frozen at its own reveal. At most
+          one generation's garbage is ever pinned, and only until its teardown.
+          (Until 7 Nov the freeze was a one-shot 45 s timer and the first Settings
+          visit thawed the RUN for good: every later gen2 scanned the whole heap.)
         Idempotent; a no-op once frozen or when the policy is inactive.
         """
 
@@ -216,8 +216,8 @@ class RuntimeGCPolicy:
         collected while permanently frozen. Only a RUN boundary may thaw it;
         the normal visualizer cadence never collects or polls. The retired
         generation is collected once, after Qt roots/resources have drained.
-        There is no second freeze in this RUN, since that would immediately pin
-        the next editable generation behind the same barrier.
+        The next generation is frozen again only at its own coordinated reveal,
+        never while it is still being built or edited.
         """
         with self._lock:
             if not self._active or not self._frozen:
@@ -366,8 +366,22 @@ class RuntimeGCPolicy:
             self._slow_collections[generation] += 1
 
 
+def heap_census(top: int = 25) -> tuple[int, int, list[tuple[str, int]]]:
+    """(tracked, frozen, the ``top`` most numerous tracked types): what a gen2 scan would walk.
+
+    Diagnostic only (``--frame-trace``): one full walk of the tracked heap, at a lifecycle edge, never per frame.
+    """
+    from collections import Counter
+
+    counts = Counter(
+        f"{getattr(type(obj), '__module__', '?')}.{type(obj).__qualname__}" for obj in gc.get_objects()
+    )
+    return sum(counts.values()), gc.get_freeze_count(), counts.most_common(top)
+
+
 __all__ = [
     "GCPolicySnapshot",
+    "heap_census",
     "RuntimeGCPolicy",
     "derive_runtime_thresholds",
 ]
