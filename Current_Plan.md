@@ -112,6 +112,13 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   - values duplicated between 2D and 3D or between runtime and Settings.
   It produces a ranked, actionable checklist (priority, reward, the fix) that the lead challenges and promotes into
   `Docs/Reference/Architecture_Checklist.md`. Defects it finds go to this plan.
+  **Binding (operator, 7 Nov):** the spec systems are the canonical owners and stay:
+  - each visualizer mode's Settings are declared once in `core/settings/visualizer_mode_settings.py`;
+  - each transition's Settings are declared once in `rendering/transition_settings.py`.
+
+  The audit finds what bypasses or duplicates them and proposes folding it into them; it never proposes replacing
+  them. One known straggler to judge: the audio-analysis Technical controls are still declared separately in
+  `ui/tabs/media/technical_controls.py`.
 - [~] **Spectrum presets 2-15: re-authored by the lead (7 Nov), awaiting the operator's eyes.** The first agent
   round failed the fidelity gate (operator: "awful"). Its looks were opaque clip-art blocks, its per-bar patterns
   turned to checkerboard and tartan, its ghost trails read as soot, and Union Jack read as tartan. That round is not
