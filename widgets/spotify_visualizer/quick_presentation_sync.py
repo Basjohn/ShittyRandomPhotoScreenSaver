@@ -28,7 +28,6 @@ invokes a second presentation owner.
 from __future__ import annotations
 
 import threading
-import time
 from typing import Any, Callable, Optional
 
 from PySide6.QtCore import QObject, Qt, Signal, Slot
@@ -44,6 +43,7 @@ from widgets.spotify_visualizer.reactivity_diagnostics import (
     maybe_log_snapshot_publication,
 )
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
+from core.authored_clock import authored_now
 
 logger = get_logger(__name__)
 
@@ -231,7 +231,7 @@ class QuickVisualizerPresentationSync:
             maybe_log_snapshot_publication(
                 self._controller,
                 logger,
-                now_ts=time.time(),
+                now_ts=authored_now(),
                 logical=logical,
                 revision=publication.revision,
             )

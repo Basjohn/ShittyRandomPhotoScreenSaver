@@ -64,7 +64,7 @@ def test_held_orbit_updates_from_gui_publication_and_audio_only_has_no_observer(
 
     gui_thread = threading.get_ident()
     now = [100.0]
-    monkeypatch.setattr(display_manager.time, "time", lambda: now[0])
+    monkeypatch.setattr(__import__("core.authored_clock").authored_clock, "authored_clock_source", lambda: now[0])
     presentation = resolve_presentation(
         policy=get_visualizer_presentation_policy("extruded_spectrum"),
         display_size=(1920.0, 1080.0), outer_origin=(100.0, 80.0), viewport_extent=(420.0, 280.0),

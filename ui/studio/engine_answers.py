@@ -3,7 +3,8 @@
 A Spectrum-family mode's step reads the beat engine's *own processing*: every logical tick ``consume_engine_bars``
 ticks the engine and reads its smoothed, shape-processed bars, and the shape editor (curve nodes, frequency
 boundaries, lane strengths), the Audio / Response sliders and the technical analysis configure that processing,
-which runs on the process clock (smoothing, play ramps and playback timestamps read ``time.time()``). Only an
+which runs on the process clock (smoothing, play ramps and playback timestamps read the authored clock,
+``core.authored_clock``). Only an
 out-of-process replay may pin that clock, so each such mode has a worker module
 (``python -m ui.studio.<mode>_recorded_inputs``, or the frozen app's ``--studio-clip-worker`` path) run through the
 shared event-driven ``ClipLoadJob``. Every piece here takes the mode id; the worker modules and adapters are thin.

@@ -8,12 +8,12 @@ edges; its conservative render-target reach is not a selectable content bound.
 from __future__ import annotations
 
 import math
-import time
 from collections.abc import Mapping
 from typing import Any
 
 from widgets.spotify_visualizer.render_state import ResolvedVisualizerPresentation
 from core.settings.visualizer_mode_registry import EXTRUDED_CAST_SHADOW_AVAILABLE
+from core.authored_clock import authored_now
 
 
 _ENVELOPE_PARAMETER_KEYS = {
@@ -370,7 +370,7 @@ def resolve_owner_edit_content_envelope(
 
     controller = owner.controller
     mode_id = str(controller.mode_id)
-    when = time.time() if now is None else float(now)
+    when = authored_now() if now is None else float(now)
     if mode_id == "extruded_spectrum":
         from widgets.spotify_visualizer.config_applier import extruded_spectrum_parameters
         from widgets.spotify_visualizer.view_orbit import view_orbit_values

@@ -8,6 +8,7 @@ from __future__ import annotations
 import time
 
 from widgets.spotify_visualizer.transient_bus import (
+from core.authored_clock import authored_now
     OnsetEvent,
     TransientBus,
     TransientEventScheduler,
@@ -20,7 +21,7 @@ from widgets.spotify_visualizer.transient_bus import (
 
 def _make_event(event_type: str = "kick", strength: float = 0.8, ts: float = 0.0) -> OnsetEvent:
     return OnsetEvent(
-        timestamp=ts or time.time(),
+        timestamp=ts or authored_now(),
         event_type=event_type,
         strength=strength,
     )
@@ -59,7 +60,7 @@ class TestFeedAndConsume:
 
     def test_consume_oldest_first(self):
         sched = TransientEventScheduler()
-        now = time.time()
+        now = authored_now()
         sched.feed(_make_event("kick", strength=0.5, ts=now - 0.2))
         # Need to bypass debounce for second event
         sched._last_accepted_ts["kick"] = 0.0
@@ -75,7 +76,7 @@ class TestFeedAndConsume:
 
     def test_feed_rejects_empty_type(self):
         sched = TransientEventScheduler()
-        evt = OnsetEvent(timestamp=time.time(), event_type="", strength=0.5)
+        evt = OnsetEvent(timestamp=authored_now(), event_type="", strength=0.5)
         assert sched.feed(evt) is False
 
 
@@ -86,33 +87,33 @@ class TestFeedAndConsume:
 class TestDebounce:
     def test_kick_debounce_rejects_fast_repeat(self):
         sched = TransientEventScheduler()
-        now = time.time()
+        now = authored_now()
         assert sched.feed(_make_event("kick", ts=now)) is True
         assert sched.feed(_make_event("kick", ts=now + 0.05)) is False  # < 90ms
 
     def test_kick_debounce_accepts_after_window(self):
         sched = TransientEventScheduler()
-        now = time.time()
+        now = authored_now()
         assert sched.feed(_make_event("kick", ts=now)) is True
         assert sched.feed(_make_event("kick", ts=now + 0.10)) is True  # >= 90ms
 
     def test_snare_debounce_window(self):
         sched = TransientEventScheduler()
-        now = time.time()
+        now = authored_now()
         assert sched.feed(_make_event("snare", ts=now)) is True
         assert sched.feed(_make_event("snare", ts=now + 0.10)) is False  # < 120ms
         assert sched.feed(_make_event("snare", ts=now + 0.13)) is True  # >= 120ms
 
     def test_vocal_swell_debounce_window(self):
         sched = TransientEventScheduler()
-        now = time.time()
+        now = authored_now()
         assert sched.feed(_make_event("vocal_swell", ts=now)) is True
         assert sched.feed(_make_event("vocal_swell", ts=now + 0.15)) is False  # < 200ms
         assert sched.feed(_make_event("vocal_swell", ts=now + 0.21)) is True  # >= 200ms
 
     def test_different_types_debounce_independently(self):
         sched = TransientEventScheduler()
-        now = time.time()
+        now = authored_now()
         assert sched.feed(_make_event("kick", ts=now)) is True
         assert sched.feed(_make_event("snare", ts=now + 0.01)) is True  # different type, OK
 
@@ -124,7 +125,7 @@ class TestDebounce:
 class TestPeek:
     def test_peek_returns_most_recent(self):
         sched = TransientEventScheduler()
-        now = time.time()
+        now = authored_now()
         sched.feed(_make_event("kick", strength=0.5, ts=now - 0.1))
         sched._last_accepted_ts["kick"] = 0.0
         sched.feed(_make_event("kick", strength=0.9, ts=now))
@@ -147,7 +148,7 @@ class TestPeek:
 
     def test_peek_respects_max_age(self):
         sched = TransientEventScheduler()
-        old_event = _make_event("kick", ts=time.time() - 1.0)
+        old_event = _make_event("kick", ts=authored_now() - 1.0)
         sched.feed(old_event)
         assert sched.peek_latest("kick", max_age_s=0.3) is None
 
@@ -169,7 +170,7 @@ class TestHasRecent:
 
     def test_has_recent_false_when_old(self):
         sched = TransientEventScheduler()
-        sched.feed(_make_event("kick", ts=time.time() - 1.0))
+        sched.feed(_make_event("kick", ts=authored_now() - 1.0))
         assert sched.has_recent("kick", max_age_s=0.2) is False
 
     def test_has_recent_false_when_empty(self):
@@ -184,7 +185,7 @@ class TestHasRecent:
 class TestConsumeMaxAge:
     def test_consume_ignores_old_events(self):
         sched = TransientEventScheduler()
-        old = _make_event("kick", ts=time.time() - 2.0)
+        old = _make_event("kick", ts=authored_now() - 2.0)
         sched.feed(old)
         assert sched.consume_next("kick", max_age_s=0.5) is None
 
@@ -203,14 +204,14 @@ class TestReset:
     def test_reset_clears_ring(self):
         sched = TransientEventScheduler()
         sched.feed(_make_event("kick"))
-        sched.feed(_make_event("snare", ts=time.time() + 0.2))
+        sched.feed(_make_event("snare", ts=authored_now() + 0.2))
         sched.reset()
         assert sched.consume_next("kick") is None
         assert sched.consume_next("snare") is None
 
     def test_reset_clears_debounce_state(self):
         sched = TransientEventScheduler()
-        now = time.time()
+        now = authored_now()
         sched.feed(_make_event("kick", ts=now))
         sched.reset()
         # After reset, debounce should be cleared
@@ -224,7 +225,7 @@ class TestReset:
 class TestCapacity:
     def test_overflow_overwrites_oldest(self):
         sched = TransientEventScheduler()
-        now = time.time()
+        now = authored_now()
         # Fill beyond capacity
         for i in range(sched._CAPACITY + 5):
             sched._last_accepted_ts.clear()  # bypass debounce for test

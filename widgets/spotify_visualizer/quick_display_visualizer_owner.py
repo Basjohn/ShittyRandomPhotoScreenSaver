@@ -20,6 +20,7 @@ from rendering.quick.lifecycle_errors import RetainedRuntimeIncoherenceError
 from widgets.spotify_visualizer.render_state import (
     CANONICAL_VISUALIZER_BASELINE_VIEWPORT_SIZE,
 )
+from core.authored_clock import authored_now
 
 logger = get_logger(__name__)
 
@@ -410,7 +411,7 @@ class QuickDisplayVisualizerOwner:
 
             begin_playback_edge(
                 state,
-                now_ts=time.time(),
+                now_ts=authored_now(),
                 playing=bool(controller.playing),
                 kind="recreation",
             )
@@ -525,7 +526,7 @@ class QuickDisplayVisualizerOwner:
         active = bool(playing)
         controller = self._controller
         previous = bool(controller.playing)
-        edge_ts = float(observed_ts if observed_ts is not None else time.time())
+        edge_ts = float(observed_ts if observed_ts is not None else authored_now())
         edge_seq = 0
         if active != previous and is_viz_diagnostics_enabled():
             from widgets.spotify_visualizer.reactivity_diagnostics import (
@@ -569,7 +570,7 @@ class QuickDisplayVisualizerOwner:
 
             arm_reentry_fresh_frame_fence(controller.logical_tick_state, engine)
         if edge_seq > 0:
-            committed_ts = time.time()
+            committed_ts = authored_now()
             warm_resume = bool(
                 active
                 and float(getattr(engine, "_play_ramp_start_ts", 0.0) or 0.0) <= 0.0
@@ -1391,7 +1392,7 @@ class QuickDisplayVisualizerOwner:
                 # stopped. Publish its complete motion state before restarting:
                 # old same-mode auto rotation must not override its first pose.
                 activation_step = "activate_target_view_motion"
-                view_now = time.time()
+                view_now = authored_now()
                 rebase_view_orbit_motion(controller.presentation_state, view_now)
                 arm_view_auto_rotate(controller.presentation_state, target, view_now, immediate=True)
             cancel = getattr(engine, "cancel_pending_compute_tasks", None)

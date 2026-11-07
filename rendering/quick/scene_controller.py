@@ -76,6 +76,7 @@ from .widgets.registry import (
     ordinary_widget_family_component,
 )
 from .window import QuickDisplayWindow
+from core.authored_clock import authored_now
 
 
 logger = get_logger(__name__)
@@ -2669,7 +2670,7 @@ class QuickSceneController(QObject):
         self._perf_last_visualizer_revision = visualizer.last_logical_revision
         age_ms = -1.0
         if visualizer.last_logical_timestamp > 0.0:
-            age_ms = max(0.0, (time.time() - visualizer.last_logical_timestamp) * 1000.0)
+            age_ms = max(0.0, (authored_now() - visualizer.last_logical_timestamp) * 1000.0)
         visualizer_root = self._visualizer_root
         mismatch_count = (
             0

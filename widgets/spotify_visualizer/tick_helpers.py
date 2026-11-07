@@ -6,17 +6,17 @@ residue with no production caller after the retained Quick cutover.
 """
 from __future__ import annotations
 
-import time
 from typing import Any, Dict
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.authored_clock import authored_now
 
 logger = get_logger(__name__)
 
 
 def log_tick_spike(widget: Any, dt: float, transition_ctx: Dict[str, Any]) -> None:
     """Log dt spikes with surrounding transition context."""
-    now = time.time()
+    now = authored_now()
     if (now - widget._last_tick_spike_log_ts) < widget._dt_spike_log_cooldown:
         return
     widget._last_tick_spike_log_ts = now
