@@ -225,8 +225,18 @@ tick cut); scheduling heavy load generators; promoting checklist items here.
     Better in every pair. The live tick is only 2-4% lower (5.3-5.6 ms, GIL ~0.5): most of it lies outside the
     simulation. Evidence `.artifacts/evidence/live_20261106/` and `.artifacts/evidence/eb_logical_tick/`.
   - **Waveform, same session (main):** P1 / P4 / P7 run at 43.5 / 42.7 / 37.6 fps, tick 8.5-8.7 ms (p90 14-16), GIL
-    0.75, P7 64% late frames. Waveform is now the slowest live mode. The tick cut is unblocked (the fixed-scale rework
-    merged as b76dc269); measure on v7, since the rework added per-tick work (phrase means, the top-edge bound).
+    0.75, P7 64% late frames. Waveform is now the slowest live mode.
+    **Tick cut (7 Nov, cc493199, byte-identical; live re-measure owed).** Profile: the tick is ~1.8 ms of many small
+    NumPy/Python calls (snapshot ~1.0, surge ~0.37, pulse transport ~0.2, scene ~0.1, burst admission 2-4 ms on
+    admitting ticks only); no steady GIL-held C call above ~2.5 ms. Cuts: shared spring terms, cached source Gaussians
+    and shifted grid, direct surge gathers, one float32 fade column, uniform_gradient for Group Wave, scene and capture
+    reads resolved once per configuration/spec, RibbonMaterial's check without astuple. Identity: 31 recorded replays
+    (169,136 frames, every preset and Reaction Mode, P4 included) match main frame by frame;
+    `tests/test_waveform_logical_tick_exactness.py` compares against the pre-cut forms with an fp64-fade negative
+    control. Offline the gain is small (P4 min-of-3 median 3.01 -> 2.94 ms on a loaded machine; quiet-machine phase
+    savings ~0.1-0.2 ms). Every tick above ~16 ms offline, in both builds, is one gen2 GC (86-161 ms, about one per
+    5,500 ticks): the remaining live spikes are GC, not Waveform work. Evidence
+    `.artifacts/evidence/waveform_logical_tick/` (worktree agent-af0eb2492e1e318d7).
 - [~] **Frozen builds could not open a Studio (operator 6 Nov: "module QtQuick.Controls.Basic is not installed"): fixed
   in source (e5005ffa), confirm on the next build.** The QML prune removed QtQuick/Controls, Templates and Shapes, and
   the import allowlist scanned only the saver's QML, never `ui/studio/qml`. The build now keeps the Basic style's
