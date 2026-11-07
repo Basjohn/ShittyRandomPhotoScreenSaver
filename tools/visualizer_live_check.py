@@ -21,6 +21,11 @@ meets it before the operator does.
 * **Load:** ``--load game60`` (the reference case) starts ``tools/gpu_load_generator.py`` and waits for its calibrated
   ``ready`` line before the saver starts; ``--load none`` for an idle or operator-supplied load. Conditions are
   sampled throughout and recorded with the result.
+* **Settings round trips:** ``--settings-roundtrip 60,300`` drives the engine's real Settings path at those times
+  (``tools/live_check_settings_roundtrip.py``): stop, teardown, barriers, the real dialog (never shown) and the
+  replacement up to its reveal, with per-trip timings, generations, memory and the GC thaw/re-freeze; any barrier
+  timeout, missing re-freeze or early process exit fails the run (exit 3). The steady figures cover the time before
+  the first round trip.
 * **Report** (``summary.json`` and a table, steady window only: startup and teardown are reported apart): logical
   tick time and its share of the GIL, revisions/s, the age chain (publish -> sync -> render -> swap, the consumed
   revision's age at sync and how many newer ones were waiting), render-mode time, swap pacing, the first 2 s after
@@ -48,6 +53,10 @@ from ctypes import wintypes
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from tools.live_check_settings_roundtrip import (  # noqa: E402  (stdlib-only at import)
+    analyse_settings_roundtrips, gc_policy_lines, parse_settings_roundtrip, print_settings_roundtrips,
+)
 DEFAULT_CLIP = ROOT / "logs" / "visualizer_recordings" / "anything_mixed2.jsonl"    # mixed real music, ~2 min
 STEADY_AFTER_STARTUP_NS = 2_000_000_000
 LATE_MS = 25.0
@@ -326,7 +335,9 @@ def analyse_display_power(trace: Path, edges: list[dict], samples: list[dict]) -
 # -- the invisible runner (child process) -------------------------------------------------------------------------
 
 def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_start: float, mode: str,
-            display_off: list[tuple[float, float]] | None = None) -> None:
+            display_off: list[tuple[float, float]] | None = None,
+            settings_roundtrip: list[float] | None = None) -> None:
+    began = time.monotonic()
     sys.path.insert(0, str(ROOT))
     os.chdir(ROOT)
     from tools import eb_live_phases as phases
@@ -384,6 +395,13 @@ def _runner(out: Path, seconds: float, visible: bool, clip: Path | None, clip_st
     if mode=='waveform_ribbon':phases._install_waveform()
     if display_off:
         _inject_display_power(out, display_off)
+    if settings_roundtrip:
+        # The engine's real Settings path at each time; the dialog never shows (tools/live_check_settings_roundtrip.py).
+        from tools.live_check_settings_roundtrip import SettingsRoundTripDriver
+
+        driver = SettingsRoundTripDriver(settings_roundtrip, began=began, state_path=out / "settings_roundtrip.json")
+        driver.install()
+        atexit.register(driver.finish)
     atexit.register(lambda: (out / "phases.json").write_text(json.dumps(phases._summary(), indent=1), encoding="utf-8"))
     import runpy
     runpy.run_path(str(ROOT / "main_mc.py"), run_name="__main__")
@@ -520,7 +538,7 @@ def _start_load(profile: str, seconds: float, out: Path) -> subprocess.Popen:
     return process
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--mode", required=True)
     parser.add_argument("--preset", type=int, help="curated preset, 1-based (default: the profile's own)")
@@ -536,13 +554,31 @@ def main() -> int:
     parser.add_argument("--display-off", metavar="AT:FOR[,AT:FOR]",
                         help="inject the console display OFF at AT s after the runner starts and ON again FOR s later, "
                              "through the saver's own WM_POWERBROADCAST window procedure (panels are never touched)")
+    parser.add_argument("--settings-roundtrip", metavar="AT[,AT]", type=parse_settings_roundtrip,
+                        help="drive the engine's real Settings path (stop, teardown, barriers, dialog, replacement) "
+                             "AT s after the runner starts; the dialog never shows. Fails the run on a barrier "
+                             "timeout, a reveal without a GC re-freeze or a process exit")
     parser.add_argument("--runner", action="store_true", help=argparse.SUPPRESS)
-    args = parser.parse_args()
+    return parser
+
+
+def runner_command(args, out: Path, clip: Path | None) -> list[str]:
+    """The child command line: every option the runner needs, forwarded as given."""
+    return ([sys.executable, str(Path(__file__).resolve()), "--runner", "--mode", args.mode, "--seconds",
+             str(args.seconds), "--out", str(out), "--clip", str(clip or "none"), "--clip-start",
+             str(args.clip_start)] + (["--visible"] if args.visible else [])
+            + (["--display-off", args.display_off] if args.display_off else [])
+            + (["--settings-roundtrip", ",".join(f"{at:g}" for at in args.settings_roundtrip)]
+               if args.settings_roundtrip else []))
+
+
+def main() -> int:
+    args = build_parser().parse_args()
     out = args.out or ROOT / "logs" / "live_check" / f"{args.mode}_{time.strftime('%Y%m%d_%H%M%S')}"
     clip = None if args.clip == "none" else Path(args.clip).resolve()
     if args.runner:
         _runner(out, args.seconds, args.visible, clip, args.clip_start, args.mode,
-                parse_display_off(args.display_off) if args.display_off else None)
+                parse_display_off(args.display_off) if args.display_off else None, args.settings_roundtrip)
         return 0
     if clip is not None and not clip.exists():
         raise SystemExit(f"recording not found: {clip}")
@@ -553,10 +589,7 @@ def main() -> int:
     overrides = {key: json.loads(value) for key, value in (item.split("=", 1) for item in args.set)}
     profile_dir = _prepare_profile(out, args.mode, args.preset, overrides)
     load = None if args.load == "none" else _start_load(args.load, args.seconds + 60, out)
-    command = [sys.executable, str(Path(__file__).resolve()), "--runner", "--mode", args.mode, "--seconds",
-               str(args.seconds), "--out", str(out), "--clip", str(clip or "none"), "--clip-start",
-               str(args.clip_start)] + (["--visible"] if args.visible else []) + (
-               ["--display-off", args.display_off] if args.display_off else [])
+    command = runner_command(args, out, clip)
     if args.display_off:
         parse_display_off(args.display_off)
     sampler, conditions = SystemSampler(), []
@@ -593,6 +626,18 @@ def main() -> int:
     if violation:
         print("STOPPED: a saver window was visible:", *violation, sep="\n  ")
         return 2
+    roundtrips = None
+    if args.settings_roundtrip:
+        state_path = out / "settings_roundtrip.json"
+        roundtrips = analyse_settings_roundtrips(
+            json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else None,
+            times=args.settings_roundtrip, returncode=runner.returncode, gc_lines=gc_policy_lines(out / "logs"))
+        (out / "settings_roundtrip_summary.json").write_text(json.dumps(roundtrips, indent=1), encoding="utf-8")
+        print_settings_roundtrips(roundtrips)
+        if roundtrips["failures"]:
+            print(f"FAILED: {len(roundtrips['failures'])} Settings round-trip failure(s); "
+                  f"see {out / 'settings_roundtrip_summary.json'} and {out / 'runner.txt'}")
+            return 3
     if runner.returncode != 0:
         raise RuntimeError(f'Live runner exited {runner.returncode}; see {out / "runner.txt"}')
     trace = out / "logs" / "screensaver_frame_trace.bin"
@@ -615,6 +660,8 @@ def main() -> int:
     summary["usage"] = usage
     summary["usage_collect_ms"] = usage["collect_ms"] if usage else None
     summary["process_tree"] = tree
+    if roundtrips is not None:
+        summary["settings_roundtrip"] = {k: v for k, v in roundtrips.items() if k != "gc_policy_lines"}
     phases_path = out / "phases.json"
     if args.mode=='waveform_ribbon' and not phases_path.exists():
         raise RuntimeError('Waveform run has no phase/admission receipt')
@@ -642,7 +689,8 @@ def main() -> int:
                                        if isinstance(v, dict) and k != "logical_publish"}
     (out / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
     for key, value in summary.items():
-        if key not in ("render_stages_ms", "process_tree", "actual_waveform_configuration", "display_power"):
+        if key not in ("render_stages_ms", "process_tree", "actual_waveform_configuration", "display_power",
+                       "settings_roundtrip"):
             print(f"{key:28s} {value}")
     for key, limit, message in _FLAGS:
         value = summary.get(key)
