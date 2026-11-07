@@ -178,6 +178,11 @@ first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-1
     `multiprocessing.connection.wait([queue._reader, parent.sentinel])` with no timeout; tag the Reddit flush lambda.
   - **Regression bar:** the pool limit is bounded with `os.cpu_count` monkeypatched to 64; after N cancelled idle
     generations `len(delivered_by_generation)` stays bounded; a worker idle for 2 s loops ≤ 2 times (about 20 today).
+  - **Landed 7 Nov (one slice):** only the terminal manager cancels every pending `single_shot`. `ThreadManager.shutdown`
+    called the global `cancel_all_scheduled_single_shots()` for any manager, so a Settings/CONFIG helper manager's
+    shutdown cancelled other owners' delayed callbacks. The runtime engine's manager is now `terminal_owner=True` and
+    is the only one that does; a helper cancels only its own pools
+    (`tests/test_thread_manager_shutdown_scope.py`, with the terminal negative control). The items above remain.
 
 - [ ] **AC-14 Dead code and dead settings sweep** (A-16 + A-17 + A-18 + unrelated defect 4). Severity low, reward low,
   effort S. **Confirmed by a production-import scan (7 Nov):** no production module imports `core/lifecycle.py`,

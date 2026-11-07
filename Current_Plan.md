@@ -222,14 +222,6 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
    `Docs/Guardrails/Visualizer_Presentation.md` §14A); a new Sphere / Extruded Spectrum control follows the same rule.
 
 **Found while landing AC-01 (7 Nov; record, not yet admitted):**
-- **Any ThreadManager shutdown cancels every pending single-shot in the process.** `ThreadManager.shutdown`
-  (`core/threading/manager.py`, first shutdown branch) calls `cancel_all_scheduled_single_shots()`, a staticmethod
-  that cancels the timers of every generation ("while terminal shutdown owns the UI"). A helper manager's shutdown
-  therefore cancels unrelated delayed callbacks too. This was already true of the eight private helper managers (shut
-  down when their Settings tab died in a CONFIG session); since AC-01 the one CONFIG Settings helper manager does it
-  once, when the dialog is destroyed (before Finish & Run starts the runtime). Fold into checklist AC-13: only the
-  terminal owner cancels globally; any other manager cancels only its own work. Bar: shutting down a helper manager
-  leaves another owner's pending `ThreadManager.single_shot` alive.
 - **Dead after A-12: removed by the Settings SSOT fold (AC-18, AC-23).** Still open from that note:
   Pre-existing: `tools/flicker_test.py`'s Widgets-tab `setup_ui_only_*` modes patch
   `widgets_tab_media.build_visualizers_ui`, which no longer exists anywhere (the Visualizer left the Widgets tab at
@@ -238,6 +230,10 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
 - **SMP import scan vs the registry:** `ui/settings_tabs.py` imports the existing tabs' modules at import time (as
   the dialog did). The SMP plan's §14 bar ("no saver module is imported by opening Settings in the SMP profile")
   needs those imports moved into the builders when the SMP descriptor lands.
+- **`tests/test_run_matrix_harness.py::test_runs_sequentially_snapshots_logs_and_reports_distinct_failures` fails
+  in any worktree** (found 7 Nov; on main too): it asserts the checkout folder is named `ShittyRandomPhotoScreenSaver`
+  (`'agent-…' == 'ShittyRandomPhotoScreenSaver'`). Environmental like the gate note below; the harness or the test
+  should derive the expected name from the checkout root instead of pinning it.
 - **Gate note:** `tests/test_release_media.py::test_source_change_during_capture_discards_media` fails in any agent
   worktree because the operator's Usu scene originals (`assets/usu/scenes/*.png`) are untracked and exist only in
   the main checkout; environmental, not a product defect.

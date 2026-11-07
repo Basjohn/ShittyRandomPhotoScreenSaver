@@ -606,7 +606,7 @@ class ScreensaverEngine(QObject):
             logger.debug("ResourceManager initialized")
             
             # Thread manager
-            self.thread_manager = ThreadManager(resource_manager=self.resource_manager)
+            self.thread_manager = ThreadManager(resource_manager=self.resource_manager, terminal_owner=True)
             ThreadManager.set_app_shared(self.thread_manager)
             logger.debug("ThreadManager initialized")
 
