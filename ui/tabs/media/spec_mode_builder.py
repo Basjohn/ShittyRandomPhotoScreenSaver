@@ -3,10 +3,10 @@
 
 Every mode is edited in its Studio (``ui/studio``), which has parity+ with the buckets it replaced
 (``tests/test_visualizer_studio_parity.py`` proves it from the registries). A mode's Settings body is the preset row
-with its OPEN STUDIO launcher and one sentence; no Settings control is kept beside them (Neon Lake's terrain is
-painted with the Studio's brush). The body's values live in a section-lazy cache (``_<prefix>_lazy_values``) so
-loading, collecting, saving, preset switching and Custom snapshots run through the unchanged owners; the technical
-(audio analysis) controls keep their canonical widgets as value owners in a never-shown holder.
+with its OPEN STUDIO launcher, its 3D Detail row where it has one, and one sentence; no other widget is built, hidden
+or not (Neon Lake's terrain is painted with the Studio's brush). The section-lazy cache (``_<prefix>_lazy_values``)
+is the only owner of the body's values, the technical (audio analysis) values included, so loading, collecting,
+saving, preset switching and Custom snapshots run through the unchanged owners without a QWidget value owner.
 """
 from __future__ import annotations
 
@@ -14,13 +14,14 @@ from copy import deepcopy
 from importlib import import_module
 from typing import Any
 
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel
 
 from core.settings.framed_camera import spec_for_mode
 from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
 from core.settings.visualizer_mode_settings import Colour, Custom, read_control_value, require_mode_settings
 from ui.tabs.media import framed_camera_editor as fce
-from ui.tabs.media.builder_scaffold import build_mode_scaffold
+from ui.tabs.media.builder_scaffold import build_mode_body
+from ui.tabs.media.technical_controls import admitted_technical_values, technical_storage_keys
 
 
 def _resolve(path: str):
@@ -48,6 +49,14 @@ def body_keys(mode_id: str) -> tuple[str, ...]:
     return tuple(out)
 
 
+def technical_values(tab, mode_id: str) -> dict[str, Any]:
+    """The mode's technical values as the cache holds them ({} while its body is unbuilt)."""
+    cache = getattr(tab, f"_{require_mode_settings(mode_id).prefix}_lazy_values", None)
+    if not isinstance(cache, dict):
+        return {}
+    return {key: cache[key] for key in technical_storage_keys(mode_id) if key in cache}
+
+
 def _admitted(tab, spec, key: str, config) -> Any:
     """``config``'s value of one body key (the canonical default when absent), admitted as the model admits it: a
     control by its spec, a Custom row's key by the row's ``admit`` (else the stored record passes through)."""
@@ -62,39 +71,27 @@ def _admitted(tab, spec, key: str, config) -> Any:
 
 
 def build_studio_owned_mode_ui(tab, parent_layout, mode_id: str, intro: str) -> None:
-    """The mode's Settings body: the preset row (OPEN STUDIO is in it) and one sentence. No bucket or other control
-    widget is built; every value lives in the section-lazy cache."""
+    """The mode's Settings body: the preset row (OPEN STUDIO is in it), the 3D Detail row where the mode has one,
+    and one sentence. No other widget is built, hidden or not: the section-lazy cache is the only owner of every body
+    and technical value, seeded with the canonical defaults until the body is hydrated."""
     spec = require_mode_settings(mode_id)
     for bucket in spec.buckets:
         tab.get_visualizer_bucket_state(mode_id, bucket.key)
     prefix = spec.prefix
-    scaffold = build_mode_scaffold(
+    body = build_mode_body(
         tab,
         parent_layout,
         mode_key=mode_id,
         settings_container_attr=f"_{prefix}_settings_container",
         preset_slider_attr=get_visualizer_mode_descriptor(mode_id).preset_slider_attr,
-        normal_attr=f"_{prefix}_normal",
-        advanced_host_attr=f"_{prefix}_advanced_host",
-        advanced_toggle_attr=f"_{prefix}_adv_toggle",
-        advanced_helper_attr=f"_{prefix}_adv_helper",
-        advanced_attr=f"_{prefix}_advanced",
     )
-    # The scaffold's Custom-only regions hold nothing to show; park them (and the value owners inside: the
-    # technical controls and the page's shared Bar Appearance / Rainbow rows) in a hidden holder, so the preset
-    # slider's Custom toggling can never show them.
-    holder = QWidget(scaffold.container)
-    holder.setObjectName(f"{mode_id}_studio_owned_values")
-    holder.hide()
-    holder_layout = QVBoxLayout(holder)
-    for region in (scaffold.normal_widget, scaffold.advanced_host):
-        scaffold.layout.removeWidget(region)
-        holder_layout.addWidget(region)
-    setattr(tab, f"_{prefix}_lazy_values", {key: _admitted(tab, spec, key, {}) for key in body_keys(mode_id)})
+    cache = {key: _admitted(tab, spec, key, {}) for key in body_keys(mode_id)}
+    cache.update(admitted_technical_values(tab, mode_id, {}))
+    setattr(tab, f"_{prefix}_lazy_values", cache)
     text = QLabel(intro)
     text.setObjectName(f"{mode_id}_studio_intro")
     text.setWordWrap(True)
-    scaffold.layout.addWidget(text)
+    body.layout.addWidget(text)
     _add_studio_launcher(tab, mode_id)
 
 
@@ -133,19 +130,22 @@ def load_spec_mode_settings(tab, mode_id: str, config) -> None:
     cache = getattr(tab, f"_{spec.prefix}_lazy_values")
     for key in body_keys(mode_id):
         cache[key] = _admitted(tab, spec, key, config)
+    cache.update(admitted_technical_values(tab, mode_id, config))
     if spec_for_mode(mode_id) is not None:
         fce.hydrate_pose(tab, mode_id, config)
         fce.refresh_editors(tab, mode_id)
 
 
 def collect_spec_mode_settings(tab, mode_id: str) -> dict[str, Any]:
-    """The body's values as persisted (colours as RGBA lists)."""
+    """The body's and technical values as persisted (colours as RGBA lists)."""
     spec = require_mode_settings(mode_id)
     cache = getattr(tab, f"_{spec.prefix}_lazy_values")
     values: dict[str, Any] = {}
     for key in body_keys(mode_id):
         value = cache[key]
         values[key] = list(value) if isinstance(_control(spec, key), Colour) else deepcopy(value)
+    for key in technical_storage_keys(mode_id):
+        values[key] = cache[key]
     if spec_for_mode(mode_id) is not None:
         values = fce.collected(tab, mode_id, values)
     return values
@@ -159,4 +159,4 @@ def _control(spec, key: str):
 
 
 __all__ = ["body_keys", "build_studio_owned_mode_ui", "collect_spec_mode_settings", "container_attr",
-           "load_spec_mode_settings"]
+           "load_spec_mode_settings", "technical_values"]

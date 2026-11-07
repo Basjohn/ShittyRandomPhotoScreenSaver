@@ -4,11 +4,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QVBoxLayout, QWidget
 
-from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
-from ui.tabs.media.technical_controls import build_per_mode_technical_group
 from ui.tabs import shared_styles
 from ui.tabs.shared_styles import add_swatch_label
 from ui.widgets.continuous_border import BucketToggle
@@ -19,15 +17,10 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class ModeScaffold:
+class ModeBody:
     container: QWidget
     layout: QVBoxLayout
     preset_slider: object
-    normal_widget: QWidget
-    normal_layout: QVBoxLayout
-    advanced_host: QWidget
-    advanced_layout: QVBoxLayout
-    technical_host: QWidget
 
 
 def bind_setting_signal(
@@ -226,20 +219,19 @@ def build_dynamic_collapsible_bucket(
     )
 
 
-def build_mode_scaffold(
+def build_mode_body(
     tab: "VisualizerSettingsContextMixin",
     parent_layout: QVBoxLayout,
     *,
     mode_key: str,
     settings_container_attr: str,
     preset_slider_attr: str,
-    normal_attr: str,
-    advanced_host_attr: str,
-    advanced_toggle_attr: str,
-    advanced_helper_attr: str,
-    advanced_attr: str,
-) -> ModeScaffold:
-    """Build the shared preset/normal/advanced/technical scaffold for a mode."""
+) -> ModeBody:
+    """Build a mode's Settings body: its preset row and, where the mode has one, its 3D Detail row.
+
+    Nothing else is built here: every mode is edited in its Studio, and the body's values live in the mode's
+    section-lazy value cache (``ui/tabs/media/spec_mode_builder.py``), never in hidden QWidgets.
+    """
     from ui.tabs.media.preset_slider import VisualizerPresetSlider
 
     body_object_name = f"visualizer_mode_body_{mode_key}"
@@ -281,109 +273,5 @@ def build_mode_scaffold(
         layout.addWidget(quality)
         setattr(tab, f"_{mode_key}_quality_controls", quality)
 
-    normal_widget = QWidget()
-    normal_layout = QVBoxLayout(normal_widget)
-    normal_layout.setContentsMargins(0, 0, 0, 0)
-    normal_layout.setSpacing(12)
-    setattr(tab, normal_attr, normal_widget)
-    layout.addWidget(normal_widget)
-
-    advanced_host = QWidget()
-    advanced_host_layout = QVBoxLayout(advanced_host)
-    advanced_host_layout.setContentsMargins(0, 0, 0, 12)
-    advanced_host_layout.setSpacing(12)
-    setattr(tab, advanced_host_attr, advanced_host)
-    layout.addWidget(advanced_host)
-
-    toggle_row = QHBoxLayout()
-    toggle_row.setContentsMargins(0, 0, 0, 0)
-    toggle_row.setSpacing(8)
-    toggle = BucketToggle()
-    toggle.setText("Advanced")
-    toggle.setProperty("bucketSize", "large")
-    toggle.setIconSize(QSize(11, 11))
-    toggle.setCheckable(True)
-    default_expanded = bool(tab.get_visualizer_adv_state(mode_key))
-    toggle.setChecked(default_expanded)
-    toggle.setArrowType(Qt.DownArrow)
-    toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-    toggle.setAutoRaise(True)
-    setattr(tab, advanced_toggle_attr, toggle)
-    toggle_row.addWidget(toggle)
-    toggle_row.addStretch()
-    advanced_host_layout.addLayout(toggle_row)
-
-    helper = QLabel("Advanced Sliders Still Apply When Hidden.")
-    helper.setProperty("class", "adv-helper")
-    shared_styles.apply_shared_label_style(helper, "ADV_HELPER_LABEL_STYLE")
-    setattr(tab, advanced_helper_attr, helper)
-    advanced_host_layout.addWidget(helper)
-
-    advanced_widget = BucketTreeBody()
-    toggle._srpss_bucket_body = advanced_widget
-    advanced_layout = QVBoxLayout(advanced_widget)
-    advanced_layout.setContentsMargins(BUCKET_CHILD_INDENT, 0, 0, 0)
-    advanced_layout.setSpacing(12)
-    setattr(tab, advanced_attr, advanced_widget)
-    advanced_host_layout.addWidget(advanced_widget)
-
-    preset_slider.set_advanced_container(advanced_host)
-
-    def _apply_advanced_toggle_state(checked: bool, *, persist: bool = True) -> None:
-        if checked and persist:
-            shared_styles.close_bucket_accordion_peers(toggle)
-            shared_styles.close_unrelated_settings_buckets(toggle)
-        toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-        if not checked:
-            shared_styles.collapse_settings_bucket_tree(advanced_widget)
-        advanced_widget.setVisible(checked)
-        helper.setVisible(not checked)
-        setter = getattr(tab, "set_visualizer_adv_state", None)
-        if callable(setter) and persist:
-            setter(mode_key, checked)
-
-    toggle._srpss_bucket_apply_visual_state = lambda checked: (
-        toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow),
-        (shared_styles.collapse_settings_bucket_tree(advanced_widget) if not checked else None),
-        advanced_widget.setVisible(checked), helper.setVisible(not checked)
-    )
-    toggle._srpss_outer_kind = "advanced"
-    toggle._srpss_outer_mode = mode_key
-    shared_styles.bind_bucket_accordion(
-        toggle, scope_owner=tab,
-        apply_visual_state=toggle._srpss_bucket_apply_visual_state,
-        scope_key=("visualizer_outer", mode_key),
-    )
-    toggle.toggled.connect(_apply_advanced_toggle_state)
-    _apply_advanced_toggle_state(toggle.isChecked(), persist=False)
-
-    def _handle_preset_visibility(is_custom: bool) -> None:
-        normal_widget.setVisible(is_custom)
-        advanced_host.setVisible(is_custom)
-
-    preset_slider.advanced_toggled.connect(_handle_preset_visibility)
-    # The slider is born on its first authored preset, not Custom. Do not expose
-    # Custom-only controls even transiently before hydration finishes. This also
-    # keeps a failed construction from presenting a bogus "Advanced" body.
-    _handle_preset_visibility(
-        preset_slider.preset_index() == preset_slider.custom_index()
-    )
-
-    if get_visualizer_mode_descriptor(mode_key).technical_controls:
-        technical_host = build_per_mode_technical_group(tab, advanced_layout, mode_key)
-    else:
-        technical_host = QWidget(container)
-        technical_host.setVisible(False)
-    preset_slider.set_technical_container(technical_host)
-
     parent_layout.addWidget(container)
-    return ModeScaffold(
-        container=container,
-        layout=layout,
-        preset_slider=preset_slider,
-        normal_widget=normal_widget,
-        normal_layout=normal_layout,
-        advanced_host=advanced_host,
-        advanced_layout=advanced_layout,
-        technical_host=technical_host,
-    )
+    return ModeBody(container=container, layout=layout, preset_slider=preset_slider)

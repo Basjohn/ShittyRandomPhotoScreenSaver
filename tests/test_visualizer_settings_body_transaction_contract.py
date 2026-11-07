@@ -14,13 +14,14 @@ def test_lazy_visualizer_body_factory_cleans_failed_qt_body_before_reraise() -> 
     assert "raise\n" in factory
 
 
-def test_mode_scaffold_marks_bodies_and_does_not_flash_custom_controls_for_preset_one() -> None:
+def test_mode_body_marks_bodies_and_builds_no_custom_only_regions() -> None:
+    """A mode body is marked for stale-body cleanup and builds no Custom-only region (nothing can flash, A-12)."""
     source = (ROOT / "ui/tabs/media/builder_scaffold.py").read_text(encoding="utf-8")
     assert 'body_object_name = f"visualizer_mode_body_{mode_key}"' in source
     assert "candidate.objectName() == body_object_name" in source
     assert "parent_layout.removeWidget(stale)" in source
-    assert "preset_slider.preset_index() == preset_slider.custom_index()" in source
-    assert "_handle_preset_visibility(True)" not in source
+    for region in ("set_advanced_container", "set_technical_container", "build_per_mode_technical_group"):
+        assert region not in source, region
 
 
 def test_collapsible_builder_bucket_keys_are_registered_in_canonical_ui_defaults() -> None:
@@ -63,7 +64,7 @@ def test_dynamic_accessory_bootstrap_does_not_consult_incompatible_active_mode()
     """Parked shared accessories acquire persisted state only after compatible placement."""
     source = (ROOT / "ui/tabs/media/builder_scaffold.py").read_text(encoding="utf-8")
     start = source.index("def build_dynamic_collapsible_bucket(")
-    end = source.index("\ndef build_mode_scaffold(", start)
+    end = source.index("\ndef build_mode_body(", start)
     dynamic = source[start:end]
     assert "initial_expanded=False" in dynamic
 

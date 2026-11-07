@@ -21,7 +21,6 @@ from urllib.parse import urlencode, parse_qs, urlparse
 from PySide6.QtCore import QObject, Signal, QCoreApplication
 
 from core.logging.logger import get_logger
-from core.resources.manager import ResourceManager
 from core.threading.manager import ThreadManager
 from core.windows.dpapi import encrypt_user_data
 
@@ -143,7 +142,6 @@ class GmailOAuthManager(QObject):
         self._state: Optional[str] = None
         self._redirect_uri: Optional[str] = None
         self._thread_manager = thread_manager
-        self._owns_thread_manager = False
         self._shutdown_hook_connected = False
         # Construction is deliberately filesystem-inert.  The GUI-owned
         # QObject receives one detached worker snapshot through GmailBackend.
@@ -438,15 +436,11 @@ class GmailOAuthManager(QObject):
             self._finalize_callback_server(context)
 
     def _get_thread_manager(self) -> ThreadManager:
-        """Return the owned ThreadManager used for OAuth network work."""
+        """The ThreadManager for OAuth network work: an injected one, else the app-shared one (the runtime's, or
+        the Settings dialog's own in a CONFIG session). A retired manager is replaced; OAuth owns none."""
         manager = self._thread_manager
-        if manager is None:
-            manager = ThreadManager.get_app_shared()
-            if manager is None:
-                manager = ThreadManager.create_helper_manager(
-                    resource_manager=ResourceManager.get_app_shared(),
-                )
-                self._owns_thread_manager = True
+        if manager is None or getattr(manager, "_shutdown", False):
+            manager = ThreadManager.require_app_shared()
             self._thread_manager = manager
         return manager
 
@@ -507,11 +501,6 @@ class GmailOAuthManager(QObject):
         self._stop_callback_server()
         if context is not None:
             context.finished_event.wait(timeout=SERVER_POLL_SECONDS + 0.25)
-        manager = self._thread_manager
-        if self._owns_thread_manager and manager is not None:
-            manager.shutdown(wait=True, timeout=SERVER_POLL_SECONDS + 0.25)
-            self._thread_manager = None
-            self._owns_thread_manager = False
 
     def _emit_auth_failed_safe(self, msg: str) -> None:
         """Emit auth_failed on the UI thread with R-10 RuntimeError guard."""

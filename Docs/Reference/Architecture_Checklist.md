@@ -19,49 +19,10 @@ appendix.
 
 ## Tier 1: land before the application-wide work (prerequisites for SMP and full display)
 
-These three are the audit's readiness blockers (A-03, A-02, A-01). The SMP plan and the Expanded Visualizer plan
+These are the audit's readiness blockers (A-03, A-02, A-01). The SMP plan and the Expanded Visualizer plan
 list them as prerequisite phases with the milestone each must precede. Order here is by effort and by when each is
-first needed.
-
-- [ ] **AC-01 Settings tabs and pills become one descriptor registry with profile gating** (A-03, with A-12 and A-14
-  folded in). Severity medium, reward high, effort M. **Confirmed.** Lands before SMP M1 (its Settings entry) and
-  before any new tab.
-  - **Boundary:** `ui/settings_dialog.py`. Today `_tab_keys` (`:709`) and `_tab_builders` (`:1088-1110`) are two
-    parallel lists, and the editing-path pill is derived twice by the same if/elif chain (`:736-745` initial,
-    `:1821-1829` reload) with per-tab vocabularies (`subtab_id`, `mode_id`+`page == "mode"`,
-    `transition_bucket_section(pill)`). Product identity is answered by `core/mc.py::is_mc_build()` at call sites;
-    Settings has no declaration point for "this tab exists only in profile X".
-  - **Fix:** one `SettingsTabDescriptor` tuple in a new `ui/settings_tabs.py` (key, Title Case label, builder
-    callable, `pill_of(view_state) -> str`, `available(profile) -> bool`, `warm_in_background: bool`). The dialog
-    derives `_tab_keys`, `_tab_builders`, `_background_warm_tab_keys` (`:687`) and both pill chains from it; the
-    persisted tab index keeps mapping through keys, never positions, so hiding a tab cannot shift a remembered
-    index. Each existing tab moves its pill vocabulary into its own `pill_of` with its persisted view-state
-    unchanged. `available(profile)` reads the one product-identity predicate (`core/mc.py` today; the SMP plan adds
-    `--smp` / `is_smp_build()` beside it, never a second resolver).
-  - **A-12 inside this item:** `ui/tabs/media/spec_mode_builder.py::build_studio_owned_mode_ui` (`:64-98`) says "no
-    bucket or other control widget is built" yet `build_mode_scaffold` still builds the normal widget, advanced
-    host, technical controls and the shared Bar Appearance / Rainbow rows and parks them hidden (`:86-92`), while
-    body values live in `_<prefix>_lazy_values` (`:93`). Make the lazy cache the only owner for Studio-owned modes
-    (technical/audio-analysis keys included), build no hidden QWidgets, and fix the docstring. Any new tab (SMP)
-    must not copy the hidden-owner pattern.
-  - **A-14 inside this item:** CONFIG mode (`main.py::run_config_session`) registers no app-shared ThreadManager,
-    so eight sites build private helper managers (`ui/tabs/widgets_tab_defaults.py:299`, `widgets_tab_feeds.py:120`,
-    `widgets_tab_gmail.py:179`, `widgets_tab_steam.py:290`, `ui/widgets/geocode_completer.py:67`,
-    `ui/onboarding/setup_page.py:59`, `core/gmail/gmail_backend.py:104`, `core/gmail/gmail_oauth.py:446`). The
-    Settings dialog in CONFIG mode owns one helper manager, registers it with `ThreadManager.set_app_shared` for its
-    lifetime and clears it on destruction; the eight sites keep their `get_app_shared()` lookup and lose their
-    factories.
-  - **Must stay true:** `Docs/Architecture/Settings_Bucket_Persistence_Contract.md` (one remembered editing path;
-    inactive buckets close); lazy tab bodies; `project_settings_bucket_context` receives the same (tab, pill) as
-    today for every existing tab; the Widgets tab `initial_view_state` path; the runtime Settings generation
-    barrier (`engine/engine_handlers.py:457-600`) unchanged.
-  - **Regression bar:** a test walks the registry: for every tab, initial and reload `pill_of` agree on the same
-    view state and round-trip through `project_settings_bucket_context`; a descriptor whose `available()` is False
-    is absent from the button row, the content stack and the persisted index mapping, and the remembered tab
-    survives its absence; for every Studio-owned mode, opening its body creates no QWidget under
-    `<mode>_studio_owned_values` and save round-trips every `body_keys(mode_id)` value; in a CONFIG-mode Settings
-    test `create_helper_manager` is called at most once and `get_app_shared()` is None after the dialog dies.
-  - **Depends on:** nothing. **Unblocks:** SMP Settings tab with pills, SMP-only build hiding.
+first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-14) landed on 7 Nov; its contract is in
+`Docs/Architecture/Settings_Bucket_Persistence_Contract.md` ("Tabs and pills: one registry").
 
 - [ ] **AC-02 The Visualizer gets a host-neutral binding; Media docking becomes a declared placement policy** (A-02).
   Severity high, reward high, effort L. **Confirmed.** Lands before Expanded Visualizer M2 (the takeover transaction

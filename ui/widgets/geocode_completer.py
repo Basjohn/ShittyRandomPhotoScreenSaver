@@ -13,7 +13,6 @@ from PySide6.QtCore import Qt, QStringListModel, QObject, Signal
 from PySide6.QtWidgets import QCompleter, QLineEdit
 
 from core.logging.logger import get_logger
-from core.resources.manager import ResourceManager
 from core.threading.manager import ThreadManager
 
 logger = get_logger(__name__)
@@ -63,19 +62,8 @@ class GeocodeCompleter(QCompleter):
         # destroyed-signal lambda never touches the dying object.
         self._closed = threading.Event()
         self.destroyed.connect(lambda _obj=None, closed=self._closed: closed.set())
-        shared_threads = ThreadManager.get_app_shared()
-        self._threads = shared_threads or ThreadManager.create_helper_manager(
-            resource_manager=ResourceManager.get_app_shared(),
-        )
-        self._owns_threads = shared_threads is None
         self._signals = _GeocodeWorkerSignals()
         self._signals.results_ready.connect(self._on_results)
-
-        if self._owns_threads:
-            try:
-                self.destroyed.connect(lambda _obj=None, m=self._threads: m.shutdown(wait=False))
-            except Exception:
-                pass
 
         line_edit.textEdited.connect(self._on_text_edited)
         line_edit.setCompleter(self)
@@ -101,7 +89,14 @@ class GeocodeCompleter(QCompleter):
         with self._lock:
             if self._closed.is_set() or query != self._pending_query:
                 return
-        self._threads.submit_io_task(self._do_fetch, query)
+        # The app-shared manager (the runtime's, or Settings' own in a CONFIG
+        # session) is resolved per query; without one only the built-in city
+        # list completes.
+        threads = ThreadManager.get_app_shared()
+        if threads is None:
+            logger.debug("[GEOCODE] No app-shared ThreadManager; online lookup skipped")
+            return
+        threads.submit_io_task(self._do_fetch, query)
 
     def retire(self) -> None:
         """Fence a closing Settings page immediately, before deferred Qt deletion."""

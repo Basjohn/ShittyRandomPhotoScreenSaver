@@ -76,9 +76,6 @@ from ui.widget_display_routes import DisplayRouteLeaveGuard
 
 logger = get_logger(__name__)
 
-from core.settings.visualizer_mode_settings import iter_mode_settings
-_MODE_NORMAL_ATTR = {spec.mode_id: f'_{spec.prefix}_normal' for spec in iter_mode_settings()}
-
 
 class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
     """Top-level Settings owner for Visualizer presentation and persistence."""
@@ -326,10 +323,16 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         build_shared_visualizer_appearance_controls(self, base_appearance_layout)
         self._base_appearance_group.setVisible(False)
 
-        # Rainbow is likewise a Custom tweakable, not a mode-global strip. It is
-        # physically moved into the selected mode's Custom normal-layout and is
-        # evacuated before switching/retiring bodies.
+        # Rainbow is likewise a per-mode Custom family, not a mode-global strip.
         self._build_rainbow_controls(controls_layout)
+        # Every mode is edited in its Studio, which edits both families too:
+        # the two rows are the page's value owners only, kept in one
+        # never-shown holder for the page's lifetime and never placed in a
+        # mode body.
+        self._studio_family_values = QWidget(page)
+        self._studio_family_values.setObjectName("visualizer_studio_family_values")
+        self._studio_family_values.hide()
+        self._park_custom_accessories()
 
         layout.addWidget(self._vis_controls_container)
         layout.addStretch()
@@ -443,9 +446,9 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
             )
 
     def _park_custom_accessories(self) -> None:
-        """Keep stable Custom widgets alive outside any retireable mode body."""
-        mode_page = getattr(self, "_mode_page", None)
-        if mode_page is None:
+        """Keep the shared family rows in the page's never-shown holder, outside any retireable mode body."""
+        holder = getattr(self, "_studio_family_values", None)
+        if holder is None:
             return
         for widget in (
             getattr(self, "_base_appearance_group", None),
@@ -458,32 +461,23 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
             parent_layout = parent.layout() if parent is not None else None
             if parent_layout is not None:
                 parent_layout.removeWidget(widget)
-            widget.setParent(mode_page)
+            widget.setParent(holder)
 
     def _place_custom_accessories(self, mode_id: str) -> None:
-        """Place the stable shared-family rows (Bar Appearance, Rainbow) with the selected mode's value owners.
+        """Point the shared-family rows (Bar Appearance, Rainbow) at the selected mode.
 
-        Every mode is edited in its Studio, which edits these families too, so the mode's normal controls sit in
-        the body's never-shown value holder: the rows are value owners only and never appear on the page."""
+        Every mode is edited in its Studio, which edits these families too, so the rows stay in the page's
+        never-shown holder as value owners only; their bucket state follows the selected mode."""
         self._park_custom_accessories()
-        normal_attr = _MODE_NORMAL_ATTR.get(str(mode_id or "").strip().lower())
-        normal_widget = getattr(self, normal_attr, None) if normal_attr else None
-        normal_layout = normal_widget.layout() if normal_widget is not None else None
-        if normal_layout is None:
-            raise RuntimeError(
-                f"Visualizer mode {mode_id!r} has no Custom normal-layout for accessories"
-            )
 
         from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
         if get_visualizer_mode_descriptor(mode_id).draws_bars:
-            normal_layout.addWidget(self._base_appearance_group)
             shared_styles.set_bucket_toggle_checked(
                 self._base_appearance_toggle,
                 self.get_visualizer_bucket_state(mode_id, "bar_appearance"),
             )
 
         if mode_has_rainbow_controls(mode_id):
-            normal_layout.addWidget(self._rainbow_controls_container)
             shared_styles.set_bucket_toggle_checked(
                 self._rainbow_bucket_toggle,
                 self.get_visualizer_bucket_state(mode_id, "rainbow"),
@@ -748,16 +742,7 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
         body.hide()
         self._mode_body_layout.removeWidget(body)
 
-        # Technical controls use one shared mode-indexed store, so retire only
-        # this mode's entry rather than deleting the store for other live bodies.
-        tech_store = getattr(self, "_per_mode_technical_controls", None)
-        if isinstance(tech_store, dict):
-            modes = tech_store.get("modes")
-            if isinstance(modes, dict):
-                modes.pop(mode_id, None)
-
         protected = {
-            "_per_mode_technical_controls",
             "_vis_body_host",
             "_mode_body_layout",
             "_mode_body_host_widget",

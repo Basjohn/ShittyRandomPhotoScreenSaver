@@ -478,3 +478,34 @@ def test_imap_bootstrap_does_not_report_missing_oauth_client_secrets_as_error(tm
     assert missing
     assert all(record.levelno < 30 for record in missing)
     assert "OAuth backend inactive" in missing[-1].getMessage()
+
+
+def test_bootstrap_queued_on_a_retired_manager_is_queued_again(qt_app, tmp_path, monkeypatch) -> None:
+    """A job queued on a manager that shuts down before running it (a runtime generation, or a CONFIG Settings
+    dialog's helper manager) never calls back; the next request must queue it again, never wait forever."""
+    monkeypatch.setattr(
+        "core.gmail.gmail_backend.prepare_gmail_backend_bootstrap",
+        lambda: _snapshot(tmp_path),
+    )
+    monkeypatch.setattr(
+        ThreadManager,
+        "run_on_ui_thread",
+        staticmethod(lambda func, *args: func(*args)),
+    )
+    backend = GmailBackend(oauth_manager=GmailOAuthManager())
+    retiring, live = _QueuedIoManager(), _QueuedIoManager()
+    results: list[bool] = []
+
+    assert backend.ensure_initialized(retiring, results.append) is True
+    assert len(retiring.tasks) == 1
+    # Still live: a second request coalesces onto the queued job.
+    assert backend.ensure_initialized(retiring) is True
+    assert len(retiring.tasks) == 1
+
+    retiring._shutdown = True                     # retired with its job never run
+    assert backend.ensure_initialized(live, results.append) is True
+    assert len(live.tasks) == 1
+    task = live.tasks[0]
+    task.callback(SimpleNamespace(success=True, result=task.func(*task.args, **task.kwargs), error=None))
+    assert backend.is_initialized is True
+    assert results == [True, True]

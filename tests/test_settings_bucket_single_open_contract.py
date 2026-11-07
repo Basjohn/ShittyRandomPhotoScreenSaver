@@ -429,32 +429,6 @@ def test_deferred_bucket_builders_have_explicit_finalization_paths() -> None:
     assert "shared_styles.finalize_bucket_body(" in technical
 
 
-def test_visualizer_parent_disclosures_remain_independent_from_leaf_accordions() -> None:
-    scaffold = _function_source(
-        ROOT / "ui" / "tabs" / "media" / "builder_scaffold.py",
-        "build_mode_scaffold",
-    )
-    technical = _function_source(
-        ROOT / "ui" / "tabs" / "media" / "technical_controls.py",
-        "build_per_mode_technical_group",
-    )
-
-    # Parent disclosure ownership is the contract; its displayed caption is not.
-    # Children must be able to open without causing the parent that contains them
-    # to close through the shared leaf-accordion authority.
-    assert "get_visualizer_adv_state(mode_key)" in scaffold
-    assert 'setter = getattr(tab, "set_visualizer_adv_state", None)' in scaffold
-    assert "setter(mode_key, checked)" in scaffold
-    assert 'scope_key=("visualizer_outer", mode_key)' in scaffold
-
-    assert "get_visualizer_tech_state(mode_key)" in technical
-    assert 'setter = getattr(tab, "set_visualizer_tech_state", None)' in technical
-    assert "setter(mode_key, checked)" in technical
-    assert 'scope_key=("visualizer_advanced", mode_key)' in technical
-    # Technical coordinates inside Advanced; neither shares the
-    # leaf accordion's ("visualizer", mode) scope.
-
-
 def test_explicit_non_bucket_surfaces_stay_outside_collapsible_contract() -> None:
     accessibility = (ROOT / "ui" / "tabs" / "accessibility_tab.py").read_text(
         encoding="utf-8"
