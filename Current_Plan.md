@@ -111,9 +111,9 @@ after the operator's yes on a question card; agents never run load (invisible ch
    - P2: an out-of-process visualizer engine for every mode (byte-identical packets; the logical tick leaves the main
      process's GIL). Designed 7 Nov (`Docs/Future_Work/Native_Core_P2_Engine_Design.md`): P2a moves the tick and mode
      runtimes into one `WorkerType.VISUALIZER` per generation (capture and DSP stay until measured), frames cross a
-     versioned C-readable seqlock triple buffer in shared memory that P3 reads directly. Landed: the packet ABI
-     (`core/visualizer_engine/packet_abi.py`, work order 1). Next: the per-mode codecs (2), then the in-process
-     loopback (3).
+     versioned C-readable seqlock triple buffer in shared memory that P3 reads directly. Landed: the packet ABI and
+     the exact frame codec (work orders 1-2; every mode's production frames round-trip byte-identically; main-thread
+     decode at most ~.4 ms per frame). Next: the in-process loopback (3), then the worker (4).
    - P3: the native render core, Spectrum first as the parity proof, then Waveform Ribbon, Extruded Bubble and the rest.
    - P4: mixed-resolution soft layers in the core.
 

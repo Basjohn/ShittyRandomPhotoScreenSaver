@@ -102,6 +102,26 @@ those values per tick, so they define the equivalence.
 4. **Dormancy and lifecycle:** overhead baseline identical with the Visualizer off; no process, mapping or handle growth
    over 20 Settings open/close and 20 mode switches; worker retired with its generation.
 
+## Measured (8 Nov, work orders 1-2 landed)
+
+`core/visualizer_engine/packet_abi.py` (the ABI above) and `core/visualizer_engine/frame_codec.py`: one exact tagged
+codec for the whole canonical frame tree (the render-state frames plus Waveform's `RibbonPacket`/scene `Recipe`/ribbon
+style and Extruded Bubble's `DriftFamily`, with numpy arrays and read-only mappings), a stable versioned type table,
+packed float64 tuples, and decode without re-validation. Every frame the production owner publishes for every mode on a
+shipped clip round-trips to the identical `repr` and re-encodes to the identical bytes
+(`tests/test_visualizer_engine_frame_codec.py`). Payload and cost per frame (2 s of `growing_pains`, p50):
+
+| Mode | payload | encode (worker) | decode (main) |
+| --- | --- | --- | --- |
+| Spectrum / Extruded Spectrum / Sphere | 2.5-2.9 KiB | .07-.10 ms | .09-.14 ms |
+| Spline Curve / Bubble | 7-17 KiB | .19-.22 ms | .16-.26 ms |
+| Oscilloscope / Neon Lake | 49-107 KiB | .08-.25 ms | .07-.25 ms (p90 .39) |
+| Waveform Ribbon | 342 KiB | .34 ms | .26 ms (p90 .34) |
+| Extruded Bubble | 610-617 KiB | .50 ms | .34 ms (p90 .39) |
+
+So the main process pays at most about .4 ms and one slot copy per presented frame, against the whole tick it stops
+running; 1 MiB slots (3 MiB per generation) hold every mode, so a mode switch never remaps.
+
 ## Work order
 
 1. ABI module (`core/visualizer_engine/packet_abi.py`): header, slots, seqlock writer/reader, edge mask; pure tests
