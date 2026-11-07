@@ -3,7 +3,8 @@
 `tools/visualizer_preset_repair.py` is the Foundry/CLI repair owner. It does not maintain a separate list of
 Visualizer controls: `visualizer_presets.preset_artwork_keys()` reads the typed mode spec, and missing controls
 come from canonical defaults. New drift gains, ray controls and camera metadata therefore follow the same path
-as existing artwork. Experimental values belonging to disabled authoring choices remain stored.
+as existing artwork, and so do the audio-analysis (technical) keys: they are spec controls in each mode's
+`technical` bucket, owned keys hidden from Settings included, so a new one is filled and guarded like any other. Experimental values belonging to disabled authoring choices remain stored.
 
 ## Admission and migration
 

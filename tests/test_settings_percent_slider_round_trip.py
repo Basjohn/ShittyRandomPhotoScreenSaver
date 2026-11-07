@@ -28,7 +28,7 @@ def _percent_keys():
     from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
     from core.settings.visualizer_mode_settings import Slider, require_mode_settings
     keys = ["spectrum_visual_smoothing", get_owned_mode_setting_keys("spectrum", "shared_bar")["bar_border_opacity"]]
-    for control in require_mode_settings("spectrum").controls:
+    for control in require_mode_settings("spectrum").body_controls:
         if (isinstance(control, Slider) and control.scale == 100 and not control.integer
                 and control.low <= min(AWKWARD) and max(AWKWARD) <= control.high and not control.source):
             keys.append(control.key)

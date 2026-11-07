@@ -362,16 +362,6 @@ def test_visualizer_technical_leaf_sections_use_real_sparse_buckets() -> None:
     assert combined["spectrum:shape"] is False
     assert combined["spectrum:agc"] is True
 
-    source = (ROOT / "ui" / "tabs" / "media" / "technical_controls.py").read_text(
-        encoding="utf-8"
-    )
-    assert "shared_styles.build_bucket_toggle(" in source
-    assert 'label="AGC"' in source
-    assert 'label="Transient"' in source
-    assert "accordion_owner=tab" in source
-    assert 'accordion_scope=("visualizer", str(mode_key).strip().lower())' in source
-    assert 'QCheckBox(label)' not in source
-
     context = (ROOT / "ui" / "tabs" / "visualizer_settings_context.py").read_text(
         encoding="utf-8"
     )
@@ -421,12 +411,6 @@ def test_deferred_bucket_builders_have_explicit_finalization_paths() -> None:
         source = (ROOT / "ui" / "tabs" / name).read_text(encoding="utf-8")
         assert "defer_initial_visibility=True" in source
         assert "_finalize_bucket_body(" in source
-
-    technical = (ROOT / "ui" / "tabs" / "media" / "technical_controls.py").read_text(
-        encoding="utf-8"
-    )
-    assert "defer_initial_visibility=True" in technical
-    assert "shared_styles.finalize_bucket_body(" in technical
 
 
 def test_explicit_non_bucket_surfaces_stay_outside_collapsible_contract() -> None:

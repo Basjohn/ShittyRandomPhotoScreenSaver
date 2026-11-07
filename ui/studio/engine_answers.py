@@ -296,7 +296,6 @@ def source_of(fixture: StudioFixture) -> str:
 def _owned_keys(mode_id: str) -> frozenset[str]:
     from core.settings.visualizer_mode_registry import get_owned_mode_setting_keys
     from core.settings.visualizer_mode_settings import Custom, require_mode_settings
-    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
     from widgets.spotify_visualizer.source_config_applier import SPECTRUM_SOURCE_SUFFIXES
     spec = require_mode_settings(mode_id)
     stored = ({c.key for c in spec.controls}
@@ -304,7 +303,7 @@ def _owned_keys(mode_id: str) -> frozenset[str]:
     for family in ("shared_bar", "rainbow"):
         stored |= set(get_owned_mode_setting_keys(mode_id, family).values())
     engine = ({f"{mode_id}_{suffix}" for suffix in SPECTRUM_SOURCE_SUFFIXES}
-              | {_storage_key(mode_id, d) for d in _control_defs_for_mode(mode_id)})
+              | {c.key for c in spec.technical_controls(offered=False)})
     return frozenset(stored - engine)
 
 

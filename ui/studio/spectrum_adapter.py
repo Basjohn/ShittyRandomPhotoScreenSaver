@@ -157,7 +157,7 @@ def build_schema() -> StudioSchema:
         props.append(StudioProperty(id=key_id, path=path, label=label, workspace=workspace, group=group,
                                     instrument=instrument, **extra))
 
-    for control in spec.controls:
+    for control in spec.body_controls:
         bucket = control.bucket or custom_bucket.get(control.key, "")
         if not bucket:
             continue

@@ -53,8 +53,7 @@ def _available(control) -> bool:
 
 
 def _technical_keys(mode: str) -> set[str]:
-    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
-    return {_storage_key(mode, defn) for defn in _control_defs_for_mode(mode)}
+    return {control.key for control in require_mode_settings(mode).technical_controls()}
 
 
 def _family_keys(mode: str) -> set[str]:
@@ -183,20 +182,21 @@ def test_every_leaf_any_preset_authors_in_a_visual_editor_is_editable(mode):
 
 @pytest.mark.parametrize("mode", MODES)
 def test_every_technical_control_keeps_its_instrument_range_and_admission(mode):
-    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
+    from core.settings.visualizer_mode_settings import Choice, Toggle
     schema = _schema(mode)
-    for defn in _control_defs_for_mode(mode):
-        prop = schema.find(_storage_key(mode, defn))
-        if defn.widget_kind == "checkbox":
+    for control in require_mode_settings(mode).technical_controls():
+        prop = schema.find(control.key)
+        if isinstance(control, Toggle):
             assert prop.instrument == SWITCH
-        elif defn.widget_kind == "combo":
+        elif isinstance(control, Choice):
             assert prop.instrument == CHOICE
-            assert tuple(prop.choice_values) == tuple(value for _label, value in defn.options)
+            assert tuple(prop.choice_values) == tuple(control.choices)
         else:
             assert prop.instrument == SCALAR
-            assert (prop.minimum, prop.maximum) == (float(defn.minimum), float(defn.maximum))
-            assert schema.admit(prop.id, float(defn.maximum) * 10, defn.minimum) == pytest.approx(defn.maximum)
-        assert prop.label == (defn.label_text or defn.checkbox_text).replace("\n", " ").rstrip(":").strip()
+            assert (prop.minimum, prop.maximum) == (float(control.low), float(control.high))
+            assert schema.admit(prop.id, float(control.high) * 10, control.low) == pytest.approx(control.high)
+        text = control.text if isinstance(control, Toggle) else ""
+        assert prop.label == (control.label or text).replace("\n", " ").rstrip(":").strip()
 
 
 # Each interactive part of Settings' preset row -> the Studio bridge slot doing the same job.
@@ -664,15 +664,15 @@ def test_a_stroke_on_the_sky_or_cancelled_saves_nothing_negative_control(studio_
 def test_bar_count_is_named_by_one_descriptor_fact_in_settings_and_the_studio():
     """Bar Count is the drawn bar count only where the mode draws bars (``draws_bars``); elsewhere it is the analysis
     resolution, named and explained as such. One definition feeds Settings' Technical group and the Studio."""
-    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
     names: dict[bool, set] = {True: set(), False: set()}
     for mode in MODES:
-        defn = next((d for d in _control_defs_for_mode(mode) if d.config_key == "bar_count"), None)
-        assert defn is not None, f"{mode} must keep its Bar Count (it moves every mode's frame)"
-        assert defn.tooltip, mode
-        names[get_visualizer_mode_descriptor(mode).draws_bars].add((defn.label_text, defn.suffix_text, defn.tooltip))
-        prop = _schema(mode).find(_storage_key(mode, defn))
-        assert prop.label == defn.label_text.rstrip(":").strip() and prop.tooltip.startswith(defn.tooltip), mode
+        control = next((c for c in require_mode_settings(mode).technical_controls() if c.key == f"{mode}_bar_count"),
+                       None)
+        assert control is not None, f"{mode} must keep its Bar Count (it moves every mode's frame)"
+        assert control.tooltip, mode
+        names[get_visualizer_mode_descriptor(mode).draws_bars].add((control.label, control.suffix, control.tooltip))
+        prop = _schema(mode).find(control.key)
+        assert prop.label == control.label.rstrip(":").strip() and prop.tooltip.startswith(control.tooltip), mode
     assert len(names[True]) == 1 and len(names[False]) == 1 and names[True] != names[False]
 
 

@@ -139,7 +139,7 @@ def build_schema() -> StudioSchema:
         props.append(StudioProperty(id=key_id, path=path, label=label, workspace=workspace, group=group,
                                     instrument=instrument, **extra))
 
-    for control in spec.controls:
+    for control in spec.body_controls:
         if control.key in view_keys or not control_available(control):
             continue                                    # the live view below; unavailable as in Settings
         owner = customs.get(_CUSTOM_OWNER.get(control.key, ""))

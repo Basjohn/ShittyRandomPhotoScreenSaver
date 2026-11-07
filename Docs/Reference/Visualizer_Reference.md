@@ -388,24 +388,25 @@ approximate the live engine's while structural facts (a control that reaches not
 
 | Mode | What its frame reads from the engine | Audio Analysis controls that move it | Inert (read by nothing the frame publishes) |
 | --- | --- | --- | --- |
-| Spectrum, Extruded Spectrum | shaped, smoothed bars (Bar Count of them) and their peaks | all offered; Kick Lane Gain / Mix and Transient Clamp only slightly | Transient Pulse (owned, never offered) |
-| Neon Lake | the same bars, onset waves from the bus, the analysis spectrum for Terrain Reaction | all offered | Transient Pulse (not offered) |
+| Spectrum, Extruded Spectrum | shaped, smoothed bars (Bar Count of them) and their peaks | all offered; Kick Lane Gain / Mix and Transient Clamp only slightly | Transient Pulse (hidden) |
+| Neon Lake | the same bars, onset waves from the bus, the analysis spectrum for Terrain Reaction | all offered, Kick Lane Gain included (it moves the frame; offered since the 7 Nov spec fold, the old mode filter had hidden it) | Transient Pulse (hidden) |
 | Oscilloscope | raw capture history for the trace; onsets, musical level / intensity and the analysis spectrum for Flare, Drive, Tone | all offered (Bar Count, Block Size and Gain also move Tone) | none offered |
-| Bubble | the Bubble feed, transient lanes, the event scheduler | Bar Count, Block Size, Sensitivity, Floors, Gain, Transient Pulse / Clamp / Mixes (Vocal Mix only through Rotation Amount) | **AGC Strength, Output Lift** (hidden); Kick Lane Gain (not offered) |
+| Bubble | the Bubble feed, transient lanes, the event scheduler | Bar Count, Block Size, Sensitivity, Floors, Gain, Transient Pulse / Clamp / Mixes (Vocal Mix only through Rotation Amount) | **AGC Strength, Output Lift, Kick Lane Gain** (hidden) |
 | Extruded Bubble | onsets from the bus; fixed-scale body bands | all offered; Sensitivity and the floors reach it only through onset detection (the body bands sit ahead of them) | none offered |
 | Voxel Sphere | the analysis spectrum (Analysis Bands), live pre-AGC lanes, onsets | all offered | none offered |
-| Spline Curve (DevCurve) | the pre-AGC control lanes, transient lanes, musical level and intensity | Bar Count, Block Size, Sensitivity, Floors, Gain, Transient Clamp | **AGC Strength, Output Lift** (hidden); Kick Lane Gain, Transient Pulse (not offered) |
+| Spline Curve (DevCurve) | the pre-AGC control lanes, transient lanes, musical level and intensity | Bar Count, Block Size, Sensitivity, Floors, Gain, Transient Clamp | **AGC Strength, Output Lift, Kick Lane Gain, Transient Pulse** (hidden) |
 | Waveform | fixed-scale raw body bands, raw-scale bus onsets, level and intensity | Bar Count, Block Size, Input Gain | **Use Recommended Sensitivity, Sensitivity, Dynamic Noise Floor, Noise Floor Baseline** (hidden) |
 
 A control a mode provably never reads is hidden with the descriptor's `technical_hidden_suffixes`
-(`core/settings/visualizer_mode_registry.py`): visibility only. The key stays owned, stored, serialized and
-preset-authorable; Settings' Technical group and the Studio's Audio Analysis group (both built from
-`ui/tabs/media/technical_controls._control_defs_for_mode`) do not offer it; a mode that starts reading it drops it from the
-tuple. `tests/test_audio_analysis_controls.py` derives both directions from the registry: every hidden control leaves the
+(`core/settings/visualizer_mode_registry.py`), the one offered/hidden mechanism (the former Kick Lane Gain / Transient
+Pulse mode filters folded into it): visibility only. The key stays owned, stored, serialized and preset-authorable;
+the Settings value cache and the Studio's Audio Analysis group (both read the mode spec's
+`ModeSettings.technical_controls()`, `core/settings/visualizer_mode_settings.py`) do not offer it; a mode that starts
+reading it drops it from the tuple. `tests/test_audio_analysis_controls.py` derives both directions from the registry: every hidden control leaves the
 published frame bit-identical, every offered one moves it, and hidden values round-trip through the model and the real tab.
 Bar Count is not hidden anywhere (it moves every mode's frame). It is the drawn bar count only on a mode whose
 descriptor `draws_bars` (Spectrum, Extruded Spectrum; the same fact shows the page's Bar Appearance family there);
-everywhere else `_control_defs_for_mode` labels it **Analysis Bands** with a tooltip saying it is the analysis
+everywhere else the spec's `audio_analysis_entries` labels it **Analysis Bands** with a tooltip saying it is the analysis
 resolution, and Settings and the Studio read that one definition (decided 6 Nov with the Studio migration).
 
 ## 6. Latest-state semantics

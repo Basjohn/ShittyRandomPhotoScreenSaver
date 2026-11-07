@@ -1,8 +1,9 @@
 """A mode's technical (audio analysis) controls as Studio properties (mode-neutral).
 
-The controls are defined once in ``ui.tabs.media.technical_controls``; the Settings mode body holds their values in
-its value cache (no widget). The Studio shows the controls with the same storage keys, ranges, choices and labels,
-and admits edits with the same coercion and clamping. Adapters call these instead of carrying their own copies.
+The controls are the mode spec's offered ``technical`` entries (``ModeSettings.technical_controls``,
+``core/settings/visualizer_mode_settings.py``); the Settings mode body holds their values in its value cache (no
+widget). The Studio shows them with the same storage keys, ranges, choices and labels, and admits edits with the
+control's own ``admit``, as Settings and the model do. Adapters call these instead of carrying their own copies.
 """
 from __future__ import annotations
 
@@ -15,10 +16,14 @@ _NOTE = ("Live audio analysis for this mode (Settings' Technical controls). The 
          "analysis; recorded clips are re-analysed with these values.")
 
 
+def _offered(mode_id: str):
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    return require_mode_settings(mode_id).technical_controls()
+
+
 def technical_keys(mode_id: str) -> frozenset[str]:
     """The storage keys of the mode's offered technical (Audio Analysis) controls."""
-    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
-    return frozenset(_storage_key(mode_id, defn) for defn in _control_defs_for_mode(mode_id))
+    return frozenset(control.key for control in _offered(mode_id))
 
 
 def clip_analysis_key(clip, mode_id: str, values) -> str:
@@ -30,35 +35,32 @@ def clip_analysis_key(clip, mode_id: str, values) -> str:
 
 def technical_properties(mode_id: str, *, workspace: str, group: str = TECHNICAL_GROUP,
                          note: str = _NOTE) -> dict[str, tuple[StudioProperty, Any]]:
-    """storage key -> (Studio property, Settings' control definition), in Settings' order."""
-    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
+    """storage key -> (Studio property, the spec control), in Settings' order."""
+    from core.settings.visualizer_mode_settings import Choice, Toggle
     out = {}
-    for defn in _control_defs_for_mode(mode_id):
-        key = _storage_key(mode_id, defn)
-        label = (defn.label_text or defn.checkbox_text or key).replace("\n", " ").rstrip(":").strip()
-        tooltip = (defn.tooltip or "") + ("\n" if defn.tooltip else "") + note
+    for control in _offered(mode_id):
+        key = control.key
+        text = control.text if isinstance(control, Toggle) else ""
+        label = (control.label or text or key).replace("\n", " ").rstrip(":").strip()
+        tooltip = (control.tooltip or "") + ("\n" if control.tooltip else "") + note
         common = dict(id=key, path=(key,), label=label, workspace=workspace, group=group, tooltip=tooltip)
-        if defn.widget_kind == "checkbox":
+        if isinstance(control, Toggle):
             prop = StudioProperty(instrument=SWITCH, **common)
-        elif defn.widget_kind == "combo":
-            prop = StudioProperty(instrument=CHOICE, choices=tuple(text for text, _v in defn.options),
-                                  choice_values=tuple(value for _t, value in defn.options), **common)
+        elif isinstance(control, Choice):
+            prop = StudioProperty(instrument=CHOICE, choices=tuple(control.labels or control.choices),
+                                  choice_values=tuple(control.choices), **common)
         else:
-            integer = defn.default_type == "int"
-            prop = StudioProperty(instrument=SCALAR, minimum=float(defn.minimum), maximum=float(defn.maximum),
-                                  decimals=0 if integer else 2, integer=integer,
-                                  units=f" {defn.suffix_text}" if getattr(defn, "suffix_text", "") else "",
-                                  **common)
-        out[key] = (prop, defn)
+            prop = StudioProperty(instrument=SCALAR, minimum=float(control.low), maximum=float(control.high),
+                                  decimals=0 if control.integer else 2, integer=control.integer,
+                                  units=control.suffix if not control.percent else "", **common)
+        out[key] = (prop, control)
     return out
 
 
 def admit_technical(entry: tuple[StudioProperty, Any], candidate: Any, previous: Any) -> Any:
-    """Settings' own coercion (and clamping for numbers) of one technical value."""
-    from ui.tabs.media.technical_controls import _clamp_numeric, _coerce_value
-    prop, defn = entry
-    value = _coerce_value(candidate, defn, previous)
-    return _clamp_numeric(value, defn) if prop.instrument == SCALAR else value
+    """The spec control's own admission of one technical value (Settings' and the model's)."""
+    _prop, control = entry
+    return control.admit(candidate, previous)
 
 
 RAINBOW_GROUP = "Rainbow"

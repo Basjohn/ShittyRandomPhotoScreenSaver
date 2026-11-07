@@ -141,7 +141,7 @@ def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
     """The 3D Settings bodies are real pages: each builds through the lazy path, holds one mode-owned
     presentation value and one Technical value edited per mode, persists them, and a fresh Settings host
     restores each mode independently. Both values live in the body's value cache (no widget owns them)."""
-    from ui.tabs.media.technical_controls import _control_defs_for_mode
+    from core.settings.visualizer_mode_settings import require_mode_settings
 
     modes = ("extruded_spectrum", "shockwave_grid", "sphere")
     presentation_controls = {
@@ -160,15 +160,15 @@ def test_all_current_3d_settings_pages_construct_and_roundtrip_owned_values(
             assert not mode_has_rainbow_controls(mode)
             assert tab._rainbow_controls_container.isHidden()
 
-            bar_count = next(d for d in _control_defs_for_mode(mode) if d.control_key == "bar_count")
+            bar_count = require_mode_settings(mode).control(f"{mode}_bar_count")
             current_bar_count = _cache(tab, mode)[f"{mode}_bar_count"]
 
             key = presentation_controls[mode]
             new_presentation = _other(mode, key, _cache(tab, mode)[key])
             new_bar_count = (
-                int(bar_count.minimum)
-                if current_bar_count != int(bar_count.minimum)
-                else int(bar_count.maximum)
+                int(bar_count.low)
+                if current_bar_count != int(bar_count.low)
+                else int(bar_count.high)
             )
             _edit(tab, mode, key, new_presentation)
             _edit(tab, mode, f"{mode}_bar_count", new_bar_count)

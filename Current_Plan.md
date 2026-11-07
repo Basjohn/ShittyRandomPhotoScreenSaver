@@ -228,6 +228,13 @@ log confirms, §9). Card surfaces, the style pass and the 15 material themes are
   worktree because the operator's Usu scene originals (`assets/usu/scenes/*.png`) are untracked and exist only in
   the main checkout; environmental, not a product defect.
 
+**Found during the Settings SSOT fold (7 Nov; fixed or recorded by that agent):**
+- **Neon Lake's Kick Lane Gain moves its frame but was never offered (fixed in AC-18).** The old Technical
+  definitions' mode filter (`_KICK_GAIN_MODES`) hid it from Settings and the Studio although
+  `tools/visualizer_replay/analysis_controls_audit.py` shows it moves the published frame (onset waves). Folding the
+  filter into `technical_hidden_suffixes` made the audit test fail, so Neon Lake now offers it; the stored values and
+  presets were always authored, so no value changes.
+
 **Lead only:** merges and merge gates; the game60 live checks (card surfaces with materials on; Waveform after the
 tick cut); scheduling heavy load generators; promoting checklist items here.
 

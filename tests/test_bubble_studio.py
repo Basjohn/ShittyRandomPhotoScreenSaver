@@ -33,14 +33,14 @@ def spec():
 def canonical_section():
     """Test-owned inputs: the code-owned canonical defaults, never an authored preset."""
     out = dict(require_canonical_default("widgets.spotify_visualizer"))
-    for control in spec().controls:
+    for control in spec().body_controls:
         out[control.key] = control.admit(out[control.key], out[control.key])
     return out
 
 
 def technical_keys():
-    from ui.tabs.media.technical_controls import _control_defs_for_mode, _storage_key
-    return {_storage_key(MODE, d) for d in _control_defs_for_mode(MODE)}
+    from core.settings.visualizer_mode_settings import require_mode_settings
+    return {control.key for control in require_mode_settings(MODE).technical_controls()}
 
 
 # ------------------------------------------------------------------------------- schema
@@ -49,8 +49,8 @@ def _uncovered(properties) -> set[str]:
     vector control (gradient endpoints, a colour's alpha) that no property edits."""
     paths = {tuple(p.path) for p in properties}
     roots = {p.path[0] for p in properties}
-    missing = {c.key for c in spec().controls if c.key not in roots} | (technical_keys() - roots)
-    for control in spec().controls:
+    missing = {c.key for c in spec().body_controls if c.key not in roots} | (technical_keys() - roots)
+    for control in spec().body_controls:
         if isinstance(control, Gradient):
             missing |= {f"{control.key}.{i}" for i in range(4) if (control.key, i) not in paths}
         if isinstance(control, Colour) and control.alpha and (control.key, 3) not in paths:
@@ -66,13 +66,13 @@ def test_coverage_check_detects_a_missing_control_negative_control():
     properties = build_schema().properties
     for dropped in (PREFIX + "big_count", PREFIX + "drift_direction", PREFIX + "transient_mix_bass"):
         assert dropped in _uncovered([p for p in properties if p.path[0] != dropped])
-    alpha = next(c.key for c in spec().controls if isinstance(c, Colour) and c.alpha)
+    alpha = next(c.key for c in spec().body_controls if isinstance(c, Colour) and c.alpha)
     assert f"{alpha}.3" in _uncovered([p for p in properties if tuple(p.path) != (alpha, 3)])
 
 
 def test_instruments_bounds_choices_and_conditions_come_from_the_registry():
     schema = build_schema()
-    for control in spec().controls:
+    for control in spec().body_controls:
         if isinstance(control, Slider):
             prop = schema.find(control.key)
             assert (prop.minimum, prop.maximum) == (control.low, control.high), control.key
@@ -323,7 +323,7 @@ def test_edits_save_through_bubbles_settings_owners_and_every_exit_restores_sett
     want = next(v for v in drift.choices if v != controller.session.values[drift.key])
     bridge.commitValue(drift.key, 0, drift.labels[drift.choices.index(want)])
     assert stored()[drift.key] == want
-    alpha = next(c.key for c in spec().controls if isinstance(c, Colour) and c.alpha)
+    alpha = next(c.key for c in spec().body_controls if isinstance(c, Colour) and c.alpha)
     bridge.commitValue(f"{alpha}.3", 0, 100)
     assert stored()[alpha][3] == 100
     mix = PREFIX + "transient_mix_vocal"

@@ -316,7 +316,7 @@ def build_schema() -> StudioSchema:
         props.append(StudioProperty(id=prop_id, path=path, label=label, workspace=workspace, group=group,
                                     instrument=instrument, **extra))
 
-    for control in spec.controls:
+    for control in spec.body_controls:
         if not control.bucket:
             continue                              # (none today: the coverage test names any that appear)
         workspace = _BUCKET_WORKSPACE.get(control.bucket, "finish")   # an unplaced new bucket still appears
