@@ -23,10 +23,13 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.logging.logger import get_logger
 from core.settings.capability_activation import is_widget_family_effective
+
+if TYPE_CHECKING:
+    from rendering.visualizer_placement import VisualizerAuthoredPlacement
 
 logger = get_logger(__name__)
 
@@ -134,129 +137,87 @@ class VisualizerHostBinding:
 
     # ------------------------------------------------------------------ layout
 
-    def resolve_base_authored_origin(
-        self,
-        chosen: Any,
-        owner: Any,
-    ) -> tuple[float, float] | None:
-        """Resolve the Visualizer's plain authored anchor without adjacency.
-
-        This is the CUSTOM-safe baseline: the Visualizer still follows Media's
-        effective authored position/monitor route, but no stacking or
-        Media-relative displacement is applied. A committed Visualizer CUSTOM
-        rect remains authoritative inside the owner and rejects this projection.
-        """
-
-        bounds = chosen.display_bounds()
-        try:
-            vis_width, vis_height = owner.resolved_outer_size()
-        except Exception:
-            logger.warning(
-                "[SPOTIFY_VIS] Failed to resolve base authored visualizer size",
-                exc_info=True,
-            )
-            return None
-        vis_width = max(1.0, min(float(vis_width), float(bounds.width)))
-        vis_height = max(1.0, min(float(vis_height), float(bounds.height)))
-
-        from rendering.quick.widgets.geometry_resolver import (
-            resolve_overlay_geometry_policy,
-        )
-
-        base = resolve_overlay_geometry_policy(
-            "media",
-            self._services.widgets_config(),
-        ).resolve((vis_width, vis_height), bounds)
-        return (float(base.x - bounds.x), float(base.y - bounds.y))
-
-    def project_base_authored_origin(self) -> bool:
-        """Project the plain authored Visualizer origin once, if admitted."""
-
-        owner = self._services.admitted_owner()
-        chosen = self._services.admitted_unit()
-        if owner is None or chosen is None or chosen.is_retired:
-            return False
-        origin = self.resolve_base_authored_origin(chosen, owner)
-        if origin is None:
-            return False
-        return bool(owner.set_authored_outer_origin(origin[0], origin[1]))
-
-    def resolve_authored_layout(
+    def resolve_placement(
         self,
         chosen: Any,
         owner: Any,
         *,
         media_geometry: Any | None = None,
-    ) -> tuple[float, float, float, float, Any] | None:
-        """Resolve the ordinary Media-relative Visualizer rectangle once.
+        authored_layout_enabled: bool | None = None,
+    ) -> "VisualizerAuthoredPlacement | None":
+        """Resolve the authored Visualizer placement on ``chosen`` once.
 
-        CUSTOM is a hard boundary and returns ``None``. Ordinary placement uses
-        the Media card's unstacked authored geometry, preferring the vertical
-        side with more usable space (top Media -> below, bottom Media -> above).
-        Horizontal adjacency is only a fallback when neither vertical side can
-        fit. No timer/poller/cadence owner is involved.
+        One function for the saver and Settings Arrange
+        (:func:`rendering.visualizer_placement.resolve_visualizer_authored_placement`).
+        ``authored_layout_enabled`` defaults to the host presenter's switch;
+        global CUSTOM always resolves undocked, on Media's plain authored slot.
+        A committed Visualizer CUSTOM rect remains authoritative inside the owner
+        and rejects any authored origin. Returns ``None`` only when the owner
+        cannot report its size. No timer/poller/cadence owner is involved.
         """
 
-        from rendering.widget_descriptors import is_global_custom_layout_mode_selected
+        from rendering.visualizer_placement import (
+            DOCKED_TO_MEDIA,
+            resolve_visualizer_authored_placement,
+            resolve_visualizer_docked_to,
+        )
 
         widgets = self._services.widgets_config()
-        if (
-            not chosen.presenter.authored_layout_enabled
-            or is_global_custom_layout_mode_selected(widgets)
-        ):
-            return None
+        if authored_layout_enabled is None:
+            authored_layout_enabled = bool(chosen.presenter.authored_layout_enabled)
         bounds = chosen.display_bounds()
         try:
-            vis_width, vis_height = owner.resolved_outer_size()
+            visualizer_size = owner.resolved_outer_size()
         except Exception:
             logger.warning(
-                "[SPOTIFY_VIS] Failed to resolve ordinary visualizer size for adjacency",
+                "[SPOTIFY_VIS] Failed to resolve authored visualizer size",
                 exc_info=True,
             )
             return None
-        vis_width = max(1.0, min(float(vis_width), float(bounds.width)))
-        vis_height = max(1.0, min(float(vis_height), float(bounds.height)))
-
-        media_rect = media_geometry or chosen.presenter.authored_geometry_for("media")
-        if media_rect is None:
-            # Visualizer routing follows Media's authored route even when the
-            # Media *card* itself is disabled and therefore has no retained
-            # preferred-size rectangle. Resolve the Visualizer at that same
-            # authored anchor using its own current outer size. This is still
-            # ordinary/non-CUSTOM placement and owns no cadence.
-            from rendering.quick.widgets.geometry_resolver import (
-                resolve_overlay_geometry_policy,
-            )
-
-            fallback = resolve_overlay_geometry_policy("media", widgets).resolve(
-                (vis_width, vis_height), bounds
-            )
-            return (
-                float(fallback.x - bounds.x),
-                float(fallback.y - bounds.y),
-                vis_width,
-                vis_height,
-                None,
-            )
-
-        from rendering.visualizer_media_adjacency import resolve_visualizer_media_origin
-
-        x, y, overfull = resolve_visualizer_media_origin(
-            (
-                float(media_rect.x - bounds.x),
-                float(media_rect.y - bounds.y),
-                float(media_rect.width),
-                float(media_rect.height),
-            ),
-            (vis_width, vis_height),
-            (float(bounds.width), float(bounds.height)),
+        media_rect = None
+        docked_to = resolve_visualizer_docked_to(
+            widgets, authored_layout_enabled=authored_layout_enabled
         )
-        if overfull:
+        if docked_to == DOCKED_TO_MEDIA:
+            # Docking follows Media's unstacked authored card. Media's route
+            # still anchors the Visualizer when the Media card itself is
+            # disabled (no retained rectangle): it then sits on Media's slot.
+            geometry = media_geometry or chosen.presenter.authored_geometry_for("media")
+            if geometry is not None:
+                media_rect = (
+                    float(geometry.x - bounds.x),
+                    float(geometry.y - bounds.y),
+                    float(geometry.width),
+                    float(geometry.height),
+                )
+        placement = resolve_visualizer_authored_placement(
+            widgets,
+            display_size=(float(bounds.width), float(bounds.height)),
+            visualizer_size=visualizer_size,
+            media_rect=media_rect,
+            authored_layout_enabled=authored_layout_enabled,
+        )
+        if placement.overfull:
             logger.warning(
                 "[SPOTIFY_VIS] Media+Visualizer ordinary pair exceeds available adjacent space"
             )
+        return placement
 
-        return (x, y, vis_width, vis_height, media_rect)
+    def project_base_authored_origin(self) -> bool:
+        """Project the plain (undocked) authored Visualizer origin once, if admitted.
+
+        Used when live Edit or a slot load holds authored layout off: the
+        Visualizer stays on Media's plain slot, never at the owner's (0, 0).
+        """
+
+        owner = self._services.admitted_owner()
+        chosen = self._services.admitted_unit()
+        if owner is None or chosen is None or chosen.is_retired:
+            return False
+        placement = self.resolve_placement(chosen, owner, authored_layout_enabled=False)
+        if placement is None:
+            return False
+        return bool(owner.set_authored_outer_origin(placement.x, placement.y))
 
     def install_authored_layout(
         self,
@@ -267,78 +228,63 @@ class VisualizerHostBinding:
         media_geometry: Any | None = None,
         defer_presenter_reflow: bool = False,
     ) -> bool:
-        """Project ordinary Visualizer adjacency and optional stacking reservation."""
+        """Project the authored placement, its stacking reservation and its docking.
 
-        resolved = self.resolve_authored_layout(
+        Returns False (and touches nothing) when authored placement does not
+        apply: CUSTOM is a hard boundary. A Visualizer docked to a presented
+        Media card installs one Media-geometry observer, so it follows Media;
+        an undocked one installs none, so moving Media leaves it in place.
+        """
+
+        placement = self.resolve_placement(
             chosen, owner, media_geometry=media_geometry
         )
-        if resolved is None:
+        if placement is None or not placement.authored:
             return False
-        x, y, width, height, media_rect = resolved
-        owner.set_authored_outer_origin(x, y)
-
-        from rendering.widget_stacking import DisplayStackObstacle
-
-        visualizer_obstacle = DisplayStackObstacle(
-            key="spotify_visualizer",
-            x=int(round(x)),
-            y=int(round(y)),
-            width=max(1, int(round(width))),
-            height=max(1, int(round(height))),
-        )
-        if media_rect is None:
-            # Media may be disabled while the Visualizer remains ordinary. It
-            # still occupies real screen space, so authored stacking should
-            # route other ordinary cards around it when stacking is enabled.
+        owner.set_authored_outer_origin(placement.x, placement.y)
+        obstacles, fixed_widget_ids = placement.stack_obstacles()
+        if fixed_widget_ids:
             chosen.presenter.set_external_stack_obstacles(
-                (visualizer_obstacle,),
+                obstacles,
+                fixed_widget_ids=fixed_widget_ids,
                 reflow=not defer_presenter_reflow,
             )
-            if install_observer:
-                chosen.presenter.set_layout_observer(None)
+        else:
+            # Media may be disabled (or the Visualizer undocked) while the
+            # Visualizer remains ordinary. It still occupies real screen space,
+            # so authored stacking routes other ordinary cards around it.
+            chosen.presenter.set_external_stack_obstacles(
+                obstacles,
+                reflow=not defer_presenter_reflow,
+            )
+        if not install_observer:
+            return True
+        if placement.media_rect is None:
+            chosen.presenter.set_layout_observer(None)
             return True
 
-        bounds = chosen.display_bounds()
-        media_local_x = int(round(float(media_rect.x - bounds.x)))
-        media_local_y = int(round(float(media_rect.y - bounds.y)))
-        chosen.presenter.set_external_stack_obstacles(
-            (
-                DisplayStackObstacle(
-                    key="media",
-                    x=media_local_x,
-                    y=media_local_y,
-                    width=max(1, int(round(float(media_rect.width)))),
-                    height=max(1, int(round(float(media_rect.height)))),
-                ),
-                visualizer_obstacle,
-            ),
-            fixed_widget_ids=("media",),
-            reflow=not defer_presenter_reflow,
-        )
+        # The services reach the caller weakly (see VisualizerHostServices),
+        # so this presenter-held observer never keeps the caller alive.
+        services = self._services
 
-        if install_observer:
-            # The services reach the caller weakly (see VisualizerHostServices),
-            # so this presenter-held observer never keeps the caller alive.
-            services = self._services
+        def _on_authored_geometry(widget_id: str, geometry: Any) -> None:
+            if widget_id != "media":
+                return
+            if (
+                services.caller_retired()
+                or services.admitted_owner() is not owner
+                or services.admitted_unit() is not chosen
+            ):
+                return
+            VisualizerHostBinding(services).install_authored_layout(
+                chosen,
+                owner,
+                install_observer=False,
+                media_geometry=geometry,
+                defer_presenter_reflow=True,
+            )
 
-            def _on_authored_geometry(widget_id: str, geometry: Any) -> None:
-                if widget_id != "media":
-                    return
-                if (
-                    services.caller_retired()
-                    or services.admitted_owner() is not owner
-                    or services.admitted_unit() is not chosen
-                ):
-                    return
-                VisualizerHostBinding(services).install_authored_layout(
-                    chosen,
-                    owner,
-                    install_observer=False,
-                    media_geometry=geometry,
-                    defer_presenter_reflow=True,
-                )
-
-            chosen.presenter.set_layout_observer(_on_authored_geometry)
+        chosen.presenter.set_layout_observer(_on_authored_geometry)
         return True
 
     # -------------------------------------------------------------- construct
@@ -455,20 +401,16 @@ class VisualizerHostBinding:
                 playing=False,
             )
             self._configure_committed_layout(chosen, owner, widgets, mode)
-            # Ordinary placement is resolved before start so the first retained
+            # Authored placement is resolved before start so the first retained
             # Visualizer presentation never appears at the old (0, 0) default.
-            # CUSTOM rejects this path completely. Stacking reservation/observer
-            # are installed only after successful single-owner admission below.
-            ordinary_layout = self.resolve_authored_layout(chosen, owner)
-            if ordinary_layout is not None:
-                owner.set_authored_outer_origin(ordinary_layout[0], ordinary_layout[1])
-            else:
-                # Global CUSTOM disables adjacency, not authored anchoring. Keep
-                # an uncommitted Visualizer on Media's authored slot instead of
-                # leaking the owner's internal (0, 0) construction default.
-                base_origin = self.resolve_base_authored_origin(chosen, owner)
-                if base_origin is not None:
-                    owner.set_authored_outer_origin(base_origin[0], base_origin[1])
+            # Global CUSTOM disables docking, not authored anchoring: an
+            # uncommitted Visualizer then sits on Media's plain authored slot (a
+            # committed CUSTOM rect rejects the origin inside the owner).
+            # Stacking reservation/observer are installed only after successful
+            # single-owner admission below.
+            placement = self.resolve_placement(chosen, owner)
+            if placement is not None:
+                owner.set_authored_outer_origin(placement.x, placement.y)
 
             engine = owner.controller.engine
             generation = int(engine.get_generation_id())

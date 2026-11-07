@@ -342,3 +342,109 @@ def test_display_manager_no_longer_builds_or_imports_the_owner() -> None:
             names.add(node.attr)
     assert "QuickDisplayVisualizerOwner" not in names
     assert not any(name.endswith("quick_display_visualizer_owner") for name in names)
+
+
+# --------------------------------------------------------------------------
+# Media docking is one declared placement policy (docked_to: media | none).
+
+
+class _PlacedOwner:
+    def __init__(self) -> None:
+        self.origin = None
+
+    def resolved_outer_size(self):
+        return (420.0, 280.0)
+
+    def set_authored_outer_origin(self, x, y) -> bool:
+        self.origin = (float(x), float(y))
+        return True
+
+
+def _docking_binding(position: str = "Top Left"):
+    from rendering.quick.widgets.host import OverlayWidgetGeometry
+    from widgets.spotify_visualizer.visualizer_host_binding import VisualizerHostBinding
+
+    host = _StubHost(0, media_rect=OverlayWidgetGeometry(40.0, 40.0, 500.0, 220.0))
+    caller = _Caller([host])
+    caller.widgets["media"]["position"] = position
+    caller.widgets["spotify_visualizer"]["position"] = position
+    owner = _PlacedOwner()
+    caller.owner, caller.unit = owner, host
+    return VisualizerHostBinding(caller.services()), host, owner
+
+
+def _move_media(host, x: float, y: float) -> None:
+    from rendering.quick.widgets.host import OverlayWidgetGeometry
+
+    moved = OverlayWidgetGeometry(x, y, 500.0, 220.0)
+    host.presenter.media_rect = moved
+    if host.presenter.observer is not None:
+        host.presenter.observer("media", moved)
+
+
+def _undock(monkeypatch) -> None:
+    """Declare the Visualizer undocked (the policy is a removable descriptor value)."""
+
+    from dataclasses import replace
+
+    import rendering.visualizer_placement as placement
+    from rendering.widget_descriptors import get_widget_runtime_descriptor
+
+    undocked = replace(get_widget_runtime_descriptor("spotify_visualizer"), docked_to="none")
+    monkeypatch.setattr(
+        placement, "get_widget_runtime_descriptor",
+        lambda widget_id: undocked if widget_id == "spotify_visualizer" else get_widget_runtime_descriptor(widget_id),
+    )
+
+
+def test_the_docking_policy_is_declared_on_the_layout_descriptor() -> None:
+    from rendering.visualizer_placement import DOCKING_TARGETS, declared_visualizer_docked_to
+    from rendering.widget_descriptors import get_widget_runtime_descriptors
+
+    declared = {d.widget_id: d.docked_to for d in get_widget_runtime_descriptors()}
+    assert declared["spotify_visualizer"] == "media" == declared_visualizer_docked_to()
+    assert set(declared.values()) <= DOCKING_TARGETS
+    assert {widget_id for widget_id, target in declared.items() if target != "none"} == {"spotify_visualizer"}
+
+
+def test_moving_media_moves_a_docked_visualizer() -> None:
+    binding, host, owner = _docking_binding()
+    assert binding.install_authored_layout(host, owner, install_observer=True) is True
+    assert host.presenter.observer is not None
+    docked_at = owner.origin
+    assert docked_at[1] > 40.0 + 220.0  # beside (below) Media
+    assert [obstacle.key for obstacle in host.presenter.obstacles] == ["media", "spotify_visualizer"]
+
+    _move_media(host, 900.0, 300.0)
+    assert owner.origin != docked_at
+    assert owner.origin[0] == 900.0  # follows Media
+
+
+def test_moving_media_leaves_an_undocked_visualizer_in_place(monkeypatch) -> None:
+    _undock(monkeypatch)
+    binding, host, owner = _docking_binding()
+    assert binding.install_authored_layout(host, owner, install_observer=True) is True
+    assert host.presenter.observer is None  # nothing follows Media
+    resting = owner.origin
+    # Undocked: Media's plain authored slot (Top Left), not beside Media's card.
+    plain = binding.resolve_placement(host, owner, authored_layout_enabled=False)
+    assert resting == (plain.x, plain.y)
+    # Still an ordinary card: it reserves its own box, with no fixed Media.
+    assert [obstacle.key for obstacle in host.presenter.obstacles] == ["spotify_visualizer"]
+
+    _move_media(host, 900.0, 300.0)
+    assert binding.install_authored_layout(host, owner, install_observer=False) is True
+    assert owner.origin == resting
+
+
+def test_global_custom_resolves_undocked_and_never_follows_media() -> None:
+    binding, host, owner = _docking_binding("Custom")
+    placement = binding.resolve_placement(host, owner)
+    assert (placement.authored, placement.docked_to) == (False, "none")
+    assert binding.install_authored_layout(host, owner, install_observer=True) is False
+    assert host.presenter.observer is None and owner.origin is None
+    assert binding.project_base_authored_origin() is True
+    resting = owner.origin
+    _move_media(host, 900.0, 300.0)
+    assert binding.install_authored_layout(host, owner, install_observer=False) is False
+    assert owner.origin == resting
