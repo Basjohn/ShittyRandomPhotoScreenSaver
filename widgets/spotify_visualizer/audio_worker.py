@@ -27,6 +27,7 @@ from utils.audio_capture import (
     AudioCaptureConfig,
     create_audio_capture,
 )
+from core.authored_clock import authored_now
 
 
 logger = get_logger(__name__)
@@ -710,7 +711,7 @@ class SpotifyVisualizerAudioWorker(QObject):
             if samples is None or len(samples) == 0:
                 return
             callback_ts = time.monotonic()
-            capture_ts = time.time()
+            capture_ts = authored_now()
 
             if hasattr(samples, "ndim") and samples.ndim > 1:
                 arr = np_mod.asarray(samples, dtype=np_mod.float32)

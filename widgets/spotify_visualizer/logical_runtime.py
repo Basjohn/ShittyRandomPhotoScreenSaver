@@ -59,6 +59,11 @@ _DEFAULT_JOIN_TIMEOUT_S = 2.0
 # 0.0001 ms, and is monotonic on every platform SRPSS targets.
 _clock = time.perf_counter
 
+# The Visualizer's one authored clock (Architecture Checklist AC-12; ``core.authored_clock``): monotonic, read by every
+# logical step and by everything the step compares timestamps with. The deadline clock above stays separate on purpose:
+# it paces the thread and is never published.
+from core.authored_clock import authored_now, pinned_authored_clock  # noqa: E402  (re-exported)
+
 # Longest single sleep inside a wait. Bounded so `stop()` stays prompt without
 # busy-spinning: the thread really sleeps, it just re-checks the stop flag
 # between slices.
@@ -208,7 +213,7 @@ class LatestStateMailbox:
                 revision=self._revision,
                 generation=int(generation),
                 activation_id=int(activation_id),
-                produced_ts=float(now_ts if now_ts is not None else time.monotonic()),
+                produced_ts=float(now_ts if now_ts is not None else authored_now()),
             )
             # Only empty -> populated needs a GUI wake. If the GUI has not yet
             # drained the slot, newer states replace it and reuse the already

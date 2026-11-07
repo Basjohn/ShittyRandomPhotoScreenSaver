@@ -292,7 +292,7 @@ def test_bubble_discrete_edge_reaches_first_visible_state_on_next_lane_free_tick
         corner_radius=8.0,
     )
 
-    monkeypatch.setattr(tick_pipeline.time, "time", lambda: clock.now)
+    monkeypatch.setattr(__import__("core.authored_clock").authored_clock, "authored_clock_source", lambda: clock.now)
     monkeypatch.setattr(tick_pipeline, "consume_engine_bars", lambda owner, now: (True, True))
     monkeypatch.setattr(tick_pipeline, "record_tick_perf", lambda owner, now: None)
     monkeypatch.setattr(tick_pipeline, "dispatch_devcurve_field", lambda owner, now: None)
