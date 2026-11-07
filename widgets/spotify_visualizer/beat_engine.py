@@ -36,6 +36,7 @@ from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker
 from widgets.spotify_visualizer.energy_bands import EnergyBands, extract_energy_bands
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
 from widgets.spotify_visualizer.transient_bus import TransientEnergyBands, TransientEventScheduler
+from core.authored_clock import authored_now
 
 
 logger = get_logger(__name__)
@@ -635,7 +636,7 @@ class _SpotifyBeatEngine(QObject):
         """Set Spotify playback state for FFT processing gating."""
         was_playing = self._is_spotify_playing
         self._is_spotify_playing = bool(is_playing)
-        self._last_playback_state_ts = time.time()
+        self._last_playback_state_ts = authored_now()
         warm_resume = self._capture_keepalive_deadline > 0.0
         if self._is_spotify_playing:
             self._capture_keepalive_deadline = 0.0
@@ -650,7 +651,7 @@ class _SpotifyBeatEngine(QObject):
                 self._play_ramp_start_ts = 0.0
                 logger.debug("[SPOTIFY_VIS] Play resumed while capture stayed warm")
             else:
-                self._play_ramp_start_ts = time.time()
+                self._play_ramp_start_ts = authored_now()
                 logger.debug("[SPOTIFY_VIS] Play detected — starting %.1fs reactivity ramp-up", self._play_ramp_duration)
         elif (not self._is_spotify_playing) and was_playing:
             self._play_ramp_start_ts = 0.0
@@ -675,7 +676,7 @@ class _SpotifyBeatEngine(QObject):
         """Return 0.0→1.0 fade factor during AGC warmup after play detection."""
         if self._play_ramp_start_ts <= 0.0:
             return 1.0
-        elapsed = time.time() - self._play_ramp_start_ts
+        elapsed = authored_now() - self._play_ramp_start_ts
         if elapsed >= self._play_ramp_duration:
             self._play_ramp_start_ts = 0.0  # ramp complete
             return 1.0
@@ -685,7 +686,7 @@ class _SpotifyBeatEngine(QObject):
 
     def _apply_smoothing(self, target_bars: List[float]) -> List[float]:
         """Apply time-based exponential smoothing with anti-flicker (Solution 1+2)."""
-        now_ts = time.time()
+        now_ts = authored_now()
         smoothed, _reset, _energy = _smooth_analysis_bars(
             target_bars,
             self._smoothed_bars,
@@ -754,7 +755,7 @@ class _SpotifyBeatEngine(QObject):
             self._capture_keepalive_deadline = 0.0
             self._stop_worker()
             return
-        self._capture_keepalive_deadline = time.time() + grace
+        self._capture_keepalive_deadline = authored_now() + grace
         logger.debug(
             "[SPOTIFY_VIS] Keeping audio capture warm for %.1fs after playback pause",
             grace,
@@ -910,7 +911,7 @@ class _SpotifyBeatEngine(QObject):
         ):
             return None
 
-        now_ts = time.time()
+        now_ts = authored_now()
         if frame_trace is not None:
             frame_trace.record(
                 FrameTraceEvent.AUDIO_SMOOTH_BEGIN,
@@ -1140,7 +1141,7 @@ class _SpotifyBeatEngine(QObject):
             self._latest_generation_with_waveform = self._generation_id
         try:
             self._last_audio_ts = (
-                time.time() if audio_timestamp is None else float(audio_timestamp)
+                authored_now() if audio_timestamp is None else float(audio_timestamp)
             )
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
@@ -1282,7 +1283,7 @@ class _SpotifyBeatEngine(QObject):
     def tick(self) -> Optional[List[float]]:
         tm = self._thread_manager
 
-        now_ts = time.time()
+        now_ts = authored_now()
         self._expire_capture_keepalive_if_needed(now_ts)
         # While paused, visuals stay on the idle path even if the capture worker
         # is still inside its short warm-grace window.
@@ -1900,7 +1901,7 @@ class _SpotifyBeatEngine(QObject):
                     self._audio_worker.restart_capture()
             
             # Reset smoothing timestamp to prevent dt>2.0 jump
-            self._last_smooth_ts = time.time()
+            self._last_smooth_ts = authored_now()
             
             # Ensure worker is running
             self.ensure_started()

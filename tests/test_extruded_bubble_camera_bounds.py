@@ -163,7 +163,7 @@ def test_dolly_pan_during_held_flight_rebases_the_same_gesture_and_saved_offset(
     host = SimpleNamespace()
     apply_presentation_vis_mode_kwargs(host,defaults())
     set_framed_flight_rates(host,'extruded_bubble',0.,0.,0.,1.,0.)
-    with patch('time.time',return_value=.2):
+    with patch('core.authored_clock.authored_clock_source',return_value=.2):
         transform_visualizer_scene(host,'extruded_bubble',{
             'extruded_bubble_scene_scale':.5,'extruded_bubble_scene_pan_x':.3})
     flight = host._view_framed_flight_motion

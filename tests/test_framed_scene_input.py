@@ -278,7 +278,7 @@ def test_scene_gesture_settlement_does_not_stop_held_wasd(card, monkeypatch):
     from engine import display_manager
     from widgets.spotify_visualizer.view_orbit import view_orbit_values
     clock = [100.]
-    monkeypatch.setattr(display_manager.time, 'time', lambda: clock[0])
+    monkeypatch.setattr(__import__("core.authored_clock").authored_clock, "authored_clock_source", lambda: clock[0])
     QCoreApplication.sendEvent(card.window, QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_A, NONE))
     host = card.visualizer.controller.presentation_state
     assert host._view_orbit_motion is not None

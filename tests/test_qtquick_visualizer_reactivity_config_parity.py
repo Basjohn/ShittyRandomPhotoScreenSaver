@@ -438,7 +438,7 @@ def test_cold_play_ramp_is_one_second_but_warm_resume_stays_unramped(monkeypatch
 
     now = {"value": 100.0}
     monkeypatch.setattr(
-        "widgets.spotify_visualizer.beat_engine.time.time",
+        "core.authored_clock.authored_clock_source",
         lambda: now["value"],
     )
 

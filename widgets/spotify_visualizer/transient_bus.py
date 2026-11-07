@@ -24,11 +24,11 @@ from __future__ import annotations
 import itertools
 import logging
 import math
-import time
 from dataclasses import dataclass
 from typing import List
 
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
+from core.authored_clock import authored_now
 
 logger = get_logger(__name__)
 
@@ -275,7 +275,7 @@ class TransientBus:
         ``loudness`` is the frame's absolute level, before any normalisation of those
         energies; onsets carry it (see ``MusicalOnset``).
         """
-        now = time.time()
+        now = authored_now()
         elapsed = now - self._last_update_ts if self._last_update_ts else 0.0
         self._last_update_ts = now
         self._frame_count += 1
@@ -475,7 +475,7 @@ class TransientBus:
 
     def get_recent_onsets(self, max_age_s: float = 0.5) -> List[OnsetEvent]:
         """Return onset events from the ring buffer within max_age_s."""
-        now = time.time()
+        now = authored_now()
         cutoff = now - max_age_s
         results = []
         for evt in self._onset_ring:
@@ -490,7 +490,7 @@ class TransientBus:
 
     def get_kick_count(self, window_s: float = 0.3) -> int:
         """Count kick events in the last window_s seconds."""
-        now = time.time()
+        now = authored_now()
         cutoff = now - window_s
         count = 0
         for evt in self._onset_ring:
@@ -650,7 +650,7 @@ class TransientEventScheduler:
         Only events younger than *max_age_s* are considered.  Returns None
         if no qualifying event exists.
         """
-        now = time.time()
+        now = authored_now()
         cutoff = now - max_age_s
         best: "_ScheduledEvent | None" = None
 
@@ -677,7 +677,7 @@ class TransientEventScheduler:
 
         Only events younger than *max_age_s* are considered.
         """
-        now = time.time()
+        now = authored_now()
         cutoff = now - max_age_s
         best: "_ScheduledEvent | None" = None
 
@@ -699,7 +699,7 @@ class TransientEventScheduler:
 
     def has_recent(self, event_type: str, max_age_s: float = 0.2) -> bool:
         """Return True if any event of *event_type* exists within *max_age_s*."""
-        now = time.time()
+        now = authored_now()
         cutoff = now - max_age_s
         for entry in self._ring:
             if (
