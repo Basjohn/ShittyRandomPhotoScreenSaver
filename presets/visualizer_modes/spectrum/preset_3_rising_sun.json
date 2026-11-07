@@ -1,8 +1,8 @@
 {
-  "description": "Square navy bars with apricot edges, laid out as a city skyline: a low block, one tall tower and a long mid-rise.",
+  "description": "White bars over Japan's crimson sun: loud passages lift the bars far enough to reveal the sun at the centre.",
   "mode": "spectrum",
-  "name": "Preset 6 (Skyline)",
-  "preset_index": 5,
+  "name": "Preset 3 (Rising Sun)",
+  "preset_index": 2,
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
@@ -11,18 +11,18 @@
         "spectrum_agc_strength": 0.15,
         "spectrum_audio_block_size": 128,
         "spectrum_bar_border_color": [
-          246,
-          184,
-          130,
+          255,
+          255,
+          255,
           255
         ],
-        "spectrum_bar_border_opacity": 1.0,
-        "spectrum_bar_count": 44,
+        "spectrum_bar_border_opacity": 0.0,
+        "spectrum_bar_count": 37,
         "spectrum_bar_fill_color": [
-          44,
-          62,
-          104,
-          240
+          255,
+          255,
+          255,
+          255
         ],
         "spectrum_border_radius": 0.0,
         "spectrum_drop_speed": 0.72,
@@ -30,37 +30,37 @@
         "spectrum_dynamic_range_enabled": true,
         "spectrum_fill_gradient": false,
         "spectrum_fill_tip_color": [
-          90,
-          200,
           255,
-          230
-        ],
-        "spectrum_ghost_alpha": 0.35,
-        "spectrum_ghost_color": [
           255,
-          190,
-          90,
+          255,
           255
         ],
-        "spectrum_ghost_color_source": "Bar Colour",
+        "spectrum_ghost_alpha": 0.8,
+        "spectrum_ghost_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "spectrum_ghost_color_source": "Custom",
         "spectrum_ghost_decay": 0.18,
         "spectrum_ghost_gradient": false,
         "spectrum_ghost_tip_color": [
           255,
-          80,
-          200,
+          255,
+          255,
           255
         ],
-        "spectrum_ghosting_enabled": true,
-        "spectrum_gloss": 0.0,
+        "spectrum_ghosting_enabled": false,
+        "spectrum_gloss": 0.16,
         "spectrum_glow_color": [
-          246,
-          184,
-          130,
-          120
+          255,
+          255,
+          255,
+          220
         ],
-        "spectrum_glow_enabled": true,
-        "spectrum_glow_intensity": 0.12,
+        "spectrum_glow_enabled": false,
+        "spectrum_glow_intensity": 0.3,
         "spectrum_input_gain": 1.1,
         "spectrum_kick_lane_gain": 1.75,
         "spectrum_lane_strengths_linear": {
@@ -78,7 +78,7 @@
         },
         "spectrum_lane_transient_mix": 0.94,
         "spectrum_manual_floor": 0.42,
-        "spectrum_mirrored": false,
+        "spectrum_mirrored": true,
         "spectrum_notch_positions_linear": [
           [
             0.0,
@@ -119,8 +119,8 @@
             "Vocal"
           ]
         ],
-        "spectrum_pattern": "Off",
-        "spectrum_pattern_anchor": "Per Bar",
+        "spectrum_pattern": "Japan Flag",
+        "spectrum_pattern_anchor": "Shared",
         "spectrum_pattern_color": [
           255,
           255,
@@ -128,15 +128,15 @@
           110
         ],
         "spectrum_pattern_scale": 1.0,
-        "spectrum_pattern_strength": 0.6,
+        "spectrum_pattern_strength": 1.0,
         "spectrum_peak_cap_color": [
-          255,
-          255,
-          255,
+          188,
+          0,
+          45,
           255
         ],
         "spectrum_peak_cap_thickness": 2,
-        "spectrum_peak_caps": false,
+        "spectrum_peak_caps": true,
         "spectrum_profile_floor": 0.2,
         "spectrum_rainbow_border": false,
         "spectrum_rainbow_enabled": false,
@@ -148,23 +148,23 @@
         "spectrum_shape_nodes": [
           [
             0.0,
-            0.34
+            1.0
           ],
           [
-            0.26,
-            0.34
-          ],
-          [
-            0.33,
-            0.95
-          ],
-          [
-            0.52,
-            0.95
+            0.3,
+            0.98
           ],
           [
             0.6,
-            0.36
+            0.9
+          ],
+          [
+            0.85,
+            0.74
+          ],
+          [
+            1.0,
+            0.6
           ]
         ],
         "spectrum_transient_clamp": 1.85,
