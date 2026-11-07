@@ -1,9 +1,36 @@
-# R-55 — Spectrum Paint-Local Smoothing Created A Second Cadence
+# R-55 — Spectrum Visual Smoothing: A Paint-Local Second Cadence (Aug) And Dead Smoothing After A Cleanup (Nov)
 
-**STRONG RETENTION VALUE DOCUMENT**
+**STRONG RETENTION VALUE DOCUMENT. REPEAT BUG: Spectrum smoothing has broken twice, in opposite directions.**
 
-Date: 2026-08-02  
-Status: Resolved by exact revert
+Date: 2026-08-02 (first incident); 2026-11-06 (recurrence)
+Status: Fixed. The accepted method has stood since August. The November fix restored it, and the operator accepted
+it on 7 Nov 2026 ("very successful").
+
+## If Spectrum smoothing looks wrong again: check these first
+
+| Symptom | Likely cause | First check |
+| --- | --- | --- |
+| Smoothing On/strength changes nothing; bars look raw and jittery at every strength | The reset edge is stuck: `first_frame` stays true, so `SpectrumFrameRuntime.resolve` snaps to source on every tick (Nov 2026) | Replay one clip at off / 0.3 / 0.7 / 1.0. Byte-identical drawn bars mean the reset branch runs every tick. Then find who sets `_has_pushed_first_frame` (`widgets/spotify_visualizer/logical_frame_capture.py`, `capture_visualizer_logical_frame`) |
+| Smoothing makes motion *less* smooth or stepped; paints exceed state publications | A second presentation cadence: smoothing moved into paint/render, or it requests its own repaints (Aug 2026) | Compare paint and update counts with `set_state`/publication counts per 10 s; paint must not exceed publication |
+| Regular jerk every few ticks whatever the smoothing | Not smoothing: missing fresh audio (R-171, capture TripleBuffer) | `[AUDIO_LANE]` published/s against the tick rate, before touching any filter |
+
+The accepted shape (do not redesign it):
+- one symmetric, time-compensated one-pole filter;
+- mode-owned presentation state, advanced only on the existing authoritative logical tick;
+- the `2–14 ms` strength mapping;
+- snap to source at the first-frame, activation, generation, mode, pause/disable and teardown boundaries, and after
+  stalls of 100 ms or more;
+- it covers Spectrum, Extruded Spectrum, Shockwave Grid and the Spectrum Studio step.
+
+Regression bar: `tests/test_spectrum_visual_smoothing_seam.py` runs the production tick seam and compares strengths
+with each other, never with authored values. Its negative control re-creates the never-cleared flag.
+
+**Lessons for both incidents:**
+1. When a cleanup retires a writer, check every reader of the state it wrote. A reset-edge flag with no writer left
+   silently turns a filter into a pass-through.
+2. Stub hosts must not set state that production never sets. The November tests stayed green only because their
+   stubs set `_has_pushed_first_frame=True` by hand.
+3. More paints are never evidence of smoother motion.
 
 ## Commits
 
@@ -166,7 +193,14 @@ set `_has_pushed_first_frame=True` by hand, which production never did.
 before the fix, off, 0.3, 0.5, 0.7 and 1.0 were byte-identical. After: mean drawn-vs-source difference and jerk
 reduction grow monotonically with strength (anything_mixed2 jerk −9% / −17% / −23% / −30% at 0.3 / 0.5 / 0.7 / 1.0;
 added velocity lag ≈ +1.1 / +2.3 / +3.4 / +5.1 ms; kick peak retention 99 / 98 / 98 / 97%).
-Evidence: `.artifacts/evidence/spectrum_smoothing_20261106/` (worktree evidence).
+Evidence: `.artifacts/evidence/spectrum_smoothing_20261106/` in the main checkout (local and git-ignored; copied from
+the fix agent's worktree on 7 Nov). It holds:
+- before/after measurement JSON and text;
+- `summary_anything_mixed2.json` (before the fix, 0.7 was identical to off);
+- 0.5 s trace and kick strip PNGs;
+- realtime and quarter-speed before/after WebPs.
+
+Commits: `bb826a84` (fix), `c66c3278` (merge). The cleanup that removed the flag's only writer was `2cd939a0`.
 
 **Fix.** `capture_visualizer_logical_frame` ends the first-frame edge with the first captured frame (one attribute
 write per capture; no timer, thread or new state). The filter itself, its symmetric one-pole shape, its `2–14 ms`
@@ -176,3 +210,6 @@ never-cleared flag).
 
 **Physical check.** The restored effect is subtle at ~90 Hz (≤ half a tick of lag at 1.0). Whether the authored
 range is strong enough is the operator's call in a real session; widening it is a product choice, not part of this fix.
+
+**Accepted (operator, 7 Nov 2026):** "Spectrum's visual smoothing fix … was very successful." This fixed state is
+the reference if smoothing regresses again. Restore this behaviour rather than inventing a new filter.

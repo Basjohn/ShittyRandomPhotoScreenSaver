@@ -398,6 +398,14 @@ display presentation, and never in routine or milestone runs. Known on-screen te
 `tests/test_qtquick_runtime_reality.py` (two). Any other test that must show a window keeps it off screen
 (`tests/_invisible_windows.keep_off_screen`).
 
+**Modal popups never show in tests (7 Nov 2026).** If a test reaches a `StyledPopup.exec()` it hasn't patched, the
+popup is not shown. It is answered as dismissed, and the test fails at teardown with the popup's title and message.
+Unguarded, it would put a modal dialog on the operator's screen and block the run: a Studio that failed to open
+under the GL-less `offscreen` platform hung its test in the error popup. A test that expects a popup patches
+`StyledPopup.exec` and answers it. Both guards install when their module is first imported, including a lazy import
+inside production code (`tests/test_conftest_guards.py`). Studio tests need GL: never run them with
+`QT_QPA_PLATFORM=offscreen`.
+
 ### 3.1 Maintained product gate
 
 ```powershell

@@ -37,7 +37,7 @@ The September 10 Sphere acoustic-admission and cohort-motion incident merges fiv
 | [R-52 — ImageWorker Retained Every Shared-Memory Frame Until Process Exit](Historical_Bugs/R-52_ImageWorker_Shared_Memory_Retention.md) | Archived investigation | **STRONG** |
 | [R-53 — Retired Runtime Generations Survived Full Edit/Settings Recreation](Historical_Bugs/R-53_Runtime_Recreation_Ownership_And_Memory.md) | Archived investigation | **STRONG** |
 | [R-54 — Phase 5 Bubble Cadence Gate Delayed And Flattened Visible Reactions](Historical_Bugs/R-54_Bubble_Cadence_Gate.md) | Archived investigation | **STRONG** |
-| [R-55 — Spectrum Paint-Local Smoothing Created A Second Cadence](Historical_Bugs/R-55_Spectrum_Presentation_Smoothing.md) | Archived investigation | **STRONG** |
+| [R-55 — Spectrum visual smoothing (repeat bug): paint-local second cadence (Aug); dead smoothing, `first_frame` never cleared after a cleanup (Nov, fixed and accepted)](Historical_Bugs/R-55_Spectrum_Presentation_Smoothing.md) | Fixed / accepted 7 Nov 2026 | **STRONG** |
 | [R-56 — Settings Close Path Retouched An Already-Deleted Dialog Wrapper](Historical_Bugs/R-56_Settings_Dialog_Deleted_Wrapper_Retouch.md) | Archived investigation | Standard |
 | [R-57 — Scaled Prefetch Popped Selection Order Instead Of Descending Indices](Historical_Bugs/R-57_Image_Prefetch_Selected_Index_Order.md) | Archived investigation | **STRONG** |
 | [R-58 — Move To Custom Copied Stale Backing Values Instead Of The Curated Runtime State](Historical_Bugs/R-58_Visualizer_Move_To_Custom_Preset_Authority.md) | Archived investigation | Standard |
