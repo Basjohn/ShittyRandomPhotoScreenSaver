@@ -221,29 +221,6 @@ first needed. AC-01 (the Settings tab registry with profile gating, A-12 and A-1
 
 ## Tier 4: hygiene (batch when a nearby owner is open)
 
-- [ ] **AC-12 The Visualizer's authored clock becomes monotonic** (A-15). Severity low, reward medium, effort M.
-  **Confirmed:** `widgets/spotify_visualizer/tick_pipeline.py:1412` `now_ts = time.time()` drives every mode's step
-  and `beat_engine.py` uses `time.time()` at nine sites (smoothing, play ramp, keepalive), while deadlines use
-  `perf_counter` (`logical_runtime.py:53-60`) and `produced_ts` defaults to `time.monotonic()` (`:204`). A clock
-  step (time sync, manual change) injects a dt jump or a negative dt; only partial guards exist (`beat_engine.py:88`).
-  - **Fix:** the logical runtime exposes one monotonic authored clock (`perf_counter`); the tick and the engine's
-    smoothing/ramp/keepalive read it; recordings that store wall timestamps convert at their boundary.
-  - **Must stay true:** Bubble Temporal Fidelity (no retune; a monotonic clock changes nothing at steady state);
-    replay harnesses keep byte-identical output on recorded clips.
-  - **Regression bar:** a tick test patches `time.time` to jump −5 s and +60 s between ticks: every mode's published
-    frame stays finite and its simulation dt stays bounded; recorded-clip digests unchanged.
-  - **Depends on:** the Waveform logical tick cut (same files; land after it to avoid a merge fight).
-  - **Built 7 Nov (awaiting lead review):** `core/authored_clock.py` (`authored_now`, `pinned_authored_clock`;
-    re-exported by `logical_runtime`), `perf_counter`. Converted every visualizer-path `time.time()` (tick, beat
-    engine, onset bus, audio capture stamp, bar computation, Bubble diagnostics throttles, Quick owner and presentation
-    sync, view orbit, the display manager's view-motion stamps, the renderer's logical-age reads) and
-    `produced_ts`'s fallback. `deterministic_clock` pins it; recordings already store recorder-relative
-    `perf_counter` time, so nothing converts at their boundary. Wall time stays only in log epoch stamps
-    (`core/performance/visualizer_switch_abc_driver.py`, read by the offline scorer across files). Gates: 88 recorded
-    and fixture replays over all nine modes byte-identical to main; `tests/test_visualizer_authored_clock.py` (every
-    mode, a −5 s / +60 s wall jump, frames identical to the steady replay; fails on main for all nine; negative
-    control: a tick on the jumping clock sees a negative step).
-
 - [ ] **AC-13 ThreadManager and worker hygiene** (A-20 + A-22 + A-21 + unrelated defects 5 and 6). Severity low,
   reward low, effort S-M. **Confirmed:** `core/threading/manager.py:638-639` sizes COMPUTE at `cpu_count - 1` (23 on
   the operator's machine) against two real submitters and a two-lane cap; `_ui_diagnostics["delivered_by_generation"]`
