@@ -126,7 +126,8 @@ Active/Pending status.
 
 - no partial Settings/Edit reinitialization;
 - no nested `processEvents()` teardown loop;
-- no production/periodic `gc.collect()`;
+- no production/periodic `gc.collect()` (superseded narrowly by R-175, 7 Nov 2026: one collection per replacement,
+  after the barrier has completed, never before or inside it; the barrier still judges by reference counting alone);
 - no working-set/allocator trimming or process recycling;
 - no ignored manager owner or longer destruction timeout;
 - no widget-only fallback for committed Edit;

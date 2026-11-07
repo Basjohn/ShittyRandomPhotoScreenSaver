@@ -7,6 +7,10 @@ implemented. The former live task ("Settings-open lifecycle barrier timeout") is
 **7 Nov 2026:** the inconsistency below is gone: every display generation is frozen at its coordinated reveal and
 thawed at every teardown, and the first-retirement-only thaw sweep is removed (option A for every retirement;
 `core/performance/gc_policy.py`, `tests/test_gc_freeze_per_generation.py`).
+**Later on 7 Nov (R-175):** a collection was adopted, but not at teardown: once per replacement, after the barrier has
+completed (`collect_retired_generations`). Harm 1 below no longer applies there (the barrier has already judged by
+reference counting, and still fails closed); harms 2-4 were accepted against ~20 MB of uncollected retired cycles per
+Settings round trip.
 
 ## The failure being solved
 
