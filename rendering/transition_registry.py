@@ -1,8 +1,10 @@
 """Canonical transition descriptor registry.
 
-This module centralizes stable transition identity, UI labels, legacy aliases,
-GL warmup policy, and engine/runtime participation so transition additions do
-not have to update several unrelated lists by hand.
+This module centralizes stable transition identity, UI labels, legacy aliases
+and engine/runtime participation so transition additions do not have to update
+several unrelated lists by hand. Product names and internal spellings (Ripple's
+``raindrops`` program, 3D Block Spins' ``blockspin`` section) are listed in
+``Docs/Reference/Naming.md``.
 """
 from __future__ import annotations
 
@@ -10,17 +12,6 @@ from dataclasses import dataclass
 from typing import Iterable, Optional
 
 from core.animation.types import EasingCurve
-from rendering.gl_programs.keys import (
-    BLINDS,
-    BURN,
-    CROSSFADE,
-    CRUMBLE,
-    PARTICLE,
-    RAINDROPS,
-    SLIDE,
-    WARP,
-    WIPE,
-)
 
 
 @dataclass(frozen=True)
@@ -30,11 +21,6 @@ class TransitionDescriptor:
     setting_name: str
     stable_id: str
     easing_curve: EasingCurve
-    gl_program_key: Optional[str] = None
-    program_attr: Optional[str] = None
-    uniforms_attr: Optional[str] = None
-    compositor_transition_class: Optional[str] = None
-    startup_compile: bool = False
     include_in_cycle: bool = True
     requires_hw_accel: bool = False
     available: bool = True
@@ -54,10 +40,6 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
         setting_name="Ripple",
         stable_id="ripple",
         easing_curve=EasingCurve.LINEAR,
-        gl_program_key=RAINDROPS,
-        program_attr="raindrops_program",
-        uniforms_attr="raindrops_uniforms",
-        compositor_transition_class="GLCompositorRainDropsTransition",
         requires_hw_accel=True,
         random_pool_name="Ripple",
         legacy_names=("Rain Drops",),
@@ -66,17 +48,11 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
         setting_name="Wipe",
         stable_id="wipe",
         easing_curve=EasingCurve.QUAD_IN_OUT,
-        gl_program_key=WIPE,
-        program_attr="wipe_program",
-        uniforms_attr="wipe_uniforms",
-        compositor_transition_class="GLCompositorWipeTransition",
     ),
     TransitionDescriptor(
         setting_name="3D Block Spins",
         stable_id="block_spins",
         easing_curve=EasingCurve.LINEAR,
-        gl_program_key=WARP,
-        compositor_transition_class="GLCompositorBlockSpinTransition",
         requires_hw_accel=True,
         section_key="blockspin",
     ),
@@ -84,10 +60,6 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
         setting_name="Slide",
         stable_id="slide",
         easing_curve=EasingCurve.SINE_IN_OUT,
-        gl_program_key=SLIDE,
-        program_attr="slide_program",
-        uniforms_attr="slide_uniforms",
-        compositor_transition_class="GLCompositorSlideTransition",
     ),
     TransitionDescriptor(
         setting_name="Glass Shatter",
@@ -201,58 +173,35 @@ _TRANSITION_DESCRIPTORS: tuple[TransitionDescriptor, ...] = (
         setting_name="Crossfade",
         stable_id="crossfade",
         easing_curve=EasingCurve.QUAD_IN_OUT,
-        gl_program_key=CROSSFADE,
-        program_attr="crossfade_program",
-        uniforms_attr="crossfade_uniforms",
-        compositor_transition_class="GLCompositorCrossfadeTransition",
-        startup_compile=True,
     ),
     TransitionDescriptor(
         setting_name="Warp Dissolve",
         stable_id="warp_dissolve",
         easing_curve=EasingCurve.LINEAR,
-        gl_program_key=WARP,
-        program_attr="warp_program",
-        uniforms_attr="warp_uniforms",
-        compositor_transition_class="GLCompositorWarpTransition",
         requires_hw_accel=True,
     ),
     TransitionDescriptor(
         setting_name="Blinds",
         stable_id="blinds",
         easing_curve=EasingCurve.LINEAR,
-        gl_program_key=BLINDS,
-        program_attr="blinds_program",
-        uniforms_attr="blinds_uniforms",
-        compositor_transition_class="GLCompositorBlindsTransition",
         requires_hw_accel=True,
     ),
     TransitionDescriptor(
         setting_name="Crumble",
         stable_id="crumble",
         easing_curve=EasingCurve.LINEAR,
-        gl_program_key=CRUMBLE,
-        compositor_transition_class="GLCompositorCrumbleTransition",
         requires_hw_accel=True,
     ),
     TransitionDescriptor(
         setting_name="Particle",
         stable_id="particle",
         easing_curve=EasingCurve.LINEAR,
-        gl_program_key=PARTICLE,
-        program_attr="particle_program",
-        uniforms_attr="particle_uniforms",
-        compositor_transition_class="GLCompositorParticleTransition",
         requires_hw_accel=True,
     ),
     TransitionDescriptor(
         setting_name="Burn",
         stable_id="burn",
         easing_curve=EasingCurve.LINEAR,
-        gl_program_key=BURN,
-        program_attr="burn_program",
-        uniforms_attr="burn_uniforms",
-        compositor_transition_class="GLCompositorBurnTransition",
         requires_hw_accel=True,
     ),
 )
@@ -308,49 +257,11 @@ def get_hw_accel_transition_names() -> list[str]:
     return [item.setting_name for item in _TRANSITION_DESCRIPTORS if item.requires_hw_accel]
 
 
-def get_transition_program_specs(*, startup_only: bool | None = None) -> list[tuple[str, str, str]]:
-    specs: list[tuple[str, str, str]] = []
-    for item in _TRANSITION_DESCRIPTORS:
-        if item.gl_program_key is None or item.program_attr is None or item.uniforms_attr is None:
-            continue
-        if startup_only is True and not item.startup_compile:
-            continue
-        if startup_only is False and item.startup_compile:
-            continue
-        specs.append((item.gl_program_key, item.program_attr, item.uniforms_attr))
-    return specs
-
-
-def get_transition_program_map() -> dict[str, str]:
-    result: dict[str, str] = {}
-    for item in _TRANSITION_DESCRIPTORS:
-        if item.compositor_transition_class and item.gl_program_key:
-            result[item.compositor_transition_class] = item.gl_program_key
-    return result
-
-
-_RUNTIME_LABEL_TO_STABLE_ID = {
-    "crossfade": "crossfade",
-    "slide": "slide",
-    "wipe": "wipe",
-    "blinds": "blinds",
-    "crumble": "crumble",
-    "particle": "particle",
-    "burn": "burn",
-    "warp": "warp_dissolve",
-    "raindrops": "ripple",
-    "ripple": "ripple",
-    "blockspin": "block_spins",
-    "block_spin": "block_spins",
-}
-
-
 def get_transition_descriptor_for_runtime_identity(value: object) -> Optional[TransitionDescriptor]:
-    """Resolve a descriptor from runtime-facing transition identities.
+    """Resolve a descriptor from a runtime-facing transition identity.
 
-    Accepts canonical setting names, stable ids, compositor transition class
-    names, and the compositor's short internal runtime labels such as
-    ``warp`` or ``raindrops``.
+    Accepts the canonical setting name (the persisted label), the stable id and
+    the registered legacy labels; nothing else.
     """
     if not isinstance(value, str):
         return None
@@ -365,14 +276,6 @@ def get_transition_descriptor_for_runtime_identity(value: object) -> Optional[Tr
         return _BY_STABLE_ID[normalized]
     if normalized in _LEGACY_TO_SETTING:
         return _BY_SETTING_NAME.get(_LEGACY_TO_SETTING[normalized])
-
-    runtime_match = _RUNTIME_LABEL_TO_STABLE_ID.get(normalized.lower())
-    if runtime_match:
-        return _BY_STABLE_ID.get(runtime_match)
-
-    for item in _TRANSITION_DESCRIPTORS:
-        if item.compositor_transition_class == normalized:
-            return item
     return None
 
 
