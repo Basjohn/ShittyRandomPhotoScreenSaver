@@ -1,7 +1,7 @@
 """Expanded Visualizer M1: the mode capability and import dormancy (plan 01 §0.3, §0.4, §B2, Gate 1).
 
-The capability is descriptor metadata in ``core/settings/visualizer_mode_registry.py`` (default False; Extruded
-Bubble opts in). Every predicate resolves through ``resolve_expanded_display_capable``, which a disabled, gated,
+The capability is descriptor metadata in ``core/settings/visualizer_mode_registry.py`` (default False). The
+operator's set (7 Nov): every mode except Voxel Sphere and Extruded Spectrum opts in (one flag each). Every predicate resolves through ``resolve_expanded_display_capable``, which a disabled, gated,
 unknown or retired mode can never pass. The takeover reducer is a pure standard-library module that nothing on the
 common Quick path or any mode's runtime/renderer/Settings wiring imports (an AST scan over the project's import
 graph, plus a fresh-interpreter check).
@@ -28,14 +28,20 @@ from core.settings.visualizer_mode_registry import (
 
 REPO = Path(__file__).resolve().parents[1]
 REDUCER = "core.expanded_visualizer_takeover"
-FIRST_CAPABLE_MODE = "extruded_bubble"   # plan 01: the initial (and only) supported Visualizer
+COORDINATOR = "widgets.spotify_visualizer.expanded_display_coordinator"
+FIRST_CAPABLE_MODE = "extruded_bubble"   # plan 01: the initial supported Visualizer
+#: The operator's decision (7 Nov). Product capability, not authored content.
+CAPABLE_MODES = {"extruded_bubble", "spectrum", "oscilloscope", "devcurve", "bubble", "shockwave_grid",
+                 "waveform_ribbon"}
+NEVER_CAPABLE = {"sphere", "extruded_spectrum"}
 
 
-def test_capability_defaults_off_and_only_extruded_bubble_opts_in():
+def test_capability_defaults_off_and_only_the_operators_modes_opt_in():
     field = next(f for f in fields(VisualizerModeDescriptor) if f.name == "supports_expanded_display")
     assert field.default is False
-    capable = [d.mode_id for d in iter_all_visualizer_mode_descriptors() if d.supports_expanded_display]
-    assert capable == [FIRST_CAPABLE_MODE]
+    capable = {d.mode_id for d in iter_all_visualizer_mode_descriptors() if d.supports_expanded_display}
+    assert capable == CAPABLE_MODES
+    assert not capable & NEVER_CAPABLE
 
 
 @pytest.mark.parametrize("mode", VISUALIZER_MODE_IDS)
@@ -125,8 +131,11 @@ def _common_and_mode_roots() -> set[str]:
 
 def test_import_scan_no_common_quick_or_mode_path_reaches_the_reducer():
     """AST import graph (``tools/impacted_tests.ImportGraph``): which project modules import the reducer through any
-    chain of module-level (eager) imports, and through one lazy hop. Neither may include the common Quick path or any
-    mode's (capable or not) runtime, renderer, capture, logical hook or Settings builder."""
+    chain of module-level (eager) imports, and through one lazy hop. No eager chain may include the common Quick path
+    or any mode's (capable or not) runtime, renderer, capture, logical hook or Settings builder. Since M2 the one
+    production entry is the display manager's lazy construction of the takeover coordinator (beside the host
+    binding), so the lazy hop reaches only that manager and the modules that import it; never a scene, owner,
+    binding or mode module."""
     sys.path.insert(0, str(REPO))
     from tools.impacted_tests import ImportGraph
 
@@ -137,9 +146,13 @@ def test_import_scan_no_common_quick_or_mode_path_reaches_the_reducer():
     roots = {root for root in _common_and_mode_roots() if root in graph.files}
     assert len(roots) >= 12
     assert not eager & roots, sorted(eager & roots)
-    assert not one_lazy & roots, sorted(one_lazy & roots)
-    # M1 wires nothing: only tests reach it.
-    assert {m for m in one_lazy if not m.startswith("tests")} == {REDUCER}, sorted(one_lazy)
+    manager_chain = {"engine.display_manager", "engine.engine_handlers", "engine.screensaver_engine", "main"}
+    assert one_lazy & roots <= manager_chain, sorted(one_lazy & roots)
+    # Eagerly, only the coordinator (and tests) import the reducer; nothing in production imports the coordinator
+    # at module level.
+    assert {m for m in eager if not m.startswith("tests")} == {REDUCER, COORDINATOR}, sorted(eager)
+    coordinator_eager = set(graph.affected({COORDINATOR}, lazy_hops=0))
+    assert {m for m in coordinator_eager if not m.startswith("tests")} == {COORDINATOR}, sorted(coordinator_eager)
 
 
 def test_fresh_interpreter_common_quick_and_every_mode_leave_the_reducer_unloaded():
@@ -152,7 +165,7 @@ def test_fresh_interpreter_common_quick_and_every_mode_leave_the_reducer_unloade
         disable_per_call_gl_error_checking()  # the production order, before OpenGL.GL is first imported
         for name in {modules!r}:
             importlib.import_module(name)
-        print({REDUCER!r} in sys.modules)
+        print({REDUCER!r} in sys.modules or {COORDINATOR!r} in sys.modules)
         # The check is meaningful only for a module that exists and loads on demand without Qt or GL.
         before = {{m for m in sys.modules if m.startswith(("PySide6", "OpenGL"))}}
         importlib.import_module({REDUCER!r})

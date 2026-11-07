@@ -19,6 +19,8 @@ Vocabulary (plan 01 §D)::
 
 Rules this reducer enforces:
 
+* **Retirement.** Settings, a runtime reload or the Visualizer turning off (``OwnerRetired``), the owning display's
+  loss and shutdown retire the generation's state; the persisted intent is untouched.
 * **Fences.** Every event names the runtime generation; anything older than the state's generation, or any event
   for a retiring generation, is ``STALE`` and changes nothing. A newer generation is adopted only at its readiness
   edge (``GenerationReady``), which re-evaluates the persisted intent exactly once. Glyph presses must also name the
@@ -149,6 +151,17 @@ class ModeRequested:
 
 
 @dataclass(frozen=True, slots=True)
+class ModeCycleRequested:
+    """The double-click's "next mode" (operator, 7 Nov): ``candidates`` are the other enabled modes in cycle order
+    after the current one, wrapping, each with its resolved capability. While expanded the cycle skips incapable
+    modes and stays expanded; with no other capable mode it stays where it is. A collapsed view takes the next one."""
+
+    generation: int
+    request_id: int
+    candidates: tuple[tuple[str, bool], ...]
+
+
+@dataclass(frozen=True, slots=True)
 class ModeActivated:
     """The owner's canonical activation completed. Activation ids only increase within a generation."""
 
@@ -216,14 +229,23 @@ class SettingsOpened:
 
 
 @dataclass(frozen=True, slots=True)
+class OwnerRetired:
+    """The Visualizer owner of this generation retired for another reason (a runtime reload, the Visualizer turned
+    off, a failed construction): like Settings, the state dies with it and the intent persists."""
+
+    generation: int
+    reason: str = "owner"
+
+
+@dataclass(frozen=True, slots=True)
 class Shutdown:
     generation: int
 
 
 Event = (
     GenerationReady | GlyphPressed | EnterPrepared | EnterFailed | EnterCommitted | ExitCommitted | ModeRequested
-    | ModeActivated | ModeRejected | TransferRequested | TransferCommitted | TransferFailed | DisplayLost
-    | EditEntered | EditExited | EditResolutionDeclined | SettingsOpened | Shutdown
+    | ModeCycleRequested | ModeActivated | ModeRejected | TransferRequested | TransferCommitted | TransferFailed | DisplayLost
+    | EditEntered | EditExited | EditResolutionDeclined | SettingsOpened | OwnerRetired | Shutdown
 )
 
 
@@ -626,6 +648,25 @@ def _mode_requested(state: TakeoverState, event: ModeRequested) -> Step:
                 f"busy: {phase.value}")
 
 
+def _mode_cycle_requested(state: TakeoverState, event: ModeCycleRequested) -> Step:
+    phase = state.phase
+    candidates = tuple((str(mode), bool(capable)) for mode, capable in event.candidates)
+    if phase in (Phase.DORMANT, Phase.ORDINARY):
+        if not candidates:
+            reason = "no other enabled mode"
+            return Step(state, (RejectModeRequest(event.request_id, reason),), Outcome.REJECTED, reason)
+        return _applied(state, ForwardModeRequest(event.request_id, candidates[0][0], False))
+    if phase is Phase.EXPANDED:
+        # Skip enabled modes that cannot be expanded; stay expanded on the next capable one (operator, 7 Nov).
+        target = next((mode for mode, capable in candidates if capable), None)
+        if target is None:
+            reason = "no other enabled capable mode"
+            return Step(state, (RejectModeRequest(event.request_id, reason),), Outcome.REJECTED, reason)
+        return _applied(state, ForwardModeRequest(event.request_id, target, True))
+    reason = f"busy: {phase.value}"
+    return Step(state, (RejectModeRequest(event.request_id, reason),), Outcome.REJECTED, reason)
+
+
 def _mode_activated(state: TakeoverState, event: ModeActivated) -> Step:
     if state.activation is not None and event.activation <= state.activation:
         return _unchanged(state, Outcome.STALE, "activation not newer")
@@ -766,6 +807,10 @@ def _settings_opened(state: TakeoverState, event: SettingsOpened) -> Step:
     return _applied(replace(state, phase=Phase.RETIRING), RetireTakeover("settings"))
 
 
+def _owner_retired(state: TakeoverState, event: OwnerRetired) -> Step:
+    return _applied(replace(state, phase=Phase.RETIRING), RetireTakeover(str(event.reason) or "owner"))
+
+
 def _shutdown(state: TakeoverState, event: Shutdown) -> Step:
     return _applied(replace(state, phase=Phase.RETIRING, terminal=True), RetireTakeover("shutdown"))
 
@@ -777,6 +822,7 @@ _HANDLERS = {
     EnterCommitted: _enter_committed,
     ExitCommitted: _exit_committed,
     ModeRequested: _mode_requested,
+    ModeCycleRequested: _mode_cycle_requested,
     ModeActivated: _mode_activated,
     ModeRejected: _mode_rejected,
     TransferRequested: _transfer_requested,
@@ -787,6 +833,7 @@ _HANDLERS = {
     EditExited: _edit_exited,
     EditResolutionDeclined: _edit_resolution_declined,
     SettingsOpened: _settings_opened,
+    OwnerRetired: _owner_retired,
     Shutdown: _shutdown,
 }
 
@@ -795,7 +842,7 @@ __all__ = [
     "Action", "BeginEnter", "BeginExit", "BeginTransfer", "CancelEnter", "DisplayLost", "EditEntered",
     "EditExited", "EditResolutionDeclined", "EnterCommitted", "EnterFailed", "EnterPrepared", "Event",
     "ExitCommitted", "ExitReason", "ForwardModeRequest", "GenerationReady", "GlyphPressed", "HeldModeRequest",
-    "ModeActivated", "ModeRejected", "ModeRequested", "Origin", "Outcome", "PersistIntent", "Phase",
+    "ModeActivated", "ModeCycleRequested", "ModeRejected", "ModeRequested", "Origin", "Outcome", "OwnerRetired", "PersistIntent", "Phase",
     "RESTING_PHASES", "RejectModeRequest", "RejectTransfer", "RequestEditResolution", "RetireTakeover",
     "RollbackTransfer", "RunEnter", "SettingsOpened", "Shutdown", "Step", "TRANSACTION_PHASES", "TakeoverState",
     "TransferCommitted", "TransferFailed", "TransferRequested", "initial_state", "reduce",

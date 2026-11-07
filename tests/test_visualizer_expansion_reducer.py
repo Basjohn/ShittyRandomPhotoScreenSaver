@@ -18,7 +18,9 @@ import core.expanded_visualizer_takeover as tk
 from core.expanded_visualizer_takeover import (
     BeginEnter, BeginExit, BeginTransfer, CancelEnter, DisplayLost, EditEntered, EditExited,
     EditResolutionDeclined, EnterCommitted, EnterFailed, EnterPrepared, ExitCommitted, ForwardModeRequest,
-    GenerationReady, GlyphPressed, ModeActivated, ModeRejected, ModeRequested, Outcome, PersistIntent, Phase,
+    GenerationReady, GlyphPressed, ModeActivated, ModeCycleRequested, ModeRejected, ModeRequested, Outcome,
+    OwnerRetired, PersistIntent,
+    Phase,
     RejectModeRequest, RejectTransfer, RetireTakeover, RollbackTransfer, RunEnter,
     SettingsOpened, Shutdown, TransferCommitted, TransferFailed, TransferRequested, reduce,
 )
@@ -242,6 +244,25 @@ SCENARIOS: list[tuple[str, list[EventSpec], list[str]]] = [
      [*EXPAND_BY_USER, ModeRequested(GEN, 7, INCAPABLE, False), exited, ModeRejected(GEN, 7), prepared, committed],
      [*EXPANDED_TRACE, "applied exiting BeginExit[mode_incapable]", f"applied ordinary Forward[{INCAPABLE},plain]",
       "applied enter_pending BeginEnter[rollback,anim]", "applied entering RunEnter", "applied expanded"]),
+    ("a cycle while expanded skips incapable modes and stays expanded on the next capable one",
+     [*EXPAND_BY_USER, ModeCycleRequested(GEN, 7, ((INCAPABLE, False), ("incapable-2", False), ("capable-2", True))),
+      activated("capable-2", True, act=2)],
+     [*EXPANDED_TRACE, "applied expanded Forward[capable-2,keep]", "applied expanded"]),
+    ("a cycle while expanded wraps around to a capable mode before the current one",
+     [*EXPAND_BY_USER, ModeCycleRequested(GEN, 7, ((INCAPABLE, False), ("capable-0", True), ("incapable-2", False)))],
+     [*EXPANDED_TRACE, "applied expanded Forward[capable-0,keep]"]),
+    ("a cycle while expanded with no other capable mode stays on the current mode, expanded",
+     [*EXPAND_BY_USER, ModeCycleRequested(GEN, 7, ((INCAPABLE, False), ("incapable-2", False)))],
+     [*EXPANDED_TRACE, "rejected expanded RejectModeRequest"]),
+    ("an explicit incapable selection while expanded still collapses (Settings, context menu)",
+     [*EXPAND_BY_USER, ModeRequested(GEN, 7, INCAPABLE, False)],
+     [*EXPANDED_TRACE, "applied exiting BeginExit[mode_incapable]"]),
+    ("a cycle from an ordinary card takes the next enabled mode, capable or not",
+     [ready(), ModeCycleRequested(GEN, 7, ((INCAPABLE, False), ("capable-2", True)))],
+     ["applied ordinary", f"applied ordinary Forward[{INCAPABLE},plain]"]),
+    ("a cycle during a transition is refused",
+     [ready(), glyph(1, True), ModeCycleRequested(GEN, 7, (("capable-2", True),))],
+     ["applied ordinary", "applied enter_pending BeginEnter[user,anim]", "rejected enter_pending RejectModeRequest"]),
     ("an unrelated mode rejection has no takeover consequence",
      [ready(), ModeRejected(GEN, 99)], ["applied ordinary", "ignored ordinary"]),
     ("incapable -> capable never re-expands, even from a saved intent",
@@ -297,6 +318,10 @@ SCENARIOS: list[tuple[str, list[EventSpec], list[str]]] = [
     ("Settings retires the state, not the intent; the next generation restores it",
      [*EXPAND_BY_USER, SettingsOpened(GEN), glyph(2, False), ready(requested=True, gen=2)],
      [*EXPANDED_TRACE, "applied retiring Retire[settings]", "stale retiring",
+      "applied enter_pending BeginEnter[restore,still]"]),
+    ("a retired owner (runtime reload) retires the state, not the intent; the replacement restores it",
+     [*EXPAND_BY_USER, OwnerRetired(GEN, "reload"), glyph(2, False), ready(requested=True, gen=2)],
+     [*EXPANDED_TRACE, "applied retiring Retire[reload]", "stale retiring",
       "applied enter_pending BeginEnter[restore,still]"]),
     ("an older generation's readiness is stale",
      [ready(gen=3), ready(gen=2)], ["applied ordinary", "stale ordinary"]),
@@ -368,16 +393,20 @@ def _alphabet(s: tk.TakeoverState) -> list[tk.Event]:
         ModeRequested(g, 7, INCAPABLE, False), ModeRequested(g, 8, "capable-2", True),
         ModeActivated(g, act + 1, disp, INCAPABLE, False), ModeActivated(g, act + 1, disp, "capable-2", True),
         ModeRejected(g, 7),
+        ModeCycleRequested(g, 11, ((INCAPABLE, False), ("capable-2", True))),
+        ModeCycleRequested(g, 12, ((INCAPABLE, False),)), ModeCycleRequested(g, 13, ()),
         TransferRequested(g, act, 9, other, True), TransferRequested(g, act, 9, other, False),
         TransferCommitted(g, s.txn), TransferFailed(g, s.txn),
         DisplayLost(g, disp), DisplayLost(g, other),
         EditEntered(g), EditExited(g, False), EditResolutionDeclined(g), SettingsOpened(g), Shutdown(g),
+        OwnerRetired(g, "reload"), OwnerRetired(g - 1, "reload"),
     ]
 
 
-_NON_WRITERS = (GenerationReady, EnterPrepared, EnterFailed, ExitCommitted, ModeRequested, ModeActivated,
+_NON_WRITERS = (GenerationReady, EnterPrepared, EnterFailed, ExitCommitted, ModeRequested, ModeCycleRequested,
+                ModeActivated,
                 ModeRejected, TransferRequested, TransferCommitted, TransferFailed, DisplayLost, EditEntered,
-                EditExited, EditResolutionDeclined, SettingsOpened, Shutdown)
+                EditExited, EditResolutionDeclined, SettingsOpened, OwnerRetired, Shutdown)
 _BEGINS = (BeginEnter, BeginExit, BeginTransfer)
 
 
@@ -440,13 +469,21 @@ def _check(s0: tk.TakeoverState, event: tk.Event, step: tk.Step) -> None:
         assert not getattr(s1, "clear_intent_at_rest", False), ctx
     # Retirement only on the three retiring edges.
     if any(isinstance(a, RetireTakeover) for a in actions):
-        assert isinstance(event, (SettingsOpened, Shutdown, DisplayLost)) and s1.phase is Phase.RETIRING, ctx
+        assert isinstance(event, (SettingsOpened, OwnerRetired, Shutdown, DisplayLost)), ctx
+        assert s1.phase is Phase.RETIRING, ctx
     # Keep-expanded forwards only a capable target from EXPANDED; an incapable one is held until the collapse.
     for a in actions:
         if isinstance(a, ForwardModeRequest) and a.keep_expanded:
             assert s0.phase is Phase.EXPANDED and s1.phase is Phase.EXPANDED, ctx
     if isinstance(event, ModeRequested) and not event.mode_capable and s0.phase is Phase.EXPANDED:
         assert not [a for a in actions if isinstance(a, ForwardModeRequest)] and s1.phase is Phase.EXITING, ctx
+    # A cycle never collapses an expanded view and never forwards an incapable mode from it.
+    if isinstance(event, ModeCycleRequested) and s0.phase is Phase.EXPANDED and step.outcome is not Outcome.STALE:
+        assert s1 == s0, ctx
+        capable = {mode for mode, ok in event.candidates if ok}
+        for a in actions:
+            if isinstance(a, ForwardModeRequest):
+                assert a.keep_expanded and a.mode_id in capable, ctx
 
 
 _STARTS = {
