@@ -133,12 +133,13 @@ constants); all state integrates on the sole logical clock and the projection on
   floor clearance inside the view, that ribbon lifts as a whole, bounded, through two cascaded followers (quick up,
   slow down). Shape is never changed; per-knot trough limits were rejected as boxy. The floor is cleared with height,
   never by shrinking a reaction (operator, 6 Nov: "Better to have good reactivity than excessively avoid the floor").
-  **Top edge first, floor second** (lead review 6 Nov): the limit stays `TROUGH_LIFT_MAX` 1.5 (2 or 3 cleared the floor
-  but lifted crests out of the card's top), and with the card's top edge supplied (`core.waveform_ribbon_view.card_span`
-  returns it after the scene-axis span; `visible_top`) the lift never raises a crest (plus its sheet hang) within
-  `TOP_CLEARANCE` of it; a lift the top lowers eases down at `TROUGH_ATTACK`. Brief floor contact is accepted instead.
-  At 1282x1005 the top sits far above every crest, so the bound only acts on smaller cards. A swell-gain bound that kept
-  every trough clear was rejected: it cut peak kicks by up to a third. Gate: `tests/test_waveform_top_edge_first.py`.
+  **Floor first (operator 7 Nov; supersedes 6 Nov's top edge first):** `TROUGH_LIFT_MAX` 3 (the lift is a pure
+  offset, so a higher limit changes nothing but height); with the card's top edge supplied
+  (`core.waveform_ribbon_view.card_span`) the top may take back at most `TOP_GIVE_BACK` 1.5 of the lift the floor asks
+  for, and a lift the top lowers eases down at `TROUGH_ATTACK`. Floor Give keeps `FLOOR_GIVE_LIFT_MAX` 1.5 (its floor
+  yields); Static Height holds `STATIC_HEIGHT_LIFT` 1.5. At 1282x1005 the top sits far above every crest. A swell-gain
+  bound that kept every trough clear was rejected: it cut peak kicks by up to a third. Gate:
+  `tests/test_waveform_floor_first.py`.
 - **Dynamic Zoom** (opt-in, off by default): a sustained-level follower widens or narrows only the lens extents,
   frozen while the user operates the camera.
 
