@@ -121,17 +121,17 @@ Current contract: Normal is the default and is today's RGBA fill. A non-Normal s
 ### Settings collapsible-bucket contract
 
 Canonical defaults enumerate collapsible bucket identities, but persistence does **not** store one boolean per bucket.
-`ui.gmail_bucket_states`, `ui.widget_bucket_states`, `ui.visualizer_bucket_states` and
-`ui.visualizer_tech_bucket_states` are sparse mappings whose missing members mean closed. Opening a bucket synchronously closes checked peers in the same local accordion scope
+`ui.gmail_bucket_states`, `ui.widget_bucket_states` and `ui.visualizer_bucket_states` are sparse mappings whose
+missing members mean closed. Opening a bucket synchronously closes checked peers in the same local accordion scope
 before revealing the new body; no timer, polling loop, animation owner or second persistence coordinator is permitted.
 
 Scope follows actual layout ownership: ordinary Widget pages coordinate their peer buckets; nested Steam card buckets
 coordinate with sibling Layout/Appearance/Content buckets without collapsing their parent card; Feeds nests
 one level deeper (News/Custom group -> card -> leaf), one open bucket per level; Visualizer Custom
-buckets coordinate per mode even when lazy construction places some buckets in Normal and others in Advanced. Stable
-Visualizer Custom accessories use the same shared accordion contract. Technical's AGC/Transient leaf sections use the
-same per-mode accordion rule. The outer Visualizer `Advanced` and `Technical` disclosures are **parents**, not leaf
-buckets: they retain independent disclosure state so opening a child can never close the container required to reach it.
+buckets keep one remembered open leaf (every mode is edited in its Studio; the body builds none today). The outer
+Visualizer Advanced / Technical disclosures, their Technical AGC/Transient leaves and the page's Bar Appearance / Rainbow
+rows are retired (7 Nov, AC-23): canonical defaults no longer declare them and the projection drops a stored profile's
+old members once.
 Canonical defaults remain the identity/schema registry, so unknown bucket keys stay fail-loud even though persisted maps
 are sparse. Legacy full boolean maps normalize
 to one open winner per local scope and are rewritten sparsely on the next bucket interaction, not during Settings startup.

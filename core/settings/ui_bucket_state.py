@@ -207,60 +207,33 @@ def _widget_bucket_depth(key: str, canonical: Iterable[str]) -> int:
     return depth
 
 
+# Retired disclosure schemas (7 Nov, AC-23): the outer Visualizer Advanced / Technical disclosures and the Technical
+# AGC/Transient leaves have no live builder (every mode is edited in its Studio). Canonical defaults no longer declare
+# them; a stored profile's old members are accepted at input and dropped by the projection below, once.
+RETIRED_VISUALIZER_DISCLOSURE_KEYS = (
+    "ui.visualizer_adv_states", "ui.visualizer_tech_states", "ui.visualizer_tech_bucket_states",
+)
+
+
 def normalize_active_visualizer_leaf_path(
-    custom_keys: Iterable[str], technical_keys: Iterable[str],
-    custom_raw: object, technical_raw: object, active_mode: str | None,
-) -> tuple[dict[str, bool], dict[str, bool]]:
-    """Only one active-mode Custom/Technical leaf survives legacy persistence."""
+    custom_keys: Iterable[str], custom_raw: object, active_mode: str | None,
+) -> dict[str, bool]:
+    """Only the active mode's one remembered Custom leaf survives legacy persistence."""
     custom = dict.fromkeys(tuple(str(k) for k in custom_keys), False)
-    technical = dict.fromkeys(tuple(str(k) for k in technical_keys), False)
-    if active_mode:
+    if active_mode and isinstance(custom_raw, Mapping):
         winner = None
-        for raw, state in ((custom_raw, custom), (technical_raw, technical)):
-            if isinstance(raw, Mapping):
-                for raw_key, value in raw.items():
-                    key = str(raw_key)
-                    if key in state and key.partition(":")[0] == active_mode and bool(value):
-                        winner = key
+        for raw_key, value in custom_raw.items():
+            key = str(raw_key)
+            if key in custom and key.partition(":")[0] == active_mode and bool(value):
+                winner = key
         if winner is not None:
-            (custom if winner in custom else technical)[winner] = True
-    return custom, technical
+            custom[winner] = True
+    return custom
 
 
 # One active editing context is retained across the entire Settings dialog.
 # Existing maps remain the canonical per-control schemas; this function only
 # projects their saved *open* values to the selected tab/pill at navigation.
-def visualizer_bucket_is_advanced(key: str) -> bool:
-    """Read a Custom leaf's parent from its existing mode declaration."""
-    from core.settings.visualizer_mode_settings import mode_settings
-    mode, _, bucket = key.partition(":")
-    spec = mode_settings(mode)
-    return spec is not None and any(entry.key == bucket and entry.advanced for entry in spec.buckets)
-
-
-def normalize_visualizer_disclosure_path(
-    custom: Mapping[str, bool], technical: Mapping[str, bool],
-    advanced: Mapping[str, bool], tech_roots: Mapping[str, bool],
-) -> tuple[dict[str, bool], dict[str, bool]]:
-    """Preserve required ancestors: Technical is a child of Advanced."""
-    advanced = dict(advanced)
-    tech_roots = dict(tech_roots)
-    for mode in advanced:
-        custom_leaf = next((key for key, opened in custom.items()
-                            if opened and key.partition(":")[0] == mode), None)
-        technical_leaf = any(opened and key.partition(":")[0] == mode
-                             for key, opened in technical.items())
-        if technical_leaf:
-            tech_roots[mode] = True
-            advanced[mode] = True
-        elif custom_leaf is not None:
-            tech_roots[mode] = False
-            advanced[mode] = visualizer_bucket_is_advanced(custom_leaf)
-        elif tech_roots.get(mode):
-            advanced[mode] = True
-    return advanced, tech_roots
-
-
 def project_settings_bucket_context(settings, tab: str, pill: str | None = None) -> None:
     from core.settings.defaults import get_default_settings
 
@@ -272,11 +245,9 @@ def project_settings_bucket_context(settings, tab: str, pill: str | None = None)
         settings.get("ui.widget_bucket_states"),
         pill if tab == "widgets" else None,
     )
-    custom, technical = normalize_active_visualizer_leaf_path(
+    custom = normalize_active_visualizer_leaf_path(
         canonical["visualizer_bucket_states"],
-        canonical["visualizer_tech_bucket_states"],
         settings.get("ui.visualizer_bucket_states"),
-        settings.get("ui.visualizer_tech_bucket_states"),
         pill if tab == "visualizers" else None,
     )
     requested = {
@@ -289,22 +260,7 @@ def project_settings_bucket_context(settings, tab: str, pill: str | None = None)
             )
         ),
         "ui.visualizer_bucket_states": sparse_open_bucket_states(custom),
-        "ui.visualizer_tech_bucket_states": sparse_open_bucket_states(technical),
     }
-    for leaf in ("visualizer_adv_states", "visualizer_tech_states"):
-        raw = settings.get("ui." + leaf)
-        requested["ui." + leaf] = {
-            str(key): True for key, expanded in (raw.items() if isinstance(raw, Mapping) else ())
-            if tab == "visualizers" and str(key) == pill and bool(expanded)
-            and key in canonical[leaf]
-        }
-    advanced, tech_roots = normalize_visualizer_disclosure_path(
-        custom, technical,
-        {key: bool(requested["ui.visualizer_adv_states"].get(key)) for key in canonical["visualizer_adv_states"]},
-        {key: bool(requested["ui.visualizer_tech_states"].get(key)) for key in canonical["visualizer_tech_states"]},
-    )
-    requested["ui.visualizer_adv_states"] = sparse_open_bucket_states(advanced)
-    requested["ui.visualizer_tech_states"] = sparse_open_bucket_states(tech_roots)
     raw_simple = settings.get("ui.basic_bucket_path")
     if tab == "sources" and raw_simple in ("sources:folders", "sources:feeds"):
         basic = raw_simple
@@ -326,6 +282,11 @@ def project_settings_bucket_context(settings, tab: str, pill: str | None = None)
         elif raw == value:
             continue
         settings.set(name, value, emit_change=False)
+    # A retired schema's stored members are accepted and dropped here, once (the second projection is a no-op).
+    remove = getattr(settings, "remove", None)
+    for name in RETIRED_VISUALIZER_DISCLOSURE_KEYS:
+        if callable(remove) and settings.get(name) is not None:
+            remove(name)
 
 
 def retire_settings_bucket_context(settings) -> None:

@@ -22,7 +22,6 @@ from core.settings.ui_bucket_state import (
     visualizer_bucket_scope,
     widget_bucket_scope,
 )
-from core.settings.visualizer_mode_registry import iter_all_visualizer_mode_descriptors
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -46,22 +45,9 @@ def test_visualizer_ui_state_defaults_cover_all_registered_settings_surfaces() -
     bucket cannot turn a lazy page selection into a runtime KeyError.
     """
     ui = DEFAULT_SETTINGS["ui"]
-    descriptors = iter_all_visualizer_mode_descriptors()
-
-    mode_ids = {descriptor.mode_id for descriptor in descriptors}
-    assert mode_ids <= set(ui["visualizer_adv_states"])
-
-    technical_modes = {
-        descriptor.mode_id
-        for descriptor in descriptors
-        if descriptor.technical_controls
-    }
-    assert technical_modes <= set(ui["visualizer_tech_states"])
-    assert {
-        f"{mode}:{bucket}"
-        for mode in technical_modes
-        for bucket in ("agc", "transient")
-    } <= set(ui["visualizer_tech_bucket_states"])
+    # The outer Advanced / Technical disclosures and the Technical leaves are retired (AC-23): no mode builds them.
+    for retired in ("visualizer_adv_states", "visualizer_tech_states", "visualizer_tech_bucket_states"):
+        assert retired not in ui
 
     # Builder bucket identities are static authored schema. Extract them from
     # the lazy builder source without importing QWidget/PySide code.
@@ -92,10 +78,7 @@ def test_fresh_settings_collapsible_state_is_all_closed() -> None:
     for state_map_name in (
         "gmail_bucket_states",
         "widget_bucket_states",
-        "visualizer_adv_states",
         "visualizer_bucket_states",
-        "visualizer_tech_states",
-        "visualizer_tech_bucket_states",
     ):
         states = ui[state_map_name]
         assert states
@@ -112,7 +95,6 @@ def test_runtime_store_default_projection_omits_sparse_bucket_maps() -> None:
         "gmail_bucket_states",
         "widget_bucket_states",
         "visualizer_bucket_states",
-        "visualizer_tech_bucket_states",
     )
     for state_map_name in sparse_maps:
         assert state_map_name in canonical_ui
@@ -156,17 +138,20 @@ def test_full_map_bucket_profile_projects_to_current_sparse_state_idempotently()
     widgets_second = normalize_active_widget_bucket_path(widget_keys, widget_sparse, "steam")
     assert sparse_open_bucket_states(widgets_second) == widget_sparse
 
+    # The fixture's retired Technical leaf map is accepted at input and contributes nothing: only canonical Custom
+    # leaves survive, and the result is a fixed point.
     custom_keys = tuple(DEFAULT_SETTINGS["ui"]["visualizer_bucket_states"])
-    tech_keys = tuple(DEFAULT_SETTINGS["ui"]["visualizer_tech_bucket_states"])
-    combined_keys = custom_keys + tech_keys
     combined_raw = dict(ui["visualizer_bucket_states"])
     combined_raw.update(ui["visualizer_tech_bucket_states"])
     combined = normalize_single_open_bucket_states(
-        combined_keys,
+        custom_keys,
         combined_raw,
         scope_for_key=visualizer_bucket_scope,
     )
-    assert sparse_open_bucket_states(combined) == {"spectrum:agc": True}
+    assert not any(key.endswith((":agc", ":transient")) for key in sparse_open_bucket_states(combined))
+    again = normalize_single_open_bucket_states(
+        custom_keys, sparse_open_bucket_states(combined), scope_for_key=visualizer_bucket_scope)
+    assert sparse_open_bucket_states(again) == sparse_open_bucket_states(combined)
 
 
 def test_legacy_full_widget_map_normalizes_to_one_open_per_local_scope() -> None:
@@ -249,34 +234,14 @@ def test_flat_and_visualizer_scopes_replace_previous_open_bucket() -> None:
         "bubble:appearance": True,
     }
     # The real persisted projection additionally excludes inactive modes.
-    custom, technical = normalize_active_visualizer_leaf_path(
-        visualizer, {}, visualizer, {}, "bubble"
-    )
+    custom = normalize_active_visualizer_leaf_path(visualizer, visualizer, "bubble")
     assert sparse_open_bucket_states(custom) == {"bubble:appearance": True}
-    assert sparse_open_bucket_states(technical) == {}
 
 
-def test_shared_rainbow_and_bar_appearance_are_real_bucket_schema() -> None:
+def test_shared_rainbow_and_bar_appearance_have_no_disclosure_schema() -> None:
+    """The page-level families are spec entries held in a value cache (AC-21): no bucket is built for them."""
     keys = set(DEFAULT_SETTINGS["ui"]["visualizer_bucket_states"])
-    descriptors = iter_all_visualizer_mode_descriptors()
-    for descriptor in descriptors:
-        rainbow_key = f"{descriptor.mode_id}:rainbow"
-        if descriptor.rainbow_controls:
-            assert rainbow_key in keys
-        else:
-            assert rainbow_key not in keys
-
-    assert "spectrum:bar_appearance" in keys
-    assert "extruded_spectrum:bar_appearance" in keys
-    assert "bubble:bar_appearance" not in keys
-    assert "sphere:bar_appearance" not in keys
-
-    source = (ROOT / "ui" / "tabs" / "visualizers_tab.py").read_text(encoding="utf-8")
-    assert 'bucket_key="bar_appearance"' in source
-    assert 'title="Bar Appearance"' in source
-    assert 'bucket_key="rainbow"' in source
-    assert 'title="Rainbow"' in source
-
+    assert not any(key.endswith((":rainbow", ":bar_appearance")) for key in keys)
 
 
 def test_structured_default_merge_does_not_materialize_sparse_bucket_maps() -> None:
@@ -285,7 +250,6 @@ def test_structured_default_merge_does_not_materialize_sparse_bucket_maps() -> N
         "widget_bucket_states": {"media:appearance": False, "media:controls": False},
         "gmail_bucket_states": {"layout": False, "appearance": False},
         "visualizer_bucket_states": {"spectrum:shape": False},
-        "visualizer_tech_bucket_states": {"spectrum:agc": False},
         "other_nested": {"enabled": True},
     }
 
@@ -306,13 +270,11 @@ def test_structured_default_merge_does_not_materialize_sparse_bucket_maps() -> N
     assert merged["other_nested"] == {"enabled": True}
     assert "gmail_bucket_states" not in merged
     assert "visualizer_bucket_states" not in merged
-    assert "visualizer_tech_bucket_states" not in merged
 
     assert SPARSE_STRUCTURED_MAPPING_PATHS == frozenset(
         {
             ("ui", "gmail_bucket_states"),
             ("ui", "visualizer_bucket_states"),
-            ("ui", "visualizer_tech_bucket_states"),
             ("ui", "widget_bucket_states"),
         }
     )
@@ -327,47 +289,6 @@ def test_shared_bucket_helper_closes_peers_synchronously_without_timer() -> None
     assert "peer.setChecked(False)" in accordion_source
     assert "apply_peer(False)" in accordion_source
     assert "QTimer" not in accordion_source
-
-
-def test_visualizer_technical_leaf_sections_use_real_sparse_buckets() -> None:
-    canonical = DEFAULT_SETTINGS["ui"]["visualizer_tech_bucket_states"]
-    states = normalize_single_open_bucket_states(
-        canonical.keys(),
-        {"spectrum:agc": True, "spectrum:transient": True, "bubble:agc": True},
-        scope_for_key=visualizer_bucket_scope,
-    )
-    assert sparse_open_bucket_states(states) == {
-        "spectrum:transient": True,
-        "bubble:agc": True,
-    }
-    selected_custom, selected_tech = normalize_active_visualizer_leaf_path(
-        {}, canonical,
-        {}, {"spectrum:transient": True, "bubble:agc": True}, "bubble",
-    )
-    assert sparse_open_bucket_states(selected_custom) == {}
-    assert sparse_open_bucket_states(selected_tech) == {"bubble:agc": True}
-
-    # Custom and Technical are separate schema maps but one logical leaf accordion
-    # per mode. A legacy dual-open profile therefore normalizes to one winner.
-    custom = DEFAULT_SETTINGS["ui"]["visualizer_bucket_states"]
-    combined_keys = tuple(custom) + tuple(canonical)
-    combined_raw = {key: False for key in combined_keys}
-    combined_raw["spectrum:shape"] = True
-    combined_raw["spectrum:agc"] = True
-    combined = normalize_single_open_bucket_states(
-        combined_keys,
-        combined_raw,
-        scope_for_key=visualizer_bucket_scope,
-    )
-    assert combined["spectrum:shape"] is False
-    assert combined["spectrum:agc"] is True
-
-    context = (ROOT / "ui" / "tabs" / "visualizer_settings_context.py").read_text(
-        encoding="utf-8"
-    )
-    assert "def _normalize_visualizer_leaf_bucket_states(" in context
-    assert "def _set_visualizer_leaf_bucket_state(" in context
-    assert context.count("self._set_visualizer_leaf_bucket_state(") == 2
 
 
 def test_widget_bucket_finalization_has_one_shared_owner() -> None:

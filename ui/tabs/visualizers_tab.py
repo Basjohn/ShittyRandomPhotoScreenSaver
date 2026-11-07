@@ -570,7 +570,6 @@ class VisualizersTab(VisualizerSettingsContextMixin, QWidget):
     def _save_settings(self) -> None:
         if self._loading or self._writing_settings:
             return
-        self._auto_switch_preset_to_custom()
         self._save_coalesce_pending = True
         self._save_coalesce_token += 1
         token = self._save_coalesce_token

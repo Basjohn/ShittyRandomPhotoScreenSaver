@@ -15,7 +15,6 @@ from copy import deepcopy
 from typing import Any, Dict, Mapping
 
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
 from core.settings.defaults import get_default_settings
@@ -25,15 +24,12 @@ from core.settings.ui_bucket_state import (
     set_single_open_bucket_state,
     sparse_open_bucket_states,
     visualizer_bucket_scope,
-    visualizer_bucket_is_advanced,
-    normalize_visualizer_disclosure_path,
 )
 from core.settings.visualizer_mode_registry import (
     get_default_visualizer_mode_id,
     get_preset_slider_attr,
 )
 from core.settings.visualizer_presets import (
-    GLOBAL_ALLOWED_KEYS,
     MODE_KEY_PREFIXES,
     VISUALIZER_CUSTOM_STORAGE_KEY,
     apply_preset_to_config,
@@ -46,6 +42,7 @@ from core.settings.visualizer_presets import (
 )
 from core.settings.visualizer_settings_contract import strip_legacy_global_technical_keys
 from core.settings.visualizer_settings_snapshot import (
+    RETIRED_AUTHORED_TECH_SUFFIXES,
     normalize_visualizer_mode_payload,
     normalize_visualizer_section_mapping,
 )
@@ -57,33 +54,13 @@ from rendering.widget_descriptors import (
 logger = get_logger(__name__)
 
 DEFAULT_VISUALIZER_MODE = get_default_visualizer_mode_id()
-_DEPRECATED_VISUALIZER_EXPORT_SUFFIXES = ("energy_boost", "use_raw_energy")
-_VISUALIZER_ADVANCED_ROOT_ATTRS = {
-    "spectrum": ("_spectrum_advanced",),
-    "oscilloscope": ("_osc_advanced",),
-    "bubble": ("_bubble_advanced",),
-    "devcurve": ("_devcurve_normal", "_devcurve_advanced", "_devcurve_advanced_host"),
-    "sphere": ("_sphere_normal", "_sphere_advanced", "_sphere_advanced_host"),
-    "extruded_spectrum": ("_extruded_spectrum_advanced", "_extruded_spectrum_advanced_host"),
-    "shockwave_grid": ("_shockwave_grid_advanced", "_shockwave_grid_advanced_host"),
-    "extruded_bubble": ("_extruded_bubble_advanced", "_extruded_bubble_advanced_host"),
-    "waveform_ribbon": ("_waveform_ribbon_advanced", "_waveform_ribbon_advanced_host"),
-}
 
 
 class VisualizerSettingsContextMixin:
     """Shared QWidget-side owner contract for Visualizer Settings presentation."""
 
-    _ADV_STATE_KEY = "ui.visualizer_adv_states"
-    _TECH_STATE_KEY = "ui.visualizer_tech_states"
-    _TECH_BUCKET_STATE_KEY = "ui.visualizer_tech_bucket_states"
     _BUCKET_STATE_KEY = "ui.visualizer_bucket_states"
     _SCROLL_POS_KEY = "ui.visualizer_scroll_positions"
-
-    _RAINBOW_COLORS = [
-        "#FF0000", "#FF7F00", "#FFFF00", "#00FF00",
-        "#0000FF", "#4B0082", "#8F00FF",
-    ]
 
     def _initialize_visualizer_settings_context_state(self) -> None:
         """Initialize Visualizer Settings UI state from canonical profile defaults."""
@@ -92,29 +69,11 @@ class VisualizerSettingsContextMixin:
         if not isinstance(ui_defaults, Mapping):
             raise TypeError("Canonical defaults are missing the ui mapping")
         self._visualizer_ui_defaults = deepcopy(dict(ui_defaults))
-        self._visualizer_adv_state = self._load_adv_states()
-        self._visualizer_tech_state = self._load_tech_states()
-        self._visualizer_tech_bucket_state = self._load_tech_bucket_states()
         self._visualizer_bucket_state = self._load_bucket_states()
-        self._normalize_visualizer_leaf_bucket_states()
-        self._visualizer_adv_state, self._visualizer_tech_state = normalize_visualizer_disclosure_path(
-            self._visualizer_bucket_state, self._visualizer_tech_bucket_state,
-            self._visualizer_adv_state, self._visualizer_tech_state,
+        # One open leaf across every mode (the editing path's single context).
+        self._visualizer_bucket_state = normalize_single_open_bucket_states(
+            tuple(self._visualizer_bucket_state), self._visualizer_bucket_state, scope_for_key=lambda _key: "active",
         )
-
-    def _load_canonical_ui_state_mapping(
-        self,
-        setting_key: str,
-        default_leaf: str,
-    ) -> Dict[str, bool]:
-        canonical = self._visualizer_ui_defaults.get(default_leaf)
-        if not isinstance(canonical, Mapping):
-            raise KeyError(f"Canonical UI defaults are missing ui.{default_leaf}")
-        merged = {str(key): bool(value) for key, value in canonical.items()}
-        raw = self._settings.get(setting_key)
-        if isinstance(raw, Mapping):
-            merged.update({str(key): bool(value) for key, value in raw.items()})
-        return merged
 
     def _widget_default(self, section: str, key: str) -> Any:
         """Return one canonical Widget default and fail loudly if schema is incomplete."""
@@ -303,29 +262,6 @@ class VisualizerSettingsContextMixin:
 
         return spotify_vis_config, current_vis_mode, current_preset_index
 
-    def _load_adv_states(self) -> Dict[str, bool]:
-        """Load persisted advanced states over the canonical UI baseline."""
-        return self._load_canonical_ui_state_mapping(
-            self._ADV_STATE_KEY, "visualizer_adv_states"
-        )
-
-    def _load_tech_states(self) -> Dict[str, bool]:
-        """Load persisted Technical states over the canonical UI baseline."""
-        return self._load_canonical_ui_state_mapping(
-            self._TECH_STATE_KEY, "visualizer_tech_states"
-        )
-
-    def _load_tech_bucket_states(self) -> Dict[str, bool]:
-        """Load one remembered open Technical leaf bucket per Visualizer mode."""
-        canonical = self._visualizer_ui_defaults.get("visualizer_tech_bucket_states")
-        if not isinstance(canonical, Mapping):
-            raise KeyError("Canonical UI defaults are missing ui.visualizer_tech_bucket_states")
-        return normalize_single_open_bucket_states(
-            canonical.keys(),
-            self._settings.get(self._TECH_BUCKET_STATE_KEY),
-            scope_for_key=visualizer_bucket_scope,
-        )
-
     def _load_bucket_states(self) -> Dict[str, bool]:
         """Load one remembered open Custom bucket per Visualizer mode page."""
         canonical = self._visualizer_ui_defaults.get("visualizer_bucket_states")
@@ -337,150 +273,25 @@ class VisualizerSettingsContextMixin:
             scope_for_key=visualizer_bucket_scope,
         )
 
-    def _normalize_visualizer_leaf_bucket_states(self) -> None:
-        """Keep Custom and Technical leaf buckets to one open winner per mode.
-
-        The two persisted maps are retained as schema families, but their leaf
-        controls share one physical per-mode accordion. Legacy profiles may have
-        one remembered open key in each map; normalize that combined state in
-        memory without writing during Settings startup. Technical keys follow
-        Custom keys in the deterministic migration order, so a legacy Technical
-        winner wins if both families were simultaneously open.
-        """
-        custom = getattr(self, "_visualizer_bucket_state", None)
-        technical = getattr(self, "_visualizer_tech_bucket_state", None)
-        if not isinstance(custom, dict) or not isinstance(technical, dict):
-            raise RuntimeError("Visualizer leaf bucket state was not initialized")
-        combined_keys = tuple(custom) + tuple(technical)
-        combined = dict(custom)
-        combined.update(technical)
-        normalized = normalize_single_open_bucket_states(
-            combined_keys,
-            combined,
-            scope_for_key=lambda _key: "active",
-        )
-        for key in custom:
-            custom[key] = normalized[key]
-        for key in technical:
-            technical[key] = normalized[key]
-
-    def _set_visualizer_leaf_bucket_state(self, key: str, expanded: bool) -> None:
-        """Persist one open leaf bucket across Custom + Technical per mode."""
-        custom = getattr(self, "_visualizer_bucket_state", None)
-        technical = getattr(self, "_visualizer_tech_bucket_state", None)
-        if not isinstance(custom, dict) or not isinstance(technical, dict):
-            raise RuntimeError("Visualizer leaf bucket state was not initialized")
-
-        combined = dict(custom)
-        combined.update(technical)
-        # Across all modes, not one winner per dormant mode.
-        set_single_open_bucket_state(
-            combined, key, bool(expanded), scope_for_key=lambda _key: "active",
-        )
-        for candidate in custom:
-            custom[candidate] = combined[candidate]
-        for candidate in technical:
-            technical[candidate] = combined[candidate]
-
-        if expanded:
-            mode = key.partition(":")[0]
-            is_technical = key in technical
-            self._set_visualizer_disclosure_path(
-                mode, advanced=is_technical or visualizer_bucket_is_advanced(key),
-                technical=is_technical,
-            )
-
-        # These are two canonical persisted subtrees but one logical leaf scope.
-        # Write both sparse projections on interaction so legacy dual-open state
-        # cannot reappear after reload. No startup migration write is performed.
-        self._settings.set(self._BUCKET_STATE_KEY, sparse_open_bucket_states(custom))
-        self._settings.set(
-            self._TECH_BUCKET_STATE_KEY,
-            sparse_open_bucket_states(technical),
-        )
-
     def retire_bucket_context(self) -> None:
-        """Synchronously clear cached Qt bodies and all visualizer state families."""
+        """Synchronously clear cached Qt bodies and the remembered Custom leaf."""
         from ui.tabs import shared_styles
         shared_styles.collapse_settings_bucket_tree(self)
-        for state, path in (
-            (self._visualizer_adv_state, self._ADV_STATE_KEY),
-            (self._visualizer_tech_state, self._TECH_STATE_KEY),
-            (self._visualizer_bucket_state, self._BUCKET_STATE_KEY),
-            (self._visualizer_tech_bucket_state, self._TECH_BUCKET_STATE_KEY),
-        ):
-            if any(state.values()):
-                for key in state:
-                    state[key] = False
-                self._settings.set(path, {}, emit_change=False)
-
-    def _set_visualizer_disclosure_path(self, mode: str, *, advanced: bool, technical: bool) -> None:
-        from PySide6.QtWidgets import QToolButton
-        from ui.tabs import shared_styles
-        for states, path, opened in (
-            (self._visualizer_adv_state, self._ADV_STATE_KEY, advanced or technical),
-            (self._visualizer_tech_state, self._TECH_STATE_KEY, technical),
-        ):
-            for key in states:
-                states[key] = key == mode and opened
-            self._settings.set(path, sparse_open_bucket_states(states), emit_change=False)
-        for toggle in self.findChildren(QToolButton):
-            target_mode = getattr(toggle, "_srpss_outer_mode", None)
-            kind = getattr(toggle, "_srpss_outer_kind", None)
-            if target_mode is None or kind not in {"advanced", "technical"}:
-                continue
-            states = self._visualizer_adv_state if kind == "advanced" else self._visualizer_tech_state
-            target = bool(states.get(target_mode))
-            if toggle.isChecked() != target:
-                shared_styles.set_bucket_toggle_checked(toggle, target, coordinate=False)
-
-    def get_visualizer_adv_state(self, mode: str) -> bool:
-        """Return remembered expanded state for a canonical visualizer mode."""
-        return bool(self._visualizer_adv_state[mode])
-
-    def set_visualizer_adv_state(self, mode: str, expanded: bool) -> None:
-        """Select or retire the Advanced path, including its Technical child."""
-        for key in self._visualizer_bucket_state:
-            if expanded or (key.startswith(f"{mode}:") and visualizer_bucket_is_advanced(key)):
-                self._visualizer_bucket_state[key] = False
-        for key in self._visualizer_tech_bucket_state:
-            self._visualizer_tech_bucket_state[key] = False
-        self._settings.set(self._BUCKET_STATE_KEY, sparse_open_bucket_states(self._visualizer_bucket_state), emit_change=False)
-        self._settings.set(self._TECH_BUCKET_STATE_KEY, {}, emit_change=False)
-        self._set_visualizer_disclosure_path(mode, advanced=bool(expanded), technical=False)
-
-    def get_visualizer_tech_state(self, mode: str) -> bool:
-        """Return remembered outer Technical disclosure state for a visualizer mode."""
-        return bool(self._visualizer_tech_state[mode])
-
-    def set_visualizer_tech_state(self, mode: str, expanded: bool) -> None:
-        """Select Technical below Advanced; closing it retains its parent."""
-        for key in self._visualizer_tech_bucket_state:
-            self._visualizer_tech_bucket_state[key] = False
-        self._settings.set(self._TECH_BUCKET_STATE_KEY, {}, emit_change=False)
-        if expanded:
+        if any(self._visualizer_bucket_state.values()):
             for key in self._visualizer_bucket_state:
                 self._visualizer_bucket_state[key] = False
             self._settings.set(self._BUCKET_STATE_KEY, {}, emit_change=False)
-        self._set_visualizer_disclosure_path(
-            mode, advanced=expanded or self._visualizer_adv_state[mode], technical=bool(expanded),
-        )
-
-    def get_visualizer_tech_bucket_state(self, mode: str, bucket: str) -> bool:
-        """Return whether this is the remembered open Technical leaf bucket."""
-        return bool(self._visualizer_tech_bucket_state[f"{mode}:{bucket}"])
-
-    def set_visualizer_tech_bucket_state(self, mode: str, bucket: str, expanded: bool) -> None:
-        """Persist this Technical leaf in the mode-wide leaf accordion."""
-        self._set_visualizer_leaf_bucket_state(f"{mode}:{bucket}", bool(expanded))
 
     def get_visualizer_bucket_state(self, mode: str, bucket: str) -> bool:
         """Return whether this is the remembered open bucket for its mode page."""
         return bool(self._visualizer_bucket_state[f"{mode}:{bucket}"])
 
     def set_visualizer_bucket_state(self, mode: str, bucket: str, expanded: bool) -> None:
-        """Persist this Custom leaf in the mode-wide leaf accordion."""
-        self._set_visualizer_leaf_bucket_state(f"{mode}:{bucket}", bool(expanded))
+        """Persist this Custom leaf as the one open leaf across every mode."""
+        set_single_open_bucket_state(
+            self._visualizer_bucket_state, f"{mode}:{bucket}", bool(expanded), scope_for_key=lambda _key: "active",
+        )
+        self._settings.set(self._BUCKET_STATE_KEY, sparse_open_bucket_states(self._visualizer_bucket_state))
 
     def save_scroll_position(self, mode: str) -> None:
         """Save current scroll position for a visualizer mode."""
@@ -593,7 +404,7 @@ class VisualizerSettingsContextMixin:
                      mode_key, len(snapshot), list(snapshot.keys())[:10])
         prefixes = MODE_KEY_PREFIXES.get(mode_key, [])
         for prefix in prefixes:
-            for suffix in _DEPRECATED_VISUALIZER_EXPORT_SUFFIXES:
+            for suffix in RETIRED_AUTHORED_TECH_SUFFIXES:
                 snapshot.pop(f"{prefix}{suffix}", None)
         if not snapshot:
             return {}
@@ -619,29 +430,6 @@ class VisualizerSettingsContextMixin:
             payload["starting_view"] = validate_visualizer_starting_view(
                 mode_key, {key: normalized_live[key] for key in get_visualizer_view_pose_keys(mode_key)})
         return payload
-
-    @staticmethod
-    def _is_key_for_mode(key: str, prefixes: list[str]) -> bool:
-        if not prefixes:
-            return False
-        return any(key.startswith(prefix) for prefix in prefixes)
-
-    @staticmethod
-    def _is_global_visualizer_key(key: str) -> bool:
-        if key in GLOBAL_ALLOWED_KEYS:
-            return True
-        return key in {
-            'mode',
-            'enabled',
-            'visualizers_enabled',
-            'monitor',
-            'bar_count',
-            'ghosting_enabled',
-            'ghost_alpha',
-            'ghost_decay',
-            'rainbow_enabled',
-            'rainbow_speed',
-        }
 
     def _build_current_spotify_visualizer_config(
         self,
@@ -680,18 +468,6 @@ class VisualizerSettingsContextMixin:
 
         return config
 
-    def cycle_visualizer_preset(self, mode_key: str, direction: int) -> None:
-        """Cycle the preset slider for *mode_key* by *direction* (+1/-1)."""
-        if not direction:
-            return
-        slider = self._get_visualizer_preset_slider(mode_key)
-        if slider is None:
-            return
-        if direction > 0:
-            slider.cycle_next()
-        else:
-            slider.cycle_previous()
-
     def _get_active_visualizer_mode(self) -> str:
         """Return the Settings-active visualizer mode from canonical context state.
 
@@ -712,70 +488,10 @@ class VisualizerSettingsContextMixin:
             return None
         return getattr(self, slider_attr, None)
 
-    def _get_visualizer_advanced_roots(self, mode: str) -> list[QWidget]:
-        """Return advanced container roots for *mode*."""
-        roots: list[QWidget] = []
-        for attr in _VISUALIZER_ADVANCED_ROOT_ATTRS.get(mode, ()):
-            root = getattr(self, attr, None)
-            if isinstance(root, QWidget):
-                roots.append(root)
-        return roots
-
     @staticmethod
     def _resolve_visualizer_preset_index(mode: str, config: Mapping[str, Any] | None) -> int:
         """Resolve a mode preset index through the shared visualizer preset contract."""
         return resolve_preset_index_from_mapping(mode, config)
-
-    def _auto_switch_preset_to_custom(self) -> None:
-        """Auto-switch to Custom preset when a visualizer-specific setting changes.
-
-        Only fires when:
-        1. The change did NOT come from the preset slider itself.
-        2. We are not programmatically loading settings (_loading guard).
-        3. The sender widget is a descendant of the current mode's advanced
-           container (so clock/weather/etc. changes never trigger this).
-        4. The current preset is NOT already Custom.
-        """
-        if getattr(self, '_preset_slider_changing', False):
-            return
-        if getattr(self, '_loading', False):
-            return
-
-        # Identify the sender and the current mode's advanced container.
-        mode = self._get_active_visualizer_mode()
-        adv_roots = self._get_visualizer_advanced_roots(mode)
-        slider = self._get_visualizer_preset_slider(mode)
-        if not adv_roots or slider is None:
-            return
-
-        # If already on Custom, nothing to switch.
-        custom_index = slider.custom_index() if hasattr(slider, 'custom_index') else slider.preset_index()
-        if slider.preset_index() == custom_index:
-            return
-
-        # Check sender is inside the advanced container
-        try:
-            sender = self.sender()
-        except Exception:
-            sender = None
-
-        # Sender-less saves happen during preset application and other
-        # programmatic flows. They must never be treated as "advanced edit"
-        # signals or we will silently force curated presets back to Custom.
-        if sender is None:
-            return
-
-        w = sender
-        inside_adv = False
-        while w is not None:
-            if any(w is root for root in adv_roots):
-                inside_adv = True
-                break
-            w = w.parent()
-        if not inside_adv:
-            return
-
-        slider.set_preset_index(custom_index)
 
     def _force_visualizer_preset_to_custom(self, mode: str | None = None) -> None:
         """Switch the active visualizer preset to Custom without relying on sender ancestry."""
@@ -888,16 +604,6 @@ class VisualizerSettingsContextMixin:
                 self._loading = False
 
         self._save_settings()
-
-    def _active_visualizer_preset_is_custom(self) -> bool:
-        mode = self._get_active_visualizer_mode()
-        slider = self._get_visualizer_preset_slider(mode)
-        if slider is None:
-            return True
-        try:
-            return slider.preset_index() == slider.custom_index()
-        except Exception:
-            return True
 
     def _update_vis_mode_sections(self) -> None:
         """Show/hide per-mode settings containers based on selected visualizer type."""
