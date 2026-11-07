@@ -47,6 +47,11 @@ from collections import defaultdict
 from ctypes import wintypes as wt
 from pathlib import Path
 from typing import Any, Iterable
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 PAGE = 4096
 _USER_TOP = 0x7FFF_FFFF_0000
@@ -768,7 +773,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     p_snap = sub.add_parser("snapshot", help="one snapshot of a process")
     p_snap.add_argument("--pid", type=int, default=None, help="default: the running SRPSS main process")
-    p_snap.add_argument("--out", type=Path, default=None)
+    p_snap.add_argument("--out", type=artifact_paths.evidence_arg, default=None)
     p_diff = sub.add_parser("diff", help="compare two snapshots")
     p_diff.add_argument("a", type=Path)
     p_diff.add_argument("b", type=Path)
@@ -777,7 +782,7 @@ def main(argv: list[str] | None = None) -> int:
     p_cap.add_argument("--pid", type=int, default=None)
     p_cap.add_argument("--wait", action="store_true", help="wait for the SRPSS main process to start")
     p_cap.add_argument("--at", type=float, nargs="+", required=True, help="minutes after the process started")
-    p_cap.add_argument("--out-dir", type=Path, default=Path("logs") / "memory_map")
+    p_cap.add_argument("--out-dir", type=artifact_paths.evidence_arg, default=artifact_paths.default_evidence("memory", "memory_map"))
     p_cap.add_argument(
         "--trace", type=float, default=0.0,
         help="also record private commit and working set every N seconds (read from outside) to a CSV",

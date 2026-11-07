@@ -26,6 +26,11 @@ import math
 from pathlib import Path
 from statistics import median
 from unittest.mock import patch
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
 
 CANONICAL = (420.0, 280.0)
 SHAPES = {
@@ -267,7 +272,7 @@ def main() -> None:
     parser.add_argument("--recordings", type=Path, default=RECORDINGS, help="recordings directory")
     parser.add_argument("--seconds", type=float, default=30.0, help="replay at most this much of the clip")
     parser.add_argument("--preset", type=int, action="append", help="curated preset index (repeatable)")
-    parser.add_argument("--report", type=Path, help="write the full results as JSON")
+    parser.add_argument("--report", type=artifact_paths.evidence_arg, help="write the full results as JSON")
     args = parser.parse_args()
     QCoreApplication.instance() or QCoreApplication([])
     clip = load_clip(args.clip, fixture=args.fixture, seconds=args.seconds, recordings=args.recordings)

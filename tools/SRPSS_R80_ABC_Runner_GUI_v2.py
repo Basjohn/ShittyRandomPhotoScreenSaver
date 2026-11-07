@@ -52,7 +52,12 @@ def find_repo_root() -> Path:
 
 REPO = find_repo_root()
 LOGS = REPO / "logs"
-EVIDENCE = LOGS / "abc_evidence"
+if str(Path(__file__).resolve().parents[1]) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
+
+# Today's evidence folder (tools/artifact_paths.py); the app's own logs above are only read.
+EVIDENCE = artifact_paths.evidence_dir("performance", "visualizer_switch_abc", "r80")
 HARNESS = REPO / "tools" / "visualizer_switch_abc_harness.py"
 MAIN_MC = REPO / "main_mc.py"
 PERF_LOG = LOGS / "screensaver_perf.log"
@@ -108,7 +113,7 @@ class RunnerApp(tk.Tk):
             text=(
                 "Slot 1 • 4 contention workers • main_mc.py • --usage --viz --perf --life\n"
                 "Run A and B separately or use Run A → B. Results are copied into "
-                "logs\\abc_evidence and can be zipped with one click."
+                ".artifacts\\evidence\\performance\\visualizer_switch_abc and can be zipped with one click."
             ),
         ).pack(anchor="w", pady=(2, 10))
 

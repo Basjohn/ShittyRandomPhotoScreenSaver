@@ -13,7 +13,6 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -50,6 +49,11 @@ from media_key_matrix_harness import (  # noqa: E402
     _wait_for_optional_log_file,
     _wait_for_window,
 )
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 
 user32 = ctypes.windll.user32
@@ -289,11 +293,14 @@ def _capture_input_events(seconds: float, target_hwnd: int, phase: str) -> Dict[
     return {"keyboard_events": keyboard_events, "mouse_events": mouse_events}
 
 
+SCRATCH_OWNER = "media_key_reality_harness"   # profile copies; discarded on success
+
+
 def _make_appdata(args: argparse.Namespace, timestamp: str) -> tuple[Optional[Path], Dict[str, Any]]:
     appdata_root: Optional[Path] = None
     profile_status: Dict[str, Any] = {"mode": args.profile_mode}
     if args.profile_mode == "mirrored":
-        appdata_root = (Path(tempfile.gettempdir()) / f"srpss_media_reality_{timestamp}").resolve()
+        appdata_root = artifact_paths.run_scratch(SCRATCH_OWNER, f"profile_{timestamp}").resolve()
         profile_status = _mirror_live_profile(appdata_root)
         if not profile_status.get("copied"):
             raise RuntimeError(
@@ -306,7 +313,7 @@ def _make_appdata(args: argparse.Namespace, timestamp: str) -> tuple[Optional[Pa
             _apply_harness_safety_settings(appdata_root)
             profile_status["safe_click_guards"] = True
     elif args.profile_mode == "isolated":
-        appdata_root = (Path(tempfile.gettempdir()) / f"srpss_media_reality_{timestamp}").resolve()
+        appdata_root = artifact_paths.run_scratch(SCRATCH_OWNER, f"profile_{timestamp}").resolve()
         _seed_profile_settings(appdata_root, (ROOT / "images").resolve())
         if args.safe_click_guards:
             _apply_harness_safety_settings(appdata_root)
@@ -555,7 +562,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--observe-seconds", type=float, default=12.0)
     parser.add_argument("--launch-timeout-s", type=float, default=45.0)
-    parser.add_argument("--output-dir", default=str(ROOT / "logs" / "media_key_reality"))
+    parser.add_argument("--output-dir", type=artifact_paths.evidence_arg, default=artifact_paths.default_evidence("media", "media_key_reality"))
     parser.add_argument("--safe-click-guards", action="store_true", default=True)
     parser.add_argument("--no-safe-click-guards", dest="safe_click_guards", action="store_false")
     parser.add_argument("--refocus-before-observe", action="store_true", default=True)
@@ -566,6 +573,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     payload = run_reality_harness(build_parser().parse_args())
+    artifact_paths.discard_run_scratch(SCRATCH_OWNER)
     print("[REALITY] Completed MC reality capture")
     print(f"[REALITY] Report JSON: {Path(payload['output_dir']) / 'reality_report.json'}")
     print(f"[REALITY] Report MD:   {Path(payload['output_dir']) / 'reality_report.md'}")

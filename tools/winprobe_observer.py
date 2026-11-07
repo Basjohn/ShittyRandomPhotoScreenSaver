@@ -12,6 +12,11 @@ import json
 import time
 from pathlib import Path
 from typing import Any, Dict, List
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 
 user32 = ctypes.windll.user32
@@ -98,7 +103,7 @@ def _enum_visible_windows(*, include_all: bool, pid_filter: int) -> List[Dict[st
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out", required=True, help="Output JSON path")
+    parser.add_argument("--out", type=artifact_paths.evidence_arg, required=True, help="Output JSON path")
     parser.add_argument("--duration-s", type=float, default=8.0)
     parser.add_argument("--sample-ms", type=int, default=5)
     parser.add_argument("--include-all", action="store_true")

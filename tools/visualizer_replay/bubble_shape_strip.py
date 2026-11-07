@@ -11,7 +11,7 @@ Replays a recording through the production logical path at each committed extent
 
 Usage::
 
-    python -m tools.visualizer_replay.bubble_shape_strip --out-dir .artifacts/evidence/bubble/shape_invariance
+    python -m tools.visualizer_replay.bubble_shape_strip --out-dir .artifacts/evidence/visualizers/bubble/shape_invariance/<YYYYMMDD>_<label>
 """
 from __future__ import annotations
 
@@ -19,6 +19,12 @@ import argparse
 from pathlib import Path
 
 from .bubble_shape_invariance import CANONICAL, RECORDINGS, load_clip
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 SHAPES = {"baseline": CANONICAL, "tall": (280.0, 1200.0), "wide": (2400.0, 300.0)}
 
@@ -95,9 +101,10 @@ def main() -> None:
     parser.add_argument("--start", type=float, default=8.0, help="seconds into the clip")
     parser.add_argument("--step-frames", type=int, default=9, help="logical frames between rows")
     parser.add_argument("--rows", type=int, default=8)
-    parser.add_argument("--out-dir", type=Path, required=True)
+    parser.add_argument("--out-dir", type=artifact_paths.evidence_arg, required=True)
     parser.add_argument("--prefix", default="")
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "out_dir", "bubble_shape_strip")
     QGuiApplication.instance() or QGuiApplication([])
     clip = load_clip(args.clip, fixture=False, seconds=args.start + args.rows * args.step_frames / 90.0 + 1.0,
                      recordings=args.recordings)
@@ -147,3 +154,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    evidence_media.finish(0)

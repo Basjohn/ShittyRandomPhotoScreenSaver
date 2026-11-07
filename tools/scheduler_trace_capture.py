@@ -44,6 +44,11 @@ import subprocess
 import sys
 import time
 from typing import Callable, Iterable, Sequence
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[1]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from tools import artifact_paths  # noqa: E402
 
 TOOL_VERSION = 2
 DEFAULT_PROFILE = "GeneralProfile.Light"
@@ -486,7 +491,7 @@ def _build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--duration-s", type=float, default=DEFAULT_DURATION_S)
     capture.add_argument("--profile", default=DEFAULT_PROFILE)
     capture.add_argument(
-        "--out-dir",
+        "--out-dir", type=artifact_paths.evidence_arg,
         default=str(Path("logs") / "scheduler_captures"),
         help="parent directory for the timestamped capture directory",
     )

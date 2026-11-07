@@ -26,6 +26,11 @@ meets it before the operator does.
   replacement up to its reveal, with per-trip timings, generations, memory and the GC thaw/re-freeze; any barrier
   timeout, missing re-freeze or early process exit fails the run (exit 3). The steady figures cover the time before
   the first round trip.
+* **Output** goes to ``.artifacts/evidence/visualizers/<mode>/live_check/<YYYYMMDD>_<label>/``
+  (``tools/artifact_paths.py``; an explicit ``--out`` inside the repository must follow that layout). The profile
+  copy lives only while the run needs it: at the end of every run, failures included, its settings are kept beside
+  the results as ``run_settings_v2.json`` (``SRPSS``) and ``run_settings_v2_mc.json`` (``SRPSS_MC``) and the
+  ``profile/`` copy (Steam image cache, backups, encrypted credentials) is deleted.
 * **Report** (``summary.json`` and a table, steady window only: startup and teardown are reported apart): logical
   tick time and its share of the GIL, revisions/s, the age chain (publish -> sync -> render -> swap, the consumed
   revision's age at sync and how many newer ones were waiting), render-mode time, swap pacing, the first 2 s after
@@ -58,6 +63,7 @@ from tools.live_check_settings_roundtrip import (  # noqa: E402  (stdlib-only at
     analyse_settings_roundtrips, gc_policy_lines, parse_roundtrip_memory, parse_settings_roundtrip,
     print_settings_roundtrips,
 )
+from tools import artifact_paths  # noqa: E402
 DEFAULT_CLIP = ROOT / "logs" / "visualizer_recordings" / "anything_mixed2.jsonl"    # mixed real music, ~2 min
 STEADY_AFTER_STARTUP_NS = 2_000_000_000
 LATE_MS = 25.0
@@ -525,6 +531,29 @@ def _prepare_profile(out: Path, mode: str, preset: int | None, overrides: dict, 
     return out / "profile"
 
 
+# The profile folders' settings, kept beside the results once the copy is deleted.
+RUN_SETTINGS = (("SRPSS", "run_settings_v2.json"), ("SRPSS_MC", "run_settings_v2_mc.json"))
+
+
+def retire_profile_copy(out: Path) -> list[Path]:
+    """Keep the run's settings files beside the results, then delete ``<out>/profile`` (every run, every path).
+
+    The copy holds the shared data root too (Steam image cache, backups, encrypted Gmail credentials): 9.8 GB
+    over 36 runs before this. Nothing the summary or the reports read lives in it.
+    """
+    profile = out / "profile"
+    kept: list[Path] = []
+    for folder, name in RUN_SETTINGS:
+        source = profile / folder / "settings_v2.json"
+        if source.is_file():
+            target = out / name
+            shutil.copyfile(source, target)
+            kept.append(target)
+    if profile.exists():
+        shutil.rmtree(profile)
+    return kept
+
+
 def _start_load(profile: str, seconds: float, out: Path) -> subprocess.Popen:
     process = subprocess.Popen([sys.executable, str(ROOT / "tools" / "gpu_load_generator.py"), "--seconds",
                                 str(seconds), "--profile", profile], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -557,7 +586,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--clip", default=str(DEFAULT_CLIP),
                         help="recorded-music JSONL replayed as the loopback, or 'none' for the machine's own audio")
     parser.add_argument("--clip-start", type=float, default=0.0, help="seconds into the recording")
-    parser.add_argument("--out", type=Path, help="output folder (default logs/live_check/<mode>_<time>)")
+    parser.add_argument("--out", type=artifact_paths.evidence_arg,
+                        help="output folder (default .artifacts/evidence/visualizers/<mode>/live_check/"
+                             "<YYYYMMDD>_<label>; inside the repository it must follow that layout)")
+    parser.add_argument("--label", help="run label for the default output folder (default p<preset>_<time>)")
     parser.add_argument("--display-off", metavar="AT:FOR[,AT:FOR]",
                         help="inject the console display OFF at AT s after the runner starts and ON again FOR s later, "
                              "through the saver's own WM_POWERBROADCAST window procedure (panels are never touched)")
@@ -584,23 +616,36 @@ def runner_command(args, out: Path, clip: Path | None) -> list[str]:
                if args.settings_roundtrip and args.roundtrip_memory else []))
 
 
-def main() -> int:
-    args = build_parser().parse_args()
-    out = args.out or ROOT / "logs" / "live_check" / f"{args.mode}_{time.strftime('%Y%m%d_%H%M%S')}"
+def default_out(args) -> Path:
+    label = args.label or artifact_paths.run_label(f"p{args.preset}" if args.preset else "profile")
+    return artifact_paths.evidence_dir(f"visualizers/{args.mode}", "live_check", artifact_paths.slug(label))
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
     clip = None if args.clip == "none" else Path(args.clip).resolve()
     if args.runner:
-        _runner(out, args.seconds, args.visible, clip, args.clip_start, args.mode,
+        _runner(args.out, args.seconds, args.visible, clip, args.clip_start, args.mode,
                 parse_display_off(args.display_off) if args.display_off else None, args.settings_roundtrip,
                 args.roundtrip_memory if args.settings_roundtrip else ())
         return 0
+    out = artifact_paths.checked_output(args.out) if args.out is not None else default_out(args)
     if clip is not None and not clip.exists():
         raise SystemExit(f"recording not found: {clip}")
     out.mkdir(parents=True, exist_ok=True)
+    try:
+        return _measure(args, out, clip)
+    finally:
+        kept = retire_profile_copy(out)
+        print(f"profile copy deleted; kept {', '.join(path.name for path in kept) or 'no settings'}")
+
+
+def _measure(args, out: Path, clip: Path | None) -> int:
     sys.path.insert(0, str(ROOT))
     from tools.bench_stability import SystemSampler, summarise_environment
 
     overrides = {key: json.loads(value) for key, value in (item.split("=", 1) for item in args.set)}
-    profile_dir = _prepare_profile(out, args.mode, args.preset, overrides)
+    _prepare_profile(out, args.mode, args.preset, overrides)
     load = None if args.load == "none" else _start_load(args.load, args.seconds + 60, out)
     command = runner_command(args, out, clip)
     if args.display_off:
@@ -653,13 +698,18 @@ def main() -> int:
             return 3
     if runner.returncode != 0:
         raise RuntimeError(f'Live runner exited {runner.returncode}; see {out / "runner.txt"}')
+    return _report(args, out, clip, overrides, summarise_environment(conditions), power_samples, tree, roundtrips)
+
+
+def _report(args, out: Path, clip: Path | None, overrides: dict, conditions: dict, power_samples: list,
+            tree, roundtrips) -> int:
     trace = out / "logs" / "screensaver_frame_trace.bin"
     if not trace.exists():
         print(f"no frame trace; see {out / 'runner.txt'}")
         return 1
     summary = {"mode": args.mode, "preset": args.preset, "overrides": overrides, "load": args.load,
                "clip": clip.name if clip else None, "clip_start": args.clip_start,
-               "visible": args.visible, "conditions": summarise_environment(conditions)}
+               "visible": args.visible, "conditions": conditions}
     edges_path = out / "power_edges.jsonl"
     edges = ([json.loads(line) for line in edges_path.read_text(encoding="utf-8").splitlines() if line.strip()]
              if edges_path.exists() else [])

@@ -15,13 +15,14 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import linux_headless as lh  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tools import artifact_paths, evidence_media  # noqa: E402
 
 READY = "Quick startup display ready"
 GL_OK = "[QUICK_GL] validated"
@@ -42,8 +43,15 @@ def main(argv: list[str]) -> int:
     if not (product / "srpss").is_file() or not (product / "install.sh").is_file():
         return _fail(f"{product} is not a built SRPSS Linux product folder")
 
-    work = Path(tempfile.mkdtemp(prefix="srpss_smoke_"))
-    home, profile, logs = work / "home", work / "profile", work / "logs"
+    # Logs are published as evidence; home, profile and images stay in the scratch run (deleted on success).
+    from types import SimpleNamespace
+
+    out = evidence_media.redirect_output(
+        SimpleNamespace(out=artifact_paths.evidence_dir("display", "linux_smoke_dist", artifact_paths.run_label("run"))),
+        "out", "linux_smoke_dist")
+    work = out.parent / "work"
+    work.mkdir(parents=True)
+    home, profile, logs = work / "home", work / "profile", out / "logs"
     home.mkdir()
     display = ":95"
     env = lh.child_env(display, profile, logs)
@@ -94,4 +102,4 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    raise SystemExit(evidence_media.finish(main(sys.argv[1:])))

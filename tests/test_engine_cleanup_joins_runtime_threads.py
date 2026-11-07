@@ -38,6 +38,10 @@ def test_reaching_the_display_window_guard_leaves_no_non_daemon_thread(qt_app, t
     before = _non_daemon_threads()
     settings = SettingsManager(organization="SRPSSFocusedTests", application=f"GuardThreads_{uuid.uuid4().hex}",
                                storage_base_dir=tmp_path / "profile")
+    # One selected monitor: its show runs inside _initialize_display, so the refusal decides the result. With more
+    # monitors selected, every later display's show is staggered onto a later UI turn, so initialization correctly
+    # reports success while those are still pending (the 7 Nov red on a two-monitor machine).
+    settings.set("display.show_on_monitors", [1])
     engine = ScreensaverEngine()
     engine.settings_manager = settings
     left = []

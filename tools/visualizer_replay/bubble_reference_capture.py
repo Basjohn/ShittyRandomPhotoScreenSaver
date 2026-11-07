@@ -14,17 +14,24 @@ import math
 from pathlib import Path
 import subprocess
 from unittest.mock import patch
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--clip', type=Path, required=True)
-    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--output', type=artifact_paths.evidence_arg, required=True)
     parser.add_argument('--duration', type=float, default=12)
     parser.add_argument('--fps', type=float, default=12)
     parser.add_argument('--size', default='1672x941')
     parser.add_argument('--preset', type=int, default=1)
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "output", "bubble_reference_capture")
     if args.duration <= 0 or args.fps <= 0 or args.preset < 1:
         parser.error('duration/fps and preset must be positive')
     from rendering.gl_error_policy import disable_per_call_gl_error_checking
@@ -136,3 +143,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    evidence_media.finish(0)

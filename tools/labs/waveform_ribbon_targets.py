@@ -8,8 +8,8 @@ The camera is a historical WR-00 analytic Orthographic fit to the traced landmar
 5 Nov 2026; the product camera is Perspective only).
 
     .venv\\Scripts\\python.exe tools/labs/waveform_ribbon_targets.py
-        --cards .artifacts/evidence/waveform_ribbon/wr00_reference_projection
-        --output .artifacts/evidence/waveform_ribbon/<new-run>
+        --cards <lossless preflight cards: a waveform_ribbon_preflight run with --output under .artifacts/scratch/<owner>/>
+        --output .artifacts/evidence/visualizers/waveform_ribbon/targets/<YYYYMMDD>_<label>
 """
 from __future__ import annotations
 
@@ -23,6 +23,12 @@ import sys
 
 import numpy as np
 from PIL import Image, ImageDraw
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -223,10 +229,11 @@ def compare(cards: Path, renders: Path, output: Path, *, board: str = 'primary')
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--cards', type=Path, required=True)
-    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--output', type=artifact_paths.evidence_arg, required=True)
     parser.add_argument('--renders', type=Path, help='Compare a lab capture using fixed masked ROIs and 2x crops')
     parser.add_argument('--board', choices=('primary','fog'), default='primary')
     args = parser.parse_args()
+    evidence_media.redirect_output(args, "output", "waveform_ribbon_targets")
     if args.renders:
         compare(args.cards, args.renders, args.output, board=args.board)
         print(f'Comparison saved to {args.output}')
@@ -235,3 +242,4 @@ if __name__ == '__main__':
             parser.error('The fog board currently has ROI comparisons only; pass --renders')
         result = run(args.cards, args.output)
         json.dump(dict(envelope={k: v['envelope'] for k, v in result['panels'].items()}, camera=result['camera']), sys.stdout, indent=2)
+    evidence_media.finish(0)

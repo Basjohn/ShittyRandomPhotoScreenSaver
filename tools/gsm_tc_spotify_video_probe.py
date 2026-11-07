@@ -42,12 +42,16 @@ import io
 import logging
 import math
 from pathlib import Path
+from types import SimpleNamespace
 import statistics
 import sys
 import threading
 import time
 from typing import Any, Callable
 
+if str(Path(__file__).resolve().parents[1]) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tools import artifact_paths, evidence_media  # noqa: E402
 
 try:
     from winrt.windows.media.control import (  # type: ignore[import]
@@ -654,9 +658,10 @@ async def run(args: argparse.Namespace) -> int:
         )
         return 2
 
-    script_dir = Path(__file__).resolve().parent
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = script_dir / "tmp" / f"gsm_tc_video_probe_{stamp}"
+    # Evidence through the owner (tools/artifact_paths.py); frames are published as WebP on success.
+    destination = SimpleNamespace(out=artifact_paths.evidence_dir(
+        "media", "gsm_tc_video_probe", artifact_paths.run_label("probe")))
+    out_dir = evidence_media.redirect_output(destination, "out", "gsm_tc_spotify_video_probe")
     frames_dir = out_dir / "frames"
     out_dir.mkdir(parents=True, exist_ok=False)
     frames_dir.mkdir(parents=True, exist_ok=True)
@@ -951,4 +956,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(evidence_media.finish(main()))

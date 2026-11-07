@@ -107,25 +107,13 @@ class TestExportImportIsolation:
     
     def test_export_includes_application_name(self, tmp_path):
         """Test that exported settings include application name."""
-        import tempfile
-        from pathlib import Path
         from core.settings.settings_manager import SettingsManager
-        
-        settings = SettingsManager(application="TestExport", storage_base_dir=tmp_path)
-        
-        # Export to temp file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.sst', delete=False) as f:
-            temp_path = f.name
-        
-        try:
-            settings.export_to_sst(temp_path)
-            
-            with open(temp_path, 'r') as f:
-                exported = json.load(f)
 
-            assert exported["application"] == "TestExport"
-        finally:
-            Path(temp_path).unlink(missing_ok=True)
+        settings = SettingsManager(application="TestExport", storage_base_dir=tmp_path / "profile")
+        temp_path = tmp_path / "export.sst"
+        settings.export_to_sst(str(temp_path))
+        exported = json.loads(temp_path.read_text())
+        assert exported["application"] == "TestExport"
 
 
 if __name__ == "__main__":

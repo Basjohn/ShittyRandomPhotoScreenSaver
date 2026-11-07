@@ -16,14 +16,21 @@ from tools import extruded_bubble_capture as capture
 from rendering.gl_programs.extruded_bubble_scene import scene_knobs, ray_strength
 from PIL import Image, ImageDraw
 import numpy as np
+import sys as _sys  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+if str(_Path(__file__).resolve().parents[2]) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from tools import artifact_paths  # noqa: E402
+from tools import evidence_media  # noqa: E402
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--clip',type=Path,required=True)
-parser.add_argument('--output',type=Path,required=True)
+parser.add_argument('--output',type=artifact_paths.evidence_arg,required=True)
 parser.add_argument('--preset',type=int,default=1)
 parser.add_argument('--at',type=float,default=3.)
 parser.add_argument('--size',default='1672x941')
 args = parser.parse_args()
+evidence_media.redirect_output(args, "output", "extruded_bubble_ray_probe")
 if not 1 <= args.preset <= 7 or args.at < 0:
     parser.error('preset must be 1..7 and at nonnegative')
 out = args.output
@@ -78,3 +85,4 @@ with patch.object(capture,'_draw',draw):
 
 if {str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in source_paths} != source_hashes:
     raise RuntimeError("source changed during ray probe; reject this evidence directory")
+evidence_media.finish(0)
